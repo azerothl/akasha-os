@@ -94,7 +94,7 @@ TTFT            = max(t_rapides, t_stream_disque) + t_token + setup
 |-----------|--------|--------|
 | `eff_gpu` | 0,50 | littérature llama.cpp ; **à mesurer en P1** (pas de GPU sur l'hôte P0) |
 | `eff_ram` | 0,80 | **étalonné : 0,99 mesuré** (§4), marge prudente pour CPU anciens |
-| `eff_disk` | 0,80 | NVMe séquentiel, lecture large ; à confirmer en P1 (offload réel) |
+| `eff_disk` | 0,65 | DeepNVMe mesuré ~66 % du pic NVMe en lecture tunée (ADR 0005, D2) |
 | `eff_prefill_gpu` | 0,60 | à mesurer en P1 |
 | `eff_prefill_cpu` | 0,50 | combiné à `cpu_flops`, donne 1,0–1,7 TFLOPS effectifs mesurés |
 | `overhead_ms` | 0,2 | sampling/scheduling par token |

@@ -1058,8 +1058,9 @@ Audit.append(infer_started/finished)
 - `specs-fonctionnelles.md`
 - `reflexion-agent-os.md`
 - `plan-developpement-phases.md` — plan détaillé par phase (livrables, gates, risques)
+- `adr/0002-model-placement.md` — algorithme de placement et modèle de coût (P0)
+- `adr/0005-offload-etat-de-l-art.md` — état de l'art offload CPU/GPU/RAM/disque (pré-P1)
 - (futur) `adr/0001-microkernel.md`
-- (futur) `adr/0002-model-placement.md`
 - (futur) `adr/0003-wasm-modules.md`
 - (futur) `adr/0004-scope-mono-vs-multi-utilisateur.md`
 

@@ -41,7 +41,10 @@ pub struct CostModel {
     /// Fraction de la bande passante RAM utile au decode CPU (mesuré 0,99
     /// sur Zen4+DDR5 ; défaut prudent 0,80).
     pub eff_ram: f64,
-    /// Fraction de la bande passante disque utile au streaming (~0,7–0,9).
+    /// Fraction de la bande passante disque utile au streaming.
+    /// Étalon ADR 0005 (D2) : DeepNVMe mesure ~66 % du pic NVMe en lecture
+    /// réelle tunée (3,69/5,6 GB/s sur A6000 workstation) → 0,65 par défaut,
+    /// à recalibrer par hôte en P1 (sonde disque + mmap vs lecture explicite).
     pub eff_disk: f64,
     /// Efficience FLOPs GPU en prefill (~0,5–0,7).
     pub eff_prefill_gpu: f64,
@@ -61,7 +64,7 @@ impl Default for CostModel {
         Self {
             eff_gpu: 0.50,
             eff_ram: 0.80,
-            eff_disk: 0.80,
+            eff_disk: 0.65,
             eff_prefill_gpu: 0.60,
             eff_prefill_cpu: 0.50,
             overhead_ms: 0.2,

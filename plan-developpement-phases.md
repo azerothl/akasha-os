@@ -305,4 +305,4 @@ Les exigences `Must` de `specs-fonctionnelles.md` doivent être **toutes couvert
 - `specs-fonctionnelles.md` — exigences produit
 - `specs-techniques.md` — architecture technique
 - `reflexion-agent-os.md` — cadrage et pistes ouvertes
-- (à créer au fil de l'eau) `adr/0001-microkernel.md`, `adr/0002-model-placement.md`, `adr/0003-ui-framework.md`
+- (à créer au fil de l'eau) `adr/0001-microkernel.md`, `adr/0002-model-placement.md` (publié, P0), `adr/0003-ui-framework.md`, `adr/0005-offload-etat-de-l-art.md` (publié, pré-P1)
