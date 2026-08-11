@@ -1,0 +1,106 @@
+# Catalogue de modèles — Agent OS P0 (specs-techniques §3.2)
+#
+# Extensions P0 par rapport au schéma §3.2, nécessaires au simulateur de
+# placement : `resource_hints.embed_bytes` et `resource_hints.kv_bytes_per_token`
+# (le §3.2 ne détaille pas la décomposition des poids ; à reverser dans la spec).
+#
+# Les tailles sont des ordres de grandeur de GGUF courants, pas des mesures
+# de fichiers précis.
+
+models:
+  # --- Modèles embarqués (§3.4) : livrés dans l'image système ---------------
+  - id: local:embedded-instruct
+    name: Embedded Instruct 3B Q4
+    modality: text
+    format: gguf
+    source:
+      type: local_file
+      path: /system/models/embedded-instruct-q4.gguf
+      sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+    architecture:
+      n_layers: 28
+      n_params: 3.0e9
+      context_length: 8192
+    resource_hints:
+      weights_bytes: 2147483648        # ~2 GiB
+      embed_bytes: 200000000
+      kv_bytes_per_token: 120000
+      supports_layer_offload: true
+    capabilities: [chat, tools]
+    backends_compatible: [llamacpp, candle]
+    privacy_class: local
+
+  - id: local:embedded-embed
+    name: Embedded Embed 0.5B
+    modality: embedding
+    format: gguf
+    source:
+      type: local_file
+      path: /system/models/embedded-embed.gguf
+      sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+    architecture:
+      n_layers: 24
+      n_params: 0.5e9
+      context_length: 8192
+    resource_hints:
+      weights_bytes: 400000000         # ~0,4 GiB
+      embed_bytes: 80000000
+      kv_bytes_per_token: 50000
+      supports_layer_offload: true
+    capabilities: [embed]
+    backends_compatible: [llamacpp, candle]
+    privacy_class: local
+
+  # --- Modèles locaux installables (utilisateur) ------------------------------
+  - id: local:llama-q6-32b
+    name: Llama 32B Q6
+    modality: text
+    format: gguf
+    source:
+      type: local_file
+      path: /var/models/llama-32b-q6.gguf
+      sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+    architecture:
+      n_layers: 80
+      n_params: 32.0e9
+      context_length: 131072
+    resource_hints:
+      weights_bytes: 27917287424       # ~26 GiB
+      embed_bytes: 800000000
+      kv_bytes_per_token: 400000
+      supports_layer_offload: true
+    capabilities: [chat, tools]
+    backends_compatible: [llamacpp]
+    privacy_class: local
+
+  - id: local:llama-q4-70b
+    name: Llama 70B Q4
+    modality: text
+    format: gguf
+    source:
+      type: local_file
+      path: /var/models/llama-70b-q4.gguf
+      sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+    architecture:
+      n_layers: 80
+      n_params: 70.0e9
+      context_length: 131072
+    resource_hints:
+      weights_bytes: 42949672960       # ~40 GiB
+      embed_bytes: 1200000000
+      kv_bytes_per_token: 640000
+      supports_layer_offload: true
+    capabilities: [chat, tools]
+    backends_compatible: [llamacpp]
+    privacy_class: local
+
+  # --- Backend distant (§3.2, exemple) ----------------------------------------
+  - id: remote:openai:gpt-4.1
+    name: GPT-4.1 (distant)
+    modality: text
+    format: remote-api
+    source:
+      type: remote_api
+      endpoint: https://api.openai.com/v1
+      protocol: openai_compatible
+    privacy_class: remote

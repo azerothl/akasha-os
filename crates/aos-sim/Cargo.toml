@@ -1,0 +1,19 @@
+[package]
+name = "aos-sim"
+description = "Agent OS — banc d'essai des scénarios de placement (P0.4, specs-techniques §17.2)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+aos-caps = { path = "../aos-caps" }
+aos-placement = { path = "../aos-placement" }
+aos-registry = { path = "../aos-registry" }
+serde.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "aos-sim"
+path = "src/main.rs"
