@@ -141,6 +141,11 @@ impl ModelRegistry {
         self.catalog.models.len()
     }
 
+    /// Itère sur toutes les entrées du catalogue.
+    pub fn entries(&self) -> impl Iterator<Item = &CatalogEntry> {
+        self.catalog.models.iter()
+    }
+
     pub fn is_empty(&self) -> bool {
         self.catalog.models.is_empty()
     }

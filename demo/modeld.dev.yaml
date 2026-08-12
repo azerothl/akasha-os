@@ -1,0 +1,42 @@
+# Config dev du Model Subsystem (P1) — chemins réels des poids sur cet hôte.
+#
+# La contrainte du Gate P1 « 32B Q6 avec 8 Go de VRAM » se règle via
+# `vram_total_bytes` (le GPU réel a 16 Go ; le budget offert au Placement
+# Manager est plafonné à 8 GiB).
+
+bus: "127.0.0.1:47001"
+gpu: true
+vram_total_bytes: 8589934592        # 8 GiB — budget gate P1
+os_reserve_vram_bytes: 1073741824   # 1 GiB (affichage + buffers de calcul)
+os_reserve_ram_bytes: 4294967296    # 4 GiB
+default_model: local:embedded-instruct
+default_kv_tokens: 2048
+n_threads: 8
+
+models:
+  # Doublure du modèle embarqué (§3.4) : Qwen2.5-3B Q4_K_M (~2 GiB).
+  local:embedded-instruct:
+    path: tools/models/qwen2.5-3b-instruct-q4_k_m.gguf
+    n_layers: 36
+    weights_bytes: 2093886464
+    embed_bytes: 175000000
+    kv_bytes_per_token: 37000
+    n_params: 3.4e9
+
+  # Petit modèle utilitaire (doublure embedded-embed côté texte).
+  local:embedded-embed:
+    path: tools/models/qwen2.5-0.5b-instruct-q4_k_m.gguf
+    n_layers: 24
+    weights_bytes: 485436211
+    embed_bytes: 76600000
+    kv_bytes_per_token: 25000
+    n_params: 6.3e8
+
+  # Gate P1 : 32B Q6_K (~26 GiB) avec budget VRAM 8 GiB → offload RAM.
+  local:llama-q6-32b:
+    path: tools/models/qwen2.5-32b-instruct-q6_k-00001-of-00007.gguf
+    n_layers: 64
+    weights_bytes: 27380416512
+    embed_bytes: 1600000000
+    kv_bytes_per_token: 262144
+    n_params: 3.28e10

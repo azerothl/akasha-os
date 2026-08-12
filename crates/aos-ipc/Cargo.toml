@@ -1,0 +1,19 @@
+[package]
+name = "aos-ipc"
+description = "Agent OS — Semantic IPC Bus v1 (P1.5)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+thiserror.workspace = true
+ciborium.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+futures.workspace = true
+bytes = "1"
+
+[[bin]]
+name = "aos-busd"
+path = "src/bin/aos-busd.rs"

@@ -1,0 +1,32 @@
+[package]
+name = "aos-agent"
+description = "Agent OS — Agent Runtime v1 : daemon (aos-agentd) + worker isolé (aos-agent-worker) (P1.4)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+aos-caps = { path = "../aos-caps" }
+aos-ipc = { path = "../aos-ipc" }
+aos-proto = { path = "../aos-proto" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+futures.workspace = true
+
+[lib]
+name = "aos_agent"
+path = "src/lib.rs"
+
+[[bin]]
+name = "aos-agentd"
+path = "src/bin/aos-agentd.rs"
+
+[[bin]]
+name = "aos-agent-worker"
+path = "src/bin/aos-agent-worker.rs"
+
+[[bin]]
+name = "aos-gate-p1"
+path = "src/bin/aos-gate-p1.rs"

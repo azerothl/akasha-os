@@ -130,6 +130,21 @@ la constante unique retenue (1,25 TFLOPS eff.) donne ≤ ±26 % sur les deux.
 prévue au plan), l'erreur decode est ≤ 20 % sur les deux modèles (< 30 % exigé).
 Le decode CPU Q4_K est quasi parfaitement limité par la bande passante mesurée.
 
+### 4.3bis Point de validation hybride GPU+CPU (P1, 12/08/2026)
+
+Première mesure du **Placement Manager réel** (P1.2) pilotant llama.cpp CUDA
+sur l'hôte de dev (RTX 4080 SUPER 16 Go, budget volontairement plafonné à
+8 GiB pour le gate P1) :
+
+| Config | Estimation simulateur | Mesuré (FFI) | Erreur |
+|--------|----------------------|--------------|--------|
+| Qwen2.5-32B Q6_K, plan balanced : 11 couches VRAM (6,12 GiB) + 53 couches RAM (19,88 GiB) | 1,64 tok/s | **1,72 tok/s** | **−4,9 %** |
+
+L'estimation hybride GPU+CPU tombe à ~5 % de la mesure réelle — le modèle de
+coût (bande passante par tier, `eff_gpu=0,5`, `eff_ram=0,8` sur cet hôte) est
+validé sur le cas d'usage central du Placement Manager. TTFT mesuré 2,6 s
+(prompt ~20 tokens) cohérent avec le prefill CPU de 53 couches.
+
 ### 4.4 Limites connues
 
 1. **Cache L3 non modélisé** : pour les modèles dont une fraction significative

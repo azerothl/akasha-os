@@ -1,0 +1,20 @@
+[package]
+name = "aos-ui"
+description = "Agent OS — UI minimale : shell conversationnel + dashboard ressources (P1.6)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+aos-ipc = { path = "../aos-ipc" }
+aos-proto = { path = "../aos-proto" }
+aos-agent = { path = "../aos-agent" }
+serde.workspace = true
+tokio.workspace = true
+futures.workspace = true
+ratatui = "0.29"
+crossterm = { version = "0.28", features = ["event-stream"] }
+
+[[bin]]
+name = "aos-ui"
+path = "src/main.rs"

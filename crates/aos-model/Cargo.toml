@@ -1,0 +1,27 @@
+[package]
+name = "aos-model"
+description = "Agent OS — Model Subsystem v1 : daemon aos-modeld (P1.1, P1.2, P1.3)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+aos-ipc = { path = "../aos-ipc" }
+aos-llama = { path = "../aos-llama" }
+aos-placement = { path = "../aos-placement" }
+aos-proto = { path = "../aos-proto" }
+aos-registry = { path = "../aos-registry" }
+serde.workspace = true
+serde_yaml.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+futures.workspace = true
+sysinfo = "0.33"
+
+[lib]
+name = "aos_model"
+path = "src/lib.rs"
+
+[[bin]]
+name = "aos-modeld"
+path = "src/bin/aos-modeld.rs"
