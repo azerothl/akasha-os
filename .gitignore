@@ -1,3 +1,8 @@
 /target
 /tools
 **/*.rs.bk
+/var/
+/vm/sel4/sdk/
+/vm/sel4/build/
+modules/**/target/
+modules/*.aospkg/
