@@ -1,0 +1,18 @@
+[package]
+name = "aos-auditd"
+description = "Agent OS — service d'audit autonome (P4.4) : journal append-only signé"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+aos-platform = { path = "../aos-platform" }
+aos-ipc = { path = "../aos-ipc" }
+aos-proto = { path = "../aos-proto" }
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+
+[[bin]]
+name = "aos-auditd"
+path = "src/main.rs"

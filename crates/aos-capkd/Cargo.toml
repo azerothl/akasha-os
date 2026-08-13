@@ -1,0 +1,25 @@
+[package]
+name = "aos-capkd"
+description = "Agent OS — noyau de capacités (P4.2) : point d'application de confiance, révocation globale immédiate"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+aos-caps = { path = "../aos-caps" }
+aos-ipc = { path = "../aos-ipc" }
+aos-proto = { path = "../aos-proto" }
+serde.workspace = true
+tokio.workspace = true
+
+[lib]
+name = "aos_capkd"
+path = "src/lib.rs"
+
+[[bin]]
+name = "aos-capkd"
+path = "src/main.rs"
+
+[[bin]]
+name = "aos-gate-p4"
+path = "src/bin/aos-gate-p4.rs"

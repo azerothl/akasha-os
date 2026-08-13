@@ -3,7 +3,8 @@
 //! Implémentation userspace du modèle de capacités décrit dans
 //! `specs-techniques.md` §2.3. En P0, ce modèle est **logique** : il valide la
 //! sémantique (atténuation stricte, révocation en arbre, TTL) avant le port sur
-//! les capabilities natives du microkernel en P4.
+//! les capabilities natives du microkernel en P4. En P4, `aos-capkd` est ce
+//! noyau userspace (ADR 0001) : même sémantique, point d'application unique.
 //!
 //! ## Invariants de sécurité garantis
 //!
@@ -21,9 +22,16 @@
 //! L'horloge est **logique** (ticks u64) pour rester déterministe dans les
 //! tests et le simulateur.
 
+#![cfg_attr(not(feature = "std"), no_std)]
+
+extern crate alloc;
+
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
 use bitflags::bitflags;
+use hashbrown::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 
 bitflags! {
@@ -117,7 +125,9 @@ pub enum CapError {
 ///
 /// En P4, chaque opération ci-dessous sera remplacée par son homologue sur
 /// capabilities natives ; la sémantique observée doit être identique.
-#[derive(Debug, Default)]
+///
+/// `next_id` commence à 1 : l'id 0 est réservé (échec C ABI / slot vide).
+#[derive(Debug)]
 pub struct CapStore {
     caps: HashMap<CapId, Cap>,
     /// Arbre de descendance pour la révocation en cascade.
@@ -125,6 +135,17 @@ pub struct CapStore {
     /// Horloge logique (ticks).
     now: u64,
     next_id: u64,
+}
+
+impl Default for CapStore {
+    fn default() -> Self {
+        Self {
+            caps: HashMap::new(),
+            children: HashMap::new(),
+            now: 0,
+            next_id: 1,
+        }
+    }
 }
 
 /// Résultat d'une vérification d'accès (gate `invoke`).
@@ -363,6 +384,15 @@ impl CapStore {
         self.caps.values().filter(|c| !c.revoked).count()
     }
 
+    /// Nombre d'entrées allouées (vivantes + révoquées). Plafond C ABI = `MAX_CAPS`.
+    pub fn len(&self) -> usize {
+        self.caps.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.caps.is_empty()
+    }
+
     /// Ensemble des capacités valides d'un détenteur (snapshot pour
     /// `CognitiveState.cap_set_snapshot`, cf. specs-techniques §4.2).
     pub fn snapshot_of(&self, holder: HolderId) -> HashSet<CapId> {
@@ -372,6 +402,24 @@ impl CapStore {
             .map(|c| c.id)
             .collect()
     }
+}
+
+/// Correspondance objet cap ↔ ressource demandée (égalité ou glob `/**`).
+pub fn object_matches(granted: &str, requested: &str) -> bool {
+    if granted == requested {
+        return true;
+    }
+    if let Some(prefix) = granted.strip_suffix("/**") {
+        if requested == prefix {
+            return true;
+        }
+        return requested.starts_with(prefix)
+            && requested.as_bytes().get(prefix.len()) == Some(&b'/');
+    }
+    if let Some(prefix) = granted.strip_suffix("**") {
+        return requested.starts_with(prefix);
+    }
+    false
 }
 
 #[cfg(test)]
@@ -391,6 +439,7 @@ mod tests {
     fn mint_puis_invoke_ok() {
         let mut s = CapStore::new();
         let c = s.mint(ALICE, "fs:/notes/a.md", rw(), None, None, 0);
+        assert_ne!(c.0, 0, "id 0 réservé (ABI C / mint échoué)");
         let g = s.authorize(ALICE, c, Rights::READ).unwrap();
         assert_eq!(g.object, "fs:/notes/a.md");
     }
@@ -627,5 +676,14 @@ mod tests {
         let snap = s.snapshot_of(ALICE);
         assert_eq!(snap.len(), 1);
         assert!(snap.contains(&a));
+    }
+
+    #[test]
+    fn object_matches_glob() {
+        assert!(object_matches("fs:/p4/gate.md", "fs:/p4/gate.md"));
+        assert!(object_matches("fs:/p4/**", "fs:/p4/gate.md"));
+        assert!(object_matches("fs:/p4/**", "fs:/p4"));
+        assert!(!object_matches("fs:/p4/**", "fs:/other.md"));
+        assert!(!object_matches("fs:/p4/**", "fs:/p4x"));
     }
 }

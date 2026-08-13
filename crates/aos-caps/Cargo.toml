@@ -6,6 +6,11 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-bitflags.workspace = true
-thiserror.workspace = true
-serde.workspace = true
+bitflags = { workspace = true }
+thiserror = { workspace = true }
+serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
+hashbrown = { version = "0.15", default-features = false, features = ["default-hasher"] }
+
+[features]
+default = ["std"]
+std = []

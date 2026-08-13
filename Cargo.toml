@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/aos-agent",
+members = ["crates/aos-agent", "crates/aos-auditd", "crates/aos-capkd",
     "crates/aos-caps", "crates/aos-ipc", "crates/aos-llama", "crates/aos-model",
     "crates/aos-placement", "crates/aos-platform", "crates/aos-proto",
     "crates/aos-registry",
