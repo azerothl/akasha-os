@@ -15,8 +15,9 @@
 //! | tier DISK | `load_mode = MMAP` (page-in paresseux) ; `DIRECT_IO` en expérimental |
 //! | couches RAM | calculées CPU (`n_threads`) — comportement natif llama.cpp |
 //!
-//! Non thread-safe par construction : un [`LlamaContext`] = une séquence
-//! d'inférence active. Le scheduler (`aos-modeld`) sérialise les accès.
+//! Non thread-safe par construction : un [`LlamaContext`] = un decode à la
+//! fois. Le scheduler (`aos-modeld`) y envoie un **batch** de jusqu'à
+//! `n_seq_max` séquences (continuous batching P5.1).
 
 #![allow(non_snake_case)]
 #![allow(clippy::missing_safety_doc)]
@@ -74,6 +75,10 @@ pub struct LoadOptions {
     pub n_ubatch: u32,
     pub n_threads: i32,
     pub flash_attn: bool,
+    /// Contexte d'embeddings (pooling mean) au lieu de génération.
+    pub embeddings: bool,
+    /// Séquences simultanées (continuous batching P5.1). 1 = une à la fois.
+    pub n_seq_max: u32,
 }
 
 impl Default for LoadOptions {
@@ -87,6 +92,8 @@ impl Default for LoadOptions {
             n_ubatch: 512,
             n_threads: 8,
             flash_attn: true,
+            embeddings: false,
+            n_seq_max: 1,
         }
     }
 }
@@ -209,12 +216,21 @@ unsafe extern "C" fn abort_trampoline(data: *mut c_void) -> bool {
     flag.load(Ordering::SeqCst)
 }
 
-/// Contexte d'inférence : une séquence à la fois (v1).
+/// Job d'un batch continu (P5.1).
+pub struct BatchItem {
+    pub messages: Vec<(String, String)>,
+    pub params: GenParams,
+    pub abort: Arc<AtomicBool>,
+}
+
+/// Contexte d'inférence. `n_seq_max` > 1 active le continuous batching.
 pub struct LlamaContext {
     ptr: *mut sys::llama_context,
     model: Arc<LlamaModel>,
     abort: Arc<AtomicBool>,
     n_ctx: u32,
+    n_batch: u32,
+    n_seq_max: u32,
 }
 
 unsafe impl Send for LlamaContext {}
@@ -225,10 +241,16 @@ impl LlamaContext {
         params.n_ctx = opts.n_ctx;
         params.n_batch = opts.n_batch;
         params.n_ubatch = opts.n_ubatch;
-        params.n_seq_max = 1;
+        params.n_seq_max = opts.n_seq_max.max(1);
         params.n_threads = opts.n_threads;
         params.n_threads_batch = opts.n_threads;
         params.offload_kqv = opts.offload_kqv;
+        // Cache KV unifié : un seul stream d'attention (meilleur decode multi-seq).
+        params.kv_unified = true;
+        params.embeddings = opts.embeddings;
+        if opts.embeddings {
+            params.pooling_type = sys::LLAMA_POOLING_TYPE_MEAN;
+        }
         params.flash_attn_type = if opts.flash_attn {
             sys::LLAMA_FLASH_ATTN_TYPE_ENABLED
         } else {
@@ -249,6 +271,8 @@ impl LlamaContext {
             model,
             abort,
             n_ctx: opts.n_ctx,
+            n_batch: opts.n_batch.max(1),
+            n_seq_max: opts.n_seq_max.max(1),
         })
     }
 
@@ -383,10 +407,10 @@ impl LlamaContext {
         let prompt = self.render_prompt(messages)?;
         let prompt_tokens = self.tokenize(&prompt, false)?;
         let n_prompt = prompt_tokens.len();
-        if n_prompt + params.max_tokens as usize + 8 > self.n_ctx as usize {
+        if n_prompt + params.max_tokens as usize + 8 > self.n_ctx_seq() as usize {
             return Err(LlamaError::PromptTooLong {
                 prompt: n_prompt,
-                ctx: self.n_ctx,
+                ctx: self.n_ctx_seq(),
             });
         }
 
@@ -469,6 +493,352 @@ impl LlamaContext {
             tok_s: generated as f64 / decode_s,
             stopped,
         })
+    }
+
+    pub fn n_seq_max(&self) -> u32 {
+        self.n_seq_max
+    }
+
+    /// Budget de tokens par séquence (n_ctx / n_seq_max).
+    fn n_ctx_seq(&self) -> u32 {
+        (self.n_ctx / self.n_seq_max.max(1)).max(1)
+    }
+
+    unsafe fn batch_add(
+        batch: &mut sys::llama_batch,
+        token: sys::llama_token,
+        pos: sys::llama_pos,
+        seq_id: sys::llama_seq_id,
+        logits: bool,
+    ) {
+        let i = batch.n_tokens as usize;
+        *batch.token.add(i) = token;
+        *batch.pos.add(i) = pos;
+        *batch.n_seq_id.add(i) = 1;
+        *(*batch.seq_id.add(i)) = seq_id;
+        *batch.logits.add(i) = i8::from(logits);
+        batch.n_tokens += 1;
+    }
+
+    fn make_sampler(params: &GenParams) -> *mut sys::llama_sampler {
+        let sparams = unsafe { sys::llama_sampler_chain_default_params() };
+        let smpl = unsafe { sys::llama_sampler_chain_init(sparams) };
+        unsafe {
+            sys::llama_sampler_chain_add(smpl, sys::llama_sampler_init_top_p(params.top_p, 1));
+            sys::llama_sampler_chain_add(smpl, sys::llama_sampler_init_temp(params.temperature));
+            sys::llama_sampler_chain_add(smpl, sys::llama_sampler_init_dist(params.seed));
+        }
+        smpl
+    }
+
+    /// Continuous batching (P5.1) : un seul `llama_decode` par pas de token
+    /// pour jusqu'à `n_seq_max` séquences. `on_delta(i, piece)` pour le job `i`.
+    pub fn generate_batch(
+        &mut self,
+        items: &[BatchItem],
+        mut on_delta: impl FnMut(usize, &str) -> bool,
+    ) -> Vec<Result<GenStats, LlamaError>> {
+        let n = items.len();
+        let mut out: Vec<Result<GenStats, LlamaError>> = (0..n)
+            .map(|_| Err(LlamaError::Decode(-1)))
+            .collect();
+        if n == 0 {
+            return out;
+        }
+        if n as u32 > self.n_seq_max {
+            for slot in &mut out {
+                *slot = Err(LlamaError::Decode(-2));
+            }
+            return out;
+        }
+
+        struct Slot {
+            seq_id: sys::llama_seq_id,
+            prompt_n: u32,
+            generated: u32,
+            max_tokens: u32,
+            pos: sys::llama_pos,
+            last: sys::llama_token,
+            smpl: *mut sys::llama_sampler,
+            abort: Arc<AtomicBool>,
+            done: Option<StopReason>,
+            ttft_ms: f64,
+            t_start: Instant,
+            t_done: Option<Instant>,
+        }
+
+        impl Slot {
+            fn finish(&mut self, reason: StopReason) {
+                if self.done.is_none() {
+                    self.t_done = Some(Instant::now());
+                    self.done = Some(reason);
+                }
+            }
+        }
+
+        let vocab = unsafe { sys::llama_model_get_vocab(self.model.ptr) };
+        let mut slots: Vec<Slot> = Vec::with_capacity(n);
+        let mut prompts: Vec<Vec<sys::llama_token>> = Vec::with_capacity(n);
+
+        for (i, item) in items.iter().enumerate() {
+            match self.render_prompt(&item.messages).and_then(|p| self.tokenize(&p, false)) {
+                Ok(toks) => {
+                    if toks.len() + item.params.max_tokens as usize + 8 > self.n_ctx_seq() as usize {
+                        out[i] = Err(LlamaError::PromptTooLong {
+                            prompt: toks.len(),
+                            ctx: self.n_ctx_seq(),
+                        });
+                        prompts.push(Vec::new());
+                        continue;
+                    }
+                    prompts.push(toks);
+                    slots.push(Slot {
+                        seq_id: i as sys::llama_seq_id,
+                        prompt_n: 0,
+                        generated: 0,
+                        max_tokens: item.params.max_tokens,
+                        pos: 0,
+                        last: 0,
+                        smpl: Self::make_sampler(&item.params),
+                        abort: item.abort.clone(),
+                        done: None,
+                        ttft_ms: f64::MAX,
+                        t_start: Instant::now(),
+                        t_done: None,
+                    });
+                }
+                Err(e) => {
+                    out[i] = Err(e);
+                    prompts.push(Vec::new());
+                }
+            }
+        }
+
+        // Réindex : slots[k] correspond à items[slots[k].seq_id].
+        if slots.is_empty() {
+            return out;
+        }
+
+        unsafe {
+            let mem = sys::llama_get_memory(self.ptr);
+            sys::llama_memory_clear(mem, true);
+        }
+
+        let mut batch = unsafe {
+            sys::llama_batch_init(self.n_batch as i32, 0, self.n_seq_max as i32)
+        };
+
+        // Prefill packé : toutes les séquences dans les mêmes `llama_decode`
+        // (évite 8 warmups CUDA graph séquentiels).
+        let mut off: Vec<usize> = vec![0; slots.len()];
+        let mut prefill_ok = true;
+        loop {
+            batch.n_tokens = 0;
+            let mut finished: Vec<(usize, i32)> = Vec::new();
+            for si in 0..slots.len() {
+                if slots[si].done.is_some() {
+                    continue;
+                }
+                let seq = slots[si].seq_id;
+                let toks = &prompts[seq as usize];
+                if off[si] >= toks.len() {
+                    continue;
+                }
+                let space = self.n_batch as usize - batch.n_tokens as usize;
+                if space == 0 {
+                    break;
+                }
+                let take = (toks.len() - off[si]).min(space);
+                for j in 0..take {
+                    let pos = (off[si] + j) as sys::llama_pos;
+                    let is_last = off[si] + j + 1 == toks.len();
+                    let logit_i = batch.n_tokens;
+                    unsafe {
+                        Self::batch_add(&mut batch, toks[off[si] + j], pos, seq, is_last);
+                    }
+                    if is_last {
+                        finished.push((si, logit_i));
+                    }
+                }
+                off[si] += take;
+            }
+            if batch.n_tokens == 0 {
+                break;
+            }
+            let rc = unsafe { sys::llama_decode(self.ptr, batch) };
+            if rc != 0 {
+                prefill_ok = false;
+                for slot in &mut slots {
+                    if slot.done.is_none() {
+                        out[slot.seq_id as usize] = Err(LlamaError::Decode(rc));
+                        slot.finish(StopReason::Aborted);
+                    }
+                }
+                break;
+            }
+            for (si, logit_i) in finished {
+                let n_tok = prompts[slots[si].seq_id as usize].len();
+                slots[si].prompt_n = n_tok as u32;
+                slots[si].pos = n_tok as sys::llama_pos;
+                slots[si].last =
+                    unsafe { sys::llama_sampler_sample(slots[si].smpl, self.ptr, logit_i) };
+            }
+        }
+
+        if !prefill_ok {
+            for slot in &slots {
+                let idx = slot.seq_id as usize;
+                if matches!(out[idx], Err(LlamaError::Decode(-1))) {
+                    out[idx] = Err(LlamaError::Decode(-3));
+                }
+                unsafe { sys::llama_sampler_free(slot.smpl) };
+            }
+            unsafe { sys::llama_batch_free(batch) };
+            return out;
+        }
+
+        loop {
+            let mut any_active = false;
+            for slot in &mut slots {
+                if slot.done.is_some() {
+                    continue;
+                }
+                if slot.abort.load(Ordering::SeqCst) {
+                    slot.finish(StopReason::Aborted);
+                    continue;
+                }
+                if unsafe { sys::llama_vocab_is_eog(vocab, slot.last) } {
+                    slot.finish(StopReason::Eog);
+                    continue;
+                }
+                if slot.generated >= slot.max_tokens {
+                    slot.finish(StopReason::MaxTokens);
+                    continue;
+                }
+                if slot.ttft_ms == f64::MAX {
+                    slot.ttft_ms = slot.t_start.elapsed().as_secs_f64() * 1000.0;
+                }
+                let piece = self.token_to_piece(slot.last);
+                if !piece.is_empty()
+                    && !on_delta(slot.seq_id as usize, &piece)
+                {
+                    slot.finish(StopReason::Aborted);
+                    continue;
+                }
+                slot.generated += 1;
+                any_active = true;
+            }
+            if !any_active {
+                break;
+            }
+
+            batch.n_tokens = 0;
+            let mut order: Vec<usize> = Vec::new();
+            for (k, slot) in slots.iter().enumerate() {
+                if slot.done.is_some() {
+                    continue;
+                }
+                unsafe {
+                    Self::batch_add(&mut batch, slot.last, slot.pos, slot.seq_id, true);
+                }
+                order.push(k);
+            }
+            if order.is_empty() {
+                break;
+            }
+            let rc = unsafe { sys::llama_decode(self.ptr, batch) };
+            if rc != 0 {
+                for k in order {
+                    if slots[k].done.is_none() {
+                        out[slots[k].seq_id as usize] = Err(LlamaError::Decode(rc));
+                        slots[k].finish(StopReason::Aborted);
+                    }
+                }
+                break;
+            }
+            for (logit_i, &k) in order.iter().enumerate() {
+                let slot = &mut slots[k];
+                slot.last =
+                    unsafe { sys::llama_sampler_sample(slot.smpl, self.ptr, logit_i as i32) };
+                slot.pos += 1;
+            }
+        }
+
+        for slot in slots {
+            let idx = slot.seq_id as usize;
+            if out[idx].is_err() && matches!(out[idx], Err(LlamaError::Decode(-1))) {
+                let total = slot
+                    .t_done
+                    .unwrap_or_else(Instant::now)
+                    .saturating_duration_since(slot.t_start)
+                    .as_secs_f64();
+                let ttft = if slot.ttft_ms == f64::MAX {
+                    total * 1000.0
+                } else {
+                    slot.ttft_ms
+                };
+                let decode_s = (total - ttft / 1000.0).max(1e-6);
+                out[idx] = Ok(GenStats {
+                    prompt_tokens: slot.prompt_n,
+                    generated_tokens: slot.generated,
+                    ttft_ms: ttft,
+                    tok_s: slot.generated as f64 / decode_s,
+                    stopped: slot.done.unwrap_or(StopReason::Eog),
+                });
+            }
+            unsafe { sys::llama_sampler_free(slot.smpl) };
+        }
+        unsafe { sys::llama_batch_free(batch) };
+        out
+    }
+
+    /// Calcule l'embedding d'un texte (contexte créé avec `embeddings=true`).
+    ///
+    /// Retourne le vecteur poolé (mean) normalisé L2, dimension
+    /// `n_embd_out` du modèle.
+    pub fn embed(&mut self, text: &str) -> Result<Vec<f32>, LlamaError> {
+        let tokens = self.tokenize(text, true)?;
+        if tokens.is_empty() {
+            return Err(LlamaError::Tokenize);
+        }
+        if tokens.len() as u32 > self.n_ctx {
+            return Err(LlamaError::PromptTooLong {
+                prompt: tokens.len(),
+                ctx: self.n_ctx,
+            });
+        }
+        unsafe {
+            let mem = sys::llama_get_memory(self.ptr);
+            sys::llama_memory_clear(mem, true);
+        }
+        let mut buf = tokens.clone();
+        let batch = unsafe { sys::llama_batch_get_one(buf.as_mut_ptr(), tokens.len() as i32) };
+        let rc = unsafe { sys::llama_decode(self.ptr, batch) };
+        if rc != 0 {
+            return Err(LlamaError::Decode(rc));
+        }
+        let dim = unsafe { sys::llama_model_n_embd_out(self.model.ptr) } as usize;
+        let ptr = unsafe { sys::llama_get_embeddings(self.ptr) };
+        if ptr.is_null() {
+            return Err(LlamaError::Decode(-1));
+        }
+        let v = unsafe { std::slice::from_raw_parts(ptr, dim) }.to_vec();
+        Ok(l2_normalize(v))
+    }
+
+    /// Dimension des embeddings du modèle.
+    pub fn embed_dim(&self) -> usize {
+        unsafe { sys::llama_model_n_embd_out(self.model.ptr) as usize }
+    }
+}
+
+/// Normalisation L2 (pour similarité cosinus).
+fn l2_normalize(v: Vec<f32>) -> Vec<f32> {
+    let norm: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt();
+    if norm > 0.0 {
+        v.into_iter().map(|x| x / norm).collect()
+    } else {
+        v
     }
 }
 

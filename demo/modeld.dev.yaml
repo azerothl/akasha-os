@@ -12,6 +12,9 @@ os_reserve_ram_bytes: 4294967296    # 4 GiB
 default_model: local:embedded-instruct
 default_kv_tokens: 2048
 n_threads: 8
+# P5.1 continuous batching : jusqu'à 8 séquences / decode.
+n_seq_max: 8
+batch_window_ms: 150
 
 models:
   # Doublure du modèle embarqué (§3.4) : Qwen2.5-3B Q4_K_M (~2 GiB).

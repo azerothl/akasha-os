@@ -1,7 +1,7 @@
 //! Cœur du Model Subsystem : état, scheduler, placement réel.
 
 use crate::config::ModeldConfig;
-use aos_llama::{GenParams, LlamaContext, LlamaModel, LoadMode, LoadOptions};
+use aos_llama::{BatchItem, GenParams, LlamaContext, LlamaModel, LoadMode, LoadOptions};
 use aos_placement::{
     Budgets, CostModel, HardwareProfile, ModelDesc, PlacementManager, PlacementPlan,
     PlacementProfile, Tier,
@@ -16,25 +16,15 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex as StdMutex};
 use tokio::sync::{mpsc, oneshot};
 
-/// Job en file, ordonné par (priorité décroissante, ancienneté).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct QueuedJob {
+/// Job envoyé au dispatcher de continuous batching (P5.1).
+struct DispatchJob {
+    job_id: u64,
     priority: u8,
-    id: u64,
-}
-
-impl Ord for QueuedJob {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        // BinaryHeap = max-heap : priorité forte d'abord, puis plus ancien.
-        self.priority
-            .cmp(&other.priority)
-            .then(other.id.cmp(&self.id))
-    }
-}
-impl PartialOrd for QueuedJob {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
+    messages: Vec<(String, String)>,
+    params: GenParams,
+    abort: Arc<AtomicBool>,
+    delta_tx: mpsc::Sender<TokenEvent>,
+    done_tx: oneshot::Sender<InferOutcome>,
 }
 
 /// État runtime d'un modèle.
@@ -47,8 +37,11 @@ pub struct ModelRuntime {
     pub model: Option<Arc<LlamaModel>>,
     pub ctx: Option<Arc<StdMutex<LlamaContext>>>,
     pub ctx_abort: Option<Arc<AtomicBool>>,
-    pub running_job: Option<u64>,
-    pub queue: std::collections::BinaryHeap<QueuedJob>,
+    /// Inférences dans le batch GPU courant.
+    pub active: u32,
+    /// Jobs en attente du prochain batch.
+    pub pending: u32,
+    dispatch: Option<mpsc::Sender<DispatchJob>>,
     pub loading: bool,
     pub load_error: Option<String>,
     pub last_ttft_ms: Option<f64>,
@@ -67,8 +60,9 @@ impl ModelRuntime {
             model: None,
             ctx: None,
             ctx_abort: None,
-            running_job: None,
-            queue: std::collections::BinaryHeap::new(),
+            active: 0,
+            pending: 0,
+            dispatch: None,
             loading: false,
             load_error: None,
             last_ttft_ms: None,
@@ -96,6 +90,10 @@ struct Inner {
     /// inference_id → flag d'annulation (jobs en file).
     job_aborts: HashMap<u64, Arc<AtomicBool>>,
     next_inference: u64,
+    /// Politique de routage courante (F-MDL-07).
+    routing_mode: String,
+    /// Backends distants configurés (P3.1).
+    remote_backends: HashMap<String, crate::backend::RemoteOpenAiBackend>,
 }
 
 enum LoadAction {
@@ -188,6 +186,8 @@ impl ModelSubsystem {
                 models,
                 job_aborts: HashMap::new(),
                 next_inference: 1,
+                routing_mode: config.routing.clone(),
+                remote_backends: HashMap::new(),
             })),
             config,
             pm,
@@ -290,11 +290,13 @@ impl ModelSubsystem {
                     n_gpu_layers: ngl,
                     load_mode: LoadMode::Mmap,
                     offload_kqv: plan.kv_bytes_on(Tier::Vram) > 0,
-                    n_ctx: (kv_tokens + 1024).max(4096),
+                    n_ctx: (kv_tokens + 1024).max(4096) * config.n_seq_max.max(1),
                     n_batch: 512,
                     n_ubatch: 512,
                     n_threads: config.n_threads,
                     flash_attn: true,
+                    embeddings: false,
+                    n_seq_max: config.n_seq_max.max(1),
                 };
                 let model = Arc::new(LlamaModel::load(&path, &opts).map_err(|e| e.to_string())?);
                 let ctx = LlamaContext::new(model.clone(), &opts).map_err(|e| e.to_string())?;
@@ -343,7 +345,7 @@ impl ModelSubsystem {
         });
     }
 
-    /// Enfile une inférence (scheduler P1.3) et retourne
+    /// Enfile une inférence (continuous batching P5.1) et retourne
     /// `(inference_id, rx_deltas, rx_done)`.
     pub async fn infer(
         &self,
@@ -357,7 +359,7 @@ impl ModelSubsystem {
         ),
         String,
     > {
-        let (job_id, abort, initial_position) = {
+        let (job_id, abort, tx) = {
             let mut g = self.inner.lock().unwrap();
             if !matches!(
                 g.models.get(model_id).map(|m| &m.state),
@@ -370,122 +372,217 @@ impl ModelSubsystem {
             let abort = Arc::new(AtomicBool::new(false));
             g.job_aborts.insert(id, abort.clone());
             let m = g.models.get_mut(model_id).unwrap();
-            m.queue.push(QueuedJob {
-                priority: req.priority,
-                id,
-            });
-            let pos = m.queue.len().saturating_sub(1);
-            (id, abort, pos)
+            m.pending += 1;
+            if m.dispatch.is_none() {
+                let (dtx, drx) = mpsc::channel::<DispatchJob>(64);
+                m.dispatch = Some(dtx);
+                let inner = self.inner.clone();
+                let mid = model_id.to_string();
+                let window = std::time::Duration::from_millis(self.config.batch_window_ms);
+                let n_seq = self.config.n_seq_max.max(1) as usize;
+                tokio::spawn(async move {
+                    Self::dispatch_loop(inner, mid, drx, window, n_seq).await;
+                });
+            }
+            let tx = m.dispatch.clone().unwrap();
+            (id, abort, tx)
         };
 
         let (delta_tx, delta_rx) = mpsc::channel::<TokenEvent>(256);
         let (done_tx, done_rx) = oneshot::channel::<InferOutcome>();
-        if initial_position > 0 {
-            let _ = delta_tx
-                .send(TokenEvent::Queued {
-                    position: initial_position,
-                })
-                .await;
+        let job = DispatchJob {
+            job_id,
+            priority: req.priority,
+            messages: req
+                .messages
+                .iter()
+                .map(|m| (m.role.clone(), m.content.clone()))
+                .collect(),
+            params: GenParams {
+                max_tokens: req.params.max_tokens,
+                temperature: req.params.temperature,
+                top_p: req.params.top_p,
+                seed: req.params.seed.unwrap_or(42),
+            },
+            abort,
+            delta_tx,
+            done_tx,
+        };
+        if tx.send(job).await.is_err() {
+            let mut g = self.inner.lock().unwrap();
+            g.job_aborts.remove(&job_id);
+            if let Some(m) = g.models.get_mut(model_id) {
+                m.pending = m.pending.saturating_sub(1);
+            }
+            return Err("dispatcher arrêté".into());
         }
 
-        let inner = self.inner.clone();
-        let model_id = model_id.to_string();
-        let req = req.clone();
-        tokio::spawn(async move {
-            // --- Attente du tour (priorité, ancienneté) ---
-            loop {
-                if abort.load(Ordering::SeqCst) {
-                    let mut g = inner.lock().unwrap();
-                    let m = g.models.get_mut(&model_id).unwrap();
-                    m.queue.retain(|j| j.id != job_id);
-                    g.job_aborts.remove(&job_id);
-                    let _ = done_tx.send(InferOutcome::Cancelled);
-                    return;
+        Ok((job_id, delta_rx, done_rx))
+    }
+
+    async fn dispatch_loop(
+        inner: Arc<StdMutex<Inner>>,
+        model_id: String,
+        mut rx: mpsc::Receiver<DispatchJob>,
+        window: std::time::Duration,
+        n_seq: usize,
+    ) {
+        loop {
+            let Some(first) = rx.recv().await else {
+                break;
+            };
+            let mut batch = vec![first];
+            while batch.len() < n_seq {
+                match rx.try_recv() {
+                    Ok(j) => batch.push(j),
+                    Err(_) => break,
                 }
-                let my_turn = {
-                    let mut g = inner.lock().unwrap();
-                    let m = g.models.get_mut(&model_id).unwrap();
-                    if m.running_job.is_none() && m.queue.peek().map(|j| j.id) == Some(job_id) {
-                        m.queue.pop();
-                        m.running_job = Some(job_id);
-                        true
-                    } else {
-                        false
+            }
+            if batch.len() < n_seq {
+                let deadline = tokio::time::Instant::now() + window;
+                while batch.len() < n_seq {
+                    match tokio::time::timeout_at(deadline, rx.recv()).await {
+                        Ok(Some(j)) => {
+                            batch.push(j);
+                            while batch.len() < n_seq {
+                                match rx.try_recv() {
+                                    Ok(j) => batch.push(j),
+                                    Err(_) => break,
+                                }
+                            }
+                        }
+                        _ => break,
                     }
-                };
-                if my_turn {
-                    break;
                 }
-                tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+            }
+            batch.sort_by(|a, b| b.priority.cmp(&a.priority).then(a.job_id.cmp(&b.job_id)));
+            eprintln!(
+                "[modeld] batch {} job(s) (fenêtre {} ms, n_seq_max={n_seq})",
+                batch.len(),
+                window.as_millis()
+            );
+
+            let n = batch.len() as u32;
+            {
+                let mut g = inner.lock().unwrap();
+                if let Some(m) = g.models.get_mut(&model_id) {
+                    m.pending = m.pending.saturating_sub(n);
+                    m.active = n;
+                }
+            }
+            for j in &batch {
+                let _ = j
+                    .delta_tx
+                    .send(TokenEvent::Started {
+                        inference_id: j.job_id,
+                    })
+                    .await;
             }
 
-            let _ = delta_tx
-                .send(TokenEvent::Started {
-                    inference_id: job_id,
-                })
-                .await;
-
-            // --- Exécution (bloquante) dans un thread dédié ---
             let ctx = {
                 let g = inner.lock().unwrap();
                 g.models.get(&model_id).and_then(|m| m.ctx.clone())
             };
-            let inner2 = inner.clone();
-            let model_id2 = model_id.clone();
-            let outcome = match ctx {
-                Some(ctx) => {
-                    let delta_tx2 = delta_tx.clone();
-                    let messages: Vec<(String, String)> = req
-                        .messages
-                        .iter()
-                        .map(|m| (m.role.clone(), m.content.clone()))
-                        .collect();
-                    let params = GenParams {
-                        max_tokens: req.params.max_tokens,
-                        temperature: req.params.temperature,
-                        top_p: req.params.top_p,
-                        seed: req.params.seed.unwrap_or(42),
-                    };
-                    tokio::task::spawn_blocking(move || {
+
+            let results = if batch.len() == 1 {
+                // Chemin unitaire : generate() (P1), pas de surcoût n_seq_max.
+                let j = &batch[0];
+                let messages = j.messages.clone();
+                let params = j.params.clone();
+                let delta_tx = j.delta_tx.clone();
+                match ctx {
+                    Some(ctx) => tokio::task::spawn_blocking(move || {
                         let mut guard = ctx.lock().unwrap();
-                        guard.generate(&messages, &params, |piece| {
-                            delta_tx2
-                                .blocking_send(TokenEvent::Delta {
-                                    text: piece.to_string(),
+                        guard
+                            .generate(&messages, &params, |piece| {
+                                delta_tx
+                                    .blocking_send(TokenEvent::Delta {
+                                        text: piece.to_string(),
+                                    })
+                                    .is_ok()
+                            })
+                            .map_err(|e| e.to_string())
+                    })
+                    .await
+                    .unwrap_or_else(|e| Err(e.to_string())),
+                    None => Err("contexte disparu".into()),
+                }
+                .map(|s| vec![Ok(s)])
+                .unwrap_or_else(|_e| vec![Err(aos_llama::LlamaError::Decode(-5))])
+            } else {
+                let items: Vec<BatchItem> = batch
+                    .iter()
+                    .map(|j| BatchItem {
+                        messages: j.messages.clone(),
+                        params: j.params.clone(),
+                        abort: j.abort.clone(),
+                    })
+                    .collect();
+                let delta_txs: Vec<mpsc::Sender<TokenEvent>> =
+                    batch.iter().map(|j| j.delta_tx.clone()).collect();
+                let n_jobs = batch.len();
+                match ctx {
+                    Some(ctx) => tokio::task::spawn_blocking(move || {
+                        let mut guard = ctx.lock().unwrap();
+                        guard.generate_batch(&items, |i, piece| {
+                            delta_txs
+                                .get(i)
+                                .map(|tx| {
+                                    tx.blocking_send(TokenEvent::Delta {
+                                        text: piece.to_string(),
+                                    })
+                                    .is_ok()
                                 })
-                                .is_ok()
+                                .unwrap_or(false)
                         })
                     })
                     .await
-                    .map(|r| match r {
-                        Ok(stats) => InferOutcome::Done {
+                    .unwrap_or_else(|_| {
+                        (0..n_jobs)
+                            .map(|_| Err(aos_llama::LlamaError::Decode(-4)))
+                            .collect()
+                    }),
+                    None => (0..n_jobs)
+                        .map(|_| Err(aos_llama::LlamaError::Decode(-5)))
+                        .collect(),
+                }
+            };
+
+            {
+                let mut g = inner.lock().unwrap();
+                if let Some(m) = g.models.get_mut(&model_id) {
+                    m.active = 0;
+                }
+            }
+
+            for (j, res) in batch.into_iter().zip(results.into_iter()) {
+                let outcome = match res {
+                    Ok(stats) => {
+                        let mut g = inner.lock().unwrap();
+                        if let Some(m) = g.models.get_mut(&model_id) {
+                            m.last_ttft_ms = Some(stats.ttft_ms);
+                            m.last_tok_s = Some(stats.tok_s);
+                        }
+                        g.job_aborts.remove(&j.job_id);
+                        InferOutcome::Done {
                             prompt_tokens: stats.prompt_tokens,
                             generated_tokens: stats.generated_tokens,
                             ttft_ms: stats.ttft_ms,
                             tok_s: stats.tok_s,
-                        },
-                        Err(e) => InferOutcome::Failed(e.to_string()),
-                    })
-                    .unwrap_or_else(|e| InferOutcome::Failed(e.to_string()))
-                }
-                None => InferOutcome::Failed("contexte disparu".into()),
-            };
-
-            // --- Libération du tour + métriques ---
-            {
-                let mut g = inner2.lock().unwrap();
-                let m = g.models.get_mut(&model_id2).unwrap();
-                m.running_job = None;
-                if let InferOutcome::Done { ttft_ms, tok_s, .. } = &outcome {
-                    m.last_ttft_ms = Some(*ttft_ms);
-                    m.last_tok_s = Some(*tok_s);
-                }
-                g.job_aborts.remove(&job_id);
+                        }
+                    }
+                    Err(e) => {
+                        inner.lock().unwrap().job_aborts.remove(&j.job_id);
+                        if j.abort.load(Ordering::SeqCst) {
+                            InferOutcome::Cancelled
+                        } else {
+                            InferOutcome::Failed(e.to_string())
+                        }
+                    }
+                };
+                let _ = j.done_tx.send(outcome);
             }
-            let _ = done_tx.send(outcome);
-        });
-
-        Ok((job_id, delta_rx, done_rx))
+        }
     }
 
     /// `model.cancel` — annulation coopérative (frontière de token, §3.6).
@@ -493,14 +590,6 @@ impl ModelSubsystem {
         let g = self.inner.lock().unwrap();
         if let Some(flag) = g.job_aborts.get(&inference_id) {
             flag.store(true, Ordering::SeqCst);
-            // Si le job tourne, son contexte doit avorter aussi.
-            for m in g.models.values() {
-                if m.running_job == Some(inference_id) {
-                    if let Some(abort) = &m.ctx_abort {
-                        abort.store(true, Ordering::SeqCst);
-                    }
-                }
-            }
             true
         } else {
             false
@@ -511,7 +600,7 @@ impl ModelSubsystem {
     pub fn unload(&self, model_id: &str) -> bool {
         let mut g = self.inner.lock().unwrap();
         match g.models.get_mut(model_id) {
-            Some(m) if m.running_job.is_none() && !m.loading => {
+            Some(m) if m.active == 0 && m.pending == 0 && !m.loading => {
                 m.ctx = None; // LlamaContext::drop libère le contexte
                 m.model = None; // puis les poids
                 m.ctx_abort = None;
@@ -523,6 +612,76 @@ impl ModelSubsystem {
         }
     }
 
+    // --- Routage local/distant (§3.7, P3.2) ---
+
+    /// Politique de routage courante.
+    pub fn routing_mode(&self) -> String {
+        self.inner.lock().unwrap().routing_mode.clone()
+    }
+
+    pub fn set_routing(&self, mode: &str) -> Result<(), String> {
+        match mode {
+            "balanced" | "local_only" | "remote_only" => {
+                self.inner.lock().unwrap().routing_mode = mode.into();
+                Ok(())
+            }
+            _ => Err(format!("mode inconnu: {mode}")),
+        }
+    }
+
+    /// `model.backend.add` : enregistre un backend distant OpenAI-compatible.
+    pub fn add_remote_backend(
+        &self,
+        model_id: &str,
+        endpoint: &str,
+        remote_model: &str,
+        api_key: Option<String>,
+    ) {
+        let backend = crate::backend::RemoteOpenAiBackend::new(endpoint, remote_model, api_key);
+        let mut g = self.inner.lock().unwrap();
+        g.remote_backends.insert(model_id.into(), backend);
+        if let Some(m) = g.models.get_mut(model_id) {
+            m.state = ModelState::Remote;
+        }
+    }
+
+    /// Un backend distant est-il configuré pour ce modèle ?
+    pub fn has_remote(&self, model_id: &str) -> bool {
+        self.inner
+            .lock()
+            .unwrap()
+            .remote_backends
+            .contains_key(model_id)
+    }
+
+    /// Endpoint du backend distant (pour net.check côté daemon).
+    pub fn remote_endpoint(&self, model_id: &str) -> Option<String> {
+        self.inner
+            .lock()
+            .unwrap()
+            .remote_backends
+            .get(model_id)
+            .map(|b| b.endpoint.clone())
+    }
+
+    /// Exécute une inférence sur le backend distant (flux).
+    pub async fn infer_remote(
+        &self,
+        model_id: &str,
+        req: &aos_proto::InferRequest,
+        tx: tokio::sync::mpsc::Sender<aos_proto::TokenEvent>,
+    ) -> Result<(), String> {
+        let backend = {
+            let g = self.inner.lock().unwrap();
+            g.remote_backends.get(model_id).cloned()
+        };
+        let be = backend.ok_or_else(|| format!("backend distant non configuré: {model_id}"))?;
+        let abort = Arc::new(AtomicBool::new(false));
+        be.infer_stream(req, tx, abort)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
     /// `model.metrics` (F-PLC-08, F-OBS-02).
     pub fn metrics(&self, ram: (u64, u64), cpu_percent: f32) -> SystemMetrics {
         let g = self.inner.lock().unwrap();
@@ -532,8 +691,8 @@ impl ModelSubsystem {
             .map(|m| ModelMetrics {
                 model_id: m.desc.id.clone(),
                 state: m.state.clone(),
-                active_inferences: m.running_job.map(|_| 1).unwrap_or(0),
-                queued: m.queue.len() as u32,
+                active_inferences: m.active,
+                queued: m.pending,
                 last_ttft_ms: m.last_ttft_ms,
                 last_tok_s: m.last_tok_s,
                 vram_bytes: m.plan.as_ref().map(|p| p.bytes_on(Tier::Vram)).unwrap_or(0),

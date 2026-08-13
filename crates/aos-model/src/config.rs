@@ -27,6 +27,16 @@ pub struct ModeldConfig {
     /// Overrides par id de modèle (chemin GGUF réel + métadonnées mesurées).
     #[serde(default)]
     pub models: HashMap<String, ModelOverride>,
+    /// Politique de routage local/distant : balanced | local_only | remote_only
+    /// (§3.7, F-MDL-07). Défaut offline-first : balanced avec préférence locale.
+    #[serde(default = "default_routing")]
+    pub routing: String,
+    /// Séquences simultanées (continuous batching P5.1, NFR-04).
+    #[serde(default = "default_seq_max")]
+    pub n_seq_max: u32,
+    /// Fenêtre de rassemblement des jobs compatibles (µs → ms, §3.6).
+    #[serde(default = "default_batch_window")]
+    pub batch_window_ms: u64,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -64,6 +74,15 @@ fn default_kv() -> u32 {
 }
 fn default_threads() -> i32 {
     8
+}
+fn default_routing() -> String {
+    "balanced".into()
+}
+fn default_seq_max() -> u32 {
+    8
+}
+fn default_batch_window() -> u64 {
+    150
 }
 
 impl ModeldConfig {

@@ -2,7 +2,7 @@
 //!
 //! Usage : `aos-modeld [config.yaml]` (défaut `demo/modeld.dev.yaml`).
 
-use aos_ipc::{BusService, StreamHandle};
+use aos_ipc::{BusClient, BusService, StreamHandle};
 use aos_model::{ModelSubsystem, ModeldConfig};
 use aos_placement::PlacementProfile;
 use aos_proto::{
@@ -17,6 +17,25 @@ fn parse_profile(s: &str) -> PlacementProfile {
         "memory-saver" => PlacementProfile::MemorySaver,
         "cpu-only" => PlacementProfile::CpuOnly,
         _ => PlacementProfile::Balanced,
+    }
+}
+
+/// Extrait host/port d'un endpoint (`http(s)://hote[:port]/...`).
+fn parse_host_port(endpoint: &str) -> (String, u16) {
+    let without_scheme = endpoint
+        .trim_start_matches("https://")
+        .trim_start_matches("http://");
+    let hostport = without_scheme.split('/').next().unwrap_or("");
+    match hostport.rsplit_once(':') {
+        Some((h, p)) => (h.to_string(), p.parse().unwrap_or(443)),
+        None => (
+            hostport.to_string(),
+            if endpoint.starts_with("https") {
+                443
+            } else {
+                80
+            },
+        ),
     }
 }
 
@@ -38,6 +57,11 @@ async fn main() {
         registry.len(),
         config.bus
     );
+
+    // Client bus pour appels sortants (platformd : fs.class, net.check, audit).
+    let bus = BusClient::connect(&config.bus, "modeld")
+        .await
+        .expect("connexion au bus — lancer aos-busd d'abord");
 
     let mut svc = BusService::new("modeld");
 
@@ -136,11 +160,13 @@ async fn main() {
         });
     }
 
-    // --- model.infer (flux) ---
+    // --- model.infer (flux, avec routage privacy §3.7) ---
     {
         let sub = subsystem.clone();
+        let bus2 = bus.clone();
         svc.on("model.infer", move |ctx| {
             let sub = sub.clone();
+            let bus = bus2.clone();
             async move {
                 let req: InferRequest = match ctx.payload() {
                     Ok(r) => r,
@@ -153,7 +179,7 @@ async fn main() {
                 };
                 let stream: StreamHandle = ctx.open_stream();
                 // Résolution du modèle + chargement paresseux si besoin.
-                let model_id = match req
+                let mut model_id = match req
                     .model_id
                     .clone()
                     .or_else(|| sub.config.default_model.clone())
@@ -169,6 +195,132 @@ async fn main() {
                         return;
                     }
                 };
+
+                // --- Routage privacy (§3.7) ---
+                // 1. Classes des données référencées (via platformd fs.class).
+                let mut max_secret = false;
+                for path in &req.data_refs {
+                    if let Ok(resp) = bus
+                        .call::<aos_proto::FsClassRequest, aos_proto::FsClassResponse>(
+                            "fs.class",
+                            &aos_proto::FsClassRequest { path: path.clone() },
+                            vec![],
+                        )
+                        .await
+                    {
+                        if resp.class == aos_proto::DataClass::Secret {
+                            max_secret = true;
+                        }
+                    }
+                }
+                let mode = req
+                    .routing
+                    .clone()
+                    .unwrap_or_else(|| sub.routing_mode());
+                let want_remote = model_id.starts_with("remote:") || sub.has_remote(&model_id);
+
+                if want_remote {
+                    // secret → jamais remote (§3.7) : bascule locale auditée.
+                    if max_secret {
+                        let _ = bus
+                            .call::<aos_proto::AuditAppendRequest, bool>(
+                                "audit.append",
+                                &aos_proto::AuditAppendRequest {
+                                    trace_id: String::new(),
+                                    actor: "service:modeld".into(),
+                                    action: "policy.deny".into(),
+                                    target: model_id.clone(),
+                                    detail: serde_json::json!({
+                                        "rule": "deny_remote_secret",
+                                        "data_refs": req.data_refs,
+                                    }),
+                                },
+                                vec![],
+                            )
+                            .await;
+                        let fallback = sub.config.default_model.clone().unwrap_or(model_id);
+                        let _ = stream
+                            .send(&TokenEvent::Error {
+                                message: format!(
+                                    "donnée secret → routage local forcé (fallback {fallback})"
+                                ),
+                            })
+                            .await;
+                        model_id = fallback;
+                    } else if mode == "local_only" {
+                        let _ = stream
+                            .send(&TokenEvent::Error {
+                                message: "mode local_only : backend distant interdit".into(),
+                            })
+                            .await;
+                        let _ = stream.finish(aos_ipc::msg::Status::PermissionDenied).await;
+                        return;
+                    } else {
+                        // 2. Contrôle d'egress (§9.5) via platformd net.check.
+                        let endpoint = sub.remote_endpoint(&model_id).unwrap_or_default();
+                        let (host, port) = parse_host_port(&endpoint);
+                        let allowed = bus
+                            .call::<aos_proto::NetCheckRequest, bool>(
+                                "net.check",
+                                &aos_proto::NetCheckRequest {
+                                    host: host.clone(),
+                                    port,
+                                    actor: "service:modeld".into(),
+                                    caps: vec![format!("net.connect:{host}:{port}")],
+                                },
+                                vec![],
+                            )
+                            .await
+                            .unwrap_or(false);
+                        if !allowed {
+                            let _ = stream
+                                .send(&TokenEvent::Error {
+                                    message: format!("egress refusé vers {host}:{port}"),
+                                })
+                                .await;
+                            let _ = stream.finish(aos_ipc::msg::Status::PermissionDenied).await;
+                            return;
+                        }
+                        // 3. Exécution distante (flux).
+                        let _ = bus
+                            .call::<aos_proto::AuditAppendRequest, bool>(
+                                "audit.append",
+                                &aos_proto::AuditAppendRequest {
+                                    trace_id: String::new(),
+                                    actor: "service:modeld".into(),
+                                    action: "model.route".into(),
+                                    target: model_id.clone(),
+                                    detail: serde_json::json!({"direction": "remote", "host": host}),
+                                },
+                                vec![],
+                            )
+                            .await;
+                        let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+                        let sub2 = sub.clone();
+                        let mid = model_id.clone();
+                        let req2 = req.clone();
+                        tokio::spawn(async move {
+                            let r = sub2.infer_remote(&mid, &req2, tx).await;
+                            if let Err(e) = r {
+                                // Le flux est fermé côté émetteur ; l'erreur est
+                                // loguée via audit par l'appelant si besoin.
+                                eprintln!("[modeld] remote infer: {e}");
+                            }
+                        });
+                        while let Some(ev) = rx.recv().await {
+                            let terminal = matches!(ev, TokenEvent::Done { .. });
+                            if stream.send(&ev).await.is_err() {
+                                return;
+                            }
+                            if terminal {
+                                break;
+                            }
+                        }
+                        let _ = stream.finish(aos_ipc::msg::Status::Ok).await;
+                        return;
+                    }
+                }
+
                 if let Err(e) = sub
                     .ensure_loaded(
                         &model_id,
@@ -237,6 +389,51 @@ async fn main() {
                         let _ = ctx
                             .respond(aos_ipc::msg::Status::Ok, &sub.cancel(req.inference_id))
                             .await;
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+
+    // --- model.backend.add / model.set_routing (P3) ---
+    {
+        let sub = subsystem.clone();
+        svc.on("model.backend.add", move |ctx| {
+            let sub = sub.clone();
+            async move {
+                match ctx.payload::<aos_proto::BackendAddRequest>() {
+                    Ok(req) => {
+                        sub.add_remote_backend(
+                            &req.model_id,
+                            &req.endpoint,
+                            req.remote_model.as_deref().unwrap_or("gpt-mock"),
+                            None,
+                        );
+                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &true).await;
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let sub = subsystem.clone();
+        svc.on("model.set_routing", move |ctx| {
+            let sub = sub.clone();
+            async move {
+                match ctx.payload::<aos_proto::SetRoutingRequest>() {
+                    Ok(req) => {
+                        let r = sub.set_routing(&req.mode);
+                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &r).await;
                     }
                     Err(_) => {
                         let _ = ctx
