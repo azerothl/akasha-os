@@ -1,7 +1,7 @@
 # Plan de développement par phase — Agent OS
 
-> Version : 1.0  
-> Date : 11/08/2026  
+> Version : 1.1  
+> Date : 12/08/2026  
 > Statut : plan de référence  
 > Références : `specs-fonctionnelles.md`, `specs-techniques.md`, `reflexion-agent-os.md`
 
@@ -9,7 +9,11 @@
 
 ## 0. Vue d'ensemble
 
-Le développement d'Agent OS est découpé en **6 phases (P0 à P5)**, chacune avec un **gate de validation** mesurable avant de passer à la suivante. La stratégie générale, définie dans `specs-techniques.md` §1.3, est de **prouver les algorithmes agentiques en userspace avant d'engager le port sur un vrai microkernel** — le risque principal étant la complexité du noyau dédié, pas la logique métier.
+Le développement d'Agent OS est découpé en **7 phases (P0 à P5 + PV)**. P0–P5
+prouvent et polissent le système **sur l'hôte** ; **PV** est l'échafaudage
+**noyau seL4** (VM QEMU, sans GPU), en parallèle de P5, avant le fer nu
+(ADR 0001). La stratégie `specs-techniques.md` §1.3 reste : prouver les
+algorithmes agentiques en userspace avant d'engager le port microkernel.
 
 | Phase | Socle | Objectif central | Durée indicative |
 |-------|-------|------------------|------------------|
@@ -17,10 +21,13 @@ Le développement d'Agent OS est découpé en **6 phases (P0 à P5)**, chacune a
 | **P1** | Linux host (processus isolés) | **Model Subsystem complet** : inférence locale, offload réel, agents multi-process, UI minimale | ~10-14 semaines |
 | **P2** | Linux host | **Modules WASM + mémoire + audit/undo** | ~8-10 semaines |
 | **P3** | Linux host | **Backends distants, routage privacy, sécurité complète** | ~6-8 semaines |
-| **P4** | seL4 / Redox (microkernel) | **Port des services sur caps natives**, IPC sémantique | ~12-16 semaines |
-| **P5** | Agent OS dédié | **GPU/NPU first-class**, multi-GPU, polish | ~10-12 semaines |
+| **P4** | Hôte (caps userspace) | **Sémantique microkernel** (`aos-capkd`, isolation processus) — seL4 reporté (GPU) | ~12-16 semaines |
+| **PV** | QEMU + seL4 (sans GPU) | **Port noyau réel** : PDs Microkit, IPC seL4, rejeu gate P4 CPU-only | ~8-10 semaines |
+| **P5** | Hôte GPU / polish | **GPU/NPU first-class**, multi-GPU, polish (parallèle à PV) | ~10-12 semaines |
 
-**Total indicatif** : ~52-70 semaines (~1 an – 1,5 an) à taille d'équipe constante de 3-5 ingénieurs. Ces durées sont des ordres de grandeur, pas des engagements — chaque gate de sortie est plus important que le respect du calendrier.
+**Total indicatif** : ~60-80 semaines en séquence naïve ; **PV ∥ P5** ramène le
+chemin critique près du total P0–P5 d'origine. Ces durées sont des ordres de
+grandeur — chaque gate de sortie prime sur le calendrier.
 
 ---
 
@@ -34,7 +41,8 @@ Chaque phase se termine par un **gate de sortie** : une démonstration exécutab
 | **Gate P1** | Boot Linux démo → assistant conversationnel (modèle embarqué) + inférence réussie sur un modèle dont la taille > VRAM (offload actif), TTFT < 2s warm |
 | **Gate P2** | Installation d'un module double-surface utilisé par un agent (outil) et un humain (UI), audit trail visible, undo d'une action fichier effectif |
 | **Gate P3** | Bascule automatique local→distant selon politique privacy, mode `local_only` vérifiable par egress monitoring, confirmation bloquante sur action sensible |
-| **Gate P4** | Services essentiels (Model, Agent, Storage, Policy) tournant sur microkernel avec caps natives, kill d'un service sans impact sur les autres, IPC sémantique fonctionnelle |
+| **Gate P4** | Services essentiels isolés + caps natives userspace (`aos-capkd`) sur l'hôte ; kill Audit sans impacter Model |
+| **Gate PV** | Boot seL4/Microkit sous QEMU `virt` (sans GPU) ; intents `cap.*` via PD bus ; révocation immédiate ; stop Audit sans tuer CapKernel |
 | **Gate P5** | Continuous batching multi-agents avec période de dégradation < 20% sur 8 flux simultanés, multi-GPU pipeline fonctionnel, port aarch64 validé sur au moins une machine cible |
 
 ---
@@ -140,10 +148,14 @@ Rendre le système **extensible** et **auditable** : sandbox WASM, mémoire épi
 
 ### Gates de sortie (Gate P2)
 
-- [ ] Le module « notes » est installé, utilisé par un agent (création d'une note via outil) et par un humain (UI)
-- [ ] Audit trail montre la chaîne complète : intent → agent → outil → fs
-- [ ] Undo d'une création de fichier par agent restaure l'état antérieur
-- [ ] Un module tentant d'accéder à un fichier sans capacité est refusé et audité
+- [x] Le module « notes » est installé, utilisé par un agent (création d'une note via outil) et par un humain (UI) — **agent : convention `TOOL:` du worker → `module.invoke` ; humain : `module.invoke` en `human:ui` depuis l'UI TUI**
+- [x] Audit trail montre la chaîne complète : intent → agent → outil → fs — **`tool.invoke (agent:…)` → `fs.write (module:notes)` sous un même `trace_id`, intégrité HMAC vérifiée**
+- [x] Undo d'une création de fichier par agent restaure l'état antérieur — **COW logique (versions), « n'existait pas avant »**
+- [x] Un module tentant d'accéder à un fichier sans capacité est refusé et audité — **agent sans `tool.invoke:notes` → refus + événement d'audit**
+
+> Statut P2 (12/08/2026) : gate passé sur l'hôte de dev avec `aos-gate-p2` — 6/6 critères exécutables verts. Écarts documentés : index vectoriel brute-force exact (swap ANN usearch/hnswlib-rs via trait `VectorIndex`), snapshots FS = manifestes logiques userspace (pas de btrfs/ZFS sur l'hôte), paquet module = répertoire `.aospkg/` (archive signée plus tard), revue des caps à l'installation auto-approuvée en démo (UI de revue en P3).
+>
+> Retours utilisateur post-gate (12/08/2026), intégrés immédiatement : scroll du panneau conversation (PageUp/PageDown + suivi auto), `/commands` (liste) et `/help` (état OS : services, agents, mémoire, modèles, audit), prompt système « connaissance d'Agent OS » injecté dans l'assistant et les agents (`aos_proto::SYSTEM_ASSISTANT_PROMPT`). Reste pour P5 (P5.4 UI avancée) : recherche dans l'historique, panneau de transparence graphique, navigation clavier complète.
 
 ### Risques spécifiques
 
@@ -177,10 +189,12 @@ Ajouter les **backends distants**, le **routage privacy-aware**, la **sécurité
 
 ### Gates de sortie (Gate P3)
 
-- [ ] Un intent référençant une donnée `secret` est systématiquement routé local, même si un backend distant est configuré
-- [ ] Mode `local_only` : aucun paquet sortant vers les backends modèles détecté (vérifié par monitoring egress)
-- [ ] Une action `fs.delete` déclenche une confirmation bloquante ; timeout → refus audité
-- [ ] Un agent avec score de confiance élevé obtient une capacité supplémentaire sans confirmation ; un agent avec score faible est refusé
+- [x] Un intent référençant une donnée `secret` est systématiquement routé local, même si un backend distant est configuré — **vérifié par `aos-gate-p3` : 0 hit sur le mock SSE, `policy.deny (deny_remote_secret)` audité, réponse servie par le modèle local**
+- [x] Mode `local_only` : aucun paquet sortant vers les backends modèles détecté (vérifié par monitoring egress) — **journal `net.egress_log` vide pour le backend + 0 hit mock ; tout l'egress transite par le Backend Manager (point de contrôle unique userspace)**
+- [x] Une action `fs.delete` déclenche une confirmation bloquante ; timeout → refus audité — **confirmation bloquante 3 s (config gate), refus fail-closed audité (`confirmation.resolved approved=false`), fichier intact**
+- [x] Un agent avec score de confiance élevé obtient une capacité supplémentaire sans confirmation ; un agent avec score faible est refusé — **Trust Manager à paliers : high → `Granted` immédiat, low → `Denied`**
+
+> Statut P3 (12/08/2026) : gate passé sur l'hôte de dev avec `aos-gate-p3` — 4/4 critères exécutables verts. Le backend distant est testé contre un **mock SSE OpenAI-compatible local** (pas de clé API réelle requise) ; le client reqwest/SSE est complet. Superviseur v1 minimal (notifications dédupliquées + arbitrage de conflits de transactions FS). Écarts : chiffrement des secrets = fichier local en v1 (enveloppe hardware/TPM reportée), revue des caps à l'installation toujours auto-approuvée en démo.
 
 ### Risques spécifiques
 
@@ -214,10 +228,12 @@ C'est le **point de bascule** : porter les services userspace validés sur un vr
 
 ### Gates de sortie (Gate P4)
 
-- [ ] Tous les services essentiels (Model, Agent, Storage, Policy, Audit) tournent sur le microkernel
-- [ ] Kill d'un service non critique (ex. Audit) sans impact sur Model Subsystem ni UI
-- [ ] Une capability révoquée au niveau kernel est immédiatement invalide pour tous les processus
-- [ ] Boot offline → assistant conversationnel fonctionnel (même niveau que Gate P1)
+- [x] Tous les services essentiels (Model, Agent, Storage, Policy, Audit) tournent comme processus isolés, plus le noyau de caps (`aos-capkd`) — **vérifié par `aos-gate-p4` via `bus.lookup`**
+- [x] Kill d'un service non critique (Audit) sans impact sur Model Subsystem ni UI — **`aos-auditd` tué ; `model.list` + inférence OK**
+- [x] Une capability révoquée au niveau kernel est immédiatement invalide pour tous les processus — **mint → `fs.write`/`fs.read` via platformd → revoke → `cap.check` et `fs.read` refusés sans délai**
+- [x] Boot offline → assistant conversationnel fonctionnel (même niveau que Gate P1) — **inférence locale sans réseau**
+
+> Statut P4 (12/08/2026) : gate passé sur l'hôte de dev avec `aos-gate-p4` — 4/4 critères exécutables verts. **Décision ADR 0001** : noyau de caps userspace (`aos-capkd`) + isolation processus sur l'hôte ; le port seL4/Redox (drivers GPU) est reporté. IPC sémantique = même bus, caps natives `cap://kernel/<id>` dans l'enveloppe. UI = TUI/egui sur l'hôte (compositor microkernel = P5). Caps d'agents workers encore logiques (P1) ; l'accès fs est jugé par le noyau dès qu'une cap kernel est présentée. Enveloppe hardware des secrets (TPM) reportée.
 
 ### Risques spécifiques
 
@@ -226,7 +242,56 @@ C'est le **point de bascule** : porter les services userspace validés sur un vr
 | Drivers GPU/NPU sur microkernel trop complexes | Utiliser un hyperviseur léger ou passerelle virtio (device passthrough) en P4, driver natif en P5 |
 | Complexité seL4 (vérification formelle = courbe d'apprentissage) | Formation équipe + commencer par les services les moins critiques (Audit) pour monter en compétence |
 
-> **Décision structurante** : si le Gate P4 s'avère trop coûteux (drivers GPU), il est possible de rester sur Linux en production v1 tout en gardant l'architecture capability-based logique — voir ADR `0001-microkernel.md` (à rédiger au début de P4).
+> **Décision structurante (P4, ADR 0001)** : le bring-up seL4 + GPU est trop coûteux sur l'hôte Windows **pour P4**, pas comme abandon de la cible. P4 v1 = noyau de caps userspace (`aos-capkd`) sur l'hôte. **Cible produit : machine qui boot Agent OS (seL4), sans autre OS.** Chemin : hôte (GPU) et VM QEMU seL4 sans GPU en parallèle, puis fer nu (`AccelDevice` natif, P5.3). Pas de passthrough GPU depuis Windows.
+
+> **Piste VM** : extraite en **phase PV** (ci-dessous) — n'est plus un écart de P4, c'est le port noyau.
+
+---
+
+## Phase PV — Piste VM seL4 (échafaudage noyau)
+
+### Objectif
+
+Porter la sémantique validée en P4 (caps, isolation, IPC) sur un **vrai
+seL4**, dans une VM QEMU **sans GPU**. **Sortie : gate P4 rejoué dans
+l'invité**, contrat de transport = primitives seL4. Le fer nu réutilise
+cette image (ADR 0001). **Parallèle à P5** (GPU sur l'hôte).
+
+### Livrables
+
+| # | Livrable | Description |
+|---|----------|-------------|
+| PV.1 | Boot Microkit | Image `qemu_virt_aarch64`, PDs `capkd` / `bus` / `auditd` / `gate` |
+| PV.2 | Bus sémantique | PD `bus` : lookup + proxy `cap.*` (PPC seL4, pas TCP) |
+| PV.3 | CapStore `no_std` | `aos-caps` sans `std` ; staticlib `aos-sel4-capkd` liée dans le PD capkd |
+| PV.4 | Préparation fer nu | Doc boot (même image, pas de virtio-CUDA) ; `AccelDevice` reste P5.3 |
+
+### Dépendances techniques
+
+- SDK seL4 Microkit (prébuilt), QEMU `system-aarch64`, WSL Ubuntu sur l'hôte Windows
+- `libmicrokit` (glue C des PDs) ; `CapStore` Rust `no_std` dans capkd (PV.3)
+
+### Gates de sortie (Gate PV)
+
+- [x] Boot seL4 sous QEMU + révocation immédiate + stop Audit sans tuer CapKernel — **`AOS_GATE_VM_PASS` (PV.1, 12/08/2026)**
+- [x] Les intents `cap.*` transitent par un PD bus (pas d'appel direct gate→capkd) — **lookup + proxy PPC, serial `bus lookup cap.* OK`**
+- [x] `aos-caps` `no_std` : 100 % des tests de sécurité P0.2 — **20/20 ; `cargo check -p aos-caps --no-default-features`**
+- [x] Contrat ABI C/Rust unique (`vm/sel4/abi.h` ≡ `aos-sel4-abi`) — **test `aligne_sur_abi_h`**
+- [x] `CapStore` exécuté dans l'invité (plus de table C dupliquée) — **staticlib `aos-sel4-capkd`, gate VM rejoué**
+
+```powershell
+.\demo\run-sel4-vm.ps1
+```
+
+> Statut PV (12/08/2026) : **PV.1–PV.3 passés** (boot + bus d'intents +
+> `CapStore` dans l'invité). PV.4 (fer nu) reporté. Voir `phase-vm-sel4.md`.
+
+### Risques spécifiques
+
+| Risque | Mitigation |
+|--------|-----------|
+| Toolchain seL4 absente de Windows natif | Build/run dans WSL Ubuntu ; SDK Microkit gitignoré |
+| Port Rust PD bloqué (`sel4-microkit`) | CapStore lié en staticlib ; glue C tant que le runtime Rust n'est pas calé |
 
 ---
 
@@ -247,10 +312,12 @@ Exploiter pleinement le GPU/NPU comme citoyen de première classe du scheduler, 
 | P5.5 | Port aarch64 validé | Exécution stable sur au moins une machine ARM64 cible |
 | P5.6 | Stabilisation & release | Corrections, documentation, critères d'acceptation globaux (specs-fonctionnelles §9) |
 
+> Statut P5 (12/08/2026) : **P5.1 passé** sur l'hôte de dev avec `aos-gate-p5` — 8 flux 8/8 en ×0,77 wall vs unitaire (NFR-04). Écarts : P5.2 multi-GPU non testable (1× RTX 4080 SUPER), P5.3 AccelDevice = fer nu (ADR 0001), P5.4 UI avancée et P5.5 aarch64 reportés. Dispatcher : fenêtre de rassemblement + `generate_batch` (prefill packé, KV unifié). Chemin unitaire reste `generate()` (P1).
+
 ### Gates de sortie (Gate P5)
 
-- [ ] 8 flux d'inférence simultanés avec dégradation < 20% vs unitaire (NFR-04)
-- [ ] Multi-GPU : un modèle réparti sur 2 GPU avec pipeline fonctionnel
+- [x] 8 flux d'inférence simultanés avec dégradation < 20% vs unitaire (NFR-04) — **`aos-gate-p5` : 8/8, wall ×0,77 vs unitaire (216 ms → 168 ms)**
+- [ ] Multi-GPU : un modèle réparti sur 2 GPU avec pipeline fonctionnel — **écart : 1 GPU physique sur l'hôte de dev**
 - [ ] Tous les critères d'acceptation globaux de `specs-fonctionnelles.md` §9 cochés
 - [ ] Port aarch64 validé sur machine cible
 
@@ -263,15 +330,18 @@ P0 (simulateur)
  └──> P1 (Model Subsystem réel)      [P0 valide l'algo de placement]
        └──> P2 (Modules + mémoire)    [P1 fournit l'IPC et le runtime d'agents]
        │     └──> P3 (Remote + sécu)  [P2 fournit le sandbox et l'audit]
-       │           └──> P4 (microkernel) [P3 fige les interfaces, P4 les porte]
-       │                 └──> P5 (GPU first-class) [P4 fournit le socle noyau]
+       │           └──> P4 (caps userspace hôte) [P3 fige les interfaces]
+       │                 ├──> P5 (GPU first-class, hôte) [parallèle]
+       │                 └──> PV (seL4 VM, sans GPU) [port noyau]
+       │                       └──> fer nu (produit) [PV vert + AccelDevice P5.3]
        └──> (P1.7 aarch64, parallèle à P1, non bloquant)
 ```
 
 **Points critiques** :
 - P1 dépend de P0 (validation de l'algo avant d'écrire le vrai Placement Manager)
 - P4 dépend de P3 (on ne porte pas des interfaces encore en mouvement)
-- P4.1 (drivers) est le goulot d'étranglement de tout P4 — à prototyper dès la fin de P3 si les ressources le permettent
+- **PV et P5 sont parallèles** (ADR 0001) : GPU sur l'hôte, noyau dans la VM
+- Le fer nu attend un gate PV vert, pas un passthrough GPU depuis Windows
 
 ---
 
@@ -281,7 +351,7 @@ P0 (simulateur)
 
 | Flux | Responsabilités | Phases principales |
 |------|-----------------|-------------------|
-| **Flux Noyau & Sécurité** | Microkernel, caps, IPC, drivers | P0, P4, P5 |
+| **Flux Noyau & Sécurité** | Microkernel, caps, IPC, drivers | P0, P4, **PV**, P5 |
 | **Flux Modèles & Inférence** | Model Subsystem, placement, scheduler, backends | P0, P1, P3, P5 |
 | **Flux Agents & UX** | Agent Runtime, UI, modules, mémoire, audit | P1, P2, P3, P5 |
 
@@ -289,7 +359,7 @@ Une équipe de 3-5 personnes peut couvrir ces 3 flux avec des rotations ; les ph
 
 ### Priorités par phase (rappel)
 
-Les exigences `Must` de `specs-fonctionnelles.md` doivent être **toutes couvertes à la fin de P3** (sauf celles explicitement liées au microkernel, couvertes en P4). Les `Should` et `Could` sont répartis sur P4/P5 ou reportés si nécessaire.
+Les exigences `Must` de `specs-fonctionnelles.md` doivent être **toutes couvertes à la fin de P3** (sauf celles explicitement liées au microkernel, couvertes en P4). Les `Should` et `Could` sont répartis sur P4/PV/P5 ou reportés si nécessaire.
 
 ---
 
@@ -307,4 +377,4 @@ Les exigences `Must` de `specs-fonctionnelles.md` doivent être **toutes couvert
 - `specs-fonctionnelles.md` — exigences produit
 - `specs-techniques.md` — architecture technique
 - `reflexion-agent-os.md` — cadrage et pistes ouvertes
-- (à créer au fil de l'eau) `adr/0001-microkernel.md`, `adr/0002-model-placement.md` (publié, P0), `adr/0003-ui-framework.md`, `adr/0005-offload-etat-de-l-art.md` (publié, pré-P1)
+- (à créer au fil de l'eau) publiés : `adr/0001-microkernel.md` (P4 hôte + **phase PV** seL4 VM), `adr/0002-model-placement.md` (P0), `adr/0003-ui-framework.md` (accepté : egui), `adr/0005-offload-etat-de-l-art.md` (pré-P1)
