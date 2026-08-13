@@ -1,6 +1,6 @@
 # Config dev du daemon plateforme (P2).
 
-bus: "127.0.0.1:47001"
+bus: "127.0.0.1:24701"
 audit_dir: var/audit
 storage_dir: var/storage
 memory_dir: var/memory

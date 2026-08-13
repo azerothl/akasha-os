@@ -5,10 +5,10 @@
 
 use aos_ipc::BusClient;
 use aos_proto::{
-    AgentCreateRequest, AgentIdRequest, AgentInfo, AgentSteerRequest, AuditEvent,
+    AgentCreateRequest, AgentIdRequest, AgentInfo, AgentState, AgentSteerRequest, AuditEvent,
     AuditQueryRequest, ChatMessage, ConfirmResponseRequest, FeedbackSubmitRequest,
-    FeedbackSubmitResponse, InferParams, InferRequest, ModuleInvokeRequest, ModuleInvokeResponse,
-    PendingConfirmation, SystemMetrics, TokenEvent, SYSTEM_ASSISTANT_PROMPT,
+    FeedbackSubmitResponse, InferParams, InferRequest, ModelInfo, ModelState, ModuleInvokeRequest,
+    ModuleInvokeResponse, PendingConfirmation, SystemMetrics, TokenEvent, SYSTEM_ASSISTANT_PROMPT,
 };
 use eframe::egui;
 use serde::{Deserialize, Serialize};
@@ -50,6 +50,7 @@ impl Default for OnboardingState {
 
 enum Cmd {
     Chat(Vec<(String, String)>),
+    Help,
     NotesList,
     NotesCreate { title: String, content: String },
     NotesSearch { query: String },
@@ -69,6 +70,7 @@ enum Evt {
     Done(String),
     Error(String),
     Status(String),
+    ChatSystem(String),
     Metrics(SystemMetrics),
     Agents(Vec<AgentInfo>),
     Notes(String),
@@ -76,6 +78,19 @@ enum Evt {
     Confirms(Vec<PendingConfirmation>),
     FeedbackOk(FeedbackSubmitResponse),
 }
+
+const SLASH_COMMANDS: &[(&str, &str)] = &[
+    ("<texte>", "discuter avec l'assistant (modèle local)"),
+    ("/commands", "cette liste"),
+    ("/help", "état du système (services, agents, modèles)"),
+    ("/agent <tâche>", "créer un agent (caps notes incluses)"),
+    ("/notes", "lister les notes"),
+    ("/notenew <titre> | <contenu>", "créer une note"),
+    ("/notesearch <requête>", "recherche sémantique dans les notes"),
+    ("/audit [n]", "n derniers événements d'audit"),
+    ("/kill <id>", "tuer un agent"),
+    ("/pause <id>", "suspendre un agent"),
+];
 
 fn main() -> eframe::Result<()> {
     let (cmd_tx, cmd_rx) = channel::<Cmd>();
@@ -129,7 +144,7 @@ fn save_onboarding(state: &OnboardingState) {
 }
 
 async fn runtime_main(cmd_rx: Receiver<Cmd>, evt_tx: Sender<Evt>, egui_ctx: egui::Context) {
-    let bus = match BusClient::connect("127.0.0.1:47001", "ui-egui").await {
+    let bus = match BusClient::connect("127.0.0.1:24701", "ui-egui").await {
         Ok(b) => b,
         Err(e) => {
             let _ = evt_tx.send(Evt::Error(format!(
@@ -184,6 +199,9 @@ async fn runtime_main(cmd_rx: Receiver<Cmd>, evt_tx: Sender<Evt>, egui_ctx: egui
 async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
     match cmd {
         Cmd::Chat(history) => {
+            let _ = evt_tx.send(Evt::Status(
+                "assistant : génération en cours…".into(),
+            ));
             let mut messages = vec![ChatMessage {
                 role: "system".into(),
                 content: SYSTEM_ASSISTANT_PROMPT.into(),
@@ -199,36 +217,95 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                     max_tokens: 512,
                     ..Default::default()
                 },
-                priority: 3,
+                priority: 8,
                 data_refs: vec![],
                 routing: Some("local_only".into()),
             };
-            match bus
-                .call_stream::<InferRequest, TokenEvent>("model.infer", &req, vec![])
-                .await
-            {
-                Ok(mut rx) => {
-                    let mut full = String::new();
-                    while let Some(ev) = rx.recv().await {
-                        match ev {
-                            Ok(TokenEvent::Delta { text }) => {
-                                full.push_str(&text);
-                                let _ = evt_tx.send(Evt::Delta(text));
+            let infer = async {
+                match bus
+                    .call_stream::<InferRequest, TokenEvent>("model.infer", &req, vec![])
+                    .await
+                {
+                    Ok(mut rx) => {
+                        let mut full = String::new();
+                        while let Some(ev) = rx.recv().await {
+                            match ev {
+                                Ok(TokenEvent::Delta { text }) => {
+                                    full.push_str(&text);
+                                    let _ = evt_tx.send(Evt::Delta(text));
+                                }
+                                Ok(TokenEvent::Done { .. }) => break,
+                                Ok(TokenEvent::Error { message }) => {
+                                    let _ = evt_tx.send(Evt::Error(message));
+                                    return;
+                                }
+                                _ => {}
                             }
-                            Ok(TokenEvent::Done { .. }) => break,
-                            Ok(TokenEvent::Error { message }) => {
-                                let _ = evt_tx.send(Evt::Error(message));
-                                break;
-                            }
-                            _ => {}
                         }
+                        let _ = evt_tx.send(Evt::Done(full));
                     }
-                    let _ = evt_tx.send(Evt::Done(full));
+                    Err(e) => {
+                        let _ = evt_tx.send(Evt::Error(e.to_string()));
+                    }
                 }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+            };
+            match tokio::time::timeout(std::time::Duration::from_secs(180), infer).await {
+                Ok(()) => {}
+                Err(_) => {
+                    let _ = evt_tx.send(Evt::Error(
+                        "timeout chat (180 s) — modeld a peut-être planté (voir var/run/aos-modeld.stderr.log) ; relancez aos-session".into(),
+                    ));
                 }
             }
+        }
+        Cmd::Help => {
+            let mut services = Vec::new();
+            for (name, probe) in [
+                ("modeld", "model.list"),
+                ("agentd", "agent.list"),
+                ("platformd", "module.list"),
+                ("capkd", "cap.check"),
+            ] {
+                let up = bus.lookup(probe).await.unwrap_or(false);
+                services.push(format!("{name}: {}", if up { "up" } else { "DOWN" }));
+            }
+            let models: Vec<ModelInfo> = bus
+                .call("model.list", &(), vec![])
+                .await
+                .unwrap_or_default();
+            let loaded = models
+                .iter()
+                .filter(|m| matches!(m.state, ModelState::Loaded | ModelState::PartiallyOffloaded))
+                .count();
+            let agents: Vec<AgentInfo> = bus
+                .call(aos_agent::intents::LIST, &(), vec![])
+                .await
+                .unwrap_or_default();
+            let running = agents
+                .iter()
+                .filter(|a| matches!(a.state, AgentState::Running))
+                .count();
+            let metrics: Option<SystemMetrics> = bus.call("model.metrics", &(), vec![]).await.ok();
+            let mut out = String::from("Agent OS Preview — état\n");
+            out.push_str(&format!("services : {}\n", services.join(", ")));
+            out.push_str(&format!(
+                "modèles : {loaded} chargés / {} au registry\n",
+                models.len()
+            ));
+            out.push_str(&format!(
+                "agents : {running} running / {} total\n",
+                agents.len()
+            ));
+            if let Some(m) = metrics {
+                out.push_str(&format!(
+                    "hôte : RAM {:.1}/{:.1} GiB, CPU {:.0}%\n",
+                    m.ram_used as f64 / (1 << 30) as f64,
+                    m.ram_total as f64 / (1 << 30) as f64,
+                    m.cpu_percent
+                ));
+            }
+            out.push_str("→ /commands pour la liste des commandes");
+            let _ = evt_tx.send(Evt::ChatSystem(out));
         }
         Cmd::NotesList => {
             invoke_notes(&bus, &evt_tx, "notes.list", serde_json::json!({})).await;
@@ -278,7 +355,9 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                     aos_agent::intents::CREATE,
                     &AgentCreateRequest {
                         directive: task,
-                        caps: vec![],
+                        // Preview : cap notes pour le scénario « note via agent »
+                        // (sinon module_rt refuse tool.invoke:notes).
+                        caps: vec!["tool.invoke:notes".into()],
                         model_id: None,
                     },
                     vec![],
@@ -286,7 +365,10 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                 .await
             {
                 Ok(r) => {
-                    let _ = evt_tx.send(Evt::Status(format!("agent créé : {}", r.agent_id)));
+                    let _ = evt_tx.send(Evt::Status(format!(
+                        "agent créé : {} (cap tool.invoke:notes)",
+                        r.agent_id
+                    )));
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));
@@ -443,6 +525,7 @@ struct UiApp {
     chat: Vec<(String, String)>,
     streaming: String,
     input: String,
+    chat_pending: bool,
     metrics: Option<SystemMetrics>,
     agents: Vec<AgentInfo>,
     confirms: Vec<PendingConfirmation>,
@@ -457,6 +540,7 @@ struct UiApp {
     status: String,
     onboarding: OnboardingState,
     show_onboarding: bool,
+    pending_note_agent: bool,
     // scenarios
     scen_chat: bool,
     scen_note_human: bool,
@@ -484,11 +568,14 @@ impl UiApp {
             chat: vec![(
                 "système".into(),
                 format!(
-                    "{PREVIEW_BANNER}\nUtilisez les onglets pour notes, agents, audit, scénarios et retours."
+                    "{PREVIEW_BANNER}\n\
+                     Tapez /commands pour la liste des commandes, /help pour l'état du système.\n\
+                     Onglets : notes, agents, audit, scénarios, retours."
                 ),
             )],
             streaming: String::new(),
             input: String::new(),
+            chat_pending: false,
             metrics: None,
             agents: Vec::new(),
             confirms: Vec::new(),
@@ -503,6 +590,7 @@ impl UiApp {
             status: String::new(),
             onboarding,
             show_onboarding,
+            pending_note_agent: false,
             scen_chat: false,
             scen_note_human: false,
             scen_note_agent: false,
@@ -523,6 +611,19 @@ impl UiApp {
             return;
         }
         self.input.clear();
+        if text.starts_with('/') {
+            self.handle_slash(&text);
+            return;
+        }
+        if self.chat_pending {
+            self.chat.push(("vous".into(), text));
+            self.chat.push((
+                "système".into(),
+                "réponse précédente encore en cours — patientez (indicateur « … en file / génération »)."
+                    .into(),
+            ));
+            return;
+        }
         self.chat.push(("vous".into(), text));
         let history: Vec<(String, String)> = self
             .chat
@@ -540,8 +641,112 @@ impl UiApp {
             })
             .collect();
         self.streaming.clear();
+        self.chat_pending = true;
+        self.status = "assistant : génération… (prioritaire, mais attend la fin d'un infer agent en cours)"
+            .into();
         let _ = self.cmd_tx.send(Cmd::Chat(history));
         self.scen_chat = true;
+    }
+
+    fn handle_slash(&mut self, text: &str) {
+        self.chat.push(("vous".into(), text.to_string()));
+        let mut parts = text.splitn(2, char::is_whitespace);
+        let cmd = parts.next().unwrap_or(text);
+        let rest = parts.next().unwrap_or("").trim();
+        match cmd {
+            "/commands" => {
+                let mut out = String::from("Commandes chat :\n");
+                for (c, d) in SLASH_COMMANDS {
+                    out.push_str(&format!("  {c} — {d}\n"));
+                }
+                self.chat.push(("système".into(), out));
+            }
+            "/help" => {
+                self.status = "interrogation des services…".into();
+                let _ = self.cmd_tx.send(Cmd::Help);
+            }
+            "/notes" => {
+                let _ = self.cmd_tx.send(Cmd::NotesList);
+                self.tab = Tab::Notes;
+            }
+            "/notenew" => {
+                let (title, content) = match rest.split_once('|') {
+                    Some((t, c)) => (t.trim().to_string(), c.trim().to_string()),
+                    None => {
+                        self.chat.push((
+                            "système".into(),
+                            "usage : /notenew <titre> | <contenu>".into(),
+                        ));
+                        return;
+                    }
+                };
+                if title.is_empty() || content.is_empty() {
+                    self.chat.push((
+                        "système".into(),
+                        "usage : /notenew <titre> | <contenu>".into(),
+                    ));
+                    return;
+                }
+                let _ = self.cmd_tx.send(Cmd::NotesCreate { title, content });
+                self.tab = Tab::Notes;
+            }
+            "/notesearch" => {
+                if rest.is_empty() {
+                    self.chat.push((
+                        "système".into(),
+                        "usage : /notesearch <requête>".into(),
+                    ));
+                    return;
+                }
+                let _ = self.cmd_tx.send(Cmd::NotesSearch {
+                    query: rest.to_string(),
+                });
+                self.tab = Tab::Notes;
+            }
+            "/agent" => {
+                if rest.is_empty() {
+                    self.chat.push((
+                        "système".into(),
+                        "usage : /agent <tâche>".into(),
+                    ));
+                    return;
+                }
+                self.pending_note_agent = rest.to_lowercase().contains("note");
+                let _ = self.cmd_tx.send(Cmd::AgentCreate {
+                    task: rest.to_string(),
+                });
+                self.tab = Tab::Agents;
+            }
+            "/audit" => {
+                let n = rest.parse().unwrap_or(20);
+                let _ = self.cmd_tx.send(Cmd::Audit { last: n });
+                self.tab = Tab::Audit;
+            }
+            "/kill" => {
+                if rest.is_empty() {
+                    self.chat.push(("système".into(), "usage : /kill <id>".into()));
+                    return;
+                }
+                let _ = self.cmd_tx.send(Cmd::AgentKill {
+                    id: rest.to_string(),
+                });
+            }
+            "/pause" => {
+                if rest.is_empty() {
+                    self.chat.push(("système".into(), "usage : /pause <id>".into()));
+                    return;
+                }
+                let _ = self.cmd_tx.send(Cmd::AgentPause {
+                    id: rest.to_string(),
+                });
+            }
+            _ => {
+                self.chat.push((
+                    "système".into(),
+                    format!("commande inconnue : {cmd} — tapez /commands"),
+                ));
+            }
+        }
     }
 }
 
@@ -555,16 +760,42 @@ impl eframe::App for UiApp {
                         self.chat.push(("assistant".into(), full));
                     }
                     self.streaming.clear();
+                    self.chat_pending = false;
+                    if self.status.starts_with("assistant :") {
+                        self.status.clear();
+                    }
                 }
                 Evt::Error(m) => {
                     self.status = m.clone();
                     self.chat.push(("système".into(), m));
                     self.streaming.clear();
+                    self.chat_pending = false;
                 }
                 Evt::Status(m) => self.status = m,
+                Evt::ChatSystem(m) => self.chat.push(("système".into(), m)),
                 Evt::Metrics(m) => self.metrics = Some(m),
-                Evt::Agents(a) => self.agents = a,
+                Evt::Agents(a) => {
+                    if self.pending_note_agent
+                        && a.iter().any(|ag| {
+                            matches!(
+                                ag.state,
+                                AgentState::Done | AgentState::Failed | AgentState::Killed
+                            )
+                        })
+                    {
+                        let _ = self.cmd_tx.send(Cmd::NotesList);
+                    }
+                    self.agents = a;
+                }
                 Evt::Notes(s) => {
+                    if self.pending_note_agent
+                        && !s.is_empty()
+                        && !s.contains("aucune note")
+                        && s != self.notes_out
+                    {
+                        self.scen_note_agent = true;
+                        self.pending_note_agent = false;
+                    }
                     self.notes_out = s;
                     self.scen_note_human = true;
                 }
@@ -736,13 +967,16 @@ impl UiApp {
                 if !self.streaming.is_empty() {
                     ui.label("[assistant]");
                     ui.add(egui::Label::new(&self.streaming).wrap());
+                } else if self.chat_pending {
+                    ui.label("[assistant]");
+                    ui.weak("… en file / génération (les agents running utilisent aussi le GPU)");
                 }
             });
         ui.horizontal(|ui| {
             let r = ui.add(
                 egui::TextEdit::singleline(&mut self.input)
                     .desired_width(f32::INFINITY)
-                    .hint_text("message…"),
+                    .hint_text("message ou /commands …"),
             );
             let send = ui.button("Envoyer").clicked()
                 || (r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)));
@@ -794,12 +1028,10 @@ impl UiApp {
         ui.horizontal(|ui| {
             ui.text_edit_singleline(&mut self.agent_task);
             if ui.button("Créer").clicked() && !self.agent_task.is_empty() {
+                self.pending_note_agent = self.agent_task.to_lowercase().contains("note");
                 let _ = self.cmd_tx.send(Cmd::AgentCreate {
                     task: self.agent_task.clone(),
                 });
-                if self.agent_task.to_lowercase().contains("note") {
-                    self.scen_note_agent = true;
-                }
                 self.agent_task.clear();
             }
         });

@@ -88,7 +88,7 @@ enum Message {
 }
 
 async fn runtime_main(cmd_rx: Receiver<Cmd>, evt_tx: Sender<Evt>) {
-    let bus = BusClient::connect("127.0.0.1:47001", "ui-iced")
+    let bus = BusClient::connect("127.0.0.1:24701", "ui-iced")
         .await
         .expect("bus requis (run-demo.ps1)");
     {

@@ -14,7 +14,7 @@ use std::thread;
 use std::time::Duration;
 
 const PREVIEW_VERSION: &str = "0.1.0";
-const BUS_ADDR: &str = "127.0.0.1:47001";
+const BUS_ADDR: &str = "127.0.0.1:24701";
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct OnboardingState {
@@ -313,10 +313,14 @@ fn start_daemons(session: &Arc<Session>) -> Result<(), String> {
     let bin = |n: &str| bin_path(home, n);
 
     let spawn = |name: &'static str, mut cmd: Command| -> Result<Daemon, String> {
+        let log_path = home.join("var/run").join(format!("{name}.stderr.log"));
+        let log_file = fs::File::create(&log_path)
+            .map_err(|e| format!("{name}: log {e} ({})", log_path.display()))?;
         cmd.current_dir(home)
             .env("AOS_HOME", home)
             .stdout(Stdio::null())
-            .stderr(Stdio::piped());
+            // Piped unread stderr deadlocks GPU daemons (ggml/CUDA logs).
+            .stderr(Stdio::from(log_file));
         let child = cmd
             .spawn()
             .map_err(|e| format!("{name}: {e} ({})", bin(name).display()))?;
@@ -330,7 +334,7 @@ fn start_daemons(session: &Arc<Session>) -> Result<(), String> {
 
     {
         let mut cmd = Command::new(bin("aos-busd"));
-        cmd.arg("47001");
+        cmd.arg("24701");
         list.push(spawn("aos-busd", cmd)?);
     }
     thread::sleep(Duration::from_millis(800));

@@ -18,9 +18,12 @@ if [ "$SKIP_BUILD" != "1" ]; then
   else
     cargo build --manifest-path "${ROOT}/modules/notes/Cargo.toml" \
       --target wasm32-unknown-unknown --release
-    mkdir -p "${ROOT}/modules/notes.aospkg/ui"
-    cp "${ROOT}/modules/notes/target/wasm32-unknown-unknown/release/module_notes.wasm" \
-      "${ROOT}/modules/notes.aospkg/module.wasm"
+    mkdir -p "${ROOT}/modules/notes.aospkg/ui" "${ROOT}/modules/notes.aospkg/schemas"
+    WASM_SRC="${CARGO_TARGET_DIR}/wasm32-unknown-unknown/release/module_notes.wasm"
+    if [ ! -f "${WASM_SRC}" ]; then
+      WASM_SRC="${ROOT}/modules/notes/target/wasm32-unknown-unknown/release/module_notes.wasm"
+    fi
+    cp -f "${WASM_SRC}" "${ROOT}/modules/notes.aospkg/module.wasm"
   fi
 fi
 

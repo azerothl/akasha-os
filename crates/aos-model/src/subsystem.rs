@@ -291,7 +291,8 @@ impl ModelSubsystem {
                     load_mode: LoadMode::Mmap,
                     offload_kqv: plan.kv_bytes_on(Tier::Vram) > 0,
                     n_ctx: (kv_tokens + 1024).max(4096) * config.n_seq_max.max(1),
-                    n_batch: 512,
+                    // Prefill chunké dans aos-llama ; 2048 réduit les round-trips.
+                    n_batch: 2048,
                     n_ubatch: 512,
                     n_threads: config.n_threads,
                     flash_attn: true,
@@ -423,41 +424,49 @@ impl ModelSubsystem {
     async fn dispatch_loop(
         inner: Arc<StdMutex<Inner>>,
         model_id: String,
-        mut rx: mpsc::Receiver<DispatchJob>,
+        rx: mpsc::Receiver<DispatchJob>,
         window: std::time::Duration,
         n_seq: usize,
     ) {
+        let rx = Arc::new(tokio::sync::Mutex::new(rx));
         loop {
-            let Some(first) = rx.recv().await else {
-                break;
+            let first = {
+                let mut g = rx.lock().await;
+                match g.recv().await {
+                    Some(j) => j,
+                    None => break,
+                }
             };
             let mut batch = vec![first];
-            while batch.len() < n_seq {
-                match rx.try_recv() {
-                    Ok(j) => batch.push(j),
-                    Err(_) => break,
-                }
-            }
-            if batch.len() < n_seq {
-                let deadline = tokio::time::Instant::now() + window;
+            {
+                let mut g = rx.lock().await;
                 while batch.len() < n_seq {
-                    match tokio::time::timeout_at(deadline, rx.recv()).await {
-                        Ok(Some(j)) => {
-                            batch.push(j);
-                            while batch.len() < n_seq {
-                                match rx.try_recv() {
-                                    Ok(j) => batch.push(j),
-                                    Err(_) => break,
+                    match g.try_recv() {
+                        Ok(j) => batch.push(j),
+                        Err(_) => break,
+                    }
+                }
+                if batch.len() < n_seq {
+                    let deadline = tokio::time::Instant::now() + window;
+                    while batch.len() < n_seq {
+                        match tokio::time::timeout_at(deadline, g.recv()).await {
+                            Ok(Some(j)) => {
+                                batch.push(j);
+                                while batch.len() < n_seq {
+                                    match g.try_recv() {
+                                        Ok(j) => batch.push(j),
+                                        Err(_) => break,
+                                    }
                                 }
                             }
+                            _ => break,
                         }
-                        _ => break,
                     }
                 }
             }
             batch.sort_by(|a, b| b.priority.cmp(&a.priority).then(a.job_id.cmp(&b.job_id)));
             eprintln!(
-                "[modeld] batch {} job(s) (fenêtre {} ms, n_seq_max={n_seq})",
+                "[modeld] batch {} job(s) (fenêtre {} ms, n_seq_max={n_seq}) — admit à chaud actif",
                 batch.len(),
                 window.as_millis()
             );
@@ -484,68 +493,125 @@ impl ModelSubsystem {
                 g.models.get(&model_id).and_then(|m| m.ctx.clone())
             };
 
-            let results = if batch.len() == 1 {
-                // Chemin unitaire : generate() (P1), pas de surcoût n_seq_max.
-                let j = &batch[0];
-                let messages = j.messages.clone();
-                let params = j.params.clone();
-                let delta_tx = j.delta_tx.clone();
-                match ctx {
-                    Some(ctx) => tokio::task::spawn_blocking(move || {
-                        let mut guard = ctx.lock().unwrap();
-                        guard
-                            .generate(&messages, &params, |piece| {
-                                delta_tx
-                                    .blocking_send(TokenEvent::Delta {
-                                        text: piece.to_string(),
-                                    })
-                                    .is_ok()
-                            })
-                            .map_err(|e| e.to_string())
-                    })
-                    .await
-                    .unwrap_or_else(|e| Err(e.to_string())),
-                    None => Err("contexte disparu".into()),
-                }
-                .map(|s| vec![Ok(s)])
-                .unwrap_or_else(|_e| vec![Err(aos_llama::LlamaError::Decode(-5))])
-            } else {
-                let items: Vec<BatchItem> = batch
+            // Handles I/O indexés comme les items du batch (y compris admits).
+            struct JobIo {
+                job_id: u64,
+                delta_tx: mpsc::Sender<TokenEvent>,
+                done_tx: Option<oneshot::Sender<InferOutcome>>,
+                abort: Arc<AtomicBool>,
+            }
+            let ios: Arc<StdMutex<Vec<JobIo>>> = Arc::new(StdMutex::new(
+                batch
                     .iter()
-                    .map(|j| BatchItem {
-                        messages: j.messages.clone(),
-                        params: j.params.clone(),
+                    .map(|j| JobIo {
+                        job_id: j.job_id,
+                        delta_tx: j.delta_tx.clone(),
+                        done_tx: None, // rempli après move
                         abort: j.abort.clone(),
                     })
-                    .collect();
-                let delta_txs: Vec<mpsc::Sender<TokenEvent>> =
-                    batch.iter().map(|j| j.delta_tx.clone()).collect();
-                let n_jobs = batch.len();
-                match ctx {
-                    Some(ctx) => tokio::task::spawn_blocking(move || {
+                    .collect(),
+            ));
+            // done_tx can't be cloned — store separately after moving batch
+            let mut done_txs: Vec<Option<oneshot::Sender<InferOutcome>>> =
+                batch.iter().map(|_| None).collect();
+            let items: Vec<BatchItem> = batch
+                .into_iter()
+                .enumerate()
+                .map(|(i, j)| {
+                    done_txs[i] = Some(j.done_tx);
+                    BatchItem {
+                        messages: j.messages,
+                        params: j.params,
+                        abort: j.abort,
+                    }
+                })
+                .collect();
+            {
+                let mut g = ios.lock().unwrap();
+                for (i, tx) in done_txs.into_iter().enumerate() {
+                    g[i].done_tx = tx;
+                }
+            }
+
+            let rx_admit = rx.clone();
+            let ios_delta = ios.clone();
+            let ios_admit = ios.clone();
+            let ios_reject = ios.clone();
+            let inner_admit = inner.clone();
+            let inner_reject = inner.clone();
+            let mid_admit = model_id.clone();
+            let mid_reject = model_id.clone();
+            let n_seq_u32 = n_seq as u32;
+
+            let results = match ctx {
+                Some(ctx) => {
+                    tokio::task::spawn_blocking(move || {
                         let mut guard = ctx.lock().unwrap();
-                        guard.generate_batch(&items, |i, piece| {
-                            delta_txs
-                                .get(i)
-                                .map(|tx| {
-                                    tx.blocking_send(TokenEvent::Delta {
-                                        text: piece.to_string(),
+                        guard.generate_batch_admit(
+                            &items,
+                            || {
+                                let mut g = rx_admit.blocking_lock();
+                                let Ok(j) = g.try_recv() else {
+                                    return None;
+                                };
+                                drop(g);
+                                let _ = j.delta_tx.try_send(TokenEvent::Started {
+                                    inference_id: j.job_id,
+                                });
+                                {
+                                    let mut st = inner_admit.lock().unwrap();
+                                    if let Some(m) = st.models.get_mut(&mid_admit) {
+                                        m.pending = m.pending.saturating_sub(1);
+                                        m.active = (m.active + 1).min(n_seq_u32);
+                                    }
+                                }
+                                let item = BatchItem {
+                                    messages: j.messages,
+                                    params: j.params,
+                                    abort: j.abort.clone(),
+                                };
+                                // Aligné sur out[idx] côté llama (push avant
+                                // tokenize) ; retiré dans on_reject si échec.
+                                ios_admit.lock().unwrap().push(JobIo {
+                                    job_id: j.job_id,
+                                    delta_tx: j.delta_tx,
+                                    done_tx: Some(j.done_tx),
+                                    abort: j.abort,
+                                });
+                                Some(item)
+                            },
+                            |err| {
+                                if let Some(io) = ios_reject.lock().unwrap().pop() {
+                                    {
+                                        let mut st = inner_reject.lock().unwrap();
+                                        st.job_aborts.remove(&io.job_id);
+                                        if let Some(m) = st.models.get_mut(&mid_reject) {
+                                            m.active = m.active.saturating_sub(1);
+                                        }
+                                    }
+                                    if let Some(tx) = io.done_tx {
+                                        let _ = tx.send(InferOutcome::Failed(err.to_string()));
+                                    }
+                                }
+                            },
+                            |i, piece| {
+                                let g = ios_delta.lock().unwrap();
+                                g.get(i)
+                                    .map(|io| {
+                                        io.delta_tx
+                                            .try_send(TokenEvent::Delta {
+                                                text: piece.to_string(),
+                                            })
+                                            .is_ok()
                                     })
-                                    .is_ok()
-                                })
-                                .unwrap_or(false)
-                        })
+                                    .unwrap_or(false)
+                            },
+                        )
                     })
                     .await
-                    .unwrap_or_else(|_| {
-                        (0..n_jobs)
-                            .map(|_| Err(aos_llama::LlamaError::Decode(-4)))
-                            .collect()
-                    }),
-                    None => (0..n_jobs)
-                        .map(|_| Err(aos_llama::LlamaError::Decode(-5)))
-                        .collect(),
+                    .unwrap_or_else(|_| Vec::new())
                 }
+                None => Vec::new(),
             };
 
             {
@@ -555,7 +621,21 @@ impl ModelSubsystem {
                 }
             }
 
-            for (j, res) in batch.into_iter().zip(results.into_iter()) {
+            let mut ios = ios.lock().unwrap();
+            if results.is_empty() && !ios.is_empty() {
+                for io in ios.drain(..) {
+                    inner.lock().unwrap().job_aborts.remove(&io.job_id);
+                    if let Some(tx) = io.done_tx {
+                        let _ = tx.send(InferOutcome::Failed("contexte disparu".into()));
+                    }
+                }
+                continue;
+            }
+            let mut results = results;
+            while results.len() < ios.len() {
+                results.push(Err(aos_llama::LlamaError::Decode(-5)));
+            }
+            for (io, res) in ios.drain(..).zip(results.into_iter()) {
                 let outcome = match res {
                     Ok(stats) => {
                         let mut g = inner.lock().unwrap();
@@ -563,7 +643,7 @@ impl ModelSubsystem {
                             m.last_ttft_ms = Some(stats.ttft_ms);
                             m.last_tok_s = Some(stats.tok_s);
                         }
-                        g.job_aborts.remove(&j.job_id);
+                        g.job_aborts.remove(&io.job_id);
                         InferOutcome::Done {
                             prompt_tokens: stats.prompt_tokens,
                             generated_tokens: stats.generated_tokens,
@@ -572,15 +652,17 @@ impl ModelSubsystem {
                         }
                     }
                     Err(e) => {
-                        inner.lock().unwrap().job_aborts.remove(&j.job_id);
-                        if j.abort.load(Ordering::SeqCst) {
+                        inner.lock().unwrap().job_aborts.remove(&io.job_id);
+                        if io.abort.load(Ordering::SeqCst) {
                             InferOutcome::Cancelled
                         } else {
                             InferOutcome::Failed(e.to_string())
                         }
                     }
                 };
-                let _ = j.done_tx.send(outcome);
+                if let Some(tx) = io.done_tx {
+                    let _ = tx.send(outcome);
+                }
             }
         }
     }

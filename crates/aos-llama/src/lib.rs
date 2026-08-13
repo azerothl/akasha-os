@@ -31,7 +31,7 @@ use thiserror::Error;
 
 use llama_cpp_sys_2 as sys;
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Clone)]
 pub enum LlamaError {
     #[error("chemin modèle invalide (non UTF-8 / NUL)")]
     InvalidPath,
@@ -432,14 +432,36 @@ impl LlamaContext {
 
         let t_start = Instant::now();
 
-        // Prefill.
-        let mut tokens_buf = prompt_tokens.clone();
-        let batch = unsafe { sys::llama_batch_get_one(tokens_buf.as_mut_ptr(), n_prompt as i32) };
-        let rc = unsafe { sys::llama_decode(self.ptr, batch) };
-        if rc != 0 {
-            unsafe { sys::llama_sampler_free(smpl) };
-            return Err(LlamaError::Decode(rc));
+        // Prefill découpé par n_batch — `llama_batch_get_one(n_prompt)` assert
+        // si n_prompt > n_batch (historique chat long → crash modeld).
+        let mut batch = unsafe { sys::llama_batch_init(self.n_batch as i32, 0, 1) };
+        let mut off = 0usize;
+        while off < n_prompt {
+            batch.n_tokens = 0;
+            let take = (n_prompt - off).min(self.n_batch as usize);
+            for j in 0..take {
+                let is_last = off + j + 1 == n_prompt;
+                unsafe {
+                    Self::batch_add(
+                        &mut batch,
+                        prompt_tokens[off + j],
+                        (off + j) as sys::llama_pos,
+                        0,
+                        is_last,
+                    );
+                }
+            }
+            let rc = unsafe { sys::llama_decode(self.ptr, batch) };
+            if rc != 0 {
+                unsafe {
+                    sys::llama_batch_free(batch);
+                    sys::llama_sampler_free(smpl);
+                }
+                return Err(LlamaError::Decode(rc));
+            }
+            off += take;
         }
+        unsafe { sys::llama_batch_free(batch) };
 
         let mut generated = 0u32;
         let mut ttft_ms = f64::MAX;
@@ -536,6 +558,24 @@ impl LlamaContext {
     pub fn generate_batch(
         &mut self,
         items: &[BatchItem],
+        on_delta: impl FnMut(usize, &str) -> bool,
+    ) -> Vec<Result<GenStats, LlamaError>> {
+        self.generate_batch_admit(items, || None, |_| {}, on_delta)
+    }
+
+    /// Comme [`generate_batch`], mais `admit()` est appelé entre les pas de
+    /// decode : un job chat/agent arrivé en cours de génération peut rejoindre
+    /// le même `llama_decode` (parallélisme réel sur le GPU).
+    ///
+    /// Si un job admis échoue avant d'occuper un slot (tokenize / prompt trop
+    /// long), `on_reject(err)` est appelé : l'appelant doit finaliser ce job
+    /// hors du vecteur de résultats (qui ne contient que les items initiaux
+    /// + les admits réellement démarrés).
+    pub fn generate_batch_admit(
+        &mut self,
+        items: &[BatchItem],
+        mut admit: impl FnMut() -> Option<BatchItem>,
+        mut on_reject: impl FnMut(LlamaError),
         mut on_delta: impl FnMut(usize, &str) -> bool,
     ) -> Vec<Result<GenStats, LlamaError>> {
         let n = items.len();
@@ -577,11 +617,14 @@ impl LlamaContext {
         }
 
         let vocab = unsafe { sys::llama_model_get_vocab(self.model.ptr) };
-        let mut slots: Vec<Slot> = Vec::with_capacity(n);
-        let mut prompts: Vec<Vec<sys::llama_token>> = Vec::with_capacity(n);
+        let mut slots: Vec<Slot> = Vec::with_capacity(self.n_seq_max as usize);
+        let mut prompts: Vec<Vec<sys::llama_token>> = Vec::with_capacity(self.n_seq_max as usize);
 
         for (i, item) in items.iter().enumerate() {
-            match self.render_prompt(&item.messages).and_then(|p| self.tokenize(&p, false)) {
+            match self
+                .render_prompt(&item.messages)
+                .and_then(|p| self.tokenize(&p, false))
+            {
                 Ok(toks) => {
                     if toks.len() + item.params.max_tokens as usize + 8 > self.n_ctx_seq() as usize {
                         out[i] = Err(LlamaError::PromptTooLong {
@@ -614,7 +657,6 @@ impl LlamaContext {
             }
         }
 
-        // Réindex : slots[k] correspond à items[slots[k].seq_id].
         if slots.is_empty() {
             return out;
         }
@@ -628,74 +670,140 @@ impl LlamaContext {
             sys::llama_batch_init(self.n_batch as i32, 0, self.n_seq_max as i32)
         };
 
-        // Prefill packé : toutes les séquences dans les mêmes `llama_decode`
-        // (évite 8 warmups CUDA graph séquentiels).
-        let mut off: Vec<usize> = vec![0; slots.len()];
-        let mut prefill_ok = true;
-        loop {
-            batch.n_tokens = 0;
-            let mut finished: Vec<(usize, i32)> = Vec::new();
-            for si in 0..slots.len() {
-                if slots[si].done.is_some() {
-                    continue;
-                }
-                let seq = slots[si].seq_id;
-                let toks = &prompts[seq as usize];
-                if off[si] >= toks.len() {
-                    continue;
-                }
-                let space = self.n_batch as usize - batch.n_tokens as usize;
-                if space == 0 {
-                    break;
-                }
-                let take = (toks.len() - off[si]).min(space);
+        let prefill_slot = |slf: &mut Self,
+                            batch: &mut sys::llama_batch,
+                            slots: &mut [Slot],
+                            prompts: &[Vec<sys::llama_token>],
+                            si: usize|
+         -> Result<(), LlamaError> {
+            let seq = slots[si].seq_id;
+            let toks = &prompts[seq as usize];
+            let mut off = 0usize;
+            let mut last_logit = 0i32;
+            while off < toks.len() {
+                batch.n_tokens = 0;
+                let take = (toks.len() - off).min(slf.n_batch as usize);
                 for j in 0..take {
-                    let pos = (off[si] + j) as sys::llama_pos;
-                    let is_last = off[si] + j + 1 == toks.len();
+                    let is_last = off + j + 1 == toks.len();
                     let logit_i = batch.n_tokens;
                     unsafe {
-                        Self::batch_add(&mut batch, toks[off[si] + j], pos, seq, is_last);
+                        Self::batch_add(
+                            batch,
+                            toks[off + j],
+                            (off + j) as sys::llama_pos,
+                            seq,
+                            is_last,
+                        );
                     }
                     if is_last {
-                        finished.push((si, logit_i));
+                        last_logit = logit_i;
                     }
                 }
-                off[si] += take;
+                let rc = unsafe { sys::llama_decode(slf.ptr, *batch) };
+                if rc != 0 {
+                    return Err(LlamaError::Decode(rc));
+                }
+                off += take;
             }
-            if batch.n_tokens == 0 {
-                break;
-            }
-            let rc = unsafe { sys::llama_decode(self.ptr, batch) };
-            if rc != 0 {
-                prefill_ok = false;
+            slots[si].prompt_n = toks.len() as u32;
+            slots[si].pos = toks.len() as sys::llama_pos;
+            slots[si].last =
+                unsafe { sys::llama_sampler_sample(slots[si].smpl, slf.ptr, last_logit) };
+            Ok(())
+        };
+
+        // Prefill initial (toutes les séquences).
+        for si in 0..slots.len() {
+            if let Err(e) = prefill_slot(self, &mut batch, &mut slots, &prompts, si) {
                 for slot in &mut slots {
                     if slot.done.is_none() {
-                        out[slot.seq_id as usize] = Err(LlamaError::Decode(rc));
+                        out[slot.seq_id as usize] = Err(e.clone());
                         slot.finish(StopReason::Aborted);
                     }
                 }
-                break;
-            }
-            for (si, logit_i) in finished {
-                let n_tok = prompts[slots[si].seq_id as usize].len();
-                slots[si].prompt_n = n_tok as u32;
-                slots[si].pos = n_tok as sys::llama_pos;
-                slots[si].last =
-                    unsafe { sys::llama_sampler_sample(slots[si].smpl, self.ptr, logit_i) };
+                for slot in &slots {
+                    unsafe { sys::llama_sampler_free(slot.smpl) };
+                }
+                unsafe { sys::llama_batch_free(batch) };
+                return out;
             }
         }
 
-        if !prefill_ok {
-            for slot in &slots {
-                let idx = slot.seq_id as usize;
-                if matches!(out[idx], Err(LlamaError::Decode(-1))) {
-                    out[idx] = Err(LlamaError::Decode(-3));
+        let try_admit = |slf: &mut Self,
+                         batch: &mut sys::llama_batch,
+                         slots: &mut Vec<Slot>,
+                         prompts: &mut Vec<Vec<sys::llama_token>>,
+                         out: &mut Vec<Result<GenStats, LlamaError>>,
+                         admit: &mut dyn FnMut() -> Option<BatchItem>,
+                         on_reject: &mut dyn FnMut(LlamaError)| {
+            // Capacité GPU = nombre de slots (y compris terminés : pas de
+            // réutilisation de seq_id / KV dans ce tour).
+            while (slots.len() as u32) < slf.n_seq_max {
+                let Some(item) = admit() else {
+                    break;
+                };
+                let idx = out.len();
+                if idx as u32 >= slf.n_seq_max {
+                    on_reject(LlamaError::Decode(-2));
+                    break;
                 }
-                unsafe { sys::llama_sampler_free(slot.smpl) };
+                match slf
+                    .render_prompt(&item.messages)
+                    .and_then(|p| slf.tokenize(&p, false))
+                {
+                    Ok(toks)
+                        if toks.len() + item.params.max_tokens as usize + 8
+                            <= slf.n_ctx_seq() as usize =>
+                    {
+                        out.push(Err(LlamaError::Decode(-1)));
+                        prompts.push(toks);
+                        slots.push(Slot {
+                            seq_id: idx as sys::llama_seq_id,
+                            prompt_n: 0,
+                            generated: 0,
+                            max_tokens: item.params.max_tokens,
+                            pos: 0,
+                            last: 0,
+                            smpl: Self::make_sampler(&item.params),
+                            abort: item.abort.clone(),
+                            done: None,
+                            ttft_ms: f64::MAX,
+                            t_start: Instant::now(),
+                            t_done: None,
+                        });
+                        let si = slots.len() - 1;
+                        if let Err(e) = prefill_slot(slf, batch, slots, prompts, si) {
+                            out[idx] = Err(e);
+                            slots[si].finish(StopReason::Aborted);
+                        } else {
+                            eprintln!(
+                                "[llama] admit seq={idx} ({} actifs)",
+                                slots.iter().filter(|s| s.done.is_none()).count()
+                            );
+                        }
+                    }
+                    Ok(toks) => {
+                        on_reject(LlamaError::PromptTooLong {
+                            prompt: toks.len(),
+                            ctx: slf.n_ctx_seq(),
+                        });
+                    }
+                    Err(e) => {
+                        on_reject(e);
+                    }
+                }
             }
-            unsafe { sys::llama_batch_free(batch) };
-            return out;
-        }
+        };
+
+        try_admit(
+            self,
+            &mut batch,
+            &mut slots,
+            &mut prompts,
+            &mut out,
+            &mut admit,
+            &mut on_reject,
+        );
 
         loop {
             let mut any_active = false;
@@ -719,16 +827,34 @@ impl LlamaContext {
                     slot.ttft_ms = slot.t_start.elapsed().as_secs_f64() * 1000.0;
                 }
                 let piece = self.token_to_piece(slot.last);
-                if !piece.is_empty()
-                    && !on_delta(slot.seq_id as usize, &piece)
-                {
+                if !piece.is_empty() && !on_delta(slot.seq_id as usize, &piece) {
                     slot.finish(StopReason::Aborted);
                     continue;
                 }
                 slot.generated += 1;
                 any_active = true;
             }
+
+            try_admit(
+                self,
+                &mut batch,
+                &mut slots,
+                &mut prompts,
+                &mut out,
+                &mut admit,
+                &mut on_reject,
+            );
+
+            // Un slot tout juste admis a déjà un `last` (prefill) mais
+            // generated==0 : le prochain tour émettra son premier delta.
+            if !any_active && slots.iter().all(|s| s.done.is_some()) {
+                break;
+            }
             if !any_active {
+                // Seulement des slots admis ce tour — continuer pour émettre.
+                if slots.iter().any(|s| s.done.is_none()) {
+                    continue;
+                }
                 break;
             }
 

@@ -1,6 +1,6 @@
 //! `aos-busd` — broker du Semantic IPC Bus (P1.5).
 //!
-//! Usage : `aos-busd [port]` (défaut 47001).
+//! Usage : `aos-busd [port]` (défaut 24701).
 
 use aos_ipc::{broker, DEFAULT_BUS_PORT};
 

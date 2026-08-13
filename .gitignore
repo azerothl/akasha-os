@@ -8,3 +8,5 @@
 /dist/
 modules/**/target/
 modules/*.aospkg/
+
+/target-linux/

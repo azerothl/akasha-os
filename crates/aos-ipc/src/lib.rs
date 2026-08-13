@@ -28,7 +28,7 @@ pub use msg::{Frame, Intent, Status, StreamItem, CAP_SCHEME};
 pub use service::{BusService, IntentCtx, ServiceError, StreamHandle};
 
 /// Port par défaut du broker (`aos-busd`).
-pub const DEFAULT_BUS_PORT: u16 = 47001;
+pub const DEFAULT_BUS_PORT: u16 = 24701;
 
 /// Préfixe des capacités natives du noyau `aos-capkd` (P4.2).
 pub const KERNEL_CAP_PREFIX: &str = "cap://kernel/";

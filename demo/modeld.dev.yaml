@@ -4,7 +4,7 @@
 # `vram_total_bytes` (le GPU réel a 16 Go ; le budget offert au Placement
 # Manager est plafonné à 8 GiB).
 
-bus: "127.0.0.1:47001"
+bus: "127.0.0.1:24701"
 gpu: true
 vram_total_bytes: 8589934592        # 8 GiB — budget gate P1
 os_reserve_vram_bytes: 1073741824   # 1 GiB (affichage + buffers de calcul)

@@ -351,7 +351,7 @@ async fn run_agent_task(bus: Arc<BusClient>, directive: String, tx: mpsc::Sender
             agent_intents::CREATE,
             &AgentCreateRequest {
                 directive: directive.clone(),
-                caps: vec![],
+                caps: vec!["tool.invoke:notes".into()],
                 model_id: None,
             },
             vec![],

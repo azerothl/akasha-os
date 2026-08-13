@@ -42,6 +42,37 @@ foreach ($b in $bins) {
     Copy-Item $src (Join-Path $OutDir "bin\$b") -Force
 }
 
+# Runtime CUDA (llama.cpp) — requis à côté des .exe (PATH système insuffisant).
+$cudaCandidates = @(
+    $env:CUDA_PATH,
+    $env:CUDA_PATH_V13_3,
+    "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.3"
+) | Where-Object { $_ }
+$cudaBin = $null
+foreach ($rootCuda in $cudaCandidates) {
+    foreach ($sub in @("bin\x64", "bin")) {
+        $cand = Join-Path $rootCuda $sub
+        if (Test-Path (Join-Path $cand "cublas64_13.dll")) { $cudaBin = $cand; break }
+        if (Test-Path (Join-Path $cand "cublas64_12.dll")) { $cudaBin = $cand; break }
+    }
+    if ($cudaBin) { break }
+}
+if ($cudaBin) {
+    Write-Host "== CUDA runtime DLLs depuis $cudaBin =="
+    $patterns = @(
+        "cudart64_*.dll", "cublas64_*.dll", "cublasLt64_*.dll",
+        "nvJitLink*.dll", "nvrtc64_*.dll", "nvrtc-builtins*.dll"
+    )
+    foreach ($pat in $patterns) {
+        Get-ChildItem $cudaBin -Filter $pat -ErrorAction SilentlyContinue | ForEach-Object {
+            Copy-Item $_.FullName (Join-Path $OutDir "bin\$($_.Name)") -Force
+            Write-Host "  + $($_.Name)"
+        }
+    }
+} else {
+    Write-Warning "CUDA Toolkit introuvable — les binaires GPU planteront (0xC0000135) sans cublas/cudart à côté de bin\"
+}
+
 Copy-Item (Join-Path $root "data\models\catalog.yaml") "$OutDir\data\models\" -Force
 
 $notes = Join-Path $root "modules\notes.aospkg"

@@ -1,7 +1,7 @@
 # Config plateforme pour le Gate P3 : timeout de confirmation court (3 s)
 # pour tester le fail-closed sans attendre 2 minutes.
 
-bus: "127.0.0.1:47001"
+bus: "127.0.0.1:24701"
 audit_dir: var/audit
 storage_dir: var/storage
 memory_dir: var/memory
