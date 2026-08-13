@@ -3,3 +3,9 @@
 # (antivirus/verrous) bruitent les builds ; P0/P1 n'ont pas besoin de
 # l'incrémental (workspace petit hors llama.cpp, qui est déjà mis en cache).
 incremental = false
+
+[target.aarch64-unknown-none]
+rustflags = [
+    "-C", "panic=abort",
+    "-C", "force-unwind-tables=no",
+]

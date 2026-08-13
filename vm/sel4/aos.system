@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<system>
+    <!-- Priorités : callee PPC strictement au-dessus du caller. -->
+    <protection_domain name="capkd" priority="200" passive="true">
+        <program_image path="capkd.elf" />
+    </protection_domain>
+
+    <protection_domain name="bus" priority="150" passive="true">
+        <program_image path="bus.elf" />
+    </protection_domain>
+
+    <protection_domain name="gate" priority="100">
+        <program_image path="gate.elf" />
+        <protection_domain name="auditd" priority="50" id="0" setvar_id="auditd_id">
+            <program_image path="auditd.elf" />
+        </protection_domain>
+    </protection_domain>
+
+    <!-- gate → bus (intents), bus → capkd (proxy cap.*). Pas d'appel direct gate→capkd. -->
+    <channel>
+        <end pd="gate" id="0" pp="true" />
+        <end pd="bus" id="1" />
+    </channel>
+    <channel>
+        <end pd="bus" id="0" pp="true" />
+        <end pd="capkd" id="0" />
+    </channel>
+
+    <channel>
+        <end pd="gate" id="1" />
+        <end pd="auditd" id="0" />
+    </channel>
+</system>

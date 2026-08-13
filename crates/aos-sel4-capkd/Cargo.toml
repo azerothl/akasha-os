@@ -1,0 +1,13 @@
+[package]
+name = "aos-sel4-capkd"
+description = "Agent OS — CapStore no_std exposé en ABI C pour le PD capkd seL4"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+aos-caps = { path = "../aos-caps", default-features = false }
+aos-sel4-abi = { path = "../aos-sel4-abi" }
