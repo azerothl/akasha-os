@@ -1,7 +1,7 @@
 # Plan de développement par phase — Agent OS
 
-> Version : 1.1  
-> Date : 12/08/2026  
+> Version : 1.2  
+> Date : 13/08/2026  
 > Statut : plan de référence  
 > Références : `specs-fonctionnelles.md`, `specs-techniques.md`, `reflexion-agent-os.md`
 
@@ -9,9 +9,10 @@
 
 ## 0. Vue d'ensemble
 
-Le développement d'Agent OS est découpé en **7 phases (P0 à P5 + PV)**. P0–P5
-prouvent et polissent le système **sur l'hôte** ; **PV** est l'échafaudage
-**noyau seL4** (VM QEMU, sans GPU), en parallèle de P5, avant le fer nu
+Le développement d'Agent OS est découpé en **8 phases (P0 à P5 + PV + PC)**.
+P0–P5 prouvent et polissent le système **sur l'hôte** ; **PV** est l'échafaudage
+**noyau seL4** (VM QEMU, sans GPU) ; **PC** est la **Preview distribuable**
+pour une cohorte de testeurs (installeur Win/Linux, pas seL4). Fer nu = suite
 (ADR 0001). La stratégie `specs-techniques.md` §1.3 reste : prouver les
 algorithmes agentiques en userspace avant d'engager le port microkernel.
 
@@ -23,11 +24,12 @@ algorithmes agentiques en userspace avant d'engager le port microkernel.
 | **P3** | Linux host | **Backends distants, routage privacy, sécurité complète** | ~6-8 semaines |
 | **P4** | Hôte (caps userspace) | **Sémantique microkernel** (`aos-capkd`, isolation processus) — seL4 reporté (GPU) | ~12-16 semaines |
 | **PV** | QEMU + seL4 (sans GPU) | **Port noyau réel** : PDs Microkit, IPC seL4, rejeu gate P4 CPU-only | ~8-10 semaines |
-| **P5** | Hôte GPU / polish | **GPU/NPU first-class**, multi-GPU, polish (parallèle à PV) | ~10-12 semaines |
+| **PC** | Hôte Win/Linux + NVIDIA | **Preview 0.1** installable : session, egui, feedback cohorte | ~2-4 semaines |
+| **P5** | Hôte GPU / polish | **GPU/NPU first-class**, multi-GPU, polish (parallèle à PV/PC) | ~10-12 semaines |
 
-**Total indicatif** : ~60-80 semaines en séquence naïve ; **PV ∥ P5** ramène le
-chemin critique près du total P0–P5 d'origine. Ces durées sont des ordres de
-grandeur — chaque gate de sortie prime sur le calendrier.
+**Total indicatif** : ~60-80 semaines en séquence naïve ; **PV ∥ P5 ∥ PC**
+rapproche le chemin critique. Ces durées sont des ordres de grandeur —
+chaque gate de sortie prime sur le calendrier.
 
 ---
 
@@ -43,6 +45,7 @@ Chaque phase se termine par un **gate de sortie** : une démonstration exécutab
 | **Gate P3** | Bascule automatique local→distant selon politique privacy, mode `local_only` vérifiable par egress monitoring, confirmation bloquante sur action sensible |
 | **Gate P4** | Services essentiels isolés + caps natives userspace (`aos-capkd`) sur l'hôte ; kill Audit sans impacter Model |
 | **Gate PV** | Boot seL4/Microkit sous QEMU `virt` (sans GPU) ; intents `cap.*` via PD bus ; révocation immédiate ; stop Audit sans tuer CapKernel |
+| **Gate PC** | 3 testeurs Win + 1 Linux installent Preview sans toolchain ; protocole TESTER.md ; ≥1 `feedback.submit` exploitable |
 | **Gate P5** | Continuous batching multi-agents avec période de dégradation < 20% sur 8 flux simultanés, multi-GPU pipeline fonctionnel, port aarch64 validé sur au moins une machine cible |
 
 ---
@@ -292,6 +295,49 @@ cette image (ADR 0001). **Parallèle à P5** (GPU sur l'hôte).
 |--------|-----------|
 | Toolchain seL4 absente de Windows natif | Build/run dans WSL Ubuntu ; SDK Microkit gitignoré |
 | Port Rust PD bloqué (`sel4-microkit`) | CapStore lié en staticlib ; glue C tant que le runtime Rust n'est pas calé |
+
+---
+
+## Phase PC — Preview cohorte (hôte distribuable)
+
+### Objectif
+
+Livrer **Agent OS Preview 0.1** : même stack hôte (P1–P5) **installable**
+par des testeurs externes sur Windows et Linux x64 + NVIDIA, **sans**
+compiler. UI egui = surface principale ; retours via `feedback.submit`
+(local only). **Ce n'est pas le fer nu** (ADR 0001).
+
+### Livrables
+
+| # | Livrable | Description |
+|---|----------|-------------|
+| PC.1 | `aos-session` | Superviseur : AOS_HOME, configs, boot ordonné, watchdog auditd, UI |
+| PC.2 | Paquet Preview | `bin/` + GGUF embarqués + notes.aospkg ; install Win/Linux |
+| PC.3 | UI egui cohorte | Onboarding, notes, confirm, agents, audit, scénarios, bannière |
+| PC.4 | Feedback | Intent `feedback.submit` → `var/feedback/` (pas de télémétrie) |
+| PC.5 | Docs | `INSTALL.md`, `docs/TESTER.md`, scripts `packaging/` |
+
+### Gates de sortie (Gate PC)
+
+- [ ] Installeur / archive Win + Linux sans `cargo`
+- [ ] Protocole `docs/TESTER.md` jouable depuis egui
+- [ ] ≥1 retour `feedback.submit` exploitable en cohorte pilote
+
+```powershell
+.\packaging\build-preview.ps1
+# Linux : ./packaging/build-preview.sh
+```
+
+> Statut PC (13/08/2026) : implémentation Preview 0.1 (session, egui,
+> feedback, packaging). Gate cohorte ouverte — voir `INSTALL.md`.
+
+### Risques spécifiques
+
+| Risque | Mitigation |
+|--------|-----------|
+| Taille GGUF (~2–3 Go) | Embarquer uniquement 3B+embed ; 32B hors paquet |
+| CUDA / drivers hétérogènes | Prérequis `nvidia-smi` ; pas de fallback CPU en 0.1 |
+| Confusion « OS installé » | Bannière Preview explicite dans l'UI |
 
 ---
 

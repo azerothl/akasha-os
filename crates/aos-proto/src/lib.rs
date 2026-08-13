@@ -824,3 +824,31 @@ pub struct CapInfo {
     pub rights: CapRights,
     pub holder: String,
 }
+
+// ---------------------------------------------------------------------------
+// Feedback testeurs (Preview 0.1) — pas de télémétrie silencieuse
+// ---------------------------------------------------------------------------
+
+/// `feedback.submit` — retour cohorte écrit en local (`var/feedback/`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FeedbackSubmitRequest {
+    pub title: String,
+    /// bug | ux | perf | security | other
+    pub category: String,
+    /// low | medium | high
+    pub severity: String,
+    pub body: String,
+    /// Scénario cohorte coché (ex. `chat_offline`).
+    #[serde(default)]
+    pub scenario: Option<String>,
+    /// Métadonnées fournies par l'UI (version, OS, GPU…).
+    #[serde(default)]
+    pub meta: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FeedbackSubmitResponse {
+    pub id: String,
+    pub path: String,
+    pub export_dir: String,
+}

@@ -1,0 +1,18 @@
+[package]
+name = "aos-session"
+description = "Agent OS Preview — superviseur de session (boot daemons + UI egui)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "aos-session"
+path = "src/main.rs"
+
+[dependencies]
+aos-ipc = { path = "../aos-ipc" }
+ctrlc = "3"
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+tokio.workspace = true

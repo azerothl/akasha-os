@@ -9,6 +9,7 @@ license.workspace = true
 aos-ipc = { path = "../aos-ipc" }
 aos-proto = { path = "../aos-proto" }
 aos-agent = { path = "../aos-agent" }
-serde.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
 tokio.workspace = true
 eframe = "0.31"

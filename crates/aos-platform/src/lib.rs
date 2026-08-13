@@ -8,6 +8,7 @@
 
 pub mod audit;
 pub mod confirm;
+pub mod feedback;
 pub mod memory;
 pub mod module_rt;
 pub mod net;

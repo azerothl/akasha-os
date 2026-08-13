@@ -5,7 +5,7 @@ GPU first-class, offline-first). Voir `reflexion-agent-os.md`,
 `specs-fonctionnelles.md`, `specs-techniques.md` et
 `plan-developpement-phases.md`.
 
-## État d'avancement : P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅
+## État d'avancement : P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
 ### P0 — Simulateur (validé)
 
@@ -90,6 +90,26 @@ l'inférence, assistant local.
 Gate P5.1 (RTX 4080 SUPER) : 8 flux **8/8 en 168 ms (×0,77 vs unitaire
 216 ms)**. Multi-GPU non bloquant sur cet hôte.
 
+### PC — Preview cohorte (hôte installable)
+
+| Livrable | Emplacement | Contenu |
+|----------|-------------|---------|
+| PC.1 | `crates/aos-session` | Superviseur de session (boot daemons + egui) |
+| PC.2 | `packaging/` | Archives Win/Linux + install scripts |
+| PC.3 | `aos-ui-egui` | UI testeur (onboarding, notes, feedback…) |
+| PC.4 | `feedback.submit` | Retours locaux `var/feedback/` |
+
+```powershell
+# Dev
+$env:AOS_HOME = "E:\akasha-os"
+cargo run -p aos-session --release
+
+# Paquet distribuable
+.\packaging\build-preview.ps1
+```
+
+Voir `INSTALL.md` et `docs/TESTER.md`.
+
 ## Utilisation
 
 ```powershell
@@ -119,6 +139,10 @@ cargo run -p aos-sim --example xval
 
 # Piste VM seL4 (phase PV) — ADR 0001
 .\demo\run-sel4-vm.ps1
+
+# Preview cohorte (phase PC)
+$env:AOS_HOME = (Resolve-Path .)
+cargo run -p aos-session --release
 
 # Démo + UI TUI (shell conversationnel + dashboard)
 .\demo\run-demo.ps1 -Gate p2 -Ui

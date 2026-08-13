@@ -1228,6 +1228,43 @@ async fn main() {
         });
     }
 
+    // --- feedback.submit (Preview 0.1, local only) ---
+    {
+        let s = sub.clone();
+        svc.on("feedback.submit", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<FeedbackSubmitRequest>() {
+                    Ok(req) => match aos_platform::feedback::submit(
+                        aos_platform::feedback::default_dir(),
+                        req,
+                    ) {
+                        Ok(resp) => {
+                            s.audit(AuditAppendRequest {
+                                trace_id: format!("feedback-{}", resp.id),
+                                actor: "human:ui".into(),
+                                action: "feedback.submit".into(),
+                                target: resp.id.clone(),
+                                detail: serde_json::json!({ "path": resp.path }),
+                            });
+                            let _ = ctx.respond(aos_ipc::msg::Status::Ok, &resp).await;
+                        }
+                        Err(e) => {
+                            let _ = ctx
+                                .respond_error(aos_ipc::msg::Status::InternalError, &e)
+                                .await;
+                        }
+                    },
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+
     eprintln!("[aos-platformd] prêt");
     let _ = svc.serve(&config.bus).await;
 }

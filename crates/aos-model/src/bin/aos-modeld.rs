@@ -45,7 +45,15 @@ async fn main() {
         .nth(1)
         .unwrap_or_else(|| "demo/modeld.dev.yaml".to_string());
     let config = ModeldConfig::load(&config_path).expect("chargement config modeld");
-    let registry = ModelRegistry::load("data/models/catalog.yaml").expect("catalogue");
+    let catalog = std::env::var("AOS_HOME")
+        .map(|h| std::path::PathBuf::from(h).join("data/models/catalog.yaml"))
+        .unwrap_or_else(|_| std::path::PathBuf::from("data/models/catalog.yaml"));
+    let catalog = if catalog.exists() {
+        catalog
+    } else {
+        std::path::PathBuf::from("data/models/catalog.yaml")
+    };
+    let registry = ModelRegistry::load(&catalog).expect("catalogue");
 
     let mut sysinfo = sysinfo::System::new_all();
     sysinfo.refresh_memory();
