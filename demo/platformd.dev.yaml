@@ -1,0 +1,13 @@
+# Config dev du daemon plateforme (P2).
+
+bus: "127.0.0.1:47001"
+audit_dir: var/audit
+storage_dir: var/storage
+memory_dir: var/memory
+modules_dir: var/modules
+
+# embedded-embed (§3.4) : doublure Qwen2.5-0.5B pour les embeddings.
+embed_model:
+  path: tools/models/qwen2.5-0.5b-instruct-q4_k_m.gguf
+  n_gpu_layers: 999
+  n_threads: 8

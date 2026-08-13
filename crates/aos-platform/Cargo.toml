@@ -1,0 +1,41 @@
+[package]
+name = "aos-platform"
+description = "Agent OS — plateforme P2 : audit, storage, memory, module runtime WASM"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+aos-agent = { path = "../aos-agent" }
+aos-caps = { path = "../aos-caps" }
+aos-ipc = { path = "../aos-ipc" }
+aos-llama = { path = "../aos-llama" }
+aos-proto = { path = "../aos-proto" }
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+futures.workspace = true
+wasmtime = "47"
+sha2 = "0.10"
+hmac = "0.12"
+
+[dev-dependencies]
+wat = "1"
+
+[lib]
+name = "aos_platform"
+path = "src/lib.rs"
+
+[[bin]]
+name = "aos-platformd"
+path = "src/bin/aos-platformd.rs"
+
+[[bin]]
+name = "aos-gate-p2"
+path = "src/bin/aos-gate-p2.rs"
+
+[[bin]]
+name = "aos-gate-p3"
+path = "src/bin/aos-gate-p3.rs"

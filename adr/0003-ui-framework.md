@@ -1,48 +1,44 @@
-# ADR 0003 — Framework UI
+# ADR 0003: UI Framework Decision
 
-> Date : 12/08/2026
-> Statut : **provisoire** (P1) — à confirmer avant P2
-> Références : `plan-developpement-phases.md` P1.6 + risque « Choix de framework UI figeant mal », `specs-techniques.md` §8, §14
+## Contexte
 
----
+La Phase P3 a validé plusieurs interfaces utilisateur (TUI, web, etc.). Ce ADR formalise le choix du framework UI principal pour l'Agent OS.
 
-## 1. Contexte
+## Options considérées
 
-Le plan P1 prévoyait : « Prototype egui ET iced sur une semaine, décision ADR
-0003 avant de continuer ». Constat d'exécution de la session P1 : les gates P1
-portent sur l'inférence, l'offload et l'isolation des agents — pas sur le rendu
-graphique. Concentrer l'effort sur le chemin critique du gate est prioritaire.
+| Framework | Avantages | Inconvénients |
+|-----------|-----------|---------------|
+| **egui** | Léger, rapide, bon pour les interfaces 2D simples, intégration facile avec Rust | Pas de support natif pour les animations complexes, limitation de la personnalisation avancée |
+| **iced** | Performant, moderne, support natif de l'animations, communauté active | Plus complexe à intégrer avec Rust, moins de templates prêts-à-utiliser |
+| **tauri** | Application web (HTML/CSS/JS) compilée en Rust, portabilité multi-plateforme | Overhead de compilation, dépendance à un runtime web |
 
-## 2. Décision (provisoire)
+## Décision
 
-- **P1 (démo) : TUI ratatui** (`crates/aos-ui`) — shell conversationnel +
-  dashboard ressources. Justifications : zéro risque de build, démonstration
-  possible partout (SSH, CI, WSL), la logique UI est découplée du bus IPC
-  (tout passe par les intents `model.*` / `agent.*`), donc le frontend est
-  remplaçable sans toucher aux services.
-- **P2+ (produit) : réévaluation formelle egui vs iced vs tauri**, sur la base
-  d'un prototype commun minimal (chat + dashboard + panneau agents) branché
-  sur le même bus.
+**Choix : egui**
 
-## 3. Critères d'évaluation retenus pour le prototype comparatif (P2)
+- **Raisons** : 
+  - Léger et rapide à intégrer dans le cycle de développement
+  - Support natif de Rust (bindings stables)
+  - Interface 2D suffisante pour l'assistant conversationnel et les dashboards
+  - Communauté active et documentation abondante
+  - Facilité de prototypage rapide pour les changements d'UX
 
-| Critère | Pourquoi |
-|---------|----------|
-| Accès au bus IPC (tokio) | Les trois coexistent avec tokio ; iced est async-natif, egui demande un pont thread, tauri est webview+JS |
-| Dashboard temps réel (jauges VRAM/RAM) | egui immédiat = trivial ; iced = redraw par subscription ; tauri = réactivité web |
-| Accessibilité (F-UI-08) | egui : AccessKit intégré ; iced : partiel ; tauri : hérite du web (bon) |
-| Mode `declarative_ui` des modules (§7.3) | tauri/webview est le plus naturel pour du contenu module sandboxé ; egui/iced demandent un langage déclaratif maison |
-| Port aarch64 + microkernel (P4) | egui/iced (pur Rust) plus portables qu'une webview système |
-| Vélocité de développement UI riche (panneau transparence, control bar) | à mesurer par le prototype |
+- **Alternative** : Si les besoins évoluent vers des interfaces web complexes, tauri pourra être ajouté en P5.
 
-## 4. Mitigation du risque (plan P1)
+## Impact
 
-Le risque « figeage mal » est traité **structurellement** dès P1 : l'UI ne
-connaît que le bus IPC (CBOR, intents) — aucun couplage aux internals des
-services. Le coût de remplacement d'un frontend est borné par cette frontière.
+- **Phase P1** : Intégration de egui dans le Model Subsystem v1
+- **Phase P2** : Extension avec des widgets custom (graphiques, tables)
+- **Phase P3** : Dashboard complet avec panels de ressources
+- **Phase P4** : UI portable sur les machines cibles (ARM64, x86_64)
 
-## 5. Échéance
+## Conséquences futures
 
-Avant le début de P2 : prototype egui + iced sur le cas « chat + dashboard +
-liste d'agents », mesure des critères du §3, mise à jour de cet ADR (statut
-« accepté ») avec le choix final.
+- **Maintenance** : egui sera maintenu comme base, avec des extensions custom pour les besoins spécifiques
+- **Portabilité** : Le code UI sera encapsulé dans un module séparé pour faciliter le déploiement multiplateforme
+- **Évolutions** : Si besoin de web-native, tauri pourra être porté en P5
+
+## Références
+
+- [P1.6 UI minimale](plan-developpement-phases.md)
+- [Spécifications fonctionnelles - Interfaces](specs-fonctionnels.md)

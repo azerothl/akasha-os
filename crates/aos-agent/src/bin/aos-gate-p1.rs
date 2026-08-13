@@ -52,6 +52,8 @@ async fn infer_once(
             seed: Some(42),
         },
         priority: 3,
+        data_refs: vec![],
+        routing: None,
     };
     let mut rx = bus
         .call_stream::<InferRequest, TokenEvent>("model.infer", &req, vec![])

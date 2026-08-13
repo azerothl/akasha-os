@@ -15,7 +15,7 @@ use aos_agent::{intents as agent_intents, SubscribeRequest};
 use aos_ipc::BusClient;
 use aos_proto::{
     AgentCreateRequest, AgentCreateResponse, AgentIdRequest, AgentInfo, AgentOutputEvent,
-    AgentSteerRequest, ChatMessage, InferParams, InferRequest, LoadRequest, ModelInfo,
+    AgentSteerRequest, ChatMessage, InferParams, InferRequest, LoadRequest, ModelInfo, ModelState,
     SystemMetrics, TokenEvent,
 };
 use crossterm::event::{Event, EventStream, KeyCode, KeyEventKind};
@@ -41,6 +41,7 @@ enum UiEvent {
     Models(Vec<ModelInfo>),
     Agents(Vec<AgentInfo>),
     Metrics(SystemMetrics),
+    Confirm(aos_proto::PendingConfirmation),
 }
 
 struct App {
@@ -49,10 +50,15 @@ struct App {
     chat: Vec<(String, String)>,
     /// Réponse en cours de streaming.
     streaming: String,
+    /// Décalage de scroll du panneau conversation (lignes).
+    chat_scroll: i32,
+    /// Suivi automatique en bas de conversation (réactivé à PageDown en bas).
+    follow: bool,
     models: Vec<ModelInfo>,
     agents: Vec<AgentInfo>,
     metrics: Option<SystemMetrics>,
     agent_log: Vec<String>,
+    pending_confirms: Vec<aos_proto::PendingConfirmation>,
     status: String,
 }
 
@@ -62,13 +68,16 @@ impl App {
             input: String::new(),
             chat: vec![(
                 "système".into(),
-                "Assistant Agent OS prêt. Tapez un message, ou /agent <tâche>, /load, /models, /kill <id>, /quit.".into(),
+                "Assistant Agent OS prêt. /commands pour les commandes, /help pour l'état du système.".into(),
             )],
             streaming: String::new(),
+            chat_scroll: 0,
+            follow: true,
             models: Vec::new(),
             agents: Vec::new(),
             metrics: None,
             agent_log: Vec::new(),
+            pending_confirms: Vec::new(),
             status: "connexion…".into(),
         }
     }
@@ -99,8 +108,22 @@ fn draw(frame: &mut ratatui::Frame, app: &App) {
             lines.push(ratatui::text::Line::from(l.to_string()));
         }
     }
+    // Scroll : suivi auto en bas, ou décalage manuel (PageUp/PageDown).
+    let visible = main[0].height.saturating_sub(2) as i32;
+    let max_scroll = (lines.len() as i32 - visible).max(0);
+    let scroll = if app.follow {
+        max_scroll
+    } else {
+        app.chat_scroll.clamp(0, max_scroll)
+    };
+    let title = if app.follow {
+        "Conversation".to_string()
+    } else {
+        format!("Conversation (scroll {scroll}/{max_scroll} — PageDown pour suivre)")
+    };
     let chat = Paragraph::new(lines)
-        .block(Block::default().borders(Borders::ALL).title("Conversation"))
+        .block(Block::default().borders(Borders::ALL).title(title))
+        .scroll((scroll.max(0) as u16, 0))
         .wrap(Wrap { trim: false });
     frame.render_widget(chat, main[0]);
 
@@ -109,8 +132,9 @@ fn draw(frame: &mut ratatui::Frame, app: &App) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(7),
-            Constraint::Min(6),
-            Constraint::Length(8),
+            Constraint::Min(5),
+            Constraint::Length(7),
+            Constraint::Length(6),
         ])
         .split(main[1]);
 
@@ -217,6 +241,29 @@ fn draw(frame: &mut ratatui::Frame, app: &App) {
         dash[2],
     );
 
+    // Confirmations bloquantes en attente (§9.4).
+    let confirm_items: Vec<ListItem> = if app.pending_confirms.is_empty() {
+        vec![ListItem::new("aucune confirmation en attente")]
+    } else {
+        app.pending_confirms
+            .iter()
+            .map(|p| {
+                ListItem::new(format!(
+                    "{} : {} {} → /confirm {} | /deny {}",
+                    p.id, p.actor, p.action, p.id, p.id
+                ))
+            })
+            .collect()
+    };
+    frame.render_widget(
+        List::new(confirm_items).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("Confirmations"),
+        ),
+        dash[3],
+    );
+
     // Input.
     let input = Paragraph::new(app.input.as_str())
         .block(Block::default().borders(Borders::ALL).title("Entrée"));
@@ -246,13 +293,14 @@ async fn refresh_models(bus: &BusClient, tx: &mpsc::Sender<UiEvent>) {
 }
 
 async fn run_chat(bus: Arc<BusClient>, history: Vec<(String, String)>, tx: mpsc::Sender<UiEvent>) {
-    let messages: Vec<ChatMessage> = history
-        .iter()
-        .map(|(r, c)| ChatMessage {
-            role: r.clone(),
-            content: c.clone(),
-        })
-        .collect();
+    let mut messages: Vec<ChatMessage> = vec![ChatMessage {
+        role: "system".into(),
+        content: aos_proto::SYSTEM_ASSISTANT_PROMPT.into(),
+    }];
+    messages.extend(history.iter().map(|(r, c)| ChatMessage {
+        role: r.clone(),
+        content: c.clone(),
+    }));
     let req = InferRequest {
         model_id: None,
         messages,
@@ -263,6 +311,8 @@ async fn run_chat(bus: Arc<BusClient>, history: Vec<(String, String)>, tx: mpsc:
             seed: None,
         },
         priority: 3, // interactive
+        data_refs: vec![],
+        routing: None,
     };
     match bus
         .call_stream::<InferRequest, TokenEvent>("model.infer", &req, vec![])
@@ -355,6 +405,144 @@ async fn run_agent_task(bus: Arc<BusClient>, directive: String, tx: mpsc::Sender
     }
 }
 
+/// Table des commandes (affichée par /commands).
+const COMMANDS: &[(&str, &str)] = &[
+    (
+        "<texte>",
+        "discuter avec l'assistant système (modèle local)",
+    ),
+    (
+        "/agent <tâche>",
+        "déléguer une tâche à un agent (processus isolé)",
+    ),
+    ("/pause <id>", "suspendre un agent"),
+    ("/resume <id>", "reprendre un agent"),
+    ("/steer <id> <txt>", "rediriger un agent en cours"),
+    ("/kill <id>", "tuer un agent (sans impact système)"),
+    ("/models", "lister les modèles et leur état"),
+    (
+        "/load <modèle> [profil]",
+        "charger un modèle (latency/balanced/memory-saver/cpu-only)",
+    ),
+    ("/modules", "lister les modules installés et leurs outils"),
+    ("/install <dir>", "installer un module (.aospkg)"),
+    ("/notes", "lister les notes (module notes)"),
+    ("/note <titre>", "lire une note"),
+    ("/notenew <titre> | <contenu>", "créer une note"),
+    (
+        "/notesearch <requête>",
+        "recherche sémantique dans les notes",
+    ),
+    ("/audit [n]", "n derniers événements du journal signé"),
+    (
+        "/undo <chemin>",
+        "annuler la dernière écriture sur un fichier",
+    ),
+    ("/commands", "cette liste"),
+    (
+        "/help",
+        "état du système (services, agents, mémoire, modèles)",
+    ),
+    ("/quit ou Échap", "quitter"),
+];
+
+async fn show_help(bus: &Arc<BusClient>, tx: &mpsc::Sender<UiEvent>) {
+    // Services vivants (découverte bus).
+    let mut services = Vec::new();
+    for (name, probe) in [
+        ("modeld", "model.list"),
+        ("agentd", "agent.list"),
+        ("platformd", "module.list"),
+    ] {
+        let up = bus.lookup(probe).await.unwrap_or(false);
+        services.push(format!("{name}: {}", if up { "up" } else { "DOWN" }));
+    }
+    // Modèles.
+    let models: Vec<ModelInfo> = bus
+        .call("model.list", &(), vec![])
+        .await
+        .unwrap_or_default();
+    let loaded: Vec<&ModelInfo> = models
+        .iter()
+        .filter(|m| matches!(m.state, ModelState::Loaded | ModelState::PartiallyOffloaded))
+        .collect();
+    // Agents.
+    let agents: Vec<AgentInfo> = bus
+        .call(agent_intents::LIST, &(), vec![])
+        .await
+        .unwrap_or_default();
+    let running = agents
+        .iter()
+        .filter(|a| matches!(a.state, aos_proto::AgentState::Running))
+        .count();
+    // Métriques hôte.
+    let metrics: Option<SystemMetrics> = bus.call("model.metrics", &(), vec![]).await.ok();
+    // Mémoire.
+    let mem: Option<aos_proto::MemStats> = bus.call("mem.stats", &(), vec![]).await.ok();
+    // Modules.
+    let modules: Vec<aos_proto::ModuleInfo> = bus
+        .call("module.list", &(), vec![])
+        .await
+        .unwrap_or_default();
+    // Audit (comptage via requête large).
+    let audit_count = bus
+        .call::<aos_proto::AuditQueryRequest, Vec<aos_proto::AuditEvent>>(
+            "audit.query",
+            &aos_proto::AuditQueryRequest {
+                trace_id: None,
+                actor: None,
+                action: None,
+                last: 10_000,
+            },
+            vec![],
+        )
+        .await
+        .map(|v| v.len())
+        .unwrap_or(0);
+
+    let mut out = String::new();
+    out.push_str("Agent OS — état du système (phases P0–P2 validées)\n");
+    out.push_str(&format!("services : {}\n", services.join(", ")));
+    out.push_str(&format!(
+        "modèles : {} chargés / {} au registry{}\n",
+        loaded.len(),
+        models.len(),
+        loaded
+            .first()
+            .map(|m| format!(" (ex: {})", m.id))
+            .unwrap_or_default()
+    ));
+    out.push_str(&format!(
+        "agents : {} actifs / {} total\n",
+        running,
+        agents.len()
+    ));
+    if let Some(m) = &metrics {
+        out.push_str(&format!(
+            "hôte : RAM {:.1}/{:.1} GiB, CPU {:.0}%\n",
+            m.ram_used as f64 / (1 << 30) as f64,
+            m.ram_total as f64 / (1 << 30) as f64,
+            m.cpu_percent
+        ));
+    }
+    if let Some(ms) = &mem {
+        out.push_str(&format!(
+            "mémoire : {} souvenirs épisodiques ({}), {} working\n",
+            ms.episodic_total,
+            ms.namespaces
+                .iter()
+                .map(|(n, c)| format!("{n}:{c}"))
+                .collect::<Vec<_>>()
+                .join(", "),
+            ms.working_agents
+        ));
+    }
+    out.push_str(&format!("modules : {} installés\n", modules.len()));
+    out.push_str(&format!("audit : {} événements signés\n", audit_count));
+    out.push_str("→ /commands pour la liste des commandes");
+    let _ = tx.send(UiEvent::ChatError(out)).await;
+}
+
 async fn handle_command(
     bus: &Arc<BusClient>,
     input: &str,
@@ -365,6 +553,20 @@ async fn handle_command(
     let cmd = parts.next().unwrap_or("");
     match cmd {
         "/quit" => std::process::exit(0),
+        "/commands" => {
+            let out = COMMANDS
+                .iter()
+                .map(|(c, d)| format!("{c:<32} {d}"))
+                .collect::<Vec<_>>()
+                .join("\n");
+            app.chat
+                .push(("système".into(), format!("Commandes :\n{out}")));
+        }
+        "/help" => {
+            let bus = bus.clone();
+            let tx = tx.clone();
+            tokio::spawn(async move { show_help(&bus, &tx).await });
+        }
         "/models" => refresh_models(bus, tx).await,
         "/load" => {
             let id = parts.next().unwrap_or("").to_string();
@@ -447,6 +649,271 @@ async fn handle_command(
                     .await;
             });
         }
+        // --- P2 : modules, notes, audit, undo ---
+        "/modules" => {
+            let bus = bus.clone();
+            let tx = tx.clone();
+            tokio::spawn(async move {
+                let r = bus
+                    .call::<(), Vec<aos_proto::ModuleInfo>>("module.list", &(), vec![])
+                    .await;
+                let msg = match r {
+                    Ok(mods) if mods.is_empty() => "aucun module installé".to_string(),
+                    Ok(mods) => mods
+                        .iter()
+                        .map(|m| format!("{} v{} [{}]", m.name, m.version, m.tools.join(", ")))
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                    Err(e) => format!("module.list: {e}"),
+                };
+                let _ = tx.send(UiEvent::ChatError(msg)).await;
+            });
+        }
+        "/install" => {
+            let dir = parts.next().unwrap_or("").to_string();
+            let bus = bus.clone();
+            let tx = tx.clone();
+            tokio::spawn(async move {
+                let r = bus
+                    .call::<aos_proto::ModuleInstallRequest, aos_proto::ModuleInfo>(
+                        "module.install",
+                        &aos_proto::ModuleInstallRequest {
+                            source_dir: dir.clone(),
+                            approved_caps: None,
+                        },
+                        vec![],
+                    )
+                    .await;
+                let msg = match r {
+                    Ok(m) => format!(
+                        "module {} v{} installé (caps: {})",
+                        m.name,
+                        m.version,
+                        m.granted_caps.join(", ")
+                    ),
+                    Err(e) => format!("install: {e}"),
+                };
+                let _ = tx.send(UiEvent::ChatError(msg)).await;
+            });
+        }
+        "/notes" | "/note" | "/notenew" | "/notesearch" => {
+            // Surface humaine du module « notes » (module.invoke en human:ui).
+            let (tool, args) = match cmd {
+                "/notes" => ("notes.list", serde_json::json!({})),
+                "/note" => (
+                    "notes.read",
+                    serde_json::json!({"title": parts.collect::<Vec<_>>().join(" ")}),
+                ),
+                "/notenew" => {
+                    let rest = input.trim_start_matches("/notenew").trim();
+                    let mut split = rest.splitn(2, '|');
+                    let title = split.next().unwrap_or("").trim().to_string();
+                    let content = split.next().unwrap_or("").trim().to_string();
+                    (
+                        "notes.create",
+                        serde_json::json!({"title": title, "content": content}),
+                    )
+                }
+                _ => (
+                    "notes.search",
+                    serde_json::json!({"query": parts.collect::<Vec<_>>().join(" ")}),
+                ),
+            };
+            let bus = bus.clone();
+            let tx = tx.clone();
+            tokio::spawn(async move {
+                let r = bus
+                    .call::<aos_proto::ModuleInvokeRequest, aos_proto::ModuleInvokeResponse>(
+                        "module.invoke",
+                        &aos_proto::ModuleInvokeRequest {
+                            module: "notes".into(),
+                            tool: tool.to_string(),
+                            args,
+                            actor: "human:ui".into(),
+                            actor_caps: vec![],
+                            trace_id: String::new(),
+                        },
+                        vec![],
+                    )
+                    .await;
+                let msg = match r {
+                    Ok(resp) if resp.ok => resp.result.to_string(),
+                    Ok(resp) => format!("outil refusé: {}", resp.error.unwrap_or_default()),
+                    Err(e) => format!("invoke: {e}"),
+                };
+                let _ = tx.send(UiEvent::ChatError(msg)).await;
+            });
+        }
+        "/audit" => {
+            let n: usize = parts.next().and_then(|s| s.parse().ok()).unwrap_or(10);
+            let bus = bus.clone();
+            let tx = tx.clone();
+            tokio::spawn(async move {
+                let r = bus
+                    .call::<aos_proto::AuditQueryRequest, Vec<aos_proto::AuditEvent>>(
+                        "audit.query",
+                        &aos_proto::AuditQueryRequest {
+                            trace_id: None,
+                            actor: None,
+                            action: None,
+                            last: n,
+                        },
+                        vec![],
+                    )
+                    .await;
+                match r {
+                    Ok(events) => {
+                        for e in events {
+                            let _ = tx
+                                .send(UiEvent::AgentEvent(format!(
+                                    "#{} {} {} → {} ({})",
+                                    e.seq, e.actor, e.action, e.target, e.trace_id
+                                )))
+                                .await;
+                        }
+                    }
+                    Err(e) => {
+                        let _ = tx.send(UiEvent::AgentEvent(format!("audit: {e}"))).await;
+                    }
+                }
+            });
+        }
+        "/undo" => {
+            let path = parts.collect::<Vec<_>>().join(" ");
+            let bus = bus.clone();
+            let tx = tx.clone();
+            tokio::spawn(async move {
+                let r = bus
+                    .call::<aos_proto::FsUndoRequest, aos_proto::FsUndoResponse>(
+                        "fs.undo",
+                        &aos_proto::FsUndoRequest {
+                            path: path.clone(),
+                            actor: "human:ui".into(),
+                            trace_id: String::new(),
+                        },
+                        vec![],
+                    )
+                    .await;
+                let msg = match r {
+                    Ok(resp) => format!("undo {}: {}", resp.path, resp.description),
+                    Err(e) => format!("undo: {e}"),
+                };
+                let _ = tx.send(UiEvent::ChatError(msg)).await;
+            });
+        }
+        // --- P3 : confirmations, trust, routage ---
+        "/confirm" | "/deny" => {
+            let approved = cmd == "/confirm";
+            let id = parts.collect::<Vec<_>>().join(" ");
+            if id.is_empty() {
+                app.status = "usage: /confirm <id> ou /deny <id>".into();
+            } else {
+                let bus = bus.clone();
+                let tx = tx.clone();
+                tokio::spawn(async move {
+                    let r = bus
+                        .call::<aos_proto::ConfirmResponseRequest, bool>(
+                            "confirm.respond",
+                            &aos_proto::ConfirmResponseRequest {
+                                id: id.clone(),
+                                approved,
+                            },
+                            vec![],
+                        )
+                        .await;
+                    let msg = match r {
+                        Ok(true) => format!(
+                            "confirmation {id} : {}",
+                            if approved { "approuvée" } else { "refusée" }
+                        ),
+                        Ok(false) => format!("confirmation {id} inconnue/expirée"),
+                        Err(e) => format!("confirm.respond: {e}"),
+                    };
+                    let _ = tx.send(UiEvent::ChatError(msg)).await;
+                });
+            }
+        }
+        "/trust" => {
+            let args: Vec<String> = parts.map(|s| s.to_string()).collect();
+            let bus = bus.clone();
+            let tx = tx.clone();
+            tokio::spawn(async move {
+                match args.len() {
+                    1 => {
+                        let r = bus
+                            .call::<aos_proto::TrustGetRequest, aos_proto::TrustProfile>(
+                                "trust.get",
+                                &aos_proto::TrustGetRequest {
+                                    agent_id: args[0].clone(),
+                                },
+                                vec![],
+                            )
+                            .await;
+                        let msg = match r {
+                            Ok(p) => format!(
+                                "{} : score {:.2} (palier {}), {} succès / {} échecs",
+                                p.agent_id, p.score, p.tier, p.success_count, p.failure_count
+                            ),
+                            Err(e) => format!("trust.get: {e}"),
+                        };
+                        let _ = tx.send(UiEvent::ChatError(msg)).await;
+                    }
+                    2 => {
+                        let score: f32 = args[1].parse().unwrap_or(0.5);
+                        let r = bus
+                            .call::<aos_proto::TrustSetRequest, bool>(
+                                "trust.set",
+                                &aos_proto::TrustSetRequest {
+                                    agent_id: args[0].clone(),
+                                    score,
+                                },
+                                vec![],
+                            )
+                            .await;
+                        let msg = match r {
+                            Ok(true) => format!("{} : score fixé à {:.2}", args[0], score),
+                            _ => "trust.set: échec".to_string(),
+                        };
+                        let _ = tx.send(UiEvent::ChatError(msg)).await;
+                    }
+                    _ => {
+                        let _ = tx
+                            .send(UiEvent::ChatError(
+                                "usage: /trust <agent_id> [score 0..1]".into(),
+                            ))
+                            .await;
+                    }
+                }
+            });
+        }
+        "/routing" => {
+            let mode = parts.collect::<Vec<_>>().join(" ");
+            let bus = bus.clone();
+            let tx = tx.clone();
+            tokio::spawn(async move {
+                if mode.is_empty() {
+                    let _ = tx
+                        .send(UiEvent::ChatError(
+                            "usage: /routing balanced|local_only|remote_only".into(),
+                        ))
+                        .await;
+                    return;
+                }
+                let r = bus
+                    .call::<aos_proto::SetRoutingRequest, Result<(), String>>(
+                        "model.set_routing",
+                        &aos_proto::SetRoutingRequest { mode: mode.clone() },
+                        vec![],
+                    )
+                    .await;
+                let msg = match r {
+                    Ok(Ok(())) => format!("routage : {mode}"),
+                    Ok(Err(e)) => format!("routage refusé: {e}"),
+                    Err(e) => format!("set_routing: {e}"),
+                };
+                let _ = tx.send(UiEvent::ChatError(msg)).await;
+            });
+        }
         _ => {
             app.status = format!("commande inconnue: {cmd}");
         }
@@ -492,6 +959,28 @@ async fn main() -> std::io::Result<()> {
         });
     }
 
+    // Abonnement aux confirmations bloquantes (Control bar, §9.4).
+    {
+        let bus = bus.clone();
+        let tx = tx.clone();
+        tokio::spawn(async move {
+            if let Ok(mut rx) = bus
+                .call_stream::<serde_json::Value, aos_proto::PendingConfirmation>(
+                    "confirm.subscribe",
+                    &serde_json::json!({}),
+                    vec![],
+                )
+                .await
+            {
+                while let Some(ev) = rx.recv().await {
+                    if let Ok(p) = ev {
+                        let _ = tx.send(UiEvent::Confirm(p)).await;
+                    }
+                }
+            }
+        });
+    }
+
     loop {
         terminal.draw(|f| draw(f, &app))?;
         tokio::select! {
@@ -515,7 +1004,18 @@ async fn main() -> std::io::Result<()> {
                                 }
                             }
                             KeyCode::Char(c) => app.input.push(c),
-                            KeyCode::Backspace => { app.input.pop(); }
+                            KeyCode::Backspace => {
+                                app.input.pop();
+                            }
+                            KeyCode::PageUp => {
+                                app.follow = false;
+                                app.chat_scroll -= 10;
+                            }
+                            KeyCode::PageDown => {
+                                app.chat_scroll += 10;
+                                // Réactive le suivi quand on revient en bas.
+                                app.follow = true;
+                            }
                             KeyCode::Esc => break,
                             _ => {}
                         }
@@ -542,6 +1042,10 @@ async fn main() -> std::io::Result<()> {
                     UiEvent::Models(m) => app.models = m,
                     UiEvent::Agents(a) => app.agents = a,
                     UiEvent::Metrics(m) => app.metrics = Some(m),
+                    UiEvent::Confirm(p) => {
+                        app.pending_confirms.push(p);
+                        app.follow = true;
+                    }
                 }
             }
         }

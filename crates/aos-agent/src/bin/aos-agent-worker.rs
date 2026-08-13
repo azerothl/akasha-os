@@ -15,7 +15,8 @@
 use aos_agent::{intents, CognitiveState, ControlCmd, ControlResp, ReportPayload};
 use aos_ipc::{BusClient, BusService};
 use aos_proto::{
-    AgentOutputEvent, AgentState, CancelRequest, ChatMessage, InferParams, InferRequest, TokenEvent,
+    AgentOutputEvent, AgentState, CancelRequest, ChatMessage, InferParams, InferRequest,
+    ModuleInvokeRequest, ModuleInvokeResponse, TokenEvent,
 };
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -96,6 +97,19 @@ async fn main() {
         current_inference: Mutex::new(None),
         cmd_tx: cmd_tx.clone(),
     });
+    // Connaissance système (§4.5) : l'agent sait où il vit et comment y
+    // répondre — injecté en tête de mémoire de travail.
+    {
+        let mut st = shared.state.lock().await;
+        st.working_memory.push((
+            "system".to_string(),
+            format!(
+                "{}\n\nTu es l'agent {} d'Agent OS. Si l'utilisateur te demande d'utiliser un outil, réponds par la ligne `TOOL: <outil> <args json>`.",
+                aos_proto::SYSTEM_ASSISTANT_PROMPT,
+                agent_id
+            ),
+        ));
+    }
 
     // Service de contrôle `agent.<id>.control`.
     let mut svc = BusService::new(format!("agent-{agent_id}"));
@@ -172,22 +186,31 @@ async fn main() {
             },
         };
 
+        // Une seule entrée utilisateur par directive.
+        {
+            let mut st = shared.state.lock().await;
+            st.push_user(&current);
+        }
+        report(
+            &bus,
+            &agent_id,
+            AgentOutputEvent::Log {
+                line: format!("directive : {current}"),
+            },
+        )
+        .await;
+        let trace_id = format!(
+            "trace-{}-{}",
+            agent_id,
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis()
+        );
+
+        let mut tool_rounds = 0;
         let mut completed = false;
         while !completed {
-            // Enregistre la directive dans la mémoire de travail.
-            {
-                let mut st = shared.state.lock().await;
-                st.push_user(&current);
-            }
-            report(
-                &bus,
-                &agent_id,
-                AgentOutputEvent::Log {
-                    line: format!("directive : {current}"),
-                },
-            )
-            .await;
-
             let messages: Vec<ChatMessage> = shared
                 .state
                 .lock()
@@ -202,8 +225,14 @@ async fn main() {
             let req = InferRequest {
                 model_id: model.clone(),
                 messages,
-                params: InferParams::default(),
+                params: InferParams {
+                    // Température basse : conformité du protocole TOOL: (P2).
+                    temperature: 0.2,
+                    ..InferParams::default()
+                },
                 priority: 1,
+                data_refs: vec![],
+                routing: None,
             };
             let rx = bus
                 .call_stream::<InferRequest, TokenEvent>("model.infer", &req, caps.clone())
@@ -294,6 +323,30 @@ async fn main() {
                     None => break 'outer,
                 }
             } else {
+                // --- Convention d'appel d'outils (P2) : `TOOL: <outil> <json>` ---
+                if let Some((tool, args)) = parse_tool_call(&full_text) {
+                    if tool_rounds < 2 {
+                        tool_rounds += 1;
+                        shared.state.lock().await.push_assistant(&full_text);
+                        let outcome =
+                            invoke_tool(&bus, &agent_id, &caps, &tool, &args, &trace_id).await;
+                        report(
+                            &bus,
+                            &agent_id,
+                            AgentOutputEvent::Log {
+                                line: format!("outil {tool} → {}", truncate(&outcome, 120)),
+                            },
+                        )
+                        .await;
+                        shared
+                            .state
+                            .lock()
+                            .await
+                            .working_memory
+                            .push(("tool".to_string(), format!("[{tool}] {outcome}")));
+                        continue; // tour final avec le résultat de l'outil
+                    }
+                }
                 shared.state.lock().await.push_assistant(&full_text);
                 completed = true;
             }
@@ -306,5 +359,58 @@ async fn main() {
             },
         )
         .await;
+    }
+}
+
+/// Parse une ligne `TOOL: <outil> <args json>` dans la réponse du modèle.
+fn parse_tool_call(text: &str) -> Option<(String, serde_json::Value)> {
+    for line in text.lines() {
+        let line = line.trim();
+        if let Some(rest) = line.strip_prefix("TOOL:") {
+            let rest = rest.trim();
+            let (tool, args_str) = match rest.find(char::is_whitespace) {
+                Some(i) => (rest[..i].to_string(), rest[i..].trim()),
+                None => (rest.to_string(), "{}"),
+            };
+            let args = serde_json::from_str(args_str).unwrap_or(serde_json::json!({}));
+            return Some((tool, args));
+        }
+    }
+    None
+}
+
+/// Invoque un outil de module via le bus (caps de l'agent présentées).
+async fn invoke_tool(
+    bus: &BusClient,
+    agent_id: &str,
+    caps: &[String],
+    tool: &str,
+    args: &serde_json::Value,
+    trace_id: &str,
+) -> String {
+    let module = tool.split('.').next().unwrap_or("").to_string();
+    let req = ModuleInvokeRequest {
+        module,
+        tool: tool.to_string(),
+        args: args.clone(),
+        actor: format!("agent:{agent_id}"),
+        actor_caps: caps.to_vec(),
+        trace_id: trace_id.to_string(),
+    };
+    match bus
+        .call::<ModuleInvokeRequest, ModuleInvokeResponse>("module.invoke", &req, vec![])
+        .await
+    {
+        Ok(resp) if resp.ok => resp.result.to_string(),
+        Ok(resp) => format!("ERREUR outil: {}", resp.error.unwrap_or_default()),
+        Err(e) => format!("ERREUR bus: {e}"),
+    }
+}
+
+fn truncate(s: &str, n: usize) -> String {
+    if s.chars().count() > n {
+        format!("{}…", s.chars().take(n).collect::<String>())
+    } else {
+        s.to_string()
     }
 }

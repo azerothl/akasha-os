@@ -1,0 +1,476 @@
+//! Assemblage plateforme : audit + storage + memory + modules + embeddings.
+//!
+//! `PlatformSubsystem` implémente [`HostServices`] : c'est lui qui exécute
+//! les appels système émis par les modules WASM, avec vérification des caps
+//! et émission d'audit (chaîne intent → agent → outil → fs, Gate P2).
+
+use crate::audit::AuditJournal;
+use crate::confirm::ConfirmManager;
+use crate::memory::MemoryStore;
+use crate::module_rt::{HostCallCtx, HostServices, ModuleRuntime};
+use crate::net::EgressControl;
+use crate::policy::PolicyEngine;
+use crate::secrets::SecretStore;
+use crate::storage::{glob_match, StorageFs};
+use crate::trust::TrustManager;
+use aos_llama::{LlamaContext, LlamaModel, LoadOptions};
+use aos_proto::AuditAppendRequest;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+
+/// Configuration du daemon plateforme.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct PlatformConfig {
+    #[serde(default = "default_bus")]
+    pub bus: String,
+    #[serde(default = "default_audit_dir")]
+    pub audit_dir: String,
+    #[serde(default = "default_storage_dir")]
+    pub storage_dir: String,
+    #[serde(default = "default_memory_dir")]
+    pub memory_dir: String,
+    #[serde(default = "default_modules_dir")]
+    pub modules_dir: String,
+    /// Modèle d'embeddings (embedded-embed, §3.4).
+    pub embed_model: Option<EmbedModelConfig>,
+    /// Fichier de règles du Policy Engine (§9.4).
+    #[serde(default)]
+    pub policies_file: Option<String>,
+    /// Timeout par défaut des confirmations (§9.4, fail-closed).
+    #[serde(default = "default_confirm_timeout")]
+    pub confirm_timeout_sec: u64,
+    /// Fichier des secrets (§9.2).
+    #[serde(default = "default_secrets_file")]
+    pub secrets_file: String,
+    /// Mode réseau au démarrage : online | offline_strict (§9.5).
+    #[serde(default = "default_net_mode")]
+    pub net_mode: String,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct EmbedModelConfig {
+    pub path: String,
+    #[serde(default)]
+    pub n_gpu_layers: i32,
+    #[serde(default = "default_threads")]
+    pub n_threads: i32,
+}
+
+fn default_bus() -> String {
+    format!("127.0.0.1:{}", aos_ipc::DEFAULT_BUS_PORT)
+}
+fn default_audit_dir() -> String {
+    "var/audit".into()
+}
+fn default_storage_dir() -> String {
+    "var/storage".into()
+}
+fn default_memory_dir() -> String {
+    "var/memory".into()
+}
+fn default_modules_dir() -> String {
+    "var/modules".into()
+}
+fn default_confirm_timeout() -> u64 {
+    120
+}
+fn default_secrets_file() -> String {
+    "var/secrets/keys.yaml".into()
+}
+fn default_net_mode() -> String {
+    "online".into()
+}
+fn default_threads() -> i32 {
+    8
+}
+
+impl PlatformConfig {
+    pub fn load(path: impl AsRef<Path>) -> Result<Self, Box<dyn std::error::Error>> {
+        Ok(serde_yaml::from_str(&std::fs::read_to_string(path)?)?)
+    }
+}
+
+/// Le sous-système plateforme (partagé entre handlers du bus).
+pub struct PlatformSubsystem {
+    pub audit: Mutex<AuditJournal>,
+    pub fs: Mutex<StorageFs>,
+    pub mem: Mutex<MemoryStore>,
+    pub modules: Mutex<ModuleRuntime>,
+    embed: Mutex<Option<Arc<std::sync::Mutex<LlamaContext>>>>,
+    pub policy: Mutex<PolicyEngine>,
+    pub confirm: Arc<ConfirmManager>,
+    pub trust: Mutex<TrustManager>,
+    pub net: Mutex<EgressControl>,
+    pub secrets: Mutex<SecretStore>,
+    /// Caps accordées par `cap.request` (registre logique par agent).
+    pub granted_caps: Mutex<std::collections::HashMap<String, Vec<String>>>,
+    /// Agent superviseur v1 (§4.6).
+    pub supervisor: Arc<crate::supervisor::Supervisor>,
+    /// Client bus : forwarding audit → `aos-auditd` et checks → `aos-capkd`.
+    bus: Mutex<Option<Arc<aos_ipc::BusClient>>>,
+}
+
+impl PlatformSubsystem {
+    pub fn open(config: &PlatformConfig) -> Result<Arc<Self>, String> {
+        let audit = AuditJournal::open(&config.audit_dir).map_err(|e| e.to_string())?;
+        let fs = StorageFs::open(&config.storage_dir).map_err(|e| e.to_string())?;
+        let mem = MemoryStore::open(&config.memory_dir).map_err(|e| e.to_string())?;
+        let embed = config.embed_model.as_ref().map(|cfg| {
+            let opts = LoadOptions {
+                n_gpu_layers: cfg.n_gpu_layers,
+                n_threads: cfg.n_threads,
+                embeddings: true,
+                n_ctx: 2048,
+                ..Default::default()
+            };
+            let model = LlamaModel::load(PathBuf::from(&cfg.path).as_path(), &opts)
+                .map_err(|e| e.to_string())?;
+            let ctx = LlamaContext::new(Arc::new(model), &opts).map_err(|e| e.to_string())?;
+            Ok::<_, String>(Arc::new(std::sync::Mutex::new(ctx)))
+        });
+        let embed = match embed {
+            Some(Ok(c)) => Some(c),
+            Some(Err(e)) => return Err(format!("embed model: {e}")),
+            None => None,
+        };
+
+        // Liaison en deux temps propre : le ModuleRuntime délègue les appels
+        // système via `LateBoundServices`, résolu une fois le sous-système créé.
+        let late = Arc::new(LateBoundServices::default());
+        let rt =
+            ModuleRuntime::open(&config.modules_dir, late.clone()).map_err(|e| e.to_string())?;
+        let policy = PolicyEngine::open(
+            config.policies_file.as_deref().map(Path::new),
+            config.confirm_timeout_sec,
+        )
+        .map_err(|e| e.to_string())?;
+        let secrets = SecretStore::open(&config.secrets_file).map_err(|e| e.to_string())?;
+        let mut net = EgressControl::new();
+        if config.net_mode == "offline_strict" {
+            net.set_mode(crate::net::NetMode::OfflineStrict);
+        }
+        let sub = Arc::new(Self {
+            audit: Mutex::new(audit),
+            fs: Mutex::new(fs),
+            mem: Mutex::new(mem),
+            modules: Mutex::new(rt),
+            embed: Mutex::new(embed),
+            policy: Mutex::new(policy),
+            confirm: ConfirmManager::new(config.confirm_timeout_sec),
+            trust: Mutex::new(TrustManager::new()),
+            net: Mutex::new(net),
+            secrets: Mutex::new(secrets),
+            granted_caps: Mutex::new(std::collections::HashMap::new()),
+            supervisor: crate::supervisor::Supervisor::new(),
+            bus: Mutex::new(None),
+        });
+        let _ = late.0.set(sub.clone());
+        Ok(sub)
+    }
+
+    /// Client bus pour `aos-auditd` (P4.4) et `aos-capkd` (P4.2).
+    pub fn set_bus(&self, bus: Arc<aos_ipc::BusClient>) {
+        *self.bus.lock().unwrap() = Some(bus);
+    }
+
+    pub fn bus(&self) -> Option<Arc<aos_ipc::BusClient>> {
+        self.bus.lock().unwrap().clone()
+    }
+
+    /// Autorise via le noyau de capacités si l'enveloppe porte des
+    /// `cap://kernel/<id>`.
+    ///
+    /// - `None` : aucune cap kernel → fallback caps logiques P1-P3 ;
+    /// - `Some(Ok(()))` : au moins une cap kernel autorise l'objet ;
+    /// - `Some(Err(_))` : caps kernel présentées mais refusées (fail-closed,
+    ///   y compris si `aos-capkd` est injoignable).
+    pub async fn authorize_kernel(
+        &self,
+        envelope_caps: &[String],
+        holder: &str,
+        object: &str,
+        rights: &[String],
+    ) -> Option<Result<(), String>> {
+        let ids: Vec<u64> = envelope_caps
+            .iter()
+            .filter_map(|c| aos_ipc::parse_kernel_cap(c))
+            .collect();
+        if ids.is_empty() {
+            return None;
+        }
+        let Some(bus) = self.bus() else {
+            return Some(Err("noyau de capacités injoignable".into()));
+        };
+        for cap in ids {
+            let r = bus
+                .call::<aos_proto::CapCheckRequest, aos_proto::CapCheckResponse>(
+                    "cap.check",
+                    &aos_proto::CapCheckRequest {
+                        holder: holder.into(),
+                        cap,
+                        rights: rights.to_vec(),
+                        object: Some(object.into()),
+                    },
+                    vec![],
+                )
+                .await;
+            match r {
+                Ok(resp) if resp.allowed => return Some(Ok(())),
+                Ok(_) => {}
+                Err(e) => return Some(Err(e.to_string())),
+            }
+        }
+        Some(Err("capacité kernel refusée ou révoquée".into()))
+    }
+
+    /// Append d'audit (point unique) + alimentation du superviseur.
+    ///
+    /// P4.4 : l'événement est aussi forwardé à `aos-auditd` (journal canonique)
+    /// si un client bus est configuré. Fire-and-forget : la panne d'auditd
+    /// n'affecte pas le service (isolation de panne, Gate P4).
+    pub fn audit(&self, req: AuditAppendRequest) {
+        let ev = self.audit.lock().unwrap().append(req.clone());
+        let sup = self.supervisor.clone();
+        tokio::spawn(async move {
+            sup.feed(&ev.actor, &ev.action, &ev.target).await;
+        });
+        // Forwarding au service d'audit autonome (tolérant à la panne).
+        let bus = self.bus();
+        if let Some(bus) = bus {
+            tokio::spawn(async move {
+                let _ = bus
+                    .call::<AuditAppendRequest, u64>("audit.append", &req, vec![])
+                    .await;
+            });
+        }
+    }
+
+    /// Embedding d'un texte (service interne, bloquant).
+    pub fn embed_text(&self, text: &str) -> Result<Vec<f32>, String> {
+        let ctx = {
+            let guard = self.embed.lock().unwrap();
+            guard.as_ref().cloned()
+        };
+        let ctx = ctx.ok_or_else(|| "modèle d'embeddings non configuré".to_string())?;
+        let result = ctx.lock().unwrap().embed(text).map_err(|e| e.to_string());
+        result
+    }
+
+    /// Évalue la politique pour une action ; gère `require_confirmation`
+    /// (bloquant, fail-closed : timeout → refus audité, §9.4).
+    /// Retourne `true` si l'action peut procéder.
+    pub async fn policy_gate(
+        &self,
+        mut context: std::collections::HashMap<String, String>,
+        actor: &str,
+        action: &str,
+        target: &str,
+        trace_id: &str,
+    ) -> bool {
+        context
+            .entry("action.kind".into())
+            .or_insert_with(|| action.into());
+        let (effect, rule_name, timeout) = {
+            let p = self.policy.lock().unwrap();
+            let (e, r) = p.evaluate(&context);
+            (e, r.map(|r| r.name.clone()), r.and_then(|r| r.timeout_sec))
+        };
+        match effect {
+            aos_proto::PolicyEffect::Allow => true,
+            aos_proto::PolicyEffect::Deny => {
+                self.audit(AuditAppendRequest {
+                    trace_id: trace_id.into(),
+                    actor: actor.into(),
+                    action: "policy.deny".into(),
+                    target: target.into(),
+                    detail: serde_json::json!({"rule": rule_name, "action": action}),
+                });
+                false
+            }
+            aos_proto::PolicyEffect::RequireConfirmation => {
+                let (id, rx) = self
+                    .confirm
+                    .ask(
+                        actor.into(),
+                        action.into(),
+                        target.into(),
+                        rule_name.unwrap_or_else(|| "require_confirmation".into()),
+                        timeout,
+                    )
+                    .await;
+                let approved = rx.await.unwrap_or(false);
+                self.audit(AuditAppendRequest {
+                    trace_id: trace_id.into(),
+                    actor: actor.into(),
+                    action: "confirmation.resolved".into(),
+                    target: target.into(),
+                    detail: serde_json::json!({"confirmation_id": id, "approved": approved}),
+                });
+                if !approved {
+                    self.trust.lock().unwrap().record_confirmation_denial(actor);
+                }
+                approved
+            }
+        }
+    }
+
+    /// Demande de capacité par un agent (§4.7 paliers, Trust consultatif).
+    pub fn decide_cap_request(&self, agent_id: &str, cap: &str) -> CapDecision {
+        const CRITICAL: &[&str] = &["fs.reclassify", "net.connect", "secrets", "module.install"];
+        let tier = self.trust.lock().unwrap().tier(agent_id);
+        let critical = CRITICAL.iter().any(|c| cap.starts_with(c));
+        match (tier, critical) {
+            (crate::trust::Tier::High, false) => CapDecision::Grant,
+            (crate::trust::Tier::High, true) => CapDecision::Confirm,
+            (crate::trust::Tier::Medium, _) => CapDecision::Confirm,
+            (crate::trust::Tier::Low, _) => CapDecision::Deny,
+        }
+    }
+
+    /// Enregistre une cap accordée (registre logique).
+    pub fn grant_cap(&self, agent_id: &str, cap: &str) {
+        self.granted_caps
+            .lock()
+            .unwrap()
+            .entry(agent_id.into())
+            .or_default()
+            .push(cap.into());
+    }
+
+    /// Vérifie une cap `kind:resource` dans les caps du module.
+    fn require_cap(ctx: &HostCallCtx, kind: &str, resource: &str) -> Result<(), String> {
+        for cap in &ctx.granted_caps {
+            if let Some(pattern) = cap.strip_prefix(&format!("{kind}:")) {
+                if glob_match(pattern, resource) || pattern == resource {
+                    return Ok(());
+                }
+            }
+        }
+        Err(format!(
+            "permission refusée: {kind}:{resource} (module {})",
+            ctx.module
+        ))
+    }
+}
+
+/// Issue d'une demande de capacité.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CapDecision {
+    Grant,
+    Confirm,
+    Deny,
+}
+
+/// Délégation des appels système des modules vers le sous-système, résolue
+/// après construction (le ModuleRuntime a besoin d'un `Arc<dyn HostServices>`
+/// avant que le sous-système existe).
+#[derive(Default)]
+struct LateBoundServices(std::sync::OnceLock<Arc<PlatformSubsystem>>);
+
+impl HostServices for LateBoundServices {
+    fn call(
+        &self,
+        ctx: &HostCallCtx,
+        service: &str,
+        args: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        self.0
+            .get()
+            .ok_or_else(|| "services non initialisés".to_string())?
+            .call(ctx, service, args)
+    }
+}
+
+impl HostServices for PlatformSubsystem {
+    fn call(
+        &self,
+        ctx: &HostCallCtx,
+        service: &str,
+        args: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        match service {
+            "fs.read" => {
+                let path = args["path"].as_str().unwrap_or("");
+                Self::require_cap(ctx, "fs.read", path)?;
+                let (content, class, version) = self
+                    .fs
+                    .lock()
+                    .unwrap()
+                    .read(path, &ctx.granted_caps)
+                    .map_err(|e| e.to_string())?;
+                self.audit(AuditAppendRequest {
+                    trace_id: ctx.trace_id.clone(),
+                    actor: format!("module:{}", ctx.module),
+                    action: "fs.read".into(),
+                    target: path.into(),
+                    detail: serde_json::json!({"on_behalf_of": ctx.actor}),
+                });
+                Ok(serde_json::json!({"content": content, "class": class, "version": version}))
+            }
+            "fs.write" => {
+                let path = args["path"].as_str().unwrap_or("");
+                let content = args["content"].as_str().unwrap_or("");
+                Self::require_cap(ctx, "fs.write", path)?;
+                let version = self
+                    .fs
+                    .lock()
+                    .unwrap()
+                    .write(
+                        path,
+                        content,
+                        &format!("module:{}", ctx.module),
+                        &ctx.granted_caps,
+                    )
+                    .map_err(|e| e.to_string())?;
+                self.audit(AuditAppendRequest {
+                    trace_id: ctx.trace_id.clone(),
+                    actor: format!("module:{}", ctx.module),
+                    action: "fs.write".into(),
+                    target: path.into(),
+                    detail: serde_json::json!({"on_behalf_of": ctx.actor, "version": version}),
+                });
+                Ok(serde_json::json!({"version": version}))
+            }
+            "fs.list" => {
+                let prefix = args["prefix"].as_str().unwrap_or("/");
+                let entries = self.fs.lock().unwrap().list(prefix, &ctx.granted_caps);
+                Ok(serde_json::json!({"entries": entries}))
+            }
+            "mem.episodic_write" => {
+                let ns = args["namespace"].as_str().unwrap_or("");
+                let text = args["text"].as_str().unwrap_or("");
+                Self::require_cap(ctx, "mem.write", ns)?;
+                let vector = self.embed_text(text)?;
+                let id = self.mem.lock().unwrap().episodic_write(
+                    ns,
+                    text,
+                    args["metadata"].clone(),
+                    vector,
+                    false,
+                );
+                self.audit(AuditAppendRequest {
+                    trace_id: ctx.trace_id.clone(),
+                    actor: format!("module:{}", ctx.module),
+                    action: "mem.episodic_write".into(),
+                    target: ns.into(),
+                    detail: serde_json::json!({"id": id, "on_behalf_of": ctx.actor}),
+                });
+                Ok(serde_json::json!({"id": id}))
+            }
+            "mem.episodic_query" => {
+                let ns = args["namespace"].as_str().unwrap_or("");
+                let query = args["query"].as_str().unwrap_or("");
+                let k = args["k"].as_u64().unwrap_or(5) as usize;
+                Self::require_cap(ctx, "mem.query", ns)?;
+                let vector = self.embed_text(query)?;
+                let hits = self.mem.lock().unwrap().episodic_query(
+                    &vector,
+                    k,
+                    if ns.is_empty() { None } else { Some(ns) },
+                );
+                Ok(serde_json::json!({"hits": hits}))
+            }
+            other => Err(format!("service inconnu: {other}")),
+        }
+    }
+}

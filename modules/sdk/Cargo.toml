@@ -1,0 +1,13 @@
+[package]
+name = "aos-module-sdk"
+description = "SDK guest pour modules Agent OS (WASM)"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+# Workspace propre : le SDK compile pour wasm32 ; exclu du workspace hôte.
+[workspace]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

@@ -2,9 +2,15 @@
 resolver = "2"
 members = ["crates/aos-agent",
     "crates/aos-caps", "crates/aos-ipc", "crates/aos-llama", "crates/aos-model",
-    "crates/aos-placement", "crates/aos-proto",
+    "crates/aos-placement", "crates/aos-platform", "crates/aos-proto",
     "crates/aos-registry",
-    "crates/aos-sim", "crates/aos-ui",
+    "crates/aos-sim", "crates/aos-ui", "crates/aos-ui-egui", "crates/aos-ui-iced",
+]
+exclude = [
+    # Modules WASM (cible wasm32-unknown-unknown, workspaces propres —
+    # ne jamais lier `host_call` côté hôte).
+    "modules/notes",
+    "modules/sdk",
 ]
 
 [workspace.package]

@@ -49,10 +49,36 @@ pub struct InferRequest {
     /// Priorité demandée (0=batch .. 4=system critical, cf. §3.6).
     #[serde(default = "default_priority")]
     pub priority: u8,
+    /// Chemins de données référencés (classification privacy, §3.7/§6.4).
+    #[serde(default)]
+    pub data_refs: Vec<String>,
+    /// Forçage de routage : `local_only` | `remote_only` | `balanced` (F-MDL-07).
+    #[serde(default)]
+    pub routing: Option<String>,
 }
 
 fn default_priority() -> u8 {
     1
+}
+
+/// `model.backend.add` — configure un backend distant OpenAI-compatible (P3).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BackendAddRequest {
+    /// Id du modèle exposé, ex. `remote:mock:gpt-x`.
+    pub model_id: String,
+    pub endpoint: String,
+    /// Nom du secret (lu via `secrets.get`, §9.2) — jamais la clé en clair.
+    #[serde(default)]
+    pub secret_name: Option<String>,
+    /// Nom du modèle côté API distante.
+    #[serde(default)]
+    pub remote_model: Option<String>,
+}
+
+/// `model.set_routing` — politique globale (F-MDL-07).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetRoutingRequest {
+    pub mode: String,
 }
 
 /// Élément du flux `model.infer`.
@@ -233,4 +259,568 @@ pub enum AgentOutputEvent {
     Token { text: String },
     StateChanged { state: AgentState },
     Error { message: String },
+}
+
+// ---------------------------------------------------------------------------
+// Audit (§9.3, §12) — P2
+// ---------------------------------------------------------------------------
+
+/// Événement d'audit (journal append-only signé, chaîne de hash).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuditEvent {
+    pub seq: u64,
+    pub ts_ms: u64,
+    /// Identifiant de chaîne causale (intent → agent → outil → fs).
+    pub trace_id: String,
+    /// Acteur (`agent:<id>`, `service:<nom>`, `human:ui`, `module:<nom>`).
+    pub actor: String,
+    /// Action (`tool.invoke`, `fs.write`, `policy.deny`, `cap.grant`, ...).
+    pub action: String,
+    /// Cible (`notes.create`, `/documents/notes/x.md`, ...).
+    pub target: String,
+    /// Détails structurés (JSON).
+    pub detail: serde_json::Value,
+    /// Hash de l'événement précédent (chaîne).
+    pub prev_hash: String,
+    /// Hash de cet événement (sha256 des champs canoniques).
+    pub hash: String,
+    /// HMAC-SHA256(clé système, hash).
+    pub signature: String,
+}
+
+/// `audit.append` — nouvel événement (champs seq/hash/signature remplis par
+/// le service d'audit).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuditAppendRequest {
+    pub trace_id: String,
+    pub actor: String,
+    pub action: String,
+    pub target: String,
+    #[serde(default)]
+    pub detail: serde_json::Value,
+}
+
+/// `audit.query`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuditQueryRequest {
+    #[serde(default)]
+    pub trace_id: Option<String>,
+    #[serde(default)]
+    pub actor: Option<String>,
+    #[serde(default)]
+    pub action: Option<String>,
+    #[serde(default = "default_audit_last")]
+    pub last: usize,
+}
+
+fn default_audit_last() -> usize {
+    50
+}
+
+// ---------------------------------------------------------------------------
+// Storage (§6) — P2
+// ---------------------------------------------------------------------------
+
+/// Classe de sensibilité (§6.4, F-FS-05).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum DataClass {
+    Public,
+    #[default]
+    Private,
+    Secret,
+}
+
+/// `fs.write` (avec transaction optionnelle).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FsWriteRequest {
+    pub path: String,
+    pub content: String,
+    #[serde(default)]
+    pub tx_id: Option<String>,
+    #[serde(default)]
+    pub actor: String,
+    #[serde(default)]
+    pub caps: Vec<String>,
+    #[serde(default)]
+    pub trace_id: String,
+}
+
+/// `fs.read`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FsReadRequest {
+    pub path: String,
+    #[serde(default)]
+    pub actor: String,
+    #[serde(default)]
+    pub caps: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FsReadResponse {
+    pub path: String,
+    pub content: String,
+    pub class: DataClass,
+    pub version: u64,
+}
+
+/// `fs.list`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FsListRequest {
+    #[serde(default)]
+    pub prefix: String,
+    #[serde(default)]
+    pub caps: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FsEntry {
+    pub path: String,
+    pub class: DataClass,
+    pub version: u64,
+    pub size_bytes: u64,
+}
+
+/// `fs.begin_tx` / `fs.commit` / `fs.rollback`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FsTxRequest {
+    #[serde(default)]
+    pub tx_id: Option<String>,
+    #[serde(default)]
+    pub actor: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FsTxResponse {
+    pub tx_id: String,
+    pub committed_ops: u32,
+}
+
+/// `fs.undo` — restaure la version précédente d'un fichier.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FsUndoRequest {
+    pub path: String,
+    #[serde(default)]
+    pub actor: String,
+    #[serde(default)]
+    pub trace_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FsUndoResponse {
+    pub path: String,
+    pub restored_version: Option<u64>,
+    pub description: String,
+}
+
+/// `fs.delete`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FsDeleteRequest {
+    pub path: String,
+    #[serde(default)]
+    pub tx_id: Option<String>,
+    #[serde(default)]
+    pub actor: String,
+    #[serde(default)]
+    pub caps: Vec<String>,
+    #[serde(default)]
+    pub trace_id: String,
+}
+
+/// `fs.set_class` (capacité `fs.reclassify` distincte, §6.4).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FsSetClassRequest {
+    pub path: String,
+    pub class: DataClass,
+    #[serde(default)]
+    pub caps: Vec<String>,
+}
+
+// ---------------------------------------------------------------------------
+// Memory (§5) — P2
+// ---------------------------------------------------------------------------
+
+/// `mem.working_set` / `mem.working_get`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemWorkingRequest {
+    pub agent_id: String,
+    #[serde(default)]
+    pub messages: Vec<(String, String)>,
+}
+
+/// `mem.episodic_write`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemEpisodicWriteRequest {
+    /// Namespace (`agent:<id>`, `module:<nom>`).
+    pub namespace: String,
+    pub text: String,
+    #[serde(default)]
+    pub metadata: serde_json::Value,
+    #[serde(default)]
+    pub pinned: bool,
+}
+
+/// `mem.episodic_query`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemEpisodicQueryRequest {
+    pub query: String,
+    #[serde(default = "default_k")]
+    pub k: usize,
+    #[serde(default)]
+    pub namespace: Option<String>,
+}
+
+fn default_k() -> usize {
+    5
+}
+
+/// `mem.stats` — compteurs pour le /help de l'UI.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemStats {
+    pub episodic_total: usize,
+    pub namespaces: Vec<(String, usize)>,
+    pub working_agents: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemHit {
+    pub id: u64,
+    pub namespace: String,
+    pub text: String,
+    pub score: f32,
+    pub metadata: serde_json::Value,
+}
+
+// ---------------------------------------------------------------------------
+// System Assistant (§4.5) — prompt de connaissance système
+// ---------------------------------------------------------------------------
+
+/// Prompt système injecté dans la mémoire de travail de l'assistant et des
+/// agents : connaissance d'Agent OS (architecture, état, capacités).
+///
+/// Maintenu à jour à chaque phase (P0–P2 actuellement).
+pub const SYSTEM_ASSISTANT_PROMPT: &str = "Tu es l'assistant système d'Agent OS, un système d'exploitation agent-natif en cours de développement (phases P0 à P2 validées à ce jour). 
+
+Architecture actuelle (services userspace reliés par un bus IPC sémantique CBOR) :
+- aos-busd : broker du bus (intents typés, streams, découverte de services) ;
+- aos-modeld : gestion des modèles IA locaux via llama.cpp (CUDA) — placement automatique des couches entre VRAM, RAM et disque (offload), scheduler par priorité, métriques TTFT/tok/s ;
+- aos-agentd : runtime d'agents — chaque agent est un processus isolé avec des capacités logiques (mint/derive/grant/revoke) ; tu peux être interrompu, redirigé (steer) ou tué (/kill) sans impact sur le système ;
+- aos-platformd : modules WASM sandboxés (sans WASI, capacités injectées), mémoire épisodique vectorielle (embeddings locaux), stockage versionné avec undo, journal d'audit signé (chaîne HMAC).
+
+Modèle actuel : LLM local (GGUF, exécuté offline sur GPU/CPU — aucune donnée ne quitte la machine en mode local). Les modules installés exposent des outils que les agents appellent via la convention TOOL: <outil> <args json>.
+
+Tu réponds en français, de façon concise et factuelle. Tu peux expliquer ton propre fonctionnement, celui du système et de ses services, et orienter l'utilisateur : /commands liste les commandes de l'interface, /models les modèles, /modules les modules installés, /audit le journal signé, /help l'état du système. Si tu ne sais pas, dis-le honnêtement.";
+
+/// Manifeste double-surface (§7.3).
+// ---------------------------------------------------------------------------
+// Modules (§7, §11.4) — P2
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModuleManifest {
+    pub name: String,
+    pub version: String,
+    pub hash: String,
+    #[serde(default)]
+    pub permissions: ModulePermissions,
+    #[serde(default)]
+    pub tools: Vec<ModuleTool>,
+    #[serde(default)]
+    pub ui: Option<ModuleUi>,
+    #[serde(default)]
+    pub min_os_api: u32,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ModulePermissions {
+    #[serde(default)]
+    pub required_caps: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModuleTool {
+    pub name: String,
+    pub description: String,
+    #[serde(default)]
+    pub input_schema: serde_json::Value,
+    #[serde(default)]
+    pub output_schema: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModuleUi {
+    pub entry: String,
+    pub mode: String,
+}
+
+/// `module.install` (depuis un répertoire `.aospkg`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModuleInstallRequest {
+    pub source_dir: String,
+    /// Caps approuvées par l'utilisateur (revue d'installation, §7.3).
+    #[serde(default)]
+    pub approved_caps: Option<Vec<String>>,
+}
+
+/// `module.invoke` — appel d'un outil du module.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModuleInvokeRequest {
+    pub module: String,
+    pub tool: String,
+    #[serde(default)]
+    pub args: serde_json::Value,
+    #[serde(default)]
+    pub actor: String,
+    #[serde(default)]
+    pub actor_caps: Vec<String>,
+    #[serde(default)]
+    pub trace_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModuleInvokeResponse {
+    pub ok: bool,
+    pub result: serde_json::Value,
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
+/// `module.describe` (introspection, F-MOD-03).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModuleIdRequest {
+    pub module: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModuleInfo {
+    pub name: String,
+    pub version: String,
+    pub granted_caps: Vec<String>,
+    pub tools: Vec<String>,
+    pub quarantined: bool,
+}
+
+// ---------------------------------------------------------------------------
+// Policy / Trust / Confirm / Egress (§9.4, §9.5, §4.7) — P3
+// ---------------------------------------------------------------------------
+
+/// Effet d'une règle de politique (§9.4) — 3 effets seulement en v1.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PolicyEffect {
+    Allow,
+    Deny,
+    RequireConfirmation,
+}
+
+/// Une règle déclarative (fichier `var/policies/rules.yaml`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PolicyRule {
+    pub name: String,
+    /// Clés à matcher dans le contexte (ex. `data_class: secret`).
+    /// Valeur = string, ou liste de strings (match quelconque).
+    #[serde(default)]
+    pub matches: Vec<(String, serde_json::Value)>,
+    pub effect: PolicyEffect,
+    /// Timeout de confirmation (si l'effet est require_confirmation).
+    #[serde(default)]
+    pub timeout_sec: Option<u64>,
+}
+
+/// `policy.evaluate` — contexte aplati (clés en points) → effet.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PolicyEvalRequest {
+    /// Contexte d'évaluation, clés en notation pointée
+    /// (ex. `{"action.kind": "fs.delete", "data_class": "secret"}`).
+    pub context: std::collections::HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PolicyEvalResponse {
+    pub effect: PolicyEffect,
+    pub rule: Option<String>,
+    pub timeout_sec: Option<u64>,
+}
+
+/// Une confirmation en attente (§9.4 `pending_confirmation`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PendingConfirmation {
+    pub id: String,
+    pub actor: String,
+    pub action: String,
+    pub target: String,
+    pub reason: String,
+    pub deadline_ts_ms: u64,
+}
+
+/// `confirm.respond`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfirmResponseRequest {
+    pub id: String,
+    pub approved: bool,
+}
+
+/// Profil de confiance d'un agent (§4.7).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrustProfile {
+    pub agent_id: String,
+    pub score: f32,
+    pub tier: String,
+    pub success_count: u64,
+    pub failure_count: u64,
+    pub override_count: u64,
+    pub confirmation_denials: u64,
+}
+
+/// `trust.set` (admin / gouvernance utilisateur).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrustSetRequest {
+    pub agent_id: String,
+    pub score: f32,
+}
+
+/// `trust.get`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrustGetRequest {
+    pub agent_id: String,
+}
+
+/// `cap.request` — demande de capacité par un agent (§4.7 paliers).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CapRequestRequest {
+    pub agent_id: String,
+    pub cap: String,
+    #[serde(default)]
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum CapRequestOutcome {
+    Granted,
+    ConfirmationRequired { confirmation_id: String },
+    Denied { reason: String },
+}
+
+/// `net.check` — contrôle d'egress (§9.5).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NetCheckRequest {
+    pub host: String,
+    pub port: u16,
+    #[serde(default)]
+    pub actor: String,
+    #[serde(default)]
+    pub caps: Vec<String>,
+}
+
+/// Entrée du journal d'egress (monitoring, Gate P3).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EgressEntry {
+    pub ts_ms: u64,
+    pub actor: String,
+    pub host: String,
+    pub port: u16,
+    pub allowed: bool,
+}
+
+/// `net.set_mode` — online / offline_strict (§9.5).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NetModeRequest {
+    pub mode: String,
+}
+
+/// `secrets.get` — usage restreint aux services (jamais aux agents, §9.2).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SecretGetRequest {
+    pub name: String,
+    pub actor: String,
+}
+
+/// `fs.class` — classe de sensibilité d'un chemin (routage §3.7).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FsClassRequest {
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FsClassResponse {
+    pub path: String,
+    pub class: DataClass,
+}
+
+// ---------------------------------------------------------------------------
+// Noyau de capacités (§2.3, P4.2) — aos-capkd
+// ---------------------------------------------------------------------------
+
+/// Droits sous forme de liste de noms (sérialisable IPC).
+/// Correspondance avec `aos_caps::Rights` : read/write/execute/grant/revoke.
+pub type CapRights = Vec<String>;
+
+/// `cap.mint` — crée une capacité racine (réservé aux services de confiance).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CapMintRequest {
+    pub holder: String,
+    pub object: String,
+    pub rights: CapRights,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CapMintResponse {
+    pub cap_id: u64,
+}
+
+/// `cap.derive` — atténuation (droits ⊆ parent).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CapDeriveRequest {
+    pub holder: String,
+    pub parent: u64,
+    pub rights: CapRights,
+}
+
+/// `cap.grant` — transfert à un autre détenteur.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CapGrantRequest {
+    pub holder: String,
+    pub cap: u64,
+    pub to: String,
+}
+
+/// `cap.revoke` — révocation unitaire ou en arbre (cascade).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CapRevokeRequest {
+    pub holder: String,
+    pub cap: u64,
+    #[serde(default)]
+    pub tree: bool,
+}
+
+/// `cap.check` — vérification d'autorisation (point d'application kernel).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CapCheckRequest {
+    pub holder: String,
+    pub cap: u64,
+    pub rights: CapRights,
+    /// Objet visé (optionnel) : doit correspondre à l'objet de la cap
+    /// (égalité ou glob `/**`). Absent = pas de contrainte d'objet.
+    #[serde(default)]
+    pub object: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CapCheckResponse {
+    pub allowed: bool,
+    pub reason: String,
+}
+
+/// `cap.list` — capacités d'un détenteur.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CapListRequest {
+    pub holder: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CapInfo {
+    pub cap_id: u64,
+    pub object: String,
+    pub rights: CapRights,
+    pub holder: String,
 }
