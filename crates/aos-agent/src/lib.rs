@@ -1,19 +1,22 @@
-//! # aos-agent — Agent Runtime v1 (P1.4)
+//! # aos-agent — Agent Runtime agentic
 //!
-//! - `aos-agentd` : service de lifecycle — chaque agent est un **processus
-//!   isolé** (worker), caps logiques via `aos-caps`, état cognitif
-//!   sérialisable (§4.2) ;
-//! - `aos-agent-worker` : boucle cognitive d'un agent (v1 : conversation
-//!   simple via `model.infer`), contrôlable (pause/resume/steer/snapshot) via
-//!   son intent `agent.<id>.control` sur le bus.
+//! - `aos-agentd` : lifecycle, skills, MCP catalogue, prompt optimize, spawn
+//! - `aos-agent-worker` : boucle goal Observe/Think/Act/Reflect/Checkpoint
 
+pub mod actions;
+pub mod mcp;
+pub mod persist;
+pub mod prompt;
+pub mod skills;
 pub mod state;
+pub mod tools;
 
 pub use state::CognitiveState;
 
 /// Intents exposés par `aos-agentd`.
 pub mod intents {
     pub const CREATE: &str = "agent.create";
+    pub const START: &str = "agent.start";
     pub const PAUSE: &str = "agent.pause";
     pub const RESUME: &str = "agent.resume";
     pub const KILL: &str = "agent.kill";
@@ -22,8 +25,12 @@ pub mod intents {
     pub const LIST: &str = "agent.list";
     pub const SUBSCRIBE: &str = "agent.subscribe";
     pub const SNAPSHOT: &str = "agent.snapshot";
-    /// Appelé par les workers pour remonter leur sortie/état à agentd.
     pub const REPORT: &str = "agent.report";
+    pub const PROMPT_OPTIMIZE: &str = "agent.prompt.optimize";
+    pub const GRANT: &str = "agent.grant";
+    pub const SKILL_LIST: &str = "skill.list";
+    pub const SKILL_GET: &str = "skill.get";
+    pub const MCP_LIST: &str = "mcp.list";
 }
 
 /// Payload de contrôle worker → intent `agent.<id>.control`.
@@ -33,6 +40,8 @@ pub enum ControlCmd {
     Resume,
     Steer { directive: String },
     Snapshot,
+    /// Hot-grant d'une capacité (mise à jour caps du worker).
+    GrantCap { cap: String },
 }
 
 /// Réponse d'un contrôle worker.

@@ -181,10 +181,17 @@ async fn main() {
     }
 
     // --- 3. Deux agents concurrents ---
-    let mk = |directive: &str| AgentCreateRequest {
-        directive: directive.into(),
-        caps: vec![],
-        model_id: Some("local:embedded-instruct".into()),
+    let mk = |directive: &str| {
+        let mut r = AgentCreateRequest::simple(directive);
+        r.model_id = Some("local:embedded-instruct".into());
+        r.goal = Some(aos_proto::AgentGoal {
+            statement: directive.into(),
+            success_criteria: vec![],
+            max_steps: 4,
+            max_subagents: 0,
+            timeout_secs: 120,
+        });
+        r
     };
     let a1 = bus
         .call::<_, AgentCreateResponse>(
@@ -268,6 +275,86 @@ async fn main() {
                 vec![],
             )
             .await;
+    }
+
+    // --- 5. Runtime agentic : skill.list + agent multi-steps ---
+    {
+        let skills: Result<Vec<aos_proto::SkillInfo>, _> = bus
+            .call(agent_intents::SKILL_LIST, &(), vec![])
+            .await;
+        let skill_ok = skills
+            .as_ref()
+            .map(|s| s.iter().any(|x| x.name == "notes-writer"))
+            .unwrap_or(false);
+        gates.push(Gate {
+            name: "skill.list expose notes-writer",
+            passed: skill_ok,
+            detail: format!("{:?}", skills.as_ref().map(|s| s.len())),
+        });
+
+        let mut req = AgentCreateRequest::simple(
+            "Appelle notes.list puis réponds goal.complete avec summary 'ok'.",
+        );
+        req.skills = vec!["notes-writer".into()];
+        req.tools = vec!["notes.list".into(), "goal.complete".into()];
+        req.caps = vec!["tool.invoke:notes".into()];
+        req.goal = Some(aos_proto::AgentGoal {
+            statement: req.directive.clone(),
+            success_criteria: vec![],
+            max_steps: 8,
+            max_subagents: 0,
+            timeout_secs: 180,
+        });
+        req.model_id = Some("local:embedded-instruct".into());
+        match bus
+            .call::<_, AgentCreateResponse>(agent_intents::CREATE, &req, vec![])
+            .await
+        {
+            Ok(r) => {
+                let deadline = Instant::now() + Duration::from_secs(180);
+                let mut done = false;
+                let mut saw_progress = false;
+                while Instant::now() < deadline && !done {
+                    tokio::time::sleep(Duration::from_secs(2)).await;
+                    let list: Vec<AgentInfo> = bus
+                        .call(agent_intents::LIST, &(), vec![])
+                        .await
+                        .unwrap_or_default();
+                    if let Some(a) = list.iter().find(|a| a.agent_id == r.agent_id) {
+                        if a.step > 0 {
+                            saw_progress = true;
+                        }
+                        if matches!(
+                            a.state,
+                            aos_proto::AgentState::Done | aos_proto::AgentState::Failed
+                        ) {
+                            done = true;
+                        }
+                    }
+                }
+                let _ = bus
+                    .call::<AgentIdRequest, bool>(
+                        agent_intents::KILL,
+                        &AgentIdRequest {
+                            agent_id: r.agent_id.clone(),
+                        },
+                        vec![],
+                    )
+                    .await;
+                gates.push(Gate {
+                    name: "agent multi-steps (progress / terminal)",
+                    passed: saw_progress || done,
+                    detail: format!("id={} progress={saw_progress} done={done}", r.agent_id),
+                });
+            }
+            Err(e) => {
+                gates.push(Gate {
+                    name: "agent multi-steps (progress / terminal)",
+                    passed: false,
+                    detail: e.to_string(),
+                });
+            }
+        }
     }
 
     // --- Bilan ---
