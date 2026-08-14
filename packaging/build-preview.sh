@@ -53,6 +53,9 @@ fi
 
 cp -f "${ROOT}/INSTALL.md" "${OUT}/" 2>/dev/null || true
 cp -f "${ROOT}/docs/TESTER.md" "${OUT}/TESTER.md" 2>/dev/null || true
+cp -f "${ROOT}/LICENSE" "${OUT}/" 2>/dev/null || true
+cp -f "${ROOT}/NOTICE" "${OUT}/" 2>/dev/null || true
+cp -f "${ROOT}/LICENSE-COMMERCIAL.md" "${OUT}/" 2>/dev/null || true
 cp -f "$(dirname "$0")/install-linux.sh" "${OUT}/install.sh"
 chmod +x "${OUT}/bin/"* "${OUT}/install.sh"
 

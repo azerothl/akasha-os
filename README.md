@@ -110,6 +110,22 @@ cargo run -p aos-session --release
 
 Voir `INSTALL.md` et `docs/TESTER.md`.
 
+## Licence
+
+**Double licence.**
+
+- **AGPL-3.0-only** (`LICENSE`) — usage, modification et distribution libres,
+  y compris commerciaux, tant que le copyleft AGPL est respecté (source
+  disponible, y compris pour un service réseau). Conserver `NOTICE` et citer
+  [Akasha OS](https://github.com/azerothl/akasha-os).
+- **Licence commerciale** (`LICENSE-COMMERCIAL.md`) — pour un fork ou un
+  produit **propriétaire** (code fermé, SaaS sans publication du source).
+  Attribution obligatoire ; redevance sur le CA du produit commercialisé.
+  Contact : loic.peaudecerf@fasst.io.
+
+Les marques **Akasha OS** et **Agent OS** sont réservées. Un fork doit
+prendre un autre nom de produit. Contributions : `CONTRIBUTING.md`.
+
 ## Utilisation
 
 ```powershell

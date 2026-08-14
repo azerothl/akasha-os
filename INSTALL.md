@@ -82,3 +82,8 @@ documenté, puis upload GitHub Release.
 ## Suite testeurs
 
 Voir [docs/TESTER.md](docs/TESTER.md) — protocole cohorte et retours depuis l'UI.
+
+## Licence
+
+AGPL-3.0-only (`LICENSE`) ; licence commerciale possible
+(`LICENSE-COMMERCIAL.md`). Conservez `NOTICE` avec toute redistribution.

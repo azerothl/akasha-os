@@ -99,6 +99,9 @@ if (-not $SkipModels) {
 
 Copy-Item (Join-Path $root "INSTALL.md") "$OutDir\" -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $root "docs\TESTER.md") "$OutDir\TESTER.md" -ErrorAction SilentlyContinue
+Copy-Item (Join-Path $root "LICENSE") "$OutDir\" -ErrorAction SilentlyContinue
+Copy-Item (Join-Path $root "NOTICE") "$OutDir\" -ErrorAction SilentlyContinue
+Copy-Item (Join-Path $root "LICENSE-COMMERCIAL.md") "$OutDir\" -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $PSScriptRoot "install-windows.ps1") "$OutDir\install.ps1" -Force
 
 # Raccourci / README package

@@ -1,0 +1,16 @@
+Akasha OS (Agent OS)
+Copyright (C) 2026 Loïc Peaudecerf
+
+This product is part of the Akasha OS project.
+Upstream: https://github.com/azerothl/akasha-os
+
+This software is dual-licensed:
+- GNU Affero General Public License v3.0 only (see LICENSE)
+- a commercial license (see LICENSE-COMMERCIAL.md)
+
+Redistributions of a fork or derivative (source or binary), including under
+a commercial license, must retain this NOTICE and a prominent reference to
+the original Akasha OS project and the URL above.
+
+The names "Akasha OS" and "Agent OS" are reserved. Forks must not use these
+names as the product name without written permission.
