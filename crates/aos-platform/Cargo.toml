@@ -20,6 +20,11 @@ futures.workspace = true
 wasmtime = "47"
 sha2 = "0.10"
 hmac = "0.12"
+base64 = "0.22"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls", "json"] }
+url = "2"
+image = { version = "0.25", default-features = false, features = ["png"] }
+printpdf = "0.7"
 
 [dev-dependencies]
 wat = "1"
@@ -39,3 +44,7 @@ path = "src/bin/aos-gate-p2.rs"
 [[bin]]
 name = "aos-gate-p3"
 path = "src/bin/aos-gate-p3.rs"
+
+[[bin]]
+name = "aos-gate-ext"
+path = "src/bin/aos-gate-ext.rs"

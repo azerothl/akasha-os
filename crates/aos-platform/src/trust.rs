@@ -111,8 +111,12 @@ impl TrustManager {
     }
 
     pub fn score(&self, agent_id: &str) -> f32 {
+        if let Some(f) = self.profiles.get(agent_id) {
+            return Self::compute(f);
+        }
+        // Score d'onboarding (trust.set sur `__default__`).
         self.profiles
-            .get(agent_id)
+            .get("__default__")
             .map(Self::compute)
             .unwrap_or(0.5)
     }

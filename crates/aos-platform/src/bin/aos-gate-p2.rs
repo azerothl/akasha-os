@@ -40,6 +40,8 @@ async fn main() {
             &ModuleInstallRequest {
                 source_dir: "modules/notes.aospkg".into(),
                 approved_caps: None,
+                actor: "human:gate".into(),
+                actor_caps: vec![],
             },
             vec![],
         )
@@ -71,10 +73,20 @@ async fn main() {
         let created = bus
             .call::<AgentCreateRequest, AgentCreateResponse>(
                 agent_intents::CREATE,
-                &AgentCreateRequest {
-                    directive: directive.to_string(),
-                    caps: vec!["tool.invoke:notes".to_string()],
-                    model_id: Some("local:embedded-instruct".into()),
+                &{
+                    let mut r = AgentCreateRequest::simple(directive);
+                    r.caps = vec!["tool.invoke:notes".to_string()];
+                    r.model_id = Some("local:embedded-instruct".into());
+                    r.skills = vec!["notes-writer".into()];
+                    r.tools = vec!["notes.create".into()];
+                    r.goal = Some(aos_proto::AgentGoal {
+                        statement: directive.to_string(),
+                        success_criteria: vec![],
+                        max_steps: 6,
+                        max_subagents: 0,
+                        timeout_secs: 180,
+                    });
+                    r
                 },
                 vec![],
             )

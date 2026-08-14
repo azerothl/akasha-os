@@ -5,6 +5,7 @@ audit_dir: var/audit
 storage_dir: var/storage
 memory_dir: var/memory
 modules_dir: var/modules
+sessions_dir: var/sessions
 
 # embedded-embed (§3.4) : doublure Qwen2.5-0.5B pour les embeddings.
 embed_model:

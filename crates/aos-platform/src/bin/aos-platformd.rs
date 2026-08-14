@@ -635,6 +635,762 @@ async fn main() {
         });
     }
 
+    // --- mem.shared_* / mem.user.* / mem.context (PC.7) ---
+    {
+        let s = sub.clone();
+        svc.on("mem.shared_read", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<MemSharedReadRequest>() {
+                    Ok(req) => {
+                        let v = s.mem.lock().unwrap().shared_read(&req.name);
+                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &v).await;
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("mem.shared_write", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<MemSharedWriteRequest>() {
+                    Ok(req) => {
+                        s.mem.lock().unwrap().shared_write(&req.name, req.value);
+                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &true).await;
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("mem.user.remember", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<MemUserRememberRequest>() {
+                    Ok(req) => {
+                        let emb = s.embed_text(&req.text).unwrap_or_default();
+                        let id = s.mem.lock().unwrap().episodic_write(
+                            "user:default",
+                            &req.text,
+                            req.metadata,
+                            emb,
+                            req.pinned,
+                        );
+                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &id).await;
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("mem.user.recall", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<MemUserRecallRequest>() {
+                    Ok(req) => {
+                        let emb = s.embed_text(&req.query).unwrap_or_default();
+                        let hits = s.mem.lock().unwrap().episodic_query(
+                            &emb,
+                            req.k,
+                            Some("user:default"),
+                        );
+                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &hits).await;
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("mem.context", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<MemContextRequest>() {
+                    Ok(req) => {
+                        let emb = s.embed_text(&req.query).unwrap_or_default();
+                        let sess_ns = req
+                            .session_id
+                            .as_ref()
+                            .map(|id| format!("session:{id}"));
+                        let (session_hits, user_hits) = {
+                            let mem = s.mem.lock().unwrap();
+                            let session_hits = if let Some(ref ns) = sess_ns {
+                                mem.episodic_query(&emb, req.k, Some(ns))
+                            } else {
+                                Vec::new()
+                            };
+                            let user_hits =
+                                mem.episodic_query(&emb, req.k, Some("user:default"));
+                            (session_hits, user_hits)
+                        };
+                        let mut prompt_block = String::new();
+                        if !session_hits.is_empty() {
+                            prompt_block.push_str("Mémoire session:\n");
+                            for h in &session_hits {
+                                prompt_block.push_str(&format!("- {}\n", h.text));
+                            }
+                        }
+                        if !user_hits.is_empty() {
+                            prompt_block.push_str("Mémoire long terme utilisateur:\n");
+                            for h in &user_hits {
+                                prompt_block.push_str(&format!("- {}\n", h.text));
+                            }
+                        }
+                        let _ = ctx
+                            .respond(
+                                aos_ipc::msg::Status::Ok,
+                                &MemContextResponse {
+                                    session_hits,
+                                    user_hits,
+                                    prompt_block,
+                                },
+                            )
+                            .await;
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+
+    // --- chat.session.* (PC.6) ---
+    {
+        let s = sub.clone();
+        svc.on("chat.session.create", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<ChatSessionCreateRequest>() {
+                    Ok(req) => {
+                        let result = s.sessions.lock().unwrap().create(req.title);
+                        match result {
+                            Ok(m) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &m).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::InternalError,
+                                        &e.to_string(),
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("chat.session.list", move |ctx| {
+            let s = s.clone();
+            async move {
+                let result = s.sessions.lock().unwrap().list(false);
+                match result {
+                    Ok(list) => {
+                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &list).await;
+                    }
+                    Err(e) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::InternalError, &e.to_string())
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("chat.session.get", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<ChatSessionIdRequest>() {
+                    Ok(req) => {
+                        let result = s.sessions.lock().unwrap().get(&req.session_id);
+                        match result {
+                            Ok((meta, messages)) => {
+                                let _ = ctx
+                                    .respond(
+                                        aos_ipc::msg::Status::Ok,
+                                        &ChatSessionGetResponse { meta, messages },
+                                    )
+                                    .await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::NotFound,
+                                        &e.to_string(),
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("chat.session.append", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<ChatSessionAppendRequest>() {
+                    Ok(req) => {
+                        let append_res = s.sessions.lock().unwrap().append(
+                            &req.session_id,
+                            &req.role,
+                            &req.content,
+                        );
+                        match append_res {
+                            Ok(msg) => {
+                                let wm = {
+                                    let sessions = s.sessions.lock().unwrap();
+                                    sessions.get(&req.session_id).ok().map(|(_, messages)| {
+                                        messages
+                                            .iter()
+                                            .rev()
+                                            .take(24)
+                                            .rev()
+                                            .map(|m| (m.role.clone(), m.content.clone()))
+                                            .collect::<Vec<_>>()
+                                    })
+                                };
+                                if let Some(wm) = wm {
+                                    s.mem.lock().unwrap().working_set(
+                                        &format!("session:{}", req.session_id),
+                                        wm,
+                                    );
+                                }
+                                // Faits épisodiques de session (assistant) pour recall.
+                                if req.role == "assistant" && req.content.len() > 40 {
+                                    let emb = s.embed_text(&req.content).unwrap_or_default();
+                                    let excerpt: String =
+                                        req.content.chars().take(400).collect();
+                                    s.mem.lock().unwrap().episodic_write(
+                                        &format!("session:{}", req.session_id),
+                                        &excerpt,
+                                        serde_json::json!({"role": "assistant"}),
+                                        emb,
+                                        false,
+                                    );
+                                }
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &msg).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::InternalError,
+                                        &e.to_string(),
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("chat.session.rename", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<ChatSessionRenameRequest>() {
+                    Ok(req) => {
+                        let result = s
+                            .sessions
+                            .lock()
+                            .unwrap()
+                            .rename(&req.session_id, &req.title);
+                        match result {
+                            Ok(m) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &m).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::NotFound,
+                                        &e.to_string(),
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("chat.session.archive", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<ChatSessionIdRequest>() {
+                    Ok(req) => {
+                        let result = s.sessions.lock().unwrap().archive(&req.session_id);
+                        match result {
+                            Ok(m) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &m).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::NotFound,
+                                        &e.to_string(),
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("chat.session.delete", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<ChatSessionIdRequest>() {
+                    Ok(req) => {
+                        let result = s.sessions.lock().unwrap().delete(&req.session_id);
+                        match result {
+                            Ok(()) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &true).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::NotFound,
+                                        &e.to_string(),
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("chat.session.export", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<ChatSessionIdRequest>() {
+                    Ok(req) => {
+                        let result =
+                            s.sessions.lock().unwrap().export_markdown(&req.session_id);
+                        match result {
+                            Ok(md) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &md).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::NotFound,
+                                        &e.to_string(),
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+
+    // --- web.search / net.fetch / files.generate / fs.*_bytes (PC.8–9) ---
+    {
+        let s = sub.clone();
+        svc.on("web.search", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<WebSearchRequest>() {
+                    Ok(req) => {
+                        let actor = if req.actor.is_empty() {
+                            "human:ui".into()
+                        } else {
+                            req.actor.clone()
+                        };
+                        let key = s
+                            .secrets
+                            .lock()
+                            .unwrap()
+                            .get("brave_search_api_key", "service:platformd")
+                            .ok();
+                        let search_res = {
+                            let mut net = s.net.lock().unwrap();
+                            aos_platform::net_services::web_search(
+                                &mut net,
+                                &actor,
+                                &req.caps,
+                                &req.query,
+                                req.max_results,
+                                key.as_deref(),
+                            )
+                        };
+                        match search_res {
+                            Ok(resp) => {
+                                s.audit(AuditAppendRequest {
+                                    trace_id: format!("web-search-{}", req.query.len()),
+                                    actor,
+                                    action: "web.search".into(),
+                                    target: req.query,
+                                    detail: serde_json::json!({ "n": resp.results.len() }),
+                                });
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &resp).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::PermissionDenied,
+                                        &e.to_string(),
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("net.fetch", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<NetFetchRequest>() {
+                    Ok(req) => {
+                        let actor = if req.actor.is_empty() {
+                            "human:ui".into()
+                        } else {
+                            req.actor.clone()
+                        };
+                        let mut caps = req.caps.clone();
+                        if !caps.iter().any(|c| c.starts_with("fs.write:")) {
+                            caps.push("fs.write:/downloads/**".into());
+                        }
+                        let fetch_res = {
+                            let mut net = s.net.lock().unwrap();
+                            aos_platform::net_services::http_fetch_bytes(
+                                &mut net,
+                                &actor,
+                                &caps,
+                                &req.url,
+                                req.max_bytes,
+                            )
+                        };
+                        match fetch_res {
+                            Ok((bytes, ctype)) => {
+                                let name =
+                                    aos_platform::net_services::safe_download_name(&req.url);
+                                let path = req
+                                    .dest_path
+                                    .unwrap_or_else(|| format!("/downloads/{name}"));
+                                let write_res = s.fs.lock().unwrap().write_bytes(
+                                    &path,
+                                    &bytes,
+                                    &actor,
+                                    &caps,
+                                );
+                                match write_res {
+                                    Ok(_) => {
+                                        s.audit(AuditAppendRequest {
+                                            trace_id: "net-fetch".into(),
+                                            actor,
+                                            action: "net.fetch".into(),
+                                            target: path.clone(),
+                                            detail: serde_json::json!({
+                                                "bytes": bytes.len(),
+                                                "content_type": ctype,
+                                            }),
+                                        });
+                                        let _ = ctx
+                                            .respond(
+                                                aos_ipc::msg::Status::Ok,
+                                                &NetFetchResponse {
+                                                    path,
+                                                    bytes: bytes.len() as u64,
+                                                    content_type: ctype,
+                                                },
+                                            )
+                                            .await;
+                                    }
+                                    Err(e) => {
+                                        let _ = ctx
+                                            .respond_error(
+                                                aos_ipc::msg::Status::PermissionDenied,
+                                                &e.to_string(),
+                                            )
+                                            .await;
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::PermissionDenied,
+                                        &e.to_string(),
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("files.generate", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<FilesGenerateRequest>() {
+                    Ok(req) => {
+                        let actor = if req.actor.is_empty() {
+                            "human:ui".into()
+                        } else {
+                            req.actor.clone()
+                        };
+                        let mut caps = req.caps.clone();
+                        if caps.is_empty() {
+                            caps.push("fs.write:/downloads/**".into());
+                            caps.push("fs.write:/documents/**".into());
+                        }
+                        match aos_platform::files_gen::generate(
+                            &req.format,
+                            &req.content,
+                            req.title.as_deref(),
+                        ) {
+                            Ok(bytes) => {
+                                let write_res = s.fs.lock().unwrap().write_bytes(
+                                    &req.path,
+                                    &bytes,
+                                    &actor,
+                                    &caps,
+                                );
+                                match write_res {
+                                    Ok(_) => {
+                                        s.audit(AuditAppendRequest {
+                                            trace_id: "files-gen".into(),
+                                            actor,
+                                            action: "files.generate".into(),
+                                            target: req.path.clone(),
+                                            detail: serde_json::json!({
+                                                "format": req.format,
+                                                "bytes": bytes.len(),
+                                            }),
+                                        });
+                                        let _ = ctx
+                                            .respond(
+                                                aos_ipc::msg::Status::Ok,
+                                                &FilesGenerateResponse {
+                                                    path: req.path,
+                                                    bytes: bytes.len() as u64,
+                                                },
+                                            )
+                                            .await;
+                                    }
+                                    Err(e) => {
+                                        let _ = ctx
+                                            .respond_error(
+                                                aos_ipc::msg::Status::PermissionDenied,
+                                                &e.to_string(),
+                                            )
+                                            .await;
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(aos_ipc::msg::Status::BadRequest, &e.to_string())
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("fs.write_bytes", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<FsWriteBytesRequest>() {
+                    Ok(req) => {
+                        use base64::Engine;
+                        let bytes = match base64::engine::general_purpose::STANDARD
+                            .decode(&req.content_b64)
+                        {
+                            Ok(b) => b,
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::BadRequest,
+                                        &e.to_string(),
+                                    )
+                                    .await;
+                                return;
+                            }
+                        };
+                        let actor = if req.actor.is_empty() {
+                            "human:ui".into()
+                        } else {
+                            req.actor
+                        };
+                        let write_res =
+                            s.fs.lock()
+                                .unwrap()
+                                .write_bytes(&req.path, &bytes, &actor, &req.caps);
+                        match write_res {
+                            Ok(v) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &v).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::PermissionDenied,
+                                        &e.to_string(),
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("fs.read_bytes", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<FsReadBytesRequest>() {
+                    Ok(req) => {
+                        let read_res = s.fs.lock().unwrap().read_bytes(&req.path, &req.caps);
+                        match read_res {
+                            Ok((bytes, class, version)) => {
+                                use base64::Engine;
+                                let _ = ctx
+                                    .respond(
+                                        aos_ipc::msg::Status::Ok,
+                                        &FsReadBytesResponse {
+                                            path: req.path,
+                                            content_b64: base64::engine::general_purpose::STANDARD
+                                                .encode(&bytes),
+                                            class,
+                                            version,
+                                            size_bytes: bytes.len() as u64,
+                                        },
+                                    )
+                                    .await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::PermissionDenied,
+                                        &e.to_string(),
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+
     // --- module.* ---
     {
         let s = sub.clone();
@@ -643,6 +1399,29 @@ async fn main() {
             async move {
                 match ctx.payload::<ModuleInstallRequest>() {
                     Ok(req) => {
+                        let actor = if req.actor.is_empty() {
+                            "human:ui".into()
+                        } else {
+                            req.actor.clone()
+                        };
+                        // Gate : humains OK ; agents doivent détenir `module.install`.
+                        let allowed = actor.starts_with("human:")
+                            || req.actor_caps.iter().any(|c| c == "module.install")
+                            || s.granted_caps
+                                .lock()
+                                .unwrap()
+                                .get(actor.strip_prefix("agent:").unwrap_or(&actor))
+                                .map(|caps| caps.iter().any(|c| c == "module.install"))
+                                .unwrap_or(false);
+                        if !allowed {
+                            let _ = ctx
+                                .respond_error(
+                                    aos_ipc::msg::Status::PermissionDenied,
+                                    "module.install : capacité requise (cap.request)",
+                                )
+                                .await;
+                            return;
+                        }
                         let s2 = s.clone();
                         let r = tokio::task::spawn_blocking(move || {
                             s2.modules
@@ -658,7 +1437,7 @@ async fn main() {
                             Ok(info) => {
                                 s.audit(AuditAppendRequest {
                                     trace_id: String::new(),
-                                    actor: "human:ui".into(),
+                                    actor,
                                     action: "module.install".into(),
                                     target: info.name.clone(),
                                     detail: serde_json::json!({"caps": info.granted_caps}),
@@ -817,6 +1596,381 @@ async fn main() {
                         let _ = ctx
                             .respond(aos_ipc::msg::Status::Ok, &r.map_err(|e| e.to_string()))
                             .await;
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+
+    // --- module.scaffold / package / compile (F-EXT) ---
+    {
+        let s = sub.clone();
+        svc.on("module.scaffold", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<ModuleScaffoldRequest>() {
+                    Ok(req) => {
+                        let r = s.author.lock().unwrap().scaffold(&req);
+                        match r {
+                            Ok(resp) => {
+                                s.audit(AuditAppendRequest {
+                                    trace_id: String::new(),
+                                    actor: if req.actor.is_empty() {
+                                        "human:ui".into()
+                                    } else {
+                                        req.actor
+                                    },
+                                    action: "module.scaffold".into(),
+                                    target: resp.path.clone(),
+                                    detail: serde_json::json!({"kind": resp.kind}),
+                                });
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &resp).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::BadRequest,
+                                        &e.to_string(),
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("module.package", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<ModulePackageRequest>() {
+                    Ok(req) => {
+                        let r = s.author.lock().unwrap().package_script(&req.name);
+                        match r {
+                            Ok(resp) => {
+                                s.audit(AuditAppendRequest {
+                                    trace_id: String::new(),
+                                    actor: if req.actor.is_empty() {
+                                        "human:ui".into()
+                                    } else {
+                                        req.actor
+                                    },
+                                    action: "module.package".into(),
+                                    target: req.name,
+                                    detail: serde_json::json!({"hash": resp.hash}),
+                                });
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &resp).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::InternalError,
+                                        &e.to_string(),
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("module.compile", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<ModuleCompileRequest>() {
+                    Ok(req) => {
+                        let actor = if req.actor.is_empty() {
+                            "human:ui".into()
+                        } else {
+                            req.actor.clone()
+                        };
+                        let agent_id = actor.strip_prefix("agent:").unwrap_or("human:ui");
+                        // Cap critique : High → confirm, Medium → confirm, Low → deny
+                        if !actor.starts_with("human:") {
+                            let decision = s.decide_cap_request(agent_id, "module.compile");
+                            match decision {
+                                aos_platform::subsystem::CapDecision::Deny => {
+                                    let _ = ctx
+                                        .respond_error(
+                                            aos_ipc::msg::Status::PermissionDenied,
+                                            "module.compile refusé (trust insuffisant)",
+                                        )
+                                        .await;
+                                    return;
+                                }
+                                aos_platform::subsystem::CapDecision::Confirm => {
+                                    let ok = s
+                                        .policy_gate(
+                                            std::collections::HashMap::from([(
+                                                "action.kind".to_string(),
+                                                "module.compile".to_string(),
+                                            )]),
+                                            agent_id,
+                                            "module.compile",
+                                            &req.name,
+                                            &format!("compile-{}", req.name),
+                                        )
+                                        .await;
+                                    if !ok {
+                                        let _ = ctx
+                                            .respond_error(
+                                                aos_ipc::msg::Status::PermissionDenied,
+                                                "module.compile : confirmation refusée",
+                                            )
+                                            .await;
+                                        return;
+                                    }
+                                    s.grant_cap(agent_id, "module.compile");
+                                }
+                                aos_platform::subsystem::CapDecision::Grant => {
+                                    s.grant_cap(agent_id, "module.compile");
+                                }
+                            }
+                            if !req.actor_caps.iter().any(|c| c == "module.compile")
+                                && !s
+                                    .granted_caps
+                                    .lock()
+                                    .unwrap()
+                                    .get(agent_id)
+                                    .map(|c| c.iter().any(|x| x == "module.compile"))
+                                    .unwrap_or(false)
+                            {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::PermissionDenied,
+                                        "module.compile : capacité manquante",
+                                    )
+                                    .await;
+                                return;
+                            }
+                        }
+                        let name = req.name.clone();
+                        let s2 = s.clone();
+                        let r = tokio::task::spawn_blocking(move || {
+                            s2.author.lock().unwrap().compile_rust(&name)
+                        })
+                        .await
+                        .unwrap_or_else(|e| {
+                            Err(aos_platform::module_compile::CompileError::Other(e.to_string()))
+                        });
+                        match r {
+                            Ok(resp) => {
+                                s.audit(AuditAppendRequest {
+                                    trace_id: String::new(),
+                                    actor,
+                                    action: "module.compile".into(),
+                                    target: req.name,
+                                    detail: serde_json::json!({"hash": resp.hash}),
+                                });
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &resp).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::InternalError,
+                                        &e.to_string(),
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+
+    // --- skill.* (F-EXT) ---
+    {
+        let s = sub.clone();
+        svc.on("skill.create", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<SkillCreateRequest>() {
+                    Ok(req) => {
+                        let actor = if req.actor.is_empty() {
+                            "human:ui".into()
+                        } else {
+                            req.actor.clone()
+                        };
+                        let agent_id = actor.strip_prefix("agent:").unwrap_or("human:ui");
+                        if !actor.starts_with("human:") {
+                            let decision = s.decide_cap_request(agent_id, "skill.create");
+                            match decision {
+                                aos_platform::subsystem::CapDecision::Deny => {
+                                    let _ = ctx
+                                        .respond_error(
+                                            aos_ipc::msg::Status::PermissionDenied,
+                                            "skill.create refusé (trust low)",
+                                        )
+                                        .await;
+                                    return;
+                                }
+                                aos_platform::subsystem::CapDecision::Confirm => {
+                                    let ok = s
+                                        .policy_gate(
+                                            std::collections::HashMap::from([(
+                                                "action.kind".to_string(),
+                                                "skill.create".to_string(),
+                                            )]),
+                                            agent_id,
+                                            "skill.create",
+                                            &req.name,
+                                            &format!("skill-create-{}", req.name),
+                                        )
+                                        .await;
+                                    if !ok {
+                                        let _ = ctx
+                                            .respond_error(
+                                                aos_ipc::msg::Status::PermissionDenied,
+                                                "skill.create : confirmation refusée",
+                                            )
+                                            .await;
+                                        return;
+                                    }
+                                }
+                                aos_platform::subsystem::CapDecision::Grant => {}
+                            }
+                        }
+                        let r = s.skills.lock().unwrap().create(&req);
+                        match r {
+                            Ok(info) => {
+                                s.audit(AuditAppendRequest {
+                                    trace_id: String::new(),
+                                    actor,
+                                    action: "skill.create".into(),
+                                    target: info.name.clone(),
+                                    detail: serde_json::json!({
+                                        "tools": info.tools,
+                                        "required_caps": info.required_caps,
+                                    }),
+                                });
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &info).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::BadRequest,
+                                        &e.to_string(),
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("skill.activate", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<SkillNameRequest>() {
+                    Ok(req) => {
+                        let info = s
+                            .skills
+                            .lock()
+                            .unwrap()
+                            .describe(&req.name)
+                            .ok()
+                            .or_else(|| aos_agent::skills::get_skill(&req.name));
+                        match info {
+                            Some(info) => {
+                                // Activation = retourner le corps + caps à demander
+                                s.audit(AuditAppendRequest {
+                                    trace_id: String::new(),
+                                    actor: if req.actor.is_empty() {
+                                        "human:ui".into()
+                                    } else {
+                                        req.actor
+                                    },
+                                    action: "skill.activate".into(),
+                                    target: info.name.clone(),
+                                    detail: serde_json::json!({"required_caps": info.required_caps}),
+                                });
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &info).await;
+                            }
+                            None => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::NotFound,
+                                        "skill inconnue",
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("skill.uninstall", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<SkillNameRequest>() {
+                    Ok(req) => {
+                        let result = s.skills.lock().unwrap().uninstall(&req.name);
+                        match result {
+                            Ok(()) => {
+                                s.audit(AuditAppendRequest {
+                                    trace_id: String::new(),
+                                    actor: if req.actor.is_empty() {
+                                        "human:ui".into()
+                                    } else {
+                                        req.actor
+                                    },
+                                    action: "skill.uninstall".into(),
+                                    target: req.name,
+                                    detail: serde_json::json!({}),
+                                });
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &true).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::NotFound,
+                                        &e.to_string(),
+                                    )
+                                    .await;
+                            }
+                        }
                     }
                     Err(_) => {
                         let _ = ctx
@@ -1008,6 +2162,18 @@ async fn main() {
                                     target: req.cap.clone(),
                                     detail: serde_json::json!({"via": "trust_tier", "confirmed": false}),
                                 });
+                                if let Some(bus) = s.bus() {
+                                    let _ = bus
+                                        .call::<AgentGrantRequest, bool>(
+                                            "agent.grant",
+                                            &AgentGrantRequest {
+                                                agent_id: req.agent_id.clone(),
+                                                cap: req.cap.clone(),
+                                            },
+                                            vec![],
+                                        )
+                                        .await;
+                                }
                                 let _ = ctx
                                     .respond(
                                         aos_ipc::msg::Status::Ok,
@@ -1031,6 +2197,18 @@ async fn main() {
                                     .await;
                                 if allowed {
                                     s.grant_cap(&req.agent_id, &req.cap);
+                                    if let Some(bus) = s.bus() {
+                                        let _ = bus
+                                            .call::<AgentGrantRequest, bool>(
+                                                "agent.grant",
+                                                &AgentGrantRequest {
+                                                    agent_id: req.agent_id.clone(),
+                                                    cap: req.cap.clone(),
+                                                },
+                                                vec![],
+                                            )
+                                            .await;
+                                    }
                                     let _ = ctx
                                         .respond(
                                             aos_ipc::msg::Status::Ok,
@@ -1113,7 +2291,15 @@ async fn main() {
                         } else {
                             aos_platform::net::NetMode::Online
                         };
-                        s.net.lock().unwrap().set_mode(mode);
+                        {
+                            let mut net = s.net.lock().unwrap();
+                            net.set_mode(mode);
+                            // Preview : en online, autoriser fetch/search génériques
+                            // (toujours journalisé + confirm policy pour agents).
+                            if matches!(mode, aos_platform::net::NetMode::Online) {
+                                net.grant("net.connect:*:*".into());
+                            }
+                        }
                         s.audit(AuditAppendRequest {
                             trace_id: String::new(),
                             actor: "human:ui".into(),

@@ -5,6 +5,7 @@
 //! et émission d'audit (chaîne intent → agent → outil → fs, Gate P2).
 
 use crate::audit::AuditJournal;
+use crate::chat_session::ChatSessionStore;
 use crate::confirm::ConfirmManager;
 use crate::memory::MemoryStore;
 use crate::module_rt::{HostCallCtx, HostServices, ModuleRuntime};
@@ -31,6 +32,10 @@ pub struct PlatformConfig {
     pub memory_dir: String,
     #[serde(default = "default_modules_dir")]
     pub modules_dir: String,
+    #[serde(default = "default_skills_dir")]
+    pub skills_dir: String,
+    #[serde(default = "default_sessions_dir")]
+    pub sessions_dir: String,
     /// Modèle d'embeddings (embedded-embed, §3.4).
     pub embed_model: Option<EmbedModelConfig>,
     /// Fichier de règles du Policy Engine (§9.4).
@@ -71,6 +76,12 @@ fn default_memory_dir() -> String {
 fn default_modules_dir() -> String {
     "var/modules".into()
 }
+fn default_skills_dir() -> String {
+    "var/skills".into()
+}
+fn default_sessions_dir() -> String {
+    "var/sessions".into()
+}
 fn default_confirm_timeout() -> u64 {
     120
 }
@@ -95,7 +106,10 @@ pub struct PlatformSubsystem {
     pub audit: Mutex<AuditJournal>,
     pub fs: Mutex<StorageFs>,
     pub mem: Mutex<MemoryStore>,
+    pub sessions: Mutex<ChatSessionStore>,
     pub modules: Mutex<ModuleRuntime>,
+    pub skills: Mutex<crate::skill::SkillStore>,
+    pub author: Mutex<crate::module_compile::ModuleAuthor>,
     embed: Mutex<Option<Arc<std::sync::Mutex<LlamaContext>>>>,
     pub policy: Mutex<PolicyEngine>,
     pub confirm: Arc<ConfirmManager>,
@@ -115,6 +129,7 @@ impl PlatformSubsystem {
         let audit = AuditJournal::open(&config.audit_dir).map_err(|e| e.to_string())?;
         let fs = StorageFs::open(&config.storage_dir).map_err(|e| e.to_string())?;
         let mem = MemoryStore::open(&config.memory_dir).map_err(|e| e.to_string())?;
+        let sessions = ChatSessionStore::open(&config.sessions_dir).map_err(|e| e.to_string())?;
         let embed = config.embed_model.as_ref().map(|cfg| {
             let opts = LoadOptions {
                 n_gpu_layers: cfg.n_gpu_layers,
@@ -139,6 +154,9 @@ impl PlatformSubsystem {
         let late = Arc::new(LateBoundServices::default());
         let rt =
             ModuleRuntime::open(&config.modules_dir, late.clone()).map_err(|e| e.to_string())?;
+        let skills = crate::skill::SkillStore::open(&config.skills_dir).map_err(|e| e.to_string())?;
+        let author =
+            crate::module_compile::ModuleAuthor::open(&config.modules_dir).map_err(|e| e.to_string())?;
         let policy = PolicyEngine::open(
             config.policies_file.as_deref().map(Path::new),
             config.confirm_timeout_sec,
@@ -149,11 +167,17 @@ impl PlatformSubsystem {
         if config.net_mode == "offline_strict" {
             net.set_mode(crate::net::NetMode::OfflineStrict);
         }
+        // Caps réseau de base pour la recherche (activées seulement si online).
+        net.grant("net.connect:html.duckduckgo.com:443".into());
+        net.grant("net.connect:api.search.brave.com:443".into());
         let sub = Arc::new(Self {
             audit: Mutex::new(audit),
             fs: Mutex::new(fs),
             mem: Mutex::new(mem),
+            sessions: Mutex::new(sessions),
             modules: Mutex::new(rt),
+            skills: Mutex::new(skills),
+            author: Mutex::new(author),
             embed: Mutex::new(embed),
             policy: Mutex::new(policy),
             confirm: ConfirmManager::new(config.confirm_timeout_sec),
@@ -316,7 +340,13 @@ impl PlatformSubsystem {
 
     /// Demande de capacité par un agent (§4.7 paliers, Trust consultatif).
     pub fn decide_cap_request(&self, agent_id: &str, cap: &str) -> CapDecision {
-        const CRITICAL: &[&str] = &["fs.reclassify", "net.connect", "secrets", "module.install"];
+        const CRITICAL: &[&str] = &[
+            "fs.reclassify",
+            "net.connect",
+            "secrets",
+            "module.install",
+            "module.compile",
+        ];
         let tier = self.trust.lock().unwrap().tier(agent_id);
         let critical = CRITICAL.iter().any(|c| cap.starts_with(c));
         match (tier, critical) {
@@ -470,6 +500,190 @@ impl HostServices for PlatformSubsystem {
                 );
                 Ok(serde_json::json!({"hits": hits}))
             }
+            "mem.shared_read" => {
+                let name = args["name"].as_str().unwrap_or("");
+                Self::require_cap(ctx, "mem.query", &format!("shared:{name}"))
+                    .or_else(|_| Self::require_cap(ctx, "mem.query", "shared:*"))
+                    .or_else(|_| Self::require_cap(ctx, "mem.query", "*"))?;
+                let v = self.mem.lock().unwrap().shared_read(name);
+                Ok(serde_json::json!({"value": v}))
+            }
+            "mem.shared_write" => {
+                let name = args["name"].as_str().unwrap_or("");
+                Self::require_cap(ctx, "mem.write", &format!("shared:{name}"))
+                    .or_else(|_| Self::require_cap(ctx, "mem.write", "shared:*"))
+                    .or_else(|_| Self::require_cap(ctx, "mem.write", "*"))?;
+                self.mem
+                    .lock()
+                    .unwrap()
+                    .shared_write(name, args["value"].clone());
+                Ok(serde_json::json!({"ok": true}))
+            }
+            "mem.user.remember" | "mem.user_remember" => {
+                let text = args["text"].as_str().unwrap_or("");
+                Self::require_cap(ctx, "mem.write", "user:default")?;
+                let emb = self.embed_text(text).unwrap_or_default();
+                let id = self.mem.lock().unwrap().episodic_write(
+                    "user:default",
+                    text,
+                    args.get("metadata").cloned().unwrap_or(serde_json::json!({})),
+                    emb,
+                    args["pinned"].as_bool().unwrap_or(false),
+                );
+                Ok(serde_json::json!({"id": id}))
+            }
+            "mem.user.recall" | "mem.user_recall" => {
+                let query = args["query"].as_str().unwrap_or("");
+                let k = args["k"].as_u64().unwrap_or(5) as usize;
+                Self::require_cap(ctx, "mem.query", "user:default")?;
+                let emb = self.embed_text(query).unwrap_or_default();
+                let hits = self
+                    .mem
+                    .lock()
+                    .unwrap()
+                    .episodic_query(&emb, k, Some("user:default"));
+                Ok(serde_json::json!({"hits": hits}))
+            }
+            "mem.context" => {
+                let query = args["query"].as_str().unwrap_or("");
+                let k = args["k"].as_u64().unwrap_or(5) as usize;
+                let emb = self.embed_text(query).unwrap_or_default();
+                let hits = self.mem.lock().unwrap().episodic_query(&emb, k, None);
+                let mut prompt_block = String::from("Contexte mémoire:\n");
+                for h in &hits {
+                    prompt_block.push_str(&format!("- {}\n", h.text));
+                }
+                Ok(serde_json::json!({"prompt_block": prompt_block, "hits": hits}))
+            }
+            "web.search" => {
+                // Cap réseau requise
+                let has_net = ctx.granted_caps.iter().any(|c| c.starts_with("net.connect:"));
+                if !has_net {
+                    return Err("permission refusée: net.connect requis pour web.search".into());
+                }
+                let query = args["query"].as_str().unwrap_or("");
+                let max = args["max_results"].as_u64().unwrap_or(5) as usize;
+                let brave = self
+                    .secrets
+                    .lock()
+                    .unwrap()
+                    .get("brave_search_api_key", "service:platformd")
+                    .ok();
+                let mut net = self.net.lock().unwrap();
+                let resp = crate::net_services::web_search(
+                    &mut net,
+                    &format!("module:{}", ctx.module),
+                    &ctx.granted_caps,
+                    query,
+                    max,
+                    brave.as_deref(),
+                )
+                .map_err(|e| e.to_string())?;
+                self.audit(AuditAppendRequest {
+                    trace_id: ctx.trace_id.clone(),
+                    actor: format!("module:{}", ctx.module),
+                    action: "web.search".into(),
+                    target: query.into(),
+                    detail: serde_json::json!({"on_behalf_of": ctx.actor}),
+                });
+                Ok(serde_json::to_value(resp).unwrap_or_default())
+            }
+            "net.fetch" => {
+                let has_net = ctx.granted_caps.iter().any(|c| c.starts_with("net.connect:"));
+                if !has_net {
+                    return Err("permission refusée: net.connect requis pour net.fetch".into());
+                }
+                let url = args["url"].as_str().unwrap_or("");
+                let dest = args["dest_path"].as_str().unwrap_or("");
+                if dest.is_empty() {
+                    return Err("dest_path requis".into());
+                }
+                Self::require_cap(ctx, "fs.write", dest)?;
+                let mut net = self.net.lock().unwrap();
+                let (bytes, _ctype) = crate::net_services::http_fetch_bytes(
+                    &mut net,
+                    &format!("module:{}", ctx.module),
+                    &ctx.granted_caps,
+                    url,
+                    50 * 1024 * 1024,
+                )
+                .map_err(|e| e.to_string())?;
+                drop(net);
+                let version = self
+                    .fs
+                    .lock()
+                    .unwrap()
+                    .write_bytes(
+                        dest,
+                        &bytes,
+                        &format!("module:{}", ctx.module),
+                        &ctx.granted_caps,
+                    )
+                    .map_err(|e| e.to_string())?;
+                Ok(serde_json::json!({"bytes": bytes.len(), "version": version, "path": dest}))
+            }
+            "files.generate" => {
+                let path = args["path"].as_str().unwrap_or("");
+                let format = args["format"].as_str().unwrap_or("md");
+                let content = args["content"].as_str().unwrap_or("");
+                Self::require_cap(ctx, "fs.write", path)?;
+                let bytes = crate::files_gen::generate(
+                    format,
+                    content,
+                    args["title"].as_str(),
+                )
+                .map_err(|e| e.to_string())?;
+                let text = if format == "png" || format == "pdf" {
+                    // Write via write_bytes if available; fallback base64 note
+                    String::from_utf8_lossy(&bytes).to_string()
+                } else {
+                    String::from_utf8_lossy(&bytes).to_string()
+                };
+                let version = self
+                    .fs
+                    .lock()
+                    .unwrap()
+                    .write(
+                        path,
+                        &text,
+                        &format!("module:{}", ctx.module),
+                        &ctx.granted_caps,
+                    )
+                    .map_err(|e| e.to_string())?;
+                self.audit(AuditAppendRequest {
+                    trace_id: ctx.trace_id.clone(),
+                    actor: format!("module:{}", ctx.module),
+                    action: "files.generate".into(),
+                    target: path.into(),
+                    detail: serde_json::json!({"format": format, "on_behalf_of": ctx.actor}),
+                });
+                Ok(serde_json::json!({"version": version, "path": path}))
+            }
+            "ext.asset_read" | "ext.load_handlers" => {
+                let rel = args["path"]
+                    .as_str()
+                    .or_else(|| args["rel"].as_str())
+                    .unwrap_or("handlers.yaml");
+                let bytes = self
+                    .modules
+                    .lock()
+                    .unwrap()
+                    .read_asset(&ctx.module, rel)
+                    .map_err(|e| e.to_string())?;
+                let text = String::from_utf8_lossy(&bytes).to_string();
+                Ok(serde_json::json!({"content": text}))
+            }
+            // Escalade interdite depuis WASM
+            "module.install"
+            | "module.compile"
+            | "module.scaffold"
+            | "module.package"
+            | "secrets.get"
+            | "trust.set"
+            | "agent.create"
+            | "agent.grant" => Err(format!(
+                "service interdit depuis host_call WASM: {service}"
+            )),
             other => Err(format!("service inconnu: {other}")),
         }
     }

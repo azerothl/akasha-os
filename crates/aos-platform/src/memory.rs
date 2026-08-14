@@ -246,11 +246,15 @@ impl MemoryStore {
             self.index.remove(*id);
         }
         self.working.remove(namespace);
-        // Réécriture du journal sans les entrées effacées (le journal est
-        // notre seule persistance ; compactage simple en v1).
-        if let Ok(content) = serde_json::to_string(&self.episodic.values().collect::<Vec<_>>()) {
-            let _ = std::fs::write(self.journal_path(), content);
+        // Compactage JSONL (une entrée par ligne — compatible avec `replay`).
+        let mut lines = String::new();
+        for e in self.episodic.values() {
+            if let Ok(s) = serde_json::to_string(e) {
+                lines.push_str(&s);
+                lines.push('\n');
+            }
         }
+        let _ = std::fs::write(self.journal_path(), lines);
         n
     }
 

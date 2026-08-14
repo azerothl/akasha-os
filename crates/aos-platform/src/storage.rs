@@ -246,6 +246,52 @@ impl StorageFs {
         self.commit(&tx)
     }
 
+    /// Écriture binaire directe (images, PDF, téléchargements).
+    pub fn write_bytes(
+        &mut self,
+        path: &str,
+        content: &[u8],
+        actor: &str,
+        caps: &[String],
+    ) -> Result<u64, FsError> {
+        Self::check_cap(caps, "fs.write", path)?;
+        self.version_existing(path)?;
+        let host = self.resolve(path)?;
+        if let Some(parent) = host.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(&host, content)?;
+        let default_class = self.default_class(path);
+        let version = {
+            let meta = self.index.entry(path.into()).or_insert(FileMeta {
+                class: default_class,
+                version: 0,
+                created_by: actor.into(),
+                deleted: false,
+            });
+            meta.version += 1;
+            meta.deleted = false;
+            meta.version
+        };
+        self.save_index()?;
+        Ok(version)
+    }
+
+    pub fn read_bytes(
+        &self,
+        path: &str,
+        caps: &[String],
+    ) -> Result<(Vec<u8>, DataClass, u64), FsError> {
+        Self::check_cap(caps, "fs.read", path)?;
+        let meta = self
+            .index
+            .get(path)
+            .filter(|m| !m.deleted)
+            .ok_or_else(|| FsError::NotFound(path.into()))?;
+        let content = std::fs::read(self.resolve(path)?)?;
+        Ok((content, meta.class, meta.version))
+    }
+
     pub fn delete(&mut self, path: &str, actor: &str, caps: &[String]) -> Result<u64, FsError> {
         let tx = self.begin_tx(actor);
         self.stage_delete(&tx, path, caps)?;

@@ -298,6 +298,28 @@ impl ModuleRuntime {
         Ok((&m.manifest, &m.granted_caps))
     }
 
+    /// Chemin d'installation d'un module (pour lecture d'assets).
+    pub fn module_dir(&self, name: &str) -> Result<&Path, ModuleError> {
+        self.installed
+            .get(name)
+            .map(|m| m.dir.as_path())
+            .ok_or_else(|| ModuleError::NotFound(name.into()))
+    }
+
+    /// Lit un fichier asset relatif au package installé (ex. handlers.yaml).
+    pub fn read_asset(&self, name: &str, rel: &str) -> Result<Vec<u8>, ModuleError> {
+        let dir = self.module_dir(name)?;
+        let rel = rel.trim_start_matches('/').trim_start_matches('\\');
+        if rel.contains("..") {
+            return Err(ModuleError::BadManifest("chemin asset invalide".into()));
+        }
+        let path = dir.join(rel);
+        if !path.starts_with(dir) {
+            return Err(ModuleError::BadManifest("chemin asset hors module".into()));
+        }
+        std::fs::read(&path).map_err(|e| ModuleError::Io(e.to_string()))
+    }
+
     pub fn set_quarantined(&mut self, name: &str, quarantined: bool) -> Result<(), ModuleError> {
         let m = self
             .installed
