@@ -41,7 +41,33 @@ Bannière attendue : *Preview sur Windows/Linux — ce n'est pas encore l'OS boo
 - Bouton **Tuer aos-auditd** : le chat doit continuer ; le superviseur
   redémarre auditd en arrière-plan.
 
-### 6. Retour depuis l'UI
+### 6. Sessions parallèles (PC.6)
+
+- Panneau **Sessions** (Chat) : créer 3 sessions, chatter dans chacune.
+- Redémarrer Preview : les historiques doivent réapparaître.
+
+### 7. Mémoire (PC.7)
+
+- Onglet **Mémoire** : mémoriser un fait (« je préfère le français »), **Recall**.
+- Revenir au Chat : le prochain message doit pouvoir s'appuyer sur ce contexte
+  (injection `mem.context` avant infer).
+
+### 8. Recherche web (PC.8)
+
+- Case **Autoriser le réseau** (barre latérale) **désactivée** → **Rechercher**
+  doit échouer (`offline_strict`).
+- Activer le réseau → recherche (ex. « Agent OS seL4 ») → résultats titre/URL.
+- (Optionnel) clé Brave dans `var/secrets/keys.yaml` :
+  `brave_search_api_key: "…"` — sinon DuckDuckGo HTML.
+
+### 9. Téléchargement + génération fichiers (PC.9)
+
+- Avec réseau ON : coller une URL image → **Télécharger URL** → fichier sous
+  `/downloads` (`var/storage/data/downloads/`).
+- **Générer fichier** : format `pdf` ou `png`, chemin `/downloads/test.pdf`,
+  contenu texte → **Ouvrir downloads**.
+
+### 10. Retour depuis l'UI
 
 - Onglet **Retour** (ou bouton **Signaler**) :
   - titre, catégorie (bug / ux / perf / security), sévérité, texte
@@ -49,12 +75,13 @@ Bannière attendue : *Preview sur Windows/Linux — ce n'est pas encore l'OS boo
 - Ouvrir le dossier `var/feedback/` et joindre le paquet à une issue GitHub
   ou au canal cohorte.
 
-**Aucun envoi réseau automatique.**
+**Aucun envoi réseau automatique** (hors actions explicites PC.8–9).
 
 ## Critères de succès (équipe)
 
 - 3 testeurs Windows + 1 Linux suivent ce protocole sans toolchain Rust
 - Au moins un fichier `var/feedback/fb-*.json` exploitable par retour
+- Gates PC.6–PC.9 cochés sur au moins une machine
 
 ## Hors scope Preview 0.1
 
@@ -62,3 +89,4 @@ Bannière attendue : *Preview sur Windows/Linux — ce n'est pas encore l'OS boo
 - macOS, CPU-only
 - Modèle 32B dans l'installeur
 - Mise à jour automatique
+- Génération audio/vidéo native

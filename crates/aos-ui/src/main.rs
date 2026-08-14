@@ -349,10 +349,10 @@ async fn run_agent_task(bus: Arc<BusClient>, directive: String, tx: mpsc::Sender
     match bus
         .call::<AgentCreateRequest, AgentCreateResponse>(
             agent_intents::CREATE,
-            &AgentCreateRequest {
-                directive: directive.clone(),
-                caps: vec!["tool.invoke:notes".into()],
-                model_id: None,
+            &{
+                let mut r = AgentCreateRequest::simple(directive.clone());
+                r.caps = vec!["tool.invoke:notes".into()];
+                r
             },
             vec![],
         )
@@ -385,6 +385,15 @@ async fn run_agent_task(bus: Arc<BusClient>, directive: String, tx: mpsc::Sender
                                 format!("[état] {state:?}")
                             }
                             Ok(AgentOutputEvent::Error { message }) => format!("[err] {message}"),
+                            Ok(AgentOutputEvent::Progress {
+                                step,
+                                max_steps,
+                                current_task,
+                            }) => format!(
+                                "[progress] {step}/{max_steps} {}",
+                                current_task.unwrap_or_default()
+                            ),
+                            Ok(other) => format!("[{other:?}]"),
                             Err(e) => format!("[bus] {e}"),
                         };
                         if tx.send(UiEvent::AgentEvent(line)).await.is_err() {
@@ -680,6 +689,8 @@ async fn handle_command(
                         &aos_proto::ModuleInstallRequest {
                             source_dir: dir.clone(),
                             approved_caps: None,
+                            actor: "human:ui".into(),
+                            actor_caps: vec![],
                         },
                         vec![],
                     )

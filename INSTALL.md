@@ -47,15 +47,36 @@ share/models/ GGUF embarqués (3B instruct + 0.5B embed)
 share/modules/notes.aospkg/
 data/models/  catalog.yaml
 etc/          généré au premier lancement par aos-session
-var/          données locales (audit, notes, feedback)
+var/          données locales (audit, notes, sessions, memory, feedback, secrets)
 ```
 
 ## Premier lancement
 
-1. `aos-session` vérifie NVIDIA, crée `var/`, écrit `etc/*.yaml`.
+1. `aos-session` vérifie NVIDIA, crée `var/` (dont `var/sessions`), écrit `etc/*.yaml`
+   avec `net_mode: offline_strict` et `sessions_dir: var/sessions`.
 2. Démarre bus → capkd → auditd → modeld → platformd → agentd.
 3. Ouvre l'UI egui (onboarding si premier run).
 4. Fermer l'UI arrête les daemons.
+
+## Réseau & recherche (optionnel)
+
+Par défaut le réseau est **coupé** (`offline_strict`). Dans l'UI, case
+**Autoriser le réseau** pour activer `web.search` / `net.fetch`.
+
+Backend search :
+
+1. **DuckDuckGo HTML** (sans clé) — défaut.
+2. **Brave Search** si vous ajoutez dans `var/secrets/keys.yaml` :
+
+```yaml
+keys:
+  brave_search_api_key: "BSA..."
+```
+
+La clé n'est jamais exposée aux agents (`service:platformd` seulement).
+
+Téléchargements et fichiers générés : `var/storage/data/downloads/`
+(chemins logiques `/downloads/**`).
 
 ## Dépannage
 
@@ -65,6 +86,8 @@ var/          données locales (audit, notes, feedback)
 | `healthcheck échoué` | Voir `var/run/*.pid` ; relancer ; logs stderr des daemons |
 | Modèle introuvable | Copier les GGUF dans `share/models/` (noms exacts du README package) |
 | Bus injoignable (UI seule) | Toujours lancer via `aos-session`, pas `aos-ui-egui` seul |
+| `réseau désactivé` | Cocher **Autoriser le réseau** dans l'UI |
+| Sessions vides au restart | Vérifier `var/sessions/<id>/` et `sessions_dir` dans `etc/platformd.yaml` |
 
 ## Build depuis les sources (mainteneurs)
 
@@ -78,10 +101,6 @@ var/          données locales (audit, notes, feedback)
 
 Les artefacts GPU ne sont pas produits en CI sans runner CUDA : job manuel
 documenté, puis upload GitHub Release.
-
-## Suite testeurs
-
-Voir [docs/TESTER.md](docs/TESTER.md) — protocole cohorte et retours depuis l'UI.
 
 ## Licence
 

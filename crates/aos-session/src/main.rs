@@ -77,6 +77,7 @@ fn main() {
         std::process::exit(1);
     }
     eprintln!("[aos-session] services OK");
+    apply_trust_default(&home);
 
     // Watchdog : redémarre auditd s'il meurt (scénario cohorte / P4).
     {
@@ -150,13 +151,19 @@ fn ensure_layout(home: &Path) {
         "var/storage",
         "var/memory",
         "var/modules",
+        "var/modules/src",
+        "var/modules/build",
+        "var/modules/packages",
+        "var/skills",
         "var/secrets",
         "var/feedback",
         "var/run",
+        "var/sessions",
         "etc",
         "share/models",
         "share/modules",
         "data/models",
+        "skills",
     ] {
         let _ = fs::create_dir_all(home.join(d));
     }
@@ -196,6 +203,14 @@ fn ensure_layout(home: &Path) {
         );
     }
 
+    // Runtime scripté ext-rt (template pour modules agent) — package partagé.
+    let extrt_share = home.join("share/modules/ext-rt.aospkg");
+    let extrt_repo = home.join("modules/ext-rt.aospkg");
+    if !extrt_share.join("module.wasm").exists() && extrt_repo.join("module.wasm").exists() {
+        let _ = fs::create_dir_all(&extrt_share);
+        copy_dir_recursive(&extrt_repo, &extrt_share).ok();
+    }
+
     // Onboarding state
     let onboard = home.join("var/run/onboarding.json");
     if !onboard.exists() {
@@ -203,7 +218,7 @@ fn ensure_layout(home: &Path) {
             completed: false,
             language: "fr".into(),
             routing: "local_only".into(),
-            trust_default: "low".into(),
+            trust_default: "medium".into(),
         };
         let _ = fs::write(onboard, serde_json::to_string_pretty(&state).unwrap());
     }
@@ -268,6 +283,7 @@ audit_dir: var/audit
 storage_dir: var/storage
 memory_dir: var/memory
 modules_dir: var/modules
+sessions_dir: var/sessions
 secrets_file: var/secrets/keys.yaml
 confirm_timeout_sec: 120
 net_mode: offline_strict
@@ -397,10 +413,49 @@ fn healthcheck() -> Result<(), String> {
                 }
                 Err(e) => last = e.to_string(),
             }
-            tokio::time::sleep(Duration::from_millis(400)).await;
+            thread::sleep(Duration::from_millis(500));
         }
-        Err(format!("timeout — {last}"))
+        Err(last)
     })
+}
+
+/// Applique `trust_default` de l'onboarding au Trust Manager (`__default__`).
+fn apply_trust_default(home: &Path) {
+    let onboard = home.join("var/run/onboarding.json");
+    let Ok(raw) = fs::read_to_string(&onboard) else {
+        return;
+    };
+    let Ok(state) = serde_json::from_str::<OnboardingState>(&raw) else {
+        return;
+    };
+    let score = match state.trust_default.as_str() {
+        "low" | "basse" => 0.2,
+        "high" | "haute" => 0.85,
+        _ => 0.5, // medium
+    };
+    let rt = match tokio::runtime::Runtime::new() {
+        Ok(r) => r,
+        Err(_) => return,
+    };
+    rt.block_on(async {
+        let Ok(bus) = BusClient::connect(BUS_ADDR, "session-trust").await else {
+            return;
+        };
+        let _ = bus
+            .call::<aos_proto::TrustSetRequest, bool>(
+                "trust.set",
+                &aos_proto::TrustSetRequest {
+                    agent_id: "__default__".into(),
+                    score,
+                },
+                vec![],
+            )
+            .await;
+        eprintln!(
+            "[aos-session] trust_default={} → score {score}",
+            state.trust_default
+        );
+    });
 }
 
 fn stop_all(session: &Arc<Session>) {
