@@ -17,10 +17,13 @@ Bannière attendue : *Preview sur Windows/Linux — ce n'est pas encore l'OS boo
 
 ### 1. Chat offline
 
-- Terminer le **tutoriel** (4 étapes : bienvenue, préférences, tour, parcours).
-- Onglet **Chat** : poser une question (ex. « Qu'est-ce qu'Agent OS ? »).
+- Terminer le **choix des modèles** (1er run) et le **tutoriel**.
+- Onglet **Chat** : poser une question ; combo **modèle de session** optionnel.
 - Vérifier une réponse streamée **sans réseau**.
-- Au tout premier run, les modèles GGUF ont dû être téléchargés (réseau).
+
+### 1b. Onglet Models
+
+- Lister / **Download** des offerings ; bandeau vert si nouveaux packs pour le tier VRAM.
 
 ### 2. Note humaine
 

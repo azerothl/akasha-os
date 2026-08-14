@@ -7,7 +7,7 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const MIN_FREE_BYTES: u64 = 4 * 1024 * 1024 * 1024; // ~4 Go
+const MIN_FREE_BYTES: u64 = 8 * 1024 * 1024 * 1024; // ~8 Go (packs mid)
 
 #[derive(Debug, Deserialize)]
 struct ModelsManifest {
@@ -79,9 +79,9 @@ pub fn check_disk_space(home: &Path) -> Result<(), String> {
             .map_err(|e| e.to_string())?;
         let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
         if let Ok(free) = s.parse::<u64>() {
-            if free < MIN_FREE_BYTES {
+                    if free < MIN_FREE_BYTES {
                 return Err(format!(
-                    "espace disque insuffisant (~{:.1} Go libres, ~4 Go requis)",
+                    "espace disque insuffisant (~{:.1} Go libres, ~8 Go requis)",
                     free as f64 / (1 << 30) as f64
                 ));
             }
@@ -104,7 +104,7 @@ pub fn check_disk_space(home: &Path) -> Result<(), String> {
                 if let Ok(avail) = cols[3].parse::<u64>() {
                     if avail < MIN_FREE_BYTES {
                         return Err(format!(
-                            "espace disque insuffisant (~{:.1} Go libres, ~4 Go requis)",
+                            "espace disque insuffisant (~{:.1} Go libres, ~8 Go requis)",
                             avail as f64 / (1 << 30) as f64
                         ));
                     }
@@ -160,18 +160,54 @@ pub fn ensure_models(home: &Path) -> Result<(), String> {
             m.filename,
             m.bytes.unwrap_or(0) as f64 / (1 << 30) as f64
         );
-        download_file(&m.url, &path, m.bytes)?;
-        if !m.sha256.is_empty() {
-            let got = file_sha256(&path)?;
-            if !got.eq_ignore_ascii_case(&m.sha256) {
-                let _ = fs::remove_file(&path);
-                return Err(format!(
-                    "sha256 invalide pour {} (attendu {}, obtenu {got})",
-                    m.filename, m.sha256
-                ));
-            }
-        }
+        download_model_file(&m.url, &path, m.bytes, &m.sha256)?;
         eprintln!("[aos-session] téléchargé {}", m.filename);
+    }
+    Ok(())
+}
+
+/// Télécharge un GGUF (resume + sha256 optionnel). Utilisé par offerings.
+pub fn download_model_file(
+    url: &str,
+    dest: &Path,
+    expected: Option<u64>,
+    sha256: &str,
+) -> Result<(), String> {
+    if dest.exists() {
+        if let Some(expect) = expected {
+            if let Ok(meta) = fs::metadata(dest) {
+                let lo = expect.saturating_mul(99) / 100;
+                if meta.len() >= lo {
+                    if sha256.is_empty() {
+                        return Ok(());
+                    }
+                    let got = file_sha256(dest)?;
+                    if got.eq_ignore_ascii_case(sha256) {
+                        return Ok(());
+                    }
+                }
+            }
+        } else if sha256.is_empty() {
+            return Ok(());
+        }
+    }
+    eprintln!(
+        "[aos-session] téléchargement {} (~{:.1} Go)…",
+        dest.file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("model"),
+        expected.unwrap_or(0) as f64 / (1 << 30) as f64
+    );
+    download_file(url, dest, expected)?;
+    if !sha256.is_empty() {
+        let got = file_sha256(dest)?;
+        if !got.eq_ignore_ascii_case(sha256) {
+            let _ = fs::remove_file(dest);
+            return Err(format!(
+                "sha256 invalide pour {} (attendu {sha256}, obtenu {got})",
+                dest.display()
+            ));
+        }
     }
     Ok(())
 }

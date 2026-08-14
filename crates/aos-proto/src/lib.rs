@@ -1219,6 +1219,9 @@ pub struct ChatSessionMeta {
     pub updated_ms: u64,
     pub archived: bool,
     pub message_count: usize,
+    /// Modèle instruct pour cette session (`None` = default_model).
+    #[serde(default)]
+    pub model_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1232,6 +1235,8 @@ pub struct ChatSessionMessage {
 pub struct ChatSessionCreateRequest {
     #[serde(default)]
     pub title: Option<String>,
+    #[serde(default)]
+    pub model_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1243,6 +1248,12 @@ pub struct ChatSessionIdRequest {
 pub struct ChatSessionRenameRequest {
     pub session_id: String,
     pub title: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatSessionSetModelRequest {
+    pub session_id: String,
+    pub model_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

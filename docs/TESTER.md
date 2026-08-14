@@ -17,10 +17,15 @@ Expected banner: *Preview on Windows/Linux — this is not the bootable OS yet*.
 
 ### 1. Offline chat
 
-- Finish the **tutorial** (4 steps: welcome, preferences, tour, paths).
+- Finish **model setup** (first run) and the **tutorial** (4 steps).
 - **Chat** tab: ask a question (e.g. “What is Agent OS?”).
+- Optionally change the **session model** combo (Models tab lists offerings).
 - Verify a streamed reply **without network**.
-- On the very first run, GGUF models must have been downloaded (network).
+
+### 1b. Models tab
+
+- Open **Models**: see installed entries, **Download** an alternative if offered.
+- Banner “Models: …” when newer offerings fit your VRAM tier.
 
 ### 2. Human note
 

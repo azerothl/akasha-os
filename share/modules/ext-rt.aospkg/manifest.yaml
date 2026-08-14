@@ -6,8 +6,10 @@ permissions:
 tools:
   - name: ext-rt.ping
     description: Santé du runtime scripté
-    input_schema: { type: object }
-    output_schema: { type: object }
+    input_schema:
+      type: object
+    output_schema:
+      type: object
 ui:
   entry: ui/index.html
   mode: declarative_ui

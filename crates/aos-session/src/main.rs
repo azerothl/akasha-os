@@ -4,6 +4,8 @@
 //! configs relatives, démarre les daemons, lance egui, arrête proprement.
 
 mod bootstrap;
+mod hardware;
+mod offerings;
 mod update;
 
 use aos_ipc::BusClient;
@@ -66,6 +68,29 @@ fn main() {
         }
     }
 
+    if let Some(pos) = args.iter().position(|a| a == "--download-models") {
+        let home = resolve_home();
+        std::env::set_var("AOS_HOME", &home);
+        let _ = std::env::set_current_dir(&home);
+        let ids: Vec<String> = args[pos + 1..].to_vec();
+        if ids.is_empty() {
+            eprintln!("[aos-session] usage: aos-session --download-models <id>…");
+            std::process::exit(1);
+        }
+        match offerings::download_ids(&home, &ids) {
+            Ok(()) => {
+                std::env::set_var("AOS_FORCE_CONFIG", "1");
+                write_runtime_configs(&home);
+                eprintln!("[aos-session] modèles téléchargés — redémarrez Preview");
+                std::process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("[aos-session] download models : {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+
     let home = resolve_home();
     std::env::set_var("AOS_HOME", &home);
     std::env::set_current_dir(&home).expect("chdir AOS_HOME");
@@ -103,19 +128,44 @@ fn main() {
         std::process::exit(2);
     }
 
-    if let Err(e) = bootstrap::ensure_models(&home) {
+    let hw = hardware::probe(&home);
+    if let Err(e) = hw.save(&home) {
+        eprintln!("[aos-session] hardware.json : {e}");
+    }
+    eprintln!(
+        "[aos-session] hardware: {} — {} MiB VRAM — tier {}",
+        hw.gpu_name,
+        hw.vram_mib,
+        hw.tier.as_str()
+    );
+
+    let _ = offerings::migrate_legacy_installed(&home);
+
+    if offerings::setup_needed(&home) {
+        if let Err(e) = run_model_setup(&home, &hw, &version) {
+            bootstrap::show_fatal_dialog(
+                "Agent OS Preview — modèles",
+                &format!(
+                    "Configuration des modèles annulée ou échouée :\n{e}\n\n\
+                     Voir share/models/catalog-offerings.json et FIRST-RUN.md."
+                ),
+            );
+            std::process::exit(4);
+        }
+    } else if let Err(e) = ensure_installed_files_present(&home) {
         bootstrap::show_fatal_dialog(
             "Agent OS Preview — modèles",
-            &format!(
-                "Échec du téléchargement des modèles GGUF :\n{e}\n\n\
-                 Vérifiez le réseau, ou placez les fichiers dans share/models/.\n\
-                 Voir share/models/manifest.json et FIRST-RUN.md."
-            ),
+            &format!("Modèles installés incomplets :\n{e}"),
         );
         std::process::exit(4);
     }
 
+    let _ = offerings::detect_model_updates(&home, &hw);
+
+    // Toujours régénérer les configs avec VRAM réelle + modèles installés.
+    std::env::set_var("AOS_FORCE_CONFIG", "1");
     write_runtime_configs(&home);
+    std::env::remove_var("AOS_FORCE_CONFIG");
 
     let session = Arc::new(Session {
         home: home.clone(),
@@ -202,10 +252,88 @@ fn main() {
             std::process::exit(st.code().unwrap_or(1));
         }
         Err(e) => {
-            eprintln!("[aos-session] impossible de lancer {} : {e}", ui.display());
+            eprintln!("[aos-session] UI failed: {e}");
             std::process::exit(1);
         }
     }
+}
+
+fn run_model_setup(home: &Path, hw: &hardware::HardwareInfo, version: &str) -> Result<(), String> {
+    let offer = offerings::build_setup_offer(home, hw)?;
+    offerings::write_setup_offer(home, &offer)?;
+    eprintln!(
+        "[aos-session] model setup — recommandé : {:?}",
+        offer.recommended_ids
+    );
+
+    // Prefer egui confirmation UI; fall back to auto-best if UI missing.
+    let ui = bin_path(home, "aos-ui-egui");
+    if ui.exists() {
+        let mut ui_cmd = Command::new(&ui);
+        ui_cmd
+            .env("AOS_HOME", home)
+            .env("AOS_PREVIEW_VERSION", version)
+            .env("AOS_MODEL_SETUP", "1")
+            .current_dir(home);
+        #[cfg(target_os = "linux")]
+        {
+            let bin_dir = home.join("bin");
+            let mut ld = bin_dir.to_string_lossy().to_string();
+            if let Ok(prev) = std::env::var("LD_LIBRARY_PATH") {
+                if !prev.is_empty() {
+                    ld = format!("{ld}:{prev}");
+                }
+            }
+            ui_cmd.env("LD_LIBRARY_PATH", &ld);
+        }
+        let st = ui_cmd.status().map_err(|e| e.to_string())?;
+        if !st.success() {
+            return Err("fenêtre de choix des modèles fermée sans validation".into());
+        }
+        let choice = offerings::read_setup_choice(home)
+            .ok_or_else(|| "setup_choice.json manquant".to_string())?;
+        offerings::apply_choice(home, &choice)?;
+        return Ok(());
+    }
+
+    // Auto-best without UI (CI / headless).
+    let choice = offerings::ModelSetupChoice {
+        selected_ids: offer.recommended_ids.clone(),
+        default_chat: offer
+            .recommended_ids
+            .iter()
+            .find(|id| {
+                offer
+                    .models
+                    .iter()
+                    .any(|m| m.id == **id && m.profiles.iter().any(|p| p == "chat"))
+            })
+            .cloned()
+            .unwrap_or_else(|| offer.recommended_ids.last().cloned().unwrap_or_default()),
+        default_embed: offer
+            .recommended_ids
+            .iter()
+            .find(|id| {
+                offer
+                    .models
+                    .iter()
+                    .any(|m| m.id == **id && m.profiles.iter().any(|p| p == "embed"))
+            })
+            .cloned()
+            .unwrap_or_else(|| offer.recommended_ids.first().cloned().unwrap_or_default()),
+        include_optional: false,
+    };
+    offerings::apply_choice(home, &choice)
+}
+
+fn ensure_installed_files_present(home: &Path) -> Result<(), String> {
+    let inst = offerings::load_installed(home);
+    if inst.models.is_empty() {
+        // Fall back to legacy manifest download once.
+        return bootstrap::ensure_models(home);
+    }
+    let ids: Vec<String> = inst.models.iter().map(|m| m.id.clone()).collect();
+    offerings::download_ids(home, &ids)
 }
 
 fn resolve_home() -> PathBuf {
@@ -271,6 +399,20 @@ fn ensure_layout(home: &Path) {
         let _ = fs::create_dir_all(home.join(d));
     }
 
+    // Catalogue offerings (copie depuis le repo / share si absent).
+    let offerings_dst = home.join("share/models/catalog-offerings.json");
+    if !offerings_dst.exists() {
+        for cand in [
+            PathBuf::from("share/models/catalog-offerings.json"),
+            home.join("share/models/catalog-offerings.json"),
+        ] {
+            if cand.exists() && cand != offerings_dst {
+                let _ = fs::copy(&cand, &offerings_dst);
+                break;
+            }
+        }
+    }
+
     // Catalogue modèles (copie depuis le repo si absent).
     let catalog_dst = home.join("data/models/catalog.yaml");
     if !catalog_dst.exists() {
@@ -330,35 +472,58 @@ fn ensure_layout(home: &Path) {
 
 fn write_runtime_configs(home: &Path) {
     let version = bootstrap::read_version(home);
-    let model_instruct = resolve_model(
-        home,
-        "qwen2.5-3b-instruct-q4_k_m.gguf",
-        &["share/models", "tools/models"],
-    );
-    let model_embed = resolve_model(
-        home,
-        "qwen2.5-0.5b-instruct-q4_k_m.gguf",
-        &["share/models", "tools/models"],
-    );
+    let hw = hardware::HardwareInfo::load(home).unwrap_or_else(|| hardware::probe(home));
+    let vram_total = if hw.vram_mib > 0 {
+        hw.vram_bytes()
+    } else {
+        12 * 1024 * 1024 * 1024
+    };
+    // Reserve embed + OS margin from placement budget.
+    let embed_reserve: u64 = 1_073_741_824;
+    let os_reserve_vram = embed_reserve + 1_073_741_824;
 
-    let modeld = home.join("etc/modeld.yaml");
-    if !modeld.exists() || std::env::var_os("AOS_FORCE_CONFIG").is_some() {
-        let yaml = format!(
-            r#"# Généré par aos-session (Preview {version})
-bus: "{BUS_ADDR}"
-gpu: true
-vram_total_bytes: 12884901888
-os_reserve_vram_bytes: 1073741824
-os_reserve_ram_bytes: 4294967296
-default_model: local:embedded-instruct
-default_kv_tokens: 2048
-n_threads: 8
-n_seq_max: 8
-batch_window_ms: 150
-routing: local_only
-
-models:
-  local:embedded-instruct:
+    let (default_chat, default_embed, entries) = offerings::runtime_model_entries(home);
+    let mut models_yaml = String::new();
+    let mut embed_path = home.join("share/models/missing-embed.gguf");
+    for (id, o, path) in &entries {
+        if id == &default_embed || o.profiles.iter().any(|p| p == "embed") {
+            if id == &default_embed {
+                embed_path = path.clone();
+            }
+        }
+        models_yaml.push_str(&format!(
+            r#"  {id}:
+    path: {path}
+    n_layers: {layers}
+    weights_bytes: {weights}
+    embed_bytes: {embed}
+    kv_bytes_per_token: {kv}
+    n_params: {params}
+"#,
+            id = id,
+            path = path_yaml(path),
+            layers = o.n_layers,
+            weights = o.weights_bytes,
+            embed = o.embed_bytes,
+            kv = o.kv_bytes_per_token,
+            params = o.n_params,
+        ));
+    }
+    if models_yaml.is_empty() {
+        // Absolute fallback legacy filenames.
+        let instruct = resolve_model(
+            home,
+            "qwen2.5-3b-instruct-q4_k_m.gguf",
+            &["share/models", "tools/models"],
+        );
+        let embed = resolve_model(
+            home,
+            "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+            &["share/models", "tools/models"],
+        );
+        embed_path = embed.clone();
+        models_yaml = format!(
+            r#"  local:embedded-instruct:
     path: {instruct}
     n_layers: 36
     weights_bytes: 2093886464
@@ -373,8 +538,33 @@ models:
     kv_bytes_per_token: 25000
     n_params: 6.3e8
 "#,
-            instruct = path_yaml(&model_instruct),
-            embed = path_yaml(&model_embed),
+            instruct = path_yaml(&instruct),
+            embed = path_yaml(&embed),
+        );
+    }
+
+    let modeld = home.join("etc/modeld.yaml");
+    if !modeld.exists() || std::env::var_os("AOS_FORCE_CONFIG").is_some() {
+        let yaml = format!(
+            r#"# Généré par aos-session (Preview {version})
+bus: "{BUS_ADDR}"
+gpu: true
+vram_total_bytes: {vram_total}
+os_reserve_vram_bytes: {os_reserve_vram}
+os_reserve_ram_bytes: 4294967296
+default_model: {default_chat}
+default_kv_tokens: 2048
+n_threads: 8
+n_seq_max: 8
+batch_window_ms: 150
+routing: local_only
+
+models:
+{models_yaml}"#,
+            vram_total = vram_total,
+            os_reserve_vram = os_reserve_vram,
+            default_chat = default_chat,
+            models_yaml = models_yaml,
         );
         let _ = fs::write(&modeld, yaml);
     }
@@ -398,10 +588,75 @@ embed_model:
   n_gpu_layers: 999
   n_threads: 8
 "#,
-            embed = path_yaml(&model_embed),
+            embed = path_yaml(&embed_path),
         );
         let _ = fs::write(&platformd, yaml);
     }
+
+    // Refresh catalog.yaml entries for installed models (best-effort).
+    let _ = default_embed;
+    write_catalog_overlay(home, &entries);
+}
+
+fn write_catalog_overlay(
+    home: &Path,
+    entries: &[(String, offerings::ModelOffering, PathBuf)],
+) {
+    let catalog_dst = home.join("data/models/catalog.yaml");
+    let mut models = Vec::new();
+    for (id, o, path) in entries {
+        let caps = if o.profiles.iter().any(|p| p == "embed") && o.profiles.len() == 1 {
+            vec!["embed"]
+        } else {
+            vec!["chat", "tools"]
+        };
+        models.push(format!(
+            r#"- id: {id}
+  name: {name}
+  modality: {modality}
+  format: gguf
+  source:
+    type: local_file
+    path: {path}
+    sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+  architecture:
+    n_layers: {layers}
+    n_params: {params}
+    context_length: 8192
+  resource_hints:
+    weights_bytes: {weights}
+    embed_bytes: {embed}
+    kv_bytes_per_token: {kv}
+    supports_layer_offload: true
+  capabilities: [{caps}]
+  backends_compatible: [llamacpp]
+  privacy_class: local
+"#,
+            id = id,
+            name = o.name.replace(':', "-"),
+            modality = if caps == ["embed"] {
+                "embedding"
+            } else {
+                "text"
+            },
+            path = path_yaml(path),
+            layers = o.n_layers,
+            params = o.n_params,
+            weights = o.weights_bytes,
+            embed = o.embed_bytes,
+            kv = o.kv_bytes_per_token,
+            caps = caps.join(", "),
+        ));
+    }
+    if models.is_empty() {
+        return;
+    }
+    let _ = fs::create_dir_all(home.join("data/models"));
+    let body = format!(
+        "# Généré par aos-session — modèles installés\nmodels:\n{}",
+        models.join("\n")
+    );
+    let _ = fs::write(catalog_dst, body);
 }
 
 fn resolve_model(home: &Path, filename: &str, dirs: &[&str]) -> PathBuf {

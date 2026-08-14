@@ -4,19 +4,20 @@
 //! audit, scénarios guidés, retours (`feedback.submit`).
 
 mod i18n;
+mod model_setup;
 
 use aos_ipc::BusClient;
 use aos_proto::{
     AgentCreateRequest, AgentGoal, AgentIdRequest, AgentInfo, AgentPromptOptimizeRequest,
     AgentPromptOptimizeResponse, AgentState, AgentSteerRequest, AuditEvent, AuditQueryRequest,
-    ChatMessage, ChatSessionAppendRequest, ChatSessionCreateRequest, ChatSessionGetResponse,
-    ChatSessionIdRequest, ChatSessionMeta, ChatSessionRenameRequest, ConfirmResponseRequest,
+    ChatMessage,     ChatSessionAppendRequest, ChatSessionCreateRequest, ChatSessionGetResponse,
+    ChatSessionIdRequest, ChatSessionMeta, ChatSessionRenameRequest, ChatSessionSetModelRequest, ConfirmResponseRequest,
     DocumentRef, FeedbackSubmitRequest, FeedbackSubmitResponse, FilesGenerateRequest,
     FilesGenerateResponse, InferParams, InferRequest, McpServerInfo, MemContextRequest,
-    MemContextResponse, MemHit, MemUserRecallRequest, MemUserRememberRequest, ModelInfo, ModelState,
-    ModuleInvokeRequest, ModuleInvokeResponse, NetFetchRequest, NetFetchResponse, NetModeRequest,
-    PendingConfirmation, SkillInfo, SystemMetrics, TokenEvent, WebSearchHit, WebSearchRequest,
-    WebSearchResponse, SYSTEM_ASSISTANT_PROMPT,
+    MemContextResponse, MemHit, MemUserRecallRequest, MemUserRememberRequest, LoadRequest, ModelInfo,
+    ModelState, ModuleInvokeRequest, ModuleInvokeResponse, NetFetchRequest, NetFetchResponse,
+    NetModeRequest, PendingConfirmation, SkillInfo, SystemMetrics, TokenEvent, WebSearchHit,
+    WebSearchRequest, WebSearchResponse, SYSTEM_ASSISTANT_PROMPT,
 };
 use eframe::egui;
 use serde::{Deserialize, Serialize};
@@ -63,6 +64,7 @@ enum Tab {
     Memory,
     Notes,
     Agents,
+    Models,
     Audit,
     Scenarios,
     Feedback,
@@ -96,6 +98,7 @@ enum Cmd {
         session_id: String,
         history: Vec<(String, String)>,
         user_text: String,
+        model_id: Option<String>,
     },
     SessionBootstrap,
     SessionCreate { title: Option<String> },
@@ -128,6 +131,7 @@ enum Cmd {
         documents: Vec<DocumentRef>,
         optimize_prompt: bool,
         max_steps: u32,
+        model_id: Option<String>,
     },
     AgentKill { id: String },
     AgentPause { id: String },
@@ -143,6 +147,12 @@ enum Cmd {
     Feedback(FeedbackSubmitRequest),
     KillAuditd,
     RefreshConfirms,
+    ModelsRefresh,
+    ModelLoad { model_id: String },
+    SessionSetModel {
+        session_id: String,
+        model_id: Option<String>,
+    },
 }
 
 enum Evt {
@@ -172,6 +182,7 @@ enum Evt {
     Skills(Vec<SkillInfo>),
     McpServers(Vec<McpServerInfo>),
     PromptOptimized(String),
+    Models(Vec<ModelInfo>),
 }
 
 const SLASH_COMMANDS: &[(&str, &str)] = &[
@@ -188,6 +199,10 @@ const SLASH_COMMANDS: &[(&str, &str)] = &[
 ];
 
 fn main() -> eframe::Result<()> {
+    if std::env::var_os("AOS_MODEL_SETUP").is_some() {
+        return model_setup::run();
+    }
+
     let (cmd_tx, cmd_rx) = channel::<Cmd>();
     let (evt_tx, evt_rx) = channel::<Evt>();
     let version = std::env::var("AOS_PREVIEW_VERSION").unwrap_or_else(|_| "0.1.0".into());
@@ -282,6 +297,12 @@ async fn runtime_main(cmd_rx: Receiver<Cmd>, evt_tx: Sender<Evt>, egui_ctx: egui
                 {
                     let _ = evt_tx.send(Evt::Agents(a));
                 }
+                if let Ok(models) = bus
+                    .call::<(), Vec<ModelInfo>>("model.list", &(), vec![])
+                    .await
+                {
+                    let _ = evt_tx.send(Evt::Models(models));
+                }
                 if let Ok(c) = bus
                     .call::<(), Vec<PendingConfirmation>>("confirm.list", &(), vec![])
                     .await
@@ -318,6 +339,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                         "chat.session.create",
                         &ChatSessionCreateRequest {
                             title: Some("Session 1".into()),
+                            model_id: None,
                         },
                         vec![],
                     )
@@ -344,7 +366,10 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
             match bus
                 .call::<ChatSessionCreateRequest, ChatSessionMeta>(
                     "chat.session.create",
-                    &ChatSessionCreateRequest { title },
+                    &ChatSessionCreateRequest {
+                        title,
+                        model_id: None,
+                    },
                     vec![],
                 )
                 .await
@@ -404,6 +429,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                         "chat.session.create",
                         &ChatSessionCreateRequest {
                             title: Some("Session 1".into()),
+                            model_id: None,
                         },
                         vec![],
                     )
@@ -463,6 +489,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
             session_id,
             history,
             user_text,
+            model_id,
         } => {
             let _ = evt_tx.send(Evt::Status(
                 "assistant : génération en cours…".into(),
@@ -508,7 +535,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                 content: c,
             }));
             let req = InferRequest {
-                model_id: None,
+                model_id,
                 messages,
                 params: InferParams {
                     max_tokens: 512,
@@ -815,6 +842,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
             documents,
             optimize_prompt,
             max_steps,
+            model_id,
         } => {
             let mut req = AgentCreateRequest::simple(task.clone());
             req.system_prompt = system_prompt;
@@ -830,6 +858,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                 max_subagents: 4,
                 timeout_secs: 3600,
             });
+            req.model_id = model_id;
             if req.skills.iter().any(|s| s.contains("notes"))
                 || req.tools.iter().any(|t| t.starts_with("notes."))
             {
@@ -977,6 +1006,69 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                 .await
             {
                 let _ = evt_tx.send(Evt::Confirms(c));
+            }
+        }
+        Cmd::ModelsRefresh => {
+            if let Ok(models) = bus
+                .call::<(), Vec<ModelInfo>>("model.list", &(), vec![])
+                .await
+            {
+                let _ = evt_tx.send(Evt::Models(models));
+            }
+        }
+        Cmd::ModelLoad { model_id } => {
+            match bus
+                .call::<LoadRequest, ()>(
+                    "model.load",
+                    &LoadRequest {
+                        model_id: model_id.clone(),
+                        profile: "balanced".into(),
+                        kv_tokens: 2048,
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(_) => {
+                    let _ = evt_tx.send(Evt::Status(format!("model load: {model_id}")));
+                    if let Ok(models) = bus
+                        .call::<(), Vec<ModelInfo>>("model.list", &(), vec![])
+                        .await
+                    {
+                        let _ = evt_tx.send(Evt::Models(models));
+                    }
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::SessionSetModel {
+            session_id,
+            model_id,
+        } => {
+            match bus
+                .call::<ChatSessionSetModelRequest, ChatSessionMeta>(
+                    "chat.session.set_model",
+                    &ChatSessionSetModelRequest {
+                        session_id,
+                        model_id,
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(_) => {
+                    if let Ok(list) = bus
+                        .call::<(), Vec<ChatSessionMeta>>("chat.session.list", &(), vec![])
+                        .await
+                    {
+                        let _ = evt_tx.send(Evt::Sessions(list));
+                    }
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
             }
         }
     }
@@ -1140,6 +1232,10 @@ struct UiApp {
     fb_github: bool,
     update_offer: Option<UpdateOffer>,
     update_status: String,
+    model_infos: Vec<ModelInfo>,
+    agent_model_id: String,
+    model_updates_msg: String,
+    download_status: String,
 }
 
 impl UiApp {
@@ -1148,6 +1244,14 @@ impl UiApp {
         let show_onboarding = !onboarding.completed;
         let t = i18n::strings(&onboarding.language);
         let _ = cmd_tx.send(Cmd::SessionBootstrap);
+        let model_updates_msg = std::fs::read_to_string(aos_home().join("var/run/model_updates.json"))
+            .ok()
+            .and_then(|s| {
+                serde_json::from_str::<serde_json::Value>(&s)
+                    .ok()
+                    .and_then(|v| v.get("reason").and_then(|r| r.as_str()).map(|s| s.to_string()))
+            })
+            .unwrap_or_default();
         Self {
             cmd_tx,
             evt_rx,
@@ -1221,6 +1325,10 @@ impl UiApp {
             fb_github: true,
             update_offer: load_update_offer(),
             update_status: String::new(),
+            model_infos: Vec::new(),
+            agent_model_id: String::new(),
+            model_updates_msg,
+            download_status: String::new(),
         }
     }
 
@@ -1268,10 +1376,16 @@ impl UiApp {
         self.streaming.clear();
         self.chat_pending = true;
         self.status = "assistant : génération…".into();
+        let model_id = self
+            .sessions
+            .iter()
+            .find(|s| s.id == session_id)
+            .and_then(|s| s.model_id.clone());
         let _ = self.cmd_tx.send(Cmd::Chat {
             session_id,
             history,
             user_text: text,
+            model_id,
         });
         self.scen_chat = true;
     }
@@ -1363,6 +1477,7 @@ impl UiApp {
                     documents: vec![],
                     optimize_prompt: false,
                     max_steps: 16,
+                    model_id: None,
                 });
                 self.tab = Tab::Agents;
             }
@@ -1526,6 +1641,7 @@ impl eframe::App for UiApp {
                     self.agent_system_prompt = p;
                     self.status = "prompt système optimisé".into();
                 }
+                Evt::Models(list) => self.model_infos = list,
             }
         }
 
@@ -1683,6 +1799,17 @@ impl eframe::App for UiApp {
                     }
                 });
             }
+            if !self.model_updates_msg.is_empty() {
+                ui.horizontal(|ui| {
+                    ui.colored_label(
+                        egui::Color32::from_rgb(180, 220, 120),
+                        format!("Models: {}", self.model_updates_msg),
+                    );
+                    if ui.button("Open Models").clicked() {
+                        self.tab = Tab::Models;
+                    }
+                });
+            }
             if !self.update_status.is_empty() {
                 ui.label(&self.update_status);
             }
@@ -1743,6 +1870,7 @@ impl eframe::App for UiApp {
                 (Tab::Memory, t.tab_memory),
                 (Tab::Notes, t.tab_notes),
                 (Tab::Agents, t.tab_agents),
+                (Tab::Models, "Models"),
                 (Tab::Audit, t.tab_audit),
                 (Tab::Scenarios, t.tab_scenarios),
                 (Tab::Feedback, t.tab_feedback),
@@ -1792,6 +1920,7 @@ impl eframe::App for UiApp {
             Tab::Memory => self.ui_memory(ui),
             Tab::Notes => self.ui_notes(ui),
             Tab::Agents => self.ui_agents(ui),
+            Tab::Models => self.ui_models(ui),
             Tab::Audit => self.ui_audit(ui),
             Tab::Scenarios => self.ui_scenarios(ui),
             Tab::Feedback => self.ui_feedback(ui),
@@ -1805,6 +1934,52 @@ impl UiApp {
             ui.vertical(|ui| {
                 ui.set_width(200.0);
                 ui.heading("Sessions");
+                ui.label("Model");
+                {
+                    let sid = self.active_session.clone();
+                    let mut current = self
+                        .sessions
+                        .iter()
+                        .find(|s| Some(s.id.as_str()) == sid.as_deref())
+                        .and_then(|s| s.model_id.clone())
+                        .unwrap_or_default();
+                    egui::ComboBox::from_id_salt("session_model")
+                        .selected_text(if current.is_empty() {
+                            "default".to_string()
+                        } else {
+                            current.clone()
+                        })
+                        .show_ui(ui, |ui| {
+                            if ui
+                                .selectable_value(&mut current, String::new(), "default")
+                                .changed()
+                            {
+                                if let Some(id) = sid.clone() {
+                                    let _ = self.cmd_tx.send(Cmd::SessionSetModel {
+                                        session_id: id,
+                                        model_id: None,
+                                    });
+                                }
+                            }
+                            for m in &self.model_infos {
+                                if ui
+                                    .selectable_value(
+                                        &mut current,
+                                        m.id.clone(),
+                                        format!("{} [{:?}]", m.id, m.state),
+                                    )
+                                    .changed()
+                                {
+                                    if let Some(id) = sid.clone() {
+                                        let _ = self.cmd_tx.send(Cmd::SessionSetModel {
+                                            session_id: id,
+                                            model_id: Some(m.id.clone()),
+                                        });
+                                    }
+                                }
+                            }
+                        });
+                }
                 if ui.button("+ Nouvelle").clicked() {
                     let n = self.sessions.len() + 1;
                     let _ = self.cmd_tx.send(Cmd::SessionCreate {
@@ -2043,6 +2218,23 @@ impl UiApp {
         if ui.button("Rafraîchir catalogues (skills / MCP)").clicked() {
             let _ = self.cmd_tx.send(Cmd::AgentCatalogRefresh);
         }
+        ui.label("Model");
+        egui::ComboBox::from_id_salt("agent_model")
+            .selected_text(if self.agent_model_id.is_empty() {
+                "default".to_string()
+            } else {
+                self.agent_model_id.clone()
+            })
+            .show_ui(ui, |ui| {
+                ui.selectable_value(&mut self.agent_model_id, String::new(), "default");
+                for m in &self.model_infos {
+                    ui.selectable_value(
+                        &mut self.agent_model_id,
+                        m.id.clone(),
+                        format!("{} [{:?}]", m.id, m.state),
+                    );
+                }
+            });
         ui.label("Goal");
         ui.add(
             egui::TextEdit::multiline(&mut self.agent_task)
@@ -2182,6 +2374,11 @@ impl UiApp {
                 documents,
                 optimize_prompt: self.agent_optimize,
                 max_steps: self.agent_max_steps,
+                model_id: if self.agent_model_id.is_empty() {
+                    None
+                } else {
+                    Some(self.agent_model_id.clone())
+                },
             });
         }
 
@@ -2246,6 +2443,93 @@ impl UiApp {
                 });
             }
         });
+    }
+
+    fn ui_models(&mut self, ui: &mut egui::Ui) {
+        ui.heading("Models");
+        if ui.button("Refresh list").clicked() {
+            let _ = self.cmd_tx.send(Cmd::ModelsRefresh);
+        }
+        if !self.model_updates_msg.is_empty() {
+            ui.colored_label(
+                egui::Color32::from_rgb(180, 220, 120),
+                &self.model_updates_msg,
+            );
+        }
+        if !self.download_status.is_empty() {
+            ui.label(&self.download_status);
+        }
+        ui.separator();
+        ui.label("Installed / registered (model.list)");
+        for m in self.model_infos.clone() {
+            ui.horizontal(|ui| {
+                ui.label(format!("{} — {} [{:?}]", m.id, m.name, m.state));
+                if ui.button("Load").clicked() {
+                    let _ = self.cmd_tx.send(Cmd::ModelLoad {
+                        model_id: m.id.clone(),
+                    });
+                }
+                if ui.button("Set session default").clicked() {
+                    if let Some(sid) = self.active_session.clone() {
+                        let _ = self.cmd_tx.send(Cmd::SessionSetModel {
+                            session_id: sid,
+                            model_id: Some(m.id.clone()),
+                        });
+                    }
+                }
+            });
+        }
+        ui.separator();
+        ui.label("Offerings (download via aos-session)");
+        let offerings_path = aos_home().join("share/models/catalog-offerings.json");
+        if let Ok(raw) = std::fs::read_to_string(offerings_path) {
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) {
+                if let Some(arr) = v.get("models").and_then(|m| m.as_array()) {
+                    for m in arr {
+                        let id = m.get("id").and_then(|x| x.as_str()).unwrap_or("");
+                        let name = m.get("name").and_then(|x| x.as_str()).unwrap_or(id);
+                        let bytes = m.get("bytes").and_then(|x| x.as_u64()).unwrap_or(0);
+                        let installed = self.model_infos.iter().any(|x| x.id == id);
+                        ui.horizontal(|ui| {
+                            ui.label(format!(
+                                "{}{} ({:.1} GiB)",
+                                if installed { "[ok] " } else { "" },
+                                name,
+                                bytes as f64 / (1 << 30) as f64
+                            ));
+                            if !installed && ui.button("Download").clicked() {
+                                let session = bin_aos_session();
+                                self.download_status =
+                                    format!("Downloading {id} (restart after)…");
+                                let id_owned = id.to_string();
+                                match std::process::Command::new(&session)
+                                    .arg("--download-models")
+                                    .arg(&id_owned)
+                                    .env("AOS_HOME", aos_home())
+                                    .status()
+                                {
+                                    Ok(st) if st.success() => {
+                                        self.download_status = format!(
+                                            "Downloaded {id_owned} — restart Preview to load"
+                                        );
+                                        self.model_updates_msg.clear();
+                                    }
+                                    Ok(st) => {
+                                        self.download_status =
+                                            format!("Download failed (exit {st})");
+                                    }
+                                    Err(e) => {
+                                        self.download_status = format!("Download error: {e}");
+                                    }
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+        } else {
+            ui.label("catalog-offerings.json missing");
+        }
     }
 
     fn ui_audit(&mut self, ui: &mut egui::Ui) {

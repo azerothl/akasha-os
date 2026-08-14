@@ -95,6 +95,9 @@ if ($cudaCopied -eq 0) {
 Copy-Item (Join-Path $root "data\models\catalog.yaml") "$OutDir\data\models\" -Force
 Copy-Item (Join-Path $root "VERSION") "$OutDir\VERSION" -Force
 Copy-Item (Join-Path $root "share\models\manifest.json") "$OutDir\share\models\manifest.json" -Force
+if (Test-Path (Join-Path $root "share\models\catalog-offerings.json")) {
+    Copy-Item (Join-Path $root "share\models\catalog-offerings.json") "$OutDir\share\models\catalog-offerings.json" -Force
+}
 
 $notes = Join-Path $root "modules\notes.aospkg"
 if (Test-Path $notes) {

@@ -11,7 +11,7 @@
 |--|--|
 | OS | Windows 10/11 x64 **or** Linux x64 (recent glibc) |
 | GPU | NVIDIA with a recent driver (`nvidia-smi -L` OK) |
-| Disk | ~4 GB free (binaries + GGUF downloaded on first run) |
+| Disk | ~8 GB free (recommended mid-tier GGUF pack) |
 | CUDA | Runtime shipped in the package (driver is enough) |
 
 No macOS, no CPU-only mode in 0.1.
@@ -58,13 +58,15 @@ var/            local data (created at run)
 
 ## First launch
 
-1. `aos-session` checks NVIDIA + disk space.
-2. Downloads Qwen2.5 GGUFs (3B + 0.5B) if missing (`share/models/`).
+1. `aos-session` checks NVIDIA + disk space and probes VRAM.
+2. **Model setup** (first run): confirm auto-best pack for your GPU tier,
+   then download GGUFs into `share/models/` (`catalog-offerings.json`).
 3. Starts bus → capkd → auditd → modeld → platformd → agentd.
 4. Opens egui UI + multi-page **tutorial**.
 5. Closing the UI stops the daemons.
 
-See [docs/FIRST-RUN.md](docs/FIRST-RUN.md).
+See [docs/FIRST-RUN.md](docs/FIRST-RUN.md). Use the **Models** tab to download
+additional profiles or switch session/agent models.
 
 ## Updates
 

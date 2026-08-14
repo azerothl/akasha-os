@@ -789,7 +789,11 @@ async fn main() {
             async move {
                 match ctx.payload::<ChatSessionCreateRequest>() {
                     Ok(req) => {
-                        let result = s.sessions.lock().unwrap().create(req.title);
+                        let result = s
+                            .sessions
+                            .lock()
+                            .unwrap()
+                            .create(req.title, req.model_id);
                         match result {
                             Ok(m) => {
                                 let _ = ctx.respond(aos_ipc::msg::Status::Ok, &m).await;
@@ -946,6 +950,41 @@ async fn main() {
                             .lock()
                             .unwrap()
                             .rename(&req.session_id, &req.title);
+                        match result {
+                            Ok(m) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &m).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::NotFound,
+                                        &e.to_string(),
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("chat.session.set_model", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<ChatSessionSetModelRequest>() {
+                    Ok(req) => {
+                        let result = s
+                            .sessions
+                            .lock()
+                            .unwrap()
+                            .set_model(&req.session_id, req.model_id);
                         match result {
                             Ok(m) => {
                                 let _ = ctx.respond(aos_ipc::msg::Status::Ok, &m).await;

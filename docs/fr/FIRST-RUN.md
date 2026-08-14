@@ -8,35 +8,35 @@ avec un GPU **NVIDIA**.
 ## Avant de lancer
 
 1. Driver NVIDIA récent (`nvidia-smi -L` OK).
-2. ~4 Go libres (binaires + modèles GGUF téléchargés au premier run).
+2. ~8 Go libres (pack mid : 9B + embedding).
 3. Installer via `install.ps1` / `install.sh`, ou lancer `bin/aos-session`.
 
-## Ce que fait le premier lancement
+## Setup modèles selon le matériel
 
-1. Vérifie NVIDIA et l'espace disque.
-2. Télécharge les modèles Qwen2.5 (3B + 0.5B) dans `share/models/` s'ils
-   manquent (réseau requis **une fois**).
-3. Démarre les services et ouvre l'UI egui.
-4. Affiche le **tutoriel** (onboarding) : langue, confiance, tour des onglets.
+Au premier lancement (pas encore de `var/models/installed.json`) :
 
-## Ce que vous pouvez faire
+1. Sonde GPU / RAM / disque → `var/run/hardware.json`.
+2. Fenêtre **Choix des modèles** (auto-best selon le tier) :
+   - **low** (&lt;10 Go VRAM) : Qwen3.5-4B + Embedding 0.6B
+   - **mid** (10–20 Go) : Qwen3.5-9B + Embedding 0.6B
+   - **high** (≥20 Go) : Qwen3 30B-A3B + Embedding 0.6B
+3. Confirmer → téléchargement dans `share/models/`.
+4. Démarrage des services + tutoriel egui.
+
+Catalogue : `share/models/catalog-offerings.json`.
+
+## Onglets utiles
 
 | Onglet | Usage |
 |--------|--------|
-| Chat / Sessions | Conversations parallèles persistées |
-| Mémoire | Faits long terme (remember / recall) |
-| Notes | Notes humaines + via agent |
-| Agents | Tâches avec skills / outils |
-| Réseau (case latérale) | Opt-in pour recherche web / téléchargements |
-| Retour | Issue GitHub sur azerothl/akasha-os |
-| Scénarios | Protocole cohorte (voir TESTER.md) |
+| Chat / Sessions | Modèle **par session** |
+| Models | Liste / load / download ; bandeau si nouveaux packs |
+| Agents | Choix du modèle à la création |
 
-Par défaut le réseau in-app est **coupé**. Les mises à jour logicielles
-passent par GitHub Releases (bandeau dans l'UI) sans effacer `var/`.
+Mises à jour modèles : bandeau vert → Models → Download → redémarrer Preview.
 
-## Dépannage rapide
+## Dépannage
 
-- Pas de GPU → installer le driver NVIDIA (pas de mode CPU en 0.1).
-- Modèle manquant → laisser le premier run télécharger, ou copier les GGUF
-  dans `share/models/`.
-- Logs des daemons → `var/run/*.stderr.log` (bouton Dépannage dans l'UI).
+- Pas de GPU → driver NVIDIA.
+- Setup annulé → relancer pour rouvrir le choix.
+- Logs → `var/run/*.stderr.log`.

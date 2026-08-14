@@ -29,6 +29,8 @@ struct MetaFile {
     created_ms: u64,
     updated_ms: u64,
     archived: bool,
+    #[serde(default)]
+    model_id: Option<String>,
 }
 
 /// Magasin de sessions chat sous `var/sessions/<id>/`.
@@ -83,10 +85,15 @@ impl ChatSessionStore {
             updated_ms: m.updated_ms,
             archived: m.archived,
             message_count,
+            model_id: m.model_id,
         }
     }
 
-    pub fn create(&self, title: Option<String>) -> Result<ChatSessionMeta, SessionError> {
+    pub fn create(
+        &self,
+        title: Option<String>,
+        model_id: Option<String>,
+    ) -> Result<ChatSessionMeta, SessionError> {
         let ts = Self::now_ms();
         let id = format!("sess-{ts}");
         let title = title
@@ -98,6 +105,7 @@ impl ChatSessionStore {
             created_ms: ts,
             updated_ms: ts,
             archived: false,
+            model_id,
         };
         self.save_meta(&meta)?;
         let _ = fs::write(self.dir(&id).join("messages.jsonl"), "");
@@ -171,6 +179,18 @@ impl ChatSessionStore {
         Ok(msg)
     }
 
+    pub fn set_model(
+        &self,
+        id: &str,
+        model_id: Option<String>,
+    ) -> Result<ChatSessionMeta, SessionError> {
+        let mut meta = self.load_meta(id)?;
+        meta.model_id = model_id;
+        meta.updated_ms = Self::now_ms();
+        self.save_meta(&meta)?;
+        Ok(self.to_public(meta))
+    }
+
     pub fn rename(&self, id: &str, title: &str) -> Result<ChatSessionMeta, SessionError> {
         let mut meta = self.load_meta(id)?;
         meta.title = title.into();
@@ -215,7 +235,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("aos-sess-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         let s = ChatSessionStore::open(&dir).unwrap();
-        let m = s.create(Some("Test".into())).unwrap();
+        let m = s.create(Some("Test".into()), None).unwrap();
         s.append(&m.id, "user", "bonjour").unwrap();
         s.append(&m.id, "assistant", "salut").unwrap();
         let (meta, msgs) = s.get(&m.id).unwrap();

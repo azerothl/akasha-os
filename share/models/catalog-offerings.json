@@ -1,0 +1,122 @@
+{
+  "version": "0.2.0",
+  "models": [
+    {
+      "id": "local:qwen3-embedding-0.6b",
+      "name": "Qwen3 Embedding 0.6B",
+      "profiles": ["embed"],
+      "filename": "Qwen3-Embedding-0.6B-Q8_0.gguf",
+      "url": "https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/main/Qwen3-Embedding-0.6B-Q8_0.gguf",
+      "bytes": 639150592,
+      "sha256": "",
+      "min_vram_mib": 1024,
+      "min_disk_bytes": 700000000,
+      "quality_score": 70,
+      "speed_score": 95,
+      "n_layers": 28,
+      "n_params": 6.0e8,
+      "weights_bytes": 639150592,
+      "embed_bytes": 80000000,
+      "kv_bytes_per_token": 20000,
+      "replaces": ["local:embedded-embed", "qwen2.5-0.5b-instruct-q4_k_m.gguf"],
+      "optional": false
+    },
+    {
+      "id": "local:qwen3.5-4b-instruct",
+      "name": "Qwen3.5 4B Instruct Q4",
+      "profiles": ["chat", "code"],
+      "filename": "Qwen3.5-4B-Q4_K_M.gguf",
+      "url": "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf",
+      "bytes": 2740937888,
+      "sha256": "",
+      "min_vram_mib": 4096,
+      "min_disk_bytes": 3000000000,
+      "quality_score": 72,
+      "speed_score": 92,
+      "n_layers": 36,
+      "n_params": 4.0e9,
+      "weights_bytes": 2740937888,
+      "embed_bytes": 200000000,
+      "kv_bytes_per_token": 40000,
+      "replaces": ["local:embedded-instruct", "qwen2.5-3b-instruct-q4_k_m.gguf"],
+      "optional": false
+    },
+    {
+      "id": "local:qwen3.5-9b-instruct",
+      "name": "Qwen3.5 9B Instruct Q4",
+      "profiles": ["chat", "code", "reasoning"],
+      "filename": "Qwen3.5-9B-Q4_K_M.gguf",
+      "url": "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_K_M.gguf",
+      "bytes": 5680522464,
+      "sha256": "",
+      "min_vram_mib": 10240,
+      "min_disk_bytes": 6200000000,
+      "quality_score": 88,
+      "speed_score": 78,
+      "n_layers": 36,
+      "n_params": 9.0e9,
+      "weights_bytes": 5680522464,
+      "embed_bytes": 350000000,
+      "kv_bytes_per_token": 70000,
+      "replaces": [],
+      "optional": false
+    },
+    {
+      "id": "local:qwen3-30b-a3b-instruct",
+      "name": "Qwen3 30B-A3B Instruct Q4",
+      "profiles": ["chat", "code", "reasoning"],
+      "filename": "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf",
+      "url": "https://huggingface.co/unsloth/Qwen3-30B-A3B-Instruct-2507-GGUF/resolve/main/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf",
+      "bytes": 18556686752,
+      "sha256": "",
+      "min_vram_mib": 16384,
+      "min_disk_bytes": 20000000000,
+      "quality_score": 95,
+      "speed_score": 70,
+      "n_layers": 48,
+      "n_params": 3.05e10,
+      "weights_bytes": 18556686752,
+      "embed_bytes": 500000000,
+      "kv_bytes_per_token": 80000,
+      "replaces": [],
+      "optional": true
+    },
+    {
+      "id": "local:qwen3-4b-instruct-2507",
+      "name": "Qwen3 4B Instruct 2507 Q4",
+      "profiles": ["chat", "code"],
+      "filename": "Qwen3-4B-Instruct-2507.Q4_K_M.gguf",
+      "url": "https://huggingface.co/MaziyarPanahi/Qwen3-4B-Instruct-2507-GGUF/resolve/main/Qwen3-4B-Instruct-2507.Q4_K_M.gguf",
+      "bytes": 2497280448,
+      "sha256": "",
+      "min_vram_mib": 4096,
+      "min_disk_bytes": 2800000000,
+      "quality_score": 74,
+      "speed_score": 90,
+      "n_layers": 36,
+      "n_params": 4.0e9,
+      "weights_bytes": 2497280448,
+      "embed_bytes": 200000000,
+      "kv_bytes_per_token": 40000,
+      "replaces": [],
+      "optional": true
+    }
+  ],
+  "packs": {
+    "low": {
+      "embed": "local:qwen3-embedding-0.6b",
+      "chat": "local:qwen3.5-4b-instruct",
+      "alternatives": ["local:qwen3-4b-instruct-2507"]
+    },
+    "mid": {
+      "embed": "local:qwen3-embedding-0.6b",
+      "chat": "local:qwen3.5-9b-instruct",
+      "alternatives": ["local:qwen3.5-4b-instruct", "local:qwen3-4b-instruct-2507"]
+    },
+    "high": {
+      "embed": "local:qwen3-embedding-0.6b",
+      "chat": "local:qwen3-30b-a3b-instruct",
+      "alternatives": ["local:qwen3.5-9b-instruct", "local:qwen3.5-4b-instruct"]
+    }
+  }
+}

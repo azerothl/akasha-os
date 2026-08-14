@@ -91,6 +91,9 @@ fi
 cp -f "${ROOT}/data/models/catalog.yaml" "${OUT}/data/models/"
 cp -f "${ROOT}/VERSION" "${OUT}/VERSION"
 cp -f "${ROOT}/share/models/manifest.json" "${OUT}/share/models/manifest.json"
+if [ -f "${ROOT}/share/models/catalog-offerings.json" ]; then
+  cp -f "${ROOT}/share/models/catalog-offerings.json" "${OUT}/share/models/catalog-offerings.json"
+fi
 
 if [ -d "${ROOT}/modules/notes.aospkg" ]; then
   rm -rf "${OUT}/share/modules/notes.aospkg"

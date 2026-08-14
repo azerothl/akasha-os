@@ -11,7 +11,7 @@ avec GPU **NVIDIA** (échafaudage hôte, ADR 0001). seL4 = piste séparée.
 |--|--|
 | OS | Windows 10/11 x64 **ou** Linux x64 (glibc récent) |
 | GPU | NVIDIA avec driver récent (`nvidia-smi -L` OK) |
-| Disque | ~4 Go libre (binaires + GGUF téléchargés au 1er run) |
+| Disque | ~8 Go libre (pack mid recommandé) |
 | CUDA | Runtime embarqué dans le paquet (driver suffit) |
 
 Pas de macOS, pas de mode CPU-only en 0.1.
@@ -58,13 +58,14 @@ var/            données locales (créé au run)
 
 ## Premier lancement
 
-1. `aos-session` vérifie NVIDIA + espace disque.
-2. Télécharge les GGUF Qwen2.5 (3B + 0.5B) si absents (`share/models/`).
+1. `aos-session` vérifie NVIDIA + disque et sonde la VRAM.
+2. **Choix des modèles** (1er run) : confirmer le pack auto-best, télécharger
+   les GGUF (`catalog-offerings.json`).
 3. Démarre bus → capkd → auditd → modeld → platformd → agentd.
-4. Ouvre l'UI egui + **tutoriel** multi-pages.
+4. Ouvre l'UI egui + **tutoriel**.
 5. Fermer l'UI arrête les daemons.
 
-Voir [FIRST-RUN.md](FIRST-RUN.md).
+Voir [FIRST-RUN.md](FIRST-RUN.md). Onglet **Models** pour d'autres profils.
 
 ## Mises à jour
 

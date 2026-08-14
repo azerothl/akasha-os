@@ -1,5 +1,6 @@
 {
   "version": "0.1.0",
+  "comment": "Legacy fallback only. Prefer share/models/catalog-offerings.json for hardware-aware packs.",
   "models": [
     {
       "filename": "qwen2.5-3b-instruct-q4_k_m.gguf",
