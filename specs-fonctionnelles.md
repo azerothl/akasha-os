@@ -194,6 +194,17 @@ Package unique exposant :
 | F-MOD-05 | Agents et humains consomment le **même** module via des surfaces adaptées | Must |
 | F-MOD-06 | Registre local de modules en v1 ; distribution réseau en phase ultérieure | Must |
 
+### 5.7bis Extensions agent (skills / modules)
+
+| ID | Exigence | Priorité |
+|----|----------|----------|
+| F-EXT-01 | Un agent peut créer une **skill** déclarative (markdown + outils) sous gouvernance trust | Must |
+| F-EXT-02 | Un agent peut demander une capacité manquante via `cap.request` (hot-grant) | Must |
+| F-EXT-03 | Un agent peut scaffolder / packager un module script (ext-rt) sans toolchain Rust | Must |
+| F-EXT-04 | Un agent peut compiler un module Rust→WASM si la toolchain est présente (cap critique) | Should |
+| F-EXT-05 | `module.install` exige une capacité critique + revue des caps (plus d'install anonyme) | Must |
+| F-EXT-06 | Le catalogue d'outils (`module.describe` + skills) est injecté dans le prompt agent | Must |
+
 ### 5.8 Interface utilisateur
 
 | ID | Exigence | Priorité |

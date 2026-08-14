@@ -82,7 +82,4 @@ Toute contribution au dépôt public est faite sous AGPL-3.0-only **et**
 autorise le Concédant à la redistribuer aussi sous licence commerciale.
 Détails : `CONTRIBUTING.md`.
 
-## 7. Avertissement
 
-Ce texte est un cadre. Il ne constitue pas un avis juridique. Faites relire
-le contrat par un avocat avant de l’utiliser en production.

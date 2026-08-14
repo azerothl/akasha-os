@@ -15,8 +15,23 @@ Linux x64 + NVIDIA, tester depuis egui, renvoyer des feedbacks locaux.
 | PC.3 | UI egui cohorte | fait |
 | PC.4 | `feedback.submit` | fait |
 | PC.5 | INSTALL + TESTER | fait |
+| PC.6 | Sessions chat parallèles persistées | fait |
+| PC.7 | Mémoire session + user + panneau UI | fait |
+| PC.8 | `web.search` + réseau opt-in | fait |
+| PC.9 | FS binaire + `net.fetch` + `files.generate` | fait |
 
-## Gate
+## Gates PC.6–PC.9
+
+| Gate | Critère |
+|------|---------|
+| PC.6 | 3 sessions concurrentes ; historique survit au restart |
+| PC.7 | `mem.context` injecté dans infer ; remember / recall UI |
+| PC.8 | recherche OK en online ; refus en `offline_strict` |
+| PC.9 | download image + PDF généré sous `/downloads` |
+
+Voir scénarios dans [`docs/TESTER.md`](docs/TESTER.md).
+
+## Gate cohorte
 
 3 Win + 1 Linux suivent `docs/TESTER.md` sans toolchain ; ≥1 feedback.
 
@@ -26,5 +41,6 @@ Linux x64 + NVIDIA, tester depuis egui, renvoyer des feedbacks locaux.
 
 ## Suite
 
+- Vague 2 : citations, export zip, restore agent, cancel infer/fetch, clipboard
 - Cohorte pilote + triage feedback
 - PV / fer nu restent parallèles (ADR 0001)

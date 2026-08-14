@@ -656,6 +656,29 @@ min_os_api: 1
 - limites CPU/mem/time par invocation
 - signatures vérifiées avant install/load
 
+### 7.5 Skills déclaratives (F-EXT-01)
+
+Les skills sont des recettes sans nouveau binaire, stockées sous `var/skills/<name>/` :
+
+```text
+skill.yaml      # name, description, when_to_use, tools[], required_caps[]
+SKILL.md        # instructions injectées dans le prompt
+```
+
+Intents : `skill.create`, `skill.list`, `skill.get`/`describe`, `skill.activate`, `skill.uninstall`.
+Gouvernance : `skill.create` n'est pas critique → Low refuse, Medium confirme, High auto.
+
+### 7.6 Authoring modules par agents (F-EXT-03/04)
+
+Deux chemins vers un `.aospkg` installable :
+
+1. **Script / ext-rt** : `module.scaffold` (kind=script) écrit `handlers.yaml` ; `module.package` copie le WASM `ext-rt` précompilé + convertit les handlers en JSON.
+2. **Rust→wasm32** : `module.scaffold` (kind=rust) + `module.compile` (cap critique, confirmation même en High) avec contrôle statique (pas d'`unsafe`, pas de `std::fs`/`net`/`process`) et `CARGO_NET_OFFLINE=true`.
+
+`module.install` exige la capacité `module.install` pour un acteur agent (humains exemptés en v1). Après install, l'agent demande `tool.invoke:<name>` via `cap.request`.
+
+Le host ABI WASM expose en plus : `web.search`, `net.fetch`, `files.generate`, `mem.context` / `mem.user.*` / `mem.shared_*`, `ext.load_handlers`. Interdits : `module.install`, `module.compile`, `secrets.get`, `agent.*`, `trust.set`.
+
 ---
 
 ## 8. UI subsystem
