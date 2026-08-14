@@ -23,7 +23,23 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 
 const PREVIEW_BANNER: &str =
-    "Agent OS Preview 0.1 — exécuté sur Windows/Linux (échafaudage). Ce n'est pas encore l'OS bootable seL4.";
+    "Agent OS Preview — exécuté sur Windows/Linux (échafaudage). Ce n'est pas encore l'OS bootable seL4.";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct UpdateOffer {
+    version: String,
+    tag: String,
+    html_url: String,
+    asset_name: String,
+    download_url: String,
+    size: u64,
+}
+
+fn load_update_offer() -> Option<UpdateOffer> {
+    let p = aos_home().join("var/run/update_available.json");
+    let raw = std::fs::read_to_string(p).ok()?;
+    serde_json::from_str(&raw).ok()
+}
 
 fn open_in_browser(url: &str) {
     #[cfg(windows)]
@@ -59,6 +75,8 @@ struct OnboardingState {
     language: String,
     routing: String,
     trust_default: String,
+    #[serde(default)]
+    tutorial_step: u32,
 }
 
 impl Default for OnboardingState {
@@ -67,7 +85,8 @@ impl Default for OnboardingState {
             completed: false,
             language: "fr".into(),
             routing: "local_only".into(),
-            trust_default: "low".into(),
+            trust_default: "medium".into(),
+            tutorial_step: 0,
         }
     }
 }
@@ -198,6 +217,20 @@ fn aos_home() -> PathBuf {
     std::env::var("AOS_HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
+}
+
+fn bin_aos_session() -> PathBuf {
+    let exe = if cfg!(windows) {
+        "aos-session.exe"
+    } else {
+        "aos-session"
+    };
+    let p = aos_home().join("bin").join(exe);
+    if p.exists() {
+        p
+    } else {
+        PathBuf::from(exe)
+    }
 }
 
 fn onboarding_path() -> PathBuf {
@@ -1106,6 +1139,8 @@ struct UiApp {
     fb_scenario: String,
     fb_result: String,
     fb_github: bool,
+    update_offer: Option<UpdateOffer>,
+    update_status: String,
 }
 
 impl UiApp {
@@ -1183,6 +1218,8 @@ impl UiApp {
             fb_scenario: String::new(),
             fb_result: String::new(),
             fb_github: true,
+            update_offer: load_update_offer(),
+            update_status: String::new(),
         }
     }
 
@@ -1492,43 +1529,105 @@ impl eframe::App for UiApp {
         }
 
         if self.show_onboarding {
-            egui::Window::new("Onboarding — Agent OS Preview")
+            egui::Window::new("Tutoriel — Agent OS Preview")
                 .collapsible(false)
-                .resizable(false)
+                .resizable(true)
+                .default_width(520.0)
                 .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
                 .show(ctx, |ui| {
-                    ui.label(PREVIEW_BANNER);
+                    let step = self.onboarding.tutorial_step;
+                    ui.label(format!("Étape {} / 4", step + 1));
                     ui.separator();
-                    ui.label("Langue");
-                    ui.horizontal(|ui| {
-                        ui.radio_value(&mut self.onboarding.language, "fr".into(), "Français");
-                        ui.radio_value(&mut self.onboarding.language, "en".into(), "English");
-                    });
-                    ui.label("Routage modèles");
-                    ui.horizontal(|ui| {
-                        ui.radio_value(
-                            &mut self.onboarding.routing,
-                            "local_only".into(),
-                            "local_only (recommandé)",
-                        );
-                        ui.radio_value(&mut self.onboarding.routing, "balanced".into(), "balanced");
-                    });
-                    ui.label("Confiance agents par défaut");
-                    ui.horizontal(|ui| {
-                        ui.radio_value(&mut self.onboarding.trust_default, "low".into(), "basse");
-                        ui.radio_value(
-                            &mut self.onboarding.trust_default,
-                            "medium".into(),
-                            "moyenne",
-                        );
-                    });
-                    ui.separator();
-                    if ui.button("Terminer l'onboarding").clicked() {
-                        self.onboarding.completed = true;
-                        save_onboarding(&self.onboarding);
-                        self.show_onboarding = false;
-                        self.status = "onboarding terminé".into();
+                    match step {
+                        0 => {
+                            ui.heading("Bienvenue");
+                            ui.label(PREVIEW_BANNER);
+                            ui.label(
+                                "Vous testez une Preview installable (hôte Win/Linux + NVIDIA), pas un microkernel bootable.",
+                            );
+                            ui.label(
+                                "Au premier lancement, les modèles GGUF sont téléchargés dans share/models/ si besoin.",
+                            );
+                        }
+                        1 => {
+                            ui.heading("Préférences");
+                            ui.label("Langue");
+                            ui.horizontal(|ui| {
+                                ui.radio_value(&mut self.onboarding.language, "fr".into(), "Français");
+                                ui.radio_value(&mut self.onboarding.language, "en".into(), "English");
+                            });
+                            ui.label("Routage modèles");
+                            ui.horizontal(|ui| {
+                                ui.radio_value(
+                                    &mut self.onboarding.routing,
+                                    "local_only".into(),
+                                    "local_only (recommandé)",
+                                );
+                                ui.radio_value(
+                                    &mut self.onboarding.routing,
+                                    "balanced".into(),
+                                    "balanced",
+                                );
+                            });
+                            ui.label("Confiance agents par défaut");
+                            ui.horizontal(|ui| {
+                                ui.radio_value(
+                                    &mut self.onboarding.trust_default,
+                                    "low".into(),
+                                    "basse",
+                                );
+                                ui.radio_value(
+                                    &mut self.onboarding.trust_default,
+                                    "medium".into(),
+                                    "moyenne",
+                                );
+                            });
+                        }
+                        2 => {
+                            ui.heading("Tour produit");
+                            ui.label("• Chat / Sessions — conversations parallèles persistées");
+                            ui.label("• Mémoire — faits long terme (remember / recall)");
+                            ui.label("• Notes — humaines ou via agent");
+                            ui.label("• Agents — tâches + skills / outils / MCP");
+                            ui.label("• Réseau (case latérale) — opt-in search / fetch");
+                            ui.label("• Retour — issue GitHub sur azerothl/akasha-os");
+                        }
+                        _ => {
+                            ui.heading("Parcours test");
+                            ui.label(
+                                "L'onglet Scénarios suit le protocole TESTER.md (cohorte).",
+                            );
+                            ui.label("Doc packagée : FIRST-RUN.md, INSTALL.md, TESTER.md.");
+                            ui.label(
+                                "Les mises à jour logicielles s'affichent en bandeau (GitHub Releases) sans effacer var/.",
+                            );
+                        }
                     }
+                    ui.separator();
+                    ui.horizontal(|ui| {
+                        if step > 0 && ui.button("Précédent").clicked() {
+                            self.onboarding.tutorial_step = step - 1;
+                            save_onboarding(&self.onboarding);
+                        }
+                        if step < 3 {
+                            if ui.button("Suivant").clicked() {
+                                self.onboarding.tutorial_step = step + 1;
+                                save_onboarding(&self.onboarding);
+                            }
+                        } else if ui.button("Terminer le tutoriel").clicked() {
+                            self.onboarding.completed = true;
+                            self.onboarding.tutorial_step = 3;
+                            save_onboarding(&self.onboarding);
+                            self.show_onboarding = false;
+                            self.tab = Tab::Scenarios;
+                            self.status = "tutoriel terminé — onglet Scénarios".into();
+                        }
+                        if ui.button("Passer").clicked() {
+                            self.onboarding.completed = true;
+                            save_onboarding(&self.onboarding);
+                            self.show_onboarding = false;
+                        }
+                    });
                 });
         }
 
@@ -1539,9 +1638,61 @@ impl eframe::App for UiApp {
                     if ui.button("Signaler").clicked() {
                         self.tab = Tab::Feedback;
                     }
+                    if ui.button("Tutoriel").clicked() {
+                        self.onboarding.tutorial_step = 0;
+                        self.onboarding.completed = false;
+                        self.show_onboarding = true;
+                        save_onboarding(&self.onboarding);
+                    }
+                    if ui.button("Dépannage").clicked() {
+                        let dir = aos_home().join("var/run");
+                        let _ = std::fs::create_dir_all(&dir);
+                        #[cfg(windows)]
+                        let _ = std::process::Command::new("explorer").arg(&dir).spawn();
+                        #[cfg(target_os = "linux")]
+                        let _ = std::process::Command::new("xdg-open").arg(&dir).spawn();
+                        self.status =
+                            "Logs daemons : var/run/*.stderr.log (dossier ouvert)".into();
+                    }
                     ui.label(format!("v{}", self.version));
                 });
             });
+            if let Some(offer) = self.update_offer.clone() {
+                ui.horizontal(|ui| {
+                    ui.colored_label(
+                        egui::Color32::from_rgb(100, 180, 255),
+                        format!("Mise à jour {} disponible", offer.version),
+                    );
+                    if ui.button("Notes").clicked() {
+                        open_in_browser(&offer.html_url);
+                    }
+                    if ui.button("Télécharger (redémarrage ensuite)").clicked() {
+                        let session = bin_aos_session();
+                        match std::process::Command::new(&session)
+                            .arg("--download-update")
+                            .env("AOS_HOME", aos_home())
+                            .status()
+                        {
+                            Ok(st) if st.success() => {
+                                self.update_status = format!(
+                                    "Update {} téléchargée — fermez Preview puis relancez.",
+                                    offer.version
+                                );
+                            }
+                            Ok(st) => {
+                                self.update_status =
+                                    format!("Échec download update (exit {st})");
+                            }
+                            Err(e) => {
+                                self.update_status = format!("Échec : {e}");
+                            }
+                        }
+                    }
+                });
+            }
+            if !self.update_status.is_empty() {
+                ui.label(&self.update_status);
+            }
             if !self.status.is_empty() {
                 ui.label(&self.status);
             }

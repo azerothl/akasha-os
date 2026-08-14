@@ -1,4 +1,4 @@
-# Installation — Agent OS Preview 0.1
+# Installation — Agent OS Preview
 
 **Ce n'est pas un OS bootable.** Preview tourne **sur Windows ou Linux x64**
 avec GPU **NVIDIA** (échafaudage hôte, ADR 0001). seL4 = piste séparée.
@@ -9,19 +9,21 @@ avec GPU **NVIDIA** (échafaudage hôte, ADR 0001). seL4 = piste séparée.
 |--|--|
 | OS | Windows 10/11 x64 **ou** Linux x64 (glibc récent) |
 | GPU | NVIDIA avec driver récent (`nvidia-smi -L` OK) |
-| Disque | ~4 Go libre (binaires + GGUF 3B + 0.5B) |
-| CUDA | Runtime compatible avec le build (driver suffit en pratique) |
+| Disque | ~4 Go libre (binaires + GGUF téléchargés au 1er run) |
+| CUDA | Runtime embarqué dans le paquet (driver suffit) |
 
 Pas de macOS, pas de mode CPU-only en 0.1.
 
 ## Windows
 
-1. Télécharger l'archive `AgentOS-Preview-0.1-windows-x64` (GitHub Releases).
+1. Télécharger `AgentOS-Preview-<ver>-windows-x64.zip` depuis
+   [GitHub Releases](https://github.com/azerothl/akasha-os/releases).
 2. Décompresser, puis :
    ```powershell
    .\install.ps1
    ```
-   Installe sous `%LOCALAPPDATA%\AgentOS-Preview` et crée un raccourci Bureau.
+   Installe sous `%LOCALAPPDATA%\AgentOS-Preview` (préserve `var/` / `etc/`
+   en cas de mise à jour).
 3. Lancer **Agent OS Preview**.
 
 Sans installateur :
@@ -32,91 +34,75 @@ $env:AOS_HOME = (Resolve-Path .)
 
 ## Linux
 
-1. Télécharger `AgentOS-Preview-0.1-linux-x64.tar.gz`, extraire.
+1. Télécharger `AgentOS-Preview-<ver>-linux-x64.tar.gz`, extraire.
 2. ```bash
    ./install.sh
    ```
-   Préfixe : `~/.local/share/agentos-preview`, lien `~/.local/bin/agentos-preview`.
-3. Lancer `agentos-preview` (ou l'entrée du menu applications).
+   Préfixe : `~/.local/share/agentos-preview` (overlay non destructif).
+3. Lancer `agentos-preview`.
 
 ## Contenu du paquet
 
 ```
-bin/          aos-session, daemons, aos-ui-egui
-share/models/ GGUF embarqués (3B instruct + 0.5B embed)
-share/modules/notes.aospkg/
-data/models/  catalog.yaml
-etc/          généré au premier lancement par aos-session
-var/          données locales (audit, notes, sessions, memory, feedback, secrets)
+bin/            daemons + CUDA runtime
+share/models/   manifest.json (GGUF téléchargés au 1er run)
+share/modules/  notes.aospkg, ext-rt.aospkg
+share/skills/   skills Preview
+data/models/    catalog.yaml
+VERSION         semver du build
+FIRST-RUN.md    tutoriel texte
+var/            données locales (créé au run)
 ```
 
 ## Premier lancement
 
-1. `aos-session` vérifie NVIDIA, crée `var/` (dont `var/sessions`), écrit `etc/*.yaml`
-   avec `net_mode: offline_strict` et `sessions_dir: var/sessions`.
-2. Démarre bus → capkd → auditd → modeld → platformd → agentd.
-3. Ouvre l'UI egui (onboarding si premier run).
-4. Fermer l'UI arrête les daemons.
+1. `aos-session` vérifie NVIDIA + espace disque.
+2. Télécharge les GGUF Qwen2.5 (3B + 0.5B) si absents (`share/models/`).
+3. Démarre bus → capkd → auditd → modeld → platformd → agentd.
+4. Ouvre l'UI egui + **tutoriel** multi-pages.
+5. Fermer l'UI arrête les daemons.
+
+Voir [docs/FIRST-RUN.md](docs/FIRST-RUN.md).
+
+## Mises à jour
+
+Un bandeau apparaît dans l'UI si une Release plus récente existe.
+**Télécharger** écrit l'archive dans `var/updates/` ; le **prochain**
+lancement applique `bin/` + `share/` sans toucher à `var/` ni écraser
+`etc/*.yaml` (fichiers `.new` si besoin).
 
 ## Réseau & recherche (optionnel)
 
-Par défaut le réseau est **coupé** (`offline_strict`). Dans l'UI, case
-**Autoriser le réseau** pour activer `web.search` / `net.fetch`.
-
-Backend search :
-
-1. **DuckDuckGo HTML** (sans clé) — défaut.
-2. **Brave Search** si vous ajoutez dans `var/secrets/keys.yaml` :
+Par défaut le réseau est **coupé** (`offline_strict`). Case
+**Autoriser le réseau** pour `web.search` / `net.fetch`.
 
 ```yaml
+# var/secrets/keys.yaml (optionnel)
 keys:
   brave_search_api_key: "BSA..."
+  github_token: "ghp_..."   # issues Feedback en un clic
 ```
-
-La clé n'est jamais exposée aux agents (`service:platformd` seulement).
-
-### Issues GitHub (retours UI)
-
-L'onglet **Retour** crée une issue sur
-[azerothl/akasha-os](https://github.com/azerothl/akasha-os/issues) :
-
-1. **Sans jeton** (défaut) : ouverture du formulaire GitHub prérempli dans
-   le navigateur — cliquez **Submit new issue** (compte GitHub).
-2. **Création directe** si `gh` est authentifié, ou un PAT `issues:write` :
-
-```yaml
-keys:
-  github_token: "ghp_..."
-```
-
-Les rapports **security** restent locaux (pas d'issue publique).
-
-Téléchargements et fichiers générés : `var/storage/data/downloads/`
-(chemins logiques `/downloads/**`).
 
 ## Dépannage
 
 | Symptôme | Action |
 |----------|--------|
-| `GPU NVIDIA requis` | Installer / mettre à jour le driver ; tester `nvidia-smi` |
-| `healthcheck échoué` | Voir `var/run/*.pid` ; relancer ; logs stderr des daemons |
-| Modèle introuvable | Copier les GGUF dans `share/models/` (noms exacts du README package) |
-| Bus injoignable (UI seule) | Toujours lancer via `aos-session`, pas `aos-ui-egui` seul |
-| `réseau désactivé` | Cocher **Autoriser le réseau** dans l'UI |
-| Sessions vides au restart | Vérifier `var/sessions/<id>/` et `sessions_dir` dans `etc/platformd.yaml` |
+| GPU NVIDIA requis | Driver NVIDIA ; `nvidia-smi -L` |
+| Échec modèles | Réseau pour HF, ou copier les GGUF dans `share/models/` |
+| healthcheck échoué | `var/run/*.stderr.log` (bouton **Dépannage**) |
+| Bus injoignable | Toujours via `aos-session` |
 
-## Build depuis les sources (mainteneurs)
+## Build / CI (mainteneurs)
 
 ```powershell
-# Windows (machine CUDA)
-.\packaging\build-preview.ps1
-
-# Linux
-./packaging/build-preview.sh
+.\packaging\build-preview.ps1 -SkipModels -RequireCuda
 ```
 
-Les artefacts GPU ne sont pas produits en CI sans runner CUDA : job manuel
-documenté, puis upload GitHub Release.
+```bash
+SKIP_MODELS=1 REQUIRE_CUDA=1 ./packaging/build-preview.sh
+```
+
+GitHub Actions : `.github/workflows/preview-release.yml` (tags `v*`).
 
 ## Licence
 

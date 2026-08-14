@@ -1,26 +1,42 @@
-# GitHub Release — Agent OS Preview 0.1
+# GitHub Release — Agent OS Preview
 
-## Assets à joindre
+## Automatique (recommandé)
 
-| Asset | Comment construire |
-|-------|-------------------|
-| `AgentOS-Preview-0.1-windows-x64.zip` | `.\packaging\build-preview.ps1` puis Compress-Archive |
-| `AgentOS-Preview-0.1-linux-x64.tar.gz` | `./packaging/build-preview.sh` puis `tar czf` |
+Tag puis push :
 
-Machine de build : Windows + CUDA (hôte de dev) et WSL/Linux + CUDA.
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Le workflow [`.github/workflows/preview-release.yml`](../.github/workflows/preview-release.yml)
+construit Win + Linux (CUDA 12.4, sans GGUF), publie :
+
+- `AgentOS-Preview-<ver>-windows-x64.zip`
+- `AgentOS-Preview-<ver>-linux-x64.tar.gz`
+- `latest.json` (sha256 + métadonnées)
+
+Déclenchement manuel : Actions → **preview-release** → Run workflow.
+
+## Manuel
+
+| Asset | Commande |
+|-------|----------|
+| Windows | `.\packaging\build-preview.ps1 -SkipModels -RequireCuda` puis Compress-Archive |
+| Linux | `SKIP_MODELS=1 REQUIRE_CUDA=1 ./packaging/build-preview.sh` puis `tar czf` |
+
+Les GGUF sont téléchargés au **premier run** via `share/models/manifest.json`.
 
 ## Notes de version (brouillon)
 
 ```
-Agent OS Preview 0.1 — cohorte de test
+Agent OS Preview — cohorte de test
 
-Application hôte (Windows / Linux x64 + NVIDIA), pas un OS bootable.
-
-- aos-session : démarre les services et l'UI egui
-- Modèles embarqués : Qwen2.5-3B + 0.5B embed (offline)
-- Retours : onglet « Retour » → var/feedback/ (aucun envoi auto)
+- Install Win/Linux + NVIDIA (pas un OS bootable)
+- Premier run : download modèles + tutoriel in-app
+- Updates non destructives via GitHub Releases
+- Retours → issues GitHub
 
 Prérequis : nvidia-smi OK, ~4 Go disque.
-Install : voir INSTALL.md dans l'archive.
-Protocole : TESTER.md
+Voir FIRST-RUN.md / INSTALL.md / TESTER.md
 ```

@@ -1,7 +1,10 @@
-//! `aos-session` — superviseur Preview 0.1.
+//! `aos-session` — superviseur Preview.
 //!
 //! Remplace `run-demo.ps1` pour les testeurs : résout `AOS_HOME`, génère les
 //! configs relatives, démarre les daemons, lance egui, arrête proprement.
+
+mod bootstrap;
+mod update;
 
 use aos_ipc::BusClient;
 use serde::{Deserialize, Serialize};
@@ -13,7 +16,6 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-const PREVIEW_VERSION: &str = "0.1.0";
 const BUS_ADDR: &str = "127.0.0.1:24701";
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -22,6 +24,8 @@ struct OnboardingState {
     language: String,
     routing: String,
     trust_default: String,
+    #[serde(default)]
+    tutorial_step: u32,
 }
 
 struct Daemon {
@@ -36,23 +40,82 @@ struct Session {
 }
 
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--download-update") {
+        let home = resolve_home();
+        std::env::set_var("AOS_HOME", &home);
+        let _ = std::env::set_current_dir(&home);
+        match update::read_update_offer(&home) {
+            Some(info) => match update::download_update(&home, &info) {
+                Ok(p) => {
+                    eprintln!(
+                        "[aos-session] update téléchargée — redémarrez pour appliquer ({})",
+                        p.display()
+                    );
+                    std::process::exit(0);
+                }
+                Err(e) => {
+                    eprintln!("[aos-session] download update échoué : {e}");
+                    std::process::exit(1);
+                }
+            },
+            None => {
+                eprintln!("[aos-session] aucune offre de mise à jour (var/run/update_available.json)");
+                std::process::exit(1);
+            }
+        }
+    }
+
     let home = resolve_home();
     std::env::set_var("AOS_HOME", &home);
     std::env::set_current_dir(&home).expect("chdir AOS_HOME");
 
-    eprintln!("[aos-session] Agent OS Preview {PREVIEW_VERSION}");
+    let version = bootstrap::read_version(&home);
+    eprintln!("[aos-session] Agent OS Preview {version}");
     eprintln!("[aos-session] AOS_HOME={}", home.display());
 
-    ensure_layout(&home);
-    write_runtime_configs(&home);
+    // Appliquer une update téléchargée avant de toucher aux binaires en cours.
+    match update::apply_pending_update(&home) {
+        Ok(true) => eprintln!("[aos-session] redémarrage recommandé après update"),
+        Ok(false) => {}
+        Err(e) => eprintln!("[aos-session] apply update : {e}"),
+    }
 
-    if !nvidia_ok() {
-        eprintln!(
-            "[aos-session] ERREUR : GPU NVIDIA requis (nvidia-smi introuvable ou en échec).\n\
-             Preview 0.1 n'accepte pas le fallback CPU. Voir INSTALL.md."
+    ensure_layout(&home);
+    bootstrap::ensure_skills(&home);
+
+    if let Err(e) = bootstrap::check_disk_space(&home) {
+        bootstrap::show_fatal_dialog(
+            "Agent OS Preview — disque",
+            &format!("{e}\n\nLibérez de l'espace puis relancez. Voir FIRST-RUN.md."),
+        );
+        std::process::exit(3);
+    }
+
+    if !bootstrap::nvidia_ok() {
+        bootstrap::show_fatal_dialog(
+            "Agent OS Preview — GPU NVIDIA requis",
+            "nvidia-smi introuvable ou en échec.\n\
+             Preview 0.1 n'accepte pas le fallback CPU.\n\
+             Installez un driver NVIDIA récent, puis relancez.\n\
+             Voir INSTALL.md / FIRST-RUN.md.",
         );
         std::process::exit(2);
     }
+
+    if let Err(e) = bootstrap::ensure_models(&home) {
+        bootstrap::show_fatal_dialog(
+            "Agent OS Preview — modèles",
+            &format!(
+                "Échec du téléchargement des modèles GGUF :\n{e}\n\n\
+                 Vérifiez le réseau, ou placez les fichiers dans share/models/.\n\
+                 Voir share/models/manifest.json et FIRST-RUN.md."
+            ),
+        );
+        std::process::exit(4);
+    }
+
+    write_runtime_configs(&home);
 
     let session = Arc::new(Session {
         home: home.clone(),
@@ -67,30 +130,67 @@ fn main() {
 
     if let Err(e) = start_daemons(&session) {
         eprintln!("[aos-session] démarrage échoué : {e}");
+        eprintln!(
+            "[aos-session] Astuce : consultez var/run/*.stderr.log (GPU, modèles, bus)."
+        );
         stop_all(&session);
         std::process::exit(1);
     }
 
     if let Err(e) = healthcheck() {
         eprintln!("[aos-session] healthcheck échoué : {e}");
+        eprintln!(
+            "[aos-session] Causes fréquentes : modèle GGUF manquant, CUDA DLL absente, bus occupé.\n\
+             Logs : var/run/*.stderr.log"
+        );
         stop_all(&session);
         std::process::exit(1);
     }
     eprintln!("[aos-session] services OK");
     apply_trust_default(&home);
 
-    // Watchdog : redémarre auditd s'il meurt (scénario cohorte / P4).
+    // Check updates en arrière-plan (best-effort, repo public).
+    {
+        let home_bg = home.clone();
+        let ver_bg = version.clone();
+        thread::spawn(move || {
+            match update::check_latest(&ver_bg) {
+                Ok(Some(info)) => {
+                    let _ = update::write_update_offer(&home_bg, &info);
+                    eprintln!(
+                        "[aos-session] mise à jour disponible : {} ({})",
+                        info.version, info.html_url
+                    );
+                }
+                Ok(None) => update::clear_update_offer(&home_bg),
+                Err(e) => eprintln!("[aos-session] check update : {e}"),
+            }
+        });
+    }
+
     {
         let s = session.clone();
         thread::spawn(move || auditd_watchdog(s));
     }
 
     let ui = bin_path(&home, "aos-ui-egui");
-    let status = Command::new(&ui)
+    let mut ui_cmd = Command::new(&ui);
+    ui_cmd
         .env("AOS_HOME", &home)
-        .env("AOS_PREVIEW_VERSION", PREVIEW_VERSION)
-        .current_dir(&home)
-        .status();
+        .env("AOS_PREVIEW_VERSION", &version)
+        .current_dir(&home);
+    #[cfg(target_os = "linux")]
+    {
+        let bin_dir = home.join("bin");
+        let mut ld = bin_dir.to_string_lossy().to_string();
+        if let Ok(prev) = std::env::var("LD_LIBRARY_PATH") {
+            if !prev.is_empty() {
+                ld = format!("{ld}:{prev}");
+            }
+        }
+        ui_cmd.env("LD_LIBRARY_PATH", &ld);
+    }
+    let status = ui_cmd.status();
 
     session.stop.store(true, Ordering::SeqCst);
     stop_all(&session);
@@ -159,9 +259,12 @@ fn ensure_layout(home: &Path) {
         "var/feedback",
         "var/run",
         "var/sessions",
+        "var/updates",
+        "var/updates/staging",
         "etc",
         "share/models",
         "share/modules",
+        "share/skills",
         "data/models",
         "skills",
     ] {
@@ -187,7 +290,7 @@ fn ensure_layout(home: &Path) {
     let notes_installed = home.join("var/modules/notes");
     if notes_share.exists() && !notes_installed.join("module.wasm").exists() {
         let _ = fs::remove_dir_all(&notes_installed);
-        copy_dir_recursive(&notes_share, &notes_installed).ok();
+        bootstrap::copy_dir_recursive(&notes_share, &notes_installed).ok();
         let reg = home.join("var/modules/registry.yaml");
         let _ = fs::write(
             &reg,
@@ -208,7 +311,7 @@ fn ensure_layout(home: &Path) {
     let extrt_repo = home.join("modules/ext-rt.aospkg");
     if !extrt_share.join("module.wasm").exists() && extrt_repo.join("module.wasm").exists() {
         let _ = fs::create_dir_all(&extrt_share);
-        copy_dir_recursive(&extrt_repo, &extrt_share).ok();
+        bootstrap::copy_dir_recursive(&extrt_repo, &extrt_share).ok();
     }
 
     // Onboarding state
@@ -219,12 +322,14 @@ fn ensure_layout(home: &Path) {
             language: "fr".into(),
             routing: "local_only".into(),
             trust_default: "medium".into(),
+            tutorial_step: 0,
         };
         let _ = fs::write(onboard, serde_json::to_string_pretty(&state).unwrap());
     }
 }
 
 fn write_runtime_configs(home: &Path) {
+    let version = bootstrap::read_version(home);
     let model_instruct = resolve_model(
         home,
         "qwen2.5-3b-instruct-q4_k_m.gguf",
@@ -239,7 +344,7 @@ fn write_runtime_configs(home: &Path) {
     let modeld = home.join("etc/modeld.yaml");
     if !modeld.exists() || std::env::var_os("AOS_FORCE_CONFIG").is_some() {
         let yaml = format!(
-            r#"# Généré par aos-session (Preview {PREVIEW_VERSION})
+            r#"# Généré par aos-session (Preview {version})
 bus: "{BUS_ADDR}"
 gpu: true
 vram_total_bytes: 12884901888
@@ -277,7 +382,7 @@ models:
     let platformd = home.join("etc/platformd.yaml");
     if !platformd.exists() || std::env::var_os("AOS_FORCE_CONFIG").is_some() {
         let yaml = format!(
-            r#"# Généré par aos-session (Preview {PREVIEW_VERSION})
+            r#"# Généré par aos-session (Preview {version})
 bus: "{BUS_ADDR}"
 audit_dir: var/audit
 storage_dir: var/storage
@@ -314,14 +419,19 @@ fn path_yaml(p: &Path) -> String {
     p.to_string_lossy().replace('\\', "/")
 }
 
-fn nvidia_ok() -> bool {
-    Command::new("nvidia-smi")
-        .arg("-L")
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
+fn daemon_env(cmd: &mut Command, home: &Path) {
+    cmd.current_dir(home).env("AOS_HOME", home);
+    #[cfg(target_os = "linux")]
+    {
+        let bin_dir = home.join("bin");
+        let mut ld = bin_dir.to_string_lossy().to_string();
+        if let Ok(prev) = std::env::var("LD_LIBRARY_PATH") {
+            if !prev.is_empty() {
+                ld = format!("{ld}:{prev}");
+            }
+        }
+        cmd.env("LD_LIBRARY_PATH", ld);
+    }
 }
 
 fn start_daemons(session: &Arc<Session>) -> Result<(), String> {
@@ -332,9 +442,8 @@ fn start_daemons(session: &Arc<Session>) -> Result<(), String> {
         let log_path = home.join("var/run").join(format!("{name}.stderr.log"));
         let log_file = fs::File::create(&log_path)
             .map_err(|e| format!("{name}: log {e} ({})", log_path.display()))?;
-        cmd.current_dir(home)
-            .env("AOS_HOME", home)
-            .stdout(Stdio::null())
+        daemon_env(&mut cmd, home);
+        cmd.stdout(Stdio::null())
             // Piped unread stderr deadlocks GPU daemons (ggml/CUDA logs).
             .stderr(Stdio::from(log_file));
         let child = cmd
@@ -505,12 +614,9 @@ fn auditd_watchdog(session: Arc<Session>) {
                 eprintln!("[aos-session] auditd mort — redémarrage");
                 let home = session.home.clone();
                 let mut cmd = Command::new(bin_path(&home, "aos-auditd"));
-                cmd.arg(BUS_ADDR)
-                    .arg("var/audit")
-                    .current_dir(&home)
-                    .env("AOS_HOME", &home)
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null());
+                cmd.arg(BUS_ADDR).arg("var/audit");
+                daemon_env(&mut cmd, &home);
+                cmd.stdout(Stdio::null()).stderr(Stdio::null());
                 match cmd.spawn() {
                     Ok(child) => {
                         let pid = child.id();
@@ -537,19 +643,4 @@ fn ctrlc_guard(session: Arc<Session>) {
         stop_all(&session);
         std::process::exit(130);
     });
-}
-
-fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
-    fs::create_dir_all(dst)?;
-    for entry in fs::read_dir(src)? {
-        let entry = entry?;
-        let ty = entry.file_type()?;
-        let to = dst.join(entry.file_name());
-        if ty.is_dir() {
-            copy_dir_recursive(&entry.path(), &to)?;
-        } else {
-            fs::copy(entry.path(), to)?;
-        }
-    }
-    Ok(())
 }

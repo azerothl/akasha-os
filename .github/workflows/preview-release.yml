@@ -1,0 +1,161 @@
+# Build & publish Agent OS Preview (Windows + Linux CUDA, no GGUF in zip)
+
+name: preview-release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: "Create/upload GitHub Release assets"
+        type: boolean
+        default: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install Ninja
+        run: choco install ninja -y
+
+      - name: Install CUDA Toolkit 12.4
+        uses: Jimver/cuda-toolkit@v0.2.23
+        with:
+          cuda: "12.4.1"
+          method: network
+          sub-packages: '["nvcc","cudart","cublas","cublas_dev","nvrtc","nvrtc_dev","cupti","thrust","visual_studio_integration"]'
+
+      - name: Build Preview package
+        shell: pwsh
+        run: |
+          $ver = (Get-Content VERSION -Raw).Trim()
+          .\packaging\build-preview.ps1 -SkipModels -RequireCuda -Version $ver
+          $dir = "dist\AgentOS-Preview-$ver-windows-x64"
+          if (-not (Test-Path "$dir\bin\aos-session.exe")) { throw "missing aos-session" }
+          if (-not (Test-Path "$dir\share\models\manifest.json")) { throw "missing manifest" }
+          $dll = Get-ChildItem "$dir\bin" -Filter "cudart64_*.dll"
+          if (-not $dll) { throw "missing CUDA cudart DLL" }
+          Compress-Archive -Path "$dir\*" -DestinationPath "dist\AgentOS-Preview-$ver-windows-x64.zip" -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: preview-windows-x64
+          path: dist/AgentOS-Preview-*-windows-x64.zip
+
+  linux:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+    container:
+      image: nvidia/cuda:12.4.1-devel-ubuntu22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build deps
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -qq
+          apt-get install -y -qq \
+            build-essential pkg-config curl ca-certificates git cmake ninja-build \
+            clang libclang-dev libssl-dev \
+            libx11-dev libxcursor-dev libxrandr-dev libxi-dev libxkbcommon-dev \
+            libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libwayland-dev libasound2-dev xz-utils
+
+      - name: Install Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+          . "$HOME/.cargo/env"
+          rustup target add wasm32-unknown-unknown
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Build Preview package
+        env:
+          CUDA_HOME: /usr/local/cuda
+          SKIP_MODELS: "1"
+          REQUIRE_CUDA: "1"
+        run: |
+          . "$HOME/.cargo/env"
+          export LIBCLANG_PATH="$(dirname "$(ls -1 /usr/lib/llvm-*/lib/libclang.so* 2>/dev/null | head -n1)")"
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          export VERSION
+          ./packaging/build-preview.sh
+          OUT="dist/AgentOS-Preview-${VERSION}-linux-x64"
+          test -x "${OUT}/bin/aos-session"
+          test -f "${OUT}/share/models/manifest.json"
+          ls "${OUT}/bin"/libcudart.so* >/dev/null
+          tar -C dist -czf "dist/AgentOS-Preview-${VERSION}-linux-x64.tar.gz" "AgentOS-Preview-${VERSION}-linux-x64"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: preview-linux-x64
+          path: dist/AgentOS-Preview-*-linux-x64.tar.gz
+
+  release:
+    needs: [windows, linux]
+    runs-on: ubuntu-22.04
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.create_release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare assets + latest.json
+        id: prep
+        run: |
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          mkdir -p release-assets
+          find artifacts -type f \( -name '*.zip' -o -name '*.tar.gz' \) -exec cp {} release-assets/ \;
+          ls -la release-assets
+          WIN=$(ls release-assets/*windows*.zip | head -n1)
+          LIN=$(ls release-assets/*linux*.tar.gz | head -n1)
+          WIN_SHA=$(sha256sum "$WIN" | awk '{print $1}')
+          LIN_SHA=$(sha256sum "$LIN" | awk '{print $1}')
+          cat > release-assets/latest.json <<EOF
+          {
+            "version": "${VERSION}",
+            "tag": "v${VERSION}",
+            "repo": "azerothl/akasha-os",
+            "assets": [
+              {
+                "name": "$(basename "$WIN")",
+                "os": "windows",
+                "sha256": "${WIN_SHA}"
+              },
+              {
+                "name": "$(basename "$LIN")",
+                "os": "linux",
+                "sha256": "${LIN_SHA}"
+              }
+            ],
+            "notes": "Agent OS Preview ${VERSION} — NVIDIA Win/Linux. Models download on first run. See FIRST-RUN.md."
+          }
+          EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.prep.outputs.version }}
+          name: Agent OS Preview ${{ steps.prep.outputs.version }}
+          generate_release_notes: true
+          files: |
+            release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

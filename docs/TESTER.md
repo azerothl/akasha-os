@@ -15,9 +15,10 @@ Bannière attendue : *Preview sur Windows/Linux — ce n'est pas encore l'OS boo
 
 ### 1. Chat offline
 
-- Terminer l'onboarding (langue, `local_only`, confiance basse).
+- Terminer le **tutoriel** (4 étapes : bienvenue, préférences, tour, parcours).
 - Onglet **Chat** : poser une question (ex. « Qu'est-ce qu'Agent OS ? »).
 - Vérifier une réponse streamée **sans réseau**.
+- Au tout premier run, les modèles GGUF ont dû être téléchargés (réseau).
 
 ### 2. Note humaine
 

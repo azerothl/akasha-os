@@ -1,16 +1,28 @@
 #!/usr/bin/env bash
-# install-linux.sh — installe Agent OS Preview pour l'utilisateur courant
+# install-linux.sh — installe / met à jour Agent OS Preview (non destructif)
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PREFIX="${PREFIX:-${HOME}/.local/share/agentos-preview}"
 BIN_LINK="${HOME}/.local/bin/agentos-preview"
 
-echo "Installation vers ${PREFIX}"
+echo "Installation / mise à jour vers ${PREFIX}"
 mkdir -p "${PREFIX}" "${HOME}/.local/bin" \
-  "${HOME}/.local/share/applications"
+  "${HOME}/.local/share/applications" \
+  "${PREFIX}/var" "${PREFIX}/etc"
 
-rsync -a --delete "${HERE}/" "${PREFIX}/" 2>/dev/null \
-  || (rm -rf "${PREFIX}" && cp -a "${HERE}" "${PREFIX}")
+# Overlay programme uniquement — jamais --delete sur var/etc.
+for dir in bin share data docs; do
+  if [ -d "${HERE}/${dir}" ]; then
+    mkdir -p "${PREFIX}/${dir}"
+    cp -a "${HERE}/${dir}/." "${PREFIX}/${dir}/"
+  fi
+done
+for f in VERSION INSTALL.md TESTER.md FIRST-RUN.md README.txt \
+         LICENSE NOTICE LICENSE-COMMERCIAL.md install.sh; do
+  if [ -f "${HERE}/${f}" ]; then
+    cp -f "${HERE}/${f}" "${PREFIX}/"
+  fi
+done
 
 ln -sfn "${PREFIX}/bin/aos-session" "${BIN_LINK}"
 
@@ -18,7 +30,7 @@ cat > "${HOME}/.local/share/applications/agentos-preview.desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Name=Agent OS Preview
-Comment=Agent OS Preview 0.1 (NVIDIA)
+Comment=Agent OS Preview (NVIDIA)
 Exec=env AOS_HOME=${PREFIX} ${PREFIX}/bin/aos-session
 Icon=utilities-terminal
 Terminal=false
@@ -26,4 +38,5 @@ Categories=Utility;Development;
 EOF
 
 echo "OK. Lancez : agentos-preview"
+echo "Données utilisateur conservées sous ${PREFIX}/var"
 echo "Désinstall : rm -rf ${PREFIX} ${BIN_LINK} ~/.local/share/applications/agentos-preview.desktop"
