@@ -3060,8 +3060,6 @@ impl UiApp {
                             ));
                             if !installed && ui.button("Download").clicked() {
                                 let session = bin_aos_session();
-                                self.download_status =
-                                    format!("Downloading {id} (restart after)…");
                                 let id_owned = id.to_string();
                                 match std::process::Command::new(&session)
                                     .arg("--download-models")

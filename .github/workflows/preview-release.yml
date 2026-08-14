@@ -91,7 +91,8 @@ jobs:
           export LIBCLANG_PATH="$(dirname "$(ls -1 /usr/lib/llvm-*/lib/libclang.so* 2>/dev/null | head -n1)")"
           VERSION="$(tr -d '[:space:]' < VERSION)"
           export VERSION
-          ./packaging/build-preview.sh
+          chmod +x packaging/build-preview.sh
+          bash packaging/build-preview.sh
           OUT="dist/AgentOS-Preview-${VERSION}-linux-x64"
           test -x "${OUT}/bin/aos-session"
           test -f "${OUT}/share/models/manifest.json"
