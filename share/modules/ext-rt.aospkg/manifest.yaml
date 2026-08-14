@@ -1,0 +1,14 @@
+name: ext-rt
+version: 1.0.0
+hash: 39633f46ce51e42605a1f571d15eeb2b1cd00bc31915e8e19d6fba437c5652af
+permissions:
+  required_caps: []
+tools:
+  - name: ext-rt.ping
+    description: Santé du runtime scripté
+    input_schema: { type: object }
+    output_schema: { type: object }
+ui:
+  entry: ui/index.html
+  mode: declarative_ui
+min_os_api: 1

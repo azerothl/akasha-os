@@ -102,6 +102,31 @@ pub fn mem_query(namespace: &str, query: &str, k: usize) -> Result<serde_json::V
     )
 }
 
+/// Lit un asset du package module (handlers.json, etc.).
+pub fn asset_read(path: &str) -> Result<String, String> {
+    let r = call("ext.load_handlers", &serde_json::json!({"path": path}))?;
+    r["content"]
+        .as_str()
+        .map(str::to_string)
+        .ok_or_else(|| "ext.asset_read: réponse invalide".into())
+}
+
+/// Recherche web (nécessite net.connect).
+pub fn web_search(query: &str, max_results: usize) -> Result<serde_json::Value, String> {
+    call(
+        "web.search",
+        &serde_json::json!({"query": query, "max_results": max_results}),
+    )
+}
+
+/// Génère un fichier via le service plateforme.
+pub fn files_generate(path: &str, format: &str, content: &str) -> Result<serde_json::Value, String> {
+    call(
+        "files.generate",
+        &serde_json::json!({"path": path, "format": format, "content": content}),
+    )
+}
+
 /// Point d'entrée généré par la macro [`export_module!`].
 #[doc(hidden)]
 pub fn invoke_internal<H>(handler: &H, ptr: *const u8, len: u32) -> u64

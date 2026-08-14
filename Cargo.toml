@@ -11,6 +11,7 @@ exclude = [
     # Modules WASM (cible wasm32-unknown-unknown, workspaces propres —
     # ne jamais lier `host_call` côté hôte).
     "modules/notes",
+    "modules/ext-rt",
     "modules/sdk",
 ]
 
