@@ -595,16 +595,26 @@ impl ModelSubsystem {
                                 }
                             },
                             |i, piece| {
-                                let g = ios_delta.lock().unwrap();
-                                g.get(i)
-                                    .map(|io| {
-                                        io.delta_tx
-                                            .try_send(TokenEvent::Delta {
-                                                text: piece.to_string(),
-                                            })
-                                            .is_ok()
-                                    })
-                                    .unwrap_or(false)
+                                let tx = {
+                                    let g = ios_delta.lock().unwrap();
+                                    g.get(i).map(|io| io.delta_tx.clone())
+                                };
+                                match tx {
+                                    Some(tx) => {
+                                        match tx.try_send(TokenEvent::Delta {
+                                            text: piece.to_string(),
+                                        }) {
+                                            Ok(()) => true,
+                                            Err(
+                                                tokio::sync::mpsc::error::TrySendError::Full(ev),
+                                            ) => tx.blocking_send(ev).is_ok(),
+                                            Err(
+                                                tokio::sync::mpsc::error::TrySendError::Closed(_),
+                                            ) => false,
+                                        }
+                                    }
+                                    None => false,
+                                }
                             },
                         )
                     })

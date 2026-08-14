@@ -328,7 +328,9 @@ impl LlamaContext {
                     }
                     if n as usize <= buf.len() {
                         let bytes: Vec<u8> = buf[..n as usize].iter().map(|b| *b as u8).collect();
-                        return Ok(String::from_utf8_lossy(&bytes).into_owned());
+                        let rendered = String::from_utf8_lossy(&bytes).into_owned();
+                        let tmpl_s = tmpl.to_string_lossy();
+                        return Ok(suppress_hybrid_thinking(&rendered, &tmpl_s));
                     }
                     cap = n as usize + 1024;
                 }
@@ -956,6 +958,29 @@ impl LlamaContext {
     pub fn embed_dim(&self) -> usize {
         unsafe { sys::llama_model_n_embd_out(self.model.ptr) as usize }
     }
+}
+
+/// Qwen3/3.5 hybrid thinking: le chat template ouvre souvent un bloc `<think>`
+/// par défaut. Sans `enable_thinking=false` (non exposé par l'API C llama),
+/// on préremplit une fermeture vide pour forcer la réponse utile.
+fn suppress_hybrid_thinking(prompt: &str, template: &str) -> String {
+    let tmpl_l = template.to_ascii_lowercase();
+    let hybrid = tmpl_l.contains("enable_thinking")
+        || tmpl_l.contains("<think>")
+        || tmpl_l.contains("</think>");
+    if !hybrid {
+        return prompt.to_string();
+    }
+    let trimmed = prompt.trim_end();
+    // Déjà prérempli / tour assistant déjà clos
+    if trimmed.contains("</think>") {
+        return prompt.to_string();
+    }
+    let open = "<think>";
+    if trimmed.ends_with(open) || trimmed.ends_with("<think>\n") {
+        return format!("{trimmed}\n</think>\n\n");
+    }
+    format!("{trimmed}{open}\n\n</think>\n\n")
 }
 
 /// Normalisation L2 (pour similarité cosinus).

@@ -1,6 +1,6 @@
 //! État cognitif d'un agent (§4.2) — sérialisable (snapshot/restore).
 
-use aos_proto::{AgentGoal, TaskNode, TaskNodeStatus};
+use aos_proto::{AgentGoal, AgentStepRecord, TaskNode, TaskNodeStatus};
 use serde::{Deserialize, Serialize};
 
 /// État cognitif complet d'un agent.
@@ -30,6 +30,9 @@ pub struct CognitiveState {
     pub children: Vec<String>,
     #[serde(default)]
     pub tokens_used: u64,
+    /// Journal des tours (transparence F-UI-04).
+    #[serde(default)]
+    pub trace: Vec<AgentStepRecord>,
     /// Version de schéma (migration future).
     pub version: u32,
 }
@@ -49,6 +52,7 @@ impl CognitiveState {
             parent_id: None,
             children: Vec::new(),
             tokens_used: 0,
+            trace: Vec::new(),
             version: 2,
         }
     }
@@ -64,8 +68,16 @@ impl CognitiveState {
     }
 
     pub fn push_tool(&mut self, tool: &str, outcome: &str) {
+        let clipped = if outcome.chars().count() > 1500 {
+            format!(
+                "{}…",
+                outcome.chars().take(1500).collect::<String>()
+            )
+        } else {
+            outcome.to_string()
+        };
         self.working_memory
-            .push(("tool".to_string(), format!("[{tool}] {outcome}")));
+            .push(("tool".to_string(), format!("[{tool}] {clipped}")));
     }
 
     pub fn set_plan(&mut self, nodes: Vec<TaskNode>) {
@@ -106,11 +118,19 @@ mod tests {
         st.push_assistant("voici le résumé…");
         st.plan_stack.push("terminer la synthèse".into());
         st.step = 3;
+        st.trace.push(aos_proto::AgentStepRecord {
+            step: 1,
+            action: "notes.list".into(),
+            generated_tokens: 12,
+            ..Default::default()
+        });
         let json = st.to_json().unwrap();
         let back = CognitiveState::from_json(&json).unwrap();
         assert_eq!(back.agent_id, "agent-1");
         assert_eq!(back.working_memory.len(), 2);
         assert_eq!(back.cap_set_snapshot.len(), 1);
         assert_eq!(back.step, 3);
+        assert_eq!(back.trace.len(), 1);
+        assert_eq!(back.trace[0].action, "notes.list");
     }
 }

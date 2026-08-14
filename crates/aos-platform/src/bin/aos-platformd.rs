@@ -1131,6 +1131,7 @@ async fn main() {
                                 &req.query,
                                 req.max_results,
                                 key.as_deref(),
+                                &req.engine,
                             )
                         };
                         match search_res {
@@ -1234,6 +1235,61 @@ async fn main() {
                                             .await;
                                     }
                                 }
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::PermissionDenied,
+                                        &e.to_string(),
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("web.browse", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<WebBrowseRequest>() {
+                    Ok(req) => {
+                        let actor = if req.actor.is_empty() {
+                            "human:ui".into()
+                        } else {
+                            req.actor.clone()
+                        };
+                        let browse_res = {
+                            let mut net = s.net.lock().unwrap();
+                            aos_platform::net_services::web_browse(
+                                &mut net,
+                                &actor,
+                                &req.caps,
+                                &req.url,
+                                req.max_chars,
+                            )
+                        };
+                        match browse_res {
+                            Ok(resp) => {
+                                s.audit(AuditAppendRequest {
+                                    trace_id: format!("web-browse-{}", req.url.len()),
+                                    actor,
+                                    action: "web.browse".into(),
+                                    target: req.url,
+                                    detail: serde_json::json!({
+                                        "title": resp.title,
+                                        "chars": resp.text.len(),
+                                    }),
+                                });
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &resp).await;
                             }
                             Err(e) => {
                                 let _ = ctx

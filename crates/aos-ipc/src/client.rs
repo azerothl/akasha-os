@@ -77,9 +77,25 @@ impl BusClient {
                     }
                 }
                 Frame::Stream(item) => {
-                    let p = self.pending.lock().await;
-                    if let Some(Pending::Stream(tx)) = p.get(&item.correlation_id) {
-                        let _ = tx.send(Ok(item)).await;
+                    let tx = {
+                        let p = self.pending.lock().await;
+                        match p.get(&item.correlation_id) {
+                            Some(Pending::Stream(tx)) => Some(tx.clone()),
+                            _ => None,
+                        }
+                    };
+                    if let Some(tx) = tx {
+                        // Ne jamais bloquer read_loop : sinon pending.lock + client
+                        // en await sur un call unaire → deadlock (agents figés).
+                        match tx.try_send(Ok(item)) {
+                            Ok(()) => {}
+                            Err(tokio::sync::mpsc::error::TrySendError::Full(v)) => {
+                                tokio::spawn(async move {
+                                    let _ = tx.send(v).await;
+                                });
+                            }
+                            Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => {}
+                        }
                     }
                 }
                 Frame::StreamEnd {
@@ -89,12 +105,19 @@ impl BusClient {
                     let p = self.pending.lock().await.remove(&correlation_id);
                     if let Some(Pending::Stream(tx)) = p {
                         if status != Status::Ok {
-                            let _ = tx
-                                .send(Err(CallError::Status {
-                                    status,
-                                    message: "fin de flux en erreur".into(),
-                                }))
-                                .await;
+                            let err = CallError::Status {
+                                status,
+                                message: "fin de flux en erreur".into(),
+                            };
+                            match tx.try_send(Err(err)) {
+                                Ok(()) => {}
+                                Err(tokio::sync::mpsc::error::TrySendError::Full(v)) => {
+                                    tokio::spawn(async move {
+                                        let _ = tx.send(v).await;
+                                    });
+                                }
+                                Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => {}
+                            }
                         }
                         // drop(tx) → ferme le flux côté récepteur.
                     }
@@ -172,7 +195,7 @@ impl BusClient {
         Item: serde::de::DeserializeOwned + Send + 'static,
     {
         let id = self.next_correlation();
-        let (tx, mut rx_raw) = mpsc::channel::<Result<StreamItem, CallError>>(64);
+        let (tx, mut rx_raw) = mpsc::channel::<Result<StreamItem, CallError>>(512);
         self.pending.lock().await.insert(id, Pending::Stream(tx));
         let msg = Intent {
             intent: intent.into(),
@@ -185,7 +208,7 @@ impl BusClient {
         };
         self.send(Frame::Intent(msg)).await?;
 
-        let (tx_typed, rx_typed) = mpsc::channel(64);
+        let (tx_typed, rx_typed) = mpsc::channel(512);
         tokio::spawn(async move {
             while let Some(item) = rx_raw.recv().await {
                 let out = item.and_then(|it| {

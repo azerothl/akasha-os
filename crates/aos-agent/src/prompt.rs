@@ -48,10 +48,23 @@ pub fn compile_system_prompt(input: &PromptCompileInput<'_>) -> String {
 
     // 5. Skills
     if !input.skills.is_empty() {
-        let mut skill_block = String::from("## Skills actives\n");
+        let mut skill_block = String::from(
+            "## Skills actives (recettes — ce ne sont PAS des outils)\n\
+             N'utilise JAMAIS le nom d'une skill comme champ `action`.\n\
+             Choisis un outil listé sous chaque skill (ou dans le catalogue).\n",
+        );
         for s in input.skills {
+            let tools = if s.tools.is_empty() {
+                "(voir corps)".to_string()
+            } else {
+                s.tools
+                    .iter()
+                    .map(|t| format!("`{t}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            };
             skill_block.push_str(&format!(
-                "### {}\n{}\n\n{}\n\n",
+                "### {}\n{}\nOutils autorisés pour cette skill : {tools}\n\n{}\n\n",
                 s.name, s.description, s.body
             ));
         }
@@ -110,6 +123,16 @@ const ACTION_PROTOCOL: &str = r#"## Protocole d'actions
 
 Réponds par un objet JSON unique (éventuellement dans un bloc ```json) de la forme :
 {"thought":"raisonnement court","action":"<nom>","args":{...}}
+
+IMPORTANT :
+- Commence directement par `{` ou ```json — PAS de balises `<think>`, `</think>`, ni monologue « Thinking Process ».
+- Mets le raisonnement court UNIQUEMENT dans le champ JSON `thought` (1–2 phrases).
+- `action` doit être EXACTEMENT un nom d'outil du catalogue (ex. `web.search`, `notes.create`, `fs.write`).
+- INTERDIT d'utiliser un nom de skill comme action (`research`, `file-author`, `notes-writer`, `planner`, etc.).
+- Les skills sont des recettes : lis leurs outils autorisés et appelle ces outils un par un.
+- Mémoire d'abord : au démarrage la mémoire est déjà consultée (`[mem.bootstrap]`) — réutilise-la.
+- Avant une recherche web ou un fetch, memory.recall si besoin d'affiner ; après une découverte utile, memory.remember.
+- Pour lire une page HTML utilise `web.browse` (texte). `net.fetch` ne fait que télécharger un fichier.
 
 Actions runtime :
 - plan.update : {"nodes":[{"id":"1","title":"...","status":"Pending"}]}

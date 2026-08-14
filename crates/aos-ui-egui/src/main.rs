@@ -3,27 +3,33 @@
 //! Surface testeur : chat, dashboard, onboarding, notes, confirm, agents,
 //! audit, scénarios guidés, retours (`feedback.submit`).
 
+mod agent_panel;
 mod i18n;
 mod model_setup;
+mod prefs;
 
 use aos_ipc::BusClient;
 use aos_proto::{
     AgentCreateRequest, AgentGoal, AgentIdRequest, AgentInfo, AgentPromptOptimizeRequest,
-    AgentPromptOptimizeResponse, AgentState, AgentSteerRequest, AuditEvent, AuditQueryRequest,
+    AgentPromptOptimizeResponse, AgentState, AgentSteerRequest, AgentTrace, AuditEvent, AuditQueryRequest,
     ChatMessage,     ChatSessionAppendRequest, ChatSessionCreateRequest, ChatSessionGetResponse,
     ChatSessionIdRequest, ChatSessionMeta, ChatSessionRenameRequest, ChatSessionSetModelRequest, ConfirmResponseRequest,
     DocumentRef, FeedbackSubmitRequest, FeedbackSubmitResponse, FilesGenerateRequest,
     FilesGenerateResponse, InferParams, InferRequest, McpServerInfo, MemContextRequest,
     MemContextResponse, MemHit, MemUserRecallRequest, MemUserRememberRequest, LoadRequest, ModelInfo,
     ModelState, ModuleInvokeRequest, ModuleInvokeResponse, NetFetchRequest, NetFetchResponse,
-    NetModeRequest, PendingConfirmation, SkillInfo, SystemMetrics, TokenEvent, WebSearchHit,
-    WebSearchRequest, WebSearchResponse, SYSTEM_ASSISTANT_PROMPT,
+    NetModeRequest, PendingConfirmation, SetRoutingRequest, SkillInfo, SystemMetrics, TokenEvent,
+    WebBrowseRequest, WebBrowseResponse, WebSearchHit, WebSearchRequest, WebSearchResponse,
+    SYSTEM_ASSISTANT_PROMPT,
 };
+use prefs::{load_preferences, save_preferences, Preferences};
 use eframe::egui;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct UpdateOffer {
@@ -68,6 +74,7 @@ enum Tab {
     Audit,
     Scenarios,
     Feedback,
+    Settings,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -109,8 +116,10 @@ enum Cmd {
     MemRecall { query: String },
     MemRemember { text: String, pinned: bool },
     NetSetMode { online: bool },
-    WebSearch { query: String },
-    NetFetch { url: String },
+    SetRouting { mode: String },
+    WebSearch { query: String, engine: String },
+    WebBrowse { url: String, max_chars: usize },
+    NetFetch { url: String, max_bytes: u64 },
     FilesGenerate {
         format: String,
         path: String,
@@ -131,11 +140,15 @@ enum Cmd {
         documents: Vec<DocumentRef>,
         optimize_prompt: bool,
         max_steps: u32,
+        timeout_secs: u64,
         model_id: Option<String>,
     },
     AgentKill { id: String },
     AgentPause { id: String },
+    AgentResume { id: String },
+    AgentRetry { id: String },
     AgentSteer { id: String, text: String },
+    AgentTrace { id: String },
     AgentPromptOptimize {
         goal: String,
         skills: Vec<String>,
@@ -177,12 +190,14 @@ enum Evt {
     },
     MemHits(Vec<MemHit>),
     WebResults(Vec<WebSearchHit>),
+    BrowsePreview(String),
     NetMode(bool),
     FileOk(String),
     Skills(Vec<SkillInfo>),
     McpServers(Vec<McpServerInfo>),
     PromptOptimized(String),
     Models(Vec<ModelInfo>),
+    AgentTrace(AgentTrace),
 }
 
 const SLASH_COMMANDS: &[(&str, &str)] = &[
@@ -660,16 +675,35 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                 }
             }
         }
-        Cmd::WebSearch { query } => {
+        Cmd::SetRouting { mode } => {
+            match bus
+                .call::<SetRoutingRequest, bool>(
+                    "model.set_routing",
+                    &SetRoutingRequest { mode: mode.clone() },
+                    vec![],
+                )
+                .await
+            {
+                Ok(_) => {
+                    let _ = evt_tx.send(Evt::Status(format!("routing → {mode}")));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(format!("model.set_routing: {e}")));
+                }
+            }
+        }
+        Cmd::WebSearch { query, engine } => {
             let req = WebSearchRequest {
                 query,
                 max_results: 5,
                 caps: vec![
                     "net.connect:html.duckduckgo.com:443".into(),
                     "net.connect:api.search.brave.com:443".into(),
+                    "net.connect:www.bing.com:443".into(),
                     "net.connect:*:*".into(),
                 ],
                 actor: "human:ui".into(),
+                engine,
             };
             match bus
                 .call::<WebSearchRequest, WebSearchResponse>("web.search", &req, vec![])
@@ -683,11 +717,36 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                 }
             }
         }
-        Cmd::NetFetch { url } => {
+        Cmd::WebBrowse { url, max_chars } => {
+            let req = WebBrowseRequest {
+                url,
+                max_chars,
+                caps: vec!["net.connect:*:*".into()],
+                actor: "human:ui".into(),
+            };
+            match bus
+                .call::<WebBrowseRequest, WebBrowseResponse>("web.browse", &req, vec![])
+                .await
+            {
+                Ok(r) => {
+                    let body = if r.text.chars().count() > 2000 {
+                        format!("{}…", r.text.chars().take(2000).collect::<String>())
+                    } else {
+                        r.text
+                    };
+                    let preview = format!("{}\n{}\n\n{}", r.title, r.final_url, body);
+                    let _ = evt_tx.send(Evt::BrowsePreview(preview));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(format!("web.browse: {e}")));
+                }
+            }
+        }
+        Cmd::NetFetch { url, max_bytes } => {
             let req = NetFetchRequest {
                 url,
                 dest_path: None,
-                max_bytes: 50 * 1024 * 1024,
+                max_bytes,
                 caps: vec![
                     "net.connect:*:*".into(),
                     "fs.write:/downloads/**".into(),
@@ -842,6 +901,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
             documents,
             optimize_prompt,
             max_steps,
+            timeout_secs,
             model_id,
         } => {
             let mut req = AgentCreateRequest::simple(task.clone());
@@ -856,7 +916,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                 success_criteria: vec![],
                 max_steps,
                 max_subagents: 4,
-                timeout_secs: 3600,
+                timeout_secs,
             });
             req.model_id = model_id;
             if req.skills.iter().any(|s| s.contains("notes"))
@@ -928,6 +988,12 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
         Cmd::AgentPause { id } => {
             agent_id_cmd(&bus, &evt_tx, aos_agent::intents::PAUSE, id).await;
         }
+        Cmd::AgentResume { id } => {
+            agent_id_cmd(&bus, &evt_tx, aos_agent::intents::RESUME, id).await;
+        }
+        Cmd::AgentRetry { id } => {
+            agent_id_cmd(&bus, &evt_tx, aos_agent::intents::RETRY, id).await;
+        }
         Cmd::AgentSteer { id, text } => {
             match bus
                 .call::<AgentSteerRequest, ()>(
@@ -945,6 +1011,23 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::AgentTrace { id } => {
+            match bus
+                .call::<AgentIdRequest, AgentTrace>(
+                    aos_agent::intents::TRACE,
+                    &AgentIdRequest { agent_id: id },
+                    vec![],
+                )
+                .await
+            {
+                Ok(t) => {
+                    let _ = evt_tx.send(Evt::AgentTrace(t));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(format!("agent.trace: {e}")));
                 }
             }
         }
@@ -1023,7 +1106,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                     &LoadRequest {
                         model_id: model_id.clone(),
                         profile: "balanced".into(),
-                        kv_tokens: 2048,
+                        kv_tokens: 8192,
                     },
                     vec![],
                 )
@@ -1185,6 +1268,9 @@ struct UiApp {
     web_query: String,
     web_results: Vec<WebSearchHit>,
     fetch_url: String,
+    browse_preview: String,
+    prefs: Preferences,
+    agent_timeout_secs: u64,
     gen_format: String,
     gen_content: String,
     gen_path: String,
@@ -1208,7 +1294,10 @@ struct UiApp {
     mcp_catalog: Vec<McpServerInfo>,
     mcp_selected: Vec<String>,
     tool_selected: Vec<String>,
-    agent_detail_id: Option<String>,
+    agent_open_tabs: Vec<String>,
+    agent_active_tab: Option<String>,
+    agent_traces: HashMap<String, AgentTrace>,
+    trace_fetched_at: Option<Instant>,
     agent_steer_id: String,
     agent_steer_txt: String,
     audit: Vec<AuditEvent>,
@@ -1241,9 +1330,19 @@ struct UiApp {
 impl UiApp {
     fn new(cmd_tx: Sender<Cmd>, evt_rx: Receiver<Evt>, version: String) -> Self {
         let onboarding = load_onboarding();
+        let mut prefs = load_preferences();
+        if prefs.language.is_empty() {
+            prefs.language = onboarding.language.clone();
+        }
         let show_onboarding = !onboarding.completed;
-        let t = i18n::strings(&onboarding.language);
+        let t = i18n::strings(&prefs.language);
         let _ = cmd_tx.send(Cmd::SessionBootstrap);
+        let _ = cmd_tx.send(Cmd::SetRouting {
+            mode: prefs.routing.clone(),
+        });
+        if prefs.network_online {
+            let _ = cmd_tx.send(Cmd::NetSetMode { online: true });
+        }
         let model_updates_msg = std::fs::read_to_string(aos_home().join("var/run/model_updates.json"))
             .ok()
             .and_then(|s| {
@@ -1252,6 +1351,10 @@ impl UiApp {
                     .and_then(|v| v.get("reason").and_then(|r| r.as_str()).map(|s| s.to_string()))
             })
             .unwrap_or_default();
+        let default_model = prefs.default_agent_model.clone().unwrap_or_default();
+        let agent_max_steps = prefs.default_max_steps;
+        let agent_timeout_secs = prefs.default_timeout_secs;
+        let network_online = prefs.network_online;
         Self {
             cmd_tx,
             evt_rx,
@@ -1272,10 +1375,13 @@ impl UiApp {
             sessions: Vec::new(),
             active_session: None,
             rename_buf: String::new(),
-            network_online: false,
+            network_online,
             web_query: String::new(),
             web_results: Vec::new(),
             fetch_url: String::new(),
+            browse_preview: String::new(),
+            prefs,
+            agent_timeout_secs,
             gen_format: "md".into(),
             gen_content: String::new(),
             gen_path: "/downloads/note.md".into(),
@@ -1292,7 +1398,7 @@ impl UiApp {
             agent_task: String::new(),
             agent_system_prompt: String::new(),
             agent_docs: String::new(),
-            agent_max_steps: 32,
+            agent_max_steps,
             agent_optimize: false,
             skill_catalog: Vec::new(),
             skill_selected: Vec::new(),
@@ -1303,7 +1409,10 @@ impl UiApp {
                 "notes.list".into(),
                 "notes.read".into(),
             ],
-            agent_detail_id: None,
+            agent_open_tabs: Vec::new(),
+            agent_active_tab: None,
+            agent_traces: HashMap::new(),
+            trace_fetched_at: None,
             agent_steer_id: String::new(),
             agent_steer_txt: String::new(),
             audit: Vec::new(),
@@ -1326,7 +1435,7 @@ impl UiApp {
             update_offer: load_update_offer(),
             update_status: String::new(),
             model_infos: Vec::new(),
-            agent_model_id: String::new(),
+            agent_model_id: default_model,
             model_updates_msg,
             download_status: String::new(),
         }
@@ -1477,6 +1586,7 @@ impl UiApp {
                     documents: vec![],
                     optimize_prompt: false,
                     max_steps: 16,
+                    timeout_secs: self.prefs.default_timeout_secs,
                     model_id: None,
                 });
                 self.tab = Tab::Agents;
@@ -1630,7 +1740,12 @@ impl eframe::App for UiApp {
                 }
                 Evt::MemHits(h) => self.mem_hits = h,
                 Evt::WebResults(r) => self.web_results = r,
-                Evt::NetMode(online) => self.network_online = online,
+                Evt::BrowsePreview(t) => self.browse_preview = t,
+                Evt::NetMode(online) => {
+                    self.network_online = online;
+                    self.prefs.network_online = online;
+                    save_preferences(&self.prefs);
+                },
                 Evt::FileOk(msg) => {
                     self.status = msg.clone();
                     self.chat.push(("système".into(), msg));
@@ -1642,10 +1757,13 @@ impl eframe::App for UiApp {
                     self.status = "prompt système optimisé".into();
                 }
                 Evt::Models(list) => self.model_infos = list,
+                Evt::AgentTrace(t) => {
+                    self.agent_traces.insert(t.agent_id.clone(), t);
+                }
             }
         }
 
-        let t = i18n::strings(&self.onboarding.language);
+        let t = i18n::strings(&self.prefs.language);
 
         if self.show_onboarding {
             egui::Window::new(t.tutorial_title)
@@ -1722,10 +1840,26 @@ impl eframe::App for UiApp {
                         }
                         if step < 3 {
                             if ui.button(t.next).clicked() {
+                                if step == 1 {
+                                    self.prefs.language = self.onboarding.language.clone();
+                                    self.prefs.routing = self.onboarding.routing.clone();
+                                    self.prefs.trust_default = self.onboarding.trust_default.clone();
+                                    save_preferences(&self.prefs);
+                                    let _ = self.cmd_tx.send(Cmd::SetRouting {
+                                        mode: self.prefs.routing.clone(),
+                                    });
+                                }
                                 self.onboarding.tutorial_step = step + 1;
                                 save_onboarding(&self.onboarding);
                             }
                         } else if ui.button(t.finish_tutorial).clicked() {
+                            self.prefs.language = self.onboarding.language.clone();
+                            self.prefs.routing = self.onboarding.routing.clone();
+                            self.prefs.trust_default = self.onboarding.trust_default.clone();
+                            save_preferences(&self.prefs);
+                            let _ = self.cmd_tx.send(Cmd::SetRouting {
+                                mode: self.prefs.routing.clone(),
+                            });
                             self.onboarding.completed = true;
                             self.onboarding.tutorial_step = 3;
                             save_onboarding(&self.onboarding);
@@ -1734,6 +1868,10 @@ impl eframe::App for UiApp {
                             self.status = t.tutorial_done_status.into();
                         }
                         if ui.button(t.skip).clicked() {
+                            self.prefs.language = self.onboarding.language.clone();
+                            self.prefs.routing = self.onboarding.routing.clone();
+                            self.prefs.trust_default = self.onboarding.trust_default.clone();
+                            save_preferences(&self.prefs);
                             self.onboarding.completed = true;
                             save_onboarding(&self.onboarding);
                             self.show_onboarding = false;
@@ -1870,10 +2008,11 @@ impl eframe::App for UiApp {
                 (Tab::Memory, t.tab_memory),
                 (Tab::Notes, t.tab_notes),
                 (Tab::Agents, t.tab_agents),
-                (Tab::Models, "Models"),
+                (Tab::Models, t.tab_models),
                 (Tab::Audit, t.tab_audit),
                 (Tab::Scenarios, t.tab_scenarios),
                 (Tab::Feedback, t.tab_feedback),
+                (Tab::Settings, t.tab_settings),
             ] {
                 if ui
                     .selectable_label(self.tab == tab, label)
@@ -1895,6 +2034,9 @@ impl eframe::App for UiApp {
                 .checkbox(&mut online, t.allow_network)
                 .changed()
             {
+                self.network_online = online;
+                self.prefs.network_online = online;
+                save_preferences(&self.prefs);
                 let _ = self.cmd_tx.send(Cmd::NetSetMode { online });
             }
             ui.separator();
@@ -1915,6 +2057,11 @@ impl eframe::App for UiApp {
             }
         });
 
+        self.poll_agent_trace(ctx);
+        if self.tab == Tab::Agents {
+            self.ui_agent_detail_panel(ctx);
+        }
+
         egui::CentralPanel::default().show(ctx, |ui| match self.tab {
             Tab::Chat => self.ui_chat(ui),
             Tab::Memory => self.ui_memory(ui),
@@ -1924,204 +2071,269 @@ impl eframe::App for UiApp {
             Tab::Audit => self.ui_audit(ui),
             Tab::Scenarios => self.ui_scenarios(ui),
             Tab::Feedback => self.ui_feedback(ui),
+            Tab::Settings => self.ui_settings(ui),
         });
     }
 }
 
 impl UiApp {
     fn ui_chat(&mut self, ui: &mut egui::Ui) {
+        let full = ui.available_size();
+        let side_w = 220.0_f32;
+        let gap = 8.0_f32;
+        let chat_w = (full.x - side_w - gap).max(320.0);
+
         ui.horizontal(|ui| {
-            ui.vertical(|ui| {
-                ui.set_width(200.0);
-                ui.heading("Sessions");
-                ui.label("Model");
-                {
-                    let sid = self.active_session.clone();
-                    let mut current = self
-                        .sessions
-                        .iter()
-                        .find(|s| Some(s.id.as_str()) == sid.as_deref())
-                        .and_then(|s| s.model_id.clone())
-                        .unwrap_or_default();
-                    egui::ComboBox::from_id_salt("session_model")
-                        .selected_text(if current.is_empty() {
-                            "default".to_string()
-                        } else {
-                            current.clone()
-                        })
-                        .show_ui(ui, |ui| {
-                            if ui
-                                .selectable_value(&mut current, String::new(), "default")
-                                .changed()
-                            {
-                                if let Some(id) = sid.clone() {
-                                    let _ = self.cmd_tx.send(Cmd::SessionSetModel {
-                                        session_id: id,
-                                        model_id: None,
-                                    });
-                                }
-                            }
-                            for m in &self.model_infos {
+            ui.set_min_height(full.y);
+            ui.allocate_ui_with_layout(
+                egui::vec2(side_w, full.y),
+                egui::Layout::top_down(egui::Align::Min).with_cross_justify(true),
+                |ui| {
+                    ui.set_width(side_w);
+                    ui.heading("Sessions");
+                    ui.label("Model");
+                    {
+                        let sid = self.active_session.clone();
+                        let mut current = self
+                            .sessions
+                            .iter()
+                            .find(|s| Some(s.id.as_str()) == sid.as_deref())
+                            .and_then(|s| s.model_id.clone())
+                            .unwrap_or_default();
+                        egui::ComboBox::from_id_salt("session_model")
+                            .selected_text(if current.is_empty() {
+                                "default".to_string()
+                            } else {
+                                current.clone()
+                            })
+                            .width(side_w - 12.0)
+                            .show_ui(ui, |ui| {
                                 if ui
-                                    .selectable_value(
-                                        &mut current,
-                                        m.id.clone(),
-                                        format!("{} [{:?}]", m.id, m.state),
-                                    )
+                                    .selectable_value(&mut current, String::new(), "default")
                                     .changed()
                                 {
                                     if let Some(id) = sid.clone() {
                                         let _ = self.cmd_tx.send(Cmd::SessionSetModel {
                                             session_id: id,
-                                            model_id: Some(m.id.clone()),
+                                            model_id: None,
                                         });
                                     }
                                 }
-                            }
-                        });
-                }
-                if ui.button("+ Nouvelle").clicked() {
-                    let n = self.sessions.len() + 1;
-                    let _ = self.cmd_tx.send(Cmd::SessionCreate {
-                        title: Some(format!("Session {n}")),
-                    });
-                }
-                egui::ScrollArea::vertical()
-                    .max_height(220.0)
-                    .show(ui, |ui| {
-                        for s in self.sessions.clone() {
-                            let selected = self.active_session.as_deref() == Some(s.id.as_str());
-                            if ui
-                                .selectable_label(selected, format!("{} ({})", s.title, s.message_count))
-                                .clicked()
-                            {
-                                let _ = self.cmd_tx.send(Cmd::SessionSelect { id: s.id.clone() });
-                            }
-                        }
-                    });
-                ui.horizontal(|ui| {
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.rename_buf)
-                            .desired_width(120.0)
-                            .hint_text("titre"),
-                    );
-                    if ui.button("Renommer").clicked() {
-                        if let Some(id) = self.active_session.clone() {
-                            let _ = self.cmd_tx.send(Cmd::SessionRename {
-                                id,
-                                title: self.rename_buf.clone(),
+                                for m in &self.model_infos {
+                                    if ui
+                                        .selectable_value(
+                                            &mut current,
+                                            m.id.clone(),
+                                            format!("{} [{:?}]", m.id, m.state),
+                                        )
+                                        .changed()
+                                    {
+                                        if let Some(id) = sid.clone() {
+                                            let _ = self.cmd_tx.send(Cmd::SessionSetModel {
+                                                session_id: id,
+                                                model_id: Some(m.id.clone()),
+                                            });
+                                        }
+                                    }
+                                }
                             });
-                        }
                     }
-                });
-                if ui.button("Exporter MD").clicked() {
-                    if let Some(id) = self.active_session.clone() {
-                        let _ = self.cmd_tx.send(Cmd::SessionExport { id });
+                    if ui.button("+ Nouvelle").clicked() {
+                        let n = self.sessions.len() + 1;
+                        let _ = self.cmd_tx.send(Cmd::SessionCreate {
+                            title: Some(format!("Session {n}")),
+                        });
                     }
-                }
-                if ui.button("Supprimer").clicked() {
-                    if let Some(id) = self.active_session.clone() {
-                        let _ = self.cmd_tx.send(Cmd::SessionDelete { id });
-                    }
-                }
-                ui.separator();
-                ui.heading("Web / fichiers");
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.web_query)
-                        .desired_width(180.0)
-                        .hint_text("recherche web"),
-                );
-                if ui.button("Rechercher").clicked() && !self.web_query.is_empty() {
-                    let _ = self.cmd_tx.send(Cmd::WebSearch {
-                        query: self.web_query.clone(),
-                    });
-                }
-                for hit in &self.web_results {
-                    ui.small(format!("• {} — {}", hit.title, hit.url));
-                }
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.fetch_url)
-                        .desired_width(180.0)
-                        .hint_text("https://…"),
-                );
-                if ui.button("Télécharger URL").clicked() && !self.fetch_url.is_empty() {
-                    let _ = self.cmd_tx.send(Cmd::NetFetch {
-                        url: self.fetch_url.clone(),
-                    });
-                }
-                ui.horizontal(|ui| {
-                    egui::ComboBox::from_id_salt("gen_fmt")
-                        .selected_text(&self.gen_format)
-                        .show_ui(ui, |ui| {
-                            for f in ["md", "txt", "json", "csv", "png", "pdf"] {
-                                ui.selectable_value(&mut self.gen_format, f.into(), f);
+                    egui::ScrollArea::vertical()
+                        .id_salt("sessions_list")
+                        .max_height(160.0)
+                        .auto_shrink([false, true])
+                        .show(ui, |ui| {
+                            ui.set_min_width(side_w - 16.0);
+                            for s in self.sessions.clone() {
+                                let selected =
+                                    self.active_session.as_deref() == Some(s.id.as_str());
+                                if ui
+                                    .selectable_label(
+                                        selected,
+                                        format!("{} ({})", s.title, s.message_count),
+                                    )
+                                    .clicked()
+                                {
+                                    let _ =
+                                        self.cmd_tx.send(Cmd::SessionSelect { id: s.id.clone() });
+                                }
                             }
                         });
-                });
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.gen_path)
-                        .desired_width(180.0)
-                        .hint_text("/downloads/…"),
-                );
-                ui.add(
-                    egui::TextEdit::multiline(&mut self.gen_content)
-                        .desired_width(180.0)
-                        .desired_rows(3)
-                        .hint_text("contenu"),
-                );
-                if ui.button("Générer fichier").clicked() && !self.gen_path.is_empty() {
-                    let _ = self.cmd_tx.send(Cmd::FilesGenerate {
-                        format: self.gen_format.clone(),
-                        path: self.gen_path.clone(),
-                        content: self.gen_content.clone(),
-                        title: Some("Agent OS".into()),
-                    });
-                }
-                if ui.button("Ouvrir downloads").clicked() {
-                    let dir = aos_home().join("var/storage/data/downloads");
-                    let _ = std::fs::create_dir_all(&dir);
-                    #[cfg(windows)]
-                    let _ = std::process::Command::new("explorer").arg(&dir).spawn();
-                    #[cfg(target_os = "linux")]
-                    let _ = std::process::Command::new("xdg-open").arg(&dir).spawn();
-                }
-            });
-            ui.separator();
-            ui.vertical(|ui| {
-                ui.heading("Conversation");
-                if let Some(id) = &self.active_session {
-                    ui.weak(format!("session {id}"));
-                }
-                egui::ScrollArea::vertical()
-                    .max_height(ui.available_height() - 48.0)
-                    .stick_to_bottom(true)
-                    .show(ui, |ui| {
-                        for (role, text) in &self.chat {
-                            ui.label(format!("[{role}]"));
-                            ui.add(egui::Label::new(text).wrap());
-                            ui.separator();
-                        }
-                        if !self.streaming.is_empty() {
-                            ui.label("[assistant]");
-                            ui.add(egui::Label::new(&self.streaming).wrap());
-                        } else if self.chat_pending {
-                            ui.label("[assistant]");
-                            ui.weak("… en file / génération");
+                    ui.horizontal(|ui| {
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.rename_buf)
+                                .desired_width(120.0)
+                                .hint_text("titre"),
+                        );
+                        if ui.button("Renommer").clicked() {
+                            if let Some(id) = self.active_session.clone() {
+                                let _ = self.cmd_tx.send(Cmd::SessionRename {
+                                    id,
+                                    title: self.rename_buf.clone(),
+                                });
+                            }
                         }
                     });
-                ui.horizontal(|ui| {
-                    let r = ui.add(
-                        egui::TextEdit::singleline(&mut self.input)
-                            .desired_width(f32::INFINITY)
-                            .hint_text("message ou /commands …"),
-                    );
-                    let send = ui.button("Envoyer").clicked()
-                        || (r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)));
-                    if send {
-                        self.send_chat();
+                    if ui.button("Exporter MD").clicked() {
+                        if let Some(id) = self.active_session.clone() {
+                            let _ = self.cmd_tx.send(Cmd::SessionExport { id });
+                        }
                     }
-                });
-            });
+                    if ui.button("Supprimer").clicked() {
+                        if let Some(id) = self.active_session.clone() {
+                            let _ = self.cmd_tx.send(Cmd::SessionDelete { id });
+                        }
+                    }
+                    ui.separator();
+                    ui.heading("Web / fichiers");
+                    egui::ScrollArea::vertical()
+                        .id_salt("web_tools")
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| {
+                            ui.set_min_width(side_w - 16.0);
+                            ui.add(
+                                egui::TextEdit::singleline(&mut self.web_query)
+                                    .desired_width(side_w - 20.0)
+                                    .hint_text("recherche web"),
+                            );
+                            if ui.button("Rechercher").clicked() && !self.web_query.is_empty() {
+                                let _ = self.cmd_tx.send(Cmd::WebSearch {
+                                    query: self.web_query.clone(),
+                                    engine: self.prefs.web_search_engine.clone(),
+                                });
+                            }
+                            for hit in &self.web_results {
+                                ui.small(format!("• {} — {}", hit.title, hit.url));
+                            }
+                            ui.add(
+                                egui::TextEdit::singleline(&mut self.fetch_url)
+                                    .desired_width(side_w - 20.0)
+                                    .hint_text("https://…"),
+                            );
+                            ui.horizontal(|ui| {
+                                if ui.button("Télécharger URL").clicked()
+                                    && !self.fetch_url.is_empty()
+                                {
+                                    let _ = self.cmd_tx.send(Cmd::NetFetch {
+                                        url: self.fetch_url.clone(),
+                                        max_bytes: self.prefs.web_fetch_max_bytes,
+                                    });
+                                }
+                                let t = i18n::strings(&self.prefs.language);
+                                if ui.button(t.web_browse_btn).clicked()
+                                    && !self.fetch_url.is_empty()
+                                {
+                                    let _ = self.cmd_tx.send(Cmd::WebBrowse {
+                                        url: self.fetch_url.clone(),
+                                        max_chars: self.prefs.web_browse_max_chars,
+                                    });
+                                }
+                            });
+                            if !self.browse_preview.is_empty() {
+                                ui.collapsing("Aperçu page", |ui| {
+                                    ui.small(&self.browse_preview);
+                                });
+                            }
+                            ui.horizontal(|ui| {
+                                egui::ComboBox::from_id_salt("gen_fmt")
+                                    .selected_text(&self.gen_format)
+                                    .show_ui(ui, |ui| {
+                                        for f in ["md", "txt", "json", "csv", "png", "pdf"] {
+                                            ui.selectable_value(&mut self.gen_format, f.into(), f);
+                                        }
+                                    });
+                            });
+                            ui.add(
+                                egui::TextEdit::singleline(&mut self.gen_path)
+                                    .desired_width(side_w - 20.0)
+                                    .hint_text("/downloads/…"),
+                            );
+                            ui.add(
+                                egui::TextEdit::multiline(&mut self.gen_content)
+                                    .desired_width(side_w - 20.0)
+                                    .desired_rows(3)
+                                    .hint_text("contenu"),
+                            );
+                            if ui.button("Générer fichier").clicked() && !self.gen_path.is_empty() {
+                                let _ = self.cmd_tx.send(Cmd::FilesGenerate {
+                                    format: self.gen_format.clone(),
+                                    path: self.gen_path.clone(),
+                                    content: self.gen_content.clone(),
+                                    title: Some("Agent OS".into()),
+                                });
+                            }
+                            if ui.button("Ouvrir downloads").clicked() {
+                                let dir = aos_home().join("var/storage/data/downloads");
+                                let _ = std::fs::create_dir_all(&dir);
+                                #[cfg(windows)]
+                                let _ =
+                                    std::process::Command::new("explorer").arg(&dir).spawn();
+                                #[cfg(target_os = "linux")]
+                                let _ =
+                                    std::process::Command::new("xdg-open").arg(&dir).spawn();
+                            }
+                        });
+                },
+            );
+
+            ui.add_space(gap);
+
+            ui.allocate_ui_with_layout(
+                egui::vec2(chat_w, full.y),
+                egui::Layout::top_down(egui::Align::Min).with_cross_justify(true),
+                |ui| {
+                    ui.set_min_width(chat_w);
+                    ui.set_min_height(full.y);
+                    ui.heading("Conversation");
+                    if let Some(id) = &self.active_session {
+                        ui.weak(format!("session {id}"));
+                    }
+
+                    let input_reserve = 40.0_f32;
+                    let scroll_h = (ui.available_height() - input_reserve).max(120.0);
+                    egui::ScrollArea::vertical()
+                        .id_salt("conversation_scroll")
+                        .auto_shrink([false, false])
+                        .max_height(scroll_h)
+                        .min_scrolled_height(scroll_h)
+                        .stick_to_bottom(true)
+                        .show(ui, |ui| {
+                            ui.set_min_width(ui.available_width());
+                            ui.set_min_height(scroll_h);
+                            for (role, text) in &self.chat {
+                                ui.label(format!("[{role}]"));
+                                ui.add(egui::Label::new(text).wrap());
+                                ui.separator();
+                            }
+                            if !self.streaming.is_empty() {
+                                ui.label("[assistant]");
+                                ui.add(egui::Label::new(&self.streaming).wrap());
+                            } else if self.chat_pending {
+                                ui.label("[assistant]");
+                                ui.weak("… en file / génération");
+                            }
+                        });
+
+                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                        let r = ui.add(
+                            egui::TextEdit::singleline(&mut self.input)
+                                .desired_width(ui.available_width() - 90.0)
+                                .hint_text("message ou /commands …"),
+                        );
+                        let send = ui.button("Envoyer").clicked()
+                            || (r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)));
+                        if send {
+                            self.send_chat();
+                        }
+                    });
+                },
+            );
         });
     }
 
@@ -2263,6 +2475,8 @@ impl UiApp {
             }
             ui.label("max_steps");
             ui.add(egui::DragValue::new(&mut self.agent_max_steps).range(1..=128));
+            ui.label("timeout_s");
+            ui.add(egui::DragValue::new(&mut self.agent_timeout_secs).range(60..=86_400));
         });
 
         ui.collapsing("Skills", |ui| {
@@ -2310,6 +2524,7 @@ impl UiApp {
                 "fs.write",
                 "fs.list",
                 "web.search",
+                "web.browse",
                 "net.fetch",
                 "files.generate",
                 "agent.spawn",
@@ -2374,6 +2589,7 @@ impl UiApp {
                 documents,
                 optimize_prompt: self.agent_optimize,
                 max_steps: self.agent_max_steps,
+                timeout_secs: self.agent_timeout_secs,
                 model_id: if self.agent_model_id.is_empty() {
                     None
                 } else {
@@ -2384,49 +2600,41 @@ impl UiApp {
 
         ui.separator();
         ui.heading("Agents actifs");
-        for a in self.agents.clone() {
-            ui.horizontal(|ui| {
-                let selected = self.agent_detail_id.as_deref() == Some(a.agent_id.as_str());
-                if ui.selectable_label(selected, &a.agent_id).clicked() {
-                    self.agent_detail_id = Some(a.agent_id.clone());
-                    self.agent_steer_id = a.agent_id.clone();
-                }
-                ui.label(format!(
-                    "[{:?}] step {}/{} {}",
-                    a.state,
-                    a.step,
-                    a.max_steps,
-                    a.current_task.clone().unwrap_or_default()
-                ));
-                if ui.button("Pause").clicked() {
-                    let _ = self.cmd_tx.send(Cmd::AgentPause {
-                        id: a.agent_id.clone(),
-                    });
-                }
-                if ui.button("Kill").clicked() {
-                    let _ = self.cmd_tx.send(Cmd::AgentKill {
-                        id: a.agent_id.clone(),
-                    });
+        egui::ScrollArea::vertical()
+            .id_salt("agents_list")
+            .max_height(280.0)
+            .show(ui, |ui| {
+                let roots: Vec<_> = self
+                    .agents
+                    .iter()
+                    .filter(|a| a.parent_id.is_none())
+                    .cloned()
+                    .collect();
+                let orphans: Vec<_> = self
+                    .agents
+                    .iter()
+                    .filter(|a| {
+                        a.parent_id
+                            .as_ref()
+                            .is_some_and(|p| !self.agents.iter().any(|x| x.agent_id == *p))
+                    })
+                    .cloned()
+                    .collect();
+
+                for a in roots.into_iter().chain(orphans) {
+                    self.draw_agent_row(ui, &a, 0);
+                    let children: Vec<_> = self
+                        .agents
+                        .iter()
+                        .filter(|c| c.parent_id.as_deref() == Some(a.agent_id.as_str()))
+                        .cloned()
+                        .collect();
+                    for child in children {
+                        self.draw_agent_row(ui, &child, 1);
+                    }
                 }
             });
-            if !a.children.is_empty() {
-                ui.small(format!("sous-agents: {}", a.children.join(", ")));
-            }
-            if !a.last_output.is_empty() {
-                ui.label(egui::RichText::new(&a.last_output).small());
-            }
-        }
-
-        if let Some(id) = self.agent_detail_id.clone() {
-            if let Some(a) = self.agents.iter().find(|x| x.agent_id == id) {
-                ui.separator();
-                ui.heading(format!("Détail {id}"));
-                ui.label(format!("Goal / directive : {}", a.directive));
-                ui.label(format!("Parent : {:?}", a.parent_id));
-                ui.label(format!("Enfants : {:?}", a.children));
-                ui.label(format!("Caps : {}", a.caps.join(", ")));
-            }
-        }
+        ui.weak("Cliquez un agent pour ouvrir le panneau détail (onglets).");
 
         ui.separator();
         ui.label("Steer");
@@ -2443,6 +2651,359 @@ impl UiApp {
                 });
             }
         });
+    }
+
+    fn draw_agent_row(&mut self, ui: &mut egui::Ui, a: &AgentInfo, indent: usize) {
+        ui.horizontal(|ui| {
+            if indent > 0 {
+                ui.add_space(16.0 * indent as f32);
+                ui.small("↳");
+            }
+            let selected = self.agent_active_tab.as_deref() == Some(a.agent_id.as_str());
+            if ui
+                .selectable_label(selected, &a.agent_id)
+                .clicked()
+            {
+                self.open_agent_tab(&a.agent_id);
+            }
+            ui.colored_label(
+                agent_panel::state_color(&a.state),
+                format!("{:?}", a.state),
+            );
+            ui.label(format!(
+                "step {}/{}{}",
+                a.step,
+                a.max_steps,
+                if a.tokens_used > 0 {
+                    format!(" · {} tok", a.tokens_used)
+                } else {
+                    String::new()
+                }
+            ));
+            if let Some(task) = &a.current_task {
+                ui.small(task);
+            }
+            if !a.children.is_empty() && indent == 0 {
+                ui.small(format!("(+{} sous-agents)", a.children.len()));
+            }
+            if let Some(reason) = &a.fail_reason {
+                ui.colored_label(
+                    egui::Color32::from_rgb(220, 120, 100),
+                    agent_panel::truncate(reason, 40),
+                );
+            }
+            if ui.small_button("Pause").clicked() {
+                let _ = self.cmd_tx.send(Cmd::AgentPause {
+                    id: a.agent_id.clone(),
+                });
+            }
+            if ui.small_button("Kill").clicked() {
+                let _ = self.cmd_tx.send(Cmd::AgentKill {
+                    id: a.agent_id.clone(),
+                });
+            }
+        });
+    }
+
+    fn open_agent_tab(&mut self, id: &str) {
+        if !self.agent_open_tabs.iter().any(|t| t == id) {
+            self.agent_open_tabs.push(id.to_string());
+        }
+        self.agent_active_tab = Some(id.to_string());
+        self.agent_steer_id = id.to_string();
+        self.trace_fetched_at = None;
+        let _ = self.cmd_tx.send(Cmd::AgentTrace {
+            id: id.to_string(),
+        });
+    }
+
+    fn close_agent_tab(&mut self, id: &str) {
+        self.agent_open_tabs.retain(|t| t != id);
+        self.agent_traces.remove(id);
+        if self.agent_active_tab.as_deref() == Some(id) {
+            self.agent_active_tab = self.agent_open_tabs.last().cloned();
+        }
+    }
+
+    fn poll_agent_trace(&mut self, ctx: &egui::Context) {
+        if self.tab != Tab::Agents || self.agent_open_tabs.is_empty() {
+            return;
+        }
+        ctx.request_repaint_after(Duration::from_millis(400));
+        let due = self
+            .trace_fetched_at
+            .map(|t| t.elapsed() >= Duration::from_secs(1))
+            .unwrap_or(true);
+        if due {
+            self.trace_fetched_at = Some(Instant::now());
+            for id in self.agent_open_tabs.clone() {
+                let _ = self.cmd_tx.send(Cmd::AgentTrace { id });
+            }
+        }
+    }
+
+    fn ui_agent_detail_panel(&mut self, ctx: &egui::Context) {
+        if self.agent_open_tabs.is_empty() {
+            return;
+        }
+        egui::SidePanel::right("agent_detail_tabs")
+            .default_width(520.0)
+            .min_width(420.0)
+            .resizable(true)
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.heading("Détail");
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.small_button("✕ tout").clicked() {
+                            self.agent_open_tabs.clear();
+                            self.agent_active_tab = None;
+                            self.agent_traces.clear();
+                        }
+                    });
+                });
+                ui.horizontal_wrapped(|ui| {
+                    let tabs = self.agent_open_tabs.clone();
+                    for id in tabs {
+                        let selected = self.agent_active_tab.as_deref() == Some(id.as_str());
+                        let label = if let Some(a) = self.agents.iter().find(|x| x.agent_id == id)
+                        {
+                            format!("{id} [{:?}]", a.state)
+                        } else {
+                            id.clone()
+                        };
+                        egui::Frame::NONE
+                            .fill(if selected {
+                                egui::Color32::from_rgb(45, 55, 70)
+                            } else {
+                                egui::Color32::from_rgb(30, 32, 38)
+                            })
+                            .corner_radius(3.0)
+                            .inner_margin(egui::Margin::symmetric(6, 3))
+                            .show(ui, |ui| {
+                                ui.horizontal(|ui| {
+                                    if ui
+                                        .selectable_label(selected, label)
+                                        .clicked()
+                                    {
+                                        self.agent_active_tab = Some(id.clone());
+                                        self.agent_steer_id = id.clone();
+                                    }
+                                    if ui.small_button("×").clicked() {
+                                        self.close_agent_tab(&id);
+                                    }
+                                });
+                            });
+                    }
+                });
+                ui.separator();
+
+                let active = self.agent_active_tab.clone();
+                if let Some(id) = active {
+                    let info = self.agents.iter().find(|a| a.agent_id == id).cloned();
+                    let trace = self.agent_traces.get(&id).cloned();
+                    let actions = agent_panel::draw_agent_detail(
+                        ui,
+                        info.as_ref(),
+                        trace.as_ref(),
+                        &mut self.agent_steer_txt,
+                        &open_in_browser,
+                    );
+                    if actions.pause {
+                        let _ = self.cmd_tx.send(Cmd::AgentPause { id: id.clone() });
+                    }
+                    if actions.kill {
+                        let _ = self.cmd_tx.send(Cmd::AgentKill { id: id.clone() });
+                    }
+                    if actions.resume {
+                        let _ = self.cmd_tx.send(Cmd::AgentResume { id: id.clone() });
+                    }
+                    if actions.retry {
+                        let _ = self.cmd_tx.send(Cmd::AgentRetry { id: id.clone() });
+                    }
+                    if let Some(text) = actions.steer {
+                        let _ = self.cmd_tx.send(Cmd::AgentSteer {
+                            id: id.clone(),
+                            text,
+                        });
+                        self.agent_steer_txt.clear();
+                    }
+                    if let Some(child) = actions.open_child {
+                        self.open_agent_tab(&child);
+                    }
+                } else {
+                    ui.weak("Sélectionnez un onglet.");
+                }
+            });
+    }
+
+    fn ui_settings(&mut self, ui: &mut egui::Ui) {
+        let t = i18n::strings(&self.prefs.language);
+        ui.heading(t.settings_title);
+        ui.separator();
+
+        ui.heading(t.settings_general);
+        ui.horizontal(|ui| {
+            ui.label(t.language);
+            for (code, label) in [("en", "English"), ("fr", "Français")] {
+                if ui
+                    .selectable_label(self.prefs.language == code, label)
+                    .clicked()
+                {
+                    self.prefs.language = code.into();
+                    self.onboarding.language = code.into();
+                    save_preferences(&self.prefs);
+                    save_onboarding(&self.onboarding);
+                    self.status = t.settings_saved.into();
+                }
+            }
+        });
+        ui.horizontal(|ui| {
+            ui.label(t.trust_default);
+            for (code, label) in [("low", t.trust_low), ("medium", t.trust_medium)] {
+                if ui
+                    .selectable_label(self.prefs.trust_default == code, label)
+                    .clicked()
+                {
+                    self.prefs.trust_default = code.into();
+                    self.onboarding.trust_default = code.into();
+                    save_preferences(&self.prefs);
+                    save_onboarding(&self.onboarding);
+                }
+            }
+        });
+
+        ui.add_space(8.0);
+        ui.heading(t.settings_models);
+        ui.horizontal(|ui| {
+            ui.label(t.routing);
+            for (code, label) in [
+                ("local_only", t.routing_local),
+                ("balanced", t.settings_routing_balanced),
+            ] {
+                if ui
+                    .selectable_label(self.prefs.routing == code, label)
+                    .clicked()
+                {
+                    self.prefs.routing = code.into();
+                    self.onboarding.routing = code.into();
+                    save_preferences(&self.prefs);
+                    save_onboarding(&self.onboarding);
+                    let _ = self.cmd_tx.send(Cmd::SetRouting {
+                        mode: code.to_string(),
+                    });
+                }
+            }
+        });
+        if ui.button(t.tab_models).clicked() {
+            self.tab = Tab::Models;
+        }
+
+        ui.add_space(8.0);
+        ui.heading(t.settings_network);
+        let mut online = self.prefs.network_online;
+        if ui.checkbox(&mut online, t.allow_network).changed() {
+            self.prefs.network_online = online;
+            self.network_online = online;
+            save_preferences(&self.prefs);
+            let _ = self.cmd_tx.send(Cmd::NetSetMode { online });
+        }
+
+        ui.add_space(8.0);
+        ui.heading(t.settings_agents);
+        ui.horizontal(|ui| {
+            ui.label(t.settings_default_model);
+            egui::ComboBox::from_id_salt("prefs_agent_model")
+                .selected_text(
+                    self.prefs
+                        .default_agent_model
+                        .clone()
+                        .unwrap_or_else(|| "default".into()),
+                )
+                .show_ui(ui, |ui| {
+                    if ui
+                        .selectable_label(self.prefs.default_agent_model.is_none(), "default")
+                        .clicked()
+                    {
+                        self.prefs.default_agent_model = None;
+                        self.agent_model_id.clear();
+                        save_preferences(&self.prefs);
+                    }
+                    for m in self.model_infos.clone() {
+                        let selected = self.prefs.default_agent_model.as_deref() == Some(m.id.as_str());
+                        if ui.selectable_label(selected, &m.id).clicked() {
+                            self.prefs.default_agent_model = Some(m.id.clone());
+                            self.agent_model_id = m.id;
+                            save_preferences(&self.prefs);
+                        }
+                    }
+                });
+        });
+        ui.horizontal(|ui| {
+            ui.label(t.settings_max_steps);
+            if ui
+                .add(egui::DragValue::new(&mut self.prefs.default_max_steps).range(1..=128))
+                .changed()
+            {
+                self.agent_max_steps = self.prefs.default_max_steps;
+                save_preferences(&self.prefs);
+            }
+        });
+        ui.horizontal(|ui| {
+            ui.label(t.settings_timeout);
+            if ui
+                .add(
+                    egui::DragValue::new(&mut self.prefs.default_timeout_secs).range(60..=86_400),
+                )
+                .changed()
+            {
+                self.agent_timeout_secs = self.prefs.default_timeout_secs;
+                save_preferences(&self.prefs);
+            }
+        });
+
+        ui.add_space(8.0);
+        ui.heading(t.settings_web);
+        ui.horizontal(|ui| {
+            ui.label(t.settings_search_engine);
+            egui::ComboBox::from_id_salt("prefs_search_engine")
+                .selected_text(&self.prefs.web_search_engine)
+                .show_ui(ui, |ui| {
+                    for eng in ["auto", "brave", "duckduckgo", "bing"] {
+                        if ui
+                            .selectable_label(self.prefs.web_search_engine == eng, eng)
+                            .clicked()
+                        {
+                            self.prefs.web_search_engine = eng.into();
+                            save_preferences(&self.prefs);
+                        }
+                    }
+                });
+        });
+        ui.horizontal(|ui| {
+            ui.label(t.settings_browse_chars);
+            if ui
+                .add(
+                    egui::DragValue::new(&mut self.prefs.web_browse_max_chars)
+                        .range(1000..=100_000),
+                )
+                .changed()
+            {
+                save_preferences(&self.prefs);
+            }
+        });
+        ui.horizontal(|ui| {
+            ui.label(t.settings_fetch_max);
+            if ui
+                .add(
+                    egui::DragValue::new(&mut self.prefs.web_fetch_max_bytes)
+                        .range(1024..=200_000_000),
+                )
+                .changed()
+            {
+                save_preferences(&self.prefs);
+            }
+        });
+        ui.weak(t.settings_brave_hint);
     }
 
     fn ui_models(&mut self, ui: &mut egui::Ui) {

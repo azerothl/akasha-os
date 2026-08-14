@@ -149,7 +149,7 @@ pub struct LoadRequest {
 }
 
 fn default_kv_tokens() -> u32 {
-    2048
+    8192
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -509,6 +509,106 @@ pub struct AgentInfo {
     pub parent_id: Option<String>,
     #[serde(default)]
     pub children: Vec<String>,
+    #[serde(default)]
+    pub tokens_used: u64,
+    #[serde(default)]
+    pub skills: Vec<String>,
+    #[serde(default)]
+    pub tools: Vec<String>,
+    #[serde(default)]
+    pub mcp_servers: Vec<String>,
+    /// Motif d'échec / blocage (bandeau UI).
+    #[serde(default)]
+    pub fail_reason: Option<String>,
+}
+
+/// Source citée par un tour (web, document, fetch).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AgentSource {
+    /// `web` | `document` | `fetch`
+    #[serde(default)]
+    pub kind: String,
+    #[serde(default)]
+    pub title: String,
+    /// URL ou chemin logique.
+    #[serde(default)]
+    pub locator: String,
+    #[serde(default)]
+    pub snippet: String,
+}
+
+/// Un tour Observe / Think / Act / Reflect (transparence F-UI-04).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AgentStepRecord {
+    pub step: u32,
+    #[serde(default)]
+    pub thought: String,
+    #[serde(default)]
+    pub response: String,
+    #[serde(default)]
+    pub action: String,
+    #[serde(default)]
+    pub args: serde_json::Value,
+    /// `native` | `module` | `mcp` | `runtime` | `unknown`
+    #[serde(default)]
+    pub tool_kind: String,
+    #[serde(default)]
+    pub mcp_server: Option<String>,
+    #[serde(default)]
+    pub skill: Option<String>,
+    #[serde(default)]
+    pub tool_result: String,
+    #[serde(default)]
+    pub reflection: Option<String>,
+    #[serde(default)]
+    pub duration_ms: u64,
+    #[serde(default)]
+    pub infer_ms: u64,
+    #[serde(default)]
+    pub tool_ms: u64,
+    #[serde(default)]
+    pub prompt_tokens: u32,
+    #[serde(default)]
+    pub generated_tokens: u32,
+    #[serde(default)]
+    pub ttft_ms: f64,
+    #[serde(default)]
+    pub tok_s: f64,
+    #[serde(default)]
+    pub current_task: Option<String>,
+    #[serde(default)]
+    pub ts_ms: u64,
+    #[serde(default)]
+    pub fail_reason: Option<String>,
+    #[serde(default)]
+    pub child_id: Option<String>,
+    #[serde(default)]
+    pub sources: Vec<AgentSource>,
+}
+
+/// Journal complet d'un agent (`agent.trace`).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AgentTrace {
+    pub agent_id: String,
+    #[serde(default)]
+    pub steps: Vec<AgentStepRecord>,
+    #[serde(default)]
+    pub tokens_used: u64,
+    #[serde(default)]
+    pub total_duration_ms: u64,
+    #[serde(default)]
+    pub skills: Vec<String>,
+    #[serde(default)]
+    pub tools: Vec<String>,
+    #[serde(default)]
+    pub mcp_servers: Vec<String>,
+    #[serde(default)]
+    pub reflections: Vec<String>,
+    /// Mémoire de travail (repli si `steps` est vide).
+    #[serde(default)]
+    pub working_memory: Vec<(String, String)>,
+    #[serde(default)]
+    pub fail_reason: Option<String>,
 }
 
 /// Élément du flux `agent.output` (journal temps réel d'un agent).
@@ -527,6 +627,8 @@ pub enum AgentOutputEvent {
     ChildDone { child_id: String, result: String },
     Reflection { text: String },
     PlanUpdated { nodes: Vec<TaskNode> },
+    /// Tour agentic terminé.
+    Step(AgentStepRecord),
 }
 
 // ---------------------------------------------------------------------------
@@ -1330,10 +1432,17 @@ pub struct WebSearchRequest {
     pub caps: Vec<String>,
     #[serde(default)]
     pub actor: String,
+    /// `auto` | `brave` | `duckduckgo` | `bing` (défaut `auto`).
+    #[serde(default = "default_search_engine")]
+    pub engine: String,
 }
 
 fn default_search_n() -> usize {
     5
+}
+
+fn default_search_engine() -> String {
+    "auto".into()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1346,6 +1455,31 @@ pub struct WebSearchHit {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WebSearchResponse {
     pub results: Vec<WebSearchHit>,
+}
+
+/// `web.browse` — lecture HTML → texte (sans JS).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WebBrowseRequest {
+    pub url: String,
+    #[serde(default = "default_browse_chars")]
+    pub max_chars: usize,
+    #[serde(default)]
+    pub caps: Vec<String>,
+    #[serde(default)]
+    pub actor: String,
+}
+
+fn default_browse_chars() -> usize {
+    12_000
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WebBrowseResponse {
+    pub url: String,
+    pub final_url: String,
+    pub title: String,
+    pub text: String,
+    pub bytes: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

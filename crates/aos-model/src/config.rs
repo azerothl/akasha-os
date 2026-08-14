@@ -70,7 +70,7 @@ fn default_reserve_ram() -> u64 {
     4 << 30
 }
 fn default_kv() -> u32 {
-    2048
+    8192
 }
 fn default_threads() -> i32 {
     8

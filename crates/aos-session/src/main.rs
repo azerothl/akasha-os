@@ -332,8 +332,28 @@ fn ensure_installed_files_present(home: &Path) -> Result<(), String> {
         // Fall back to legacy manifest download once.
         return bootstrap::ensure_models(home);
     }
-    let ids: Vec<String> = inst.models.iter().map(|m| m.id.clone()).collect();
-    offerings::download_ids(home, &ids)
+    let dir = home.join("share/models");
+    let mut missing = Vec::new();
+    for m in &inst.models {
+        let path = dir.join(&m.filename);
+        if !path.exists() {
+            missing.push(m.id.clone());
+            continue;
+        }
+        if m.bytes > 0 {
+            if let Ok(meta) = std::fs::metadata(&path) {
+                let lo = m.bytes.saturating_mul(99) / 100;
+                if meta.len() < lo {
+                    missing.push(m.id.clone());
+                }
+            }
+        }
+    }
+    if missing.is_empty() {
+        return Ok(());
+    }
+    // Télécharge uniquement les manquants (nécessite catalog-offerings.json).
+    offerings::download_ids(home, &missing)
 }
 
 fn resolve_home() -> PathBuf {
@@ -399,13 +419,30 @@ fn ensure_layout(home: &Path) {
         let _ = fs::create_dir_all(home.join(d));
     }
 
-    // Catalogue offerings (copie depuis le repo / share si absent).
+    // Catalogue offerings (copie depuis le package / repo si absent).
     let offerings_dst = home.join("share/models/catalog-offerings.json");
     if !offerings_dst.exists() {
-        for cand in [
+        let mut cands = vec![
             PathBuf::from("share/models/catalog-offerings.json"),
             home.join("share/models/catalog-offerings.json"),
-        ] {
+        ];
+        // Raccourci : à côté de bin/aos-session (package Preview).
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(bin) = exe.parent() {
+                cands.push(bin.join("../share/models/catalog-offerings.json"));
+                if let Some(home2) = bin.parent() {
+                    cands.push(home2.join("share/models/catalog-offerings.json"));
+                }
+            }
+        }
+        for cand in cands {
+            let Ok(cand) = cand.canonicalize() else {
+                if cand.exists() && cand != offerings_dst {
+                    let _ = fs::copy(&cand, &offerings_dst);
+                    break;
+                }
+                continue;
+            };
             if cand.exists() && cand != offerings_dst {
                 let _ = fs::copy(&cand, &offerings_dst);
                 break;
@@ -553,9 +590,9 @@ vram_total_bytes: {vram_total}
 os_reserve_vram_bytes: {os_reserve_vram}
 os_reserve_ram_bytes: 4294967296
 default_model: {default_chat}
-default_kv_tokens: 2048
+default_kv_tokens: 8192
 n_threads: 8
-n_seq_max: 8
+n_seq_max: 4
 batch_window_ms: 150
 routing: local_only
 
@@ -567,6 +604,20 @@ models:
             models_yaml = models_yaml,
         );
         let _ = fs::write(&modeld, yaml);
+    } else {
+        // Migration douce : remonter le contexte KV pour les agents (évite PromptTooLong).
+        if let Ok(raw) = fs::read_to_string(&modeld) {
+            let mut next = raw.clone();
+            if next.contains("default_kv_tokens: 2048") {
+                next = next.replace("default_kv_tokens: 2048", "default_kv_tokens: 8192");
+            }
+            if next.contains("n_seq_max: 8\n") && next.contains("default_kv_tokens: 8192") {
+                next = next.replace("n_seq_max: 8\n", "n_seq_max: 4\n");
+            }
+            if next != raw {
+                let _ = fs::write(&modeld, next);
+            }
+        }
     }
 
     let platformd = home.join("etc/platformd.yaml");

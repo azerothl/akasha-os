@@ -170,6 +170,7 @@ impl PlatformSubsystem {
         // Caps réseau de base pour la recherche (activées seulement si online).
         net.grant("net.connect:html.duckduckgo.com:443".into());
         net.grant("net.connect:api.search.brave.com:443".into());
+        net.grant("net.connect:www.bing.com:443".into());
         let sub = Arc::new(Self {
             audit: Mutex::new(audit),
             fs: Mutex::new(fs),
@@ -570,6 +571,7 @@ impl HostServices for PlatformSubsystem {
                     .get("brave_search_api_key", "service:platformd")
                     .ok();
                 let mut net = self.net.lock().unwrap();
+                let engine = args["engine"].as_str().unwrap_or("auto");
                 let resp = crate::net_services::web_search(
                     &mut net,
                     &format!("module:{}", ctx.module),
@@ -577,6 +579,7 @@ impl HostServices for PlatformSubsystem {
                     query,
                     max,
                     brave.as_deref(),
+                    engine,
                 )
                 .map_err(|e| e.to_string())?;
                 self.audit(AuditAppendRequest {
@@ -584,6 +587,31 @@ impl HostServices for PlatformSubsystem {
                     actor: format!("module:{}", ctx.module),
                     action: "web.search".into(),
                     target: query.into(),
+                    detail: serde_json::json!({"on_behalf_of": ctx.actor}),
+                });
+                Ok(serde_json::to_value(resp).unwrap_or_default())
+            }
+            "web.browse" => {
+                let has_net = ctx.granted_caps.iter().any(|c| c.starts_with("net.connect:"));
+                if !has_net {
+                    return Err("permission refusée: net.connect requis pour web.browse".into());
+                }
+                let url = args["url"].as_str().unwrap_or("");
+                let max_chars = args["max_chars"].as_u64().unwrap_or(12_000) as usize;
+                let mut net = self.net.lock().unwrap();
+                let resp = crate::net_services::web_browse(
+                    &mut net,
+                    &format!("module:{}", ctx.module),
+                    &ctx.granted_caps,
+                    url,
+                    max_chars,
+                )
+                .map_err(|e| e.to_string())?;
+                self.audit(AuditAppendRequest {
+                    trace_id: ctx.trace_id.clone(),
+                    actor: format!("module:{}", ctx.module),
+                    action: "web.browse".into(),
+                    target: url.into(),
                     detail: serde_json::json!({"on_behalf_of": ctx.actor}),
                 });
                 Ok(serde_json::to_value(resp).unwrap_or_default())

@@ -10,10 +10,10 @@ vram_total_bytes: 8589934592        # 8 GiB — budget gate P1
 os_reserve_vram_bytes: 1073741824   # 1 GiB (affichage + buffers de calcul)
 os_reserve_ram_bytes: 4294967296    # 4 GiB
 default_model: local:embedded-instruct
-default_kv_tokens: 2048
+default_kv_tokens: 8192
 n_threads: 8
-# P5.1 continuous batching : jusqu'à 8 séquences / decode.
-n_seq_max: 8
+# P5.1 continuous batching : jusqu'à 4 séquences / decode (contexte agent ~8k).
+n_seq_max: 4
 batch_window_ms: 150
 
 models:

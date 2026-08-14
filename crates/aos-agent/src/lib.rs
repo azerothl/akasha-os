@@ -25,7 +25,9 @@ pub mod intents {
     pub const LIST: &str = "agent.list";
     pub const SUBSCRIBE: &str = "agent.subscribe";
     pub const SNAPSHOT: &str = "agent.snapshot";
+    pub const TRACE: &str = "agent.trace";
     pub const REPORT: &str = "agent.report";
+    pub const RETRY: &str = "agent.retry";
     pub const PROMPT_OPTIMIZE: &str = "agent.prompt.optimize";
     pub const GRANT: &str = "agent.grant";
     pub const SKILL_LIST: &str = "skill.list";

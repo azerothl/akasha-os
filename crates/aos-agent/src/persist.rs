@@ -1,6 +1,6 @@
 //! Persistance agents : `var/agents/<id>/spec.json` + `state.json` + registry.
 
-use aos_proto::{AgentInfo, AgentSpec};
+use aos_proto::{AgentInfo, AgentSpec, AgentTrace};
 use std::path::{Path, PathBuf};
 
 use crate::CognitiveState;
@@ -42,6 +42,52 @@ pub fn read_state(agent_id: &str) -> Option<CognitiveState> {
     let path = agent_dir(agent_id).join("state.json");
     let raw = std::fs::read_to_string(path).ok()?;
     CognitiveState::from_json(&raw).ok()
+}
+
+/// Journal des tours (mémoire + spec disque).
+pub fn load_trace(agent_id: &str) -> AgentTrace {
+    let spec = read_spec(agent_id);
+    let state = read_state(agent_id);
+    assemble_trace(agent_id, spec.as_ref(), state.as_ref(), None)
+}
+
+/// Assemble un `AgentTrace` depuis spec / état cognitif / tours déjà en mémoire.
+pub fn assemble_trace(
+    agent_id: &str,
+    spec: Option<&AgentSpec>,
+    state: Option<&CognitiveState>,
+    live_steps: Option<&[aos_proto::AgentStepRecord]>,
+) -> AgentTrace {
+    let steps = live_steps
+        .map(|s| s.to_vec())
+        .or_else(|| state.map(|s| s.trace.clone()))
+        .unwrap_or_default();
+    let tokens_used = live_steps
+        .map(|s| s.iter().map(|x| x.generated_tokens as u64).sum())
+        .or_else(|| state.map(|s| s.tokens_used))
+        .unwrap_or(0);
+    let fail_reason = steps
+        .iter()
+        .rev()
+        .find_map(|s| s.fail_reason.clone())
+        .or_else(|| {
+            std::fs::read_to_string(agent_dir(agent_id).join("info.json"))
+                .ok()
+                .and_then(|s| serde_json::from_str::<AgentInfo>(&s).ok())
+                .and_then(|i| i.fail_reason)
+        });
+    AgentTrace {
+        agent_id: agent_id.to_string(),
+        tokens_used,
+        total_duration_ms: steps.iter().map(|s| s.duration_ms).sum(),
+        skills: spec.map(|s| s.skills.clone()).unwrap_or_default(),
+        tools: spec.map(|s| s.tools.clone()).unwrap_or_default(),
+        mcp_servers: spec.map(|s| s.mcp_servers.clone()).unwrap_or_default(),
+        reflections: state.map(|s| s.reflections.clone()).unwrap_or_default(),
+        working_memory: state.map(|s| s.working_memory.clone()).unwrap_or_default(),
+        steps,
+        fail_reason,
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]

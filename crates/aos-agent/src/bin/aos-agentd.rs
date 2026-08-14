@@ -14,8 +14,8 @@ use aos_ipc::{BusClient, BusService};
 use aos_proto::{
     AgentCreateRequest, AgentCreateResponse, AgentIdRequest, AgentInfo,
     AgentOutputEvent, AgentPromptOptimizeRequest, AgentPromptOptimizeResponse, AgentSpec,
-    AgentStartRequest, AgentState, AgentSteerRequest, ChatMessage, InferParams, InferRequest,
-    McpServerInfo, SkillInfo, TokenEvent,
+    AgentStartRequest, AgentState, AgentSteerRequest, AgentStepRecord, AgentTrace, ChatMessage,
+    InferParams, InferRequest, McpServerInfo, SkillInfo, TokenEvent,
 };
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -26,6 +26,7 @@ use tokio::sync::{mpsc, Mutex};
 struct AgentEntry {
     info: AgentInfo,
     subscribers: Vec<mpsc::Sender<AgentOutputEvent>>,
+    trace: Vec<AgentStepRecord>,
 }
 
 struct Runtime {
@@ -39,7 +40,8 @@ type Shared = Arc<Mutex<Runtime>>;
 async fn broadcast(entry: &mut AgentEntry, event: &AgentOutputEvent) {
     entry.subscribers.retain(|tx| !tx.is_closed());
     for tx in &entry.subscribers {
-        let _ = tx.send(event.clone()).await;
+        // try_send : un abonné lent ne doit pas figer agent.report / le worker.
+        let _ = tx.try_send(event.clone());
     }
 }
 
@@ -118,6 +120,14 @@ async fn spawn_worker(
     let child = cmd.spawn().map_err(|e| format!("spawn worker: {e}"))?;
     let pid = child.id();
 
+    let restored = if restore {
+        persist::read_state(agent_id)
+    } else {
+        None
+    };
+    let restored_trace = restored.as_ref().map(|s| s.trace.clone()).unwrap_or_default();
+    let restored_tokens = restored.as_ref().map(|s| s.tokens_used).unwrap_or(0);
+
     {
         let mut rt = shared.lock().await;
         // Mint caps
@@ -140,13 +150,22 @@ async fn spawn_worker(
                     pid,
                     caps: spec.caps.clone(),
                     last_output: String::new(),
-                    step: 0,
+                    step: restored.as_ref().map(|s| s.step).unwrap_or(0),
                     max_steps: spec.goal.max_steps,
                     current_task: None,
                     parent_id: spec.parent_id.clone(),
-                    children: Vec::new(),
+                    children: restored
+                        .as_ref()
+                        .map(|s| s.children.clone())
+                        .unwrap_or_default(),
+                    tokens_used: restored_tokens,
+                    skills: spec.skills.clone(),
+                    tools: spec.tools.clone(),
+                    mcp_servers: spec.mcp_servers.clone(),
+                    fail_reason: None,
                 },
                 subscribers: Vec::new(),
+                trace: restored_trace,
             },
         );
         persist::update_info_sidecar(&rt.agents[agent_id].info);
@@ -329,6 +348,146 @@ async fn main() {
             }
         });
     }
+    // --- agent.retry ---
+    {
+        let shared = shared.clone();
+        let bus2 = bus.clone();
+        let bus_addr2 = bus_addr.clone();
+        svc.on(intents::RETRY, move |ctx| {
+            let shared = shared.clone();
+            let bus = bus2.clone();
+            let bus_addr = bus_addr2.clone();
+            async move {
+                match ctx.payload::<AgentIdRequest>() {
+                    Ok(req) => {
+                        let (state, pid, fail_reason, last_action) = {
+                            let rt = shared.lock().await;
+                            match rt.agents.get(&req.agent_id) {
+                                Some(e) => {
+                                    let last_action = e
+                                        .trace
+                                        .last()
+                                        .map(|s| s.action.clone())
+                                        .unwrap_or_default();
+                                    (
+                                        e.info.state.clone(),
+                                        e.info.pid,
+                                        e.info.fail_reason.clone(),
+                                        last_action,
+                                    )
+                                }
+                                None => {
+                                    let _ = ctx
+                                        .respond_error(
+                                            aos_ipc::msg::Status::NotFound,
+                                            "agent inconnu",
+                                        )
+                                        .await;
+                                    return;
+                                }
+                            }
+                        };
+
+                        match state {
+                            AgentState::Paused | AgentState::Blocked if pid.is_some() => {
+                                let steer = format!(
+                                    "continue — lève le blocage ({})",
+                                    fail_reason.unwrap_or_else(|| "attente".into())
+                                );
+                                let _ = send_control(
+                                    &bus,
+                                    &req.agent_id,
+                                    &ControlCmd::Steer { directive: steer },
+                                )
+                                .await;
+                                let r =
+                                    send_control(&bus, &req.agent_id, &ControlCmd::Resume).await;
+                                {
+                                    let mut rt = shared.lock().await;
+                                    if let Some(e) = rt.agents.get_mut(&req.agent_id) {
+                                        e.info.fail_reason = None;
+                                        e.info.state = AgentState::Running;
+                                        persist::update_info_sidecar(&e.info);
+                                    }
+                                }
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &r).await;
+                            }
+                            AgentState::Failed | AgentState::Killed | AgentState::Done
+                                if pid.is_none() =>
+                            {
+                                let Some(mut spec) = persist::read_spec(&req.agent_id) else {
+                                    let _ = ctx
+                                        .respond_error(
+                                            aos_ipc::msg::Status::NotFound,
+                                            "spec introuvable",
+                                        )
+                                        .await;
+                                    return;
+                                };
+                                let reason = fail_reason
+                                    .clone()
+                                    .unwrap_or_else(|| "échec inconnu".into());
+                                if reason.contains("max_steps") {
+                                    spec.goal.max_steps = spec.goal.max_steps.saturating_add(8);
+                                    if let Some(ms) = spec.budget.max_steps.as_mut() {
+                                        *ms = ms.saturating_add(8);
+                                    }
+                                    let _ = persist::write_spec(&spec);
+                                }
+                                if let Some(mut st) = persist::read_state(&req.agent_id) {
+                                    st.push_user(&format!(
+                                        "[retry] dernière action `{last_action}` a échoué : {reason}. Réessaie autrement."
+                                    ));
+                                    let _ = persist::write_state(&st);
+                                }
+                                match spawn_worker(
+                                    &shared,
+                                    &bus_addr,
+                                    &req.agent_id,
+                                    &spec,
+                                    true,
+                                )
+                                .await
+                                {
+                                    Ok(_) => {
+                                        let mut rt = shared.lock().await;
+                                        if let Some(e) = rt.agents.get_mut(&req.agent_id) {
+                                            e.info.fail_reason = None;
+                                            e.info.state = AgentState::Running;
+                                            e.info.max_steps = spec.goal.max_steps;
+                                            persist::update_info_sidecar(&e.info);
+                                        }
+                                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &true).await;
+                                    }
+                                    Err(e) => {
+                                        let _ = ctx
+                                            .respond_error(
+                                                aos_ipc::msg::Status::InternalError,
+                                                &e,
+                                            )
+                                            .await;
+                                    }
+                                }
+                            }
+                            other => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::BadRequest,
+                                        &format!("retry impossible depuis l'état {other:?}"),
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
     {
         let bus2 = bus.clone();
         svc.on(intents::STEER, move |ctx| {
@@ -434,6 +593,62 @@ async fn main() {
         });
     }
 
+    // --- agent.trace ---
+    {
+        let shared = shared.clone();
+        svc.on(intents::TRACE, move |ctx| {
+            let shared = shared.clone();
+            async move {
+                match ctx.payload::<AgentIdRequest>() {
+                    Ok(req) => {
+                        let live: Option<(AgentTrace, Option<String>)> = {
+                            let rt = shared.lock().await;
+                            rt.agents.get(&req.agent_id).map(|e| {
+                                let mut t = persist::assemble_trace(
+                                    &req.agent_id,
+                                    persist::read_spec(&req.agent_id).as_ref(),
+                                    persist::read_state(&req.agent_id).as_ref(),
+                                    Some(&e.trace),
+                                );
+                                if t.fail_reason.is_none() {
+                                    t.fail_reason = e.info.fail_reason.clone();
+                                }
+                                (t, e.info.fail_reason.clone())
+                            })
+                        };
+                        let mut trace = live
+                            .map(|(t, _)| t)
+                            .unwrap_or_else(|| persist::load_trace(&req.agent_id));
+                        if trace.fail_reason.is_none() {
+                            if let Ok(info) = std::fs::read_to_string(
+                                persist::agent_dir(&req.agent_id).join("info.json"),
+                            ) {
+                                if let Ok(i) = serde_json::from_str::<AgentInfo>(&info) {
+                                    trace.fail_reason = i.fail_reason;
+                                }
+                            }
+                        }
+                        if trace.steps.is_empty()
+                            && trace.working_memory.is_empty()
+                            && persist::read_spec(&req.agent_id).is_none()
+                        {
+                            let _ = ctx
+                                .respond_error(aos_ipc::msg::Status::NotFound, "agent inconnu")
+                                .await;
+                        } else {
+                            let _ = ctx.respond(aos_ipc::msg::Status::Ok, &trace).await;
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+
     // --- subscribe ---
     {
         let shared = shared.clone();
@@ -489,6 +704,15 @@ async fn main() {
                                 }
                                 AgentOutputEvent::StateChanged { state } => {
                                     entry.info.state = state.clone();
+                                    if matches!(
+                                        state,
+                                        AgentState::Running | AgentState::Done
+                                    ) {
+                                        entry.info.fail_reason = None;
+                                    }
+                                }
+                                AgentOutputEvent::Error { message } => {
+                                    entry.info.fail_reason = Some(message.clone());
                                 }
                                 AgentOutputEvent::Progress {
                                     step,
@@ -498,11 +722,29 @@ async fn main() {
                                     entry.info.step = *step;
                                     entry.info.max_steps = *max_steps;
                                     entry.info.current_task = current_task.clone();
+                                    // Nouveau tour → le flux UI repart de zéro
+                                    entry.info.last_output.clear();
                                 }
                                 AgentOutputEvent::ChildSpawned { child_id, .. } => {
                                     if !entry.info.children.contains(child_id) {
                                         entry.info.children.push(child_id.clone());
                                     }
+                                }
+                                AgentOutputEvent::Step(rec) => {
+                                    if let Some(existing) =
+                                        entry.trace.iter_mut().find(|s| s.step == rec.step)
+                                    {
+                                        *existing = rec.clone();
+                                    } else {
+                                        entry.trace.push(rec.clone());
+                                    }
+                                    entry.info.tokens_used =
+                                        entry.trace.iter().map(|s| s.generated_tokens as u64).sum();
+                                    if let Some(reason) = &rec.fail_reason {
+                                        entry.info.fail_reason = Some(reason.clone());
+                                    }
+                                    // Tour terminé : ne plus afficher le flux partiel
+                                    entry.info.last_output.clear();
                                 }
                                 _ => {}
                             }

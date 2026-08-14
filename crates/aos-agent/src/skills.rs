@@ -186,6 +186,46 @@ pub fn merge_skill_tools(selected_tools: &[String], skills: &[SkillDoc]) -> Vec<
     out
 }
 
+fn normalize_skill_key(name: &str) -> String {
+    name.trim()
+        .to_ascii_lowercase()
+        .replace(['.', '_'], "-")
+}
+
+/// Si `action` est un nom de skill (ou variante `file.author` / `file_author`),
+/// renvoie la skill correspondante.
+pub fn match_skill_by_action<'a>(action: &str, skills: &'a [SkillDoc]) -> Option<&'a SkillDoc> {
+    let key = normalize_skill_key(action);
+    skills
+        .iter()
+        .find(|s| normalize_skill_key(&s.name) == key)
+}
+
+/// Message de correction quand le modèle appelle une skill comme outil.
+pub fn skill_misuse_hint(action: &str, skill: &SkillDoc) -> String {
+    let tools = if skill.tools.is_empty() {
+        "(aucun outil déclaré — choisis un outil du catalogue)".to_string()
+    } else {
+        skill
+            .tools
+            .iter()
+            .map(|t| format!("`{t}`"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    format!(
+        "`{action}` est la skill `{}`, pas un outil. \
+         Réessaie avec action = un de : {tools}. \
+         Exemple : {{\"thought\":\"…\",\"action\":\"{}\",\"args\":{{…}}}}",
+        skill.name,
+        skill
+            .tools
+            .first()
+            .map(|s| s.as_str())
+            .unwrap_or("web.search")
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -206,5 +246,24 @@ Corps de la skill.
         assert_eq!(doc.name, "notes-writer");
         assert_eq!(doc.tools.len(), 2);
         assert!(doc.body.contains("Notes writer"));
+    }
+
+    #[test]
+    fn match_skill_dot_alias() {
+        let skill = SkillDoc {
+            name: "file-author".into(),
+            description: "files".into(),
+            when_to_use: String::new(),
+            tools: vec!["fs.write".into(), "files.generate".into()],
+            required_caps: vec![],
+            body: String::new(),
+            path: PathBuf::from("skills/file-author/SKILL.md"),
+        };
+        let skills = [skill];
+        let hit = match_skill_by_action("file.author", &skills).unwrap();
+        assert_eq!(hit.name, "file-author");
+        let hint = skill_misuse_hint("file.author", hit);
+        assert!(hint.contains("fs.write"));
+        assert!(hint.contains("skill"));
     }
 }

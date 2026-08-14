@@ -3,29 +3,31 @@
 //! Usage : `aos-agent-worker --agent-id <id> --bus <addr> --spec-path <path>
 //!          [--restore]`
 
-use aos_agent::actions::{parse_action, AgentAction};
+use aos_agent::actions::{parse_action, strip_reasoning, AgentAction};
 use aos_agent::mcp::{open_mcp_tools, McpSession};
 use aos_agent::persist::{self, compact_working_memory};
 use aos_agent::prompt::{compile_system_prompt, optimize_prompt_request, PromptCompileInput};
-use aos_agent::skills::{load_skills, merge_skill_tools};
+use aos_agent::skills::{load_skills, match_skill_by_action, merge_skill_tools, skill_misuse_hint, SkillDoc};
 use aos_agent::tools::{
-    caps_for_tools, caps_subset, select_tools, ToolBackend, ToolDesc,
+    caps_for_tools, caps_subset, classify_action, select_tools, ToolBackend, ToolDesc,
 };
 use aos_agent::{intents, CognitiveState, ControlCmd, ControlResp, ReportPayload};
 use aos_ipc::{BusClient, BusService};
 use aos_proto::{
     AgentCreateRequest, AgentCreateResponse, AgentGoal, AgentInfo, AgentOutputEvent, AgentSpec,
-    AgentState, CancelRequest, ChatMessage, DocumentRef, FilesGenerateRequest, FsListRequest,
-    FsReadRequest, FsReadResponse, FsWriteRequest, InferParams, InferRequest, MemContextRequest,
-    MemContextResponse, MemEpisodicQueryRequest, MemEpisodicWriteRequest, MemHit,
-    MemSharedReadRequest, MemSharedWriteRequest, ModuleInvokeRequest, ModuleInvokeResponse,
-    NetFetchRequest, TaskNode, TaskNodeStatus, TokenEvent, WebSearchRequest, WebSearchResponse,
+    AgentSource, AgentState, AgentStepRecord, CancelRequest, ChatMessage, DocumentRef,
+    FilesGenerateRequest, FsListRequest, FsReadRequest, FsReadResponse, FsWriteRequest, InferParams,
+    InferRequest, MemContextRequest, MemContextResponse, MemEpisodicQueryRequest,
+    MemEpisodicWriteRequest, MemHit, MemSharedReadRequest, MemSharedWriteRequest,
+    ModuleInvokeRequest, ModuleInvokeResponse, NetFetchRequest, TaskNode, TaskNodeStatus,
+    TokenEvent, WebBrowseRequest, WebBrowseResponse, WebSearchHit, WebSearchRequest,
+    WebSearchResponse,
 };
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::{mpsc, Mutex};
 
 enum WorkerCmd {
@@ -238,10 +240,25 @@ async fn main() {
         let mut st = shared.state.lock().await;
         if !restore || st.step == 0 {
             st.push_user(&format!(
-                "Goal à accomplir : {}\nCritères : {:?}\nCommence par plan.update si la tâche est complexe, sinon agis.",
+                "Goal à accomplir : {}\nCritères : {:?}\n\
+                 La mémoire vient d'être consultée (voir [mem.bootstrap]). \
+                 Réutilise ces infos ; si insuffisant, memory.recall avec une requête plus précise \
+                 avant toute recherche externe. Ensuite plan.update si la tâche est complexe, sinon agis.",
                 spec.goal.statement, spec.goal.success_criteria
             ));
         }
+    }
+
+    // Observe: toujours interroger la mémoire au démarrage (sauf restore mid-run)
+    if !restore || shared.state.lock().await.step == 0 {
+        bootstrap_memory_recall(
+            &bus,
+            &shared,
+            &agent_id,
+            &spec.goal.statement,
+            "démarrage",
+        )
+        .await;
     }
 
     let mut pending_steer: Option<String> = None;
@@ -286,6 +303,8 @@ async fn main() {
                 },
             )
             .await;
+            // Nouvelle demande → reconsulter la mémoire sur le sujet
+            bootstrap_memory_recall(&bus, &shared, &agent_id, &d, "steer").await;
         }
 
         // Non-blocking drain of steer while running
@@ -305,11 +324,20 @@ async fn main() {
         };
 
         if step > max_steps {
+            let reason = format!("max_steps ({max_steps}) atteint");
+            report(
+                &bus,
+                &agent_id,
+                AgentOutputEvent::Error {
+                    message: reason.clone(),
+                },
+            )
+            .await;
             report(
                 &bus,
                 &agent_id,
                 AgentOutputEvent::Log {
-                    line: format!("max_steps ({max_steps}) atteint"),
+                    line: reason,
                 },
             )
             .await;
@@ -317,11 +345,20 @@ async fn main() {
             break;
         }
         if started.elapsed() > timeout {
+            let reason = "timeout goal atteint".to_string();
+            report(
+                &bus,
+                &agent_id,
+                AgentOutputEvent::Error {
+                    message: reason.clone(),
+                },
+            )
+            .await;
             report(
                 &bus,
                 &agent_id,
                 AgentOutputEvent::Log {
-                    line: "timeout goal atteint".into(),
+                    line: reason,
                 },
             )
             .await;
@@ -331,20 +368,45 @@ async fn main() {
         if let Some(max_tok) = spec.budget.max_tokens {
             let used = shared.state.lock().await.tokens_used;
             if used >= max_tok {
+                let reason = format!("budget tokens atteint ({used}/{max_tok})");
+                report(
+                    &bus,
+                    &agent_id,
+                    AgentOutputEvent::Error {
+                        message: reason,
+                    },
+                )
+                .await;
                 terminal = Some(AgentState::Failed);
                 break;
             }
         }
 
-        // Observe: inject mem.context periodically
-        if step == 1 || step % 4 == 0 {
-            inject_mem_context(&bus, &shared, &spec.goal.statement).await;
+        // Observe: rappel mémoire périodique (démarrage déjà fait via bootstrap)
+        if step > 1 && step % 4 == 0 {
+            inject_mem_context(&bus, &shared, &agent_id, &spec.goal.statement).await;
         }
 
-        // Compact if needed
+        // Compact if needed (agressif : outils / skills gonflent vite le prompt)
         {
             let mut st = shared.state.lock().await;
-            if let Some(sum) = compact_working_memory(&mut st.working_memory, 12) {
+            // Tronque aussi les injections système trop longues (mem.context, reflect…)
+            for (role, content) in st.working_memory.iter_mut() {
+                if role == "system" && content.len() > 6000 && !content.starts_with("You are") {
+                    // garde les system de base plus longs ; tronque les injections
+                    if content.starts_with("[mem.context]")
+                        || content.starts_with("[mem.bootstrap]")
+                        || content.starts_with("[reflect]")
+                        || content.starts_with("[compaction]")
+                    {
+                        *content = format!(
+                            "{}…",
+                            content.chars().take(2000).collect::<String>()
+                        );
+                    }
+                }
+            }
+            if let Some(sum) = compact_working_memory(&mut st.working_memory, 6) {
                 let _ = bus
                     .call::<MemEpisodicWriteRequest, u64>(
                         "mem.episodic_write",
@@ -372,8 +434,10 @@ async fn main() {
         )
         .await;
 
+        let step_t0 = Instant::now();
+        let infer_t0 = Instant::now();
         // Think
-        let full_text = match infer_turn(
+        let infer = match infer_turn(
             &bus,
             &shared,
             &spec,
@@ -399,12 +463,28 @@ async fn main() {
                 continue;
             }
         };
+        let infer_ms = infer_t0.elapsed().as_millis() as u64;
+        let (reasoning, clean_text) = aos_agent::actions::split_reasoning(&infer.text);
+        let full_text = if clean_text.is_empty() && !reasoning.is_empty() {
+            // Budget tokens mangé par le raisonnement → pas d'action visible
+            String::new()
+        } else {
+            clean_text
+        };
 
-        shared.state.lock().await.push_assistant(&full_text);
+        shared.state.lock().await.push_assistant(if full_text.is_empty() {
+            "[output sans action JSON — éviter <think>, répondre en JSON]"
+        } else {
+            &full_text
+        });
 
         // Act
-        let action = parse_action(&full_text).unwrap_or(AgentAction {
-            thought: String::new(),
+        let action = parse_action(&infer.text).unwrap_or(AgentAction {
+            thought: if reasoning.is_empty() {
+                String::new()
+            } else {
+                reasoning.chars().take(400).collect()
+            },
             action: "noop".into(),
             args: serde_json::json!({}),
         });
@@ -422,15 +502,22 @@ async fn main() {
         )
         .await;
 
+        let tool_t0 = Instant::now();
         let act_result = execute_action(
             &bus,
             &shared,
             &mut spec,
             &tools,
+            &skill_docs,
             &mut mcp_sessions,
             &action,
         )
         .await;
+        let tool_ms = tool_t0.elapsed().as_millis() as u64;
+        let mut tool_result;
+        let mut step_fail_reason: Option<String> = None;
+        let mut step_child_id: Option<String> = None;
+        let mut step_sources: Vec<AgentSource> = Vec::new();
 
         match act_result {
             ActResult::Continue(outcome) => {
@@ -459,6 +546,21 @@ async fn main() {
                         action.action
                     ));
                 }
+                tool_result = outcome.clone();
+                step_child_id = extract_child_id(&action.action, &outcome, &action.args);
+                step_sources = collect_sources(&action.action, &action.args, &outcome);
+                if action.action == "web.search" && !step_sources.is_empty() {
+                    tool_result = format!(
+                        "{} résultat(s) : {}",
+                        step_sources.len(),
+                        step_sources
+                            .iter()
+                            .take(3)
+                            .map(|s| s.title.as_str())
+                            .collect::<Vec<_>>()
+                            .join(" · ")
+                    );
+                }
                 if !outcome.is_empty() {
                     shared
                         .state
@@ -468,6 +570,7 @@ async fn main() {
                 }
             }
             ActResult::Complete(summary) => {
+                tool_result = summary.clone();
                 // Verifier pass
                 let ok = verify_goal(&bus, &shared, &spec, &summary).await;
                 if ok {
@@ -507,6 +610,16 @@ async fn main() {
                 }
             }
             ActResult::Fail(reason) => {
+                tool_result = reason.clone();
+                step_fail_reason = Some(reason.clone());
+                report(
+                    &bus,
+                    &agent_id,
+                    AgentOutputEvent::Error {
+                        message: reason.clone(),
+                    },
+                )
+                .await;
                 report(
                     &bus,
                     &agent_id,
@@ -530,7 +643,19 @@ async fn main() {
                 }
                 terminal = Some(AgentState::Failed);
             }
-            ActResult::Blocked => {
+            ActResult::Blocked { reason, child_id } => {
+                tool_result = reason.clone();
+                step_fail_reason = Some(reason.clone());
+                step_child_id = child_id;
+                shared.paused.store(true, Ordering::SeqCst);
+                report(
+                    &bus,
+                    &agent_id,
+                    AgentOutputEvent::Error {
+                        message: reason.clone(),
+                    },
+                )
+                .await;
                 report(
                     &bus,
                     &agent_id,
@@ -543,9 +668,51 @@ async fn main() {
         }
 
         // Reflect every 3 steps or after error-looking outcomes
-        if step % 3 == 0 {
-            reflect(&bus, &shared, &spec).await;
+        let reflection = if step % 3 == 0 {
+            reflect(&bus, &shared, &spec).await
+        } else {
+            None
+        };
+
+        let skill_pairs: Vec<(String, Vec<String>)> = skill_docs
+            .iter()
+            .map(|s| (s.name.clone(), s.tools.clone()))
+            .collect();
+        let (tool_kind, mcp_server, skill) =
+            classify_action(&action.action, &tools, &skill_pairs);
+        let record = AgentStepRecord {
+            step,
+            thought: action.thought.clone(),
+            response: full_text,
+            action: action.action.clone(),
+            args: action.args.clone(),
+            tool_kind,
+            mcp_server,
+            skill,
+            tool_result,
+            reflection,
+            duration_ms: step_t0.elapsed().as_millis() as u64,
+            infer_ms,
+            tool_ms,
+            prompt_tokens: infer.prompt_tokens,
+            generated_tokens: infer.generated_tokens,
+            ttft_ms: infer.ttft_ms,
+            tok_s: infer.tok_s,
+            current_task: current_task.clone(),
+            ts_ms: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0),
+            fail_reason: step_fail_reason,
+            child_id: step_child_id,
+            sources: step_sources,
+        };
+        {
+            let mut st = shared.state.lock().await;
+            st.tokens_used += record.generated_tokens as u64;
+            st.trace.push(record.clone());
         }
+        report(&bus, &agent_id, AgentOutputEvent::Step(record)).await;
 
         // Checkpoint
         {
@@ -572,10 +739,18 @@ async fn main() {
 }
 
 enum InferOutcome {
-    Text(String),
+    Text(InferTurn),
     Aborted,
     Fatal(String),
     Steer(String),
+}
+
+struct InferTurn {
+    text: String,
+    prompt_tokens: u32,
+    generated_tokens: u32,
+    ttft_ms: f64,
+    tok_s: f64,
 }
 
 async fn infer_turn(
@@ -601,6 +776,7 @@ async fn infer_turn(
         messages,
         params: InferParams {
             temperature: 0.2,
+            max_tokens: 512,
             ..InferParams::default()
         },
         priority: 1,
@@ -616,13 +792,46 @@ async fn infer_turn(
     };
 
     let mut full_text = String::new();
+    let mut generated_fallback = 0u32;
+    let mut done_stats: Option<(u32, u32, f64, f64)> = None;
+    let mut token_buf = String::new();
+    let mut last_token_flush = Instant::now();
+    let infer_deadline = Duration::from_secs(180);
+    let started_infer = Instant::now();
+
     while let Some(ev) = rx.recv().await {
+        if started_infer.elapsed() > infer_deadline {
+            if !token_buf.is_empty() {
+                report(
+                    bus,
+                    &spec.agent_id,
+                    AgentOutputEvent::Token {
+                        text: std::mem::take(&mut token_buf),
+                    },
+                )
+                .await;
+            }
+            return InferOutcome::Fatal(format!(
+                "timeout inférence ({} s) — le modèle ou le bus ne répond plus",
+                infer_deadline.as_secs()
+            ));
+        }
         match ev {
             Ok(TokenEvent::Started { inference_id }) => {
                 *shared.current_inference.lock().await = Some(inference_id);
             }
             Ok(TokenEvent::Delta { text }) => {
                 if shared.paused.load(Ordering::SeqCst) {
+                    if !token_buf.is_empty() {
+                        report(
+                            bus,
+                            &spec.agent_id,
+                            AgentOutputEvent::Token {
+                                text: std::mem::take(&mut token_buf),
+                            },
+                        )
+                        .await;
+                    }
                     *shared.current_inference.lock().await = None;
                     report(
                         bus,
@@ -639,19 +848,55 @@ async fn infer_turn(
                     }
                 }
                 full_text.push_str(&text);
-                report(
-                    bus,
-                    &spec.agent_id,
-                    AgentOutputEvent::Token { text },
-                )
-                .await;
-                shared.state.lock().await.tokens_used += 1;
+                generated_fallback += 1;
+                token_buf.push_str(&text);
+                if token_buf.len() >= 96 || last_token_flush.elapsed() >= Duration::from_millis(80)
+                {
+                    report(
+                        bus,
+                        &spec.agent_id,
+                        AgentOutputEvent::Token {
+                            text: std::mem::take(&mut token_buf),
+                        },
+                    )
+                    .await;
+                    last_token_flush = Instant::now();
+                }
             }
-            Ok(TokenEvent::Done { .. }) => {}
+            Ok(TokenEvent::Done {
+                prompt_tokens,
+                generated_tokens,
+                ttft_ms,
+                tok_s,
+            }) => {
+                done_stats = Some((prompt_tokens, generated_tokens, ttft_ms, tok_s));
+            }
             Ok(TokenEvent::Error { message }) => {
+                if !token_buf.is_empty() {
+                    report(
+                        bus,
+                        &spec.agent_id,
+                        AgentOutputEvent::Token {
+                            text: std::mem::take(&mut token_buf),
+                        },
+                    )
+                    .await;
+                }
                 return InferOutcome::Fatal(message);
             }
-            Err(e) => return InferOutcome::Fatal(e.to_string()),
+            Err(e) => {
+                if !token_buf.is_empty() {
+                    report(
+                        bus,
+                        &spec.agent_id,
+                        AgentOutputEvent::Token {
+                            text: std::mem::take(&mut token_buf),
+                        },
+                    )
+                    .await;
+                }
+                return InferOutcome::Fatal(e.to_string());
+            }
             Ok(TokenEvent::Queued { position }) => {
                 report(
                     bus,
@@ -664,15 +909,36 @@ async fn infer_turn(
             }
         }
     }
+    if !token_buf.is_empty() {
+        report(
+            bus,
+            &spec.agent_id,
+            AgentOutputEvent::Token {
+                text: std::mem::take(&mut token_buf),
+            },
+        )
+        .await;
+    }
     *shared.current_inference.lock().await = None;
-    InferOutcome::Text(full_text)
+    let (prompt_tokens, generated_tokens, ttft_ms, tok_s) =
+        done_stats.unwrap_or((0, generated_fallback, 0.0, 0.0));
+    InferOutcome::Text(InferTurn {
+        text: full_text,
+        prompt_tokens,
+        generated_tokens,
+        ttft_ms,
+        tok_s,
+    })
 }
 
 enum ActResult {
     Continue(String),
     Complete(String),
     Fail(String),
-    Blocked,
+    Blocked {
+        reason: String,
+        child_id: Option<String>,
+    },
 }
 
 async fn execute_action(
@@ -680,11 +946,18 @@ async fn execute_action(
     shared: &Shared,
     spec: &mut AgentSpec,
     tools: &[ToolDesc],
+    skills: &[SkillDoc],
     mcp_sessions: &mut HashMap<String, McpSession>,
     action: &AgentAction,
 ) -> ActResult {
     let name = action.action.as_str();
     let args = &action.args;
+    // Skill name used as tool (research, file.author, …) → correction claire
+    if tools.iter().all(|t| t.name != name) {
+        if let Some(skill) = match_skill_by_action(name, skills) {
+            return ActResult::Continue(skill_misuse_hint(name, skill));
+        }
+    }
     let agent_id = spec.agent_id.clone();
     let caps = {
         let st = shared.state.lock().await;
@@ -711,7 +984,10 @@ async fn execute_action(
 
     match name {
         "noop" => ActResult::Continue(
-            "aucune action structurée détectée — réponds en JSON action".into(),
+            "aucune action JSON détectée. N'utilise pas <think>. \
+             Réponds uniquement par {\"thought\":\"…\",\"action\":\"<outil>\",\"args\":{…}} \
+             avec un outil du catalogue."
+                .into(),
         ),
         "goal.complete" => {
             let summary = args
@@ -785,21 +1061,8 @@ async fn execute_action(
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
-            match bus
-                .call::<MemContextRequest, MemContextResponse>(
-                    "mem.context",
-                    &MemContextRequest {
-                        session_id: None,
-                        query,
-                        k: 5,
-                    },
-                    vec![],
-                )
-                .await
-            {
-                Ok(r) => ActResult::Continue(r.prompt_block),
-                Err(e) => ActResult::Continue(format!("recall err: {e}")),
-            }
+            let block = recall_memory_bundle(bus, &agent_id, &query, 5).await;
+            ActResult::Continue(block)
         }
         "agent.spawn" => {
             // Profondeur max 2 : un sous-agent ne spawn pas.
@@ -899,7 +1162,14 @@ async fn execute_action(
                 }
                 tokio::time::sleep(Duration::from_millis(500)).await;
             }
-            ActResult::Blocked
+            ActResult::Blocked {
+                reason: format!("attente de {child_id} expirée"),
+                child_id: if child_id.is_empty() {
+                    None
+                } else {
+                    Some(child_id)
+                },
+            }
         }
         other => {
             // Look up tool
@@ -1194,15 +1464,54 @@ async fn invoke_native(
         }
         "web.search" => {
             let query = args.get("query").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let engine = args
+                .get("engine")
+                .and_then(|v| v.as_str())
+                .unwrap_or("auto")
+                .to_string();
             match bus
                 .call::<WebSearchRequest, WebSearchResponse>(
                     "web.search",
                     &WebSearchRequest {
-                        query,
+                        query: query.clone(),
                         max_results: args
                             .get("max_results")
                             .and_then(|v| v.as_u64())
                             .unwrap_or(5) as usize,
+                        caps: caps.to_vec(),
+                        actor,
+                        engine,
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(r) if r.results.is_empty() => {
+                    format!(
+                        "web.search: 0 résultat pour « {query} ». \
+                         Réessaie avec args.engine=\"bing\" ou \"duckduckgo\", \
+                         ou utilise web.browse sur une URL connue."
+                    )
+                }
+                Ok(r) => serde_json::to_string(&r.results).unwrap_or_default(),
+                Err(e) => format!(
+                    "web.search err: {e}. Si le réseau est online, réessaie avec \
+                     engine=\"bing\" ou utilise web.browse sur une URL."
+                ),
+            }
+        }
+        "web.browse" => {
+            let url = args.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let max_chars = args
+                .get("max_chars")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(12_000) as usize;
+            match bus
+                .call::<WebBrowseRequest, WebBrowseResponse>(
+                    "web.browse",
+                    &WebBrowseRequest {
+                        url,
+                        max_chars,
                         caps: caps.to_vec(),
                         actor,
                     },
@@ -1210,8 +1519,8 @@ async fn invoke_native(
                 )
                 .await
             {
-                Ok(r) => serde_json::to_string(&r.results).unwrap_or_default(),
-                Err(e) => format!("web.search err: {e}"),
+                Ok(r) => serde_json::to_string(&r).unwrap_or_default(),
+                Err(e) => format!("web.browse err: {e}"),
             }
         }
         "net.fetch" => {
@@ -1230,8 +1539,12 @@ async fn invoke_native(
                 )
                 .await
             {
-                Ok(v) => v.to_string(),
-                Err(e) => format!("net.fetch err: {e}"),
+                Ok(v) => format!(
+                    "{v}\n[hint] net.fetch enregistre un fichier ; pour lire le contenu d'une page HTML utilise web.browse."
+                ),
+                Err(e) => format!(
+                    "net.fetch err: {e}. Pour extraire le texte d'une page, utilise web.browse."
+                ),
             }
         }
         "files.generate" => {
@@ -1632,29 +1945,146 @@ async fn index_documents(
     }
 }
 
-async fn inject_mem_context(bus: &BusClient, shared: &Shared, query: &str) {
-    if let Ok(r) = bus
+async fn recall_memory_bundle(
+    bus: &BusClient,
+    agent_id: &str,
+    query: &str,
+    k: usize,
+) -> String {
+    let mut parts: Vec<String> = Vec::new();
+
+    for (label, ns) in [
+        ("Mémoire agent", format!("agent:{agent_id}")),
+        ("Documents indexés", format!("agent:{agent_id}:docs")),
+    ] {
+        match bus
+            .call::<MemEpisodicQueryRequest, Vec<MemHit>>(
+                "mem.episodic_query",
+                &MemEpisodicQueryRequest {
+                    query: query.to_string(),
+                    k,
+                    namespace: Some(ns),
+                },
+                vec![],
+            )
+            .await
+        {
+            Ok(hits) if !hits.is_empty() => {
+                parts.push(format!("{label}:"));
+                for h in hits {
+                    parts.push(format!("- {}", truncate(&h.text, 400)));
+                }
+            }
+            Ok(_) => {}
+            Err(e) => parts.push(format!("({label}: err {e})")),
+        }
+    }
+
+    match bus
         .call::<MemContextRequest, MemContextResponse>(
             "mem.context",
             &MemContextRequest {
                 session_id: None,
                 query: query.to_string(),
-                k: 3,
+                k,
             },
             vec![],
         )
         .await
     {
-        if !r.prompt_block.is_empty() {
-            shared.state.lock().await.working_memory.push((
-                "system".into(),
-                format!("[mem.context]\n{}", r.prompt_block),
-            ));
+        Ok(r) if !r.prompt_block.trim().is_empty() => {
+            parts.push(r.prompt_block.trim().to_string());
         }
+        Ok(_) => {}
+        Err(e) => parts.push(format!("(mémoire utilisateur: err {e})")),
+    }
+
+    if parts.is_empty() {
+        format!(
+            "(aucune information mémorisée trouvée pour « {} »)",
+            truncate(query, 120)
+        )
+    } else {
+        parts.join("\n")
     }
 }
 
-async fn reflect(bus: &BusClient, shared: &Shared, spec: &AgentSpec) {
+async fn inject_mem_context(bus: &BusClient, shared: &Shared, agent_id: &str, query: &str) {
+    let block = recall_memory_bundle(bus, agent_id, query, 3).await;
+    if block.starts_with("(aucune information") {
+        return;
+    }
+    shared.state.lock().await.working_memory.push((
+        "system".into(),
+        format!("[mem.context]\n{block}"),
+    ));
+}
+
+/// Consulte la mémoire dès le début (ou après un steer) et l'enregistre dans la timeline.
+async fn bootstrap_memory_recall(
+    bus: &BusClient,
+    shared: &Shared,
+    agent_id: &str,
+    query: &str,
+    reason: &str,
+) {
+    let t0 = Instant::now();
+    let block = recall_memory_bundle(bus, agent_id, query, 5).await;
+    let tool_ms = t0.elapsed().as_millis() as u64;
+
+    shared.state.lock().await.working_memory.push((
+        "system".into(),
+        format!(
+            "[mem.bootstrap]\nConsultation mémoire ({reason}) pour : {}\n{block}\n\
+             Consigne: réutilise ces informations avant web.search / net.fetch. \
+             Affiner avec memory.recall si besoin.",
+            truncate(query, 200)
+        ),
+    ));
+
+    let record = AgentStepRecord {
+        step: 0,
+        thought: format!("Interroger la mémoire ({reason}) avant d'agir"),
+        response: String::new(),
+        action: "memory.recall".into(),
+        args: serde_json::json!({ "query": query, "reason": reason }),
+        tool_kind: "runtime".into(),
+        mcp_server: None,
+        skill: None,
+        tool_result: truncate(&block, 2000),
+        reflection: None,
+        duration_ms: tool_ms,
+        infer_ms: 0,
+        tool_ms,
+        prompt_tokens: 0,
+        generated_tokens: 0,
+        ttft_ms: 0.0,
+        tok_s: 0.0,
+        current_task: None,
+        ts_ms: SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0),
+        fail_reason: None,
+        child_id: None,
+        sources: vec![],
+    };
+    {
+        let mut st = shared.state.lock().await;
+        st.trace.push(record.clone());
+    }
+    report(bus, agent_id, AgentOutputEvent::Step(record)).await;
+    report(
+        bus,
+        agent_id,
+        AgentOutputEvent::Log {
+            line: format!("mémoire consultée ({reason}): {}", truncate(query, 80)),
+        },
+    )
+    .await;
+}
+
+async fn reflect(bus: &BusClient, shared: &Shared, spec: &AgentSpec) -> Option<String> {
     let st = shared.state.lock().await;
     let progress = format!(
         "step {}/{} goal={} tasks={:?}",
@@ -1669,7 +2099,9 @@ async fn reflect(bus: &BusClient, shared: &Shared, spec: &AgentSpec) {
         messages: vec![
             ChatMessage {
                 role: "system".into(),
-                content: "Tu es un critique. En 2 phrases: est-ce que l'agent avance vers le goal ? Que faire ensuite ?".into(),
+                content: "Tu es un critique. En 2 phrases en français: est-ce que l'agent avance vers le goal ? Que faire ensuite ? \
+                          Réponds directement, sans balises <think> ni monologue Thinking Process."
+                    .into(),
             },
             ChatMessage {
                 role: "user".into(),
@@ -1677,7 +2109,7 @@ async fn reflect(bus: &BusClient, shared: &Shared, spec: &AgentSpec) {
             },
         ],
         params: InferParams {
-            max_tokens: 120,
+            max_tokens: 220,
             temperature: 0.1,
             ..InferParams::default()
         },
@@ -1695,6 +2127,7 @@ async fn reflect(bus: &BusClient, shared: &Shared, spec: &AgentSpec) {
                 text.push_str(&t);
             }
         }
+        let text = strip_reasoning(&text);
         if !text.is_empty() {
             shared.state.lock().await.reflections.push(text.clone());
             report(
@@ -1709,7 +2142,12 @@ async fn reflect(bus: &BusClient, shared: &Shared, spec: &AgentSpec) {
                 .await
                 .working_memory
                 .push(("system".into(), format!("[reflect] {text}")));
+            Some(text)
+        } else {
+            None
         }
+    } else {
+        None
     }
 }
 
@@ -1811,5 +2249,120 @@ fn truncate(s: &str, n: usize) -> String {
         format!("{}…", s.chars().take(n).collect::<String>())
     } else {
         s.to_string()
+    }
+}
+
+fn extract_child_id(action: &str, outcome: &str, args: &serde_json::Value) -> Option<String> {
+    if action == "agent.spawn" {
+        if let Some(rest) = outcome.strip_prefix("sous-agent créé: ") {
+            return Some(rest.trim().to_string());
+        }
+    }
+    if action == "agent.await" {
+        return args
+            .get("child_id")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+    }
+    None
+}
+
+fn collect_sources(
+    action: &str,
+    args: &serde_json::Value,
+    outcome: &str,
+) -> Vec<AgentSource> {
+    match action {
+        "web.search" => {
+            if let Ok(hits) = serde_json::from_str::<Vec<WebSearchHit>>(outcome) {
+                return hits
+                    .into_iter()
+                    .map(|h| AgentSource {
+                        kind: "web".into(),
+                        title: h.title,
+                        locator: h.url,
+                        snippet: h.snippet,
+                    })
+                    .collect();
+            }
+            Vec::new()
+        }
+        "web.browse" => {
+            let url = args
+                .get("url")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            if let Ok(v) = serde_json::from_str::<WebBrowseResponse>(outcome) {
+                return vec![AgentSource {
+                    kind: "web".into(),
+                    title: if v.title.is_empty() {
+                        url.clone()
+                    } else {
+                        v.title
+                    },
+                    locator: if v.final_url.is_empty() {
+                        v.url
+                    } else {
+                        v.final_url
+                    },
+                    snippet: truncate(&v.text, 200),
+                }];
+            }
+            if !url.is_empty() {
+                return vec![AgentSource {
+                    kind: "web".into(),
+                    title: url.clone(),
+                    locator: url,
+                    snippet: truncate(outcome, 200),
+                }];
+            }
+            Vec::new()
+        }
+        "docs.read" | "fs.read" => {
+            let path = args
+                .get("path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            if path.is_empty() {
+                return Vec::new();
+            }
+            vec![AgentSource {
+                kind: "document".into(),
+                title: path.clone(),
+                locator: path,
+                snippet: truncate(outcome, 200),
+            }]
+        }
+        "net.fetch" => {
+            let url = args
+                .get("url")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let path = serde_json::from_str::<serde_json::Value>(outcome)
+                .ok()
+                .and_then(|v| {
+                    v.get("path")
+                        .and_then(|p| p.as_str())
+                        .map(|s| s.to_string())
+                })
+                .unwrap_or_default();
+            if url.is_empty() && path.is_empty() {
+                return Vec::new();
+            }
+            vec![AgentSource {
+                kind: "fetch".into(),
+                title: if path.is_empty() {
+                    url.clone()
+                } else {
+                    path.clone()
+                },
+                locator: if url.is_empty() { path } else { url },
+                snippet: truncate(outcome, 120),
+            }]
+        }
+        _ => Vec::new(),
     }
 }

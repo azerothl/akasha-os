@@ -68,14 +68,36 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
         },
         ToolDesc {
             name: "web.search".into(),
-            description: "Recherche web".into(),
-            input_schema: serde_json::json!({"type":"object","properties":{"query":{"type":"string"},"max_results":{"type":"integer"}},"required":["query"]}),
+            description: "Recherche web (auto: Brave→DDG→Bing)".into(),
+            input_schema: serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "query":{"type":"string"},
+                    "max_results":{"type":"integer"},
+                    "engine":{"type":"string","description":"auto|brave|duckduckgo|bing"}
+                },
+                "required":["query"]
+            }),
+            backend: ToolBackend::Native,
+            required_caps: vec!["net.connect:*".into()],
+        },
+        ToolDesc {
+            name: "web.browse".into(),
+            description: "Lire une page web (HTML→texte, sans JS)".into(),
+            input_schema: serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "url":{"type":"string"},
+                    "max_chars":{"type":"integer"}
+                },
+                "required":["url"]
+            }),
             backend: ToolBackend::Native,
             required_caps: vec!["net.connect:*".into()],
         },
         ToolDesc {
             name: "net.fetch".into(),
-            description: "Télécharger une URL".into(),
+            description: "Télécharger une URL vers le VFS (binaire)".into(),
             input_schema: serde_json::json!({"type":"object","properties":{"url":{"type":"string"}},"required":["url"]}),
             backend: ToolBackend::Native,
             required_caps: vec!["net.connect:*".into()],
@@ -118,7 +140,8 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
         },
         ToolDesc {
             name: "memory.recall".into(),
-            description: "Rappeler du contexte mémorisé".into(),
+            description: "Consulter la mémoire agent + utilisateur sur un sujet (à faire avant recherche externe)"
+                .into(),
             input_schema: serde_json::json!({"type":"object","properties":{"query":{"type":"string"}},"required":["query"]}),
             backend: ToolBackend::Runtime,
             required_caps: vec![],
@@ -314,6 +337,44 @@ pub fn caps_for_tools(tools: &[ToolDesc], mcp_servers: &[String]) -> Vec<String>
     caps
 }
 
+/// Classe une action (backend outil + skill qui la déclare).
+pub fn classify_action(
+    name: &str,
+    tools: &[ToolDesc],
+    skills: &[(String, Vec<String>)],
+) -> (String, Option<String>, Option<String>) {
+    let skill = skills
+        .iter()
+        .find(|(_, ts)| ts.iter().any(|t| t == name || name.starts_with(t)))
+        .map(|(n, _)| n.clone());
+    if let Some(t) = tools.iter().find(|t| t.name == name) {
+        let (kind, mcp) = match &t.backend {
+            ToolBackend::Native => ("native".to_string(), None),
+            ToolBackend::Module => ("module".to_string(), None),
+            ToolBackend::Mcp { server } => ("mcp".to_string(), Some(server.clone())),
+            ToolBackend::Runtime => ("runtime".to_string(), None),
+        };
+        return (kind, mcp, skill);
+    }
+    // Nom de skill utilisé comme action (research, file.author, …)
+    let skill_key = name.trim().to_ascii_lowercase().replace(['.', '_'], "-");
+    if let Some((skill_name, _)) = skills
+        .iter()
+        .find(|(n, _)| n.trim().to_ascii_lowercase().replace(['.', '_'], "-") == skill_key)
+    {
+        return ("skill".into(), None, Some(skill_name.clone()));
+    }
+    if let Some(rest) = name.strip_prefix("mcp.") {
+        let server = rest.split(':').next().map(|s| s.to_string());
+        return ("mcp".into(), server, skill);
+    }
+    if name.contains('.') {
+        ("module".into(), None, skill)
+    } else {
+        ("unknown".into(), None, skill)
+    }
+}
+
 /// Vérifie que child_caps ⊆ parent_caps.
 pub fn caps_subset(parent: &[String], child: &[String]) -> bool {
     child.iter().all(|c| {
@@ -343,5 +404,15 @@ mod tests {
         let t = select_tools(&["notes.create".into()], &[]);
         assert!(t.iter().any(|x| x.name == "goal.complete"));
         assert!(t.iter().any(|x| x.name == "notes.create"));
+    }
+
+    #[test]
+    fn classify_notes_module_and_skill() {
+        let tools = select_tools(&["notes.create".into()], &[]);
+        let skills = vec![("notes-writer".into(), vec!["notes.create".into()])];
+        let (kind, mcp, skill) = classify_action("notes.create", &tools, &skills);
+        assert_eq!(kind, "module");
+        assert!(mcp.is_none());
+        assert_eq!(skill.as_deref(), Some("notes-writer"));
     }
 }
