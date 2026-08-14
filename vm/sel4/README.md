@@ -1,27 +1,29 @@
-# Piste VM seL4 — échafaudage noyau (ADR 0001)
+# seL4 VM track — kernel scaffolding (ADR 0001)
 
-## Objectif
+**Language:** English | [Français](../../docs/fr/vm-sel4-README.md)
 
-Booter **seL4** (Microkit) sous QEMU `virt` aarch64, **sans GPU**, et
-rejouer les critères testables du gate P4 : caps natives via IPC seL4
-(pas TCP), révocation immédiate, arrêt d'Audit sans tuer CapKernel.
+## Goal
 
-Ce n'est **pas** le produit (fer nu). C'est l'échafaudage noyau, en
-parallèle de l'hôte Windows+CUDA.
+Boot **seL4** (Microkit) under QEMU `virt` aarch64, **without GPU**, and
+replay the testable P4 gate criteria: native caps via seL4 IPC (not TCP),
+immediate revoke, stop Audit without killing CapKernel.
 
-## Invité
+This is **not** the product (bare metal). It is the kernel scaffold, in
+parallel with the Windows+CUDA host.
 
-| PD | Rôle | Isolation |
+## Guest
+
+| PD | Role | Isolation |
 |----|------|-----------|
-| `capkd` | mint / check / revoke via `CapStore` | domaine passif, prio 200 |
-| `bus` | lookup + proxy `cap.*` | domaine passif, prio 150 |
-| `gate` | client du gate PV | prio 100, parent d'`auditd` |
-| `auditd` | journal minimal | enfant ; `pd_stop` depuis le gate |
+| `capkd` | mint / check / revoke via `CapStore` | passive domain, prio 200 |
+| `bus` | lookup + `cap.*` proxy | passive domain, prio 150 |
+| `gate` | PV gate client | prio 100, parent of `auditd` |
+| `auditd` | minimal journal | child; `pd_stop` from the gate |
 
-Transport : `microkit_ppcall`. Le gate **n'appelle pas** capkd
-directement — tout transite par `bus` (PV.2). Contrat : `abi.h` /
-`aos-sel4-abi`. La table de caps n'est plus dupliquée en C : le PD
-appelle `aos-sel4-capkd` (`aos-caps::CapStore`).
+Transport: `microkit_ppcall`. The gate does **not** call capkd directly —
+everything goes through `bus` (PV.2). Contract: `abi.h` / `aos-sel4-abi`.
+The cap table is no longer duplicated in C: the PD calls `aos-sel4-capkd`
+(`aos-caps::CapStore`).
 
 ## Gate
 
@@ -29,18 +31,18 @@ appelle `aos-sel4-capkd` (`aos-caps::CapStore`).
 .\demo\run-sel4-vm.ps1
 ```
 
-Prérequis : WSL distro **Ubuntu**, sudo apt, `rustup target add
-aarch64-unknown-none`. Le SDK Microkit 2.3.0 est téléchargé dans
-`vm/sel4/sdk/` (gitignoré). `run-sel4-vm.ps1` construit d'abord la
-staticlib Rust, puis l'image Microkit.
+Prerequisites: WSL distro **Ubuntu**, sudo apt, `rustup target add
+aarch64-unknown-none`. Microkit SDK 2.3.0 is downloaded into
+`vm/sel4/sdk/` (gitignored). `run-sel4-vm.ps1` builds the Rust staticlib
+first, then the Microkit image.
 
-Succès : le serial QEMU contient `AOS_GATE_VM_PASS`.
+Success: QEMU serial contains `AOS_GATE_VM_PASS`.
 
-## Écarts (honnêtes)
+## Honest gaps
 
-- Glue Microkit (`init` / `protected`) encore en C ; le magasin de caps
-  est le `CapStore` Rust. PDs 100 % Rust (`sel4-microkit`) = suite.
-- Pas de bus TCP dans l'invité (remplacé par PPC) — c'est le but.
-- Pas de Model / llama.cpp (CPU-only, ADR 0001).
-- Microkit est statique : « kill » = `microkit_pd_stop` du PD enfant,
-  pas `SIGKILL` d'un processus hôte.
+- Microkit glue (`init` / `protected`) still in C; the cap store is the Rust
+  `CapStore`. 100% Rust PDs (`sel4-microkit`) = next.
+- No TCP bus in the guest (replaced by PPC) — that is the point.
+- No Model / llama.cpp (CPU-only, ADR 0001).
+- Microkit is static: “kill” = `microkit_pd_stop` of the child PD, not
+  `SIGKILL` of a host process.

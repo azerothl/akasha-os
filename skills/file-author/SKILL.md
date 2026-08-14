@@ -1,6 +1,6 @@
 ---
 name: file-author
-description: Lire/écrire des fichiers et générer des artefacts (md, txt, json, csv, pdf)
+description: Read/write files and generate artifacts (md, txt, json, csv, pdf)
 tools:
   - fs.read
   - fs.write
@@ -10,7 +10,9 @@ tools:
 ---
 # File author
 
-Travaille sur le FS logique Agent OS.
-- Lis avant d'écrire (`fs.read` / `docs.read`).
-- Pour des artefacts utilisateur, préfère `files.generate` sous `/documents/` ou `/downloads/`.
-- Garde les chemins stables et documente ce que tu as produit dans `goal.complete`.
+**Language:** English | [Français](../../docs/fr/skills/file-author/SKILL.md)
+
+Work on the Agent OS logical FS.
+- Read before writing (`fs.read` / `docs.read`).
+- For user artifacts, prefer `files.generate` under `/documents/` or `/downloads/`.
+- Keep paths stable and document what you produced in `goal.complete`.

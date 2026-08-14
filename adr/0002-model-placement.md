@@ -1,41 +1,51 @@
 # ADR 0002: Model Placement Algorithm
 
-## Contexte
+**Language:** English | [Français](../docs/fr/adr/0002-model-placement.md)
 
-La Phase P0 a validé l'algorithme de placement RAM/GPU/disque et le modèle de capacités. Cette ADR formalise les spécifications techniques de l'algorithme de placement pour être utilisé dans toutes les phases suivantes.
+## Context
 
-## Spécifications
+Phase P0 validated the RAM/GPU/disk placement algorithm and the capability
+model. This ADR formalizes the technical specifications of the placement
+algorithm for use in all later phases.
 
-### Objectif
-Produire un plan de placement réaliste qui optimise l'utilisation des ressources (RAM, VRAM, disque) tout en respectant les contraintes de latence et de bande passante.
+## Specifications
 
-### Entrées
-- **Modèle** : Taille du modèle (nombre de paramètres), nombre de couches, type d'architecture (Transformer, LFM, etc.)
-- **Matériel** : Capacité VRAM, RAM, bande passante mémoire, capacité GPU/NPU
-- **Contraintes** : Latence maximale acceptable (TTFT < 2s), budget énergétique
+### Goal
+Produce a realistic placement plan that optimizes resource use (RAM, VRAM,
+disk) while respecting latency and bandwidth constraints.
 
-### Sorties
-- **Plan de placement** : Affectation des couches aux différents tampons (CPU, GPU, RAM, NVMe)
-- **Estimation de performance** : Tokens/secondes (TTFT), utilisation mémoire, latence I/O
-- **Validation** : Comparaison avec des mesures réelles sur llama.cpp
+### Inputs
+- **Model**: size (parameter count), layer count, architecture type
+  (Transformer, LFM, etc.)
+- **Hardware**: VRAM, RAM, memory bandwidth, GPU/NPU capacity
+- **Constraints**: max acceptable latency (TTFT < 2s), energy budget
 
-### Métriques de succès
-- Estimation de TTFT < 2s pour les modèles > 32B paramètres
-- Utilisation mémoire ≤ 80% de la VRAM disponible
-- Latence I/O < 10ms pour les accès disque
-- Respect des contraintes de confidentialité (data locality)
+### Outputs
+- **Placement plan**: layer assignment to buffers (CPU, GPU, RAM, NVMe)
+- **Performance estimate**: tokens/s (TTFT), memory use, I/O latency
+- **Validation**: comparison with real llama.cpp measurements
 
-### Implémentation
-- **Composants** : PlacementManager (interface), Allocator (gestion mémoire), Profiler (mesure)
-- **Technologies** : Rust, FFI avec llama.cpp, benchmarks avec criterion
-- **Tests** : Scénarios de placement automatiques (6 scénarios de specs-techniques.md §17.2)
+### Success metrics
+- TTFT estimate < 2s for models > 32B parameters
+- Memory use ≤ 80% of available VRAM
+- I/O latency < 10ms for disk accesses
+- Privacy constraints respected (data locality)
 
-## Risques
+### Implementation
+- **Components**: PlacementManager (interface), Allocator, Profiler
+- **Technologies**: Rust, llama.cpp FFI, criterion benchmarks
+- **Tests**: automatic placement scenarios (6 scenarios in
+  `docs/technical-specs.md` §17.2)
 
-- **Estimation de performance inexacte** : L'affectation optimale dépend fortement de la topologie matérielle réelle. Mitigation : profilage continu et ajustement dynamique.
-- **Conflits de ressources** : Plusieurs agents demandant les mêmes ressources. Mitigation : allocation hiérarchique avec priorité.
+## Risks
 
-## Références
+- **Inaccurate performance estimates**: optimal assignment depends heavily on
+  real hardware topology. Mitigation: continuous profiling and dynamic
+  adjustment.
+- **Resource conflicts**: multiple agents requesting the same resources.
+  Mitigation: hierarchical allocation with priority.
 
-- [Specs techniques - Section 17.2](specs-techniques.md)
-- [P0.1 Simulateur de Placement Manager](plan-developpement-phases.md)
+## References
+
+- [Technical specs — Section 17.2](../docs/technical-specs.md)
+- [P0.1 Placement Manager simulator](../docs/development-plan.md)

@@ -3,6 +3,8 @@
 //! Surface testeur : chat, dashboard, onboarding, notes, confirm, agents,
 //! audit, scénarios guidés, retours (`feedback.submit`).
 
+mod i18n;
+
 use aos_ipc::BusClient;
 use aos_proto::{
     AgentCreateRequest, AgentGoal, AgentIdRequest, AgentInfo, AgentPromptOptimizeRequest,
@@ -21,9 +23,6 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
-
-const PREVIEW_BANNER: &str =
-    "Agent OS Preview — exécuté sur Windows/Linux (échafaudage). Ce n'est pas encore l'OS bootable seL4.";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct UpdateOffer {
@@ -83,7 +82,7 @@ impl Default for OnboardingState {
     fn default() -> Self {
         Self {
             completed: false,
-            language: "fr".into(),
+            language: "en".into(),
             routing: "local_only".into(),
             trust_default: "medium".into(),
             tutorial_step: 0,
@@ -1147,6 +1146,7 @@ impl UiApp {
     fn new(cmd_tx: Sender<Cmd>, evt_rx: Receiver<Evt>, version: String) -> Self {
         let onboarding = load_onboarding();
         let show_onboarding = !onboarding.completed;
+        let t = i18n::strings(&onboarding.language);
         let _ = cmd_tx.send(Cmd::SessionBootstrap);
         Self {
             cmd_tx,
@@ -1154,11 +1154,12 @@ impl UiApp {
             version,
             tab: Tab::Chat,
             chat: vec![(
-                "système".into(),
+                "system".into(),
                 format!(
-                    "{PREVIEW_BANNER}\n\
-                     Sessions persistées, mémoire, réseau opt-in.\n\
-                     Tapez /commands — onglets Sessions / Mémoire / Notes…"
+                    "{}\n\
+                     Sessions / Memory / Network opt-in.\n\
+                     Type /commands — use the side tabs.",
+                    t.preview_banner
                 ),
             )],
             streaming: String::new(),
@@ -1528,40 +1529,38 @@ impl eframe::App for UiApp {
             }
         }
 
+        let t = i18n::strings(&self.onboarding.language);
+
         if self.show_onboarding {
-            egui::Window::new("Tutoriel — Agent OS Preview")
+            egui::Window::new(t.tutorial_title)
                 .collapsible(false)
                 .resizable(true)
                 .default_width(520.0)
                 .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
                 .show(ctx, |ui| {
                     let step = self.onboarding.tutorial_step;
-                    ui.label(format!("Étape {} / 4", step + 1));
+                    ui.label(t.step_of.replace("{}", &(step + 1).to_string()));
                     ui.separator();
                     match step {
                         0 => {
-                            ui.heading("Bienvenue");
-                            ui.label(PREVIEW_BANNER);
-                            ui.label(
-                                "Vous testez une Preview installable (hôte Win/Linux + NVIDIA), pas un microkernel bootable.",
-                            );
-                            ui.label(
-                                "Au premier lancement, les modèles GGUF sont téléchargés dans share/models/ si besoin.",
-                            );
+                            ui.heading(t.welcome);
+                            ui.label(t.preview_banner);
+                            ui.label(t.welcome_body1);
+                            ui.label(t.welcome_body2);
                         }
                         1 => {
-                            ui.heading("Préférences");
-                            ui.label("Langue");
+                            ui.heading(t.preferences);
+                            ui.label(t.language);
                             ui.horizontal(|ui| {
                                 ui.radio_value(&mut self.onboarding.language, "fr".into(), "Français");
                                 ui.radio_value(&mut self.onboarding.language, "en".into(), "English");
                             });
-                            ui.label("Routage modèles");
+                            ui.label(t.routing);
                             ui.horizontal(|ui| {
                                 ui.radio_value(
                                     &mut self.onboarding.routing,
                                     "local_only".into(),
-                                    "local_only (recommandé)",
+                                    t.routing_local,
                                 );
                                 ui.radio_value(
                                     &mut self.onboarding.routing,
@@ -1569,60 +1568,56 @@ impl eframe::App for UiApp {
                                     "balanced",
                                 );
                             });
-                            ui.label("Confiance agents par défaut");
+                            ui.label(t.trust_default);
                             ui.horizontal(|ui| {
                                 ui.radio_value(
                                     &mut self.onboarding.trust_default,
                                     "low".into(),
-                                    "basse",
+                                    t.trust_low,
                                 );
                                 ui.radio_value(
                                     &mut self.onboarding.trust_default,
                                     "medium".into(),
-                                    "moyenne",
+                                    t.trust_medium,
                                 );
                             });
                         }
                         2 => {
-                            ui.heading("Tour produit");
-                            ui.label("• Chat / Sessions — conversations parallèles persistées");
-                            ui.label("• Mémoire — faits long terme (remember / recall)");
-                            ui.label("• Notes — humaines ou via agent");
-                            ui.label("• Agents — tâches + skills / outils / MCP");
-                            ui.label("• Réseau (case latérale) — opt-in search / fetch");
-                            ui.label("• Retour — issue GitHub sur azerothl/akasha-os");
+                            ui.heading(t.product_tour);
+                            ui.label(t.tour_chat);
+                            ui.label(t.tour_memory);
+                            ui.label(t.tour_notes);
+                            ui.label(t.tour_agents);
+                            ui.label(t.tour_network);
+                            ui.label(t.tour_feedback);
                         }
                         _ => {
-                            ui.heading("Parcours test");
-                            ui.label(
-                                "L'onglet Scénarios suit le protocole TESTER.md (cohorte).",
-                            );
-                            ui.label("Doc packagée : FIRST-RUN.md, INSTALL.md, TESTER.md.");
-                            ui.label(
-                                "Les mises à jour logicielles s'affichent en bandeau (GitHub Releases) sans effacer var/.",
-                            );
+                            ui.heading(t.test_path);
+                            ui.label(t.test_path_body1);
+                            ui.label(t.test_path_body2);
+                            ui.label(t.test_path_body3);
                         }
                     }
                     ui.separator();
                     ui.horizontal(|ui| {
-                        if step > 0 && ui.button("Précédent").clicked() {
+                        if step > 0 && ui.button(t.prev).clicked() {
                             self.onboarding.tutorial_step = step - 1;
                             save_onboarding(&self.onboarding);
                         }
                         if step < 3 {
-                            if ui.button("Suivant").clicked() {
+                            if ui.button(t.next).clicked() {
                                 self.onboarding.tutorial_step = step + 1;
                                 save_onboarding(&self.onboarding);
                             }
-                        } else if ui.button("Terminer le tutoriel").clicked() {
+                        } else if ui.button(t.finish_tutorial).clicked() {
                             self.onboarding.completed = true;
                             self.onboarding.tutorial_step = 3;
                             save_onboarding(&self.onboarding);
                             self.show_onboarding = false;
                             self.tab = Tab::Scenarios;
-                            self.status = "tutoriel terminé — onglet Scénarios".into();
+                            self.status = t.tutorial_done_status.into();
                         }
-                        if ui.button("Passer").clicked() {
+                        if ui.button(t.skip).clicked() {
                             self.onboarding.completed = true;
                             save_onboarding(&self.onboarding);
                             self.show_onboarding = false;
@@ -1633,26 +1628,25 @@ impl eframe::App for UiApp {
 
         egui::TopBottomPanel::top("banner").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                ui.colored_label(egui::Color32::from_rgb(220, 160, 40), PREVIEW_BANNER);
+                ui.colored_label(egui::Color32::from_rgb(220, 160, 40), t.preview_banner);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button("Signaler").clicked() {
+                    if ui.button(t.report).clicked() {
                         self.tab = Tab::Feedback;
                     }
-                    if ui.button("Tutoriel").clicked() {
+                    if ui.button(t.tutorial).clicked() {
                         self.onboarding.tutorial_step = 0;
                         self.onboarding.completed = false;
                         self.show_onboarding = true;
                         save_onboarding(&self.onboarding);
                     }
-                    if ui.button("Dépannage").clicked() {
+                    if ui.button(t.troubleshooting).clicked() {
                         let dir = aos_home().join("var/run");
                         let _ = std::fs::create_dir_all(&dir);
                         #[cfg(windows)]
                         let _ = std::process::Command::new("explorer").arg(&dir).spawn();
                         #[cfg(target_os = "linux")]
                         let _ = std::process::Command::new("xdg-open").arg(&dir).spawn();
-                        self.status =
-                            "Logs daemons : var/run/*.stderr.log (dossier ouvert)".into();
+                        self.status = t.troubleshooting_status.into();
                     }
                     ui.label(format!("v{}", self.version));
                 });
@@ -1661,12 +1655,12 @@ impl eframe::App for UiApp {
                 ui.horizontal(|ui| {
                     ui.colored_label(
                         egui::Color32::from_rgb(100, 180, 255),
-                        format!("Mise à jour {} disponible", offer.version),
+                        t.update_available.replace("{}", &offer.version),
                     );
-                    if ui.button("Notes").clicked() {
+                    if ui.button(t.update_notes).clicked() {
                         open_in_browser(&offer.html_url);
                     }
-                    if ui.button("Télécharger (redémarrage ensuite)").clicked() {
+                    if ui.button(t.update_download).clicked() {
                         let session = bin_aos_session();
                         match std::process::Command::new(&session)
                             .arg("--download-update")
@@ -1674,17 +1668,16 @@ impl eframe::App for UiApp {
                             .status()
                         {
                             Ok(st) if st.success() => {
-                                self.update_status = format!(
-                                    "Update {} téléchargée — fermez Preview puis relancez.",
-                                    offer.version
-                                );
+                                self.update_status =
+                                    t.update_downloaded.replace("{}", &offer.version);
                             }
                             Ok(st) => {
                                 self.update_status =
-                                    format!("Échec download update (exit {st})");
+                                    t.update_fail_exit.replace("{}", &st.to_string());
                             }
                             Err(e) => {
-                                self.update_status = format!("Échec : {e}");
+                                self.update_status =
+                                    t.update_fail.replace("{}", &e.to_string());
                             }
                         }
                     }
@@ -1746,13 +1739,13 @@ impl eframe::App for UiApp {
         egui::SidePanel::left("tabs").exact_width(140.0).show(ctx, |ui| {
             ui.heading("Preview");
             for (tab, label) in [
-                (Tab::Chat, "Chat"),
-                (Tab::Memory, "Mémoire"),
-                (Tab::Notes, "Notes"),
-                (Tab::Agents, "Agents"),
-                (Tab::Audit, "Audit"),
-                (Tab::Scenarios, "Scénarios"),
-                (Tab::Feedback, "Retour"),
+                (Tab::Chat, t.tab_chat),
+                (Tab::Memory, t.tab_memory),
+                (Tab::Notes, t.tab_notes),
+                (Tab::Agents, t.tab_agents),
+                (Tab::Audit, t.tab_audit),
+                (Tab::Scenarios, t.tab_scenarios),
+                (Tab::Feedback, t.tab_feedback),
             ] {
                 if ui
                     .selectable_label(self.tab == tab, label)
@@ -1768,10 +1761,10 @@ impl eframe::App for UiApp {
                 }
             }
             ui.separator();
-            ui.heading("Réseau");
+            ui.heading(t.network_heading);
             let mut online = self.network_online;
             if ui
-                .checkbox(&mut online, "Autoriser le réseau")
+                .checkbox(&mut online, t.allow_network)
                 .changed()
             {
                 let _ = self.cmd_tx.send(Cmd::NetSetMode { online });

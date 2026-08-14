@@ -1,55 +1,60 @@
-# ADR 0005: Offloading State of the Art
+# ADR 0005: Offloading state of the art
 
-## Contexte
+**Language:** English | [Français](../docs/fr/adr/0005-offload-etat-de-l-art.md)
 
-La Phase P1 a validé l'inférence avec offload actif (RAM+disque) pour les modèles > VRAM. Ce ADR formalise les meilleures pratiques et les compromis pour l'offloading.
+## Context
 
-## État actuel
+Phase P1 validated inference with active offload (RAM+disk) for models larger
+than VRAM. This ADR formalizes best practices and trade-offs for offloading.
 
-- **Offload RAM** : Utilisé pour les couches qui ne tiennent pas en VRAM (modèles > 32B paramètres)
-- **Offload Disque** : Streaming de couches lentes vers le stockage persistant
-- **Combinaison** : Les couches rapides restent en VRAM, les couches lentes sont streamées
-- **Performance** : TTFT < 2s pour les modèles > 32B sur GPU 4080S
+## Current state
 
-## Stratégie d'offloading
+- **RAM offload**: used for layers that do not fit in VRAM (models > 32B)
+- **Disk offload**: streaming slow layers to persistent storage
+- **Combination**: fast layers stay in VRAM; slow layers are streamed
+- **Performance**: TTFT < 2s for models > 32B on RTX 4080S
 
-### 1. Stratégie de partitionnement des couches
-- **Couches rapides** : Premières couches (embedding, attention) → VRAM
-- **Couches lentes** : Couches profondes (décodeurs, heads) → RAM/Disque
-- **Politique** : Basée sur la taille des activations estimées par le profiler
+## Offloading strategy
 
-### 2. Gestion de la mémoire
-- **Memory Pool** : Allocation dynamique dans le Model Subsystem
-- **Swapping** : Page swap vers RAM quand la VRAM est saturée
-- **Prefetching** : Anticipation des accès via le cache IPC
+### 1. Layer partitioning
+- **Fast layers**: early layers (embedding, attention) → VRAM
+- **Slow layers**: deep layers (decoders, heads) → RAM/Disk
+- **Policy**: based on activation sizes estimated by the profiler
 
-### 3. Offload Disque
-- **Format** : HDF5/Parquet pour les tenseurs, compression ZSTD
-- **Streaming** : Lecture par blocs alignés sur la page de cache
-- **Checkpointing** : Sauvegarde périodique des états intermédiaires
+### 2. Memory management
+- **Memory pool**: dynamic allocation in the Model Subsystem
+- **Swapping**: page swap to RAM when VRAM is saturated
+- **Prefetching**: anticipate accesses via the IPC cache
 
-## Compromis
+### 3. Disk offload
+- **Format**: HDF5/Parquet for tensors, ZSTD compression
+- **Streaming**: block reads aligned to the cache page
+- **Checkpointing**: periodic save of intermediate states
 
-| Aspect | Avantage | Inconvénient |
-|--------|----------|--------------|
-| **Latence** | Offload réduit la pression VRAM | Ajoute de la latence (streaming) |
-| **Performance** | Permet d'utiliser des modèles plus grands | Nécessite un profiling précis |
-| **Complexité** | Logique d'offload complexe | Nécessite un profiler intégré |
+## Trade-offs
 
-## Recommandations
+| Aspect | Advantage | Drawback |
+|--------|-----------|----------|
+| **Latency** | Offload reduces VRAM pressure | Adds latency (streaming) |
+| **Performance** | Enables larger models | Needs precise profiling |
+| **Complexity** | Rich offload logic | Requires an integrated profiler |
 
-1. **Profiler continu** : Mesurer la taille des activations en temps réel pour adapter l'offload
-2. **Hybridation** : Certains agents préfèrent le CPU pour les tâches de raisonnement, le GPU pour l'inférence
-3. **Optimisation** : Utiliser des formats de tenseurs compressés (FP8, INT8) pour réduire l'offload
+## Recommendations
 
-## Impact sur les phases
+1. **Continuous profiler**: measure activation sizes in real time to adapt
+   offload
+2. **Hybridization**: some agents prefer CPU for reasoning tasks, GPU for
+   inference
+3. **Optimization**: compressed tensor formats (FP8, INT8) to reduce offload
 
-- **P1** : Implémentation du Model Subsystem avec offload
-- **P2** : Module Registry + Module Runtime avec support offload
-- **P3** : Audit trail incluant les opérations d'offload
-- **P4** : Port des services sur microkernel avec gestion d'offload
+## Phase impact
 
-## Références
+- **P1**: Model Subsystem with offload
+- **P2**: Module Registry + Module Runtime with offload support
+- **P3**: Audit trail including offload operations
+- **P4**: Port services to microkernel with offload management
 
-- [P1.3 Inference Scheduler v1](plan-developpement-phases.md)
-- [Specs techniques - Section 18](specs-techniques.md)
+## References
+
+- [P1.3 Inference Scheduler v1](../docs/development-plan.md)
+- [Technical specs — Section 18](../docs/technical-specs.md)

@@ -1,26 +1,27 @@
-# Contribuer à Akasha OS
+# Contributing to Akasha OS
 
-Merci d’avance. Le projet est en **double licence** (AGPL-3.0-only +
-licence commerciale). Pour que les deux voies restent possibles, chaque
-contribution doit pouvoir être redistribuée sous les deux régimes.
+**Language:** English | [Français](docs/fr/CONTRIBUTING.md)
 
-## Licence des contributions
+Thank you. The project is **dual-licensed** (AGPL-3.0-only + commercial).
+For both paths to remain viable, every contribution must be redistributable
+under both regimes.
 
-En ouvrant une pull request ou en poussant du code dans ce dépôt, tu
-certifies que :
+## Contribution license
 
-1. tu es titulaire des droits sur ta contribution, ou tu as le droit de
-   la soumettre ;
-2. tu la places sous **GNU AGPL-3.0-only** (`LICENSE`) ;
-3. tu accordes au concédant (Loïc Peaudecerf) une licence irrévocable,
-   mondiale, gratuite, de redistribuer ta contribution aussi sous la
-   **licence commerciale** décrite dans `LICENSE-COMMERCIAL.md`.
+By opening a pull request or pushing code to this repository, you certify
+that:
 
-Si tu ne peux pas accorder le point 3, ne soumets pas la contribution
-ici ; discute d’abord d’une exception écrite.
+1. you own the rights to your contribution, or you have permission to submit
+   it;
+2. you place it under **GNU AGPL-3.0-only** (`LICENSE`);
+3. you grant the licensor (Loïc Peaudecerf) an irrevocable, worldwide,
+   royalty-free license to redistribute your contribution also under the
+   **commercial license** described in `LICENSE-COMMERCIAL.md`.
 
-## Marque
+If you cannot grant point 3, do not submit the contribution here; discuss a
+written exception first.
 
-N’utilise pas « Akasha OS » / « Agent OS » comme nom d’un fork. Conserve
-`NOTICE` et un lien vers
-<https://github.com/azerothl/akasha-os>.
+## Trademark
+
+Do not use “Akasha OS” / “Agent OS” as the name of a fork. Keep `NOTICE`
+and a link to <https://github.com/azerothl/akasha-os>.

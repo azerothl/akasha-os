@@ -121,7 +121,14 @@ fi
 cp -f "${ROOT}/INSTALL.md" "${OUT}/" 2>/dev/null || true
 cp -f "${ROOT}/docs/TESTER.md" "${OUT}/TESTER.md" 2>/dev/null || true
 cp -f "${ROOT}/docs/FIRST-RUN.md" "${OUT}/FIRST-RUN.md" 2>/dev/null || true
+mkdir -p "${OUT}/docs"
 cp -f "${ROOT}/docs/FIRST-RUN.md" "${OUT}/docs/FIRST-RUN.md" 2>/dev/null || true
+cp -f "${ROOT}/docs/STATUS.md" "${OUT}/docs/STATUS.md" 2>/dev/null || true
+cp -f "${ROOT}/docs/I18N.md" "${OUT}/docs/I18N.md" 2>/dev/null || true
+if [ -d "${ROOT}/docs/fr" ]; then
+  mkdir -p "${OUT}/docs/fr"
+  cp -a "${ROOT}/docs/fr/." "${OUT}/docs/fr/"
+fi
 cp -f "${ROOT}/LICENSE" "${OUT}/" 2>/dev/null || true
 cp -f "${ROOT}/NOTICE" "${OUT}/" 2>/dev/null || true
 cp -f "${ROOT}/LICENSE-COMMERCIAL.md" "${OUT}/" 2>/dev/null || true
@@ -134,7 +141,7 @@ Agent OS Preview ${VERSION} (Linux x64 + NVIDIA)
 1. Prérequis : driver NVIDIA, nvidia-smi OK, ~4 Go disque
 2. ./install.sh
 3. Premier lancement : télécharge les modèles si besoin, puis le tutoriel
-4. Voir FIRST-RUN.md, INSTALL.md, TESTER.md
+4. Voir FIRST-RUN.md, INSTALL.md, TESTER.md (et docs/fr/ pour le français)
 EOF
 
 echo "== package prêt : ${OUT} =="

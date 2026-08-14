@@ -1,98 +1,95 @@
-# ADR 0001: Microkernel et caps natives (P4)
+# ADR 0001: Microkernel and native caps (P4)
 
-## Cible produit
+**Language:** English | [Français](../docs/fr/adr/0001-microkernel.md)
 
-**Agent OS est l'OS de la machine.** Le déploiement visé est une machine
-qui boot le microkernel (seL4) et les services Agent OS, **sans Windows
-ni Linux en dessous**. L'hôte de dev et la VM QEMU sont des **échafaudages**,
-pas la forme livrée.
+## Product target
 
-## Contexte
+**Agent OS is the machine's OS.** The intended deployment is a machine that
+boots the microkernel (seL4) and Agent OS services, **without Windows or
+Linux underneath**. The host and QEMU VM are **scaffolds**, not the shipped
+form.
 
-La phase P4 devait porter les services userspace validés (P0–P3) sur un
-microkernel capability-based (seL4 ou Redox). Le plan de développement
-prévoit une **décision structurante** : si le gate P4 s'avère trop coûteux
-(drivers GPU/NPU), rester sur l'hôte **en v1 de développement** tout en
-conservant l'architecture capability-based — sans abandonner la cible
-bare-metal.
+## Context
 
-L'hôte de développement est Windows (RTX 4080S). seL4 n'y a pas de
-bring-up GPU utilisable. On sépare donc : GPU sur l'hôte, noyau dans une
-VM, puis **fusion sur fer nu**.
+Phase P4 was meant to port validated userspace services (P0–P3) onto a
+capability-based microkernel (seL4 or Redox). The development plan calls for
+a **structuring decision**: if the P4 gate proves too costly (GPU/NPU
+drivers), stay on the host **for development v1** while keeping the
+capability-based architecture — without abandoning the bare-metal target.
 
-## Options (P4 v1 seulement)
+The development host is Windows (RTX 4080S). seL4 has no usable GPU bring-up
+there. So we split: GPU on the host, kernel in a VM, then **merge on bare
+metal**.
 
-### A — Port seL4 réel dès P4
-Preuve formelle, caps kernel natives, IPC seL4. Coût : bring-up, drivers
-userspace, toolchain hors Windows. Bloqué par le GPU en P4.
+## Options (P4 v1 only)
 
-### B — Port Redox dès P4
-Meilleur fit Rust, virtio plus accessible. Toujours un OS invité à
-maintenir, pas de llama.cpp/CUDA natif.
+### A — Real seL4 port in P4
+Formal proof, native kernel caps, seL4 IPC. Cost: bring-up, userspace
+drivers, non-Windows toolchain. Blocked by GPU in P4.
 
-### C — Noyau de caps userspace + processus isolés (hôte)
-`aos-capkd` est le **point d'application de confiance unique** : mint,
-derive, grant, revoke, check. Une révocation y est immédiatement globale
-pour tous les processus (vérifiée via le bus). Les services essentiels
-tournent déjà en processus séparés (Model, Agent, Storage/Policy,
-Audit, CapKernel). L'IPC sémantique transporte `cap://kernel/<id>` dans
-l'enveloppe. Le transport reste TCP localhost ; la sémantique est celle
-du bus natif.
+### B — Redox port in P4
+Better Rust fit, easier virtio. Still a guest OS to maintain; no native
+llama.cpp/CUDA.
 
-## Décision
+### C — Userspace cap kernel + isolated processes (host)
+`aos-capkd` is the **single trust application point**: mint, derive, grant,
+revoke, check. A revoke is immediately global for all processes (verified via
+the bus). Essential services already run as separate processes (Model, Agent,
+Storage/Policy, Audit, CapKernel). Semantic IPC carries `cap://kernel/<id>`
+in the envelope. Transport remains localhost TCP; semantics match the native
+bus.
 
-**P4 v1 = option C** (échafaudage sur l'hôte). **Cible finale = seL4
-bare-metal** (option A, plus tard). Redox n'est pas retenu, sauf si le
-Rust userspace seL4 bloque trop.
+## Decision
 
-Raisons du report, pas de l'abandon :
-- le goulot P4.1 (drivers GPU) est réel sur cet hôte Windows ;
-- les critères **testables** du gate P4 sont démontrables sans changer
-  de noyau ;
-- figer une stack GPU virtio jetable avant d'avoir un `AccelDevice`
-  natif (P5.3) retarderait le bare-metal au lieu de l'approcher.
+**P4 v1 = option C** (host scaffold). **Final target = seL4 bare metal**
+(option A, later). Redox is not selected unless seL4 Rust userspace blocks
+too hard.
 
-## Conséquences
+Reasons for deferral, not abandonment:
+- the P4.1 bottleneck (GPU drivers) is real on this Windows host;
+- **testable** P4 gate criteria are demonstrable without changing kernels;
+- freezing a throwaway virtio-GPU stack before a native `AccelDevice` (P5.3)
+  would delay bare metal instead of approaching it.
 
-- **P4.2** : `aos-capkd` remplace les `CapStore` locaux pour l'accès
-  ressources (fs). Les caps logiques P1–P3 restent valides en fallback
-  (modules WASM, agents) tant qu'aucune URI `cap://kernel/<id>` n'est
-  présentée.
-- **P4.3** : le Semantic IPC Bus n'est pas réécrit ; les caps natives
-  voyagent dans l'enveloppe. Transport seL4 = piste VM puis fer nu.
-- **P4.4** : `aos-auditd` est un processus autonome ; le tuer n'affecte
-  ni Model ni UI (forward fire-and-forget).
-- **P4.5** : UI = TUI/egui sur l'hôte (compositor microkernel = fer nu).
-- **P4.6** : boot offline = `demo/run-demo.ps1 -Gate p4` (pas de réseau).
-- **P5 hôte** : GPU first-class (batching, multi-GPU) **sur l'échafaudage
-  Windows**, pour ne pas attendre le fer nu.
-- **Après P4** : piste VM puis fer nu — voir ci-dessous.
+## Consequences
 
-## Pistes : échafaudage → produit
+- **P4.2**: `aos-capkd` replaces local `CapStore`s for resource access (fs).
+  Logical P1–P3 caps remain valid as fallback (WASM modules, agents) until a
+  `cap://kernel/<id>` URI is presented.
+- **P4.3**: Semantic IPC Bus is not rewritten; native caps travel in the
+  envelope. seL4 transport = VM track then bare metal.
+- **P4.4**: `aos-auditd` is autonomous; killing it does not affect Model or UI
+  (fire-and-forget forward).
+- **P4.5**: UI = TUI/egui on the host (microkernel compositor = bare metal).
+- **P4.6**: offline boot = `demo/run-demo.ps1 -Gate p4` (no network).
+- **P5 host**: first-class GPU (batching, multi-GPU) **on the Windows
+  scaffold**, so we do not wait for bare metal.
+- **After P4**: VM then bare-metal track — see below.
 
-Le port noyau et le GPU first-class **ne partagent pas le même véhicule
-pendant l'intégration**. `virtio-gpu` est de l'affichage, pas CUDA ; un
-passthrough RTX 4080 Super depuis Windows vers un invité seL4 n'est pas
-un chemin sérieux. WSL2 donne du CUDA, mais c'est du Linux userspace.
+## Tracks: scaffold → product
 
-| Piste | Rôle | Où | Objectif |
-|-------|------|----|----------|
-| **Hôte** | échafaudage | Windows + CUDA | Inférence, scheduler GPU, gates P1–P5 mesurables |
-| **VM** | échafaudage noyau | QEMU, invité seL4 **sans GPU** | Boot, caps kernel, IPC seL4 à la place du TCP, gate P4 rejoué CPU-only |
-| **Fer nu** | **produit** | Machine qui boot seL4 + Agent OS, **aucun autre OS** | Caps + IPC natives, puis `AccelDevice` GPU (P5.3), offline-first |
+Kernel port and first-class GPU **do not share the same vehicle during
+integration**. `virtio-gpu` is display, not CUDA; RTX 4080 Super passthrough
+from Windows into an seL4 guest is not a serious path. WSL2 gives CUDA, but
+that is Linux userspace.
 
-Ordre : **Hôte et VM en parallèle** (contrat = bus sémantique
-`cap://kernel/<id>` ; la VM ne change que le transport), **puis fer nu**
-quand le boot seL4 + services essentiels sont verts en VM. Sur le fer :
-d'abord les mêmes services CPU-only que la VM, ensuite le GPU natif
-(pas virtio).
+| Track | Role | Where | Goal |
+|-------|------|-------|------|
+| **Host** | scaffold | Windows + CUDA | Inference, GPU scheduler, measurable P1–P5 gates |
+| **VM** | kernel scaffold | QEMU, seL4 guest **without GPU** | Boot, kernel caps, seL4 IPC instead of TCP, P4 gate replayed CPU-only |
+| **Bare metal** | **product** | Machine boots seL4 + Agent OS, **no other OS** | Native caps + IPC, then GPU `AccelDevice` (P5.3), offline-first |
 
-Dans l'invité VM : image seL4 `virt` sous QEMU (Microkit), d'abord
-`capkd` + `auditd` + gate (CPU-only), rejeu du gate P4 via
-`.\demo\run-sel4-vm.ps1`. Voir `vm/sel4/README.md` et `phase-vm-sel4.md`.
+Order: **Host and VM in parallel** (contract = semantic bus
+`cap://kernel/<id>`; the VM only changes transport), **then bare metal** when
+seL4 boot + essential services are green in the VM. On bare metal: first the
+same CPU-only services as the VM, then native GPU (not virtio).
 
-## Références
+In the VM guest: seL4 `virt` image under QEMU (Microkit), first `capkd` +
+`auditd` + gate (CPU-only), P4 gate replay via `.\demo\run-sel4-vm.ps1`.
+See `vm/sel4/README.md` and `docs/phases/phase-vm-sel4.md`.
 
-- `plan-developpement-phases.md` §P4, **§PV**, §P5.3 (`AccelDevice` natif)
+## References
+
+- `docs/development-plan.md` §P4, **§PV**, §P5.3 (native `AccelDevice`)
 - [seL4](https://sel4.dev/), [Redox OS](https://redox-os.org/)
-- `specs-techniques.md` §2.3 (caps), §2.4 (IPC), §1.3 (userspace d'abord)
+- `docs/technical-specs.md` §2.3 (caps), §2.4 (IPC), §1.3 (userspace first)

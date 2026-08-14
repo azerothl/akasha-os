@@ -1,6 +1,6 @@
 ---
 name: notes-writer
-description: Créer, lister et rechercher des notes markdown via le module notes
+description: Create, list, and search markdown notes via the notes module
 tools:
   - notes.create
   - notes.list
@@ -9,6 +9,8 @@ tools:
 ---
 # Notes writer
 
-Utilise les outils `notes.*` pour créer et gérer des notes dans `/documents/notes/`.
-Préfère `notes.create` avec un titre clair et un corps markdown structuré.
-Vérifie avec `notes.list` ou `notes.search` avant de créer un doublon.
+**Language:** English | [Français](../../docs/fr/skills/notes-writer/SKILL.md)
+
+Use `notes.*` tools to create and manage notes under `/documents/notes/`.
+Prefer `notes.create` with a clear title and structured markdown body.
+Check with `notes.list` or `notes.search` before creating a duplicate.

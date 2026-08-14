@@ -1,6 +1,6 @@
 ---
 name: research
-description: Recherche web et récupération de pages pour documenter une réponse
+description: Web search and page fetch to document an answer
 tools:
   - web.search
   - net.fetch
@@ -9,8 +9,10 @@ tools:
 ---
 # Research
 
-1. Clarifie la question.
-2. `web.search` avec une requête précise.
-3. `net.fetch` sur 1–3 URLs pertinentes.
-4. Synthétise et `memory.remember` les faits clés.
-5. Cite les sources dans le résumé final.
+**Language:** English | [Français](../../docs/fr/skills/research/SKILL.md)
+
+1. Clarify the question.
+2. `web.search` with a precise query.
+3. `net.fetch` on 1–3 relevant URLs.
+4. Synthesize and `memory.remember` key facts.
+5. Cite sources in the final summary.

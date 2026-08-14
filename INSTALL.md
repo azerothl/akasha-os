@@ -1,32 +1,34 @@
 # Installation — Agent OS Preview
 
-**Ce n'est pas un OS bootable.** Preview tourne **sur Windows ou Linux x64**
-avec GPU **NVIDIA** (échafaudage hôte, ADR 0001). seL4 = piste séparée.
+**Language:** English | [Français](docs/fr/INSTALL.md)
 
-## Prérequis
+**This is not a bootable OS.** Preview runs on **Windows or Linux x64** with an
+**NVIDIA** GPU (host scaffolding, ADR 0001). seL4 is a separate track.
+
+## Requirements
 
 | | |
 |--|--|
-| OS | Windows 10/11 x64 **ou** Linux x64 (glibc récent) |
-| GPU | NVIDIA avec driver récent (`nvidia-smi -L` OK) |
-| Disque | ~4 Go libre (binaires + GGUF téléchargés au 1er run) |
-| CUDA | Runtime embarqué dans le paquet (driver suffit) |
+| OS | Windows 10/11 x64 **or** Linux x64 (recent glibc) |
+| GPU | NVIDIA with a recent driver (`nvidia-smi -L` OK) |
+| Disk | ~4 GB free (binaries + GGUF downloaded on first run) |
+| CUDA | Runtime shipped in the package (driver is enough) |
 
-Pas de macOS, pas de mode CPU-only en 0.1.
+No macOS, no CPU-only mode in 0.1.
 
 ## Windows
 
-1. Télécharger `AgentOS-Preview-<ver>-windows-x64.zip` depuis
+1. Download `AgentOS-Preview-<ver>-windows-x64.zip` from
    [GitHub Releases](https://github.com/azerothl/akasha-os/releases).
-2. Décompresser, puis :
+2. Extract, then:
    ```powershell
    .\install.ps1
    ```
-   Installe sous `%LOCALAPPDATA%\AgentOS-Preview` (préserve `var/` / `etc/`
-   en cas de mise à jour).
-3. Lancer **Agent OS Preview**.
+   Installs under `%LOCALAPPDATA%\AgentOS-Preview` (preserves `var/` / `etc/`
+   on update).
+3. Launch **Agent OS Preview**.
 
-Sans installateur :
+Without the installer:
 ```powershell
 $env:AOS_HOME = (Resolve-Path .)
 .\bin\aos-session.exe
@@ -34,65 +36,65 @@ $env:AOS_HOME = (Resolve-Path .)
 
 ## Linux
 
-1. Télécharger `AgentOS-Preview-<ver>-linux-x64.tar.gz`, extraire.
+1. Download `AgentOS-Preview-<ver>-linux-x64.tar.gz`, extract.
 2. ```bash
    ./install.sh
    ```
-   Préfixe : `~/.local/share/agentos-preview` (overlay non destructif).
-3. Lancer `agentos-preview`.
+   Prefix: `~/.local/share/agentos-preview` (non-destructive overlay).
+3. Run `agentos-preview`.
 
-## Contenu du paquet
+## Package contents
 
 ```
 bin/            daemons + CUDA runtime
-share/models/   manifest.json (GGUF téléchargés au 1er run)
+share/models/   manifest.json (GGUF downloaded on first run)
 share/modules/  notes.aospkg, ext-rt.aospkg
-share/skills/   skills Preview
+share/skills/   Preview skills
 data/models/    catalog.yaml
-VERSION         semver du build
-FIRST-RUN.md    tutoriel texte
-var/            données locales (créé au run)
+VERSION         build semver
+FIRST-RUN.md    text tutorial
+var/            local data (created at run)
 ```
 
-## Premier lancement
+## First launch
 
-1. `aos-session` vérifie NVIDIA + espace disque.
-2. Télécharge les GGUF Qwen2.5 (3B + 0.5B) si absents (`share/models/`).
-3. Démarre bus → capkd → auditd → modeld → platformd → agentd.
-4. Ouvre l'UI egui + **tutoriel** multi-pages.
-5. Fermer l'UI arrête les daemons.
+1. `aos-session` checks NVIDIA + disk space.
+2. Downloads Qwen2.5 GGUFs (3B + 0.5B) if missing (`share/models/`).
+3. Starts bus → capkd → auditd → modeld → platformd → agentd.
+4. Opens egui UI + multi-page **tutorial**.
+5. Closing the UI stops the daemons.
 
-Voir [docs/FIRST-RUN.md](docs/FIRST-RUN.md).
+See [docs/FIRST-RUN.md](docs/FIRST-RUN.md).
 
-## Mises à jour
+## Updates
 
-Un bandeau apparaît dans l'UI si une Release plus récente existe.
-**Télécharger** écrit l'archive dans `var/updates/` ; le **prochain**
-lancement applique `bin/` + `share/` sans toucher à `var/` ni écraser
-`etc/*.yaml` (fichiers `.new` si besoin).
+A banner appears in the UI when a newer Release exists.
+**Download** writes the archive under `var/updates/`; the **next** launch
+applies `bin/` + `share/` without touching `var/` or overwriting
+`etc/*.yaml` (`.new` files if needed).
 
-## Réseau & recherche (optionnel)
+## Network & search (optional)
 
-Par défaut le réseau est **coupé** (`offline_strict`). Case
-**Autoriser le réseau** pour `web.search` / `net.fetch`.
+Network is **off** by default (`offline_strict`). Enable **Allow network**
+for `web.search` / `net.fetch`.
 
 ```yaml
-# var/secrets/keys.yaml (optionnel)
+# var/secrets/keys.yaml (optional)
 keys:
   brave_search_api_key: "BSA..."
-  github_token: "ghp_..."   # issues Feedback en un clic
+  github_token: "ghp_..."   # one-click Feedback issues
 ```
 
-## Dépannage
+## Troubleshooting
 
-| Symptôme | Action |
-|----------|--------|
-| GPU NVIDIA requis | Driver NVIDIA ; `nvidia-smi -L` |
-| Échec modèles | Réseau pour HF, ou copier les GGUF dans `share/models/` |
-| healthcheck échoué | `var/run/*.stderr.log` (bouton **Dépannage**) |
-| Bus injoignable | Toujours via `aos-session` |
+| Symptom | Action |
+|---------|--------|
+| NVIDIA GPU required | NVIDIA driver; `nvidia-smi -L` |
+| Model download failed | Network for HF, or copy GGUFs into `share/models/` |
+| Healthcheck failed | `var/run/*.stderr.log` (**Troubleshooting** button) |
+| Bus unreachable | Always launch via `aos-session` |
 
-## Build / CI (mainteneurs)
+## Build / CI (maintainers)
 
 ```powershell
 .\packaging\build-preview.ps1 -SkipModels -RequireCuda
@@ -102,9 +104,9 @@ keys:
 SKIP_MODELS=1 REQUIRE_CUDA=1 ./packaging/build-preview.sh
 ```
 
-GitHub Actions : `.github/workflows/preview-release.yml` (tags `v*`).
+GitHub Actions: `.github/workflows/preview-release.yml` (tags `v*`).
 
 ## Licence
 
-AGPL-3.0-only (`LICENSE`) ; licence commerciale possible
-(`LICENSE-COMMERCIAL.md`). Conservez `NOTICE` avec toute redistribution.
+AGPL-3.0-only (`LICENSE`); commercial license available
+(`LICENSE-COMMERCIAL.md`). Keep `NOTICE` with any redistribution.

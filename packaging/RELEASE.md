@@ -1,42 +1,44 @@
 # GitHub Release — Agent OS Preview
 
-## Automatique (recommandé)
+**Language:** English | [Français](../docs/fr/packaging-RELEASE.md)
 
-Tag puis push :
+## Automatic (recommended)
+
+Tag then push:
 
 ```bash
 git tag v0.1.0
 git push origin v0.1.0
 ```
 
-Le workflow [`.github/workflows/preview-release.yml`](../.github/workflows/preview-release.yml)
-construit Win + Linux (CUDA 12.4, sans GGUF), publie :
+The workflow [`.github/workflows/preview-release.yml`](../.github/workflows/preview-release.yml)
+builds Win + Linux (CUDA 12.4, no GGUF) and publishes:
 
 - `AgentOS-Preview-<ver>-windows-x64.zip`
 - `AgentOS-Preview-<ver>-linux-x64.tar.gz`
-- `latest.json` (sha256 + métadonnées)
+- `latest.json` (sha256 + metadata)
 
-Déclenchement manuel : Actions → **preview-release** → Run workflow.
+Manual trigger: Actions → **preview-release** → Run workflow.
 
-## Manuel
+## Manual
 
-| Asset | Commande |
-|-------|----------|
-| Windows | `.\packaging\build-preview.ps1 -SkipModels -RequireCuda` puis Compress-Archive |
-| Linux | `SKIP_MODELS=1 REQUIRE_CUDA=1 ./packaging/build-preview.sh` puis `tar czf` |
+| Asset | Command |
+|-------|---------|
+| Windows | `.\packaging\build-preview.ps1 -SkipModels -RequireCuda` then Compress-Archive |
+| Linux | `SKIP_MODELS=1 REQUIRE_CUDA=1 ./packaging/build-preview.sh` then `tar czf` |
 
-Les GGUF sont téléchargés au **premier run** via `share/models/manifest.json`.
+GGUFs are downloaded on **first run** via `share/models/manifest.json`.
 
-## Notes de version (brouillon)
+## Release notes (draft)
 
 ```
-Agent OS Preview — cohorte de test
+Agent OS Preview — tester cohort
 
-- Install Win/Linux + NVIDIA (pas un OS bootable)
-- Premier run : download modèles + tutoriel in-app
-- Updates non destructives via GitHub Releases
-- Retours → issues GitHub
+- Win/Linux install + NVIDIA (not a bootable OS)
+- First run: model download + in-app tutorial
+- Non-destructive updates via GitHub Releases
+- Feedback → GitHub issues
 
-Prérequis : nvidia-smi OK, ~4 Go disque.
-Voir FIRST-RUN.md / INSTALL.md / TESTER.md
+Requirements: nvidia-smi OK, ~4 GB disk.
+See FIRST-RUN.md / INSTALL.md / TESTER.md
 ```

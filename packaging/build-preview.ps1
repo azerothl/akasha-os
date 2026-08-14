@@ -135,6 +135,12 @@ Copy-Item (Join-Path $root "INSTALL.md") "$OutDir\" -ErrorAction SilentlyContinu
 Copy-Item (Join-Path $root "docs\TESTER.md") "$OutDir\TESTER.md" -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $root "docs\FIRST-RUN.md") "$OutDir\docs\FIRST-RUN.md" -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $root "docs\FIRST-RUN.md") "$OutDir\FIRST-RUN.md" -ErrorAction SilentlyContinue
+Copy-Item (Join-Path $root "docs\STATUS.md") "$OutDir\docs\STATUS.md" -ErrorAction SilentlyContinue
+Copy-Item (Join-Path $root "docs\I18N.md") "$OutDir\docs\I18N.md" -ErrorAction SilentlyContinue
+if (Test-Path (Join-Path $root "docs\fr")) {
+    New-Item -ItemType Directory -Force -Path "$OutDir\docs\fr" | Out-Null
+    Copy-Item (Join-Path $root "docs\fr\*") "$OutDir\docs\fr\" -Recurse -Force -ErrorAction SilentlyContinue
+}
 Copy-Item (Join-Path $root "LICENSE") "$OutDir\" -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $root "NOTICE") "$OutDir\" -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $root "LICENSE-COMMERCIAL.md") "$OutDir\" -ErrorAction SilentlyContinue
@@ -146,7 +152,7 @@ Agent OS Preview $Version (Windows x64 + NVIDIA)
 1. Prérequis : driver NVIDIA récent, nvidia-smi OK, ~4 Go disque
 2. Installation : .\install.ps1
 3. Premier lancement : télécharge les modèles si besoin, puis ouvre le tutoriel
-4. Voir FIRST-RUN.md, INSTALL.md, TESTER.md
+4. Voir FIRST-RUN.md, INSTALL.md, TESTER.md (et docs/fr/ pour le français)
 "@ | Set-Content "$OutDir\README.txt" -Encoding utf8
 
 Write-Host "== package prêt : $OutDir =="

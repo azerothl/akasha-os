@@ -1,99 +1,100 @@
-# Protocole testeur — Agent OS Preview 0.1
+# Tester protocol — Agent OS Preview 0.1
 
-Merci de tester la Preview. Objectif : installer **sans** `cargo` ni clone du
-repo, exercer les parcours principaux, et envoyer un retour **depuis l'UI**.
+**Language:** English | [Français](fr/TESTER.md)
 
-## Avant de commencer
+Thank you for testing Preview. Goal: install **without** `cargo` or cloning
+the repo, exercise the main paths, and send feedback **from the UI**.
 
-- Machine Windows ou Linux x64 + GPU NVIDIA (`nvidia-smi` OK)
-- Installation : voir [INSTALL.md](../INSTALL.md)
-- Lancer **Agent OS Preview** (`aos-session`)
+## Before you start
 
-Bannière attendue : *Preview sur Windows/Linux — ce n'est pas encore l'OS bootable*.
+- Windows or Linux x64 + NVIDIA GPU (`nvidia-smi` OK)
+- Install: see [INSTALL.md](../INSTALL.md)
+- Launch **Agent OS Preview** (`aos-session`)
 
-## Étapes (également dans l'onglet Scénarios)
+Expected banner: *Preview on Windows/Linux — this is not the bootable OS yet*.
 
-### 1. Chat offline
+## Steps (also in the Scenarios tab)
 
-- Terminer le **tutoriel** (4 étapes : bienvenue, préférences, tour, parcours).
-- Onglet **Chat** : poser une question (ex. « Qu'est-ce qu'Agent OS ? »).
-- Vérifier une réponse streamée **sans réseau**.
-- Au tout premier run, les modèles GGUF ont dû être téléchargés (réseau).
+### 1. Offline chat
 
-### 2. Note humaine
+- Finish the **tutorial** (4 steps: welcome, preferences, tour, paths).
+- **Chat** tab: ask a question (e.g. “What is Agent OS?”).
+- Verify a streamed reply **without network**.
+- On the very first run, GGUF models must have been downloaded (network).
 
-- Onglet **Notes** → titre + contenu → **Créer**, puis **Lister**.
+### 2. Human note
+
+- **Notes** tab → title + body → **Create**, then **List**.
 
 ### 3. Note via agent
 
-- Onglet **Agents** → créer un agent avec une tâche du type
-  « crée une note intitulée cohorte avec le contenu hello ».
-- L'agent utilise la convention `TOOL:` côté modèle.
+- **Agents** tab → create an agent with a task like
+  “create a note titled cohort with content hello”.
+- The agent uses the `TOOL:` convention on the model side.
 
-### 4. Confirmation sensible
+### 4. Sensitive confirmation
 
-- Lorsqu'une confirmation apparaît en bandeau (action sensible) :
-  **Refuser** une fois, puis **Accepter** une autre (ou la même rejouée).
-- Fail-closed : timeout = refus.
+- When a confirmation banner appears (sensitive action):
+  **Deny** once, then **Accept** another (or the same replayed).
+- Fail-closed: timeout = deny.
 
 ### 5. Audit + kill auditd
 
-- Onglet **Audit** → **Rafraîchir** (événements signés).
-- Bouton **Tuer aos-auditd** : le chat doit continuer ; le superviseur
-  redémarre auditd en arrière-plan.
+- **Audit** tab → **Refresh** (signed events).
+- **Kill aos-auditd**: chat must continue; the supervisor restarts auditd
+  in the background.
 
-### 6. Sessions parallèles (PC.6)
+### 6. Parallel sessions (PC.6)
 
-- Panneau **Sessions** (Chat) : créer 3 sessions, chatter dans chacune.
-- Redémarrer Preview : les historiques doivent réapparaître.
+- **Sessions** panel (Chat): create 3 sessions, chat in each.
+- Restart Preview: histories must reappear.
 
-### 7. Mémoire (PC.7)
+### 7. Memory (PC.7)
 
-- Onglet **Mémoire** : mémoriser un fait (« je préfère le français »), **Recall**.
-- Revenir au Chat : le prochain message doit pouvoir s'appuyer sur ce contexte
-  (injection `mem.context` avant infer).
+- **Memory** tab: remember a fact (“I prefer French”), **Recall**.
+- Back to Chat: the next message should be able to use that context
+  (`mem.context` injection before infer).
 
-### 8. Recherche web (PC.8)
+### 8. Web search (PC.8)
 
-- Case **Autoriser le réseau** (barre latérale) **désactivée** → **Rechercher**
-  doit échouer (`offline_strict`).
-- Activer le réseau → recherche (ex. « Agent OS seL4 ») → résultats titre/URL.
-- (Optionnel) clé Brave dans `var/secrets/keys.yaml` :
-  `brave_search_api_key: "…"` — sinon DuckDuckGo HTML.
+- **Allow network** (sidebar) **off** → **Search** must fail (`offline_strict`).
+- Enable network → search (e.g. “Agent OS seL4”) → title/URL results.
+- (Optional) Brave key in `var/secrets/keys.yaml`:
+  `brave_search_api_key: "…"` — otherwise DuckDuckGo HTML.
 
-### 9. Téléchargement + génération fichiers (PC.9)
+### 9. Download + file generation (PC.9)
 
-- Avec réseau ON : coller une URL image → **Télécharger URL** → fichier sous
+- With network ON: paste an image URL → **Download URL** → file under
   `/downloads` (`var/storage/data/downloads/`).
-- **Générer fichier** : format `pdf` ou `png`, chemin `/downloads/test.pdf`,
-  contenu texte → **Ouvrir downloads**.
+- **Generate file**: format `pdf` or `png`, path `/downloads/test.pdf`,
+  text content → **Open downloads**.
 
-### 10. Retour depuis l'UI
+### 10. Feedback from the UI
 
-- Onglet **Retour** (ou bouton **Signaler**) :
-  - titre, catégorie (bug / ux / perf / security), sévérité, texte
-  - case **Créer une issue GitHub** (cochée par défaut, sauf security)
-  - **Envoyer le retour**
-- Une copie locale est écrite dans `var/feedback/`.
-- Une issue (ou le formulaire GitHub prérempli) s'ouvre sur
+- **Feedback** tab (or **Report** button):
+  - title, category (bug / ux / perf / security), severity, body
+  - **Create a GitHub issue** (checked by default, except security)
+  - **Send feedback**
+- A local copy is written under `var/feedback/`.
+- An issue (or prefilled GitHub form) opens on
   [azerothl/akasha-os](https://github.com/azerothl/akasha-os/issues).
-  Avec un compte GitHub, validez **Submit new issue**.
+  With a GitHub account, confirm **Submit new issue**.
 
-Les rapports **security** ne sont **pas** publiés.
+**Security** reports are **not** published.
 
-**Aucun envoi réseau automatique** (hors actions explicites : PC.8–9 et
-envoi de retour GitHub).
+**No automatic network upload** (except explicit actions: PC.8–9 and
+GitHub feedback submit).
 
-## Critères de succès (équipe)
+## Success criteria (team)
 
-- 3 testeurs Windows + 1 Linux suivent ce protocole sans toolchain Rust
-- Au moins un fichier `var/feedback/fb-*.json` exploitable par retour
-- Gates PC.6–PC.9 cochés sur au moins une machine
+- 3 Windows + 1 Linux testers complete this protocol without a Rust toolchain
+- At least one usable `var/feedback/fb-*.json` per report
+- Gates PC.6–PC.9 checked on at least one machine
 
-## Hors scope Preview 0.1
+## Out of scope Preview 0.1
 
-- Boot seL4 / fer nu
+- seL4 / bare-metal boot
 - macOS, CPU-only
-- Modèle 32B dans l'installeur
-- Mise à jour automatique
-- Génération audio/vidéo native
+- 32B model in the installer
+- Fully automatic update apply
+- Native audio/video generation
