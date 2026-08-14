@@ -2414,33 +2414,78 @@ async fn main() {
         });
     }
 
-    // --- feedback.submit (Preview 0.1, local only) ---
+    // --- feedback.submit (local + issue GitHub optionnelle) ---
     {
         let s = sub.clone();
         svc.on("feedback.submit", move |ctx| {
             let s = s.clone();
             async move {
                 match ctx.payload::<FeedbackSubmitRequest>() {
-                    Ok(req) => match aos_platform::feedback::submit(
-                        aos_platform::feedback::default_dir(),
-                        req,
-                    ) {
-                        Ok(resp) => {
-                            s.audit(AuditAppendRequest {
-                                trace_id: format!("feedback-{}", resp.id),
-                                actor: "human:ui".into(),
-                                action: "feedback.submit".into(),
-                                target: resp.id.clone(),
-                                detail: serde_json::json!({ "path": resp.path }),
-                            });
-                            let _ = ctx.respond(aos_ipc::msg::Status::Ok, &resp).await;
+                    Ok(req) => {
+                        let publish = req.publish_github;
+                        let req_gh = req.clone();
+                        match aos_platform::feedback::submit(
+                            aos_platform::feedback::default_dir(),
+                            req,
+                        ) {
+                            Ok(mut resp) => {
+                                if aos_platform::feedback::is_security_category(&req_gh.category)
+                                {
+                                    resp.github_status = "skipped_security".into();
+                                } else if publish {
+                                    let token = s
+                                        .secrets
+                                        .lock()
+                                        .unwrap()
+                                        .get("github_token", "service:platformd")
+                                        .ok()
+                                        .or_else(|| std::env::var("AOS_GITHUB_TOKEN").ok())
+                                        .or_else(|| std::env::var("GITHUB_TOKEN").ok());
+                                    let gh = {
+                                        let mut net = s.net.lock().unwrap();
+                                        aos_platform::feedback::publish_to_github(
+                                            &mut net,
+                                            token.as_deref(),
+                                            &req_gh,
+                                            &resp.id,
+                                        )
+                                    };
+                                    match gh {
+                                        Ok(p) => {
+                                            resp.github_issue_url = Some(p.issue_url.clone());
+                                            resp.github_issue_number = p.issue_number;
+                                            resp.github_status = p.via.into();
+                                        }
+                                        Err(e) => {
+                                            resp.github_issue_url = Some(
+                                                aos_platform::feedback::new_issue_form_url(
+                                                    &req_gh, &resp.id,
+                                                ),
+                                            );
+                                            resp.github_status = format!("form ({e})");
+                                        }
+                                    }
+                                }
+                                s.audit(AuditAppendRequest {
+                                    trace_id: format!("feedback-{}", resp.id),
+                                    actor: "human:ui".into(),
+                                    action: "feedback.submit".into(),
+                                    target: resp.id.clone(),
+                                    detail: serde_json::json!({
+                                        "path": resp.path,
+                                        "github_status": resp.github_status,
+                                        "github_issue": resp.github_issue_number,
+                                    }),
+                                });
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &resp).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(aos_ipc::msg::Status::InternalError, &e)
+                                    .await;
+                            }
                         }
-                        Err(e) => {
-                            let _ = ctx
-                                .respond_error(aos_ipc::msg::Status::InternalError, &e)
-                                .await;
-                        }
-                    },
+                    }
                     Err(_) => {
                         let _ = ctx
                             .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")

@@ -25,6 +25,23 @@ use std::sync::Arc;
 const PREVIEW_BANNER: &str =
     "Agent OS Preview 0.1 — exécuté sur Windows/Linux (échafaudage). Ce n'est pas encore l'OS bootable seL4.";
 
+fn open_in_browser(url: &str) {
+    #[cfg(windows)]
+    {
+        let _ = std::process::Command::new("rundll32")
+            .args(["url.dll,FileProtocolHandler", url])
+            .spawn();
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let _ = std::process::Command::new("xdg-open").arg(url).spawn();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("open").arg(url).spawn();
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Tab {
     Chat,
@@ -1088,6 +1105,7 @@ struct UiApp {
     fb_body: String,
     fb_scenario: String,
     fb_result: String,
+    fb_github: bool,
 }
 
 impl UiApp {
@@ -1164,6 +1182,7 @@ impl UiApp {
             fb_body: String::new(),
             fb_scenario: String::new(),
             fb_result: String::new(),
+            fb_github: true,
         }
     }
 
@@ -1398,10 +1417,44 @@ impl eframe::App for UiApp {
                 }
                 Evt::Confirms(c) => self.confirms = c,
                 Evt::FeedbackOk(r) => {
-                    self.fb_result = format!(
-                        "Enregistré : {}\nDossier : {}\nOuvrez ce dossier et joignez-le à une issue / canal cohorte.",
+                    let mut msg = format!(
+                        "Enregistré localement : {}\nDossier : {}",
                         r.path, r.export_dir
                     );
+                    match r.github_status.as_str() {
+                        "created" | "api" | "gh" => {
+                            if let Some(url) = &r.github_issue_url {
+                                msg.push_str(&format!(
+                                    "\nIssue GitHub #{} : {url}",
+                                    r.github_issue_number
+                                        .map(|n| n.to_string())
+                                        .unwrap_or_else(|| "?".into())
+                                ));
+                                open_in_browser(url);
+                            }
+                        }
+                        "skipped_security" => {
+                            msg.push_str(
+                                "\nCatégorie security : non publié (issue publique interdite). Conservez le dossier local.",
+                            );
+                        }
+                        s if s == "form" || s.starts_with("form ") => {
+                            if let Some(url) = &r.github_issue_url {
+                                msg.push_str(
+                                    "\nFormulaire GitHub ouvert — cliquez « Submit new issue » pour publier.",
+                                );
+                                open_in_browser(url);
+                            }
+                        }
+                        "local_only" => {}
+                        other => {
+                            msg.push_str(&format!("\nGitHub : {other}"));
+                            if let Some(url) = &r.github_issue_url {
+                                open_in_browser(url);
+                            }
+                        }
+                    }
+                    self.fb_result = msg;
                     self.status = format!("feedback {}", r.id);
                 }
                 Evt::Sessions(list) => self.sessions = list,
@@ -2120,7 +2173,9 @@ impl UiApp {
 
     fn ui_feedback(&mut self, ui: &mut egui::Ui) {
         ui.heading("Retour testeur");
-        ui.label("Aucun envoi réseau automatique — fichier local dans var/feedback/.");
+        ui.label(
+            "Copie locale dans var/feedback/. Une issue GitHub est créée sur azerothl/akasha-os (formulaire navigateur, ou API si jeton / gh).",
+        );
         ui.horizontal(|ui| {
             ui.label("Titre");
             ui.text_edit_singleline(&mut self.fb_title);
@@ -2148,7 +2203,21 @@ impl UiApp {
             ui.text_edit_singleline(&mut self.fb_scenario);
         });
         ui.text_edit_multiline(&mut self.fb_body);
-        if ui.button("Enregistrer le retour").clicked() && !self.fb_title.is_empty() {
+        let security = self.fb_category.eq_ignore_ascii_case("security");
+        if security {
+            self.fb_github = false;
+            ui.weak(
+                "Les rapports security restent locaux (pas d'issue publique). Utilisez GitHub Security Advisories.",
+            );
+        } else {
+            ui.checkbox(&mut self.fb_github, "Créer une issue GitHub");
+            if self.fb_github && !self.network_online {
+                ui.weak(
+                    "Réseau in-app coupé : le navigateur ouvrira le formulaire GitHub (compte GitHub requis).",
+                );
+            }
+        }
+        if ui.button("Envoyer le retour").clicked() && !self.fb_title.is_empty() {
             let meta = serde_json::json!({
                 "preview_version": self.version,
                 "os": std::env::consts::OS,
@@ -2173,6 +2242,7 @@ impl UiApp {
                     Some(self.fb_scenario.clone())
                 },
                 meta,
+                publish_github: self.fb_github && !security,
             }));
         }
         if !self.fb_result.is_empty() {

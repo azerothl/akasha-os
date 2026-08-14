@@ -13,7 +13,7 @@ Linux x64 + NVIDIA, tester depuis egui, renvoyer des feedbacks locaux.
 | PC.1 | `aos-session` | fait |
 | PC.2 | Packaging Win/Linux | scripts `packaging/` |
 | PC.3 | UI egui cohorte | fait |
-| PC.4 | `feedback.submit` | fait |
+| PC.4 | `feedback.submit` | local + issue GitHub |
 | PC.5 | INSTALL + TESTER | fait |
 | PC.6 | Sessions chat parallèles persistées | fait |
 | PC.7 | Mémoire session + user + panneau UI | fait |

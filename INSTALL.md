@@ -75,6 +75,22 @@ keys:
 
 La clé n'est jamais exposée aux agents (`service:platformd` seulement).
 
+### Issues GitHub (retours UI)
+
+L'onglet **Retour** crée une issue sur
+[azerothl/akasha-os](https://github.com/azerothl/akasha-os/issues) :
+
+1. **Sans jeton** (défaut) : ouverture du formulaire GitHub prérempli dans
+   le navigateur — cliquez **Submit new issue** (compte GitHub).
+2. **Création directe** si `gh` est authentifié, ou un PAT `issues:write` :
+
+```yaml
+keys:
+  github_token: "ghp_..."
+```
+
+Les rapports **security** restent locaux (pas d'issue publique).
+
 Téléchargements et fichiers générés : `var/storage/data/downloads/`
 (chemins logiques `/downloads/**`).
 

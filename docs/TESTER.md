@@ -71,11 +71,17 @@ Bannière attendue : *Preview sur Windows/Linux — ce n'est pas encore l'OS boo
 
 - Onglet **Retour** (ou bouton **Signaler**) :
   - titre, catégorie (bug / ux / perf / security), sévérité, texte
-  - **Enregistrer le retour**
-- Ouvrir le dossier `var/feedback/` et joindre le paquet à une issue GitHub
-  ou au canal cohorte.
+  - case **Créer une issue GitHub** (cochée par défaut, sauf security)
+  - **Envoyer le retour**
+- Une copie locale est écrite dans `var/feedback/`.
+- Une issue (ou le formulaire GitHub prérempli) s'ouvre sur
+  [azerothl/akasha-os](https://github.com/azerothl/akasha-os/issues).
+  Avec un compte GitHub, validez **Submit new issue**.
 
-**Aucun envoi réseau automatique** (hors actions explicites PC.8–9).
+Les rapports **security** ne sont **pas** publiés.
+
+**Aucun envoi réseau automatique** (hors actions explicites : PC.8–9 et
+envoi de retour GitHub).
 
 ## Critères de succès (équipe)
 

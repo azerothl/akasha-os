@@ -1171,7 +1171,8 @@ pub struct CapInfo {
 // Feedback testeurs (Preview 0.1) — pas de télémétrie silencieuse
 // ---------------------------------------------------------------------------
 
-/// `feedback.submit` — retour cohorte écrit en local (`var/feedback/`).
+/// `feedback.submit` — retour cohorte écrit en local (`var/feedback/`),
+/// optionnellement publié comme issue GitHub.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FeedbackSubmitRequest {
     pub title: String,
@@ -1186,6 +1187,9 @@ pub struct FeedbackSubmitRequest {
     /// Métadonnées fournies par l'UI (version, OS, GPU…).
     #[serde(default)]
     pub meta: serde_json::Value,
+    /// Si vrai, tente de créer une issue sur le dépôt public.
+    #[serde(default)]
+    pub publish_github: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1193,6 +1197,14 @@ pub struct FeedbackSubmitResponse {
     pub id: String,
     pub path: String,
     pub export_dir: String,
+    /// Issue créée ou formulaire GitHub à ouvrir.
+    #[serde(default)]
+    pub github_issue_url: Option<String>,
+    #[serde(default)]
+    pub github_issue_number: Option<u64>,
+    /// `created` | `form` | `skipped_security` | `local_only` | message d'erreur
+    #[serde(default)]
+    pub github_status: String,
 }
 
 // ---------------------------------------------------------------------------

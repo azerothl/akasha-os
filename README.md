@@ -97,7 +97,7 @@ Gate P5.1 (RTX 4080 SUPER) : 8 flux **8/8 en 168 ms (×0,77 vs unitaire
 | PC.1 | `crates/aos-session` | Superviseur de session (boot daemons + egui) |
 | PC.2 | `packaging/` | Archives Win/Linux + install scripts |
 | PC.3 | `aos-ui-egui` | UI testeur (onboarding, notes, feedback…) |
-| PC.4 | `feedback.submit` | Retours locaux `var/feedback/` |
+| PC.4 | `feedback.submit` | Retours locaux + issue GitHub |
 
 ```powershell
 # Dev
