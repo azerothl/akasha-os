@@ -200,17 +200,152 @@ pub struct SystemMetrics {
 // Agent API (§11.2)
 // ---------------------------------------------------------------------------
 
+/// Référence à un document fourni à un agent.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DocumentRef {
+    pub path: String,
+    #[serde(default)]
+    pub label: String,
+}
+
+fn default_max_steps() -> u32 {
+    32
+}
+
+fn default_max_subagents() -> u32 {
+    4
+}
+
+fn default_timeout_secs() -> u64 {
+    3600
+}
+
+/// Objectif d'un agent (boucle agentic).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentGoal {
+    pub statement: String,
+    #[serde(default)]
+    pub success_criteria: Vec<String>,
+    #[serde(default = "default_max_steps")]
+    pub max_steps: u32,
+    #[serde(default = "default_max_subagents")]
+    pub max_subagents: u32,
+    #[serde(default = "default_timeout_secs")]
+    pub timeout_secs: u64,
+}
+
+impl Default for AgentGoal {
+    fn default() -> Self {
+        Self {
+            statement: String::new(),
+            success_criteria: Vec::new(),
+            max_steps: default_max_steps(),
+            max_subagents: default_max_subagents(),
+            timeout_secs: default_timeout_secs(),
+        }
+    }
+}
+
+/// Budget optionnel (tokens / steps).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AgentBudget {
+    #[serde(default)]
+    pub max_tokens: Option<u64>,
+    #[serde(default)]
+    pub max_steps: Option<u32>,
+}
+
+/// Spec complète d'un agent (persistée dans `var/agents/<id>/spec.json`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentSpec {
+    pub agent_id: String,
+    pub goal: AgentGoal,
+    #[serde(default)]
+    pub system_prompt: Option<String>,
+    #[serde(default)]
+    pub skills: Vec<String>,
+    #[serde(default)]
+    pub tools: Vec<String>,
+    #[serde(default)]
+    pub mcp_servers: Vec<String>,
+    #[serde(default)]
+    pub documents: Vec<DocumentRef>,
+    #[serde(default)]
+    pub caps: Vec<String>,
+    #[serde(default)]
+    pub model_id: Option<String>,
+    #[serde(default)]
+    pub parent_id: Option<String>,
+    #[serde(default)]
+    pub budget: AgentBudget,
+    /// Optimiser le prompt système avant le premier step.
+    #[serde(default)]
+    pub optimize_prompt: bool,
+}
+
 /// `agent.create`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentCreateRequest {
-    /// Directive initiale (tâche déléguée).
+    /// Directive initiale (alias de `goal.statement` pour compat).
     pub directive: String,
-    /// Capacités initiales demandées (URIs `cap://`).
+    /// Capacités initiales demandées (URIs `cap://` ou `tool.invoke:*`).
     #[serde(default)]
     pub caps: Vec<String>,
     /// Modèle préféré (`None` → défaut système).
     #[serde(default)]
     pub model_id: Option<String>,
+    /// Objectif structuré (si absent → dérivé de `directive`).
+    #[serde(default)]
+    pub goal: Option<AgentGoal>,
+    /// Override / delta du prompt système.
+    #[serde(default)]
+    pub system_prompt: Option<String>,
+    #[serde(default)]
+    pub skills: Vec<String>,
+    #[serde(default)]
+    pub tools: Vec<String>,
+    #[serde(default)]
+    pub mcp_servers: Vec<String>,
+    #[serde(default)]
+    pub documents: Vec<DocumentRef>,
+    #[serde(default)]
+    pub parent_id: Option<String>,
+    #[serde(default)]
+    pub budget: AgentBudget,
+    #[serde(default)]
+    pub optimize_prompt: bool,
+}
+
+impl AgentCreateRequest {
+    /// Construit un `AgentGoal` à partir de la requête (compat directive).
+    pub fn resolved_goal(&self) -> AgentGoal {
+        let mut g = self.goal.clone().unwrap_or_default();
+        if g.statement.is_empty() {
+            g.statement = self.directive.clone();
+        }
+        if let Some(ms) = self.budget.max_steps {
+            g.max_steps = ms;
+        }
+        g
+    }
+
+    /// Création minimale (compat gates / slash-command).
+    pub fn simple(directive: impl Into<String>) -> Self {
+        Self {
+            directive: directive.into(),
+            caps: Vec::new(),
+            model_id: None,
+            goal: None,
+            system_prompt: None,
+            skills: Vec::new(),
+            tools: Vec::new(),
+            mcp_servers: Vec::new(),
+            documents: Vec::new(),
+            parent_id: None,
+            budget: AgentBudget::default(),
+            optimize_prompt: false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -223,11 +358,98 @@ pub struct AgentIdRequest {
     pub agent_id: String,
 }
 
+/// `agent.start` — relance depuis un snapshot persisté.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentStartRequest {
+    pub agent_id: String,
+}
+
 /// `agent.steer`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentSteerRequest {
     pub agent_id: String,
     pub directive: String,
+}
+
+/// `agent.prompt.optimize`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentPromptOptimizeRequest {
+    pub goal: String,
+    #[serde(default)]
+    pub skills: Vec<String>,
+    #[serde(default)]
+    pub tools: Vec<String>,
+    #[serde(default)]
+    pub current_prompt: Option<String>,
+    #[serde(default)]
+    pub model_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentPromptOptimizeResponse {
+    pub optimized_prompt: String,
+}
+
+/// Skill catalogue entry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillInfo {
+    pub name: String,
+    pub description: String,
+    #[serde(default)]
+    pub when_to_use: String,
+    #[serde(default)]
+    pub tools: Vec<String>,
+    #[serde(default)]
+    pub required_caps: Vec<String>,
+    #[serde(default)]
+    pub path: String,
+    #[serde(default)]
+    pub body: String,
+}
+
+/// `skill.create` — création d'une skill déclarative par un agent.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillCreateRequest {
+    pub name: String,
+    pub description: String,
+    #[serde(default)]
+    pub when_to_use: String,
+    #[serde(default)]
+    pub tools: Vec<String>,
+    #[serde(default)]
+    pub required_caps: Vec<String>,
+    /// Corps markdown (instructions injectées au prompt).
+    pub body: String,
+    #[serde(default)]
+    pub actor: String,
+    #[serde(default)]
+    pub actor_caps: Vec<String>,
+}
+
+/// `skill.activate` / `skill.uninstall` / `skill.describe`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillNameRequest {
+    pub name: String,
+    #[serde(default)]
+    pub actor: String,
+    #[serde(default)]
+    pub actor_caps: Vec<String>,
+}
+
+/// `agent.grant` — hot-grant d'une capacité à un agent vivant.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentGrantRequest {
+    pub agent_id: String,
+    pub cap: String,
+}
+
+/// MCP server catalogue entry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpServerInfo {
+    pub name: String,
+    pub command: String,
+    #[serde(default)]
+    pub args: Vec<String>,
 }
 
 /// État de lifecycle d'un agent (§4.3).
@@ -236,9 +458,36 @@ pub enum AgentState {
     Created,
     Running,
     Paused,
+    Blocked,
     Done,
     Killed,
     Failed,
+}
+
+/// Nœud du graphe de tâches.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TaskNodeStatus {
+    Pending,
+    Running,
+    Blocked,
+    Done,
+    Failed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskNode {
+    pub id: String,
+    pub title: String,
+    #[serde(default)]
+    pub status: TaskNodeStatus,
+    #[serde(default)]
+    pub notes: String,
+}
+
+impl Default for TaskNodeStatus {
+    fn default() -> Self {
+        Self::Pending
+    }
 }
 
 /// Information sur un agent (`agent.list`, `agent.state`).
@@ -250,6 +499,16 @@ pub struct AgentInfo {
     pub pid: Option<u32>,
     pub caps: Vec<String>,
     pub last_output: String,
+    #[serde(default)]
+    pub step: u32,
+    #[serde(default)]
+    pub max_steps: u32,
+    #[serde(default)]
+    pub current_task: Option<String>,
+    #[serde(default)]
+    pub parent_id: Option<String>,
+    #[serde(default)]
+    pub children: Vec<String>,
 }
 
 /// Élément du flux `agent.output` (journal temps réel d'un agent).
@@ -259,6 +518,15 @@ pub enum AgentOutputEvent {
     Token { text: String },
     StateChanged { state: AgentState },
     Error { message: String },
+    Progress {
+        step: u32,
+        max_steps: u32,
+        current_task: Option<String>,
+    },
+    ChildSpawned { child_id: String, brief: String },
+    ChildDone { child_id: String, result: String },
+    Reflection { text: String },
+    PlanUpdated { nodes: Vec<TaskNode> },
 }
 
 // ---------------------------------------------------------------------------
@@ -498,18 +766,24 @@ pub struct MemHit {
 /// Prompt système injecté dans la mémoire de travail de l'assistant et des
 /// agents : connaissance d'Agent OS (architecture, état, capacités).
 ///
-/// Maintenu à jour à chaque phase (P0–P2 actuellement).
-pub const SYSTEM_ASSISTANT_PROMPT: &str = "Tu es l'assistant système d'Agent OS, un système d'exploitation agent-natif en cours de développement (phases P0 à P2 validées à ce jour). 
+/// Base pour le PromptCompiler agentic ; les agents reçoivent en plus
+/// goal, skills, catalogue d'outils et protocole d'actions JSON.
+pub const SYSTEM_ASSISTANT_PROMPT: &str = "Tu es l'assistant système d'Agent OS, un système d'exploitation agent-natif.
 
-Architecture actuelle (services userspace reliés par un bus IPC sémantique CBOR) :
+Architecture (services userspace reliés par un bus IPC sémantique CBOR) :
 - aos-busd : broker du bus (intents typés, streams, découverte de services) ;
-- aos-modeld : gestion des modèles IA locaux via llama.cpp (CUDA) — placement automatique des couches entre VRAM, RAM et disque (offload), scheduler par priorité, métriques TTFT/tok/s ;
-- aos-agentd : runtime d'agents — chaque agent est un processus isolé avec des capacités logiques (mint/derive/grant/revoke) ; tu peux être interrompu, redirigé (steer) ou tué (/kill) sans impact sur le système ;
-- aos-platformd : modules WASM sandboxés (sans WASI, capacités injectées), mémoire épisodique vectorielle (embeddings locaux), stockage versionné avec undo, journal d'audit signé (chaîne HMAC).
+- aos-modeld : modèles IA locaux via llama.cpp (CUDA) — offload VRAM/RAM/disque, scheduler par priorité ;
+- aos-agentd : runtime agentic — boucle goal/plan/outils, skills, MCP, sous-agents isolés par capacités ;
+- aos-platformd : modules WASM, mémoire épisodique, FS versionné avec undo, web/files, audit signé, skills.
 
-Modèle actuel : LLM local (GGUF, exécuté offline sur GPU/CPU — aucune donnée ne quitte la machine en mode local). Les modules installés exposent des outils que les agents appellent via la convention TOOL: <outil> <args json>.
+Extensibilité : si tu butes sur une limitation, tu peux étendre l'OS :
+1. skill.create — recette déclarative (prompt + outils existants) ;
+2. cap.request — demander une capacité manquante (web, fs, module.install…) ;
+3. module.scaffold + module.package (script/ext-rt) ou module.compile (Rust→WASM) puis module.install.
 
-Tu réponds en français, de façon concise et factuelle. Tu peux expliquer ton propre fonctionnement, celui du système et de ses services, et orienter l'utilisateur : /commands liste les commandes de l'interface, /models les modèles, /modules les modules installés, /audit le journal signé, /help l'état du système. Si tu ne sais pas, dis-le honnêtement.";
+Tu agis via des actions JSON structurées (ou la convention TOOL: pour compat). Tu n'inventes pas d'outils absents du catalogue. Tu respectes les capacités (caps) et les confirmations bloquantes.
+
+Tu réponds en français, de façon concise et factuelle. Si tu ne sais pas, dis-le honnêtement.";
 
 /// Manifeste double-surface (§7.3).
 // ---------------------------------------------------------------------------
@@ -560,6 +834,74 @@ pub struct ModuleInstallRequest {
     /// Caps approuvées par l'utilisateur (revue d'installation, §7.3).
     #[serde(default)]
     pub approved_caps: Option<Vec<String>>,
+    #[serde(default)]
+    pub actor: String,
+    #[serde(default)]
+    pub actor_caps: Vec<String>,
+}
+
+/// `module.scaffold` — génère un squelette de module (script ou rust).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModuleScaffoldRequest {
+    pub name: String,
+    /// `script` (handlers.yaml + ext-rt) ou `rust` (crate wasm).
+    #[serde(default = "default_scaffold_kind")]
+    pub kind: String,
+    pub description: String,
+    #[serde(default)]
+    pub tools: Vec<ModuleTool>,
+    #[serde(default)]
+    pub required_caps: Vec<String>,
+    /// Contenu handlers.yaml (kind=script) ou src/lib.rs (kind=rust).
+    #[serde(default)]
+    pub source: String,
+    #[serde(default)]
+    pub actor: String,
+    #[serde(default)]
+    pub actor_caps: Vec<String>,
+}
+
+fn default_scaffold_kind() -> String {
+    "script".into()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModuleScaffoldResponse {
+    pub path: String,
+    pub kind: String,
+}
+
+/// `module.package` — produit un `.aospkg` depuis un scaffold script.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModulePackageRequest {
+    pub name: String,
+    #[serde(default)]
+    pub actor: String,
+    #[serde(default)]
+    pub actor_caps: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModulePackageResponse {
+    pub package_dir: String,
+    pub hash: String,
+}
+
+/// `module.compile` — compile un crate Rust → wasm32 puis package.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModuleCompileRequest {
+    pub name: String,
+    #[serde(default)]
+    pub actor: String,
+    #[serde(default)]
+    pub actor_caps: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModuleCompileResponse {
+    pub package_dir: String,
+    pub hash: String,
+    pub log: String,
 }
 
 /// `module.invoke` — appel d'un outil du module.
@@ -851,4 +1193,210 @@ pub struct FeedbackSubmitResponse {
     pub id: String,
     pub path: String,
     pub export_dir: String,
+}
+
+// ---------------------------------------------------------------------------
+// Chat sessions (Preview PC.6) — conversations parallèles persistées
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatSessionMeta {
+    pub id: String,
+    pub title: String,
+    pub created_ms: u64,
+    pub updated_ms: u64,
+    pub archived: bool,
+    pub message_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatSessionMessage {
+    pub role: String,
+    pub content: String,
+    pub ts_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatSessionCreateRequest {
+    #[serde(default)]
+    pub title: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatSessionIdRequest {
+    pub session_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatSessionRenameRequest {
+    pub session_id: String,
+    pub title: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatSessionAppendRequest {
+    pub session_id: String,
+    pub role: String,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatSessionGetResponse {
+    pub meta: ChatSessionMeta,
+    pub messages: Vec<ChatSessionMessage>,
+}
+
+// ---------------------------------------------------------------------------
+// Memory partagée / user (PC.7)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemSharedReadRequest {
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemSharedWriteRequest {
+    pub name: String,
+    pub value: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemUserRememberRequest {
+    pub text: String,
+    #[serde(default)]
+    pub metadata: serde_json::Value,
+    #[serde(default)]
+    pub pinned: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemUserRecallRequest {
+    pub query: String,
+    #[serde(default = "default_k")]
+    pub k: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemContextRequest {
+    /// Session chat active (`session:<id>`).
+    #[serde(default)]
+    pub session_id: Option<String>,
+    pub query: String,
+    #[serde(default = "default_k")]
+    pub k: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemContextResponse {
+    pub session_hits: Vec<MemHit>,
+    pub user_hits: Vec<MemHit>,
+    pub prompt_block: String,
+}
+
+// ---------------------------------------------------------------------------
+// Web / fetch / files (PC.8–PC.9)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WebSearchRequest {
+    pub query: String,
+    #[serde(default = "default_search_n")]
+    pub max_results: usize,
+    #[serde(default)]
+    pub caps: Vec<String>,
+    #[serde(default)]
+    pub actor: String,
+}
+
+fn default_search_n() -> usize {
+    5
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WebSearchHit {
+    pub title: String,
+    pub url: String,
+    pub snippet: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WebSearchResponse {
+    pub results: Vec<WebSearchHit>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NetFetchRequest {
+    pub url: String,
+    /// Chemin logique FS (défaut `/downloads/<filename>`).
+    #[serde(default)]
+    pub dest_path: Option<String>,
+    #[serde(default = "default_max_fetch")]
+    pub max_bytes: u64,
+    #[serde(default)]
+    pub caps: Vec<String>,
+    #[serde(default)]
+    pub actor: String,
+}
+
+fn default_max_fetch() -> u64 {
+    50 * 1024 * 1024
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NetFetchResponse {
+    pub path: String,
+    pub bytes: u64,
+    pub content_type: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FsWriteBytesRequest {
+    pub path: String,
+    /// Contenu en base64.
+    pub content_b64: String,
+    #[serde(default)]
+    pub actor: String,
+    #[serde(default)]
+    pub caps: Vec<String>,
+    #[serde(default)]
+    pub trace_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FsReadBytesRequest {
+    pub path: String,
+    #[serde(default)]
+    pub caps: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FsReadBytesResponse {
+    pub path: String,
+    pub content_b64: String,
+    pub class: DataClass,
+    pub version: u64,
+    pub size_bytes: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FilesGenerateRequest {
+    /// md | txt | json | csv | png | pdf
+    pub format: String,
+    pub path: String,
+    /// Contenu texte ou spécification JSON (png/pdf).
+    #[serde(default)]
+    pub content: String,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub caps: Vec<String>,
+    #[serde(default)]
+    pub actor: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FilesGenerateResponse {
+    pub path: String,
+    pub bytes: u64,
 }
