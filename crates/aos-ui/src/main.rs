@@ -68,7 +68,7 @@ impl App {
             input: String::new(),
             chat: vec![(
                 "système".into(),
-                "Assistant Agent OS prêt. /commands pour les commandes, /help pour l'état du système.".into(),
+                "Assistant Akasha OS prêt. /commands pour les commandes, /help pour l'état du système.".into(),
             )],
             streaming: String::new(),
             chat_scroll: 0,
@@ -455,6 +455,37 @@ const COMMANDS: &[(&str, &str)] = &[
     ("/quit ou Échap", "quitter"),
 ];
 
+/// Affiche un résultat notes lisible (liste structurée ou JSON).
+fn format_notes_tool_result(tool: &str, result: &serde_json::Value) -> String {
+    if tool == "notes.list" {
+        if let Some(arr) = result.get("notes").and_then(|n| n.as_array()) {
+            let mut out = String::from("Notes :\n");
+            for item in arr {
+                if let Some(path) = item.as_str() {
+                    out.push_str(&format!("  - {path}\n"));
+                    continue;
+                }
+                let title = item
+                    .get("title")
+                    .and_then(|t| t.as_str())
+                    .unwrap_or("?");
+                let path = item.get("path").and_then(|p| p.as_str()).unwrap_or("");
+                let excerpt = item
+                    .get("excerpt")
+                    .and_then(|e| e.as_str())
+                    .unwrap_or("");
+                if excerpt.is_empty() {
+                    out.push_str(&format!("  - {title} ({path})\n"));
+                } else {
+                    out.push_str(&format!("  - {title} ({path})\n    {excerpt}\n"));
+                }
+            }
+            return out;
+        }
+    }
+    result.to_string()
+}
+
 async fn show_help(bus: &Arc<BusClient>, tx: &mpsc::Sender<UiEvent>) {
     // Services vivants (découverte bus).
     let mut services = Vec::new();
@@ -510,7 +541,7 @@ async fn show_help(bus: &Arc<BusClient>, tx: &mpsc::Sender<UiEvent>) {
         .unwrap_or(0);
 
     let mut out = String::new();
-    out.push_str("Agent OS — état du système (phases P0–P2 validées)\n");
+    out.push_str("Akasha OS — état du système (phases P0–P2 validées)\n");
     out.push_str(&format!("services : {}\n", services.join(", ")));
     out.push_str(&format!(
         "modèles : {} chargés / {} au registry{}\n",
@@ -748,7 +779,7 @@ async fn handle_command(
                     )
                     .await;
                 let msg = match r {
-                    Ok(resp) if resp.ok => resp.result.to_string(),
+                    Ok(resp) if resp.ok => format_notes_tool_result(tool, &resp.result),
                     Ok(resp) => format!("outil refusé: {}", resp.error.unwrap_or_default()),
                     Err(e) => format!("invoke: {e}"),
                 };

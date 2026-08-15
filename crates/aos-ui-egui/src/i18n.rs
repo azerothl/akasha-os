@@ -71,8 +71,8 @@ pub struct UiStrings {
 }
 
 const EN: UiStrings = UiStrings {
-    preview_banner: "Agent OS Preview — running on Windows/Linux (scaffold). This is not the bootable seL4 OS yet.",
-    tutorial_title: "Tutorial — Agent OS Preview",
+    preview_banner: "Akasha OS Preview — running on Windows/Linux (scaffold). This is not the bootable seL4 OS yet.",
+    tutorial_title: "Tutorial — Akasha OS Preview",
     step_of: "Step {} / 4",
     welcome: "Welcome",
     welcome_body1: "You are testing an installable Preview (Win/Linux host + NVIDIA), not a bootable microkernel.",
@@ -140,8 +140,8 @@ const EN: UiStrings = UiStrings {
 };
 
 const FR: UiStrings = UiStrings {
-    preview_banner: "Agent OS Preview — exécuté sur Windows/Linux (échafaudage). Ce n'est pas encore l'OS bootable seL4.",
-    tutorial_title: "Tutoriel — Agent OS Preview",
+    preview_banner: "Akasha OS Preview — exécuté sur Windows/Linux (échafaudage). Ce n'est pas encore l'OS bootable seL4.",
+    tutorial_title: "Tutoriel — Akasha OS Preview",
     step_of: "Étape {} / 4",
     welcome: "Bienvenue",
     welcome_body1: "Vous testez une Preview installable (hôte Win/Linux + NVIDIA), pas un microkernel bootable.",

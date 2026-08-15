@@ -38,7 +38,7 @@ fn main() -> iced::Result {
 }
 
 fn title(_app: &App) -> String {
-    String::from("Agent OS — prototype iced (ADR 0003)")
+    String::from("Akasha OS — prototype iced (ADR 0003)")
 }
 
 fn theme(_app: &App) -> Theme {

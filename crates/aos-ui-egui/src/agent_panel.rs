@@ -54,6 +54,31 @@ pub fn truncate(s: &str, n: usize) -> String {
     }
 }
 
+/// Lit le dernier `task.assess` de la timeline (`simple` / `complex`).
+fn complexity_from_trace(trace: Option<&AgentTrace>) -> Option<&'static str> {
+    let steps = &trace?.steps;
+    for step in steps.iter().rev() {
+        if step.action == "task.assess" {
+            if let Some(c) = step.args.get("complexity").and_then(|v| v.as_str()) {
+                if c.eq_ignore_ascii_case("complex") {
+                    return Some("complex");
+                }
+                if c.eq_ignore_ascii_case("simple") {
+                    return Some("simple");
+                }
+            }
+            let r = step.tool_result.to_ascii_lowercase();
+            if r.starts_with("complex") {
+                return Some("complex");
+            }
+            if r.starts_with("simple") {
+                return Some("simple");
+            }
+        }
+    }
+    None
+}
+
 /// Retire les blocs `<think>…</think>` (Qwen3/3.5) pour l'affichage.
 fn strip_think_tags(text: &str) -> String {
     let mut rest = text.to_string();
@@ -99,6 +124,65 @@ pub fn prose_without_json(response: &str) -> String {
         .join("\n")
         .trim()
         .to_string()
+}
+
+/// Carte compacte d'un agent lié au chat (état live via `agent.list`).
+/// Retourne `true` si l'utilisateur demande le détail.
+pub fn chat_agent_card(ui: &mut Ui, info: Option<&AgentInfo>, agent_id: &str, title: &str) -> bool {
+    let mut open_detail = false;
+    let (state_label, color, step, max_steps, task, fail) = if let Some(a) = info {
+        (
+            format!("{:?}", a.state),
+            state_color(&a.state),
+            a.step,
+            a.max_steps,
+            a.current_task.clone().unwrap_or_default(),
+            a.fail_reason.clone(),
+        )
+    } else {
+        (
+            "…".into(),
+            Color32::GRAY,
+            0,
+            0,
+            String::new(),
+            None,
+        )
+    };
+    egui::Frame::NONE
+        .fill(Color32::from_rgb(32, 36, 44))
+        .stroke(egui::Stroke::new(1.0, color))
+        .inner_margin(8.0)
+        .corner_radius(4.0)
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.colored_label(color, RichText::new(format!("● {state_label}")).strong());
+                ui.strong(agent_id);
+                if max_steps > 0 {
+                    ui.label(format!("step {step}/{max_steps}"));
+                }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.small_button("Détail").clicked() {
+                        open_detail = true;
+                    }
+                });
+            });
+            let goal = if title.is_empty() {
+                info.map(|a| a.directive.as_str()).unwrap_or("")
+            } else {
+                title
+            };
+            if !goal.is_empty() {
+                ui.label(RichText::new(truncate(goal, 120)).italics());
+            }
+            if !task.is_empty() {
+                ui.weak(format!("tâche : {}", truncate(&task, 80)));
+            }
+            if let Some(reason) = fail {
+                ui.colored_label(Color32::from_rgb(220, 90, 90), truncate(&reason, 100));
+            }
+        });
+    open_detail
 }
 
 fn find_json_object_end(s: &str) -> Option<usize> {
@@ -184,6 +268,15 @@ pub fn draw_agent_detail(
             let tokens = trace.map(|t| t.tokens_used).unwrap_or(a.tokens_used);
             ui.separator();
             ui.label(format!("{tokens} tok"));
+            if let Some(complexity) = complexity_from_trace(trace) {
+                ui.separator();
+                let color = if complexity == "complex" {
+                    Color32::from_rgb(230, 160, 60)
+                } else {
+                    Color32::from_rgb(100, 190, 120)
+                };
+                ui.colored_label(color, complexity);
+            }
             if let Some(t) = trace {
                 ui.separator();
                 ui.label(fmt_ms(t.total_duration_ms));

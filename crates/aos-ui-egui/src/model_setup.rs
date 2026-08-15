@@ -88,12 +88,12 @@ pub fn run() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([640.0, 560.0])
-            .with_title("Agent OS Preview — Models"),
+            .with_title("Akasha OS Preview — Models"),
         ..Default::default()
     };
 
     eframe::run_native(
-        "Agent OS Preview — Models",
+        "Akasha OS Preview — Models",
         options,
         Box::new(move |_cc| {
             Ok(Box::new(SetupApp {

@@ -1,4 +1,4 @@
-//! Agent OS Preview — UI egui (ADR 0003).
+//! Akasha OS Preview — UI egui (ADR 0003).
 //!
 //! Surface testeur : chat, dashboard, onboarding, notes, confirm, agents,
 //! audit, scénarios guidés, retours (`feedback.submit`).
@@ -6,21 +6,22 @@
 mod agent_panel;
 mod i18n;
 mod model_setup;
+mod notes_panel;
 mod prefs;
 
 use aos_ipc::BusClient;
 use aos_proto::{
     AgentCreateRequest, AgentGoal, AgentIdRequest, AgentInfo, AgentPromptOptimizeRequest,
     AgentPromptOptimizeResponse, AgentState, AgentSteerRequest, AgentTrace, AuditEvent, AuditQueryRequest,
-    ChatMessage,     ChatSessionAppendRequest, ChatSessionCreateRequest, ChatSessionGetResponse,
-    ChatSessionIdRequest, ChatSessionMeta, ChatSessionRenameRequest, ChatSessionSetModelRequest, ConfirmResponseRequest,
-    DocumentRef, FeedbackSubmitRequest, FeedbackSubmitResponse, FilesGenerateRequest,
-    FilesGenerateResponse, InferParams, InferRequest, McpServerInfo, MemContextRequest,
-    MemContextResponse, MemHit, MemUserRecallRequest, MemUserRememberRequest, LoadRequest, ModelInfo,
-    ModelState, ModuleInvokeRequest, ModuleInvokeResponse, NetFetchRequest, NetFetchResponse,
-    NetModeRequest, PendingConfirmation, SetRoutingRequest, SkillInfo, SystemMetrics, TokenEvent,
-    WebBrowseRequest, WebBrowseResponse, WebSearchHit, WebSearchRequest, WebSearchResponse,
-    SYSTEM_ASSISTANT_PROMPT,
+    ChatAttachment, ChatMessage, ChatSessionAppendRequest, ChatSessionCreateRequest,
+    ChatSessionGetResponse, ChatSessionIdRequest, ChatSessionMeta, ChatSessionRenameRequest,
+    ChatSessionSetModelRequest, ConfirmResponseRequest, DocumentRef, FeedbackSubmitRequest,
+    FeedbackSubmitResponse, FilesGenerateRequest, FilesGenerateResponse, InferParams, InferRequest,
+    McpServerInfo, MemContextRequest, MemContextResponse, MemHit, MemUserRecallRequest,
+    MemUserRememberRequest, LoadRequest, ModelInfo, ModelState, ModuleInvokeRequest,
+    ModuleInvokeResponse, NetFetchRequest, NetFetchResponse, NetModeRequest, PendingConfirmation,
+    SetRoutingRequest, SkillInfo, SystemMetrics, TokenEvent, WebBrowseRequest, WebBrowseResponse,
+    WebSearchHit, WebSearchRequest, WebSearchResponse, CHAT_DELEGATION_PROMPT, SYSTEM_ASSISTANT_PROMPT,
 };
 use prefs::{load_preferences, save_preferences, Preferences};
 use eframe::egui;
@@ -129,7 +130,21 @@ enum Cmd {
     Help,
     NotesList,
     NotesCreate { title: String, content: String },
+    NotesUpdate {
+        title: String,
+        path: String,
+        content: String,
+    },
+    NotesRead {
+        title: Option<String>,
+        path: Option<String>,
+        slug: Option<String>,
+    },
     NotesSearch { query: String },
+    NotesRelated {
+        path: String,
+        topic: String,
+    },
     Confirm { id: String, approved: bool },
     AgentCreate {
         task: String,
@@ -142,6 +157,9 @@ enum Cmd {
         max_steps: u32,
         timeout_secs: u64,
         model_id: Option<String>,
+        session_id: Option<String>,
+        /// `slash` | `assistant` | `form`
+        origin: String,
     },
     AgentKill { id: String },
     AgentPause { id: String },
@@ -166,6 +184,13 @@ enum Cmd {
         session_id: String,
         model_id: Option<String>,
     },
+    /// Append chat sans infer (slash /agent, etc.).
+    SessionAppend {
+        session_id: String,
+        role: String,
+        content: String,
+        attachments: Vec<ChatAttachment>,
+    },
 }
 
 enum Evt {
@@ -173,12 +198,30 @@ enum Evt {
     Done {
         text: String,
         session_id: String,
+        attachments: Vec<ChatAttachment>,
     },
     Error(String),
     Status(String),
     ChatSystem(String),
     Metrics(SystemMetrics),
     Agents(Vec<AgentInfo>),
+    AgentSpawned {
+        session_id: String,
+        agent_id: String,
+        title: String,
+        origin: String,
+        ack: String,
+    },
+    NotesListed(Vec<notes_panel::NoteListItem>),
+    NoteLoaded(notes_panel::NoteDetail),
+    NotesSearchHits(Vec<notes_panel::NoteSearchHit>),
+    NotesRelated(Vec<notes_panel::NoteRelatedHit>),
+    NotesSaved {
+        path: String,
+        slug: String,
+        title: String,
+    },
+    /// Payload brut (compat scénarios / debug).
     Notes(String),
     Audit(Vec<AuditEvent>),
     Confirms(Vec<PendingConfirmation>),
@@ -186,7 +229,7 @@ enum Evt {
     Sessions(Vec<ChatSessionMeta>),
     SessionLoaded {
         id: String,
-        messages: Vec<(String, String)>,
+        messages: Vec<ChatLine>,
     },
     MemHits(Vec<MemHit>),
     WebResults(Vec<WebSearchHit>),
@@ -200,11 +243,35 @@ enum Evt {
     AgentTrace(AgentTrace),
 }
 
+#[derive(Debug, Clone)]
+struct ChatLine {
+    role: String,
+    text: String,
+    attachments: Vec<ChatAttachment>,
+}
+
+impl ChatLine {
+    fn plain(role: impl Into<String>, text: impl Into<String>) -> Self {
+        Self {
+            role: role.into(),
+            text: text.into(),
+            attachments: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct AgentNotice {
+    agent_id: String,
+    session_id: String,
+    summary: String,
+}
+
 const SLASH_COMMANDS: &[(&str, &str)] = &[
     ("<texte>", "discuter avec l'assistant (modèle local)"),
     ("/commands", "cette liste"),
     ("/help", "état du système (services, agents, modèles)"),
-    ("/agent <tâche>", "créer un agent (caps notes incluses)"),
+    ("/agent <tâche>", "lancer un agent en fond (carte dans le chat)"),
     ("/notes", "lister les notes"),
     ("/notenew <titre> | <contenu>", "créer une note"),
     ("/notesearch <requête>", "recherche sémantique dans les notes"),
@@ -220,16 +287,17 @@ fn main() -> eframe::Result<()> {
 
     let (cmd_tx, cmd_rx) = channel::<Cmd>();
     let (evt_tx, evt_rx) = channel::<Evt>();
-    let version = std::env::var("AOS_PREVIEW_VERSION").unwrap_or_else(|_| "0.1.0".into());
+    let version = std::env::var("AOS_PREVIEW_VERSION")
+        .unwrap_or_else(|_| env!("CARGO_PKG_VERSION").into());
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1280.0, 800.0])
-            .with_title(format!("Agent OS Preview {version}")),
+            .with_title(format!("Akasha OS Preview {version}")),
         ..Default::default()
     };
     eframe::run_native(
-        &format!("Agent OS Preview {version}"),
+        &format!("Akasha OS Preview {version}"),
         options,
         Box::new(move |cc| {
             let ctx = cc.egui_ctx.clone();
@@ -516,6 +584,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                         session_id: session_id.clone(),
                         role: "user".into(),
                         content: user_text.clone(),
+                        attachments: vec![],
                     },
                     vec![],
                 )
@@ -537,6 +606,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                 .unwrap_or_default();
 
             let mut system = SYSTEM_ASSISTANT_PROMPT.to_string();
+            system.push_str(CHAT_DELEGATION_PROMPT);
             if !mem_block.trim().is_empty() {
                 system.push_str("\n\n");
                 system.push_str(&mem_block);
@@ -582,22 +652,134 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                                 _ => {}
                             }
                         }
-                        if !full.is_empty() {
-                            let _ = bus
-                                .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
-                                    "chat.session.append",
-                                    &ChatSessionAppendRequest {
-                                        session_id: sid.clone(),
-                                        role: "assistant".into(),
-                                        content: full.clone(),
-                                    },
-                                    vec![],
-                                )
-                                .await;
+                        if full.is_empty() {
+                            let _ = evt_tx.send(Evt::Done {
+                                text: String::new(),
+                                session_id: sid,
+                                attachments: vec![],
+                            });
+                            return;
                         }
+
+                        // Délégation : agent.spawn / agent.create → worker en fond
+                        if let Some(action) = aos_agent::actions::parse_action(&full) {
+                            if action.action == "agent.spawn" || action.action == "agent.create" {
+                                let brief = action
+                                    .args
+                                    .get("brief")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("")
+                                    .trim()
+                                    .to_string();
+                                let brief = if brief.is_empty() {
+                                    user_text.clone()
+                                } else {
+                                    brief
+                                };
+                                let (mut skills, mut tools) = agent_heuristics_for_task(&brief);
+                                if let Some(arr) = action.args.get("skills").and_then(|v| v.as_array())
+                                {
+                                    for s in arr {
+                                        if let Some(name) = s.as_str() {
+                                            if !skills.iter().any(|x| x == name) {
+                                                skills.push(name.to_string());
+                                            }
+                                        }
+                                    }
+                                }
+                                if let Some(arr) = action.args.get("tools").and_then(|v| v.as_array())
+                                {
+                                    for t in arr {
+                                        if let Some(name) = t.as_str() {
+                                            if !tools.iter().any(|x| x == name) {
+                                                tools.push(name.to_string());
+                                            }
+                                        }
+                                    }
+                                }
+                                let mut prose = agent_panel::prose_without_json(&full);
+                                if prose.is_empty() {
+                                    prose = "Je lance un agent pour cette tâche.".into();
+                                }
+                                let mut req = AgentCreateRequest::simple(brief.clone());
+                                req.skills = skills;
+                                req.tools = tools;
+                                req.session_id = Some(sid.clone());
+                                req.goal = Some(AgentGoal {
+                                    statement: brief.clone(),
+                                    success_criteria: vec![],
+                                    max_steps: 16,
+                                    max_subagents: 4,
+                                    timeout_secs: 3600,
+                                });
+                                if req.skills.iter().any(|s| s.contains("notes"))
+                                    || req.tools.iter().any(|t| t.starts_with("notes."))
+                                {
+                                    req.caps.push("tool.invoke:notes".into());
+                                }
+                                match bus
+                                    .call::<AgentCreateRequest, aos_proto::AgentCreateResponse>(
+                                        aos_agent::intents::CREATE,
+                                        &req,
+                                        vec![],
+                                    )
+                                    .await
+                                {
+                                    Ok(r) => {
+                                        let att = ChatAttachment::AgentRef {
+                                            agent_id: r.agent_id.clone(),
+                                            title: brief.clone(),
+                                            origin: "assistant".into(),
+                                        };
+                                        let _ = bus
+                                            .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
+                                                "chat.session.append",
+                                                &ChatSessionAppendRequest {
+                                                    session_id: sid.clone(),
+                                                    role: "assistant".into(),
+                                                    content: prose.clone(),
+                                                    attachments: vec![att.clone()],
+                                                },
+                                                vec![],
+                                            )
+                                            .await;
+                                        let _ = evt_tx.send(Evt::AgentSpawned {
+                                            session_id: sid.clone(),
+                                            agent_id: r.agent_id,
+                                            title: brief,
+                                            origin: "assistant".into(),
+                                            ack: prose,
+                                        });
+                                        let _ = evt_tx.send(Evt::Done {
+                                            text: String::new(),
+                                            session_id: sid,
+                                            attachments: vec![],
+                                        });
+                                    }
+                                    Err(e) => {
+                                        let _ = evt_tx.send(Evt::Error(e.to_string()));
+                                    }
+                                }
+                                return;
+                            }
+                        }
+
+                        let _ = bus
+                            .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
+                                "chat.session.append",
+                                &ChatSessionAppendRequest {
+                                    session_id: sid.clone(),
+                                    role: "assistant".into(),
+                                    content: full.clone(),
+                                    attachments: vec![],
+                                },
+                                vec![],
+                            )
+                            .await;
                         let _ = evt_tx.send(Evt::Done {
                             text: full,
                             session_id: sid,
+                            attachments: vec![],
                         });
                     }
                     Err(e) => {
@@ -829,7 +1011,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                 .filter(|a| matches!(a.state, AgentState::Running))
                 .count();
             let metrics: Option<SystemMetrics> = bus.call("model.metrics", &(), vec![]).await.ok();
-            let mut out = String::from("Agent OS Preview — état\n");
+            let mut out = String::from("Akasha OS Preview — état\n");
             out.push_str(&format!("services : {}\n", services.join(", ")));
             out.push_str(&format!(
                 "modèles : {loaded} chargés / {} au registry\n",
@@ -862,6 +1044,32 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
             )
             .await;
         }
+        Cmd::NotesUpdate {
+            title,
+            path,
+            content,
+        } => {
+            invoke_notes(
+                &bus,
+                &evt_tx,
+                "notes.update",
+                serde_json::json!({ "title": title, "path": path, "content": content }),
+            )
+            .await;
+        }
+        Cmd::NotesRead { title, path, slug } => {
+            let mut args = serde_json::json!({});
+            if let Some(t) = title {
+                args["title"] = serde_json::json!(t);
+            }
+            if let Some(p) = path {
+                args["path"] = serde_json::json!(p);
+            }
+            if let Some(s) = slug {
+                args["slug"] = serde_json::json!(s);
+            }
+            invoke_notes(&bus, &evt_tx, "notes.read", args).await;
+        }
         Cmd::NotesSearch { query } => {
             invoke_notes(
                 &bus,
@@ -870,6 +1078,13 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                 serde_json::json!({ "query": query }),
             )
             .await;
+        }
+        Cmd::NotesRelated { path, topic } => {
+            let mut args = serde_json::json!({ "path": path });
+            if !topic.is_empty() {
+                args["topic"] = serde_json::json!(topic);
+            }
+            invoke_notes(&bus, &evt_tx, "notes.related", args).await;
         }
         Cmd::Confirm { id, approved } => {
             match bus
@@ -903,6 +1118,8 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
             max_steps,
             timeout_secs,
             model_id,
+            session_id,
+            origin,
         } => {
             let mut req = AgentCreateRequest::simple(task.clone());
             req.system_prompt = system_prompt;
@@ -911,8 +1128,9 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
             req.mcp_servers = mcp_servers;
             req.documents = documents;
             req.optimize_prompt = optimize_prompt;
+            req.session_id = session_id.clone();
             req.goal = Some(AgentGoal {
-                statement: task,
+                statement: task.clone(),
                 success_criteria: vec![],
                 max_steps,
                 max_subagents: 4,
@@ -933,7 +1151,35 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                 .await
             {
                 Ok(r) => {
-                    let _ = evt_tx.send(Evt::Status(format!("agent créé : {}", r.agent_id)));
+                    if let Some(sid) = session_id {
+                        let ack = format!("Agent {} lancé en fond.", r.agent_id);
+                        let att = ChatAttachment::AgentRef {
+                            agent_id: r.agent_id.clone(),
+                            title: task.clone(),
+                            origin: origin.clone(),
+                        };
+                        let _ = bus
+                            .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
+                                "chat.session.append",
+                                &ChatSessionAppendRequest {
+                                    session_id: sid.clone(),
+                                    role: "assistant".into(),
+                                    content: ack.clone(),
+                                    attachments: vec![att],
+                                },
+                                vec![],
+                            )
+                            .await;
+                        let _ = evt_tx.send(Evt::AgentSpawned {
+                            session_id: sid,
+                            agent_id: r.agent_id.clone(),
+                            title: task,
+                            origin,
+                            ack,
+                        });
+                    } else {
+                        let _ = evt_tx.send(Evt::Status(format!("agent créé : {}", r.agent_id)));
+                    }
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));
@@ -1154,6 +1400,25 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                 }
             }
         }
+        Cmd::SessionAppend {
+            session_id,
+            role,
+            content,
+            attachments,
+        } => {
+            let _ = bus
+                .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
+                    "chat.session.append",
+                    &ChatSessionAppendRequest {
+                        session_id,
+                        role,
+                        content,
+                        attachments,
+                    },
+                    vec![],
+                )
+                .await;
+        }
     }
 }
 
@@ -1176,7 +1441,7 @@ async fn load_session(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>, id: &str) {
         .await
     {
         Ok(resp) => {
-            let messages: Vec<(String, String)> = resp
+            let messages: Vec<ChatLine> = resp
                 .messages
                 .into_iter()
                 .map(|m| {
@@ -1185,7 +1450,11 @@ async fn load_session(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>, id: &str) {
                         "assistant" => "assistant".into(),
                         other => other.to_string(),
                     };
-                    (role, m.content)
+                    ChatLine {
+                        role,
+                        text: m.content,
+                        attachments: m.attachments,
+                    }
                 })
                 .collect();
             let _ = evt_tx.send(Evt::SessionLoaded {
@@ -1197,6 +1466,30 @@ async fn load_session(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>, id: &str) {
             let _ = evt_tx.send(Evt::Error(e.to_string()));
         }
     }
+}
+
+/// Heuristiques skills/tools partagées `/agent` et délégation chat.
+fn agent_heuristics_for_task(task: &str) -> (Vec<String>, Vec<String>) {
+    let lower = task.to_lowercase();
+    let mut skills = Vec::new();
+    let mut tools = vec![
+        "notes.create".into(),
+        "notes.list".into(),
+        "notes.read".into(),
+        "notes.search".into(),
+        "notes.update".into(),
+        "notes.links".into(),
+        "notes.related".into(),
+    ];
+    if lower.contains("note") {
+        skills.push("notes-writer".into());
+    }
+    if lower.contains("plan") || lower.contains("délégu") {
+        skills.push("planner".into());
+        tools.push("agent.spawn".into());
+        tools.push("agent.await".into());
+    }
+    (skills, tools)
 }
 
 async fn invoke_notes(
@@ -1215,6 +1508,7 @@ async fn invoke_notes(
             "fs.write:/documents/notes/**".into(),
             "mem.write:module:notes".into(),
             "mem.query:module:notes".into(),
+            "tool.invoke:notes".into(),
         ],
         trace_id: format!("ui-notes-{}", tool),
     };
@@ -1223,9 +1517,74 @@ async fn invoke_notes(
         .await
     {
         Ok(r) if r.ok => {
-            let _ = evt_tx.send(Evt::Notes(
-                serde_json::to_string_pretty(&r.result).unwrap_or_default(),
-            ));
+            let pretty = serde_json::to_string_pretty(&r.result).unwrap_or_default();
+            let _ = evt_tx.send(Evt::Notes(pretty));
+            match tool {
+                "notes.list" => {
+                    let notes = notes_panel::parse_list_result(&r.result);
+                    let _ = evt_tx.send(Evt::NotesListed(notes));
+                }
+                "notes.read" => {
+                    if let Some(d) = notes_panel::parse_detail(&r.result) {
+                        let _ = evt_tx.send(Evt::NoteLoaded(d));
+                    }
+                }
+                "notes.search" => {
+                    let hits = notes_panel::parse_search_hits(&r.result);
+                    let _ = evt_tx.send(Evt::NotesSearchHits(hits));
+                }
+                "notes.related" => {
+                    let hits = notes_panel::parse_related(&r.result);
+                    let _ = evt_tx.send(Evt::NotesRelated(hits));
+                }
+                "notes.create" | "notes.update" => {
+                    let path = r
+                        .result
+                        .get("path")
+                        .and_then(|p| p.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let slug = r
+                        .result
+                        .get("slug")
+                        .and_then(|p| p.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let title = r
+                        .result
+                        .get("title")
+                        .and_then(|p| p.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let _ = evt_tx.send(Evt::NotesSaved { path, slug, title });
+                    // Rafraîchir la liste après écriture.
+                    let list_req = ModuleInvokeRequest {
+                        module: "notes".into(),
+                        tool: "notes.list".into(),
+                        args: serde_json::json!({}),
+                        actor: "human:ui".into(),
+                        actor_caps: vec![
+                            "fs.read:/documents/notes/**".into(),
+                            "tool.invoke:notes".into(),
+                        ],
+                        trace_id: "ui-notes-list-after-save".into(),
+                    };
+                    if let Ok(lr) = bus
+                        .call::<ModuleInvokeRequest, ModuleInvokeResponse>(
+                            "module.invoke",
+                            &list_req,
+                            vec![],
+                        )
+                        .await
+                    {
+                        if lr.ok {
+                            let notes = notes_panel::parse_list_result(&lr.result);
+                            let _ = evt_tx.send(Evt::NotesListed(notes));
+                        }
+                    }
+                }
+                _ => {}
+            }
         }
         Ok(r) => {
             let _ = evt_tx.send(Evt::Error(
@@ -1257,7 +1616,7 @@ struct UiApp {
     evt_rx: Receiver<Evt>,
     version: String,
     tab: Tab,
-    chat: Vec<(String, String)>,
+    chat: Vec<ChatLine>,
     streaming: String,
     input: String,
     chat_pending: bool,
@@ -1279,11 +1638,16 @@ struct UiApp {
     mem_hits: Vec<MemHit>,
     metrics: Option<SystemMetrics>,
     agents: Vec<AgentInfo>,
+    /// États précédents pour détecter Done/Failed/Killed (notifications).
+    agent_prev_states: HashMap<String, AgentState>,
+    /// Notices terminales hors session active.
+    agent_notices: Vec<AgentNotice>,
+    /// agent_id déjà notifiés (dédup).
+    agent_notified: std::collections::HashSet<String>,
     confirms: Vec<PendingConfirmation>,
+    notes: notes_panel::NotesPanelState,
+    /// Dernier payload notes brut (scénarios / debug).
     notes_out: String,
-    note_title: String,
-    note_content: String,
-    note_search: String,
     agent_task: String,
     agent_system_prompt: String,
     agent_docs: String,
@@ -1360,8 +1724,8 @@ impl UiApp {
             evt_rx,
             version,
             tab: Tab::Chat,
-            chat: vec![(
-                "system".into(),
+            chat: vec![ChatLine::plain(
+                "système",
                 format!(
                     "{}\n\
                      Sessions / Memory / Network opt-in.\n\
@@ -1390,11 +1754,12 @@ impl UiApp {
             mem_hits: Vec::new(),
             metrics: None,
             agents: Vec::new(),
+            agent_prev_states: HashMap::new(),
+            agent_notices: Vec::new(),
+            agent_notified: std::collections::HashSet::new(),
             confirms: Vec::new(),
+            notes: notes_panel::NotesPanelState::default(),
             notes_out: String::new(),
-            note_title: String::new(),
-            note_content: String::new(),
-            note_search: String::new(),
             agent_task: String::new(),
             agent_system_prompt: String::new(),
             agent_docs: String::new(),
@@ -1408,6 +1773,10 @@ impl UiApp {
                 "notes.create".into(),
                 "notes.list".into(),
                 "notes.read".into(),
+                "notes.search".into(),
+                "notes.update".into(),
+                "notes.links".into(),
+                "notes.related".into(),
             ],
             agent_open_tabs: Vec::new(),
             agent_active_tab: None,
@@ -1452,33 +1821,33 @@ impl UiApp {
             return;
         }
         let Some(session_id) = self.active_session.clone() else {
-            self.chat.push((
-                "système".into(),
-                "aucune session — créez-en une dans le panneau Sessions".into(),
+            self.chat.push(ChatLine::plain(
+                "système",
+                "aucune session — créez-en une dans le panneau Sessions",
             ));
             return;
         };
         if self.chat_pending {
-            self.chat.push(("vous".into(), text));
-            self.chat.push((
-                "système".into(),
-                "réponse précédente encore en cours — patientez.".into(),
+            self.chat.push(ChatLine::plain("vous", text));
+            self.chat.push(ChatLine::plain(
+                "système",
+                "réponse précédente encore en cours — patientez.",
             ));
             return;
         }
-        self.chat.push(("vous".into(), text.clone()));
+        self.chat.push(ChatLine::plain("vous", text.clone()));
         let history: Vec<(String, String)> = self
             .chat
             .iter()
-            .filter(|(r, _)| r == "vous" || r == "assistant")
-            .map(|(r, c)| {
+            .filter(|l| l.role == "vous" || l.role == "assistant")
+            .map(|l| {
                 (
-                    if r == "vous" {
+                    if l.role == "vous" {
                         "user".into()
                     } else {
                         "assistant".into()
                     },
-                    c.clone(),
+                    l.text.clone(),
                 )
             })
             .collect();
@@ -1500,7 +1869,7 @@ impl UiApp {
     }
 
     fn handle_slash(&mut self, text: &str) {
-        self.chat.push(("vous".into(), text.to_string()));
+        self.chat.push(ChatLine::plain("vous", text));
         let mut parts = text.splitn(2, char::is_whitespace);
         let cmd = parts.next().unwrap_or(text);
         let rest = parts.next().unwrap_or("").trim();
@@ -1510,7 +1879,7 @@ impl UiApp {
                 for (c, d) in SLASH_COMMANDS {
                     out.push_str(&format!("  {c} — {d}\n"));
                 }
-                self.chat.push(("système".into(), out));
+                self.chat.push(ChatLine::plain("système", out));
             }
             "/help" => {
                 self.status = "interrogation des services…".into();
@@ -1524,17 +1893,17 @@ impl UiApp {
                 let (title, content) = match rest.split_once('|') {
                     Some((t, c)) => (t.trim().to_string(), c.trim().to_string()),
                     None => {
-                        self.chat.push((
-                            "système".into(),
-                            "usage : /notenew <titre> | <contenu>".into(),
+                        self.chat.push(ChatLine::plain(
+                            "système",
+                            "usage : /notenew <titre> | <contenu>",
                         ));
                         return;
                     }
                 };
                 if title.is_empty() || content.is_empty() {
-                    self.chat.push((
-                        "système".into(),
-                        "usage : /notenew <titre> | <contenu>".into(),
+                    self.chat.push(ChatLine::plain(
+                        "système",
+                        "usage : /notenew <titre> | <contenu>",
                     ));
                     return;
                 }
@@ -1543,9 +1912,9 @@ impl UiApp {
             }
             "/notesearch" => {
                 if rest.is_empty() {
-                    self.chat.push((
-                        "système".into(),
-                        "usage : /notesearch <requête>".into(),
+                    self.chat.push(ChatLine::plain(
+                        "système",
+                        "usage : /notesearch <requête>",
                     ));
                     return;
                 }
@@ -1556,27 +1925,25 @@ impl UiApp {
             }
             "/agent" => {
                 if rest.is_empty() {
-                    self.chat.push((
-                        "système".into(),
-                        "usage : /agent <tâche>".into(),
-                    ));
+                    self.chat.push(ChatLine::plain("système", "usage : /agent <tâche>"));
                     return;
                 }
+                let Some(session_id) = self.active_session.clone() else {
+                    self.chat.push(ChatLine::plain(
+                        "système",
+                        "aucune session — créez-en une avant /agent",
+                    ));
+                    return;
+                };
+                // Persister la ligne slash (sinon perdue au reload).
+                let _ = self.cmd_tx.send(Cmd::SessionAppend {
+                    session_id: session_id.clone(),
+                    role: "user".into(),
+                    content: text.to_string(),
+                    attachments: vec![],
+                });
                 self.pending_note_agent = rest.to_lowercase().contains("note");
-                let mut skills = Vec::new();
-                let mut tools = vec![
-                    "notes.create".into(),
-                    "notes.list".into(),
-                    "notes.read".into(),
-                ];
-                if rest.to_lowercase().contains("note") {
-                    skills.push("notes-writer".into());
-                }
-                if rest.to_lowercase().contains("plan") || rest.to_lowercase().contains("délégu") {
-                    skills.push("planner".into());
-                    tools.push("agent.spawn".into());
-                    tools.push("agent.await".into());
-                }
+                let (skills, tools) = agent_heuristics_for_task(rest);
                 let _ = self.cmd_tx.send(Cmd::AgentCreate {
                     task: rest.to_string(),
                     system_prompt: None,
@@ -1588,8 +1955,10 @@ impl UiApp {
                     max_steps: 16,
                     timeout_secs: self.prefs.default_timeout_secs,
                     model_id: None,
+                    session_id: Some(session_id),
+                    origin: "slash".into(),
                 });
-                self.tab = Tab::Agents;
+                // Rester dans le chat — carte via Evt::AgentSpawned
             }
             "/audit" => {
                 let n = rest.parse().unwrap_or(20);
@@ -1598,7 +1967,8 @@ impl UiApp {
             }
             "/kill" => {
                 if rest.is_empty() {
-                    self.chat.push(("système".into(), "usage : /kill <id>".into()));
+                    self.chat
+                        .push(ChatLine::plain("système", "usage : /kill <id>"));
                     return;
                 }
                 let _ = self.cmd_tx.send(Cmd::AgentKill {
@@ -1607,7 +1977,8 @@ impl UiApp {
             }
             "/pause" => {
                 if rest.is_empty() {
-                    self.chat.push(("système".into(), "usage : /pause <id>".into()));
+                    self.chat
+                        .push(ChatLine::plain("système", "usage : /pause <id>"));
                     return;
                 }
                 let _ = self.cmd_tx.send(Cmd::AgentPause {
@@ -1615,8 +1986,8 @@ impl UiApp {
                 });
             }
             _ => {
-                self.chat.push((
-                    "système".into(),
+                self.chat.push(ChatLine::plain(
+                    "système",
                     format!("commande inconnue : {cmd} — tapez /commands"),
                 ));
             }
@@ -1629,10 +2000,18 @@ impl eframe::App for UiApp {
         while let Ok(ev) = self.evt_rx.try_recv() {
             match ev {
                 Evt::Delta(t) => self.streaming.push_str(&t),
-                Evt::Done { text, session_id } => {
+                Evt::Done {
+                    text,
+                    session_id,
+                    attachments,
+                } => {
                     if self.active_session.as_deref() == Some(session_id.as_str()) && !text.is_empty()
                     {
-                        self.chat.push(("assistant".into(), text));
+                        self.chat.push(ChatLine {
+                            role: "assistant".into(),
+                            text,
+                            attachments,
+                        });
                     }
                     self.streaming.clear();
                     self.chat_pending = false;
@@ -1642,13 +2021,34 @@ impl eframe::App for UiApp {
                 }
                 Evt::Error(m) => {
                     self.status = m.clone();
-                    self.chat.push(("système".into(), m));
+                    self.chat.push(ChatLine::plain("système", m));
                     self.streaming.clear();
                     self.chat_pending = false;
                 }
                 Evt::Status(m) => self.status = m,
-                Evt::ChatSystem(m) => self.chat.push(("système".into(), m)),
+                Evt::ChatSystem(m) => self.chat.push(ChatLine::plain("système", m)),
                 Evt::Metrics(m) => self.metrics = Some(m),
+                Evt::AgentSpawned {
+                    session_id,
+                    agent_id,
+                    title,
+                    origin,
+                    ack,
+                } => {
+                    if self.active_session.as_deref() == Some(session_id.as_str()) {
+                        self.chat.push(ChatLine {
+                            role: "assistant".into(),
+                            text: ack,
+                            attachments: vec![ChatAttachment::AgentRef {
+                                agent_id,
+                                title,
+                                origin,
+                            }],
+                        });
+                    } else {
+                        self.status = format!("agent lancé : {agent_id}");
+                    }
+                }
                 Evt::Agents(a) => {
                     if self.pending_note_agent
                         && a.iter().any(|ag| {
@@ -1659,6 +2059,99 @@ impl eframe::App for UiApp {
                         })
                     {
                         let _ = self.cmd_tx.send(Cmd::NotesList);
+                    }
+                    for ag in &a {
+                        let prev = self.agent_prev_states.get(&ag.agent_id).cloned();
+                        let terminal = matches!(
+                            ag.state,
+                            AgentState::Done | AgentState::Failed | AgentState::Killed
+                        );
+                        let was_active = prev
+                            .as_ref()
+                            .map(|p| {
+                                !matches!(
+                                    p,
+                                    AgentState::Done | AgentState::Failed | AgentState::Killed
+                                )
+                            })
+                            .unwrap_or(false);
+                        if terminal && was_active {
+                            if let Some(sid) = &ag.session_id {
+                                let viewing = self.tab == Tab::Chat
+                                    && self.active_session.as_deref() == Some(sid.as_str());
+                                if !viewing && !self.agent_notified.contains(&ag.agent_id) {
+                                    let summary = match ag.state {
+                                        AgentState::Done => format!("{} terminé", ag.agent_id),
+                                        AgentState::Failed => format!(
+                                            "{} échoué — {}",
+                                            ag.agent_id,
+                                            ag.fail_reason.as_deref().unwrap_or("échec")
+                                        ),
+                                        AgentState::Killed => format!("{} arrêté", ag.agent_id),
+                                        _ => format!("{} terminé", ag.agent_id),
+                                    };
+                                    self.agent_notified.insert(ag.agent_id.clone());
+                                    self.agent_notices.push(AgentNotice {
+                                        agent_id: ag.agent_id.clone(),
+                                        session_id: sid.clone(),
+                                        summary,
+                                    });
+                                }
+                                if viewing {
+                                    let content = match ag.state {
+                                        AgentState::Done => {
+                                            let out = ag.last_output.trim();
+                                            if out.is_empty() {
+                                                format!("Agent {} terminé.", ag.agent_id)
+                                            } else {
+                                                let excerpt: String =
+                                                    out.chars().take(500).collect();
+                                                format!(
+                                                    "Agent {} terminé.\n{}",
+                                                    ag.agent_id, excerpt
+                                                )
+                                            }
+                                        }
+                                        AgentState::Failed => format!(
+                                            "Agent {} a échoué : {}",
+                                            ag.agent_id,
+                                            ag.fail_reason.as_deref().unwrap_or("échec")
+                                        ),
+                                        AgentState::Killed => {
+                                            format!("Agent {} arrêté.", ag.agent_id)
+                                        }
+                                        _ => format!("Agent {} terminé.", ag.agent_id),
+                                    };
+                                    // Évite doublon si agentd a déjà écrit le même résumé
+                                    let already = self.chat.iter().any(|l| {
+                                        l.attachments.iter().any(|a| {
+                                            matches!(
+                                                a,
+                                                ChatAttachment::AgentRef {
+                                                    agent_id,
+                                                    origin,
+                                                    ..
+                                                } if agent_id == &ag.agent_id
+                                                    && origin == "completion"
+                                            )
+                                        })
+                                    });
+                                    if !already {
+                                        self.chat.push(ChatLine {
+                                            role: "assistant".into(),
+                                            text: content,
+                                            attachments: vec![ChatAttachment::AgentRef {
+                                                agent_id: ag.agent_id.clone(),
+                                                title: ag.directive.clone(),
+                                                origin: "completion".into(),
+                                            }],
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                        self.agent_prev_states
+                            .insert(ag.agent_id.clone(), ag.state.clone());
                     }
                     self.agents = a;
                 }
@@ -1672,6 +2165,23 @@ impl eframe::App for UiApp {
                         self.pending_note_agent = false;
                     }
                     self.notes_out = s;
+                    self.scen_note_human = true;
+                }
+                Evt::NotesListed(notes) => {
+                    self.notes.apply_listed(notes);
+                    self.scen_note_human = true;
+                }
+                Evt::NoteLoaded(detail) => {
+                    self.notes.apply_loaded(detail);
+                }
+                Evt::NotesSearchHits(hits) => {
+                    self.notes.apply_search_hits(hits);
+                }
+                Evt::NotesRelated(hits) => {
+                    self.notes.apply_related(hits);
+                }
+                Evt::NotesSaved { path, slug, title } => {
+                    self.notes.mark_saved(path, slug, title);
                     self.scen_note_human = true;
                 }
                 Evt::Audit(a) => {
@@ -1729,8 +2239,8 @@ impl eframe::App for UiApp {
                         .find(|s| s.id == id)
                         .map(|s| s.title.clone())
                         .unwrap_or_default();
-                    let mut chat = vec![(
-                        "système".into(),
+                    let mut chat = vec![ChatLine::plain(
+                        "système",
                         format!("Session {id} — historique rechargé."),
                     )];
                     chat.extend(messages);
@@ -1748,7 +2258,7 @@ impl eframe::App for UiApp {
                 },
                 Evt::FileOk(msg) => {
                     self.status = msg.clone();
-                    self.chat.push(("système".into(), msg));
+                    self.chat.push(ChatLine::plain("système", msg));
                 }
                 Evt::Skills(list) => self.skill_catalog = list,
                 Evt::McpServers(list) => self.mcp_catalog = list,
@@ -1881,6 +2391,39 @@ impl eframe::App for UiApp {
         }
 
         egui::TopBottomPanel::top("banner").show(ctx, |ui| {
+            if !self.agent_notices.is_empty() {
+                let notices = self.agent_notices.clone();
+                let mut dismiss: Vec<String> = Vec::new();
+                let mut open_sess: Option<String> = None;
+                for n in &notices {
+                    ui.horizontal(|ui| {
+                        ui.colored_label(
+                            egui::Color32::from_rgb(120, 180, 230),
+                            &n.summary,
+                        );
+                        let sess_title = self
+                            .sessions
+                            .iter()
+                            .find(|s| s.id == n.session_id)
+                            .map(|s| s.title.clone())
+                            .unwrap_or_else(|| n.session_id.clone());
+                        ui.label(format!("— {sess_title}"));
+                        if ui.button("Ouvrir").clicked() {
+                            open_sess = Some(n.session_id.clone());
+                            dismiss.push(n.agent_id.clone());
+                        }
+                        if ui.small_button("×").clicked() {
+                            dismiss.push(n.agent_id.clone());
+                        }
+                    });
+                }
+                self.agent_notices
+                    .retain(|x| !dismiss.contains(&x.agent_id));
+                if let Some(id) = open_sess {
+                    self.tab = Tab::Chat;
+                    let _ = self.cmd_tx.send(Cmd::SessionSelect { id });
+                }
+            }
             ui.horizontal(|ui| {
                 ui.colored_label(egui::Color32::from_rgb(220, 160, 40), t.preview_banner);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -2265,7 +2808,7 @@ impl UiApp {
                                     format: self.gen_format.clone(),
                                     path: self.gen_path.clone(),
                                     content: self.gen_content.clone(),
-                                    title: Some("Agent OS".into()),
+                                    title: Some("Akasha OS".into()),
                                 });
                             }
                             if ui.button("Ouvrir downloads").clicked() {
@@ -2306,10 +2849,28 @@ impl UiApp {
                         .show(ui, |ui| {
                             ui.set_min_width(ui.available_width());
                             ui.set_min_height(scroll_h);
-                            for (role, text) in &self.chat {
-                                ui.label(format!("[{role}]"));
-                                ui.add(egui::Label::new(text).wrap());
+                            let mut open_agent: Option<String> = None;
+                            for line in &self.chat {
+                                ui.label(format!("[{}]", line.role));
+                                if !line.text.is_empty() {
+                                    ui.add(egui::Label::new(&line.text).wrap());
+                                }
+                                for att in &line.attachments {
+                                    let ChatAttachment::AgentRef {
+                                        agent_id,
+                                        title,
+                                        ..
+                                    } = att;
+                                    let info =
+                                        self.agents.iter().find(|a| a.agent_id == *agent_id);
+                                    if agent_panel::chat_agent_card(ui, info, agent_id, title) {
+                                        open_agent = Some(agent_id.clone());
+                                    }
+                                }
                                 ui.separator();
+                            }
+                            if let Some(id) = open_agent {
+                                self.open_agent_tab(&id);
                             }
                             if !self.streaming.is_empty() {
                                 ui.label("[assistant]");
@@ -2389,40 +2950,49 @@ impl UiApp {
     }
 
     fn ui_notes(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Notes");
-        ui.horizontal(|ui| {
-            if ui.button("Lister").clicked() {
-                let _ = self.cmd_tx.send(Cmd::NotesList);
-            }
-            ui.text_edit_singleline(&mut self.note_search);
-            if ui.button("Rechercher").clicked() && !self.note_search.is_empty() {
-                let _ = self.cmd_tx.send(Cmd::NotesSearch {
-                    query: self.note_search.clone(),
-                });
-            }
-        });
-        ui.separator();
-        ui.label("Nouvelle note");
-        ui.horizontal(|ui| {
-            ui.label("Titre");
-            ui.text_edit_singleline(&mut self.note_title);
-        });
-        ui.text_edit_multiline(&mut self.note_content);
-        if ui.button("Créer").clicked()
-            && !self.note_title.is_empty()
-            && !self.note_content.is_empty()
-        {
-            let _ = self.cmd_tx.send(Cmd::NotesCreate {
-                title: self.note_title.clone(),
-                content: self.note_content.clone(),
-            });
-            self.note_title.clear();
-            self.note_content.clear();
+        let actions = notes_panel::show_notes_panel(ui, &mut self.notes);
+        if actions.list {
+            let _ = self.cmd_tx.send(Cmd::NotesList);
         }
-        ui.separator();
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            ui.monospace(&self.notes_out);
-        });
+        if let Some(query) = actions.search {
+            let _ = self.cmd_tx.send(Cmd::NotesSearch { query });
+        }
+        if let Some(path) = actions.read_path {
+            let _ = self.cmd_tx.send(Cmd::NotesRead {
+                title: None,
+                path: Some(path),
+                slug: None,
+            });
+        }
+        if let Some(title) = actions.read_title {
+            let _ = self.cmd_tx.send(Cmd::NotesRead {
+                title: Some(title),
+                path: None,
+                slug: None,
+            });
+        }
+        if let Some((title, content)) = actions.save_create {
+            let _ = self.cmd_tx.send(Cmd::NotesCreate { title, content });
+        }
+        if let Some((title, path, content)) = actions.save_update {
+            let _ = self.cmd_tx.send(Cmd::NotesUpdate {
+                title,
+                path,
+                content,
+            });
+        }
+        if let Some(path) = actions.attach_path {
+            if self.agent_docs.is_empty() {
+                self.agent_docs = path;
+            } else if !self.agent_docs.split(',').any(|p| p.trim() == path) {
+                self.agent_docs = format!("{},{}", self.agent_docs, path);
+            }
+            self.tab = Tab::Agents;
+            self.status = "Note jointe — créez un agent avec ce document.".into();
+        }
+        if let Some((path, topic)) = actions.related {
+            let _ = self.cmd_tx.send(Cmd::NotesRelated { path, topic });
+        }
     }
 
     fn ui_agents(&mut self, ui: &mut egui::Ui) {
@@ -2520,6 +3090,9 @@ impl UiApp {
                 "notes.list",
                 "notes.read",
                 "notes.search",
+                "notes.update",
+                "notes.links",
+                "notes.related",
                 "fs.read",
                 "fs.write",
                 "fs.list",
@@ -2595,6 +3168,8 @@ impl UiApp {
                 } else {
                     Some(self.agent_model_id.clone())
                 },
+                session_id: self.active_session.clone(),
+                origin: "form".into(),
             });
         }
 
