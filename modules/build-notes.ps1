@@ -41,7 +41,7 @@ $hash = (Get-FileHash -Algorithm SHA256 $wasmDst).Hash.ToLower()
 
 $manifest = @"
 name: notes
-version: 1.0.0
+version: 1.1.0
 hash: $hash
 permissions:
   required_caps:
@@ -51,7 +51,7 @@ permissions:
     - mem.query:module:notes
 tools:
   - name: notes.create
-    description: Créer une note (fichier + mémoire épisodique)
+    description: Create or overwrite a markdown note (file + memory + graph)
     input_schema:
       type: object
       properties:
@@ -62,9 +62,22 @@ tools:
       type: object
       properties:
         path: { type: string }
+        slug: { type: string }
         version: { type: integer }
+        memory_id: { type: integer }
+  - name: notes.update
+    description: Update an existing note (reindexes memory + graph)
+    input_schema:
+      type: object
+      properties:
+        title: { type: string }
+        path: { type: string }
+        slug: { type: string }
+        content: { type: string }
+        new_title: { type: string }
+      required: [content]
   - name: notes.list
-    description: Lister les notes
+    description: List notes (title, path, excerpt)
     input_schema:
       type: object
     output_schema:
@@ -72,34 +85,55 @@ tools:
       properties:
         notes: { type: array }
   - name: notes.read
-    description: Lire une note par titre
+    description: Read a note by title, path or slug (includes links)
     input_schema:
       type: object
       properties:
         title: { type: string }
-      required: [title]
+        path: { type: string }
+        slug: { type: string }
   - name: notes.search
-    description: Recherche sémantique dans les notes
+    description: Semantic search over notes (deduped by path)
     input_schema:
       type: object
       properties:
         query: { type: string }
         k: { type: integer }
       required: [query]
+  - name: notes.links
+    description: Outgoing links and backlinks for a note
+    input_schema:
+      type: object
+      properties:
+        title: { type: string }
+        path: { type: string }
+        slug: { type: string }
+  - name: notes.related
+    description: Graph-linked notes scored by semantic relevance to a topic
+    input_schema:
+      type: object
+      properties:
+        title: { type: string }
+        path: { type: string }
+        slug: { type: string }
+        topic: { type: string }
+        hops: { type: integer }
+        k: { type: integer }
 ui:
   entry: ui/index.html
   mode: declarative_ui
 min_os_api: 1
 "@
-Set-Content -Path "$pkg\manifest.yaml" -Value $manifest -Encoding utf8NoBOM
+[System.IO.File]::WriteAllText("$pkg\manifest.yaml", $manifest)
 
-@'
+$uiJson = @'
 {
   "type": "declarative_ui",
   "title": "Notes",
-  "description": "Liste et crée des notes (surface humaine du module notes).",
-  "commands": ["notes.list", "notes.read", "notes.create", "notes.search"]
+  "description": "List, read, create and link notes (human surface of the notes module).",
+  "commands": ["notes.list", "notes.read", "notes.create", "notes.update", "notes.search", "notes.links", "notes.related"]
 }
-'@ | Set-Content -Path "$pkg\ui\index.html" -Encoding utf8NoBOM
+'@
+[System.IO.File]::WriteAllText("$pkg\ui\index.html", $uiJson)
 
-Write-Host "== package prêt : $pkg (hash $hash) =="
+Write-Host "== package ready: $pkg (hash $hash) =="

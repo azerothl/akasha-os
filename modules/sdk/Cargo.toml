@@ -1,6 +1,6 @@
 [package]
 name = "aos-module-sdk"
-description = "SDK guest pour modules Agent OS (WASM)"
+description = "SDK guest pour modules Akasha OS (WASM)"
 version = "0.1.0"
 edition = "2021"
 license = "AGPL-3.0-only"

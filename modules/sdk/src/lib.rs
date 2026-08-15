@@ -1,4 +1,4 @@
-//! # aos-module-sdk — SDK côté guest pour les modules Agent OS (WASM).
+//! # aos-module-sdk — SDK côté guest pour les modules Akasha OS (WASM).
 //!
 //! Un module ne peut communiquer avec le système **que** via `host_call`
 //! (pas de WASI, aucun accès ambiant, §7.4). Ce SDK encapsule la plomberie
@@ -18,9 +18,16 @@
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
+#[cfg(target_arch = "wasm32")]
 #[link(wasm_import_module = "env")]
 extern "C" {
     fn host_call(svc_ptr: u32, svc_len: u32, args_ptr: u32, args_len: u32) -> u64;
+}
+
+/// Stub natif pour permettre `cargo test` des modules (logique pure hors host).
+#[cfg(not(target_arch = "wasm32"))]
+unsafe fn host_call(_svc_ptr: u32, _svc_len: u32, _args_ptr: u32, _args_len: u32) -> u64 {
+    panic!("host_call n'est disponible que sous wasm32");
 }
 
 /// Appelle un service système (`fs.read`, `fs.write`, `fs.list`,
@@ -100,6 +107,29 @@ pub fn mem_query(namespace: &str, query: &str, k: usize) -> Result<serde_json::V
         "mem.episodic_query",
         &serde_json::json!({"namespace": namespace, "query": query, "k": k}),
     )
+}
+
+/// `mem.episodic_delete` par id (namespace pour le contrôle de caps).
+pub fn mem_delete(namespace: &str, id: u64) -> Result<bool, String> {
+    let r = call(
+        "mem.episodic_delete",
+        &serde_json::json!({"namespace": namespace, "id": id}),
+    )?;
+    Ok(r["deleted"].as_bool().unwrap_or(false))
+}
+
+/// `mem.episodic_delete` par métadonnée `path` dans un namespace.
+pub fn mem_delete_by_path(namespace: &str, path: &str) -> Result<usize, String> {
+    let r = call(
+        "mem.episodic_delete",
+        &serde_json::json!({
+            "namespace": namespace,
+            "meta_key": "path",
+            "meta_value": path,
+            "path": path,
+        }),
+    )?;
+    Ok(r["count"].as_u64().unwrap_or(0) as usize)
 }
 
 /// Lit un asset du package module (handlers.json, etc.).
