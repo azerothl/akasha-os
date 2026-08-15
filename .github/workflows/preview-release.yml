@@ -11,10 +11,25 @@ on:
       create_release:
         description: "Create/upload GitHub Release assets"
         type: boolean
-        default: true
+        default: false
+
+concurrency:
+  group: preview-release-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  CARGO_BUILD_JOBS: "4"
+  # Limit ggml CUDA SMs (default builds many arches → ~1h+). Turing→Ada consumer GPUs.
+  # Forwarded by llama-cpp-sys-2 build.rs to CMake.
+  CMAKE_CUDA_ARCHITECTURES: "75;80;86;89"
+  # Shared by cargo + cmake-rs / ninja
+  CMAKE_BUILD_PARALLEL_LEVEL: "4"
+  # Avoid native host tuning in CI (no GPU / unstable ISA assumptions).
+  GGML_NATIVE: "OFF"
+  SCCACHE_GHA_ENABLED: "true"
+  RUSTC_WRAPPER: sccache
 
 permissions:
   contents: read
@@ -22,7 +37,7 @@ permissions:
 jobs:
   windows:
     runs-on: windows-2022
-    timeout-minutes: 360
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
 
@@ -31,19 +46,46 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
 
-      - name: Install Ninja
-        run: choco install ninja -y
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
 
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: preview-cuda-windows
+          cache-targets: true
+          cache-all-crates: true
+
+      - name: Install Ninja
+        shell: pwsh
+        run: |
+          $ver = "1.12.1"
+          $zip = "$env:RUNNER_TEMP\ninja.zip"
+          Invoke-WebRequest -Uri "https://github.com/ninja-build/ninja/releases/download/v$ver/ninja-win.zip" -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath "$env:RUNNER_TEMP\ninja" -Force
+          Add-Content -Path $env:GITHUB_PATH -Value "$env:RUNNER_TEMP\ninja"
+          ninja --version
+
+      # Skip cupti (profiling only). Keep visual_studio_integration for nvcc+MSVC.
       - name: Install CUDA Toolkit 12.4
         uses: Jimver/cuda-toolkit@v0.2.23
         with:
           cuda: "12.4.1"
           method: network
-          sub-packages: '["nvcc","cudart","cublas","cublas_dev","nvrtc","nvrtc_dev","cupti","thrust","visual_studio_integration"]'
+          use-github-cache: false
+          use-local-cache: false
+          sub-packages: '["nvcc","cudart","cublas","cublas_dev","nvrtc","nvrtc_dev","thrust","visual_studio_integration"]'
 
       - name: Build Preview package
         shell: pwsh
+        # Do not force CMAKE_GENERATOR=Ninja on Windows: CUDA+MSVC needs VS env;
+        # cmake-rs defaults to the VS generator which is reliable on GHA.
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: sccache
+          CMAKE_CXX_COMPILER_LAUNCHER: sccache
+          CMAKE_CUDA_COMPILER_LAUNCHER: sccache
         run: |
+          sccache --show-stats
           $ver = (Get-Content VERSION -Raw).Trim()
           .\packaging\build-preview.ps1 -SkipModels -RequireCuda -Version $ver
           $dir = "dist\AgentOS-Preview-$ver-windows-x64"
@@ -52,15 +94,18 @@ jobs:
           $dll = Get-ChildItem "$dir\bin" -Filter "cudart64_*.dll"
           if (-not $dll) { throw "missing CUDA cudart DLL" }
           Compress-Archive -Path "$dir\*" -DestinationPath "dist\AgentOS-Preview-$ver-windows-x64.zip" -Force
+          sccache --show-stats
 
       - uses: actions/upload-artifact@v4
         with:
           name: preview-windows-x64
           path: dist/AgentOS-Preview-*-windows-x64.zip
+          compression-level: 0
+          retention-days: 7
 
   linux:
     runs-on: ubuntu-22.04
-    timeout-minutes: 360
+    timeout-minutes: 180
     container:
       image: nvidia/cuda:12.4.1-devel-ubuntu22.04
     steps:
@@ -72,29 +117,41 @@ jobs:
           apt-get update -qq
           apt-get install -y -qq \
             build-essential pkg-config curl ca-certificates git cmake ninja-build \
-            findutils \
-            clang libclang-dev libssl-dev \
+            findutils zstd clang libclang-dev libssl-dev \
             libx11-dev libxcursor-dev libxrandr-dev libxi-dev libxkbcommon-dev \
             libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
-            libwayland-dev libasound2-dev xz-utils
+            libwayland-dev libasound2-dev xz-utils lld
 
       - name: Install Rust
-        run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
-          . "$HOME/.cargo/env"
-          rustup target add wasm32-unknown-unknown
-          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: preview-cuda-linux
+          cache-targets: true
+          cache-all-crates: true
 
       - name: Build Preview package
         env:
           CUDA_HOME: /usr/local/cuda
           SKIP_MODELS: "1"
           REQUIRE_CUDA: "1"
+          CMAKE_GENERATOR: Ninja
+          CMAKE_C_COMPILER_LAUNCHER: sccache
+          CMAKE_CXX_COMPILER_LAUNCHER: sccache
+          CMAKE_CUDA_COMPILER_LAUNCHER: sccache
+          RUSTFLAGS: "-C link-arg=-fuse-ld=lld"
         run: |
-          . "$HOME/.cargo/env"
-          export LIBCLANG_PATH="$(dirname "$(ls -1 /usr/lib/llvm-*/lib/libclang.so* 2>/dev/null | head -n1)")"
+          sccache --show-stats
           VERSION="$(tr -d '[:space:]' < VERSION)"
           export VERSION
+          export LIBCLANG_PATH="$(dirname "$(ls -1 /usr/lib/llvm-*/lib/libclang.so* 2>/dev/null | head -n1)")"
           chmod +x packaging/build-preview.sh
           bash packaging/build-preview.sh
           OUT="dist/AgentOS-Preview-${VERSION}-linux-x64"
@@ -102,11 +159,14 @@ jobs:
           test -f "${OUT}/share/models/manifest.json"
           ls "${OUT}/bin"/libcudart.so* >/dev/null
           tar -C dist -czf "dist/AgentOS-Preview-${VERSION}-linux-x64.tar.gz" "AgentOS-Preview-${VERSION}-linux-x64"
+          sccache --show-stats
 
       - uses: actions/upload-artifact@v4
         with:
           name: preview-linux-x64
           path: dist/AgentOS-Preview-*-linux-x64.tar.gz
+          compression-level: 0
+          retention-days: 7
 
   release:
     needs: [windows, linux]

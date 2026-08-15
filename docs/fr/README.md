@@ -46,6 +46,19 @@ Windows 10/11 x64 **ou** Linux x64, GPU NVIDIA, ~4 Go disque.
 
 Voir [INSTALL.md](INSTALL.md), [FIRST-RUN.md](FIRST-RUN.md), [TESTER.md](TESTER.md).
 
+### Build depuis les sources
+
+Toolchain, scripts de packaging et run local :
+[INSTALL.md — Build depuis les sources](INSTALL.md#build-depuis-les-sources)
+(anglais : [INSTALL.md — Build from source](../../INSTALL.md#build-from-source)).
+
+```powershell
+cargo test --workspace
+.\packaging\build-preview.ps1 -SkipModels -RequireCuda
+$env:AOS_HOME = (Resolve-Path .)
+cargo run -p aos-session --release
+```
+
 ## Documentation
 
 | Doc | Description |

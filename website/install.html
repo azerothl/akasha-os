@@ -6,7 +6,7 @@
     <title>Install — Akasha OS Preview</title>
     <meta
       name="description"
-      content="Install Akasha OS Preview on Windows or Linux x64 with an NVIDIA GPU. Zip or tar.gz, no cargo."
+      content="Install Akasha OS Preview on Windows or Linux x64 with an NVIDIA GPU. Zip/tar.gz or build from source."
     />
     <link rel="stylesheet" href="styles.css" />
   </head>
@@ -170,6 +170,41 @@ var/            created at run</pre>
           <li data-lang="en">Bus unreachable → always launch via <code>aos-session</code></li>
           <li data-lang="fr">Bus unreachable → toujours lancer via <code>aos-session</code></li>
         </ul>
+
+        <h2 id="build">
+          <span data-lang="en"># build from source</span>
+          <span data-lang="fr"># build depuis les sources</span>
+        </h2>
+        <p class="hist" data-lang="en">
+          Releases are enough to run Preview. Build from source for a local
+          package, patches, or development. Full write-up:
+          <a href="docs/build.html">docs/build</a>
+          and
+          <a href="https://github.com/azerothl/akasha-os/blob/main/INSTALL.md#build-from-source">INSTALL.md</a>.
+        </p>
+        <p class="hist" data-lang="fr">
+          Les Releases suffisent pour lancer la Preview. Compilez depuis les
+          sources pour un paquet local, des patches ou du développement.
+          Détail :
+          <a href="docs/build.html">docs/build</a>
+          et
+          <a href="https://github.com/azerothl/akasha-os/blob/main/docs/fr/INSTALL.md#build-depuis-les-sources">INSTALL.md</a>.
+        </p>
+        <ul class="loglines">
+          <li>rust GRANT stable + <code>wasm32-unknown-unknown</code></li>
+          <li>cuda GRANT Toolkit (nvcc) · nvidia-smi OK</li>
+          <li>cmake · ninja · clang/libclang <span data-lang="en">(Linux)</span><span data-lang="fr">(Linux)</span></li>
+        </ul>
+        <pre># Windows
+.\packaging\build-preview.ps1 -SkipModels -RequireCuda
+
+# Linux
+SKIP_MODELS=1 REQUIRE_CUDA=1 ./packaging/build-preview.sh
+
+# Dev run (repo root)
+$env:AOS_HOME = (Resolve-Path .)   # Windows
+export AOS_HOME="$(pwd)"           # Linux
+cargo run -p aos-session --release</pre>
 
         <p class="prompt hist pager">
           <span class="ps">$</span>
