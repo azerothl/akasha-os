@@ -2,6 +2,8 @@
 
 **Langue :** [English](../../README.md) | Français
 
+**Site :** [azerothl.github.io/akasha-os](https://azerothl.github.io/akasha-os/?lang=fr)
+
 **Système d'exploitation agent-natif** — capacités, IPC sémantique, GPU
 first-class, offline-first. La Preview tourne sur hôte Windows/Linux
 (NVIDIA) ; la piste seL4 est séparée.

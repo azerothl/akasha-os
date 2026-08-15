@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Akasha OS — Agent-native operating system</title>
+    <meta
+      name="description"
+      content="Agent-native OS with capability-based security, semantic IPC, and first-class GPU. Offline-first. Preview on Windows/Linux (NVIDIA)."
+    />
+    <meta property="og:title" content="Akasha OS" />
+    <meta
+      property="og:description"
+      content="Agent-native OS — capability-based security, semantic IPC, first-class GPU, offline-first."
+    />
+    <meta property="og:type" content="website" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip" href="#content">Skip to content</a>
+    <header class="wrap">
+      <a class="brand" href="./">
+        <strong>Akasha OS</strong>
+        <span>Agent OS</span>
+      </a>
+      <nav aria-label="Primary">
+        <a href="#why"><span data-lang="en">Why</span><span data-lang="fr">Pourquoi</span></a>
+        <a href="#features"><span data-lang="en">Preview</span><span data-lang="fr">Preview</span></a>
+        <a href="#start"><span data-lang="en">Start</span><span data-lang="fr">Démarrer</span></a>
+        <a href="#docs"><span data-lang="en">Docs</span><span data-lang="fr">Docs</span></a>
+        <a href="https://github.com/azerothl/akasha-os">GitHub</a>
+        <div class="lang" role="group" aria-label="Language">
+          <button type="button" data-set-lang="en" aria-pressed="true">EN</button>
+          <button type="button" data-set-lang="fr" aria-pressed="false">FR</button>
+        </div>
+      </nav>
+    </header>
+
+    <main id="content">
+      <section class="hero wrap">
+        <p class="kicker" data-lang="en">Preview 0.1 · not a bootable OS image</p>
+        <p class="kicker" data-lang="fr">Preview 0.1 · pas encore un OS bootable</p>
+        <h1 data-lang="en">An operating system built around agents.</h1>
+        <h1 data-lang="fr">Un système d’exploitation conçu autour des agents.</h1>
+        <p class="lede" data-lang="en">
+          Capability-based security, semantic IPC, first-class GPU, offline-first.
+          Preview builds run on a Windows or Linux host with NVIDIA; a seL4
+          bare-metal track is separate.
+        </p>
+        <p class="lede" data-lang="fr">
+          Capacités, IPC sémantique, GPU first-class, offline-first. La Preview
+          tourne sur hôte Windows ou Linux (NVIDIA) ; la piste seL4 est séparée.
+        </p>
+        <p class="audit mono" aria-hidden="true">
+          cap.grant session:preview gpu:nvidia net:deny audit:on offline:default
+        </p>
+        <div class="cta">
+          <a class="btn" href="https://github.com/azerothl/akasha-os/releases">
+            <span data-lang="en">Download Preview</span>
+            <span data-lang="fr">Télécharger la Preview</span>
+          </a>
+          <a class="btn btn-ghost" href="https://github.com/azerothl/akasha-os">
+            <span data-lang="en">View repository</span>
+            <span data-lang="fr">Voir le dépôt</span>
+          </a>
+        </div>
+        <ul class="chips">
+          <li>Capabilities</li>
+          <li>Semantic IPC</li>
+          <li>GPU</li>
+          <li>Offline-first</li>
+          <li>Rust</li>
+        </ul>
+      </section>
+
+      <section class="wrap" id="why">
+        <h2 data-lang="en">Why Agent OS</h2>
+        <h2 data-lang="fr">Pourquoi Agent OS</h2>
+        <p class="section-lede" data-lang="en">
+          Most agent stacks are apps on top of a general-purpose OS. Agent OS
+          treats agents, models, tools, and memory as first-class system
+          services with explicit capabilities, audit, and policy — so autonomy
+          stays bounded and observable.
+        </p>
+        <p class="section-lede" data-lang="fr">
+          La plupart des stacks agents sont des applications sur un OS
+          généraliste. Agent OS traite agents, modèles, outils et mémoire comme
+          des services système, avec capacités explicites, audit et politiques —
+          pour que l’autonomie reste bornée et observable.
+        </p>
+        <div class="grid">
+          <article>
+            <h3 data-lang="en">Capabilities, not ambient trust</h3>
+            <h3 data-lang="fr">Des capacités, pas une confiance ambiante</h3>
+            <p data-lang="en">
+              Agents act only with unforgeable, revocable tokens. No coarse
+              global permissions.
+            </p>
+            <p data-lang="fr">
+              Les agents n’agissent qu’avec des jetons infalsifiables et
+              révocables. Pas de permissions globales trop grossières.
+            </p>
+          </article>
+          <article>
+            <h3 data-lang="en">Semantic IPC</h3>
+            <h3 data-lang="fr">IPC sémantique</h3>
+            <p data-lang="en">
+              Typed intents on the system bus, not POSIX as the agent’s native
+              language.
+            </p>
+            <p data-lang="fr">
+              Des intents typés sur le bus système, pas POSIX comme langage
+              natif de l’agent.
+            </p>
+          </article>
+          <article>
+            <h3 data-lang="en">GPU as a first-class device</h3>
+            <h3 data-lang="fr">Le GPU comme périphérique de premier plan</h3>
+            <p data-lang="en">
+              Placement, scheduling, and local GGUF inference are part of the
+              runtime, not an app afterthought.
+            </p>
+            <p data-lang="fr">
+              Placement, ordonnancement et inférence GGUF locale font partie du
+              runtime, pas d’un à-côté applicatif.
+            </p>
+          </article>
+          <article>
+            <h3 data-lang="en">Offline by default</h3>
+            <h3 data-lang="fr">Offline par défaut</h3>
+            <p data-lang="en">
+              Network search and fetch are opt-in. Egress is deny-by-default.
+            </p>
+            <p data-lang="fr">
+              Recherche et fetch réseau sont en opt-in. La sortie réseau est
+              refusée par défaut.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="wrap" id="features">
+        <h2 data-lang="en">Preview features</h2>
+        <h2 data-lang="fr">Fonctionnalités Preview</h2>
+        <div class="grid">
+          <article>
+            <h3>Chat / Sessions</h3>
+            <p data-lang="en">Parallel persisted conversations.</p>
+            <p data-lang="fr">Conversations parallèles persistées.</p>
+          </article>
+          <article>
+            <h3 data-lang="en">Memory</h3>
+            <h3 data-lang="fr">Mémoire</h3>
+            <p data-lang="en">Long-term user facts — remember and recall.</p>
+            <p data-lang="fr">Faits long terme — remember / recall.</p>
+          </article>
+          <article>
+            <h3>Notes</h3>
+            <p data-lang="en">Human- and agent-authored notes (WASM module).</p>
+            <p data-lang="fr">Notes humaines et agents (module WASM).</p>
+          </article>
+          <article>
+            <h3>Agents</h3>
+            <p data-lang="en">Goal loop, skills, tools, optional MCP.</p>
+            <p data-lang="fr">Boucle de goal, skills, outils, MCP optionnel.</p>
+          </article>
+          <article>
+            <h3 data-lang="en">Feedback</h3>
+            <h3 data-lang="fr">Retour</h3>
+            <p data-lang="en">Local report plus a GitHub issue on this repo.</p>
+            <p data-lang="fr">Rapport local et issue GitHub sur ce dépôt.</p>
+          </article>
+          <article>
+            <h3 data-lang="en">Updates</h3>
+            <h3 data-lang="fr">Mises à jour</h3>
+            <p data-lang="en">Non-destructive overlays from GitHub Releases.</p>
+            <p data-lang="fr">Overlay non destructif depuis GitHub Releases.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="wrap" id="requirements">
+        <h2 data-lang="en">Requirements</h2>
+        <h2 data-lang="fr">Prérequis</h2>
+        <ul class="req">
+          <li>Windows 10/11 x64 <span data-lang="en">or</span><span data-lang="fr">ou</span> Linux x64</li>
+          <li>NVIDIA GPU + <span data-lang="en">recent driver</span><span data-lang="fr">pilote récent</span> (<code>nvidia-smi -L</code>)</li>
+          <li data-lang="en">~4 GB free disk (binaries + GGUF models on first run)</li>
+          <li data-lang="fr">~4 Go d’espace disque (binaires + modèles GGUF au premier lancement)</li>
+        </ul>
+        <p class="note" data-lang="en">
+          No macOS or CPU-only mode in Preview 0.1. Cohort status:
+          P0–P4 and PV shipped; PC in progress.
+        </p>
+        <p class="note" data-lang="fr">
+          Pas de macOS ni de mode CPU-only en Preview 0.1. Statut de la cohorte :
+          P0–P4 et PV livrés ; PC en cours.
+        </p>
+      </section>
+
+      <section class="wrap" id="start">
+        <h2 data-lang="en">Quick start</h2>
+        <h2 data-lang="fr">Démarrage rapide</h2>
+        <ol class="steps">
+          <li data-lang="en">
+            Download the latest zip/tar.gz from
+            <a href="https://github.com/azerothl/akasha-os/releases">GitHub Releases</a>.
+          </li>
+          <li data-lang="fr">
+            Télécharger le dernier zip/tar.gz depuis
+            <a href="https://github.com/azerothl/akasha-os/releases">GitHub Releases</a>.
+          </li>
+          <li><code>install.ps1</code> (Windows) <span data-lang="en">or</span><span data-lang="fr">ou</span> <code>./install.sh</code> (Linux).</li>
+          <li data-lang="en">
+            Launch <strong>Agent OS Preview</strong> — first run downloads models
+            if needed, then opens the in-app tutorial.
+          </li>
+          <li data-lang="fr">
+            Lancer <strong>Agent OS Preview</strong> — le premier lancement
+            télécharge les modèles si besoin, puis ouvre le tutoriel intégré.
+          </li>
+        </ol>
+        <p class="note">
+          <a href="https://github.com/azerothl/akasha-os/blob/main/INSTALL.md">INSTALL.md</a>
+          ·
+          <a href="https://github.com/azerothl/akasha-os/blob/main/docs/FIRST-RUN.md">FIRST-RUN</a>
+          ·
+          <a href="https://github.com/azerothl/akasha-os/blob/main/docs/TESTER.md">TESTER</a>
+        </p>
+      </section>
+
+      <section class="wrap" id="docs">
+        <h2 data-lang="en">Documentation</h2>
+        <h2 data-lang="fr">Documentation</h2>
+        <ul class="docs" data-lang="en">
+          <li><a href="https://github.com/azerothl/akasha-os/blob/main/docs/STATUS.md">STATUS</a> — phases and gates</li>
+          <li><a href="https://github.com/azerothl/akasha-os/blob/main/docs/vision.md">Vision</a></li>
+          <li><a href="https://github.com/azerothl/akasha-os/blob/main/docs/functional-specs.md">Functional specs</a></li>
+          <li><a href="https://github.com/azerothl/akasha-os/blob/main/docs/technical-specs.md">Technical specs</a></li>
+          <li><a href="https://github.com/azerothl/akasha-os/blob/main/CONTRIBUTING.md">Contributing</a></li>
+        </ul>
+        <ul class="docs" data-lang="fr">
+          <li><a href="https://github.com/azerothl/akasha-os/blob/main/docs/fr/STATUS.md">STATUS</a> — phases et gates</li>
+          <li><a href="https://github.com/azerothl/akasha-os/blob/main/docs/fr/README.md">README français</a></li>
+          <li><a href="https://github.com/azerothl/akasha-os/blob/main/docs/fr/specs-fonctionnelles.md">Specs fonctionnelles</a></li>
+          <li><a href="https://github.com/azerothl/akasha-os/blob/main/docs/fr/specs-techniques.md">Specs techniques</a></li>
+          <li><a href="https://github.com/azerothl/akasha-os/blob/main/CONTRIBUTING.md">Contributions</a></li>
+        </ul>
+      </section>
+
+      <section class="wrap" id="license">
+        <h2 data-lang="en">License</h2>
+        <h2 data-lang="fr">Licence</h2>
+        <p class="section-lede" data-lang="en">
+          Dual licensing. Trademarks <strong>Akasha OS</strong> and
+          <strong>Agent OS</strong> are reserved.
+        </p>
+        <p class="section-lede" data-lang="fr">
+          Double licence. Les marques <strong>Akasha OS</strong> et
+          <strong>Agent OS</strong> sont réservées.
+        </p>
+        <div class="grid">
+          <article>
+            <h3>AGPL-3.0-only</h3>
+            <p data-lang="en">
+              Free use, modify, and distribute — including commercially — if you
+              honor AGPL (source available, including network use). Keep
+              <code>NOTICE</code> and credit Akasha OS.
+            </p>
+            <p data-lang="fr">
+              Usage, modification et distribution libres — y compris
+              commercialement — si vous respectez l’AGPL (source disponible, y
+              compris en usage réseau). Conservez <code>NOTICE</code> et créditez
+              Akasha OS.
+            </p>
+          </article>
+          <article>
+            <h3 data-lang="en">Commercial</h3>
+            <h3 data-lang="fr">Commerciale</h3>
+            <p data-lang="en">
+              Proprietary forks and closed SaaS: attribution and royalty.
+              Contact
+              <a href="mailto:loic.peaudecerf@fasst.io">loic.peaudecerf@fasst.io</a>.
+            </p>
+            <p data-lang="fr">
+              Forks propriétaires et SaaS fermé : attribution et redevance.
+              Contact
+              <a href="mailto:loic.peaudecerf@fasst.io">loic.peaudecerf@fasst.io</a>.
+            </p>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="wrap">
+      <p>Akasha OS · Agent OS</p>
+      <p>
+        <a href="https://github.com/azerothl/akasha-os">github.com/azerothl/akasha-os</a>
+      </p>
+    </footer>
+    <script src="app.js"></script>
+  </body>
+</html>

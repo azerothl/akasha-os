@@ -2,6 +2,8 @@
 
 **Language:** English | [Français](docs/fr/README.md)
 
+**Site:** [azerothl.github.io/akasha-os](https://azerothl.github.io/akasha-os/)
+
 **Agent-native operating system** — capability-based security, semantic IPC,
 first-class GPU, offline-first. Preview builds run on a Windows/Linux host
 (NVIDIA); a seL4 bare-metal track is separate.
