@@ -84,10 +84,27 @@ done
 
 # CUDA runtime .so next to binaries
 CUDA_HOME="${CUDA_HOME:-${CUDA_PATH:-/usr/local/cuda}}"
+if command -v readlink >/dev/null 2>&1; then
+  CUDA_HOME_REAL="$(readlink -f "${CUDA_HOME}" 2>/dev/null || true)"
+else
+  CUDA_HOME_REAL=""
+fi
 CUDA_LIB_CANDIDATES=(
+  "${CUDA_HOME}"
   "${CUDA_HOME}/lib64"
   "${CUDA_HOME}/lib"
   "${CUDA_HOME}/targets/x86_64-linux/lib"
+)
+if [ -n "${CUDA_HOME_REAL}" ]; then
+  CUDA_LIB_CANDIDATES+=(
+    "${CUDA_HOME_REAL}"
+    "${CUDA_HOME_REAL}/lib64"
+    "${CUDA_HOME_REAL}/lib"
+    "${CUDA_HOME_REAL}/targets/x86_64-linux/lib"
+  )
+fi
+CUDA_LIB_CANDIDATES+=(
+  /usr/local/cuda
   /usr/local/cuda/lib64
   /usr/local/cuda/lib
   /usr/local/cuda/targets/x86_64-linux/lib
@@ -96,57 +113,71 @@ CUDA_LIB_CANDIDATES=(
 cuda_copied=0
 copied_names=""
 echo "== CUDA runtime (CUDA_HOME=${CUDA_HOME}) =="
-shopt -s nullglob
-for CUDA_LIB in "${CUDA_LIB_CANDIDATES[@]}"; do
-  [ -d "${CUDA_LIB}" ] || continue
-  for pat in libcudart.so* libcublas.so* libcublasLt.so* libnvJitLink.so* libnvrtc.so* libnvrtc-builtins.so*; do
-    for f in "${CUDA_LIB}"/${pat}; do
-      base="$(basename "${f}")"
-      # Évite les stubs vides et les doublons
-      case "${CUDA_LIB}" in
-        */stubs) continue ;;
-      esac
-      case " ${copied_names} " in
-        *" ${base} "*) continue ;;
-      esac
-      # -L : déréférence les symlinks (layout CUDA typique lib64 → targets/…)
-      if cp -L -a "${f}" "${OUT}/bin/" 2>/dev/null || cp -a "${f}" "${OUT}/bin/" 2>/dev/null; then
-        echo "  + ${base}  (depuis ${CUDA_LIB})"
-        copied_names="${copied_names} ${base}"
-        cuda_copied=$((cuda_copied + 1))
-      fi
-    done
-  done
-done
-# Dernier recours : find sous CUDA_HOME
-if [ "${cuda_copied}" -eq 0 ] && [ -d "${CUDA_HOME}" ]; then
-  echo "  fallback find sous ${CUDA_HOME}…"
-  while IFS= read -r f; do
-    base="$(basename "${f}")"
+
+copy_cuda_from_dir() {
+  local dir="$1"
+  local f base
+  [ -d "${dir}" ] || return 0
+  case "${dir}" in
+    */stubs) return 0 ;;
+  esac
+  # Globs must be expanded against ${dir}, never CWD (nullglob + libcudart.so* in
+  # `for pat in` would wipe the pattern list when the repo root has no .so).
+  local files=()
+  shopt -s nullglob
+  files=(
+    "${dir}"/libcudart.so*
+    "${dir}"/libcublas.so*
+    "${dir}"/libcublasLt.so*
+    "${dir}"/libnvJitLink.so*
+    "${dir}"/libnvrtc.so*
+    "${dir}"/libnvrtc-builtins.so*
+  )
+  shopt -u nullglob
+  for f in "${files[@]}"; do
+    [ -e "${f}" ] || continue
     case "${f}" in
       */stubs/*) continue ;;
     esac
+    base="$(basename "${f}")"
     case " ${copied_names} " in
       *" ${base} "*) continue ;;
     esac
-    if cp -L -a "${f}" "${OUT}/bin/" 2>/dev/null || cp -a "${f}" "${OUT}/bin/" 2>/dev/null; then
-      echo "  + ${base}  (find)"
+    if cp -L "${f}" "${OUT}/bin/${base}"; then
+      echo "  + ${base}  (depuis ${dir})"
       copied_names="${copied_names} ${base}"
       cuda_copied=$((cuda_copied + 1))
+    else
+      echo "  WARN: cp failed ${f} -> ${OUT}/bin/${base}" >&2
     fi
-  done < <(find "${CUDA_HOME}" \( -type f -o -type l \) \( \
-      -name 'libcudart.so*' -o -name 'libcublas.so*' -o -name 'libcublasLt.so*' \
-      -o -name 'libnvJitLink.so*' -o -name 'libnvrtc.so*' -o -name 'libnvrtc-builtins.so*' \
-    \) ! -path '*/stubs/*' 2>/dev/null | head -n 80)
+  done
+}
+
+for CUDA_LIB in "${CUDA_LIB_CANDIDATES[@]}"; do
+  copy_cuda_from_dir "${CUDA_LIB}"
+done
+if [ "${cuda_copied}" -eq 0 ] && command -v ldconfig >/dev/null 2>&1; then
+  echo "  fallback ldconfig…"
+  while IFS= read -r so; do
+    [ -n "${so}" ] || continue
+    copy_cuda_from_dir "$(dirname "${so}")"
+  done < <(ldconfig -p 2>/dev/null | awk '/libcudart\.so/ { print $NF }' || true)
 fi
-shopt -u nullglob
+if [ "${cuda_copied}" -eq 0 ] && [ -d "${CUDA_HOME}" ] && command -v find >/dev/null 2>&1; then
+  echo "  fallback find sous ${CUDA_HOME}…"
+  while IFS= read -r f; do
+    [ -n "${f}" ] || continue
+    copy_cuda_from_dir "$(dirname "${f}")"
+  done < <(find -L "${CUDA_HOME}" \( -type f -o -type l \) -name 'libcudart.so*' \
+    ! -path '*/stubs/*' 2>/dev/null | head -n 40 || true)
+fi
 if [ "${cuda_copied}" -eq 0 ]; then
   msg="CUDA runtime .so introuvables"
   echo "DEBUG: listing CUDA_HOME=${CUDA_HOME}" >&2
   ls -la "${CUDA_HOME}" 2>/dev/null >&2 || true
   ls -la "${CUDA_HOME}/lib64" 2>/dev/null >&2 || true
   ls -la "${CUDA_HOME}/targets/x86_64-linux/lib" 2>/dev/null | head -n 40 >&2 || true
-  find "${CUDA_HOME}" \( -type f -o -type l \) -name 'libcudart.so*' 2>/dev/null | head -n 20 >&2 || true
+  find -L "${CUDA_HOME}" \( -type f -o -type l \) -name 'libcudart.so*' 2>/dev/null | head -n 20 >&2 || true
   if [ "${REQUIRE_CUDA}" = "1" ]; then echo "ERROR: ${msg}" >&2; exit 1; else echo "WARN: ${msg}" >&2; fi
 fi
 

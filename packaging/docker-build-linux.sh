@@ -5,6 +5,7 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq \
   build-essential pkg-config curl ca-certificates git cmake ninja-build \
+  findutils \
   clang libclang-dev \
   libssl-dev \
   libx11-dev libxcursor-dev libxrandr-dev libxi-dev libxkbcommon-dev \
