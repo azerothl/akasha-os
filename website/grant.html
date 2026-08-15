@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Grants — Akasha OS</title>
+    <meta
+      name="description"
+      content="Preview capabilities: sessions, GPU, network deny-by-default, audit, memory, notes, agents, and updates."
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!--
+      THESIS: Powers are grants, not feature tiles. This page is the session log, not a product grid.
+      OWN-WORLD: Host Console — amber phosphor, Azeret Mono, log lines, one live trace.
+      STORY: A tester learns what Preview may do, where it lives in the UI, and what stays denied.
+      FIRST VIEWPORT: Honesty line, live grant string, then the issued capabilities as a log.
+      FORM: Host Console inner page, seed a54b2068.
+      FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+    -->
+    <a class="skip" href="#content">Skip to content</a>
+    <div class="bezel">
+      <header class="status">
+        <a class="brand" href="./">AKASHA OS</a>
+        <p class="status-meta">
+          PREVIEW <span data-aos-version>0.1.2</span>
+          · GRANT
+        </p>
+        <nav aria-label="Primary">
+          <a href="grant.html" aria-current="page">grant</a>
+          <a href="why.html">why</a>
+          <a href="install.html">install</a>
+          <a href="docs/">docs</a>
+          <a href="about.html">about</a>
+          <div class="lang" role="group" aria-label="Language">
+            <button type="button" data-set-lang="en" aria-pressed="true">EN</button>
+            <button type="button" data-set-lang="fr" aria-pressed="false">FR</button>
+          </div>
+        </nav>
+      </header>
+      <main id="content" class="screen article">
+        <h1>
+          <span data-lang="en">
+            Agents act only with unforgeable, revocable tokens. Preview
+            <span data-aos-version>0.1.2</span> issues the grants below to the
+            host session. Network egress stays deny-by-default.
+          </span>
+          <span data-lang="fr">
+            Les agents n’agissent qu’avec des jetons infalsifiables et révocables.
+            La Preview <span data-aos-version>0.1.2</span> émet les grants
+            ci-dessous à la session hôte. La sortie réseau reste refusée par défaut.
+          </span>
+        </h1>
+        <p class="prompt live-line">
+          <span class="ps">$</span>
+          <span>cap.grant session:preview gpu:nvidia net:deny audit:on offline:default</span>
+          <span class="caret" aria-hidden="true"></span>
+        </p>
+
+        <h2 data-lang="en"># session GRANT</h2>
+        <h2 data-lang="fr"># session GRANT</h2>
+        <p class="hist" data-lang="en">
+          Parallel persisted conversations. In the Chat tab, open several sessions,
+          talk in each, and restart Preview: histories must come back. Each session
+          can pick its own model from the session combo (offerings listed in Models).
+        </p>
+        <p class="hist" data-lang="fr">
+          Conversations parallèles persistées. Dans l’onglet Chat, ouvrez plusieurs
+          sessions, parlez dans chacune, puis redémarrez Preview : les historiques
+          doivent revenir. Chaque session peut choisir son modèle (catalogue dans Models).
+        </p>
+
+        <h2 data-lang="en"># gpu GRANT</h2>
+        <h2 data-lang="fr"># gpu GRANT</h2>
+        <p class="hist" data-lang="en">
+          Placement, scheduling, and local GGUF inference. First launch probes VRAM,
+          RAM, and disk, then offers a pack for your tier. There is no CPU-only mode
+          in Preview <span data-aos-version>0.1.2</span>. Confirm
+          <code>nvidia-smi -L</code> before you install.
+        </p>
+        <p class="hist" data-lang="fr">
+          Placement, ordonnancement et inférence GGUF locale. Le premier lancement
+          sonde VRAM, RAM et disque, puis propose un pack pour votre palier. Pas de
+          mode CPU-only en Preview <span data-aos-version>0.1.2</span>. Vérifiez
+          <code>nvidia-smi -L</code> avant d’installer.
+        </p>
+
+        <h2 data-lang="en"># net DENY</h2>
+        <h2 data-lang="fr"># net DENY</h2>
+        <p class="hist" data-lang="en">
+          Search and fetch are opt-in. Leave <strong>Allow network</strong> off
+          and web search must fail (<code>offline_strict</code>). Turn it on only
+          when you mean to search or download. Optional Brave key:
+          <code>var/secrets/keys.yaml</code> → <code>brave_search_api_key</code>;
+          otherwise DuckDuckGo HTML.
+        </p>
+        <p class="hist" data-lang="fr">
+          Recherche et fetch en opt-in. Laissez <strong>Allow network</strong>
+          éteint : la recherche web doit échouer (<code>offline_strict</code>).
+          Activez-le seulement pour chercher ou télécharger. Clé Brave optionnelle :
+          <code>var/secrets/keys.yaml</code> → <code>brave_search_api_key</code> ;
+          sinon DuckDuckGo HTML.
+        </p>
+
+        <h2 data-lang="en"># audit ON</h2>
+        <h2 data-lang="fr"># audit ON</h2>
+        <p class="hist" data-lang="en">
+          Signed events in the Audit tab. Sensitive actions raise a confirmation
+          banner: Deny once, Accept another. Timeout is deny (fail-closed).
+          Feedback writes a local report under <code>var/feedback/</code> and can
+          open a GitHub issue. Security reports are not published.
+        </p>
+        <p class="hist" data-lang="fr">
+          Événements signés dans l’onglet Audit. Une action sensible affiche une
+          bannière : Deny une fois, Accept une autre. Timeout = refus (fail-closed).
+          Le feedback écrit un rapport local sous <code>var/feedback/</code> et
+          peut ouvrir une issue GitHub. Les rapports sécurité ne sont pas publiés.
+        </p>
+
+        <h2 data-lang="en"># memory GRANT</h2>
+        <h2 data-lang="fr"># memory GRANT</h2>
+        <p class="hist" data-lang="en">
+          Long-term user facts. Memory tab: remember (“I prefer French”), then
+          Recall. The next Chat turn can use that context
+          (<code>mem.context</code> injected before infer).
+        </p>
+        <p class="hist" data-lang="fr">
+          Faits utilisateur long terme. Onglet Memory : remember (« je préfère
+          le français »), puis Recall. Le prochain tour Chat peut s’en servir
+          (<code>mem.context</code> injecté avant l’inférence).
+        </p>
+
+        <h2 data-lang="en"># notes GRANT</h2>
+        <h2 data-lang="fr"># notes GRANT</h2>
+        <p class="hist" data-lang="en">
+          Human- and agent-authored notes, shipped as a WASM module. Notes tab:
+          title + body → Create, then List. An agent can create a note via the
+          <code>TOOL:</code> convention on the model side.
+        </p>
+        <p class="hist" data-lang="fr">
+          Notes humaines et agents, module WASM. Onglet Notes : titre + corps →
+          Create, puis List. Un agent peut créer une note via la convention
+          <code>TOOL:</code> côté modèle.
+        </p>
+
+        <h2 data-lang="en"># agents GRANT</h2>
+        <h2 data-lang="fr"># agents GRANT</h2>
+        <p class="hist" data-lang="en">
+          Goal loop, skills, tools, optional MCP. Agents tab: create an agent
+          with a task and a model. Preview skills include notes-writer, research,
+          file-author, and planner. Optional stdio MCP servers live in
+          <code>share/mcp/servers.yaml.example</code>.
+        </p>
+        <p class="hist" data-lang="fr">
+          Boucle de goal, skills, outils, MCP optionnel. Onglet Agents : créez
+          un agent avec une tâche et un modèle. Skills Preview : notes-writer,
+          research, file-author, planner. Serveurs MCP stdio optionnels :
+          <code>share/mcp/servers.yaml.example</code>.
+        </p>
+
+        <h2 data-lang="en"># update GRANT</h2>
+        <h2 data-lang="fr"># update GRANT</h2>
+        <p class="hist" data-lang="en">
+          Non-destructive overlays from GitHub Releases. A banner appears when a
+          newer Release exists. Download writes the archive under
+          <code>var/updates/</code>; the next launch applies <code>bin/</code>
+          and <code>share/</code> without touching <code>var/</code> or
+          overwriting <code>etc/*.yaml</code> (writes <code>.new</code> if needed).
+          Apply is not fully automatic.
+        </p>
+        <p class="hist" data-lang="fr">
+          Overlay non destructif depuis GitHub Releases. Une bannière apparaît
+          si une Release plus récente existe. Download écrit l’archive sous
+          <code>var/updates/</code> ; le lancement suivant applique
+          <code>bin/</code> et <code>share/</code> sans toucher <code>var/</code>
+          ni écraser <code>etc/*.yaml</code> (fichiers <code>.new</code> si besoin).
+          L’application n’est pas entièrement automatique.
+        </p>
+
+        <p class="prompt hist pager">
+          <span class="ps">$</span>
+          <a class="run" href="docs/">
+            <span data-lang="en">open docs/</span>
+            <span data-lang="fr">open docs/</span>
+          </a>
+        </p>
+      </main>
+      <footer>
+        <p>AKASHA OS · <a href="https://github.com/azerothl/akasha-os">github.com/azerothl/akasha-os</a></p>
+      </footer>
+    </div>
+    <script src="app.js"></script>
+  </body>
+</html>

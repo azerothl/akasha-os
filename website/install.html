@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Install — Akasha OS Preview</title>
+    <meta
+      name="description"
+      content="Install Akasha OS Preview on Windows or Linux x64 with an NVIDIA GPU. Zip or tar.gz, no cargo."
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!--
+      THESIS: Install is a procedure, printed as a console transcript, not a download marketing block.
+      OWN-WORLD: Host Console — amber phosphor, steps as a numbered log, commands in phosphor.
+      STORY: A tester checks hardware, downloads the archive, runs the script, launches Preview.
+      FIRST VIEWPORT: Honesty + requirements log + the Releases prompt.
+      FORM: Host Console inner page, seed a54b2068.
+      FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+    -->
+    <a class="skip" href="#content">Skip to content</a>
+    <div class="bezel">
+      <header class="status">
+        <a class="brand" href="./">AKASHA OS</a>
+        <p class="status-meta">
+          PREVIEW <span data-aos-version>0.1.2</span>
+          · INSTALL
+        </p>
+        <nav aria-label="Primary">
+          <a href="grant.html">grant</a>
+          <a href="why.html">why</a>
+          <a href="install.html" aria-current="page">install</a>
+          <a href="docs/">docs</a>
+          <a href="about.html">about</a>
+          <div class="lang" role="group" aria-label="Language">
+            <button type="button" data-set-lang="en" aria-pressed="true">EN</button>
+            <button type="button" data-set-lang="fr" aria-pressed="false">FR</button>
+          </div>
+        </nav>
+      </header>
+      <main id="content" class="screen article">
+        <h1>
+          <span data-lang="en">
+            This is not a bootable OS. Preview <span data-aos-version>0.1.2</span>
+            installs as a host app. No clone, no cargo. Download the archive,
+            run the script, launch Akasha OS Preview.
+          </span>
+          <span data-lang="fr">
+            Ce n’est pas un OS bootable. La Preview <span data-aos-version>0.1.2</span>
+            s’installe comme appli hôte. Pas de clone, pas de cargo. Téléchargez
+            l’archive, lancez le script, ouvrez Akasha OS Preview.
+          </span>
+        </h1>
+
+        <p class="prompt hist">
+          <span class="ps">$</span>
+          <a class="run" href="https://github.com/azerothl/akasha-os/releases">install --preview</a>
+        </p>
+
+        <h2># hw.req</h2>
+        <ul class="loglines" aria-label="Requirements">
+          <li>os GRANT Windows 10/11 x64 <span data-lang="en">or</span><span data-lang="fr">ou</span> Linux x64</li>
+          <li>gpu GRANT NVIDIA <span data-lang="en">+ recent driver</span><span data-lang="fr">+ pilote récent</span> (<code>nvidia-smi -L</code>)</li>
+          <li>
+            <span data-lang="en">disk ~8 GB free recommended (mid-tier GGUF pack). Binaries plus first-run models.</span>
+            <span data-lang="fr">disque ~8 Go libres recommandés (pack GGUF mid). Binaires plus modèles au premier lancement.</span>
+          </li>
+          <li>
+            <span data-lang="en">cuda runtime ships in the package; the driver is enough</span>
+            <span data-lang="fr">runtime cuda fourni dans le paquet ; le pilote suffit</span>
+          </li>
+          <li>macos DENY</li>
+          <li>
+            <span data-lang="en">cpu-only DENY in Preview <span data-aos-version>0.1.2</span></span>
+            <span data-lang="fr">cpu-only DENY en Preview <span data-aos-version>0.1.2</span></span>
+          </li>
+        </ul>
+
+        <h2 data-lang="en"># Windows</h2>
+        <h2 data-lang="fr"># Windows</h2>
+        <ol class="steps">
+          <li data-lang="en">
+            Download <code>AgentOS-Preview-&lt;ver&gt;-windows-x64.zip</code> from
+            <a href="https://github.com/azerothl/akasha-os/releases">GitHub Releases</a>.
+          </li>
+          <li data-lang="fr">
+            Télécharger <code>AgentOS-Preview-&lt;ver&gt;-windows-x64.zip</code> depuis
+            <a href="https://github.com/azerothl/akasha-os/releases">GitHub Releases</a>.
+          </li>
+          <li data-lang="en">Extract, then run:</li>
+          <li data-lang="fr">Décompresser, puis :</li>
+        </ol>
+        <pre>.\install.ps1</pre>
+        <p class="hist" data-lang="en">
+          Installs under <code>%LOCALAPPDATA%\AgentOS-Preview</code> and keeps
+          <code>var/</code> and <code>etc/</code> on update. Launch
+          <strong>Akasha OS Preview</strong>.
+        </p>
+        <p class="hist" data-lang="fr">
+          Installe sous <code>%LOCALAPPDATA%\AgentOS-Preview</code> et conserve
+          <code>var/</code> et <code>etc/</code> à la mise à jour. Lancer
+          <strong>Akasha OS Preview</strong>.
+        </p>
+        <p class="hist" data-lang="en">Without the installer:</p>
+        <p class="hist" data-lang="fr">Sans installateur :</p>
+        <pre>$env:AOS_HOME = (Resolve-Path .)
+.\bin\aos-session.exe</pre>
+
+        <h2 data-lang="en"># Linux</h2>
+        <h2 data-lang="fr"># Linux</h2>
+        <ol class="steps">
+          <li data-lang="en">
+            Download <code>AgentOS-Preview-&lt;ver&gt;-linux-x64.tar.gz</code>, extract.
+          </li>
+          <li data-lang="fr">
+            Télécharger <code>AgentOS-Preview-&lt;ver&gt;-linux-x64.tar.gz</code>, extraire.
+          </li>
+          <li><code>./install.sh</code></li>
+          <li data-lang="en">
+            Prefix: <code>~/.local/share/agentos-preview</code> (non-destructive overlay).
+            Run <code>agentos-preview</code>.
+          </li>
+          <li data-lang="fr">
+            Préfixe : <code>~/.local/share/agentos-preview</code> (overlay non destructif).
+            Lancer <code>agentos-preview</code>.
+          </li>
+        </ol>
+
+        <h2 data-lang="en"># package</h2>
+        <h2 data-lang="fr"># paquet</h2>
+        <pre>bin/            daemons + CUDA runtime
+share/models/   manifest.json (GGUF on first run)
+share/modules/  notes.aospkg, ext-rt.aospkg
+share/skills/   notes-writer, research, file-author, planner
+share/mcp/      servers.yaml.example
+data/models/    catalog.yaml
+VERSION         build semver
+var/            created at run</pre>
+
+        <h2 data-lang="en"># first launch</h2>
+        <h2 data-lang="fr"># premier lancement</h2>
+        <ol class="steps">
+          <li data-lang="en"><code>aos-session</code> checks NVIDIA and disk, probes VRAM.</li>
+          <li data-lang="fr"><code>aos-session</code> vérifie NVIDIA et le disque, sonde la VRAM.</li>
+          <li data-lang="en">
+            Model setup: confirm the auto-best pack for your GPU tier, then GGUFs
+            download into <code>share/models/</code>.
+          </li>
+          <li data-lang="fr">
+            Réglage modèles : confirmez le pack auto pour votre palier GPU, puis
+            les GGUF descendent dans <code>share/models/</code>.
+          </li>
+          <li>bus → capkd → auditd → modeld → platformd → agentd</li>
+          <li data-lang="en">egui UI + multi-page tutorial. Closing the UI stops the daemons.</li>
+          <li data-lang="fr">UI egui + tutoriel multi-pages. Fermer l’UI arrête les daemons.</li>
+        </ol>
+        <p class="hist" data-lang="en">
+          Next: <a href="docs/first-run.html">first run</a> in the user manual.
+        </p>
+        <p class="hist" data-lang="fr">
+          Suite : <a href="docs/first-run.html">premier lancement</a> dans le manuel.
+        </p>
+
+        <h2 data-lang="en"># troubleshooting</h2>
+        <h2 data-lang="fr"># dépannage</h2>
+        <ul class="loglines">
+          <li data-lang="en">NVIDIA GPU required → install the driver; <code>nvidia-smi -L</code></li>
+          <li data-lang="fr">NVIDIA GPU required → installer le pilote ; <code>nvidia-smi -L</code></li>
+          <li data-lang="en">Model download failed → network for Hugging Face, or copy GGUFs into <code>share/models/</code></li>
+          <li data-lang="fr">Échec téléchargement modèle → réseau vers Hugging Face, ou copier les GGUF dans <code>share/models/</code></li>
+          <li data-lang="en">Healthcheck failed → <code>var/run/*.stderr.log</code> (Troubleshooting button)</li>
+          <li data-lang="fr">Healthcheck failed → <code>var/run/*.stderr.log</code> (bouton Troubleshooting)</li>
+          <li data-lang="en">Bus unreachable → always launch via <code>aos-session</code></li>
+          <li data-lang="fr">Bus unreachable → toujours lancer via <code>aos-session</code></li>
+        </ul>
+
+        <p class="prompt hist pager">
+          <span class="ps">$</span>
+          <a class="run" href="docs/">open docs/</a>
+        </p>
+      </main>
+      <footer>
+        <p>AKASHA OS · <a href="https://github.com/azerothl/akasha-os">github.com/azerothl/akasha-os</a></p>
+      </footer>
+    </div>
+    <script src="app.js"></script>
+  </body>
+</html>

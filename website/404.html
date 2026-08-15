@@ -4,13 +4,34 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Not found — Akasha OS</title>
-    <meta http-equiv="refresh" content="0; url=./" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <main class="hero wrap">
-      <h1>Page not found</h1>
-      <p class="lede"><a href="./">Back to Akasha OS</a></p>
-    </main>
+    <a class="skip" href="#content">Skip to content</a>
+    <div class="bezel">
+      <header class="status">
+        <a class="brand" href="./">AKASHA OS</a>
+        <p class="status-meta">HOST · 404</p>
+        <nav aria-label="Primary">
+          <a href="grant.html">grant</a>
+          <a href="why.html">why</a>
+          <a href="install.html">install</a>
+          <a href="docs/">docs</a>
+          <a href="about.html">about</a>
+        </nav>
+      </header>
+      <main id="content" class="screen lost">
+        <p class="prompt live-line">
+          <span class="ps">$</span>
+          <span>open: not found</span><span class="caret" aria-hidden="true"></span>
+        </p>
+        <h1>page not found</h1>
+        <ul class="loglines">
+          <li><a href="./">cd /</a></li>
+          <li><a href="install.html">open install.html</a></li>
+          <li><a href="docs/">open docs/</a></li>
+        </ul>
+      </main>
+    </div>
   </body>
 </html>

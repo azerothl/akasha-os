@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Documentation — Akasha OS Preview</title>
+    <meta
+      name="description"
+      content="End-user manual for Akasha OS Preview: install, first run, using the UI, network, feedback, and limits."
+    />
+    <link rel="stylesheet" href="../styles.css" />
+  </head>
+  <body>
+    <!--
+      THESIS: Docs are a man page for the host, not a repo dump of kernel specs.
+      OWN-WORLD: Host Console — amber phosphor, TOC as open lines.
+      STORY: A tester finds the next procedure without leaving the site or cloning the repo.
+      FIRST VIEWPORT: What this manual is, then the chapter log.
+      FORM: Host Console Read surface, seed a54b2068.
+      FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+    -->
+    <a class="skip" href="#content">Skip to content</a>
+    <div class="bezel">
+      <header class="status">
+        <a class="brand" href="../">AKASHA OS</a>
+        <p class="status-meta">
+          PREVIEW <span data-aos-version>0.1.2</span>
+          · DOCS
+        </p>
+        <nav aria-label="Primary">
+          <a href="../grant.html">grant</a>
+          <a href="../why.html">why</a>
+          <a href="../install.html">install</a>
+          <a href="./" aria-current="page">docs</a>
+          <a href="../about.html">about</a>
+          <div class="lang" role="group" aria-label="Language">
+            <button type="button" data-set-lang="en" aria-pressed="true">EN</button>
+            <button type="button" data-set-lang="fr" aria-pressed="false">FR</button>
+          </div>
+        </nav>
+      </header>
+      <main id="content" class="screen article">
+        <h1>
+          <span data-lang="en">
+            User manual for Preview <span data-aos-version>0.1.2</span>.
+            Written for someone who will install the host app, finish the
+            tutorial, and send feedback from the UI — not for someone who
+            wants to read the kernel specs.
+          </span>
+          <span data-lang="fr">
+            Manuel utilisateur de la Preview <span data-aos-version>0.1.2</span>.
+            Pour quelqu’un qui installe l’appli hôte, termine le tutoriel et
+            envoie un retour depuis l’UI — pas pour lire les specs noyau.
+          </span>
+        </h1>
+        <p class="hist" data-lang="en">
+          This is not a bootable OS. You need Windows or Linux x64 and an NVIDIA
+          GPU. No cargo. Specs, ADRs, and the seL4 track stay in the
+          <a href="https://github.com/azerothl/akasha-os">repository</a>.
+        </p>
+        <p class="hist" data-lang="fr">
+          Ce n’est pas un OS bootable. Il faut Windows ou Linux x64 et un GPU
+          NVIDIA. Pas de cargo. Specs, ADR et piste seL4 restent dans le
+          <a href="https://github.com/azerothl/akasha-os">dépôt</a>.
+        </p>
+
+        <h2 data-lang="en"># chapters</h2>
+        <h2 data-lang="fr"># chapitres</h2>
+        <ul class="loglines" aria-label="Manual chapters">
+          <li>
+            <a href="../install.html">
+              1 install
+              <span data-lang="en">· hardware, archive, scripts</span>
+              <span data-lang="fr">· matériel, archive, scripts</span>
+            </a>
+          </li>
+          <li>
+            <a href="first-run.html">
+              2 first-run
+              <span data-lang="en">· models, tutorial, tiers</span>
+              <span data-lang="fr">· modèles, tutoriel, paliers</span>
+            </a>
+          </li>
+          <li>
+            <a href="use.html">
+              3 use
+              <span data-lang="en">· chat, memory, notes, agents, models, audit</span>
+              <span data-lang="fr">· chat, mémoire, notes, agents, modèles, audit</span>
+            </a>
+          </li>
+          <li>
+            <a href="network.html">
+              4 network
+              <span data-lang="en">· offline default, search, downloads</span>
+              <span data-lang="fr">· hors ligne par défaut, recherche, téléchargements</span>
+            </a>
+          </li>
+          <li>
+            <a href="feedback.html">
+              5 feedback
+              <span data-lang="en">· tester protocol from the UI</span>
+              <span data-lang="fr">· protocole testeur depuis l’UI</span>
+            </a>
+          </li>
+          <li>
+            <a href="limits.html">
+              6 limits
+              <span data-lang="en">· what Preview will not do</span>
+              <span data-lang="fr">· ce que Preview ne fera pas</span>
+            </a>
+          </li>
+        </ul>
+
+        <h2 data-lang="en"># start here</h2>
+        <h2 data-lang="fr"># commencer ici</h2>
+        <p class="hist" data-lang="en">
+          If <code>nvidia-smi -L</code> already lists a GPU, open
+          <a href="../install.html">install</a>. After launch, stay in
+          <a href="first-run.html">first-run</a> until the tutorial is done.
+          Then walk <a href="feedback.html">feedback</a> if you are in the
+          Preview cohort.
+        </p>
+        <p class="hist" data-lang="fr">
+          Si <code>nvidia-smi -L</code> liste déjà un GPU, ouvrez
+          <a href="../install.html">install</a>. Après le lancement, restez
+          sur <a href="first-run.html">first-run</a> jusqu’à la fin du tutoriel.
+          Puis suivez <a href="feedback.html">feedback</a> si vous êtes dans
+          la cohorte Preview.
+        </p>
+
+        <p class="prompt hist pager">
+          <span class="ps">$</span>
+          <a class="run" href="../install.html">open install.html</a>
+        </p>
+      </main>
+      <footer>
+        <p>AKASHA OS · <a href="https://github.com/azerothl/akasha-os">github.com/azerothl/akasha-os</a></p>
+      </footer>
+    </div>
+    <script src="../app.js"></script>
+  </body>
+</html>

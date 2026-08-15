@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>First run — Akasha OS Preview</title>
+    <meta
+      name="description"
+      content="First launch of Akasha OS Preview: GPU probe, model packs, in-app tutorial."
+    />
+    <link rel="stylesheet" href="../styles.css" />
+  </head>
+  <body>
+    <!--
+      THESIS: First run is a procedure on the host UART, not an onboarding carousel.
+      OWN-WORLD: Host Console. FORM: seed a54b2068.
+      STORY: Tester finishes model setup and the four-step tutorial before exploring tabs.
+      FIRST VIEWPORT: Honesty + before-you-launch checks.
+      FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+    -->
+    <a class="skip" href="#content">Skip to content</a>
+    <div class="bezel">
+      <header class="status">
+        <a class="brand" href="../">AKASHA OS</a>
+        <p class="status-meta">
+          PREVIEW <span data-aos-version>0.1.2</span>
+          · DOCS · FIRST-RUN
+        </p>
+        <nav aria-label="Primary">
+          <a href="../grant.html">grant</a>
+          <a href="../why.html">why</a>
+          <a href="../install.html">install</a>
+          <a href="./" aria-current="page">docs</a>
+          <a href="../about.html">about</a>
+          <div class="lang" role="group" aria-label="Language">
+            <button type="button" data-set-lang="en" aria-pressed="true">EN</button>
+            <button type="button" data-set-lang="fr" aria-pressed="false">FR</button>
+          </div>
+        </nav>
+      </header>
+      <main id="content" class="screen article">
+        <h1>
+          <span data-lang="en">
+            First launch after <a href="../install.html">install</a>.
+            Preview is not a bootable OS. You should already have
+            <code>nvidia-smi -L</code> and about 8 GB free disk.
+          </span>
+          <span data-lang="fr">
+            Premier lancement après <a href="../install.html">install</a>.
+            Preview n’est pas un OS bootable. Vous devez déjà avoir
+            <code>nvidia-smi -L</code> et environ 8 Go libres.
+          </span>
+        </h1>
+
+        <h2 data-lang="en"># before you launch</h2>
+        <h2 data-lang="fr"># avant de lancer</h2>
+        <ol class="steps">
+          <li data-lang="en">Recent NVIDIA driver (<code>nvidia-smi -L</code> OK).</li>
+          <li data-lang="fr">Pilote NVIDIA récent (<code>nvidia-smi -L</code> OK).</li>
+          <li data-lang="en">~8 GB free (recommended mid-tier pack: 9B + embedding).</li>
+          <li data-lang="fr">~8 Go libres (pack mid recommandé : 9B + embedding).</li>
+          <li data-lang="en">Installed via <code>install.ps1</code> / <code>install.sh</code>, or run <code>bin/aos-session</code>.</li>
+          <li data-lang="fr">Installé via <code>install.ps1</code> / <code>install.sh</code>, ou lancez <code>bin/aos-session</code>.</li>
+        </ol>
+
+        <h2 data-lang="en"># model setup</h2>
+        <h2 data-lang="fr"># réglage des modèles</h2>
+        <p class="hist" data-lang="en">
+          On first launch (no <code>var/models/installed.json</code> yet),
+          <code>aos-session</code> probes GPU VRAM / RAM / disk →
+          <code>var/run/hardware.json</code>, then opens a Model selection window
+          (auto-best for your tier):
+        </p>
+        <p class="hist" data-lang="fr">
+          Au premier lancement (pas encore de <code>var/models/installed.json</code>),
+          <code>aos-session</code> sonde VRAM / RAM / disque →
+          <code>var/run/hardware.json</code>, puis ouvre la fenêtre Model selection
+          (auto-meilleur pour votre palier) :
+        </p>
+        <ul class="loglines">
+          <li>low &lt;10 GiB VRAM → Qwen3.5-4B + Embedding 0.6B</li>
+          <li>mid 10–20 GiB <span data-lang="en">(e.g. RTX 4080 SUPER)</span><span data-lang="fr">(ex. RTX 4080 SUPER)</span> → Qwen3.5-9B + Embedding 0.6B</li>
+          <li>high ≥20 GiB → Qwen3 30B-A3B + Embedding 0.6B</li>
+        </ul>
+        <p class="hist" data-lang="en">
+          Confirm, or pick alternatives. GGUFs download into
+          <code>share/models/</code>. Catalogue:
+          <code>share/models/catalog-offerings.json</code>. Registry:
+          <code>var/models/installed.json</code>. Services start; egui opens
+          with the in-app tutorial (4 steps). Expected banner:
+          Preview on Windows/Linux — this is not the bootable OS yet.
+        </p>
+        <p class="hist" data-lang="fr">
+          Confirmez, ou choisissez des alternatives. Les GGUF descendent dans
+          <code>share/models/</code>. Catalogue :
+          <code>share/models/catalog-offerings.json</code>. Registre :
+          <code>var/models/installed.json</code>. Les services démarrent ; egui
+          ouvre le tutoriel (4 étapes). Bannière attendue :
+          Preview on Windows/Linux — this is not the bootable OS yet.
+        </p>
+
+        <h2 data-lang="en"># if setup is cancelled</h2>
+        <h2 data-lang="fr"># si le réglage est annulé</h2>
+        <p class="hist" data-lang="en">
+          Delete nothing. Relaunch to reopen model selection. No GPU means
+          install the NVIDIA driver — there is no CPU mode in 0.1.
+          Daemon logs: <code>var/run/*.stderr.log</code> (Troubleshooting button).
+        </p>
+        <p class="hist" data-lang="fr">
+          Ne supprimez rien. Relancez pour rouvrir la sélection de modèles.
+          Pas de GPU : installez le pilote NVIDIA — pas de mode CPU en 0.1.
+          Journaux : <code>var/run/*.stderr.log</code> (bouton Troubleshooting).
+        </p>
+
+        <h2 data-lang="en"># later model updates</h2>
+        <h2 data-lang="fr"># mises à jour de modèles plus tard</h2>
+        <p class="hist" data-lang="en">
+          If <code>catalog-offerings.json</code> recommends models you do not
+          have, a banner appears → Open Models → Download. Restart Preview after
+          download so <code>etc/modeld.yaml</code> picks up new paths.
+          CLI: <code>aos-session --download-models &lt;id&gt;…</code>
+        </p>
+        <p class="hist" data-lang="fr">
+          Si <code>catalog-offerings.json</code> recommande des modèles absents,
+          une bannière apparaît → Open Models → Download. Redémarrez Preview
+          après le téléchargement pour que <code>etc/modeld.yaml</code> voie
+          les nouveaux chemins.
+          CLI : <code>aos-session --download-models &lt;id&gt;…</code>
+        </p>
+
+        <p class="prompt hist pager">
+          <span class="ps">$</span>
+          <a class="run" href="use.html">open use.html</a>
+        </p>
+      </main>
+      <footer>
+        <p>AKASHA OS · <a href="https://github.com/azerothl/akasha-os">github.com/azerothl/akasha-os</a></p>
+      </footer>
+    </div>
+    <script src="../app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Network — Akasha OS Preview</title>
+    <meta
+      name="description"
+      content="Offline by default. Opt-in web search, fetch, and downloads in Akasha OS Preview."
+    />
+    <link rel="stylesheet" href="../styles.css" />
+  </head>
+  <body>
+    <!--
+      THESIS: Network is a grant you turn on, documented as deny-then-allow, not a connectivity hero.
+      OWN-WORLD: Host Console. FORM: seed a54b2068.
+      STORY: Tester proves search fails offline, then enables Allow network on purpose.
+      FIRST VIEWPORT: offline_strict as the default grant line.
+      FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+    -->
+    <a class="skip" href="#content">Skip to content</a>
+    <div class="bezel">
+      <header class="status">
+        <a class="brand" href="../">AKASHA OS</a>
+        <p class="status-meta">
+          PREVIEW <span data-aos-version>0.1.2</span>
+          · DOCS · NETWORK
+        </p>
+        <nav aria-label="Primary">
+          <a href="../grant.html">grant</a>
+          <a href="../why.html">why</a>
+          <a href="../install.html">install</a>
+          <a href="./" aria-current="page">docs</a>
+          <a href="../about.html">about</a>
+          <div class="lang" role="group" aria-label="Language">
+            <button type="button" data-set-lang="en" aria-pressed="true">EN</button>
+            <button type="button" data-set-lang="fr" aria-pressed="false">FR</button>
+          </div>
+        </nav>
+      </header>
+      <main id="content" class="screen article">
+        <h1>
+          <span data-lang="en">
+            Network is off by default (<code>offline_strict</code>).
+            Chat after model setup must work without it. Search, fetch, and
+            GitHub feedback submit are explicit actions — not automatic uploads.
+          </span>
+          <span data-lang="fr">
+            Le réseau est éteint par défaut (<code>offline_strict</code>).
+            Le chat après le réglage des modèles doit marcher sans lui.
+            Recherche, fetch et envoi de feedback GitHub sont des actions
+            explicites — pas des uploads automatiques.
+          </span>
+        </h1>
+
+        <h2 data-lang="en"># prove deny</h2>
+        <h2 data-lang="fr"># prouver le refus</h2>
+        <ol class="steps">
+          <li data-lang="en">Leave <strong>Allow network</strong> (sidebar) off.</li>
+          <li data-lang="fr">Laissez <strong>Allow network</strong> (barre latérale) éteint.</li>
+          <li data-lang="en">Search must fail with <code>offline_strict</code>.</li>
+          <li data-lang="fr">La recherche doit échouer avec <code>offline_strict</code>.</li>
+        </ol>
+
+        <h2 data-lang="en"># allow, then search</h2>
+        <h2 data-lang="fr"># autoriser, puis chercher</h2>
+        <ol class="steps">
+          <li data-lang="en">Enable <strong>Allow network</strong>.</li>
+          <li data-lang="fr">Activez <strong>Allow network</strong>.</li>
+          <li data-lang="en">Search (for example “Akasha OS seL4”) → title/URL results.</li>
+          <li data-lang="fr">Cherchez (par exemple « Akasha OS seL4 ») → titres / URL.</li>
+        </ol>
+        <p class="hist" data-lang="en">
+          Optional Brave key in <code>var/secrets/keys.yaml</code>:
+        </p>
+        <p class="hist" data-lang="fr">
+          Clé Brave optionnelle dans <code>var/secrets/keys.yaml</code> :
+        </p>
+        <pre>keys:
+  brave_search_api_key: "BSA..."
+  github_token: "ghp_..."   # one-click Feedback issues</pre>
+        <p class="hist" data-lang="en">
+          Without a Brave key, search uses DuckDuckGo HTML.
+          <code>github_token</code> is only for one-click Feedback issues.
+        </p>
+        <p class="hist" data-lang="fr">
+          Sans clé Brave, la recherche utilise DuckDuckGo HTML.
+          <code>github_token</code> sert uniquement aux issues Feedback en un clic.
+        </p>
+
+        <h2 data-lang="en"># download and generate a file</h2>
+        <h2 data-lang="fr"># télécharger et générer un fichier</h2>
+        <ol class="steps">
+          <li data-lang="en">With network ON, paste an image URL → Download URL.</li>
+          <li data-lang="fr">Réseau ON : coller une URL d’image → Download URL.</li>
+          <li>
+            <span data-lang="en">File lands under</span>
+            <span data-lang="fr">Fichier sous</span>
+            <code>/downloads</code>
+            (<code>var/storage/data/downloads/</code>).
+          </li>
+          <li data-lang="en">
+            Generate file: format <code>pdf</code> or <code>png</code>, path
+            <code>/downloads/test.pdf</code>, then Open downloads.
+          </li>
+          <li data-lang="fr">
+            Generate file : format <code>pdf</code> ou <code>png</code>, chemin
+            <code>/downloads/test.pdf</code>, puis Open downloads.
+          </li>
+        </ol>
+
+        <p class="prompt hist pager">
+          <span class="ps">$</span>
+          <a class="run" href="feedback.html">open feedback.html</a>
+        </p>
+      </main>
+      <footer>
+        <p>AKASHA OS · <a href="https://github.com/azerothl/akasha-os">github.com/azerothl/akasha-os</a></p>
+      </footer>
+    </div>
+    <script src="../app.js"></script>
+  </body>
+</html>

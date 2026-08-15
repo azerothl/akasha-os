@@ -37,4 +37,32 @@
       window.history.replaceState({}, "", url);
     });
   });
+
+  const live = document.querySelector("[data-type]");
+  if (!live) {
+    return;
+  }
+
+  const full = live.getAttribute("data-type") || "";
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function finish() {
+    live.textContent = full;
+  }
+
+  if (reduce || !full) {
+    finish();
+    return;
+  }
+
+  let i = 0;
+  live.textContent = "";
+  const tick = window.setInterval(() => {
+    i += 1;
+    live.textContent = full.slice(0, i);
+    if (i >= full.length) {
+      window.clearInterval(tick);
+      finish();
+    }
+  }, 18);
 })();

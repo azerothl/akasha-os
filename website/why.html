@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Why — Akasha OS</title>
+    <meta
+      name="description"
+      content="Why Akasha OS is an agent-native OS, not a chat wrapper: capabilities, semantic IPC, first-class GPU, offline-first."
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!--
+      THESIS: The why page is an argument in the UART, not a manifesto hero.
+      OWN-WORLD: Host Console — amber phosphor, Azeret Mono, comments as headings.
+      STORY: A tester can tell a neighboring chat app from this host, then open install.
+      FIRST VIEWPORT: Honesty + the claim that agents are system services.
+      FORM: Host Console inner page, seed a54b2068.
+      FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+    -->
+    <a class="skip" href="#content">Skip to content</a>
+    <div class="bezel">
+      <header class="status">
+        <a class="brand" href="./">AKASHA OS</a>
+        <p class="status-meta">
+          PREVIEW <span data-aos-version>0.1.2</span>
+          · WHY
+        </p>
+        <nav aria-label="Primary">
+          <a href="grant.html">grant</a>
+          <a href="why.html" aria-current="page">why</a>
+          <a href="install.html">install</a>
+          <a href="docs/">docs</a>
+          <a href="about.html">about</a>
+          <div class="lang" role="group" aria-label="Language">
+            <button type="button" data-set-lang="en" aria-pressed="true">EN</button>
+            <button type="button" data-set-lang="fr" aria-pressed="false">FR</button>
+          </div>
+        </nav>
+      </header>
+      <main id="content" class="screen article">
+        <h1>
+          <span data-lang="en">
+            Most agent stacks are applications on a general-purpose OS.
+            Akasha OS treats autonomy as a system problem. Preview
+            <span data-aos-version>0.1.2</span> is still a host app — not a
+            bootable image. The seL4 track is separate.
+          </span>
+          <span data-lang="fr">
+            La plupart des stacks agents sont des applications sur un OS
+            généraliste. Akasha OS traite l’autonomie comme un problème système.
+            La Preview <span data-aos-version>0.1.2</span> reste une appli hôte —
+            pas une image bootable. La piste seL4 est séparée.
+          </span>
+        </h1>
+
+        <h2 data-lang="en"># not a chat wrapper</h2>
+        <h2 data-lang="fr"># pas un wrapper de chat</h2>
+        <p class="hist" data-lang="en">
+          A neighboring chat wrapper or “AI desktop” cannot truthfully claim that
+          agents, models, and tools are kernel-adjacent services with capability
+          tokens and a signed audit trail. Those products sit on POSIX and hope
+          the host OS is enough. This project does not.
+        </p>
+        <p class="hist" data-lang="fr">
+          Un wrapper de chat voisin ou un « bureau IA » ne peut pas prétendre
+          que agents, modèles et outils sont des services proches du noyau, avec
+          jetons de capacité et journal d’audit signé. Ces produits s’appuient
+          sur POSIX et espèrent que l’OS hôte suffise. Ce projet non.
+        </p>
+
+        <h2 data-lang="en"># capabilities, not ambient trust</h2>
+        <h2 data-lang="fr"># des capacités, pas une confiance ambiante</h2>
+        <p class="hist" data-lang="en">
+          An agent can act only inside tokens it was granted: a file, a network
+          path, a tool, a lifetime. Tokens are unforgeable and revocable. There
+          is no coarse Unix uid that means “this agent may do anything the user
+          can.” Broad grants are possible because they stay auditable and can
+          be taken back.
+        </p>
+        <p class="hist" data-lang="fr">
+          Un agent n’agit que dans les jetons qu’on lui a donnés : un fichier,
+          un chemin réseau, un outil, une durée. Les jetons sont infalsifiables
+          et révocables. Pas d’uid Unix grossier qui voudrait dire « cet agent
+          peut tout ce que l’utilisateur peut ». Des grants larges restent
+          possibles parce qu’ils sont auditables et retirables.
+        </p>
+
+        <h2 data-lang="en"># semantic IPC</h2>
+        <h2 data-lang="fr"># IPC sémantique</h2>
+        <p class="hist" data-lang="en">
+          The agent’s native language on this system is typed intents on the
+          bus, not <code>open()</code> / <code>read()</code> / <code>write()</code>.
+          POSIX remains underneath the host. The point is that the agent does
+          not speak POSIX as its first dialect. Modules expose a typed schema
+          that humans and agents consume the same way.
+        </p>
+        <p class="hist" data-lang="fr">
+          Le langage natif de l’agent ici, ce sont des intents typés sur le bus,
+          pas <code>open()</code> / <code>read()</code> / <code>write()</code>.
+          POSIX reste sous l’hôte. L’agent ne parle pas POSIX en première langue.
+          Les modules exposent un schéma typé, consommé pareil par humains et agents.
+        </p>
+
+        <h2 data-lang="en"># first-class GPU</h2>
+        <h2 data-lang="fr"># GPU de premier plan</h2>
+        <p class="hist" data-lang="en">
+          Inference latency, not a classic CPU scheduler, is the bottleneck.
+          Placement and local GGUF inference are runtime concerns: the host
+          probes VRAM, picks a pack, and runs models as a system service
+          (<code>modeld</code>), not as an app plugin. Preview requires NVIDIA.
+          That limit is the product, not fine print.
+        </p>
+        <p class="hist" data-lang="fr">
+          Le goulot, c’est la latence d’inférence, pas un scheduler CPU classique.
+          Placement et inférence GGUF locale sont des affaires de runtime : l’hôte
+          sonde la VRAM, choisit un pack, et fait tourner les modèles comme
+          service (<code>modeld</code>), pas comme plugin d’appli. Preview exige
+          NVIDIA. Cette limite est le produit, pas une note de bas de page.
+        </p>
+
+        <h2 data-lang="en"># offline by default</h2>
+        <h2 data-lang="fr"># hors ligne par défaut</h2>
+        <p class="hist" data-lang="en">
+          Network egress is deny-by-default (<code>offline_strict</code>). Chat
+          must work without the network after models are on disk. Search, fetch,
+          and GitHub feedback submit are explicit actions. No automatic upload
+          of your session.
+        </p>
+        <p class="hist" data-lang="fr">
+          La sortie réseau est refusée par défaut (<code>offline_strict</code>).
+          Le chat doit fonctionner sans réseau une fois les modèles sur disque.
+          Recherche, fetch et envoi de feedback GitHub sont des actions explicites.
+          Pas d’upload automatique de votre session.
+        </p>
+
+        <h2 data-lang="en"># host now, seL4 later</h2>
+        <h2 data-lang="fr"># hôte maintenant, seL4 plus tard</h2>
+        <p class="hist" data-lang="en">
+          Preview is userspace scaffolding on Windows or Linux (ADR 0001).
+          A seL4 / Microkit track exists in the repo and is not what you
+          download from Releases. Do not expect a bootable image from
+          <code>install.ps1</code> or <code>install.sh</code>.
+        </p>
+        <p class="hist" data-lang="fr">
+          Preview est un échafaudage userspace sur Windows ou Linux (ADR 0001).
+          Une piste seL4 / Microkit existe dans le dépôt ; ce n’est pas ce que
+          vous téléchargez depuis Releases. N’attendez pas une image bootable
+          de <code>install.ps1</code> ou <code>install.sh</code>.
+        </p>
+
+        <p class="prompt hist pager">
+          <span class="ps">$</span>
+          <a class="run" href="install.html">install --preview</a>
+        </p>
+      </main>
+      <footer>
+        <p>AKASHA OS · <a href="https://github.com/azerothl/akasha-os">github.com/azerothl/akasha-os</a></p>
+      </footer>
+    </div>
+    <script src="app.js"></script>
+  </body>
+</html>

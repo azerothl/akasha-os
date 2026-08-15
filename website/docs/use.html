@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Using Preview — Akasha OS</title>
+    <meta
+      name="description"
+      content="How to use Akasha OS Preview: Chat, Models, Memory, Notes, Agents, Audit."
+    />
+    <link rel="stylesheet" href="../styles.css" />
+  </head>
+  <body>
+    <!--
+      THESIS: The UI is a set of grants you operate, documented as a log, not a feature gallery.
+      OWN-WORLD: Host Console. FORM: seed a54b2068.
+      STORY: After the tutorial, the tester knows which tab does which grant.
+      FIRST VIEWPORT: Map of tabs as log lines, then procedures.
+      FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+    -->
+    <a class="skip" href="#content">Skip to content</a>
+    <div class="bezel">
+      <header class="status">
+        <a class="brand" href="../">AKASHA OS</a>
+        <p class="status-meta">
+          PREVIEW <span data-aos-version>0.1.2</span>
+          · DOCS · USE
+        </p>
+        <nav aria-label="Primary">
+          <a href="../grant.html">grant</a>
+          <a href="../why.html">why</a>
+          <a href="../install.html">install</a>
+          <a href="./" aria-current="page">docs</a>
+          <a href="../about.html">about</a>
+          <div class="lang" role="group" aria-label="Language">
+            <button type="button" data-set-lang="en" aria-pressed="true">EN</button>
+            <button type="button" data-set-lang="fr" aria-pressed="false">FR</button>
+          </div>
+        </nav>
+      </header>
+      <main id="content" class="screen article">
+        <h1>
+          <span data-lang="en">
+            After <a href="first-run.html">first run</a> and the four-step
+            tutorial, these are the Preview surfaces. Closing the UI stops
+            the daemons.
+          </span>
+          <span data-lang="fr">
+            Après <a href="first-run.html">first-run</a> et le tutoriel en
+            quatre étapes, voici les surfaces Preview. Fermer l’UI arrête
+            les daemons.
+          </span>
+        </h1>
+
+        <h2 data-lang="en"># tab map</h2>
+        <h2 data-lang="fr"># carte des onglets</h2>
+        <ul class="loglines">
+          <li data-lang="en">Chat / Sessions — parallel sessions; per-session model combo</li>
+          <li data-lang="fr">Chat / Sessions — sessions parallèles ; modèle par session</li>
+          <li data-lang="en">Models — list / load / download offerings; update banner</li>
+          <li data-lang="fr">Models — lister / charger / télécharger ; bannière de mise à jour</li>
+          <li data-lang="en">Memory — long-term facts (remember / recall)</li>
+          <li data-lang="fr">Memory — faits long terme (remember / recall)</li>
+          <li data-lang="en">Notes — human notes and notes via agent</li>
+          <li data-lang="fr">Notes — notes humaines et via agent</li>
+          <li data-lang="en">Agents — tasks with skills / tools; model at create</li>
+          <li data-lang="fr">Agents — tâches avec skills / outils ; modèle à la création</li>
+          <li data-lang="en">Audit — signed events; Refresh; supervisor restarts auditd</li>
+          <li data-lang="fr">Audit — événements signés ; Refresh ; le superviseur relance auditd</li>
+          <li data-lang="en">Network (sidebar) — opt-in web search / downloads</li>
+          <li data-lang="fr">Network (barre latérale) — recherche / téléchargements en opt-in</li>
+          <li data-lang="en">Feedback — GitHub issue on azerothl/akasha-os</li>
+          <li data-lang="fr">Feedback — issue GitHub sur azerothl/akasha-os</li>
+          <li data-lang="en">Scenarios — cohort protocol (see <a href="feedback.html">feedback</a>)</li>
+          <li data-lang="fr">Scenarios — protocole de cohorte (voir <a href="feedback.html">feedback</a>)</li>
+        </ul>
+
+        <h2 data-lang="en"># chat</h2>
+        <h2 data-lang="fr"># chat</h2>
+        <p class="hist" data-lang="en">
+          Ask a question (for example “What is Akasha OS?”). A streamed reply
+          must work with network off once models are on disk. Optionally change
+          the session model combo. Create three sessions, chat in each, restart
+          Preview: histories must reappear.
+        </p>
+        <p class="hist" data-lang="fr">
+          Posez une question (par exemple « Qu’est-ce qu’Akasha OS ? »). Une
+          réponse en flux doit marcher sans réseau une fois les modèles sur
+          disque. Changez éventuellement le modèle de session. Créez trois
+          sessions, parlez dans chacune, redémarrez Preview : les historiques
+          doivent réapparaître.
+        </p>
+
+        <h2 data-lang="en"># models</h2>
+        <h2 data-lang="fr"># models</h2>
+        <p class="hist" data-lang="en">
+          Open Models to see installed entries. Download an alternative if
+          offered. A “Models: …” banner appears when newer offerings fit your
+          VRAM tier. After a download, restart so <code>etc/modeld.yaml</code>
+          sees new paths.
+        </p>
+        <p class="hist" data-lang="fr">
+          Ouvrez Models pour voir les entrées installées. Téléchargez une
+          alternative si elle est proposée. Une bannière « Models: … » apparaît
+          quand de nouvelles offres tiennent dans votre palier VRAM. Après un
+          téléchargement, redémarrez pour que <code>etc/modeld.yaml</code>
+          voie les chemins.
+        </p>
+
+        <h2 data-lang="en"># memory</h2>
+        <h2 data-lang="fr"># memory</h2>
+        <p class="hist" data-lang="en">
+          Remember a fact (“I prefer French”), then Recall. Back in Chat, the
+          next message should be able to use that context
+          (<code>mem.context</code> injection before infer).
+        </p>
+        <p class="hist" data-lang="fr">
+          Remember un fait (« je préfère le français »), puis Recall. De retour
+          dans Chat, le message suivant doit pouvoir s’en servir
+          (injection <code>mem.context</code> avant l’inférence).
+        </p>
+
+        <h2 data-lang="en"># notes</h2>
+        <h2 data-lang="fr"># notes</h2>
+        <p class="hist" data-lang="en">
+          Notes tab: title + body → Create, then List. To create a note via
+          agent: Agents tab → a task like “create a note titled cohort with
+          content hello”. The agent uses the <code>TOOL:</code> convention.
+        </p>
+        <p class="hist" data-lang="fr">
+          Onglet Notes : titre + corps → Create, puis List. Via agent : onglet
+          Agents → une tâche du type « create a note titled cohort with content
+          hello ». L’agent utilise la convention <code>TOOL:</code>.
+        </p>
+
+        <h2 data-lang="en"># agents</h2>
+        <h2 data-lang="fr"># agents</h2>
+        <p class="hist" data-lang="en">
+          Create an agent with a task and a model. Preview skills:
+          notes-writer, research, file-author, planner. Optional MCP:
+          copy <code>share/mcp/servers.yaml.example</code> and add stdio servers.
+          Sensitive actions raise a confirmation banner. Deny once, Accept
+          another. Timeout is deny.
+        </p>
+        <p class="hist" data-lang="fr">
+          Créez un agent avec une tâche et un modèle. Skills Preview :
+          notes-writer, research, file-author, planner. MCP optionnel :
+          copiez <code>share/mcp/servers.yaml.example</code> et ajoutez des
+          serveurs stdio. Une action sensible affiche une bannière. Deny une
+          fois, Accept une autre. Timeout = refus.
+        </p>
+
+        <h2 data-lang="en"># audit</h2>
+        <h2 data-lang="fr"># audit</h2>
+        <p class="hist" data-lang="en">
+          Audit tab → Refresh (signed events). Kill aos-auditd: chat must
+          continue; the supervisor restarts auditd in the background.
+        </p>
+        <p class="hist" data-lang="fr">
+          Onglet Audit → Refresh (événements signés). Tuer aos-auditd : le chat
+          doit continuer ; le superviseur relance auditd en arrière-plan.
+        </p>
+
+        <p class="prompt hist pager">
+          <span class="ps">$</span>
+          <a class="run" href="network.html">open network.html</a>
+        </p>
+      </main>
+      <footer>
+        <p>AKASHA OS · <a href="https://github.com/azerothl/akasha-os">github.com/azerothl/akasha-os</a></p>
+      </footer>
+    </div>
+    <script src="../app.js"></script>
+  </body>
+</html>
