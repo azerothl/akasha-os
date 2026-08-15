@@ -1,6 +1,6 @@
 [package]
 name = "aos-registry"
-description = "Agent OS — catalogue de modèles YAML et backends simulés (P0.3)"
+description = "Akasha OS — catalogue de modèles YAML et backends simulés (P0.3)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -1,6 +1,6 @@
 [package]
 name = "aos-platform"
-description = "Agent OS — plateforme P2 : audit, storage, memory, module runtime WASM"
+description = "Akasha OS — plateforme P2 : audit, storage, memory, module runtime WASM"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

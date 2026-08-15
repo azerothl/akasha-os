@@ -1,6 +1,6 @@
 [package]
 name = "aos-agent"
-description = "Agent OS — Agent Runtime v1 : daemon (aos-agentd) + worker isolé (aos-agent-worker) (P1.4)"
+description = "Akasha OS — Agent Runtime v1 : daemon (aos-agentd) + worker isolé (aos-agent-worker) (P1.4)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

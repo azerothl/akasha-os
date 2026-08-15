@@ -1,6 +1,6 @@
 [package]
 name = "aos-sel4-abi"
-description = "Agent OS — contrat IPC seL4 (phase PV), aligné sur vm/sel4/abi.h"
+description = "Akasha OS — contrat IPC seL4 (phase PV), aligné sur vm/sel4/abi.h"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

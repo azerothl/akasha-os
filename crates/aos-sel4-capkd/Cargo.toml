@@ -1,6 +1,6 @@
 [package]
 name = "aos-sel4-capkd"
-description = "Agent OS — CapStore no_std exposé en ABI C pour le PD capkd seL4"
+description = "Akasha OS — CapStore no_std exposé en ABI C pour le PD capkd seL4"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

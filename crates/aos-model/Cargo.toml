@@ -1,6 +1,6 @@
 [package]
 name = "aos-model"
-description = "Agent OS — Model Subsystem v1 : daemon aos-modeld (P1.1, P1.2, P1.3)"
+description = "Akasha OS — Model Subsystem v1 : daemon aos-modeld (P1.1, P1.2, P1.3)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

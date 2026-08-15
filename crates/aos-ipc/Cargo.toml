@@ -1,6 +1,6 @@
 [package]
 name = "aos-ipc"
-description = "Agent OS — Semantic IPC Bus v1 (P1.5)"
+description = "Akasha OS — Semantic IPC Bus v1 (P1.5)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -1,4 +1,4 @@
-# Build & publish Agent OS Preview (Windows + Linux CUDA, no GGUF in zip)
+# Build & publish Akasha OS Preview (Windows + Linux CUDA, no GGUF in zip)
 
 name: preview-release
 
@@ -147,7 +147,7 @@ jobs:
                 "sha256": "${LIN_SHA}"
               }
             ],
-            "notes": "Agent OS Preview ${VERSION} — NVIDIA Win/Linux. Models download on first run. See FIRST-RUN.md."
+            "notes": "Akasha OS Preview ${VERSION} — NVIDIA Win/Linux. Models download on first run. See FIRST-RUN.md."
           }
           EOF
 
@@ -155,7 +155,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.prep.outputs.version }}
-          name: Agent OS Preview ${{ steps.prep.outputs.version }}
+          name: Akasha OS Preview ${{ steps.prep.outputs.version }}
           generate_release_notes: true
           files: |
             release-assets/*

@@ -1,6 +1,6 @@
 [package]
 name = "aos-placement"
-description = "Agent OS — simulateur du Placement Manager (P0.1)"
+description = "Akasha OS — simulateur du Placement Manager (P0.1)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

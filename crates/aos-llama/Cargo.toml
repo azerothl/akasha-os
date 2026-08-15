@@ -1,6 +1,6 @@
 [package]
 name = "aos-llama"
-description = "Agent OS — Backend Manager llama.cpp via FFI (P1.1)"
+description = "Akasha OS — Backend Manager llama.cpp via FFI (P1.1)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

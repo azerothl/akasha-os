@@ -1,6 +1,6 @@
 [package]
 name = "aos-capkd"
-description = "Agent OS — noyau de capacités (P4.2) : point d'application de confiance, révocation globale immédiate"
+description = "Akasha OS — noyau de capacités (P4.2) : point d'application de confiance, révocation globale immédiate"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

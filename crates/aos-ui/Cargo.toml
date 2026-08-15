@@ -1,6 +1,6 @@
 [package]
 name = "aos-ui"
-description = "Agent OS — UI minimale : shell conversationnel + dashboard ressources (P1.6)"
+description = "Akasha OS — UI minimale : shell conversationnel + dashboard ressources (P1.6)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

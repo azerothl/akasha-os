@@ -8,6 +8,7 @@ on:
     branches: [main]
     paths:
       - "website/**"
+      - "VERSION"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -28,6 +29,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Inject product version
+        run: |
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          version = Path("VERSION").read_text(encoding="utf-8").strip()
+          n = 0
+          for path in Path("website").rglob("*.html"):
+              html = path.read_text(encoding="utf-8")
+              next_html, count = re.subn(
+                  r"(<span data-aos-version>)[^<]*(</span>)",
+                  rf"\g<1>{version}\g<2>",
+                  html,
+              )
+              if count:
+                  path.write_text(next_html, encoding="utf-8")
+                  n += count
+          print(f"injected version {version} into {n} spans")
+          PY
 
       - uses: actions/configure-pages@v5
 

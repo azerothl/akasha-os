@@ -1,6 +1,6 @@
 [package]
 name = "aos-proto"
-description = "Agent OS — types des APIs système (intents §11) partagés entre services"
+description = "Akasha OS — types des APIs système (intents §11) partagés entre services"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

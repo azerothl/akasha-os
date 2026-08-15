@@ -4,7 +4,7 @@
 fn main() {
     let reports = aos_sim::run_all();
     let mut failures = 0;
-    println!("=== Agent OS — Banc d'essai P0 (specs-techniques §17.2) ===\n");
+    println!("=== Akasha OS — Banc d'essai P0 (specs-techniques §17.2) ===\n");
     for r in &reports {
         print!("{}", r.render());
         println!();
