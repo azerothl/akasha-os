@@ -441,6 +441,21 @@ pub fn read_version(home: &Path) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::sync_packaged_module;
+    use std::{
+        fs,
+        path::PathBuf,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    fn temp_dir(name: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!("akasha-os-{name}-{}-{nanos}", std::process::id()))
+    }
+
     #[test]
     fn workspace_version_matches_version_file() {
         let file = include_str!("../../../VERSION").trim();
@@ -449,5 +464,44 @@ mod tests {
             env!("CARGO_PKG_VERSION"),
             "VERSION and workspace.package.version must stay in sync"
         );
+    }
+
+    #[test]
+    fn sync_packaged_module_replaces_outdated_notes_package() {
+        let root = temp_dir("sync-packaged-module");
+        let share_pkg = root.join("share/modules/notes.aospkg");
+        let installed_dir = root.join("var/modules/notes");
+        fs::create_dir_all(share_pkg.join("ui")).unwrap();
+        fs::create_dir_all(&installed_dir).unwrap();
+
+        fs::write(
+            share_pkg.join("manifest.yaml"),
+            "name: notes\nhash: new-hash\nversion: 1.1.0\n",
+        )
+        .unwrap();
+        fs::write(share_pkg.join("module.wasm"), b"new wasm").unwrap();
+        fs::write(share_pkg.join("ui/index.html"), "new ui").unwrap();
+
+        fs::write(
+            installed_dir.join("manifest.yaml"),
+            "name: notes\nhash: old-hash\nversion: 1.0.0\n",
+        )
+        .unwrap();
+        fs::write(installed_dir.join("module.wasm"), b"old wasm").unwrap();
+        fs::write(installed_dir.join("stale.txt"), "stale").unwrap();
+
+        assert!(sync_packaged_module(&share_pkg, &installed_dir));
+        assert_eq!(
+            fs::read_to_string(installed_dir.join("manifest.yaml")).unwrap(),
+            "name: notes\nhash: new-hash\nversion: 1.1.0\n"
+        );
+        assert_eq!(fs::read(installed_dir.join("module.wasm")).unwrap(), b"new wasm");
+        assert_eq!(
+            fs::read_to_string(installed_dir.join("ui/index.html")).unwrap(),
+            "new ui"
+        );
+        assert!(!installed_dir.join("stale.txt").exists());
+
+        let _ = fs::remove_dir_all(root);
     }
 }
