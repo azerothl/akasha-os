@@ -1,4 +1,4 @@
-# Preview features — Akasha OS 0.1.2
+# Preview features — Akasha OS 0.2.0
 
 **Language:** English | [Français](fr/FEATURES.md)
 
@@ -7,7 +7,14 @@ This is **not** the bootable OS. Target v1 requirements live in
 [functional-specs.md](functional-specs.md); phase gates in
 [STATUS.md](STATUS.md).
 
-> Date: 15/08/2026 · Preview **0.1.2**
+> Date: 15/08/2026 · Preview **0.2.0**
+
+### What's new in 0.2.0
+
+- Public site rebuilt as a split-flap departure board (EN/FR)
+- Packaged notes module resyncs on boot after a Preview update
+- In-app **Troubleshoot** collects diagnostics and can open a GitHub report
+- `notes.read` accepts `title`, `name`, `path`, or `slug`
 
 ---
 
@@ -70,6 +77,8 @@ Slash commands:
 - Human UI: create / list / search
 - Agent tools: `notes.create`, `notes.update`, `notes.search`, …
 - Same data for humans and agents
+- On boot, `share/modules/notes.aospkg` is copied to `var/modules/notes` when the manifest hash or WASM fingerprint differs (a Preview update must not keep a stale module)
+- `notes.read` accepts `title`, `name`, `path`, or `slug`
 
 ---
 
@@ -159,8 +168,9 @@ Persisted in `var/run/preferences.json` (migrated from `onboarding.json` if need
 | Audit | Append-only hashed journal; Audit tab; kill `aos-auditd` → supervisor restarts it |
 | Confirmation | Blocking banner for sensitive actions; timeout = deny (fail-closed) |
 | Feedback | Local `var/feedback/` + optional GitHub issue (security reports stay local) |
+| Troubleshoot | In-app diagnostics (NVIDIA, home, logs); opens a GitHub report when findings exist |
 | App updates | Banner when a newer GitHub Release exists; overlay `bin/` + `share/` without touching `var/` or overwriting `etc/*.yaml` |
-| Site | [azerothl.github.io/akasha-os](https://azerothl.github.io/akasha-os/) (EN/FR) |
+| Site | [azerothl.github.io/akasha-os](https://azerothl.github.io/akasha-os/) — Split-Flap Board, EN/FR |
 
 ---
 
@@ -178,7 +188,7 @@ seL4 VM track (PV.1–PV.3) is separate: see [phases/phase-vm-sel4.md](phases/ph
 
 ---
 
-## 11. Not in Preview 0.1.2
+## 11. Not in Preview 0.2.0
 
 - Bootable / bare-metal image
 - macOS or CPU-only inference

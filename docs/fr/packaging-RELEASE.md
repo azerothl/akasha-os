@@ -7,8 +7,8 @@
 Tag puis push :
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
 Le workflow [`.github/workflows/preview-release.yml`](../../.github/workflows/preview-release.yml)
@@ -32,10 +32,13 @@ Les GGUF sont téléchargés au **premier run** via `share/models/manifest.json`
 ## Notes de version (brouillon)
 
 ```
-Akasha OS Preview — cohorte de test
+Akasha OS Preview 0.2.0 — cohorte de test
 
 - Install Win/Linux + NVIDIA (pas un OS bootable)
 - Premier run : download modèles + tutoriel in-app
+- Le module notes se resynchronise au boot après une update
+- Dépannage in-app → rapport GitHub
+- Site public Split-Flap (EN/FR)
 - Updates non destructives via GitHub Releases
 - Retours → issues GitHub
 

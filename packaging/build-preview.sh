@@ -3,7 +3,7 @@
 # GGUF optionnels (SKIP_MODELS=1) — téléchargés au premier run.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="${VERSION:-$(tr -d '[:space:]' < "${ROOT}/VERSION" 2>/dev/null || echo 0.1.0)}"
+VERSION="${VERSION:-$(tr -d '[:space:]' < "${ROOT}/VERSION" 2>/dev/null || echo 0.2.0)}"
 OUT="${OUT:-${ROOT}/dist/AgentOS-Preview-${VERSION}-linux-x64}"
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-${ROOT}/target}"
 

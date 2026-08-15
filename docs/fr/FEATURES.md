@@ -1,4 +1,4 @@
-# Fonctionnalités Preview — Akasha OS 0.1.2
+# Fonctionnalités Preview — Akasha OS 0.2.0
 
 **Langue :** [English](../FEATURES.md) | Français
 
@@ -7,7 +7,14 @@ Ce n'est **pas** l'OS bootable. Les exigences v1 sont dans
 [specs-fonctionnelles.md](specs-fonctionnelles.md) ; les gates dans
 [STATUS.md](STATUS.md).
 
-> Date : 15/08/2026 · Preview **0.1.2**
+> Date : 15/08/2026 · Preview **0.2.0**
+
+### Nouveautés 0.2.0
+
+- Site public refait en tableau à volets (EN/FR)
+- Le module notes empaqueté se resynchronise au boot après une update Preview
+- **Dépannage** in-app : collecte un diagnostic et peut ouvrir un rapport GitHub
+- `notes.read` accepte `title`, `name`, `path` ou `slug`
 
 ---
 
@@ -70,6 +77,8 @@ Commandes slash :
 - UI humaine : créer / lister / rechercher
 - Outils agent : `notes.create`, `notes.update`, `notes.search`, …
 - Les mêmes données pour humains et agents
+- Au boot, `share/modules/notes.aospkg` est copié vers `var/modules/notes` si le hash du manifeste ou l'empreinte WASM diffère (une update Preview ne doit pas garder un module périmé)
+- `notes.read` accepte `title`, `name`, `path` ou `slug`
 
 ---
 
@@ -159,8 +168,9 @@ Persistés dans `var/run/preferences.json` (migration depuis `onboarding.json` s
 | Audit | Journal append-only hashé ; onglet Audit ; tuer `aos-auditd` → le superviseur le relance |
 | Confirmation | Bandeau bloquant pour les actions sensibles ; timeout = refus (fail-closed) |
 | Retour | Copie locale `var/feedback/` + issue GitHub optionnelle (security reste local) |
+| Dépannage | Diagnostic in-app (NVIDIA, home, logs) ; ouvre un rapport GitHub s'il y a des anomalies |
 | Updates | Bandeau si une Release plus récente existe ; overlay `bin/` + `share/` sans toucher `var/` ni écraser `etc/*.yaml` |
-| Site | [azerothl.github.io/akasha-os](https://azerothl.github.io/akasha-os/?lang=fr) (EN/FR) |
+| Site | [azerothl.github.io/akasha-os](https://azerothl.github.io/akasha-os/?lang=fr) — tableau à volets, EN/FR |
 
 ---
 
@@ -178,7 +188,7 @@ Piste VM seL4 (PV.1–PV.3) séparée : [phases/phase-vm-sel4.md](phases/phase-v
 
 ---
 
-## 11. Hors Preview 0.1.2
+## 11. Hors Preview 0.2.0
 
 - Image bootable / fer nu
 - macOS ou inférence CPU-only

@@ -112,13 +112,21 @@ et envoi de retour GitHub).
 - Une tâche complexe affiche le badge **complex** (`task.assess`) et peut
   spawner un sous-agent (planner).
 
+### 13. Notes après update + Dépannage (0.2.0)
+
+- Après une install par-dessus une Preview précédente, ouvrir **Notes**, créer
+  une note, puis la relire depuis la liste. Le WASM empaqueté doit correspondre
+  à cette release.
+- **Dépannage** (Aide / barre latérale) : collecte un diagnostic (NVIDIA, home,
+  logs). S'il y a des anomalies, un rapport GitHub peut s'ouvrir.
+
 ## Critères de succès (équipe)
 
 - 3 testeurs Windows + 1 Linux suivent ce protocole sans toolchain Rust
 - Au moins un fichier `var/feedback/fb-*.json` exploitable par retour
 - Gates PC.6–PC.9 et PC.11–PC.13 cochés sur au moins une machine
 
-## Hors scope Preview 0.1
+## Hors scope Preview 0.2.0
 
 - Boot seL4 / fer nu
 - macOS, CPU-only

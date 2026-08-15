@@ -336,8 +336,9 @@ compiler. UI egui = surface principale ; retours via `feedback.submit`
 # Linux : ./packaging/build-preview.sh
 ```
 
-> Statut PC (15/08/2026) : Preview **0.1.2** livrée (session, egui,
-> modèles selon le matériel, transparence, Settings, browse multi-moteurs).
+> Statut PC (15/08/2026) : Preview **0.2.0** livrée (session, egui,
+> modèles selon le matériel, transparence, Settings, browse multi-moteurs,
+> resync notes, dépannage in-app, site Split-Flap).
 > Gate cohorte encore ouverte — voir `INSTALL.md` et `FEATURES.md`.
 
 ### Risques spécifiques

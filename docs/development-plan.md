@@ -385,8 +385,9 @@ Deliver **Agent OS Preview 0.1**: the same host stack (P1–P5),
 # Linux: ./packaging/build-preview.sh
 ```
 
-> PC status (15/08/2026): Preview **0.1.2** shipped (session, egui,
-> hardware-aware models, transparency, Settings, multi-engine browse).
+> PC status (15/08/2026): Preview **0.2.0** shipped (session, egui,
+> hardware-aware models, transparency, Settings, multi-engine browse,
+> notes resync, in-app troubleshoot, Split-Flap public site).
 > Cohort gate still open — see `INSTALL.md` and `docs/FEATURES.md`.
 
 ### Specific risks

@@ -6,6 +6,7 @@
 > Date: 15/08/2026  
 > Status: draft  
 > Reference: `docs/vision.md`  
+> Changes v0.3.1: Preview 0.2.0 — notes package resync, in-app troubleshoot, Split-Flap public site; appendix §12.
 > Changes v0.3: Preview 0.1.2 coverage — F-AGT-11, F-NET-01/02, F-UI-09; appendix §12.  
 > Changes v0.2: completeness review cross-checked with `docs/technical-specs.md` — clarification of the single-user scope, addition of F-BOOT-06, F-AGT-10, F-FS-05, F-SEC-07, F-SEC-08, clarifications to NFR-04 and glossary.
 
@@ -362,12 +363,12 @@ Single package exposing:
 
 - `docs/vision.md` — founding reflection  
 - `docs/technical-specs.md` — technical specifications  
-- `docs/FEATURES.md` — shipped Preview 0.1.2 catalogue  
+- `docs/FEATURES.md` — shipped Preview 0.2.0 catalogue  
 - (future) `adr/` — Architecture Decision Records  
 
 ---
 
-## 12. Preview 0.1.2 coverage (host)
+## 12. Preview 0.2.0 coverage (host)
 
 Mapping of this spec onto the **installable host Preview** (not the bootable OS).
 Detail: `docs/FEATURES.md`.

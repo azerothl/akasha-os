@@ -7,7 +7,7 @@ Summary of delivered phases. Detail: [development-plan.md](development-plan.md),
 
 **Headline:** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview:** 0.1.2 (15/08/2026) — host app on Windows/Linux + NVIDIA; not a
+**Preview:** 0.2.0 (15/08/2026) — host app on Windows/Linux + NVIDIA; not a
 bootable OS. Cohort gate still open.
 
 ## P0 — Simulator (validated)
@@ -90,7 +90,9 @@ Detail: [phases/phase-p5.md](phases/phase-p5.md).
 | PC.13 Multi-engine search + `web.browse` | done |
 | PC.14 Memory-first bootstrap + Qwen think strip | done |
 | Hardware-aware first-run model setup | done |
-| Public site (EN/FR) | done |
+| Public site (EN/FR, Split-Flap Board) | done |
+| Notes package resync on boot | done |
+| In-app Troubleshoot report | done |
 
 Cohort gate (3 Win + 1 Linux testers, no toolchain) remains **open**.
 

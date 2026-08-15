@@ -6,6 +6,7 @@
 > Date : 15/08/2026  
 > Statut : brouillon  
 > Référence : `specs-fonctionnelles.md`, `reflexion-agent-os.md`, `FEATURES.md`  
+> Changements v0.3.1 : Preview 0.2.0 — resync du module notes, dépannage in-app, site Split-Flap.
 > Changements v0.3 : Preview 0.1.2 — `web.browse`, `web.search` multi-moteurs, panneau de transparence egui, Settings persistées (`preferences.json`).  
 > Changements v0.2 : revue de complétude — ajout Agent superviseur/System Assistant/Trust Manager (§4.5-4.7), classification de sensibilité (§6.4), Module Registry (§7), egress réseau (§9.5), confirmation bloquante (§9.4), mises à jour système (§10.1), Module API/Admin API (§11.4-11.5), profil utilisateur (§12), cibles agents concurrents (§13), accessibilité (§8.3), glossaire technique et matrice de traçabilité (§21-22).
 
@@ -691,7 +692,7 @@ Le host ABI WASM expose en plus : `web.search`, `web.browse`, `net.fetch`, `file
 - **Compositor** (display server minimal)
 - **Shell direct** : dock/panels, file manager, settings, resource dashboard
 - **Shell conversationnel** : timeline, streaming tokens, cartes d'actions
-- **Transparency panel** : chain-of-custody des décisions agent (timeline `agent.trace`, sources agrégées, badge simple/complex). **Preview 0.1.2** : livré dans egui (onglet Agents + cartes chat).
+- **Transparency panel** : chain-of-custody des décisions agent (timeline `agent.trace`, sources agrégées, badge simple/complex). **Preview 0.2.0** : livré dans egui (onglet Agents + cartes chat).
 - **Control bar** : pause / stop / steer / retry sur l'agent sélectionné
 
 ### 8.2 Contraintes perf

@@ -7,7 +7,7 @@ Résumé des phases livrées. Détail : [plan-developpement-phases.md](plan-deve
 
 **En-tête :** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview :** 0.1.2 (15/08/2026) — appli hôte Windows/Linux + NVIDIA ; pas un
+**Preview :** 0.2.0 (15/08/2026) — appli hôte Windows/Linux + NVIDIA ; pas un
 OS bootable. Gate cohorte encore ouverte.
 
 ## P0 — Simulateur (validé)

@@ -6,6 +6,7 @@
 > Date: 15/08/2026  
 > Status: draft  
 > Reference: `docs/functional-specs.md`, `docs/vision.md`, `docs/FEATURES.md`  
+> Changes v0.3.1: Preview 0.2.0 — notes package resync, in-app troubleshoot, Split-Flap public site.
 > Changes v0.3: Preview 0.1.2 — `web.browse`, multi-engine `web.search`, egui transparency panel, persisted Settings (`preferences.json`).  
 > Changes v0.2: completeness review — addition Supervisor Agent/System Assistant/Trust Manager (§4.5-4.7), sensitivity classification (§6.4), Registry Module (§7), network egress (§9.5), blocking confirmation (§9.4), system updates (§10.1), API Module/API Admin (§11.4-11.5), user profile (§12), concurrent agent targets (§13), accessibility (§8.3), technical glossary and traceability matrix (§21-22).
 
@@ -691,7 +692,7 @@ The WASM ABI host additionally exposes: `web.search`, `web.browse`, `net.fetch`,
 - **Compositor** (display server minimal)
 - **Shell direct** : dock/panels, file manager, settings, resource dashboard
 - **Shell conversationnel** : timeline, streaming tokens, cartes d'actions
-- **Transparency panel**: chain-of-custody of agent decisions (`agent.trace` timeline, aggregated sources, simple/complex badge). **Preview 0.1.2** ships this in egui (Agents tab + chat agent cards).
+- **Transparency panel**: chain-of-custody of agent decisions (`agent.trace` timeline, aggregated sources, simple/complex badge). **Preview 0.2.0** ships this in egui (Agents tab + chat agent cards).
 - **Control bar**: pause / stop / steer / retry on selected agent
 
 ### 8.2 Contraintes perf

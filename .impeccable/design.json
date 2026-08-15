@@ -143,7 +143,7 @@
       "kind": "nav",
       "refersTo": "link-inline",
       "description": "Bezel status row: brand, host meta, lowercase section links.",
-      "html": "<header class=\"ds-status\"><a class=\"ds-brand\" href=\"#\">AKASHA OS</a><p class=\"ds-status-meta\">PREVIEW 0.1.2 · HOST</p><nav class=\"ds-nav\" aria-label=\"Primary\"><a href=\"#\">grant</a><a href=\"#\">why</a><a href=\"#\">install</a></nav></header>",
+      "html": "<header class=\"ds-status\"><a class=\"ds-brand\" href=\"#\">AKASHA OS</a><p class=\"ds-status-meta\">PREVIEW 0.2.0 · HOST</p><nav class=\"ds-nav\" aria-label=\"Primary\"><a href=\"#\">grant</a><a href=\"#\">why</a><a href=\"#\">install</a></nav></header>",
       "css": ".ds-status { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.55rem 1rem; color: var(--phosphor-dim, #c4a06a); font-family: \"Azeret Mono\", ui-monospace, \"Cascadia Mono\", Consolas, monospace; font-size: 0.78rem; letter-spacing: 0.04em; } .ds-brand { color: var(--phosphor-dim, #c4a06a); font-weight: 600; letter-spacing: 0.08em; text-decoration: none; } .ds-brand:hover, .ds-brand:focus-visible { color: var(--phosphor, #e8a04a); } .ds-brand:focus-visible { outline: 2px solid var(--phosphor, #e8a04a); outline-offset: 3px; } .ds-status-meta { margin: 0; flex: 1 1 auto; } .ds-nav { display: flex; flex-wrap: wrap; gap: 0.55rem 0.85rem; } .ds-nav a { color: var(--phosphor-dim, #c4a06a); text-decoration: none; } .ds-nav a:hover, .ds-nav a:focus-visible { color: var(--phosphor, #e8a04a); } .ds-nav a:focus-visible { outline: 2px solid var(--phosphor, #e8a04a); outline-offset: 3px; }"
     },
     {

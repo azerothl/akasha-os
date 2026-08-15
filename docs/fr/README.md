@@ -8,7 +8,7 @@
 first-class, offline-first. La Preview tourne sur hôte Windows/Linux
 (NVIDIA) ; la piste seL4 est séparée.
 
-> Ce n'est **pas** encore un OS bootable. La Preview 0.1.2 est une application
+> Ce n'est **pas** encore un OS bootable. La Preview 0.2.0 est une application
 > hôte installable pour testeurs.
 
 ## Pourquoi Akasha OS
@@ -25,12 +25,13 @@ Catalogue : [FEATURES.md](FEATURES.md).
 |---------|---------|
 | Chat / Sessions | Conversations persistées ; slash ; modèle par session |
 | Mémoire | Faits long terme ; bootstrap mémoire d'abord |
-| Notes | Humaines + agents (module WASM) |
+| Notes | Humaines + agents (module WASM) ; resync au boot après une update |
 | Agents | Goal, skills, outils, MCP ; timeline ; steer / pause |
 | Modèles | Packs selon le GPU ; download / load ; local-only par défaut |
 | Réseau | Recherche opt-in (Brave / DDG / Bing) + `web.browse` + fetch |
 | Settings | Langue, trust, routage, défauts agent, moteur |
 | Retour | Rapport local + issue GitHub |
+| Dépannage | Diagnostic in-app ; rapport GitHub s'il y a des anomalies |
 | Mises à jour | Overlay non destructif depuis GitHub Releases |
 
 ## Prérequis

@@ -8,7 +8,7 @@
 first-class GPU, offline-first. Preview builds run on a Windows/Linux host
 (NVIDIA); a seL4 bare-metal track is separate.
 
-> This is **not** a bootable OS image yet. Preview 0.1.2 is an installable host
+> This is **not** a bootable OS image yet. Preview 0.2.0 is an installable host
 > app for testers.
 
 ## Why Akasha OS
@@ -26,12 +26,13 @@ Full catalogue: [docs/FEATURES.md](docs/FEATURES.md).
 |------|----------------|
 | Chat / Sessions | Parallel persisted conversations; slash commands; per-session model |
 | Memory | Long-term facts; memory-first agent bootstrap |
-| Notes | Human + agent-authored notes (WASM module) |
+| Notes | Human + agent-authored notes (WASM); resyncs on boot after an update |
 | Agents | Goal loop, skills, tools, MCP; transparency timeline; steer / pause |
 | Models | Hardware-aware first-run packs; download / load; local-only by default |
 | Network | Opt-in search (Brave / DDG / Bing) + `web.browse` + fetch |
 | Settings | Language, trust, routing, agent defaults, search engine |
 | Feedback | Local report + GitHub issue on this repo |
+| Troubleshoot | In-app diagnostics; GitHub report when findings exist |
 | Updates | Non-destructive overlays from GitHub Releases |
 
 ## Requirements
@@ -40,7 +41,7 @@ Full catalogue: [docs/FEATURES.md](docs/FEATURES.md).
 - NVIDIA GPU + recent driver (`nvidia-smi -L`)
 - ~4 GB free disk (binaries + GGUF models downloaded on first run)
 
-No macOS / CPU-only mode in Preview 0.1.2.
+No macOS / CPU-only mode in Preview 0.2.0.
 
 ## Quick start
 

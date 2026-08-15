@@ -111,13 +111,20 @@ GitHub feedback submit).
 - Complex tasks should show a **complex** badge (`task.assess`) and may spawn
   a child agent (planner).
 
+### 13. Notes after update + Troubleshoot (0.2.0)
+
+- After installing over a previous Preview, open **Notes**, create a note, then
+  read it from the list. The packaged WASM must match this release.
+- **Troubleshoot** (Help / sidebar): runs diagnostics (NVIDIA, home, logs).
+  If findings exist, a GitHub report can open.
+
 ## Success criteria (team)
 
 - 3 Windows + 1 Linux testers complete this protocol without a Rust toolchain
 - At least one usable `var/feedback/fb-*.json` per report
 - Gates PC.6–PC.9 and PC.11–PC.13 checked on at least one machine
 
-## Out of scope Preview 0.1
+## Out of scope Preview 0.2.0
 
 - seL4 / bare-metal boot
 - macOS, CPU-only

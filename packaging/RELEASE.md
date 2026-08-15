@@ -7,8 +7,8 @@
 Tag then push:
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
 The workflow [`.github/workflows/preview-release.yml`](../.github/workflows/preview-release.yml)
@@ -32,10 +32,13 @@ GGUFs are downloaded on **first run** via `share/models/manifest.json`.
 ## Release notes (draft)
 
 ```
-Akasha OS Preview — tester cohort
+Akasha OS Preview 0.2.0 — tester cohort
 
 - Win/Linux install + NVIDIA (not a bootable OS)
 - First run: model download + in-app tutorial
+- Notes module resyncs on boot after an update
+- In-app Troubleshoot → GitHub report
+- Split-Flap public site (EN/FR)
 - Non-destructive updates via GitHub Releases
 - Feedback → GitHub issues
 
