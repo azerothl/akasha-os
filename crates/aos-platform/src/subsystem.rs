@@ -501,6 +501,45 @@ impl HostServices for PlatformSubsystem {
                 );
                 Ok(serde_json::json!({"hits": hits}))
             }
+            "mem.episodic_delete" => {
+                let ns = args["namespace"].as_str().unwrap_or("");
+                if ns.is_empty() {
+                    return Err("mem.episodic_delete: namespace requis".into());
+                }
+                Self::require_cap(ctx, "mem.write", ns)?;
+                let mut mem = self.mem.lock().unwrap();
+                let (deleted, count) = if let Some(id) = args["id"].as_u64() {
+                    // Vérifie que l'entrée appartient au namespace autorisé.
+                    let ok = mem
+                        .export(ns)
+                        .iter()
+                        .any(|e| e.id == id)
+                        && mem.episodic_delete(id);
+                    (ok, if ok { 1 } else { 0 })
+                } else {
+                    let key = args["meta_key"].as_str().unwrap_or("path");
+                    let value = args["meta_value"]
+                        .as_str()
+                        .or_else(|| args["path"].as_str())
+                        .unwrap_or("");
+                    if value.is_empty() {
+                        return Err(
+                            "mem.episodic_delete: id ou path/meta_value requis".into(),
+                        );
+                    }
+                    let n = mem.episodic_delete_by_meta(ns, key, value);
+                    (n > 0, n)
+                };
+                drop(mem);
+                self.audit(AuditAppendRequest {
+                    trace_id: ctx.trace_id.clone(),
+                    actor: format!("module:{}", ctx.module),
+                    action: "mem.episodic_delete".into(),
+                    target: ns.into(),
+                    detail: serde_json::json!({"deleted": deleted, "count": count, "on_behalf_of": ctx.actor}),
+                });
+                Ok(serde_json::json!({"deleted": deleted, "count": count}))
+            }
             "mem.shared_read" => {
                 let name = args["name"].as_str().unwrap_or("");
                 Self::require_cap(ctx, "mem.query", &format!("shared:{name}"))

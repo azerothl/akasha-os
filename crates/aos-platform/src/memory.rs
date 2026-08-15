@@ -213,6 +213,58 @@ impl MemoryStore {
             .collect()
     }
 
+    /// Supprime une entrée épisodique par id (compacte le journal).
+    pub fn episodic_delete(&mut self, id: u64) -> bool {
+        if self.episodic.remove(&id).is_none() {
+            return false;
+        }
+        self.index.remove(id);
+        self.compact_journal();
+        true
+    }
+
+    /// Supprime les entrées d'un namespace dont `metadata[key] == value`.
+    pub fn episodic_delete_by_meta(
+        &mut self,
+        namespace: &str,
+        key: &str,
+        value: &str,
+    ) -> usize {
+        let ids: Vec<u64> = self
+            .episodic
+            .values()
+            .filter(|e| {
+                e.namespace == namespace
+                    && e.metadata
+                        .get(key)
+                        .and_then(|v| v.as_str())
+                        .map(|s| s == value)
+                        .unwrap_or(false)
+            })
+            .map(|e| e.id)
+            .collect();
+        let n = ids.len();
+        for id in ids {
+            self.episodic.remove(&id);
+            self.index.remove(id);
+        }
+        if n > 0 {
+            self.compact_journal();
+        }
+        n
+    }
+
+    fn compact_journal(&mut self) {
+        let mut lines = String::new();
+        for e in self.episodic.values() {
+            if let Ok(s) = serde_json::to_string(e) {
+                lines.push_str(&s);
+                lines.push('\n');
+            }
+        }
+        let _ = std::fs::write(self.journal_path(), lines);
+    }
+
     // --- shared (§5.1, F-MEM-03) ---
 
     pub fn shared_read(&self, name: &str) -> Option<serde_json::Value> {
@@ -246,15 +298,7 @@ impl MemoryStore {
             self.index.remove(*id);
         }
         self.working.remove(namespace);
-        // Compactage JSONL (une entrée par ligne — compatible avec `replay`).
-        let mut lines = String::new();
-        for e in self.episodic.values() {
-            if let Ok(s) = serde_json::to_string(e) {
-                lines.push_str(&s);
-                lines.push('\n');
-            }
-        }
-        let _ = std::fs::write(self.journal_path(), lines);
+        self.compact_journal();
         n
     }
 
@@ -358,6 +402,31 @@ mod tests {
         assert_eq!(s2.episodic_len(), 1);
         let hits = s2.episodic_query(&v(0.3), 1, None);
         assert_eq!(hits[0].text, "persisté");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn episodic_delete_et_by_meta() {
+        let (mut s, dir) = store();
+        let id = s.episodic_write(
+            "module:notes",
+            "a — body",
+            serde_json::json!({"path": "/documents/notes/a.md"}),
+            v(0.5),
+            false,
+        );
+        s.episodic_write(
+            "module:notes",
+            "b — body",
+            serde_json::json!({"path": "/documents/notes/b.md"}),
+            v(0.6),
+            false,
+        );
+        assert!(s.episodic_delete(id));
+        assert_eq!(s.episodic_len(), 1);
+        let n = s.episodic_delete_by_meta("module:notes", "path", "/documents/notes/b.md");
+        assert_eq!(n, 1);
+        assert_eq!(s.episodic_len(), 0);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

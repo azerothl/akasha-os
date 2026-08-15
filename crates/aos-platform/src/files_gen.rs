@@ -49,7 +49,7 @@ fn generate_png(content: &str, title: Option<&str>) -> Result<Vec<u8>, GenError>
     }
     // « Texte » simulé : lignes proportionnelles au contenu (pas de font raster
     // complète — motif déterministe pour artefact visible).
-    let label = title.unwrap_or("Agent OS");
+    let label = title.unwrap_or("Akasha OS");
     draw_bars(&mut img, 20, 60, label.len() as u32 * 8 + 40, 16, Rgb([220, 220, 230]));
     let lines: Vec<&str> = content.lines().take(12).collect();
     for (i, line) in lines.iter().enumerate() {
@@ -76,14 +76,14 @@ fn draw_bars(img: &mut RgbImage, x: u32, y: u32, w: u32, h: u32, color: Rgb<u8>)
 fn generate_pdf(content: &str, title: Option<&str>) -> Result<Vec<u8>, GenError> {
     use printpdf::*;
     let (doc, page1, layer1) =
-        PdfDocument::new(title.unwrap_or("Agent OS"), Mm(210.0), Mm(297.0), "Layer 1");
+        PdfDocument::new(title.unwrap_or("Akasha OS"), Mm(210.0), Mm(297.0), "Layer 1");
     let layer = doc.get_page(page1).get_layer(layer1);
     let font = doc
         .add_builtin_font(BuiltinFont::Helvetica)
         .map_err(|e| GenError::Io(e.to_string()))?;
     let mut y = 280.0;
     layer.use_text(
-        title.unwrap_or("Document Agent OS"),
+        title.unwrap_or("Document Akasha OS"),
         18.0,
         Mm(20.0),
         Mm(y),

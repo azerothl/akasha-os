@@ -126,8 +126,12 @@ async fn main() {
                     )
                     .await;
                 if let Ok(r) = notes {
-                    if r.ok && r.result.to_string().contains("note-agent-gate") {
-                        agent_note_ok = true;
+                    if r.ok {
+                        // Accepte l'ancien format (chemins) et le nouveau (objets avec title).
+                        let s = r.result.to_string();
+                        if s.contains("note-agent-gate") {
+                            agent_note_ok = true;
+                        }
                     }
                 }
             }

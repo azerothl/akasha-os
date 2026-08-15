@@ -1,6 +1,6 @@
 //! Sessions de conversation persistées (Preview PC.6).
 
-use aos_proto::{ChatSessionMessage, ChatSessionMeta};
+use aos_proto::{ChatAttachment, ChatSessionMessage, ChatSessionMeta};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -155,6 +155,7 @@ impl ChatSessionStore {
         id: &str,
         role: &str,
         content: &str,
+        attachments: Vec<ChatAttachment>,
     ) -> Result<ChatSessionMessage, SessionError> {
         if role.is_empty() || content.is_empty() {
             return Err(SessionError::BadRequest("role/content requis".into()));
@@ -164,6 +165,7 @@ impl ChatSessionStore {
             role: role.into(),
             content: content.into(),
             ts_ms: Self::now_ms(),
+            attachments,
         };
         let path = self.dir(id).join("messages.jsonl");
         use std::io::Write;
@@ -221,6 +223,16 @@ impl ChatSessionStore {
         let mut out = format!("# {}\n\n", meta.title);
         for m in messages {
             out.push_str(&format!("## {}\n\n{}\n\n", m.role, m.content));
+            for att in &m.attachments {
+                let ChatAttachment::AgentRef {
+                    agent_id,
+                    title,
+                    origin,
+                } = att;
+                out.push_str(&format!(
+                    "_agent: {agent_id} ({origin}) — {title}_\n\n"
+                ));
+            }
         }
         Ok(out)
     }
@@ -236,12 +248,46 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         let s = ChatSessionStore::open(&dir).unwrap();
         let m = s.create(Some("Test".into()), None).unwrap();
-        s.append(&m.id, "user", "bonjour").unwrap();
-        s.append(&m.id, "assistant", "salut").unwrap();
+        s.append(&m.id, "user", "bonjour", vec![]).unwrap();
+        s.append(&m.id, "assistant", "salut", vec![]).unwrap();
         let (meta, msgs) = s.get(&m.id).unwrap();
         assert_eq!(meta.message_count, 2);
         assert_eq!(msgs.len(), 2);
         assert_eq!(s.list(false).unwrap().len(), 1);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn legacy_jsonl_without_attachments() {
+        let dir = std::env::temp_dir().join(format!("aos-sess-leg-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let s = ChatSessionStore::open(&dir).unwrap();
+        let m = s.create(Some("Legacy".into()), None).unwrap();
+        let path = dir.join(&m.id).join("messages.jsonl");
+        fs::write(
+            &path,
+            r#"{"role":"user","content":"hi","ts_ms":1}
+{"role":"assistant","content":"yo","ts_ms":2}
+"#,
+        )
+        .unwrap();
+        let (_, msgs) = s.get(&m.id).unwrap();
+        assert_eq!(msgs.len(), 2);
+        assert!(msgs[0].attachments.is_empty());
+        s.append(
+            &m.id,
+            "assistant",
+            "agent lancé",
+            vec![ChatAttachment::AgentRef {
+                agent_id: "agent-1".into(),
+                title: "tâche".into(),
+                origin: "slash".into(),
+            }],
+        )
+        .unwrap();
+        let (_, msgs2) = s.get(&m.id).unwrap();
+        assert_eq!(msgs2.len(), 3);
+        assert_eq!(msgs2[2].attachments.len(), 1);
         let _ = fs::remove_dir_all(&dir);
     }
 }

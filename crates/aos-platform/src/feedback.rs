@@ -54,7 +54,7 @@ pub fn submit(
     fs::copy(&path, &export_json).map_err(|e| e.to_string())?;
     let _ = fs::write(
         export_dir.join("README.txt"),
-        "Agent OS Preview — paquet de retour testeur.\n\
+        "Akasha OS Preview — paquet de retour testeur.\n\
          Une copie locale est toujours conservée ici.\n\
          Si vous avez coché « Créer une issue GitHub », une issue (ou un formulaire)\n\
          a été ouverte sur https://github.com/azerothl/akasha-os/issues.\n",

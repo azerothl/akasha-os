@@ -578,6 +578,47 @@ async fn main() {
     }
     {
         let s = sub.clone();
+        svc.on("mem.episodic_delete", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<MemEpisodicDeleteRequest>() {
+                    Ok(req) => {
+                        let result = {
+                            let mut mem = s.mem.lock().unwrap();
+                            if let Some(id) = req.id {
+                                let ok = mem.episodic_delete(id);
+                                serde_json::json!({"deleted": ok, "count": if ok { 1 } else { 0 }})
+                            } else if let (Some(ns), Some(key), Some(val)) = (
+                                req.namespace.as_deref(),
+                                req.meta_key.as_deref(),
+                                req.meta_value.as_deref(),
+                            ) {
+                                let n = mem.episodic_delete_by_meta(ns, key, val);
+                                serde_json::json!({"deleted": n > 0, "count": n})
+                            } else {
+                                drop(mem);
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::BadRequest,
+                                        "id ou (namespace + meta_key + meta_value) requis",
+                                    )
+                                    .await;
+                                return;
+                            }
+                        };
+                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &result).await;
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
         svc.on("mem.export", move |ctx| {
             let s = s.clone();
             async move {
@@ -883,6 +924,7 @@ async fn main() {
                             &req.session_id,
                             &req.role,
                             &req.content,
+                            req.attachments.clone(),
                         );
                         match append_res {
                             Ok(msg) => {
