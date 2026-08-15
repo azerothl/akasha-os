@@ -54,10 +54,13 @@ No macOS / CPU-only mode in Preview 0.2.0.
 See [INSTALL.md](INSTALL.md) and [docs/FIRST-RUN.md](docs/FIRST-RUN.md).
 Cohort protocol: [docs/TESTER.md](docs/TESTER.md).
 
-### Developers
+### Developers / build from source
+
+Full steps (toolchain, package scripts, `AOS_HOME`): [INSTALL.md — Build from source](INSTALL.md#build-from-source).
 
 ```powershell
 cargo test --workspace
+.\packaging\build-preview.ps1 -SkipModels -RequireCuda
 $env:AOS_HOME = (Resolve-Path .)
 cargo run -p aos-session --release
 .\demo\run-demo.ps1 -Gate p4

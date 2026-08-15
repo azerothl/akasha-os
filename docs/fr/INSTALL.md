@@ -98,17 +98,87 @@ keys:
 | healthcheck échoué | `var/run/*.stderr.log` (bouton **Dépannage**) |
 | Bus injoignable | Toujours via `aos-session` |
 
-## Build / CI (mainteneurs)
+## Build depuis les sources
+
+Préférez une [Release GitHub](https://github.com/azerothl/akasha-os/releases) si
+vous voulez seulement lancer la Preview. Compilez depuis les sources pour un
+paquet local, des patches, ou du développement sur l’arbre.
+
+### Toolchain
+
+| | |
+|--|--|
+| OS | Windows 10/11 x64 **ou** Linux x64 |
+| GPU | Pilote NVIDIA (`nvidia-smi -L`) |
+| Rust | Toolchain stable + cible `wasm32-unknown-unknown` (`rustup target add wasm32-unknown-unknown`) |
+| CUDA | CUDA Toolkit (nvcc), typiquement 12.x — requis pour compiler `aos-llama` / `aos-modeld` |
+| Outils | CMake, Ninja ; sous Windows, environnement compatible MSVC ; sous Linux, deps X11/Wayland et clang/`libclang` (voir `packaging/docker-build-linux.sh`) |
+
+Disque : plusieurs Go pour `target/` plus les modèles GGUF au premier lancement
+(comme le paquet Release).
+
+### Clone et paquet
+
+```bash
+git clone https://github.com/azerothl/akasha-os.git
+cd akasha-os
+```
+
+**Windows** (PowerShell) — compile les binaires, empaquete les modules WASM,
+assemble `dist/AgentOS-Preview-<ver>-windows-x64/` (sans GGUF ; téléchargés au
+premier run) :
 
 ```powershell
 .\packaging\build-preview.ps1 -SkipModels -RequireCuda
 ```
 
+Ensuite lancez depuis le dossier dist (`.\bin\aos-session.exe` avec
+`$env:AOS_HOME` pointant dessus) ou utilisez `install.ps1` comme pour une
+Release.
+
+**Linux :**
+
 ```bash
 SKIP_MODELS=1 REQUIRE_CUDA=1 ./packaging/build-preview.sh
 ```
 
-GitHub Actions : `.github/workflows/preview-release.yml` (tags `v*`).
+Sortie : `dist/AgentOS-Preview-<ver>-linux-x64/`. Option : build dans un
+conteneur CUDA devel via `packaging/docker-build-linux.sh`.
+
+### Run de développement (sans packaging)
+
+Depuis la racine du dépôt, après un `cargo build --release` des crates Preview
+(ou après `build-preview.*`) :
+
+```powershell
+# Windows
+$env:AOS_HOME = (Resolve-Path .)
+cargo run -p aos-session --release
+```
+
+```bash
+# Linux
+export AOS_HOME="$(pwd)"
+cargo run -p aos-session --release
+```
+
+`aos-session` exige toujours NVIDIA et enchaîne le setup modèles / l’UI egui.
+Avec `AOS_HOME` sur le checkout, les arbres `share/` du dépôt sont utilisés ;
+un arbre `dist/` ressemble davantage au paquet testeur.
+
+### Tests
+
+```powershell
+cargo test --workspace
+```
+
+Gates / démo : `.\demo\run-demo.ps1 -Gate p4` (Windows).
+
+### CI
+
+GitHub Actions [`.github/workflows/preview-release.yml`](../../.github/workflows/preview-release.yml)
+construit Win + Linux sur les tags `v*` (mêmes scripts, sans GGUF dans
+l’artefact).
 
 ## Licence
 
