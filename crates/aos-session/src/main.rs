@@ -96,7 +96,7 @@ fn main() {
     std::env::set_current_dir(&home).expect("chdir AOS_HOME");
 
     let version = bootstrap::read_version(&home);
-    eprintln!("[aos-session] Agent OS Preview {version}");
+    eprintln!("[aos-session] Akasha OS Preview {version}");
     eprintln!("[aos-session] AOS_HOME={}", home.display());
 
     // Appliquer une update téléchargée avant de toucher aux binaires en cours.
@@ -108,10 +108,11 @@ fn main() {
 
     ensure_layout(&home);
     bootstrap::ensure_skills(&home);
+    bootstrap::ensure_mcp_stub(&home);
 
     if let Err(e) = bootstrap::check_disk_space(&home) {
         bootstrap::show_fatal_dialog(
-            "Agent OS Preview — disque",
+            "Akasha OS Preview — disque",
             &format!("{e}\n\nLibérez de l'espace puis relancez. Voir FIRST-RUN.md."),
         );
         std::process::exit(3);
@@ -119,9 +120,9 @@ fn main() {
 
     if !bootstrap::nvidia_ok() {
         bootstrap::show_fatal_dialog(
-            "Agent OS Preview — GPU NVIDIA requis",
+            "Akasha OS Preview — GPU NVIDIA requis",
             "nvidia-smi introuvable ou en échec.\n\
-             Preview 0.1 n'accepte pas le fallback CPU.\n\
+             La Preview n'accepte pas le fallback CPU.\n\
              Installez un driver NVIDIA récent, puis relancez.\n\
              Voir INSTALL.md / FIRST-RUN.md.",
         );
@@ -144,7 +145,7 @@ fn main() {
     if offerings::setup_needed(&home) {
         if let Err(e) = run_model_setup(&home, &hw, &version) {
             bootstrap::show_fatal_dialog(
-                "Agent OS Preview — modèles",
+                "Akasha OS Preview — modèles",
                 &format!(
                     "Configuration des modèles annulée ou échouée :\n{e}\n\n\
                      Voir share/models/catalog-offerings.json et FIRST-RUN.md."
@@ -154,7 +155,7 @@ fn main() {
         }
     } else if let Err(e) = ensure_installed_files_present(&home) {
         bootstrap::show_fatal_dialog(
-            "Agent OS Preview — modèles",
+            "Akasha OS Preview — modèles",
             &format!("Modèles installés incomplets :\n{e}"),
         );
         std::process::exit(4);

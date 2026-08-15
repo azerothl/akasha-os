@@ -119,23 +119,67 @@ pub fn check_disk_space(home: &Path) -> Result<(), String> {
 pub fn ensure_skills(home: &Path) {
     let dest = home.join("skills");
     let _ = fs::create_dir_all(&dest);
-    let already = fs::read_dir(&dest)
-        .map(|rd| rd.filter_map(|e| e.ok()).any(|e| e.path().is_dir()))
-        .unwrap_or(false);
-    if already {
-        return;
-    }
     for cand in [
         home.join("share/skills"),
         PathBuf::from("share/skills"),
         PathBuf::from("skills"),
     ] {
-        if cand.is_dir() {
-            let _ = copy_dir_recursive(&cand, &dest);
-            eprintln!("[aos-session] skills copiés depuis {}", cand.display());
+        if !cand.is_dir() {
+            continue;
+        }
+        // Sync : copie les skills manquantes / met à jour depuis le package.
+        let mut copied = 0u32;
+        if let Ok(rd) = fs::read_dir(&cand) {
+            for ent in rd.filter_map(|e| e.ok()) {
+                let src = ent.path();
+                if !src.is_dir() {
+                    continue;
+                }
+                let name = match src.file_name() {
+                    Some(n) => n.to_os_string(),
+                    None => continue,
+                };
+                let target = dest.join(&name);
+                // Toujours re-synchroniser depuis share/ (package à jour).
+                let _ = fs::remove_dir_all(&target);
+                if copy_dir_recursive(&src, &target).is_ok() {
+                    copied += 1;
+                }
+            }
+        }
+        if copied > 0 {
+            eprintln!(
+                "[aos-session] {copied} skill(s) synchronisée(s) depuis {}",
+                cand.display()
+            );
             return;
         }
     }
+}
+
+/// Première install : stub MCP si absent.
+pub fn ensure_mcp_stub(home: &Path) {
+    let dir = home.join("var/mcp");
+    let _ = fs::create_dir_all(&dir);
+    let cfg = dir.join("servers.yaml");
+    if cfg.exists() {
+        return;
+    }
+    for cand in [
+        home.join("share/mcp/servers.yaml.example"),
+        PathBuf::from("share/mcp/servers.yaml.example"),
+        PathBuf::from("var/mcp/servers.yaml.example"),
+    ] {
+        if cand.is_file() {
+            let _ = fs::copy(&cand, &cfg);
+            eprintln!("[aos-session] MCP stub depuis {}", cand.display());
+            return;
+        }
+    }
+    let _ = fs::write(
+        &cfg,
+        "# MCP servers (stdio). See share/mcp/servers.yaml.example\n\nservers: {}\n",
+    );
 }
 
 pub fn ensure_models(home: &Path) -> Result<(), String> {
@@ -328,4 +372,17 @@ pub fn read_version(home: &Path) -> String {
         }
     }
     env!("CARGO_PKG_VERSION").to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn workspace_version_matches_version_file() {
+        let file = include_str!("../../../VERSION").trim();
+        assert_eq!(
+            file,
+            env!("CARGO_PKG_VERSION"),
+            "VERSION and workspace.package.version must stay in sync"
+        );
+    }
 }

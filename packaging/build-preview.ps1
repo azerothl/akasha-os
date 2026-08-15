@@ -1,4 +1,4 @@
-# build-preview.ps1 — assemble Agent OS Preview (Windows x64 + CUDA)
+# build-preview.ps1 — assemble Akasha OS Preview (Windows x64 + CUDA)
 #
 # Prérequis : cargo, CUDA Toolkit, cmake/ninja (llama.cpp).
 # GGUF : optionnels (-SkipModels) — téléchargés au premier run via manifest.json.
@@ -121,6 +121,18 @@ if (Test-Path $skillsSrc) {
     Copy-Item "$skillsSrc\*" "$OutDir\share\skills\" -Recurse -Force
 }
 
+# MCP example config (seeded into var/mcp at first run)
+New-Item -ItemType Directory -Force -Path "$OutDir\share\mcp" | Out-Null
+$mcpEx = Join-Path $root "var\mcp\servers.yaml.example"
+if (Test-Path $mcpEx) {
+    Copy-Item $mcpEx "$OutDir\share\mcp\servers.yaml.example" -Force
+} else {
+    @"
+# MCP servers (stdio). Copy to var/mcp/servers.yaml and adapt.
+servers: {}
+"@ | Set-Content "$OutDir\share\mcp\servers.yaml.example" -Encoding utf8
+}
+
 if (-not $SkipModels) {
     $models = @(
         "qwen2.5-3b-instruct-q4_k_m.gguf",
@@ -141,6 +153,7 @@ Copy-Item (Join-Path $root "docs\TESTER.md") "$OutDir\TESTER.md" -ErrorAction Si
 Copy-Item (Join-Path $root "docs\FIRST-RUN.md") "$OutDir\docs\FIRST-RUN.md" -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $root "docs\FIRST-RUN.md") "$OutDir\FIRST-RUN.md" -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $root "docs\STATUS.md") "$OutDir\docs\STATUS.md" -ErrorAction SilentlyContinue
+Copy-Item (Join-Path $root "docs\FEATURES.md") "$OutDir\docs\FEATURES.md" -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $root "docs\I18N.md") "$OutDir\docs\I18N.md" -ErrorAction SilentlyContinue
 if (Test-Path (Join-Path $root "docs\fr")) {
     New-Item -ItemType Directory -Force -Path "$OutDir\docs\fr" | Out-Null
@@ -152,12 +165,13 @@ Copy-Item (Join-Path $root "LICENSE-COMMERCIAL.md") "$OutDir\" -ErrorAction Sile
 Copy-Item (Join-Path $PSScriptRoot "install-windows.ps1") "$OutDir\install.ps1" -Force
 
 @"
-Agent OS Preview $Version (Windows x64 + NVIDIA)
+Akasha OS Preview $Version (Windows x64 + NVIDIA)
 
 1. Prérequis : driver NVIDIA récent, nvidia-smi OK, ~4 Go disque
 2. Installation : .\install.ps1
 3. Premier lancement : télécharge les modèles si besoin, puis ouvre le tutoriel
-4. Voir FIRST-RUN.md, INSTALL.md, TESTER.md (et docs/fr/ pour le français)
+4. Agents agentic : skills (share/skills), MCP (var/mcp/servers.yaml), sous-agents
+5. Voir FIRST-RUN.md, INSTALL.md, TESTER.md, docs/FEATURES.md (et docs/fr/ pour le français)
 "@ | Set-Content "$OutDir\README.txt" -Encoding utf8
 
 Write-Host "== package prêt : $OutDir =="

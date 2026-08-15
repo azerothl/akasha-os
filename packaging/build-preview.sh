@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build-preview.sh — assemble Agent OS Preview (Linux x64 + CUDA)
+# build-preview.sh — assemble Akasha OS Preview (Linux x64 + CUDA)
 # GGUF optionnels (SKIP_MODELS=1) — téléchargés au premier run.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -204,6 +204,16 @@ if [ -d "${ROOT}/skills" ]; then
   cp -a "${ROOT}/skills/." "${OUT}/share/skills/"
 fi
 
+mkdir -p "${OUT}/share/mcp"
+if [ -f "${ROOT}/var/mcp/servers.yaml.example" ]; then
+  cp -f "${ROOT}/var/mcp/servers.yaml.example" "${OUT}/share/mcp/servers.yaml.example"
+else
+  cat > "${OUT}/share/mcp/servers.yaml.example" <<'EOF'
+# MCP servers (stdio). Copy to var/mcp/servers.yaml and adapt.
+servers: {}
+EOF
+fi
+
 if [ "$SKIP_MODELS" != "1" ]; then
   for m in qwen2.5-3b-instruct-q4_k_m.gguf qwen2.5-0.5b-instruct-q4_k_m.gguf; do
     if [ -f "${ROOT}/tools/models/${m}" ]; then
@@ -220,6 +230,7 @@ cp -f "${ROOT}/docs/FIRST-RUN.md" "${OUT}/FIRST-RUN.md" 2>/dev/null || true
 mkdir -p "${OUT}/docs"
 cp -f "${ROOT}/docs/FIRST-RUN.md" "${OUT}/docs/FIRST-RUN.md" 2>/dev/null || true
 cp -f "${ROOT}/docs/STATUS.md" "${OUT}/docs/STATUS.md" 2>/dev/null || true
+cp -f "${ROOT}/docs/FEATURES.md" "${OUT}/docs/FEATURES.md" 2>/dev/null || true
 cp -f "${ROOT}/docs/I18N.md" "${OUT}/docs/I18N.md" 2>/dev/null || true
 if [ -d "${ROOT}/docs/fr" ]; then
   mkdir -p "${OUT}/docs/fr"
@@ -232,12 +243,13 @@ cp -f "$(dirname "$0")/install-linux.sh" "${OUT}/install.sh"
 chmod +x "${OUT}/bin/"* "${OUT}/install.sh"
 
 cat > "${OUT}/README.txt" <<EOF
-Agent OS Preview ${VERSION} (Linux x64 + NVIDIA)
+Akasha OS Preview ${VERSION} (Linux x64 + NVIDIA)
 
 1. Prérequis : driver NVIDIA, nvidia-smi OK, ~4 Go disque
 2. ./install.sh
 3. Premier lancement : télécharge les modèles si besoin, puis le tutoriel
-4. Voir FIRST-RUN.md, INSTALL.md, TESTER.md (et docs/fr/ pour le français)
+4. Agents agentic : skills (share/skills), MCP (var/mcp/servers.yaml), sous-agents
+5. Voir FIRST-RUN.md, INSTALL.md, TESTER.md, docs/FEATURES.md (et docs/fr/ pour le français)
 EOF
 
 echo "== package prêt : ${OUT} =="

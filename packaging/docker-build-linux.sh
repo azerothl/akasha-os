@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build Agent OS Preview Linux x64 inside a CUDA devel container (compile-only).
+# Build Akasha OS Preview Linux x64 inside a CUDA devel container (compile-only).
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq

@@ -1,4 +1,4 @@
-# Installation — Agent OS Preview
+# Installation — Akasha OS Preview
 
 **Language:** English | [Français](docs/fr/INSTALL.md)
 
@@ -26,7 +26,7 @@ No macOS, no CPU-only mode in 0.1.
    ```
    Installs under `%LOCALAPPDATA%\AgentOS-Preview` (preserves `var/` / `etc/`
    on update).
-3. Launch **Agent OS Preview**.
+3. Launch **Akasha OS Preview**.
 
 Without the installer:
 ```powershell
@@ -49,11 +49,12 @@ $env:AOS_HOME = (Resolve-Path .)
 bin/            daemons + CUDA runtime
 share/models/   manifest.json (GGUF downloaded on first run)
 share/modules/  notes.aospkg, ext-rt.aospkg
-share/skills/   Preview skills
+share/skills/   Preview skills (notes-writer, research, file-author, planner)
+share/mcp/      servers.yaml.example (stdio MCP)
 data/models/    catalog.yaml
 VERSION         build semver
 FIRST-RUN.md    text tutorial
-var/            local data (created at run)
+var/            local data (created at run; agents, mcp, skills overrides)
 ```
 
 ## First launch
@@ -65,8 +66,9 @@ var/            local data (created at run)
 4. Opens egui UI + multi-page **tutorial**.
 5. Closing the UI stops the daemons.
 
-See [docs/FIRST-RUN.md](docs/FIRST-RUN.md). Use the **Models** tab to download
-additional profiles or switch session/agent models.
+See [docs/FIRST-RUN.md](docs/FIRST-RUN.md) and [docs/FEATURES.md](docs/FEATURES.md).
+Use the **Models** tab to download additional profiles or switch session/agent
+models.
 
 ## Updates
 
@@ -78,7 +80,8 @@ applies `bin/` + `share/` without touching `var/` or overwriting
 ## Network & search (optional)
 
 Network is **off** by default (`offline_strict`). Enable **Allow network**
-for `web.search` / `net.fetch`.
+for `web.search` / `web.browse` / `net.fetch`. Search engine (`auto` =
+Brave → DuckDuckGo → Bing) is set in **Settings**.
 
 ```yaml
 # var/secrets/keys.yaml (optional)
