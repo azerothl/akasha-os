@@ -30,9 +30,11 @@ if (-not $SkipBuild) {
 
     Write-Host "== package notes module =="
     pwsh -NoProfile -File (Join-Path $root "modules\build-notes.ps1")
+    if ($LASTEXITCODE -ne 0) { throw "build-notes.ps1 failed ($LASTEXITCODE)" }
     if (Test-Path (Join-Path $root "modules\build-ext-rt.ps1")) {
         Write-Host "== package ext-rt module =="
         pwsh -NoProfile -File (Join-Path $root "modules\build-ext-rt.ps1")
+        if ($LASTEXITCODE -ne 0) { throw "build-ext-rt.ps1 failed ($LASTEXITCODE)" }
     }
 }
 

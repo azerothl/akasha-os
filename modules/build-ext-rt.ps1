@@ -6,15 +6,32 @@ Write-Host "== build ext-rt wasm32 =="
 cargo build --manifest-path "$root\modules\ext-rt\Cargo.toml" --target wasm32-unknown-unknown --release
 if ($LASTEXITCODE -ne 0) { throw "échec build wasm ext-rt" }
 
+function Resolve-WasmArtifact {
+    param([string]$FileName)
+    $candidates = @()
+    if ($env:CARGO_TARGET_DIR) {
+        $candidates += (Join-Path $env:CARGO_TARGET_DIR "wasm32-unknown-unknown\release\$FileName")
+    }
+    $candidates += (Join-Path $root "target\wasm32-unknown-unknown\release\$FileName")
+    $candidates += (Join-Path $root "modules\ext-rt\target\wasm32-unknown-unknown\release\$FileName")
+    foreach ($c in $candidates) {
+        if (Test-Path $c) { return $c }
+    }
+    Write-Host "WASM introuvable ($FileName). Candidats :"
+    $candidates | ForEach-Object { Write-Host "  - $_" }
+    throw "WASM manquant: $FileName"
+}
+
 $pkg = "$root\modules\ext-rt.aospkg"
 $share = "$root\share\modules\ext-rt.aospkg"
 New-Item -ItemType Directory -Path "$pkg\schemas" -Force | Out-Null
 New-Item -ItemType Directory -Path "$pkg\ui" -Force | Out-Null
 New-Item -ItemType Directory -Path "$pkg\assets" -Force | Out-Null
 
-$wasmSrc = "$root\modules\ext-rt\target\wasm32-unknown-unknown\release\module_ext_rt.wasm"
+$wasmSrc = Resolve-WasmArtifact "module_ext_rt.wasm"
 $wasmDst = "$pkg\module.wasm"
 Copy-Item $wasmSrc $wasmDst -Force
+Write-Host "  wasm: $wasmSrc -> $wasmDst"
 
 $hash = (Get-FileHash -Algorithm SHA256 $wasmDst).Hash.ToLower()
 

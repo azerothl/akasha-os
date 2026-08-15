@@ -22,11 +22,21 @@ if [ "$SKIP_BUILD" != "1" ]; then
     cargo build --manifest-path "${ROOT}/modules/notes/Cargo.toml" \
       --target wasm32-unknown-unknown --release
     mkdir -p "${ROOT}/modules/notes.aospkg/ui" "${ROOT}/modules/notes.aospkg/schemas"
-    WASM_SRC="${CARGO_TARGET_DIR}/wasm32-unknown-unknown/release/module_notes.wasm"
-    if [ ! -f "${WASM_SRC}" ]; then
-      WASM_SRC="${ROOT}/modules/notes/target/wasm32-unknown-unknown/release/module_notes.wasm"
+    WASM_SRC=""
+    for cand in \
+      "${CARGO_TARGET_DIR}/wasm32-unknown-unknown/release/module_notes.wasm" \
+      "${ROOT}/target/wasm32-unknown-unknown/release/module_notes.wasm" \
+      "${ROOT}/modules/notes/target/wasm32-unknown-unknown/release/module_notes.wasm"
+    do
+      if [ -f "${cand}" ]; then WASM_SRC="${cand}"; break; fi
+    done
+    if [ -z "${WASM_SRC}" ]; then
+      echo "ERROR: module_notes.wasm introuvable" >&2
+      find "${ROOT}" -name 'module_notes.wasm' 2>/dev/null | head -n 20 >&2 || true
+      exit 1
     fi
     cp -f "${WASM_SRC}" "${ROOT}/modules/notes.aospkg/module.wasm"
+    echo "  wasm: ${WASM_SRC}"
     cat > "${ROOT}/modules/notes.aospkg/manifest.yaml" <<'EOF'
 name: notes
 version: 0.1.0
@@ -47,10 +57,18 @@ EOF
     echo "== ext-rt wasm =="
     cargo build --manifest-path "${ROOT}/modules/ext-rt/Cargo.toml" \
       --target wasm32-unknown-unknown --release || true
-    WASM_EXT="${CARGO_TARGET_DIR}/wasm32-unknown-unknown/release/module_ext_rt.wasm"
-    if [ -f "${WASM_EXT}" ]; then
+    WASM_EXT=""
+    for cand in \
+      "${CARGO_TARGET_DIR}/wasm32-unknown-unknown/release/module_ext_rt.wasm" \
+      "${ROOT}/target/wasm32-unknown-unknown/release/module_ext_rt.wasm" \
+      "${ROOT}/modules/ext-rt/target/wasm32-unknown-unknown/release/module_ext_rt.wasm"
+    do
+      if [ -f "${cand}" ]; then WASM_EXT="${cand}"; break; fi
+    done
+    if [ -n "${WASM_EXT}" ]; then
       mkdir -p "${ROOT}/share/modules/ext-rt.aospkg/ui" "${ROOT}/share/modules/ext-rt.aospkg/assets"
       cp -f "${WASM_EXT}" "${ROOT}/share/modules/ext-rt.aospkg/module.wasm"
+      echo "  wasm: ${WASM_EXT}"
     fi
   fi
 fi
@@ -66,25 +84,69 @@ done
 
 # CUDA runtime .so next to binaries
 CUDA_HOME="${CUDA_HOME:-${CUDA_PATH:-/usr/local/cuda}}"
-CUDA_LIB=""
-for cand in "${CUDA_HOME}/lib64" "${CUDA_HOME}/lib" /usr/local/cuda/lib64; do
-  if [ -d "${cand}" ]; then CUDA_LIB="${cand}"; break; fi
-done
+CUDA_LIB_CANDIDATES=(
+  "${CUDA_HOME}/lib64"
+  "${CUDA_HOME}/lib"
+  "${CUDA_HOME}/targets/x86_64-linux/lib"
+  /usr/local/cuda/lib64
+  /usr/local/cuda/lib
+  /usr/local/cuda/targets/x86_64-linux/lib
+  /usr/lib/x86_64-linux-gnu
+)
 cuda_copied=0
-if [ -n "${CUDA_LIB}" ]; then
-  echo "== CUDA runtime depuis ${CUDA_LIB} =="
-  shopt -s nullglob
+copied_names=""
+echo "== CUDA runtime (CUDA_HOME=${CUDA_HOME}) =="
+shopt -s nullglob
+for CUDA_LIB in "${CUDA_LIB_CANDIDATES[@]}"; do
+  [ -d "${CUDA_LIB}" ] || continue
   for pat in libcudart.so* libcublas.so* libcublasLt.so* libnvJitLink.so* libnvrtc.so* libnvrtc-builtins.so*; do
     for f in "${CUDA_LIB}"/${pat}; do
-      cp -a "${f}" "${OUT}/bin/" 2>/dev/null || true
-      echo "  + $(basename "${f}")"
-      cuda_copied=$((cuda_copied + 1))
+      base="$(basename "${f}")"
+      # Évite les stubs vides et les doublons
+      case "${CUDA_LIB}" in
+        */stubs) continue ;;
+      esac
+      case " ${copied_names} " in
+        *" ${base} "*) continue ;;
+      esac
+      # -L : déréférence les symlinks (layout CUDA typique lib64 → targets/…)
+      if cp -L -a "${f}" "${OUT}/bin/" 2>/dev/null || cp -a "${f}" "${OUT}/bin/" 2>/dev/null; then
+        echo "  + ${base}  (depuis ${CUDA_LIB})"
+        copied_names="${copied_names} ${base}"
+        cuda_copied=$((cuda_copied + 1))
+      fi
     done
   done
-  shopt -u nullglob
+done
+# Dernier recours : find sous CUDA_HOME
+if [ "${cuda_copied}" -eq 0 ] && [ -d "${CUDA_HOME}" ]; then
+  echo "  fallback find sous ${CUDA_HOME}…"
+  while IFS= read -r f; do
+    base="$(basename "${f}")"
+    case "${f}" in
+      */stubs/*) continue ;;
+    esac
+    case " ${copied_names} " in
+      *" ${base} "*) continue ;;
+    esac
+    if cp -L -a "${f}" "${OUT}/bin/" 2>/dev/null || cp -a "${f}" "${OUT}/bin/" 2>/dev/null; then
+      echo "  + ${base}  (find)"
+      copied_names="${copied_names} ${base}"
+      cuda_copied=$((cuda_copied + 1))
+    fi
+  done < <(find "${CUDA_HOME}" \( -type f -o -type l \) \( \
+      -name 'libcudart.so*' -o -name 'libcublas.so*' -o -name 'libcublasLt.so*' \
+      -o -name 'libnvJitLink.so*' -o -name 'libnvrtc.so*' -o -name 'libnvrtc-builtins.so*' \
+    \) ! -path '*/stubs/*' 2>/dev/null | head -n 80)
 fi
+shopt -u nullglob
 if [ "${cuda_copied}" -eq 0 ]; then
   msg="CUDA runtime .so introuvables"
+  echo "DEBUG: listing CUDA_HOME=${CUDA_HOME}" >&2
+  ls -la "${CUDA_HOME}" 2>/dev/null >&2 || true
+  ls -la "${CUDA_HOME}/lib64" 2>/dev/null >&2 || true
+  ls -la "${CUDA_HOME}/targets/x86_64-linux/lib" 2>/dev/null | head -n 40 >&2 || true
+  find "${CUDA_HOME}" \( -type f -o -type l \) -name 'libcudart.so*' 2>/dev/null | head -n 20 >&2 || true
   if [ "${REQUIRE_CUDA}" = "1" ]; then echo "ERROR: ${msg}" >&2; exit 1; else echo "WARN: ${msg}" >&2; fi
 fi
 
