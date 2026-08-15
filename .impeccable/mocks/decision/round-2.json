@@ -1,0 +1,183 @@
+{
+  "title": "Choose the visual world",
+  "question": "Re-roll. The new assignment is Host Console. Keep it, take an alternate, or re-roll again.",
+  "options": [
+    {
+      "id": "assigned",
+      "label": "Host Console",
+      "kicker": "THE ROLL",
+      "lineage": "Kernel serial / UART host log: amber phosphor, typed grants, no chrome",
+      "thesis": "The page is the host log the Preview already is: the first line admits it is not a bootable OS, then grants type in, then the install command sits on the prompt.",
+      "palette": ["#16110c", "#e8a04a", "#6b5344", "#f0d8a8"],
+      "materials": ["amber phosphor", "bezel metal", "typed UART line"],
+      "viewport": "Full-bleed console: honesty line already printed, a grant net typing in as the only bright trace, `install` as the live prompt at the bottom.",
+      "risk": "Reads as generic hacker-terminal if the glow is decoration and the lines are not real product facts.",
+      "raised": [
+        { "from": "challenger-treasure-map", "raise": "THE LIVE LINE IS THE ONLY BRIGHT TRACE — dim history above, one amber grant line at full intensity." },
+        { "from": "challenger-menagerie", "raise": "ONE SCROLL ADVANCES THE LOG — the visitor cranks the UART; they do not hunt marketing sections." },
+        { "from": "challenger-chromatophore", "raise": "GRANTS ARE WRITTEN ON THE SURFACE — capabilities are log lines, not a sidebar of tiles." }
+      ],
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "status bezel", "x": 0, "y": 0, "w": 12, "h": 1 },
+          { "label": "dim history", "x": 0, "y": 1, "w": 12, "h": 3 },
+          { "label": "live grant line", "x": 0, "y": 4, "w": 12, "h": 3, "accent": true },
+          { "label": "install prompt", "x": 0, "y": 7, "w": 12, "h": 3, "accent": true }
+        ]
+      },
+      "comp": ".impeccable/mocks/decision/r2-assigned.webp"
+    },
+    {
+      "id": "model-pick",
+      "label": "Interlocking Frame",
+      "kicker": "IMPECCABLE’S PICK",
+      "lineage": "Railway signal-box interlocking: levers, locked routes, red/clear lamps",
+      "thesis": "An agent may only take a route the frame has unlocked; conflicting capabilities cannot be pulled at once.",
+      "palette": ["#1a1612", "#d8d0c4", "#c43c2c", "#2f7a3e"],
+      "materials": ["varnished lever", "enamel plate", "signal lamp"],
+      "viewport": "A row of named levers (session, gpu, net, audit); net is locked; Download is pulling the Preview route.",
+      "risk": "Also a familiar ‘serious infrastructure’ landing — the direction many systems products drift toward.",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "frame header", "x": 0, "y": 0, "w": 12, "h": 2 },
+          { "label": "lever bank", "x": 0, "y": 2, "w": 12, "h": 5, "accent": true },
+          { "label": "pull Preview route", "x": 0, "y": 7, "w": 12, "h": 3, "accent": true }
+        ]
+      },
+      "comp": ".impeccable/mocks/decision/r2-pick.webp"
+    },
+    {
+      "id": "challenger-passport",
+      "label": "Traveled Passport",
+      "verdict": "competitive",
+      "lineage": "Well-traveled passport: visa plates, entry stamps, security paper",
+      "thesis": "Each Preview power is an entry stamp; the data page states the limit: host app, not a bootable OS.",
+      "palette": ["#5c1a2a", "#c9a227", "#e8d4c8", "#3a5c4a"],
+      "materials": ["burgundy cover", "guilloché page", "stamp ink"],
+      "viewport": "Open booklet: OCR identity line, a restriction stamp, then stamps for gpu / audit / net:deny.",
+      "case": "Holds product clarity (grant as official mark); loses audience identification (borders are a metaphor, the tester is at a GPU desk).",
+      "risk": "Becomes travel-brand chrome if stamps decorate instead of recording real limits.",
+      "hero": "https://impeccable.style/worlds/cards/vernacular-ephemera-well-traveled-passport-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/vernacular-ephemera-well-traveled-passport.webp",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "data page", "x": 0, "y": 0, "w": 6, "h": 10 },
+          { "label": "stamp spread", "x": 6, "y": 0, "w": 6, "h": 7, "accent": true },
+          { "label": "issue visa / Download", "x": 6, "y": 7, "w": 6, "h": 3, "accent": true }
+        ]
+      },
+      "comp": ".impeccable/mocks/decision/r2-passport.webp"
+    },
+    {
+      "id": "challenger-hypercard",
+      "label": "Shoebox Stack",
+      "verdict": "competitive",
+      "lineage": "HyperCard: one-bit cards, painted buttons, browse and author as one",
+      "thesis": "A stack of addressable cards — thesis, grant, install — linked by visible buttons, no color anywhere.",
+      "palette": ["#f4f4f0", "#111111", "#111111"],
+      "materials": ["1-bit stipple", "painted button", "card rectangle"],
+      "viewport": "Card 1 is the honesty line and a fat button to the grant card; Download is a painted button on the last card.",
+      "case": "Holds product clarity (one card, one job); loses audience identification (classic Mac, not Windows/Linux NVIDIA testers).",
+      "risk": "Nostalgia toy if the cards are cute instead of carrying the protocol.",
+      "hero": "https://impeccable.style/worlds/cards/medium-native-hypercard-stack-shoebox-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/medium-native-hypercard-stack-shoebox.webp",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "card chrome", "x": 1, "y": 1, "w": 10, "h": 8, "accent": true },
+          { "label": "painted button", "x": 3, "y": 7, "w": 6, "h": 1 }
+        ]
+      },
+      "comp": ".impeccable/mocks/decision/r2-hypercard.webp"
+    },
+    {
+      "id": "challenger-scope",
+      "label": "Signal Bench",
+      "verdict": "competitive",
+      "lineage": "CRT oscilloscope: phosphor trace, etched graticule, detented knobs",
+      "thesis": "Semantic IPC is a locked trace on a ten-division graticule; ungranted nets roll as noise.",
+      "palette": ["#0c100e", "#3dff6a", "#6a7a70", "#e8a04a"],
+      "materials": ["phosphor glass", "etched graticule", "knob skirt"],
+      "viewport": "One screen: a triggered grant waveform standing still; amber readout says net:deny; Download is arming the trigger.",
+      "case": "Holds audience identification (bench people with NVIDIA); loses product clarity (a waveform must be translated before the tester knows what to install).",
+      "risk": "A pretty trace that never states the thesis in words.",
+      "hero": "https://impeccable.style/worlds/cards/scientific-notation-oscilloscope-signal-bench-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/scientific-notation-oscilloscope-signal-bench.webp",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "graticule / trace", "x": 0, "y": 0, "w": 9, "h": 8, "accent": true },
+          { "label": "knobs", "x": 9, "y": 0, "w": 3, "h": 8 },
+          { "label": "arm / Download", "x": 0, "y": 8, "w": 12, "h": 2, "accent": true }
+        ]
+      },
+      "comp": ".impeccable/mocks/decision/r2-scope.webp"
+    },
+    {
+      "id": "challenger-treasure-map",
+      "label": "Salt Map",
+      "verdict": "declined",
+      "lineage": "Salt-stiffened treasure map, false trails, oblique light",
+      "thesis": "The tester infers a hidden route to the real OS.",
+      "palette": ["#c4a882", "#4a3424", "#8b2e2e"],
+      "materials": ["vellum", "iron-gall ink", "tide stain"],
+      "viewport": "A torn chart; a faded red route under oblique light.",
+      "case": "Loses both: pirate inference fights the honesty brief, and the audience is not navigating a harbor.",
+      "kept": "One bright route under dim history — donated as THE LIVE LINE IS THE ONLY BRIGHT TRACE.",
+      "risk": "Mystery where the product needs a plain admission.",
+      "hero": "https://impeccable.style/worlds/cards/wayfinding-cartography-signage-salt-stiffened-treasure-map-hero.webp",
+      "comp": ".impeccable/mocks/decision/r2-map.webp"
+    },
+    {
+      "id": "challenger-menagerie",
+      "label": "Paper Menagerie",
+      "verdict": "declined",
+      "lineage": "Hand-cranked paper automata",
+      "thesis": "A crank advances thesis, grant, and install as linked figures.",
+      "palette": ["#e8dcc8", "#2a241c", "#b42318"],
+      "materials": ["cut paper", "kraft board", "cast shadow"],
+      "viewport": "A procession on a crank line; the live figure is crimson.",
+      "case": "Loses both: toy identification, and paper animals cannot carry Preview limits.",
+      "kept": "One crank advances the whole — donated as ONE SCROLL ADVANCES THE LOG.",
+      "risk": "A charming machine that forgets the OS.",
+      "hero": "https://impeccable.style/worlds/cards/kinetic-sculpture-automata-crank-paper-menagerie-hero.webp",
+      "comp": ".impeccable/mocks/decision/r2-menagerie.webp"
+    },
+    {
+      "id": "challenger-chromatophore",
+      "label": "Living Skin",
+      "verdict": "declined",
+      "lineage": "Cephalopod chromatophore display",
+      "thesis": "The surface itself signals grant and deny by changing pattern.",
+      "palette": ["#e8d8c4", "#6b2a1a", "#2a8a7a"],
+      "materials": ["mantle", "chromatophore", "iridophore flash"],
+      "viewport": "A pale field that becomes waves when the grant is live.",
+      "case": "Loses both: biology-art identification, and camouflage contradicts honesty.",
+      "kept": "Signals written on the body — donated as GRANTS ARE WRITTEN ON THE SURFACE.",
+      "risk": "Atmosphere that hides the install.",
+      "hero": "https://impeccable.style/worlds/cards/reefs-bioluminescent-nocturnal-chromatophore-skin-language-hero.webp",
+      "comp": ".impeccable/mocks/decision/r2-skin.webp"
+    }
+  ],
+  "reroll": { "registers": ["safer", "bolder"] },
+  "buildPath": { "value": "code", "toggle": true },
+  "canon": true,
+  "canonCard": {
+    "label": "The category standard",
+    "thesis": "Dark AI-OS landing: kicker, centered hero, four feature cards, dual CTA, executed at full craft.",
+    "palette": ["#0b0d10", "#e8e4dc", "#5b8def"],
+    "materials": ["clean grid", "soft glow", "card chrome"],
+    "viewport": "The arrangement a visitor expects from an agent-product site.",
+    "risk": "Indistinguishable from the competition by design — the wrapper look testers were told to refuse.",
+    "comp": ".impeccable/mocks/decision/canon.webp"
+  },
+  "steer": true
+}

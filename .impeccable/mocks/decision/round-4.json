@@ -1,0 +1,190 @@
+{
+  "title": "Choose the visual world",
+  "question": "Re-roll recovered. Your steer: colors were too dull. Host Console and the last hand stay eliminated. The oscilloscope challenger was dropped: phosphor on black is the world you already discarded.",
+  "options": [
+    {
+      "id": "assigned",
+      "label": "Device Datasheet",
+      "kicker": "THE ROLL",
+      "lineage": "GPU / CUDA programming-guide covers and device tables",
+      "thesis": "The landing is a device sheet: Preview as the part number, grants as rated specs, install as the first assembly note.",
+      "palette": ["#087a45", "#f4f1e6", "#e6b422", "#e23b16", "#102418"],
+      "materials": ["soldermask green field", "gold spec rules", "white silkscreen type"],
+      "viewport": "A green field owning the first screen; AKASHA OS as the part name; a gold-ruled spec table (host, NVIDIA, not bootable); Install as the only red note.",
+      "risk": "Can look like a driver PDF if the green field is timid and the type stays gray.",
+      "raised": [
+        {
+          "from": "challenger-comic",
+          "raise": "Action red: Install is the only process-red ink. Everything else is green, gold, or paper."
+        },
+        {
+          "from": "challenger-crane",
+          "raise": "Active step: install is a numbered sequence with one gold-lit step, not a lone button."
+        },
+        {
+          "from": "challenger-quarry",
+          "raise": "Cut blocks: sections sit as stacked plates with vivid gaps, not a gray wall of prose."
+        },
+        {
+          "from": "challenger-kiosk",
+          "raise": "Restricted inks: three loud inks only. No gray standing in for quieter text."
+        }
+      ],
+      "comp": ".impeccable/mocks/decision/r4-assigned.webp",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "part · AKASHA OS · 0.1.2", "x": 0, "y": 0, "w": 12, "h": 2, "accent": true },
+          { "label": "green field · thesis", "x": 0, "y": 2, "w": 8, "h": 4, "accent": true },
+          { "label": "spec table · HOST NVIDIA", "x": 8, "y": 2, "w": 4, "h": 4 },
+          { "label": "rated grants", "x": 0, "y": 6, "w": 8, "h": 3 },
+          { "label": "1 gold · Install", "x": 8, "y": 6, "w": 4, "h": 3, "accent": true },
+          { "label": "EN/FR · batch stamp", "x": 0, "y": 9, "w": 12, "h": 1 }
+        ]
+      }
+    },
+    {
+      "id": "model-pick",
+      "label": "Pit Board",
+      "kicker": "IMPECCABLE’S PICK",
+      "lineage": "racing pit boards held over the wall",
+      "thesis": "The first viewport is a fluorescent board: HOST, NVIDIA, NOT BOOTABLE, then INSTALL as the next instruction.",
+      "palette": ["#111111", "#f5e31a", "#f4f4f0", "#e10600"],
+      "materials": ["fluorescent yellow plate", "black vinyl letters", "held-up board"],
+      "viewport": "A black wall, one yellow board filling the frame, four stacked lines, INSTALL in red at the foot.",
+      "risk": "The most familiar high-chroma move, and the one most runs reach when asked for louder color.",
+      "comp": ".impeccable/mocks/decision/r4-pick.webp",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "black wall", "x": 0, "y": 0, "w": 12, "h": 1 },
+          { "label": "AKASHA OS", "x": 1, "y": 1, "w": 10, "h": 2, "accent": true },
+          { "label": "HOST", "x": 1, "y": 3, "w": 10, "h": 1 },
+          { "label": "NVIDIA", "x": 1, "y": 4, "w": 10, "h": 1 },
+          { "label": "NOT BOOTABLE", "x": 1, "y": 5, "w": 10, "h": 2 },
+          { "label": "INSTALL", "x": 1, "y": 7, "w": 10, "h": 2, "accent": true },
+          { "label": "EN/FR", "x": 1, "y": 9, "w": 10, "h": 1 }
+        ]
+      }
+    },
+    {
+      "id": "challenger-comic",
+      "label": "Four-Color Host",
+      "verdict": "competitive",
+      "lineage": "silver-age comic page, ben-day, CMYK pulp",
+      "thesis": "The thesis is a splash caption; grants are panels; Install is the action lettering reserved in process red.",
+      "palette": ["#f3e6b8", "#1c1c1c", "#d61f26", "#2a5fbf", "#f2c01e"],
+      "materials": ["yellowed pulp", "ben-day dots", "misregistered plates"],
+      "viewport": "A pulp splash: AKASHA OS in action type, a caption box with the honesty line, then a six-panel grant grid that is a comic page, not product cards.",
+      "case": "Holds audience identification: everyone can read a comic page. Loses on product clarity: pulp fight energy can swallow the host-app limit.",
+      "risk": "Reads as a joke OS if the splash is louder than the NVIDIA line.",
+      "comp": ".impeccable/mocks/decision/r4-comic.webp",
+      "hero": "https://impeccable.style/worlds/cards/pop-culture-shelf-benday-comic-page-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/pop-culture-shelf-benday-comic-page.webp",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "splash · AKASHA OS", "x": 0, "y": 0, "w": 12, "h": 4, "accent": true },
+          { "label": "caption · not bootable", "x": 0, "y": 4, "w": 12, "h": 1 },
+          { "label": "panel grant", "x": 0, "y": 5, "w": 4, "h": 3 },
+          { "label": "panel grant", "x": 4, "y": 5, "w": 4, "h": 3 },
+          { "label": "panel grant", "x": 8, "y": 5, "w": 4, "h": 3 },
+          { "label": "INSTALL burst", "x": 0, "y": 8, "w": 12, "h": 2, "accent": true }
+        ]
+      }
+    },
+    {
+      "id": "challenger-crane",
+      "label": "Fold Sequence",
+      "verdict": "competitive",
+      "lineage": "orizuru crane, thirty-two folds on one vermilion sheet",
+      "thesis": "Install is a crease sequence: one uncut sheet from flat honesty to a finished host, each step numbered in the margin.",
+      "palette": ["#c41e3a", "#f7f0e4", "#1a1a1a", "#d4a017"],
+      "materials": ["vermilion washi", "crease white", "gold active step"],
+      "viewport": "A red square owning the field; step 1 gold-lit: not a bootable OS; later steps are Windows/Linux, NVIDIA, then run the script.",
+      "case": "Holds product clarity: a numbered fold is a procedure testers can follow. Loses on audience identification: this cohort does not live in origami.",
+      "risk": "The crane can become decoration if the sheet stops being the whole page.",
+      "comp": ".impeccable/mocks/decision/r4-crane.webp",
+      "hero": "https://impeccable.style/worlds/cards/paper-folds-pleats-deployable-orizuru-crane-sequence-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/paper-folds-pleats-deployable-orizuru-crane-sequence.webp",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "1–n step column", "x": 0, "y": 0, "w": 3, "h": 10, "accent": true },
+          { "label": "vermilion sheet", "x": 3, "y": 0, "w": 9, "h": 8, "accent": true },
+          { "label": "active fold · install", "x": 3, "y": 8, "w": 9, "h": 2 }
+        ]
+      }
+    },
+    {
+      "id": "challenger-minihompy",
+      "label": "Host Room",
+      "verdict": "declined",
+      "lineage": "Cyworld minihompy isometric room",
+      "thesis": "The host is a furnishable room; grants are objects you place; visitors see the same room.",
+      "palette": ["#f7c6d0", "#b8e0d2", "#f6e27a", "#2b2b2b"],
+      "materials": ["pastel tiles", "sticker furniture", "visitor counter"],
+      "viewport": "An isometric room with a tiny GPU, a locked network door, and a guest ledger for feedback.",
+      "case": "Loses both axes: testers do not identify with a decorated room, and furniture invents a scene the product does not ship.",
+      "kept": "The surface itself is the identity, not a chrome wrapper around a hero.",
+      "risk": "Cute, and it fabricates a room Preview does not have.",
+      "hero": "https://impeccable.style/worlds/cards/cyworld-minihompy-room-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/cyworld-minihompy-room.webp",
+      "comp": ".impeccable/mocks/decision/r4-minihompy.webp"
+    },
+    {
+      "id": "challenger-quarry",
+      "label": "Cloud Quarry",
+      "verdict": "declined",
+      "lineage": "surreal cloud-block quarry",
+      "thesis": "Services are cut weather-blocks stacked with blue voids between them.",
+      "palette": ["#f4f7fb", "#3d7ad6", "#6b7280", "#c0c8d4"],
+      "materials": ["cumulus mass", "sky-blue voids", "silver cut line"],
+      "viewport": "Stacked white blocks named capkd, modeld, agentd, with blue gaps and a cut edge labeled Preview.",
+      "case": "Loses both axes: a quarry of weather is not this cohort, and voids hide the NVIDIA requirement.",
+      "kept": "Sections as cut plates with vivid gaps, not a continuous gray column.",
+      "risk": "Dream poster, wrong product.",
+      "hero": "https://impeccable.style/worlds/cards/dream-surreal-impossible-worlds-cloud-quarry-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/dream-surreal-impossible-worlds-cloud-quarry.webp",
+      "comp": ".impeccable/mocks/decision/r4-quarry.webp"
+    },
+    {
+      "id": "challenger-kiosk",
+      "label": "Kiosk Print",
+      "verdict": "declined",
+      "lineage": "state kiosk ephemera, three inks, no photos",
+      "thesis": "Grant, install, and docs as everyday printed goods in one restricted ink set.",
+      "palette": ["#d9d2c5", "#c43b2a", "#1f4d8f", "#e3b505"],
+      "materials": ["recycled board", "off-register inks", "office mark"],
+      "viewport": "A kiosk grid of tickets: install, first-run, feedback, each in the same three inks.",
+      "case": "Loses both axes: a goods grid becomes feature cards, and testers do not shop a kiosk for an OS.",
+      "kept": "Three loud inks only. No gray for secondary type.",
+      "risk": "The card grid you already refused, in nicer inks.",
+      "hero": "https://impeccable.style/worlds/cards/vernacular-ephemera-socialist-kiosk-print-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/vernacular-ephemera-socialist-kiosk-print.webp",
+      "comp": ".impeccable/mocks/decision/r4-kiosk.webp"
+    }
+  ],
+  "reroll": {
+    "registers": ["safer", "bolder"]
+  },
+  "buildPath": {
+    "value": "code",
+    "toggle": true
+  },
+  "canon": true,
+  "canonCard": {
+    "label": "The category standard",
+    "thesis": "Dark AI-OS hero, three feature cards, a Download button, executed at full craft.",
+    "palette": ["#0b0f14", "#f8fafc", "#3b82f6"],
+    "materials": ["soft cards", "glow accent", "product chrome"],
+    "viewport": "A night hero, a feature row, a primary download.",
+    "risk": "Indistinguishable from neighboring agent desktops by design.",
+    "comp": ".impeccable/mocks/decision/canon.webp"
+  },
+  "steer": true
+}

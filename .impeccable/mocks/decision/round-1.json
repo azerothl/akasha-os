@@ -1,0 +1,176 @@
+{
+  "title": "Choose the visual world",
+  "question": "The roll assigned Silkscreen Datasheet. Keep it, take an alternate, or re-roll.",
+  "options": [
+    {
+      "id": "assigned",
+      "label": "Silkscreen Datasheet",
+      "kicker": "THE ROLL",
+      "lineage": "GPU reference design: black soldermask, white legend, copper nets, gold fingers",
+      "thesis": "The landing page is the board the tester already owns: every fact is a silkscreen note, Download is seating the edge connector.",
+      "palette": ["#121714", "#f2f0e6", "#c47a3a", "#e6b422"],
+      "materials": ["soldermask", "silkscreen legend", "copper trace", "gold finger"],
+      "viewport": "One continuous board field: huge silkscreen wordmark, a printed grant line, gold-finger Download along the bottom edge.",
+      "risk": "Reads as generic hardware-startup chrome if traces decorate instead of carrying nets to facts.",
+      "raised": [
+        { "from": "challenger-neo-tokyo", "raise": "ONE LIVE NET — a single copper net and amber LED are the only live accent; everything else stays silkscreen-quiet." },
+        { "from": "challenger-indoor-sun", "raise": "BOARD OWNS THE SHEET — the first viewport is one continuous soldermask field, not a hero card on a page." },
+        { "from": "challenger-specimen", "raise": "SCALE IS THE HIERARCHY — thesis at board scale; nav and meta as 0402 reference designators." },
+        { "from": "challenger-nixie", "raise": "STATE IS A PHYSICAL EVENT — grant and deny occupy fixed pads; change is a layer cross-fade, not a hover tint." }
+      ],
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "silkscreen nav", "x": 0, "y": 0, "w": 12, "h": 1 },
+          { "label": "board field / wordmark", "x": 0, "y": 1, "w": 12, "h": 5, "accent": true },
+          { "label": "grant net", "x": 1, "y": 6, "w": 10, "h": 2 },
+          { "label": "gold-finger Download", "x": 0, "y": 8, "w": 12, "h": 2, "accent": true }
+        ]
+      },
+      "comp": ".impeccable/mocks/decision/assigned.webp"
+    },
+    {
+      "id": "model-pick",
+      "label": "Capability Map",
+      "kicker": "IMPECCABLE’S PICK",
+      "lineage": "seL4 capDL / Lampson access matrix as a graphic system",
+      "thesis": "The page is an unforgeable grant table: each Preview power is a token the tester can read, not a feature tile.",
+      "palette": ["#0e1210", "#d7ddd4", "#3d6b4a", "#8b2e2e"],
+      "materials": ["ruled ledger", "stamp ink", "token chits"],
+      "viewport": "A full-width grant matrix: rows are powers, columns are grant/deny/revoke; Download is issuing the Preview session token.",
+      "risk": "Also the direction most runs in this category land on: capability tables are the obvious artifact for this product.",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "title + honesty", "x": 0, "y": 0, "w": 12, "h": 2 },
+          { "label": "grant matrix", "x": 0, "y": 2, "w": 12, "h": 6, "accent": true },
+          { "label": "issue token / Download", "x": 0, "y": 8, "w": 12, "h": 2, "accent": true }
+        ]
+      },
+      "comp": ".impeccable/mocks/decision/model-pick.webp"
+    },
+    {
+      "id": "challenger-saul-bass",
+      "label": "Title Sequence",
+      "verdict": "competitive",
+      "lineage": "Saul Bass cut-paper title cards",
+      "thesis": "One idea per full-bleed card: not a chat app, then the grant, then seat the install.",
+      "palette": ["#c94a1a", "#14110e", "#f3ead8"],
+      "materials": ["cut paper", "flat field", "jitter line"],
+      "viewport": "Timed cards on a flat field; the last card is Download as a cut-paper edge seating into a slot.",
+      "case": "Holds product clarity (one claim per card); loses audience identification (film titles are not this tester’s world).",
+      "risk": "Reads as a movie poster if the cards stay decorative and the grant never becomes a symbol that does work.",
+      "hero": "https://impeccable.style/worlds/cards/posters-covers-sleeves-saul-bass-title-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/posters-covers-sleeves-saul-bass-title.webp",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "card 1 thesis", "x": 0, "y": 0, "w": 12, "h": 4, "accent": true },
+          { "label": "card 2 grant", "x": 0, "y": 4, "w": 12, "h": 3 },
+          { "label": "card 3 Download", "x": 0, "y": 7, "w": 12, "h": 3, "accent": true }
+        ]
+      },
+      "comp": ".impeccable/mocks/decision/challenger-saul-bass.webp"
+    },
+    {
+      "id": "challenger-quote-grammar",
+      "label": "Quoted Hazard",
+      "verdict": "competitive",
+      "lineage": "Industrial streetwear: literal quotes, zip-tie tags, 45° hazard stripe",
+      "thesis": "The obvious is printed in quotes: “NOT A BOOTABLE OS”, “NVIDIA REQUIRED”, Download keeps its orange zip-tie on.",
+      "palette": ["#f4f1ea", "#111111", "#ff5a1f"],
+      "materials": ["stockroom cotton", "black nylon", "zip-tie tag"],
+      "viewport": "Giant quoted honesty line, a diagonal hazard under the only live action, label plates for every zone.",
+      "case": "Holds product clarity (honesty is the graphic); loses audience identification (stockroom fashion is not the tester’s scene).",
+      "risk": "Becomes a streetwear lookbook if the quotes decorate instead of naming the real limits.",
+      "hero": "https://impeccable.style/worlds/cards/textiles-weave-drape-fashion-industrial-quote-grammar-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/textiles-weave-drape-fashion-industrial-quote-grammar.webp",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "quoted honesty", "x": 0, "y": 0, "w": 12, "h": 5, "accent": true },
+          { "label": "label plates", "x": 0, "y": 5, "w": 8, "h": 3 },
+          { "label": "zip-tie Download", "x": 8, "y": 5, "w": 4, "h": 5, "accent": true }
+        ]
+      },
+      "comp": ".impeccable/mocks/decision/challenger-quote-grammar.webp"
+    },
+    {
+      "id": "challenger-neo-tokyo",
+      "label": "Neon Night",
+      "verdict": "declined",
+      "lineage": "Neo-Tokyo rain-black towers, magenta/cyan neon",
+      "thesis": "A tower of signs the tester climbs; one scarlet mark is the live grant.",
+      "palette": ["#0a0c10", "#e1147b", "#18c5c5", "#ff2a2a"],
+      "materials": ["wet asphalt", "neon tube", "hazard stencil"],
+      "viewport": "A tall stack of signs; the red grant holds the center of gravity.",
+      "case": "Loses both axes: cyber-neon is the AI-wrapper rut this tester was told to refuse, and rain-night hides Preview honesty.",
+      "kept": "One live accent at the center — donated as ONE LIVE NET.",
+      "risk": "Looks like every other agent-product night city.",
+      "hero": "https://impeccable.style/worlds/cards/pop-culture-shelf-neo-tokyo-neon-night-hero.webp",
+      "comp": ".impeccable/mocks/decision/challenger-neo-tokyo.webp"
+    },
+    {
+      "id": "challenger-indoor-sun",
+      "label": "Indoor Sun",
+      "verdict": "declined",
+      "lineage": "Monofrequency hall, mirrored ceiling, sodium amber",
+      "thesis": "One vast amber hall; the tester walks the long axis toward the light.",
+      "palette": ["#c48a1a", "#1a140c", "#0d0b08"],
+      "materials": ["sodium haze", "concrete", "mirrored ceiling"],
+      "viewport": "A half-sun on the far wall completing itself in the ceiling.",
+      "case": "Loses both: art-hall identification is foreign, and atmosphere swallows the grant and the install.",
+      "kept": "Total field commitment — donated as BOARD OWNS THE SHEET.",
+      "risk": "A mood with no mechanism.",
+      "hero": "https://impeccable.style/worlds/cards/light-shadow-caustics-indoor-weather-sun-hero.webp",
+      "comp": ".impeccable/mocks/decision/challenger-indoor-sun.webp"
+    },
+    {
+      "id": "challenger-specimen",
+      "label": "Type Specimen",
+      "verdict": "declined",
+      "lineage": "Interactive variable-font specimen",
+      "thesis": "One giant letter; sliders remap the whole page.",
+      "palette": ["#f6f4ef", "#111111", "#2a5a8c"],
+      "materials": ["foundry paper", "ink black"],
+      "viewport": "A single glyph filling the screen; a monospace readout of axis values.",
+      "case": "Loses both: foundry culture is not this audience, and sliders do not map to grant or install without becoming a toy.",
+      "kept": "Hierarchy by scale alone — donated as SCALE IS THE HIERARCHY.",
+      "risk": "A type demo that forgets the OS.",
+      "hero": "https://impeccable.style/worlds/cards/variable-font-specimen-hero.webp",
+      "comp": ".impeccable/mocks/decision/challenger-specimen.webp"
+    },
+    {
+      "id": "challenger-nixie",
+      "label": "Nixie Counter",
+      "verdict": "declined",
+      "lineage": "Laboratory nixie-tube counter",
+      "thesis": "Quantities are the interface: version, disk, gates as glowing digit banks.",
+      "palette": ["#1a120c", "#ff6a1a", "#6a645c"],
+      "materials": ["glass envelope", "blackened steel", "plasma digit"],
+      "viewport": "A chassis of tube banks; Preview 0.1.2 is a physical count.",
+      "case": "Loses both: closer than fashion, but numbers are not the mechanism, and the GPU they already own is the clearer artifact.",
+      "kept": "Value change as a physical event — donated as STATE IS A PHYSICAL EVENT.",
+      "risk": "A gadget that counts instead of granting.",
+      "hero": "https://impeccable.style/worlds/cards/signals-instruments-nixie-laboratory-counter-hero.webp",
+      "comp": ".impeccable/mocks/decision/challenger-nixie.webp"
+    }
+  ],
+  "reroll": { "registers": ["safer", "bolder"] },
+  "buildPath": { "value": "code", "toggle": true },
+  "canon": true,
+  "canonCard": {
+    "label": "The category standard",
+    "thesis": "Dark AI-OS landing: kicker, centered hero, four feature cards, dual CTA, executed at full craft.",
+    "palette": ["#0b0d10", "#e8e4dc", "#5b8def"],
+    "materials": ["clean grid", "soft glow", "card chrome"],
+    "viewport": "The arrangement a visitor expects from an agent-product site.",
+    "risk": "Indistinguishable from the competition by design — the wrapper look testers were told to refuse.",
+    "comp": ".impeccable/mocks/decision/canon.webp"
+  },
+  "steer": true
+}

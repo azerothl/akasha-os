@@ -8,11 +8,10 @@
   </head>
   <body>
     <a class="skip" href="#content">Skip to content</a>
-    <div class="bezel">
-      <header class="status">
-        <a class="brand" href="./">AKASHA OS</a>
-        <p class="status-meta">HOST · 404</p>
-        <nav aria-label="Primary">
+    <div class="board">
+      <header class="board-head">
+        <p class="clock" data-clock>00:00:00</p>
+        <nav class="destinations" aria-label="Primary">
           <a href="grant.html">grant</a>
           <a href="why.html">why</a>
           <a href="install.html">install</a>
@@ -20,18 +19,17 @@
           <a href="about.html">about</a>
         </nav>
       </header>
-      <main id="content" class="screen lost">
-        <p class="prompt live-line">
-          <span class="ps">$</span>
-          <span>open: not found</span><span class="caret" aria-hidden="true"></span>
-        </p>
-        <h1>page not found</h1>
-        <ul class="loglines">
-          <li><a href="./">cd /</a></li>
-          <li><a href="install.html">open install.html</a></li>
-          <li><a href="docs/">open docs/</a></li>
-        </ul>
+      <main id="content" class="lost">
+        <div class="flap flap-title">
+          <span class="flap-dest">NOT FOUND</span>
+          <span class="flap-note">404</span>
+        </div>
+        <a class="flap flap-gate" href="./">
+          <span class="flap-code">GATE</span>
+          <span class="flap-dest">HOME</span>
+        </a>
       </main>
     </div>
+    <script src="app.js"></script>
   </body>
 </html>

@@ -465,16 +465,17 @@ fn ensure_layout(home: &Path) {
         }
     }
 
-    // Module notes : partager → installer au premier boot via copie package.
+    // Module notes : synchroniser le package partagé à chaque boot
+    // (sinon un ancien WASM reste en place après update Preview — issue #1).
     let notes_share = home.join("share/modules/notes.aospkg");
     let notes_installed = home.join("var/modules/notes");
-    if notes_share.exists() && !notes_installed.join("module.wasm").exists() {
-        let _ = fs::remove_dir_all(&notes_installed);
-        bootstrap::copy_dir_recursive(&notes_share, &notes_installed).ok();
-        let reg = home.join("var/modules/registry.yaml");
-        let _ = fs::write(
-            &reg,
-            r#"installed:
+    if notes_share.exists() {
+        if bootstrap::sync_packaged_module(&notes_share, &notes_installed) {
+            let reg = home.join("var/modules/registry.yaml");
+            if !reg.exists() {
+                let _ = fs::write(
+                    &reg,
+                    r#"installed:
   - name: notes
     granted_caps:
       - fs.read:/documents/notes/**
@@ -483,7 +484,9 @@ fn ensure_layout(home: &Path) {
       - mem.query:module:notes
     quarantined: false
 "#,
-        );
+                );
+            }
+        }
     }
 
     // Runtime scripté ext-rt (template pour modules agent) — package partagé.

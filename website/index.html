@@ -18,106 +18,97 @@
   </head>
   <body>
     <!--
-      THESIS: The landing is the host UART, not a product hero. It refuses the AI-OS card grid.
-      OWN-WORLD: Amber phosphor on bezel-dark; Azeret Mono only; grants are log lines; one live trace at full intensity.
-      STORY: A tester reads that Preview is not bootable, sees powers as grants, then runs install.
-      FIRST VIEWPORT: Bezel and dim banner already printed; one grant line types at full amber; install prompt docked on the bottom edge.
-      FORM: Host Console, re-roll grounded list position 3, seed a54b2068.
+      THESIS: The landing is a departure board, not an AI-OS hero and not a UART log.
+      OWN-WORLD: Matte black split-flaps, yellow destination type, red GATE only; Big Shoulders; one horizon-wide row.
+      STORY: A tester reads HOST / NVIDIA / NOT BOOTABLE, then walks through the gate to install.
+      FIRST VIEWPORT: Clock and destinations already up; AKASHA OS flips as the title row; honesty rows; GATE · INSTALL in red.
+      FORM: Split-Flap Board, grounded list position 6, seed 5ff66a2a, re-roll 2.
       FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
     -->
     <a class="skip" href="#content">Skip to content</a>
-    <div class="bezel">
-      <header class="status">
-        <a class="brand" href="./">AKASHA OS</a>
-        <p class="status-meta">
-          PREVIEW <span data-aos-version>0.1.2</span>
-          · HOST
-        </p>
-        <nav aria-label="Primary">
+    <div class="board">
+      <header class="board-head">
+        <p class="clock" data-clock>00:00:00</p>
+        <nav class="destinations" aria-label="Primary">
           <a href="grant.html">grant</a>
           <a href="why.html">why</a>
           <a href="install.html">install</a>
           <a href="docs/">docs</a>
           <a href="about.html">about</a>
-          <div class="lang" role="group" aria-label="Language">
-            <button type="button" data-set-lang="en" aria-pressed="true">EN</button>
-            <button type="button" data-set-lang="fr" aria-pressed="false">FR</button>
-          </div>
         </nav>
+        <div class="lang" role="group" aria-label="Language">
+          <button type="button" data-set-lang="en" aria-pressed="true">EN</button>
+          <button type="button" data-set-lang="fr" aria-pressed="false">FR</button>
+        </div>
       </header>
 
-      <main id="content" class="screen">
-        <div class="viewport">
-          <h1>
-            <span data-lang="en">
-              Akasha OS treats agents, models, tools, and memory as first-class system services.
-              Preview <span data-aos-version>0.1.2</span> is a host app on Windows or Linux,
-              not a bootable OS image. NVIDIA GPU required. A seL4 bare-metal track is separate.
-            </span>
-            <span data-lang="fr">
-              Akasha OS traite agents, modèles, outils et mémoire comme des services système.
-              La Preview <span data-aos-version>0.1.2</span> est une appli hôte sur Windows ou Linux,
-              pas une image d’OS bootable. GPU NVIDIA requis. La piste seL4 est séparée.
-            </span>
-          </h1>
-
-          <p class="prompt live-line" id="grant">
-            <span class="ps">$</span>
-            <span
-              class="live"
-              data-type="cap.grant session:preview gpu:nvidia net:deny audit:on offline:default"
-            ></span><span class="caret" aria-hidden="true"></span>
-          </p>
-          <p class="hist" data-lang="en">
-            Agents act only with unforgeable, revocable tokens. Network egress is deny-by-default.
-          </p>
-          <p class="hist" data-lang="fr">
-            Les agents n’agissent qu’avec des jetons infalsifiables et révocables. La sortie réseau est refusée par défaut.
-          </p>
-
-          <p class="comment" data-lang="en"># open</p>
-          <p class="comment" data-lang="fr"># open</p>
-          <ul class="loglines" aria-label="Open a page">
-            <li>
-              <a href="grant.html">
-                open grant.html
-                <span data-lang="en">· capabilities issued to this session</span>
-                <span data-lang="fr">· capacités émises pour cette session</span>
-              </a>
-            </li>
-            <li>
-              <a href="why.html">
-                open why.html
-                <span data-lang="en">· why this is not a chat wrapper</span>
-                <span data-lang="fr">· pourquoi ce n’est pas un wrapper de chat</span>
-              </a>
-            </li>
-            <li>
-              <a href="install.html">
-                open install.html
-                <span data-lang="en">· zip, scripts, first launch · no cargo</span>
-                <span data-lang="fr">· zip, scripts, premier lancement · sans cargo</span>
-              </a>
-            </li>
-            <li>
-              <a href="docs/">
-                open docs/
-                <span data-lang="en">· end-user manual</span>
-                <span data-lang="fr">· manuel utilisateur</span>
-              </a>
-            </li>
-          </ul>
-
-          <p class="prompt hist" id="install">
-            <span class="ps">$</span>
-            <a class="run" href="install.html">
-              <span data-lang="en">install --preview</span>
-              <span data-lang="fr">install --preview</span>
-            </a>
-          </p>
-          <p class="comment" data-lang="en"># GitHub Releases · zip/tar.gz · install.ps1 or ./install.sh</p>
-          <p class="comment" data-lang="fr"># GitHub Releases · zip/tar.gz · install.ps1 ou ./install.sh</p>
+      <main id="content">
+        <div class="flap flap-title" data-flip>
+          <span class="flap-dest">AKASHA OS</span>
+          <span class="flap-note">PREVIEW <span data-aos-version>0.1.2</span></span>
         </div>
+        <div class="flap" data-flip>
+          <span class="flap-code">HOST</span>
+          <span class="flap-dest">
+            <span data-lang="en">Windows / Linux x64 app</span>
+            <span data-lang="fr">Appli Windows / Linux x64</span>
+          </span>
+          <span class="flap-note">NOW</span>
+        </div>
+        <div class="flap" data-flip>
+          <span class="flap-code">GPU</span>
+          <span class="flap-dest">NVIDIA</span>
+          <span class="flap-note">REQ</span>
+        </div>
+        <div class="flap flap-warn" data-flip>
+          <span class="flap-code">BOOT</span>
+          <span class="flap-dest">
+            <span data-lang="en">Not a bootable OS</span>
+            <span data-lang="fr">Pas un OS bootable</span>
+          </span>
+          <span class="flap-note">DENY</span>
+        </div>
+
+        <p class="lede" data-lang="en">
+          Agents, models, tools, and memory are first-class system services.
+          Tokens are unforgeable and revocable. Network egress is deny-by-default.
+          A seL4 bare-metal track is separate.
+        </p>
+        <p class="lede" data-lang="fr">
+          Agents, modèles, outils et mémoire sont des services système.
+          Les jetons sont infalsifiables et révocables. La sortie réseau est
+          refusée par défaut. La piste seL4 est séparée.
+        </p>
+
+        <a class="flap" data-flip href="grant.html">
+          <span class="flap-code">GRANT</span>
+          <span class="flap-dest">
+            <span data-lang="en">Capabilities on this session</span>
+            <span data-lang="fr">Capacités de cette session</span>
+          </span>
+          <span class="flap-note">OPEN</span>
+        </a>
+        <a class="flap" data-flip href="why.html">
+          <span class="flap-code">WHY</span>
+          <span class="flap-dest">
+            <span data-lang="en">Not a chat wrapper</span>
+            <span data-lang="fr">Pas un wrapper de chat</span>
+          </span>
+          <span class="flap-note">OPEN</span>
+        </a>
+        <a class="flap" data-flip href="docs/">
+          <span class="flap-code">DOCS</span>
+          <span class="flap-dest">
+            <span data-lang="en">End-user manual</span>
+            <span data-lang="fr">Manuel utilisateur</span>
+          </span>
+          <span class="flap-note">OPEN</span>
+        </a>
+
+        <a class="flap flap-gate" data-flip id="install" href="install.html">
+          <span class="flap-code">GATE</span>
+          <span class="flap-dest">INSTALL</span>
+        </a>
       </main>
 
       <footer>

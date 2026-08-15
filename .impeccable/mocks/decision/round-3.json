@@ -1,0 +1,182 @@
+{
+  "title": "Choose the visual world",
+  "question": "The roll assigned Foundry Specimen. Host Console is discarded. Facts, routes, and the user manual stay. The character-goods catalog was dropped from the hand: invented mascots and a popularity grid cannot carry Preview without fabricating proof.",
+  "options": [
+    {
+      "id": "assigned",
+      "label": "Foundry Specimen",
+      "kicker": "THE ROLL",
+      "lineage": "metal-type foundry specimen sheets",
+      "thesis": "The site is a specimen of the OS as a type system: the thesis is the display cut, grants are shown styles, install is how you set the face.",
+      "palette": ["#e8e4dc", "#1c1c1c", "#9a2b1f", "#6b6458"],
+      "materials": ["laid paper", "letterpress impression", "one vermillion display ink"],
+      "viewport": "A full paper sheet: wordmark as the specimen word at display size, honesty as the colophon under it, Install as the only inked rule at the foot.",
+      "risk": "Can read as a design-studio site if the specimen word is prettier than the Preview limits.",
+      "raised": [
+        {
+          "from": "challenger-riso",
+          "raise": "Riso grain: ink sits on toothy paper. The sheet is a material, not a flat digital beige."
+        },
+        {
+          "from": "challenger-silk",
+          "raise": "Chord rest: a bright open field. The paper must breathe; no filled dark void."
+        },
+        {
+          "from": "challenger-brine",
+          "raise": "Dated batch: Preview 0.1.2 is a stamped date on every page, not a hidden footer."
+        }
+      ],
+      "comp": ".impeccable/mocks/decision/assigned.webp",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "running head · batch 0.1.2", "x": 0, "y": 0, "w": 12, "h": 1 },
+          { "label": "specimen word AKASHA", "x": 0, "y": 1, "w": 12, "h": 3, "accent": true },
+          { "label": "colophon · not bootable · NVIDIA", "x": 0, "y": 4, "w": 8, "h": 2 },
+          { "label": "shown styles · grants", "x": 0, "y": 6, "w": 8, "h": 3 },
+          { "label": "EN/FR", "x": 8, "y": 4, "w": 4, "h": 2 },
+          { "label": "Install · inked rule", "x": 0, "y": 9, "w": 12, "h": 1, "accent": true }
+        ]
+      }
+    },
+    {
+      "id": "model-pick",
+      "label": "Release Gazette",
+      "kicker": "IMPECCABLE’S PICK",
+      "lineage": "GitHub Releases notes as a printed gazette",
+      "thesis": "The landing is today’s Release: version, assets, checksums of honesty, then the download.",
+      "palette": ["#e6e1d4", "#141414", "#2f6b3a", "#8a8374"],
+      "materials": ["newsprint", "hairline rules", "asset table"],
+      "viewport": "Masthead PREVIEW 0.1.2, assets as a ruled list (zip, tar.gz, scripts), honesty as the lead paragraph, Download as the marked asset.",
+      "risk": "Also the direction most runs in this category land on: the site as release notes.",
+      "comp": ".impeccable/mocks/decision/model-pick.webp",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "masthead · Akasha OS", "x": 0, "y": 0, "w": 12, "h": 2, "accent": true },
+          { "label": "lead · host app, not bootable", "x": 0, "y": 2, "w": 8, "h": 3 },
+          { "label": "assets zip / tar.gz", "x": 8, "y": 2, "w": 4, "h": 5, "accent": true },
+          { "label": "what’s in this preview", "x": 0, "y": 5, "w": 8, "h": 4 },
+          { "label": "Download this asset", "x": 8, "y": 7, "w": 4, "h": 2 }
+        ]
+      }
+    },
+    {
+      "id": "challenger-transit",
+      "label": "Grant Network",
+      "verdict": "competitive",
+      "lineage": "midnight enamel transit diagram",
+      "thesis": "Capabilities are lines on a porcelain map; install is the interchange; first-run is the destination.",
+      "palette": ["#0b1c3a", "#f4f1ea", "#d1262e", "#2a62c4", "#e3a012", "#2f8a4a"],
+      "materials": ["enamel ground", "porcelain ticks", "45-degree linework"],
+      "viewport": "A midnight field with four named lines (session, gpu, net, audit) meeting at one interchange labeled install.",
+      "case": "Holds audience identification: testers already read maps. Loses on product clarity: a metro can hide that this is a host app with tokens.",
+      "risk": "Reads as a metaphor poster if the lines are prettier than the NVIDIA limit.",
+      "comp": ".impeccable/mocks/decision/challenger-transit.webp",
+      "hero": "https://impeccable.style/worlds/cards/wayfinding-cartography-signage-midnight-transit-diagram-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/wayfinding-cartography-signage-midnight-transit-diagram.webp",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "legend · four grants", "x": 0, "y": 0, "w": 3, "h": 10 },
+          { "label": "diagram · lines + interchange", "x": 3, "y": 0, "w": 9, "h": 8, "accent": true },
+          { "label": "install · this station", "x": 3, "y": 8, "w": 9, "h": 2, "accent": true }
+        ]
+      }
+    },
+    {
+      "id": "challenger-segments",
+      "label": "Segment Mask",
+      "verdict": "competitive",
+      "lineage": "seven-segment clocks and price totems",
+      "thesis": "Preview status is a rigid LED mask: version lit, missing GPU as the flashing 12:00, grants as cells on or ghosted.",
+      "palette": ["#0e0e0c", "#f0a020", "#3a2a10", "#d8d0c0"],
+      "materials": ["matte bezel", "ghost segments", "instant cell swaps"],
+      "viewport": "Four large cells read 0.1.2; a status row under them: HOST / NVIDIA / NOT BOOTABLE; Install is a held-button label.",
+      "case": "Holds product clarity for honesty and version. Loses on audience identification: a clock face is not where testers decide to download.",
+      "risk": "Docs cannot live in eight-cell glyphs; inner pages must keep the mask as chrome, not as the only voice.",
+      "comp": ".impeccable/mocks/decision/challenger-segments.webp",
+      "hero": "https://impeccable.style/worlds/cards/signals-instruments-seven-segment-alarm-clock-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/signals-instruments-seven-segment-alarm-clock.webp",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "0 . 1 . 2", "x": 1, "y": 1, "w": 10, "h": 4, "accent": true },
+          { "label": "HOST · NVIDIA · NOT BOOTABLE", "x": 1, "y": 5, "w": 10, "h": 2 },
+          { "label": "grant cells", "x": 1, "y": 7, "w": 10, "h": 2 },
+          { "label": "HOLD · INSTALL", "x": 1, "y": 9, "w": 10, "h": 1, "accent": true }
+        ]
+      }
+    },
+    {
+      "id": "challenger-riso",
+      "label": "Riso Host",
+      "verdict": "declined",
+      "lineage": "risograph spot-ink print",
+      "thesis": "The host is warm paper; grant, deny, and live are two or three fluorescent inks that misregister on hover.",
+      "palette": ["#f3ead8", "#ff4d8d", "#2a4bd7", "#f5c518"],
+      "materials": ["toothy paper", "halftone grain", "multiply overlaps"],
+      "viewport": "A paper sheet with the thesis in one spot ink and Install in another, slightly off register.",
+      "case": "Loses both axes: testers do not identify with print-shop culture, and spot inks do not explain a host app.",
+      "kept": "Ink as material on paper, not a flat fill.",
+      "risk": "Reads as a poster club, not an install.",
+      "hero": "https://impeccable.style/worlds/cards/risograph-web-system-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/risograph-web-system.webp",
+      "comp": ".impeccable/mocks/decision/challenger-riso.webp"
+    },
+    {
+      "id": "challenger-silk",
+      "label": "Color Chord",
+      "verdict": "declined",
+      "lineage": "courtyard silk canopy",
+      "thesis": "Overlapping grants as translucent color chords over a sun-white rest.",
+      "palette": ["#f7f4ee", "#2a2d7a", "#9a2a3a", "#e0a020"],
+      "materials": ["translucent silk", "sun-white paving", "overlap chords"],
+      "viewport": "A bright open field with three crossing banners named session, gpu, net.",
+      "case": "Loses both axes: courtyard silk is not this cohort’s world, and chords hide the NVIDIA limit.",
+      "kept": "A bright open rest instead of a filled dark page.",
+      "risk": "Mystical Akasha costume.",
+      "hero": "https://impeccable.style/worlds/cards/generative-art-computational-color-chord-counterpoint-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/generative-art-computational-color-chord-counterpoint.webp",
+      "comp": ".impeccable/mocks/decision/challenger-silk.webp"
+    },
+    {
+      "id": "challenger-brine",
+      "label": "Batch Calendar",
+      "verdict": "declined",
+      "lineage": "pickling brine calendar",
+      "thesis": "Preview is an immature batch: dated jars for install, first-run, and feedback.",
+      "palette": ["#f6f1e6", "#c45a4a", "#5a6b3a", "#8a6a3a"],
+      "materials": ["jar glass", "kraft labels", "stamped dates"],
+      "viewport": "A shelf of dated jars; the current batch is 0.1.2.",
+      "case": "Loses both axes: fermentation is not how testers think about a host app.",
+      "kept": "The version as a stamped batch on every page.",
+      "risk": "Cute pantry, wrong product.",
+      "hero": "https://impeccable.style/worlds/cards/food-fermentation-culinary-theater-pickling-brine-calendar-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/food-fermentation-culinary-theater-pickling-brine-calendar.webp",
+      "comp": ".impeccable/mocks/decision/challenger-brine.webp"
+    }
+  ],
+  "reroll": {
+    "registers": ["safer", "bolder"]
+  },
+  "buildPath": {
+    "value": "code",
+    "toggle": true
+  },
+  "canon": true,
+  "canonCard": {
+    "label": "The category standard",
+    "thesis": "Dark AI-OS hero, three feature cards, a Download button, executed at full craft.",
+    "palette": ["#0b0f14", "#f8fafc", "#3b82f6"],
+    "materials": ["soft cards", "glow accent", "product chrome"],
+    "viewport": "A night hero, a metric or feature row, a primary download.",
+    "risk": "Indistinguishable from neighboring agent desktops by design.",
+    "comp": ".impeccable/mocks/decision/canon.webp"
+  },
+  "steer": true
+}

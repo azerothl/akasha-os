@@ -1,0 +1,242 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-15T13:12:00.000Z",
+  "title": "Design System: Akasha OS",
+  "extensions": {
+    "colorMeta": {
+      "mask": {
+        "role": "neutral",
+        "displayName": "Mask",
+        "canonical": "#0c0906",
+        "tonalRamp": [
+          "#16110c",
+          "#2c241c",
+          "#443830",
+          "#5c4c40",
+          "#746254",
+          "#8c7a6a",
+          "#b4a090",
+          "#e8dcd0"
+        ]
+      },
+      "bezel": {
+        "role": "neutral",
+        "displayName": "Bezel",
+        "canonical": "#1c1610",
+        "tonalRamp": [
+          "#16110c",
+          "#2c241c",
+          "#443830",
+          "#5c4c40",
+          "#746254",
+          "#8c7a6a",
+          "#b4a090",
+          "#e8dcd0"
+        ]
+      },
+      "phosphor": {
+        "role": "primary",
+        "displayName": "Amber Phosphor",
+        "canonical": "#f6c15a",
+        "tonalRamp": [
+          "#2e1d06",
+          "#4d310a",
+          "#6d450e",
+          "#9a6418",
+          "#c48428",
+          "#e8a04a",
+          "#f0c07a",
+          "#f8e8c8"
+        ]
+      },
+      "phosphor-dim": {
+        "role": "neutral",
+        "displayName": "Dim Phosphor",
+        "canonical": "#e0bc78",
+        "tonalRamp": [
+          "#2a2114",
+          "#4a3a24",
+          "#6a5334",
+          "#8a6c44",
+          "#aa8554",
+          "#c4a06a",
+          "#d8c090",
+          "#f0e4c8"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Honesty banner and about titles at body-adjacent size. This world has no display size."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "History, transcript, grant log, and about copy. Measure 72ch."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Status meta and footer at 0.78rem / 0.04em."
+      },
+      "brand": {
+        "displayName": "Brand",
+        "purpose": "AKASHA OS in the status row. Weight 700, full phosphor, 0.08em, no underline."
+      },
+      "live": {
+        "displayName": "Live",
+        "purpose": "The single typing grant line and its prompt at weight 700 / 1.12rem, with a 1px-offset bloom."
+      },
+      "lang": {
+        "displayName": "Lang",
+        "purpose": "EN / FR chips at 0.72rem / 0.06em."
+      }
+    },
+    "motion": [
+      {
+        "name": "caret-blink",
+        "value": "1.05s steps(1) infinite",
+        "purpose": "Block caret on the live grant line. Disabled when prefers-reduced-motion."
+      },
+      {
+        "name": "type-tick",
+        "value": "18ms",
+        "purpose": "Per-character interval for the live grant string. Instant print when prefers-reduced-motion."
+      }
+    ],
+    "breakpoints": []
+  },
+  "components": [
+    {
+      "name": "Language chip",
+      "kind": "button",
+      "refersTo": "button-lang",
+      "description": "EN / FR locale control. Active locale inverts dim phosphor onto the mask.",
+      "html": "<div class=\"ds-lang\" role=\"group\" aria-label=\"Language\"><button type=\"button\" class=\"ds-lang-btn\">EN</button><button type=\"button\" class=\"ds-lang-btn ds-lang-btn-active\" aria-pressed=\"true\">FR</button></div>",
+      "css": ".ds-lang { display: flex; gap: 0.15rem; font-family: \"Azeret Mono\", ui-monospace, \"Cascadia Mono\", Consolas, monospace; } .ds-lang-btn { appearance: none; border: 0; background: transparent; color: var(--phosphor-dim, #c4a06a); padding: 0.1rem 0.35rem; font: inherit; font-size: 0.72rem; letter-spacing: 0.06em; cursor: pointer; } .ds-lang-btn:hover, .ds-lang-btn:focus-visible { color: var(--phosphor, #e8a04a); } .ds-lang-btn:focus-visible { outline: 2px solid var(--phosphor, #e8a04a); outline-offset: 3px; } .ds-lang-btn-active { color: var(--mask, #16110c); background: var(--phosphor-dim, #c4a06a); }"
+    },
+    {
+      "name": "Install prompt",
+      "kind": "button",
+      "refersTo": "link-run",
+      "description": "Docked command line. The action is a dim link, not a filled button.",
+      "html": "<p class=\"ds-prompt\"><span class=\"ds-ps\">$</span><a class=\"ds-run\" href=\"#\">install --preview</a></p>",
+      "css": ".ds-prompt { margin: 0; font-family: \"Azeret Mono\", ui-monospace, \"Cascadia Mono\", Consolas, monospace; font-size: 1rem; font-weight: 400; line-height: 1.55; color: var(--phosphor-dim, #c4a06a); } .ds-ps { margin-right: 0.45rem; } .ds-run { color: var(--phosphor-dim, #c4a06a); font-weight: 400; text-decoration: none; } .ds-run:hover, .ds-run:focus-visible { color: var(--phosphor, #e8a04a); text-decoration: underline; } .ds-run:focus-visible { outline: 2px solid var(--phosphor, #e8a04a); outline-offset: 3px; }"
+    },
+    {
+      "name": "Live grant line",
+      "kind": "custom",
+      "refersTo": "live-line",
+      "description": "The single full-phosphor trace: prompt, typed grant, block caret.",
+      "html": "<p class=\"ds-live-line\"><span class=\"ds-ps\">$</span><span class=\"ds-live\">cap.grant session:preview gpu:nvidia net:deny audit:on offline:default</span><span class=\"ds-caret\" aria-hidden=\"true\"></span></p>",
+      "css": ".ds-live-line { margin: 0; font-family: \"Azeret Mono\", ui-monospace, \"Cascadia Mono\", Consolas, monospace; font-size: 1rem; line-height: 1.55; overflow-wrap: anywhere; color: var(--phosphor, #e8a04a); font-weight: 600; } .ds-live-line .ds-ps { margin-right: 0.45rem; color: var(--phosphor, #e8a04a); } .ds-live { color: var(--phosphor, #e8a04a); font-weight: 600; } .ds-caret { display: inline-block; width: 0.55ch; height: 1em; margin-left: 0.08ch; background: var(--phosphor, #e8a04a); vertical-align: -0.12em; animation: ds-blink 1.05s steps(1) infinite; } @keyframes ds-blink { 50% { opacity: 0; } } @media (prefers-reduced-motion: reduce) { .ds-caret { animation: none; } }"
+    },
+    {
+      "name": "Grant log line",
+      "kind": "custom",
+      "refersTo": "logline",
+      "description": "A capability printed as a dim log line. Focus raises it to full phosphor.",
+      "html": "<ul class=\"ds-loglines\"><li tabindex=\"0\">session GRANT Parallel persisted conversations</li><li tabindex=\"0\">net DENY Search and fetch are opt-in</li></ul>",
+      "css": ".ds-loglines { margin: 0; padding: 0; max-width: 72ch; list-style: none; font-family: \"Azeret Mono\", ui-monospace, \"Cascadia Mono\", Consolas, monospace; font-size: 1rem; font-weight: 400; line-height: 1.55; } .ds-loglines li { margin: 0; padding: 0.12rem 0; color: var(--phosphor-dim, #c4a06a); overflow-wrap: anywhere; cursor: default; } .ds-loglines li:focus, .ds-loglines li:focus-visible { outline: 1px solid var(--phosphor, #e8a04a); outline-offset: 2px; color: var(--phosphor, #e8a04a); }"
+    },
+    {
+      "name": "Status navigation",
+      "kind": "nav",
+      "refersTo": "link-inline",
+      "description": "Bezel status row: brand, host meta, lowercase section links.",
+      "html": "<header class=\"ds-status\"><a class=\"ds-brand\" href=\"#\">AKASHA OS</a><p class=\"ds-status-meta\">PREVIEW 0.1.2 · HOST</p><nav class=\"ds-nav\" aria-label=\"Primary\"><a href=\"#\">grant</a><a href=\"#\">why</a><a href=\"#\">install</a></nav></header>",
+      "css": ".ds-status { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.55rem 1rem; color: var(--phosphor-dim, #c4a06a); font-family: \"Azeret Mono\", ui-monospace, \"Cascadia Mono\", Consolas, monospace; font-size: 0.78rem; letter-spacing: 0.04em; } .ds-brand { color: var(--phosphor-dim, #c4a06a); font-weight: 600; letter-spacing: 0.08em; text-decoration: none; } .ds-brand:hover, .ds-brand:focus-visible { color: var(--phosphor, #e8a04a); } .ds-brand:focus-visible { outline: 2px solid var(--phosphor, #e8a04a); outline-offset: 3px; } .ds-status-meta { margin: 0; flex: 1 1 auto; } .ds-nav { display: flex; flex-wrap: wrap; gap: 0.55rem 0.85rem; } .ds-nav a { color: var(--phosphor-dim, #c4a06a); text-decoration: none; } .ds-nav a:hover, .ds-nav a:focus-visible { color: var(--phosphor, #e8a04a); } .ds-nav a:focus-visible { outline: 2px solid var(--phosphor, #e8a04a); outline-offset: 3px; }"
+    },
+    {
+      "name": "Inline link",
+      "kind": "custom",
+      "refersTo": "link-inline",
+      "description": "Transcript link: dim phosphor, 1px underline, full phosphor on hover and focus.",
+      "html": "<p class=\"ds-hist\">Download from <a class=\"ds-inline\" href=\"#\">GitHub Releases</a>.</p>",
+      "css": ".ds-hist { margin: 0; max-width: 72ch; color: var(--phosphor-dim, #c4a06a); font-family: \"Azeret Mono\", ui-monospace, \"Cascadia Mono\", Consolas, monospace; font-size: 1rem; font-weight: 400; line-height: 1.55; } .ds-inline { color: var(--phosphor-dim, #c4a06a); text-decoration-thickness: 1px; text-underline-offset: 0.22em; } .ds-inline:hover, .ds-inline:focus-visible { color: var(--phosphor, #e8a04a); } .ds-inline:focus-visible { outline: 2px solid var(--phosphor, #e8a04a); outline-offset: 3px; }"
+    },
+    {
+      "name": "Skip link",
+      "kind": "nav",
+      "refersTo": "skip",
+      "description": "Focus-revealed skip control: mask field, phosphor type.",
+      "html": "<a class=\"ds-skip\" href=\"#content\">Skip to content</a>",
+      "css": ".ds-skip { display: inline-block; background: var(--mask, #16110c); color: var(--phosphor, #e8a04a); padding: 0.4rem 0.7rem; font-family: \"Azeret Mono\", ui-monospace, \"Cascadia Mono\", Consolas, monospace; font-size: 1rem; text-decoration-thickness: 1px; text-underline-offset: 0.22em; } .ds-skip:hover, .ds-skip:focus-visible { color: var(--phosphor, #e8a04a); } .ds-skip:focus-visible { outline: 2px solid var(--phosphor, #e8a04a); outline-offset: 3px; }"
+    },
+    {
+      "name": "404 lost prompt",
+      "kind": "custom",
+      "refersTo": "live-line",
+      "description": "Centered not-found UART: live phosphor line, dim honesty, return prompt.",
+      "html": "<div class=\"ds-lost\"><p class=\"ds-live-line\"><span class=\"ds-ps\">$</span><span>open: not found</span><span class=\"ds-caret\" aria-hidden=\"true\"></span></p><h1 class=\"ds-lost-h\">page not found</h1><p class=\"ds-prompt\"><a class=\"ds-run\" href=\"#\">cd /</a></p></div>",
+      "css": ".ds-lost { min-height: 16rem; display: flex; flex-direction: column; justify-content: center; font-family: \"Azeret Mono\", ui-monospace, \"Cascadia Mono\", Consolas, monospace; } .ds-lost .ds-live-line { margin: 0 0 0.55rem; font-size: 1rem; line-height: 1.55; color: var(--phosphor, #e8a04a); font-weight: 600; } .ds-lost .ds-ps { margin-right: 0.45rem; } .ds-lost .ds-caret { display: inline-block; width: 0.55ch; height: 1em; margin-left: 0.08ch; background: var(--phosphor, #e8a04a); vertical-align: -0.12em; animation: ds-blink 1.05s steps(1) infinite; } @keyframes ds-blink { 50% { opacity: 0; } } .ds-lost-h { margin: 0 0 1.6rem; max-width: 72ch; color: var(--phosphor-dim, #c4a06a); font-size: 1.05rem; font-weight: 400; line-height: 1.5; } .ds-lost .ds-prompt { margin: 0; color: var(--phosphor-dim, #c4a06a); } .ds-lost .ds-run { color: var(--phosphor-dim, #c4a06a); text-decoration: none; } .ds-lost .ds-run:hover, .ds-lost .ds-run:focus-visible { color: var(--phosphor, #e8a04a); text-decoration: underline; } .ds-lost .ds-run:focus-visible { outline: 2px solid var(--phosphor, #e8a04a); outline-offset: 3px; } @media (prefers-reduced-motion: reduce) { .ds-lost .ds-caret { animation: none; } }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Host Console",
+    "overview": "The public site is a host UART, not a product hero. The first surface is already printed: a dark bezel, a dim status banner, an honesty line at body size, and one grant typing at full amber. Powers are log lines. Install is a prompt docked on the bottom edge of the first viewport. The world refuses the AI-OS card grid — no icon tiles, no metric row, no marketing display face.\n\nPersonality is precise and technical. Density is terminal density: one column, tight line rhythm, generous bezel padding. Aesthetic philosophy is phosphor on a mask, not a themed landing page. Emphasis is intensity and weight, never a second hue or a larger display size. Confirmed visual rejections: card grids, hero metrics, kickers, system display faces, glyph icons, and any gray standing in for dimmed phosphor.",
+    "keyCharacteristics": [
+      "Self-hosted Azeret Mono as the only voice (400, 600, and 700 on the live trace and wordmark)",
+      "Two amber intensities: full phosphor for the live trace and wordmark; dim phosphor for history, grants, and chrome",
+      "Bezel chassis around a darker glass screen — same brown family, two fills",
+      "Chassis sits in a dark void; glass carries a faint tube glow and static scanlines",
+      "Install prompt docked to the first-viewport floor"
+    ],
+    "rules": [
+      {
+        "name": "The One Live Trace Rule",
+        "body": "Only the live grant line (prompt, typed text, caret) sits at full phosphor at rest. History, grant log, honesty banner, and chrome stay dim. Hover, focus, and the active language chip may borrow full phosphor or invert; they are states, not a second live trace.",
+        "section": "colors"
+      },
+      {
+        "name": "The Phosphor Ink Rule",
+        "body": "Secondary text is dim phosphor. Never introduce gray, cool white, or a second hue to mean “quieter.”",
+        "section": "colors"
+      },
+      {
+        "name": "The Single Face Rule",
+        "body": "Azeret Mono is the only voice. Do not add a display pairing or let a system sans become the page voice.",
+        "section": "typography"
+      },
+      {
+        "name": "The No-Hero Type Rule",
+        "body": "Headlines stay near body size (1.15rem / 400). The console does not shout with a campaign display size.",
+        "section": "typography"
+      },
+      {
+        "name": "The Docked Prompt Rule",
+        "body": "The install (or return) prompt sits on the first-viewport floor, not in a hero CTA cluster.",
+        "section": "layout"
+      },
+      {
+        "name": "The Measure Rule",
+        "body": "Running copy and grant lines wrap at 72ch.",
+        "section": "layout"
+      },
+      {
+        "name": "The Intensity-Not-Shadow Rule",
+        "body": "Do not halo the whole page. The live grant may bloom; the chassis may sit off the void. History stays flat ink.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Square Terminal Rule",
+        "body": "No radius. No resting borders. Interaction is outline and intensity, not a filled chip — except the active language control, which inverts dim phosphor onto the mask.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "Do keep one live trace at full phosphor and leave history, grants, and chrome dim.",
+      "Do dock the primary action to the first-viewport floor with `margin-top: auto`.",
+      "Do wrap running copy at 72ch and pad the bezel with `clamp(1rem, 3vw, 1.75rem)`.",
+      "Do theme selection, caret, focus rings, and scrollbars from phosphor and mask.",
+      "Do honor `prefers-reduced-motion`: no caret blink, no type-in."
+    ],
+    "donts": [
+      "Don't add a second typeface or a display / hero size.",
+      "Don't structure a page as a card grid, metric row, or icon-plus-heading tiles.",
+      "Don't use gray, cool white, or a second hue for secondary text.",
+      "Don't add border-radius, a page-wide halo, or a second hue. The chassis may sit off the void; the live line may bloom.",
+      "Don't place a kicker or eyebrow above a heading.",
+      "Don't use glyph, emoji, or icon-font marks as an icon system."
+    ]
+  }
+}

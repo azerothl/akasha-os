@@ -1,0 +1,42 @@
+{
+  "title": "Choose the composition",
+  "question": "Device Datasheet is locked. Pick the first-viewport structure. Comp B drew a GPU object: that object will not ship (no fake hardware). Type, plates, and the red INSTALL are what we build.",
+  "options": [
+    {
+      "id": "comp-a",
+      "label": "Green field + spec rail",
+      "kicker": "DECISION COMP",
+      "thesis": "The green field owns the thesis; a gold-ruled spec rail states HOST, NVIDIA, not bootable; INSTALL is the only red note.",
+      "palette": ["#087a45", "#f4f1e6", "#e6b422", "#e23b16", "#102418"],
+      "materials": ["soldermask field", "gold rules", "silkscreen type"],
+      "viewport": "Running head, green thesis plate, right spec table, grant rows, red INSTALL at the foot.",
+      "risk": "The right rail can shrink into a sidebar widget if the green field is not actually two-thirds of the fold.",
+      "comp": ".impeccable/mocks/decision/r4-assigned.png"
+    },
+    {
+      "id": "comp-b",
+      "label": "Step column + ratings table",
+      "thesis": "A gold-lit step column makes install a sequence; the fold is one ratings table on green.",
+      "palette": ["#087a45", "#f4f1e6", "#e6b422", "#e23b16", "#102418"],
+      "materials": ["step column", "full-width gold rules"],
+      "viewport": "Left 1–6 steps (step 1: not bootable); right a green ratings table; cream foot with red INSTALL.",
+      "risk": "Ignore the GPU object in the render. It is not in the build.",
+      "comp": ".impeccable/mocks/datasheet-comp-b.png"
+    },
+    {
+      "id": "comp-c",
+      "label": "Cut plates",
+      "thesis": "The page is stacked datasheet plates with vivid green gaps: thesis, grants, limits, then INSTALL.",
+      "palette": ["#087a45", "#f4f1e6", "#e6b422", "#e23b16", "#102418"],
+      "materials": ["cut plates", "green gaps", "gold rules"],
+      "viewport": "Cream head, green thesis plate, cream grant plate, green limits plate, cream foot with red INSTALL.",
+      "risk": "Gaps can collapse into ordinary section padding if they are not actually visible cuts.",
+      "comp": ".impeccable/mocks/datasheet-comp-c.png"
+    }
+  ],
+  "steer": true,
+  "buildPath": {
+    "value": "comp",
+    "toggle": false
+  }
+}

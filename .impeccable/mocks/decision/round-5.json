@@ -1,0 +1,193 @@
+{
+  "title": "Choose the visual world",
+  "question": "New style hand. Device Datasheet and its three comps are discarded. ANSI BBS was dropped: textmode on black is the console you already refused.",
+  "options": [
+    {
+      "id": "assigned",
+      "label": "Split-Flap Board",
+      "kicker": "THE ROLL",
+      "lineage": "airport FIDS / split-flap departure boards",
+      "thesis": "The site is a departure board: Preview is the flight, grants are rows that have flipped, install is the gate.",
+      "palette": ["#0d0d0d", "#f5e31a", "#f4f4f0", "#e23b16", "#3d3d3d"],
+      "materials": ["matte black flaps", "yellow destination type", "mechanical seams"],
+      "viewport": "A black board filling the fold. One yellow title row AKASHA OS. Rows under it: HOST, NVIDIA, NOT BOOTABLE, then GATE · INSTALL in red.",
+      "risk": "Can read as a novelty clock if the flaps are decoration instead of the only navigation.",
+      "raised": [
+        {
+          "from": "challenger-sun",
+          "raise": "Horizon band: one long flap row owns the width. Not a stack of small cards."
+        },
+        {
+          "from": "challenger-quilt",
+          "raise": "Stamped seam: each grant is a flap that has already flipped, with a visible mechanical split."
+        }
+      ],
+      "comp": ".impeccable/mocks/decision/r5-assigned.webp",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "clock · EN/FR", "x": 0, "y": 0, "w": 12, "h": 1 },
+          { "label": "AKASHA OS · 0.1.2", "x": 0, "y": 1, "w": 12, "h": 2, "accent": true },
+          { "label": "HOST", "x": 0, "y": 3, "w": 12, "h": 1 },
+          { "label": "NVIDIA", "x": 0, "y": 4, "w": 12, "h": 1 },
+          { "label": "NOT BOOTABLE", "x": 0, "y": 5, "w": 12, "h": 1 },
+          { "label": "grant rows", "x": 0, "y": 6, "w": 12, "h": 2 },
+          { "label": "GATE · INSTALL", "x": 0, "y": 8, "w": 12, "h": 2, "accent": true }
+        ]
+      }
+    },
+    {
+      "id": "model-pick",
+      "label": "Safety Card",
+      "kicker": "IMPECCABLE’S PICK",
+      "lineage": "airline seatback safety cards",
+      "thesis": "The landing is a safety card: honesty is the first diagram, install is the brace-for-landing step.",
+      "palette": ["#f4f1e4", "#0b3d8c", "#e10600", "#f5c518", "#1a1a1a"],
+      "materials": ["laminated card", "flat instructional ink", "numbered panels"],
+      "viewport": "A laminated sheet: panel 1 not a bootable OS, panel 2 NVIDIA, panel 3 Windows or Linux, panel 4 INSTALL.",
+      "risk": "The most familiar ‘procedure as pictures’ destination for an install-first product.",
+      "comp": ".impeccable/mocks/decision/r5-pick.webp",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "header · AKASHA OS PREVIEW", "x": 0, "y": 0, "w": 12, "h": 2, "accent": true },
+          { "label": "1 not bootable", "x": 0, "y": 2, "w": 6, "h": 3 },
+          { "label": "2 NVIDIA", "x": 6, "y": 2, "w": 6, "h": 3 },
+          { "label": "3 Windows / Linux", "x": 0, "y": 5, "w": 6, "h": 3 },
+          { "label": "4 INSTALL", "x": 6, "y": 5, "w": 6, "h": 3, "accent": true },
+          { "label": "EN/FR · 0.1.2", "x": 0, "y": 8, "w": 12, "h": 2 }
+        ]
+      }
+    },
+    {
+      "id": "challenger-bench",
+      "label": "Cutting Bench",
+      "verdict": "competitive",
+      "lineage": "film cutting bench, orange flags, perforated rail",
+      "thesis": "Grants hang as frames on one orange rail; the folded flag is where you install.",
+      "palette": ["#000000", "#f25c05", "#f4f0e6", "#2a2a2a"],
+      "materials": ["grain-orange field", "perforated rail", "tape flags"],
+      "viewport": "A black bench, one orange perforated rail across the fold, frames labeled session / gpu / net, a folded flag on INSTALL.",
+      "case": "Holds product clarity: a flagged frame is a next step. Loses on audience identification: testers are not editors.",
+      "risk": "Orange can swallow the honesty line if the rail is the only thing that reads.",
+      "comp": ".impeccable/mocks/decision/r5-bench.webp",
+      "hero": "https://impeccable.style/worlds/cards/operate-a-cutting-bench-select-rail-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/operate-a-cutting-bench-select-rail.webp",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "pin bin · docs", "x": 0, "y": 0, "w": 12, "h": 2 },
+          { "label": "perforated rail", "x": 0, "y": 2, "w": 12, "h": 2, "accent": true },
+          { "label": "frame HOST", "x": 0, "y": 4, "w": 4, "h": 4 },
+          { "label": "frame NVIDIA", "x": 4, "y": 4, "w": 4, "h": 4 },
+          { "label": "flag INSTALL", "x": 8, "y": 4, "w": 4, "h": 4, "accent": true },
+          { "label": "hung trims · grants", "x": 0, "y": 8, "w": 12, "h": 2 }
+        ]
+      }
+    },
+    {
+      "id": "challenger-pulp",
+      "label": "Pulp Rack",
+      "verdict": "competitive",
+      "lineage": "drugstore pulp paperback rack",
+      "thesis": "Each route is a cover on a wire rack: Why, Grant, Install face out; the chosen cover is lipstick red.",
+      "palette": ["#0a1a3a", "#f2c01e", "#d61f26", "#f3e6c8"],
+      "materials": ["painted cover field", "taxi yellow lines", "wire pockets"],
+      "viewport": "Night-blue rack. One face-out cover: AKASHA OS, hook line not a bootable OS, red INSTALL as the dread line.",
+      "case": "Holds audience identification: everyone can read a pulp cover. Loses on product clarity: lurid energy can lie about a host app.",
+      "risk": "Do not paint invented people or guns. Covers are type and flat color only.",
+      "comp": ".impeccable/mocks/decision/r5-pulp.webp",
+      "hero": "https://impeccable.style/worlds/cards/posters-covers-sleeves-pulp-rack-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/posters-covers-sleeves-pulp-rack.webp",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "spines", "x": 0, "y": 0, "w": 3, "h": 10 },
+          { "label": "face-out cover", "x": 3, "y": 0, "w": 9, "h": 7, "accent": true },
+          { "label": "hook · not bootable", "x": 3, "y": 7, "w": 9, "h": 1 },
+          { "label": "INSTALL", "x": 3, "y": 8, "w": 9, "h": 2, "accent": true }
+        ]
+      }
+    },
+    {
+      "id": "challenger-rail",
+      "label": "Centre Rail",
+      "verdict": "competitive",
+      "lineage": "wide-margin reference edition, vermilion keys",
+      "thesis": "Two short columns around a vermilion key rail; honesty lives in the annotation margin.",
+      "palette": ["#efe6d4", "#1a1612", "#b11b1b", "#8a7d68"],
+      "materials": ["unbleached bone paper", "hairline rules", "vermilion keys"],
+      "viewport": "A small type block in a wide margin. Centre rail keys: grant, why, install. A vermilion note in the margin: not bootable, NVIDIA.",
+      "case": "Holds product clarity for a manual. Loses on the chroma steer: bone and iron can feel as dull as the last hand.",
+      "risk": "Reads as a scholarly reprint if the vermilion never owns a whole region.",
+      "comp": ".impeccable/mocks/decision/r5-rail.webp",
+      "hero": "https://impeccable.style/worlds/cards/rw-centre-rail-reference-setting-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/rw-centre-rail-reference-setting.webp",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "margin note · NVIDIA", "x": 0, "y": 0, "w": 3, "h": 10, "accent": true },
+          { "label": "column", "x": 3, "y": 0, "w": 3, "h": 10 },
+          { "label": "vermilion rail", "x": 6, "y": 0, "w": 1, "h": 10, "accent": true },
+          { "label": "column", "x": 7, "y": 0, "w": 3, "h": 10 },
+          { "label": "keyed nav", "x": 10, "y": 0, "w": 2, "h": 10 }
+        ]
+      }
+    },
+    {
+      "id": "challenger-sun",
+      "label": "Indoor Sun",
+      "verdict": "declined",
+      "lineage": "monofrequency indoor weather sun",
+      "thesis": "The page is a sodium-amber hall; the thesis sits on the far wall as a half sun.",
+      "palette": ["#c47a12", "#1a1208", "#f0c050", "#000000"],
+      "materials": ["amber haze", "silhouette black", "mirrored double"],
+      "viewport": "A long amber field, one half-disc, the honesty line low on the horizon, INSTALL as a silhouette at the foot.",
+      "case": "Loses both axes: a light installation is not this cohort, and haze hides the NVIDIA limit.",
+      "kept": "One horizon-wide band instead of a stack of small units.",
+      "risk": "Atmosphere without a download.",
+      "hero": "https://impeccable.style/worlds/cards/light-shadow-caustics-indoor-weather-sun-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/light-shadow-caustics-indoor-weather-sun.webp",
+      "comp": ".impeccable/mocks/decision/r5-sun.webp"
+    },
+    {
+      "id": "challenger-quilt",
+      "label": "Memory Quilt",
+      "verdict": "declined",
+      "lineage": "hand-pieced memory quilt",
+      "thesis": "Each grant is a cloth block with a date and a seam.",
+      "palette": ["#3d5a7a", "#8a1f1f", "#e8dcc8", "#1a1a1a"],
+      "materials": ["worn chambray", "new red stitch", "iron-gall labels"],
+      "viewport": "Unequal patches named session, gpu, net; a red stitch leads to INSTALL.",
+      "case": "Loses both axes: a quilt invents domestic history the product does not have.",
+      "kept": "A visible seam on every grant row, as if it already flipped.",
+      "risk": "Fabricates garments and owners.",
+      "hero": "https://impeccable.style/worlds/cards/textiles-weave-drape-fashion-memory-quilt-atlas-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/textiles-weave-drape-fashion-memory-quilt-atlas.webp",
+      "comp": ".impeccable/mocks/decision/r5-quilt.webp"
+    }
+  ],
+  "reroll": {
+    "registers": ["safer", "bolder"]
+  },
+  "buildPath": {
+    "value": "code",
+    "toggle": true
+  },
+  "canon": true,
+  "canonCard": {
+    "label": "The category standard",
+    "thesis": "Dark AI-OS hero, three feature cards, a Download button, executed at full craft.",
+    "palette": ["#0b0f14", "#f8fafc", "#3b82f6"],
+    "materials": ["soft cards", "glow accent", "product chrome"],
+    "viewport": "A night hero, a feature row, a primary download.",
+    "risk": "Indistinguishable from neighboring agent desktops by design.",
+    "comp": ".impeccable/mocks/decision/canon.webp"
+  },
+  "steer": true
+}

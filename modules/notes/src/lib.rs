@@ -154,6 +154,9 @@ fn list() -> Result<serde_json::Value, String> {
 struct ReadArgs {
     #[serde(default)]
     title: Option<String>,
+    /// Alias legacy / UI (certains clients envoyaient `name`).
+    #[serde(default)]
+    name: Option<String>,
     #[serde(default)]
     path: Option<String>,
     #[serde(default)]
@@ -161,9 +164,15 @@ struct ReadArgs {
 }
 
 fn read(args: &serde_json::Value) -> Result<serde_json::Value, String> {
-    let a: ReadArgs = aos_module_sdk::parse_args(args)?;
+    // Tolérance : si le payload est une string, la traiter comme path ou title.
+    let args = normalize_read_args(args);
+    let a: ReadArgs = aos_module_sdk::parse_args(&args)?;
+    let title = a
+        .title
+        .filter(|s| !s.is_empty())
+        .or_else(|| a.name.filter(|s| !s.is_empty()));
     let (title_hint, path, slug) =
-        resolve_identity(a.title.as_deref(), a.path.as_deref(), a.slug.as_deref())?;
+        resolve_identity(title.as_deref(), a.path.as_deref(), a.slug.as_deref())?;
     let content = aos_module_sdk::fs_read(&path)?;
     let (title_opt, body) = split_title_body(&content);
     let title = title_opt.unwrap_or(title_hint);
@@ -179,6 +188,18 @@ fn read(args: &serde_json::Value) -> Result<serde_json::Value, String> {
         "outgoing": outgoing,
         "incoming": incoming,
     }))
+}
+
+fn normalize_read_args(args: &serde_json::Value) -> serde_json::Value {
+    if let Some(s) = args.as_str() {
+        let s = s.trim();
+        if s.starts_with('/') || s.contains('/') {
+            return serde_json::json!({ "path": s });
+        }
+        return serde_json::json!({ "title": s });
+    }
+    // Anciens clients : objet vide ou clés inattendues — laisser tel quel.
+    args.clone()
 }
 
 #[derive(Deserialize)]

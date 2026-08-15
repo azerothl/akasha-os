@@ -38,31 +38,28 @@
     });
   });
 
-  const live = document.querySelector("[data-type]");
-  if (!live) {
-    return;
+  function pad(n) {
+    return String(n).padStart(2, "0");
   }
 
-  const full = live.getAttribute("data-type") || "";
-  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-  function finish() {
-    live.textContent = full;
-  }
-
-  if (reduce || !full) {
-    finish();
-    return;
-  }
-
-  let i = 0;
-  live.textContent = "";
-  const tick = window.setInterval(() => {
-    i += 1;
-    live.textContent = full.slice(0, i);
-    if (i >= full.length) {
-      window.clearInterval(tick);
-      finish();
+  function tickClock() {
+    const node = document.querySelector("[data-clock]");
+    if (!node) {
+      return;
     }
-  }, 18);
+    const now = new Date();
+    node.textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  }
+
+  tickClock();
+  window.setInterval(tickClock, 1000);
+
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduce) {
+    return;
+  }
+
+  document.querySelectorAll("[data-flip]").forEach((row, i) => {
+    row.style.animationDelay = `${i * 70}ms`;
+  });
 })();

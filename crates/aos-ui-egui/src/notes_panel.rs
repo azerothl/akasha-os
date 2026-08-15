@@ -265,6 +265,11 @@ pub fn show_notes_panel(ui: &mut Ui, state: &mut NotesPanelState) -> NotesAction
                         };
                         if ui.selectable_label(selected, label).clicked() {
                             actions.read_path = Some(n.path.clone());
+                            // Toujours envoyer aussi le titre : évite les anciens
+                            // WASM notes.read qui exigeaient `title` (issue #1).
+                            if !n.title.is_empty() {
+                                actions.read_title = Some(n.title.clone());
+                            }
                         }
                     }
                 });

@@ -362,6 +362,71 @@ pub fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
+fn module_manifest_hash(dir: &Path) -> Option<String> {
+    let raw = fs::read_to_string(dir.join("manifest.yaml")).ok()?;
+    for line in raw.lines() {
+        let line = line.trim();
+        if let Some(rest) = line.strip_prefix("hash:") {
+            let h = rest.trim().trim_matches('"').trim_matches('\'').to_string();
+            if !h.is_empty() {
+                return Some(h);
+            }
+        }
+    }
+    None
+}
+
+fn wasm_fingerprint(dir: &Path) -> Option<(u64, u64)> {
+    let meta = fs::metadata(dir.join("module.wasm")).ok()?;
+    let len = meta.len();
+    let mtime = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    Some((len, mtime))
+}
+
+/// Copie `share/.../*.aospkg` → `var/modules/<name>` si absent ou obsolète.
+/// Retourne `true` si une copie a été effectuée.
+pub fn sync_packaged_module(share_pkg: &Path, installed_dir: &Path) -> bool {
+    if !share_pkg.is_dir() || !share_pkg.join("module.wasm").exists() {
+        return false;
+    }
+    let need = if !installed_dir.join("module.wasm").exists() {
+        true
+    } else {
+        let share_hash = module_manifest_hash(share_pkg);
+        let inst_hash = module_manifest_hash(installed_dir);
+        match (share_hash, inst_hash) {
+            (Some(a), Some(b)) => a != b,
+            _ => wasm_fingerprint(share_pkg) != wasm_fingerprint(installed_dir),
+        }
+    };
+    if !need {
+        return false;
+    }
+    let _ = fs::remove_dir_all(installed_dir);
+    match copy_dir_recursive(share_pkg, installed_dir) {
+        Ok(()) => {
+            eprintln!(
+                "[aos-session] module synchronisé {} → {}",
+                share_pkg.display(),
+                installed_dir.display()
+            );
+            true
+        }
+        Err(e) => {
+            eprintln!(
+                "[aos-session] sync module échoué {} : {e}",
+                share_pkg.display()
+            );
+            false
+        }
+    }
+}
+
 pub fn read_version(home: &Path) -> String {
     for p in [home.join("VERSION"), PathBuf::from("VERSION")] {
         if let Ok(s) = fs::read_to_string(p) {
