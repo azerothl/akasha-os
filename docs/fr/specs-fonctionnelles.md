@@ -2,10 +2,11 @@
 
 **Langue :** [English](../functional-specs.md) | Français
 
-> Version : 0.2  
-> Date : 11/08/2026  
+> Version : 0.3  
+> Date : 15/08/2026  
 > Statut : brouillon  
 > Référence : `reflexion-agent-os.md`  
+> Changements v0.3 : couverture Preview 0.1.2 — F-AGT-11, F-NET-01/02, F-UI-09 ; annexe §12.  
 > Changements v0.2 : revue de complétude croisée avec `specs-techniques.md` — clarification du périmètre mono-utilisateur, ajout de F-BOOT-06, F-AGT-10, F-FS-05, F-SEC-07, F-SEC-08, précisions NFR-04 et glossaire.
 
 ---
@@ -134,6 +135,7 @@ Package unique exposant :
 | F-AGT-08 | Les actions à effet de bord sont **réversibles par défaut** (transaction / snapshot / undo) quand techniquement possible | Must |
 | F-AGT-09 | Autonomie graduée : le niveau de capacités d'un agent peut évoluer selon un score de confiance et des politiques utilisateur | Should |
 | F-AGT-10 | Un agent superviseur système peut arbitrer les conflits de ressources ou de priorité entre agents concurrents (au-delà de la simple notification) | Should |
+| F-AGT-11 | Avant les outils, le runtime classe le goal (`task.assess` simple/complex) et consulte d'abord la mémoire (`mem.bootstrap`) | Should |
 
 ### 5.3 Gestion des modèles d'IA
 
@@ -219,6 +221,7 @@ Package unique exposant :
 | F-UI-06 | Tableau de bord ressources : CPU, RAM, VRAM, disque, modèles chargés, agents actifs | Must |
 | F-UI-07 | Notifications priorisées (agent superviseur), pas de spam | Should |
 | F-UI-08 | Accessibilité de base (contraste, taille texte, navigation clavier) | Should |
+| F-UI-09 | Préférences persistées (langue, routage, trust, réseau, défauts agent, moteur de recherche) éditables depuis Settings | Must |
 
 ### 5.9 Sécurité, privacy, confiance
 
@@ -232,6 +235,13 @@ Package unique exposant :
 | F-SEC-06 | Isolation entre agents non liés (pas de fuite de contexte) | Must |
 | F-SEC-07 | Le système peut exiger une **confirmation humaine explicite** avant l'exécution d'une action classée sensible par la politique (distinct du simple audit après coup) | Must |
 | F-SEC-08 | L'accès réseau sortant (egress) d'un agent ou d'un module est contrôlé par capacité explicite (hôte/domaine autorisé) ; refus par défaut hors backends modèles configurés | Must |
+
+### 5.9bis Outils réseau (Preview)
+
+| ID | Exigence | Priorité |
+|----|----------|----------|
+| F-NET-01 | Recherche web opt-in avec moteur sélectionnable (`auto` / Brave / DuckDuckGo / Bing), refusée en offline strict | Must |
+| F-NET-02 | Lire une page HTML→texte sans exécuter de JavaScript (`web.browse`), sous la même politique d'egress | Should |
 
 ### 5.10 Observabilité et administration
 
@@ -352,4 +362,25 @@ Package unique exposant :
 
 - `reflexion-agent-os.md` — réflexion fondatrice  
 - `specs-techniques.md` — spécifications techniques  
+- `FEATURES.md` — catalogue Preview 0.1.2 livrée  
 - (futur) `adr/` — Architecture Decision Records  
+
+---
+
+## 12. Couverture Preview 0.1.2 (hôte)
+
+Correspondance de cette spec avec la **Preview hôte installable** (pas l'OS bootable).
+Détail : `FEATURES.md`.
+
+| IDs | État Preview |
+|-----|----------------|
+| F-BOOT-01–05 | Sonde matériel + setup modèles + chat offline ; pas de fallback CPU |
+| F-BOOT-06 | Overlay Release non destructif (apply au prochain lancement) |
+| F-AGT-01–08, 11 | Boucle de goal, caps, audit, steer, `task.assess`, mémoire d'abord |
+| F-AGT-09–10 | Trust low/medium + confirm ; superviseur relance auditd |
+| F-MDL-01–09 | llama.cpp local + remote optionnel ; routage local_only / balanced |
+| F-MEM-01–02, 05 | Working / épisodique / faits user ; onglet Mémoire |
+| F-MOD / F-EXT | notes.aospkg, ext-rt, skills déclaratives, `cap.request` |
+| F-UI-01–05, 09 | Double surface + panneau transparence + Settings |
+| F-SEC-01–08 | Caps, confirm, egress deny-by-default, isolation auditd |
+| F-NET-01–02 | Recherche multi-moteurs + `web.browse` |

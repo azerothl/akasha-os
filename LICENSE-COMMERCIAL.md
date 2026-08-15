@@ -46,7 +46,7 @@ must, visibly:
    (<https://github.com/azerothl/akasha-os>);
 3. not present the fork as if it were the original project.
 
-Trademarks **Akasha OS** and **Agent OS** remain reserved. A commercial fork
+The **Akasha OS** trademark remains reserved. A commercial fork
 must use a **different product name**, unless written authorization is given.
 
 ## 4. Royalty

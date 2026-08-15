@@ -1,9 +1,11 @@
-# First run — Agent OS Preview
+# First run — Akasha OS Preview
 
 **Language:** English | [Français](fr/FIRST-RUN.md)
 
 **This is not a bootable OS.** Preview runs on Windows or Linux x64 with an
 **NVIDIA** GPU.
+
+Full feature list: [FEATURES.md](FEATURES.md).
 
 ## Before you launch
 
@@ -28,16 +30,29 @@ Catalogue: `share/models/catalog-offerings.json`. Installed registry:
 
 ## What you can do
 
-| Tab | Usage |
-|-----|--------|
-| Chat / Sessions | Parallel sessions; **per-session model** combo |
+| Tab / surface | Usage |
+|---------------|--------|
+| Chat / Sessions | Parallel sessions; **per-session model**; slash commands (`/help`, `/agent`, `/notes`…) |
+| Memory | Long-term facts (remember / recall); injected as `mem.context` |
+| Notes | Human notes + via agent (WASM module) |
+| Agents | Goal loop, skills, tools, MCP; **model** at create; **Detail** timeline |
 | Models | List / load / download offerings; update banner when newer packs fit |
-| Memory | Long-term facts (remember / recall) |
-| Notes | Human notes + via agent |
-| Agents | Tasks with skills / tools; **model** at create |
-| Network (sidebar) | Opt-in web search / downloads |
+| Audit | Signed events; kill auditd (supervisor restarts it) |
+| Network (sidebar) | Opt-in `web.search` / `web.browse` / `net.fetch` |
+| Settings | Language, trust, routing, agent defaults, search engine |
 | Feedback | GitHub issue on azerothl/akasha-os |
-| Scenarios | Cohort protocol (see TESTER.md) |
+| Scenarios | Cohort protocol (see [TESTER.md](TESTER.md)) |
+
+### Agent detail
+
+Open **Détail** on an agent card or the Agents tab: live state, simple/complex
+badge, sources, step timeline, Pause / Resume / Retry / Kill / Steer.
+
+### Settings
+
+Preferences persist in `var/run/preferences.json` (language **en** / **fr**,
+routing, trust, default agent model, max steps, timeout, search engine,
+browse/fetch limits).
 
 ## Model updates
 
@@ -46,6 +61,12 @@ banner appears → **Open Models** → **Download**. Restart Preview after
 download so `etc/modeld.yaml` picks up new paths.
 
 CLI: `aos-session --download-models <id>…`
+
+## Network
+
+Off by default (`offline_strict`). Enable **Allow network**, then search
+(engine `auto` = Brave → DuckDuckGo → Bing) or **Browse** a URL (HTML → text).
+Optional Brave key: `var/secrets/keys.yaml` → `brave_search_api_key`.
 
 ## Quick troubleshooting
 

@@ -23,6 +23,6 @@ ici ; discute d’abord d’une exception écrite.
 
 ## Marque
 
-N’utilise pas « Akasha OS » / « Agent OS » comme nom d’un fork. Conserve
+N’utilise pas « Akasha OS » comme nom d’un fork. Conserve
 `NOTICE` et un lien vers
 <https://github.com/azerothl/akasha-os>.

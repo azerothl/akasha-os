@@ -1,4 +1,4 @@
-# Catalogue de modèles — Agent OS P0 (specs-techniques §3.2)
+# Catalogue de modèles — Akasha OS P0 (specs-techniques §3.2)
 #
 # Extensions P0 par rapport au schéma §3.2, nécessaires au simulateur de
 # placement : `resource_hints.embed_bytes` et `resource_hints.kv_bytes_per_token`

@@ -2,10 +2,10 @@
 
 **Language:** English | [Français](fr/plan-developpement-phases.md)
 
-> Version: 1.2  
-> Date: 13/08/2026  
+> Version: 1.3  
+> Date: 15/08/2026  
 > Status: reference plan  
-> References: `docs/functional-specs.md`, `docs/technical-specs.md`, `docs/vision.md`
+> References: `docs/functional-specs.md`, `docs/technical-specs.md`, `docs/vision.md`, `docs/FEATURES.md`
 
 ---
 
@@ -363,10 +363,16 @@ Deliver **Agent OS Preview 0.1**: the same host stack (P1–P5),
 | # | Deliverable | Description |
 |---|-------------|-------------|
 | PC.1 | `aos-session` | Supervisor: AOS_HOME, configs, ordered boot, auditd watchdog, UI |
-| PC.2 | Preview package | `bin/` + embedded GGUFs + notes.aospkg; Win/Linux installation |
+| PC.2 | Preview package | `bin/` + first-run GGUF download + notes.aospkg; Win/Linux |
 | PC.3 | Cohort egui UI | Onboarding, notes, confirm, agents, audit, scenarios, banner |
-| PC.4 | Feedback | `feedback.submit` intent → `var/feedback/` (no telemetry) |
-| PC.5 | Docs | `INSTALL.md`, `docs/TESTER.md`, `packaging/` scripts |
+| PC.4 | Feedback | `feedback.submit` intent → `var/feedback/` + optional GitHub issue |
+| PC.5 | Docs | `INSTALL.md`, `docs/TESTER.md`, `docs/FEATURES.md`, `packaging/` |
+| PC.6–PC.9 | Sessions / memory / search / files | Persisted chat, `mem.context`, opt-in net, generate |
+| PC.10 | Release updates | Non-destructive overlay of `bin/` + `share/` |
+| PC.11 | Transparency | Agent detail timeline, sources, pause / steer / retry |
+| PC.12 | Settings | Persisted prefs (language, routing, trust, web engine) |
+| PC.13 | Browse + engines | `web.browse`; Brave / DuckDuckGo / Bing |
+| PC.14 | Agent bootstrap | `task.assess` + memory-first recall; Qwen think strip |
 
 ### Exit gates (Gate PC)
 
@@ -379,8 +385,9 @@ Deliver **Agent OS Preview 0.1**: the same host stack (P1–P5),
 # Linux: ./packaging/build-preview.sh
 ```
 
-> PC status (13/08/2026): Preview 0.1 implementation (session, egui,
-> feedback, packaging). Cohort gate open — see `INSTALL.md`.
+> PC status (15/08/2026): Preview **0.1.2** shipped (session, egui,
+> hardware-aware models, transparency, Settings, multi-engine browse).
+> Cohort gate still open — see `INSTALL.md` and `docs/FEATURES.md`.
 
 ### Specific risks
 
@@ -406,15 +413,16 @@ multi-GPU, and apply general polish. **Output: Agent OS v1.0.**
 | P5.1 | Mature continuous batching | vLLM-like, deep integration with the native scheduler |
 | P5.2 | Multi-GPU pipeline | Distribution of layers across GPUs (pipeline parallelism) |
 | P5.3 | Native AccelDevice | Replace the virtio gateway with a native trait if P4 required it |
-| P5.4 | Advanced UI | Complete Transparency panel, advanced Control bar, accessibility (F-UI-08) |
+| P5.4 | Advanced UI | Accessibility (F-UI-08); Preview already ships the egui transparency panel + control bar (PC.11) |
 | P5.5 | Validated aarch64 port | Stable execution on at least one target ARM64 machine |
 | P5.6 | Stabilization & release | Fixes, documentation, global acceptance criteria (`docs/functional-specs.md` §9) |
 
-> P5 status (12/08/2026): **P5.1 passed** on the development host with
+> P5 status (15/08/2026): **P5.1 passed** on the development host with
 > `aos-gate-p5` — 8 streams 8/8 at ×0.77 wall time vs. single stream
 > (NFR-04). Gaps: P5.2 multi-GPU not testable (1× RTX 4080 SUPER), P5.3
-> AccelDevice = bare metal (ADR 0001), P5.4 advanced UI and P5.5 aarch64
-> deferred. Dispatcher: gathering window + `generate_batch` (packed prefill,
+> AccelDevice = bare metal (ADR 0001), P5.5 aarch64 deferred. P5.4
+> transparency + control bar shipped in Preview egui (PC.11); accessibility
+> remains. Dispatcher: gathering window + `generate_batch` (packed prefill,
 > unified KV). The single-stream path remains `generate()` (P1).
 
 ### Exit gates (Gate P5)
@@ -485,5 +493,6 @@ deferred if necessary.
 
 - `docs/functional-specs.md` — product requirements
 - `docs/technical-specs.md` — technical architecture
+- `docs/FEATURES.md` — shipped Preview catalogue
 - `docs/vision.md` — framing and open directions
 - (to be created as work progresses) published: `adr/0001-microkernel.md` (P4 host + **phase PV** seL4 VM), `adr/0002-model-placement.md` (P0), `adr/0003-ui-framework.md` (accepted: egui), `adr/0005-offload-etat-de-l-art.md` (pre-P1)

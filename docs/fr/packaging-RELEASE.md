@@ -1,4 +1,4 @@
-# GitHub Release — Agent OS Preview
+# GitHub Release — Akasha OS Preview
 
 **Langue :** [English](../../packaging/RELEASE.md) | Français
 
@@ -32,7 +32,7 @@ Les GGUF sont téléchargés au **premier run** via `share/models/manifest.json`
 ## Notes de version (brouillon)
 
 ```
-Agent OS Preview — cohorte de test
+Akasha OS Preview — cohorte de test
 
 - Install Win/Linux + NVIDIA (pas un OS bootable)
 - Premier run : download modèles + tutoriel in-app

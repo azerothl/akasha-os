@@ -2,10 +2,10 @@
 
 **Langue :** [English](../development-plan.md) | Français
 
-> Version : 1.2  
-> Date : 13/08/2026  
+> Version : 1.3  
+> Date : 15/08/2026  
 > Statut : plan de référence  
-> Références : `specs-fonctionnelles.md`, `specs-techniques.md`, `reflexion-agent-os.md`
+> Références : `specs-fonctionnelles.md`, `specs-techniques.md`, `reflexion-agent-os.md`, `FEATURES.md`
 
 ---
 
@@ -314,10 +314,16 @@ compiler. UI egui = surface principale ; retours via `feedback.submit`
 | # | Livrable | Description |
 |---|----------|-------------|
 | PC.1 | `aos-session` | Superviseur : AOS_HOME, configs, boot ordonné, watchdog auditd, UI |
-| PC.2 | Paquet Preview | `bin/` + GGUF embarqués + notes.aospkg ; install Win/Linux |
+| PC.2 | Paquet Preview | `bin/` + download GGUF au 1er run + notes.aospkg ; install Win/Linux |
 | PC.3 | UI egui cohorte | Onboarding, notes, confirm, agents, audit, scénarios, bannière |
-| PC.4 | Feedback | Intent `feedback.submit` → `var/feedback/` (pas de télémétrie) |
-| PC.5 | Docs | `INSTALL.md`, `docs/TESTER.md`, scripts `packaging/` |
+| PC.4 | Feedback | Intent `feedback.submit` → `var/feedback/` + issue GitHub optionnelle |
+| PC.5 | Docs | `INSTALL.md`, `TESTER.md`, `FEATURES.md`, scripts `packaging/` |
+| PC.6–PC.9 | Sessions / mémoire / search / fichiers | Chat persisté, `mem.context`, net opt-in, generate |
+| PC.10 | Updates Releases | Overlay non destructif de `bin/` + `share/` |
+| PC.11 | Transparence | Timeline agent, sources, pause / steer / retry |
+| PC.12 | Settings | Préférences persistées (langue, routage, trust, moteur) |
+| PC.13 | Browse + moteurs | `web.browse` ; Brave / DuckDuckGo / Bing |
+| PC.14 | Bootstrap agent | `task.assess` + mémoire d'abord ; strip think Qwen |
 
 ### Gates de sortie (Gate PC)
 
@@ -330,8 +336,9 @@ compiler. UI egui = surface principale ; retours via `feedback.submit`
 # Linux : ./packaging/build-preview.sh
 ```
 
-> Statut PC (13/08/2026) : implémentation Preview 0.1 (session, egui,
-> feedback, packaging). Gate cohorte ouverte — voir `INSTALL.md`.
+> Statut PC (15/08/2026) : Preview **0.1.2** livrée (session, egui,
+> modèles selon le matériel, transparence, Settings, browse multi-moteurs).
+> Gate cohorte encore ouverte — voir `INSTALL.md` et `FEATURES.md`.
 
 ### Risques spécifiques
 
@@ -356,11 +363,11 @@ Exploiter pleinement le GPU/NPU comme citoyen de première classe du scheduler, 
 | P5.1 | Continuous batching mature | vLLM-like, intégration profonde avec le scheduler natif |
 | P5.2 | Multi-GPU pipeline | Répartition de couches inter-GPU (pipeline parallelism) |
 | P5.3 | AccelDevice natif | Remplacement de la passerelle virtio par un trait natif si P4 l'exigeait |
-| P5.4 | UI avancée | Transparency panel complet, Control bar avancée, accessibilité (F-UI-08) |
+| P5.4 | UI avancée | Accessibilité (F-UI-08) ; la Preview livre déjà le panneau de transparence egui + control bar (PC.11) |
 | P5.5 | Port aarch64 validé | Exécution stable sur au moins une machine ARM64 cible |
 | P5.6 | Stabilisation & release | Corrections, documentation, critères d'acceptation globaux (specs-fonctionnelles §9) |
 
-> Statut P5 (12/08/2026) : **P5.1 passé** sur l'hôte de dev avec `aos-gate-p5` — 8 flux 8/8 en ×0,77 wall vs unitaire (NFR-04). Écarts : P5.2 multi-GPU non testable (1× RTX 4080 SUPER), P5.3 AccelDevice = fer nu (ADR 0001), P5.4 UI avancée et P5.5 aarch64 reportés. Dispatcher : fenêtre de rassemblement + `generate_batch` (prefill packé, KV unifié). Chemin unitaire reste `generate()` (P1).
+> Statut P5 (15/08/2026) : **P5.1 passé** sur l'hôte de dev avec `aos-gate-p5` — 8 flux 8/8 en ×0,77 wall vs unitaire (NFR-04). Écarts : P5.2 multi-GPU non testable (1× RTX 4080 SUPER), P5.3 AccelDevice = fer nu (ADR 0001), P5.5 aarch64 reporté. P5.4 transparence + control bar livrés dans egui Preview (PC.11) ; accessibilité restante. Dispatcher : fenêtre de rassemblement + `generate_batch` (prefill packé, KV unifié). Chemin unitaire reste `generate()` (P1).
 
 ### Gates de sortie (Gate P5)
 
@@ -424,5 +431,6 @@ Les exigences `Must` de `specs-fonctionnelles.md` doivent être **toutes couvert
 
 - `specs-fonctionnelles.md` — exigences produit
 - `specs-techniques.md` — architecture technique
+- `FEATURES.md` — catalogue Preview livrée
 - `reflexion-agent-os.md` — cadrage et pistes ouvertes
 - (à créer au fil de l'eau) publiés : `adr/0001-microkernel.md` (P4 hôte + **phase PV** seL4 VM), `adr/0002-model-placement.md` (P0), `adr/0003-ui-framework.md` (accepté : egui), `adr/0005-offload-etat-de-l-art.md` (pré-P1)

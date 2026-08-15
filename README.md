@@ -1,4 +1,4 @@
-# Akasha OS (Agent OS)
+# Akasha OS
 
 **Language:** English | [Français](docs/fr/README.md)
 
@@ -8,25 +8,29 @@
 first-class GPU, offline-first. Preview builds run on a Windows/Linux host
 (NVIDIA); a seL4 bare-metal track is separate.
 
-> This is **not** a bootable OS image yet. Preview 0.1 is an installable host
+> This is **not** a bootable OS image yet. Preview 0.1.2 is an installable host
 > app for testers.
 
-## Why Agent OS
+## Why Akasha OS
 
-Most agent stacks are apps on top of a general-purpose OS. Agent OS treats
+Most agent stacks are apps on top of a general-purpose OS. Akasha OS treats
 agents, models, tools, and memory as **first-class system services** with
 explicit capabilities, audit, and policy — so autonomy stays bounded and
 observable.
 
 ## Preview features
 
+Full catalogue: [docs/FEATURES.md](docs/FEATURES.md).
+
 | Area | What you get |
 |------|----------------|
-| Chat / Sessions | Parallel persisted conversations |
-| Memory | Long-term user facts (remember / recall) |
+| Chat / Sessions | Parallel persisted conversations; slash commands; per-session model |
+| Memory | Long-term facts; memory-first agent bootstrap |
 | Notes | Human + agent-authored notes (WASM module) |
-| Agents | Goal loop, skills, tools, optional MCP |
-| Network | Opt-in web search / fetch (offline by default) |
+| Agents | Goal loop, skills, tools, MCP; transparency timeline; steer / pause |
+| Models | Hardware-aware first-run packs; download / load; local-only by default |
+| Network | Opt-in search (Brave / DDG / Bing) + `web.browse` + fetch |
+| Settings | Language, trust, routing, agent defaults, search engine |
 | Feedback | Local report + GitHub issue on this repo |
 | Updates | Non-destructive overlays from GitHub Releases |
 
@@ -36,14 +40,14 @@ observable.
 - NVIDIA GPU + recent driver (`nvidia-smi -L`)
 - ~4 GB free disk (binaries + GGUF models downloaded on first run)
 
-No macOS / CPU-only mode in Preview 0.1.
+No macOS / CPU-only mode in Preview 0.1.2.
 
 ## Quick start
 
 1. Download the latest zip/tar.gz from
    [GitHub Releases](https://github.com/azerothl/akasha-os/releases).
 2. Run `install.ps1` (Windows) or `./install.sh` (Linux).
-3. Launch **Agent OS Preview** — first run downloads models if needed, then
+3. Launch **Akasha OS Preview** — first run downloads models if needed, then
    opens the in-app tutorial.
 
 See [INSTALL.md](INSTALL.md) and [docs/FIRST-RUN.md](docs/FIRST-RUN.md).
@@ -63,6 +67,7 @@ cargo run -p aos-session --release
 | Doc | Description |
 |-----|-------------|
 | [docs/STATUS.md](docs/STATUS.md) | **Project status** (phases & gates) |
+| [docs/FEATURES.md](docs/FEATURES.md) | **Shipped Preview features** |
 | [docs/FIRST-RUN.md](docs/FIRST-RUN.md) | First-run guide |
 | [docs/functional-specs.md](docs/functional-specs.md) | Functional requirements |
 | [docs/technical-specs.md](docs/technical-specs.md) | Architecture & APIs |
@@ -83,9 +88,9 @@ French mirrors live under [`docs/fr/`](docs/fr/).
   [Akasha OS](https://github.com/azerothl/akasha-os).
 - **Commercial license** ([`LICENSE-COMMERCIAL.md`](LICENSE-COMMERCIAL.md)) —
   proprietary forks / closed SaaS. Attribution + royalty. Contact:
-  loic.peaudecerf@fasst.io.
+  loic.peaudecerf@proton.me.
 
-Trademarks **Akasha OS** and **Agent OS** are reserved.
+The **Akasha OS** trademark is reserved.
 
 ## Status
 

@@ -1,15 +1,16 @@
-# Protocole testeur — Agent OS Preview 0.1
+# Protocole testeur — Akasha OS Preview
 
 **Langue :** [English](../TESTER.md) | Français
 
 Merci de tester la Preview. Objectif : installer **sans** `cargo` ni clone du
 repo, exercer les parcours principaux, et envoyer un retour **depuis l'UI**.
+Catalogue : [FEATURES.md](FEATURES.md).
 
 ## Avant de commencer
 
 - Machine Windows ou Linux x64 + GPU NVIDIA (`nvidia-smi` OK)
 - Installation : voir [INSTALL.md](INSTALL.md)
-- Lancer **Agent OS Preview** (`aos-session`)
+- Lancer **Akasha OS Preview** (`aos-session`)
 
 Bannière attendue : *Preview sur Windows/Linux — ce n'est pas encore l'OS bootable*.
 
@@ -58,13 +59,21 @@ Bannière attendue : *Preview sur Windows/Linux — ce n'est pas encore l'OS boo
 - Revenir au Chat : le prochain message doit pouvoir s'appuyer sur ce contexte
   (injection `mem.context` avant infer).
 
-### 8. Recherche web (PC.8)
+### 8. Recherche web (PC.8 / PC.13)
 
 - Case **Autoriser le réseau** (barre latérale) **désactivée** → **Rechercher**
   doit échouer (`offline_strict`).
-- Activer le réseau → recherche (ex. « Agent OS seL4 ») → résultats titre/URL.
+- Activer le réseau → recherche (ex. « Akasha OS seL4 ») → résultats titre/URL.
+- Settings → moteur : essayer `auto`, puis forcer `duckduckgo` ou `bing`.
 - (Optionnel) clé Brave dans `var/secrets/keys.yaml` :
-  `brave_search_api_key: "…"` — sinon DuckDuckGo HTML.
+  `brave_search_api_key: "…"` — sinon DuckDuckGo / Bing HTML.
+
+### 8b. Parcourir une page (PC.13)
+
+- Réseau ON : coller une URL → **Parcourir** (`web.browse`).
+- Attendre titre + texte extrait (sans JavaScript). Comparer avec
+  **Télécharger URL** (`net.fetch`), qui enregistre le fichier brut sous
+  `/downloads`.
 
 ### 9. Téléchargement + génération fichiers (PC.9)
 
@@ -86,14 +95,28 @@ Bannière attendue : *Preview sur Windows/Linux — ce n'est pas encore l'OS boo
 
 Les rapports **security** ne sont **pas** publiés.
 
-**Aucun envoi réseau automatique** (hors actions explicites : PC.8–9 et
-envoi de retour GitHub).
+**Aucun envoi réseau automatique** (hors actions explicites : PC.8–9, browse,
+et envoi de retour GitHub).
+
+### 11. Settings (PC.12)
+
+- **Settings** : basculer en ↔ fr ; changer le modèle agent / max steps.
+- Redémarrer Preview : les préférences dans `var/run/preferences.json` doivent
+  persister.
+
+### 12. Transparence agent (PC.11)
+
+- Lancer un agent (onglet Agents ou `/agent` dans le Chat) avec une tâche courte.
+- Ouvrir **Détail** : timeline, sources si recherche/browse, Pause puis Reprendre
+  (ou Steer une nouvelle directive).
+- Une tâche complexe affiche le badge **complex** (`task.assess`) et peut
+  spawner un sous-agent (planner).
 
 ## Critères de succès (équipe)
 
 - 3 testeurs Windows + 1 Linux suivent ce protocole sans toolchain Rust
 - Au moins un fichier `var/feedback/fb-*.json` exploitable par retour
-- Gates PC.6–PC.9 cochés sur au moins une machine
+- Gates PC.6–PC.9 et PC.11–PC.13 cochés sur au moins une machine
 
 ## Hors scope Preview 0.1
 

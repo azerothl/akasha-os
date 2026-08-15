@@ -23,5 +23,5 @@ written exception first.
 
 ## Trademark
 
-Do not use “Akasha OS” / “Agent OS” as the name of a fork. Keep `NOTICE`
+Do not use “Akasha OS” as the name of a fork. Keep `NOTICE`
 and a link to <https://github.com/azerothl/akasha-os>.

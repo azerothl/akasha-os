@@ -23,6 +23,12 @@ Linux x64 + NVIDIA, tester depuis egui, renvoyer des feedbacks locaux.
 | PC.7 | Mémoire session + user + panneau UI | fait |
 | PC.8 | `web.search` + réseau opt-in | fait |
 | PC.9 | FS binaire + `net.fetch` + `files.generate` | fait |
+| PC.11 | Panneau transparence agent (`agent.trace`, sources, steer) | fait |
+| PC.12 | Onglet Settings + `var/run/preferences.json` | fait |
+| PC.13 | `web.search` multi-moteurs + `web.browse` | fait |
+| PC.14 | Bootstrap mémoire + strip `<think>` Qwen | fait |
+
+Catalogue : [`docs/fr/FEATURES.md`](../FEATURES.md).
 
 ## Gates PC.6–PC.9
 
@@ -45,6 +51,6 @@ Voir scénarios dans [`docs/TESTER.md`](docs/TESTER.md).
 
 ## Suite
 
-- Vague 2 : citations, export zip, restore agent, cancel infer/fetch, clipboard
-- Cohorte pilote + triage feedback
+- Reste vague 2 : export zip, cancel infer/fetch, clipboard
+- Cohorte pilote + triage feedback (gate encore ouverte)
 - PV / fer nu restent parallèles (ADR 0001)

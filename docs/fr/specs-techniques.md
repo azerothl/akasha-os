@@ -2,10 +2,11 @@
 
 **Langue :** [English](../technical-specs.md) | Français
 
-> Version : 0.2  
-> Date : 11/08/2026  
+> Version : 0.3  
+> Date : 15/08/2026  
 > Statut : brouillon  
-> Référence : `specs-fonctionnelles.md`, `reflexion-agent-os.md`  
+> Référence : `specs-fonctionnelles.md`, `reflexion-agent-os.md`, `FEATURES.md`  
+> Changements v0.3 : Preview 0.1.2 — `web.browse`, `web.search` multi-moteurs, panneau de transparence egui, Settings persistées (`preferences.json`).  
 > Changements v0.2 : revue de complétude — ajout Agent superviseur/System Assistant/Trust Manager (§4.5-4.7), classification de sensibilité (§6.4), Module Registry (§7), egress réseau (§9.5), confirmation bloquante (§9.4), mises à jour système (§10.1), Module API/Admin API (§11.4-11.5), profil utilisateur (§12), cibles agents concurrents (§13), accessibilité (§8.3), glossaire technique et matrice de traçabilité (§21-22).
 
 ---
@@ -679,7 +680,7 @@ Deux chemins vers un `.aospkg` installable :
 
 `module.install` exige la capacité `module.install` pour un acteur agent (humains exemptés en v1). Après install, l'agent demande `tool.invoke:<name>` via `cap.request`.
 
-Le host ABI WASM expose en plus : `web.search`, `net.fetch`, `files.generate`, `mem.context` / `mem.user.*` / `mem.shared_*`, `ext.load_handlers`. Interdits : `module.install`, `module.compile`, `secrets.get`, `agent.*`, `trust.set`.
+Le host ABI WASM expose en plus : `web.search`, `web.browse`, `net.fetch`, `files.generate`, `mem.context` / `mem.user.*` / `mem.shared_*`, `ext.load_handlers`. Interdits : `module.install`, `module.compile`, `secrets.get`, `agent.*`, `trust.set`.
 
 ---
 
@@ -690,8 +691,8 @@ Le host ABI WASM expose en plus : `web.search`, `net.fetch`, `files.generate`, `
 - **Compositor** (display server minimal)
 - **Shell direct** : dock/panels, file manager, settings, resource dashboard
 - **Shell conversationnel** : timeline, streaming tokens, cartes d'actions
-- **Transparency panel** : chain-of-custody des décisions agent
-- **Control bar** : pause / stop / steer sur agent sélectionné
+- **Transparency panel** : chain-of-custody des décisions agent (timeline `agent.trace`, sources agrégées, badge simple/complex). **Preview 0.1.2** : livré dans egui (onglet Agents + cartes chat).
+- **Control bar** : pause / stop / steer / retry sur l'agent sélectionné
 
 ### 8.2 Contraintes perf
 
@@ -776,6 +777,16 @@ Règles par défaut :
 - Pour les **modules/outils génériques** (ex. recherche web, appel API tiers), la capacité `net.connect` est demandée explicitement dans le manifeste (§7.3) et review par l'utilisateur à l'installation (comme les permissions fichiers).
 - Mode « offline strict » (politique globale) : coupe l'ensemble des capacités `net.connect` actives, y compris celles déjà accordées, sans désinstallation des modules (renforce F-MDL-06).
 - Toute tentative de connexion refusée est auditée (`policy deny`, §9.3) avec l'hôte cible, pour diagnostic.
+
+Outils réseau Preview (F-NET-01/02), tous soumis au même contrôle d'egress :
+
+| Intent | Comportement |
+|--------|-----------|
+| `web.search` | `engine` : `auto` (API Brave si `brave_search_api_key` → DuckDuckGo HTML → Bing HTML) ou forcé `brave` / `duckduckgo` / `bing` |
+| `web.browse` | HTTP GET, HTML → texte (sans JS) ; `max_chars` (défaut 12_000) |
+| `net.fetch` | Téléchargement binaire dans le FS logique (défaut `/downloads/`, `max_bytes`) |
+
+Défauts utilisateur dans `var/run/preferences.json` (`web_search_engine`, `web_browse_max_chars`, `web_fetch_max_bytes`, `network_online`).
 
 ---
 

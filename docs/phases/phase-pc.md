@@ -21,6 +21,12 @@ NVIDIA, test from egui, send local feedback. **Not** seL4 / bare metal.
 | PC.7 | Session + user memory + UI panel | done |
 | PC.8 | `web.search` + opt-in network | done |
 | PC.9 | Binary FS + `net.fetch` + `files.generate` | done |
+| PC.11 | Agent transparency panel (`agent.trace`, sources, steer) | done |
+| PC.12 | Settings tab + `var/run/preferences.json` | done |
+| PC.13 | Multi-engine `web.search` + `web.browse` | done |
+| PC.14 | Memory-first bootstrap + Qwen `<think>` strip | done |
+
+Catalogue: [`docs/FEATURES.md`](../FEATURES.md).
 
 ## Gates PC.6–PC.9
 
@@ -43,6 +49,6 @@ See scenarios in [`docs/TESTER.md`](../TESTER.md).
 
 ## Next
 
-- Wave 2: citations, zip export, agent restore, cancel infer/fetch, clipboard
-- Pilot cohort + feedback triage
+- Wave 2 leftovers: zip export, cancel infer/fetch, clipboard
+- Pilot cohort + feedback triage (gate still open)
 - PV / bare metal remain parallel (ADR 0001)

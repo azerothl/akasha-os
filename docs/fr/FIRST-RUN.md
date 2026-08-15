@@ -1,9 +1,11 @@
-# Premier lancement — Agent OS Preview
+# Premier lancement — Akasha OS Preview
 
 **Langue :** [English](../FIRST-RUN.md) | Français
 
 **Ce n'est pas un OS bootable.** Preview tourne sur Windows ou Linux x64
 avec un GPU **NVIDIA**.
+
+Catalogue : [FEATURES.md](FEATURES.md).
 
 ## Avant de lancer
 
@@ -27,13 +29,36 @@ Catalogue : `share/models/catalog-offerings.json`.
 
 ## Onglets utiles
 
-| Onglet | Usage |
-|--------|--------|
-| Chat / Sessions | Modèle **par session** |
+| Onglet / surface | Usage |
+|------------------|--------|
+| Chat / Sessions | Modèle **par session** ; commandes slash (`/help`, `/agent`, `/notes`…) |
+| Mémoire | Faits long terme ; injection `mem.context` |
+| Notes | Humaines + via agent (module WASM) |
+| Agents | Goal, skills, outils, MCP ; **modèle** à la création ; **Détail** |
 | Models | Liste / load / download ; bandeau si nouveaux packs |
-| Agents | Choix du modèle à la création |
+| Audit | Événements signés ; tuer auditd (le superviseur le relance) |
+| Réseau (barre latérale) | Opt-in `web.search` / `web.browse` / `net.fetch` |
+| Settings | Langue, trust, routage, défauts agent, moteur de recherche |
+| Retour | Issue GitHub sur azerothl/akasha-os |
+| Scénarios | Protocole cohorte ([TESTER.md](TESTER.md)) |
+
+### Détail agent
+
+Carte chat ou onglet Agents → **Détail** : état, badge simple/complex, sources,
+timeline, Pause / Reprendre / Relancer / Kill / Steer.
+
+### Settings
+
+Préférences dans `var/run/preferences.json` (langue **en** / **fr**, routage,
+trust, modèle agent, max steps, timeout, moteur, limites browse/fetch).
 
 Mises à jour modèles : bandeau vert → Models → Download → redémarrer Preview.
+
+## Réseau
+
+Coupé par défaut (`offline_strict`). **Autoriser le réseau**, puis rechercher
+(`auto` = Brave → DuckDuckGo → Bing) ou **Parcourir** une URL (HTML → texte).
+Clé Brave optionnelle : `var/secrets/keys.yaml`.
 
 ## Dépannage
 

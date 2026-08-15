@@ -47,7 +47,7 @@ Akasha OS doit, de façon visible :
    (<https://github.com/azerothl/akasha-os>) ;
 3. ne pas présenter le fork comme s’il était le projet original.
 
-Les marques **Akasha OS** et **Agent OS** restent réservées. Un fork
+La marque **Akasha OS** reste réservée. Un fork
 commercial doit utiliser un **autre nom de produit**, sauf autorisation
 écrite.
 

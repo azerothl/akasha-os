@@ -3,9 +3,12 @@
 **Langue :** [English](../STATUS.md) | Français
 
 Résumé des phases livrées. Détail : [plan-developpement-phases.md](plan-developpement-phases.md),
-[phases/](phases/).
+[phases/](phases/). Surface Preview : [FEATURES.md](FEATURES.md).
 
 **En-tête :** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
+
+**Preview :** 0.1.2 (15/08/2026) — appli hôte Windows/Linux + NVIDIA ; pas un
+OS bootable. Gate cohorte encore ouverte.
 
 ## P0 — Simulateur (validé)
 
@@ -51,5 +54,17 @@ Voir [phases/phase-p5.md](phases/phase-p5.md).
 
 ## PC — Preview cohorte
 
-Voir [phases/phase-pc.md](phases/phase-pc.md). Tables détaillées EN :
-[../STATUS.md](../STATUS.md).
+| Livrable | État |
+|----------|------|
+| PC.1–PC.10 | Session, packaging, egui, feedback, docs, sessions, mémoire, search, fichiers, updates |
+| PC.11 Transparence agent (timeline, sources, steer) | fait |
+| PC.12 Settings + préférences persistées | fait |
+| PC.13 Recherche multi-moteurs + `web.browse` | fait |
+| PC.14 Bootstrap mémoire + strip think Qwen | fait |
+| Setup modèles selon le matériel | fait |
+| Site public (EN/FR) | fait |
+
+Gate cohorte (3 Win + 1 Linux, sans toolchain) encore **ouverte**.
+
+Détail : [phases/phase-pc.md](phases/phase-pc.md), [FEATURES.md](FEATURES.md).
+Tables EN : [../STATUS.md](../STATUS.md).

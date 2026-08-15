@@ -2,10 +2,11 @@
 
 **Language:** English | [Français](fr/specs-fonctionnelles.md)
 
-> Version: 0.2  
-> Date: 11/08/2026  
+> Version: 0.3  
+> Date: 15/08/2026  
 > Status: draft  
 > Reference: `docs/vision.md`  
+> Changes v0.3: Preview 0.1.2 coverage — F-AGT-11, F-NET-01/02, F-UI-09; appendix §12.  
 > Changes v0.2: completeness review cross-checked with `docs/technical-specs.md` — clarification of the single-user scope, addition of F-BOOT-06, F-AGT-10, F-FS-05, F-SEC-07, F-SEC-08, clarifications to NFR-04 and glossary.
 
 ---
@@ -134,6 +135,7 @@ Single package exposing:
 | F-AGT-08 | Side-effecting actions are **reversible by default** (transaction / snapshot / undo) when technically possible | Must |
 | F-AGT-09 | Graduated autonomy: an agent’s capability level can evolve according to a trust score and user policies | Should |
 | F-AGT-10 | A system supervisor agent can arbitrate resource or priority conflicts between concurrent agents (beyond simple notification) | Should |
+| F-AGT-11 | Before tool use, the runtime classifies the goal (`task.assess` simple/complex) and consults memory first (`mem.bootstrap`) | Should |
 
 ### 5.3 AI model management
 
@@ -219,6 +221,7 @@ Single package exposing:
 | F-UI-06 | Resource dashboard: CPU, RAM, VRAM, disk, loaded models, active agents | Must |
 | F-UI-07 | Prioritized notifications (supervisor agent), no spam | Should |
 | F-UI-08 | Basic accessibility (contrast, text size, keyboard navigation) | Should |
+| F-UI-09 | Persisted user preferences (language, routing, trust, network, agent defaults, search engine) editable from a Settings surface | Must |
 
 ### 5.9 Security, privacy, trust
 
@@ -232,6 +235,13 @@ Single package exposing:
 | F-SEC-06 | Isolation between unrelated agents (no context leakage) | Must |
 | F-SEC-07 | The system can require **explicit human confirmation** before executing an action classified as sensitive by policy (distinct from simple after-the-fact auditing) | Must |
 | F-SEC-08 | An agent’s or module’s outbound network access (egress) is controlled by explicit capability (authorized host/domain); denied by default outside configured model backends | Must |
+
+### 5.9bis Network tools (Preview)
+
+| ID | Requirement | Priority |
+|----|----------|----------|
+| F-NET-01 | Opt-in web search with selectable engine (`auto` / Brave / DuckDuckGo / Bing), refused under strict offline | Must |
+| F-NET-02 | Read a page as HTML→text without executing JavaScript (`web.browse`), under the same egress policy | Should |
 
 ### 5.10 Observability and administration
 
@@ -352,4 +362,25 @@ Single package exposing:
 
 - `docs/vision.md` — founding reflection  
 - `docs/technical-specs.md` — technical specifications  
+- `docs/FEATURES.md` — shipped Preview 0.1.2 catalogue  
 - (future) `adr/` — Architecture Decision Records  
+
+---
+
+## 12. Preview 0.1.2 coverage (host)
+
+Mapping of this spec onto the **installable host Preview** (not the bootable OS).
+Detail: `docs/FEATURES.md`.
+
+| Spec IDs | Preview status |
+|----------|----------------|
+| F-BOOT-01–05 | Hardware probe + model setup + offline chat; no CPU fallback |
+| F-BOOT-06 | Non-destructive Release overlay (apply on next launch) |
+| F-AGT-01–08, 11 | Goal loop, caps, audit, steer, `task.assess`, memory-first |
+| F-AGT-09–10 | Trust low/medium + confirm; supervisor restart of auditd |
+| F-MDL-01–09 | Local llama.cpp + optional remote; routing local_only / balanced |
+| F-MEM-01–02, 05 | Working / episodic / user facts; Memory tab |
+| F-MOD / F-EXT | notes.aospkg, ext-rt, declarative skills, `cap.request` |
+| F-UI-01–05, 09 | Dual surface + transparency panel + Settings |
+| F-SEC-01–08 | Caps, confirm, egress deny-by-default, auditd isolation |
+| F-NET-01–02 | Multi-engine search + `web.browse` |  

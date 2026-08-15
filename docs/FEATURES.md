@@ -1,0 +1,191 @@
+# Preview features — Akasha OS 0.1.2
+
+**Language:** English | [Français](fr/FEATURES.md)
+
+Catalogue of **shipped** Preview features on the Windows/Linux host (NVIDIA).
+This is **not** the bootable OS. Target v1 requirements live in
+[functional-specs.md](functional-specs.md); phase gates in
+[STATUS.md](STATUS.md).
+
+> Date: 15/08/2026 · Preview **0.1.2**
+
+---
+
+## 1. First launch
+
+| Feature | What it does |
+|---------|----------------|
+| NVIDIA + disk checks | `aos-session` refuses to start without a GPU / enough free space |
+| Hardware probe | Writes `var/run/hardware.json` (VRAM, RAM, disk) |
+| Model selection | Auto-best pack by VRAM tier (low / mid / high) |
+| GGUF download | Offerings from `share/models/catalog-offerings.json` → `share/models/` |
+| In-app tutorial | 4-step onboarding (language, trust, routing, scenarios) |
+| Ordered boot | bus → capkd → auditd → modeld → platformd → agentd → egui |
+
+Tiers:
+
+- **low** (&lt;10 GiB VRAM): Qwen3.5-4B + Embedding 0.6B
+- **mid** (10–20 GiB): Qwen3.5-9B + Embedding 0.6B
+- **high** (≥20 GiB): Qwen3 30B-A3B + Embedding 0.6B
+
+See [FIRST-RUN.md](FIRST-RUN.md).
+
+---
+
+## 2. Chat and sessions (PC.6)
+
+- Parallel **persisted** conversations; history survives restart
+- **Per-session model** combo (falls back to the default instruct model)
+- Streaming replies from the local model (offline by default)
+- Chat **agent cards** when a background agent is attached (`/agent` or assistant delegation)
+- `mem.context` injection before infer (session hits + user facts)
+
+Slash commands:
+
+| Command | Action |
+|---------|--------|
+| `/commands` | List commands |
+| `/help` | System snapshot (services, agents, models, memory, audit) |
+| `/agent <task>` | Start a background agent; card in the current session |
+| `/notes` | List notes |
+| `/notenew <title> \| <body>` | Create a note |
+| `/notesearch <query>` | Semantic note search |
+| `/audit [n]` | Last *n* audit events |
+| `/kill <id>` / `/pause <id>` | Control an agent |
+
+---
+
+## 3. Memory (PC.7)
+
+- Long-term **user facts**: remember / recall in the Memory tab
+- Session + user hits assembled as `mem.context` for chat and agents
+- Agents also have episodic memory (`mem.episodic_*`) and `memory.remember` / `memory.recall`
+- **Memory-first bootstrap**: before tools, the runtime runs `task.assess` then a targeted `mem.bootstrap` recall so agents reuse known facts before searching the web
+
+---
+
+## 4. Notes (P2.6)
+
+- Dual-surface WASM module (`notes.aospkg`)
+- Human UI: create / list / search
+- Agent tools: `notes.create`, `notes.update`, `notes.search`, …
+- Same data for humans and agents
+
+---
+
+## 5. Agents
+
+Observe / Think / Act loop with capability checks, confirmation, and audit.
+
+| Feature | Detail |
+|---------|--------|
+| Goal loop | `goal.complete` / `goal.fail`; max steps and timeout (Settings defaults) |
+| `task.assess` | Classifies the goal as **simple** or **complex**; complex activates the planner skill |
+| Skills | Declarative recipes (`share/skills/`, overridable under `var/skills/`) |
+| Tools | Native, WASM module, MCP, or runtime (plan / spawn / memory) |
+| MCP | Optional stdio servers (`share/mcp/servers.yaml.example`) |
+| Sub-agents | `agent.spawn` / `agent.await` with a narrow brief |
+| Hot-grant | `cap.request` under trust + confirmation |
+| Authoring | `skill.create`; scripted WASM via `ext-rt` (`module.scaffold` / `package`) |
+| Qwen think | Hybrid `<think>` blocks stripped from prompts and from the UI |
+
+Shipped skills: **notes-writer**, **research**, **file-author**, **planner**.
+
+### Transparency panel (F-UI-04 / F-UI-05)
+
+Agent **Detail** (from the Agents tab or a chat card):
+
+- Live state, step *n/max*, tokens, duration, simple/complex badge
+- Skills and MCP servers; parent / children
+- **Sources** (web / document / fetch) with open-in-browser links
+- Step timeline (`agent.trace`): action, args, tool result, tool kind (native / module / mcp / runtime)
+- Controls: **Pause**, **Resume**, **Retry**, **Kill**, **Steer**
+
+---
+
+## 6. Models
+
+- Unified local backends (llama.cpp CUDA) + optional remote OpenAI-compatible (P3)
+- Routing: **local_only** (default) or **balanced** (Settings)
+- Models tab: list / load / download offerings; set session default
+- Green banner when newer packs fit the detected VRAM tier
+- CLI: `aos-session --download-models <id>…`
+- Continuous batching (`generate_batch`, `n_seq_max=8`) on the host (P5.1)
+
+---
+
+## 7. Network (opt-in)
+
+Default mode is **`offline_strict`** (deny-by-default egress). Enable
+**Allow network** in the sidebar or Settings.
+
+| Intent | Role |
+|--------|------|
+| `web.search` | Multi-engine search: `auto` (Brave → DuckDuckGo → Bing), or force `brave` / `duckduckgo` / `bing` |
+| `web.browse` | Fetch HTML → plain text (no JavaScript); `max_chars` configurable |
+| `net.fetch` | Download a URL into the logical FS (default `/downloads/`) |
+| `files.generate` | Write `md` / `txt` / `json` / `csv` / `png` / `pdf` |
+
+Optional secrets (`var/secrets/keys.yaml`):
+
+```yaml
+keys:
+  brave_search_api_key: "BSA..."
+  github_token: "ghp_..."
+```
+
+Without a Brave key, `auto` falls through to DuckDuckGo then Bing HTML.
+
+---
+
+## 8. Settings
+
+Persisted in `var/run/preferences.json` (migrated from `onboarding.json` if needed).
+
+| Group | Options |
+|-------|---------|
+| General | Language **en** / **fr**; default trust **low** / **medium** |
+| Models | Routing `local_only` / `balanced` |
+| Network | Allow network (same as sidebar) |
+| Agents | Default model, max steps (1–128), timeout (60–86400 s) |
+| Web | Search engine, browse max chars, fetch max bytes |
+
+---
+
+## 9. Audit, policy, feedback, updates
+
+| Area | What you get |
+|------|----------------|
+| Audit | Append-only hashed journal; Audit tab; kill `aos-auditd` → supervisor restarts it |
+| Confirmation | Blocking banner for sensitive actions; timeout = deny (fail-closed) |
+| Feedback | Local `var/feedback/` + optional GitHub issue (security reports stay local) |
+| App updates | Banner when a newer GitHub Release exists; overlay `bin/` + `share/` without touching `var/` or overwriting `etc/*.yaml` |
+| Site | [azerothl.github.io/akasha-os](https://azerothl.github.io/akasha-os/) (EN/FR) |
+
+---
+
+## 10. Security primitives (host)
+
+Already on the Preview host (P0–P4), not only “planned”:
+
+- Logical then native capabilities (`aos-caps` / `aos-capkd`)
+- Semantic IPC (CBOR, typed intents)
+- WASM sandbox (wasmtime) + cap injection
+- Declarative policy, egress deny-by-default, trust manager
+- Isolated daemons + autonomous auditd
+
+seL4 VM track (PV.1–PV.3) is separate: see [phases/phase-vm-sel4.md](phases/phase-vm-sel4.md).
+
+---
+
+## 11. Not in Preview 0.1.2
+
+- Bootable / bare-metal image
+- macOS or CPU-only inference
+- Fully automatic update apply (download now, apply on next launch)
+- Native audio / video generation
+- Public module marketplace
+- Simultaneous multi-user accounts
+- Complete multi-GPU pipeline (P5.2; single-GPU hosts only)
+
+Cohort protocol: [TESTER.md](TESTER.md).

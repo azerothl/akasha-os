@@ -1,15 +1,16 @@
-# Tester protocol — Agent OS Preview 0.1
+# Tester protocol — Akasha OS Preview
 
 **Language:** English | [Français](fr/TESTER.md)
 
 Thank you for testing Preview. Goal: install **without** `cargo` or cloning
 the repo, exercise the main paths, and send feedback **from the UI**.
+Feature catalogue: [FEATURES.md](FEATURES.md).
 
 ## Before you start
 
 - Windows or Linux x64 + NVIDIA GPU (`nvidia-smi` OK)
 - Install: see [INSTALL.md](../INSTALL.md)
-- Launch **Agent OS Preview** (`aos-session`)
+- Launch **Akasha OS Preview** (`aos-session`)
 
 Expected banner: *Preview on Windows/Linux — this is not the bootable OS yet*.
 
@@ -18,7 +19,7 @@ Expected banner: *Preview on Windows/Linux — this is not the bootable OS yet*.
 ### 1. Offline chat
 
 - Finish **model setup** (first run) and the **tutorial** (4 steps).
-- **Chat** tab: ask a question (e.g. “What is Agent OS?”).
+- **Chat** tab: ask a question (e.g. “What is Akasha OS?”).
 - Optionally change the **session model** combo (Models tab lists offerings).
 - Verify a streamed reply **without network**.
 
@@ -60,12 +61,19 @@ Expected banner: *Preview on Windows/Linux — this is not the bootable OS yet*.
 - Back to Chat: the next message should be able to use that context
   (`mem.context` injection before infer).
 
-### 8. Web search (PC.8)
+### 8. Web search (PC.8 / PC.13)
 
 - **Allow network** (sidebar) **off** → **Search** must fail (`offline_strict`).
-- Enable network → search (e.g. “Agent OS seL4”) → title/URL results.
+- Enable network → search (e.g. “Akasha OS seL4”) → title/URL results.
+- Settings → search engine: try `auto`, then force `duckduckgo` or `bing`.
 - (Optional) Brave key in `var/secrets/keys.yaml`:
-  `brave_search_api_key: "…"` — otherwise DuckDuckGo HTML.
+  `brave_search_api_key: "…"` — otherwise DuckDuckGo / Bing HTML.
+
+### 8b. Browse a page (PC.13)
+
+- With network ON: paste a URL → **Browse** (`web.browse`).
+- Expect title + extracted text (no JavaScript). Compare with **Download URL**
+  (`net.fetch`), which saves the raw file under `/downloads`.
 
 ### 9. Download + file generation (PC.9)
 
@@ -87,14 +95,27 @@ Expected banner: *Preview on Windows/Linux — this is not the bootable OS yet*.
 
 **Security** reports are **not** published.
 
-**No automatic network upload** (except explicit actions: PC.8–9 and
+**No automatic network upload** (except explicit actions: PC.8–9, browse, and
 GitHub feedback submit).
+
+### 11. Settings (PC.12)
+
+- **Settings**: switch language en ↔ fr; change default agent model / max steps.
+- Restart Preview: preferences in `var/run/preferences.json` must persist.
+
+### 12. Agent transparency (PC.11)
+
+- Start an agent (Agents tab or `/agent` in Chat) with a short task.
+- Open **Detail**: timeline of steps, sources if the agent searched/browsed,
+  Pause then Resume (or Steer a new directive).
+- Complex tasks should show a **complex** badge (`task.assess`) and may spawn
+  a child agent (planner).
 
 ## Success criteria (team)
 
 - 3 Windows + 1 Linux testers complete this protocol without a Rust toolchain
 - At least one usable `var/feedback/fb-*.json` per report
-- Gates PC.6–PC.9 checked on at least one machine
+- Gates PC.6–PC.9 and PC.11–PC.13 checked on at least one machine
 
 ## Out of scope Preview 0.1
 

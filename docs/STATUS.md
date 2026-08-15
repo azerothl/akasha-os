@@ -3,9 +3,12 @@
 **Language:** English | [Français](fr/STATUS.md)
 
 Summary of delivered phases. Detail: [development-plan.md](development-plan.md),
-[phases/](phases/).
+[phases/](phases/). Shipped Preview surface: [FEATURES.md](FEATURES.md).
 
 **Headline:** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
+
+**Preview:** 0.1.2 (15/08/2026) — host app on Windows/Linux + NVIDIA; not a
+bootable OS. Cohort gate still open.
 
 ## P0 — Simulator (validated)
 
@@ -82,8 +85,16 @@ Detail: [phases/phase-p5.md](phases/phase-p5.md).
 | PC.5 INSTALL / TESTER / FIRST-RUN | done |
 | PC.6–PC.9 Sessions, memory, search, files | done |
 | PC.10 Non-destructive Release updates | done |
+| PC.11 Agent transparency (timeline, sources, steer) | done |
+| PC.12 Settings + persisted preferences | done |
+| PC.13 Multi-engine search + `web.browse` | done |
+| PC.14 Memory-first bootstrap + Qwen think strip | done |
+| Hardware-aware first-run model setup | done |
+| Public site (EN/FR) | done |
 
-Detail: [phases/phase-pc.md](phases/phase-pc.md).
+Cohort gate (3 Win + 1 Linux testers, no toolchain) remains **open**.
+
+Detail: [phases/phase-pc.md](phases/phase-pc.md), [FEATURES.md](FEATURES.md).
 
 ## Dev commands
 
