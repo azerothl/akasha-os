@@ -12,14 +12,20 @@ SKIP_MODELS="${SKIP_MODELS:-0}"
 REQUIRE_CUDA="${REQUIRE_CUDA:-0}"
 
 if [ "$SKIP_BUILD" != "1" ]; then
+  # Separate cargo resolve so aos-auditd does not feature-unify llama/CUDA into
+  # the audit binary (GitHub Release 2 GiB limit).
+  echo "== cargo build --release (aos-auditd sans CUDA/llama) =="
+  cargo build --release -p aos-auditd
   echo "== cargo build --release =="
   cargo build --release -p aos-session -p aos-ipc -p aos-model -p aos-agent \
-    -p aos-platform -p aos-capkd -p aos-auditd -p aos-ui-egui
+    -p aos-platform -p aos-capkd -p aos-ui-egui
   echo "== notes module =="
   if command -v pwsh >/dev/null 2>&1; then
     pwsh -NoProfile -File "${ROOT}/modules/build-notes.ps1"
   else
-    cargo build --manifest-path "${ROOT}/modules/notes/Cargo.toml" \
+    # Clear host-only linker flags for wasm (rust-lld rejects -fuse-ld=lld).
+    env -u RUSTFLAGS -u CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS \
+      cargo build --manifest-path "${ROOT}/modules/notes/Cargo.toml" \
       --target wasm32-unknown-unknown --release
     mkdir -p "${ROOT}/modules/notes.aospkg/ui" "${ROOT}/modules/notes.aospkg/schemas"
     WASM_SRC=""
@@ -55,7 +61,8 @@ EOF
     pwsh -NoProfile -File "${ROOT}/modules/build-ext-rt.ps1" || true
   elif [ -f "${ROOT}/modules/ext-rt/Cargo.toml" ]; then
     echo "== ext-rt wasm =="
-    cargo build --manifest-path "${ROOT}/modules/ext-rt/Cargo.toml" \
+    env -u RUSTFLAGS -u CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS \
+      cargo build --manifest-path "${ROOT}/modules/ext-rt/Cargo.toml" \
       --target wasm32-unknown-unknown --release || true
     WASM_EXT=""
     for cand in \

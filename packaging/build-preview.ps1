@@ -23,9 +23,15 @@ if (-not $OutDir) { $OutDir = Join-Path $root "dist\AgentOS-Preview-$Version-win
 $env:CARGO_TARGET_DIR = Join-Path $root "target"
 
 if (-not $SkipBuild) {
+    Write-Host "== cargo build --release (aos-auditd sans CUDA/llama) =="
+    # Separate resolve: aos-platform default features are additive. Building
+    # aos-auditd alone keeps embeddings (llama) off for that binary.
+    cargo build --release -p aos-auditd
+    if ($LASTEXITCODE -ne 0) { throw "build aos-auditd failed" }
+
     Write-Host "== cargo build --release (bins Preview) =="
     cargo build --release -p aos-session -p aos-ipc -p aos-model -p aos-agent `
-        -p aos-platform -p aos-capkd -p aos-auditd -p aos-ui-egui
+        -p aos-platform -p aos-capkd -p aos-ui-egui
     if ($LASTEXITCODE -ne 0) { throw "build failed" }
 
     Write-Host "== package notes module =="
@@ -53,19 +59,6 @@ foreach ($b in $bins) {
     $src = Join-Path $binSrc $b
     if (-not (Test-Path $src)) { throw "manque $src" }
     Copy-Item $src (Join-Path $OutDir "bin\$b") -Force
-}
-
-# Drop debug symbols when a strip tool is available (keeps zips under GitHub's 2 GiB limit).
-$stripCmd = $null
-foreach ($c in @("llvm-strip", "strip")) {
-    if (Get-Command $c -ErrorAction SilentlyContinue) { $stripCmd = $c; break }
-}
-if ($stripCmd) {
-    Write-Host "== $stripCmd release binaries =="
-    Get-ChildItem (Join-Path $OutDir "bin") -Filter "aos-*.exe" | ForEach-Object {
-        & $stripCmd --strip-unneeded $_.FullName 2>$null
-        if ($LASTEXITCODE -ne 0) { & $stripCmd $_.FullName 2>$null }
-    }
 }
 
 # Runtime CUDA (llama.cpp) — requis à côté des .exe.

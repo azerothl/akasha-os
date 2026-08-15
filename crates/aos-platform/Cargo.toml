@@ -9,7 +9,7 @@ license.workspace = true
 aos-agent = { path = "../aos-agent" }
 aos-caps = { path = "../aos-caps" }
 aos-ipc = { path = "../aos-ipc" }
-aos-llama = { path = "../aos-llama" }
+aos-llama = { path = "../aos-llama", optional = true }
 aos-proto = { path = "../aos-proto" }
 serde.workspace = true
 serde_json.workspace = true
@@ -25,6 +25,11 @@ reqwest = { version = "0.12", default-features = false, features = ["blocking", 
 url = "2"
 image = { version = "0.25", default-features = false, features = ["png"] }
 printpdf = "0.7"
+
+[features]
+default = ["embeddings"]
+# Pulls llama.cpp + CUDA fatbins (~hundreds of MiB per linked binary).
+embeddings = ["dep:aos-llama"]
 
 [dev-dependencies]
 wat = "1"

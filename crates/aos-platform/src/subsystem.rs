@@ -14,10 +14,14 @@ use crate::policy::PolicyEngine;
 use crate::secrets::SecretStore;
 use crate::storage::{glob_match, StorageFs};
 use crate::trust::TrustManager;
-use aos_llama::{LlamaContext, LlamaModel, LoadOptions};
 use aos_proto::AuditAppendRequest;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::{Arc, Mutex};
+
+#[cfg(feature = "embeddings")]
+use aos_llama::{LlamaContext, LlamaModel, LoadOptions};
+#[cfg(feature = "embeddings")]
+use std::path::PathBuf;
 
 /// Configuration du daemon plateforme.
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -110,6 +114,7 @@ pub struct PlatformSubsystem {
     pub modules: Mutex<ModuleRuntime>,
     pub skills: Mutex<crate::skill::SkillStore>,
     pub author: Mutex<crate::module_compile::ModuleAuthor>,
+    #[cfg(feature = "embeddings")]
     embed: Mutex<Option<Arc<std::sync::Mutex<LlamaContext>>>>,
     pub policy: Mutex<PolicyEngine>,
     pub confirm: Arc<ConfirmManager>,
@@ -130,23 +135,26 @@ impl PlatformSubsystem {
         let fs = StorageFs::open(&config.storage_dir).map_err(|e| e.to_string())?;
         let mem = MemoryStore::open(&config.memory_dir).map_err(|e| e.to_string())?;
         let sessions = ChatSessionStore::open(&config.sessions_dir).map_err(|e| e.to_string())?;
-        let embed = config.embed_model.as_ref().map(|cfg| {
-            let opts = LoadOptions {
-                n_gpu_layers: cfg.n_gpu_layers,
-                n_threads: cfg.n_threads,
-                embeddings: true,
-                n_ctx: 2048,
-                ..Default::default()
-            };
-            let model = LlamaModel::load(PathBuf::from(&cfg.path).as_path(), &opts)
-                .map_err(|e| e.to_string())?;
-            let ctx = LlamaContext::new(Arc::new(model), &opts).map_err(|e| e.to_string())?;
-            Ok::<_, String>(Arc::new(std::sync::Mutex::new(ctx)))
-        });
-        let embed = match embed {
-            Some(Ok(c)) => Some(c),
-            Some(Err(e)) => return Err(format!("embed model: {e}")),
-            None => None,
+        #[cfg(feature = "embeddings")]
+        let embed = {
+            let embed = config.embed_model.as_ref().map(|cfg| {
+                let opts = LoadOptions {
+                    n_gpu_layers: cfg.n_gpu_layers,
+                    n_threads: cfg.n_threads,
+                    embeddings: true,
+                    n_ctx: 2048,
+                    ..Default::default()
+                };
+                let model = LlamaModel::load(PathBuf::from(&cfg.path).as_path(), &opts)
+                    .map_err(|e| e.to_string())?;
+                let ctx = LlamaContext::new(Arc::new(model), &opts).map_err(|e| e.to_string())?;
+                Ok::<_, String>(Arc::new(std::sync::Mutex::new(ctx)))
+            });
+            match embed {
+                Some(Ok(c)) => Some(c),
+                Some(Err(e)) => return Err(format!("embed model: {e}")),
+                None => None,
+            }
         };
 
         // Liaison en deux temps propre : le ModuleRuntime délègue les appels
@@ -179,6 +187,7 @@ impl PlatformSubsystem {
             modules: Mutex::new(rt),
             skills: Mutex::new(skills),
             author: Mutex::new(author),
+            #[cfg(feature = "embeddings")]
             embed: Mutex::new(embed),
             policy: Mutex::new(policy),
             confirm: ConfirmManager::new(config.confirm_timeout_sec),
@@ -272,13 +281,20 @@ impl PlatformSubsystem {
 
     /// Embedding d'un texte (service interne, bloquant).
     pub fn embed_text(&self, text: &str) -> Result<Vec<f32>, String> {
-        let ctx = {
-            let guard = self.embed.lock().unwrap();
-            guard.as_ref().cloned()
-        };
-        let ctx = ctx.ok_or_else(|| "modèle d'embeddings non configuré".to_string())?;
-        let result = ctx.lock().unwrap().embed(text).map_err(|e| e.to_string());
-        result
+        #[cfg(feature = "embeddings")]
+        {
+            let ctx = {
+                let guard = self.embed.lock().unwrap();
+                guard.as_ref().cloned()
+            };
+            let ctx = ctx.ok_or_else(|| "modèle d'embeddings non configuré".to_string())?;
+            return ctx.lock().unwrap().embed(text).map_err(|e| e.to_string());
+        }
+        #[cfg(not(feature = "embeddings"))]
+        {
+            let _ = text;
+            Err("embeddings désactivés dans ce binaire".into())
+        }
     }
 
     /// Évalue la politique pour une action ; gère `require_confirmation`

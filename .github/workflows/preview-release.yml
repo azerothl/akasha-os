@@ -21,9 +21,10 @@ env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
   CARGO_BUILD_JOBS: "4"
-  # Limit ggml CUDA SMs (default builds many arches → ~1h+). Turing→Ada consumer GPUs.
-  # Forwarded by llama-cpp-sys-2 build.rs to CMake.
-  CMAKE_CUDA_ARCHITECTURES: "75;80;86;89"
+  # Limit ggml CUDA SMs. Each arch is statically linked into modeld/platformd;
+  # 4 real arches blew past the GitHub 2 GiB release limit on Windows.
+  # RTX 30/40 SASS + Turing PTX for older cards.
+  CMAKE_CUDA_ARCHITECTURES: "75-virtual;86;89"
   # Shared by cargo + cmake-rs / ninja
   CMAKE_BUILD_PARALLEL_LEVEL: "4"
   # Avoid native host tuning in CI (no GPU / unstable ISA assumptions).
@@ -146,7 +147,8 @@ jobs:
           CMAKE_C_COMPILER_LAUNCHER: sccache
           CMAKE_CXX_COMPILER_LAUNCHER: sccache
           CMAKE_CUDA_COMPILER_LAUNCHER: sccache
-          RUSTFLAGS: "-C link-arg=-fuse-ld=lld"
+          # Host only — must not leak to wasm32 (rust-lld rejects -fuse-ld=lld).
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-C link-arg=-fuse-ld=lld"
         run: |
           sccache --show-stats
           VERSION="$(tr -d '[:space:]' < VERSION)"

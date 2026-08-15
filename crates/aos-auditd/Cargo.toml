@@ -6,7 +6,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-aos-platform = { path = "../aos-platform" }
+aos-platform = { path = "../aos-platform", default-features = false }
 aos-ipc = { path = "../aos-ipc" }
 aos-proto = { path = "../aos-proto" }
 serde.workspace = true
