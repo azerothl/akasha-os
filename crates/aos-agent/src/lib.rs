@@ -4,6 +4,7 @@
 //! - `aos-agent-worker` : boucle goal Observe/Think/Act/Reflect/Checkpoint
 
 pub mod actions;
+pub mod assess;
 pub mod mcp;
 pub mod persist;
 pub mod prompt;
@@ -11,6 +12,7 @@ pub mod skills;
 pub mod state;
 pub mod tools;
 
+pub use assess::{parse_assess_response, AssessResult};
 pub use state::CognitiveState;
 
 /// Intents exposés par `aos-agentd`.

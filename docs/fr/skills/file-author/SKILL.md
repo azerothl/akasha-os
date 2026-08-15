@@ -12,7 +12,7 @@ tools:
 
 **Langue :** [English](../../../../skills/file-author/SKILL.md) | Français
 
-Travaille sur le FS logique Agent OS.
+Travaille sur le FS logique Akasha OS.
 - Lis avant d'écrire (`fs.read` / `docs.read`).
 - Pour des artefacts utilisateur, préfère `files.generate` sous `/documents/` ou `/downloads/`.
 - Garde les chemins stables et documente ce que tu as produit dans `goal.complete`.

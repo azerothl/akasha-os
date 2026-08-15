@@ -4,6 +4,7 @@
 //!          [--restore]`
 
 use aos_agent::actions::{parse_action, strip_reasoning, AgentAction};
+use aos_agent::assess::{parse_assess_response, AssessResult};
 use aos_agent::mcp::{open_mcp_tools, McpSession};
 use aos_agent::persist::{self, compact_working_memory};
 use aos_agent::prompt::{compile_system_prompt, optimize_prompt_request, PromptCompileInput};
@@ -116,12 +117,12 @@ async fn main() {
     });
 
     // Skills + tools + MCP + modules installés (catalogue dynamique)
-    let skill_docs = load_skills(&spec.skills);
+    let mut skill_docs = load_skills(&spec.skills);
     let tool_ids = merge_skill_tools(&spec.tools, &skill_docs);
     let (mut mcp_sessions, mcp_tools) = open_mcp_tools(&spec.mcp_servers).await;
     let mut module_tools = discover_module_tools(&bus).await;
     module_tools.extend(mcp_tools);
-    let tools = select_tools(&tool_ids, &module_tools);
+    let mut tools = select_tools(&tool_ids, &module_tools);
     // Enrich caps from tools if create didn't set them all
     let derived = caps_for_tools(&tools, &spec.mcp_servers);
     for c in derived {
@@ -138,22 +139,7 @@ async fn main() {
         }
     }
 
-    let system = compile_system_prompt(&PromptCompileInput {
-        spec: &spec,
-        skills: &skill_docs,
-        tools: &tools,
-        doc_index: &spec.documents,
-    });
-    {
-        let mut st = shared.state.lock().await;
-        if st.working_memory.is_empty()
-            || st.working_memory[0].0 != "system"
-        {
-            st.working_memory.insert(0, ("system".into(), system));
-        } else {
-            st.working_memory[0] = ("system".into(), system);
-        }
-    }
+    install_system_prompt(&shared, &spec, &skill_docs, &tools).await;
 
     // Index documents
     index_documents(&bus, &agent_id, &spec.caps, &spec.documents).await;
@@ -235,30 +221,80 @@ async fn main() {
     let timeout = Duration::from_secs(spec.goal.timeout_secs);
     let data_refs: Vec<String> = spec.documents.iter().map(|d| d.path.clone()).collect();
 
-    // Seed first user turn with goal
-    {
-        let mut st = shared.state.lock().await;
-        if !restore || st.step == 0 {
-            st.push_user(&format!(
-                "Goal à accomplir : {}\nCritères : {:?}\n\
-                 La mémoire vient d'être consultée (voir [mem.bootstrap]). \
-                 Réutilise ces infos ; si insuffisant, memory.recall avec une requête plus précise \
-                 avant toute recherche externe. Ensuite plan.update si la tâche est complexe, sinon agis.",
-                spec.goal.statement, spec.goal.success_criteria
-            ));
+    // Seed + task.assess + mémoire (ordre : assess → plan si besoin → mémoire ciblée)
+    let is_child = spec.parent_id.is_some();
+    let fresh_start = !restore || shared.state.lock().await.step == 0;
+    if fresh_start {
+        if is_child {
+            {
+                let mut st = shared.state.lock().await;
+                st.complexity = Some("simple".into());
+                st.needs_plan = false;
+                st.push_user(&format!(
+                    "Brief sous-agent : {}\nCritères : {:?}\n\
+                     Consulte la mémoire ([mem.bootstrap]) pour accélérer, puis agis. \
+                     Pas de plan.update (tu es un sous-agent).",
+                    spec.goal.statement, spec.goal.success_criteria
+                ));
+            }
+            bootstrap_memory_recall(
+                &bus,
+                &shared,
+                &agent_id,
+                &spec.goal.statement,
+                "brief sous-agent",
+            )
+            .await;
+        } else {
+            let assess = run_task_assess(
+                &bus,
+                &shared,
+                &spec,
+                &spec.goal.statement,
+                "démarrage",
+            )
+            .await;
+            apply_assess_to_runtime(
+                &bus,
+                &shared,
+                &mut spec,
+                &mut skill_docs,
+                &mut tools,
+                &module_tools,
+                &assess,
+            )
+            .await;
+            {
+                let mut st = shared.state.lock().await;
+                if assess.is_complex() {
+                    st.push_user(&format!(
+                        "Goal à accomplir : {}\nCritères : {:?}\n\
+                         Classification : complex — {}. \
+                         Première action obligatoire : plan.update avec des nœuds atomiques. \
+                         Ensuite memory.recall / exécution sur le nœud courant (pas sur le goal entier).",
+                        spec.goal.statement, spec.goal.success_criteria, assess.reason
+                    ));
+                } else {
+                    st.push_user(&format!(
+                        "Goal à accomplir : {}\nCritères : {:?}\n\
+                         Classification : simple — {}. \
+                         La mémoire vient d'être consultée ([mem.bootstrap]) : réutilise-la ; \
+                         affiner avec memory.recall si besoin avant une recherche externe, puis agis.",
+                        spec.goal.statement, spec.goal.success_criteria, assess.reason
+                    ));
+                }
+            }
+            if !assess.is_complex() {
+                bootstrap_memory_recall(
+                    &bus,
+                    &shared,
+                    &agent_id,
+                    &spec.goal.statement,
+                    "démarrage",
+                )
+                .await;
+            }
         }
-    }
-
-    // Observe: toujours interroger la mémoire au démarrage (sauf restore mid-run)
-    if !restore || shared.state.lock().await.step == 0 {
-        bootstrap_memory_recall(
-            &bus,
-            &shared,
-            &agent_id,
-            &spec.goal.statement,
-            "démarrage",
-        )
-        .await;
     }
 
     let mut pending_steer: Option<String> = None;
@@ -303,8 +339,39 @@ async fn main() {
                 },
             )
             .await;
-            // Nouvelle demande → reconsulter la mémoire sur le sujet
-            bootstrap_memory_recall(&bus, &shared, &agent_id, &d, "steer").await;
+            if is_child {
+                bootstrap_memory_recall(&bus, &shared, &agent_id, &d, "steer").await;
+            } else {
+                let assess = run_task_assess(&bus, &shared, &spec, &d, "steer").await;
+                apply_assess_to_runtime(
+                    &bus,
+                    &shared,
+                    &mut spec,
+                    &mut skill_docs,
+                    &mut tools,
+                    &module_tools,
+                    &assess,
+                )
+                .await;
+                if assess.is_complex() {
+                    let needs_new_plan = shared.state.lock().await.task_graph.is_empty();
+                    if needs_new_plan {
+                        shared.state.lock().await.push_user(
+                            "[steer] Tâche devenue complexe — appelle plan.update avant d'agir.",
+                        );
+                    } else {
+                        let q = shared
+                            .state
+                            .lock()
+                            .await
+                            .current_task_title()
+                            .unwrap_or_else(|| d.clone());
+                        bootstrap_memory_recall(&bus, &shared, &agent_id, &q, "steer").await;
+                    }
+                } else {
+                    bootstrap_memory_recall(&bus, &shared, &agent_id, &d, "steer").await;
+                }
+            }
         }
 
         // Non-blocking drain of steer while running
@@ -382,9 +449,14 @@ async fn main() {
             }
         }
 
-        // Observe: rappel mémoire périodique (démarrage déjà fait via bootstrap)
+        // Observe: rappel mémoire périodique sur le nœud courant (sinon le goal)
         if step > 1 && step % 4 == 0 {
-            inject_mem_context(&bus, &shared, &agent_id, &spec.goal.statement).await;
+            let query = {
+                let st = shared.state.lock().await;
+                st.current_task_title()
+                    .unwrap_or_else(|| spec.goal.statement.clone())
+            };
+            inject_mem_context(&bus, &shared, &agent_id, &query).await;
         }
 
         // Compact if needed (agressif : outils / skills gonflent vite le prompt)
@@ -958,6 +1030,20 @@ async fn execute_action(
             return ActResult::Continue(skill_misuse_hint(name, skill));
         }
     }
+
+    // Gate : plan obligatoire tant que task_graph vide
+    {
+        let st = shared.state.lock().await;
+        if st.blocks_action(name) {
+            return ActResult::Continue(
+                "plan requis: appelle plan.update avec des nœuds atomiques avant toute autre action \
+                 (task.assess = complex). goal.fail reste autorisé. \
+                 Exemple: {\"thought\":\"découper\",\"action\":\"plan.update\",\"args\":{\"nodes\":[{\"id\":\"1\",\"title\":\"…\",\"status\":\"Pending\"}]}}"
+                    .into(),
+            );
+        }
+    }
+
     let agent_id = spec.agent_id.clone();
     let caps = {
         let st = shared.state.lock().await;
@@ -1007,10 +1093,15 @@ async fn execute_action(
         }
         "plan.update" => {
             let nodes = parse_plan_nodes(args);
-            {
+            let need_mem = {
                 let mut st = shared.state.lock().await;
                 st.set_plan(nodes.clone());
-            }
+                let need = st.needs_plan && !st.plan_memory_recalled;
+                if need {
+                    st.plan_memory_recalled = true;
+                }
+                need
+            };
             report(
                 bus,
                 &agent_id,
@@ -1019,6 +1110,15 @@ async fn execute_action(
                 },
             )
             .await;
+            if need_mem {
+                let query = nodes
+                    .iter()
+                    .find(|n| n.status == TaskNodeStatus::Pending || n.status == TaskNodeStatus::Running)
+                    .map(|n| n.title.clone())
+                    .or_else(|| nodes.first().map(|n| n.title.clone()))
+                    .unwrap_or_else(|| spec.goal.statement.clone());
+                bootstrap_memory_recall(bus, shared, &agent_id, &query, "après plan.update").await;
+            }
             ActResult::Continue(format!("plan mis à jour ({} nœuds)", nodes.len()))
         }
         "docs.read" => {
@@ -1250,6 +1350,7 @@ async fn spawn_child(
         mcp_servers: vec![],
         documents: documents.to_vec(),
         parent_id: Some(parent.agent_id.clone()),
+        session_id: None,
         budget: parent.budget.clone(),
         optimize_prompt: false,
     };
@@ -1943,6 +2044,185 @@ async fn index_documents(
             )
             .await;
     }
+}
+
+async fn install_system_prompt(
+    shared: &Shared,
+    spec: &AgentSpec,
+    skills: &[SkillDoc],
+    tools: &[ToolDesc],
+) {
+    let system = compile_system_prompt(&PromptCompileInput {
+        spec,
+        skills,
+        tools,
+        doc_index: &spec.documents,
+    });
+    let mut st = shared.state.lock().await;
+    if st.working_memory.is_empty() || st.working_memory[0].0 != "system" {
+        st.working_memory.insert(0, ("system".into(), system));
+    } else {
+        st.working_memory[0] = ("system".into(), system);
+    }
+}
+
+/// Applique le résultat de `task.assess` : state, skill planner, recompile prompt.
+async fn apply_assess_to_runtime(
+    bus: &BusClient,
+    shared: &Shared,
+    spec: &mut AgentSpec,
+    skill_docs: &mut Vec<SkillDoc>,
+    tools: &mut Vec<ToolDesc>,
+    module_tools: &[ToolDesc],
+    assess: &AssessResult,
+) {
+    {
+        let mut st = shared.state.lock().await;
+        st.complexity = Some(assess.complexity.clone());
+        st.needs_plan = assess.needs_plan;
+        if !assess.needs_plan {
+            // Steer vers simple : lever le gate même si un ancien plan existe
+            // (needs_plan=false suffit via plan_gate_active).
+        } else {
+            // Nouveau besoin de plan : reset le flag mémoire-après-plan
+            if st.task_graph.is_empty() {
+                st.plan_memory_recalled = false;
+            }
+        }
+    }
+
+    if assess.is_complex() && !spec.skills.iter().any(|s| s == "planner") {
+        spec.skills.push("planner".into());
+        *skill_docs = load_skills(&spec.skills);
+        let tool_ids = merge_skill_tools(&spec.tools, skill_docs);
+        *tools = select_tools(&tool_ids, module_tools);
+        let derived = caps_for_tools(tools, &spec.mcp_servers);
+        for c in derived {
+            if !spec.caps.contains(&c) {
+                spec.caps.push(c);
+            }
+        }
+        install_system_prompt(shared, spec, skill_docs, tools).await;
+        let _ = persist::write_spec(spec);
+        report(
+            bus,
+            &spec.agent_id,
+            AgentOutputEvent::Log {
+                line: "skill planner activée (task.assess = complex)".into(),
+            },
+        )
+        .await;
+    } else if assess.is_complex() {
+        // Planner déjà présent : recompile quand même pour coller au protocole à jour
+        install_system_prompt(shared, spec, skill_docs, tools).await;
+    }
+}
+
+async fn run_task_assess(
+    bus: &BusClient,
+    shared: &Shared,
+    spec: &AgentSpec,
+    statement: &str,
+    reason: &str,
+) -> AssessResult {
+    let t0 = Instant::now();
+    let req = InferRequest {
+        model_id: spec.model_id.clone(),
+        messages: vec![
+            ChatMessage {
+                role: "system".into(),
+                content: "Tu classifies des tâches pour un agent OS. Réponds UNIQUEMENT par un JSON \
+                     {\"complexity\":\"simple\"|\"complex\",\"reason\":\"…\",\"needs_plan\":bool}. \
+                     complex/needs_plan=true si plusieurs étapes, livrables distincts, recherche+rédaction, \
+                     délégation, ou critères multiples. simple sinon. Pas de balises <think>."
+                    .into(),
+            },
+            ChatMessage {
+                role: "user".into(),
+                content: format!("Tâche ({reason}) : {statement}"),
+            },
+        ],
+        params: InferParams {
+            max_tokens: 80,
+            temperature: 0.0,
+            ..InferParams::default()
+        },
+        priority: 2,
+        data_refs: vec![],
+        routing: None,
+    };
+
+    let mut text = String::new();
+    if let Ok(mut rx) = bus
+        .call_stream::<InferRequest, TokenEvent>("model.infer", &req, vec![])
+        .await
+    {
+        while let Some(ev) = rx.recv().await {
+            if let Ok(TokenEvent::Delta { text: t }) = ev {
+                text.push_str(&t);
+            }
+        }
+    }
+    let assess = if text.trim().is_empty() {
+        AssessResult::complex("task.assess: pas de réponse modèle — plan par défaut")
+    } else {
+        parse_assess_response(&text)
+    };
+    let tool_ms = t0.elapsed().as_millis() as u64;
+
+    let record = AgentStepRecord {
+        step: 0,
+        thought: format!("Estimer la complexité ({reason})"),
+        response: truncate(&text, 500),
+        action: "task.assess".into(),
+        args: serde_json::json!({
+            "query": statement,
+            "reason": reason,
+            "complexity": assess.complexity,
+            "needs_plan": assess.needs_plan,
+        }),
+        tool_kind: "runtime".into(),
+        mcp_server: None,
+        skill: None,
+        tool_result: format!(
+            "{} — {} (needs_plan={})",
+            assess.complexity, assess.reason, assess.needs_plan
+        ),
+        reflection: None,
+        duration_ms: tool_ms,
+        infer_ms: tool_ms,
+        tool_ms: 0,
+        prompt_tokens: 0,
+        generated_tokens: 0,
+        ttft_ms: 0.0,
+        tok_s: 0.0,
+        current_task: None,
+        ts_ms: SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0),
+        fail_reason: None,
+        child_id: None,
+        sources: vec![],
+    };
+    {
+        let mut st = shared.state.lock().await;
+        st.trace.push(record.clone());
+    }
+    report(bus, &spec.agent_id, AgentOutputEvent::Step(record)).await;
+    report(
+        bus,
+        &spec.agent_id,
+        AgentOutputEvent::Log {
+            line: format!(
+                "task.assess ({reason}): {} — {}",
+                assess.complexity,
+                truncate(&assess.reason, 80)
+            ),
+        },
+    )
+    .await;
+    assess
 }
 
 async fn recall_memory_bundle(

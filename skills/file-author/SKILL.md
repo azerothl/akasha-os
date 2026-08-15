@@ -12,7 +12,7 @@ tools:
 
 **Language:** English | [Français](../../docs/fr/skills/file-author/SKILL.md)
 
-Work on the Agent OS logical FS.
+Work on the Akasha OS logical FS.
 - Read before writing (`fs.read` / `docs.read`).
 - For user artifacts, prefer `files.generate` under `/documents/` or `/downloads/`.
 - Keep paths stable and document what you produced in `goal.complete`.

@@ -13,8 +13,12 @@ tools:
 
 **Langue :** [English](../../../../skills/planner/SKILL.md) | Français
 
-1. Appelle `plan.update` avec des nœuds atomiques.
-2. Pour chaque sous-tâche lourde : `agent.spawn` avec un brief étroit (skills/tools/docs limités).
-3. `agent.await` ou continue en parallèle puis intègre les résultats.
-4. Ne passe jamais au sous-agent plus de caps/outils que nécessaire.
-5. Termine avec `goal.complete` quand tous les nœuds sont Done.
+Activée automatiquement si `task.assess` classe le goal en **complex**
+(aussi sélectionnable manuellement).
+
+1. Appelle d'abord `plan.update` avec des nœuds atomiques — obligatoire avant tout effet de bord.
+2. Pour chaque nœud / brief : `memory.recall` sur cette requête étroite (pas sur le goal entier).
+3. Pour chaque sous-tâche lourde : `agent.spawn` avec un brief étroit (skills/tools/docs limités).
+4. `agent.await` ou continue en parallèle puis intègre les résultats.
+5. Ne passe jamais au sous-agent plus de caps/outils que nécessaire.
+6. Termine avec `goal.complete` quand tous les nœuds sont Done.

@@ -22,7 +22,7 @@ pub fn compile_system_prompt(input: &PromptCompileInput<'_>) -> String {
 
     // 2. Identité
     let mut identity = format!(
-        "Tu es l'agent `{}` d'Agent OS.",
+        "Tu es l'agent `{}` d'Akasha OS.",
         input.spec.agent_id
     );
     if let Some(parent) = &input.spec.parent_id {
@@ -130,8 +130,11 @@ IMPORTANT :
 - `action` doit être EXACTEMENT un nom d'outil du catalogue (ex. `web.search`, `notes.create`, `fs.write`).
 - INTERDIT d'utiliser un nom de skill comme action (`research`, `file-author`, `notes-writer`, `planner`, etc.).
 - Les skills sont des recettes : lis leurs outils autorisés et appelle ces outils un par un.
-- Mémoire d'abord : au démarrage la mémoire est déjà consultée (`[mem.bootstrap]`) — réutilise-la.
-- Avant une recherche web ou un fetch, memory.recall si besoin d'affiner ; après une découverte utile, memory.remember.
+- Le runtime a déjà classé la tâche (`task.assess` → simple|complex).
+- Si complex : appelle `plan.update` AVANT tout effet de bord (recherche, écriture, spawn).
+- `memory.recall` sert à accélérer le nœud / brief courant — pas à relire tout le goal.
+- Après une découverte utile : `memory.remember`.
+- Avant une recherche web ou un fetch : `memory.recall` sur la requête courante si le contexte mémoire n'est pas déjà suffisant.
 - Pour lire une page HTML utilise `web.browse` (texte). `net.fetch` ne fait que télécharger un fichier.
 
 Actions runtime :
@@ -166,7 +169,7 @@ pub fn optimize_prompt_request(
     current: Option<&str>,
 ) -> String {
     format!(
-        "Réécris un prompt système concis et efficace pour un agent Agent OS.\n\
+        "Réécris un prompt système concis et efficace pour un agent Akasha OS.\n\
          Goal : {goal}\n\
          Skills : {}\n\
          Outils : {}\n\
@@ -219,5 +222,8 @@ mod tests {
         assert!(out.contains("écrire une note"));
         assert!(out.contains("notes.create"));
         assert!(out.contains("Sois bref"));
+        assert!(!out.contains("Mémoire d'abord"));
+        assert!(out.contains("task.assess"));
+        assert!(out.contains("plan.update"));
     }
 }

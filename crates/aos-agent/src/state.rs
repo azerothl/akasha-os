@@ -33,6 +33,15 @@ pub struct CognitiveState {
     /// Journal des tours (transparence F-UI-04).
     #[serde(default)]
     pub trace: Vec<AgentStepRecord>,
+    /// Résultat de `task.assess` : `"simple"` | `"complex"`.
+    #[serde(default)]
+    pub complexity: Option<String>,
+    /// Si vrai, `plan.update` est obligatoire tant que `task_graph` est vide.
+    #[serde(default)]
+    pub needs_plan: bool,
+    /// Recall mémoire déjà fait après le premier `plan.update` (tâches complexes).
+    #[serde(default)]
+    pub plan_memory_recalled: bool,
     /// Version de schéma (migration future).
     pub version: u32,
 }
@@ -53,8 +62,21 @@ impl CognitiveState {
             children: Vec::new(),
             tokens_used: 0,
             trace: Vec::new(),
+            complexity: None,
+            needs_plan: false,
+            plan_memory_recalled: false,
             version: 2,
         }
+    }
+
+    /// Vrai si un plan est encore requis avant toute autre action.
+    pub fn plan_gate_active(&self) -> bool {
+        self.needs_plan && self.task_graph.is_empty()
+    }
+
+    /// Actions autorisées sous le gate : `plan.update` et `goal.fail` uniquement.
+    pub fn blocks_action(&self, action: &str) -> bool {
+        self.plan_gate_active() && action != "plan.update" && action != "goal.fail"
     }
 
     pub fn push_user(&mut self, content: &str) {
@@ -132,5 +154,35 @@ mod tests {
         assert_eq!(back.step, 3);
         assert_eq!(back.trace.len(), 1);
         assert_eq!(back.trace[0].action, "notes.list");
+        assert!(!back.needs_plan);
+        assert!(back.complexity.is_none());
+    }
+
+    #[test]
+    fn plan_gate_active_when_needed_and_empty() {
+        let mut st = CognitiveState::new("a", vec![]);
+        st.needs_plan = true;
+        assert!(st.plan_gate_active());
+        assert!(st.blocks_action("web.search"));
+        assert!(st.blocks_action("noop"));
+        assert!(!st.blocks_action("plan.update"));
+        assert!(!st.blocks_action("goal.fail"));
+        st.set_plan(vec![TaskNode {
+            id: "1".into(),
+            title: "étape".into(),
+            status: TaskNodeStatus::Pending,
+            notes: String::new(),
+        }]);
+        assert!(!st.plan_gate_active());
+        assert!(!st.blocks_action("web.search"));
+    }
+
+    #[test]
+    fn complexity_fields_default_on_old_json() {
+        let json = r#"{"agent_id":"x","working_memory":[],"plan_stack":[],"cap_set_snapshot":[],"version":2}"#;
+        let st = CognitiveState::from_json(json).unwrap();
+        assert!(st.complexity.is_none());
+        assert!(!st.needs_plan);
+        assert!(!st.plan_memory_recalled);
     }
 }

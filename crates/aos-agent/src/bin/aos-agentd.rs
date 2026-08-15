@@ -14,8 +14,9 @@ use aos_ipc::{BusClient, BusService};
 use aos_proto::{
     AgentCreateRequest, AgentCreateResponse, AgentIdRequest, AgentInfo,
     AgentOutputEvent, AgentPromptOptimizeRequest, AgentPromptOptimizeResponse, AgentSpec,
-    AgentStartRequest, AgentState, AgentSteerRequest, AgentStepRecord, AgentTrace, ChatMessage,
-    InferParams, InferRequest, McpServerInfo, SkillInfo, TokenEvent,
+    AgentStartRequest, AgentState, AgentSteerRequest, AgentStepRecord, AgentTrace, ChatAttachment,
+    ChatMessage, ChatSessionAppendRequest, InferParams, InferRequest, McpServerInfo, SkillInfo,
+    TokenEvent,
 };
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -92,6 +93,7 @@ fn build_spec(agent_id: &str, req: &AgentCreateRequest) -> AgentSpec {
         caps,
         model_id: req.model_id.clone(),
         parent_id: req.parent_id.clone(),
+        session_id: req.session_id.clone(),
         budget: req.budget.clone(),
         optimize_prompt: req.optimize_prompt,
     }
@@ -163,6 +165,7 @@ async fn spawn_worker(
                     tools: spec.tools.clone(),
                     mcp_servers: spec.mcp_servers.clone(),
                     fail_reason: None,
+                    session_id: spec.session_id.clone(),
                 },
                 subscribers: Vec::new(),
                 trace: restored_trace,
@@ -687,69 +690,154 @@ async fn main() {
     // --- report ---
     {
         let shared = shared.clone();
+        let bus_report = bus.clone();
         svc.on(intents::REPORT, move |ctx| {
             let shared = shared.clone();
+            let bus = bus_report.clone();
             async move {
                 match ctx.payload::<ReportPayload>() {
                     Ok(rep) => {
-                        let mut rt = shared.lock().await;
-                        if let Some(entry) = rt.agents.get_mut(&rep.agent_id) {
-                            match &rep.event {
-                                AgentOutputEvent::Token { text } => {
-                                    entry.info.last_output.push_str(text);
-                                    if entry.info.last_output.len() > 4000 {
-                                        let cut = entry.info.last_output.len() - 4000;
-                                        entry.info.last_output.drain(..cut);
+                        let mut chat_summary: Option<(String, String, String, String, String)> =
+                            None;
+                        {
+                            let mut rt = shared.lock().await;
+                            if let Some(entry) = rt.agents.get_mut(&rep.agent_id) {
+                                match &rep.event {
+                                    AgentOutputEvent::Token { text } => {
+                                        entry.info.last_output.push_str(text);
+                                        if entry.info.last_output.len() > 4000 {
+                                            let cut = entry.info.last_output.len() - 4000;
+                                            entry.info.last_output.drain(..cut);
+                                        }
                                     }
-                                }
-                                AgentOutputEvent::StateChanged { state } => {
-                                    entry.info.state = state.clone();
-                                    if matches!(
-                                        state,
-                                        AgentState::Running | AgentState::Done
-                                    ) {
-                                        entry.info.fail_reason = None;
+                                    AgentOutputEvent::StateChanged { state } => {
+                                        let prev = entry.info.state.clone();
+                                        entry.info.state = state.clone();
+                                        if matches!(
+                                            state,
+                                            AgentState::Running | AgentState::Done
+                                        ) {
+                                            entry.info.fail_reason = None;
+                                        }
+                                        let terminal = matches!(
+                                            state,
+                                            AgentState::Done
+                                                | AgentState::Failed
+                                                | AgentState::Killed
+                                        );
+                                        let was_active = !matches!(
+                                            prev,
+                                            AgentState::Done
+                                                | AgentState::Failed
+                                                | AgentState::Killed
+                                        );
+                                        if terminal && was_active {
+                                            if let Some(sid) = entry.info.session_id.clone() {
+                                                let summary = match state {
+                                                    AgentState::Done => {
+                                                        let out = entry.info.last_output.trim();
+                                                        if out.is_empty() {
+                                                            format!(
+                                                                "Agent {} terminé.",
+                                                                entry.info.agent_id
+                                                            )
+                                                        } else {
+                                                            let excerpt: String =
+                                                                out.chars().take(500).collect();
+                                                            format!(
+                                                                "Agent {} terminé.\n{}",
+                                                                entry.info.agent_id, excerpt
+                                                            )
+                                                        }
+                                                    }
+                                                    AgentState::Failed => {
+                                                        let reason = entry
+                                                            .info
+                                                            .fail_reason
+                                                            .clone()
+                                                            .unwrap_or_else(|| {
+                                                                "échec".into()
+                                                            });
+                                                        format!(
+                                                            "Agent {} a échoué : {}",
+                                                            entry.info.agent_id, reason
+                                                        )
+                                                    }
+                                                    AgentState::Killed => format!(
+                                                        "Agent {} arrêté.",
+                                                        entry.info.agent_id
+                                                    ),
+                                                    _ => String::new(),
+                                                };
+                                                chat_summary = Some((
+                                                    sid,
+                                                    entry.info.agent_id.clone(),
+                                                    entry.info.directive.clone(),
+                                                    summary,
+                                                    format!("{state:?}").to_lowercase(),
+                                                ));
+                                            }
+                                        }
                                     }
-                                }
-                                AgentOutputEvent::Error { message } => {
-                                    entry.info.fail_reason = Some(message.clone());
-                                }
-                                AgentOutputEvent::Progress {
-                                    step,
-                                    max_steps,
-                                    current_task,
-                                } => {
-                                    entry.info.step = *step;
-                                    entry.info.max_steps = *max_steps;
-                                    entry.info.current_task = current_task.clone();
-                                    // Nouveau tour → le flux UI repart de zéro
-                                    entry.info.last_output.clear();
-                                }
-                                AgentOutputEvent::ChildSpawned { child_id, .. } => {
-                                    if !entry.info.children.contains(child_id) {
-                                        entry.info.children.push(child_id.clone());
+                                    AgentOutputEvent::Error { message } => {
+                                        entry.info.fail_reason = Some(message.clone());
                                     }
-                                }
-                                AgentOutputEvent::Step(rec) => {
-                                    if let Some(existing) =
-                                        entry.trace.iter_mut().find(|s| s.step == rec.step)
-                                    {
-                                        *existing = rec.clone();
-                                    } else {
-                                        entry.trace.push(rec.clone());
+                                    AgentOutputEvent::Progress {
+                                        step,
+                                        max_steps,
+                                        current_task,
+                                    } => {
+                                        entry.info.step = *step;
+                                        entry.info.max_steps = *max_steps;
+                                        entry.info.current_task = current_task.clone();
+                                        entry.info.last_output.clear();
                                     }
-                                    entry.info.tokens_used =
-                                        entry.trace.iter().map(|s| s.generated_tokens as u64).sum();
-                                    if let Some(reason) = &rec.fail_reason {
-                                        entry.info.fail_reason = Some(reason.clone());
+                                    AgentOutputEvent::ChildSpawned { child_id, .. } => {
+                                        if !entry.info.children.contains(child_id) {
+                                            entry.info.children.push(child_id.clone());
+                                        }
                                     }
-                                    // Tour terminé : ne plus afficher le flux partiel
-                                    entry.info.last_output.clear();
+                                    AgentOutputEvent::Step(rec) => {
+                                        if let Some(existing) =
+                                            entry.trace.iter_mut().find(|s| s.step == rec.step)
+                                        {
+                                            *existing = rec.clone();
+                                        } else {
+                                            entry.trace.push(rec.clone());
+                                        }
+                                        entry.info.tokens_used = entry
+                                            .trace
+                                            .iter()
+                                            .map(|s| s.generated_tokens as u64)
+                                            .sum();
+                                        if let Some(reason) = &rec.fail_reason {
+                                            entry.info.fail_reason = Some(reason.clone());
+                                        }
+                                        entry.info.last_output.clear();
+                                    }
+                                    _ => {}
                                 }
-                                _ => {}
+                                persist::update_info_sidecar(&entry.info);
+                                broadcast(entry, &rep.event).await;
                             }
-                            persist::update_info_sidecar(&entry.info);
-                            broadcast(entry, &rep.event).await;
+                        }
+                        if let Some((session_id, agent_id, title, content, _state)) = chat_summary {
+                            let _ = bus
+                                .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
+                                    "chat.session.append",
+                                    &ChatSessionAppendRequest {
+                                        session_id,
+                                        role: "assistant".into(),
+                                        content,
+                                        attachments: vec![ChatAttachment::AgentRef {
+                                            agent_id,
+                                            title,
+                                            origin: "completion".into(),
+                                        }],
+                                    },
+                                    vec![],
+                                )
+                                .await;
                         }
                         let _ = ctx.respond(aos_ipc::msg::Status::Ok, &true).await;
                     }

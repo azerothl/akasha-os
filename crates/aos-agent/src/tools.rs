@@ -241,16 +241,96 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
     ];
 
     // Module notes (toujours listé ; filtré par sélection)
-    for (name, desc) in [
-        ("notes.create", "Créer une note markdown"),
-        ("notes.list", "Lister les notes"),
-        ("notes.read", "Lire une note"),
-        ("notes.search", "Chercher dans les notes"),
-    ] {
+    let notes_tools = [
+        (
+            "notes.create",
+            "Créer une note markdown (wikilinks [[Titre]] supportés)",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "title":{"type":"string"},
+                    "content":{"type":"string","description":"Corps markdown"}
+                },
+                "required":["title","content"]
+            }),
+        ),
+        (
+            "notes.update",
+            "Mettre à jour une note existante (réindexe mémoire + graphe)",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "title":{"type":"string"},
+                    "path":{"type":"string"},
+                    "slug":{"type":"string"},
+                    "content":{"type":"string"},
+                    "new_title":{"type":"string"}
+                },
+                "required":["content"]
+            }),
+        ),
+        (
+            "notes.list",
+            "Lister les notes (titre, path, extrait)",
+            serde_json::json!({"type":"object"}),
+        ),
+        (
+            "notes.read",
+            "Lire une note par title, path ou slug (inclut liens)",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "title":{"type":"string"},
+                    "path":{"type":"string"},
+                    "slug":{"type":"string"}
+                }
+            }),
+        ),
+        (
+            "notes.search",
+            "Recherche sémantique dans les notes",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "query":{"type":"string"},
+                    "k":{"type":"integer"}
+                },
+                "required":["query"]
+            }),
+        ),
+        (
+            "notes.links",
+            "Liens sortants et backlinks d'une note",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "title":{"type":"string"},
+                    "path":{"type":"string"},
+                    "slug":{"type":"string"}
+                }
+            }),
+        ),
+        (
+            "notes.related",
+            "Notes liées (graphe) avec score de pertinence sur un sujet",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "title":{"type":"string"},
+                    "path":{"type":"string"},
+                    "slug":{"type":"string"},
+                    "topic":{"type":"string","description":"Sujet pour scorer la pertinence"},
+                    "hops":{"type":"integer"},
+                    "k":{"type":"integer"}
+                }
+            }),
+        ),
+    ];
+    for (name, desc, schema) in notes_tools {
         v.push(ToolDesc {
             name: name.into(),
             description: desc.into(),
-            input_schema: serde_json::json!({"type":"object"}),
+            input_schema: schema,
             backend: ToolBackend::Module,
             required_caps: vec!["tool.invoke:notes".into()],
         });

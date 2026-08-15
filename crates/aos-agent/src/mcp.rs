@@ -80,7 +80,7 @@ impl McpSession {
                 Some(serde_json::json!({
                     "protocolVersion": "2024-11-05",
                     "capabilities": {},
-                    "clientInfo": {"name": "aos-agent", "version": "0.1.0"}
+                    "clientInfo": {"name": "aos-agent", "version": env!("CARGO_PKG_VERSION")}
                 })),
             )
             .await?;

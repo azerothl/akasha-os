@@ -276,6 +276,9 @@ pub struct AgentSpec {
     pub model_id: Option<String>,
     #[serde(default)]
     pub parent_id: Option<String>,
+    /// Session chat d'origine (carte / résumé dans le fil).
+    #[serde(default)]
+    pub session_id: Option<String>,
     #[serde(default)]
     pub budget: AgentBudget,
     /// Optimiser le prompt système avant le premier step.
@@ -310,6 +313,9 @@ pub struct AgentCreateRequest {
     pub documents: Vec<DocumentRef>,
     #[serde(default)]
     pub parent_id: Option<String>,
+    /// Session chat d'origine (`None` = Agents UI / spawn parent).
+    #[serde(default)]
+    pub session_id: Option<String>,
     #[serde(default)]
     pub budget: AgentBudget,
     #[serde(default)]
@@ -342,6 +348,7 @@ impl AgentCreateRequest {
             mcp_servers: Vec::new(),
             documents: Vec::new(),
             parent_id: None,
+            session_id: None,
             budget: AgentBudget::default(),
             optimize_prompt: false,
         }
@@ -520,6 +527,9 @@ pub struct AgentInfo {
     /// Motif d'échec / blocage (bandeau UI).
     #[serde(default)]
     pub fail_reason: Option<String>,
+    /// Session chat liée (pour carte / notification).
+    #[serde(default)]
+    pub session_id: Option<String>,
 }
 
 /// Source citée par un tour (web, document, fetch).
@@ -840,6 +850,20 @@ pub struct MemEpisodicQueryRequest {
     pub namespace: Option<String>,
 }
 
+/// `mem.episodic_delete` — par id, ou par namespace + métadonnée (`path`, etc.).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemEpisodicDeleteRequest {
+    #[serde(default)]
+    pub id: Option<u64>,
+    #[serde(default)]
+    pub namespace: Option<String>,
+    /// Clé de métadonnée (ex. `"path"`) lorsque `id` est absent.
+    #[serde(default)]
+    pub meta_key: Option<String>,
+    #[serde(default)]
+    pub meta_value: Option<String>,
+}
+
 fn default_k() -> usize {
     5
 }
@@ -866,11 +890,11 @@ pub struct MemHit {
 // ---------------------------------------------------------------------------
 
 /// Prompt système injecté dans la mémoire de travail de l'assistant et des
-/// agents : connaissance d'Agent OS (architecture, état, capacités).
+/// agents : connaissance d'Akasha OS (architecture, état, capacités).
 ///
 /// Base pour le PromptCompiler agentic ; les agents reçoivent en plus
 /// goal, skills, catalogue d'outils et protocole d'actions JSON.
-pub const SYSTEM_ASSISTANT_PROMPT: &str = "Tu es l'assistant système d'Agent OS, un système d'exploitation agent-natif.
+pub const SYSTEM_ASSISTANT_PROMPT: &str = "Tu es l'assistant système d'Akasha OS, un système d'exploitation agent-natif.
 
 Architecture (services userspace reliés par un bus IPC sémantique CBOR) :
 - aos-busd : broker du bus (intents typés, streams, découverte de services) ;
@@ -886,6 +910,16 @@ Extensibilité : si tu butes sur une limitation, tu peux étendre l'OS :
 Tu agis via des actions JSON structurées (ou la convention TOOL: pour compat). Tu n'inventes pas d'outils absents du catalogue. Tu respectes les capacités (caps) et les confirmations bloquantes.
 
 Tu réponds en français, de façon concise et factuelle. Si tu ne sais pas, dis-le honnêtement.";
+
+/// Addendum injecté uniquement dans le chemin chat (pas les workers).
+/// Délégation des tâches complexes via `agent.spawn` sans boucle d'outils.
+pub const CHAT_DELEGATION_PROMPT: &str = "
+Chat (cette session) :
+- Questions, explications, conseils → réponds directement en français, sans JSON.
+- Tâche multi-étapes, outils, notes, fichiers, recherche web, effets de bord →
+  une courte phrase d'accusé puis un objet JSON seul :
+  {\"action\":\"agent.spawn\",\"args\":{\"brief\":\"…\"}}
+  (skills/tools optionnels dans args). Ne lance pas toi-même d'outils.";
 
 /// Manifeste double-surface (§7.3).
 // ---------------------------------------------------------------------------
@@ -1326,11 +1360,27 @@ pub struct ChatSessionMeta {
     pub model_id: Option<String>,
 }
 
+/// Pièce jointe d'un message de session (ex. référence agent en fond).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ChatAttachment {
+    AgentRef {
+        agent_id: String,
+        #[serde(default)]
+        title: String,
+        /// `slash` | `assistant` | `completion`
+        #[serde(default)]
+        origin: String,
+    },
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatSessionMessage {
     pub role: String,
     pub content: String,
     pub ts_ms: u64,
+    #[serde(default)]
+    pub attachments: Vec<ChatAttachment>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1363,6 +1413,8 @@ pub struct ChatSessionAppendRequest {
     pub session_id: String,
     pub role: String,
     pub content: String,
+    #[serde(default)]
+    pub attachments: Vec<ChatAttachment>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
