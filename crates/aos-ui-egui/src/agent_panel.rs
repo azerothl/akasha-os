@@ -151,7 +151,7 @@ pub fn chat_agent_card(ui: &mut Ui, info: Option<&AgentInfo>, agent_id: &str, ti
     };
     egui::Frame::NONE
         .fill(Color32::from_rgb(32, 36, 44))
-        .stroke(egui::Stroke::new(1.0, color))
+        .stroke(egui::Stroke::new(1.0_f32, color))
         .inner_margin(8.0)
         .corner_radius(4.0)
         .show(ui, |ui| {
