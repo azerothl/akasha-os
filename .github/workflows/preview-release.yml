@@ -158,7 +158,11 @@ jobs:
           test -x "${OUT}/bin/aos-session"
           test -f "${OUT}/share/models/manifest.json"
           ls "${OUT}/bin"/libcudart.so* >/dev/null
+          echo "== bin layout =="
+          ls -lah "${OUT}/bin" | head -n 80
+          du -sh "${OUT}" "${OUT}/bin"
           tar -C dist -czf "dist/AgentOS-Preview-${VERSION}-linux-x64.tar.gz" "AgentOS-Preview-${VERSION}-linux-x64"
+          ls -lh "dist/AgentOS-Preview-${VERSION}-linux-x64.tar.gz"
           sccache --show-stats
 
       - uses: actions/upload-artifact@v4
@@ -188,7 +192,20 @@ jobs:
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           mkdir -p release-assets
           find artifacts -type f \( -name '*.zip' -o -name '*.tar.gz' \) -exec cp {} release-assets/ \;
-          ls -la release-assets
+          ls -lah release-assets
+
+          # GitHub Release assets must be < 2 GiB each.
+          max=$((2 * 1024 * 1024 * 1024 - 1))
+          for f in release-assets/*; do
+            [ -f "$f" ] || continue
+            size=$(stat -c%s "$f")
+            echo "$f: $size bytes"
+            if [ "$size" -ge "$max" ]; then
+              echo "::error::$f exceeds GitHub Release asset limit (2 GiB)"
+              exit 1
+            fi
+          done
+
           WIN=$(ls release-assets/*windows*.zip | head -n1)
           LIN=$(ls release-assets/*linux*.tar.gz | head -n1)
           WIN_SHA=$(sha256sum "$WIN" | awk '{print $1}')

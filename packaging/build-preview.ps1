@@ -55,6 +55,19 @@ foreach ($b in $bins) {
     Copy-Item $src (Join-Path $OutDir "bin\$b") -Force
 }
 
+# Drop debug symbols when a strip tool is available (keeps zips under GitHub's 2 GiB limit).
+$stripCmd = $null
+foreach ($c in @("llvm-strip", "strip")) {
+    if (Get-Command $c -ErrorAction SilentlyContinue) { $stripCmd = $c; break }
+}
+if ($stripCmd) {
+    Write-Host "== $stripCmd release binaries =="
+    Get-ChildItem (Join-Path $OutDir "bin") -Filter "aos-*.exe" | ForEach-Object {
+        & $stripCmd --strip-unneeded $_.FullName 2>$null
+        if ($LASTEXITCODE -ne 0) { & $stripCmd $_.FullName 2>$null }
+    }
+}
+
 # Runtime CUDA (llama.cpp) — requis à côté des .exe.
 $cudaCandidates = @(
     $env:CUDA_PATH,
@@ -175,5 +188,13 @@ Akasha OS Preview $Version (Windows x64 + NVIDIA)
 "@ | Set-Content "$OutDir\README.txt" -Encoding utf8
 
 Write-Host "== package prêt : $OutDir =="
-Get-ChildItem $OutDir -Recurse -File | Measure-Object -Property Length -Sum |
-    ForEach-Object { Write-Host ("taille ~{0:N1} MiB" -f ($_.Sum / 1MB)) }
+$files = Get-ChildItem $OutDir -Recurse -File
+$sum = ($files | Measure-Object -Property Length -Sum).Sum
+Write-Host ("taille ~{0:N1} MiB" -f ($sum / 1MB))
+Write-Host "== plus gros fichiers =="
+$files | Sort-Object Length -Descending | Select-Object -First 15 |
+    ForEach-Object { Write-Host ("  {0,8:N1} MiB  {1}" -f ($_.Length / 1MB), $_.FullName.Substring($OutDir.Length).TrimStart('\', '/')) }
+$maxBytes = (2GB) - 1
+if ($sum -ge $maxBytes) {
+    throw "package $OutDir exceeds GitHub Release 2 GiB asset limit ($sum bytes)"
+}

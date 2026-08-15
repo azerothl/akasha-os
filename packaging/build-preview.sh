@@ -81,6 +81,10 @@ for b in aos-session aos-busd aos-modeld aos-agentd aos-agent-worker \
          aos-platformd aos-capkd aos-auditd aos-ui-egui; do
   cp -f "${CARGO_TARGET_DIR}/release/${b}" "${OUT}/bin/"
 done
+if command -v strip >/dev/null 2>&1; then
+  echo "== strip release binaries =="
+  strip --strip-unneeded "${OUT}/bin/"aos-* 2>/dev/null || strip "${OUT}/bin/"aos-* || true
+fi
 
 # CUDA runtime .so next to binaries
 CUDA_HOME="${CUDA_HOME:-${CUDA_PATH:-/usr/local/cuda}}"
@@ -111,12 +115,15 @@ CUDA_LIB_CANDIDATES+=(
   /usr/lib/x86_64-linux-gnu
 )
 cuda_copied=0
-copied_names=""
+# Map realpath -> canonical basename already placed in ${OUT}/bin (dedupe SONAME
+# aliases: libcublasLt.so / .so.12 / .so.12.4.x used to be copied 3× with cp -L
+# and blew past GitHub's 2 GiB release asset limit).
+declare -A CUDA_REAL_TO_CANON=()
 echo "== CUDA runtime (CUDA_HOME=${CUDA_HOME}) =="
 
 copy_cuda_from_dir() {
   local dir="$1"
-  local f base
+  local f base real canon
   [ -d "${dir}" ] || return 0
   case "${dir}" in
     */stubs) return 0 ;;
@@ -140,15 +147,30 @@ copy_cuda_from_dir() {
       */stubs/*) continue ;;
     esac
     base="$(basename "${f}")"
-    case " ${copied_names} " in
-      *" ${base} "*) continue ;;
-    esac
-    if cp -L "${f}" "${OUT}/bin/${base}"; then
-      echo "  + ${base}  (depuis ${dir})"
-      copied_names="${copied_names} ${base}"
-      cuda_copied=$((cuda_copied + 1))
+    if command -v readlink >/dev/null 2>&1; then
+      real="$(readlink -f "${f}" 2>/dev/null || true)"
     else
-      echo "  WARN: cp failed ${f} -> ${OUT}/bin/${base}" >&2
+      real=""
+    fi
+    if [ -z "${real}" ] || [ ! -e "${real}" ]; then
+      real="${f}"
+    fi
+    canon="${CUDA_REAL_TO_CANON[${real}]:-}"
+    if [ -z "${canon}" ]; then
+      canon="$(basename "${real}")"
+      if [ ! -e "${OUT}/bin/${canon}" ]; then
+        if ! cp -L "${real}" "${OUT}/bin/${canon}"; then
+          echo "  WARN: cp failed ${real} -> ${OUT}/bin/${canon}" >&2
+          continue
+        fi
+        echo "  + ${canon}  (depuis ${dir})"
+        cuda_copied=$((cuda_copied + 1))
+      fi
+      CUDA_REAL_TO_CANON["${real}"]="${canon}"
+    fi
+    if [ "${base}" != "${canon}" ] && [ ! -e "${OUT}/bin/${base}" ]; then
+      ln -sfn "${canon}" "${OUT}/bin/${base}"
+      echo "  ~ ${base} -> ${canon}"
     fi
   done
 }
@@ -254,3 +276,14 @@ EOF
 
 echo "== package prêt : ${OUT} =="
 du -sh "${OUT}"
+echo "== plus gros fichiers =="
+du -ah "${OUT}" 2>/dev/null | sort -hr | head -n 25 || true
+# Fail early if the tree alone already exceeds GitHub Release asset limit (~2 GiB),
+# even before tar/gzip (archives of CUDA libs barely shrink).
+MAX_BYTES=$((2 * 1024 * 1024 * 1024 - 1))
+TREE_BYTES="$(du -sb "${OUT}" | awk '{print $1}')"
+echo "taille arbre: ${TREE_BYTES} bytes (limite release ${MAX_BYTES})"
+if [ "${TREE_BYTES}" -ge "${MAX_BYTES}" ]; then
+  echo "ERROR: package ${OUT} exceeds GitHub Release 2 GiB asset limit" >&2
+  exit 1
+fi
