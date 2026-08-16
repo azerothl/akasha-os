@@ -161,7 +161,7 @@ et envoi de retour GitHub).
 - Au moins un fichier `var/feedback/fb-*.json` exploitable par retour
 - Gates PC.6–PC.9 et PC.11–PC.13 cochés sur au moins une machine
 
-## Hors scope Preview 0.3.0
+## Hors scope Preview 0.4.0
 
 - Boot seL4 / fer nu
 - macOS

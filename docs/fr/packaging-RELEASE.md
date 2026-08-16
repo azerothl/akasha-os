@@ -7,8 +7,8 @@
 Tag puis push :
 
 ```bash
-git tag v0.3.0
-git push origin v0.3.0
+git tag v0.4.0
+git push origin v0.4.0
 ```
 
 Le workflow [`.github/workflows/preview-release.yml`](../../.github/workflows/preview-release.yml)
@@ -18,7 +18,7 @@ construit Win + Linux **CUDA** et **CPU** (sans GGUF), publie :
 - `AgentOS-Preview-<ver>-windows-x64-cpu.zip`
 - `AgentOS-Preview-<ver>-linux-x64.tar.gz`
 - `AgentOS-Preview-<ver>-linux-x64-cpu.tar.gz`
-- `latest.json` (sha256 + métadonnées)
+- `latest.json` (sha256 + métadonnées pour **les quatre** artefacts)
 
 Déclenchement manuel : Actions → **preview-release** → Run workflow.
 
@@ -36,14 +36,13 @@ Les GGUF sont téléchargés au **premier run** via `share/models/manifest.json`
 ## Notes de version (brouillon)
 
 ```
-Akasha OS Preview 0.3.0 — prouver l'OS, élargir le cohort
+Akasha OS Preview 0.4.0 — graphe mémoire, vault secrets, revue de caps
 
-- TTFT / tok/s / VRAM live dans la barre latérale + Models
-- Onglet Caps (lister + révoquer)
-- Boot CPU-only + pack cpu (NVIDIA optionnel)
-- Scheduler agent (schedule.create/list/cancel)
-- Module tasks dual-surface + onglet Tasks
-- Artefacts Win/Linux : CUDA et CPU
+- Mémoire typée (similar / updates / supersedes) + onglet Mémoire inspect/edit
+- Vault secrets chiffré (Settings) ; MCP ${secret:name}
+- Install module : revue de caps obligatoire (refus → quarantaine)
+- latest.json liste les artefacts CUDA et CPU
+- Doc contrat sibling-bridge
 
 Pas un OS bootable. Voir FIRST-RUN.md / INSTALL.md / TESTER.md
 ```

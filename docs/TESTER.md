@@ -157,7 +157,7 @@ GitHub feedback submit).
 - At least one usable `var/feedback/fb-*.json` per report
 - Gates PC.6–PC.9 and PC.11–PC.13 checked on at least one machine
 
-## Out of scope Preview 0.3.0
+## Out of scope Preview 0.4.0
 
 - seL4 / bare-metal boot
 - macOS

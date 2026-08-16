@@ -6,6 +6,7 @@
 > Date : 15/08/2026  
 > Statut : brouillon  
 > Référence : `specs-fonctionnelles.md`, `reflexion-agent-os.md`, `FEATURES.md`  
+> Changements v0.4.0 : Preview 0.4.0 — graphe mémoire typé, vault secrets, revue de caps modules.
 > Changements v0.3.1 : Preview 0.3.0 — resync du module notes, dépannage in-app, site Split-Flap.
 > Changements v0.3 : Preview 0.1.2 — `web.browse`, `web.search` multi-moteurs, panneau de transparence egui, Settings persistées (`preferences.json`).  
 > Changements v0.2 : revue de complétude — ajout Agent superviseur/System Assistant/Trust Manager (§4.5-4.7), classification de sensibilité (§6.4), Module Registry (§7), egress réseau (§9.5), confirmation bloquante (§9.4), mises à jour système (§10.1), Module API/Admin API (§11.4-11.5), profil utilisateur (§12), cibles agents concurrents (§13), accessibilité (§8.3), glossaire technique et matrice de traçabilité (§21-22).
