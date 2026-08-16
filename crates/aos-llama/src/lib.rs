@@ -948,8 +948,9 @@ impl LlamaContext {
     /// Retourne le vecteur poolé (mean) normalisé L2, dimension
     /// `n_embd_out` du modèle.
     ///
-    /// Le prefill est découpé par `n_batch` — `llama_batch_get_one(n)` assert
-    /// (et tue le process) si `n > n_batch` (textes mémoire / notes longs).
+    /// Prefill découpé par `min(n_batch, n_ubatch)` : `llama_batch` assert si
+    /// `n > n_batch`, et `LLAMA_POOLING_TYPE_MEAN` est **local à l'ubatch**
+    /// (écrase `embd_seq`). On accumule donc une moyenne pondérée par chunk.
     pub fn embed(&mut self, text: &str) -> Result<Vec<f32>, LlamaError> {
         let mut tokens = self.tokenize(text, true)?;
         if tokens.is_empty() {
@@ -963,13 +964,17 @@ impl LlamaContext {
             let mem = sys::llama_get_memory(self.ptr);
             sys::llama_memory_clear(mem, true);
         }
-        let mut batch = unsafe { sys::llama_batch_init(self.n_batch as i32, 0, 1) };
+        let dim = unsafe { sys::llama_model_n_embd_out(self.model.ptr) } as usize;
+        let chunk = (unsafe { sys::llama_n_ubatch(self.ptr) })
+            .min(self.n_batch)
+            .max(1) as usize;
+        let mut acc = vec![0.0f32; dim];
+        let mut batch = unsafe { sys::llama_batch_init(chunk as i32, 0, 1) };
         let mut off = 0usize;
         while off < n {
             batch.n_tokens = 0;
-            let take = (n - off).min(self.n_batch as usize);
+            let take = (n - off).min(chunk);
             for j in 0..take {
-                // Mean pooling : demander les embeddings sur chaque token.
                 unsafe {
                     Self::batch_add(
                         &mut batch,
@@ -985,16 +990,29 @@ impl LlamaContext {
                 unsafe { sys::llama_batch_free(batch) };
                 return Err(LlamaError::Decode(rc));
             }
+            let Some(pooled) = self.pooled_seq_embedding(dim) else {
+                unsafe { sys::llama_batch_free(batch) };
+                return Err(LlamaError::Decode(-1));
+            };
+            accumulate_pooled_chunk(&mut acc, &pooled, take);
             off += take;
         }
         unsafe { sys::llama_batch_free(batch) };
-        let dim = unsafe { sys::llama_model_n_embd_out(self.model.ptr) } as usize;
-        let ptr = unsafe { sys::llama_get_embeddings(self.ptr) };
+        Ok(finish_mean_pool(acc, n))
+    }
+
+    /// Embedding poolé de seq 0 après le dernier decode (MEAN écrit `embd_seq`).
+    fn pooled_seq_embedding(&self, dim: usize) -> Option<Vec<f32>> {
+        let ptr = unsafe { sys::llama_get_embeddings_seq(self.ptr, 0) };
+        let ptr = if ptr.is_null() {
+            unsafe { sys::llama_get_embeddings(self.ptr) }
+        } else {
+            ptr
+        };
         if ptr.is_null() {
-            return Err(LlamaError::Decode(-1));
+            return None;
         }
-        let v = unsafe { std::slice::from_raw_parts(ptr, dim) }.to_vec();
-        Ok(l2_normalize(v))
+        Some(unsafe { std::slice::from_raw_parts(ptr, dim) }.to_vec())
     }
 
     /// Dimension des embeddings du modèle.
@@ -1026,6 +1044,24 @@ fn suppress_hybrid_thinking(prompt: &str, template: &str) -> String {
     format!("{trimmed}{open}\n\n</think>\n\n")
 }
 
+/// Ajoute `n_tokens * mean_chunk` (MEAN llama.cpp = moyenne du chunk courant).
+fn accumulate_pooled_chunk(acc: &mut [f32], chunk: &[f32], n_tokens: usize) {
+    let w = n_tokens as f32;
+    for (a, &x) in acc.iter_mut().zip(chunk.iter()) {
+        *a += x * w;
+    }
+}
+
+fn finish_mean_pool(mut acc: Vec<f32>, n_tokens: usize) -> Vec<f32> {
+    if n_tokens > 0 {
+        let inv = 1.0 / n_tokens as f32;
+        for a in &mut acc {
+            *a *= inv;
+        }
+    }
+    l2_normalize(acc)
+}
+
 /// Normalisation L2 (pour similarité cosinus).
 fn l2_normalize(v: Vec<f32>) -> Vec<f32> {
     let norm: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt();
@@ -1039,5 +1075,31 @@ fn l2_normalize(v: Vec<f32>) -> Vec<f32> {
 impl Drop for LlamaContext {
     fn drop(&mut self) {
         unsafe { sys::llama_free(self.ptr) };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{accumulate_pooled_chunk, finish_mean_pool, l2_normalize};
+
+    #[test]
+    fn split_mean_matches_full_sequence_mean() {
+        // Two decode chunks: 3 tokens then 1 — last-chunk-only would keep [4,4].
+        let chunk_a = vec![1.0f32, 0.0];
+        let chunk_b = vec![4.0f32, 4.0];
+        let mut acc = vec![0.0f32; 2];
+        accumulate_pooled_chunk(&mut acc, &chunk_a, 3);
+        accumulate_pooled_chunk(&mut acc, &chunk_b, 1);
+        let got = finish_mean_pool(acc, 4);
+        let want = l2_normalize(vec![1.75, 1.0]);
+        assert_eq!(got, want);
+    }
+
+    #[test]
+    fn single_chunk_mean_is_just_l2() {
+        let chunk = vec![3.0f32, 4.0];
+        let mut acc = vec![0.0f32; 2];
+        accumulate_pooled_chunk(&mut acc, &chunk, 5);
+        assert_eq!(finish_mean_pool(acc, 5), l2_normalize(chunk));
     }
 }
