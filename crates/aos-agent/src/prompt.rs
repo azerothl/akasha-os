@@ -132,6 +132,9 @@ IMPORTANT :
 - Les skills sont des recettes : lis leurs outils autorisés et appelle ces outils un par un.
 - Le runtime a déjà classé la tâche (`task.assess` → simple|complex).
 - Si complex : appelle `plan.update` AVANT tout effet de bord (recherche, écriture, spawn).
+- Si le plan a des nœuds **indépendants**, préfère `agent.spawn` en parallèle puis `agent.await` plutôt que tout faire en série toi-même.
+- `agent.spawn` : brief **court** (≤ 3 phrases, auto-suffisant), tools/docs **minimaux** — ne dump pas le contexte parent ni les résultats d'outils.
+- Notes / documents longs : `notes.create` avec titre + **outline court**, puis `notes.update` **section par section** (≤ ~1200 caractères de `content` par appel). Ne mets jamais un guide entier dans un seul JSON.
 - `memory.recall` sert à accélérer le nœud / brief courant — pas à relire tout le goal.
 - Après une découverte utile : `memory.remember`.
 - Avant une recherche web ou un fetch : `memory.recall` sur la requête courante si le contexte mémoire n'est pas déjà suffisant.
@@ -139,7 +142,7 @@ IMPORTANT :
 
 Actions runtime :
 - plan.update : {"nodes":[{"id":"1","title":"...","status":"Pending"}]}
-- agent.spawn : {"brief":"...","skills":[],"tools":[],"documents":[]}
+- agent.spawn : {"brief":"tâche étroite auto-suffisante (court)","skills":[],"tools":[],"documents":[]}
 - agent.await : {"child_id":"..."}
 - memory.remember : {"text":"..."}
 - memory.recall : {"query":"..."}
@@ -202,6 +205,7 @@ mod tests {
             caps: vec!["tool.invoke:notes".into()],
             model_id: None,
             parent_id: None,
+            session_id: None,
             budget: AgentBudget::default(),
             optimize_prompt: false,
         };

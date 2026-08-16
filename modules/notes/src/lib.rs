@@ -34,7 +34,7 @@ fn handle(tool: &str, args: &serde_json::Value) -> Result<serde_json::Value, Str
 #[derive(Deserialize)]
 struct CreateArgs {
     title: String,
-    #[serde(default)]
+    #[serde(default, alias = "body")]
     content: String,
 }
 
@@ -51,6 +51,7 @@ struct UpdateArgs {
     path: Option<String>,
     #[serde(default)]
     slug: Option<String>,
+    #[serde(alias = "body")]
     content: String,
     #[serde(default)]
     new_title: Option<String>,

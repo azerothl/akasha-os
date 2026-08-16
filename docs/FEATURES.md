@@ -1,13 +1,25 @@
-# Preview features — Akasha OS 0.2.0
+# Preview features — Akasha OS 0.3.0
 
 **Language:** English | [Français](fr/FEATURES.md)
 
-Catalogue of **shipped** Preview features on the Windows/Linux host (NVIDIA).
+Catalogue of **shipped** Preview features on the Windows/Linux host.
 This is **not** the bootable OS. Target v1 requirements live in
 [functional-specs.md](functional-specs.md); phase gates in
 [STATUS.md](STATUS.md).
 
-> Date: 15/08/2026 · Preview **0.2.0**
+> Date: 16/08/2026 · Preview **0.3.0**
+
+### What's new in 0.3.0
+
+- Live inference metrics (TTFT, tok/s, VRAM) in sidebar + Models
+- Caps tab: list by holder + revoke (audited)
+- CPU-only boot + `cpu` first-run pack (NVIDIA optional)
+- Agent scheduler (`schedule.*`) + Settings UI
+- Dual-surface **tasks** module + Tasks tab
+- CUDA and CPU packaging artefacts
+- Agent context budget + `PromptTooLong` retry; loop guard on truncated JSON
+- Chat: markdown for agent actions; slash `/` popup above input; themes
+- Parallel spawn briefs kept short; notes create/update chunking guidance
 
 ### What's new in 0.2.0
 
@@ -22,15 +34,17 @@ This is **not** the bootable OS. Target v1 requirements live in
 
 | Feature | What it does |
 |---------|----------------|
-| NVIDIA + disk checks | `aos-session` refuses to start without a GPU / enough free space |
-| Hardware probe | Writes `var/run/hardware.json` (VRAM, RAM, disk) |
-| Model selection | Auto-best pack by VRAM tier (low / mid / high) |
+| NVIDIA optional | Without GPU, starts CPU-only (slow OK); `AOS_REQUIRE_GPU=1` or Settings→GPU to refuse |
+| Disk checks | Refuses to start without enough free space |
+| Hardware probe | Writes `var/run/hardware.json` (VRAM, RAM, disk); tier includes **cpu** |
+| Model selection | Auto-best pack by tier (`cpu` / low / mid / high) |
 | GGUF download | Offerings from `share/models/catalog-offerings.json` → `share/models/` |
 | In-app tutorial | 4-step onboarding (language, trust, routing, scenarios) |
 | Ordered boot | bus → capkd → auditd → modeld → platformd → agentd → egui |
 
 Tiers:
 
+- **cpu** (no NVIDIA): Qwen3.5-4B + Embedding 0.6B
 - **low** (&lt;10 GiB VRAM): Qwen3.5-4B + Embedding 0.6B
 - **mid** (10–20 GiB): Qwen3.5-9B + Embedding 0.6B
 - **high** (≥20 GiB): Qwen3 30B-A3B + Embedding 0.6B
@@ -82,6 +96,16 @@ Slash commands:
 
 ---
 
+## 4b. Tasks (P03.5 / E3)
+
+- Dual-surface WASM module (`tasks.aospkg`)
+- Human UI: **Tasks** tab — create / list / complete
+- Agent tools: `tasks.create`, `tasks.list`, `tasks.update`, `tasks.complete`
+- Same JSON store for humans and agents (`/documents/tasks/tasks.json`)
+- Resyncs on boot like notes; skill `tasks` shipped under `share/skills/`
+
+---
+
 ## 5. Agents
 
 Observe / Think / Act loop with capability checks, confirmation, and audit.
@@ -98,7 +122,13 @@ Observe / Think / Act loop with capability checks, confirmation, and audit.
 | Authoring | `skill.create`; scripted WASM via `ext-rt` (`module.scaffold` / `package`) |
 | Qwen think | Hybrid `<think>` blocks stripped from prompts and from the UI |
 
-Shipped skills: **notes-writer**, **research**, **file-author**, **planner**.
+Shipped skills: **notes-writer**, **research**, **file-author**, **planner**, **tasks**.
+
+### Scheduler (P03.4 / E2)
+
+- Intents `schedule.create` / `schedule.list` / `schedule.cancel` (system; not chat channels)
+- Persist under `var/schedules/`; ticker fires agents on interval (min 30s)
+- Settings UI: create / list / cancel
 
 ### Transparency panel (F-UI-04 / F-UI-05)
 
@@ -114,12 +144,13 @@ Agent **Detail** (from the Agents tab or a chat card):
 
 ## 6. Models
 
-- Unified local backends (llama.cpp CUDA) + optional remote OpenAI-compatible (P3)
+- Unified local backends (llama.cpp CUDA **or** CPU) + optional remote OpenAI-compatible (P3)
 - Routing: **local_only** (default) or **balanced** (Settings)
 - Models tab: list / load / download offerings; set session default
+- Live metrics: TTFT, tok/s, VRAM/RAM/disk (sidebar + Models)
 - Green banner when newer packs fit the detected VRAM tier
 - CLI: `aos-session --download-models <id>…`
-- Continuous batching (`generate_batch`, `n_seq_max=8`) on the host (P5.1)
+- Continuous batching (`generate_batch`, `n_seq_max=8`) on CUDA hosts (P5.1)
 
 ---
 
@@ -153,19 +184,21 @@ Persisted in `var/run/preferences.json` (migrated from `onboarding.json` if need
 
 | Group | Options |
 |-------|---------|
-| General | Language **en** / **fr**; default trust **low** / **medium** |
+| General | Language **en** / **fr**; default trust **low** / **medium**; Inference **auto** / **gpu** / **cpu** |
 | Models | Routing `local_only` / `balanced` |
 | Network | Allow network (same as sidebar) |
 | Agents | Default model, max steps (1–128), timeout (60–86400 s) |
+| Schedules | Interval agent fires (`schedule.*`) |
 | Web | Search engine, browse max chars, fetch max bytes |
 
 ---
 
-## 9. Audit, policy, feedback, updates
+## 9. Audit, policy, caps, feedback, updates
 
 | Area | What you get |
 |------|----------------|
 | Audit | Append-only hashed journal; Audit tab; kill `aos-auditd` → supervisor restarts it |
+| Caps | Caps tab: `cap.list` by holder; revoke (audited) |
 | Confirmation | Blocking banner for sensitive actions; timeout = deny (fail-closed) |
 | Feedback | Local `var/feedback/` + optional GitHub issue (security reports stay local) |
 | Troubleshoot | In-app diagnostics (NVIDIA, home, logs); opens a GitHub report when findings exist |
@@ -188,13 +221,14 @@ seL4 VM track (PV.1–PV.3) is separate: see [phases/phase-vm-sel4.md](phases/ph
 
 ---
 
-## 11. Not in Preview 0.2.0
+## 11. Not in Preview 0.3.0
 
 - Bootable / bare-metal image
-- macOS or CPU-only inference
+- macOS
 - Fully automatic update apply (download now, apply on next launch)
 - Native audio / video generation
 - Public module marketplace
+- Messaging channels (Slack/Discord/etc.) in the OS core
 - Simultaneous multi-user accounts
 - Complete multi-GPU pipeline (P5.2; single-GPU hosts only)
 

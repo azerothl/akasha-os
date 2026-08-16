@@ -11,6 +11,12 @@ pub struct Preferences {
     pub routing: String,
     #[serde(default = "default_trust")]
     pub trust_default: String,
+    /// `auto` | `gpu` | `cpu` — applied on next session boot.
+    #[serde(default = "default_inference")]
+    pub inference_mode: String,
+    /// `light` | `dark` | `soft` | `high_contrast`
+    #[serde(default = "default_theme")]
+    pub theme: String,
     #[serde(default)]
     pub network_online: bool,
     #[serde(default)]
@@ -37,6 +43,12 @@ fn default_routing() -> String {
 fn default_trust() -> String {
     "medium".into()
 }
+fn default_inference() -> String {
+    "auto".into()
+}
+fn default_theme() -> String {
+    "dark".into()
+}
 fn default_max_steps() -> u32 {
     32
 }
@@ -59,6 +71,8 @@ impl Default for Preferences {
             language: default_language(),
             routing: default_routing(),
             trust_default: default_trust(),
+            inference_mode: default_inference(),
+            theme: default_theme(),
             network_online: false,
             default_agent_model: None,
             default_max_steps: default_max_steps(),

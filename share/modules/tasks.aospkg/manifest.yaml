@@ -1,0 +1,42 @@
+name: tasks
+version: 1.0.0
+hash: 25fcd075392220953454c1a70ad3ceaf6ef0125c101129bcc6b6b40d80993e48
+permissions:
+  required_caps:
+    - fs.read:/documents/tasks/**
+    - fs.write:/documents/tasks/**
+tools:
+  - name: tasks.create
+    description: Create a task
+    input_schema:
+      type: object
+      properties:
+        title: { type: string }
+        notes: { type: string }
+      required: [title]
+  - name: tasks.list
+    description: List tasks
+    input_schema:
+      type: object
+  - name: tasks.update
+    description: Update a task
+    input_schema:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string }
+        notes: { type: string }
+        done: { type: boolean }
+      required: [id]
+  - name: tasks.complete
+    description: Mark a task complete (or reopen)
+    input_schema:
+      type: object
+      properties:
+        id: { type: string }
+        done: { type: boolean }
+      required: [id]
+ui:
+  entry: ui/index.html
+  mode: declarative_ui
+min_os_api: 1

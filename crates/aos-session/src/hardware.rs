@@ -8,6 +8,8 @@ use std::process::Command;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum HardwareTier {
+    /// No usable NVIDIA GPU — CPU inference packs.
+    Cpu,
     Low,
     Mid,
     High,
@@ -16,6 +18,7 @@ pub enum HardwareTier {
 impl HardwareTier {
     pub fn as_str(self) -> &'static str {
         match self {
+            Self::Cpu => "cpu",
             Self::Low => "low",
             Self::Mid => "mid",
             Self::High => "high",
@@ -52,10 +55,22 @@ impl HardwareInfo {
 }
 
 pub fn probe(home: &Path) -> HardwareInfo {
-    let (gpu_name, vram_mib, driver_version) = probe_nvidia();
+    let force_cpu = std::env::var_os("AOS_CPU_ONLY").is_some()
+        || std::env::var("AOS_INFERENCE")
+            .map(|v| v.eq_ignore_ascii_case("cpu"))
+            .unwrap_or(false);
+    let (gpu_name, vram_mib, driver_version) = if force_cpu {
+        ("cpu-only".into(), 0, String::new())
+    } else {
+        probe_nvidia()
+    };
     let ram_mib = probe_ram_mib();
     let disk_free_bytes = probe_disk_free(home).unwrap_or(0);
-    let tier = tier_from_vram(vram_mib);
+    let tier = if force_cpu || vram_mib == 0 {
+        HardwareTier::Cpu
+    } else {
+        tier_from_vram(vram_mib)
+    };
     HardwareInfo {
         gpu_name,
         vram_mib,

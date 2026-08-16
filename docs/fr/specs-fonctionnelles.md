@@ -6,7 +6,7 @@
 > Date : 15/08/2026  
 > Statut : brouillon  
 > Référence : `reflexion-agent-os.md`  
-> Changements v0.3.1 : Preview 0.2.0 — resync du module notes, dépannage in-app, site Split-Flap ; annexe §12.
+> Changements v0.3.1 : Preview 0.3.0 — resync du module notes, dépannage in-app, site Split-Flap ; annexe §12.
 > Changements v0.3 : couverture Preview 0.1.2 — F-AGT-11, F-NET-01/02, F-UI-09 ; annexe §12.  
 > Changements v0.2 : revue de complétude croisée avec `specs-techniques.md` — clarification du périmètre mono-utilisateur, ajout de F-BOOT-06, F-AGT-10, F-FS-05, F-SEC-07, F-SEC-08, précisions NFR-04 et glossaire.
 
@@ -363,12 +363,12 @@ Package unique exposant :
 
 - `reflexion-agent-os.md` — réflexion fondatrice  
 - `specs-techniques.md` — spécifications techniques  
-- `FEATURES.md` — catalogue Preview 0.2.0 livrée  
+- `FEATURES.md` — catalogue Preview 0.3.0 livrée  
 - (futur) `adr/` — Architecture Decision Records  
 
 ---
 
-## 12. Couverture Preview 0.2.0 (hôte)
+## 12. Couverture Preview 0.3.0 (hôte)
 
 Correspondance de cette spec avec la **Preview hôte installable** (pas l'OS bootable).
 Détail : `FEATURES.md`.

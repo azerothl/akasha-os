@@ -7,15 +7,17 @@
 Tag puis push :
 
 ```bash
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.3.0
+git push origin v0.3.0
 ```
 
 Le workflow [`.github/workflows/preview-release.yml`](../../.github/workflows/preview-release.yml)
-construit Win + Linux (CUDA 12.4, sans GGUF), publie :
+construit Win + Linux **CUDA** et **CPU** (sans GGUF), publie :
 
 - `AgentOS-Preview-<ver>-windows-x64.zip`
+- `AgentOS-Preview-<ver>-windows-x64-cpu.zip`
 - `AgentOS-Preview-<ver>-linux-x64.tar.gz`
+- `AgentOS-Preview-<ver>-linux-x64-cpu.tar.gz`
 - `latest.json` (sha256 + métadonnées)
 
 Déclenchement manuel : Actions → **preview-release** → Run workflow.
@@ -24,24 +26,24 @@ Déclenchement manuel : Actions → **preview-release** → Run workflow.
 
 | Asset | Commande |
 |-------|----------|
-| Windows | `.\packaging\build-preview.ps1 -SkipModels -RequireCuda` puis Compress-Archive |
-| Linux | `SKIP_MODELS=1 REQUIRE_CUDA=1 ./packaging/build-preview.sh` puis `tar czf` |
+| Windows GPU | `.\packaging\build-preview.ps1 -SkipModels -RequireCuda` puis Compress-Archive |
+| Windows CPU | `.\packaging\build-preview.ps1 -SkipModels -CpuOnly` puis Compress-Archive |
+| Linux GPU | `SKIP_MODELS=1 REQUIRE_CUDA=1 ./packaging/build-preview.sh` puis `tar czf` |
+| Linux CPU | `CPU_ONLY=1 SKIP_MODELS=1 ./packaging/build-preview.sh` puis `tar czf` |
 
 Les GGUF sont téléchargés au **premier run** via `share/models/manifest.json`.
 
 ## Notes de version (brouillon)
 
 ```
-Akasha OS Preview 0.2.0 — cohorte de test
+Akasha OS Preview 0.3.0 — prouver l'OS, élargir le cohort
 
-- Install Win/Linux + NVIDIA (pas un OS bootable)
-- Premier run : download modèles + tutoriel in-app
-- Le module notes se resynchronise au boot après une update
-- Dépannage in-app → rapport GitHub
-- Site public Split-Flap (EN/FR)
-- Updates non destructives via GitHub Releases
-- Retours → issues GitHub
+- TTFT / tok/s / VRAM live dans la barre latérale + Models
+- Onglet Caps (lister + révoquer)
+- Boot CPU-only + pack cpu (NVIDIA optionnel)
+- Scheduler agent (schedule.create/list/cancel)
+- Module tasks dual-surface + onglet Tasks
+- Artefacts Win/Linux : CUDA et CPU
 
-Prérequis : nvidia-smi OK, ~4 Go disque.
-Voir FIRST-RUN.md / INSTALL.md / TESTER.md
+Pas un OS bootable. Voir FIRST-RUN.md / INSTALL.md / TESTER.md
 ```

@@ -2,15 +2,15 @@
 
 **Language:** English | [Français](fr/FIRST-RUN.md)
 
-**This is not a bootable OS.** Preview runs on Windows or Linux x64 with an
-**NVIDIA** GPU.
+**This is not a bootable OS.** Preview runs on Windows or Linux x64.
+**NVIDIA is recommended**; CPU-only boot works with a smaller/slower pack.
 
 Full feature list: [FEATURES.md](FEATURES.md).
 
 ## Before you launch
 
-1. Recent NVIDIA driver (`nvidia-smi -L` OK).
-2. ~8 GB free disk (recommended mid-tier pack: 9B + embedding).
+1. NVIDIA driver (`nvidia-smi -L` OK), **or** CPU-only package / Settings → Inference → CPU.
+2. ~8 GB free disk (recommended mid-tier pack: 9B + embedding); less for the **cpu** pack.
 3. Install via `install.cmd` / `install.sh`, or run `bin/aos-session`.
 4. On Windows, if SmartScreen says **Unknown publisher**: **More info** →
    **Run anyway** (Preview is not code-signed yet).
@@ -21,6 +21,7 @@ On first launch (no `var/models/installed.json` yet):
 
 1. `aos-session` probes GPU VRAM / RAM / disk → `var/run/hardware.json`.
 2. It opens a **Model selection** window (auto-best for your tier):
+   - **cpu** (no NVIDIA): Qwen3.5-4B + Embedding 0.6B
    - **low** (&lt;10 GiB VRAM): Qwen3.5-4B + Embedding 0.6B
    - **mid** (10–20 GiB, e.g. RTX 4080 SUPER): Qwen3.5-9B + Embedding 0.6B
    - **high** (≥20 GiB): Qwen3 30B-A3B + Embedding 0.6B (optional alternatives listed)
@@ -72,6 +73,6 @@ Optional Brave key: `var/secrets/keys.yaml` → `brave_search_api_key`.
 
 ## Quick troubleshooting
 
-- No GPU → install the NVIDIA driver (no CPU mode in 0.1).
+- No GPU → CPU-only mode starts automatically (slow OK), or install an NVIDIA driver / use the GPU package.
 - Setup cancelled → delete nothing; relaunch to reopen model selection.
 - Daemon logs → `var/run/*.stderr.log` (Troubleshooting button).

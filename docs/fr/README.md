@@ -8,8 +8,8 @@
 first-class, offline-first. La Preview tourne sur hôte Windows/Linux
 (NVIDIA) ; la piste seL4 est séparée.
 
-> Ce n'est **pas** encore un OS bootable. La Preview 0.2.0 est une application
-> hôte installable pour testeurs.
+> Ce n'est **pas** encore un OS bootable. La Preview 0.3.0 est une application
+> hôte installable pour testeurs (Windows/Linux ; NVIDIA optionnel via chemin CPU).
 
 ## Pourquoi Akasha OS
 
@@ -26,17 +26,20 @@ Catalogue : [FEATURES.md](FEATURES.md).
 | Chat / Sessions | Conversations persistées ; slash ; modèle par session |
 | Mémoire | Faits long terme ; bootstrap mémoire d'abord |
 | Notes | Humaines + agents (module WASM) ; resync au boot après une update |
-| Agents | Goal, skills, outils, MCP ; timeline ; steer / pause |
-| Modèles | Packs selon le GPU ; download / load ; local-only par défaut |
+| Tâches | Module dual-surface + onglet Tasks |
+| Agents | Goal, skills, outils, MCP, scheduler ; timeline |
+| Caps | Liste / révocation dans l'UI |
+| Modèles | Packs selon le matériel (dont CPU) ; métriques TTFT / tok/s / VRAM |
 | Réseau | Recherche opt-in (Brave / DDG / Bing) + `web.browse` + fetch |
-| Settings | Langue, trust, routage, défauts agent, moteur |
+| Settings | Langue, thème, trust, routage, défauts agent, moteur |
 | Retour | Rapport local + issue GitHub |
 | Dépannage | Diagnostic in-app ; rapport GitHub s'il y a des anomalies |
 | Mises à jour | Overlay non destructif depuis GitHub Releases |
 
 ## Prérequis
 
-Windows 10/11 x64 **ou** Linux x64, GPU NVIDIA, ~4 Go disque.
+Windows 10/11 x64 **ou** Linux x64 ; GPU NVIDIA **ou** mode CPU-only (plus lent) ;
+~4 Go disque. Pas de macOS en Preview 0.3.0.
 
 ## Démarrage rapide
 
@@ -67,6 +70,8 @@ cargo run -p aos-session --release
 | [FEATURES.md](FEATURES.md) | **Fonctionnalités Preview livrées** |
 | [../functional-specs.md](../functional-specs.md) | Specs fonctionnelles (EN) |
 | [specs-fonctionnelles.md](specs-fonctionnelles.md) | Specs fonctionnelles (FR) |
+| [paysage-concurrentiel.md](paysage-concurrentiel.md) | Paysage OS agentiques vs Akasha OS |
+| [plan-evolutions.md](plan-evolutions.md) | Priorités d’évolution post-paysage (E1–E13) |
 | [I18N.md](I18N.md) | Convention multilingue |
 | [../../CONTRIBUTING.md](../../CONTRIBUTING.md) | Contributions |
 

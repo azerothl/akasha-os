@@ -6,6 +6,7 @@
 use aos_agent::mcp::list_mcp_servers;
 use aos_agent::persist::{self, registry_add};
 use aos_agent::prompt::optimize_prompt_request;
+use aos_agent::schedule::{self, ScheduleCreateRequest, ScheduleIdRequest, ScheduleListResponse};
 use aos_agent::skills::{get_skill, list_skills, load_skills, merge_skill_tools};
 use aos_agent::tools::{caps_for_tools, select_tools};
 use aos_agent::{intents, ControlCmd, ControlResp, ReportPayload, SubscribeRequest};
@@ -1065,6 +1066,123 @@ async fn main() {
     }
 
     eprintln!("[aos-agentd] prêt (agentic)");
+
+    // Schedule ticker (E2 / P03.4).
+    {
+        let shared_tick = shared.clone();
+        let bus_addr_tick = bus_addr.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(15));
+            loop {
+                interval.tick().await;
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0);
+                let due = match schedule::due(now) {
+                    Ok(d) => d,
+                    Err(e) => {
+                        eprintln!("[aos-agentd] schedule.due: {e}");
+                        continue;
+                    }
+                };
+                for entry in due {
+                    eprintln!(
+                        "[aos-agentd] schedule fire {} — {}",
+                        entry.id, entry.goal
+                    );
+                    let mut req = AgentCreateRequest::simple(&entry.goal);
+                    req.model_id = entry.model_id.clone();
+                    let n = {
+                        let rt = shared_tick.lock().await;
+                        rt.next_id.fetch_add(1, Ordering::Relaxed)
+                    };
+                    let agent_id = format!("agent-{n}");
+                    let spec = build_spec(&agent_id, &req);
+                    match spawn_worker(&shared_tick, &bus_addr_tick, &agent_id, &spec, false).await
+                    {
+                        Ok(pid) => {
+                            eprintln!(
+                                "[aos-agentd] schedule {} → {agent_id} (pid {pid})",
+                                entry.id
+                            );
+                        }
+                        Err(e) => {
+                            eprintln!("[aos-agentd] schedule spawn {agent_id}: {e}");
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // --- schedule.create / list / cancel ---
+    {
+        svc.on(intents::SCHEDULE_CREATE, move |ctx| async move {
+            let req: ScheduleCreateRequest = match ctx.payload() {
+                Ok(r) => r,
+                Err(_) => {
+                    let _ = ctx
+                        .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                        .await;
+                    return;
+                }
+            };
+            match schedule::create(&req) {
+                Ok(e) => {
+                    let _ = ctx.respond(aos_ipc::msg::Status::Ok, &e).await;
+                }
+                Err(err) => {
+                    let _ = ctx
+                        .respond_error(aos_ipc::msg::Status::InternalError, &err)
+                        .await;
+                }
+            }
+        });
+    }
+    {
+        svc.on(intents::SCHEDULE_LIST, move |ctx| async move {
+            match schedule::list() {
+                Ok(schedules) => {
+                    let _ = ctx
+                        .respond(
+                            aos_ipc::msg::Status::Ok,
+                            &ScheduleListResponse { schedules },
+                        )
+                        .await;
+                }
+                Err(err) => {
+                    let _ = ctx
+                        .respond_error(aos_ipc::msg::Status::InternalError, &err)
+                        .await;
+                }
+            }
+        });
+    }
+    {
+        svc.on(intents::SCHEDULE_CANCEL, move |ctx| async move {
+            let req: ScheduleIdRequest = match ctx.payload() {
+                Ok(r) => r,
+                Err(_) => {
+                    let _ = ctx
+                        .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                        .await;
+                    return;
+                }
+            };
+            match schedule::cancel(&req.id) {
+                Ok(e) => {
+                    let _ = ctx.respond(aos_ipc::msg::Status::Ok, &e).await;
+                }
+                Err(err) => {
+                    let _ = ctx
+                        .respond_error(aos_ipc::msg::Status::InternalError, &err)
+                        .await;
+                }
+            }
+        });
+    }
+
     let _ = svc.serve(&bus_addr).await;
 }
 

@@ -8,13 +8,13 @@ web
 
 ## Users
 
-Primary users are Preview cohort testers. They sit at a Windows 10/11 x64 or Linux x64 machine with an NVIDIA GPU, deciding whether this install is worth their time. They do not want to clone the repo or use `cargo`. Their job is to understand why an agent-native OS is different from an agent app on a general-purpose OS, then install Preview and send feedback from the UI.
+Primary users are Preview cohort testers. They sit at a Windows 10/11 x64 or Linux x64 machine (NVIDIA GPU recommended; CPU-only supported but slower), deciding whether this install is worth their time. They do not want to clone the repo or use `cargo`. Their job is to understand why an agent-native OS is different from an agent app on a general-purpose OS, then install Preview and send feedback from the UI.
 
 Other audiences (systems/security/AI researchers, commercial-license evaluators) exist in the repo but are not the primary user of this surface.
 
 ## Product Purpose
 
-Akasha OS is an agent-native operating system: agents, models, tools, and memory are first-class system services with explicit capabilities, audit, and policy. Preview 0.2.0 is an installable host app on Windows/Linux (NVIDIA), not a bootable OS image. A seL4 bare-metal track is separate.
+Akasha OS is an agent-native operating system: agents, models, tools, and memory are first-class system services with explicit capabilities, audit, and policy. Preview 0.3.0 is an installable host app on Windows/Linux (NVIDIA optional via CPU path), not a bootable OS image. A seL4 bare-metal track is separate.
 
 Success for the public site: a tester understands the thesis (capabilities, semantic IPC, first-class GPU, offline-by-default), then downloads Preview and follows the tester protocol.
 
@@ -35,12 +35,12 @@ A neighboring chat wrapper or “AI desktop” cannot truthfully claim that agen
 
 ## Capabilities and Constraints
 
-Confirmed Preview surfaces: parallel persisted chat sessions; long-term memory (remember / recall); human- and agent-authored notes (WASM module); agent goal loop with skills, tools, optional MCP; opt-in web search/fetch (offline by default); local feedback report plus GitHub issue; non-destructive update overlays from GitHub Releases.
+Confirmed Preview surfaces: parallel persisted chat sessions; long-term memory (remember / recall); human- and agent-authored notes and tasks (WASM modules); agent goal loop with skills, tools, scheduler, optional MCP; caps list/revoke; live model metrics; opt-in web search/fetch (offline by default); themes; local feedback report plus GitHub issue; non-destructive update overlays from GitHub Releases.
 
 Constraints:
 
 - This is not a bootable OS image yet. Future work must never imply otherwise.
-- Preview 0.2.0: Windows/Linux x64 + NVIDIA GPU + recent driver (`nvidia-smi -L`); ~4 GB disk. No macOS. No CPU-only mode.
+- Preview 0.3.0: Windows/Linux x64; NVIDIA GPU recommended; CPU-only path available; ~4 GB disk. No macOS.
 - Dual licensing: AGPL-3.0-only and a commercial license (attribution + royalty). The Akasha OS trademark is reserved.
 - Site and product copy are bilingual EN / FR with equivalent content.
 - Stack for the public site is already decided: static HTML / CSS / JS in `website/`.

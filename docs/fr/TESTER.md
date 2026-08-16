@@ -8,7 +8,7 @@ Catalogue : [FEATURES.md](FEATURES.md).
 
 ## Avant de commencer
 
-- Machine Windows ou Linux x64 + GPU NVIDIA (`nvidia-smi` OK)
+- Machine Windows ou Linux x64 (NVIDIA recommandé ; paquet / chemin CPU-only aussi OK)
 - Installation : voir [INSTALL.md](INSTALL.md)
 - Lancer **Akasha OS Preview** (`aos-session`)
 
@@ -18,17 +18,32 @@ Bannière attendue : *Preview sur Windows/Linux — ce n'est pas encore l'OS boo
 
 ### 1. Chat offline
 
-- Terminer le **choix des modèles** (1er run) et le **tutoriel**.
-- Onglet **Chat** : poser une question ; combo **modèle de session** optionnel.
+- Terminer le **choix des modèles** (1er run) et le **tutoriel** (4 étapes).
+- Onglet **Chat** : poser une question (ex. « Qu'est-ce qu'Akasha OS ? »).
+- Combo **modèle de session** optionnel (onglet Models liste les offerings).
 - Vérifier une réponse streamée **sans réseau**.
+- Après une réponse, la barre latérale / **Models** doit afficher **TTFT** et **tok/s** (et VRAM sur GPU).
 
 ### 1b. Onglet Models
 
-- Lister / **Download** des offerings ; bandeau vert si nouveaux packs pour le tier VRAM.
+- Ouvrir **Models** : voir les entrées installées, **Download** une alternative si proposée.
+- Bandeau « Models: … » si de nouveaux offerings correspondent au tier VRAM.
+- Confirmer les métriques live pour le modèle chargé.
+
+### 1c. CPU-only (optionnel)
+
+- Sur une machine sans NVIDIA, ou avec Settings → Inférence → **CPU only** puis redémarrage :
+  la Preview doit démarrer et le chat local doit fonctionner (lent OK).
 
 ### 2. Note humaine
 
 - Onglet **Notes** → titre + contenu → **Créer**, puis **Lister**.
+
+### 2b. Tasks (dual-surface)
+
+- Onglet **Tasks** → créer une tâche.
+- Lancer un agent avec les outils incluant `tasks.list` — il doit voir la même tâche.
+- Optionnel : demander à l'agent un `tasks.create` ; rafraîchir l'onglet Tasks.
 
 ### 3. Note via agent
 
@@ -42,11 +57,17 @@ Bannière attendue : *Preview sur Windows/Linux — ce n'est pas encore l'OS boo
   **Refuser** une fois, puis **Accepter** une autre (ou la même rejouée).
 - Fail-closed : timeout = refus.
 
-### 5. Audit + kill auditd
+### 5. Audit + caps + kill auditd
 
 - Onglet **Audit** → **Rafraîchir** (événements signés).
-- Bouton **Tuer aos-auditd** : le chat doit continuer ; le superviseur
+- Onglet **Caps** : charger le détenteur `agent:<id>` pour un agent actif → voir les caps → **Révoquer** une cap non critique → confirmer une ligne d'audit.
+- **Tuer aos-auditd** : le chat doit continuer ; le superviseur
   redémarre auditd en arrière-plan.
+
+### 5b. Scheduler
+
+- **Settings** → Schedules : créer un schedule avec intervalle **60s** et un goal court.
+- Attendre un fire : un nouvel agent doit apparaître ; annuler le schedule pour qu'il ne fire plus.
 
 ### 6. Sessions parallèles (PC.6)
 
@@ -126,10 +147,10 @@ et envoi de retour GitHub).
 - Au moins un fichier `var/feedback/fb-*.json` exploitable par retour
 - Gates PC.6–PC.9 et PC.11–PC.13 cochés sur au moins une machine
 
-## Hors scope Preview 0.2.0
+## Hors scope Preview 0.3.0
 
 - Boot seL4 / fer nu
-- macOS, CPU-only
+- macOS
 - Modèle 32B dans l'installeur
 - Mise à jour automatique complète
 - Génération audio/vidéo native

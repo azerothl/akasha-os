@@ -1,13 +1,25 @@
-# Fonctionnalités Preview — Akasha OS 0.2.0
+# Fonctionnalités Preview — Akasha OS 0.3.0
 
 **Langue :** [English](../FEATURES.md) | Français
 
-Catalogue des fonctionnalités **livrées** sur l'hôte Windows/Linux (NVIDIA).
+Catalogue des fonctionnalités **livrées** sur l'hôte Windows/Linux.
 Ce n'est **pas** l'OS bootable. Les exigences v1 sont dans
 [specs-fonctionnelles.md](specs-fonctionnelles.md) ; les gates dans
 [STATUS.md](STATUS.md).
 
-> Date : 15/08/2026 · Preview **0.2.0**
+> Date : 16/08/2026 · Preview **0.3.0**
+
+### Nouveautés 0.3.0
+
+- Métriques d'inférence live (TTFT, tok/s, VRAM) dans la barre latérale + Models
+- Onglet Caps : lister par détenteur + révoquer (audité)
+- Boot CPU-only + pack first-run `cpu` (NVIDIA optionnel)
+- Scheduler agent (`schedule.*`) + UI Settings
+- Module **tasks** dual-surface + onglet Tasks
+- Artefacts de packaging CUDA et CPU
+- Budget de contexte agent + retry `PromptTooLong` ; garde anti-boucle JSON tronqué
+- Chat : markdown des actions ; popup `/` au-dessus de l'input ; thèmes
+- Briefs spawn courts ; découpage notes.create / notes.update
 
 ### Nouveautés 0.2.0
 
@@ -22,15 +34,17 @@ Ce n'est **pas** l'OS bootable. Les exigences v1 sont dans
 
 | Fonctionnalité | Rôle |
 |----------------|------|
-| Contrôles NVIDIA + disque | `aos-session` refuse de démarrer sans GPU / espace suffisant |
-| Sonde matériel | Écrit `var/run/hardware.json` (VRAM, RAM, disque) |
-| Choix des modèles | Pack auto-best selon le tier VRAM (low / mid / high) |
+| NVIDIA optionnel | Sans GPU, démarre en CPU-only (lent OK) ; `AOS_REQUIRE_GPU=1` ou Settings→GPU pour refuser |
+| Contrôles disque | Refuse de démarrer sans espace suffisant |
+| Sonde matériel | Écrit `var/run/hardware.json` (VRAM, RAM, disque) ; tier inclut **cpu** |
+| Choix des modèles | Pack auto-best selon le tier (`cpu` / low / mid / high) |
 | Téléchargement GGUF | Offerings `share/models/catalog-offerings.json` → `share/models/` |
 | Tutoriel in-app | Onboarding 4 étapes (langue, confiance, routage, scénarios) |
 | Boot ordonné | bus → capkd → auditd → modeld → platformd → agentd → egui |
 
 Tiers :
 
+- **cpu** (sans NVIDIA) : Qwen3.5-4B + Embedding 0.6B
 - **low** (&lt;10 Go VRAM) : Qwen3.5-4B + Embedding 0.6B
 - **mid** (10–20 Go) : Qwen3.5-9B + Embedding 0.6B
 - **high** (≥20 Go) : Qwen3 30B-A3B + Embedding 0.6B
@@ -82,6 +96,16 @@ Commandes slash :
 
 ---
 
+## 4b. Tasks (P03.5 / E3)
+
+- Module WASM dual-surface (`tasks.aospkg`)
+- UI humaine : onglet **Tasks** — créer / lister / compléter
+- Outils agent : `tasks.create`, `tasks.list`, `tasks.update`, `tasks.complete`
+- Même store JSON pour humains et agents (`/documents/tasks/tasks.json`)
+- Resync au boot comme notes ; skill `tasks` livrée sous `share/skills/`
+
+---
+
 ## 5. Agents
 
 Boucle Observe / Think / Act avec caps, confirmation et audit.
@@ -98,7 +122,13 @@ Boucle Observe / Think / Act avec caps, confirmation et audit.
 | Authoring | `skill.create` ; WASM scripté via `ext-rt` (`module.scaffold` / `package`) |
 | Think Qwen | Blocs hybrides `<think>` retirés des prompts et de l'UI |
 
-Skills livrées : **notes-writer**, **research**, **file-author**, **planner**.
+Skills livrées : **notes-writer**, **research**, **file-author**, **planner**, **tasks**.
+
+### Scheduler (P03.4 / E2)
+
+- Intents `schedule.create` / `schedule.list` / `schedule.cancel` (système ; pas les canaux chat)
+- Persist sous `var/schedules/` ; ticker déclenche les agents à intervalle (min 30 s)
+- UI Settings : créer / lister / annuler
 
 ### Panneau de transparence (F-UI-04 / F-UI-05)
 
@@ -114,9 +144,10 @@ Skills livrées : **notes-writer**, **research**, **file-author**, **planner**.
 
 ## 6. Modèles
 
-- Backends locaux unifiés (llama.cpp CUDA) + remote OpenAI-compatible optionnel (P3)
+- Backends locaux unifiés (llama.cpp CUDA **ou** CPU) + remote OpenAI-compatible optionnel (P3)
 - Routage : **local_only** (défaut) ou **balanced** (Settings)
 - Onglet Models : lister / charger / télécharger ; défaut de session
+- Métriques live : TTFT, tok/s, VRAM/RAM/disque (barre latérale + Models)
 - Bandeau vert si de nouveaux packs correspondent au tier VRAM
 - CLI : `aos-session --download-models <id>…`
 - Continuous batching (`generate_batch`, `n_seq_max=8`) sur l'hôte (P5.1)
@@ -153,19 +184,21 @@ Persistés dans `var/run/preferences.json` (migration depuis `onboarding.json` s
 
 | Groupe | Options |
 |--------|---------|
-| Général | Langue **en** / **fr** ; trust **low** / **medium** |
+| Général | Langue **en** / **fr** ; trust **low** / **medium** ; Inférence **auto** / **gpu** / **cpu** |
 | Modèles | Routage `local_only` / `balanced` |
 | Réseau | Autoriser le réseau (même interrupteur que la barre latérale) |
 | Agents | Modèle par défaut, max steps (1–128), timeout (60–86400 s) |
+| Schedules | Intervalle de déclenchement agent (`schedule.*`) |
 | Web | Moteur de recherche, max caractères browse, max octets fetch |
 
 ---
 
-## 9. Audit, politique, retours, mises à jour
+## 9. Audit, politique, caps, retours, mises à jour
 
 | Domaine | Contenu |
 |---------|---------|
 | Audit | Journal append-only hashé ; onglet Audit ; tuer `aos-auditd` → le superviseur le relance |
+| Caps | Onglet Caps : `cap.list` par détenteur ; révocation (audité) |
 | Confirmation | Bandeau bloquant pour les actions sensibles ; timeout = refus (fail-closed) |
 | Retour | Copie locale `var/feedback/` + issue GitHub optionnelle (security reste local) |
 | Dépannage | Diagnostic in-app (NVIDIA, home, logs) ; ouvre un rapport GitHub s'il y a des anomalies |
@@ -188,13 +221,14 @@ Piste VM seL4 (PV.1–PV.3) séparée : [phases/phase-vm-sel4.md](phases/phase-v
 
 ---
 
-## 11. Hors Preview 0.2.0
+## 11. Hors Preview 0.3.0
 
 - Image bootable / fer nu
-- macOS ou inférence CPU-only
+- macOS
 - Application automatique complète des updates (téléchargement maintenant, apply au prochain lancement)
 - Génération audio / vidéo native
 - Marketplace public de modules
+- Canaux de messagerie (Slack/Discord/etc.) dans le noyau OS
 - Comptes multi-utilisateur simultanés
 - Pipeline multi-GPU complet (P5.2 ; hôte mono-GPU)
 

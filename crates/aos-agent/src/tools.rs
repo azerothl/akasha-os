@@ -119,8 +119,18 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
         },
         ToolDesc {
             name: "agent.spawn".into(),
-            description: "Déléguer à un sous-agent".into(),
-            input_schema: serde_json::json!({"type":"object","properties":{"brief":{"type":"string"}},"required":["brief"]}),
+            description: "Déléguer à un sous-agent (brief COURT auto-suffisant ; tools/docs minimaux)"
+                .into(),
+            input_schema: serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "brief":{"type":"string","description":"≤3 phrases, auto-suffisant — pas de dump parent"},
+                    "skills":{"type":"array","items":{"type":"string"}},
+                    "tools":{"type":"array","items":{"type":"string"}},
+                    "documents":{"type":"array"}
+                },
+                "required":["brief"]
+            }),
             backend: ToolBackend::Runtime,
             required_caps: vec![],
         },
@@ -244,26 +254,26 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
     let notes_tools = [
         (
             "notes.create",
-            "Créer une note markdown (wikilinks [[Titre]] supportés)",
+            "Créer une note (titre + content COURT / outline). Pour un long texte : create puis notes.update par sections",
             serde_json::json!({
                 "type":"object",
                 "properties":{
                     "title":{"type":"string"},
-                    "content":{"type":"string","description":"Corps markdown"}
+                    "content":{"type":"string","description":"Corps markdown (court à la création ; ≤ ~1200 car. recommandé)"}
                 },
                 "required":["title","content"]
             }),
         ),
         (
             "notes.update",
-            "Mettre à jour une note existante (réindexe mémoire + graphe)",
+            "Mettre à jour une note (préférer sections incrémentales ≤ ~1200 car. de content)",
             serde_json::json!({
                 "type":"object",
                 "properties":{
                     "title":{"type":"string"},
                     "path":{"type":"string"},
                     "slug":{"type":"string"},
-                    "content":{"type":"string"},
+                    "content":{"type":"string","description":"Corps markdown complet ou section à écrire"},
                     "new_title":{"type":"string"}
                 },
                 "required":["content"]
@@ -335,6 +345,61 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
             required_caps: vec!["tool.invoke:notes".into()],
         });
     }
+
+    let tasks_tools = [
+        (
+            "tasks.create",
+            "Créer une tâche partagée (humain + agent)",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "title":{"type":"string"},
+                    "notes":{"type":"string"}
+                },
+                "required":["title"]
+            }),
+        ),
+        (
+            "tasks.list",
+            "Lister les tâches",
+            serde_json::json!({"type":"object"}),
+        ),
+        (
+            "tasks.update",
+            "Mettre à jour une tâche",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "id":{"type":"string"},
+                    "title":{"type":"string"},
+                    "notes":{"type":"string"},
+                    "done":{"type":"boolean"}
+                },
+                "required":["id"]
+            }),
+        ),
+        (
+            "tasks.complete",
+            "Marquer une tâche terminée (ou la réouvrir)",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "id":{"type":"string"},
+                    "done":{"type":"boolean"}
+                },
+                "required":["id"]
+            }),
+        ),
+    ];
+    for (name, desc, schema) in tasks_tools {
+        v.push(ToolDesc {
+            name: name.into(),
+            description: desc.into(),
+            input_schema: schema,
+            backend: ToolBackend::Module,
+            required_caps: vec!["tool.invoke:tasks".into()],
+        });
+    }
     v
 }
 
@@ -366,9 +431,10 @@ pub fn select_tools(selected: &[String], extra: &[ToolDesc]) -> Vec<ToolDesc> {
             || selected.iter().any(|s| s == &t.name || t.name.starts_with(&format!("{s}.")));
         // Si selected non vide : garder tools explicitement demandés + runtime always
         let keep = if selected.is_empty() {
-            // Mode permissif : notes + runtime + fs + extensions
+            // Mode permissif : notes + tasks + runtime + fs + extensions
             matches!(t.backend, ToolBackend::Runtime)
                 || t.name.starts_with("notes.")
+                || t.name.starts_with("tasks.")
                 || always.contains(&t.name.as_str())
                 || t.name == "fs.read"
                 || t.name == "fs.list"

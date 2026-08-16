@@ -45,8 +45,28 @@ pub enum LlamaError {
     Tokenize,
     #[error("échec llama_decode (code {0})")]
     Decode(i32),
-    #[error("le prompt ne tient pas dans le contexte ({prompt} tokens > {ctx})")]
-    PromptTooLong { prompt: usize, ctx: u32 },
+    #[error(
+        "le prompt ne tient pas dans le contexte (prompt={prompt} + réserve_gen={gen_reserve} = {need} tokens > ctx={ctx})"
+    )]
+    PromptTooLong {
+        prompt: usize,
+        ctx: u32,
+        gen_reserve: u32,
+        need: usize,
+    },
+}
+
+impl LlamaError {
+    pub fn prompt_too_long(prompt: usize, ctx: u32, max_tokens: u32) -> Self {
+        let gen_reserve = max_tokens.saturating_add(8);
+        let need = prompt.saturating_add(gen_reserve as usize);
+        Self::PromptTooLong {
+            prompt,
+            ctx,
+            gen_reserve,
+            need,
+        }
+    }
 }
 
 /// Mode de chargement des poids (mapping tier DISK, §3.5.8).
@@ -410,10 +430,11 @@ impl LlamaContext {
         let prompt_tokens = self.tokenize(&prompt, false)?;
         let n_prompt = prompt_tokens.len();
         if n_prompt + params.max_tokens as usize + 8 > self.n_ctx_seq() as usize {
-            return Err(LlamaError::PromptTooLong {
-                prompt: n_prompt,
-                ctx: self.n_ctx_seq(),
-            });
+            return Err(LlamaError::prompt_too_long(
+                n_prompt,
+                self.n_ctx_seq(),
+                params.max_tokens,
+            ));
         }
 
         // KV cache vierge pour cette requête (v1 single-sequence).
@@ -629,10 +650,11 @@ impl LlamaContext {
             {
                 Ok(toks) => {
                     if toks.len() + item.params.max_tokens as usize + 8 > self.n_ctx_seq() as usize {
-                        out[i] = Err(LlamaError::PromptTooLong {
-                            prompt: toks.len(),
-                            ctx: self.n_ctx_seq(),
-                        });
+                        out[i] = Err(LlamaError::prompt_too_long(
+                            toks.len(),
+                            self.n_ctx_seq(),
+                            item.params.max_tokens,
+                        ));
                         prompts.push(Vec::new());
                         continue;
                     }
@@ -785,10 +807,11 @@ impl LlamaContext {
                         }
                     }
                     Ok(toks) => {
-                        on_reject(LlamaError::PromptTooLong {
-                            prompt: toks.len(),
-                            ctx: slf.n_ctx_seq(),
-                        });
+                        on_reject(LlamaError::prompt_too_long(
+                            toks.len(),
+                            slf.n_ctx_seq(),
+                            item.params.max_tokens,
+                        ));
                     }
                     Err(e) => {
                         on_reject(e);
@@ -930,10 +953,7 @@ impl LlamaContext {
             return Err(LlamaError::Tokenize);
         }
         if tokens.len() as u32 > self.n_ctx {
-            return Err(LlamaError::PromptTooLong {
-                prompt: tokens.len(),
-                ctx: self.n_ctx,
-            });
+            return Err(LlamaError::prompt_too_long(tokens.len(), self.n_ctx, 0));
         }
         unsafe {
             let mem = sys::llama_get_memory(self.ptr);

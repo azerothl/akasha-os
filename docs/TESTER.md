@@ -8,7 +8,7 @@ Feature catalogue: [FEATURES.md](FEATURES.md).
 
 ## Before you start
 
-- Windows or Linux x64 + NVIDIA GPU (`nvidia-smi` OK)
+- Windows or Linux x64 (NVIDIA recommended; CPU-only package / path also OK)
 - Install: see [INSTALL.md](../INSTALL.md)
 - Launch **Akasha OS Preview** (`aos-session`)
 
@@ -22,15 +22,28 @@ Expected banner: *Preview on Windows/Linux — this is not the bootable OS yet*.
 - **Chat** tab: ask a question (e.g. “What is Akasha OS?”).
 - Optionally change the **session model** combo (Models tab lists offerings).
 - Verify a streamed reply **without network**.
+- After one reply, sidebar / **Models** should show **TTFT** and **tok/s** (and VRAM when on GPU).
 
 ### 1b. Models tab
 
 - Open **Models**: see installed entries, **Download** an alternative if offered.
 - Banner “Models: …” when newer offerings fit your VRAM tier.
+- Confirm live metrics for the loaded model.
+
+### 1c. CPU-only (optional)
+
+- On a machine without NVIDIA, or with Settings → Inference → **CPU only** then restart:
+  Preview should start and local chat should work (slow is OK).
 
 ### 2. Human note
 
 - **Notes** tab → title + body → **Create**, then **List**.
+
+### 2b. Tasks (dual-surface)
+
+- **Tasks** tab → create a task.
+- Start an agent with tools including `tasks.list` — it should see the same task.
+- Optionally ask the agent to `tasks.create`; refresh the Tasks tab.
 
 ### 3. Note via agent
 
@@ -44,11 +57,17 @@ Expected banner: *Preview on Windows/Linux — this is not the bootable OS yet*.
   **Deny** once, then **Accept** another (or the same replayed).
 - Fail-closed: timeout = deny.
 
-### 5. Audit + kill auditd
+### 5. Audit + caps + kill auditd
 
 - **Audit** tab → **Refresh** (signed events).
+- **Caps** tab: load holder `agent:<id>` for an active agent → see caps → **Revoke** a non-critical one → confirm an audit line.
 - **Kill aos-auditd**: chat must continue; the supervisor restarts auditd
   in the background.
+
+### 5b. Scheduler
+
+- **Settings** → Schedules: create a schedule with interval **60s** and a short goal.
+- Wait for a fire: a new agent should appear; cancel the schedule so it does not fire again.
 
 ### 6. Parallel sessions (PC.6)
 
@@ -124,10 +143,10 @@ GitHub feedback submit).
 - At least one usable `var/feedback/fb-*.json` per report
 - Gates PC.6–PC.9 and PC.11–PC.13 checked on at least one machine
 
-## Out of scope Preview 0.2.0
+## Out of scope Preview 0.3.0
 
 - seL4 / bare-metal boot
-- macOS, CPU-only
+- macOS
 - 32B model in the installer
 - Fully automatic update apply
 - Native audio/video generation

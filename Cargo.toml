@@ -11,12 +11,13 @@ exclude = [
     # Modules WASM (cible wasm32-unknown-unknown, workspaces propres —
     # ne jamais lier `host_call` côté hôte).
     "modules/notes",
+    "modules/tasks",
     "modules/ext-rt",
     "modules/sdk",
 ]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 license = "AGPL-3.0-only"
 

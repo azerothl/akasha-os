@@ -3,8 +3,13 @@
 # GGUF optionnels (SKIP_MODELS=1) — téléchargés au premier run.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="${VERSION:-$(tr -d '[:space:]' < "${ROOT}/VERSION" 2>/dev/null || echo 0.2.0)}"
-OUT="${OUT:-${ROOT}/dist/AgentOS-Preview-${VERSION}-linux-x64}"
+VERSION="${VERSION:-$(tr -d '[:space:]' < "${ROOT}/VERSION" 2>/dev/null || echo 0.3.0)}"
+CPU_ONLY="${CPU_ONLY:-0}"
+if [ "$CPU_ONLY" = "1" ]; then
+  OUT="${OUT:-${ROOT}/dist/AgentOS-Preview-${VERSION}-linux-x64-cpu}"
+else
+  OUT="${OUT:-${ROOT}/dist/AgentOS-Preview-${VERSION}-linux-x64}"
+fi
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-${ROOT}/target}"
 
 SKIP_BUILD="${SKIP_BUILD:-0}"
@@ -16,14 +21,22 @@ if [ "$SKIP_BUILD" != "1" ]; then
   # the audit binary (GitHub Release 2 GiB limit).
   echo "== cargo build --release (aos-auditd sans CUDA/llama) =="
   cargo build --release -p aos-auditd
-  echo "== cargo build --release =="
-  cargo build --release -p aos-session -p aos-ipc -p aos-model -p aos-agent \
-    -p aos-capkd -p aos-ui-egui
-  # Build the preview's platform daemon without optional embeddings so Linux
-  # release assets keep a single CUDA/llama-linked binary (aos-modeld) and stay
-  # under GitHub's 2 GiB artifact limit.
-  echo "== cargo build --release (aos-platformd sans embeddings) =="
-  cargo build --release -p aos-platform --bin aos-platformd --no-default-features
+  if [ "$CPU_ONLY" = "1" ]; then
+    echo "== cargo build --release (CPU-only) =="
+    cargo build --release -p aos-session -p aos-ipc -p aos-agent \
+      -p aos-capkd -p aos-ui-egui
+    cargo build --release -p aos-model --no-default-features
+    cargo build --release -p aos-platform --no-default-features --features embeddings
+  else
+    echo "== cargo build --release =="
+    cargo build --release -p aos-session -p aos-ipc -p aos-model -p aos-agent \
+      -p aos-capkd -p aos-ui-egui
+    # Build the preview's platform daemon without optional embeddings so Linux
+    # release assets keep a single CUDA/llama-linked binary (aos-modeld) and stay
+    # under GitHub's 2 GiB artifact limit.
+    echo "== cargo build --release (aos-platformd sans embeddings) =="
+    cargo build --release -p aos-platform --bin aos-platformd --no-default-features
+  fi
   echo "== notes module =="
   if command -v pwsh >/dev/null 2>&1; then
     pwsh -NoProfile -File "${ROOT}/modules/build-notes.ps1"
@@ -60,6 +73,42 @@ ui:
   mode: declarative_ui
 min_os_api: 1
 EOF
+  fi
+  echo "== tasks module =="
+  if command -v pwsh >/dev/null 2>&1; then
+    pwsh -NoProfile -File "${ROOT}/modules/build-tasks.ps1"
+  else
+    env -u RUSTFLAGS -u CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS \
+      cargo build --manifest-path "${ROOT}/modules/tasks/Cargo.toml" \
+      --target wasm32-unknown-unknown --release
+    mkdir -p "${ROOT}/modules/tasks.aospkg/ui" "${ROOT}/modules/tasks.aospkg/schemas"
+    WASM_TASK=""
+    for cand in \
+      "${CARGO_TARGET_DIR}/wasm32-unknown-unknown/release/module_tasks.wasm" \
+      "${ROOT}/target/wasm32-unknown-unknown/release/module_tasks.wasm" \
+      "${ROOT}/modules/tasks/target/wasm32-unknown-unknown/release/module_tasks.wasm"
+    do
+      if [ -f "${cand}" ]; then WASM_TASK="${cand}"; break; fi
+    done
+    if [ -z "${WASM_TASK}" ]; then
+      echo "ERROR: module_tasks.wasm introuvable" >&2
+      exit 1
+    fi
+    cp -f "${WASM_TASK}" "${ROOT}/modules/tasks.aospkg/module.wasm"
+    cat > "${ROOT}/modules/tasks.aospkg/manifest.yaml" <<'EOF'
+name: tasks
+version: 1.0.0
+hash: "ci"
+permissions:
+  required_caps: []
+tools: []
+ui:
+  entry: ui/index.html
+  mode: declarative_ui
+min_os_api: 1
+EOF
+    echo '{"type":"declarative_ui","title":"Tasks","commands":["tasks.create","tasks.list","tasks.update","tasks.complete"]}' \
+      > "${ROOT}/modules/tasks.aospkg/ui/index.html"
   fi
   if [ -f "${ROOT}/modules/build-ext-rt.ps1" ] && command -v pwsh >/dev/null 2>&1; then
     echo "== ext-rt module =="
@@ -98,7 +147,9 @@ if command -v strip >/dev/null 2>&1; then
   strip --strip-unneeded "${OUT}/bin/"aos-* 2>/dev/null || strip "${OUT}/bin/"aos-* || true
 fi
 
-# CUDA runtime .so next to binaries
+# CUDA runtime .so next to binaries (skip for CPU-only artefacts)
+cuda_copied=0
+if [ "$CPU_ONLY" != "1" ]; then
 CUDA_HOME="${CUDA_HOME:-${CUDA_PATH:-/usr/local/cuda}}"
 if command -v readlink >/dev/null 2>&1; then
   CUDA_HOME_REAL="$(readlink -f "${CUDA_HOME}" 2>/dev/null || true)"
@@ -126,7 +177,6 @@ CUDA_LIB_CANDIDATES+=(
   /usr/local/cuda/targets/x86_64-linux/lib
   /usr/lib/x86_64-linux-gnu
 )
-cuda_copied=0
 # Map realpath -> canonical basename already placed in ${OUT}/bin (dedupe SONAME
 # aliases: libcublasLt.so / .so.12 / .so.12.4.x used to be copied 3× with cp -L
 # and blew past GitHub's 2 GiB release asset limit).
@@ -214,6 +264,9 @@ if [ "${cuda_copied}" -eq 0 ]; then
   find -L "${CUDA_HOME}" \( -type f -o -type l \) -name 'libcudart.so*' 2>/dev/null | head -n 20 >&2 || true
   if [ "${REQUIRE_CUDA}" = "1" ]; then echo "ERROR: ${msg}" >&2; exit 1; else echo "WARN: ${msg}" >&2; fi
 fi
+else
+  echo "== CPU-only package — skipping CUDA runtime copy =="
+fi
 
 cp -f "${ROOT}/data/models/catalog.yaml" "${OUT}/data/models/"
 cp -f "${ROOT}/VERSION" "${OUT}/VERSION"
@@ -225,6 +278,10 @@ fi
 if [ -d "${ROOT}/modules/notes.aospkg" ]; then
   rm -rf "${OUT}/share/modules/notes.aospkg"
   cp -a "${ROOT}/modules/notes.aospkg" "${OUT}/share/modules/notes.aospkg"
+fi
+if [ -d "${ROOT}/modules/tasks.aospkg" ]; then
+  rm -rf "${OUT}/share/modules/tasks.aospkg"
+  cp -a "${ROOT}/modules/tasks.aospkg" "${OUT}/share/modules/tasks.aospkg"
 fi
 if [ -d "${ROOT}/share/modules/ext-rt.aospkg" ]; then
   rm -rf "${OUT}/share/modules/ext-rt.aospkg"

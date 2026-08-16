@@ -2,15 +2,15 @@
 
 **Langue :** [English](../FIRST-RUN.md) | Français
 
-**Ce n'est pas un OS bootable.** Preview tourne sur Windows ou Linux x64
-avec un GPU **NVIDIA**.
+**Ce n'est pas un OS bootable.** Preview tourne sur Windows ou Linux x64.
+**NVIDIA est recommandé** ; le boot CPU-only fonctionne (plus lent).
 
 Catalogue : [FEATURES.md](FEATURES.md).
 
 ## Avant de lancer
 
-1. Driver NVIDIA récent (`nvidia-smi -L` OK).
-2. ~8 Go libres (pack mid : 9B + embedding).
+1. Driver NVIDIA (`nvidia-smi -L` OK), **ou** paquet / mode CPU-only.
+2. ~8 Go libres (pack mid : 9B + embedding) ; moins pour le pack **cpu**.
 3. Installer via `install.cmd` / `install.sh`, ou lancer `bin/aos-session`.
 4. Sous Windows, si SmartScreen affiche **Éditeur inconnu** :
    **Informations complémentaires** → **Exécuter quand même** (Preview pas
@@ -22,6 +22,7 @@ Au premier lancement (pas encore de `var/models/installed.json`) :
 
 1. Sonde GPU / RAM / disque → `var/run/hardware.json`.
 2. Fenêtre **Choix des modèles** (auto-best selon le tier) :
+   - **cpu** (pas de NVIDIA) : Qwen3.5-4B + Embedding 0.6B
    - **low** (&lt;10 Go VRAM) : Qwen3.5-4B + Embedding 0.6B
    - **mid** (10–20 Go) : Qwen3.5-9B + Embedding 0.6B
    - **high** (≥20 Go) : Qwen3 30B-A3B + Embedding 0.6B
@@ -65,6 +66,6 @@ Clé Brave optionnelle : `var/secrets/keys.yaml`.
 
 ## Dépannage
 
-- Pas de GPU → driver NVIDIA.
+- Pas de GPU → démarrage CPU-only (lent OK), ou installer un driver NVIDIA / paquet GPU.
 - Setup annulé → relancer pour rouvrir le choix.
 - Logs → `var/run/*.stderr.log`.

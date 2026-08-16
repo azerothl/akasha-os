@@ -22,6 +22,8 @@ Avant de lister des pistes, il faut trancher une question de fond : **qu'est-ce 
 
 Ces projets restent au-dessus de Linux — ce qui est révélateur : même en visant un "agent OS", personne ne réinvente le bas niveau. Recommandation : même posture, avec ambition d'aller plus loin sur les couches spécifiques agentiques.
 
+Une comparaison datée des projets OS / runtimes agentiques (y compris l’assistant Akasha connexe et les stacks type OpenClaw) figure dans [paysage-concurrentiel.md](paysage-concurrentiel.md).
+
 ---
 
 ## 1. Architecture noyau : capacités, pas permissions ambiantes

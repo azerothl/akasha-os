@@ -9,7 +9,7 @@ license.workspace = true
 aos-agent = { path = "../aos-agent" }
 aos-caps = { path = "../aos-caps" }
 aos-ipc = { path = "../aos-ipc" }
-aos-llama = { path = "../aos-llama", optional = true }
+aos-llama = { path = "../aos-llama", optional = true, default-features = false }
 aos-proto = { path = "../aos-proto" }
 serde.workspace = true
 serde_json.workspace = true
@@ -27,9 +27,10 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 printpdf = "0.7"
 
 [features]
-default = ["embeddings"]
-# Pulls llama.cpp + CUDA fatbins (~hundreds of MiB per linked binary).
+default = ["embeddings", "cuda"]
+# Pulls llama.cpp. Disable `cuda` for CPU-only packaging.
 embeddings = ["dep:aos-llama"]
+cuda = ["aos-llama?/cuda"]
 
 [dev-dependencies]
 wat = "1"

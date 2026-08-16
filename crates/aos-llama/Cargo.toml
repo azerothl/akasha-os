@@ -6,6 +6,10 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-llama-cpp-sys-2 = { version = "0.1.154", features = ["cuda"] }
+llama-cpp-sys-2 = { version = "0.1.154", default-features = false }
 thiserror.workspace = true
 serde.workspace = true
+
+[features]
+default = ["cuda"]
+cuda = ["llama-cpp-sys-2/cuda"]

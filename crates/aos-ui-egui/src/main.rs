@@ -8,20 +8,26 @@ mod i18n;
 mod model_setup;
 mod notes_panel;
 mod prefs;
+mod tasks_panel;
 
+use aos_agent::schedule::{
+    ScheduleCreateRequest, ScheduleEntry, ScheduleIdRequest, ScheduleListResponse,
+};
+use aos_agent::intents as agent_intents;
 use aos_ipc::BusClient;
 use aos_proto::{
     AgentCreateRequest, AgentGoal, AgentIdRequest, AgentInfo, AgentPromptOptimizeRequest,
     AgentPromptOptimizeResponse, AgentState, AgentSteerRequest, AgentTrace, AuditEvent, AuditQueryRequest,
-    ChatAttachment, ChatMessage, ChatSessionAppendRequest, ChatSessionCreateRequest,
-    ChatSessionGetResponse, ChatSessionIdRequest, ChatSessionMeta, ChatSessionRenameRequest,
-    ChatSessionSetModelRequest, ConfirmResponseRequest, DocumentRef, FeedbackSubmitRequest,
-    FeedbackSubmitResponse, FilesGenerateRequest, FilesGenerateResponse, InferParams, InferRequest,
-    McpServerInfo, MemContextRequest, MemContextResponse, MemHit, MemUserRecallRequest,
-    MemUserRememberRequest, LoadRequest, ModelInfo, ModelState, ModuleInvokeRequest,
-    ModuleInvokeResponse, NetFetchRequest, NetFetchResponse, NetModeRequest, PendingConfirmation,
-    SetRoutingRequest, SkillInfo, SystemMetrics, TokenEvent, WebBrowseRequest, WebBrowseResponse,
-    WebSearchHit, WebSearchRequest, WebSearchResponse, CHAT_DELEGATION_PROMPT, SYSTEM_ASSISTANT_PROMPT,
+    CapInfo, CapListRequest, CapRevokeRequest, ChatAttachment, ChatMessage, ChatSessionAppendRequest,
+    ChatSessionCreateRequest, ChatSessionGetResponse, ChatSessionIdRequest, ChatSessionMeta,
+    ChatSessionRenameRequest, ChatSessionSetModelRequest, ConfirmResponseRequest, DocumentRef,
+    FeedbackSubmitRequest, FeedbackSubmitResponse, FilesGenerateRequest, FilesGenerateResponse,
+    InferParams, InferRequest, McpServerInfo, MemContextRequest, MemContextResponse, MemHit,
+    MemUserRecallRequest, MemUserRememberRequest, LoadRequest, ModelInfo, ModelState,
+    ModuleInvokeRequest, ModuleInvokeResponse, NetFetchRequest, NetFetchResponse, NetModeRequest,
+    PendingConfirmation, SetRoutingRequest, SkillInfo, SystemMetrics, TokenEvent, WebBrowseRequest,
+    WebBrowseResponse, WebSearchHit, WebSearchRequest, WebSearchResponse, CHAT_DELEGATION_PROMPT,
+    SYSTEM_ASSISTANT_PROMPT,
 };
 use prefs::{load_preferences, save_preferences, Preferences};
 use eframe::egui;
@@ -103,12 +109,18 @@ enum Tab {
     Chat,
     Memory,
     Notes,
+    Tasks,
     Agents,
     Models,
     Audit,
+    Caps,
     Scenarios,
     Feedback,
     Settings,
+}
+
+fn agent_cap_holder(agent_id: &str) -> String {
+    format!("agent:{agent_id}")
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -209,6 +221,29 @@ enum Cmd {
     AgentCatalogRefresh,
     Troubleshoot,
     Audit { last: usize },
+    CapList { holder: String },
+    CapRevoke {
+        holder: String,
+        cap_id: u64,
+        tree: bool,
+    },
+    ScheduleList,
+    ScheduleCreate {
+        goal: String,
+        interval_secs: u64,
+    },
+    ScheduleCancel {
+        id: String,
+    },
+    TasksList,
+    TasksCreate {
+        title: String,
+        notes: String,
+    },
+    TasksComplete {
+        id: String,
+        done: bool,
+    },
     Feedback(FeedbackSubmitRequest),
     KillAuditd,
     RefreshConfirms,
@@ -258,6 +293,12 @@ enum Evt {
     /// Payload brut (compat scénarios / debug).
     Notes(String),
     Audit(Vec<AuditEvent>),
+    Caps {
+        holder: String,
+        caps: Vec<CapInfo>,
+    },
+    Schedules(Vec<ScheduleEntry>),
+    TasksListed(Vec<tasks_panel::TaskItem>),
     Confirms(Vec<PendingConfirmation>),
     FeedbackOk(FeedbackSubmitResponse),
     /// Préremplit le formulaire Retour (dépannage) sans publier tout de suite.
@@ -315,6 +356,55 @@ const SLASH_COMMANDS: &[(&str, &str)] = &[
     ("/kill <id>", "tuer un agent"),
     ("/pause <id>", "suspendre un agent"),
 ];
+
+fn apply_theme(ctx: &egui::Context, theme: &str) {
+    match theme {
+        "light" => ctx.set_visuals(egui::Visuals::light()),
+        "soft" => {
+            let mut v = egui::Visuals::light();
+            v.override_text_color = Some(egui::Color32::from_rgb(40, 44, 52));
+            v.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(245, 246, 248);
+            v.widgets.inactive.bg_fill = egui::Color32::from_rgb(232, 236, 240);
+            v.panel_fill = egui::Color32::from_rgb(250, 250, 252);
+            v.window_fill = egui::Color32::from_rgb(255, 255, 255);
+            ctx.set_visuals(v);
+        }
+        "high_contrast" => {
+            let mut v = egui::Visuals::dark();
+            v.override_text_color = Some(egui::Color32::WHITE);
+            v.widgets.noninteractive.fg_stroke =
+                egui::Stroke::new(1.5, egui::Color32::WHITE);
+            v.widgets.inactive.fg_stroke = egui::Stroke::new(1.5, egui::Color32::WHITE);
+            v.widgets.hovered.fg_stroke = egui::Stroke::new(2.0, egui::Color32::YELLOW);
+            v.widgets.active.fg_stroke = egui::Stroke::new(2.0, egui::Color32::YELLOW);
+            v.selection.bg_fill = egui::Color32::from_rgb(0, 90, 200);
+            v.extreme_bg_color = egui::Color32::BLACK;
+            v.panel_fill = egui::Color32::BLACK;
+            v.window_fill = egui::Color32::from_rgb(10, 10, 10);
+            ctx.set_visuals(v);
+        }
+        _ => ctx.set_visuals(egui::Visuals::dark()),
+    }
+}
+
+fn slash_completions(prefix: &str) -> Vec<(&'static str, &'static str)> {
+    if !prefix.starts_with('/') {
+        return Vec::new();
+    }
+    let token = prefix.split_whitespace().next().unwrap_or(prefix);
+    SLASH_COMMANDS
+        .iter()
+        .copied()
+        .filter(|(cmd, _)| {
+            !cmd.starts_with('<') && cmd.split_whitespace().next().unwrap_or(cmd).starts_with(token)
+        })
+        .collect()
+}
+
+fn slash_insert_text(cmd_pattern: &str) -> String {
+    let base = cmd_pattern.split_whitespace().next().unwrap_or(cmd_pattern);
+    format!("{base} ")
+}
 
 fn main() -> eframe::Result<()> {
     if std::env::var_os("AOS_MODEL_SETUP").is_some() {
@@ -800,20 +890,21 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                             }
                         }
 
+                        let display = agent_panel::format_assistant_display(&full);
                         let _ = bus
                             .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
                                 "chat.session.append",
                                 &ChatSessionAppendRequest {
                                     session_id: sid.clone(),
                                     role: "assistant".into(),
-                                    content: full.clone(),
+                                    content: display.clone(),
                                     attachments: vec![],
                                 },
                                 vec![],
                             )
                             .await;
                         let _ = evt_tx.send(Evt::Done {
-                            text: full,
+                            text: display,
                             session_id: sid,
                             attachments: vec![],
                         });
@@ -1335,6 +1426,159 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                 }
             }
         }
+        Cmd::CapList { holder } => {
+            match bus
+                .call::<CapListRequest, Vec<CapInfo>>(
+                    "cap.list",
+                    &CapListRequest {
+                        holder: holder.clone(),
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(caps) => {
+                    let _ = evt_tx.send(Evt::Caps { holder, caps });
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(format!("cap.list: {e}")));
+                }
+            }
+        }
+        Cmd::CapRevoke {
+            holder,
+            cap_id,
+            tree,
+        } => {
+            match bus
+                .call::<CapRevokeRequest, u64>(
+                    "cap.revoke",
+                    &CapRevokeRequest {
+                        holder: holder.clone(),
+                        cap: cap_id,
+                        tree,
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(n) => {
+                    let _ = evt_tx.send(Evt::Status(format!(
+                        "cap.revoke: {n} capacité(s) révoquée(s) (holder={holder}, cap={cap_id})"
+                    )));
+                    match bus
+                        .call::<CapListRequest, Vec<CapInfo>>(
+                            "cap.list",
+                            &CapListRequest {
+                                holder: holder.clone(),
+                            },
+                            vec![],
+                        )
+                        .await
+                    {
+                        Ok(caps) => {
+                            let _ = evt_tx.send(Evt::Caps { holder, caps });
+                        }
+                        Err(e) => {
+                            let _ = evt_tx.send(Evt::Error(format!("cap.list: {e}")));
+                        }
+                    }
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(format!("cap.revoke: {e}")));
+                }
+            }
+        }
+        Cmd::ScheduleList => {
+            match bus
+                .call::<(), ScheduleListResponse>(agent_intents::SCHEDULE_LIST, &(), vec![])
+                .await
+            {
+                Ok(r) => {
+                    let _ = evt_tx.send(Evt::Schedules(r.schedules));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(format!("schedule.list: {e}")));
+                }
+            }
+        }
+        Cmd::ScheduleCreate {
+            goal,
+            interval_secs,
+        } => {
+            match bus
+                .call::<ScheduleCreateRequest, ScheduleEntry>(
+                    agent_intents::SCHEDULE_CREATE,
+                    &ScheduleCreateRequest {
+                        goal,
+                        interval_secs,
+                        model_id: None,
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(e) => {
+                    let _ = evt_tx.send(Evt::Status(format!(
+                        "schedule créé {} ({}s)",
+                        e.id, e.interval_secs
+                    )));
+                    if let Ok(r) = bus
+                        .call::<(), ScheduleListResponse>(agent_intents::SCHEDULE_LIST, &(), vec![])
+                        .await
+                    {
+                        let _ = evt_tx.send(Evt::Schedules(r.schedules));
+                    }
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(format!("schedule.create: {e}")));
+                }
+            }
+        }
+        Cmd::ScheduleCancel { id } => {
+            match bus
+                .call::<ScheduleIdRequest, ScheduleEntry>(
+                    agent_intents::SCHEDULE_CANCEL,
+                    &ScheduleIdRequest { id: id.clone() },
+                    vec![],
+                )
+                .await
+            {
+                Ok(_) => {
+                    let _ = evt_tx.send(Evt::Status(format!("schedule annulé {id}")));
+                    if let Ok(r) = bus
+                        .call::<(), ScheduleListResponse>(agent_intents::SCHEDULE_LIST, &(), vec![])
+                        .await
+                    {
+                        let _ = evt_tx.send(Evt::Schedules(r.schedules));
+                    }
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(format!("schedule.cancel: {e}")));
+                }
+            }
+        }
+        Cmd::TasksList => {
+            invoke_tasks(&bus, &evt_tx, "tasks.list", serde_json::json!({})).await;
+        }
+        Cmd::TasksCreate { title, notes } => {
+            invoke_tasks(
+                &bus,
+                &evt_tx,
+                "tasks.create",
+                serde_json::json!({ "title": title, "notes": notes }),
+            )
+            .await;
+        }
+        Cmd::TasksComplete { id, done } => {
+            invoke_tasks(
+                &bus,
+                &evt_tx,
+                "tasks.complete",
+                serde_json::json!({ "id": id, "done": done }),
+            )
+            .await;
+        }
         Cmd::Feedback(req) => {
             match bus
                 .call::<FeedbackSubmitRequest, FeedbackSubmitResponse>(
@@ -1519,9 +1763,16 @@ fn agent_heuristics_for_task(task: &str) -> (Vec<String>, Vec<String>) {
         "notes.update".into(),
         "notes.links".into(),
         "notes.related".into(),
+        "tasks.create".into(),
+        "tasks.list".into(),
+        "tasks.update".into(),
+        "tasks.complete".into(),
     ];
     if lower.contains("note") {
         skills.push("notes-writer".into());
+    }
+    if lower.contains("task") || lower.contains("tâche") || lower.contains("todo") {
+        skills.push("tasks".into());
     }
     if lower.contains("plan") || lower.contains("délégu") {
         skills.push("planner".into());
@@ -1852,6 +2103,75 @@ async fn invoke_notes(
     }
 }
 
+async fn invoke_tasks(
+    bus: &Arc<BusClient>,
+    evt_tx: &Sender<Evt>,
+    tool: &str,
+    args: serde_json::Value,
+) {
+    let req = ModuleInvokeRequest {
+        module: "tasks".into(),
+        tool: tool.into(),
+        args,
+        actor: "human:ui".into(),
+        actor_caps: vec![
+            "fs.read:/documents/tasks/**".into(),
+            "fs.write:/documents/tasks/**".into(),
+            "tool.invoke:tasks".into(),
+        ],
+        trace_id: format!("ui-tasks-{tool}"),
+    };
+    match bus
+        .call::<ModuleInvokeRequest, ModuleInvokeResponse>("module.invoke", &req, vec![])
+        .await
+    {
+        Ok(r) if r.ok => {
+            match tool {
+                "tasks.list" => {
+                    let tasks = tasks_panel::parse_list_result(&r.result);
+                    let _ = evt_tx.send(Evt::TasksListed(tasks));
+                }
+                "tasks.create" | "tasks.update" | "tasks.complete" => {
+                    let _ = evt_tx.send(Evt::Status(format!("{tool} OK")));
+                    let list_req = ModuleInvokeRequest {
+                        module: "tasks".into(),
+                        tool: "tasks.list".into(),
+                        args: serde_json::json!({}),
+                        actor: "human:ui".into(),
+                        actor_caps: vec![
+                            "fs.read:/documents/tasks/**".into(),
+                            "tool.invoke:tasks".into(),
+                        ],
+                        trace_id: "ui-tasks-list-after".into(),
+                    };
+                    if let Ok(lr) = bus
+                        .call::<ModuleInvokeRequest, ModuleInvokeResponse>(
+                            "module.invoke",
+                            &list_req,
+                            vec![],
+                        )
+                        .await
+                    {
+                        if lr.ok {
+                            let tasks = tasks_panel::parse_list_result(&lr.result);
+                            let _ = evt_tx.send(Evt::TasksListed(tasks));
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(r) => {
+            let _ = evt_tx.send(Evt::Error(
+                r.error.unwrap_or_else(|| "tasks: échec".into()),
+            ));
+        }
+        Err(e) => {
+            let _ = evt_tx.send(Evt::Error(e.to_string()));
+        }
+    }
+}
+
 async fn agent_id_cmd(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>, intent: &str, id: String) {
     match bus
         .call::<AgentIdRequest, ()>(intent, &AgentIdRequest { agent_id: id }, vec![])
@@ -1903,6 +2223,10 @@ struct UiApp {
     notes: notes_panel::NotesPanelState,
     /// Dernier payload notes brut (scénarios / debug).
     notes_out: String,
+    tasks: tasks_panel::TasksPanelState,
+    schedules: Vec<ScheduleEntry>,
+    schedule_goal: String,
+    schedule_interval_secs: u64,
     agent_task: String,
     agent_system_prompt: String,
     agent_docs: String,
@@ -1920,6 +2244,8 @@ struct UiApp {
     agent_steer_id: String,
     agent_steer_txt: String,
     audit: Vec<AuditEvent>,
+    caps: Vec<CapInfo>,
+    caps_holder: String,
     status: String,
     onboarding: OnboardingState,
     show_onboarding: bool,
@@ -1948,6 +2274,8 @@ struct UiApp {
     agent_model_id: String,
     model_updates_msg: String,
     download_status: String,
+    /// Re-focus chat TextEdit after send (Enter clears focus).
+    chat_refocus: bool,
 }
 
 impl UiApp {
@@ -2019,6 +2347,10 @@ impl UiApp {
             confirms: Vec::new(),
             notes: notes_panel::NotesPanelState::default(),
             notes_out: String::new(),
+            tasks: tasks_panel::TasksPanelState::default(),
+            schedules: Vec::new(),
+            schedule_goal: String::new(),
+            schedule_interval_secs: 60,
             agent_task: String::new(),
             agent_system_prompt: String::new(),
             agent_docs: String::new(),
@@ -2036,6 +2368,10 @@ impl UiApp {
                 "notes.update".into(),
                 "notes.links".into(),
                 "notes.related".into(),
+                "tasks.create".into(),
+                "tasks.list".into(),
+                "tasks.update".into(),
+                "tasks.complete".into(),
             ],
             agent_open_tabs: Vec::new(),
             agent_active_tab: None,
@@ -2044,6 +2380,8 @@ impl UiApp {
             agent_steer_id: String::new(),
             agent_steer_txt: String::new(),
             audit: Vec::new(),
+            caps: Vec::new(),
+            caps_holder: String::new(),
             status: String::new(),
             onboarding,
             show_onboarding,
@@ -2069,6 +2407,7 @@ impl UiApp {
             agent_model_id: default_model,
             model_updates_msg,
             download_status: String::new(),
+            chat_refocus: false,
         }
     }
 
@@ -2078,6 +2417,7 @@ impl UiApp {
             return;
         }
         self.input.clear();
+        self.chat_refocus = true;
         if text.starts_with('/') {
             self.handle_slash(&text);
             return;
@@ -2259,6 +2599,7 @@ impl UiApp {
 
 impl eframe::App for UiApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        apply_theme(ctx, &self.prefs.theme);
         while let Ok(ev) = self.evt_rx.try_recv() {
             match ev {
                 Evt::Delta(t) => self.streaming.push_str(&t),
@@ -2450,6 +2791,12 @@ impl eframe::App for UiApp {
                     self.audit = a;
                     self.scen_audit = true;
                 }
+                Evt::Caps { holder, caps } => {
+                    self.caps_holder = holder;
+                    self.caps = caps;
+                }
+                Evt::Schedules(s) => self.schedules = s,
+                Evt::TasksListed(tasks) => self.tasks.apply_listed(tasks),
                 Evt::Confirms(c) => self.confirms = c,
                 Evt::FeedbackOk(r) => {
                     let mut msg = format!(
@@ -2827,19 +3174,22 @@ impl eframe::App for UiApp {
 
         egui::SidePanel::left("tabs").exact_width(140.0).show(ctx, |ui| {
             ui.heading("Preview");
-            for (tab, label) in [
-                (Tab::Chat, t.tab_chat),
-                (Tab::Memory, t.tab_memory),
-                (Tab::Notes, t.tab_notes),
-                (Tab::Agents, t.tab_agents),
-                (Tab::Models, t.tab_models),
-                (Tab::Audit, t.tab_audit),
-                (Tab::Scenarios, t.tab_scenarios),
-                (Tab::Feedback, t.tab_feedback),
-                (Tab::Settings, t.tab_settings),
+            for (tab, label, hint) in [
+                (Tab::Chat, t.tab_chat, t.tab_hint_chat),
+                (Tab::Memory, t.tab_memory, t.tab_hint_memory),
+                (Tab::Notes, t.tab_notes, t.tab_hint_notes),
+                (Tab::Tasks, t.tab_tasks, t.tab_hint_tasks),
+                (Tab::Agents, t.tab_agents, t.tab_hint_agents),
+                (Tab::Models, t.tab_models, t.tab_hint_models),
+                (Tab::Audit, t.tab_audit, t.tab_hint_audit),
+                (Tab::Caps, t.tab_caps, t.tab_hint_caps),
+                (Tab::Scenarios, t.tab_scenarios, t.tab_hint_scenarios),
+                (Tab::Feedback, t.tab_feedback, t.tab_hint_feedback),
+                (Tab::Settings, t.tab_settings, t.tab_hint_settings),
             ] {
                 if ui
                     .selectable_label(self.tab == tab, label)
+                    .on_hover_text(hint)
                     .clicked()
                 {
                     if tab == Tab::Feedback && self.tab != Tab::Feedback {
@@ -2849,8 +3199,19 @@ impl eframe::App for UiApp {
                     if tab == Tab::Audit {
                         let _ = self.cmd_tx.send(Cmd::Audit { last: 40 });
                     }
+                    if tab == Tab::Caps && !self.caps_holder.is_empty() {
+                        let _ = self.cmd_tx.send(Cmd::CapList {
+                            holder: self.caps_holder.clone(),
+                        });
+                    }
                     if tab == Tab::Notes {
                         let _ = self.cmd_tx.send(Cmd::NotesList);
+                    }
+                    if tab == Tab::Tasks {
+                        let _ = self.cmd_tx.send(Cmd::TasksList);
+                    }
+                    if tab == Tab::Settings {
+                        let _ = self.cmd_tx.send(Cmd::ScheduleList);
                     }
                 }
             }
@@ -2867,7 +3228,7 @@ impl eframe::App for UiApp {
                 let _ = self.cmd_tx.send(Cmd::NetSetMode { online });
             }
             ui.separator();
-            ui.heading("Ressources");
+            ui.heading(t.resources_heading);
             if let Some(m) = &self.metrics {
                 let ratio = m.ram_used as f32 / m.ram_total.max(1) as f32;
                 ui.add(egui::ProgressBar::new(ratio).text(format!(
@@ -2876,8 +3237,34 @@ impl eframe::App for UiApp {
                     m.ram_total as f64 / (1 << 30) as f64
                 )));
                 ui.label(format!("CPU {:.0}%", m.cpu_percent));
+                ui.label(format!("{}: {}", t.metrics_live, m.agents_active));
                 for mm in &m.models {
-                    ui.label(format!("{} [{:?}]", mm.model_id, mm.state));
+                    ui.group(|ui| {
+                        ui.label(format!("{} [{:?}]", mm.model_id, mm.state));
+                        let ttft = mm
+                            .last_ttft_ms
+                            .map(|v| format!("{v:.0} ms"))
+                            .unwrap_or_else(|| "—".into());
+                        let toks = mm
+                            .last_tok_s
+                            .map(|v| format!("{v:.1}"))
+                            .unwrap_or_else(|| "—".into());
+                        ui.monospace(format!(
+                            "{} {} · {} {} · {} {:.0} MiB",
+                            t.metrics_ttft,
+                            ttft,
+                            t.metrics_tok_s,
+                            toks,
+                            t.metrics_vram,
+                            mm.vram_bytes as f64 / (1 << 20) as f64
+                        ));
+                        if mm.queued > 0 || mm.active_inferences > 0 {
+                            ui.weak(format!(
+                                "inf={} {}={}",
+                                mm.active_inferences, t.metrics_queued, mm.queued
+                            ));
+                        }
+                    });
                 }
             } else {
                 ui.label("…");
@@ -2893,9 +3280,11 @@ impl eframe::App for UiApp {
             Tab::Chat => self.ui_chat(ui),
             Tab::Memory => self.ui_memory(ui),
             Tab::Notes => self.ui_notes(ui),
+            Tab::Tasks => self.ui_tasks(ui),
             Tab::Agents => self.ui_agents(ui),
             Tab::Models => self.ui_models(ui),
             Tab::Audit => self.ui_audit(ui),
+            Tab::Caps => self.ui_caps(ui),
             Tab::Scenarios => self.ui_scenarios(ui),
             Tab::Feedback => self.ui_feedback(ui),
             Tab::Settings => self.ui_settings(ui),
@@ -3116,7 +3505,7 @@ impl UiApp {
                         ui.weak(format!("session {id}"));
                     }
 
-                    let input_reserve = 40.0_f32;
+                    let input_reserve = 44.0_f32;
                     let scroll_h = (ui.available_height() - input_reserve).max(120.0);
                     egui::ScrollArea::vertical()
                         .id_salt("conversation_scroll")
@@ -3133,6 +3522,11 @@ impl UiApp {
                                 let role = self.chat[i].role.clone();
                                 let text = self.chat[i].text.clone();
                                 let attachments = self.chat[i].attachments.clone();
+                                let text = if role == "assistant" {
+                                    agent_panel::format_assistant_display(&text)
+                                } else {
+                                    text
+                                };
                                 ui.label(format!("[{role}]"));
                                 if !text.is_empty() {
                                     if role == "assistant" {
@@ -3166,7 +3560,8 @@ impl UiApp {
                             }
                             if !self.streaming.is_empty() {
                                 ui.label("[assistant]");
-                                let streaming = self.streaming.clone();
+                                let streaming =
+                                    agent_panel::format_streaming_preview(&self.streaming);
                                 ui.push_id("chat_md_stream", |ui| {
                                     CommonMarkViewer::new().show(
                                         ui,
@@ -3180,26 +3575,88 @@ impl UiApp {
                             }
                         });
 
-                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                        let r = ui.add(
-                            egui::TextEdit::singleline(&mut self.input)
-                                .desired_width(ui.available_width() - 90.0)
-                                .hint_text("message ou /commands …"),
-                        );
-                        let send = ui.button("Envoyer").clicked()
-                            || (r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)));
-                        if send {
-                            self.send_chat();
+                    let completions = slash_completions(&self.input);
+                    let input_row = ui.with_layout(
+                        egui::Layout::left_to_right(egui::Align::Center),
+                        |ui| {
+                            let t = i18n::strings(&self.prefs.language);
+                            let r = ui.add(
+                                egui::TextEdit::singleline(&mut self.input)
+                                    .id_salt("chat_input")
+                                    .desired_width(ui.available_width() - 90.0)
+                                    .hint_text(t.chat_hint),
+                            );
+                            if self.chat_refocus {
+                                r.request_focus();
+                                self.chat_refocus = false;
+                            }
+                            let send_btn = ui.button("Envoyer").on_hover_text(t.tip_send);
+                            let send = send_btn.clicked()
+                                || (r.lost_focus()
+                                    && ui.input(|i| i.key_pressed(egui::Key::Enter)));
+                            if send {
+                                self.send_chat();
+                                self.chat_refocus = true;
+                            }
+                            r
+                        },
+                    );
+                    let input_rect = input_row.inner.rect;
+
+                    // Popup au-dessus de l'input, en overlay sur le chat (pas sous le cadre)
+                    if !completions.is_empty() {
+                        let t = i18n::strings(&self.prefs.language);
+                        let popup_w = input_rect.width().clamp(240.0, chat_w);
+                        let max_h = 220.0_f32;
+                        let mut picked: Option<String> = None;
+                        egui::Area::new(egui::Id::new("slash_completions_popup"))
+                            .order(egui::Order::Foreground)
+                            .fixed_pos(egui::pos2(input_rect.left(), input_rect.top() - 6.0))
+                            .pivot(egui::Align2::LEFT_BOTTOM)
+                            .interactable(true)
+                            .show(ui.ctx(), |ui| {
+                                egui::Frame::popup(ui.style())
+                                    .inner_margin(egui::Margin::same(8))
+                                    .show(ui, |ui| {
+                                        ui.set_min_width(popup_w * 0.85);
+                                        ui.set_max_width(popup_w);
+                                        ui.label(
+                                            egui::RichText::new(t.slash_pick)
+                                                .small()
+                                                .strong(),
+                                        );
+                                        egui::ScrollArea::vertical()
+                                            .max_height(max_h)
+                                            .show(ui, |ui| {
+                                                for (cmd, desc) in &completions {
+                                                    if ui
+                                                        .selectable_label(
+                                                            false,
+                                                            format!("{cmd} — {desc}"),
+                                                        )
+                                                        .clicked()
+                                                    {
+                                                        picked = Some(slash_insert_text(cmd));
+                                                    }
+                                                }
+                                            });
+                                    });
+                            });
+                        if let Some(text) = picked {
+                            self.input = text;
+                            self.chat_refocus = true;
                         }
-                    });
+                    }
                 },
             );
         });
     }
 
     fn ui_memory(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Mémoire long terme (user:default)");
-        ui.label("Épingler des faits stables ; ils sont injectés avant chaque infer.");
+        let t = i18n::strings(&self.prefs.language);
+        ui.heading(t.tab_memory);
+        ui.weak(t.memory_blurb);
+        ui.separator();
         ui.horizontal(|ui| {
             ui.add(
                 egui::TextEdit::singleline(&mut self.mem_note)
@@ -3248,7 +3705,26 @@ impl UiApp {
         });
     }
 
+    fn ui_tasks(&mut self, ui: &mut egui::Ui) {
+        let t = i18n::strings(&self.prefs.language);
+        ui.weak(t.tasks_blurb);
+        ui.separator();
+        let actions = self.tasks.ui(ui, t.tab_tasks);
+        if actions.list {
+            let _ = self.cmd_tx.send(Cmd::TasksList);
+        }
+        if let Some((title, notes)) = actions.create {
+            let _ = self.cmd_tx.send(Cmd::TasksCreate { title, notes });
+        }
+        if let Some((id, done)) = actions.complete {
+            let _ = self.cmd_tx.send(Cmd::TasksComplete { id, done });
+        }
+    }
+
     fn ui_notes(&mut self, ui: &mut egui::Ui) {
+        let t = i18n::strings(&self.prefs.language);
+        ui.weak(t.notes_blurb);
+        ui.separator();
         let actions = notes_panel::show_notes_panel(ui, &mut self.notes);
         if actions.list {
             let _ = self.cmd_tx.send(Cmd::NotesList);
@@ -3307,7 +3783,10 @@ impl UiApp {
     }
 
     fn ui_agents(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Agents — compose agentic");
+        let t = i18n::strings(&self.prefs.language);
+        ui.heading(t.tab_agents);
+        ui.weak(t.agents_blurb);
+        ui.separator();
         if ui.button("Rafraîchir catalogues (skills / MCP)").clicked() {
             let _ = self.cmd_tx.send(Cmd::AgentCatalogRefresh);
         }
@@ -3404,6 +3883,10 @@ impl UiApp {
                 "notes.update",
                 "notes.links",
                 "notes.related",
+                "tasks.create",
+                "tasks.list",
+                "tasks.update",
+                "tasks.complete",
                 "fs.read",
                 "fs.write",
                 "fs.list",
@@ -3601,6 +4084,9 @@ impl UiApp {
         let _ = self.cmd_tx.send(Cmd::AgentTrace {
             id: id.to_string(),
         });
+        let holder = agent_cap_holder(id);
+        self.caps_holder = holder.clone();
+        let _ = self.cmd_tx.send(Cmd::CapList { holder });
     }
 
     fn close_agent_tab(&mut self, id: &str) {
@@ -3673,6 +4159,9 @@ impl UiApp {
                                     {
                                         self.agent_active_tab = Some(id.clone());
                                         self.agent_steer_id = id.clone();
+                                        let holder = agent_cap_holder(&id);
+                                        self.caps_holder = holder.clone();
+                                        let _ = self.cmd_tx.send(Cmd::CapList { holder });
                                     }
                                     if ui.small_button("×").clicked() {
                                         self.close_agent_tab(&id);
@@ -3685,6 +4174,21 @@ impl UiApp {
 
                 let active = self.agent_active_tab.clone();
                 if let Some(id) = active {
+                    let holder = agent_cap_holder(&id);
+                    let t = i18n::strings(&self.prefs.language);
+                    ui.collapsing(format!("{} ({holder})", t.caps_heading), |ui| {
+                        ui.horizontal(|ui| {
+                            if ui.small_button(t.caps_refresh).clicked() {
+                                self.caps_holder = holder.clone();
+                                let _ = self.cmd_tx.send(Cmd::CapList {
+                                    holder: holder.clone(),
+                                });
+                            }
+                        });
+                        self.draw_caps_list(ui, &holder);
+                    });
+                    ui.separator();
+
                     let info = self.agents.iter().find(|a| a.agent_id == id).cloned();
                     let trace = self.agent_traces.get(&id).cloned();
                     let actions = agent_panel::draw_agent_detail(
@@ -3692,6 +4196,7 @@ impl UiApp {
                         info.as_ref(),
                         trace.as_ref(),
                         &mut self.agent_steer_txt,
+                        &mut self.chat_md_cache,
                         &open_in_browser,
                     );
                     if actions.pause {
@@ -3727,173 +4232,328 @@ impl UiApp {
         ui.heading(t.settings_title);
         ui.separator();
 
+        let label_w = 160.0_f32;
+
         ui.heading(t.settings_general);
-        ui.horizontal(|ui| {
-            ui.label(t.language);
-            for (code, label) in [("en", "English"), ("fr", "Français")] {
-                if ui
-                    .selectable_label(self.prefs.language == code, label)
-                    .clicked()
-                {
-                    self.prefs.language = code.into();
-                    self.onboarding.language = code.into();
-                    save_preferences(&self.prefs);
-                    save_onboarding(&self.onboarding);
-                    self.status = t.settings_saved.into();
-                }
-            }
-        });
-        ui.horizontal(|ui| {
-            ui.label(t.trust_default);
-            for (code, label) in [("low", t.trust_low), ("medium", t.trust_medium)] {
-                if ui
-                    .selectable_label(self.prefs.trust_default == code, label)
-                    .clicked()
-                {
-                    self.prefs.trust_default = code.into();
-                    self.onboarding.trust_default = code.into();
-                    save_preferences(&self.prefs);
-                    save_onboarding(&self.onboarding);
-                }
-            }
-        });
+        egui::Grid::new("settings_general")
+            .num_columns(2)
+            .spacing([12.0, 8.0])
+            .min_col_width(label_w)
+            .show(ui, |ui| {
+                ui.label(t.language);
+                ui.horizontal(|ui| {
+                    for (code, label) in [("en", "English"), ("fr", "Français")] {
+                        if ui
+                            .selectable_label(self.prefs.language == code, label)
+                            .clicked()
+                        {
+                            self.prefs.language = code.into();
+                            self.onboarding.language = code.into();
+                            save_preferences(&self.prefs);
+                            save_onboarding(&self.onboarding);
+                            self.status = t.settings_saved.into();
+                        }
+                    }
+                });
+                ui.end_row();
+
+                ui.label(t.theme);
+                let theme_label = match self.prefs.theme.as_str() {
+                    "light" => t.theme_light,
+                    "soft" => t.theme_soft,
+                    "high_contrast" => t.theme_high_contrast,
+                    _ => t.theme_dark,
+                };
+                egui::ComboBox::from_id_salt("prefs_theme")
+                    .selected_text(theme_label)
+                    .show_ui(ui, |ui| {
+                        for (code, label) in [
+                            ("dark", t.theme_dark),
+                            ("light", t.theme_light),
+                            ("soft", t.theme_soft),
+                            ("high_contrast", t.theme_high_contrast),
+                        ] {
+                            if ui
+                                .selectable_label(self.prefs.theme == code, label)
+                                .clicked()
+                            {
+                                self.prefs.theme = code.into();
+                                save_preferences(&self.prefs);
+                                self.status = t.settings_saved.into();
+                            }
+                        }
+                    });
+                ui.end_row();
+
+                ui.label(t.trust_default);
+                ui.horizontal(|ui| {
+                    for (code, label) in [("low", t.trust_low), ("medium", t.trust_medium)] {
+                        if ui
+                            .selectable_label(self.prefs.trust_default == code, label)
+                            .clicked()
+                        {
+                            self.prefs.trust_default = code.into();
+                            self.onboarding.trust_default = code.into();
+                            save_preferences(&self.prefs);
+                            save_onboarding(&self.onboarding);
+                        }
+                    }
+                });
+                ui.end_row();
+
+                ui.label(t.inference_mode);
+                ui.horizontal(|ui| {
+                    for (code, label) in [
+                        ("auto", "Auto"),
+                        ("gpu", t.inference_gpu),
+                        ("cpu", t.inference_cpu),
+                    ] {
+                        if ui
+                            .selectable_label(self.prefs.inference_mode == code, label)
+                            .clicked()
+                        {
+                            self.prefs.inference_mode = code.into();
+                            save_preferences(&self.prefs);
+                            self.status = format!(
+                                "{} — redémarrage session recommandé",
+                                t.settings_saved
+                            );
+                        }
+                    }
+                });
+                ui.end_row();
+            });
 
         ui.add_space(8.0);
         ui.heading(t.settings_models);
-        ui.horizontal(|ui| {
-            ui.label(t.routing);
-            for (code, label) in [
-                ("local_only", t.routing_local),
-                ("balanced", t.settings_routing_balanced),
-            ] {
-                if ui
-                    .selectable_label(self.prefs.routing == code, label)
-                    .clicked()
-                {
-                    self.prefs.routing = code.into();
-                    self.onboarding.routing = code.into();
-                    save_preferences(&self.prefs);
-                    save_onboarding(&self.onboarding);
-                    let _ = self.cmd_tx.send(Cmd::SetRouting {
-                        mode: code.to_string(),
-                    });
+        egui::Grid::new("settings_models")
+            .num_columns(2)
+            .spacing([12.0, 8.0])
+            .min_col_width(label_w)
+            .show(ui, |ui| {
+                ui.label(t.routing);
+                ui.horizontal(|ui| {
+                    for (code, label) in [
+                        ("local_only", t.routing_local),
+                        ("balanced", t.settings_routing_balanced),
+                    ] {
+                        if ui
+                            .selectable_label(self.prefs.routing == code, label)
+                            .clicked()
+                        {
+                            self.prefs.routing = code.into();
+                            self.onboarding.routing = code.into();
+                            save_preferences(&self.prefs);
+                            save_onboarding(&self.onboarding);
+                            let _ = self.cmd_tx.send(Cmd::SetRouting {
+                                mode: code.to_string(),
+                            });
+                        }
+                    }
+                });
+                ui.end_row();
+
+                ui.label(t.tab_models);
+                if ui.button(t.tab_models).clicked() {
+                    self.tab = Tab::Models;
                 }
-            }
-        });
-        if ui.button(t.tab_models).clicked() {
-            self.tab = Tab::Models;
-        }
+                ui.end_row();
+            });
 
         ui.add_space(8.0);
         ui.heading(t.settings_network);
-        let mut online = self.prefs.network_online;
-        if ui.checkbox(&mut online, t.allow_network).changed() {
-            self.prefs.network_online = online;
-            self.network_online = online;
-            save_preferences(&self.prefs);
-            let _ = self.cmd_tx.send(Cmd::NetSetMode { online });
-        }
+        egui::Grid::new("settings_network")
+            .num_columns(2)
+            .spacing([12.0, 8.0])
+            .min_col_width(label_w)
+            .show(ui, |ui| {
+                ui.label(t.network_heading);
+                let mut online = self.prefs.network_online;
+                if ui.checkbox(&mut online, t.allow_network).changed() {
+                    self.prefs.network_online = online;
+                    self.network_online = online;
+                    save_preferences(&self.prefs);
+                    let _ = self.cmd_tx.send(Cmd::NetSetMode { online });
+                }
+                ui.end_row();
+            });
 
         ui.add_space(8.0);
         ui.heading(t.settings_agents);
-        ui.horizontal(|ui| {
-            ui.label(t.settings_default_model);
-            egui::ComboBox::from_id_salt("prefs_agent_model")
-                .selected_text(
-                    self.prefs
-                        .default_agent_model
-                        .clone()
-                        .unwrap_or_else(|| "default".into()),
-                )
-                .show_ui(ui, |ui| {
-                    if ui
-                        .selectable_label(self.prefs.default_agent_model.is_none(), "default")
-                        .clicked()
-                    {
-                        self.prefs.default_agent_model = None;
-                        self.agent_model_id.clear();
-                        save_preferences(&self.prefs);
-                    }
-                    for m in self.model_infos.clone() {
-                        let selected = self.prefs.default_agent_model.as_deref() == Some(m.id.as_str());
-                        if ui.selectable_label(selected, &m.id).clicked() {
-                            self.prefs.default_agent_model = Some(m.id.clone());
-                            self.agent_model_id = m.id;
+        egui::Grid::new("settings_agents")
+            .num_columns(2)
+            .spacing([12.0, 8.0])
+            .min_col_width(label_w)
+            .show(ui, |ui| {
+                ui.label(t.settings_default_model);
+                egui::ComboBox::from_id_salt("prefs_agent_model")
+                    .selected_text(
+                        self.prefs
+                            .default_agent_model
+                            .clone()
+                            .unwrap_or_else(|| "default".into()),
+                    )
+                    .show_ui(ui, |ui| {
+                        if ui
+                            .selectable_label(self.prefs.default_agent_model.is_none(), "default")
+                            .clicked()
+                        {
+                            self.prefs.default_agent_model = None;
+                            self.agent_model_id.clear();
                             save_preferences(&self.prefs);
                         }
-                    }
-                });
-        });
-        ui.horizontal(|ui| {
-            ui.label(t.settings_max_steps);
-            if ui
-                .add(egui::DragValue::new(&mut self.prefs.default_max_steps).range(1..=128))
-                .changed()
-            {
-                self.agent_max_steps = self.prefs.default_max_steps;
-                save_preferences(&self.prefs);
-            }
-        });
-        ui.horizontal(|ui| {
-            ui.label(t.settings_timeout);
-            if ui
-                .add(
-                    egui::DragValue::new(&mut self.prefs.default_timeout_secs).range(60..=86_400),
-                )
-                .changed()
-            {
-                self.agent_timeout_secs = self.prefs.default_timeout_secs;
-                save_preferences(&self.prefs);
-            }
-        });
+                        for m in self.model_infos.clone() {
+                            let selected =
+                                self.prefs.default_agent_model.as_deref() == Some(m.id.as_str());
+                            if ui.selectable_label(selected, &m.id).clicked() {
+                                self.prefs.default_agent_model = Some(m.id.clone());
+                                self.agent_model_id = m.id;
+                                save_preferences(&self.prefs);
+                            }
+                        }
+                    });
+                ui.end_row();
+
+                ui.label(t.settings_max_steps);
+                if ui
+                    .add(egui::DragValue::new(&mut self.prefs.default_max_steps).range(1..=128))
+                    .changed()
+                {
+                    self.agent_max_steps = self.prefs.default_max_steps;
+                    save_preferences(&self.prefs);
+                }
+                ui.end_row();
+
+                ui.label(t.settings_timeout);
+                if ui
+                    .add(
+                        egui::DragValue::new(&mut self.prefs.default_timeout_secs)
+                            .range(60..=86_400),
+                    )
+                    .changed()
+                {
+                    self.agent_timeout_secs = self.prefs.default_timeout_secs;
+                    save_preferences(&self.prefs);
+                }
+                ui.end_row();
+            });
 
         ui.add_space(8.0);
         ui.heading(t.settings_web);
-        ui.horizontal(|ui| {
-            ui.label(t.settings_search_engine);
-            egui::ComboBox::from_id_salt("prefs_search_engine")
-                .selected_text(&self.prefs.web_search_engine)
-                .show_ui(ui, |ui| {
-                    for eng in ["auto", "brave", "duckduckgo", "bing"] {
-                        if ui
-                            .selectable_label(self.prefs.web_search_engine == eng, eng)
-                            .clicked()
-                        {
-                            self.prefs.web_search_engine = eng.into();
-                            save_preferences(&self.prefs);
+        egui::Grid::new("settings_web")
+            .num_columns(2)
+            .spacing([12.0, 8.0])
+            .min_col_width(label_w)
+            .show(ui, |ui| {
+                ui.label(t.settings_search_engine);
+                egui::ComboBox::from_id_salt("prefs_search_engine")
+                    .selected_text(&self.prefs.web_search_engine)
+                    .show_ui(ui, |ui| {
+                        for eng in ["auto", "brave", "duckduckgo", "bing"] {
+                            if ui
+                                .selectable_label(self.prefs.web_search_engine == eng, eng)
+                                .clicked()
+                            {
+                                self.prefs.web_search_engine = eng.into();
+                                save_preferences(&self.prefs);
+                            }
                         }
+                    });
+                ui.end_row();
+
+                ui.label(t.settings_browse_chars);
+                if ui
+                    .add(
+                        egui::DragValue::new(&mut self.prefs.web_browse_max_chars)
+                            .range(1000..=100_000),
+                    )
+                    .changed()
+                {
+                    save_preferences(&self.prefs);
+                }
+                ui.end_row();
+
+                ui.label(t.settings_fetch_max);
+                if ui
+                    .add(
+                        egui::DragValue::new(&mut self.prefs.web_fetch_max_bytes)
+                            .range(1024..=200_000_000),
+                    )
+                    .changed()
+                {
+                    save_preferences(&self.prefs);
+                }
+                ui.end_row();
+            });
+        ui.weak(t.settings_brave_hint);
+
+        ui.add_space(12.0);
+        ui.heading(t.schedule_heading);
+        egui::Grid::new("settings_schedules")
+            .num_columns(2)
+            .spacing([12.0, 8.0])
+            .min_col_width(label_w)
+            .show(ui, |ui| {
+                ui.label(t.schedule_goal);
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.schedule_goal)
+                        .desired_width(280.0)
+                        .hint_text("agent goal"),
+                );
+                ui.end_row();
+
+                ui.label(t.schedule_interval);
+                ui.horizontal(|ui| {
+                    ui.add(
+                        egui::DragValue::new(&mut self.schedule_interval_secs)
+                            .range(30..=86_400)
+                            .suffix(" s"),
+                    );
+                    if ui
+                        .button(t.schedule_create)
+                        .on_hover_text(t.tip_schedule_create)
+                        .clicked()
+                        && !self.schedule_goal.trim().is_empty()
+                    {
+                        let _ = self.cmd_tx.send(Cmd::ScheduleCreate {
+                            goal: self.schedule_goal.trim().to_string(),
+                            interval_secs: self.schedule_interval_secs.max(30),
+                        });
+                        self.schedule_goal.clear();
+                    }
+                    if ui.button(t.caps_refresh).clicked() {
+                        let _ = self.cmd_tx.send(Cmd::ScheduleList);
                     }
                 });
-        });
-        ui.horizontal(|ui| {
-            ui.label(t.settings_browse_chars);
-            if ui
-                .add(
-                    egui::DragValue::new(&mut self.prefs.web_browse_max_chars)
-                        .range(1000..=100_000),
-                )
-                .changed()
-            {
-                save_preferences(&self.prefs);
+                ui.end_row();
+            });
+        if self.schedules.is_empty() {
+            ui.weak("Aucun schedule");
+        } else {
+            for s in self.schedules.clone() {
+                ui.horizontal(|ui| {
+                    let flag = if s.enabled { "ON" } else { "OFF" };
+                    ui.monospace(&s.id);
+                    ui.label(format!(
+                        "[{flag}] every {}s · fires={} · {}",
+                        s.interval_secs, s.fire_count, s.goal
+                    ));
+                    if s.enabled
+                        && ui
+                            .small_button(t.schedule_cancel)
+                            .on_hover_text(t.tip_schedule_cancel)
+                            .clicked()
+                    {
+                        let _ = self.cmd_tx.send(Cmd::ScheduleCancel { id: s.id });
+                    }
+                });
             }
-        });
-        ui.horizontal(|ui| {
-            ui.label(t.settings_fetch_max);
-            if ui
-                .add(
-                    egui::DragValue::new(&mut self.prefs.web_fetch_max_bytes)
-                        .range(1024..=200_000_000),
-                )
-                .changed()
-            {
-                save_preferences(&self.prefs);
-            }
-        });
-        ui.weak(t.settings_brave_hint);
+        }
     }
 
     fn ui_models(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Models");
+        let t = i18n::strings(&self.prefs.language);
+        ui.heading(t.tab_models);
         if ui.button("Refresh list").clicked() {
             let _ = self.cmd_tx.send(Cmd::ModelsRefresh);
         }
@@ -3905,6 +4565,40 @@ impl UiApp {
         }
         if !self.download_status.is_empty() {
             ui.label(&self.download_status);
+        }
+        ui.separator();
+        ui.label(t.metrics_live);
+        if let Some(m) = &self.metrics {
+            for mm in &m.models {
+                ui.group(|ui| {
+                    ui.strong(format!("{} [{:?}]", mm.model_id, mm.state));
+                    let ttft = mm
+                        .last_ttft_ms
+                        .map(|v| format!("{v:.1} ms"))
+                        .unwrap_or_else(|| "—".into());
+                    let toks = mm
+                        .last_tok_s
+                        .map(|v| format!("{v:.2}"))
+                        .unwrap_or_else(|| "—".into());
+                    ui.label(format!("{}: {}", t.metrics_ttft, ttft));
+                    ui.label(format!("{}: {}", t.metrics_tok_s, toks));
+                    ui.label(format!(
+                        "{}: {:.2} GiB · {}: {:.2} GiB · {}: {:.2} GiB",
+                        t.metrics_vram,
+                        mm.vram_bytes as f64 / (1 << 30) as f64,
+                        t.metrics_ram,
+                        mm.ram_bytes as f64 / (1 << 30) as f64,
+                        t.metrics_disk,
+                        mm.disk_bytes as f64 / (1 << 30) as f64
+                    ));
+                    ui.weak(format!(
+                        "active={} {}={}",
+                        mm.active_inferences, t.metrics_queued, mm.queued
+                    ));
+                });
+            }
+        } else {
+            ui.label("…");
         }
         ui.separator();
         ui.label("Installed / registered (model.list)");
@@ -3995,6 +4689,86 @@ impl UiApp {
                 ));
             }
         });
+    }
+
+    fn ui_caps(&mut self, ui: &mut egui::Ui) {
+        let t = i18n::strings(&self.prefs.language);
+        ui.heading(t.caps_heading);
+        ui.weak(t.caps_blurb);
+        ui.separator();
+        ui.horizontal(|ui| {
+            ui.label(t.caps_holder);
+            ui.add(
+                egui::TextEdit::singleline(&mut self.caps_holder)
+                    .desired_width(280.0)
+                    .hint_text("agent:<id>"),
+            );
+            if ui
+                .button(t.caps_refresh)
+                .on_hover_text(t.tip_caps_refresh)
+                .clicked()
+                && !self.caps_holder.trim().is_empty()
+            {
+                let holder = self.caps_holder.trim().to_string();
+                self.caps_holder = holder.clone();
+                let _ = self.cmd_tx.send(Cmd::CapList { holder });
+            }
+        });
+        if let Some(id) = self.agent_active_tab.clone() {
+            ui.horizontal(|ui| {
+                let holder = agent_cap_holder(&id);
+                ui.weak(format!("Agent actif → {holder}"));
+                if ui.small_button("Charger").clicked() {
+                    self.caps_holder = holder.clone();
+                    let _ = self.cmd_tx.send(Cmd::CapList { holder });
+                }
+            });
+        }
+        ui.separator();
+        let holder = self.caps_holder.clone();
+        self.draw_caps_list(ui, &holder);
+    }
+
+    fn draw_caps_list(&mut self, ui: &mut egui::Ui, holder: &str) {
+        let t = i18n::strings(&self.prefs.language);
+        let matching: Vec<CapInfo> = if holder.is_empty() {
+            self.caps.clone()
+        } else {
+            self.caps
+                .iter()
+                .filter(|c| c.holder == holder)
+                .cloned()
+                .collect()
+        };
+        if matching.is_empty() {
+            ui.weak(t.caps_empty);
+            return;
+        }
+        egui::ScrollArea::vertical()
+            .id_salt(format!("caps_list_{holder}"))
+            .max_height(360.0)
+            .show(ui, |ui| {
+                for c in matching {
+                    ui.group(|ui| {
+                        ui.horizontal(|ui| {
+                            ui.monospace(format!("#{}", c.cap_id));
+                            ui.label(&c.object);
+                            ui.weak(c.rights.join(", "));
+                            if ui
+                                .small_button(t.caps_revoke)
+                                .on_hover_text(t.tip_caps_revoke)
+                                .clicked()
+                            {
+                                let _ = self.cmd_tx.send(Cmd::CapRevoke {
+                                    holder: c.holder.clone(),
+                                    cap_id: c.cap_id,
+                                    tree: false,
+                                });
+                            }
+                        });
+                    });
+                }
+            });
     }
 
     fn ui_scenarios(&mut self, ui: &mut egui::Ui) {

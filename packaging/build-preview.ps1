@@ -9,16 +9,18 @@ param(
     [string]$Version = "",
     [switch]$SkipBuild,
     [switch]$SkipModels,
-    [switch]$RequireCuda
+    [switch]$RequireCuda,
+    [switch]$CpuOnly
 )
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 if (-not $Version) {
     $verFile = Join-Path $root "VERSION"
-    if (Test-Path $verFile) { $Version = (Get-Content $verFile -Raw).Trim() } else { $Version = "0.2.0" }
+    if (Test-Path $verFile) { $Version = (Get-Content $verFile -Raw).Trim() } else { $Version = "0.3.0" }
 }
-if (-not $OutDir) { $OutDir = Join-Path $root "dist\AgentOS-Preview-$Version-windows-x64" }
+$suffix = if ($CpuOnly) { "windows-x64-cpu" } else { "windows-x64" }
+if (-not $OutDir) { $OutDir = Join-Path $root "dist\AgentOS-Preview-$Version-$suffix" }
 
 $env:CARGO_TARGET_DIR = Join-Path $root "target"
 
@@ -30,13 +32,27 @@ if (-not $SkipBuild) {
     if ($LASTEXITCODE -ne 0) { throw "build aos-auditd failed" }
 
     Write-Host "== cargo build --release (bins Preview) =="
-    cargo build --release -p aos-session -p aos-ipc -p aos-model -p aos-agent `
-        -p aos-platform -p aos-capkd -p aos-ui-egui
-    if ($LASTEXITCODE -ne 0) { throw "build failed" }
+    if ($CpuOnly) {
+        Write-Host "  (CPU-only: aos-model/aos-llama without CUDA feature)"
+        cargo build --release -p aos-session -p aos-ipc -p aos-capkd -p aos-ui-egui `
+            -p aos-agent -p aos-auditd
+        if ($LASTEXITCODE -ne 0) { throw "build failed" }
+        cargo build --release -p aos-model --no-default-features
+        if ($LASTEXITCODE -ne 0) { throw "build aos-model cpu failed" }
+        cargo build --release -p aos-platform --no-default-features --features embeddings
+        if ($LASTEXITCODE -ne 0) { throw "build aos-platform cpu failed" }
+    } else {
+        cargo build --release -p aos-session -p aos-ipc -p aos-model -p aos-agent `
+            -p aos-platform -p aos-capkd -p aos-ui-egui
+        if ($LASTEXITCODE -ne 0) { throw "build failed" }
+    }
 
     Write-Host "== package notes module =="
     pwsh -NoProfile -File (Join-Path $root "modules\build-notes.ps1")
     if ($LASTEXITCODE -ne 0) { throw "build-notes.ps1 failed ($LASTEXITCODE)" }
+    Write-Host "== package tasks module =="
+    pwsh -NoProfile -File (Join-Path $root "modules\build-tasks.ps1")
+    if ($LASTEXITCODE -ne 0) { throw "build-tasks.ps1 failed ($LASTEXITCODE)" }
     if (Test-Path (Join-Path $root "modules\build-ext-rt.ps1")) {
         Write-Host "== package ext-rt module =="
         pwsh -NoProfile -File (Join-Path $root "modules\build-ext-rt.ps1")
@@ -61,6 +77,9 @@ foreach ($b in $bins) {
     Copy-Item $src (Join-Path $OutDir "bin\$b") -Force
 }
 
+if ($CpuOnly) {
+    Write-Host "== CPU-only package — skipping CUDA runtime DLL copy =="
+} else {
 # Runtime CUDA (llama.cpp) — requis à côté des .exe.
 $cudaCandidates = @(
     $env:CUDA_PATH,
@@ -99,6 +118,7 @@ if ($cudaCopied -eq 0) {
     $msg = "CUDA runtime DLLs introuvables — binaires GPU incomplets"
     if ($RequireCuda) { throw $msg } else { Write-Warning $msg }
 }
+}
 
 Copy-Item (Join-Path $root "data\models\catalog.yaml") "$OutDir\data\models\" -Force
 Copy-Item (Join-Path $root "VERSION") "$OutDir\VERSION" -Force
@@ -112,6 +132,13 @@ if (Test-Path $notes) {
     Copy-Item $notes "$OutDir\share\modules\notes.aospkg" -Recurse -Force
 } else {
     Write-Warning "notes.aospkg absent — lancer modules\build-notes.ps1"
+}
+
+$tasks = Join-Path $root "modules\tasks.aospkg"
+if (Test-Path $tasks) {
+    Copy-Item $tasks "$OutDir\share\modules\tasks.aospkg" -Recurse -Force
+} else {
+    Write-Warning "tasks.aospkg absent — lancer modules\build-tasks.ps1"
 }
 
 $extrt = Join-Path $root "share\modules\ext-rt.aospkg"

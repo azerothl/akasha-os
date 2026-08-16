@@ -22,6 +22,8 @@ Before listing possible directions, a fundamental question must be settled: **wh
 
 These projects remain above Linux—which is revealing: even when aiming for an “agent OS,” nobody reinvents the low level. Recommendation: take the same stance, with the ambition of going further on agent-specific layers.
 
+A dated comparison of agentic OS / runtime projects (including the related Akasha assistant and OpenClaw-class stacks) lives in [competitive-landscape.md](competitive-landscape.md).
+
 ---
 
 ## 1. Kernel architecture: capabilities, not ambient permissions

@@ -7,8 +7,21 @@ Summary of delivered phases. Detail: [development-plan.md](development-plan.md),
 
 **Headline:** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview:** 0.2.0 (15/08/2026) — host app on Windows/Linux + NVIDIA; not a
-bootable OS. Cohort gate still open.
+**Preview:** 0.3.0 (16/08/2026) — host app on Windows/Linux; NVIDIA optional
+(CPU path). Context budget / loop guard / UI polish included. Not a bootable OS.
+Cohort gate still open.
+
+## P03 — Preview 0.3.0 (E1–E5)
+
+| # | Evolution | Status |
+|---|-----------|--------|
+| P03.1 | E5 metrics UI (TTFT / tok/s / VRAM) | done |
+| P03.2 | E4 caps UI (`cap.list` / revoke) | done |
+| P03.3 | E1 CPU-only path + packaging | done |
+| P03.4 | E2 agent scheduler | done |
+| P03.5 | E3 tasks dual-surface module | done |
+
+Detail: [phases/phase-preview-03.md](phases/phase-preview-03.md).
 
 ## P0 — Simulator (validated)
 

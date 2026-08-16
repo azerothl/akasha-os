@@ -3,23 +3,25 @@
 **Langue :** [English](../../INSTALL.md) | Français
 
 **Ce n'est pas un OS bootable.** Preview tourne **sur Windows ou Linux x64**
-avec GPU **NVIDIA** (échafaudage hôte, ADR 0001). seL4 = piste séparée.
+(échafaudage hôte, ADR 0001). **NVIDIA est recommandé** ; un paquet et un chemin
+**CPU-only** existent (inférence plus lente). seL4 = piste séparée.
 
 ## Prérequis
 
 | | |
 |--|--|
 | OS | Windows 10/11 x64 **ou** Linux x64 (glibc récent) |
-| GPU | NVIDIA avec driver récent (`nvidia-smi -L` OK) |
-| Disque | ~8 Go libre (pack mid recommandé) |
-| CUDA | Runtime embarqué dans le paquet (driver suffit) |
+| GPU | NVIDIA avec driver récent (`nvidia-smi -L` OK) **ou** artefact CPU-only |
+| Disque | ~8 Go libre (pack mid recommandé) ; moins pour pack tiny/cpu |
+| CUDA | Runtime embarqué dans le paquet GPU (driver suffit) ; pas sur le paquet CPU |
 
-Pas de macOS, pas de mode CPU-only en 0.1.
+Pas de macOS. L'inférence CPU est supportée mais dégradée.
 
 ## Windows
 
-1. Télécharger `AgentOS-Preview-<ver>-windows-x64.zip` depuis
-   [GitHub Releases](https://github.com/azerothl/akasha-os/releases).
+1. Télécharger depuis [GitHub Releases](https://github.com/azerothl/akasha-os/releases) :
+   - GPU : `AgentOS-Preview-<ver>-windows-x64.zip`
+   - CPU : `AgentOS-Preview-<ver>-windows-x64-cpu.zip`
 2. Décompresser, puis lancer **l’un** de :
    ```bat
    .\install.cmd
@@ -55,7 +57,7 @@ $env:AOS_HOME = (Resolve-Path .)
 
 ## Linux
 
-1. Télécharger `AgentOS-Preview-<ver>-linux-x64.tar.gz`, extraire.
+1. Télécharger le GPU `…-linux-x64.tar.gz` ou CPU `…-linux-x64-cpu.tar.gz`, extraire.
 2. ```bash
    ./install.sh
    ```
@@ -65,10 +67,10 @@ $env:AOS_HOME = (Resolve-Path .)
 ## Contenu du paquet
 
 ```
-bin/            daemons + CUDA runtime
+bin/            daemons (+ runtime CUDA sur builds GPU)
 share/models/   manifest.json (GGUF téléchargés au 1er run)
-share/modules/  notes.aospkg, ext-rt.aospkg
-share/skills/   skills Preview (notes-writer, research, file-author, planner)
+share/modules/  notes.aospkg, tasks.aospkg, ext-rt.aospkg
+share/skills/   skills Preview (notes-writer, research, file-author, planner, tasks)
 share/mcp/      servers.yaml.example (MCP stdio)
 data/models/    catalog.yaml
 VERSION         semver du build
@@ -112,7 +114,7 @@ keys:
 
 | Symptôme | Action |
 |----------|--------|
-| GPU NVIDIA requis | Driver NVIDIA ; `nvidia-smi -L` |
+| NVIDIA recommandé | Driver + `nvidia-smi -L`, ou paquet CPU / Settings → CPU |
 | Échec modèles | Réseau pour HF, ou copier les GGUF dans `share/models/` |
 | healthcheck échoué | `var/run/*.stderr.log` (bouton **Dépannage**) |
 | Bus injoignable | Toujours via `aos-session` |

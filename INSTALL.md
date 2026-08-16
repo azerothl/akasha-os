@@ -2,24 +2,26 @@
 
 **Language:** English | [Français](docs/fr/INSTALL.md)
 
-**This is not a bootable OS.** Preview runs on **Windows or Linux x64** with an
-**NVIDIA** GPU (host scaffolding, ADR 0001). seL4 is a separate track.
+**This is not a bootable OS.** Preview runs on **Windows or Linux x64**
+(host scaffolding, ADR 0001). **NVIDIA is recommended**; a **CPU-only**
+package and boot path exist (slower inference). seL4 is a separate track.
 
 ## Requirements
 
 | | |
 |--|--|
 | OS | Windows 10/11 x64 **or** Linux x64 (recent glibc) |
-| GPU | NVIDIA with a recent driver (`nvidia-smi -L` OK) |
-| Disk | ~8 GB free (recommended mid-tier GGUF pack) |
-| CUDA | Runtime shipped in the package (driver is enough) |
+| GPU | NVIDIA with a recent driver (`nvidia-smi -L` OK) **or** CPU-only artefact |
+| Disk | ~8 GB free (recommended mid-tier GGUF pack); less for tiny/cpu pack |
+| CUDA | GPU package ships CUDA runtime (driver is enough); CPU package does not |
 
-No macOS, no CPU-only mode in 0.1.
+No macOS. CPU inference is supported but degraded.
 
 ## Windows
 
-1. Download `AgentOS-Preview-<ver>-windows-x64.zip` from
-   [GitHub Releases](https://github.com/azerothl/akasha-os/releases).
+1. Download from [GitHub Releases](https://github.com/azerothl/akasha-os/releases):
+   - GPU: `AgentOS-Preview-<ver>-windows-x64.zip`
+   - CPU: `AgentOS-Preview-<ver>-windows-x64-cpu.zip`
 2. Extract, then run **one** of:
    ```bat
    .\install.cmd
@@ -54,7 +56,7 @@ $env:AOS_HOME = (Resolve-Path .)
 
 ## Linux
 
-1. Download `AgentOS-Preview-<ver>-linux-x64.tar.gz`, extract.
+1. Download GPU `…-linux-x64.tar.gz` or CPU `…-linux-x64-cpu.tar.gz`, extract.
 2. ```bash
    ./install.sh
    ```
@@ -64,10 +66,10 @@ $env:AOS_HOME = (Resolve-Path .)
 ## Package contents
 
 ```
-bin/            daemons + CUDA runtime
+bin/            daemons (+ CUDA runtime on GPU builds)
 share/models/   manifest.json (GGUF downloaded on first run)
-share/modules/  notes.aospkg, ext-rt.aospkg
-share/skills/   Preview skills (notes-writer, research, file-author, planner)
+share/modules/  notes.aospkg, tasks.aospkg, ext-rt.aospkg
+share/skills/   Preview skills (notes-writer, research, file-author, planner, tasks)
 share/mcp/      servers.yaml.example (stdio MCP)
 data/models/    catalog.yaml
 VERSION         build semver
@@ -112,7 +114,7 @@ keys:
 
 | Symptom | Action |
 |---------|--------|
-| NVIDIA GPU required | NVIDIA driver; `nvidia-smi -L` |
+| NVIDIA recommended | Driver + `nvidia-smi -L`, or use CPU package / Settings → CPU |
 | Model download failed | Network for HF, or copy GGUFs into `share/models/` |
 | Healthcheck failed | `var/run/*.stderr.log` (**Troubleshooting** button) |
 | Bus unreachable | Always launch via `aos-session` |

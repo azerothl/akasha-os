@@ -6,7 +6,12 @@
 use aos_agent::actions::{parse_action, strip_reasoning, AgentAction};
 use aos_agent::assess::{parse_assess_response, AssessResult};
 use aos_agent::mcp::{open_mcp_tools, McpSession};
-use aos_agent::persist::{self, compact_working_memory};
+use aos_agent::context_budget::{
+    aggressive_trim_for_overflow, choose_agent_max_tokens, clamp_spawn_brief,
+    enforce_prompt_budget, is_prompt_too_long_error, parse_ctx_from_error,
+    prompt_budget, sanitize_assistant_for_memory, LoopGuard, LoopVerdict, DEFAULT_N_CTX_HINT,
+};
+use aos_agent::persist;
 use aos_agent::prompt::{compile_system_prompt, optimize_prompt_request, PromptCompileInput};
 use aos_agent::skills::{load_skills, match_skill_by_action, merge_skill_tools, skill_misuse_hint, SkillDoc};
 use aos_agent::tools::{
@@ -271,7 +276,11 @@ async fn main() {
                         "Goal à accomplir : {}\nCritères : {:?}\n\
                          Classification : complex — {}. \
                          Première action obligatoire : plan.update avec des nœuds atomiques. \
-                         Ensuite memory.recall / exécution sur le nœud courant (pas sur le goal entier).",
+                         Si des nœuds sont indépendants (pas de dépendance de données), \
+                         délègue-les en parallèle via agent.spawn (briefs COURTS auto-suffisants, \
+                         tools/docs minimaux — pas de dump parent) puis agent.await ; \
+                         n'exécute en solo que les nœuds séquentiels ou légers. \
+                         memory.recall sur le nœud / brief courant (pas sur le goal entier).",
                         spec.goal.statement, spec.goal.success_criteria, assess.reason
                     ));
                 } else {
@@ -299,6 +308,8 @@ async fn main() {
 
     let mut pending_steer: Option<String> = None;
     let mut terminal: Option<AgentState> = None;
+    let mut loop_guard = LoopGuard::default();
+    let mut n_ctx_hint = DEFAULT_N_CTX_HINT;
 
     while terminal.is_none() {
         // Pause / steer handling between steps
@@ -459,26 +470,15 @@ async fn main() {
             inject_mem_context(&bus, &shared, &agent_id, &query).await;
         }
 
-        // Compact if needed (agressif : outils / skills gonflent vite le prompt)
+        // Budget prompt avant infer (aligné n_ctx − max_gen)
+        let gen_tokens = {
+            let st = shared.state.lock().await;
+            choose_agent_max_tokens(&st.working_memory, &spec.goal.statement)
+        };
+        let budget = prompt_budget(n_ctx_hint, gen_tokens);
         {
             let mut st = shared.state.lock().await;
-            // Tronque aussi les injections système trop longues (mem.context, reflect…)
-            for (role, content) in st.working_memory.iter_mut() {
-                if role == "system" && content.len() > 6000 && !content.starts_with("You are") {
-                    // garde les system de base plus longs ; tronque les injections
-                    if content.starts_with("[mem.context]")
-                        || content.starts_with("[mem.bootstrap]")
-                        || content.starts_with("[reflect]")
-                        || content.starts_with("[compaction]")
-                    {
-                        *content = format!(
-                            "{}…",
-                            content.chars().take(2000).collect::<String>()
-                        );
-                    }
-                }
-            }
-            if let Some(sum) = compact_working_memory(&mut st.working_memory, 6) {
+            if let Some(sum) = enforce_prompt_budget(&mut st.working_memory, budget, 6) {
                 let _ = bus
                     .call::<MemEpisodicWriteRequest, u64>(
                         "mem.episodic_write",
@@ -508,50 +508,95 @@ async fn main() {
 
         let step_t0 = Instant::now();
         let infer_t0 = Instant::now();
-        // Think
-        let infer = match infer_turn(
-            &bus,
-            &shared,
-            &spec,
-            &data_refs,
-            &mut cmd_rx,
-        )
-        .await
-        {
-            InferOutcome::Text(t) => t,
-            InferOutcome::Aborted => continue,
-            InferOutcome::Fatal(e) => {
-                report(
-                    &bus,
-                    &agent_id,
-                    AgentOutputEvent::Error { message: e },
-                )
-                .await;
-                terminal = Some(AgentState::Failed);
-                break;
+        // Think (+ retry PromptTooLong : trim + réduction max_tokens)
+        let mut prompt_retries = 0u32;
+        let mut gen_tokens = gen_tokens;
+        let infer = loop {
+            match infer_turn(
+                &bus,
+                &shared,
+                &spec,
+                &data_refs,
+                &mut cmd_rx,
+                gen_tokens,
+            )
+            .await
+            {
+                InferOutcome::Text(t) => break Ok(t),
+                InferOutcome::Aborted => break Err(InferControl::Continue),
+                InferOutcome::Fatal(e)
+                    if is_prompt_too_long_error(&e) && prompt_retries < 2 =>
+                {
+                    prompt_retries += 1;
+                    n_ctx_hint = parse_ctx_from_error(&e);
+                    // Réduire la réserve gen pour laisser plus de place au prompt
+                    gen_tokens = (gen_tokens / 2).max(256);
+                    report(
+                        &bus,
+                        &agent_id,
+                        AgentOutputEvent::Log {
+                            line: format!(
+                                "prompt trop long — compaction agressive + max_tokens={gen_tokens} \
+                                 (retry {prompt_retries}/2 ; {e})"
+                            ),
+                        },
+                    )
+                    .await;
+                    {
+                        let mut st = shared.state.lock().await;
+                        if let Some(sum) =
+                            aggressive_trim_for_overflow(&mut st.working_memory, n_ctx_hint, gen_tokens)
+                        {
+                            let _ = bus
+                                .call::<MemEpisodicWriteRequest, u64>(
+                                    "mem.episodic_write",
+                                    &MemEpisodicWriteRequest {
+                                        namespace: format!("agent:{agent_id}"),
+                                        text: sum,
+                                        metadata: serde_json::json!({
+                                            "kind": "compaction",
+                                            "reason": "prompt_too_long"
+                                        }),
+                                        pinned: false,
+                                    },
+                                    vec![],
+                                )
+                                .await;
+                        }
+                    }
+                }
+                InferOutcome::Fatal(e) => {
+                    report(
+                        &bus,
+                        &agent_id,
+                        AgentOutputEvent::Error { message: e },
+                    )
+                    .await;
+                    terminal = Some(AgentState::Failed);
+                    break Err(InferControl::Fail);
+                }
+                InferOutcome::Steer(d) => {
+                    pending_steer = Some(d);
+                    break Err(InferControl::Continue);
+                }
             }
-            InferOutcome::Steer(d) => {
-                pending_steer = Some(d);
-                continue;
-            }
+        };
+        let infer = match infer {
+            Ok(t) => t,
+            Err(InferControl::Continue) => continue,
+            Err(InferControl::Fail) => break,
         };
         let infer_ms = infer_t0.elapsed().as_millis() as u64;
         let (reasoning, clean_text) = aos_agent::actions::split_reasoning(&infer.text);
         let full_text = if clean_text.is_empty() && !reasoning.is_empty() {
-            // Budget tokens mangé par le raisonnement → pas d'action visible
             String::new()
         } else {
             clean_text
         };
 
-        shared.state.lock().await.push_assistant(if full_text.is_empty() {
-            "[output sans action JSON — éviter <think>, répondre en JSON]"
-        } else {
-            &full_text
-        });
-
-        // Act
-        let action = parse_action(&infer.text).unwrap_or(AgentAction {
+        let parsed = parse_action(&infer.text);
+        let parsed_ok = parsed.is_some();
+        let action = parsed.unwrap_or(AgentAction {
             thought: if reasoning.is_empty() {
                 String::new()
             } else {
@@ -560,6 +605,11 @@ async fn main() {
             action: "noop".into(),
             args: serde_json::json!({}),
         });
+        shared
+            .state
+            .lock()
+            .await
+            .push_assistant(&sanitize_assistant_for_memory(&full_text, parsed_ok));
 
         report(
             &bus,
@@ -739,8 +789,47 @@ async fn main() {
             }
         }
 
+        match loop_guard.observe(&action.action, &tool_result) {
+            LoopVerdict::Ok => {}
+            LoopVerdict::Warn(msg) => {
+                report(
+                    &bus,
+                    &agent_id,
+                    AgentOutputEvent::Log {
+                        line: msg.clone(),
+                    },
+                )
+                .await;
+                shared
+                    .state
+                    .lock()
+                    .await
+                    .push_user(&format!("[runtime] {msg}"));
+            }
+            LoopVerdict::Abort(reason) => {
+                step_fail_reason = Some(reason.clone());
+                report(
+                    &bus,
+                    &agent_id,
+                    AgentOutputEvent::Error {
+                        message: reason.clone(),
+                    },
+                )
+                .await;
+                report(
+                    &bus,
+                    &agent_id,
+                    AgentOutputEvent::Log {
+                        line: reason.clone(),
+                    },
+                )
+                .await;
+                terminal = Some(AgentState::Failed);
+            }
+        }
+
         // Reflect every 3 steps or after error-looking outcomes
-        let reflection = if step % 3 == 0 {
+        let reflection = if terminal.is_none() && step % 3 == 0 {
             reflect(&bus, &shared, &spec).await
         } else {
             None
@@ -817,6 +906,11 @@ enum InferOutcome {
     Steer(String),
 }
 
+enum InferControl {
+    Continue,
+    Fail,
+}
+
 struct InferTurn {
     text: String,
     prompt_tokens: u32,
@@ -831,6 +925,7 @@ async fn infer_turn(
     spec: &AgentSpec,
     data_refs: &[String],
     cmd_rx: &mut mpsc::Receiver<WorkerCmd>,
+    max_tokens: u32,
 ) -> InferOutcome {
     let messages: Vec<ChatMessage> = shared
         .state
@@ -848,7 +943,7 @@ async fn infer_turn(
         messages,
         params: InferParams {
             temperature: 0.2,
-            max_tokens: 512,
+            max_tokens,
             ..InferParams::default()
         },
         priority: 1,
@@ -1070,9 +1165,10 @@ async fn execute_action(
 
     match name {
         "noop" => ActResult::Continue(
-            "aucune action JSON détectée. N'utilise pas <think>. \
-             Réponds uniquement par {\"thought\":\"…\",\"action\":\"<outil>\",\"args\":{…}} \
-             avec un outil du catalogue."
+            "aucune action JSON détectée (souvent tronquée). \
+             Réponds uniquement par {\"thought\":\"…\",\"action\":\"<outil>\",\"args\":{…}}. \
+             Note longue : notes.create (titre + outline court) puis notes.update par sections \
+             (≤ ~1200 car. de content)."
                 .into(),
         ),
         "goal.complete" => {
@@ -1175,11 +1271,12 @@ async fn execute_action(
             if children_count >= spec.goal.max_subagents {
                 return ActResult::Continue("max_subagents atteint".into());
             }
-            let brief = args
-                .get("brief")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
+            let brief = clamp_spawn_brief(
+                args.get("brief").and_then(|v| v.as_str()).unwrap_or(""),
+            );
+            if brief.is_empty() {
+                return ActResult::Continue("brief sous-agent vide".into());
+            }
             let child_skills: Vec<String> = args
                 .get("skills")
                 .and_then(|v| serde_json::from_value(v.clone()).ok())
@@ -1188,10 +1285,12 @@ async fn execute_action(
                 .get("tools")
                 .and_then(|v| serde_json::from_value(v.clone()).ok())
                 .unwrap_or_else(|| spec.tools.clone());
+            // Docs explicites uniquement (pas d'héritage parent) — max 3 pour limiter le contexte enfant
             let child_docs: Vec<DocumentRef> = args
                 .get("documents")
                 .and_then(|v| serde_json::from_value(v.clone()).ok())
                 .unwrap_or_default();
+            let child_docs: Vec<DocumentRef> = child_docs.into_iter().take(3).collect();
             let mut child_caps = caps_for_tools(&select_tools(&child_tools, &[]), &[]);
             child_caps.retain(|c| caps_subset(&spec.caps, std::slice::from_ref(c)));
             if child_caps.is_empty() {
@@ -1333,18 +1432,25 @@ async fn spawn_child(
     documents: &[DocumentRef],
     caps: &[String],
 ) -> ActResult {
+    let brief = clamp_spawn_brief(brief);
     let req = AgentCreateRequest {
-        directive: brief.to_string(),
+        directive: brief.clone(),
         caps: caps.to_vec(),
         model_id: parent.model_id.clone(),
         goal: Some(AgentGoal {
-            statement: brief.to_string(),
-            success_criteria: vec!["Produire un résultat clair et concis".into()],
+            statement: brief.clone(),
+            success_criteria: vec![
+                "Résultat clair et concis (≤ ~800 caractères utiles)".into(),
+            ],
             max_steps: parent.goal.max_steps.min(16),
             max_subagents: 0,
             timeout_secs: parent.goal.timeout_secs.min(1800),
         }),
-        system_prompt: None,
+        system_prompt: Some(
+            "Sous-agent : exécute UNIQUEMENT ce brief. Ne redis pas le contexte parent. \
+             Réponds de façon concise ; pas de dump d'historique."
+                .into(),
+        ),
         skills: skills.to_vec(),
         tools: tools.to_vec(),
         mcp_servers: vec![],
@@ -1365,7 +1471,7 @@ async fn spawn_child(
                 &parent.agent_id,
                 AgentOutputEvent::ChildSpawned {
                     child_id: resp.agent_id.clone(),
-                    brief: brief.to_string(),
+                    brief: brief.clone(),
                 },
             )
             .await;
@@ -2134,7 +2240,10 @@ async fn run_task_assess(
                 content: "Tu classifies des tâches pour un agent OS. Réponds UNIQUEMENT par un JSON \
                      {\"complexity\":\"simple\"|\"complex\",\"reason\":\"…\",\"needs_plan\":bool}. \
                      complex/needs_plan=true si plusieurs étapes, livrables distincts, recherche+rédaction, \
-                     délégation, ou critères multiples. simple sinon. Pas de balises <think>."
+                     délégation, critères multiples, OU si plusieurs sous-travaux indépendants \
+                     peuvent avancer en parallèle (ex. chercher A et rédiger B, deux notes/fichiers distincts, \
+                     plusieurs recherches sans dépendance). simple seulement si une seule chaîne séquentielle courte. \
+                     Pas de balises <think>."
                     .into(),
             },
             ChatMessage {

@@ -118,15 +118,54 @@ fn main() {
         std::process::exit(3);
     }
 
-    if !bootstrap::nvidia_ok() {
+    let nvidia = bootstrap::nvidia_ok();
+    // Preferences may request CPU inference (Settings → Inference).
+    let prefs_cpu = std::fs::read_to_string(home.join("var/run/preferences.json"))
+        .ok()
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+        .and_then(|v| {
+            v.get("inference_mode")
+                .and_then(|m| m.as_str())
+                .map(|m| m.eq_ignore_ascii_case("cpu"))
+        })
+        .unwrap_or(false);
+    let force_cpu = prefs_cpu
+        || std::env::var_os("AOS_CPU_ONLY").is_some()
+        || std::env::var("AOS_INFERENCE")
+            .map(|v| v.eq_ignore_ascii_case("cpu"))
+            .unwrap_or(false);
+    let require_gpu = std::env::var_os("AOS_REQUIRE_GPU").is_some()
+        || std::fs::read_to_string(home.join("var/run/preferences.json"))
+            .ok()
+            .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+            .and_then(|v| {
+                v.get("inference_mode")
+                    .and_then(|m| m.as_str())
+                    .map(|m| m.eq_ignore_ascii_case("gpu"))
+            })
+            .unwrap_or(false);
+    if !nvidia && !force_cpu && require_gpu {
         bootstrap::show_fatal_dialog(
             "Akasha OS Preview — GPU NVIDIA requis",
             "nvidia-smi introuvable ou en échec.\n\
-             La Preview n'accepte pas le fallback CPU.\n\
-             Installez un driver NVIDIA récent, puis relancez.\n\
+             AOS_REQUIRE_GPU est défini — pas de fallback CPU.\n\
+             Installez un driver NVIDIA, ou relancez avec AOS_CPU_ONLY=1.\n\
              Voir INSTALL.md / FIRST-RUN.md.",
         );
         std::process::exit(2);
+    }
+    if !nvidia || force_cpu {
+        eprintln!(
+            "[aos-session] mode CPU-only (nvidia_ok={}, force_cpu={})",
+            nvidia, force_cpu
+        );
+        std::env::set_var("AOS_CPU_ONLY", "1");
+        if !nvidia && !force_cpu {
+            eprintln!(
+                "[aos-session] NVIDIA absent — démarrage CPU (lent). \
+                 Définir AOS_REQUIRE_GPU=1 pour refuser."
+            );
+        }
     }
 
     let hw = hardware::probe(&home);
@@ -489,6 +528,40 @@ fn ensure_layout(home: &Path) {
         }
     }
 
+    // Module tasks (Preview 0.3 / E3) — même resync au boot.
+    let tasks_share = home.join("share/modules/tasks.aospkg");
+    let tasks_installed = home.join("var/modules/tasks");
+    if tasks_share.exists() {
+        if bootstrap::sync_packaged_module(&tasks_share, &tasks_installed) {
+            let reg = home.join("var/modules/registry.yaml");
+            if let Ok(mut raw) = fs::read_to_string(&reg) {
+                if !raw.contains("name: tasks") {
+                    raw.push_str(
+                        r#"
+  - name: tasks
+    granted_caps:
+      - fs.read:/documents/tasks/**
+      - fs.write:/documents/tasks/**
+    quarantined: false
+"#,
+                    );
+                    let _ = fs::write(&reg, raw);
+                }
+            } else {
+                let _ = fs::write(
+                    &reg,
+                    r#"installed:
+  - name: tasks
+    granted_caps:
+      - fs.read:/documents/tasks/**
+      - fs.write:/documents/tasks/**
+    quarantined: false
+"#,
+                );
+            }
+        }
+    }
+
     // Runtime scripté ext-rt (template pour modules agent) — package partagé.
     let extrt_share = home.join("share/modules/ext-rt.aospkg");
     let extrt_repo = home.join("modules/ext-rt.aospkg");
@@ -517,11 +590,16 @@ fn write_runtime_configs(home: &Path) {
     let vram_total = if hw.vram_mib > 0 {
         hw.vram_bytes()
     } else {
-        12 * 1024 * 1024 * 1024
+        0
     };
-    // Reserve embed + OS margin from placement budget.
-    let embed_reserve: u64 = 1_073_741_824;
-    let os_reserve_vram = embed_reserve + 1_073_741_824;
+    let cpu_only = hw.tier == hardware::HardwareTier::Cpu || hw.vram_mib == 0;
+    // Reserve embed + OS margin from placement budget (0 on CPU-only).
+    let embed_reserve: u64 = if cpu_only { 0 } else { 1_073_741_824 };
+    let os_reserve_vram = if cpu_only {
+        0
+    } else {
+        embed_reserve + 1_073_741_824
+    };
 
     let (default_chat, default_embed, entries) = offerings::runtime_model_entries(home);
     let mut models_yaml = String::new();
@@ -589,7 +667,7 @@ fn write_runtime_configs(home: &Path) {
         let yaml = format!(
             r#"# Généré par aos-session (Preview {version})
 bus: "{BUS_ADDR}"
-gpu: true
+gpu: {gpu}
 vram_total_bytes: {vram_total}
 os_reserve_vram_bytes: {os_reserve_vram}
 os_reserve_ram_bytes: 4294967296
@@ -602,6 +680,7 @@ routing: local_only
 
 models:
 {models_yaml}"#,
+            gpu = if cpu_only { "false" } else { "true" },
             vram_total = vram_total,
             os_reserve_vram = os_reserve_vram,
             default_chat = default_chat,

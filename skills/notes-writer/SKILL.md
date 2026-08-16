@@ -19,7 +19,8 @@ Use `notes.*` tools to manage notes under `/documents/notes/`.
 
 ## Writing
 
-- Prefer `notes.create` with a clear title and structured markdown body.
+- Prefer `notes.create` with a clear title and a **short** structured outline (not a full long guide).
+- For long content: `notes.create` (stub) then several `notes.update` calls, **section by section** (keep each `content` under ~1200 characters) so the JSON action is not truncated.
 - Use `[[Other Note]]` wikilinks instead of duplicating content.
 - Before creating, check `notes.list` or `notes.search` to avoid duplicates.
 - To change an existing note, use `notes.update` (same title/path) — do not recreate.

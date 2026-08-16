@@ -9,7 +9,7 @@
       "url": "https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/main/Qwen3-Embedding-0.6B-Q8_0.gguf",
       "bytes": 639150592,
       "sha256": "",
-      "min_vram_mib": 1024,
+      "min_vram_mib": 0,
       "min_disk_bytes": 700000000,
       "quality_score": 70,
       "speed_score": 95,
@@ -29,7 +29,7 @@
       "url": "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf",
       "bytes": 2740937888,
       "sha256": "",
-      "min_vram_mib": 4096,
+      "min_vram_mib": 0,
       "min_disk_bytes": 3000000000,
       "quality_score": 72,
       "speed_score": 92,
@@ -103,6 +103,11 @@
     }
   ],
   "packs": {
+    "cpu": {
+      "embed": "local:qwen3-embedding-0.6b",
+      "chat": "local:qwen3.5-4b-instruct",
+      "alternatives": ["local:qwen3-4b-instruct-2507"]
+    },
     "low": {
       "embed": "local:qwen3-embedding-0.6b",
       "chat": "local:qwen3.5-4b-instruct",

@@ -5,9 +5,11 @@
 
 pub mod actions;
 pub mod assess;
+pub mod context_budget;
 pub mod mcp;
 pub mod persist;
 pub mod prompt;
+pub mod schedule;
 pub mod skills;
 pub mod state;
 pub mod tools;
@@ -35,6 +37,9 @@ pub mod intents {
     pub const SKILL_LIST: &str = "skill.list";
     pub const SKILL_GET: &str = "skill.get";
     pub const MCP_LIST: &str = "mcp.list";
+    pub const SCHEDULE_CREATE: &str = "schedule.create";
+    pub const SCHEDULE_LIST: &str = "schedule.list";
+    pub const SCHEDULE_CANCEL: &str = "schedule.cancel";
 }
 
 /// Payload de contrôle worker → intent `agent.<id>.control`.

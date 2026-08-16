@@ -90,10 +90,10 @@ impl CognitiveState {
     }
 
     pub fn push_tool(&mut self, tool: &str, outcome: &str) {
-        let clipped = if outcome.chars().count() > 1500 {
+        let clipped = if outcome.chars().count() > 1200 {
             format!(
                 "{}…",
-                outcome.chars().take(1500).collect::<String>()
+                outcome.chars().take(1200).collect::<String>()
             )
         } else {
             outcome.to_string()

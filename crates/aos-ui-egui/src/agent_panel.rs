@@ -2,6 +2,7 @@
 
 use aos_proto::{AgentInfo, AgentSource, AgentState, AgentStepRecord, AgentTrace};
 use eframe::egui::{self, Color32, RichText, Ui};
+use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
 
 pub struct PanelActions {
     pub pause: bool,
@@ -124,6 +125,174 @@ pub fn prose_without_json(response: &str) -> String {
         .join("\n")
         .trim()
         .to_string()
+}
+
+/// Clés d'args dont la valeur string est du contenu utilisateur (souvent markdown).
+const CONTENT_ARG_KEYS: &[&str] = &[
+    "content",
+    "text",
+    "body",
+    "markdown",
+    "summary",
+    "message",
+    "result",
+    "answer",
+];
+
+fn looks_like_action_json(s: &str) -> bool {
+    let t = s.trim_start();
+    t.starts_with('{')
+        && (t.contains("\"action\"") || t.contains("\"thought\""))
+        && (t.contains("\"args\"") || t.contains("\"action\""))
+}
+
+fn pick_content_from_args(args: &serde_json::Value) -> Option<(Option<String>, String)> {
+    for key in CONTENT_ARG_KEYS {
+        if let Some(s) = args.get(*key).and_then(|v| v.as_str()) {
+            let s = s.trim();
+            if s.is_empty() {
+                continue;
+            }
+            let title = args
+                .get("title")
+                .and_then(|v| v.as_str())
+                .map(|t| t.trim().to_string())
+                .filter(|t| !t.is_empty());
+            return Some((title, s.to_string()));
+        }
+    }
+    None
+}
+
+/// Affichage chat / timeline : interprète une action JSON en markdown lisible.
+pub fn format_assistant_display(raw: &str) -> String {
+    let cleaned = strip_think_tags(raw);
+    if let Some(action) = aos_agent::actions::parse_action(&cleaned) {
+        return format_action_as_markdown(&action, &prose_without_json(&cleaned));
+    }
+    let prose = prose_without_json(&cleaned);
+    if !prose.is_empty() {
+        return prose;
+    }
+    cleaned.trim().to_string()
+}
+
+fn format_action_as_markdown(action: &aos_agent::actions::AgentAction, outer_prose: &str) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    if !outer_prose.is_empty() {
+        parts.push(outer_prose.to_string());
+    }
+    if !action.thought.is_empty() {
+        let already = parts.iter().any(|p| p.contains(&action.thought));
+        if !already {
+            parts.push(format!("_{}_", action.thought.trim()));
+        }
+    }
+    if let Some((title, content)) = pick_content_from_args(&action.args) {
+        if let Some(t) = title {
+            parts.push(format!("## {t}\n\n{content}"));
+        } else {
+            parts.push(content);
+        }
+    } else {
+        match action.action.as_str() {
+            "goal.complete" | "noop" | "" => {}
+            other => {
+                let mut line = format!("✓ `{other}`");
+                if let Some(path) = action.args.get("path").and_then(|v| v.as_str()) {
+                    line.push_str(&format!(" → `{path}`"));
+                }
+                if let Some(q) = action
+                    .args
+                    .get("query")
+                    .or_else(|| action.args.get("brief"))
+                    .and_then(|v| v.as_str())
+                {
+                    line.push_str(&format!(" — {}", truncate(q, 120)));
+                }
+                parts.push(line);
+            }
+        }
+    }
+    let joined = parts.join("\n\n");
+    if joined.trim().is_empty() {
+        if action.action.is_empty() {
+            String::new()
+        } else {
+            format!("`{}`", action.action)
+        }
+    } else {
+        joined
+    }
+}
+
+/// Pendant le stream : évite d'afficher l'objet JSON brut incomplet.
+pub fn format_streaming_preview(raw: &str) -> String {
+    if !looks_like_action_json(raw) {
+        return raw.to_string();
+    }
+    if let Some(action) = aos_agent::actions::parse_action(raw) {
+        return format_action_as_markdown(&action, &prose_without_json(raw));
+    }
+    // JSON encore incomplet : extraire thought partiel si possible
+    if let Some(thought) = extract_partial_json_string(raw, "thought") {
+        return format!("_{thought}_");
+    }
+    "…".into()
+}
+
+fn extract_partial_json_string(hay: &str, key: &str) -> Option<String> {
+    let needle = format!("\"{key}\"");
+    let idx = hay.find(&needle)?;
+    let after = &hay[idx + needle.len()..];
+    let colon = after.find(':')?;
+    let mut rest = after[colon + 1..].trim_start();
+    if !rest.starts_with('"') {
+        return None;
+    }
+    rest = &rest[1..];
+    let mut out = String::new();
+    let mut escape = false;
+    for ch in rest.chars() {
+        if escape {
+            out.push(ch);
+            escape = false;
+            continue;
+        }
+        match ch {
+            '\\' => escape = true,
+            '"' => break,
+            c => out.push(c),
+        }
+        if out.chars().count() > 280 {
+            out.push('…');
+            break;
+        }
+    }
+    let out = out.trim().to_string();
+    if out.is_empty() {
+        None
+    } else {
+        Some(out)
+    }
+}
+
+/// Contenu markdown à mettre en avant dans la timeline (args d'outil).
+pub fn step_content_markdown(rec: &AgentStepRecord) -> Option<String> {
+    if let Some((title, content)) = pick_content_from_args(&rec.args) {
+        return Some(match title {
+            Some(t) => format!("## {t}\n\n{content}"),
+            None => content,
+        });
+    }
+    let display = format_assistant_display(&rec.response);
+    if !display.is_empty() && !looks_like_action_json(&display) {
+        // Si response était du JSON, format_assistant_display a déjà extrait le fond
+        if looks_like_action_json(&rec.response) {
+            return Some(display);
+        }
+    }
+    None
 }
 
 /// Carte compacte d'un agent lié au chat (état live via `agent.list`).
@@ -251,6 +420,7 @@ pub fn draw_agent_detail(
     info: Option<&AgentInfo>,
     trace: Option<&AgentTrace>,
     steer_buf: &mut String,
+    md_cache: &mut CommonMarkCache,
     open_in_browser: &dyn Fn(&str),
 ) -> PanelActions {
     let mut actions = PanelActions::default();
@@ -448,7 +618,7 @@ pub fn draw_agent_detail(
                 } else {
                     let last = t.steps.len().saturating_sub(1);
                     for (i, rec) in t.steps.iter().enumerate() {
-                        draw_step(ui, id, rec, i == last, &mut actions);
+                        draw_step(ui, id, rec, i == last, md_cache, &mut actions);
                     }
                 }
                 if let Some(a) = info {
@@ -472,6 +642,7 @@ fn draw_step(
     agent_id: &str,
     rec: &AgentStepRecord,
     default_open: bool,
+    md_cache: &mut CommonMarkCache,
     actions: &mut PanelActions,
 ) {
     let header = format!(
@@ -517,8 +688,15 @@ fn draw_step(
                 });
             }
 
+            let content_md = step_content_markdown(rec);
             let prose = prose_without_json(&rec.response);
-            if !prose.is_empty() {
+            let show_prose = !prose.is_empty()
+                && content_md
+                    .as_ref()
+                    .map(|c| !c.contains(prose.trim()))
+                    .unwrap_or(true);
+
+            if show_prose {
                 card_frame(Color32::from_rgb(32, 40, 36)).show(ui, |ui| {
                     ui.label(
                         RichText::new("Réponse")
@@ -526,10 +704,33 @@ fn draw_step(
                             .small()
                             .strong(),
                     );
-                    ui.label(&prose);
+                    ui.push_id(("step_prose", agent_id, rec.step), |ui| {
+                        CommonMarkViewer::new().show(ui, md_cache, &prose);
+                    });
                 });
             }
-            if !rec.response.is_empty()
+
+            if let Some(md) = &content_md {
+                card_frame(Color32::from_rgb(28, 38, 32)).show(ui, |ui| {
+                    ui.label(
+                        RichText::new("Contenu")
+                            .color(Color32::from_rgb(150, 220, 180))
+                            .small()
+                            .strong(),
+                    );
+                    ui.push_id(("step_content", agent_id, rec.step), |ui| {
+                        CommonMarkViewer::new().show(ui, md_cache, md);
+                    });
+                });
+            }
+
+            if looks_like_action_json(&rec.response) {
+                ui.collapsing("JSON brut", |ui| {
+                    ui.monospace(truncate(&rec.response, 3000));
+                });
+            } else if !rec.response.is_empty()
+                && content_md.is_none()
+                && prose.is_empty()
                 && (rec.response.contains('{') || rec.response.contains("```"))
             {
                 ui.collapsing("JSON brut", |ui| {
@@ -602,13 +803,26 @@ fn draw_step(
                         }
                     });
                     if !rec.tool_result.is_empty() {
-                        ui.label(RichText::new(truncate(&rec.tool_result, 400)).small());
+                        let tr = truncate(&rec.tool_result, 1200);
+                        if tr.contains('#') || tr.contains("**") || tr.contains('\n') {
+                            ui.push_id(("step_tool", agent_id, rec.step), |ui| {
+                                CommonMarkViewer::new().show(ui, md_cache, &tr);
+                            });
+                        } else {
+                            ui.label(RichText::new(tr).small());
+                        }
                     }
-                    let args = serde_json::to_string_pretty(&rec.args)
-                        .unwrap_or_else(|_| rec.args.to_string());
-                    if args != "null" && args != "{}" && args != "[]" {
+                    let mut args = rec.args.clone();
+                    if let Some(obj) = args.as_object_mut() {
+                        for k in CONTENT_ARG_KEYS {
+                            obj.remove(*k);
+                        }
+                    }
+                    let args_s = serde_json::to_string_pretty(&args)
+                        .unwrap_or_else(|_| args.to_string());
+                    if args_s != "null" && args_s != "{}" && args_s != "[]" {
                         ui.collapsing("Arguments", |ui| {
-                            ui.monospace(&args);
+                            ui.monospace(&args_s);
                         });
                     }
                 });
@@ -647,4 +861,42 @@ fn draw_step(
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn formats_notes_create_json_as_markdown() {
+        let raw = serde_json::json!({
+            "thought": "Je complète le guide.",
+            "action": "notes.create",
+            "args": {
+                "title": "Guide CPU/GPU",
+                "content": "# Intro\n\n- **INT4**\n- table"
+            }
+        })
+        .to_string();
+        let out = format_assistant_display(&raw);
+        assert!(out.contains("Guide CPU/GPU"), "{out}");
+        assert!(out.contains("**INT4**"), "{out}");
+        assert!(!out.contains("\"action\""), "{out}");
+        assert!(out.contains("Je complète"), "{out}");
+    }
+
+    #[test]
+    fn streaming_hides_partial_json() {
+        let partial =
+            "{\"thought\":\"En cours\",\"action\":\"notes.create\",\"args\":{\"content\":\"# Hi\"";
+        let prev = format_streaming_preview(partial);
+        assert!(!prev.contains("\"action\""), "{prev}");
+        assert!(prev.contains("En cours") || prev == "…", "{prev}");
+    }
+
+    #[test]
+    fn plain_markdown_passthrough() {
+        let md = "## Hello\n\nWorld";
+        assert_eq!(format_assistant_display(md), md);
+    }
 }

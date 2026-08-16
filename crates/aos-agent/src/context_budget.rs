@@ -1,0 +1,440 @@
+//! Budget de prompt avant inférence + trim agressif + garde anti-boucle.
+
+use crate::persist::compact_working_memory;
+
+/// n_ctx typique Preview : `default_kv_tokens` 8192 + padding modeld (+1024).
+pub const DEFAULT_N_CTX_HINT: usize = 9216;
+/// Génération agent (tours normaux).
+pub const AGENT_GEN_TOKENS: u32 = 1536;
+/// Génération pour écritures longues (notes / fs / guides).
+pub const AGENT_GEN_TOKENS_WRITE: u32 = 2048;
+/// Marge template chat + sampler.
+pub const GEN_SAFETY_TOKENS: usize = 64;
+/// Longueur max d'un brief de sous-agent (caractères).
+pub const MAX_SPAWN_BRIEF_CHARS: usize = 600;
+/// noop / JSON invalide consécutifs avant fail.
+pub const MAX_NOOP_STREAK: u32 = 3;
+/// Même action en échec répété avant fail.
+pub const MAX_SAME_FAIL_STREAK: u32 = 3;
+
+/// Budget soft dérivé de n_ctx et de la réserve de génération.
+pub fn prompt_budget(n_ctx: usize, max_gen: u32) -> usize {
+    n_ctx.saturating_sub(max_gen as usize + GEN_SAFETY_TOKENS)
+}
+
+/// Budget après overflow (plus serré).
+pub fn retry_prompt_budget(n_ctx: usize, max_gen: u32) -> usize {
+    (prompt_budget(n_ctx, max_gen) * 6) / 10
+}
+
+/// @deprecated alias — préférer `prompt_budget(DEFAULT_N_CTX_HINT, AGENT_GEN_TOKENS)`.
+pub const DEFAULT_PROMPT_BUDGET_TOKENS: usize = 7616; // 9216 - 1536 - 64
+/// @deprecated alias
+pub const RETRY_PROMPT_BUDGET_TOKENS: usize = 4569;
+
+/// Estimation conservative (FR/JSON denser que 4 chars/token).
+pub fn estimate_tokens(text: &str) -> usize {
+    text.chars().count().div_ceil(3).max(1)
+}
+
+/// Tokens estimés pour la fenêtre working_memory (+ overhead template).
+pub fn estimate_messages_tokens(memory: &[(String, String)]) -> usize {
+    let body: usize = memory
+        .iter()
+        .map(|(r, c)| estimate_tokens(r) + estimate_tokens(c) + 4)
+        .sum();
+    body.saturating_add(64)
+}
+
+pub fn is_prompt_too_long_error(msg: &str) -> bool {
+    let m = msg.to_ascii_lowercase();
+    m.contains("ne tient pas dans le contexte")
+        || m.contains("prompttoolong")
+        || m.contains("prompt too long")
+}
+
+/// Extrait `ctx=N` du message d'erreur clarifié (sinon hint défaut).
+pub fn parse_ctx_from_error(msg: &str) -> usize {
+    for part in msg.split([' ', ',', '(', ')']) {
+        if let Some(rest) = part.strip_prefix("ctx=") {
+            if let Ok(n) = rest.parse::<usize>() {
+                if n >= 1024 {
+                    return n;
+                }
+            }
+        }
+    }
+    DEFAULT_N_CTX_HINT
+}
+
+/// Choisit max_tokens selon goal / mémoire récente (écritures longues).
+pub fn choose_agent_max_tokens(memory: &[(String, String)], goal: &str) -> u32 {
+    let g = goal.to_ascii_lowercase();
+    let recent: String = memory
+        .iter()
+        .rev()
+        .take(8)
+        .map(|(_, c)| c.as_str())
+        .collect::<Vec<_>>()
+        .join("\n")
+        .to_ascii_lowercase();
+    let hay = format!("{g}\n{recent}");
+    let write_hint = [
+        "notes.create",
+        "notes.update",
+        "fs.write",
+        "guide",
+        "markdown",
+        "document",
+        "rédige",
+        "redige",
+        "écrire",
+        "ecrire",
+        "note",
+        "notes",
+    ]
+    .iter()
+    .any(|h| hint_match(&hay, h));
+    if write_hint {
+        AGENT_GEN_TOKENS_WRITE
+    } else {
+        AGENT_GEN_TOKENS
+    }
+}
+
+fn hint_match(hay: &str, hint: &str) -> bool {
+    if hint.contains('.') {
+        return hay.contains(hint);
+    }
+    hay.split(|c: char| !c.is_alphanumeric() && c != '_')
+        .any(|w| w == hint)
+}
+
+fn is_injection_system(content: &str) -> bool {
+    content.starts_with("[mem.")
+        || content.starts_with("[reflect]")
+        || content.starts_with("[compaction]")
+}
+
+fn truncate_chars(s: &str, n: usize) -> String {
+    if s.chars().count() > n {
+        format!("{}…", s.chars().take(n).collect::<String>())
+    } else {
+        s.to_string()
+    }
+}
+
+/// JSON d'action apparemment tronqué / non parseable.
+pub fn looks_like_truncated_action_json(text: &str) -> bool {
+    let t = text.trim_start();
+    if !(t.starts_with('{') || t.contains("```json")) {
+        return false;
+    }
+    let open = t.chars().filter(|c| *c == '{').count();
+    let close = t.chars().filter(|c| *c == '}').count();
+    open > close
+        || t.contains("\"action\"")
+        || t.contains("\"thought\"")
+        || t.contains("\"args\"")
+}
+
+/// Texte à stocker en working_memory (évite d'empiler des JSON géants tronqués).
+pub fn sanitize_assistant_for_memory(raw: &str, parsed_ok: bool) -> String {
+    if raw.trim().is_empty() {
+        return "[output sans action JSON — éviter <think>, répondre en JSON]".into();
+    }
+    if !parsed_ok && looks_like_truncated_action_json(raw) {
+        return "[output JSON incomplet/tronqué — pour une note longue : \
+                notes.create (titre + outline court) puis notes.update section par section \
+                (≤ ~1200 car. de content par appel)]"
+            .into();
+    }
+    truncate_chars(raw, 3500)
+}
+
+#[derive(Clone, Copy)]
+struct TrimCaps {
+    injection_max: usize,
+    tool_max: usize,
+    user_max: usize,
+    assistant_max: usize,
+    primary_system_max: usize,
+}
+
+const SOFT_CAPS: TrimCaps = TrimCaps {
+    injection_max: 2000,
+    tool_max: 1200,
+    user_max: 4000,
+    assistant_max: 2500,
+    primary_system_max: 24_000,
+};
+
+const HARD_CAPS: TrimCaps = TrimCaps {
+    injection_max: 600,
+    tool_max: 400,
+    user_max: 1200,
+    assistant_max: 800,
+    primary_system_max: 8_000,
+};
+
+fn trim_oversized_messages(memory: &mut [(String, String)], caps: TrimCaps) -> bool {
+    let mut changed = false;
+    let mut saw_primary_system = false;
+    for (role, content) in memory.iter_mut() {
+        let before = content.len();
+        match role.as_str() {
+            "system" => {
+                if is_injection_system(content) {
+                    *content = truncate_chars(content, caps.injection_max);
+                } else if !saw_primary_system {
+                    saw_primary_system = true;
+                    *content = truncate_chars(content, caps.primary_system_max);
+                } else {
+                    *content = truncate_chars(content, caps.injection_max);
+                }
+            }
+            "tool" => *content = truncate_chars(content, caps.tool_max),
+            "user" => *content = truncate_chars(content, caps.user_max),
+            "assistant" => *content = truncate_chars(content, caps.assistant_max),
+            _ => *content = truncate_chars(content, caps.user_max),
+        }
+        if content.len() != before {
+            changed = true;
+        }
+    }
+    changed
+}
+
+/// Applique trim + compaction jusqu'à tenir dans `max_prompt_tokens`.
+pub fn enforce_prompt_budget(
+    memory: &mut Vec<(String, String)>,
+    max_prompt_tokens: usize,
+    keep_recent: usize,
+) -> Option<String> {
+    let mut notes: Vec<String> = Vec::new();
+
+    if estimate_messages_tokens(memory) <= max_prompt_tokens {
+        return None;
+    }
+
+    if trim_oversized_messages(memory, SOFT_CAPS) {
+        notes.push("trim soft messages longs".into());
+    }
+    if estimate_messages_tokens(memory) <= max_prompt_tokens {
+        return Some(notes.join("; "));
+    }
+
+    if let Some(sum) = compact_working_memory(memory, keep_recent) {
+        notes.push(sum);
+    }
+    if estimate_messages_tokens(memory) <= max_prompt_tokens {
+        return Some(notes.join("; "));
+    }
+
+    let _ = trim_oversized_messages(memory, HARD_CAPS);
+    notes.push("trim hard".into());
+    if let Some(sum) = compact_working_memory(memory, keep_recent.min(3)) {
+        notes.push(sum);
+    }
+    if estimate_messages_tokens(memory) <= max_prompt_tokens {
+        return Some(notes.join("; "));
+    }
+
+    let keep = keep_recent.min(2).max(1);
+    if let Some(sum) = compact_working_memory(memory, keep) {
+        notes.push(sum);
+    }
+    let _ = trim_oversized_messages(memory, HARD_CAPS);
+    if !memory.is_empty() && memory[0].0 == "system" && !is_injection_system(&memory[0].1) {
+        memory[0].1 = truncate_chars(&memory[0].1, 4_000);
+        notes.push("system primaire réduit à 4k chars".into());
+    }
+
+    Some(notes.join("; "))
+}
+
+pub fn aggressive_trim_for_overflow(
+    memory: &mut Vec<(String, String)>,
+    n_ctx: usize,
+    max_gen: u32,
+) -> Option<String> {
+    enforce_prompt_budget(memory, retry_prompt_budget(n_ctx, max_gen), 3)
+}
+
+pub fn clamp_spawn_brief(brief: &str) -> String {
+    let t = brief.trim();
+    if t.chars().count() <= MAX_SPAWN_BRIEF_CHARS {
+        t.to_string()
+    } else {
+        truncate_chars(t, MAX_SPAWN_BRIEF_CHARS)
+    }
+}
+
+/// Garde anti-boucle (noop / même échec).
+#[derive(Debug, Default)]
+pub struct LoopGuard {
+    pub noop_streak: u32,
+    pub same_fail_streak: u32,
+    last_fail_key: String,
+}
+
+impl LoopGuard {
+    pub fn observe(&mut self, action: &str, tool_result: &str) -> LoopVerdict {
+        let is_noop = action == "noop";
+        let looks_stuck = is_noop
+            || tool_result.contains("aucune action JSON")
+            || tool_result.contains("JSON incomplet")
+            || tool_result.contains("JSON tronqué")
+            || (action.starts_with("notes.")
+                && (tool_result.to_ascii_lowercase().contains("err")
+                    || tool_result.contains("parse")));
+
+        if is_noop {
+            self.noop_streak = self.noop_streak.saturating_add(1);
+        } else {
+            self.noop_streak = 0;
+        }
+
+        if looks_stuck {
+            let key = if is_noop {
+                "noop".into()
+            } else {
+                format!("{action}:stuck")
+            };
+            if key == self.last_fail_key {
+                self.same_fail_streak = self.same_fail_streak.saturating_add(1);
+            } else {
+                self.last_fail_key = key;
+                self.same_fail_streak = 1;
+            }
+        } else {
+            self.same_fail_streak = 0;
+            self.last_fail_key.clear();
+        }
+
+        if self.noop_streak >= MAX_NOOP_STREAK {
+            return LoopVerdict::Abort(
+                "boucle détectée : JSON d'action invalide/tronqué à répétition \
+                 (max_tokens ou note trop longue). Découpez : notes.create court \
+                 puis notes.update par sections."
+                    .into(),
+            );
+        }
+        if !is_noop && self.same_fail_streak >= MAX_SAME_FAIL_STREAK {
+            return LoopVerdict::Abort(format!(
+                "boucle détectée : échec répété de `{action}` — changez d'approche \
+                 (contenu plus court, notes.update incrémental, ou goal.fail)."
+            ));
+        }
+        if self.noop_streak == 2 || self.same_fail_streak == 2 {
+            return LoopVerdict::Warn(
+                "Attention boucle : pour une note longue, \
+                 notes.create (titre + plan court) puis notes.update section par section \
+                 (≤ ~1200 caractères de content)."
+                    .into(),
+            );
+        }
+        LoopVerdict::Ok
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum LoopVerdict {
+    Ok,
+    Warn(String),
+    Abort(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn estimate_grows_with_text() {
+        assert!(estimate_tokens("abcd") <= 2);
+        assert!(estimate_tokens(&"x".repeat(300)) >= 100);
+    }
+
+    #[test]
+    fn budget_tracks_ctx_and_gen() {
+        assert_eq!(prompt_budget(9216, 1536), 9216 - 1536 - 64);
+        assert!(retry_prompt_budget(9216, 2048) < prompt_budget(9216, 2048));
+    }
+
+    #[test]
+    fn enforce_shrinks_bloated_memory() {
+        let mut mem = vec![
+            ("system".into(), "You are base. ".repeat(800)),
+            ("user".into(), "u0".into()),
+            ("assistant".into(), "a0".into()),
+        ];
+        for i in 0..20 {
+            mem.push((
+                "user".into(),
+                format!("user long {}{}", "y".repeat(2000), i),
+            ));
+            mem.push((
+                "tool".into(),
+                format!("[web.search] {}", "z".repeat(3000)),
+            ));
+            mem.push(("assistant".into(), format!("a{i}")));
+        }
+        let budget = prompt_budget(DEFAULT_N_CTX_HINT, AGENT_GEN_TOKENS);
+        let before = estimate_messages_tokens(&mem);
+        let note = enforce_prompt_budget(&mut mem, budget, 6);
+        assert!(note.is_some());
+        let after = estimate_messages_tokens(&mem);
+        assert!(after < before);
+        assert!(after <= budget + 1200);
+    }
+
+    #[test]
+    fn clamp_brief() {
+        assert_eq!(clamp_spawn_brief("  ok  "), "ok");
+        let long = "a".repeat(900);
+        assert!(clamp_spawn_brief(&long).chars().count() <= MAX_SPAWN_BRIEF_CHARS + 1);
+    }
+
+    #[test]
+    fn detects_prompt_too_long() {
+        assert!(is_prompt_too_long_error(
+            "le prompt ne tient pas dans le contexte (prompt=8845 + réserve_gen=520 = 9365 tokens > ctx=9216)"
+        ));
+        assert_eq!(
+            parse_ctx_from_error(
+                "le prompt ne tient pas dans le contexte (prompt=8845 + réserve_gen=520 = 9365 tokens > ctx=9216)"
+            ),
+            9216
+        );
+        assert!(!is_prompt_too_long_error("timeout inférence"));
+    }
+
+    #[test]
+    fn sanitize_truncates_broken_json() {
+        let raw = "{\"thought\":\"x\",\"action\":\"notes.create\",\"args\":{\"content\":\"# Hi";
+        let s = sanitize_assistant_for_memory(raw, false);
+        assert!(!s.contains("\"action\""), "{s}");
+        assert!(s.contains("notes.create"), "{s}");
+    }
+
+    #[test]
+    fn loop_guard_trips_on_noop_streak() {
+        let mut g = LoopGuard::default();
+        assert!(matches!(g.observe("noop", "aucune action JSON"), LoopVerdict::Ok));
+        assert!(matches!(g.observe("noop", "aucune action JSON"), LoopVerdict::Warn(_)));
+        assert!(matches!(g.observe("noop", "aucune action JSON"), LoopVerdict::Abort(_)));
+    }
+
+    #[test]
+    fn choose_write_tokens() {
+        let mem = vec![("user".into(), "crée une note guide".into())];
+        assert_eq!(
+            choose_agent_max_tokens(&mem, "rédige un guide"),
+            AGENT_GEN_TOKENS_WRITE
+        );
+        assert_eq!(
+            choose_agent_max_tokens(&[], "quelle heure est-il"),
+            AGENT_GEN_TOKENS
+        );
+    }
+}

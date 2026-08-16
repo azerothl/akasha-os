@@ -39,18 +39,18 @@
         <h1>
           <span data-lang="en">
             Agents act only with unforgeable, revocable tokens. Preview
-            <span data-aos-version>0.2.0</span> issues the grants below to the
+            <span data-aos-version>0.3.0</span> issues the grants below to the
             host session. Network egress stays deny-by-default.
           </span>
           <span data-lang="fr">
             Les agents n’agissent qu’avec des jetons infalsifiables et révocables.
-            La Preview <span data-aos-version>0.2.0</span> émet les grants
+            La Preview <span data-aos-version>0.3.0</span> émet les grants
             ci-dessous à la session hôte. La sortie réseau reste refusée par défaut.
           </span>
         </h1>
         <div class="flap flap-title">
           <span class="flap-dest">GRANT</span>
-          <span class="flap-note">PREVIEW <span data-aos-version>0.2.0</span></span>
+          <span class="flap-note">PREVIEW <span data-aos-version>0.3.0</span></span>
         </div>
 
         <h2 data-lang="en"># session GRANT</h2>
@@ -70,15 +70,15 @@
         <h2 data-lang="fr"># gpu GRANT</h2>
         <p class="hist" data-lang="en">
           Placement, scheduling, and local GGUF inference. First launch probes VRAM,
-          RAM, and disk, then offers a pack for your tier. There is no CPU-only mode
-          in Preview <span data-aos-version>0.2.0</span>. Confirm
-          <code>nvidia-smi -L</code> before you install.
+          RAM, and disk, then offers a pack for your tier (including a
+          <strong>cpu</strong> pack when NVIDIA is absent). Confirm
+          <code>nvidia-smi -L</code> when you expect GPU mode.
         </p>
         <p class="hist" data-lang="fr">
           Placement, ordonnancement et inférence GGUF locale. Le premier lancement
-          sonde VRAM, RAM et disque, puis propose un pack pour votre palier. Pas de
-          mode CPU-only en Preview <span data-aos-version>0.2.0</span>. Vérifiez
-          <code>nvidia-smi -L</code> avant d’installer.
+          sonde VRAM, RAM et disque, puis propose un pack pour votre palier
+          (y compris un pack <strong>cpu</strong> sans NVIDIA). Vérifiez
+          <code>nvidia-smi -L</code> si vous attendez le mode GPU.
         </p>
 
         <h2 data-lang="en"># net DENY</h2>
