@@ -2828,7 +2828,7 @@ impl eframe::App for UiApp {
                     .selectable_label(self.tab == tab, label)
                     .clicked()
                 {
-                    if self.tab == Tab::Feedback && tab != Tab::Feedback {
+                    if tab == Tab::Feedback && self.tab != Tab::Feedback {
                         self.fb_result.clear();
                     }
                     self.tab = tab;
