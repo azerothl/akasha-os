@@ -411,16 +411,43 @@ async fn main() {
     // --- model.backend.add / model.set_routing (P3) ---
     {
         let sub = subsystem.clone();
+        let bus = bus.clone();
         svc.on("model.backend.add", move |ctx| {
             let sub = sub.clone();
+            let bus = bus.clone();
             async move {
                 match ctx.payload::<aos_proto::BackendAddRequest>() {
                     Ok(req) => {
+                        let mut api_key = None;
+                        if let Some(name) = req.secret_name.as_deref() {
+                            match bus
+                                .call::<aos_proto::SecretGetRequest, String>(
+                                    "secrets.get",
+                                    &aos_proto::SecretGetRequest {
+                                        name: name.to_string(),
+                                        actor: String::new(),
+                                    },
+                                    vec![],
+                                )
+                                .await
+                            {
+                                Ok(k) => api_key = Some(k),
+                                Err(e) => {
+                                    let _ = ctx
+                                        .respond_error(
+                                            aos_ipc::msg::Status::PermissionDenied,
+                                            &format!("secret {name}: {e}"),
+                                        )
+                                        .await;
+                                    return;
+                                }
+                            }
+                        }
                         sub.add_remote_backend(
                             &req.model_id,
                             &req.endpoint,
                             req.remote_model.as_deref().unwrap_or("gpt-mock"),
-                            None,
+                            api_key,
                         );
                         let _ = ctx.respond(aos_ipc::msg::Status::Ok, &true).await;
                     }

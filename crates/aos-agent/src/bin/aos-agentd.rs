@@ -3,7 +3,7 @@
 //! Lifecycle : crée un `AgentSpec` persisté, spawn `aos-agent-worker` avec
 //! `--spec-path`. Skills, MCP catalogue, prompt optimize.
 
-use aos_agent::mcp::list_mcp_servers;
+use aos_agent::mcp::{list_mcp_servers, load_servers_config, resolve_secret_placeholder};
 use aos_agent::persist::{self, registry_add};
 use aos_agent::prompt::optimize_prompt_request;
 use aos_agent::schedule::{self, ScheduleCreateRequest, ScheduleIdRequest, ScheduleListResponse};
@@ -16,10 +16,11 @@ use aos_proto::{
     AgentCreateRequest, AgentCreateResponse, AgentIdRequest, AgentInfo,
     AgentOutputEvent, AgentPromptOptimizeRequest, AgentPromptOptimizeResponse, AgentSpec,
     AgentStartRequest, AgentState, AgentSteerRequest, AgentStepRecord, AgentTrace, ChatAttachment,
-    ChatMessage, ChatSessionAppendRequest, InferParams, InferRequest, McpServerInfo, SkillInfo,
-    TokenEvent,
+    ChatMessage, ChatSessionAppendRequest, InferParams, InferRequest, McpServerInfo, SecretGetRequest,
+    SkillInfo, TokenEvent,
 };
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tokio::process::Command;
@@ -100,15 +101,90 @@ fn build_spec(agent_id: &str, req: &AgentCreateRequest) -> AgentSpec {
     }
 }
 
+fn mcp_secrets_path(agent_id: &str) -> PathBuf {
+    PathBuf::from("var/agents").join(agent_id).join("mcp_secrets.json")
+}
+
+/// Résout `${secret:…}` pour les serveurs MCP de l'agent et écrit un fichier
+/// éphémère lu puis effacé par le worker.
+async fn prepare_mcp_secrets(
+    bus: &BusClient,
+    agent_id: &str,
+    mcp_servers: &[String],
+) -> Result<(), String> {
+    if mcp_servers.is_empty() {
+        return Ok(());
+    }
+    let cfg = load_servers_config(std::path::Path::new("var/mcp/servers.yaml"));
+    let mut needed: Vec<String> = Vec::new();
+    for name in mcp_servers {
+        if let Some(server) = cfg.servers.get(name) {
+            for v in server.env.values() {
+                if let Some(sec) = v
+                    .trim()
+                    .strip_prefix("${secret:")
+                    .and_then(|s| s.strip_suffix('}'))
+                {
+                    if !needed.iter().any(|n| n == sec) {
+                        needed.push(sec.to_string());
+                    }
+                }
+            }
+        }
+    }
+    let mut secrets = HashMap::new();
+    for name in needed {
+        match bus
+            .call::<SecretGetRequest, String>(
+                "secrets.get",
+                &SecretGetRequest {
+                    name: name.clone(),
+                    actor: String::new(),
+                },
+                vec![],
+            )
+            .await
+        {
+            Ok(v) => {
+                secrets.insert(name, v);
+            }
+            Err(e) => return Err(format!("{name}: {e}")),
+        }
+    }
+    // Validate placeholders resolve
+    for name in mcp_servers {
+        if let Some(server) = cfg.servers.get(name) {
+            for v in server.env.values() {
+                let _ = resolve_secret_placeholder(v, &secrets)?;
+            }
+        }
+    }
+    let path = mcp_secrets_path(agent_id);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let json = serde_json::to_string(&secrets).map_err(|e| e.to_string())?;
+    std::fs::write(&path, json).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 async fn spawn_worker(
     shared: &Shared,
     bus_addr: &str,
     agent_id: &str,
     spec: &AgentSpec,
     restore: bool,
+    bus: Option<&BusClient>,
 ) -> Result<u32, String> {
     let spec_path = persist::write_spec(spec).map_err(|e| e.to_string())?;
     registry_add(agent_id);
+
+    // Pré-résout les secrets MCP (agentd = service ; le worker est agent:*).
+    if let Some(bus) = bus {
+        if let Err(e) = prepare_mcp_secrets(bus, agent_id, &spec.mcp_servers).await {
+            eprintln!("[aos-agentd] mcp secrets {agent_id}: {e}");
+        }
+    }
 
     let mut cmd = Command::new(worker_exe_path());
     cmd.arg("--agent-id")
@@ -226,9 +302,11 @@ async fn main() {
     {
         let shared = shared.clone();
         let bus_addr2 = bus_addr.clone();
+        let bus2 = bus.clone();
         svc.on(intents::CREATE, move |ctx| {
             let shared = shared.clone();
             let bus_addr = bus_addr2.clone();
+            let bus = bus2.clone();
             async move {
                 let req: AgentCreateRequest = match ctx.payload() {
                     Ok(r) => r,
@@ -245,7 +323,7 @@ async fn main() {
                 };
                 let agent_id = format!("agent-{n}");
                 let spec = build_spec(&agent_id, &req);
-                match spawn_worker(&shared, &bus_addr, &agent_id, &spec, false).await {
+                match spawn_worker(&shared, &bus_addr, &agent_id, &spec, false, Some(&bus)).await {
                     Ok(pid) => {
                         eprintln!("[aos-agentd] {agent_id} créé (pid {pid})");
                         let _ = ctx
@@ -303,7 +381,7 @@ async fn main() {
                         }
                     }
                 }
-                match spawn_worker(&shared, &bus_addr, &req.agent_id, &spec, true).await {
+                match spawn_worker(&shared, &bus_addr, &req.agent_id, &spec, true, None).await {
                     Ok(_) => {
                         let _ = ctx.respond(aos_ipc::msg::Status::Ok, &true).await;
                     }
@@ -454,6 +532,7 @@ async fn main() {
                                     &req.agent_id,
                                     &spec,
                                     true,
+                                    None,
                                 )
                                 .await
                                 {
@@ -1075,6 +1154,7 @@ async fn main() {
     {
         let shared_tick = shared.clone();
         let bus_addr_tick = bus_addr.clone();
+        let bus_tick = bus.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(15));
             loop {
@@ -1118,7 +1198,15 @@ async fn main() {
                     };
                     let agent_id = format!("agent-{n}");
                     let spec = build_spec(&agent_id, &req);
-                    match spawn_worker(&shared_tick, &bus_addr_tick, &agent_id, &spec, false).await
+                    match spawn_worker(
+                        &shared_tick,
+                        &bus_addr_tick,
+                        &agent_id,
+                        &spec,
+                        false,
+                        Some(&bus_tick),
+                    )
+                    .await
                     {
                         Ok(pid) => {
                             if let Err(e) = schedule::mark_fired(&entry.id, now, &agent_id) {

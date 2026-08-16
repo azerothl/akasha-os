@@ -5,7 +5,7 @@
 
 use aos_agent::actions::{parse_action, strip_reasoning, AgentAction};
 use aos_agent::assess::{parse_assess_response, AssessResult};
-use aos_agent::mcp::{open_mcp_tools, McpSession};
+use aos_agent::mcp::{open_mcp_tools_with_secrets, McpSession};
 use aos_agent::context_budget::{
     aggressive_trim_for_overflow, choose_agent_max_tokens, clamp_spawn_brief,
     enforce_prompt_budget, is_prompt_too_long_error, parse_ctx_from_error,
@@ -24,7 +24,7 @@ use aos_proto::{
     AgentSource, AgentState, AgentStepRecord, CancelRequest, ChatMessage, DocumentRef,
     FilesGenerateRequest, FsListRequest, FsReadRequest, FsReadResponse, FsWriteRequest, InferParams,
     InferRequest, MemContextRequest, MemContextResponse, MemEpisodicQueryRequest,
-    MemEpisodicWriteRequest, MemHit, MemSharedReadRequest, MemSharedWriteRequest,
+    MemEpisodicWriteRequest, MemHit, MemRememberResponse, MemSharedReadRequest, MemSharedWriteRequest,
     ModuleInvokeRequest, ModuleInvokeResponse, NetFetchRequest, TaskNode, TaskNodeStatus,
     TokenEvent, WebBrowseRequest, WebBrowseResponse, WebSearchHit, WebSearchRequest,
     WebSearchResponse,
@@ -88,6 +88,18 @@ async fn report(bus: &BusClient, agent_id: &str, event: AgentOutputEvent) {
         .await;
 }
 
+fn load_mcp_secrets(agent_id: &str) -> HashMap<String, String> {
+    let path = PathBuf::from("var/agents")
+        .join(agent_id)
+        .join("mcp_secrets.json");
+    let map = std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default();
+    let _ = std::fs::remove_file(&path);
+    map
+}
+
 #[tokio::main]
 async fn main() {
     let (agent_id, bus_addr, spec_path, restore) = parse_args();
@@ -124,7 +136,9 @@ async fn main() {
     // Skills + tools + MCP + modules installés (catalogue dynamique)
     let mut skill_docs = load_skills(&spec.skills);
     let tool_ids = merge_skill_tools(&spec.tools, &skill_docs);
-    let (mut mcp_sessions, mcp_tools) = open_mcp_tools(&spec.mcp_servers).await;
+    let mcp_secrets = load_mcp_secrets(&agent_id);
+    let (mut mcp_sessions, mcp_tools) =
+        open_mcp_tools_with_secrets(&spec.mcp_servers, &mcp_secrets).await;
     let mut module_tools = discover_module_tools(&bus).await;
     module_tools.extend(mcp_tools);
     let mut tools = select_tools(&tool_ids, &module_tools);
@@ -480,13 +494,14 @@ async fn main() {
             let mut st = shared.state.lock().await;
             if let Some(sum) = enforce_prompt_budget(&mut st.working_memory, budget, 6) {
                 let _ = bus
-                    .call::<MemEpisodicWriteRequest, u64>(
+                    .call::<MemEpisodicWriteRequest, MemRememberResponse>(
                         "mem.episodic_write",
                         &MemEpisodicWriteRequest {
                             namespace: format!("agent:{agent_id}"),
                             text: sum,
                             metadata: serde_json::json!({"kind":"compaction"}),
                             pinned: false,
+                            ..Default::default()
                         },
                         vec![],
                     )
@@ -548,7 +563,7 @@ async fn main() {
                             aggressive_trim_for_overflow(&mut st.working_memory, n_ctx_hint, gen_tokens)
                         {
                             let _ = bus
-                                .call::<MemEpisodicWriteRequest, u64>(
+                                .call::<MemEpisodicWriteRequest, MemRememberResponse>(
                                     "mem.episodic_write",
                                     &MemEpisodicWriteRequest {
                                         namespace: format!("agent:{agent_id}"),
@@ -558,6 +573,7 @@ async fn main() {
                                             "reason": "prompt_too_long"
                                         }),
                                         pinned: false,
+                                        ..Default::default()
                                     },
                                     vec![],
                                 )
@@ -1238,13 +1254,15 @@ async fn execute_action(
                 .unwrap_or("")
                 .to_string();
             let _ = bus
-                .call::<MemEpisodicWriteRequest, u64>(
+                .call::<MemEpisodicWriteRequest, MemRememberResponse>(
                     "mem.episodic_write",
                     &MemEpisodicWriteRequest {
                         namespace: format!("agent:{agent_id}"),
                         text: text.clone(),
                         metadata: serde_json::json!({}),
                         pinned: false,
+                        auto_link: true,
+                        ..Default::default()
                     },
                     vec![],
                 )
@@ -1617,19 +1635,21 @@ async fn invoke_native(
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| format!("agent:{agent_id}"));
             match bus
-                .call::<MemEpisodicWriteRequest, u64>(
+                .call::<MemEpisodicWriteRequest, MemRememberResponse>(
                     "mem.episodic_write",
                     &MemEpisodicWriteRequest {
                         namespace: ns,
                         text,
                         metadata: serde_json::json!({}),
                         pinned: false,
+                        auto_link: true,
+                        ..Default::default()
                     },
                     vec![],
                 )
                 .await
             {
-                Ok(id) => format!("episodic id={id}"),
+                Ok(r) => format!("episodic id={}", r.id),
                 Err(e) => format!("err: {e}"),
             }
         }
@@ -2138,13 +2158,14 @@ async fn index_documents(
         let content = read_fs(bus, &d.path, agent_id, caps).await;
         let excerpt = truncate(&content, 500);
         let _ = bus
-            .call::<MemEpisodicWriteRequest, u64>(
+            .call::<MemEpisodicWriteRequest, MemRememberResponse>(
                 "mem.episodic_write",
                 &MemEpisodicWriteRequest {
                     namespace: format!("agent:{agent_id}:docs"),
                     text: format!("{} ({}) : {excerpt}", d.label, d.path),
                     metadata: serde_json::json!({"path": d.path}),
                     pinned: true,
+                    ..Default::default()
                 },
                 vec![],
             )
@@ -2361,7 +2382,21 @@ async fn recall_memory_bundle(
             Ok(hits) if !hits.is_empty() => {
                 parts.push(format!("{label}:"));
                 for h in hits {
-                    parts.push(format!("- {}", truncate(&h.text, 400)));
+                    if h.superseded {
+                        continue;
+                    }
+                    let pin = if h.pinned { " ★" } else { "" };
+                    let mut line = format!("- [{}] {}{}", h.id, truncate(&h.text, 400), pin);
+                    let similar: Vec<_> = h
+                        .relations
+                        .iter()
+                        .filter(|r| r.rel == aos_proto::MemRelationKind::Similar)
+                        .map(|r| r.to.to_string())
+                        .collect();
+                    if !similar.is_empty() {
+                        line.push_str(&format!(" ~similar:{}", similar.join(",")));
+                    }
+                    parts.push(line);
                 }
             }
             Ok(_) => {}

@@ -55,13 +55,23 @@ pub struct McpSession {
 
 impl McpSession {
     pub async fn spawn(name: &str, cfg: &McpServerConfig) -> Result<Self, String> {
+        Self::spawn_resolved(name, cfg, None).await
+    }
+
+    /// Spawn avec `env` déjà résolu (secrets interpolés en amont).
+    pub async fn spawn_resolved(
+        name: &str,
+        cfg: &McpServerConfig,
+        env_override: Option<&HashMap<String, String>>,
+    ) -> Result<Self, String> {
         let mut cmd = Command::new(&cfg.command);
         cmd.args(&cfg.args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .kill_on_drop(true);
-        for (k, v) in &cfg.env {
+        let env_map = env_override.unwrap_or(&cfg.env);
+        for (k, v) in env_map {
             cmd.env(k, v);
         }
         let mut child = cmd.spawn().map_err(|e| format!("spawn mcp {name}: {e}"))?;
@@ -220,6 +230,24 @@ pub fn load_servers_config(path: &Path) -> McpServersFile {
         })
 }
 
+/// Remplace `${secret:name}` dans une valeur d'env MCP.
+pub fn resolve_secret_placeholder(
+    value: &str,
+    secrets: &HashMap<String, String>,
+) -> Result<String, String> {
+    let trimmed = value.trim();
+    if let Some(name) = trimmed
+        .strip_prefix("${secret:")
+        .and_then(|s| s.strip_suffix('}'))
+    {
+        return secrets
+            .get(name)
+            .cloned()
+            .ok_or_else(|| format!("secret inconnu: {name}"));
+    }
+    Ok(value.to_string())
+}
+
 pub fn list_mcp_servers() -> Vec<McpServerInfo> {
     let cfg = load_servers_config(Path::new("var/mcp/servers.yaml"));
     cfg.servers
@@ -233,8 +261,16 @@ pub fn list_mcp_servers() -> Vec<McpServerInfo> {
 }
 
 /// Ouvre les sessions MCP demandées et retourne leurs outils.
+/// `secrets` : carte name→valeur pour interpoler `${secret:…}` (fournie par agentd).
 pub async fn open_mcp_tools(
     names: &[String],
+) -> (HashMap<String, McpSession>, Vec<ToolDesc>) {
+    open_mcp_tools_with_secrets(names, &HashMap::new()).await
+}
+
+pub async fn open_mcp_tools_with_secrets(
+    names: &[String],
+    secrets: &HashMap<String, String>,
 ) -> (HashMap<String, McpSession>, Vec<ToolDesc>) {
     let cfg = load_servers_config(Path::new("var/mcp/servers.yaml"));
     let mut sessions = HashMap::new();
@@ -243,7 +279,24 @@ pub async fn open_mcp_tools(
         let Some(server_cfg) = cfg.servers.get(name) else {
             continue;
         };
-        match McpSession::spawn(name, server_cfg).await {
+        let mut resolved_env = HashMap::new();
+        let mut env_ok = true;
+        for (k, v) in &server_cfg.env {
+            match resolve_secret_placeholder(v, secrets) {
+                Ok(val) => {
+                    resolved_env.insert(k.clone(), val);
+                }
+                Err(e) => {
+                    eprintln!("[mcp] env {name}: {e}");
+                    env_ok = false;
+                    break;
+                }
+            }
+        }
+        if !env_ok {
+            continue;
+        }
+        match McpSession::spawn_resolved(name, server_cfg, Some(&resolved_env)).await {
             Ok(mut session) => {
                 match session.list_tools().await {
                     Ok(t) => tools.extend(t),
@@ -255,4 +308,24 @@ pub async fn open_mcp_tools(
         }
     }
     (sessions, tools)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolve_secret_placeholder_ok() {
+        let mut secrets = HashMap::new();
+        secrets.insert("github_token".into(), "ghp_x".into());
+        assert_eq!(
+            resolve_secret_placeholder("${secret:github_token}", &secrets).unwrap(),
+            "ghp_x"
+        );
+        assert_eq!(
+            resolve_secret_placeholder("plain", &secrets).unwrap(),
+            "plain"
+        );
+        assert!(resolve_secret_placeholder("${secret:missing}", &secrets).is_err());
+    }
 }
