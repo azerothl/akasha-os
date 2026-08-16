@@ -169,12 +169,14 @@ Copy-Item (Join-Path $root "LICENSE") "$OutDir\" -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $root "NOTICE") "$OutDir\" -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $root "LICENSE-COMMERCIAL.md") "$OutDir\" -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $PSScriptRoot "install-windows.ps1") "$OutDir\install.ps1" -Force
+Copy-Item (Join-Path $PSScriptRoot "install-windows.cmd") "$OutDir\install.cmd" -Force
 
 @"
 Akasha OS Preview $Version (Windows x64 + NVIDIA)
 
 1. Prérequis : driver NVIDIA récent, nvidia-smi OK, ~4 Go disque
-2. Installation : .\install.ps1
+2. Installation : .\install.cmd
+   (ou : powershell -ExecutionPolicy Bypass -File .\install.ps1)
 3. Premier lancement : télécharge les modèles si besoin, puis ouvre le tutoriel
 4. Agents agentic : skills (share/skills), MCP (var/mcp/servers.yaml), sous-agents
 5. Voir FIRST-RUN.md, INSTALL.md, TESTER.md, docs/FEATURES.md (et docs/fr/ pour le français)

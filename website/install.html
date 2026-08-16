@@ -87,18 +87,23 @@
           <li data-lang="en">Extract, then run:</li>
           <li data-lang="fr">Décompresser, puis :</li>
         </ol>
-        <pre>.\install.ps1</pre>
+        <pre>.\install.cmd</pre>
         <p class="hist" data-lang="en">
+          Prefer <code>install.cmd</code> (bypasses Restricted PowerShell
+          policy). Equivalent:
+          <code>powershell -ExecutionPolicy Bypass -File .\install.ps1</code>.
           Installs under <code>%LOCALAPPDATA%\AgentOS-Preview</code> and keeps
           <code>var/</code> and <code>etc/</code> on update. Launch
           <strong>Akasha OS Preview</strong>.
         </p>
         <p class="hist" data-lang="fr">
+          Préférez <code>install.cmd</code> (contourne la stratégie PowerShell
+          Restricted). Équivalent :
+          <code>powershell -ExecutionPolicy Bypass -File .\install.ps1</code>.
           Installe sous <code>%LOCALAPPDATA%\AgentOS-Preview</code> et conserve
           <code>var/</code> et <code>etc/</code> à la mise à jour. Lancer
           <strong>Akasha OS Preview</strong>.
-        </p>
-        <p class="hist" data-lang="en">Without the installer:</p>
+        </p>        <p class="hist" data-lang="en">Without the installer:</p>
         <p class="hist" data-lang="fr">Sans installateur :</p>
         <pre>$env:AOS_HOME = (Resolve-Path .)
 .\bin\aos-session.exe</pre>

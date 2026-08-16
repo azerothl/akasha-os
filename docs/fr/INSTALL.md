@@ -20,10 +20,16 @@ Pas de macOS, pas de mode CPU-only en 0.1.
 
 1. Télécharger `AgentOS-Preview-<ver>-windows-x64.zip` depuis
    [GitHub Releases](https://github.com/azerothl/akasha-os/releases).
-2. Décompresser, puis :
-   ```powershell
-   .\install.ps1
+2. Décompresser, puis lancer **l’un** de :
+   ```bat
+   .\install.cmd
    ```
+   ou, en PowerShell explicite :
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\install.ps1
+   ```
+   (`.\install.ps1` seul échoue si la stratégie est `Restricted` /
+   `AllSigned` — scripts non signés bloqués.)
    Installe sous `%LOCALAPPDATA%\AgentOS-Preview` (préserve `var/` / `etc/`
    en cas de mise à jour).
 3. Lancer **Akasha OS Preview**.
