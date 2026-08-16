@@ -845,6 +845,28 @@ pub struct MemEpisodicWriteRequest {
     pub metadata: serde_json::Value,
     #[serde(default)]
     pub pinned: bool,
+    /// Kind optionnel : `fact` ou `episode`.
+    #[serde(default)]
+    pub kind: Option<String>,
+    /// Si true, auto-crée `updates`/`supersedes` vers un hit proche du même namespace.
+    #[serde(default)]
+    pub auto_link: bool,
+    #[serde(default = "default_auto_link_threshold")]
+    pub auto_link_threshold: f32,
+}
+
+impl Default for MemEpisodicWriteRequest {
+    fn default() -> Self {
+        Self {
+            namespace: String::new(),
+            text: String::new(),
+            metadata: serde_json::Value::Null,
+            pinned: false,
+            kind: None,
+            auto_link: false,
+            auto_link_threshold: default_auto_link_threshold(),
+        }
+    }
 }
 
 /// `mem.episodic_query`.
@@ -883,6 +905,41 @@ pub struct MemStats {
     pub working_agents: usize,
 }
 
+/// Relation typée entre souvenirs (E6 / Preview 0.4).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MemRelationKind {
+    Similar,
+    Updates,
+    Supersedes,
+}
+
+impl MemRelationKind {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Similar => "similar",
+            Self::Updates => "updates",
+            Self::Supersedes => "supersedes",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "similar" => Some(Self::Similar),
+            "updates" => Some(Self::Updates),
+            "supersedes" => Some(Self::Supersedes),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemRelation {
+    pub from: u64,
+    pub rel: MemRelationKind,
+    pub to: u64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemHit {
     pub id: u64,
@@ -890,6 +947,72 @@ pub struct MemHit {
     pub text: String,
     pub score: f32,
     pub metadata: serde_json::Value,
+    #[serde(default)]
+    pub pinned: bool,
+    /// Kind optionnel (`fact` / `episode`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    /// Relations sortantes (1 hop) pour l'UI / bootstrap.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub relations: Vec<MemRelation>,
+    /// True si un autre souvenir `supersedes` celui-ci.
+    #[serde(default)]
+    pub superseded: bool,
+}
+
+/// `mem.relate` — crée une arête typée entre deux souvenirs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemRelateRequest {
+    pub from: u64,
+    pub rel: MemRelationKind,
+    pub to: u64,
+}
+
+/// `mem.unrelate` — retire une arête.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemUnrelateRequest {
+    pub from: u64,
+    pub rel: MemRelationKind,
+    pub to: u64,
+}
+
+/// `mem.neighbors` — voisinage 1 hop.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemNeighborsRequest {
+    pub id: u64,
+    #[serde(default)]
+    pub rel: Option<MemRelationKind>,
+}
+
+/// `mem.list` — liste les entrées d'un namespace (F-MEM-05).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemListRequest {
+    pub namespace: String,
+    /// Inclure les souvenirs supersédés (défaut false).
+    #[serde(default)]
+    pub include_superseded: bool,
+}
+
+/// `mem.update` — remplace le texte d'un souvenir (et optionnellement supersède l'ancien).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemUpdateRequest {
+    pub id: u64,
+    pub text: String,
+    #[serde(default)]
+    pub metadata: Option<serde_json::Value>,
+    #[serde(default)]
+    pub pinned: Option<bool>,
+    /// Si true, crée une nouvelle entrée et `supersedes` l'ancienne.
+    #[serde(default)]
+    pub supersede: bool,
+}
+
+/// Réponse enrichie de `mem.user.remember` / write avec auto-link.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemRememberResponse {
+    pub id: u64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub auto_relations: Vec<MemRelation>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1214,10 +1337,31 @@ pub struct NetModeRequest {
 }
 
 /// `secrets.get` — usage restreint aux services (jamais aux agents, §9.2).
+/// L'identité fait foi via `Intent.from` (bus) ; `actor` est ignoré s'il diverge.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecretGetRequest {
     pub name: String,
+    /// Déprécié : conservé pour compat ; le daemon utilise `Intent.from`.
+    #[serde(default)]
     pub actor: String,
+}
+
+/// `secrets.set` — écriture depuis UI Settings / services.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SecretSetRequest {
+    pub name: String,
+    /// Valeur vide = suppression.
+    pub value: String,
+}
+
+/// `secrets.list` — noms uniquement.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SecretListRequest {}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SecretListResponse {
+    pub names: Vec<String>,
+    pub encrypted: bool,
 }
 
 /// `fs.class` — classe de sensibilité d'un chemin (routage §3.7).
@@ -1452,6 +1596,32 @@ pub struct MemUserRememberRequest {
     pub metadata: serde_json::Value,
     #[serde(default)]
     pub pinned: bool,
+    /// Si true (défaut), lie automatiquement un hit proche via `updates`/`supersedes`.
+    #[serde(default = "default_true")]
+    pub auto_link: bool,
+    /// Seuil cosinus pour l'auto-link (défaut 0.82).
+    #[serde(default = "default_auto_link_threshold")]
+    pub auto_link_threshold: f32,
+}
+
+impl Default for MemUserRememberRequest {
+    fn default() -> Self {
+        Self {
+            text: String::new(),
+            metadata: serde_json::Value::Null,
+            pinned: false,
+            auto_link: true,
+            auto_link_threshold: default_auto_link_threshold(),
+        }
+    }
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_auto_link_threshold() -> f32 {
+    0.82
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

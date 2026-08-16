@@ -508,19 +508,43 @@ async fn main() {
                         let s2 = s.clone();
                         let r = tokio::task::spawn_blocking(move || {
                             let vector = s2.embed_text(&req.text)?;
-                            Ok::<_, String>(s2.mem.lock().unwrap().episodic_write(
-                                &req.namespace,
-                                &req.text,
-                                req.metadata,
-                                vector,
-                                req.pinned,
-                            ))
+                            let kind = req
+                                .kind
+                                .as_deref()
+                                .map(aos_platform::memory::MemoryKind::parse)
+                                .unwrap_or_default();
+                            let mut mem = s2.mem.lock().unwrap();
+                            let (id, auto) = if req.auto_link {
+                                mem.episodic_write_auto_link(
+                                    &req.namespace,
+                                    &req.text,
+                                    req.metadata,
+                                    vector,
+                                    req.pinned,
+                                    kind,
+                                    req.auto_link_threshold,
+                                )
+                            } else {
+                                let id = mem.episodic_write_kind(
+                                    &req.namespace,
+                                    &req.text,
+                                    req.metadata,
+                                    vector,
+                                    req.pinned,
+                                    kind,
+                                );
+                                (id, Vec::new())
+                            };
+                            Ok::<_, String>(MemRememberResponse {
+                                id,
+                                auto_relations: auto,
+                            })
                         })
                         .await
                         .unwrap_or_else(|e| Err(e.to_string()));
                         match r {
-                            Ok(id) => {
-                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &id).await;
+                            Ok(resp) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &resp).await;
                             }
                             Err(e) => {
                                 let _ = ctx
@@ -723,14 +747,34 @@ async fn main() {
                 match ctx.payload::<MemUserRememberRequest>() {
                     Ok(req) => {
                         let emb = s.embed_text(&req.text).unwrap_or_default();
-                        let id = s.mem.lock().unwrap().episodic_write(
-                            "user:default",
-                            &req.text,
-                            req.metadata,
-                            emb,
-                            req.pinned,
-                        );
-                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &id).await;
+                        let resp = {
+                            let mut mem = s.mem.lock().unwrap();
+                            let (id, auto) = if req.auto_link {
+                                mem.episodic_write_auto_link(
+                                    "user:default",
+                                    &req.text,
+                                    req.metadata,
+                                    emb,
+                                    req.pinned,
+                                    aos_platform::memory::MemoryKind::Fact,
+                                    req.auto_link_threshold,
+                                )
+                            } else {
+                                let id = mem.episodic_write(
+                                    "user:default",
+                                    &req.text,
+                                    req.metadata,
+                                    emb,
+                                    req.pinned,
+                                );
+                                (id, Vec::new())
+                            };
+                            MemRememberResponse {
+                                id,
+                                auto_relations: auto,
+                            }
+                        };
+                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &resp).await;
                     }
                     Err(_) => {
                         let _ = ctx
@@ -796,9 +840,18 @@ async fn main() {
                             }
                         }
                         if !user_hits.is_empty() {
-                            prompt_block.push_str("Mémoire long terme utilisateur:\n");
-                            for h in &user_hits {
-                                prompt_block.push_str(&format!("- {}\n", h.text));
+                            let structured = {
+                                let mem = s.mem.lock().unwrap();
+                                mem.bootstrap_block(&user_hits)
+                            };
+                            if structured.is_empty() {
+                                prompt_block.push_str("Mémoire long terme utilisateur:\n");
+                                for h in &user_hits {
+                                    prompt_block.push_str(&format!("- {}\n", h.text));
+                                }
+                            } else {
+                                prompt_block.push_str("Mémoire long terme utilisateur:\n");
+                                prompt_block.push_str(&structured);
                             }
                         }
                         let _ = ctx
@@ -811,6 +864,146 @@ async fn main() {
                                 },
                             )
                             .await;
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+
+    // --- mem.relate / neighbors / list / update (E6 / Preview 0.4) ---
+    {
+        let s = sub.clone();
+        svc.on("mem.relate", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<MemRelateRequest>() {
+                    Ok(req) => {
+                        let result = s.mem.lock().unwrap().relate(req.from, req.rel, req.to);
+                        match result {
+                            Ok(edge) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &edge).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(aos_ipc::msg::Status::BadRequest, &e)
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("mem.unrelate", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<MemUnrelateRequest>() {
+                    Ok(req) => {
+                        let ok = s.mem.lock().unwrap().unrelate(req.from, req.rel, req.to);
+                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &ok).await;
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("mem.neighbors", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<MemNeighborsRequest>() {
+                    Ok(req) => {
+                        let hits = s.mem.lock().unwrap().neighbors(req.id, req.rel);
+                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &hits).await;
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("mem.list", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<MemListRequest>() {
+                    Ok(req) => {
+                        let hits = s
+                            .mem
+                            .lock()
+                            .unwrap()
+                            .list(&req.namespace, req.include_superseded);
+                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &hits).await;
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("mem.update", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<MemUpdateRequest>() {
+                    Ok(req) => {
+                        let s2 = s.clone();
+                        let r = tokio::task::spawn_blocking(move || {
+                            let vector = s2.embed_text(&req.text)?;
+                            s2.mem.lock().unwrap().update(
+                                req.id,
+                                &req.text,
+                                req.metadata,
+                                req.pinned,
+                                req.supersede,
+                                vector,
+                            )
+                        })
+                        .await
+                        .unwrap_or_else(|e| Err(e.to_string()));
+                        match r {
+                            Ok((id, auto)) => {
+                                let _ = ctx
+                                    .respond(
+                                        aos_ipc::msg::Status::Ok,
+                                        &MemRememberResponse {
+                                            id,
+                                            auto_relations: auto,
+                                        },
+                                    )
+                                    .await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(aos_ipc::msg::Status::BadRequest, &e)
+                                    .await;
+                            }
+                        }
                     }
                     Err(_) => {
                         let _ = ctx
@@ -1560,16 +1753,61 @@ async fn main() {
                             return;
                         }
                         let s2 = s.clone();
+                        let source = req.source_dir.clone();
+                        let approved = req.approved_caps.clone();
                         let r = tokio::task::spawn_blocking(move || {
                             s2.modules
                                 .lock()
                                 .unwrap()
-                                .install(std::path::Path::new(&req.source_dir), req.approved_caps)
+                                .install(std::path::Path::new(&source), approved)
                         })
                         .await
                         .unwrap_or_else(|e| {
                             Err(aos_platform::module_rt::ModuleError::Io(e.to_string()))
                         });
+                        let r = match r {
+                            Err(aos_platform::module_rt::ModuleError::CapReviewRequired(caps_csv)) => {
+                                let required: Vec<String> = caps_csv
+                                    .split(',')
+                                    .map(|s| s.trim().to_string())
+                                    .filter(|s| !s.is_empty())
+                                    .collect();
+                                let reason = format!(
+                                    "Revue des caps requise pour installer ce module.\nCaps demandées:\n- {}",
+                                    required.join("\n- ")
+                                );
+                                let (_id, rx) = s
+                                    .confirm
+                                    .ask(
+                                        actor.clone(),
+                                        "module.install".into(),
+                                        req.source_dir.clone(),
+                                        reason,
+                                        Some(120),
+                                    )
+                                    .await;
+                                let approved = rx.await.unwrap_or(false);
+                                let caps = if approved {
+                                    Some(required)
+                                } else {
+                                    // Refus → install quarantined (aucune cap).
+                                    Some(Vec::new())
+                                };
+                                let s3 = s.clone();
+                                let source = req.source_dir.clone();
+                                tokio::task::spawn_blocking(move || {
+                                    s3.modules
+                                        .lock()
+                                        .unwrap()
+                                        .install(std::path::Path::new(&source), caps)
+                                })
+                                .await
+                                .unwrap_or_else(|e| {
+                                    Err(aos_platform::module_rt::ModuleError::Io(e.to_string()))
+                                })
+                            }
+                            other => other,
+                        };
                         match r {
                             Ok(info) => {
                                 s.audit(AuditAppendRequest {
@@ -1577,7 +1815,10 @@ async fn main() {
                                     actor,
                                     action: "module.install".into(),
                                     target: info.name.clone(),
-                                    detail: serde_json::json!({"caps": info.granted_caps}),
+                                    detail: serde_json::json!({
+                                        "caps": info.granted_caps,
+                                        "quarantined": info.quarantined,
+                                    }),
                                 });
                                 let _ = ctx.respond(aos_ipc::msg::Status::Ok, &info).await;
                             }
@@ -2466,7 +2707,7 @@ async fn main() {
         });
     }
 
-    // --- secrets.get (services seulement, §9.2) ---
+    // --- secrets.get / set / list (E7 / Preview 0.4) ---
     {
         let s = sub.clone();
         svc.on("secrets.get", move |ctx| {
@@ -2474,9 +2715,10 @@ async fn main() {
             async move {
                 match ctx.payload::<SecretGetRequest>() {
                     Ok(req) => {
+                        let actor = ctx.intent.from.clone();
                         let r = {
                             let store = s.secrets.lock().unwrap();
-                            store.get(&req.name, &req.actor)
+                            store.get(&req.name, &actor)
                         };
                         match r {
                             Ok(v) => {
@@ -2495,6 +2737,70 @@ async fn main() {
                     Err(_) => {
                         let _ = ctx
                             .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("secrets.set", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<SecretSetRequest>() {
+                    Ok(req) => {
+                        let actor = ctx.intent.from.clone();
+                        let r = {
+                            let mut store = s.secrets.lock().unwrap();
+                            store.set(&req.name, &req.value, &actor)
+                        };
+                        match r {
+                            Ok(()) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &true).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::PermissionDenied,
+                                        &e.to_string(),
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("secrets.list", move |ctx| {
+            let s = s.clone();
+            async move {
+                let actor = ctx.intent.from.clone();
+                let r = {
+                    let store = s.secrets.lock().unwrap();
+                    store.list_names(&actor).map(|names| SecretListResponse {
+                        names,
+                        encrypted: store.is_encrypted(),
+                    })
+                };
+                match r {
+                    Ok(resp) => {
+                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &resp).await;
+                    }
+                    Err(e) => {
+                        let _ = ctx
+                            .respond_error(
+                                aos_ipc::msg::Status::PermissionDenied,
+                                &e.to_string(),
+                            )
                             .await;
                     }
                 }

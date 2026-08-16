@@ -158,13 +158,18 @@ async fn main() {
             detail: format!("{deny_install:?}"),
         });
 
-        // Install humain OK
+        // Install humain OK (revue explicite des caps — pas d'auto-approve)
+        let required = aos_platform::module_rt::ModuleRuntime::peek_required_caps(
+            std::path::Path::new(&pkg.package_dir),
+        )
+        .map(|(_, caps)| caps)
+        .unwrap_or_default();
         let human_install = bus
             .call::<ModuleInstallRequest, ModuleInfo>(
                 "module.install",
                 &ModuleInstallRequest {
                     source_dir: pkg.package_dir.clone(),
-                    approved_caps: None,
+                    approved_caps: Some(required),
                     actor: "human:gate".into(),
                     actor_caps: vec![],
                 },

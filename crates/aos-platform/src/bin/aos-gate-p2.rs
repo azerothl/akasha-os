@@ -39,7 +39,12 @@ async fn main() {
             "module.install",
             &ModuleInstallRequest {
                 source_dir: "modules/notes.aospkg".into(),
-                approved_caps: None,
+                approved_caps: Some(vec![
+                    "fs.read:/documents/notes/**".into(),
+                    "fs.write:/documents/notes/**".into(),
+                    "mem.write:module:notes".into(),
+                    "mem.query:module:notes".into(),
+                ]),
                 actor: "human:gate".into(),
                 actor_caps: vec![],
             },

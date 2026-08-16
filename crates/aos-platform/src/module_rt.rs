@@ -46,6 +46,8 @@ pub enum ModuleError {
     Trap(String),
     #[error("erreur d'exécution du module: {0}")]
     Guest(String),
+    #[error("revue de caps requise: {0}")]
+    CapReviewRequired(String),
     #[error("io: {0}")]
     Io(String),
 }
@@ -216,6 +218,8 @@ impl ModuleRuntime {
     }
 
     /// `module.install` : vérifie le package, copie, enregistre (F-MOD-01).
+    /// `approved_caps` est **obligatoire** (revue F-EXT-05) — `None` →
+    /// [`ModuleError::CapReviewRequired`] avec la liste demandée.
     pub fn install(
         &mut self,
         source_dir: &Path,
@@ -229,9 +233,17 @@ impl ModuleRuntime {
         if manifest.hash != hash && manifest.hash != format!("sha256:{hash}") {
             return Err(ModuleError::HashMismatch);
         }
-        let granted = approved_caps.unwrap_or_else(|| manifest.permissions.required_caps.clone());
+        let granted = match approved_caps {
+            Some(caps) => caps,
+            None if manifest.permissions.required_caps.is_empty() => Vec::new(),
+            None => {
+                return Err(ModuleError::CapReviewRequired(
+                    manifest.permissions.required_caps.join(", "),
+                ));
+            }
+        };
         // Les caps approuvées ne peuvent excéder celles demandées (least
-        // privilege, §7 règles métier).
+        // privilege, §7 règles métier). Empty granted = install quarantined.
         for cap in &granted {
             if !manifest.permissions.required_caps.contains(cap) {
                 return Err(ModuleError::BadManifest(format!(
@@ -239,6 +251,7 @@ impl ModuleRuntime {
                 )));
             }
         }
+        let quarantined = granted.is_empty() && !manifest.permissions.required_caps.is_empty();
         let dest = self.dir.join(&manifest.name);
         if dest.exists() {
             std::fs::remove_dir_all(&dest)?;
@@ -250,20 +263,31 @@ impl ModuleRuntime {
             version: manifest.version.clone(),
             granted_caps: granted.clone(),
             tools: manifest.tools.iter().map(|t| t.name.clone()).collect(),
-            quarantined: false,
+            quarantined,
         };
         self.installed.insert(
             manifest.name.clone(),
             InstalledModule {
                 manifest,
                 granted_caps: granted,
-                quarantined: false,
+                quarantined,
                 dir: dest,
                 compiled,
             },
         );
         self.save_registry()?;
         Ok(info)
+    }
+
+    /// Lit le manifeste d'un package sans installer (pour revue UI).
+    pub fn peek_required_caps(source_dir: &Path) -> Result<(String, Vec<String>), ModuleError> {
+        let manifest: ModuleManifest =
+            serde_yaml::from_str(&std::fs::read_to_string(source_dir.join("manifest.yaml"))?)
+                .map_err(|e| ModuleError::BadManifest(e.to_string()))?;
+        Ok((
+            manifest.name,
+            manifest.permissions.required_caps,
+        ))
     }
 
     pub fn uninstall(&mut self, name: &str) -> Result<(), ModuleError> {
@@ -619,7 +643,7 @@ min_os_api: 1
         let pkg = base.join("pkg");
         make_package(&pkg);
         let mut rt = ModuleRuntime::open(base.join("modules"), Arc::new(EchoServices)).unwrap();
-        let info = rt.install(&pkg, None).unwrap();
+        let info = rt.install(&pkg, Some(vec![])).unwrap();
         assert_eq!(info.name, "echo-test");
         assert_eq!(rt.list().len(), 1);
         let (manifest, _) = rt.describe("echo-test").unwrap();
@@ -649,7 +673,7 @@ min_os_api: 1
         let pkg = base.join("pkg");
         make_package(&pkg);
         let mut rt = ModuleRuntime::open(base.join("modules"), Arc::new(EchoServices)).unwrap();
-        rt.install(&pkg, None).unwrap();
+        rt.install(&pkg, Some(vec![])).unwrap();
         let err = rt
             .invoke(
                 "echo-test",
