@@ -194,7 +194,9 @@ fn find_package_root(extract: &Path) -> Result<PathBuf, String> {
     Err("structure de paquet invalide (pas de bin/)".into())
 }
 
-fn overlay_program(home: &Path, pkg: &Path) -> Result<(), String> {
+/// Overlay `bin/` / `share/` / `data/` / docs / VERSION onto `home` without
+/// deleting `var/` or overwriting existing `etc/*.yaml` (writes `.new` instead).
+pub fn overlay_program(home: &Path, pkg: &Path) -> Result<(), String> {
     for dir in ["bin", "share", "data", "docs"] {
         let src = pkg.join(dir);
         if !src.is_dir() {

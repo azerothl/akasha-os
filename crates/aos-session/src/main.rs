@@ -396,17 +396,139 @@ fn ensure_installed_files_present(home: &Path) -> Result<(), String> {
     offerings::download_ids(home, &missing)
 }
 
+/// Préfixe d'installation stable (indépendant du dossier d'extraction versionné).
+fn default_install_home() -> PathBuf {
+    if cfg!(windows) {
+        let base = std::env::var("LOCALAPPDATA").unwrap_or_else(|_| ".".into());
+        PathBuf::from(base).join("AgentOS-Preview")
+    } else {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        PathBuf::from(home).join(".local/share/agentos-preview")
+    }
+}
+
+fn package_root_from_exe() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let bin_dir = exe.parent()?;
+    if bin_dir.file_name().and_then(|s| s.to_str()) != Some("bin") {
+        return None;
+    }
+    let home = bin_dir.parent()?;
+    if home.join("VERSION").is_file() {
+        Some(home.to_path_buf())
+    } else {
+        None
+    }
+}
+
+fn same_dir(a: &Path, b: &Path) -> bool {
+    match (fs::canonicalize(a), fs::canonicalize(b)) {
+        (Ok(x), Ok(y)) => x == y,
+        _ => a == b,
+    }
+}
+
+fn portable_requested(pkg: &Path) -> bool {
+    if std::env::var("AOS_PORTABLE").map(|v| v == "1" || v.eq_ignore_ascii_case("true")).unwrap_or(false)
+    {
+        return true;
+    }
+    pkg.join(".portable").is_file()
+}
+
+/// True if this tree already holds user state we must not clobber.
+fn user_data_present(home: &Path) -> bool {
+    let markers = [
+        "var/run/preferences.json",
+        "var/run/onboarding.json",
+        "var/models/installed.json",
+        "var/secrets/vault.enc",
+        "var/secrets/keys.yaml",
+        "var/secrets/keys.yaml.migrated",
+    ];
+    if markers.iter().any(|m| home.join(m).is_file()) {
+        return true;
+    }
+    for dir in [
+        "var/sessions",
+        "var/memory",
+        "var/storage",
+        "var/agents",
+        "var/modules/notes",
+        "var/feedback",
+    ] {
+        let p = home.join(dir);
+        if let Ok(rd) = fs::read_dir(&p) {
+            if rd.filter_map(|e| e.ok()).next().is_some() {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn migrate_user_data(from: &Path, to: &Path) -> Result<(), String> {
+    if same_dir(from, to) || !user_data_present(from) || user_data_present(to) {
+        return Ok(());
+    }
+    eprintln!(
+        "[aos-session] migration des données utilisateur\n  de {}\n  vers {}",
+        from.display(),
+        to.display()
+    );
+    for name in ["var", "etc"] {
+        let src = from.join(name);
+        if !src.is_dir() {
+            continue;
+        }
+        let dst = to.join(name);
+        fs::create_dir_all(&dst).map_err(|e| e.to_string())?;
+        bootstrap::copy_dir_recursive(&src, &dst).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Si on lance depuis un zip/dossier versionné, synchronise vers le préfixe
+/// stable pour que mémoire / sessions / notes survivent aux nouvelles versions.
+fn ensure_stable_install(pkg: &Path) -> Result<PathBuf, String> {
+    let stable = default_install_home();
+    if same_dir(pkg, &stable) {
+        return Ok(stable);
+    }
+    if portable_requested(pkg) {
+        eprintln!(
+            "[aos-session] mode portable (AOS_PORTABLE ou .portable) — données dans {}",
+            pkg.display()
+        );
+        return Ok(pkg.to_path_buf());
+    }
+    eprintln!(
+        "[aos-session] installation stable : {} (préserve var/ etc/)",
+        stable.display()
+    );
+    fs::create_dir_all(&stable).map_err(|e| e.to_string())?;
+    migrate_user_data(pkg, &stable)?;
+    update::overlay_program(&stable, pkg)?;
+    // Seed empty dirs the install scripts create.
+    for d in ["var", "etc", "var/mcp", "var/skills", "var/agents"] {
+        let _ = fs::create_dir_all(stable.join(d));
+    }
+    Ok(stable)
+}
+
 fn resolve_home() -> PathBuf {
     if let Ok(h) = std::env::var("AOS_HOME") {
         return PathBuf::from(h);
     }
-    // Exécutable dans <home>/bin/aos-session → home = parent du bin.
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(bin_dir) = exe.parent() {
-            if bin_dir.file_name().and_then(|s| s.to_str()) == Some("bin") {
-                if let Some(home) = bin_dir.parent() {
-                    return home.to_path_buf();
-                }
+    if let Some(pkg) = package_root_from_exe() {
+        match ensure_stable_install(&pkg) {
+            Ok(home) => return home,
+            Err(e) => {
+                eprintln!(
+                    "[aos-session] sync install stable échoué ({e}) — fallback {}",
+                    pkg.display()
+                );
+                return pkg;
             }
         }
     }

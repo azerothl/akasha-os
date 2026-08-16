@@ -11,7 +11,9 @@ Full feature list: [FEATURES.md](FEATURES.md).
 
 1. NVIDIA driver (`nvidia-smi -L` OK), **or** CPU-only package / Settings → Inference → CPU.
 2. ~8 GB free disk (recommended mid-tier pack: 9B + embedding); less for the **cpu** pack.
-3. Install via `install.cmd` / `install.sh`, or run `bin/aos-session`.
+3. Prefer `install.cmd` / `install.sh`, or run `bin/aos-session` (auto-syncs
+   into `%LOCALAPPDATA%\AgentOS-Preview` / `~/.local/share/agentos-preview` so
+   history, memory and notes survive version upgrades).
 4. On Windows, if SmartScreen says **Unknown publisher**: **More info** →
    **Run anyway** (Preview is not code-signed yet).
 

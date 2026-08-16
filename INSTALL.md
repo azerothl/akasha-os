@@ -36,6 +36,13 @@ No macOS. CPU inference is supported but degraded.
    on update).
 3. Launch **Akasha OS Preview**.
 
+**User data lives in that stable folder** (sessions, memory, notes, secrets,
+models registry). Extracting a new zip and running `bin\aos-session.exe`
+syncs program files into the same prefix and **keeps** `var/` / `etc/`.
+Do not set `AOS_HOME` to the versioned extract folder unless you want an
+isolated copy. True portable mode: create a `.portable` file next to
+`VERSION`, or set `AOS_PORTABLE=1`.
+
 ### Windows SmartScreen (“Unknown publisher”)
 
 Preview binaries are **not Authenticode-signed** yet. SmartScreen may block
@@ -48,9 +55,8 @@ This is expected for unsigned GitHub Release builds. A signed publisher
 certificate (e.g. Azure Trusted Signing / EV code signing) is the proper
 fix for later releases — it is not a malware warning by itself.
 
-Without the installer:
+Quick start without `install.cmd` (still uses the stable data prefix):
 ```powershell
-$env:AOS_HOME = (Resolve-Path .)
 .\bin\aos-session.exe
 ```
 
@@ -96,6 +102,10 @@ A banner appears in the UI when a newer Release exists.
 **Download** writes the archive under `var/updates/`; the **next** launch
 applies `bin/` + `share/` without touching `var/` or overwriting
 `etc/*.yaml` (`.new` files if needed).
+
+Running a newly extracted Release zip (or `install.cmd` again) overlays the
+same way onto `%LOCALAPPDATA%\AgentOS-Preview` /
+`~/.local/share/agentos-preview`. Sessions, memory, notes and secrets stay.
 
 ## Network & search (optional)
 

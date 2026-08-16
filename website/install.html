@@ -111,10 +111,17 @@
           Installe sous <code>%LOCALAPPDATA%\AgentOS-Preview</code> et conserve
           <code>var/</code> et <code>etc/</code> à la mise à jour. Lancer
           <strong>Akasha OS Preview</strong>.
-        </p>        <p class="hist" data-lang="en">Without the installer:</p>
-        <p class="hist" data-lang="fr">Sans installateur :</p>
-        <pre>$env:AOS_HOME = (Resolve-Path .)
-.\bin\aos-session.exe</pre>
+        </p>
+        <p class="hist" data-lang="en">
+          Quick start without <code>install.cmd</code> still uses the stable
+          data prefix (<code>%LOCALAPPDATA%\AgentOS-Preview</code>):
+        </p>
+        <p class="hist" data-lang="fr">
+          Démarrage rapide sans <code>install.cmd</code> : le préfixe de
+          données stable est quand même utilisé
+          (<code>%LOCALAPPDATA%\AgentOS-Preview</code>) :
+        </p>
+        <pre>.\bin\aos-session.exe</pre>
 
         <h2 data-lang="en"># Linux</h2>
         <h2 data-lang="fr"># Linux</h2>

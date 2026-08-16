@@ -11,7 +11,10 @@ Catalogue : [FEATURES.md](FEATURES.md).
 
 1. Driver NVIDIA (`nvidia-smi -L` OK), **ou** paquet / mode CPU-only.
 2. ~8 Go libres (pack mid : 9B + embedding) ; moins pour le pack **cpu**.
-3. Installer via `install.cmd` / `install.sh`, ou lancer `bin/aos-session`.
+3. Préférer `install.cmd` / `install.sh`, ou lancer `bin/aos-session`
+   (synchronise vers `%LOCALAPPDATA%\AgentOS-Preview` /
+   `~/.local/share/agentos-preview` pour que historique, mémoire et notes
+   survivent aux nouvelles versions).
 4. Sous Windows, si SmartScreen affiche **Éditeur inconnu** :
    **Informations complémentaires** → **Exécuter quand même** (Preview pas
    encore signée Authenticode).
