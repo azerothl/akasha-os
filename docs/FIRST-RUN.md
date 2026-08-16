@@ -11,7 +11,9 @@ Full feature list: [FEATURES.md](FEATURES.md).
 
 1. Recent NVIDIA driver (`nvidia-smi -L` OK).
 2. ~8 GB free disk (recommended mid-tier pack: 9B + embedding).
-3. Install via `install.ps1` / `install.sh`, or run `bin/aos-session`.
+3. Install via `install.cmd` / `install.sh`, or run `bin/aos-session`.
+4. On Windows, if SmartScreen says **Unknown publisher**: **More info** →
+   **Run anyway** (Preview is not code-signed yet).
 
 ## Hardware-aware model setup
 

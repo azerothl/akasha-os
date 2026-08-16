@@ -34,6 +34,18 @@ No macOS, no CPU-only mode in 0.1.
    on update).
 3. Launch **Akasha OS Preview**.
 
+### Windows SmartScreen (“Unknown publisher”)
+
+Preview binaries are **not Authenticode-signed** yet. SmartScreen may block
+`aos-session.exe` (or the desktop shortcut) with *Windows protected your PC*.
+
+1. Click **More info**.
+2. Click **Run anyway**.
+
+This is expected for unsigned GitHub Release builds. A signed publisher
+certificate (e.g. Azure Trusted Signing / EV code signing) is the proper
+fix for later releases — it is not a malware warning by itself.
+
 Without the installer:
 ```powershell
 $env:AOS_HOME = (Resolve-Path .)

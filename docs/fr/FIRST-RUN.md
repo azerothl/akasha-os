@@ -11,7 +11,10 @@ Catalogue : [FEATURES.md](FEATURES.md).
 
 1. Driver NVIDIA récent (`nvidia-smi -L` OK).
 2. ~8 Go libres (pack mid : 9B + embedding).
-3. Installer via `install.ps1` / `install.sh`, ou lancer `bin/aos-session`.
+3. Installer via `install.cmd` / `install.sh`, ou lancer `bin/aos-session`.
+4. Sous Windows, si SmartScreen affiche **Éditeur inconnu** :
+   **Informations complémentaires** → **Exécuter quand même** (Preview pas
+   encore signée Authenticode).
 
 ## Setup modèles selon le matériel
 

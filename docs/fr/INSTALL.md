@@ -34,6 +34,19 @@ Pas de macOS, pas de mode CPU-only en 0.1.
    en cas de mise à jour).
 3. Lancer **Akasha OS Preview**.
 
+### SmartScreen Windows (« Éditeur inconnu »)
+
+Les binaires Preview ne sont **pas encore signés** Authenticode. SmartScreen
+peut bloquer `aos-session.exe` (ou le raccourci) avec *Windows a protégé votre
+ordinateur*.
+
+1. Cliquer **Informations complémentaires**.
+2. Cliquer **Exécuter quand même**.
+
+Attendu pour des builds GitHub non signés. Une signature éditeur (Azure Trusted
+Signing / certificat EV) est le vrai correctif pour les releases suivantes —
+ce n’est pas, en soi, un signal malware.
+
 Sans installateur :
 ```powershell
 $env:AOS_HOME = (Resolve-Path .)
