@@ -1118,6 +1118,8 @@ enum ActResult {
     Continue(String),
     Complete(String),
     Fail(String),
+    /// Pause jusqu'à Resume humain (plus utilisé par agent.await).
+    #[allow(dead_code)]
     Blocked {
         reason: String,
         child_id: Option<String>,
@@ -1331,10 +1333,17 @@ async fn execute_action(
                 .get("child_id")
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
+                .trim()
                 .to_string();
+            let my_children = shared.state.lock().await.children.clone();
+            if let Some(msg) = await_child_reject_reason(&child_id, &my_children) {
+                return ActResult::Continue(msg);
+            }
             let key = format!("agent:{}/child:{}", agent_id, child_id);
-            // Poll shared mem / agent state
-            for _ in 0..60 {
+            let mut seen_in_list = false;
+            // Poll shared mem / agent state (~30s). Never Block: a missing or
+            // crashed child must not freeze the parent for a human Resume.
+            for i in 0..60 {
                 if let Ok(Some(val)) = bus
                     .call::<MemSharedReadRequest, Option<serde_json::Value>>(
                         "mem.shared_read",
@@ -1355,15 +1364,21 @@ async fn execute_action(
                     .await;
                     return ActResult::Continue(result);
                 }
-                // Also check agent.list state
                 if let Ok(list) = bus
                     .call::<(), Vec<AgentInfo>>("agent.list", &(), vec![])
                     .await
                 {
                     if let Some(info) = list.iter().find(|a| a.agent_id == child_id) {
-                        if matches!(info.state, AgentState::Done | AgentState::Failed | AgentState::Killed)
-                        {
-                            let result = info.last_output.clone();
+                        seen_in_list = true;
+                        if matches!(
+                            info.state,
+                            AgentState::Done | AgentState::Failed | AgentState::Killed
+                        ) {
+                            let result = if info.last_output.is_empty() {
+                                format!("{} ({:?})", child_id, info.state)
+                            } else {
+                                info.last_output.clone()
+                            };
                             report(
                                 bus,
                                 &agent_id,
@@ -1375,18 +1390,19 @@ async fn execute_action(
                             .await;
                             return ActResult::Continue(result);
                         }
+                    } else if i >= 3 && !seen_in_list {
+                        return ActResult::Continue(format!(
+                            "agent.await: {child_id} introuvable dans agent.list \
+                             (lancement probablement échoué) — spawn à nouveau ou continue sans lui"
+                        ));
                     }
                 }
                 tokio::time::sleep(Duration::from_millis(500)).await;
             }
-            ActResult::Blocked {
-                reason: format!("attente de {child_id} expirée"),
-                child_id: if child_id.is_empty() {
-                    None
-                } else {
-                    Some(child_id)
-                },
-            }
+            ActResult::Continue(format!(
+                "agent.await: {child_id} toujours en cours après 30s — \
+                 réessaie agent.await ou poursuis sans lui"
+            ))
         }
         other => {
             // Look up tool
@@ -2676,6 +2692,22 @@ fn truncate(s: &str, n: usize) -> String {
     }
 }
 
+/// Refuse d'attendre un id vide ou un agent que ce parent n'a pas spawn.
+fn await_child_reject_reason(child_id: &str, my_children: &[String]) -> Option<String> {
+    if child_id.is_empty() {
+        return Some(
+            "agent.await: child_id manquant — spawn d'abord un sous-agent".into(),
+        );
+    }
+    if !my_children.iter().any(|c| c == child_id) {
+        return Some(format!(
+            "agent.await: {child_id} n'est pas un sous-agent que tu as créé. \
+             Utilise l'id renvoyé par agent.spawn, ou spawn d'abord."
+        ));
+    }
+    None
+}
+
 fn extract_child_id(action: &str, outcome: &str, args: &serde_json::Value) -> Option<String> {
     if action == "agent.spawn" {
         if let Some(rest) = outcome.strip_prefix("sous-agent créé: ") {
@@ -2788,5 +2820,27 @@ fn collect_sources(
             }]
         }
         _ => Vec::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::await_child_reject_reason;
+
+    #[test]
+    fn await_rejects_empty_child_id() {
+        assert!(await_child_reject_reason("", &["agent-2".into()]).is_some());
+    }
+
+    #[test]
+    fn await_rejects_child_not_spawned_by_parent() {
+        let msg = await_child_reject_reason("agent-9", &["agent-2".into()]).unwrap();
+        assert!(msg.contains("agent-9"));
+        assert!(msg.contains("pas un sous-agent"));
+    }
+
+    #[test]
+    fn await_accepts_own_child() {
+        assert!(await_child_reject_reason("agent-2", &["agent-2".into()]).is_none());
     }
 }

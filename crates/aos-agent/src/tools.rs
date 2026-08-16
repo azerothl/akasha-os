@@ -136,7 +136,7 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
         },
         ToolDesc {
             name: "agent.await".into(),
-            description: "Attendre le résultat d'un sous-agent".into(),
+            description: "Attendre le résultat d'un sous-agent que tu as créé (child_id de agent.spawn)".into(),
             input_schema: serde_json::json!({"type":"object","properties":{"child_id":{"type":"string"}},"required":["child_id"]}),
             backend: ToolBackend::Runtime,
             required_caps: vec![],

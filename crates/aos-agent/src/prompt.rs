@@ -143,7 +143,7 @@ IMPORTANT :
 Actions runtime :
 - plan.update : {"nodes":[{"id":"1","title":"...","status":"Pending"}]}
 - agent.spawn : {"brief":"tâche étroite auto-suffisante (court)","skills":[],"tools":[],"documents":[]}
-- agent.await : {"child_id":"..."}
+- agent.await : {"child_id":"..."}  (uniquement un id renvoyé par ton agent.spawn ; si spawn a échoué, continue toi-même)
 - memory.remember : {"text":"..."}
 - memory.recall : {"query":"..."}
 - docs.read : {"path":"..."}

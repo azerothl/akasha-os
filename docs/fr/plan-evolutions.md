@@ -74,6 +74,7 @@ E6 / E7-lite / E10-lite livrés dans Preview **0.4.0** — [phase-preview-04.md]
 | **E8** | **Pont sibling** (documenté + minimal) : schémas intents / mémoire / ABI WASM alignés ; plus tard option « Akasha assistant as module » | Risque (d) duplication | **Docs 0.4.0** — [sibling-bridge.md](sibling-bridge.md) ; **pas** un seul binaire |
 | **E9** | **P5.2 multi-GPU** quand le hardware est dispo | Gate P5 partielle | [phases/phase-p5.md](phases/phase-p5.md) |
 | **E10** | **Marketplace MCP / modules locale** (catalogue signé, revue de caps) | Distribution type ClawHub sans devenir ClawHub | **E10-lite 0.4.0** — revue de caps + exemple MCP ; pas de store réseau |
+| **E14** | **Extraction auto de faits du chat → mémoire long terme** | Le chat ne fait que *lire* `mem.context` ; les faits demandent Remember manuel | **Candidat Preview 0.5** — opt-in Settings ; extraction LLM post-tour → `mem.user.remember` + dédup/`supersedes` ; jamais de secrets auto |
 
 ---
 
@@ -101,9 +102,9 @@ E6 / E7-lite / E10-lite livrés dans Preview **0.4.0** — [phase-preview-04.md]
 | Couche | Rôle |
 |--------|------|
 | **P0–P5 / PV / PC** | Gates exécutables ([plan-developpement-phases.md](plan-developpement-phases.md), [STATUS.md](STATUS.md)) |
-| **E1–E13** | Priorisation après analyse concurrentielle ; planifier **après** la fermeture de la gate cohort PC |
+| **E1–E14** | Priorisation après analyse concurrentielle ; planifier **après** la fermeture de la gate cohort PC |
 
-Ne **pas** inventer un numéro P6 tant que PC n’est pas fermé et que STATUS n’est pas à jour. E1–E5 sont les candidats Preview 0.3 par défaut une fois PC vert.
+Ne **pas** inventer un numéro P6 tant que PC n’est pas fermé et que STATUS n’est pas à jour. E1–E5 livrés en Preview **0.3.0** ; E6 / E7-lite / E10-lite en **0.4.0**. Prochain focus : **E14** (chat→mémoire auto, candidat Preview 0.5) + reste Horizon B (E7 TPM, E8 runtime, E9 multi-GPU) + fermeture cohort PC.
 
 Séquençage suggéré une fois PC fermé :
 
