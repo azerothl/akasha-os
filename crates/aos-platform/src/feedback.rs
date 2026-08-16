@@ -110,6 +110,7 @@ pub fn issue_body(req: &FeedbackSubmitRequest, local_id: &str) -> String {
          - **Sévérité :** {sev}\n\
          - **Scénario :** {scenario}\n\
          - **Id local :** `{local_id}`\n\
+         - **Fichier local :** `var/feedback/{local_id}.json`\n\
          \n\
          ## Description\n\
          \n\
@@ -138,26 +139,53 @@ fn percent_encode(s: &str) -> String {
     out
 }
 
+/// Budget URL navigateur / GitHub (au-delà, le formulaire arrive vide ou coupé).
+const MAX_FORM_URL_BYTES: usize = 7000;
+const FORM_TRUNCATE_NOTE: &str =
+    "\n\n_(corps tronqué — le rapport complet est dans `var/feedback/`)_\n";
+
+/// Coupe `s` pour que `percent_encode(s)` tienne dans `max_encoded` octets.
+fn truncate_to_encoded_len(s: &str, max_encoded: usize) -> String {
+    let mut out = String::new();
+    let mut enc_len = 0usize;
+    for ch in s.chars() {
+        let mut buf = [0u8; 4];
+        let piece = percent_encode(ch.encode_utf8(&mut buf));
+        if enc_len.saturating_add(piece.len()) > max_encoded {
+            break;
+        }
+        out.push(ch);
+        enc_len += piece.len();
+    }
+    out
+}
+
 /// URL du formulaire GitHub prérempli (aucun jeton requis).
+///
+/// Le corps d'un dépannage dépasse souvent 1200 caractères : on garde le
+/// début (résumé / anomalies) et on borne la longueur *encodée* de l'URL.
 pub fn new_issue_form_url(req: &FeedbackSubmitRequest, local_id: &str) -> String {
     let repo = github_repo();
     let title = issue_title(req);
-    let mut body = issue_body(req, local_id);
-    const MAX_BODY: usize = 1200;
-    if body.len() > MAX_BODY {
-        body.truncate(MAX_BODY);
-        body.push_str("\n\n_(corps tronqué — voir le fichier local `var/feedback/`)_\n");
-    }
-    let mut url = format!(
-        "https://github.com/{repo}/issues/new?title={}&body={}",
-        percent_encode(&title),
-        percent_encode(&body)
-    );
-    if let Some(label) = labels_for_category(&req.category).first() {
-        url.push_str("&labels=");
-        url.push_str(percent_encode(label).as_str());
-    }
-    url
+    let body = issue_body(req, local_id);
+    let encoded_title = percent_encode(&title);
+    let label = labels_for_category(&req.category)
+        .first()
+        .map(|l| format!("&labels={}", percent_encode(l)))
+        .unwrap_or_default();
+    let prefix = format!("https://github.com/{repo}/issues/new?title={encoded_title}&body=");
+    let note_enc = percent_encode(FORM_TRUNCATE_NOTE).len();
+    let budget = MAX_FORM_URL_BYTES
+        .saturating_sub(prefix.len())
+        .saturating_sub(label.len());
+    let encoded_full = percent_encode(&body);
+    let encoded_body = if encoded_full.len() <= budget {
+        encoded_full
+    } else {
+        let kept = truncate_to_encoded_len(&body, budget.saturating_sub(note_enc));
+        percent_encode(&format!("{kept}{FORM_TRUNCATE_NOTE}"))
+    };
+    format!("{prefix}{encoded_body}{label}")
 }
 
 #[derive(Debug)]
@@ -174,16 +202,40 @@ fn github_caps() -> Vec<String> {
     ]
 }
 
+fn gh_executable() -> PathBuf {
+    if let Some(p) = std::env::var_os("AOS_GH") {
+        return PathBuf::from(p);
+    }
+    #[cfg(windows)]
+    {
+        for candidate in [
+            r"C:\Program Files\GitHub CLI\gh.exe",
+            r"C:\Program Files (x86)\GitHub CLI\gh.exe",
+        ] {
+            let p = PathBuf::from(candidate);
+            if p.is_file() {
+                return p;
+            }
+        }
+    }
+    PathBuf::from("gh")
+}
+
 fn try_gh_cli(req: &FeedbackSubmitRequest, local_id: &str) -> Result<GithubPublish, String> {
     let repo = github_repo();
     let title = issue_title(req);
     let body = issue_body(req, local_id);
-    let mut cmd = std::process::Command::new("gh");
-    cmd.args(["issue", "create", "--repo", &repo, "--title", &title, "--body", &body]);
+    // --body-file : un rapport de dépannage dépasse la limite de ligne de commande.
+    let tmp = std::env::temp_dir().join(format!("aos-issue-{local_id}.md"));
+    fs::write(&tmp, &body).map_err(|e| format!("gh body-file: {e}"))?;
+    let mut cmd = std::process::Command::new(gh_executable());
+    cmd.args(["issue", "create", "--repo", &repo, "--title", &title]);
+    cmd.arg("--body-file").arg(&tmp);
     for label in labels_for_category(&req.category) {
         cmd.args(["--label", label]);
     }
     let out = cmd.output().map_err(|e| format!("gh: {e}"))?;
+    let _ = fs::remove_file(&tmp);
     if !out.status.success() {
         let err = String::from_utf8_lossy(&out.stderr);
         return Err(format!("gh: {}", err.trim()));
@@ -351,6 +403,47 @@ mod tests {
         assert!(url.starts_with("https://github.com/azerothl/akasha-os/issues/new?"));
         assert!(url.contains("labels=bug"));
         assert!(url.contains("Preview"));
+    }
+
+    #[test]
+    fn formulaire_github_conserve_le_debut_d_un_long_rapport() {
+        let findings = "anomalie critique nvidia-smi";
+        let req = FeedbackSubmitRequest {
+            title: "Dépannage auto".into(),
+            category: "bug".into(),
+            severity: "high".into(),
+            body: format!(
+                "## Résumé dépannage automatique\n\n{findings}\n\n{}",
+                "x".repeat(12_000)
+            ),
+            scenario: Some("troubleshooting".into()),
+            meta: serde_json::json!({}),
+            publish_github: true,
+        };
+        let url = new_issue_form_url(&req, "fb-diag");
+        assert!(url.starts_with("https://github.com/azerothl/akasha-os/issues/new?"));
+        assert!(
+            url.contains("anomalie%20critique%20nvidia-smi"),
+            "le résumé de dépannage doit rester dans l'issue: {url}"
+        );
+        assert!(url.len() <= MAX_FORM_URL_BYTES + 80);
+        assert!(url.contains("tronqu") || url.contains("feedback"));
+    }
+
+    #[test]
+    fn formulaire_github_ne_coupe_pas_un_utf8() {
+        let req = FeedbackSubmitRequest {
+            title: "accents".into(),
+            category: "ux".into(),
+            severity: "low".into(),
+            body: "é".repeat(4000),
+            scenario: None,
+            meta: serde_json::json!({}),
+            publish_github: true,
+        };
+        let url = new_issue_form_url(&req, "fb-utf8");
+        assert!(url.starts_with("https://github.com/"));
+        assert!(url.len() <= MAX_FORM_URL_BYTES + 80);
     }
 
     #[test]

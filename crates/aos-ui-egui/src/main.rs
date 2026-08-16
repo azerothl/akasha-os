@@ -25,9 +25,10 @@ use aos_proto::{
 };
 use prefs::{load_preferences, save_preferences, Preferences};
 use eframe::egui;
+use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -62,6 +63,38 @@ fn open_in_browser(url: &str) {
     #[cfg(target_os = "macos")]
     {
         let _ = std::process::Command::new("open").arg(url).spawn();
+    }
+}
+
+/// Convertit un chemin stocké (`/` ou `\`) en chemin natif.
+fn native_path(stored: &str) -> PathBuf {
+    PathBuf::from(stored.replace(['/', '\\'], std::path::MAIN_SEPARATOR_STR))
+}
+
+/// Ouvre un dossier dans l'explorateur OS.
+///
+/// Sur Windows, `explorer <chemin>` avec des `/` (ou un dossier absent)
+/// ouvre « Mes documents » au lieu de la cible — d'où la normalisation
+/// et `/e,chemin`.
+fn open_os_folder(dir: &Path) {
+    let _ = std::fs::create_dir_all(dir);
+    #[cfg(windows)]
+    {
+        let mut path = dir.to_string_lossy().replace('/', "\\");
+        if let Some(stripped) = path.strip_prefix(r"\\?\") {
+            path = stripped.to_string();
+        }
+        let _ = std::process::Command::new("explorer")
+            .arg(format!("/e,{path}"))
+            .spawn();
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let _ = std::process::Command::new("xdg-open").arg(dir).spawn();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("open").arg(dir).spawn();
     }
 }
 
@@ -227,6 +260,8 @@ enum Evt {
     Audit(Vec<AuditEvent>),
     Confirms(Vec<PendingConfirmation>),
     FeedbackOk(FeedbackSubmitResponse),
+    /// Préremplit le formulaire Retour (dépannage) sans publier tout de suite.
+    FeedbackDraft(FeedbackSubmitRequest),
     Sessions(Vec<ChatSessionMeta>),
     SessionLoaded {
         id: String,
@@ -1496,7 +1531,7 @@ fn agent_heuristics_for_task(task: &str) -> (Vec<String>, Vec<String>) {
     (skills, tools)
 }
 
-/// Collecte un diagnostic Preview et ouvre un rapport GitHub si anomalies (issue #2).
+/// Collecte un diagnostic Preview, l'archive localement et préremplit l'onglet Retour.
 async fn run_troubleshoot(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>) {
     let _ = evt_tx.send(Evt::Status("Dépannage : collecte des diagnostics…".into()));
     let home = aos_home();
@@ -1649,7 +1684,7 @@ async fn run_troubleshoot(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>) {
         format!("Dépannage : {} anomalie(s) — rapport en cours…", findings.len())
     }));
 
-    // Toujours archiver localement ; publier sur GitHub seulement s'il y a des anomalies.
+    // Archive locale + brouillon dans l'onglet Retour (l'utilisateur publie l'issue).
     let req = FeedbackSubmitRequest {
         title: if healthy {
             format!("[Preview][diag] OK — v{version}")
@@ -1674,7 +1709,9 @@ async fn run_troubleshoot(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>) {
             "findings": findings,
             "healthy": healthy,
         }),
-        publish_github: !healthy,
+        // Copie locale seulement : l'issue GitHub est créée quand l'utilisateur
+        // envoie le formulaire prérempli, pour que le rapport y figure.
+        publish_github: false,
     };
 
     match bus
@@ -1687,11 +1724,17 @@ async fn run_troubleshoot(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>) {
     {
         Ok(r) => {
             let _ = evt_tx.send(Evt::FeedbackOk(r));
-            if healthy {
-                let _ = evt_tx.send(Evt::Status(
-                    "Dépannage OK — rapport local enregistré (pas d'issue GitHub)".into(),
-                ));
-            }
+            let mut draft = req;
+            draft.publish_github = !healthy;
+            let _ = evt_tx.send(Evt::FeedbackDraft(draft));
+            let _ = evt_tx.send(Evt::Status(if healthy {
+                "Dépannage OK — rapport local prêt dans l'onglet Retour".into()
+            } else {
+                format!(
+                    "Dépannage : {} anomalie(s) — rapport prêt, envoyez-le depuis Retour",
+                    findings.len()
+                )
+            }));
         }
         Err(e) => {
             let _ = evt_tx.send(Evt::Error(format!("Dépannage : échec feedback.submit : {e}")));
@@ -1890,6 +1933,8 @@ struct UiApp {
     fb_scenario: String,
     fb_result: String,
     fb_github: bool,
+    fb_dir: Option<PathBuf>,
+    chat_md_cache: CommonMarkCache,
     update_offer: Option<UpdateOffer>,
     update_status: String,
     model_infos: Vec<ModelInfo>,
@@ -2008,6 +2053,8 @@ impl UiApp {
             fb_scenario: String::new(),
             fb_result: String::new(),
             fb_github: true,
+            fb_dir: None,
+            chat_md_cache: CommonMarkCache::default(),
             update_offer: load_update_offer(),
             update_status: String::new(),
             model_infos: Vec::new(),
@@ -2436,6 +2483,23 @@ impl eframe::App for UiApp {
                     }
                     self.fb_result = msg;
                     self.status = format!("feedback {}", r.id);
+                    let export = native_path(&r.export_dir);
+                    self.fb_dir = export
+                        .parent()
+                        .filter(|p| !p.as_os_str().is_empty())
+                        .map(|p| p.to_path_buf())
+                        .or(Some(export));
+                    self.reset_feedback_form();
+                }
+                Evt::FeedbackDraft(req) => {
+                    self.fb_title = req.title;
+                    self.fb_category = req.category;
+                    self.fb_severity = req.severity;
+                    self.fb_body = req.body;
+                    self.fb_scenario = req.scenario.unwrap_or_default();
+                    self.fb_github = req.publish_github
+                        && !self.fb_category.eq_ignore_ascii_case("security");
+                    self.tab = Tab::Feedback;
                 }
                 Evt::Sessions(list) => self.sessions = list,
                 Evt::SessionLoaded { id, messages } => {
@@ -3016,13 +3080,7 @@ impl UiApp {
                             }
                             if ui.button("Ouvrir downloads").clicked() {
                                 let dir = aos_home().join("var/storage/data/downloads");
-                                let _ = std::fs::create_dir_all(&dir);
-                                #[cfg(windows)]
-                                let _ =
-                                    std::process::Command::new("explorer").arg(&dir).spawn();
-                                #[cfg(target_os = "linux")]
-                                let _ =
-                                    std::process::Command::new("xdg-open").arg(&dir).spawn();
+                                open_os_folder(&dir);
                             }
                         });
                 },
@@ -3053,12 +3111,26 @@ impl UiApp {
                             ui.set_min_width(ui.available_width());
                             ui.set_min_height(scroll_h);
                             let mut open_agent: Option<String> = None;
-                            for line in &self.chat {
-                                ui.label(format!("[{}]", line.role));
-                                if !line.text.is_empty() {
-                                    ui.add(egui::Label::new(&line.text).wrap());
+                            let n = self.chat.len();
+                            for i in 0..n {
+                                let role = self.chat[i].role.clone();
+                                let text = self.chat[i].text.clone();
+                                let attachments = self.chat[i].attachments.clone();
+                                ui.label(format!("[{role}]"));
+                                if !text.is_empty() {
+                                    if role == "assistant" {
+                                        ui.push_id(("chat_md", i), |ui| {
+                                            CommonMarkViewer::new().show(
+                                                ui,
+                                                &mut self.chat_md_cache,
+                                                &text,
+                                            );
+                                        });
+                                    } else {
+                                        ui.add(egui::Label::new(&text).wrap());
+                                    }
                                 }
-                                for att in &line.attachments {
+                                for att in &attachments {
                                     let ChatAttachment::AgentRef {
                                         agent_id,
                                         title,
@@ -3077,7 +3149,14 @@ impl UiApp {
                             }
                             if !self.streaming.is_empty() {
                                 ui.label("[assistant]");
-                                ui.add(egui::Label::new(&self.streaming).wrap());
+                                let streaming = self.streaming.clone();
+                                ui.push_id("chat_md_stream", |ui| {
+                                    CommonMarkViewer::new().show(
+                                        ui,
+                                        &mut self.chat_md_cache,
+                                        &streaming,
+                                    );
+                                });
                             } else if self.chat_pending {
                                 ui.label("[assistant]");
                                 ui.weak("… en file / génération");
@@ -3948,6 +4027,15 @@ impl UiApp {
         }
     }
 
+    fn reset_feedback_form(&mut self) {
+        self.fb_title.clear();
+        self.fb_body.clear();
+        self.fb_scenario.clear();
+        self.fb_category = "ux".into();
+        self.fb_severity = "medium".into();
+        self.fb_github = true;
+    }
+
     fn ui_feedback(&mut self, ui: &mut egui::Ui) {
         ui.heading("Retour testeur");
         ui.label(
@@ -4026,11 +4114,11 @@ impl UiApp {
             ui.separator();
             ui.label(&self.fb_result);
             if ui.button("Ouvrir le dossier feedback").clicked() {
-                let dir = aos_home().join("var/feedback");
-                #[cfg(windows)]
-                let _ = std::process::Command::new("explorer").arg(&dir).spawn();
-                #[cfg(target_os = "linux")]
-                let _ = std::process::Command::new("xdg-open").arg(&dir).spawn();
+                let dir = self
+                    .fb_dir
+                    .clone()
+                    .unwrap_or_else(|| aos_home().join("var/feedback"));
+                open_os_folder(&dir);
             }
         }
     }
