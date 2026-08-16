@@ -947,24 +947,47 @@ impl LlamaContext {
     ///
     /// Retourne le vecteur poolé (mean) normalisé L2, dimension
     /// `n_embd_out` du modèle.
+    ///
+    /// Le prefill est découpé par `n_batch` — `llama_batch_get_one(n)` assert
+    /// (et tue le process) si `n > n_batch` (textes mémoire / notes longs).
     pub fn embed(&mut self, text: &str) -> Result<Vec<f32>, LlamaError> {
-        let tokens = self.tokenize(text, true)?;
+        let mut tokens = self.tokenize(text, true)?;
         if tokens.is_empty() {
             return Err(LlamaError::Tokenize);
         }
         if tokens.len() as u32 > self.n_ctx {
-            return Err(LlamaError::prompt_too_long(tokens.len(), self.n_ctx, 0));
+            tokens.truncate(self.n_ctx as usize);
         }
+        let n = tokens.len();
         unsafe {
             let mem = sys::llama_get_memory(self.ptr);
             sys::llama_memory_clear(mem, true);
         }
-        let mut buf = tokens.clone();
-        let batch = unsafe { sys::llama_batch_get_one(buf.as_mut_ptr(), tokens.len() as i32) };
-        let rc = unsafe { sys::llama_decode(self.ptr, batch) };
-        if rc != 0 {
-            return Err(LlamaError::Decode(rc));
+        let mut batch = unsafe { sys::llama_batch_init(self.n_batch as i32, 0, 1) };
+        let mut off = 0usize;
+        while off < n {
+            batch.n_tokens = 0;
+            let take = (n - off).min(self.n_batch as usize);
+            for j in 0..take {
+                // Mean pooling : demander les embeddings sur chaque token.
+                unsafe {
+                    Self::batch_add(
+                        &mut batch,
+                        tokens[off + j],
+                        (off + j) as sys::llama_pos,
+                        0,
+                        true,
+                    );
+                }
+            }
+            let rc = unsafe { sys::llama_decode(self.ptr, batch) };
+            if rc != 0 {
+                unsafe { sys::llama_batch_free(batch) };
+                return Err(LlamaError::Decode(rc));
+            }
+            off += take;
         }
+        unsafe { sys::llama_batch_free(batch) };
         let dim = unsafe { sys::llama_model_n_embd_out(self.model.ptr) } as usize;
         let ptr = unsafe { sys::llama_get_embeddings(self.ptr) };
         if ptr.is_null() {

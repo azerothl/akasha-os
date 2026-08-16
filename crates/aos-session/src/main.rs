@@ -262,6 +262,10 @@ fn main() {
         let s = session.clone();
         thread::spawn(move || auditd_watchdog(s));
     }
+    {
+        let s = session.clone();
+        thread::spawn(move || platformd_watchdog(s));
+    }
 
     let ui = bin_path(&home, "aos-ui-egui");
     let mut ui_cmd = Command::new(&ui);
@@ -1110,35 +1114,62 @@ fn kill_by_name(name: &str) {
 }
 
 fn auditd_watchdog(session: Arc<Session>) {
+    daemon_watchdog(session, "aos-auditd", &|home| {
+        let mut cmd = Command::new(bin_path(home, "aos-auditd"));
+        cmd.arg(BUS_ADDR).arg("var/audit");
+        cmd
+    });
+}
+
+/// Redémarre platformd s'il meurt (ex. assert llama embed) pour que
+/// `mem.*` / notes / modules restent joignables.
+fn platformd_watchdog(session: Arc<Session>) {
+    daemon_watchdog(session, "aos-platformd", &|home| {
+        let mut cmd = Command::new(bin_path(home, "aos-platformd"));
+        cmd.arg("etc/platformd.yaml");
+        cmd
+    });
+}
+
+fn daemon_watchdog(
+    session: Arc<Session>,
+    name: &'static str,
+    make_cmd: &dyn Fn(&Path) -> Command,
+) {
     while !session.stop.load(Ordering::SeqCst) {
         thread::sleep(Duration::from_secs(2));
         if session.stop.load(Ordering::SeqCst) {
             break;
         }
         let mut daemons = session.daemons.lock().unwrap();
-        let Some(pos) = daemons.iter().position(|d| d.name == "aos-auditd") else {
+        let Some(pos) = daemons.iter().position(|d| d.name == name) else {
             continue;
         };
         // try_wait : None = encore vivant
         match daemons[pos].child.try_wait() {
             Ok(Some(_)) => {
-                eprintln!("[aos-session] auditd mort — redémarrage");
+                eprintln!("[aos-session] {name} mort — redémarrage");
                 let home = session.home.clone();
-                let mut cmd = Command::new(bin_path(&home, "aos-auditd"));
-                cmd.arg(BUS_ADDR).arg("var/audit");
+                let mut cmd = make_cmd(&home);
                 daemon_env(&mut cmd, &home);
-                cmd.stdout(Stdio::null()).stderr(Stdio::null());
+                // Conserver les logs stderr (crash GGML, etc.)
+                let log_path = home.join("var/run").join(format!("{name}.stderr.log"));
+                let stderr = fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&log_path)
+                    .ok()
+                    .map(Stdio::from)
+                    .unwrap_or_else(Stdio::null);
+                cmd.stdout(Stdio::null()).stderr(stderr);
                 match cmd.spawn() {
                     Ok(child) => {
                         let pid = child.id();
-                        let _ = fs::write(home.join("var/run/aos-auditd.pid"), pid.to_string());
-                        daemons[pos] = Daemon {
-                            name: "aos-auditd",
-                            child,
-                        };
-                        eprintln!("[aos-session] aos-auditd up (pid {pid})");
+                        let _ = fs::write(home.join("var/run").join(format!("{name}.pid")), pid.to_string());
+                        daemons[pos] = Daemon { name, child };
+                        eprintln!("[aos-session] {name} up (pid {pid})");
                     }
-                    Err(e) => eprintln!("[aos-session] restart auditd échoué : {e}"),
+                    Err(e) => eprintln!("[aos-session] restart {name} échoué : {e}"),
                 }
             }
             Ok(None) => {}
