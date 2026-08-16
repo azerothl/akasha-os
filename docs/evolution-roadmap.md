@@ -58,7 +58,8 @@ Goal: wider tester cohort + clearer OS differentiator, without becoming OpenClaw
 | **E4** | **Readable caps surface**: list + revoke from UI | ZeroClaw receipts / MS governance | egui Caps tab + `aos-capkd` |
 | **E5** | **GPU metrics in UI** (TTFT, tok/s, VRAM) | Prove Placement Manager claim | `model.metrics`; sidebar + Models |
 
-**Status:** E1–E5 implemented in Preview **0.3.0** — [phase-preview-03.md](phases/phase-preview-03.md).
+**Status:** E1–E5 implemented in Preview **0.3.0** — [phase-preview-03.md](phases/phase-preview-03.md).  
+E6 / E7-lite / E10-lite shipped in Preview **0.4.0** — [phase-preview-04.md](phases/phase-preview-04.md).
 
 **Out of near-term scope:** native Telegram/Discord, public marketplace, desktop computer-use.
 
@@ -68,11 +69,11 @@ Goal: wider tester cohort + clearer OS differentiator, without becoming OpenClaw
 
 | ID | Evolution | Motivation | Notes |
 |----|-----------|------------|-------|
-| **E6** | **Typed memory graph** (`similar` / `updates` / …) + richer bootstrap | Sibling already rich; Hermes LT; A-MEM | Conceptual borrow of sibling `memory_relations`, not a code merge |
-| **E7** | **Secrets vault** (OS keyring + usage caps; never raw keys to agents) | Sibling vault; F-SEC-04 | Replace/extend `var/secrets/keys.yaml` |
-| **E8** | **Sibling bridge** (documented + minimal): aligned intent / memory / WASM ABI schemas; later optional “Akasha assistant as module” | Landscape risk (d) duplication | Contracts + docs; **not** one binary |
+| **E6** | **Typed memory graph** (`similar` / `updates` / …) + richer bootstrap | Sibling already rich; Hermes LT; A-MEM | **Shipped 0.4.0** — conceptual borrow of sibling `memory_relations`, not a code merge |
+| **E7** | **Secrets vault** (OS keyring + usage caps; never raw keys to agents) | Sibling vault; F-SEC-04 | **Shipped E7-lite 0.4.0** (`vault.enc` + DPAPI/0600); full TPM later |
+| **E8** | **Sibling bridge** (documented + minimal): aligned intent / memory / WASM ABI schemas; later optional “Akasha assistant as module” | Landscape risk (d) duplication | **Docs 0.4.0** — [sibling-bridge.md](sibling-bridge.md); **not** one binary |
 | **E9** | **P5.2 multi-GPU** when hardware is available | Partial P5 gate | [phases/phase-p5.md](phases/phase-p5.md) |
-| **E10** | **Local MCP / module marketplace** (signed catalogue, cap review) | ClawHub-shaped distribution without becoming ClawHub | Local registry already in v1 specs |
+| **E10** | **Local MCP / module marketplace** (signed catalogue, cap review) | ClawHub-shaped distribution without becoming ClawHub | **E10-lite 0.4.0** — cap review on install + MCP example; no network store |
 
 ---
 
@@ -102,7 +103,7 @@ Goal: wider tester cohort + clearer OS differentiator, without becoming OpenClaw
 | **P0–P5 / PV / PC** | Executable phase gates ([development-plan.md](development-plan.md), [STATUS.md](STATUS.md)) |
 | **E1–E13** | Prioritization after competitive analysis; schedule **after** PC cohort gate closes |
 
-Do **not** invent a P6 number until PC is closed and STATUS is updated. E1–E5 shipped in Preview **0.3.0**; next focus is Horizon B + PC cohort close.
+Do **not** invent a P6 number until PC is closed and STATUS is updated. E1–E5 shipped in Preview **0.3.0**; E6 / E7-lite / E10-lite shipped in Preview **0.4.0**. Next focus: remaining Horizon B (full E7 TPM, E8 bridge runtime, E9 multi-GPU when HW available) + PC cohort close.
 
 Suggested sequencing once PC closes:
 

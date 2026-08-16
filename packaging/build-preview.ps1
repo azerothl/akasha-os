@@ -160,14 +160,24 @@ if (Test-Path $skillsSrc) {
 
 # MCP example config (seeded into var/mcp at first run)
 New-Item -ItemType Directory -Force -Path "$OutDir\share\mcp" | Out-Null
-$mcpEx = Join-Path $root "var\mcp\servers.yaml.example"
-if (Test-Path $mcpEx) {
-    Copy-Item $mcpEx "$OutDir\share\mcp\servers.yaml.example" -Force
-} else {
-    @"
+$mcpExCandidates = @(
+    (Join-Path $root "share\mcp\servers.yaml.example"),
+    (Join-Path $root "var\mcp\servers.yaml.example")
+)
+$mcpCopied = $false
+foreach ($mcpEx in $mcpExCandidates) {
+    if (Test-Path $mcpEx) {
+        Copy-Item $mcpEx "$OutDir\share\mcp\servers.yaml.example" -Force
+        $mcpCopied = $true
+        break
+    }
+}
+if (-not $mcpCopied) {
+    @'
 # MCP servers (stdio). Copy to var/mcp/servers.yaml and adapt.
+# Use ${secret:name} for vault-backed API keys (Settings → Secrets).
 servers: {}
-"@ | Set-Content "$OutDir\share\mcp\servers.yaml.example" -Encoding utf8
+'@ | Set-Content "$OutDir\share\mcp\servers.yaml.example" -Encoding utf8
 }
 
 if (-not $SkipModels) {
@@ -208,6 +218,8 @@ Akasha OS Preview $Version (Windows x64 + NVIDIA)
 1. Prérequis : driver NVIDIA récent, nvidia-smi OK, ~4 Go disque
 2. Installation : .\install.cmd
    (ou : powershell -ExecutionPolicy Bypass -File .\install.ps1)
+   Données stables : %LOCALAPPDATA%\AgentOS-Preview (sessions, mémoire, notes).
+   Lancer bin\aos-session.exe depuis ce zip synchronise aussi vers ce préfixe.
 3. Premier lancement : télécharge les modèles si besoin, puis ouvre le tutoriel
 4. Agents agentic : skills (share/skills), MCP (var/mcp/servers.yaml), sous-agents
 5. Voir FIRST-RUN.md, INSTALL.md, TESTER.md, docs/FEATURES.md (et docs/fr/ pour le français)

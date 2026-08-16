@@ -74,9 +74,23 @@ Bannière attendue : *Preview sur Windows/Linux — ce n'est pas encore l'OS boo
 - Panneau **Sessions** (Chat) : créer 3 sessions, chatter dans chacune.
 - Redémarrer Preview : les historiques doivent réapparaître.
 
-### 7. Mémoire (PC.7)
+### 7. Mémoire (PC.7 / P04)
 
-- Onglet **Mémoire** : mémoriser un fait (« je préfère le français »), **Recall**.
+- Onglet **Mémoire** : mémoriser « je préfère le français », **Lister**, puis
+  « je préfère l'anglais ».
+- Attendre un auto-lien (`supersedes` / `updates`) ; **Recall** doit préférer l'anglais.
+- Éditer / supprimer / superséder ; cocher « Afficher supersédés ».
+- Retour Chat : le prochain message doit utiliser ce contexte (`mem.context`).
+
+### 7b. Coffre secrets (P04.3)
+
+- **Settings → Secrets** : saisir une clé Brave (ou GitHub) → **Enregistrer**.
+- Le magasin live est `vault.enc` (pas de YAML clair) ; **Lister** ne montre que les noms.
+
+### 7c. Revue de caps module (P04.4)
+
+- Install sans `approved_caps` → confirmation listant les caps.
+- **Accepter** → caps accordées ; **Refuser** → quarantaine / caps vides.
 - Revenir au Chat : le prochain message doit pouvoir s'appuyer sur ce contexte
   (injection `mem.context` avant infer).
 
@@ -86,8 +100,8 @@ Bannière attendue : *Preview sur Windows/Linux — ce n'est pas encore l'OS boo
   doit échouer (`offline_strict`).
 - Activer le réseau → recherche (ex. « Akasha OS seL4 ») → résultats titre/URL.
 - Settings → moteur : essayer `auto`, puis forcer `duckduckgo` ou `bing`.
-- (Optionnel) clé Brave dans `var/secrets/keys.yaml` :
-  `brave_search_api_key: "…"` — sinon DuckDuckGo / Bing HTML.
+- (Optionnel) clé Brave via **Settings → Secrets** (vault chiffré), pas un fichier clair.
+  L'ancien `var/secrets/keys.yaml` est migré au boot.
 
 ### 8b. Parcourir une page (PC.13)
 

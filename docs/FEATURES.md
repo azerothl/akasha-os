@@ -1,4 +1,4 @@
-# Preview features — Akasha OS 0.3.0
+# Preview features — Akasha OS 0.4.0
 
 **Language:** English | [Français](fr/FEATURES.md)
 
@@ -7,7 +7,16 @@ This is **not** the bootable OS. Target v1 requirements live in
 [functional-specs.md](functional-specs.md); phase gates in
 [STATUS.md](STATUS.md).
 
-> Date: 16/08/2026 · Preview **0.3.0**
+> Date: 16/08/2026 · Preview **0.4.0**
+
+### What's new in 0.4.0
+
+- Typed memory graph (`similar` / `updates` / `supersedes`) + auto-link on remember
+- Memory tab: list / edit / delete / supersede; structured agent bootstrap
+- Encrypted secrets vault (Settings); MCP `${secret:name}` interpolation
+- Module install requires cap review (no auto-approve); refuse → quarantine
+- `share/mcp/servers.yaml.example`; `latest.json` lists CUDA **and** CPU artefacts
+- Sibling bridge contract doc ([sibling-bridge.md](sibling-bridge.md))
 
 ### What's new in 0.3.0
 
@@ -76,12 +85,13 @@ Slash commands:
 
 ---
 
-## 3. Memory (PC.7)
+## 3. Memory (PC.7 + P04.1/P04.2)
 
-- Long-term **user facts**: remember / recall in the Memory tab
+- Long-term **user facts**: remember / recall / list / edit / delete in the Memory tab
+- Typed relations: `similar`, `updates`, `supersedes` (auto-link on close remembers)
 - Session + user hits assembled as `mem.context` for chat and agents
 - Agents also have episodic memory (`mem.episodic_*`) and `memory.remember` / `memory.recall`
-- **Memory-first bootstrap**: before tools, the runtime runs `task.assess` then a targeted `mem.bootstrap` recall so agents reuse known facts before searching the web
+- **Memory-first bootstrap**: `task.assess` then structured `mem.bootstrap` (active facts + similar neighbors; superseded omitted)
 
 ---
 
@@ -189,6 +199,7 @@ Persisted in `var/run/preferences.json` (migrated from `onboarding.json` if need
 | Network | Allow network (same as sidebar) |
 | Agents | Default model, max steps (1–128), timeout (60–86400 s) |
 | Schedules | Interval agent fires (`schedule.*`) |
+| Secrets | Brave / GitHub / OpenAI keys → encrypted vault (never shown back) |
 | Web | Search engine, browse max chars, fetch max bytes |
 
 ---
@@ -221,13 +232,13 @@ seL4 VM track (PV.1–PV.3) is separate: see [phases/phase-vm-sel4.md](phases/ph
 
 ---
 
-## 11. Not in Preview 0.3.0
+## 11. Not in Preview 0.4.0
 
 - Bootable / bare-metal image
 - macOS
 - Fully automatic update apply (download now, apply on next launch)
 - Native audio / video generation
-- Public module marketplace
+- Public module marketplace (local cap review only)
 - Messaging channels (Slack/Discord/etc.) in the OS core
 - Simultaneous multi-user accounts
 - Complete multi-GPU pipeline (P5.2; single-GPU hosts only)

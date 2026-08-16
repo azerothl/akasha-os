@@ -58,7 +58,8 @@ Objectif : cohort plus large + différenciateur OS plus visible, sans devenir un
 | **E4** | **Surface caps lisible** : lister + révoquer depuis l’UI | Receipts ZeroClaw / gouvernance MS | egui onglet Caps + `aos-capkd` |
 | **E5** | **Métriques GPU dans l’UI** (TTFT, tok/s, VRAM) | Prouver le claim Placement Manager | `model.metrics` ; barre latérale + Models |
 
-**Statut :** E1–E5 implémentés dans Preview **0.3.0** — [phase-preview-03.md](phases/phase-preview-03.md).
+**Statut :** E1–E5 implémentés dans Preview **0.3.0** — [phase-preview-03.md](phases/phase-preview-03.md).  
+E6 / E7-lite / E10-lite livrés dans Preview **0.4.0** — [phase-preview-04.md](phases/phase-preview-04.md).
 
 **Hors scope court terme :** Telegram/Discord natifs, marketplace public, computer-use desktop.
 
@@ -68,11 +69,11 @@ Objectif : cohort plus large + différenciateur OS plus visible, sans devenir un
 
 | ID | Évolution | Motivation | Notes |
 |----|-----------|------------|-------|
-| **E6** | **Mémoire graphe typé** (`similar` / `updates` / …) + bootstrap enrichi | Sibling déjà riche ; Hermes LT ; A-MEM | Emprunt conceptuel sibling `memory_relations`, pas de merge de code |
-| **E7** | **Vault secrets** (keyring OS + caps d’usage ; jamais de clés brutes aux agents) | Vault sibling ; F-SEC-04 | Remplace/étend `var/secrets/keys.yaml` |
-| **E8** | **Pont sibling** (documenté + minimal) : schémas intents / mémoire / ABI WASM alignés ; plus tard option « Akasha assistant as module » | Risque (d) duplication | Contrats + docs ; **pas** un seul binaire |
+| **E6** | **Mémoire graphe typé** (`similar` / `updates` / …) + bootstrap enrichi | Sibling déjà riche ; Hermes LT ; A-MEM | **Livré 0.4.0** — emprunt conceptuel sibling `memory_relations`, pas de merge de code |
+| **E7** | **Vault secrets** (keyring OS + caps d’usage ; jamais de clés brutes aux agents) | Vault sibling ; F-SEC-04 | **E7-lite 0.4.0** (`vault.enc` + DPAPI/0600) ; TPM plus tard |
+| **E8** | **Pont sibling** (documenté + minimal) : schémas intents / mémoire / ABI WASM alignés ; plus tard option « Akasha assistant as module » | Risque (d) duplication | **Docs 0.4.0** — [sibling-bridge.md](sibling-bridge.md) ; **pas** un seul binaire |
 | **E9** | **P5.2 multi-GPU** quand le hardware est dispo | Gate P5 partielle | [phases/phase-p5.md](phases/phase-p5.md) |
-| **E10** | **Marketplace MCP / modules locale** (catalogue signé, revue de caps) | Distribution type ClawHub sans devenir ClawHub | Registre local déjà dans les specs v1 |
+| **E10** | **Marketplace MCP / modules locale** (catalogue signé, revue de caps) | Distribution type ClawHub sans devenir ClawHub | **E10-lite 0.4.0** — revue de caps + exemple MCP ; pas de store réseau |
 
 ---
 

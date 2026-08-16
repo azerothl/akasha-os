@@ -1,0 +1,18 @@
+# Example MCP servers for Akasha OS Preview.
+# Copy to var/mcp/servers.yaml (done automatically on first run if missing).
+#
+# Secrets: use ${secret:name} so API keys stay in the encrypted vault
+# (Settings → Secrets), never plaintext in this file.
+#
+# servers:
+#   filesystem:
+#     command: npx
+#     args: ["-y", "@modelcontextprotocol/server-filesystem", "E:/docs"]
+#     env: {}
+#   github:
+#     command: npx
+#     args: ["-y", "@modelcontextprotocol/server-github"]
+#     env:
+#       GITHUB_PERSONAL_ACCESS_TOKEN: "${secret:github_token}"
+
+servers: {}

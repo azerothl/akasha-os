@@ -300,11 +300,14 @@ if [ -d "${ROOT}/skills" ]; then
 fi
 
 mkdir -p "${OUT}/share/mcp"
-if [ -f "${ROOT}/var/mcp/servers.yaml.example" ]; then
+if [ -f "${ROOT}/share/mcp/servers.yaml.example" ]; then
+  cp -f "${ROOT}/share/mcp/servers.yaml.example" "${OUT}/share/mcp/servers.yaml.example"
+elif [ -f "${ROOT}/var/mcp/servers.yaml.example" ]; then
   cp -f "${ROOT}/var/mcp/servers.yaml.example" "${OUT}/share/mcp/servers.yaml.example"
 else
   cat > "${OUT}/share/mcp/servers.yaml.example" <<'EOF'
 # MCP servers (stdio). Copy to var/mcp/servers.yaml and adapt.
+# Use ${secret:name} for vault-backed API keys (Settings → Secrets).
 servers: {}
 EOF
 fi
@@ -342,6 +345,8 @@ Akasha OS Preview ${VERSION} (Linux x64 + NVIDIA)
 
 1. Prérequis : driver NVIDIA, nvidia-smi OK, ~4 Go disque
 2. ./install.sh
+   Données stables : ~/.local/share/agentos-preview (sessions, mémoire, notes).
+   Lancer bin/aos-session depuis cette archive synchronise aussi vers ce préfixe.
 3. Premier lancement : télécharge les modèles si besoin, puis le tutoriel
 4. Agents agentic : skills (share/skills), MCP (var/mcp/servers.yaml), sous-agents
 5. Voir FIRST-RUN.md, INSTALL.md, TESTER.md, docs/FEATURES.md (et docs/fr/ pour le français)

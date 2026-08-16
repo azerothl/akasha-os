@@ -1,4 +1,4 @@
-# Fonctionnalités Preview — Akasha OS 0.3.0
+# Fonctionnalités Preview — Akasha OS 0.4.0
 
 **Langue :** [English](../FEATURES.md) | Français
 
@@ -7,7 +7,16 @@ Ce n'est **pas** l'OS bootable. Les exigences v1 sont dans
 [specs-fonctionnelles.md](specs-fonctionnelles.md) ; les gates dans
 [STATUS.md](STATUS.md).
 
-> Date : 16/08/2026 · Preview **0.3.0**
+> Date : 16/08/2026 · Preview **0.4.0**
+
+### Nouveautés 0.4.0
+
+- Graphe mémoire typé (`similar` / `updates` / `supersedes`) + auto-lien
+- Onglet Mémoire : lister / éditer / supprimer / superséder ; bootstrap structuré
+- Coffre à secrets chiffré (Settings) ; interpolation MCP `${secret:name}`
+- Install module : revue de caps obligatoire ; refus → quarantaine
+- `share/mcp/servers.yaml.example` ; `latest.json` liste CUDA **et** CPU
+- Doc pont sibling ([sibling-bridge.md](sibling-bridge.md))
 
 ### Nouveautés 0.3.0
 
@@ -76,12 +85,13 @@ Commandes slash :
 
 ---
 
-## 3. Mémoire (PC.7)
+## 3. Mémoire (PC.7 + P04.1/P04.2)
 
-- **Faits utilisateur** long terme : remember / recall dans l'onglet Mémoire
+- **Faits utilisateur** long terme : remember / recall / lister / éditer / supprimer
+- Relations typées : `similar`, `updates`, `supersedes` (auto-lien)
 - Hits session + user assemblés en `mem.context` pour le chat et les agents
 - Mémoire épisodique agent (`mem.episodic_*`) et `memory.remember` / `memory.recall`
-- **Bootstrap mémoire d'abord** : avant les outils, le runtime fait `task.assess` puis un `mem.bootstrap` ciblé pour réutiliser les faits connus avant d'aller sur le web
+- **Bootstrap mémoire d'abord** : `task.assess` puis `mem.bootstrap` structuré (faits actifs + voisins similar ; supersédés omis)
 
 ---
 
@@ -221,13 +231,13 @@ Piste VM seL4 (PV.1–PV.3) séparée : [phases/phase-vm-sel4.md](phases/phase-v
 
 ---
 
-## 11. Hors Preview 0.3.0
+## 11. Hors Preview 0.4.0
 
 - Image bootable / fer nu
 - macOS
 - Application automatique complète des updates (téléchargement maintenant, apply au prochain lancement)
 - Génération audio / vidéo native
-- Marketplace public de modules
+- Marketplace public de modules (revue de caps locale seulement)
 - Canaux de messagerie (Slack/Discord/etc.) dans le noyau OS
 - Comptes multi-utilisateur simultanés
 - Pipeline multi-GPU complet (P5.2 ; hôte mono-GPU)

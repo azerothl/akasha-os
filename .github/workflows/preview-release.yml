@@ -298,28 +298,45 @@ jobs:
             fi
           done
 
-          WIN=$(ls release-assets/*windows*.zip | head -n1)
-          LIN=$(ls release-assets/*linux*.tar.gz | head -n1)
-          WIN_SHA=$(sha256sum "$WIN" | awk '{print $1}')
-          LIN_SHA=$(sha256sum "$LIN" | awk '{print $1}')
+          # Prefer listing all four Preview artefacts (Win/Linux × CUDA/CPU).
+          assets_json="["
+          first=1
+          for f in release-assets/*windows-x64.zip release-assets/*windows-x64-cpu.zip \
+                   release-assets/*linux-x64.tar.gz release-assets/*linux-x64-cpu.tar.gz; do
+            [ -f "$f" ] || continue
+            sha=$(sha256sum "$f" | awk '{print $1}')
+            base=$(basename "$f")
+            os="windows"
+            echo "$base" | grep -q linux && os="linux"
+            variant="cuda"
+            echo "$base" | grep -q '\-cpu\.' && variant="cpu"
+            if [ "$first" -eq 1 ]; then first=0; else assets_json+=","; fi
+            assets_json+=$(printf '{"name":"%s","os":"%s","variant":"%s","sha256":"%s"}' "$base" "$os" "$variant" "$sha")
+          done
+          assets_json+="]"
+          # Fallback if naming differs: pick any win/linux pair.
+          if [ "$assets_json" = "[]" ]; then
+            WIN=$(ls release-assets/*windows*.zip 2>/dev/null | head -n1 || true)
+            LIN=$(ls release-assets/*linux*.tar.gz 2>/dev/null | head -n1 || true)
+            assets_json="["
+            first=1
+            for f in $WIN $LIN; do
+              [ -n "$f" ] && [ -f "$f" ] || continue
+              sha=$(sha256sum "$f" | awk '{print $1}')
+              base=$(basename "$f")
+              os="windows"; echo "$base" | grep -q linux && os="linux"
+              if [ "$first" -eq 1 ]; then first=0; else assets_json+=","; fi
+              assets_json+=$(printf '{"name":"%s","os":"%s","sha256":"%s"}' "$base" "$os" "$sha")
+            done
+            assets_json+="]"
+          fi
           cat > release-assets/latest.json <<EOF
           {
             "version": "${VERSION}",
             "tag": "v${VERSION}",
             "repo": "azerothl/akasha-os",
-            "assets": [
-              {
-                "name": "$(basename "$WIN")",
-                "os": "windows",
-                "sha256": "${WIN_SHA}"
-              },
-              {
-                "name": "$(basename "$LIN")",
-                "os": "linux",
-                "sha256": "${LIN_SHA}"
-              }
-            ],
-            "notes": "Akasha OS Preview ${VERSION} — NVIDIA Win/Linux. Models download on first run. See FIRST-RUN.md."
+            "assets": ${assets_json},
+            "notes": "Akasha OS Preview ${VERSION} — Win/Linux CUDA + CPU. Models download on first run. See FIRST-RUN.md."
           }
           EOF
 

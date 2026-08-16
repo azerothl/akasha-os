@@ -74,19 +74,33 @@ Expected banner: *Preview on Windows/Linux — this is not the bootable OS yet*.
 - **Sessions** panel (Chat): create 3 sessions, chat in each.
 - Restart Preview: histories must reappear.
 
-### 7. Memory (PC.7)
+### 7. Memory (PC.7 / P04)
 
-- **Memory** tab: remember a fact (“I prefer French”), **Recall**.
-- Back to Chat: the next message should be able to use that context
-  (`mem.context` injection before infer).
+- **Memory** tab: remember “I prefer French”, **List**, then remember “I prefer English”.
+- Expect auto-link (`supersedes` / `updates`); **Recall** should prefer English.
+- Edit / delete / supersede from the list; toggle “Show superseded”.
+- Back to Chat: the next message should use that context (`mem.context`).
+
+### 7b. Secrets vault (P04.3)
+
+- **Settings → Secrets**: set a Brave (or GitHub) key → **Save**.
+- Confirm status mentions encrypted vault; `var/secrets/keys.yaml` should be
+  absent or renamed `.migrated` (live store is `vault.enc`).
+- **List configured** shows names only (never values).
+
+### 7c. Module cap review (P04.4)
+
+- When an agent (or UI) installs a module without `approved_caps`, a
+  **confirmation** lists required caps.
+- **Accept** → caps granted; **Refuse** → module quarantined / empty caps.
 
 ### 8. Web search (PC.8 / PC.13)
 
 - **Allow network** (sidebar) **off** → **Search** must fail (`offline_strict`).
 - Enable network → search (e.g. “Akasha OS seL4”) → title/URL results.
 - Settings → search engine: try `auto`, then force `duckduckgo` or `bing`.
-- (Optional) Brave key in `var/secrets/keys.yaml`:
-  `brave_search_api_key: "…"` — otherwise DuckDuckGo / Bing HTML.
+- (Optional) Brave key via **Settings → Secrets** (encrypted vault), not a plaintext file.
+  Legacy `var/secrets/keys.yaml` is migrated on boot.
 
 ### 8b. Browse a page (PC.13)
 

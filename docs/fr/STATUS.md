@@ -7,9 +7,21 @@ Résumé des phases livrées. Détail : [plan-developpement-phases.md](plan-deve
 
 **En-tête :** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview :** 0.3.0 (16/08/2026) — appli hôte Windows/Linux ; NVIDIA optionnel
-(chemin CPU). Budget contexte / anti-boucle / polish UI inclus. Pas un OS
-bootable. Gate cohorte encore ouverte.
+**Preview :** 0.4.0 (16/08/2026) — appli hôte Windows/Linux ; NVIDIA optionnel
+(chemin CPU). Graphe mémoire typé, vault secrets, revue de caps modules.
+Pas un OS bootable. Gate cohorte encore ouverte.
+
+## P04 — Preview 0.4.0 (E6 / E7 / E10-lite)
+
+| # | Évolution | État |
+|---|-----------|------|
+| P04.1 | E6 graphe mémoire typé | fait |
+| P04.2 | E6 bootstrap + UI Mémoire | fait |
+| P04.3 | E7-lite vault secrets | fait |
+| P04.4 | E10-lite revue caps + exemple MCP | fait |
+| P04.5 | Docs / packaging / sibling-bridge | fait |
+
+Détail : [phases/phase-preview-04.md](phases/phase-preview-04.md).
 
 ## P03 — Preview 0.3.0 (E1–E5)
 

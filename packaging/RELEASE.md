@@ -7,8 +7,8 @@
 Tag then push:
 
 ```bash
-git tag v0.3.0
-git push origin v0.3.0
+git tag v0.4.0
+git push origin v0.4.0
 ```
 
 The workflow [`.github/workflows/preview-release.yml`](../.github/workflows/preview-release.yml)
@@ -18,7 +18,7 @@ builds Win + Linux **CUDA** and **CPU** (no GGUF) and publishes:
 - `AgentOS-Preview-<ver>-windows-x64-cpu.zip`
 - `AgentOS-Preview-<ver>-linux-x64.tar.gz`
 - `AgentOS-Preview-<ver>-linux-x64-cpu.tar.gz`
-- `latest.json` (sha256 + metadata)
+- `latest.json` (sha256 + metadata for **all four** artefacts)
 
 Manual trigger: Actions → **preview-release** → Run workflow.
 
@@ -36,14 +36,13 @@ GGUFs are downloaded on **first run** via `share/models/manifest.json`.
 ## Release notes (draft)
 
 ```
-Akasha OS Preview 0.3.0 — prove the OS, widen the cohort
+Akasha OS Preview 0.4.0 — memory graph, secrets vault, cap review
 
-- Live TTFT / tok/s / VRAM in sidebar + Models
-- Caps tab (list + revoke)
-- CPU-only boot + cpu pack (NVIDIA optional)
-- Agent scheduler (schedule.create/list/cancel)
-- Dual-surface tasks module + Tasks tab
-- Win/Linux artefacts: CUDA and CPU
+- Typed memory (similar / updates / supersedes) + Memory tab inspect/edit
+- Encrypted secrets vault (Settings); MCP ${secret:name}
+- Module install requires cap review (refuse → quarantine)
+- latest.json lists CUDA and CPU artefacts
+- Sibling bridge contract doc
 
 Not a bootable OS. See FIRST-RUN.md / INSTALL.md / TESTER.md
 ```
