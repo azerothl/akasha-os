@@ -2828,6 +2828,9 @@ impl eframe::App for UiApp {
                     .selectable_label(self.tab == tab, label)
                     .clicked()
                 {
+                    if self.tab == Tab::Feedback && tab != Tab::Feedback {
+                        self.fb_result.clear();
+                    }
                     self.tab = tab;
                     if tab == Tab::Audit {
                         let _ = self.cmd_tx.send(Cmd::Audit { last: 40 });
