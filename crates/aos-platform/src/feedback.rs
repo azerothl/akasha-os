@@ -506,6 +506,10 @@ mod tests {
             "source doit être dans la méta: {body}"
         );
         assert!(
+            body.contains("\"findings\""),
+            "findings doit être dans la méta: {body}"
+        );
+        assert!(
             body.contains("\"healthy\": false"),
             "healthy doit être dans la méta: {body}"
         );
