@@ -373,10 +373,10 @@ fn apply_theme(ctx: &egui::Context, theme: &str) {
             let mut v = egui::Visuals::dark();
             v.override_text_color = Some(egui::Color32::WHITE);
             v.widgets.noninteractive.fg_stroke =
-                egui::Stroke::new(1.5, egui::Color32::WHITE);
-            v.widgets.inactive.fg_stroke = egui::Stroke::new(1.5, egui::Color32::WHITE);
-            v.widgets.hovered.fg_stroke = egui::Stroke::new(2.0, egui::Color32::YELLOW);
-            v.widgets.active.fg_stroke = egui::Stroke::new(2.0, egui::Color32::YELLOW);
+                egui::Stroke::new(1.5_f32, egui::Color32::WHITE);
+            v.widgets.inactive.fg_stroke = egui::Stroke::new(1.5_f32, egui::Color32::WHITE);
+            v.widgets.hovered.fg_stroke = egui::Stroke::new(2.0_f32, egui::Color32::YELLOW);
+            v.widgets.active.fg_stroke = egui::Stroke::new(2.0_f32, egui::Color32::YELLOW);
             v.selection.bg_fill = egui::Color32::from_rgb(0, 90, 200);
             v.extreme_bg_color = egui::Color32::BLACK;
             v.panel_fill = egui::Color32::BLACK;
