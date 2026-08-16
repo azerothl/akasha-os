@@ -1738,6 +1738,11 @@ async fn run_troubleshoot(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>) {
         }
         Err(e) => {
             let _ = evt_tx.send(Evt::Error(format!("Dépannage : échec feedback.submit : {e}")));
+            // Même en cas d'échec de la sauvegarde locale, on pré-remplit le formulaire
+            // Retour pour que l'utilisateur puisse quand même remonter l'issue avec le rapport.
+            let mut draft = req;
+            draft.publish_github = !healthy;
+            let _ = evt_tx.send(Evt::FeedbackDraft(draft));
         }
     }
 }
@@ -1934,6 +1939,8 @@ struct UiApp {
     fb_result: String,
     fb_github: bool,
     fb_dir: Option<PathBuf>,
+    /// Méta du rapport de dépannage (préservée pour la remontée d'issue).
+    fb_diag_meta: Option<serde_json::Value>,
     chat_md_cache: CommonMarkCache,
     update_offer: Option<UpdateOffer>,
     update_status: String,
@@ -2054,6 +2061,7 @@ impl UiApp {
             fb_result: String::new(),
             fb_github: true,
             fb_dir: None,
+            fb_diag_meta: None,
             chat_md_cache: CommonMarkCache::default(),
             update_offer: load_update_offer(),
             update_status: String::new(),
@@ -2504,6 +2512,7 @@ impl eframe::App for UiApp {
                     self.fb_scenario = req.scenario.unwrap_or_default();
                     self.fb_github = req.publish_github
                         && !self.fb_category.eq_ignore_ascii_case("security");
+                    self.fb_diag_meta = Some(req.meta);
                     self.tab = Tab::Feedback;
                 }
                 Evt::Sessions(list) => self.sessions = list,
@@ -4039,6 +4048,7 @@ impl UiApp {
         self.fb_category = "ux".into();
         self.fb_severity = "medium".into();
         self.fb_github = true;
+        self.fb_diag_meta = None;
     }
 
     fn ui_feedback(&mut self, ui: &mut egui::Ui) {
@@ -4088,7 +4098,7 @@ impl UiApp {
             }
         }
         if ui.button("Envoyer le retour").clicked() && !self.fb_title.is_empty() {
-            let meta = serde_json::json!({
+            let mut meta = serde_json::json!({
                 "preview_version": self.version,
                 "os": std::env::consts::OS,
                 "arch": std::env::consts::ARCH,
@@ -4101,6 +4111,15 @@ impl UiApp {
                 },
                 "onboarding": self.onboarding,
             });
+            // Fusionner les champs du rapport de dépannage (source, findings, healthy)
+            // pour qu'ils figurent dans l'issue GitHub remontée.
+            if let Some(diag) = &self.fb_diag_meta {
+                if let (Some(m), Some(d)) = (meta.as_object_mut(), diag.as_object()) {
+                    for (k, v) in d {
+                        m.entry(k).or_insert_with(|| v.clone());
+                    }
+                }
+            }
             let _ = self.cmd_tx.send(Cmd::Feedback(FeedbackSubmitRequest {
                 title: self.fb_title.clone(),
                 category: self.fb_category.clone(),
