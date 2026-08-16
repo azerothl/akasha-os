@@ -22,10 +22,12 @@ use aos_proto::{
     ChatSessionCreateRequest, ChatSessionGetResponse, ChatSessionIdRequest, ChatSessionMeta,
     ChatSessionRenameRequest, ChatSessionSetModelRequest, ConfirmResponseRequest, DocumentRef,
     FeedbackSubmitRequest, FeedbackSubmitResponse, FilesGenerateRequest, FilesGenerateResponse,
-    InferParams, InferRequest, McpServerInfo, MemContextRequest, MemContextResponse, MemHit,
-    MemUserRecallRequest, MemUserRememberRequest, LoadRequest, ModelInfo, ModelState,
+    InferParams, InferRequest, McpServerInfo, MemContextRequest, MemContextResponse, MemEpisodicDeleteRequest,
+    MemHit, MemListRequest, MemRememberResponse, MemUpdateRequest, MemUserRecallRequest,
+    MemUserRememberRequest, MemWorkingRequest, LoadRequest, ModelInfo, ModelState,
     ModuleInvokeRequest, ModuleInvokeResponse, NetFetchRequest, NetFetchResponse, NetModeRequest,
-    PendingConfirmation, SetRoutingRequest, SkillInfo, SystemMetrics, TokenEvent, WebBrowseRequest,
+    PendingConfirmation, SecretListRequest, SecretListResponse, SecretSetRequest, SetRoutingRequest,
+    SkillInfo, SystemMetrics, TokenEvent, WebBrowseRequest,
     WebBrowseResponse, WebSearchHit, WebSearchRequest, WebSearchResponse, CHAT_DELEGATION_PROMPT,
     SYSTEM_ASSISTANT_PROMPT,
 };
@@ -161,6 +163,13 @@ enum Cmd {
     SessionExport { id: String },
     MemRecall { query: String },
     MemRemember { text: String, pinned: bool },
+    MemList { include_superseded: bool },
+    MemDelete { id: u64 },
+    MemWipeUser,
+    MemSupersede { id: u64, text: String },
+    MemEdit { id: u64, text: String },
+    SecretSet { name: String, value: String },
+    SecretList,
     NetSetMode { online: bool },
     SetRouting { mode: String },
     WebSearch { query: String, engine: String },
@@ -309,6 +318,10 @@ enum Evt {
         messages: Vec<ChatLine>,
     },
     MemHits(Vec<MemHit>),
+    SecretList {
+        names: Vec<String>,
+        encrypted: bool,
+    },
     WebResults(Vec<WebSearchHit>),
     BrowsePreview(String),
     NetMode(bool),
@@ -947,19 +960,237 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
         }
         Cmd::MemRemember { text, pinned } => {
             match bus
-                .call::<MemUserRememberRequest, String>(
+                .call::<MemUserRememberRequest, MemRememberResponse>(
                     "mem.user.remember",
                     &MemUserRememberRequest {
                         text,
                         metadata: serde_json::json!({"source": "ui"}),
                         pinned,
+                        ..Default::default()
                     },
                     vec![],
                 )
                 .await
             {
-                Ok(id) => {
-                    let _ = evt_tx.send(Evt::Status(format!("mémoire enregistrée ({id})")));
+                Ok(r) => {
+                    let extra = if r.auto_relations.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" (+{} relation(s))", r.auto_relations.len())
+                    };
+                    let _ = evt_tx.send(Evt::Status(format!(
+                        "mémoire enregistrée ({}{})",
+                        r.id, extra
+                    )));
+                    // Refresh list
+                    if let Ok(hits) = bus
+                        .call::<MemListRequest, Vec<MemHit>>(
+                            "mem.list",
+                            &MemListRequest {
+                                namespace: "user:default".into(),
+                                include_superseded: true,
+                            },
+                            vec![],
+                        )
+                        .await
+                    {
+                        let _ = evt_tx.send(Evt::MemHits(hits));
+                    }
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::MemList { include_superseded } => {
+            match bus
+                .call::<MemListRequest, Vec<MemHit>>(
+                    "mem.list",
+                    &MemListRequest {
+                        namespace: "user:default".into(),
+                        include_superseded,
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(hits) => {
+                    let _ = evt_tx.send(Evt::MemHits(hits));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::MemDelete { id } => {
+            match bus
+                .call::<MemEpisodicDeleteRequest, serde_json::Value>(
+                    "mem.episodic_delete",
+                    &MemEpisodicDeleteRequest {
+                        id: Some(id),
+                        namespace: None,
+                        meta_key: None,
+                        meta_value: None,
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(_) => {
+                    let _ = evt_tx.send(Evt::Status(format!("souvenir {id} supprimé")));
+                    if let Ok(hits) = bus
+                        .call::<MemListRequest, Vec<MemHit>>(
+                            "mem.list",
+                            &MemListRequest {
+                                namespace: "user:default".into(),
+                                include_superseded: true,
+                            },
+                            vec![],
+                        )
+                        .await
+                    {
+                        let _ = evt_tx.send(Evt::MemHits(hits));
+                    }
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::MemWipeUser => {
+            match bus
+                .call::<MemWorkingRequest, usize>(
+                    "mem.wipe",
+                    &MemWorkingRequest {
+                        agent_id: "user:default".into(),
+                        messages: vec![],
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(n) => {
+                    let _ = evt_tx.send(Evt::Status(format!("mémoire utilisateur effacée ({n})")));
+                    let _ = evt_tx.send(Evt::MemHits(Vec::new()));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::MemSupersede { id, text } => {
+            match bus
+                .call::<MemUpdateRequest, MemRememberResponse>(
+                    "mem.update",
+                    &MemUpdateRequest {
+                        id,
+                        text,
+                        metadata: None,
+                        pinned: Some(true),
+                        supersede: true,
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(r) => {
+                    let _ = evt_tx.send(Evt::Status(format!(
+                        "remplacé → id {} (supersedes {id})",
+                        r.id
+                    )));
+                    if let Ok(hits) = bus
+                        .call::<MemListRequest, Vec<MemHit>>(
+                            "mem.list",
+                            &MemListRequest {
+                                namespace: "user:default".into(),
+                                include_superseded: true,
+                            },
+                            vec![],
+                        )
+                        .await
+                    {
+                        let _ = evt_tx.send(Evt::MemHits(hits));
+                    }
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::MemEdit { id, text } => {
+            match bus
+                .call::<MemUpdateRequest, MemRememberResponse>(
+                    "mem.update",
+                    &MemUpdateRequest {
+                        id,
+                        text,
+                        metadata: None,
+                        pinned: None,
+                        supersede: false,
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(r) => {
+                    let _ = evt_tx.send(Evt::Status(format!("souvenir {} mis à jour", r.id)));
+                    if let Ok(hits) = bus
+                        .call::<MemListRequest, Vec<MemHit>>(
+                            "mem.list",
+                            &MemListRequest {
+                                namespace: "user:default".into(),
+                                include_superseded: true,
+                            },
+                            vec![],
+                        )
+                        .await
+                    {
+                        let _ = evt_tx.send(Evt::MemHits(hits));
+                    }
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::SecretSet { name, value } => {
+            match bus
+                .call::<SecretSetRequest, bool>(
+                    "secrets.set",
+                    &SecretSetRequest { name: name.clone(), value },
+                    vec![],
+                )
+                .await
+            {
+                Ok(_) => {
+                    let _ = evt_tx.send(Evt::Status(format!("secret `{name}` enregistré (chiffré)")));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::SecretList => {
+            match bus
+                .call::<SecretListRequest, SecretListResponse>(
+                    "secrets.list",
+                    &SecretListRequest {},
+                    vec![],
+                )
+                .await
+            {
+                Ok(r) => {
+                    let names = if r.names.is_empty() {
+                        "(aucun)".into()
+                    } else {
+                        r.names.join(", ")
+                    };
+                    let enc = if r.encrypted { "vault.enc" } else { "clair" };
+                    let _ = evt_tx.send(Evt::SecretList {
+                        names: r.names,
+                        encrypted: r.encrypted,
+                    });
+                    let _ = evt_tx.send(Evt::Status(format!("secrets [{enc}]: {names}")));
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));
@@ -2216,6 +2447,14 @@ struct UiApp {
     mem_query: String,
     mem_note: String,
     mem_hits: Vec<MemHit>,
+    mem_show_superseded: bool,
+    mem_edit_id: Option<u64>,
+    mem_edit_text: String,
+    secret_brave: String,
+    secret_github: String,
+    secret_openai: String,
+    secret_names: Vec<String>,
+    secret_vault_encrypted: bool,
     metrics: Option<SystemMetrics>,
     agents: Vec<AgentInfo>,
     /// États précédents pour détecter Done/Failed/Killed (notifications).
@@ -2344,6 +2583,14 @@ impl UiApp {
             mem_query: String::new(),
             mem_note: String::new(),
             mem_hits: Vec::new(),
+            mem_show_superseded: true,
+            mem_edit_id: None,
+            mem_edit_text: String::new(),
+            secret_brave: String::new(),
+            secret_github: String::new(),
+            secret_openai: String::new(),
+            secret_names: Vec::new(),
+            secret_vault_encrypted: false,
             metrics: None,
             agents: Vec::new(),
             agent_prev_states: HashMap::new(),
@@ -2886,6 +3133,10 @@ impl eframe::App for UiApp {
                     self.chat_pending = false;
                 }
                 Evt::MemHits(h) => self.mem_hits = h,
+                Evt::SecretList { names, encrypted } => {
+                    self.secret_names = names;
+                    self.secret_vault_encrypted = encrypted;
+                }
                 Evt::WebResults(r) => self.web_results = r,
                 Evt::BrowsePreview(t) => self.browse_preview = t,
                 Evt::NetMode(online) => {
@@ -3666,48 +3917,123 @@ impl UiApp {
             ui.add(
                 egui::TextEdit::singleline(&mut self.mem_note)
                     .desired_width(400.0)
-                    .hint_text("fait à mémoriser"),
+                    .hint_text(t.memory_hint_remember),
             );
-            if ui.button("Mémoriser").clicked() && !self.mem_note.is_empty() {
+            if ui.button(t.memory_btn_remember).clicked() && !self.mem_note.is_empty() {
                 let _ = self.cmd_tx.send(Cmd::MemRemember {
                     text: self.mem_note.clone(),
                     pinned: true,
                 });
                 self.mem_note.clear();
             }
+            if ui.button(t.memory_btn_list).clicked() {
+                let _ = self.cmd_tx.send(Cmd::MemList {
+                    include_superseded: self.mem_show_superseded,
+                });
+            }
+            if ui.button(t.memory_btn_wipe).clicked() {
+                let _ = self.cmd_tx.send(Cmd::MemWipeUser);
+            }
         });
         ui.horizontal(|ui| {
             ui.add(
                 egui::TextEdit::singleline(&mut self.mem_query)
                     .desired_width(400.0)
-                    .hint_text("requête recall"),
+                    .hint_text(t.memory_hint_recall),
             );
-            if ui.button("Recall").clicked() && !self.mem_query.is_empty() {
+            if ui.button(t.memory_btn_recall).clicked() && !self.mem_query.is_empty() {
                 let _ = self.cmd_tx.send(Cmd::MemRecall {
                     query: self.mem_query.clone(),
                 });
             }
+            ui.checkbox(&mut self.mem_show_superseded, t.memory_show_superseded);
         });
+        if let Some(edit_id) = self.mem_edit_id {
+            ui.horizontal(|ui| {
+                ui.label(format!("{} #{edit_id}", t.memory_editing));
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.mem_edit_text).desired_width(360.0),
+                );
+                if ui.button(t.memory_btn_save).clicked() && !self.mem_edit_text.is_empty() {
+                    let _ = self.cmd_tx.send(Cmd::MemEdit {
+                        id: edit_id,
+                        text: self.mem_edit_text.clone(),
+                    });
+                    self.mem_edit_id = None;
+                    self.mem_edit_text.clear();
+                }
+                if ui.button(t.memory_btn_supersede).clicked() && !self.mem_edit_text.is_empty() {
+                    let _ = self.cmd_tx.send(Cmd::MemSupersede {
+                        id: edit_id,
+                        text: self.mem_edit_text.clone(),
+                    });
+                    self.mem_edit_id = None;
+                    self.mem_edit_text.clear();
+                }
+                if ui.button(t.memory_btn_cancel).clicked() {
+                    self.mem_edit_id = None;
+                    self.mem_edit_text.clear();
+                }
+            });
+        }
         ui.separator();
+        let mut edit_req: Option<(u64, String)> = None;
+        let mut delete_id: Option<u64> = None;
+        let mut supersede_req: Option<(u64, String)> = None;
         egui::ScrollArea::vertical().show(ui, |ui| {
             if self.mem_hits.is_empty() {
-                ui.weak("Aucun hit — mémorisez un fait puis recall.");
+                ui.weak(t.memory_empty);
             }
             for h in &self.mem_hits {
-                let pinned = h
-                    .metadata
-                    .get("pinned")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(false);
-                ui.label(format!(
-                    "[{}] {} (score {:.2})",
-                    if pinned { "*" } else { "·" },
-                    h.text,
-                    h.score
-                ));
+                if h.superseded && !self.mem_show_superseded {
+                    continue;
+                }
+                let star = if h.pinned { "★" } else { "·" };
+                let status = if h.superseded {
+                    " [superseded]"
+                } else {
+                    ""
+                };
+                let rels: String = h
+                    .relations
+                    .iter()
+                    .map(|r| format!("{}→{}", r.rel.as_str(), r.to))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                ui.horizontal(|ui| {
+                    ui.label(format!(
+                        "[{star}] #{} {}{status} (score {:.2})",
+                        h.id, h.text, h.score
+                    ));
+                });
+                if !rels.is_empty() {
+                    ui.weak(format!("  {}", rels));
+                }
+                ui.horizontal(|ui| {
+                    if ui.small_button(t.memory_btn_edit).clicked() {
+                        edit_req = Some((h.id, h.text.clone()));
+                    }
+                    if ui.small_button(t.memory_btn_replace).clicked() {
+                        supersede_req = Some((h.id, h.text.clone()));
+                    }
+                    if ui.small_button(t.memory_btn_delete).clicked() {
+                        delete_id = Some(h.id);
+                    }
+                });
                 ui.separator();
             }
         });
+        if let Some((id, text)) = edit_req {
+            self.mem_edit_id = Some(id);
+            self.mem_edit_text = text;
+        }
+        if let Some((id, text)) = supersede_req {
+            self.mem_edit_id = Some(id);
+            self.mem_edit_text = text;
+        }
+        if let Some(id) = delete_id {
+            let _ = self.cmd_tx.send(Cmd::MemDelete { id });
+        }
     }
 
     fn ui_tasks(&mut self, ui: &mut egui::Ui) {
@@ -4490,6 +4816,78 @@ impl UiApp {
                 }
                 ui.end_row();
             });
+        ui.heading(t.settings_secrets);
+        ui.weak(t.settings_secrets_blurb);
+        egui::Grid::new("settings_secrets")
+            .num_columns(2)
+            .spacing([12.0, 8.0])
+            .min_col_width(label_w)
+            .show(ui, |ui| {
+                ui.label("Brave Search");
+                ui.horizontal(|ui| {
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.secret_brave)
+                            .password(true)
+                            .desired_width(220.0)
+                            .hint_text("BSA…"),
+                    );
+                    if ui.button(t.settings_secret_save).clicked() {
+                        let _ = self.cmd_tx.send(Cmd::SecretSet {
+                            name: "brave_search_api_key".into(),
+                            value: self.secret_brave.clone(),
+                        });
+                        self.secret_brave.clear();
+                    }
+                });
+                ui.end_row();
+
+                ui.label("GitHub token");
+                ui.horizontal(|ui| {
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.secret_github)
+                            .password(true)
+                            .desired_width(220.0)
+                            .hint_text("ghp_…"),
+                    );
+                    if ui.button(t.settings_secret_save).clicked() {
+                        let _ = self.cmd_tx.send(Cmd::SecretSet {
+                            name: "github_token".into(),
+                            value: self.secret_github.clone(),
+                        });
+                        self.secret_github.clear();
+                    }
+                });
+                ui.end_row();
+
+                ui.label(t.settings_secret_openai);
+                ui.horizontal(|ui| {
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.secret_openai)
+                            .password(true)
+                            .desired_width(220.0)
+                            .hint_text("sk-…"),
+                    );
+                    if ui.button(t.settings_secret_save).clicked() {
+                        let _ = self.cmd_tx.send(Cmd::SecretSet {
+                            name: "openai_api_key".into(),
+                            value: self.secret_openai.clone(),
+                        });
+                        self.secret_openai.clear();
+                    }
+                });
+                ui.end_row();
+            });
+        ui.horizontal(|ui| {
+            if ui.button(t.settings_secret_list).clicked() {
+                let _ = self.cmd_tx.send(Cmd::SecretList);
+            }
+            if self.secret_vault_encrypted {
+                ui.weak(t.settings_secret_encrypted);
+            }
+            if !self.secret_names.is_empty() {
+                ui.weak(format!("{}: {}", t.settings_secret_configured, self.secret_names.join(", ")));
+            }
+        });
         ui.weak(t.settings_brave_hint);
 
         ui.add_space(12.0);
