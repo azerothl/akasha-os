@@ -463,7 +463,7 @@ mod tests {
     }
 
     #[test]
-    fn issue_body_inclut_le_rapport_de_depannage() {
+    fn issue_body_includes_troubleshooting_report() {
         // Vérifie que le corps du rapport de dépannage (body + meta findings)
         // est bien présent dans l'issue générée — scénario remontée d'erreur.
         let findings = vec!["nvidia-smi introuvable", "agent X en Failed"];
