@@ -2483,7 +2483,12 @@ impl eframe::App for UiApp {
                     }
                     self.fb_result = msg;
                     self.status = format!("feedback {}", r.id);
-                    let export = native_path(&r.export_dir);
+                    let export_raw = native_path(&r.export_dir);
+                    let export = if export_raw.is_absolute() {
+                        export_raw
+                    } else {
+                        aos_home().join(&export_raw)
+                    };
                     self.fb_dir = export
                         .parent()
                         .filter(|p| !p.as_os_str().is_empty())
