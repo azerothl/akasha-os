@@ -18,7 +18,12 @@ if [ "$SKIP_BUILD" != "1" ]; then
   cargo build --release -p aos-auditd
   echo "== cargo build --release =="
   cargo build --release -p aos-session -p aos-ipc -p aos-model -p aos-agent \
-    -p aos-platform -p aos-capkd -p aos-ui-egui
+    -p aos-capkd -p aos-ui-egui
+  # Build the preview's platform daemon without optional embeddings so Linux
+  # release assets keep a single CUDA/llama-linked binary (aos-modeld) and stay
+  # under GitHub's 2 GiB artifact limit.
+  echo "== cargo build --release (aos-platformd sans embeddings) =="
+  cargo build --release -p aos-platform --bin aos-platformd --no-default-features
   echo "== notes module =="
   if command -v pwsh >/dev/null 2>&1; then
     pwsh -NoProfile -File "${ROOT}/modules/build-notes.ps1"
