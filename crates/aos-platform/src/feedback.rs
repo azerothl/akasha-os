@@ -461,4 +461,59 @@ mod tests {
         let err = publish_to_github(&mut net, None, &req, "fb-1").unwrap_err();
         assert_eq!(err, "skipped_security");
     }
+
+    #[test]
+    fn issue_body_inclut_le_rapport_de_depannage() {
+        // Vérifie que le corps du rapport de dépannage (body + meta findings)
+        // est bien présent dans l'issue générée — scénario remontée d'erreur.
+        let findings = vec!["nvidia-smi introuvable", "agent X en Failed"];
+        let diag_body = format!(
+            "## Résumé dépannage automatique\n\n{} anomalie(s) :\n- {}\n\n## NVIDIA\nintrouvable\n",
+            findings.len(),
+            findings.join("\n- ")
+        );
+        let req = FeedbackSubmitRequest {
+            title: "[Preview][bug] Dépannage auto — 2 anomalie(s)".into(),
+            category: "bug".into(),
+            severity: "medium".into(),
+            body: diag_body.clone(),
+            scenario: Some("troubleshooting".into()),
+            meta: serde_json::json!({
+                "preview_version": "0.2.0",
+                "os": "windows",
+                "arch": "x86_64",
+                "source": "troubleshooting_button",
+                "findings": findings,
+                "healthy": false,
+                "scenarios": { "chat_offline": true },
+                "onboarding": { "completed": true },
+            }),
+            publish_github: true,
+        };
+        let body = issue_body(&req, "fb-diag-test");
+        // Le rapport de dépannage doit figurer dans la section Description.
+        assert!(
+            body.contains("nvidia-smi introuvable"),
+            "le rapport doit contenir les anomalies: {body}"
+        );
+        assert!(
+            body.contains("## Résumé dépannage automatique"),
+            "la section résumé doit être présente: {body}"
+        );
+        // Les champs de méta dépannage doivent figurer dans la section Méta.
+        assert!(
+            body.contains("troubleshooting_button"),
+            "source doit être dans la méta: {body}"
+        );
+        assert!(
+            body.contains("\"healthy\": false"),
+            "healthy doit être dans la méta: {body}"
+        );
+        // L'URL de formulaire doit aussi contenir le résumé.
+        let url = new_issue_form_url(&req, "fb-diag-test");
+        assert!(
+            url.contains("nvidia-smi") || url.contains("anomalie"),
+            "le résumé doit être dans l'URL: {url}"
+        );
+    }
 }
