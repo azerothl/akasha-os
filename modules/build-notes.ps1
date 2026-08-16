@@ -5,18 +5,29 @@
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 
+# Join-Path with "a\b" keeps backslashes on Linux pwsh; cargo then looks for a
+# literal `modules\notes\Cargo.toml`. Combine segments so CI (ubuntu + pwsh) works.
+function Join-OsPath {
+    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Parts)
+    $acc = $Parts[0]
+    for ($i = 1; $i -lt $Parts.Length; $i++) {
+        $acc = [IO.Path]::Combine($acc, $Parts[$i])
+    }
+    $acc
+}
+
 Write-Host "== build wasm32 =="
-cargo build --manifest-path "$root\modules\notes\Cargo.toml" --target wasm32-unknown-unknown --release
+cargo build --manifest-path (Join-OsPath $root modules notes Cargo.toml) --target wasm32-unknown-unknown --release
 if ($LASTEXITCODE -ne 0) { throw "échec build wasm" }
 
 function Resolve-WasmArtifact {
     param([string]$FileName)
     $candidates = @()
     if ($env:CARGO_TARGET_DIR) {
-        $candidates += (Join-Path $env:CARGO_TARGET_DIR "wasm32-unknown-unknown\release\$FileName")
+        $candidates += (Join-OsPath $env:CARGO_TARGET_DIR wasm32-unknown-unknown release $FileName)
     }
-    $candidates += (Join-Path $root "target\wasm32-unknown-unknown\release\$FileName")
-    $candidates += (Join-Path $root "modules\notes\target\wasm32-unknown-unknown\release\$FileName")
+    $candidates += (Join-OsPath $root target wasm32-unknown-unknown release $FileName)
+    $candidates += (Join-OsPath $root modules notes target wasm32-unknown-unknown release $FileName)
     foreach ($c in $candidates) {
         if (Test-Path $c) { return $c }
     }
@@ -28,12 +39,12 @@ function Resolve-WasmArtifact {
     throw "WASM manquant: $FileName"
 }
 
-$pkg = "$root\modules\notes.aospkg"
-New-Item -ItemType Directory -Path "$pkg\schemas" -Force | Out-Null
-New-Item -ItemType Directory -Path "$pkg\ui" -Force | Out-Null
+$pkg = Join-OsPath $root modules notes.aospkg
+New-Item -ItemType Directory -Path (Join-OsPath $pkg schemas) -Force | Out-Null
+New-Item -ItemType Directory -Path (Join-OsPath $pkg ui) -Force | Out-Null
 
 $wasmSrc = Resolve-WasmArtifact "module_notes.wasm"
-$wasmDst = "$pkg\module.wasm"
+$wasmDst = Join-OsPath $pkg module.wasm
 Copy-Item $wasmSrc $wasmDst -Force
 Write-Host "  wasm: $wasmSrc -> $wasmDst"
 
@@ -124,7 +135,7 @@ ui:
   mode: declarative_ui
 min_os_api: 1
 "@
-[System.IO.File]::WriteAllText("$pkg\manifest.yaml", $manifest)
+[System.IO.File]::WriteAllText((Join-OsPath $pkg manifest.yaml), $manifest)
 
 $uiJson = @'
 {
@@ -134,6 +145,6 @@ $uiJson = @'
   "commands": ["notes.list", "notes.read", "notes.create", "notes.update", "notes.search", "notes.links", "notes.related"]
 }
 '@
-[System.IO.File]::WriteAllText("$pkg\ui\index.html", $uiJson)
+[System.IO.File]::WriteAllText((Join-OsPath $pkg ui index.html), $uiJson)
 
 Write-Host "== package ready: $pkg (hash $hash) =="

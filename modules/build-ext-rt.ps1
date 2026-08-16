@@ -2,18 +2,27 @@
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 
+function Join-OsPath {
+    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Parts)
+    $acc = $Parts[0]
+    for ($i = 1; $i -lt $Parts.Length; $i++) {
+        $acc = [IO.Path]::Combine($acc, $Parts[$i])
+    }
+    $acc
+}
+
 Write-Host "== build ext-rt wasm32 =="
-cargo build --manifest-path "$root\modules\ext-rt\Cargo.toml" --target wasm32-unknown-unknown --release
+cargo build --manifest-path (Join-OsPath $root modules ext-rt Cargo.toml) --target wasm32-unknown-unknown --release
 if ($LASTEXITCODE -ne 0) { throw "échec build wasm ext-rt" }
 
 function Resolve-WasmArtifact {
     param([string]$FileName)
     $candidates = @()
     if ($env:CARGO_TARGET_DIR) {
-        $candidates += (Join-Path $env:CARGO_TARGET_DIR "wasm32-unknown-unknown\release\$FileName")
+        $candidates += (Join-OsPath $env:CARGO_TARGET_DIR wasm32-unknown-unknown release $FileName)
     }
-    $candidates += (Join-Path $root "target\wasm32-unknown-unknown\release\$FileName")
-    $candidates += (Join-Path $root "modules\ext-rt\target\wasm32-unknown-unknown\release\$FileName")
+    $candidates += (Join-OsPath $root target wasm32-unknown-unknown release $FileName)
+    $candidates += (Join-OsPath $root modules ext-rt target wasm32-unknown-unknown release $FileName)
     foreach ($c in $candidates) {
         if (Test-Path $c) { return $c }
     }
@@ -22,14 +31,14 @@ function Resolve-WasmArtifact {
     throw "WASM manquant: $FileName"
 }
 
-$pkg = "$root\modules\ext-rt.aospkg"
-$share = "$root\share\modules\ext-rt.aospkg"
-New-Item -ItemType Directory -Path "$pkg\schemas" -Force | Out-Null
-New-Item -ItemType Directory -Path "$pkg\ui" -Force | Out-Null
-New-Item -ItemType Directory -Path "$pkg\assets" -Force | Out-Null
+$pkg = Join-OsPath $root modules ext-rt.aospkg
+$share = Join-OsPath $root share modules ext-rt.aospkg
+New-Item -ItemType Directory -Path (Join-OsPath $pkg schemas) -Force | Out-Null
+New-Item -ItemType Directory -Path (Join-OsPath $pkg ui) -Force | Out-Null
+New-Item -ItemType Directory -Path (Join-OsPath $pkg assets) -Force | Out-Null
 
 $wasmSrc = Resolve-WasmArtifact "module_ext_rt.wasm"
-$wasmDst = "$pkg\module.wasm"
+$wasmDst = Join-OsPath $pkg module.wasm
 Copy-Item $wasmSrc $wasmDst -Force
 Write-Host "  wasm: $wasmSrc -> $wasmDst"
 
@@ -41,8 +50,8 @@ tools:
     steps:
       - return:
           ok: "true"
-'@ | Set-Content -Path "$pkg\handlers.yaml" -Encoding utf8NoBOM
-Copy-Item "$pkg\handlers.yaml" "$pkg\assets\handlers.yaml" -Force
+'@ | Set-Content -Path (Join-OsPath $pkg handlers.yaml) -Encoding utf8NoBOM
+Copy-Item (Join-OsPath $pkg handlers.yaml) (Join-OsPath $pkg assets handlers.yaml) -Force
 
 $manifest = @"
 name: ext-rt
@@ -62,12 +71,12 @@ ui:
   mode: declarative_ui
 min_os_api: 1
 "@
-Set-Content -Path "$pkg\manifest.yaml" -Value $manifest -Encoding utf8NoBOM
+Set-Content -Path (Join-OsPath $pkg manifest.yaml) -Value $manifest -Encoding utf8NoBOM
 
 @'
 {"type":"declarative_ui","title":"ext-rt","commands":["ext-rt.ping"]}
-'@ | Set-Content -Path "$pkg\ui\index.html" -Encoding utf8NoBOM
+'@ | Set-Content -Path (Join-OsPath $pkg ui index.html) -Encoding utf8NoBOM
 
 New-Item -ItemType Directory -Path $share -Force | Out-Null
-Copy-Item -Recurse -Force "$pkg\*" $share
+Copy-Item -Recurse -Force (Join-OsPath $pkg '*') $share
 Write-Host "== package prêt : $pkg / $share (hash $hash) =="
