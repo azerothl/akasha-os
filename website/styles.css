@@ -132,10 +132,13 @@ a:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
+  align-self: start;
   flex: 0 0 auto;
-  aspect-ratio: 1;
+  width: 2.25rem;
+  height: 2.25rem;
+  box-sizing: border-box;
   background: var(--flap);
-  padding: 0.28rem;
+  padding: 0.2rem;
   line-height: 0;
 }
 
