@@ -10,3 +10,7 @@ modules/**/target/
 modules/*.aospkg/
 
 /target-linux/
+branding/logo/node_modules/
+branding/logo/package.json
+branding/logo/package-lock.json
+branding/logo/export/

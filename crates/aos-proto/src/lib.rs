@@ -196,6 +196,13 @@ pub struct SystemMetrics {
     pub agents_active: u32,
 }
 
+impl SystemMetrics {
+    /// In-flight inferences across loaded models (`model.metrics`).
+    pub fn live_inferences(&self) -> u32 {
+        self.models.iter().map(|m| m.active_inferences).sum()
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Agent API (§11.2)
 // ---------------------------------------------------------------------------

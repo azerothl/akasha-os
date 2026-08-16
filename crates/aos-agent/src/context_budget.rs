@@ -278,16 +278,28 @@ pub struct LoopGuard {
     last_fail_key: String,
 }
 
+/// Structured tool / runtime failure — not a substring hunt in payload text.
+pub fn looks_like_tool_failure(tool_result: &str) -> bool {
+    let lower = tool_result.to_ascii_lowercase();
+    tool_result.contains("aucune action JSON")
+        || tool_result.contains("JSON incomplet")
+        || tool_result.contains("JSON tronqué")
+        || tool_result.contains("ERREUR outil:")
+        || tool_result.contains("ERREUR bus:")
+        || tool_result.contains("PermissionDenied")
+        || tool_result.contains("ActorDenied")
+        || tool_result.contains("capacité requise")
+        || tool_result.contains("capacité manquante")
+        || tool_result.contains("args invalides")
+        || lower.contains(" err:")
+        || lower.starts_with("err:")
+        || lower.starts_with("error:")
+}
+
 impl LoopGuard {
     pub fn observe(&mut self, action: &str, tool_result: &str) -> LoopVerdict {
         let is_noop = action == "noop";
-        let looks_stuck = is_noop
-            || tool_result.contains("aucune action JSON")
-            || tool_result.contains("JSON incomplet")
-            || tool_result.contains("JSON tronqué")
-            || (action.starts_with("notes.")
-                && (tool_result.to_ascii_lowercase().contains("err")
-                    || tool_result.contains("parse")));
+        let looks_stuck = is_noop || looks_like_tool_failure(tool_result);
 
         if is_noop {
             self.noop_streak = self.noop_streak.saturating_add(1);
@@ -423,6 +435,26 @@ mod tests {
         assert!(matches!(g.observe("noop", "aucune action JSON"), LoopVerdict::Ok));
         assert!(matches!(g.observe("noop", "aucune action JSON"), LoopVerdict::Warn(_)));
         assert!(matches!(g.observe("noop", "aucune action JSON"), LoopVerdict::Abort(_)));
+    }
+
+    #[test]
+    fn loop_guard_ignores_note_content_mentioning_error() {
+        let mut g = LoopGuard::default();
+        let body = r#"{"title":"Incident","content":"parse error in the logs"}"#;
+        assert!(matches!(g.observe("notes.read", body), LoopVerdict::Ok));
+        assert!(matches!(g.observe("notes.read", body), LoopVerdict::Ok));
+        assert!(matches!(g.observe("notes.update", body), LoopVerdict::Ok));
+        assert!(!looks_like_tool_failure(body));
+    }
+
+    #[test]
+    fn loop_guard_trips_on_structured_tool_error() {
+        let mut g = LoopGuard::default();
+        let err = "ERREUR outil: args invalides: missing field `title`";
+        assert!(looks_like_tool_failure(err));
+        assert!(matches!(g.observe("notes.create", err), LoopVerdict::Ok));
+        assert!(matches!(g.observe("notes.create", err), LoopVerdict::Warn(_)));
+        assert!(matches!(g.observe("notes.create", err), LoopVerdict::Abort(_)));
     }
 
     #[test]

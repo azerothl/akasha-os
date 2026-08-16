@@ -406,6 +406,10 @@ fn slash_insert_text(cmd_pattern: &str) -> String {
     format!("{base} ")
 }
 
+pub(crate) fn app_icon() -> egui::IconData {
+    eframe::icon_data::from_png_bytes(include_bytes!("../assets/icon.png")).expect("app icon")
+}
+
 fn main() -> eframe::Result<()> {
     if std::env::var_os("AOS_MODEL_SETUP").is_some() {
         return model_setup::run();
@@ -419,7 +423,8 @@ fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1280.0, 800.0])
-            .with_title(format!("Akasha OS Preview {version}")),
+            .with_title(format!("Akasha OS Preview {version}"))
+            .with_icon(app_icon()),
         ..Default::default()
     };
     eframe::run_native(
@@ -3237,7 +3242,7 @@ impl eframe::App for UiApp {
                     m.ram_total as f64 / (1 << 30) as f64
                 )));
                 ui.label(format!("CPU {:.0}%", m.cpu_percent));
-                ui.label(format!("{}: {}", t.metrics_live, m.agents_active));
+                ui.label(format!("{}: {}", t.metrics_live, m.live_inferences()));
                 for mm in &m.models {
                     ui.group(|ui| {
                         ui.label(format!("{} [{:?}]", mm.model_id, mm.state));

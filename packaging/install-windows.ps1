@@ -52,18 +52,21 @@ if (Test-Path $skillsShare) {
 }
 
 $exe = Join-Path $Prefix "bin\aos-session.exe"
+$ico = Join-Path $Prefix "share\icons\akasha-os.ico"
 $wsh = New-Object -ComObject WScript.Shell
 $desktop = [Environment]::GetFolderPath("Desktop")
 $lnk = $wsh.CreateShortcut((Join-Path $desktop "Akasha OS Preview.lnk"))
 $lnk.TargetPath = $exe
 $lnk.WorkingDirectory = $Prefix
 $lnk.Description = "Akasha OS Preview"
+if (Test-Path $ico) { $lnk.IconLocation = "$ico,0" }
 $lnk.Save()
 
 $start = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"
 $lnk2 = $wsh.CreateShortcut((Join-Path $start "Akasha OS Preview.lnk"))
 $lnk2.TargetPath = $exe
 $lnk2.WorkingDirectory = $Prefix
+if (Test-Path $ico) { $lnk2.IconLocation = "$ico,0" }
 $lnk2.Save()
 
 Write-Host "OK. Lancez « Akasha OS Preview » depuis le Bureau."

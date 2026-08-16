@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Akasha OS">
+  <title>Akasha OS</title>
+  <g fill="none" stroke="#f5e31a" stroke-width="5" stroke-linecap="butt">
+    <path d="M167 60.5 A78 78 0 1 0 167 195.5"/>
+    <path d="M157 77.8 A58 58 0 1 0 157 178.2"/>
+    <path d="M147 95.1 A38 38 0 1 0 147 160.9"/>
+    <line x1="128" y1="38" x2="128" y2="218"/>
+  </g>
+  <circle cx="128" cy="128" r="9" fill="#e23b16"/>
+</svg>

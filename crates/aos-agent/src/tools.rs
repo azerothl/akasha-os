@@ -403,6 +403,31 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
     v
 }
 
+/// Default Preview tool ids (UI agent create + scheduled fires).
+pub fn default_agent_tools() -> Vec<String> {
+    [
+        "notes.create",
+        "notes.list",
+        "notes.read",
+        "notes.search",
+        "notes.update",
+        "notes.links",
+        "notes.related",
+        "tasks.create",
+        "tasks.list",
+        "tasks.update",
+        "tasks.complete",
+        "fs.read",
+        "fs.list",
+        "fs.write",
+        "web.search",
+        "web.browse",
+    ]
+    .into_iter()
+    .map(str::to_string)
+    .collect()
+}
+
 /// Filtre le catalogue selon les ids sélectionnés (+ toujours les runtime de base).
 pub fn select_tools(selected: &[String], extra: &[ToolDesc]) -> Vec<ToolDesc> {
     let catalog = builtin_catalog();
@@ -560,5 +585,19 @@ mod tests {
         assert_eq!(kind, "module");
         assert!(mcp.is_none());
         assert_eq!(skill.as_deref(), Some("notes-writer"));
+    }
+
+    #[test]
+    fn default_agent_tools_grant_notes_tasks_fs_web() {
+        let ids = default_agent_tools();
+        let tools = select_tools(&ids, &[]);
+        let caps = caps_for_tools(&tools, &[]);
+        assert!(caps.iter().any(|c| c == "tool.invoke:notes"));
+        assert!(caps.iter().any(|c| c == "tool.invoke:tasks"));
+        assert!(caps.iter().any(|c| c == "fs.read:**"));
+        assert!(caps.iter().any(|c| c == "fs.write:**"));
+        assert!(caps.iter().any(|c| c == "net.connect:*"));
+        assert!(tools.iter().any(|t| t.name == "web.browse"));
+        assert!(tools.iter().any(|t| t.name == "tasks.create"));
     }
 }

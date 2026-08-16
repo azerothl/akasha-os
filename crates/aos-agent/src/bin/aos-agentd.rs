@@ -8,7 +8,7 @@ use aos_agent::persist::{self, registry_add};
 use aos_agent::prompt::optimize_prompt_request;
 use aos_agent::schedule::{self, ScheduleCreateRequest, ScheduleIdRequest, ScheduleListResponse};
 use aos_agent::skills::{get_skill, list_skills, load_skills, merge_skill_tools};
-use aos_agent::tools::{caps_for_tools, select_tools};
+use aos_agent::tools::{caps_for_tools, default_agent_tools, select_tools};
 use aos_agent::{intents, ControlCmd, ControlResp, ReportPayload, SubscribeRequest};
 use aos_caps::{CapStore, HolderId};
 use aos_ipc::{BusClient, BusService};
@@ -194,6 +194,10 @@ async fn spawn_worker(
                 broadcast(entry, &ev).await;
             }
             persist::update_info_sidecar(&entry.info);
+        }
+        drop(rt);
+        if let Err(e) = schedule::release_agent(&agent_id2) {
+            eprintln!("[aos-agentd] schedule release {agent_id2}: {e}");
         }
     });
 
@@ -1079,7 +1083,21 @@ async fn main() {
                     .duration_since(std::time::UNIX_EPOCH)
                     .map(|d| d.as_millis() as u64)
                     .unwrap_or(0);
-                let due = match schedule::due(now) {
+                let running: Vec<String> = {
+                    let rt = shared_tick.lock().await;
+                    rt.agents
+                        .iter()
+                        .filter(|(_, e)| {
+                            e.info.pid.is_some()
+                                && !matches!(
+                                    e.info.state,
+                                    AgentState::Done | AgentState::Failed | AgentState::Killed
+                                )
+                        })
+                        .map(|(id, _)| id.clone())
+                        .collect()
+                };
+                let due = match schedule::due(now, &running) {
                     Ok(d) => d,
                     Err(e) => {
                         eprintln!("[aos-agentd] schedule.due: {e}");
@@ -1093,6 +1111,7 @@ async fn main() {
                     );
                     let mut req = AgentCreateRequest::simple(&entry.goal);
                     req.model_id = entry.model_id.clone();
+                    req.tools = default_agent_tools();
                     let n = {
                         let rt = shared_tick.lock().await;
                         rt.next_id.fetch_add(1, Ordering::Relaxed)
@@ -1102,6 +1121,12 @@ async fn main() {
                     match spawn_worker(&shared_tick, &bus_addr_tick, &agent_id, &spec, false).await
                     {
                         Ok(pid) => {
+                            if let Err(e) = schedule::mark_fired(&entry.id, now, &agent_id) {
+                                eprintln!(
+                                    "[aos-agentd] schedule mark {} → {agent_id}: {e}",
+                                    entry.id
+                                );
+                            }
                             eprintln!(
                                 "[aos-agentd] schedule {} → {agent_id} (pid {pid})",
                                 entry.id

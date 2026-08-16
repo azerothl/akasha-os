@@ -48,7 +48,7 @@ Type=Application
 Name=Akasha OS Preview
 Comment=Akasha OS Preview (NVIDIA)
 Exec=env AOS_HOME=${PREFIX} ${PREFIX}/bin/aos-session
-Icon=utilities-terminal
+Icon=${PREFIX}/share/icons/akasha-os.png
 Terminal=false
 Categories=Utility;Development;
 EOF

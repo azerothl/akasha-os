@@ -5,6 +5,9 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[target.'cfg(windows)'.build-dependencies]
+winres = "0.1"
+
 [dependencies]
 aos-ipc = { path = "../aos-ipc" }
 aos-proto = { path = "../aos-proto" }

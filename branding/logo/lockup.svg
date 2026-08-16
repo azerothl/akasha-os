@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 256" role="img" aria-label="Akasha OS">
+  <title>Akasha OS</title>
+  <rect width="720" height="256" fill="#0d0d0d"/>
+  <g transform="translate(20 20) scale(0.84375)">
+    <defs>
+      <clipPath id="akasha-inscribe">
+        <circle cx="128" cy="128" r="102.25"/>
+      </clipPath>
+    </defs>
+    <g fill="none" stroke="#f5e31a">
+      <circle cx="128" cy="128" r="104" stroke-width="3.5"/>
+      <circle cx="128" cy="128" r="84" stroke-width="2.4"/>
+      <circle cx="128" cy="128" r="64" stroke-width="2.4"/>
+    </g>
+    <path d="M68.4 213.2 L128 48 L187.6 213.2" fill="none" stroke="#f5e31a" stroke-width="15.5" stroke-linejoin="miter" stroke-miterlimit="6" stroke-linecap="butt" clip-path="url(#akasha-inscribe)"/>
+    <line x1="111" y1="128" x2="145" y2="128" stroke="#f5e31a" stroke-width="2.25" stroke-linecap="butt"/>
+    <circle cx="128" cy="128" r="8.5" fill="#e23b16"/>
+  </g>
+  <text x="268" y="152" fill="#f5e31a" font-family="Arial Narrow, Helvetica Neue Condensed, Impact, sans-serif" font-size="72" font-weight="700" letter-spacing="0.08em">AKASHA</text>
+  <text x="598" y="152" fill="#f5e31a" font-family="Arial Narrow, Helvetica Neue Condensed, Impact, sans-serif" font-size="72" font-weight="700" letter-spacing="0.08em" opacity="0.72">OS</text>
+</svg>

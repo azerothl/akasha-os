@@ -271,6 +271,10 @@ fi
 cp -f "${ROOT}/data/models/catalog.yaml" "${OUT}/data/models/"
 cp -f "${ROOT}/VERSION" "${OUT}/VERSION"
 cp -f "${ROOT}/share/models/manifest.json" "${OUT}/share/models/manifest.json"
+if [ -d "${ROOT}/share/icons" ]; then
+  mkdir -p "${OUT}/share/icons"
+  cp -f "${ROOT}/share/icons/"* "${OUT}/share/icons/"
+fi
 if [ -f "${ROOT}/share/models/catalog-offerings.json" ]; then
   cp -f "${ROOT}/share/models/catalog-offerings.json" "${OUT}/share/models/catalog-offerings.json"
 fi

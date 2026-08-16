@@ -88,7 +88,8 @@ pub fn run() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([640.0, 560.0])
-            .with_title("Akasha OS Preview — Models"),
+            .with_title("Akasha OS Preview — Models")
+            .with_icon(crate::app_icon()),
         ..Default::default()
     };
 

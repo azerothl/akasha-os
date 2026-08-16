@@ -128,6 +128,41 @@ a:focus-visible {
   margin-bottom: 0.35rem;
 }
 
+.mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  aspect-ratio: 1;
+  background: var(--flap);
+  padding: 0.28rem;
+  line-height: 0;
+}
+
+.mark img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.mark:hover,
+.mark:focus-visible {
+  background: var(--yellow);
+}
+
+.brand-hero {
+  margin: 0 0 1rem;
+}
+
+.brand-hero img {
+  display: block;
+  width: 5.5rem;
+  height: 5.5rem;
+  background: var(--flap);
+  padding: 0.35rem;
+}
+
 .clock {
   margin: 0;
   min-width: 7.5rem;
