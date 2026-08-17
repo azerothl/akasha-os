@@ -50,7 +50,7 @@ rounded:
 spacing:
   u: "8px"
   inset: "24px"
-  measure: "70ch"
+  measure: "42rem"
 components:
   key:
     backgroundColor: "{colors.hydrogen}"
@@ -163,8 +163,8 @@ Night void, cyan rails, and a single hydrogen winding key. Cool paper for type a
 - **Headline** (700, `clamp(1.85rem, 3.4vw, 2.7rem)`, line-height 1.12, tracking -0.02em): Inner-page `h1` and 404. Paper on void. The landing `h1` is visually hidden; the canvas is the machine.
 - **Title** (700, 1.2rem, tracking 0.1em, uppercase, signal): Inner `h2` band labels (`hw.req`, `session GRANT`, chapter names).
 - **Rail** (700, 1.05rem, tracking 0.08em, uppercase): Nav lanes, language toggles, swipe, honesty `dt`. Wordmark is 1.15rem / tracking 0.04em / 700, not uppercase. Key hint is 1.05rem / 0.08em.
-- **Lede** (500, `clamp(1.15rem, 2vw, 1.45rem)`, line-height 1.35): Landing thesis and 404 line; max-width 28rem in the honesty column, 36rem elsewhere.
-- **Body** (400, 1.0625rem, line-height 1.55): Running copy, history, transcripts. Measure 70ch. Honesty plate body is 0.98rem paper on void, centered, max 32ch.
+- **Lede** (500, `clamp(1.15rem, 2vw, 1.45rem)`, line-height 1.35): Landing thesis and 404 line; max-width 36rem in the honesty column.
+- **Body** (400, 1.0625rem, line-height 1.55): Running copy, history, transcripts. Measure 42rem. Honesty fact body is 0.98rem paper on void, centered, max 36rem. Honesty facts are `.fact` — never `.plate`, which is reserved for inner-page weather (`body.plate`).
 - **Label** (700, 1.05rem, tracking 0.1em, uppercase, signal): Honesty Host / NVIDIA / Boot in Archivo Narrow. Canvas orbit IDs are Archivo Narrow 600 in signal. Footer is 0.92rem mute.
 
 ### Named Rules
@@ -178,7 +178,7 @@ The site is a column: axis, then fold or plate-main, then footer. Inset is 3u (2
 
 Sky fold is a 2fr / 1fr grid (machine | honesty) with the winding key spanning the bottom row. The canvas is fixed full-viewport behind the shell. Honesty is a void column, centered: lede, swipe, Host / NVIDIA / Boot on void, repo link. Sky footer is hidden.
 
-Plate-main is ordinary flow under the dimmed orrery. Grants and chapter lists may run to 52rem; copy, steps, and pre wrap at 70ch. Grants, ticks, and doc-bands stack with void gutters (2u–3u plates, 3u chapters, 8u between grants) — cut faces, not cards.
+Plate-main is ordinary flow under the dimmed orrery. Grants and chapter lists may run to 52rem; copy, steps, and pre wrap at 42rem. Grants, ticks, and doc-bands stack with void gutters (2u–3u plates, 3u chapters, 8u between grants) — cut faces, not cards.
 
 Below 820px the fold stacks, honesty comes first, the machine keeps 28dvh, orbit IDs appear as a four-item rail, and the sky key sticks to the bottom. Below 560px the key wraps so the hint takes a full row. Canvas orbit labels draw only when the canvas is at least 640px wide.
 
@@ -187,7 +187,7 @@ Below 820px the fold stacks, honesty comes first, the machine keeps 28dvh, orbit
 
 **The Cut-Face Rule.** Honesty stacks, grants, ticks, and chapter bands are separated by void gaps. Do not wrap them in a card grid or sit them on paper sheets.
 
-**The Measure Rule.** Running copy wraps at 70ch.
+**The Measure Rule.** Running copy wraps at 42rem, left-aligned on inner pages. Do not center body copy with `margin: auto` outside `.honesty`.
 
 ## Elevation & Depth
 
@@ -234,7 +234,7 @@ Fixed full-viewport canvas, pointer-events none. Four bodies on elliptical rails
 - **Do** use cyan continue links on inner pages and 404.
 - **Do** set current nav and language as void type on a signal well.
 - **Do** use `body.sky` for the landing (and 404) and `body.plate` for procedures.
-- **Do** wrap running copy at 70ch; separate grants and chapters with void gutters.
+- **Do** wrap running copy at 42rem, left-aligned; separate grants and chapters with void gutters.
 
 ### Don't:
 - **Don't** build an AI-OS hero, a spectrogram correlator, a split-flap board, or a feature card grid.

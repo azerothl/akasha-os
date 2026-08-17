@@ -113,7 +113,7 @@
   --paper: #dce6f0;
   --mute: color-mix(in srgb, var(--signal) 48%, var(--void));
   --u: 8px;
-  --measure: 70ch;
+  --measure: 42rem;
   --display: "Archivo Narrow", "Arial Narrow", sans-serif;
   --body: "Fira Sans", "Segoe UI", sans-serif;
 }
@@ -125,10 +125,12 @@
 }
 
 html {
+  color-scheme: dark;
   scroll-behavior: smooth;
   scrollbar-color: var(--signal) var(--void);
   scrollbar-width: thin;
   caret-color: var(--signal);
+  background: var(--void);
 }
 
 html[lang="en"] [data-lang="fr"],
@@ -154,6 +156,12 @@ body {
 
 body.sky {
   min-height: 100dvh;
+}
+
+body.sky,
+body.plate {
+  background: var(--void);
+  color: var(--paper);
 }
 
 a {
@@ -310,23 +318,23 @@ html[lang="fr"] .lang [data-set-lang="fr"] {
 
 .honesty .lede {
   margin: 0 auto calc(var(--u) * 3);
-  max-width: 28rem;
+  max-width: 36rem;
 }
 
-.plates {
+.facts {
   display: grid;
   gap: calc(var(--u) * 3);
   margin: calc(var(--u) * 3) 0 0;
   width: 100%;
 }
 
-.plate {
+.fact {
   background: transparent;
   color: var(--paper);
   padding: 0;
 }
 
-.plate h2 {
+.fact h2 {
   margin: 0 0 var(--u);
   max-width: none;
   color: var(--signal);
@@ -337,9 +345,9 @@ html[lang="fr"] .lang [data-set-lang="fr"] {
   text-transform: uppercase;
 }
 
-.plate p {
+.fact p {
   margin: 0 auto;
-  max-width: 32ch;
+  max-width: 36rem;
   color: var(--paper);
   font-size: 0.98rem;
 }
@@ -485,6 +493,7 @@ body.sky footer {
 main.plate-main {
   flex: 1 1 auto;
   padding: 0 calc(var(--u) * 3) calc(var(--u) * 4);
+  text-align: start;
 }
 
 h1 {
@@ -702,12 +711,12 @@ footer p {
     font-size: 1.05rem;
   }
 
-  .plates {
+  .facts {
     gap: var(--u);
     margin-top: calc(var(--u) * 2);
   }
 
-  .plate {
+  .fact {
     padding: 0;
   }
 
