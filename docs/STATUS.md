@@ -7,9 +7,22 @@ Summary of delivered phases. Detail: [development-plan.md](development-plan.md),
 
 **Headline:** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview:** 0.4.0 (16/08/2026) — host app on Windows/Linux; NVIDIA optional
-(CPU path). Typed memory graph, encrypted secrets vault, module cap review.
+**Preview:** 0.5.0 (17/08/2026) — host app on Windows/Linux; NVIDIA optional
+(CPU path). Opt-in auto fact extraction from chat → long-term memory (E14).
+Typed memory graph, encrypted secrets vault, module cap review.
 Not a bootable OS. Cohort gate still open.
+
+## P05 — Preview 0.5.0 (E14)
+
+| # | Evolution | Status |
+|---|-----------|--------|
+| P05.1 | E14 `mem.extract` + secret filter | done |
+| P05.2 | E14 persist + auto_link + audit | done |
+| P05.3 | E14 Settings opt-in + toast + badge | done |
+| P05.4 | E14 tests + TESTER 7d | done |
+| P05.5 | Docs / packaging / version 0.5.0 | done |
+
+Detail: [phases/phase-preview-05.md](phases/phase-preview-05.md).
 
 ## P04 — Preview 0.4.0 (E6 / E7 / E10-lite)
 

@@ -23,8 +23,8 @@ use aos_proto::{
     ChatSessionRenameRequest, ChatSessionSetModelRequest, ConfirmResponseRequest, DocumentRef,
     FeedbackSubmitRequest, FeedbackSubmitResponse, FilesGenerateRequest, FilesGenerateResponse,
     InferParams, InferRequest, McpServerInfo, MemContextRequest, MemContextResponse, MemEpisodicDeleteRequest,
-    MemHit, MemListRequest, MemRememberResponse, MemUpdateRequest, MemUserRecallRequest,
-    MemUserRememberRequest, MemWorkingRequest, LoadRequest, ModelInfo, ModelState,
+    MemExtractRequest, MemExtractResponse, MemHit, MemListRequest, MemRememberResponse, MemUpdateRequest,
+    MemUserRecallRequest, MemUserRememberRequest, MemWorkingRequest, LoadRequest, ModelInfo, ModelState,
     ModuleInvokeRequest, ModuleInvokeResponse, NetFetchRequest, NetFetchResponse, NetModeRequest,
     PendingConfirmation, SecretListRequest, SecretListResponse, SecretSetRequest, SetRoutingRequest,
     SkillInfo, SystemMetrics, TokenEvent, WebBrowseRequest,
@@ -38,8 +38,12 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+
+/// Coalesce : un seul `mem.extract` à la fois (fire-and-forget).
+static MEM_EXTRACT_BUSY: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct UpdateOffer {
@@ -154,6 +158,8 @@ enum Cmd {
         history: Vec<(String, String)>,
         user_text: String,
         model_id: Option<String>,
+        /// E14 : déclencher mem.extract après le tour (opt-in Settings).
+        auto_remember: bool,
     },
     SessionBootstrap,
     SessionCreate { title: Option<String> },
@@ -318,6 +324,7 @@ enum Evt {
         messages: Vec<ChatLine>,
     },
     MemHits(Vec<MemHit>),
+    MemExtracted { n: usize },
     SecretList {
         names: Vec<String>,
         encrypted: bool,
@@ -553,6 +560,52 @@ async fn runtime_main(cmd_rx: Receiver<Cmd>, evt_tx: Sender<Evt>, egui_ctx: egui
     }
 }
 
+/// E14 : fire-and-forget `mem.extract` (coalesce si déjà en cours).
+fn maybe_spawn_mem_extract(
+    bus: Arc<BusClient>,
+    evt_tx: Sender<Evt>,
+    enabled: bool,
+    session_id: String,
+    user_text: String,
+    assistant_text: String,
+    model_id: Option<String>,
+) {
+    if !enabled {
+        return;
+    }
+    if user_text.trim().is_empty() && assistant_text.trim().is_empty() {
+        return;
+    }
+    if MEM_EXTRACT_BUSY
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
+        return; // skip — extract précédent encore en cours
+    }
+    tokio::spawn(async move {
+        let req = MemExtractRequest {
+            user_text,
+            assistant_text,
+            session_id: Some(session_id),
+            model_id,
+            persist: true,
+        };
+        let result = bus
+            .call::<MemExtractRequest, MemExtractResponse>("mem.extract", &req, vec![])
+            .await;
+        MEM_EXTRACT_BUSY.store(false, Ordering::SeqCst);
+        match result {
+            Ok(resp) if resp.stored > 0 => {
+                let _ = evt_tx.send(Evt::MemExtracted { n: resp.stored });
+            }
+            Ok(_) => {}
+            Err(e) => {
+                let _ = evt_tx.send(Evt::Status(format!("mem.extract: {e}")));
+            }
+        }
+    });
+}
+
 async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
     match cmd {
         Cmd::SessionBootstrap => {
@@ -717,6 +770,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
             history,
             user_text,
             model_id,
+            auto_remember,
         } => {
             let _ = evt_tx.send(Evt::Status(
                 "assistant : génération en cours…".into(),
@@ -764,7 +818,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                 content: c,
             }));
             let req = InferRequest {
-                model_id,
+                model_id: model_id.clone(),
                 messages,
                 params: InferParams {
                     max_tokens: 512,
@@ -887,6 +941,15 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                                                 vec![],
                                             )
                                             .await;
+                                        maybe_spawn_mem_extract(
+                                            bus.clone(),
+                                            evt_tx.clone(),
+                                            auto_remember,
+                                            sid.clone(),
+                                            user_text.clone(),
+                                            prose.clone(),
+                                            model_id.clone(),
+                                        );
                                         let _ = evt_tx.send(Evt::AgentSpawned {
                                             session_id: sid.clone(),
                                             agent_id: r.agent_id,
@@ -921,6 +984,15 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                                 vec![],
                             )
                             .await;
+                        maybe_spawn_mem_extract(
+                            bus.clone(),
+                            evt_tx.clone(),
+                            auto_remember,
+                            sid.clone(),
+                            user_text.clone(),
+                            display.clone(),
+                            model_id.clone(),
+                        );
                         let _ = evt_tx.send(Evt::Done {
                             text: display,
                             session_id: sid,
@@ -2718,6 +2790,7 @@ impl UiApp {
             history,
             user_text: text,
             model_id,
+            auto_remember: self.prefs.auto_remember_chat,
         });
         self.scen_chat = true;
     }
@@ -2881,6 +2954,14 @@ impl eframe::App for UiApp {
                     self.chat_pending = false;
                 }
                 Evt::Status(m) => self.status = m,
+                Evt::MemExtracted { n } => {
+                    let t = i18n::strings(&self.prefs.language);
+                    self.status = t.memory_extracted_toast.replace("{}", &n.to_string());
+                    // Refresh memory list so the chat badge appears.
+                    let _ = self.cmd_tx.send(Cmd::MemList {
+                        include_superseded: self.mem_show_superseded,
+                    });
+                }
                 Evt::ChatSystem(m) => self.chat.push(ChatLine::plain("système", m)),
                 Evt::Metrics(m) => self.metrics = Some(m),
                 Evt::AgentSpawned {
@@ -3994,6 +4075,13 @@ impl UiApp {
                 } else {
                     ""
                 };
+                let chat_badge = h
+                    .metadata
+                    .get("source")
+                    .and_then(|v| v.as_str())
+                    .filter(|s| *s == "chat")
+                    .map(|_| format!(" [{}]", t.memory_badge_chat))
+                    .unwrap_or_default();
                 let rels: String = h
                     .relations
                     .iter()
@@ -4002,7 +4090,7 @@ impl UiApp {
                     .join(", ");
                 ui.horizontal(|ui| {
                     ui.label(format!(
-                        "[{star}] #{} {}{status} (score {:.2})",
+                        "[{star}] #{} {}{status}{chat_badge} (score {:.2})",
                         h.id, h.text, h.score
                     ));
                 });
@@ -4705,6 +4793,19 @@ impl UiApp {
                     self.network_online = online;
                     save_preferences(&self.prefs);
                     let _ = self.cmd_tx.send(Cmd::NetSetMode { online });
+                }
+                ui.end_row();
+
+                ui.label(t.settings_auto_remember);
+                let mut auto = self.prefs.auto_remember_chat;
+                if ui
+                    .checkbox(&mut auto, t.settings_auto_remember)
+                    .on_hover_text(t.settings_auto_remember_hint)
+                    .changed()
+                {
+                    self.prefs.auto_remember_chat = auto;
+                    save_preferences(&self.prefs);
+                    self.status = t.settings_saved.into();
                 }
                 ui.end_row();
             });

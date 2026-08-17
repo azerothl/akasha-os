@@ -7,9 +7,22 @@ Résumé des phases livrées. Détail : [plan-developpement-phases.md](plan-deve
 
 **En-tête :** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview :** 0.4.0 (16/08/2026) — appli hôte Windows/Linux ; NVIDIA optionnel
-(chemin CPU). Graphe mémoire typé, vault secrets, revue de caps modules.
+**Preview :** 0.5.0 (17/08/2026) — appli hôte Windows/Linux ; NVIDIA optionnel
+(chemin CPU). Extraction auto opt-in des faits du chat → mémoire LT (E14).
+Graphe mémoire typé, vault secrets, revue de caps modules.
 Pas un OS bootable. Gate cohorte encore ouverte.
+
+## P05 — Preview 0.5.0 (E14)
+
+| # | Évolution | État |
+|---|-----------|------|
+| P05.1 | E14 `mem.extract` + filtre secrets | fait |
+| P05.2 | E14 persist + auto_link + audit | fait |
+| P05.3 | E14 Settings opt-in + toast + badge | fait |
+| P05.4 | E14 tests + TESTER 7d | fait |
+| P05.5 | Docs / packaging / version 0.5.0 | fait |
+
+Détail : [phases/phase-preview-05.md](phases/phase-preview-05.md).
 
 ## P04 — Preview 0.4.0 (E6 / E7 / E10-lite)
 

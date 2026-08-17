@@ -9,6 +9,7 @@
 pub mod audit;
 pub mod chat_session;
 pub mod confirm;
+pub mod extract;
 pub mod feedback;
 pub mod files_gen;
 pub mod memory;

@@ -38,13 +38,13 @@ Catalogue: `share/models/catalog-offerings.json`. Installed registry:
 | Tab / surface | Usage |
 |---------------|--------|
 | Chat / Sessions | Parallel sessions; **per-session model**; slash commands (`/help`, `/agent`, `/notes`…) |
-| Memory | Long-term facts (remember / recall); injected as `mem.context` |
+| Memory | Long-term facts (remember / recall); injected as `mem.context`; optional auto-remember from chat (Settings) |
 | Notes | Human notes + via agent (WASM module) |
 | Agents | Goal loop, skills, tools, MCP; **model** at create; **Detail** timeline |
 | Models | List / load / download offerings; update banner when newer packs fit |
 | Audit | Signed events; kill auditd (supervisor restarts it) |
 | Network (sidebar) | Opt-in `web.search` / `web.browse` / `net.fetch` |
-| Settings | Language, trust, routing, agent defaults, search engine |
+| Settings | Language, trust, routing, agent defaults, search engine, auto-remember |
 | Feedback | GitHub issue on azerothl/akasha-os |
 | Scenarios | Cohort protocol (see [TESTER.md](TESTER.md)) |
 

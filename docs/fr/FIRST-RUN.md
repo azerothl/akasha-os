@@ -39,13 +39,13 @@ Catalogue : `share/models/catalog-offerings.json`.
 | Onglet / surface | Usage |
 |------------------|--------|
 | Chat / Sessions | Modèle **par session** ; commandes slash (`/help`, `/agent`, `/notes`…) |
-| Mémoire | Faits long terme ; injection `mem.context` |
+| Mémoire | Faits long terme ; injection `mem.context` ; mémorisation auto opt-in depuis le chat (Settings) |
 | Notes | Humaines + via agent (module WASM) |
 | Agents | Goal, skills, outils, MCP ; **modèle** à la création ; **Détail** |
 | Models | Liste / load / download ; bandeau si nouveaux packs |
 | Audit | Événements signés ; tuer auditd (le superviseur le relance) |
 | Réseau (barre latérale) | Opt-in `web.search` / `web.browse` / `net.fetch` |
-| Settings | Langue, trust, routage, défauts agent, moteur de recherche |
+| Settings | Langue, trust, routage, défauts agent, moteur de recherche, mémorisation auto |
 | Retour | Issue GitHub sur azerothl/akasha-os |
 | Scénarios | Protocole cohorte ([TESTER.md](TESTER.md)) |
 

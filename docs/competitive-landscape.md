@@ -5,7 +5,7 @@
 > Date: 16/08/2026  
 > Scope: public and related projects that call themselves an “agent OS,” agent runtime, or agentic operating layer. Marketing claims are cross-checked against README / papers where possible. Many projects use “OS” without shipping a kernel.
 
-**Akasha OS baseline:** Preview **0.4.0** host app (Windows/Linux + NVIDIA), not a bootable image. Sources: [README.md](../README.md), [FEATURES.md](FEATURES.md), [vision.md](vision.md), [functional-specs.md](functional-specs.md), [STATUS.md](STATUS.md).
+**Akasha OS baseline:** Preview **0.5.0** host app (Windows/Linux + NVIDIA), not a bootable image. Sources: [README.md](../README.md), [FEATURES.md](FEATURES.md), [vision.md](vision.md), [functional-specs.md](functional-specs.md), [STATUS.md](STATUS.md).
 
 ---
 

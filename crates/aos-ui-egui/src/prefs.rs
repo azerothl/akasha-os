@@ -19,6 +19,9 @@ pub struct Preferences {
     pub theme: String,
     #[serde(default)]
     pub network_online: bool,
+    /// E14 : extraire automatiquement des faits durables après chaque tour de chat.
+    #[serde(default)]
+    pub auto_remember_chat: bool,
     #[serde(default)]
     pub default_agent_model: Option<String>,
     #[serde(default = "default_max_steps")]
@@ -74,6 +77,7 @@ impl Default for Preferences {
             inference_mode: default_inference(),
             theme: default_theme(),
             network_online: false,
+            auto_remember_chat: false,
             default_agent_model: None,
             default_max_steps: default_max_steps(),
             default_timeout_secs: default_timeout_secs(),

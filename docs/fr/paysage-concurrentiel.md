@@ -5,7 +5,7 @@
 > Date : 16/08/2026  
 > Périmètre : projets publics ou connexes qui se présentent comme un « OS agentique », un runtime agent ou une couche d’exploitation agentique. Les claims marketing sont recoupés avec README / papers quand c’est possible. Beaucoup de projets disent « OS » sans livrer un noyau.
 
-**Baseline Akasha OS :** Preview **0.4.0**, appli hôte (Windows/Linux + NVIDIA), pas une image bootable. Sources : [README.md](../../README.md), [FEATURES.md](FEATURES.md), [reflexion-agent-os.md](reflexion-agent-os.md), [specs-fonctionnelles.md](specs-fonctionnelles.md), [STATUS.md](STATUS.md).
+**Baseline Akasha OS :** Preview **0.5.0**, appli hôte (Windows/Linux + NVIDIA), pas une image bootable. Sources : [README.md](../../README.md), [FEATURES.md](FEATURES.md), [reflexion-agent-os.md](reflexion-agent-os.md), [specs-fonctionnelles.md](specs-fonctionnelles.md), [STATUS.md](STATUS.md).
 
 ---
 

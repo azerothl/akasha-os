@@ -94,6 +94,18 @@ Expected banner: *Preview on Windows/Linux — this is not the bootable OS yet*.
   **confirmation** lists required caps.
 - **Accept** → caps granted; **Refuse** → module quarantined / empty caps.
 
+### 7d. Auto-remember from chat (P05 / E14)
+
+- **Settings → Network** (or Memory-related prefs): enable **Auto-remember from chat**
+  (default is **off**).
+- In Chat, say something durable e.g. “I prefer French for the UI”.
+- After the reply, status should mention fact(s) remembered; **Memory → List**
+  shows the fact with a **`[chat]`** badge.
+- Say the opposite (“I prefer English”); expect auto-link / `supersedes`.
+- Paste a fake key (`sk-abcdefghijklmnopqrstuvwxyz1234` or `ghp_…`) in chat:
+  it must **not** appear as a remembered fact (audit may show `filtered`).
+- Turn the setting **off** again: further chat must not write new facts.
+
 ### 8. Web search (PC.8 / PC.13)
 
 - **Allow network** (sidebar) **off** → **Search** must fail (`offline_strict`).
@@ -157,10 +169,11 @@ GitHub feedback submit).
 - At least one usable `var/feedback/fb-*.json` per report
 - Gates PC.6–PC.9 and PC.11–PC.13 checked on at least one machine
 
-## Out of scope Preview 0.4.0
+## Out of scope Preview 0.5.0
 
 - seL4 / bare-metal boot
 - macOS
 - 32B model in the installer
 - Fully automatic update apply
 - Native audio/video generation
+- Public marketplace / messaging channels / multi-GPU

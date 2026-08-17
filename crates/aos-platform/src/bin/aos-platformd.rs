@@ -875,6 +875,33 @@ async fn main() {
         });
     }
 
+    // --- mem.extract (E14 / Preview 0.5) — post-turn chat → LT memory ---
+    {
+        let s = sub.clone();
+        svc.on("mem.extract", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<MemExtractRequest>() {
+                    Ok(req) => match run_mem_extract(&s, req).await {
+                        Ok(resp) => {
+                            let _ = ctx.respond(aos_ipc::msg::Status::Ok, &resp).await;
+                        }
+                        Err(e) => {
+                            let _ = ctx
+                                .respond_error(aos_ipc::msg::Status::InternalError, &e)
+                                .await;
+                        }
+                    },
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+
     // --- mem.relate / neighbors / list / update (E6 / Preview 0.4) ---
     {
         let s = sub.clone();
@@ -2942,3 +2969,202 @@ async fn main() {
     eprintln!("[aos-platformd] prêt");
     let _ = svc.serve(&config.bus).await;
 }
+
+/// E14 : infer locale basse priorité → parse JSON → filtre secrets → remember.
+async fn run_mem_extract(
+    s: &PlatformSubsystem,
+    req: MemExtractRequest,
+) -> Result<MemExtractResponse, String> {
+    let bus = s
+        .bus()
+        .ok_or_else(|| "bus injoignable pour mem.extract".to_string())?;
+
+    let user = req.user_text.trim();
+    let assistant = req.assistant_text.trim();
+    if user.is_empty() && assistant.is_empty() {
+        return Ok(MemExtractResponse {
+            facts_proposed: vec![],
+            outcomes: vec![],
+            stored: 0,
+        });
+    }
+
+    let prompt = format!(
+        "Tour de chat:\nUtilisateur: {user}\nAssistant: {assistant}\n\nExtrais les faits durables (JSON uniquement)."
+    );
+    let infer_req = InferRequest {
+        model_id: req.model_id.clone(),
+        messages: vec![
+            ChatMessage {
+                role: "system".into(),
+                content: MEM_EXTRACT_SYSTEM_PROMPT.into(),
+            },
+            ChatMessage {
+                role: "user".into(),
+                content: prompt,
+            },
+        ],
+        params: InferParams {
+            max_tokens: 384,
+            temperature: 0.2,
+            top_p: 0.9,
+            seed: Some(42),
+        },
+        priority: 1, // batch / basse priorité (< chat=8)
+        data_refs: vec![],
+        routing: Some("local_only".into()),
+    };
+
+    let mut rx = bus
+        .call_stream::<InferRequest, TokenEvent>("model.infer", &infer_req, vec![])
+        .await
+        .map_err(|e| e.to_string())?;
+    let mut full = String::new();
+    while let Some(ev) = rx.recv().await {
+        match ev {
+            Ok(TokenEvent::Delta { text }) => full.push_str(&text),
+            Ok(TokenEvent::Done { .. }) => break,
+            Ok(TokenEvent::Error { message }) => {
+                return Err(format!("mem.extract infer: {message}"));
+            }
+            Ok(_) => {}
+            Err(e) => return Err(e.to_string()),
+        }
+    }
+
+    let facts_proposed = aos_platform::extract::parse_extract_json(&full).unwrap_or_else(|_| {
+        // Échec parse → aucun fait (fail soft).
+        Vec::new()
+    });
+
+    let mut outcomes = Vec::new();
+    let mut stored = 0usize;
+    let session_meta = req.session_id.clone().unwrap_or_default();
+
+    for fact in &facts_proposed {
+        let text = fact.text.trim().to_string();
+        if text.is_empty() {
+            outcomes.push(MemExtractOutcome {
+                kind: MemExtractOutcomeKind::SkippedEmpty,
+                text,
+                id: None,
+                auto_relations: vec![],
+            });
+            continue;
+        }
+        if aos_platform::extract::looks_like_secret(&text) {
+            s.audit(AuditAppendRequest {
+                trace_id: format!("mem-extract-{}", session_meta),
+                actor: "service:platformd".into(),
+                action: "mem.extract".into(),
+                target: "filtered".into(),
+                detail: serde_json::json!({
+                    "kind": "filtered_secret",
+                    "text_preview": text.chars().take(40).collect::<String>(),
+                }),
+            });
+            outcomes.push(MemExtractOutcome {
+                kind: MemExtractOutcomeKind::FilteredSecret,
+                text,
+                id: None,
+                auto_relations: vec![],
+            });
+            continue;
+        }
+
+        if !req.persist {
+            outcomes.push(MemExtractOutcome {
+                kind: MemExtractOutcomeKind::Stored,
+                text,
+                id: None,
+                auto_relations: vec![],
+            });
+            continue;
+        }
+
+        let emb = s.embed_text(&text).unwrap_or_default();
+        let near = {
+            let mem = s.mem.lock().unwrap();
+            mem.episodic_query(&emb, 1, Some("user:default"))
+        };
+        if let Some(hit) = near.first() {
+            if hit.score >= aos_platform::extract::DEDUP_THRESHOLD {
+                s.audit(AuditAppendRequest {
+                    trace_id: format!("mem-extract-{}", session_meta),
+                    actor: "service:platformd".into(),
+                    action: "mem.extract".into(),
+                    target: "skipped".into(),
+                    detail: serde_json::json!({
+                        "kind": "skipped_duplicate",
+                        "existing_id": hit.id,
+                        "score": hit.score,
+                    }),
+                });
+                outcomes.push(MemExtractOutcome {
+                    kind: MemExtractOutcomeKind::SkippedDuplicate,
+                    text,
+                    id: Some(hit.id),
+                    auto_relations: vec![],
+                });
+                continue;
+            }
+        }
+
+        let metadata = serde_json::json!({
+            "source": "chat",
+            "session_id": req.session_id,
+            "extracted": true,
+            "supersedes_hint": fact.supersedes_hint,
+        });
+        let (id, auto) = {
+            let mut mem = s.mem.lock().unwrap();
+            mem.episodic_write_auto_link(
+                "user:default",
+                &text,
+                metadata,
+                emb,
+                false,
+                aos_platform::memory::MemoryKind::Fact,
+                0.82,
+            )
+        };
+        stored += 1;
+        s.audit(AuditAppendRequest {
+            trace_id: format!("mem-extract-{}", session_meta),
+            actor: "service:platformd".into(),
+            action: "mem.extract".into(),
+            target: format!("stored:{id}"),
+            detail: serde_json::json!({
+                "kind": "stored",
+                "id": id,
+                "text": text,
+                "auto_relations": auto.len(),
+            }),
+        });
+        outcomes.push(MemExtractOutcome {
+            kind: MemExtractOutcomeKind::Stored,
+            text,
+            id: Some(id),
+            auto_relations: auto,
+        });
+    }
+
+    s.audit(AuditAppendRequest {
+        trace_id: format!("mem-extract-{}", session_meta),
+        actor: "service:platformd".into(),
+        action: "mem.extract".into(),
+        target: "summary".into(),
+        detail: serde_json::json!({
+            "proposed": facts_proposed.len(),
+            "stored": stored,
+            "session_id": req.session_id,
+        }),
+    });
+
+    Ok(MemExtractResponse {
+        facts_proposed,
+        outcomes,
+        stored,
+    })
+}
+

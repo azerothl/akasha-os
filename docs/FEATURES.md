@@ -1,4 +1,4 @@
-# Preview features — Akasha OS 0.4.0
+# Preview features — Akasha OS 0.5.0
 
 **Language:** English | [Français](fr/FEATURES.md)
 
@@ -7,7 +7,16 @@ This is **not** the bootable OS. Target v1 requirements live in
 [functional-specs.md](functional-specs.md); phase gates in
 [STATUS.md](STATUS.md).
 
-> Date: 16/08/2026 · Preview **0.4.0**
+> Date: 17/08/2026 · Preview **0.5.0**
+
+### What's new in 0.5.0
+
+- **Auto-remember from chat** (E14): opt-in Settings toggle (default OFF)
+- After each chat turn, low-priority local `mem.extract` → durable facts
+- Persist via `mem.user.remember` + E6 `updates`/`supersedes` auto-link
+- Secret filter: API keys / tokens / IBAN-like never auto-stored (audited)
+- Memory list shows a **`[chat]`** badge on extracted facts; toast on store
+- Non-blocking (coalesced); skips if a previous extract is still running
 
 ### What's new in 0.4.0
 
@@ -85,13 +94,16 @@ Slash commands:
 
 ---
 
-## 3. Memory (PC.7 + P04.1/P04.2)
+## 3. Memory (PC.7 + P04.1/P04.2 + P05 / E14)
 
 - Long-term **user facts**: remember / recall / list / edit / delete in the Memory tab
 - Typed relations: `similar`, `updates`, `supersedes` (auto-link on close remembers)
 - Session + user hits assembled as `mem.context` for chat and agents
 - Agents also have episodic memory (`mem.episodic_*`) and `memory.remember` / `memory.recall`
 - **Memory-first bootstrap**: `task.assess` then structured `mem.bootstrap` (active facts + similar neighbors; superseded omitted)
+- **Auto-remember from chat** (opt-in, Settings, default OFF): after each chat turn,
+  `mem.extract` proposes durable facts → `mem.user.remember` with `source=chat`;
+  secrets filtered; Memory list shows a `[chat]` badge
 
 ---
 
@@ -196,7 +208,7 @@ Persisted in `var/run/preferences.json` (migrated from `onboarding.json` if need
 |-------|---------|
 | General | Language **en** / **fr**; default trust **low** / **medium**; Inference **auto** / **gpu** / **cpu** |
 | Models | Routing `local_only` / `balanced` |
-| Network | Allow network (same as sidebar) |
+| Network / Memory | Allow network (same as sidebar); **Auto-remember from chat** (E14, default off) |
 | Agents | Default model, max steps (1–128), timeout (60–86400 s) |
 | Schedules | Interval agent fires (`schedule.*`) |
 | Secrets | Brave / GitHub / OpenAI keys → encrypted vault (never shown back) |
@@ -232,7 +244,7 @@ seL4 VM track (PV.1–PV.3) is separate: see [phases/phase-vm-sel4.md](phases/ph
 
 ---
 
-## 11. Not in Preview 0.4.0
+## 11. Not in Preview 0.5.0
 
 - Bootable / bare-metal image
 - macOS

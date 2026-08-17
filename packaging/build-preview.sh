@@ -3,7 +3,7 @@
 # GGUF optionnels (SKIP_MODELS=1) — téléchargés au premier run.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="${VERSION:-$(tr -d '[:space:]' < "${ROOT}/VERSION" 2>/dev/null || echo 0.4.0)}"
+VERSION="${VERSION:-$(tr -d '[:space:]' < "${ROOT}/VERSION" 2>/dev/null || echo 0.5.0)}"
 CPU_ONLY="${CPU_ONLY:-0}"
 if [ "$CPU_ONLY" = "1" ]; then
   OUT="${OUT:-${ROOT}/dist/AgentOS-Preview-${VERSION}-linux-x64-cpu}"

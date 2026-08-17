@@ -1,4 +1,4 @@
-# Fonctionnalités Preview — Akasha OS 0.4.0
+# Fonctionnalités Preview — Akasha OS 0.5.0
 
 **Langue :** [English](../FEATURES.md) | Français
 
@@ -7,7 +7,16 @@ Ce n'est **pas** l'OS bootable. Les exigences v1 sont dans
 [specs-fonctionnelles.md](specs-fonctionnelles.md) ; les gates dans
 [STATUS.md](STATUS.md).
 
-> Date : 16/08/2026 · Preview **0.4.0**
+> Date : 17/08/2026 · Preview **0.5.0**
+
+### Nouveautés 0.5.0
+
+- **Mémorisation auto depuis le chat** (E14) : option Settings (défaut OFF)
+- Après chaque tour, `mem.extract` locale basse priorité → faits durables
+- Persist via `mem.user.remember` + auto-lien E6 `updates`/`supersedes`
+- Filtre secrets : clés API / tokens / IBAN-like jamais auto-stockés (audité)
+- Badge **`[chat]`** dans la liste Mémoire ; toast à l'écriture
+- Non bloquant (coalescé) ; skip si un extract précédent tourne encore
 
 ### Nouveautés 0.4.0
 
@@ -85,13 +94,16 @@ Commandes slash :
 
 ---
 
-## 3. Mémoire (PC.7 + P04.1/P04.2)
+## 3. Mémoire (PC.7 + P04.1/P04.2 + P05 / E14)
 
 - **Faits utilisateur** long terme : remember / recall / lister / éditer / supprimer
 - Relations typées : `similar`, `updates`, `supersedes` (auto-lien)
 - Hits session + user assemblés en `mem.context` pour le chat et les agents
 - Mémoire épisodique agent (`mem.episodic_*`) et `memory.remember` / `memory.recall`
 - **Bootstrap mémoire d'abord** : `task.assess` puis `mem.bootstrap` structuré (faits actifs + voisins similar ; supersédés omis)
+- **Mémorisation auto depuis le chat** (opt-in Settings, défaut OFF) : après chaque tour,
+  `mem.extract` propose des faits durables → `mem.user.remember` avec `source=chat` ;
+  secrets filtrés ; badge **`[chat]`** dans la liste Mémoire
 
 ---
 
@@ -196,9 +208,10 @@ Persistés dans `var/run/preferences.json` (migration depuis `onboarding.json` s
 |--------|---------|
 | Général | Langue **en** / **fr** ; trust **low** / **medium** ; Inférence **auto** / **gpu** / **cpu** |
 | Modèles | Routage `local_only` / `balanced` |
-| Réseau | Autoriser le réseau (même interrupteur que la barre latérale) |
+| Réseau / Mémoire | Autoriser le réseau ; **Mémorisation auto depuis le chat** (E14, défaut off) |
 | Agents | Modèle par défaut, max steps (1–128), timeout (60–86400 s) |
 | Schedules | Intervalle de déclenchement agent (`schedule.*`) |
+| Secrets | Clés Brave / GitHub / OpenAI → vault chiffré (jamais réaffichées) |
 | Web | Moteur de recherche, max caractères browse, max octets fetch |
 
 ---
@@ -231,7 +244,7 @@ Piste VM seL4 (PV.1–PV.3) séparée : [phases/phase-vm-sel4.md](phases/phase-v
 
 ---
 
-## 11. Hors Preview 0.4.0
+## 11. Hors Preview 0.5.0
 
 - Image bootable / fer nu
 - macOS

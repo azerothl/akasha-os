@@ -91,8 +91,17 @@ Bannière attendue : *Preview sur Windows/Linux — ce n'est pas encore l'OS boo
 
 - Install sans `approved_caps` → confirmation listant les caps.
 - **Accepter** → caps accordées ; **Refuser** → quarantaine / caps vides.
-- Revenir au Chat : le prochain message doit pouvoir s'appuyer sur ce contexte
-  (injection `mem.context` avant infer).
+
+### 7d. Mémorisation auto depuis le chat (P05 / E14)
+
+- **Settings** : activer **Mémorisation auto depuis le chat** (défaut **off**).
+- Dans Chat, dire un fait durable ex. « Je préfère le français pour l’UI ».
+- Après la réponse, le statut mentionne des fait(s) mémorisé(s) ; **Mémoire → Lister**
+  affiche le fait avec un badge **`[chat]`**.
+- Dire le contraire (« Je préfère l’anglais ») ; attendre auto-lien / `supersedes`.
+- Coller une fausse clé (`sk-abcdefghijklmnopqrstuvwxyz1234` ou `ghp_…`) :
+  elle ne doit **pas** apparaître comme fait (audit peut montrer `filtered`).
+- Remettre l’option **off** : les tours suivants ne doivent plus écrire de faits.
 
 ### 8. Recherche web (PC.8 / PC.13)
 
@@ -161,10 +170,11 @@ et envoi de retour GitHub).
 - Au moins un fichier `var/feedback/fb-*.json` exploitable par retour
 - Gates PC.6–PC.9 et PC.11–PC.13 cochés sur au moins une machine
 
-## Hors scope Preview 0.4.0
+## Hors scope Preview 0.5.0
 
 - Boot seL4 / fer nu
 - macOS
 - Modèle 32B dans l'installeur
 - Mise à jour automatique complète
 - Génération audio/vidéo native
+- Marketplace public / canaux messagerie / multi-GPU

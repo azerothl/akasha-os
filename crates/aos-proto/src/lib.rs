@@ -1648,6 +1648,83 @@ pub struct MemContextResponse {
     pub prompt_block: String,
 }
 
+/// `mem.extract` — extraction LLM de faits durables depuis un tour de chat (E14).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemExtractRequest {
+    pub user_text: String,
+    pub assistant_text: String,
+    #[serde(default)]
+    pub session_id: Option<String>,
+    /// Id modèle instruct (défaut = modèle système).
+    #[serde(default)]
+    pub model_id: Option<String>,
+    /// Si false, extrait sans écrire (dry-run / tests).
+    #[serde(default = "default_true")]
+    pub persist: bool,
+}
+
+impl Default for MemExtractRequest {
+    fn default() -> Self {
+        Self {
+            user_text: String::new(),
+            assistant_text: String::new(),
+            session_id: None,
+            model_id: None,
+            persist: true,
+        }
+    }
+}
+
+/// Un fait proposé par l'extracteur (avant filtre / persist).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemExtractedFact {
+    pub text: String,
+    #[serde(default)]
+    pub supersedes_hint: Option<String>,
+}
+
+/// Issue pour un candidat (stocké, skip dédup, ou filtré secret).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MemExtractOutcomeKind {
+    Stored,
+    SkippedDuplicate,
+    FilteredSecret,
+    SkippedEmpty,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemExtractOutcome {
+    pub kind: MemExtractOutcomeKind,
+    pub text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub auto_relations: Vec<MemRelation>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemExtractResponse {
+    pub facts_proposed: Vec<MemExtractedFact>,
+    pub outcomes: Vec<MemExtractOutcome>,
+    /// Nombre de faits réellement écrits.
+    pub stored: usize,
+}
+
+/// Prompt système pour l'extraction post-tour (local_only, JSON strict).
+pub const MEM_EXTRACT_SYSTEM_PROMPT: &str = r#"Tu extrais des FAITS DURABLES sur l'utilisateur à partir d'un tour de chat.
+Réponds UNIQUEMENT avec un objet JSON valide, sans markdown, sans commentaire :
+{"facts":[{"text":"...","supersedes_hint":null}]}
+
+Règles :
+- Maximum 5 faits. Chaque "text" est une phrase courte à la 3e personne (ex. "L'utilisateur préfère le français").
+- Uniquement des préférences, identité, décisions stables, contraintes durables.
+- N'extrais PAS : secrets, mots de passe, tokens, clés API, IBAN, PEM, codes OTP, contenu de vault.
+- N'extrais PAS : salutations, questions ponctuelles, commandes OS, prose de l'assistant sans fait user.
+- Si aucun fait durable : {"facts":[]}
+- "supersedes_hint" optionnel : ancien fait que celui-ci remplace (texte libre).
+"#;
+
 // ---------------------------------------------------------------------------
 // Web / fetch / files (PC.8–PC.9)
 // ---------------------------------------------------------------------------

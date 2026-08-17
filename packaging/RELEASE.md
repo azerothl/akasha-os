@@ -7,8 +7,8 @@
 Tag then push:
 
 ```bash
-git tag v0.4.0
-git push origin v0.4.0
+git tag v0.5.0
+git push origin v0.5.0
 ```
 
 The workflow [`.github/workflows/preview-release.yml`](../.github/workflows/preview-release.yml)
@@ -36,13 +36,12 @@ GGUFs are downloaded on **first run** via `share/models/manifest.json`.
 ## Release notes (draft)
 
 ```
-Akasha OS Preview 0.4.0 — memory graph, secrets vault, cap review
+Akasha OS Preview 0.5.0 — auto-remember from chat (E14)
 
-- Typed memory (similar / updates / supersedes) + Memory tab inspect/edit
-- Encrypted secrets vault (Settings); MCP ${secret:name}
-- Module install requires cap review (refuse → quarantine)
-- latest.json lists CUDA and CPU artefacts
-- Sibling bridge contract doc
+- Opt-in Settings: after each chat turn, extract durable facts → Memory
+- mem.extract (local_only, low priority) + secret filter (never auto-store keys)
+- Auto-link updates/supersedes; Memory [chat] badge; toast on store
+- Non-blocking / coalesced extract
 
 Not a bootable OS. See FIRST-RUN.md / INSTALL.md / TESTER.md
 ```
