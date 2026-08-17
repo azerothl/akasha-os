@@ -248,7 +248,7 @@ body.plate .ether {
 .lanes {
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: center;
   gap: 0;
 }
 
@@ -289,6 +289,10 @@ html[lang="fr"] .lang [data-set-lang="fr"] {
   display: flex;
 }
 
+.lang button + button {
+  box-shadow: inset 1px 0 0 color-mix(in srgb, var(--signal) 28%, var(--void));
+}
+
 .fold {
   display: grid;
   grid-template-columns: 2fr 1fr;
@@ -318,7 +322,48 @@ html[lang="fr"] .lang [data-set-lang="fr"] {
 
 .honesty .lede {
   margin: 0 auto calc(var(--u) * 3);
-  max-width: 36rem;
+  max-width: 22rem;
+}
+
+.sheet {
+  width: 100%;
+  max-width: 22rem;
+  padding: calc(var(--u) * 3);
+  background: var(--paper);
+  color: var(--void);
+  text-align: start;
+}
+
+.sheet .fact {
+  padding: calc(var(--u) * 2) 0;
+  border-top: 1px solid color-mix(in srgb, var(--void) 14%, var(--paper));
+}
+
+.sheet .fact:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.sheet .fact:last-child {
+  padding-bottom: 0;
+}
+
+.sheet h2 {
+  margin: 0 0 var(--u);
+  max-width: none;
+  color: var(--void);
+  font-family: var(--display);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.sheet p {
+  margin: 0;
+  max-width: none;
+  color: var(--void);
+  font-size: 0.98rem;
 }
 
 .facts {
@@ -352,6 +397,16 @@ html[lang="fr"] .lang [data-set-lang="fr"] {
   font-size: 0.98rem;
 }
 
+.sheet .fact h2 {
+  color: var(--void);
+}
+
+.sheet .fact p {
+  margin: 0;
+  max-width: none;
+  color: var(--void);
+}
+
 .lede {
   margin: calc(var(--u) * 2) 0 0;
   max-width: 36rem;
@@ -367,6 +422,16 @@ html[lang="fr"] .lang [data-set-lang="fr"] {
   text-align: center;
 }
 
+.preview {
+  margin: calc(var(--u) * 2) 0 0;
+  color: var(--signal);
+  font-family: var(--display);
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
 body.sky footer {
   display: none;
 }
@@ -377,7 +442,7 @@ body.sky footer {
   justify-content: center;
   align-items: center;
   padding: calc(var(--u) * 4) calc(var(--u) * 3);
-  background: var(--void);
+  background: transparent;
   text-align: center;
 }
 
@@ -425,7 +490,7 @@ body.sky footer {
   grid-column: 1 / -1;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: calc(var(--u) * 3);
   min-height: calc(var(--u) * 10);
   padding: calc(var(--u) * 2) calc(var(--u) * 3);
@@ -436,7 +501,7 @@ body.sky footer {
   letter-spacing: 0.04em;
   text-decoration: none;
   text-transform: uppercase;
-  text-align: center;
+  text-align: start;
   box-shadow: 0 14px 28px rgb(0 0 0 / 0.35);
 }
 
@@ -459,10 +524,49 @@ body.sky footer {
   letter-spacing: -0.02em;
 }
 
+.key-rule {
+  display: block;
+  width: 1px;
+  align-self: stretch;
+  margin: var(--u) 0;
+  background: color-mix(in srgb, var(--paper) 42%, var(--hydrogen));
+  flex: 0 0 auto;
+}
+
+.key:hover .key-rule,
+.key:focus-visible .key-rule {
+  background: color-mix(in srgb, var(--void) 28%, var(--paper));
+}
+
+.key-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+
 .key-hint {
   font-size: 1.05rem;
   letter-spacing: 0.08em;
   opacity: 0.92;
+}
+
+.key-sub {
+  font-family: var(--body);
+  font-size: 0.82rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  opacity: 0.92;
+}
+
+.key-arrow {
+  display: block;
+  width: 2rem;
+  height: 2rem;
+  margin-left: auto;
+  flex: 0 0 auto;
 }
 
 .continue {
@@ -703,12 +807,17 @@ footer p {
   }
 
   .machine {
-    min-height: 28dvh;
+    min-height: 36dvh;
   }
 
   .honesty .lede {
     margin-bottom: calc(var(--u) * 2);
+    max-width: none;
     font-size: 1.05rem;
+  }
+
+  .sheet {
+    max-width: none;
   }
 
   .facts {
@@ -745,11 +854,24 @@ footer p {
 @media (max-width: 560px) {
   .key {
     flex-wrap: wrap;
+    gap: calc(var(--u) * 1.5);
+  }
+
+  .key-rule {
+    display: none;
+  }
+
+  .key-copy {
+    width: 100%;
+  }
+
+  .key-arrow {
+    margin-left: 0;
   }
 
   .key-hint {
-    width: 100%;
-    text-align: center;
+    width: auto;
+    text-align: start;
   }
 }
 

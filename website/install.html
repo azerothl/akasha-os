@@ -66,7 +66,19 @@
             />
           </svg>
           <span class="key-label">Download</span>
-          <span class="key-hint">GitHub Releases</span>
+          <span class="key-rule" aria-hidden="true"></span>
+          <span class="key-copy">
+            <span class="key-hint">GitHub Releases</span>
+          </span>
+          <svg class="key-arrow" viewBox="0 0 32 32" aria-hidden="true">
+            <path
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+              stroke-linecap="square"
+              d="M6 16h18M18 8l8 8-8 8"
+            />
+          </svg>
         </a>
 
         <h2>hw.req</h2>
@@ -245,5 +257,6 @@ cargo run -p aos-session --release</pre>
       </footer>
     </div>
     <script src="app.js"></script>
+    <script type="module" src="orrery.js"></script>
   </body>
 </html>

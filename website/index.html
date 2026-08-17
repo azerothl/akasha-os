@@ -69,16 +69,15 @@
             <span data-aos-version>0.5.0</span> est une appli hôte, pas une image
             bootable.
           </p>
-          <p class="swipe">HOST · NVIDIA rec. · NOT BOOTABLE</p>
           <ul class="orbits">
             <li>MEMORY</li>
             <li>CAPS</li>
             <li>GPU</li>
             <li>AGENTS</li>
           </ul>
-          <div class="facts">
+          <div class="sheet">
             <article class="fact">
-              <h2>Host</h2>
+              <h2>HOST</h2>
               <p data-lang="en">Preview <span data-aos-version>0.5.0</span> is a host app on Windows or Linux x64.</p>
               <p data-lang="fr">La Preview <span data-aos-version>0.5.0</span> est une appli hôte sur Windows ou Linux x64.</p>
             </article>
@@ -88,11 +87,13 @@
               <p data-lang="fr">Recommandé. Un chemin CPU plus lent existe sans GPU.</p>
             </article>
             <article class="fact">
-              <h2>Boot</h2>
+              <h2 data-lang="en">NOT BOOTABLE</h2>
+              <h2 data-lang="fr">NON BOOTABLE</h2>
               <p data-lang="en">Denied. This is not a bootable OS image. The seL4 track is separate.</p>
               <p data-lang="fr">Refusé. Ce n’est pas une image bootable. La piste seL4 est séparée.</p>
             </article>
           </div>
+          <p class="preview">PREVIEW <span data-aos-version>0.5.0</span></p>
           <p class="repo">
             <a href="https://github.com/azerothl/akasha-os">github.com/azerothl/akasha-os</a>
           </p>
@@ -106,11 +107,26 @@
             />
           </svg>
           <span class="key-label">Install</span>
-          <span class="key-hint" data-lang="en">Wind the orrery</span>
-          <span class="key-hint" data-lang="fr">Remonter le planétaire</span>
+          <span class="key-rule" aria-hidden="true"></span>
+          <span class="key-copy">
+            <span class="key-hint" data-lang="en">Wind the orrery</span>
+            <span class="key-hint" data-lang="fr">Remonter le planétaire</span>
+            <span class="key-sub" data-lang="en">Download Preview <span data-aos-version>0.5.0</span></span>
+            <span class="key-sub" data-lang="fr">Télécharger la Preview <span data-aos-version>0.5.0</span></span>
+          </span>
+          <svg class="key-arrow" viewBox="0 0 32 32" aria-hidden="true">
+            <path
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+              stroke-linecap="square"
+              d="M6 16h18M18 8l8 8-8 8"
+            />
+          </svg>
         </a>
       </main>
     </div>
     <script src="app.js"></script>
+    <script type="module" src="orrery.js"></script>
   </body>
 </html>
