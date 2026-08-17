@@ -1,8 +1,10 @@
-# Installation — Akasha OS Preview
+# Installation — Akasha OS Preview 0.6.0
 
 **Langue :** [English](../../INSTALL.md) | Français
 
-**Ce n'est pas un OS bootable.** Preview tourne **sur Windows ou Linux x64**
+> Date : 17/08/2026 · Preview **0.6.0**
+
+**Ce n'est pas un OS bootable.** La Preview 0.6.0 tourne **sur Windows ou Linux x64**
 (échafaudage hôte, ADR 0001). **NVIDIA est recommandé** ; un paquet et un chemin
 **CPU-only** existent (inférence plus lente). seL4 = piste séparée.
 

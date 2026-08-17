@@ -25,7 +25,7 @@ plus tard.
 
 ## Mapping HTTP JSON ↔ intents CBOR (contrat seulement)
 
-La Preview **0.6 n'exécute pas** d'adaptateur HTTP dans le process OS. Un
+La Preview **0.6.0 n'exécute pas** d'adaptateur HTTP dans le process OS. Un
 futur daemon de pont (binaire séparé, optionnel) PEUT exposer du JSON HTTP
 et relayer vers le bus CBOR. Jusqu'à ce daemon, ce tableau est le gel.
 

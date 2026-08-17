@@ -20,4 +20,4 @@ cargo test -p aos-proto committed_bridge_schemas_match
 ```
 
 See [sibling-bridge.md](../sibling-bridge.md) for the HTTP JSON ↔ CBOR mapping
-(contract only — no live daemon in Preview 0.6).
+(contract only — no live daemon in Preview 0.6.0).

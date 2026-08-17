@@ -2931,7 +2931,7 @@ impl UiApp {
                     "{}\n\
                      Sessions / Memory / Network opt-in.\n\
                      Type /commands — use the side tabs.",
-                    t.preview_banner
+                    t.preview_banner.replace("{}", &version)
                 ),
             )],
             streaming: String::new(),
@@ -3724,7 +3724,7 @@ impl eframe::App for UiApp {
                     match step {
                         0 => {
                             ui.heading(t.welcome);
-                            ui.label(t.preview_banner);
+                            ui.label(t.preview_banner.replace("{}", &self.version));
                             ui.label(t.welcome_body1);
                             ui.label(t.welcome_body2);
                         }
@@ -3861,7 +3861,7 @@ impl eframe::App for UiApp {
                 }
             }
             ui.horizontal(|ui| {
-                ui.colored_label(egui::Color32::from_rgb(220, 160, 40), t.preview_banner);
+                ui.colored_label(egui::Color32::from_rgb(220, 160, 40), t.preview_banner.replace("{}", &self.version));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.button(t.report).clicked() {
                         self.tab = Tab::Feedback;

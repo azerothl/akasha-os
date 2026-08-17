@@ -166,7 +166,7 @@ pub struct UiStrings {
 }
 
 const EN: UiStrings = UiStrings {
-    preview_banner: "Akasha OS Preview — running on Windows/Linux (scaffold). This is not the bootable seL4 OS yet.",
+    preview_banner: "Akasha OS Preview {} — running on Windows/Linux (scaffold). This is not the bootable seL4 OS yet.",
     tutorial_title: "Tutorial — Akasha OS Preview",
     step_of: "Step {} / 4",
     welcome: "Welcome",
@@ -330,7 +330,7 @@ const EN: UiStrings = UiStrings {
 };
 
 const FR: UiStrings = UiStrings {
-    preview_banner: "Akasha OS Preview — exécuté sur Windows/Linux (échafaudage). Ce n'est pas encore l'OS bootable seL4.",
+    preview_banner: "Akasha OS Preview {} — exécuté sur Windows/Linux (échafaudage). Ce n'est pas encore l'OS bootable seL4.",
     tutorial_title: "Tutoriel — Akasha OS Preview",
     step_of: "Étape {} / 4",
     welcome: "Bienvenue",

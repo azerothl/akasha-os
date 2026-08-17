@@ -1,8 +1,10 @@
-# First run — Akasha OS Preview
+# First run — Akasha OS Preview 0.6.0
 
 **Language:** English | [Français](fr/FIRST-RUN.md)
 
-**This is not a bootable OS.** Preview runs on Windows or Linux x64.
+> Date: 17/08/2026 · Preview **0.6.0**
+
+**This is not a bootable OS.** Preview 0.6.0 runs on Windows or Linux x64.
 **NVIDIA is recommended**; CPU-only boot works with a smaller/slower pack.
 
 Full feature list: [FEATURES.md](FEATURES.md).

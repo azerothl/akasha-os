@@ -35,7 +35,7 @@ not duplicated blindly; optional “assistant as module” remains a later optio
 
 ## HTTP JSON ↔ CBOR intent mapping (contract only)
 
-Preview **0.6 does not run** an HTTP adapter inside the OS process. A future
+Preview **0.6.0 does not run** an HTTP adapter inside the OS process. A future
 bridge daemon (separate binary, optional) MAY expose JSON over HTTP and
 forward to the CBOR bus. Until that daemon exists, this table is the freeze.
 
