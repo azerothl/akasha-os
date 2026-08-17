@@ -249,7 +249,7 @@ body.plate .ether {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 0;
+  gap: var(--u) 0;
 }
 
 .lanes a,
@@ -654,6 +654,43 @@ h2 {
   margin: 0 0 calc(var(--u) * 1.5);
 }
 
+.log-toc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--u) calc(var(--u) * 2);
+  max-width: 52rem;
+  margin: calc(var(--u) * 3) 0 0;
+  font-family: var(--display);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.log-toc a {
+  color: var(--signal);
+  text-decoration: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.log-toc a:hover,
+.log-toc a:focus-visible {
+  color: var(--paper);
+}
+
+.grant[id] {
+  scroll-margin-top: calc(var(--u) * 3);
+}
+
+.rev-when {
+  margin: 0 0 calc(var(--u) * 2);
+  color: var(--mute);
+  font-size: 0.92rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.grant .ticks li {
+  margin-bottom: calc(var(--u) * 1.5);
+}
+
 .steps {
   margin: 0 0 calc(var(--u) * 3);
   padding: 0;
@@ -789,6 +826,7 @@ footer p {
   .lanes {
     grid-column: 1 / -1;
     justify-content: flex-start;
+    gap: var(--u);
   }
 
   .mark-id {
