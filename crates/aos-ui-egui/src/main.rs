@@ -2920,20 +2920,18 @@ impl UiApp {
         let agent_max_steps = prefs.default_max_steps;
         let agent_timeout_secs = prefs.default_timeout_secs;
         let network_online = prefs.network_online;
+        let intro = format!(
+            "{}\n\
+             Sessions / Memory / Network opt-in.\n\
+             Type /commands — use the side tabs.",
+            t.preview_banner.replace("{}", &version)
+        );
         Self {
             cmd_tx,
             evt_rx,
             version,
             tab: Tab::Chat,
-            chat: vec![ChatLine::plain(
-                "système",
-                format!(
-                    "{}\n\
-                     Sessions / Memory / Network opt-in.\n\
-                     Type /commands — use the side tabs.",
-                    t.preview_banner.replace("{}", &version)
-                ),
-            )],
+            chat: vec![ChatLine::plain("système", intro)],
             streaming: String::new(),
             input: String::new(),
             chat_pending: false,
