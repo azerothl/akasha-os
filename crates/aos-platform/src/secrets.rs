@@ -1,11 +1,12 @@
-//! Secrets vault (E7 / Preview 0.4) : chiffrement au repos, distribution
-//! restreinte aux **services** (jamais aux agents — F-SEC-04 / §9.2).
+//! Secrets vault (E7 / Preview 0.4 + E7-keyring / 0.6) : chiffrement au repos,
+//! distribution restreinte aux **services** (jamais aux agents — F-SEC-04 / §9.2).
 //!
 //! - Magasin live : `var/secrets/vault.enc` (ChaCha20-Poly1305).
-//! - Clé maître : `var/secrets/master.key` (32 octets) ; sous Windows le
-//!   contenu est protégé par DPAPI ; sous Linux permissions 0600.
+//! - Clé maître : OS keyring (Windows Credential Manager / Linux Secret Service)
+//!   avec fallback fichier `master.key` (DPAPI sous Windows, 0600 sous Linux).
 //! - Import optionnel : si `keys.yaml` clair existe encore, migration
 //!   automatique puis renommage en `keys.yaml.migrated`.
+//! - Forcer le fichier : `AOS_SECRETS_FILE_KEY=1` (tests / Linux headless).
 
 use chacha20poly1305::aead::{Aead, KeyInit};
 use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
@@ -52,11 +53,28 @@ struct VaultFile {
     keys: HashMap<String, String>,
 }
 
+/// Backend de la clé maître (audit Preview 0.6).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MasterBackend {
+    Keyring,
+    File,
+}
+
+impl MasterBackend {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Keyring => "keyring",
+            Self::File => "file",
+        }
+    }
+}
+
 /// Le magasin de secrets chiffré.
 pub struct SecretStore {
     dir: PathBuf,
     keys: HashMap<String, String>,
     master: [u8; 32],
+    backend: MasterBackend,
 }
 
 impl SecretStore {
@@ -78,11 +96,13 @@ impl SecretStore {
         };
         std::fs::create_dir_all(&dir)?;
 
-        let master = load_or_create_master(&dir)?;
+        let (master, backend) = load_or_create_master(&dir)?;
+        write_backend_marker(&dir, backend);
         let mut store = Self {
             dir: dir.clone(),
             keys: HashMap::new(),
             master,
+            backend,
         };
 
         let vault = dir.join("vault.enc");
@@ -171,10 +191,112 @@ impl SecretStore {
     pub fn is_encrypted(&self) -> bool {
         self.vault_path().exists()
     }
+
+    /// `keyring` (Credential Manager / Secret Service) ou `file` (0600 / DPAPI).
+    pub fn master_backend(&self) -> MasterBackend {
+        self.backend
+    }
+
+    /// Retire l'entrée keyring de ce magasin (tests).
+    pub fn delete_keyring_entry(&self) {
+        let _ = keyring_delete(&self.dir);
+    }
 }
 
-fn load_or_create_master(dir: &Path) -> Result<[u8; 32], SecretError> {
+const KEYRING_SERVICE: &str = "akasha-os";
+
+fn force_file_backend() -> bool {
+    matches!(
+        std::env::var("AOS_SECRETS_FILE_KEY").ok().as_deref(),
+        Some("1") | Some("true") | Some("TRUE")
+    )
+}
+
+fn sha256_hex16(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    let d = Sha256::digest(bytes);
+    let mut s = String::with_capacity(16);
+    for b in d.iter().take(8) {
+        s.push_str(&format!("{b:02x}"));
+    }
+    s
+}
+
+fn keyring_user(dir: &Path) -> String {
+    let marker = dir.join("master.keyring-user");
+    if let Ok(s) = std::fs::read_to_string(&marker) {
+        let t = s.trim();
+        if !t.is_empty() {
+            return t.to_string();
+        }
+    }
+    let canon = dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf());
+    let user = format!(
+        "vault-master:{}",
+        sha256_hex16(canon.to_string_lossy().as_bytes())
+    );
+    let _ = std::fs::write(&marker, &user);
+    user
+}
+
+fn key_to_hex(key: &[u8; 32]) -> String {
+    key.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+fn hex_to_key(s: &str) -> Option<[u8; 32]> {
+    let s = s.trim();
+    if s.len() != 64 {
+        return None;
+    }
+    let mut key = [0u8; 32];
+    for i in 0..32 {
+        key[i] = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16).ok()?;
+    }
+    Some(key)
+}
+
+fn keyring_get(dir: &Path) -> Option<[u8; 32]> {
+    if force_file_backend() {
+        return None;
+    }
+    let entry = keyring::Entry::new(KEYRING_SERVICE, &keyring_user(dir)).ok()?;
+    hex_to_key(&entry.get_password().ok()?)
+}
+
+fn keyring_set(dir: &Path, key: &[u8; 32]) -> bool {
+    if force_file_backend() {
+        return false;
+    }
+    let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, &keyring_user(dir)) else {
+        return false;
+    };
+    if entry.set_password(&key_to_hex(key)).is_err() {
+        return false;
+    }
+    keyring_get(dir).as_ref() == Some(key)
+}
+
+fn keyring_delete(dir: &Path) -> bool {
+    let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, &keyring_user(dir)) else {
+        return false;
+    };
+    entry.delete_credential().is_ok()
+}
+
+fn write_backend_marker(dir: &Path, backend: MasterBackend) {
+    let _ = std::fs::write(dir.join("master.backend"), backend.as_str());
+}
+
+fn load_or_create_master(dir: &Path) -> Result<([u8; 32], MasterBackend), SecretError> {
     let path = dir.join("master.key");
+
+    if let Some(key) = keyring_get(dir) {
+        if path.exists() {
+            let _ = std::fs::remove_file(&path);
+        }
+        return Ok((key, MasterBackend::Keyring));
+    }
+
     if path.exists() {
         let raw = std::fs::read(&path)?;
         let plain = unprotect_master(&raw)?;
@@ -183,10 +305,24 @@ fn load_or_create_master(dir: &Path) -> Result<[u8; 32], SecretError> {
         }
         let mut key = [0u8; 32];
         key.copy_from_slice(&plain);
-        return Ok(key);
+        if keyring_set(dir, &key) {
+            let _ = std::fs::remove_file(&path);
+            return Ok((key, MasterBackend::Keyring));
+        }
+        return Ok((key, MasterBackend::File));
     }
+
+    if dir.join("vault.enc").exists() {
+        return Err(SecretError::Crypto(
+            "vault.enc présent mais clé maître introuvable (keyring/file)".into(),
+        ));
+    }
+
     let mut key = [0u8; 32];
     rand::thread_rng().fill_bytes(&mut key);
+    if keyring_set(dir, &key) {
+        return Ok((key, MasterBackend::Keyring));
+    }
     let protected = protect_master(&key)?;
     std::fs::write(&path, protected)?;
     #[cfg(unix)]
@@ -194,7 +330,7 @@ fn load_or_create_master(dir: &Path) -> Result<[u8; 32], SecretError> {
         use std::os::unix::fs::PermissionsExt;
         let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
     }
-    Ok(key)
+    Ok((key, MasterBackend::File))
 }
 
 fn encrypt_vault(
@@ -370,6 +506,7 @@ mod tests {
         ));
         let names = s.list_names("ui-egui").unwrap();
         assert_eq!(names, vec!["openai_key".to_string()]);
+        s.delete_keyring_entry();
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -399,6 +536,13 @@ mod tests {
         );
         let raw = std::fs::read(dir.join("vault.enc")).unwrap();
         assert!(!String::from_utf8_lossy(&raw).contains("BSA-test"));
+        if s2.master_backend() == MasterBackend::Keyring {
+            assert!(!dir.join("master.key").exists());
+        } else {
+            assert!(dir.join("master.key").exists());
+        }
+        assert!(dir.join("master.backend").exists());
+        s2.delete_keyring_entry();
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
