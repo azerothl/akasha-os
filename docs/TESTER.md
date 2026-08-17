@@ -96,8 +96,7 @@ Expected banner: *Preview on Windows/Linux — this is not the bootable OS yet*.
 
 ### 7d. Auto-remember from chat (P05 / E14)
 
-- **Settings → Network** (or Memory-related prefs): enable **Auto-remember from chat**
-  (default is **off**).
+- **Settings → Network**: **Auto-remember from chat** is **on** by default (uncheck to disable).
 - In Chat, say something durable e.g. “I prefer French for the UI”.
 - After the reply, status should mention fact(s) remembered; **Memory → List**
   shows the fact with a **`[chat]`** badge.
@@ -105,6 +104,14 @@ Expected banner: *Preview on Windows/Linux — this is not the bootable OS yet*.
 - Paste a fake key (`sk-abcdefghijklmnopqrstuvwxyz1234` or `ghp_…`) in chat:
   it must **not** appear as a remembered fact (audit may show `filtered`).
 - Turn the setting **off** again: further chat must not write new facts.
+
+### 7e. Agent asks the user (`user.ask`)
+
+- Start `/agent` with a task that needs a preference (format, name, choice).
+- When the agent asks, the chat hint becomes “answer the agent’s question”;
+  type the reply in the same thread (or **Répondre** on the card if several wait).
+- The agent should resume with your answer. Leaving it unanswered ~10 min
+  continues the task without blocking forever.
 
 ### 8. Web search (PC.8 / PC.13)
 

@@ -20,7 +20,7 @@ pub struct Preferences {
     #[serde(default)]
     pub network_online: bool,
     /// E14 : extraire automatiquement des faits durables après chaque tour de chat.
-    #[serde(default)]
+    #[serde(default = "default_auto_remember_chat")]
     pub auto_remember_chat: bool,
     #[serde(default)]
     pub default_agent_model: Option<String>,
@@ -53,7 +53,7 @@ fn default_theme() -> String {
     "dark".into()
 }
 fn default_max_steps() -> u32 {
-    32
+    64
 }
 fn default_timeout_secs() -> u64 {
     3600
@@ -67,6 +67,9 @@ fn default_fetch_max() -> u64 {
 fn default_browse_chars() -> usize {
     12_000
 }
+fn default_auto_remember_chat() -> bool {
+    true
+}
 
 impl Default for Preferences {
     fn default() -> Self {
@@ -77,7 +80,7 @@ impl Default for Preferences {
             inference_mode: default_inference(),
             theme: default_theme(),
             network_online: false,
-            auto_remember_chat: false,
+            auto_remember_chat: default_auto_remember_chat(),
             default_agent_model: None,
             default_max_steps: default_max_steps(),
             default_timeout_secs: default_timeout_secs(),

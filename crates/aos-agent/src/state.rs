@@ -76,7 +76,10 @@ impl CognitiveState {
 
     /// Actions autorisées sous le gate : `plan.update` et `goal.fail` uniquement.
     pub fn blocks_action(&self, action: &str) -> bool {
-        self.plan_gate_active() && action != "plan.update" && action != "goal.fail"
+        self.plan_gate_active()
+            && action != "plan.update"
+            && action != "goal.fail"
+            && action != "user.ask"
     }
 
     pub fn push_user(&mut self, content: &str) {
@@ -167,6 +170,7 @@ mod tests {
         assert!(st.blocks_action("noop"));
         assert!(!st.blocks_action("plan.update"));
         assert!(!st.blocks_action("goal.fail"));
+        assert!(!st.blocks_action("user.ask"));
         st.set_plan(vec![TaskNode {
             id: "1".into(),
             title: "étape".into(),

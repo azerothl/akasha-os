@@ -6,6 +6,7 @@
 > Date : 15/08/2026  
 > Statut : brouillon  
 > Référence : `specs-fonctionnelles.md`, `reflexion-agent-os.md`, `FEATURES.md`  
+> Changements v0.5.0 : Preview 0.5.0 — mémorisation auto depuis le chat (E14) ; `user.ask` en cours de tâche.
 > Changements v0.4.0 : Preview 0.4.0 — graphe mémoire typé, vault secrets, revue de caps modules.
 > Changements v0.3.1 : Preview 0.3.0 — resync du module notes, dépannage in-app, site Split-Flap.
 > Changements v0.3 : Preview 0.1.2 — `web.browse`, `web.search` multi-moteurs, panneau de transparence egui, Settings persistées (`preferences.json`).  

@@ -9,8 +9,8 @@ Summary of delivered phases. Detail: [development-plan.md](development-plan.md),
 
 **Preview:** 0.5.0 (17/08/2026) — host app on Windows/Linux; NVIDIA optional
 (CPU path). Opt-in auto fact extraction from chat → long-term memory (E14).
-Typed memory graph, encrypted secrets vault, module cap review.
-Not a bootable OS. Cohort gate still open.
+Agents can `user.ask` mid-task (chat Q&A, 10 min timeout). Typed memory graph,
+encrypted secrets vault, module cap review. Not a bootable OS. Cohort gate still open.
 
 ## P05 — Preview 0.5.0 (E14)
 

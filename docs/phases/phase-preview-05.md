@@ -18,7 +18,7 @@ Priorities: [evolution-roadmap.md](../evolution-roadmap.md) Horizon B
 |---|-----------|-------------|--------|
 | P05.1 | E14 extract | Intent `mem.extract`; JSON prompt; secret filter; low-priority `model.infer` | done |
 | P05.2 | E14 persist | Remember + auto_link; metadata `source=chat`; dedup ~0.92; audit | done |
-| P05.3 | E14 UX | Settings opt-in (default OFF); post-turn hook; toast; Memory `chat` badge | done |
+| P05.3 | E14 UX | Settings toggle (default ON); post-turn hook; toast; Memory `chat` badge | done |
 | P05.4 | E14 tests | Unit + integration; TESTER step 7d | done |
 | P05.5 | Docs / ship | Phase docs, FEATURES/STATUS/TESTER, version 0.5.0, site, packaging | done |
 
@@ -30,7 +30,7 @@ Catalogue: [`docs/FEATURES.md`](../FEATURES.md).
 |------|-----------|
 | P05.1 | `mem.extract` on « je m’appelle X, je préfère le français » returns ≥1 valid JSON fact |
 | P05.2 | Restart → recall / `mem.context` see the fact; contradictory 2nd turn creates `supersedes` |
-| P05.3 | Default OFF: zero writes. ON: toast + Memory badge. Delete from UI removes the fact |
+| P05.3 | Default ON: toast + Memory badge after a durable chat turn. OFF: zero writes. Delete from UI removes the fact |
 | P05.4 | Paste `sk-…` / `ghp_…` in chat → 0 remember; audit `filtered` |
 | Regression | `cargo test --workspace`; gates p4/p5 green on CUDA host |
 | Packaging | Four artefacts (Win/Linux × CUDA/CPU) + complete `latest.json` |

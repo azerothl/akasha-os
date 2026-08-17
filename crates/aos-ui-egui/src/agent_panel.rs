@@ -296,10 +296,23 @@ pub fn step_content_markdown(rec: &AgentStepRecord) -> Option<String> {
 }
 
 /// Carte compacte d'un agent lié au chat (état live via `agent.list`).
-/// Retourne `true` si l'utilisateur demande le détail.
-pub fn chat_agent_card(ui: &mut Ui, info: Option<&AgentInfo>, agent_id: &str, title: &str) -> bool {
-    let mut open_detail = false;
-    let (state_label, color, step, max_steps, task, fail) = if let Some(a) = info {
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ChatCardAction {
+    None,
+    OpenDetail,
+    TargetReply,
+}
+
+pub fn chat_agent_card(
+    ui: &mut Ui,
+    info: Option<&AgentInfo>,
+    agent_id: &str,
+    title: &str,
+    origin: &str,
+    selected_for_reply: bool,
+) -> ChatCardAction {
+    let mut action = ChatCardAction::None;
+    let (state_label, color, step, max_steps, task, fail, is_blocked) = if let Some(a) = info {
         (
             format!("{:?}", a.state),
             state_color(&a.state),
@@ -307,6 +320,7 @@ pub fn chat_agent_card(ui: &mut Ui, info: Option<&AgentInfo>, agent_id: &str, ti
             a.max_steps,
             a.current_task.clone().unwrap_or_default(),
             a.fail_reason.clone(),
+            a.state == AgentState::Blocked,
         )
     } else {
         (
@@ -316,23 +330,58 @@ pub fn chat_agent_card(ui: &mut Ui, info: Option<&AgentInfo>, agent_id: &str, ti
             0,
             String::new(),
             None,
+            false,
         )
     };
+    let ask_card = origin == "ask" && is_blocked;
+    let stroke_color = if selected_for_reply && ask_card {
+        Color32::from_rgb(250, 190, 80)
+    } else {
+        color
+    };
+    let fill = if selected_for_reply && ask_card {
+        Color32::from_rgb(48, 42, 28)
+    } else {
+        Color32::from_rgb(32, 36, 44)
+    };
     egui::Frame::NONE
-        .fill(Color32::from_rgb(32, 36, 44))
-        .stroke(egui::Stroke::new(1.0_f32, color))
+        .fill(fill)
+        .stroke(egui::Stroke::new(
+            if selected_for_reply && ask_card {
+                2.0_f32
+            } else {
+                1.0_f32
+            },
+            stroke_color,
+        ))
         .inner_margin(8.0)
         .corner_radius(4.0)
         .show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.colored_label(color, RichText::new(format!("● {state_label}")).strong());
-                ui.strong(agent_id);
+                let shown = if title.is_empty() {
+                    agent_id
+                } else {
+                    title
+                };
+                ui.strong(truncate(shown, 64));
+                ui.weak(agent_id);
                 if max_steps > 0 {
                     ui.label(format!("step {step}/{max_steps}"));
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.small_button("Détail").clicked() {
-                        open_detail = true;
+                    if ui.add(egui::Button::new("Détail").small()).clicked() {
+                        action = ChatCardAction::OpenDetail;
+                    }
+                    if ask_card {
+                        if selected_for_reply {
+                            ui.colored_label(
+                                Color32::from_rgb(240, 190, 100),
+                                RichText::new("répondre ici").small(),
+                            );
+                        } else if ui.add(egui::Button::new("Répondre").small()).clicked() {
+                            action = ChatCardAction::TargetReply;
+                        }
                     }
                 });
             });
@@ -351,7 +400,7 @@ pub fn chat_agent_card(ui: &mut Ui, info: Option<&AgentInfo>, agent_id: &str, ti
                 ui.colored_label(Color32::from_rgb(220, 90, 90), truncate(&reason, 100));
             }
         });
-    open_detail
+    action
 }
 
 fn find_json_object_end(s: &str) -> Option<usize> {
@@ -457,22 +506,29 @@ pub fn draw_agent_detail(
             .fail_reason
             .clone()
             .or_else(|| trace.and_then(|t| t.fail_reason.clone()));
-        if matches!(a.state, AgentState::Failed | AgentState::Blocked | AgentState::Killed)
-            || fail.is_some()
-        {
+        if a.state == AgentState::Blocked {
+            card_frame(Color32::from_rgb(70, 55, 28)).show(ui, |ui| {
+                ui.label(
+                    RichText::new("Question à l'utilisateur")
+                        .color(Color32::from_rgb(240, 190, 100))
+                        .strong(),
+                );
+                let q = if a.last_output.trim().is_empty() {
+                    "En attente d'une réponse dans le chat."
+                } else {
+                    a.last_output.trim()
+                };
+                ui.label(q);
+            });
+            ui.add_space(4.0);
+        } else if matches!(a.state, AgentState::Failed | AgentState::Killed) || fail.is_some() {
             card_frame(Color32::from_rgb(60, 30, 30)).show(ui, |ui| {
                 ui.label(
-                    RichText::new(if matches!(a.state, AgentState::Blocked) {
-                        "Bloqué"
-                    } else {
-                        "Échec"
-                    })
-                    .color(Color32::from_rgb(240, 140, 120))
-                    .strong(),
+                    RichText::new("Échec")
+                        .color(Color32::from_rgb(240, 140, 120))
+                        .strong(),
                 );
-                ui.label(
-                    fail.unwrap_or_else(|| "motif non renseigné".into()),
-                );
+                ui.label(fail.unwrap_or_else(|| "motif non renseigné".into()));
             });
             ui.add_space(4.0);
         }
@@ -500,6 +556,16 @@ pub fn draw_agent_detail(
                     if ui.button("Débloquer").clicked() {
                         actions.resume = true;
                     }
+                    if a.state == AgentState::Blocked {
+                        ui.add(
+                            egui::TextEdit::singleline(steer_buf)
+                                .desired_width(180.0)
+                                .hint_text("réponse…"),
+                        );
+                        if ui.button("Répondre").clicked() && !steer_buf.is_empty() {
+                            actions.steer = Some(steer_buf.clone());
+                        }
+                    }
                 }
                 AgentState::Failed | AgentState::Killed => {
                     if ui.button("Relancer l'étape").clicked() {
@@ -518,14 +584,16 @@ pub fn draw_agent_detail(
                     actions.kill = true;
                 }
             }
-            ui.label("Steer");
-            ui.add(
-                egui::TextEdit::singleline(steer_buf)
-                    .desired_width(160.0)
-                    .hint_text("directive…"),
-            );
-            if ui.button("Envoyer").clicked() && !steer_buf.is_empty() {
-                actions.steer = Some(steer_buf.clone());
+            if a.state != AgentState::Blocked {
+                ui.label("Steer");
+                ui.add(
+                    egui::TextEdit::singleline(steer_buf)
+                        .desired_width(160.0)
+                        .hint_text("directive…"),
+                );
+                if ui.button("Envoyer").clicked() && !steer_buf.is_empty() {
+                    actions.steer = Some(steer_buf.clone());
+                }
             }
         });
 

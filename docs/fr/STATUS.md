@@ -9,6 +9,7 @@ Résumé des phases livrées. Détail : [plan-developpement-phases.md](plan-deve
 
 **Preview :** 0.5.0 (17/08/2026) — appli hôte Windows/Linux ; NVIDIA optionnel
 (chemin CPU). Extraction auto opt-in des faits du chat → mémoire LT (E14).
+Les agents peuvent `user.ask` en cours de tâche (Q&R chat, timeout 10 min).
 Graphe mémoire typé, vault secrets, revue de caps modules.
 Pas un OS bootable. Gate cohorte encore ouverte.
 

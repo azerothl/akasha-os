@@ -537,6 +537,23 @@ pub struct AgentInfo {
     /// Session chat liée (pour carte / notification).
     #[serde(default)]
     pub session_id: Option<String>,
+    /// Libellé court dérivé de la directive (liste / historique).
+    #[serde(default)]
+    pub title: String,
+}
+
+impl AgentInfo {
+    pub fn display_title(&self) -> &str {
+        let t = self.title.trim();
+        if !t.is_empty() {
+            return t;
+        }
+        let d = self.directive.trim();
+        if !d.is_empty() {
+            return d;
+        }
+        self.agent_id.as_str()
+    }
 }
 
 /// Source citée par un tour (web, document, fetch).
@@ -1049,7 +1066,12 @@ Chat (cette session) :
 - Tâche multi-étapes, outils, notes, fichiers, recherche web, effets de bord →
   une courte phrase d'accusé puis un objet JSON seul :
   {\"action\":\"agent.spawn\",\"args\":{\"brief\":\"…\"}}
-  (skills/tools optionnels dans args). Ne lance pas toi-même d'outils.";
+  (skills/tools optionnels dans args). Ne lance pas toi-même d'outils.
+- Mémoire : tu n'enregistres rien toi-même. Les faits durables (nom, préférences…)
+  sont extraits après le tour vers l'onglet Mémoire. N'écris jamais que tu as
+  « noté », « enregistré » ou mis en « mémoire épisodique ». Si un bloc
+  « Mémoire long terme utilisateur » est présent ci-dessous, utilise-le.
+  Si l'utilisateur demande d'oublier, oriente-le vers l'onglet Mémoire.";
 
 /// Manifeste double-surface (§7.3).
 // ---------------------------------------------------------------------------
@@ -1712,17 +1734,19 @@ pub struct MemExtractResponse {
 }
 
 /// Prompt système pour l'extraction post-tour (local_only, JSON strict).
-pub const MEM_EXTRACT_SYSTEM_PROMPT: &str = r#"Tu extrais des FAITS DURABLES sur l'utilisateur à partir d'un tour de chat.
-Réponds UNIQUEMENT avec un objet JSON valide, sans markdown, sans commentaire :
+pub const MEM_EXTRACT_SYSTEM_PROMPT: &str = r#"Extract DURABLE facts about the USER from one chat turn.
+The user may write in any language, any grammatical person, or short fragments.
+Reply with valid JSON only — no markdown, no chain-of-thought:
 {"facts":[{"text":"...","supersedes_hint":null}]}
 
-Règles :
-- Maximum 5 faits. Chaque "text" est une phrase courte à la 3e personne (ex. "L'utilisateur préfère le français").
-- Uniquement des préférences, identité, décisions stables, contraintes durables.
-- N'extrais PAS : secrets, mots de passe, tokens, clés API, IBAN, PEM, codes OTP, contenu de vault.
-- N'extrais PAS : salutations, questions ponctuelles, commandes OS, prose de l'assistant sans fait user.
-- Si aucun fait durable : {"facts":[]}
-- "supersedes_hint" optionnel : ancien fait que celui-ci remplace (texte libre).
+Rules:
+- Max 5 facts. Each "text" is a short third-person sentence in the user's language.
+- Extract identity, preferences, stable constraints, decisions that should persist across sessions.
+- Do NOT extract: secrets, passwords, tokens, API keys, IBAN, PEM, OTP, vault contents.
+- Do NOT extract: greetings, one-off questions, OS commands, or assistant prose that adds no user fact.
+- The USER message is the only source of facts. Ignore assistant claims about having "saved" or "remembered" anything.
+- If none: {"facts":[]}
+- "supersedes_hint" optional: older fact this one replaces (free text).
 "#;
 
 // ---------------------------------------------------------------------------

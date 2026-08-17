@@ -21,13 +21,13 @@ use aos_agent::{intents, CognitiveState, ControlCmd, ControlResp, ReportPayload}
 use aos_ipc::{BusClient, BusService};
 use aos_proto::{
     AgentCreateRequest, AgentCreateResponse, AgentGoal, AgentInfo, AgentOutputEvent, AgentSpec,
-    AgentSource, AgentState, AgentStepRecord, CancelRequest, ChatMessage, DocumentRef,
-    FilesGenerateRequest, FsListRequest, FsReadRequest, FsReadResponse, FsWriteRequest, InferParams,
-    InferRequest, MemContextRequest, MemContextResponse, MemEpisodicQueryRequest,
-    MemEpisodicWriteRequest, MemHit, MemRememberResponse, MemSharedReadRequest, MemSharedWriteRequest,
-    ModuleInvokeRequest, ModuleInvokeResponse, NetFetchRequest, TaskNode, TaskNodeStatus,
-    TokenEvent, WebBrowseRequest, WebBrowseResponse, WebSearchHit, WebSearchRequest,
-    WebSearchResponse,
+    AgentSource, AgentState, AgentStepRecord, CancelRequest, ChatAttachment, ChatMessage,
+    ChatSessionAppendRequest, DocumentRef, FilesGenerateRequest, FsListRequest, FsReadRequest,
+    FsReadResponse, FsWriteRequest, InferParams, InferRequest, MemContextRequest,
+    MemContextResponse, MemEpisodicQueryRequest, MemEpisodicWriteRequest, MemHit,
+    MemRememberResponse, MemSharedReadRequest, MemSharedWriteRequest, ModuleInvokeRequest,
+    ModuleInvokeResponse, NetFetchRequest, TaskNode, TaskNodeStatus, TokenEvent, WebBrowseRequest,
+    WebBrowseResponse, WebSearchHit, WebSearchRequest, WebSearchResponse,
 };
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -39,6 +39,15 @@ use tokio::sync::{mpsc, Mutex};
 enum WorkerCmd {
     Resume,
     Steer(String),
+}
+
+/// Attente max d'une réponse `user.ask` (bornée aussi par le timeout du goal).
+const USER_ASK_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+
+enum AskWait {
+    Answer(String),
+    Timeout { waited_secs: u64 },
+    Killed,
 }
 
 struct Shared {
@@ -658,6 +667,79 @@ async fn main() {
         let mut step_sources: Vec<AgentSource> = Vec::new();
 
         match act_result {
+            ActResult::AskUser { question, choices } => {
+                let body = format_user_question(&question, &choices);
+                report(
+                    &bus,
+                    &agent_id,
+                    AgentOutputEvent::Log {
+                        line: format!("user.ask : {body}"),
+                    },
+                )
+                .await;
+                post_user_question(&bus, &spec, &body).await;
+                shared.paused.store(true, Ordering::SeqCst);
+                report(
+                    &bus,
+                    &agent_id,
+                    AgentOutputEvent::StateChanged {
+                        state: AgentState::Blocked,
+                    },
+                )
+                .await;
+                let remaining = timeout.saturating_sub(started.elapsed());
+                let ask_wait = USER_ASK_TIMEOUT.min(remaining.max(Duration::from_secs(15)));
+                match wait_user_answer(&shared, &mut cmd_rx, ask_wait).await {
+                    AskWait::Killed => {
+                        terminal = Some(AgentState::Killed);
+                        tool_result = "interrompu en attendant l'utilisateur".into();
+                    }
+                    AskWait::Timeout { waited_secs } => {
+                        let mins = (waited_secs / 60).max(1);
+                        report(
+                            &bus,
+                            &agent_id,
+                            AgentOutputEvent::Log {
+                                line: format!("user.ask.timeout : {mins} min"),
+                            },
+                        )
+                        .await;
+                        post_ask_timeout(&bus, &spec, mins).await;
+                        report(
+                            &bus,
+                            &agent_id,
+                            AgentOutputEvent::StateChanged {
+                                state: AgentState::Running,
+                            },
+                        )
+                        .await;
+                        tool_result = format!(
+                            "(aucune réponse après {mins} min — continue avec les infos disponibles ; ne repose pas la même question tout de suite)"
+                        );
+                        shared
+                            .state
+                            .lock()
+                            .await
+                            .push_tool("user.ask", &tool_result);
+                    }
+                    AskWait::Answer(answer) => {
+                        report(
+                            &bus,
+                            &agent_id,
+                            AgentOutputEvent::StateChanged {
+                                state: AgentState::Running,
+                            },
+                        )
+                        .await;
+                        tool_result = format!("réponse utilisateur : {answer}");
+                        shared
+                            .state
+                            .lock()
+                            .await
+                            .push_tool("user.ask", &tool_result);
+                    }
+                }
+            }
             ActResult::Continue(outcome) => {
                 let mut outcome = outcome;
                 if outcome.contains("permission")
@@ -1118,6 +1200,11 @@ enum ActResult {
     Continue(String),
     Complete(String),
     Fail(String),
+    /// Pause jusqu'à une réponse utilisateur (`user.ask`).
+    AskUser {
+        question: String,
+        choices: Vec<String>,
+    },
     /// Pause jusqu'à Resume humain (plus utilisé par agent.await).
     #[allow(dead_code)]
     Blocked {
@@ -1204,6 +1291,29 @@ async fn execute_action(
                 .unwrap_or("échec")
                 .to_string();
             ActResult::Fail(reason)
+        }
+        "user.ask" => {
+            let question = args
+                .get("question")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            if question.is_empty() {
+                ActResult::Continue("user.ask : question vide".into())
+            } else {
+                let choices: Vec<String> = args
+                    .get("choices")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|x| x.as_str().map(|s| s.trim().to_string()))
+                            .filter(|s| !s.is_empty())
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                ActResult::AskUser { question, choices }
+            }
         }
         "plan.update" => {
             let nodes = parse_plan_nodes(args);
@@ -1456,6 +1566,103 @@ async fn execute_action(
     }
 }
 
+fn format_user_question(question: &str, choices: &[String]) -> String {
+    if choices.is_empty() {
+        question.to_string()
+    } else {
+        let opts: String = choices.iter().map(|c| format!("\n- {c}")).collect();
+        format!("{question}\n\nChoix possibles :{opts}")
+    }
+}
+
+fn ask_heading(spec: &AgentSpec) -> String {
+    let title = spec.goal.statement.trim();
+    let title: String = if title.is_empty() {
+        spec.agent_id.clone()
+    } else {
+        title.chars().take(80).collect()
+    };
+    format!("**Question — {title}**")
+}
+
+async fn post_user_question(bus: &BusClient, spec: &AgentSpec, body: &str) {
+    let Some(session_id) = spec.session_id.clone() else {
+        return;
+    };
+    let content = format!("{}\n\n{body}", ask_heading(spec));
+    let _ = bus
+        .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
+            "chat.session.append",
+            &ChatSessionAppendRequest {
+                session_id,
+                role: "assistant".into(),
+                content,
+                attachments: vec![ChatAttachment::AgentRef {
+                    agent_id: spec.agent_id.clone(),
+                    title: spec.goal.statement.clone(),
+                    origin: "ask".into(),
+                }],
+            },
+            vec![],
+        )
+        .await;
+}
+
+async fn post_ask_timeout(bus: &BusClient, spec: &AgentSpec, mins: u64) {
+    let Some(session_id) = spec.session_id.clone() else {
+        return;
+    };
+    let content = format!(
+        "**Question expirée** ({mins} min) — l'agent continue sans réponse."
+    );
+    let _ = bus
+        .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
+            "chat.session.append",
+            &ChatSessionAppendRequest {
+                session_id,
+                role: "assistant".into(),
+                content,
+                attachments: vec![ChatAttachment::AgentRef {
+                    agent_id: spec.agent_id.clone(),
+                    title: spec.goal.statement.clone(),
+                    origin: "ask-timeout".into(),
+                }],
+            },
+            vec![],
+        )
+        .await;
+}
+
+async fn wait_user_answer(
+    shared: &Shared,
+    cmd_rx: &mut mpsc::Receiver<WorkerCmd>,
+    limit: Duration,
+) -> AskWait {
+    let deadline = tokio::time::Instant::now() + limit;
+    let waited_secs = limit.as_secs();
+    while shared.paused.load(Ordering::SeqCst) {
+        match tokio::time::timeout_at(deadline, cmd_rx.recv()).await {
+            Ok(Some(WorkerCmd::Steer(d))) => {
+                shared.paused.store(false, Ordering::SeqCst);
+                return AskWait::Answer(d.trim().to_string());
+            }
+            Ok(Some(WorkerCmd::Resume)) => {
+                shared.paused.store(false, Ordering::SeqCst);
+                return AskWait::Answer(
+                    "(l'utilisateur a repris sans répondre — continue avec les infos disponibles)"
+                        .into(),
+                );
+            }
+            Ok(None) => return AskWait::Killed,
+            Err(_) => {
+                shared.paused.store(false, Ordering::SeqCst);
+                return AskWait::Timeout { waited_secs };
+            }
+        }
+    }
+    AskWait::Answer(String::new())
+}
+
 async fn spawn_child(
     bus: &BusClient,
     shared: &Shared,
@@ -1476,7 +1683,7 @@ async fn spawn_child(
             success_criteria: vec![
                 "Résultat clair et concis (≤ ~800 caractères utiles)".into(),
             ],
-            max_steps: parent.goal.max_steps.min(16),
+            max_steps: (parent.goal.max_steps / 2).clamp(24, 64),
             max_subagents: 0,
             timeout_secs: parent.goal.timeout_secs.min(1800),
         }),
@@ -1490,7 +1697,7 @@ async fn spawn_child(
         mcp_servers: vec![],
         documents: documents.to_vec(),
         parent_id: Some(parent.agent_id.clone()),
-        session_id: None,
+        session_id: parent.session_id.clone(),
         budget: parent.budget.clone(),
         optimize_prompt: false,
     };

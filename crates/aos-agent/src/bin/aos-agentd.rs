@@ -21,7 +21,6 @@ use aos_proto::{
 };
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tokio::process::Command;
 use tokio::sync::{mpsc, Mutex};
@@ -35,7 +34,6 @@ struct AgentEntry {
 struct Runtime {
     agents: HashMap<String, AgentEntry>,
     caps: CapStore,
-    next_id: AtomicU64,
 }
 
 type Shared = Arc<Mutex<Runtime>>;
@@ -210,10 +208,7 @@ async fn spawn_worker(
     {
         let mut rt = shared.lock().await;
         // Mint caps
-        let n = agent_id
-            .strip_prefix("agent-")
-            .and_then(|s| s.parse::<u64>().ok())
-            .unwrap_or(1);
+        let n = persist::seq_from_id(agent_id).max(1);
         let holder = HolderId(n);
         for uri in &spec.caps {
             rt.caps
@@ -243,6 +238,10 @@ async fn spawn_worker(
                     mcp_servers: spec.mcp_servers.clone(),
                     fail_reason: None,
                     session_id: spec.session_id.clone(),
+                    title: persist::read_info(agent_id)
+                        .map(|i| i.title)
+                        .filter(|t| !t.is_empty())
+                        .unwrap_or_else(|| persist::agent_title(&spec.goal.statement)),
                 },
                 subscribers: Vec::new(),
                 trace: restored_trace,
@@ -293,8 +292,11 @@ async fn main() {
     let shared: Shared = Arc::new(Mutex::new(Runtime {
         agents: HashMap::new(),
         caps: CapStore::new(),
-        next_id: AtomicU64::new(1),
     }));
+    {
+        let mut rt = shared.lock().await;
+        hydrate_persisted_agents(&mut rt);
+    }
 
     let mut svc = BusService::new("agentd");
 
@@ -317,11 +319,7 @@ async fn main() {
                         return;
                     }
                 };
-                let n = {
-                    let rt = shared.lock().await;
-                    rt.next_id.fetch_add(1, Ordering::Relaxed)
-                };
-                let agent_id = format!("agent-{n}");
+                let agent_id = persist::alloc_agent_id();
                 let spec = build_spec(&agent_id, &req);
                 match spawn_worker(&shared, &bus_addr, &agent_id, &spec, false, Some(&bus)).await {
                     Ok(pid) => {
@@ -819,20 +817,11 @@ async fn main() {
                                             if let Some(sid) = entry.info.session_id.clone() {
                                                 let summary = match state {
                                                     AgentState::Done => {
-                                                        let out = entry.info.last_output.trim();
-                                                        if out.is_empty() {
-                                                            format!(
-                                                                "Agent {} terminé.",
-                                                                entry.info.agent_id
-                                                            )
-                                                        } else {
-                                                            let excerpt: String =
-                                                                out.chars().take(500).collect();
-                                                            format!(
-                                                                "Agent {} terminé.\n{}",
-                                                                entry.info.agent_id, excerpt
-                                                            )
-                                                        }
+                                                        agent_done_chat_message(
+                                                            &entry.info.agent_id,
+                                                            &entry.info.directive,
+                                                            &entry.info.last_output,
+                                                        )
                                                     }
                                                     AgentState::Failed => {
                                                         let reason = entry
@@ -866,6 +855,31 @@ async fn main() {
                                     AgentOutputEvent::Error { message } => {
                                         entry.info.fail_reason = Some(message.clone());
                                     }
+                                    AgentOutputEvent::Log { line } => {
+                                        if let Some(rest) = line.strip_prefix("goal.complete : ")
+                                        {
+                                            let rest = rest.trim();
+                                            if !rest.is_empty() {
+                                                entry.info.last_output = rest.to_string();
+                                            }
+                                        } else if let Some(rest) =
+                                            line.strip_prefix("user.ask : ")
+                                        {
+                                            let rest = rest.trim();
+                                            if !rest.is_empty() {
+                                                entry.info.last_output = rest.to_string();
+                                                entry.info.fail_reason = None;
+                                            }
+                                        } else if let Some(rest) =
+                                            line.strip_prefix("user.ask.timeout : ")
+                                        {
+                                            let rest = rest.trim();
+                                            entry.info.last_output = format!(
+                                                "Question expirée ({rest})"
+                                            );
+                                            entry.info.fail_reason = None;
+                                        }
+                                    }
                                     AgentOutputEvent::Progress {
                                         step,
                                         max_steps,
@@ -874,7 +888,9 @@ async fn main() {
                                         entry.info.step = *step;
                                         entry.info.max_steps = *max_steps;
                                         entry.info.current_task = current_task.clone();
-                                        entry.info.last_output.clear();
+                                        if entry.info.state != AgentState::Blocked {
+                                            entry.info.last_output.clear();
+                                        }
                                     }
                                     AgentOutputEvent::ChildSpawned { child_id, .. } => {
                                         if !entry.info.children.contains(child_id) {
@@ -882,6 +898,28 @@ async fn main() {
                                         }
                                     }
                                     AgentOutputEvent::Step(rec) => {
+                                        if rec.action == "goal.complete"
+                                            && !rec.tool_result.trim().is_empty()
+                                        {
+                                            entry.info.last_output = rec.tool_result.clone();
+                                        } else if rec.action == "goal.fail"
+                                            && !rec.tool_result.trim().is_empty()
+                                        {
+                                            entry.info.last_output = rec.tool_result.clone();
+                                            if entry.info.fail_reason.is_none() {
+                                                entry.info.fail_reason =
+                                                    Some(rec.tool_result.clone());
+                                            }
+                                        } else if rec.action == "user.ask"
+                                            && !rec.tool_result.trim().is_empty()
+                                        {
+                                            // garder la question visible pendant l'attente
+                                            if entry.info.last_output.is_empty() {
+                                                entry.info.last_output = rec.tool_result.clone();
+                                            }
+                                        } else {
+                                            entry.info.last_output.clear();
+                                        }
                                         if let Some(existing) =
                                             entry.trace.iter_mut().find(|s| s.step == rec.step)
                                         {
@@ -897,7 +935,6 @@ async fn main() {
                                         if let Some(reason) = &rec.fail_reason {
                                             entry.info.fail_reason = Some(reason.clone());
                                         }
-                                        entry.info.last_output.clear();
                                     }
                                     _ => {}
                                 }
@@ -1192,11 +1229,7 @@ async fn main() {
                     let mut req = AgentCreateRequest::simple(&entry.goal);
                     req.model_id = entry.model_id.clone();
                     req.tools = default_agent_tools();
-                    let n = {
-                        let rt = shared_tick.lock().await;
-                        rt.next_id.fetch_add(1, Ordering::Relaxed)
-                    };
-                    let agent_id = format!("agent-{n}");
+                    let agent_id = persist::alloc_agent_id();
                     let spec = build_spec(&agent_id, &req);
                     match spawn_worker(
                         &shared_tick,
@@ -1297,6 +1330,71 @@ async fn main() {
     }
 
     let _ = svc.serve(&bus_addr).await;
+}
+
+fn hydrate_persisted_agents(rt: &mut Runtime) {
+    for id in persist::list_agent_ids() {
+        if rt.agents.contains_key(&id) {
+            continue;
+        }
+        let Some(mut info) = persist::read_info(&id).or_else(|| persist::info_from_spec(&id))
+        else {
+            continue;
+        };
+        info.pid = None;
+        let mut dirty = false;
+        if info.title.is_empty() {
+            info.title = persist::agent_title(&info.directive);
+            dirty = true;
+        }
+        let was_live = matches!(
+            info.state,
+            AgentState::Running
+                | AgentState::Created
+                | AgentState::Paused
+                | AgentState::Blocked
+        );
+        if was_live {
+            info.state = AgentState::Killed;
+            if info.fail_reason.as_ref().map(|s| s.is_empty()).unwrap_or(true) {
+                info.fail_reason = Some("arrêté au redémarrage".into());
+            }
+            dirty = true;
+        }
+        if dirty {
+            persist::update_info_sidecar(&info);
+        }
+        let trace = persist::read_state(&id)
+            .map(|s| s.trace)
+            .unwrap_or_default();
+        rt.agents.insert(
+            id,
+            AgentEntry {
+                info,
+                subscribers: Vec::new(),
+                trace,
+            },
+        );
+    }
+}
+
+fn agent_done_chat_message(agent_id: &str, directive: &str, last_output: &str) -> String {
+    let out = last_output.trim();
+    let title = {
+        let t = directive.trim();
+        if t.is_empty() {
+            agent_id.to_string()
+        } else {
+            let excerpt: String = t.chars().take(80).collect();
+            excerpt
+        }
+    };
+    if out.is_empty() {
+        format!("Agent « {title} » terminé.")
+    } else {
+        let body: String = out.chars().take(8000).collect();
+        format!("**Résultat — {title}**\n\n{body}")
+    }
 }
 
 fn kill_pid(pid: u32) {

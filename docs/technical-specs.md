@@ -6,6 +6,7 @@
 > Date: 15/08/2026  
 > Status: draft  
 > Reference: `docs/functional-specs.md`, `docs/vision.md`, `docs/FEATURES.md`  
+> Changes v0.5.0: Preview 0.5.0 — auto-remember from chat (E14); `user.ask` mid-task.
 > Changes v0.4.0: Preview 0.4.0 — typed memory graph, secrets vault, module cap review.
 > Changes v0.3.1: Preview 0.3.0 — notes package resync, in-app troubleshoot, Split-Flap public site.
 > Changes v0.3: Preview 0.1.2 — `web.browse`, multi-engine `web.search`, egui transparency panel, persisted Settings (`preferences.json`).  

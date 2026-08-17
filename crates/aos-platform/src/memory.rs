@@ -430,6 +430,25 @@ impl MemoryStore {
         hits
     }
 
+    /// Hits utilisateur pour `mem.context` : similarité, puis repli liste
+    /// (embeddings vides / requête trop générique), pins toujours inclus.
+    pub fn context_user_hits(&self, query_vector: &[f32], k: usize) -> Vec<MemHit> {
+        let k = k.max(1);
+        let listed = self.list("user:default", false);
+        let mut hits = self.episodic_query(query_vector, k, Some("user:default"));
+        if hits.is_empty() {
+            return listed.into_iter().take(k.max(8)).collect();
+        }
+        let mut seen: HashSet<u64> = hits.iter().map(|h| h.id).collect();
+        for p in listed.iter().filter(|h| h.pinned).rev() {
+            if seen.insert(p.id) {
+                hits.insert(0, p.clone());
+            }
+        }
+        hits.truncate(k.max(8));
+        hits
+    }
+
     /// Met à jour un souvenir (texte / meta / pin) ou le supersède.
     pub fn update(
         &mut self,

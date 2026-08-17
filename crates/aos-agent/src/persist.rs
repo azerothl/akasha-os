@@ -1,6 +1,6 @@
 //! Persistance agents : `var/agents/<id>/spec.json` + `state.json` + registry.
 
-use aos_proto::{AgentInfo, AgentSpec, AgentTrace};
+use aos_proto::{AgentInfo, AgentSpec, AgentState, AgentTrace};
 use std::path::{Path, PathBuf};
 
 use crate::CognitiveState;
@@ -92,7 +92,11 @@ pub fn assemble_trace(
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
 pub struct AgentRegistry {
+    #[serde(default)]
     pub agents: Vec<String>,
+    /// Prochain numéro `agent-{n}` (jamais réutilisé après redémarrage).
+    #[serde(default)]
+    pub next_id: u64,
 }
 
 pub fn load_registry() -> AgentRegistry {
@@ -117,6 +121,97 @@ pub fn registry_add(agent_id: &str) {
         reg.agents.push(agent_id.to_string());
         save_registry(&reg);
     }
+}
+
+/// Suffixe numérique de `agent-12` (0 si absent).
+pub fn seq_from_id(agent_id: &str) -> u64 {
+    agent_id
+        .strip_prefix("agent-")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0)
+}
+
+pub fn agent_title(directive: &str) -> String {
+    let t = directive.split_whitespace().collect::<Vec<_>>().join(" ");
+    if t.is_empty() {
+        return String::new();
+    }
+    let count = t.chars().count();
+    let mut s: String = t.chars().take(56).collect();
+    if count > 56 {
+        s.push('…');
+    }
+    s
+}
+
+pub fn list_agent_ids() -> Vec<String> {
+    let Ok(rd) = std::fs::read_dir(agents_root()) else {
+        return Vec::new();
+    };
+    let mut ids = Vec::new();
+    for e in rd.flatten() {
+        let path = e.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = e.file_name().to_string_lossy().into_owned();
+        if name.is_empty() {
+            continue;
+        }
+        if path.join("spec.json").is_file() || path.join("info.json").is_file() {
+            ids.push(name);
+        }
+    }
+    ids.sort();
+    ids
+}
+
+pub fn read_info(agent_id: &str) -> Option<AgentInfo> {
+    let path = agent_dir(agent_id).join("info.json");
+    let raw = std::fs::read_to_string(path).ok()?;
+    serde_json::from_str(&raw).ok()
+}
+
+pub fn info_from_spec(agent_id: &str) -> Option<AgentInfo> {
+    let spec = read_spec(agent_id)?;
+    Some(AgentInfo {
+        agent_id: spec.agent_id.clone(),
+        state: AgentState::Killed,
+        directive: spec.goal.statement.clone(),
+        pid: None,
+        caps: spec.caps.clone(),
+        last_output: String::new(),
+        step: 0,
+        max_steps: spec.goal.max_steps,
+        current_task: None,
+        parent_id: spec.parent_id.clone(),
+        children: Vec::new(),
+        tokens_used: 0,
+        skills: spec.skills.clone(),
+        tools: spec.tools.clone(),
+        mcp_servers: spec.mcp_servers.clone(),
+        fail_reason: Some("arrêté au redémarrage".into()),
+        session_id: spec.session_id.clone(),
+        title: agent_title(&spec.goal.statement),
+    })
+}
+
+/// Alloue un id unique `agent-{n}` (compteur disque, jamais recyclé).
+pub fn alloc_agent_id() -> String {
+    let mut reg = load_registry();
+    let disk_max = list_agent_ids()
+        .iter()
+        .map(|id| seq_from_id(id))
+        .max()
+        .unwrap_or(0);
+    let n = reg.next_id.max(disk_max + 1).max(1);
+    reg.next_id = n + 1;
+    let id = format!("agent-{n}");
+    if !reg.agents.iter().any(|a| a == &id) {
+        reg.agents.push(id.clone());
+    }
+    save_registry(&reg);
+    id
 }
 
 pub fn update_info_sidecar(info: &AgentInfo) {
@@ -208,5 +303,15 @@ mod tests {
         assert!(s.is_some());
         assert!(mem[0].1.contains("base"));
         assert!(mem.last().unwrap().1.contains("a3"));
+    }
+
+    #[test]
+    fn seq_and_title() {
+        assert_eq!(seq_from_id("agent-12"), 12);
+        assert_eq!(seq_from_id("agent-1"), 1);
+        assert_eq!(seq_from_id("other"), 0);
+        let t = agent_title("  Analyse   de l'état des skills  ");
+        assert!(t.starts_with("Analyse"));
+        assert!(!t.contains("  "));
     }
 }

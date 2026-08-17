@@ -94,7 +94,7 @@ Bannière attendue : *Preview sur Windows/Linux — ce n'est pas encore l'OS boo
 
 ### 7d. Mémorisation auto depuis le chat (P05 / E14)
 
-- **Settings** : activer **Mémorisation auto depuis le chat** (défaut **off**).
+- **Settings** : **Mémorisation auto depuis le chat** est **activée** par défaut (décocher pour désactiver).
 - Dans Chat, dire un fait durable ex. « Je préfère le français pour l’UI ».
 - Après la réponse, le statut mentionne des fait(s) mémorisé(s) ; **Mémoire → Lister**
   affiche le fait avec un badge **`[chat]`**.
@@ -102,6 +102,15 @@ Bannière attendue : *Preview sur Windows/Linux — ce n'est pas encore l'OS boo
 - Coller une fausse clé (`sk-abcdefghijklmnopqrstuvwxyz1234` ou `ghp_…`) :
   elle ne doit **pas** apparaître comme fait (audit peut montrer `filtered`).
 - Remettre l’option **off** : les tours suivants ne doivent plus écrire de faits.
+
+### 7e. L’agent interroge l’utilisateur (`user.ask`)
+
+- Lancer `/agent` avec une tâche qui demande une préférence (format, nom, choix).
+- Quand l’agent pose une question, le placeholder devient « répondez à la
+  question de l’agent » ; répondre dans le même fil (ou **Répondre** sur la
+  carte s’il y en a plusieurs).
+- L’agent reprend avec la réponse. Sans réponse ~10 min, la tâche continue
+  (pas de blocage infini).
 
 ### 8. Recherche web (PC.8 / PC.13)
 

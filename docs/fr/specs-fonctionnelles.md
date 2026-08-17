@@ -6,6 +6,7 @@
 > Date : 15/08/2026  
 > Statut : brouillon  
 > Référence : `reflexion-agent-os.md`  
+> Changements v0.5.0 : Preview 0.5.0 — mémorisation auto depuis le chat (E14) ; `user.ask` en cours de tâche ; annexe §12.
 > Changements v0.4.0 : Preview 0.4.0 — graphe mémoire typé, vault secrets, revue de caps modules ; annexe §12.
 > Changements v0.3.1 : Preview 0.3.0 — resync du module notes, dépannage in-app, site Split-Flap ; annexe §12.
 > Changements v0.3 : couverture Preview 0.1.2 — F-AGT-11, F-NET-01/02, F-UI-09 ; annexe §12.  
@@ -364,12 +365,12 @@ Package unique exposant :
 
 - `reflexion-agent-os.md` — réflexion fondatrice  
 - `specs-techniques.md` — spécifications techniques  
-- `FEATURES.md` — catalogue Preview 0.4.0 livrée  
+- `FEATURES.md` — catalogue Preview 0.5.0 livrée  
 - (futur) `adr/` — Architecture Decision Records  
 
 ---
 
-## 12. Couverture Preview 0.4.0 (hôte)
+## 12. Couverture Preview 0.5.0 (hôte)
 
 Correspondance de cette spec avec la **Preview hôte installable** (pas l'OS bootable).
 Détail : `FEATURES.md`.

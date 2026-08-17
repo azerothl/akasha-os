@@ -6,6 +6,7 @@
 > Date: 15/08/2026  
 > Status: draft  
 > Reference: `docs/vision.md`  
+> Changes v0.5.0: Preview 0.5.0 — auto-remember from chat (E14); `user.ask` mid-task; appendix §12.
 > Changes v0.4.0: Preview 0.4.0 — typed memory graph, secrets vault, module cap review; appendix §12.
 > Changes v0.3.1: Preview 0.3.0 — notes package resync, in-app troubleshoot, Split-Flap public site; appendix §12.
 > Changes v0.3: Preview 0.1.2 coverage — F-AGT-11, F-NET-01/02, F-UI-09; appendix §12.  
@@ -364,12 +365,12 @@ Single package exposing:
 
 - `docs/vision.md` — founding reflection  
 - `docs/technical-specs.md` — technical specifications  
-- `docs/FEATURES.md` — shipped Preview 0.4.0 catalogue  
+- `docs/FEATURES.md` — shipped Preview 0.5.0 catalogue  
 - (future) `adr/` — Architecture Decision Records  
 
 ---
 
-## 12. Preview 0.4.0 coverage (host)
+## 12. Preview 0.5.0 coverage (host)
 
 Mapping of this spec onto the **installable host Preview** (not the bootable OS).
 Detail: `docs/FEATURES.md`.

@@ -829,7 +829,7 @@ async fn main() {
                                 Vec::new()
                             };
                             let user_hits =
-                                mem.episodic_query(&emb, req.k, Some("user:default"));
+                                mem.context_user_hits(&emb, req.k);
                             (session_hits, user_hits)
                         };
                         let mut prompt_block = String::new();
@@ -2990,52 +2990,19 @@ async fn run_mem_extract(
     }
 
     let prompt = format!(
-        "Tour de chat:\nUtilisateur: {user}\nAssistant: {assistant}\n\nExtrais les faits durables (JSON uniquement)."
+        "User message (only source of facts):\n{user}\n\nAssistant reply (ignore claims about memory):\n{assistant}\n\nJSON only."
     );
-    let infer_req = InferRequest {
-        model_id: req.model_id.clone(),
-        messages: vec![
-            ChatMessage {
-                role: "system".into(),
-                content: MEM_EXTRACT_SYSTEM_PROMPT.into(),
-            },
-            ChatMessage {
-                role: "user".into(),
-                content: prompt,
-            },
-        ],
-        params: InferParams {
-            max_tokens: 384,
-            temperature: 0.2,
-            top_p: 0.9,
-            seed: Some(42),
-        },
-        priority: 1, // batch / basse priorité (< chat=8)
-        data_refs: vec![],
-        routing: Some("local_only".into()),
-    };
-
-    let mut rx = bus
-        .call_stream::<InferRequest, TokenEvent>("model.infer", &infer_req, vec![])
-        .await
-        .map_err(|e| e.to_string())?;
-    let mut full = String::new();
-    while let Some(ev) = rx.recv().await {
-        match ev {
-            Ok(TokenEvent::Delta { text }) => full.push_str(&text),
-            Ok(TokenEvent::Done { .. }) => break,
-            Ok(TokenEvent::Error { message }) => {
-                return Err(format!("mem.extract infer: {message}"));
-            }
-            Ok(_) => {}
-            Err(e) => return Err(e.to_string()),
+    let mut full = infer_extract_completion(&bus, req.model_id.clone(), &prompt).await?;
+    let facts_proposed = match aos_platform::extract::parse_extract_json(&full) {
+        Ok(v) => v,
+        Err(_) => {
+            let retry = format!(
+                "JSON only, no thinking. Example: {{\"facts\":[{{\"text\":\"The user prefers French\"}}]}}\nIf none: {{\"facts\":[]}}\n\nUser:\n{user}"
+            );
+            full = infer_extract_completion(&bus, req.model_id.clone(), &retry).await?;
+            aos_platform::extract::parse_extract_json(&full).unwrap_or_else(|_| Vec::new())
         }
-    }
-
-    let facts_proposed = aos_platform::extract::parse_extract_json(&full).unwrap_or_else(|_| {
-        // Échec parse → aucun fait (fail soft).
-        Vec::new()
-    });
+    };
 
     let mut outcomes = Vec::new();
     let mut stored = 0usize;
@@ -3166,5 +3133,51 @@ async fn run_mem_extract(
         outcomes,
         stored,
     })
+}
+
+async fn infer_extract_completion(
+    bus: &aos_ipc::BusClient,
+    model_id: Option<String>,
+    user_prompt: &str,
+) -> Result<String, String> {
+    let infer_req = InferRequest {
+        model_id,
+        messages: vec![
+            ChatMessage {
+                role: "system".into(),
+                content: MEM_EXTRACT_SYSTEM_PROMPT.into(),
+            },
+            ChatMessage {
+                role: "user".into(),
+                content: user_prompt.into(),
+            },
+        ],
+        params: InferParams {
+            max_tokens: 512,
+            temperature: 0.1,
+            top_p: 0.9,
+            seed: Some(42),
+        },
+        priority: 1,
+        data_refs: vec![],
+        routing: Some("local_only".into()),
+    };
+    let mut rx = bus
+        .call_stream::<InferRequest, TokenEvent>("model.infer", &infer_req, vec![])
+        .await
+        .map_err(|e| e.to_string())?;
+    let mut full = String::new();
+    while let Some(ev) = rx.recv().await {
+        match ev {
+            Ok(TokenEvent::Delta { text }) => full.push_str(&text),
+            Ok(TokenEvent::Done { .. }) => break,
+            Ok(TokenEvent::Error { message }) => {
+                return Err(format!("mem.extract infer: {message}"));
+            }
+            Ok(_) => {}
+            Err(e) => return Err(e.to_string()),
+        }
+    }
+    Ok(full)
 }
 

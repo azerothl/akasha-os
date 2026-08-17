@@ -158,8 +158,9 @@ enum Cmd {
         history: Vec<(String, String)>,
         user_text: String,
         model_id: Option<String>,
-        /// E14 : déclencher mem.extract après le tour (opt-in Settings).
+        /// E14 : déclencher mem.extract après le tour (Settings, défaut ON).
         auto_remember: bool,
+        max_steps: u32,
     },
     SessionBootstrap,
     SessionCreate { title: Option<String> },
@@ -354,6 +355,107 @@ impl ChatLine {
             text: text.into(),
             attachments: Vec::new(),
         }
+    }
+}
+
+fn ask_origin_closes(origin: &str) -> bool {
+    origin == "ask-reply" || origin == "ask-timeout"
+}
+
+/// File FIFO des `user.ask` encore ouverts pour des agents actuellement bloqués.
+fn pending_ask_ids(chat: &[ChatLine], blocked_ids: &[String]) -> Vec<String> {
+    let blocked: std::collections::HashSet<&str> =
+        blocked_ids.iter().map(String::as_str).collect();
+    let mut order: Vec<String> = Vec::new();
+    for line in chat {
+        for att in &line.attachments {
+            let ChatAttachment::AgentRef {
+                agent_id, origin, ..
+            } = att;
+            if origin == "ask" && blocked.contains(agent_id.as_str()) {
+                if !order.iter().any(|id| id == agent_id) {
+                    order.push(agent_id.clone());
+                }
+            } else if ask_origin_closes(origin) {
+                order.retain(|id| id != agent_id);
+            }
+        }
+    }
+    for id in blocked_ids {
+        if !order.iter().any(|x| x == id) {
+            order.push(id.clone());
+        }
+    }
+    order
+}
+
+fn chat_has_open_ask(chat: &[ChatLine], agent_id: &str) -> bool {
+    let mut open = false;
+    for line in chat {
+        for att in &line.attachments {
+            let ChatAttachment::AgentRef {
+                agent_id: id,
+                origin,
+                ..
+            } = att;
+            if id != agent_id {
+                continue;
+            }
+            if origin == "ask" {
+                open = true;
+            } else if ask_origin_closes(origin) {
+                open = false;
+            }
+        }
+    }
+    open
+}
+
+fn agent_display_title(ag: &AgentInfo) -> String {
+    let t = ag.directive.trim();
+    if t.is_empty() {
+        ag.agent_id.clone()
+    } else {
+        t.chars().take(48).collect()
+    }
+}
+
+#[cfg(test)]
+mod ask_queue_tests {
+    use super::*;
+
+    fn ask_line(id: &str, origin: &str) -> ChatLine {
+        ChatLine {
+            role: "assistant".into(),
+            text: origin.into(),
+            attachments: vec![ChatAttachment::AgentRef {
+                agent_id: id.into(),
+                title: id.into(),
+                origin: origin.into(),
+            }],
+        }
+    }
+
+    #[test]
+    fn fifo_then_close() {
+        let chat = vec![ask_line("a", "ask"), ask_line("b", "ask")];
+        let q = pending_ask_ids(&chat, &["a".into(), "b".into()]);
+        assert_eq!(q, vec!["a", "b"]);
+        let chat = vec![
+            ask_line("a", "ask"),
+            ask_line("b", "ask"),
+            ask_line("a", "ask-reply"),
+        ];
+        let q = pending_ask_ids(&chat, &["b".into()]);
+        assert_eq!(q, vec!["b"]);
+    }
+
+    #[test]
+    fn timeout_closes_and_blocked_without_card_appends() {
+        let chat = vec![ask_line("a", "ask"), ask_line("a", "ask-timeout")];
+        let q = pending_ask_ids(&chat, &["c".into()]);
+        assert_eq!(q, vec!["c"]);
+        assert!(!chat_has_open_ask(&chat, "a"));
     }
 }
 
@@ -771,6 +873,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
             user_text,
             model_id,
             auto_remember,
+            max_steps,
         } => {
             let _ = evt_tx.send(Evt::Status(
                 "assistant : génération en cours…".into(),
@@ -874,7 +977,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                                 } else {
                                     brief
                                 };
-                                let (mut skills, mut tools) = agent_heuristics_for_task(&brief);
+                                let (mut skills, mut tools) = chat_agent_kit(&brief);
                                 if let Some(arr) = action.args.get("skills").and_then(|v| v.as_array())
                                 {
                                     for s in arr {
@@ -906,14 +1009,15 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                                 req.goal = Some(AgentGoal {
                                     statement: brief.clone(),
                                     success_criteria: vec![],
-                                    max_steps: 16,
-                                    max_subagents: 4,
+                                    max_steps,
+                                    max_subagents: CHAT_AGENT_MAX_SUBAGENTS,
                                     timeout_secs: 3600,
                                 });
-                                if req.skills.iter().any(|s| s.contains("notes"))
-                                    || req.tools.iter().any(|t| t.starts_with("notes."))
+                                req.caps.push("tool.invoke:notes".into());
+                                if req.skills.iter().any(|s| s.contains("task"))
+                                    || req.tools.iter().any(|t| t.starts_with("tasks."))
                                 {
-                                    req.caps.push("tool.invoke:notes".into());
+                                    req.caps.push("tool.invoke:tasks".into());
                                 }
                                 match bus
                                     .call::<AgentCreateRequest, aos_proto::AgentCreateResponse>(
@@ -1568,7 +1672,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                 statement: task.clone(),
                 success_criteria: vec![],
                 max_steps,
-                max_subagents: 4,
+                max_subagents: CHAT_AGENT_MAX_SUBAGENTS,
                 timeout_secs,
             });
             req.model_id = model_id;
@@ -2020,6 +2124,41 @@ fn chrono_like_stamp() -> String {
         .unwrap_or_else(|_| "0".into())
 }
 
+fn agent_is_live(state: &AgentState) -> bool {
+    matches!(
+        state,
+        AgentState::Created | AgentState::Running | AgentState::Paused | AgentState::Blocked
+    )
+}
+
+fn agent_completion_chat_text(ag: &AgentInfo) -> String {
+    let title = {
+        let t = ag.directive.trim();
+        if t.is_empty() {
+            ag.agent_id.clone()
+        } else {
+            t.chars().take(80).collect()
+        }
+    };
+    match ag.state {
+        AgentState::Done => {
+            let out = ag.last_output.trim();
+            if out.is_empty() {
+                format!("Agent « {title} » terminé.")
+            } else {
+                let body: String = out.chars().take(8000).collect();
+                format!("**Résultat — {title}**\n\n{body}")
+            }
+        }
+        AgentState::Failed => format!(
+            "Agent « {title} » a échoué : {}",
+            ag.fail_reason.as_deref().unwrap_or("échec")
+        ),
+        AgentState::Killed => format!("Agent « {title} » arrêté."),
+        _ => format!("Agent « {title} » terminé."),
+    }
+}
+
 async fn load_session(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>, id: &str) {
     match bus
         .call::<ChatSessionIdRequest, ChatSessionGetResponse>(
@@ -2059,10 +2198,17 @@ async fn load_session(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>, id: &str) {
     }
 }
 
-/// Heuristiques skills/tools partagées `/agent` et délégation chat.
-fn agent_heuristics_for_task(task: &str) -> (Vec<String>, Vec<String>) {
+/// Kit des agents lancés depuis le chat : plan, notes, sous-agents — toujours.
+const CHAT_AGENT_MIN_STEPS: u32 = 64;
+const CHAT_AGENT_MAX_SUBAGENTS: u32 = 8;
+
+fn chat_agent_max_steps(prefs_max: u32) -> u32 {
+    prefs_max.max(CHAT_AGENT_MIN_STEPS).min(128)
+}
+
+fn chat_agent_kit(task: &str) -> (Vec<String>, Vec<String>) {
     let lower = task.to_lowercase();
-    let mut skills = Vec::new();
+    let mut skills = vec!["planner".into(), "notes-writer".into()];
     let mut tools = vec![
         "notes.create".into(),
         "notes.list".into(),
@@ -2075,17 +2221,29 @@ fn agent_heuristics_for_task(task: &str) -> (Vec<String>, Vec<String>) {
         "tasks.list".into(),
         "tasks.update".into(),
         "tasks.complete".into(),
+        "plan.update".into(),
+        "agent.spawn".into(),
+        "agent.await".into(),
+        "user.ask".into(),
     ];
-    if lower.contains("note") {
-        skills.push("notes-writer".into());
-    }
     if lower.contains("task") || lower.contains("tâche") || lower.contains("todo") {
-        skills.push("tasks".into());
+        if !skills.iter().any(|s| s == "tasks") {
+            skills.push("tasks".into());
+        }
     }
-    if lower.contains("plan") || lower.contains("délégu") {
-        skills.push("planner".into());
-        tools.push("agent.spawn".into());
-        tools.push("agent.await".into());
+    if lower.contains("recherch")
+        || lower.contains("web")
+        || lower.contains("search")
+        || lower.contains("http")
+    {
+        if !skills.iter().any(|s| s == "research") {
+            skills.push("research".into());
+        }
+        for t in ["web.search", "web.browse"] {
+            if !tools.iter().any(|x| x == t) {
+                tools.push(t.into());
+            }
+        }
     }
     (skills, tools)
 }
@@ -2555,6 +2713,7 @@ struct UiApp {
     tool_selected: Vec<String>,
     agent_open_tabs: Vec<String>,
     agent_active_tab: Option<String>,
+    agent_show_history: bool,
     agent_traces: HashMap<String, AgentTrace>,
     trace_fetched_at: Option<Instant>,
     agent_steer_id: String,
@@ -2590,6 +2749,8 @@ struct UiApp {
     agent_model_id: String,
     model_updates_msg: String,
     download_status: String,
+    /// Agent visé pour la prochaine réponse `user.ask` (plusieurs bloqués).
+    ask_reply_target: Option<String>,
     /// Re-focus chat TextEdit after send (Enter clears focus).
     chat_refocus: bool,
 }
@@ -2699,6 +2860,7 @@ impl UiApp {
             ],
             agent_open_tabs: Vec::new(),
             agent_active_tab: None,
+            agent_show_history: false,
             agent_traces: HashMap::new(),
             trace_fetched_at: None,
             agent_steer_id: String::new(),
@@ -2731,8 +2893,65 @@ impl UiApp {
             agent_model_id: default_model,
             model_updates_msg,
             download_status: String::new(),
+            ask_reply_target: None,
             chat_refocus: false,
         }
+    }
+
+    fn blocked_ask_ids(&self) -> Vec<String> {
+        let Some(sid) = self.active_session.as_deref() else {
+            return Vec::new();
+        };
+        self.agents
+            .iter()
+            .filter(|a| a.session_id.as_deref() == Some(sid) && a.state == AgentState::Blocked)
+            .map(|a| a.agent_id.clone())
+            .collect()
+    }
+
+    fn pending_ask_queue(&self) -> Vec<String> {
+        pending_ask_ids(&self.chat, &self.blocked_ask_ids())
+    }
+
+    fn blocked_ask_agent(&self) -> Option<&AgentInfo> {
+        let queue = self.pending_ask_queue();
+        let chosen = self
+            .ask_reply_target
+            .as_ref()
+            .filter(|t| queue.iter().any(|x| x == *t))
+            .cloned()
+            .or_else(|| queue.first().cloned())?;
+        self.agents.iter().find(|a| a.agent_id == chosen)
+    }
+
+    fn send_ask_reply(&mut self, session_id: String, agent_id: String, title: String, text: String) {
+        self.chat.push(ChatLine {
+            role: "vous".into(),
+            text: text.clone(),
+            attachments: vec![ChatAttachment::AgentRef {
+                agent_id: agent_id.clone(),
+                title: title.clone(),
+                origin: "ask-reply".into(),
+            }],
+        });
+        let _ = self.cmd_tx.send(Cmd::SessionAppend {
+            session_id,
+            role: "user".into(),
+            content: text.clone(),
+            attachments: vec![ChatAttachment::AgentRef {
+                agent_id: agent_id.clone(),
+                title,
+                origin: "ask-reply".into(),
+            }],
+        });
+        let _ = self.cmd_tx.send(Cmd::AgentSteer {
+            id: agent_id.clone(),
+            text,
+        });
+        if self.ask_reply_target.as_deref() == Some(agent_id.as_str()) {
+            self.ask_reply_target = None;
+        }
+        self.status = "réponse envoyée à l'agent".into();
     }
 
     fn send_chat(&mut self) {
@@ -2753,6 +2972,13 @@ impl UiApp {
             ));
             return;
         };
+        if let Some((agent_id, title)) = self
+            .blocked_ask_agent()
+            .map(|ag| (ag.agent_id.clone(), ag.directive.clone()))
+        {
+            self.send_ask_reply(session_id, agent_id, title, text);
+            return;
+        }
         if self.chat_pending {
             self.chat.push(ChatLine::plain("vous", text));
             self.chat.push(ChatLine::plain(
@@ -2791,6 +3017,7 @@ impl UiApp {
             user_text: text,
             model_id,
             auto_remember: self.prefs.auto_remember_chat,
+            max_steps: chat_agent_max_steps(self.prefs.default_max_steps),
         });
         self.scen_chat = true;
     }
@@ -2870,7 +3097,7 @@ impl UiApp {
                     attachments: vec![],
                 });
                 self.pending_note_agent = rest.to_lowercase().contains("note");
-                let (skills, tools) = agent_heuristics_for_task(rest);
+                let (skills, tools) = chat_agent_kit(rest);
                 let _ = self.cmd_tx.send(Cmd::AgentCreate {
                     task: rest.to_string(),
                     system_prompt: None,
@@ -2879,7 +3106,7 @@ impl UiApp {
                     mcp_servers: vec![],
                     documents: vec![],
                     optimize_prompt: false,
-                    max_steps: 16,
+                    max_steps: chat_agent_max_steps(self.prefs.default_max_steps),
                     timeout_secs: self.prefs.default_timeout_secs,
                     model_id: None,
                     session_id: Some(session_id),
@@ -2996,6 +3223,7 @@ impl eframe::App for UiApp {
                     {
                         let _ = self.cmd_tx.send(Cmd::NotesList);
                     }
+                    let seeding = self.agent_prev_states.is_empty();
                     for ag in &a {
                         let prev = self.agent_prev_states.get(&ag.agent_id).cloned();
                         let terminal = matches!(
@@ -3011,11 +3239,63 @@ impl eframe::App for UiApp {
                                 )
                             })
                             .unwrap_or(false);
-                        if terminal && was_active {
+                        if terminal {
                             if let Some(sid) = &ag.session_id {
-                                let viewing = self.tab == Tab::Chat
-                                    && self.active_session.as_deref() == Some(sid.as_str());
-                                if !viewing && !self.agent_notified.contains(&ag.agent_id) {
+                                let on_this_session =
+                                    self.active_session.as_deref() == Some(sid.as_str());
+                                let already = self.chat.iter().any(|l| {
+                                    l.attachments.iter().any(|a| {
+                                        matches!(
+                                            a,
+                                            ChatAttachment::AgentRef {
+                                                agent_id,
+                                                origin,
+                                                ..
+                                            } if agent_id == &ag.agent_id
+                                                && origin == "completion"
+                                        )
+                                    })
+                                });
+                                if on_this_session {
+                                    let content = agent_completion_chat_text(ag);
+                                    if already {
+                                        if !ag.last_output.trim().is_empty() {
+                                            if let Some(line) =
+                                                self.chat.iter_mut().find(|l| {
+                                                    l.attachments.iter().any(|a| {
+                                                        matches!(
+                                                            a,
+                                                            ChatAttachment::AgentRef {
+                                                                agent_id,
+                                                                origin,
+                                                                ..
+                                                            } if agent_id == &ag.agent_id
+                                                                && origin == "completion"
+                                                        )
+                                                    })
+                                                })
+                                            {
+                                                if line.text != content {
+                                                    line.text = content;
+                                                }
+                                            }
+                                        }
+                                    } else if !seeding {
+                                        self.chat.push(ChatLine {
+                                            role: "assistant".into(),
+                                            text: content,
+                                            attachments: vec![ChatAttachment::AgentRef {
+                                                agent_id: ag.agent_id.clone(),
+                                                title: ag.directive.clone(),
+                                                origin: "completion".into(),
+                                            }],
+                                        });
+                                    }
+                                } else if !seeding
+                                    && !on_this_session
+                                    && !self.agent_notified.contains(&ag.agent_id)
+                                    && was_active
+                                {
                                     let summary = match ag.state {
                                         AgentState::Done => format!("{} terminé", ag.agent_id),
                                         AgentState::Failed => format!(
@@ -3033,56 +3313,75 @@ impl eframe::App for UiApp {
                                         summary,
                                     });
                                 }
-                                if viewing {
-                                    let content = match ag.state {
-                                        AgentState::Done => {
-                                            let out = ag.last_output.trim();
-                                            if out.is_empty() {
-                                                format!("Agent {} terminé.", ag.agent_id)
-                                            } else {
-                                                let excerpt: String =
-                                                    out.chars().take(500).collect();
-                                                format!(
-                                                    "Agent {} terminé.\n{}",
-                                                    ag.agent_id, excerpt
-                                                )
-                                            }
-                                        }
-                                        AgentState::Failed => format!(
-                                            "Agent {} a échoué : {}",
-                                            ag.agent_id,
-                                            ag.fail_reason.as_deref().unwrap_or("échec")
-                                        ),
-                                        AgentState::Killed => {
-                                            format!("Agent {} arrêté.", ag.agent_id)
-                                        }
-                                        _ => format!("Agent {} terminé.", ag.agent_id),
+                            }
+                        }
+                        if prev == Some(AgentState::Blocked) && ag.state != AgentState::Blocked {
+                            if self.ask_reply_target.as_deref() == Some(ag.agent_id.as_str()) {
+                                self.ask_reply_target = None;
+                            }
+                            if let Some(sid) = &ag.session_id {
+                                let on_this_session =
+                                    self.active_session.as_deref() == Some(sid.as_str());
+                                if on_this_session
+                                    && chat_has_open_ask(&self.chat, &ag.agent_id)
+                                {
+                                    let expired =
+                                        ag.last_output.starts_with("Question expirée");
+                                    let text = if expired {
+                                        "**Question expirée** — l'agent continue sans réponse."
+                                            .into()
+                                    } else {
+                                        "**Question close** — l'agent a repris.".into()
                                     };
-                                    // Évite doublon si agentd a déjà écrit le même résumé
-                                    let already = self.chat.iter().any(|l| {
-                                        l.attachments.iter().any(|a| {
-                                            matches!(
-                                                a,
-                                                ChatAttachment::AgentRef {
-                                                    agent_id,
-                                                    origin,
-                                                    ..
-                                                } if agent_id == &ag.agent_id
-                                                    && origin == "completion"
-                                            )
-                                        })
+                                    self.chat.push(ChatLine {
+                                        role: "assistant".into(),
+                                        text,
+                                        attachments: vec![ChatAttachment::AgentRef {
+                                            agent_id: ag.agent_id.clone(),
+                                            title: ag.directive.clone(),
+                                            origin: "ask-timeout".into(),
+                                        }],
                                     });
-                                    if !already {
-                                        self.chat.push(ChatLine {
-                                            role: "assistant".into(),
-                                            text: content,
-                                            attachments: vec![ChatAttachment::AgentRef {
-                                                agent_id: ag.agent_id.clone(),
-                                                title: ag.directive.clone(),
-                                                origin: "completion".into(),
-                                            }],
-                                        });
-                                    }
+                                }
+                            }
+                        }
+                        if ag.state == AgentState::Blocked {
+                            if let Some(sid) = &ag.session_id {
+                                let on_this_session =
+                                    self.active_session.as_deref() == Some(sid.as_str());
+                                let already =
+                                    chat_has_open_ask(&self.chat, &ag.agent_id);
+                                if on_this_session
+                                    && !already
+                                    && !ag.last_output.trim().is_empty()
+                                    && !ag.last_output.starts_with("Question expirée")
+                                {
+                                    let title = agent_display_title(ag);
+                                    let body = format!(
+                                        "**Question — {title}**\n\n{}",
+                                        ag.last_output.trim()
+                                    );
+                                    self.chat.push(ChatLine {
+                                        role: "assistant".into(),
+                                        text: body,
+                                        attachments: vec![ChatAttachment::AgentRef {
+                                            agent_id: ag.agent_id.clone(),
+                                            title: ag.directive.clone(),
+                                            origin: "ask".into(),
+                                        }],
+                                    });
+                                } else if !on_this_session
+                                    && !self.agent_notified.contains(&ag.agent_id)
+                                {
+                                    self.agent_notified.insert(ag.agent_id.clone());
+                                    self.agent_notices.push(AgentNotice {
+                                        agent_id: ag.agent_id.clone(),
+                                        session_id: sid.clone(),
+                                        summary: format!(
+                                            "{} pose une question",
+                                            agent_display_title(ag)
+                                        ),
+                                    });
                                 }
                             }
                         }
@@ -3544,6 +3843,11 @@ impl eframe::App for UiApp {
                     if tab == Tab::Notes {
                         let _ = self.cmd_tx.send(Cmd::NotesList);
                     }
+                    if tab == Tab::Memory {
+                        let _ = self.cmd_tx.send(Cmd::MemList {
+                            include_superseded: self.mem_show_superseded,
+                        });
+                    }
                     if tab == Tab::Tasks {
                         let _ = self.cmd_tx.send(Cmd::TasksList);
                     }
@@ -3609,7 +3913,7 @@ impl eframe::App for UiApp {
         });
 
         self.poll_agent_trace(ctx);
-        if self.tab == Tab::Agents {
+        if !self.agent_open_tabs.is_empty() {
             self.ui_agent_detail_panel(ctx);
         }
 
@@ -3854,12 +4158,21 @@ impl UiApp {
                             ui.set_min_width(ui.available_width());
                             ui.set_min_height(scroll_h);
                             let mut open_agent: Option<String> = None;
+                            let mut target_reply: Option<String> = None;
+                            let reply_id = self.blocked_ask_agent().map(|a| a.agent_id.clone());
                             let n = self.chat.len();
                             for i in 0..n {
                                 let role = self.chat[i].role.clone();
                                 let text = self.chat[i].text.clone();
                                 let attachments = self.chat[i].attachments.clone();
-                                let text = if role == "assistant" {
+                                let is_completion = attachments.iter().any(|a| {
+                                    matches!(
+                                        a,
+                                        ChatAttachment::AgentRef { origin, .. }
+                                            if origin == "completion"
+                                    )
+                                });
+                                let text = if role == "assistant" && !is_completion {
                                     agent_panel::format_assistant_display(&text)
                                 } else {
                                     text
@@ -3878,22 +4191,46 @@ impl UiApp {
                                         ui.add(egui::Label::new(&text).wrap());
                                     }
                                 }
-                                for att in &attachments {
+                                for (j, att) in attachments.iter().enumerate() {
                                     let ChatAttachment::AgentRef {
                                         agent_id,
                                         title,
-                                        ..
+                                        origin,
                                     } = att;
                                     let info =
                                         self.agents.iter().find(|a| a.agent_id == *agent_id);
-                                    if agent_panel::chat_agent_card(ui, info, agent_id, title) {
-                                        open_agent = Some(agent_id.clone());
+                                    let selected = reply_id.as_deref() == Some(agent_id.as_str());
+                                    let action = ui
+                                        .push_id(("chat_agent_card", i, j, agent_id.as_str()), |ui| {
+                                            agent_panel::chat_agent_card(
+                                                ui,
+                                                info,
+                                                agent_id,
+                                                title,
+                                                origin,
+                                                selected && origin == "ask",
+                                            )
+                                        })
+                                        .inner;
+                                    match action {
+                                        agent_panel::ChatCardAction::OpenDetail => {
+                                            open_agent = Some(agent_id.clone());
+                                        }
+                                        agent_panel::ChatCardAction::TargetReply => {
+                                            target_reply = Some(agent_id.clone());
+                                        }
+                                        agent_panel::ChatCardAction::None => {}
                                     }
                                 }
                                 ui.separator();
                             }
                             if let Some(id) = open_agent {
                                 self.open_agent_tab(&id);
+                            }
+                            if let Some(id) = target_reply {
+                                self.ask_reply_target = Some(id);
+                                self.chat_refocus = true;
+                                self.status = "réponse destinée à cet agent".into();
                             }
                             if !self.streaming.is_empty() {
                                 ui.label("[assistant]");
@@ -3913,15 +4250,42 @@ impl UiApp {
                         });
 
                     let completions = slash_completions(&self.input);
+                    let ask_queue = self.pending_ask_queue();
+                    if ask_queue.len() > 1 {
+                        let t = i18n::strings(&self.prefs.language);
+                        let title = self
+                            .blocked_ask_agent()
+                            .map(agent_display_title)
+                            .unwrap_or_default();
+                        ui.colored_label(
+                            egui::Color32::from_rgb(240, 190, 100),
+                            t.chat_ask_queue
+                                .replace("{n}", &ask_queue.len().to_string())
+                                .replace("{agent}", &title),
+                        );
+                    }
                     let input_row = ui.with_layout(
                         egui::Layout::left_to_right(egui::Align::Center),
                         |ui| {
                             let t = i18n::strings(&self.prefs.language);
+                            let hint = match ask_queue.len() {
+                                0 => t.chat_hint.to_string(),
+                                1 => t.chat_hint_agent_ask.to_string(),
+                                n => {
+                                    let title = self
+                                        .blocked_ask_agent()
+                                        .map(agent_display_title)
+                                        .unwrap_or_default();
+                                    t.chat_hint_agent_ask_many
+                                        .replace("{agent}", &title)
+                                        .replace("{n}", &n.to_string())
+                                }
+                            };
                             let r = ui.add(
                                 egui::TextEdit::singleline(&mut self.input)
                                     .id_salt("chat_input")
                                     .desired_width(ui.available_width() - 90.0)
-                                    .hint_text(t.chat_hint),
+                                    .hint_text(hint),
                             );
                             if self.chat_refocus {
                                 r.request_focus();
@@ -4387,32 +4751,47 @@ impl UiApp {
         }
 
         ui.separator();
-        ui.heading("Agents actifs");
+        ui.horizontal(|ui| {
+            ui.selectable_value(&mut self.agent_show_history, false, t.agents_tab_active);
+            ui.selectable_value(&mut self.agent_show_history, true, t.agents_tab_history);
+        });
+        let history = self.agent_show_history;
+        let visible: Vec<AgentInfo> = self
+            .agents
+            .iter()
+            .filter(|a| agent_is_live(&a.state) != history)
+            .cloned()
+            .collect();
         egui::ScrollArea::vertical()
             .id_salt("agents_list")
             .max_height(280.0)
             .show(ui, |ui| {
-                let roots: Vec<_> = self
-                    .agents
+                if visible.is_empty() {
+                    ui.weak(if history {
+                        t.agents_history_empty
+                    } else {
+                        t.agents_active_empty
+                    });
+                    return;
+                }
+                let roots: Vec<_> = visible
                     .iter()
                     .filter(|a| a.parent_id.is_none())
                     .cloned()
                     .collect();
-                let orphans: Vec<_> = self
-                    .agents
+                let orphans: Vec<_> = visible
                     .iter()
                     .filter(|a| {
-                        a.parent_id
-                            .as_ref()
-                            .is_some_and(|p| !self.agents.iter().any(|x| x.agent_id == *p))
+                        a.parent_id.as_ref().is_some_and(|p| {
+                            !visible.iter().any(|x| x.agent_id == *p)
+                        })
                     })
                     .cloned()
                     .collect();
 
                 for a in roots.into_iter().chain(orphans) {
                     self.draw_agent_row(ui, &a, 0);
-                    let children: Vec<_> = self
-                        .agents
+                    let children: Vec<_> = visible
                         .iter()
                         .filter(|c| c.parent_id.as_deref() == Some(a.agent_id.as_str()))
                         .cloned()
@@ -4448,12 +4827,12 @@ impl UiApp {
                 ui.small("↳");
             }
             let selected = self.agent_active_tab.as_deref() == Some(a.agent_id.as_str());
-            if ui
-                .selectable_label(selected, &a.agent_id)
-                .clicked()
+            let label = agent_panel::truncate(a.display_title(), 48);
+            if ui.selectable_label(selected, &label).on_hover_text(&a.agent_id).clicked()
             {
                 self.open_agent_tab(&a.agent_id);
             }
+            ui.weak(&a.agent_id);
             ui.colored_label(
                 agent_panel::state_color(&a.state),
                 format!("{:?}", a.state),
@@ -4517,7 +4896,7 @@ impl UiApp {
     }
 
     fn poll_agent_trace(&mut self, ctx: &egui::Context) {
-        if self.tab != Tab::Agents || self.agent_open_tabs.is_empty() {
+        if self.agent_open_tabs.is_empty() {
             return;
         }
         ctx.request_repaint_after(Duration::from_millis(400));
@@ -4558,7 +4937,7 @@ impl UiApp {
                         let selected = self.agent_active_tab.as_deref() == Some(id.as_str());
                         let label = if let Some(a) = self.agents.iter().find(|x| x.agent_id == id)
                         {
-                            format!("{id} [{:?}]", a.state)
+                            format!("{} [{:?}]", agent_panel::truncate(a.display_title(), 28), a.state)
                         } else {
                             id.clone()
                         };
@@ -4625,16 +5004,64 @@ impl UiApp {
                         let _ = self.cmd_tx.send(Cmd::AgentKill { id: id.clone() });
                     }
                     if actions.resume {
+                        if info
+                            .as_ref()
+                            .is_some_and(|a| a.state == AgentState::Blocked)
+                        {
+                            if let Some(sid) = info
+                                .as_ref()
+                                .and_then(|a| a.session_id.clone())
+                                .or_else(|| self.active_session.clone())
+                            {
+                                if self.active_session.as_deref() == Some(sid.as_str()) {
+                                    let title = info
+                                        .as_ref()
+                                        .map(|a| a.directive.clone())
+                                        .unwrap_or_default();
+                                    self.chat.push(ChatLine {
+                                        role: "vous".into(),
+                                        text: "(débloqué sans répondre)".into(),
+                                        attachments: vec![ChatAttachment::AgentRef {
+                                            agent_id: id.clone(),
+                                            title,
+                                            origin: "ask-reply".into(),
+                                        }],
+                                    });
+                                }
+                            }
+                        }
                         let _ = self.cmd_tx.send(Cmd::AgentResume { id: id.clone() });
                     }
                     if actions.retry {
                         let _ = self.cmd_tx.send(Cmd::AgentRetry { id: id.clone() });
                     }
                     if let Some(text) = actions.steer {
-                        let _ = self.cmd_tx.send(Cmd::AgentSteer {
-                            id: id.clone(),
-                            text,
-                        });
+                        let blocked = info
+                            .as_ref()
+                            .is_some_and(|a| a.state == AgentState::Blocked);
+                        if blocked {
+                            if let Some(sid) = info
+                                .as_ref()
+                                .and_then(|a| a.session_id.clone())
+                                .or_else(|| self.active_session.clone())
+                            {
+                                let title = info
+                                    .as_ref()
+                                    .map(|a| a.directive.clone())
+                                    .unwrap_or_default();
+                                self.send_ask_reply(sid, id.clone(), title, text);
+                            } else {
+                                let _ = self.cmd_tx.send(Cmd::AgentSteer {
+                                    id: id.clone(),
+                                    text,
+                                });
+                            }
+                        } else {
+                            let _ = self.cmd_tx.send(Cmd::AgentSteer {
+                                id: id.clone(),
+                                text,
+                            });
+                        }
                         self.agent_steer_txt.clear();
                     }
                     if let Some(child) = actions.open_child {

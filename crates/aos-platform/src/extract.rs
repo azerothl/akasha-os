@@ -4,7 +4,6 @@
 //! passe par [`crate::memory::MemoryStore::episodic_write_auto_link`].
 
 use aos_proto::{MemExtractedFact, MemExtractOutcome, MemExtractOutcomeKind};
-use serde::Deserialize;
 
 /// Seuil cosinus au-delà duquel un fait est considéré comme doublon exact
 /// (skip write ; l'auto-link `updates`/`supersedes` utilise 0.82).
@@ -12,40 +11,85 @@ pub const DEDUP_THRESHOLD: f32 = 0.92;
 
 /// Parse la réponse modèle en liste de faits (tolère fence markdown).
 pub fn parse_extract_json(raw: &str) -> Result<Vec<MemExtractedFact>, String> {
-    let trimmed = strip_json_fence(raw.trim());
-    #[derive(Deserialize)]
-    struct Envelope {
-        #[serde(default)]
-        facts: Vec<FactIn>,
-    }
-    #[derive(Deserialize)]
-    struct FactIn {
-        text: String,
-        #[serde(default)]
-        supersedes_hint: Option<String>,
-    }
-    let env: Envelope = serde_json::from_str(trimmed)
-        .or_else(|_| {
-            // Parfois le modèle renvoie un tableau nu.
-            let arr: Vec<FactIn> = serde_json::from_str(trimmed)?;
-            Ok::<_, serde_json::Error>(Envelope { facts: arr })
-        })
+    let stripped = strip_think_tags(raw);
+    let trimmed = strip_json_fence(stripped.trim());
+    let value: serde_json::Value = serde_json::from_str(trimmed)
         .map_err(|e| format!("JSON extract invalide: {e}"))?;
-    let mut out = Vec::new();
-    for f in env.facts.into_iter().take(5) {
-        let text = f.text.trim().to_string();
-        if text.is_empty() {
-            continue;
+    let items: Vec<serde_json::Value> = match value {
+        serde_json::Value::Object(map) => {
+            if let Some(facts) = map.get("facts").and_then(|v| v.as_array()) {
+                facts.clone()
+            } else if map.get("text").is_some() {
+                vec![serde_json::Value::Object(map)]
+            } else {
+                Vec::new()
+            }
         }
-        out.push(MemExtractedFact {
-            text,
-            supersedes_hint: f
-                .supersedes_hint
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty()),
-        });
+        serde_json::Value::Array(arr) => arr,
+        serde_json::Value::String(s) => vec![serde_json::Value::String(s)],
+        _ => Vec::new(),
+    };
+    let mut out = Vec::new();
+    for item in items.into_iter().take(5) {
+        if let Some(fact) = fact_from_value(item) {
+            out.push(fact);
+        }
     }
     Ok(out)
+}
+
+fn fact_from_value(v: serde_json::Value) -> Option<MemExtractedFact> {
+    match v {
+        serde_json::Value::String(s) => {
+            let text = s.trim().to_string();
+            if text.is_empty() {
+                None
+            } else {
+                Some(MemExtractedFact {
+                    text,
+                    supersedes_hint: None,
+                })
+            }
+        }
+        serde_json::Value::Object(map) => {
+            let text = map.get("text").and_then(|x| x.as_str())?.trim().to_string();
+            if text.is_empty() {
+                return None;
+            }
+            let supersedes_hint = map
+                .get("supersedes_hint")
+                .and_then(|x| x.as_str())
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty());
+            Some(MemExtractedFact {
+                text,
+                supersedes_hint,
+            })
+        }
+        _ => None,
+    }
+}
+
+fn strip_think_tags(s: &str) -> String {
+    let mut out = String::new();
+    let mut rest = s;
+    loop {
+        let lower = rest.to_ascii_lowercase();
+        if let Some(i) = lower.find("<think>") {
+            out.push_str(&rest[..i]);
+            let after_open = i + "<think>".len();
+            let tail = rest[after_open..].to_ascii_lowercase();
+            if let Some(j) = tail.find("</think>") {
+                rest = &rest[after_open + j + "</think>".len()..];
+            } else {
+                break;
+            }
+        } else {
+            out.push_str(rest);
+            break;
+        }
+    }
+    out
 }
 
 fn strip_json_fence(s: &str) -> &str {
@@ -235,6 +279,22 @@ mod tests {
         assert_eq!(parse_extract_json(raw).unwrap().len(), 1);
         let raw2 = "blabla {\"facts\":[]} suite";
         assert!(parse_extract_json(raw2).unwrap().is_empty());
+    }
+
+    #[test]
+    fn parse_strips_think_tags() {
+        let raw = "<think>{\"facts\":[]}</think>\n{\"facts\":[{\"text\":\"L'utilisateur préfère le français\"}]}";
+        let facts = parse_extract_json(raw).unwrap();
+        assert_eq!(facts.len(), 1);
+        assert!(facts[0].text.contains("français"));
+    }
+
+    #[test]
+    fn parse_string_facts_and_single_object() {
+        let raw = r#"{"facts":["User prefers German"]}"#;
+        assert_eq!(parse_extract_json(raw).unwrap()[0].text, "User prefers German");
+        let raw2 = r#"{"text":"User lives in Berlin"}"#;
+        assert_eq!(parse_extract_json(raw2).unwrap()[0].text, "User lives in Berlin");
     }
 
     #[test]

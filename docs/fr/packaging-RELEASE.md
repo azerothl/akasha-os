@@ -36,12 +36,13 @@ Les GGUF sont téléchargés au **premier run** via `share/models/manifest.json`
 ## Notes de version (brouillon)
 
 ```
-Akasha OS Preview 0.5.0 — mémorisation auto depuis le chat (E14)
+Akasha OS Preview 0.5.0 — mémorisation auto depuis le chat (E14) + user.ask
 
 - Opt-in Settings : après chaque tour de chat, extraction de faits durables → Mémoire
 - mem.extract (local_only, basse priorité) + filtre secrets (jamais de clés auto)
 - Auto-lien updates/supersedes ; badge Memory [chat] ; toast à l'écriture
 - Extract non bloquant / coalescé
+- user.ask : l'agent peut interroger l'utilisateur en cours de tâche (timeout 10 min)
 
 Pas un OS bootable. Voir FIRST-RUN.md / INSTALL.md / TESTER.md
 ```

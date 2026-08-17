@@ -11,12 +11,14 @@ This is **not** the bootable OS. Target v1 requirements live in
 
 ### What's new in 0.5.0
 
-- **Auto-remember from chat** (E14): opt-in Settings toggle (default OFF)
+- **Auto-remember from chat** (E14): Settings toggle (**on** by default)
 - After each chat turn, low-priority local `mem.extract` → durable facts
 - Persist via `mem.user.remember` + E6 `updates`/`supersedes` auto-link
 - Secret filter: API keys / tokens / IBAN-like never auto-stored (audited)
 - Memory list shows a **`[chat]`** badge on extracted facts; toast on store
 - Non-blocking (coalesced); skips if a previous extract is still running
+- **`user.ask`**: mid-task question in the linked chat; agent waits (`Blocked`),
+  resumes on the next reply (FIFO if several agents wait; 10 min timeout)
 
 ### What's new in 0.4.0
 
@@ -101,7 +103,7 @@ Slash commands:
 - Session + user hits assembled as `mem.context` for chat and agents
 - Agents also have episodic memory (`mem.episodic_*`) and `memory.remember` / `memory.recall`
 - **Memory-first bootstrap**: `task.assess` then structured `mem.bootstrap` (active facts + similar neighbors; superseded omitted)
-- **Auto-remember from chat** (opt-in, Settings, default OFF): after each chat turn,
+- **Auto-remember from chat** (Settings, **on** by default): after each chat turn,
   `mem.extract` proposes durable facts → `mem.user.remember` with `source=chat`;
   secrets filtered; Memory list shows a `[chat]` badge
 
@@ -140,6 +142,7 @@ Observe / Think / Act loop with capability checks, confirmation, and audit.
 | Tools | Native, WASM module, MCP, or runtime (plan / spawn / memory) |
 | MCP | Optional stdio servers (`share/mcp/servers.yaml.example`) |
 | Sub-agents | `agent.spawn` / `agent.await` with a narrow brief |
+| `user.ask` | Pause and ask the user in the linked chat; reply routes via steer |
 | Hot-grant | `cap.request` under trust + confirmation |
 | Authoring | `skill.create`; scripted WASM via `ext-rt` (`module.scaffold` / `package`) |
 | Qwen think | Hybrid `<think>` blocks stripped from prompts and from the UI |
@@ -208,7 +211,7 @@ Persisted in `var/run/preferences.json` (migrated from `onboarding.json` if need
 |-------|---------|
 | General | Language **en** / **fr**; default trust **low** / **medium**; Inference **auto** / **gpu** / **cpu** |
 | Models | Routing `local_only` / `balanced` |
-| Network / Memory | Allow network (same as sidebar); **Auto-remember from chat** (E14, default off) |
+| Network / Memory | Allow network (same as sidebar); **Auto-remember from chat** (E14, **on** by default) |
 | Agents | Default model, max steps (1–128), timeout (60–86400 s) |
 | Schedules | Interval agent fires (`schedule.*`) |
 | Secrets | Brave / GitHub / OpenAI keys → encrypted vault (never shown back) |

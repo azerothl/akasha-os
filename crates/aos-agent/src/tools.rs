@@ -142,6 +142,20 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
             required_caps: vec![],
         },
         ToolDesc {
+            name: "user.ask".into(),
+            description: "Poser une question à l'utilisateur et attendre sa réponse (bloque jusqu'à la réponse)".into(),
+            input_schema: serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "question":{"type":"string","description":"Question claire, une à la fois"},
+                    "choices":{"type":"array","items":{"type":"string"},"description":"Options facultatives"}
+                },
+                "required":["question"]
+            }),
+            backend: ToolBackend::Runtime,
+            required_caps: vec![],
+        },
+        ToolDesc {
             name: "memory.remember".into(),
             description: "Mémoriser un fait pour cet agent".into(),
             input_schema: serde_json::json!({"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}),
@@ -436,6 +450,7 @@ pub fn select_tools(selected: &[String], extra: &[ToolDesc]) -> Vec<ToolDesc> {
         "plan.update",
         "goal.complete",
         "goal.fail",
+        "user.ask",
         "docs.read",
         "memory.remember",
         "memory.recall",
@@ -574,6 +589,7 @@ mod tests {
     fn select_includes_runtime() {
         let t = select_tools(&["notes.create".into()], &[]);
         assert!(t.iter().any(|x| x.name == "goal.complete"));
+        assert!(t.iter().any(|x| x.name == "user.ask"));
         assert!(t.iter().any(|x| x.name == "notes.create"));
     }
 

@@ -11,7 +11,7 @@
 
 ## Ce qu’est Akasha OS
 
-**Positionnement :** OS *agent-natif* — agents, modèles, outils et mémoire comme services système de premier plan, pas une appli posée sur POSIX. La Preview 0.4.0 tourne sur hôte ; une piste seL4 séparée (PV.1–PV.3) prépare le bare metal.
+**Positionnement :** OS *agent-natif* — agents, modèles, outils et mémoire comme services système de premier plan, pas une appli posée sur POSIX. La Preview 0.5.0 tourne sur hôte ; une piste seL4 séparée (PV.1–PV.3) prépare le bare metal.
 
 **Livré sur l’hôte :**
 
@@ -25,7 +25,7 @@
 - Trust manager + `cap.request`, politique déclarative
 - UI egui : chat, agents, mémoire, notes, modèles, audit, settings (EN/FR)
 
-**Hors Preview :** image bootable, macOS / CPU-only, marketplace, multi-utilisateur, multi-GPU complet, audio/vidéo natif.
+**Hors Preview :** image bootable, macOS, marketplace, multi-utilisateur, multi-GPU complet, audio/vidéo natif.
 
 ```mermaid
 flowchart TB
@@ -87,7 +87,7 @@ Ne pas confondre [azerothl/akasha](https://github.com/azerothl/akasha) avec [ocu
 
 **Surface livrée (phases 0–9+) :** daemon always-on, orchestrateur non bloquant, Slack / Discord / Telegram, mémoire CT + LT (graphe de relations typées), vault / RBAC / redaction, plugins WASM, routeur LLM (embarqué / Ollama / OpenAI / OpenRouter), cluster, RAG + doctor advice, TTS/STT, Home Assistant, discovery, chemin CPU-capable.
 
-| | Akasha (assistant) | Akasha OS (Preview 0.4.0) |
+| | Akasha (assistant) | Akasha OS (Preview 0.5.0) |
 |--|--------------------|---------------------------|
 | Thèse | Guest 24/7 sur Windows/Linux | OS agent-natif (caps, IPC, seL4) |
 | Isolation | Politique outils + WASM + vault | Caps natives `aos-capkd` + WASM sans WASI ambiant |
@@ -100,7 +100,7 @@ Ne pas confondre [azerothl/akasha](https://github.com/azerothl/akasha) avec [ocu
 | Modules dual-surface | plugins WASM (tools) | `.aospkg` humain + agent (notes) |
 | UI | TUI + Tauri React | egui natif |
 | Licence | propriétaire | AGPL + commerciale |
-| Maturité | v0.10.0, plus de surface produit | Preview 0.4.0, thèse OS plus poussée |
+| Maturité | v0.10.0, plus de surface produit | Preview 0.5.0, thèse OS plus poussée |
 
 **Lecture :** Akasha *couvre déjà* une grande partie de ce qu’OpenClaw/Hermes vendent (canaux, 24/7, vault, routeur, CPU). Akasha OS *n’essaie pas* de recopier cette couche : il remonte d’un cran (caps, IPC sémantique, GPU-as-service, seL4). Les trous d’Akasha OS vs le marché C existent déjà dans le sibling — réutiliser plutôt que réimplémenter, sans diluer la thèse OS.
 
@@ -119,7 +119,7 @@ Seul projet public qui vise le **même objet** qu’Akasha OS : OS bootable seL4
 | IPC | intents CBOR sémantiques | contrats C Microkit |
 | Inférence / GPU | first-class (placement, batching, packs VRAM) | pas le focus |
 | UI humaine | egui Preview, dual-surface | « pas d’UI humaine requise » ; GUI dans un autre repo |
-| Maturité produit | Preview installable 0.4.0 | ~20★, boot kernel oui, couche agent encore scaffolding |
+| Maturité produit | Preview installable 0.5.0 | ~20★, boot kernel oui, couche agent encore scaffolding |
 | Licence | AGPL + commerciale | dépôt public, petit |
 
 **Lecture :** Akasha OS est **plus avancé côté produit agent + GPU + UI** ; agentOS est **plus avancé côté boot bare-metal**. Ce sont des pairs, pas des clones d’OpenClaw.

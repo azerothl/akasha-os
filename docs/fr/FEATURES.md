@@ -11,12 +11,14 @@ Ce n'est **pas** l'OS bootable. Les exigences v1 sont dans
 
 ### Nouveautés 0.5.0
 
-- **Mémorisation auto depuis le chat** (E14) : option Settings (défaut OFF)
+- **Mémorisation auto depuis le chat** (E14) : option Settings (**activée** par défaut)
 - Après chaque tour, `mem.extract` locale basse priorité → faits durables
 - Persist via `mem.user.remember` + auto-lien E6 `updates`/`supersedes`
 - Filtre secrets : clés API / tokens / IBAN-like jamais auto-stockés (audité)
 - Badge **`[chat]`** dans la liste Mémoire ; toast à l'écriture
 - Non bloquant (coalescé) ; skip si un extract précédent tourne encore
+- **`user.ask`** : question en cours de tâche dans le chat lié ; l'agent attend
+  (`Blocked`), reprend à la réponse (FIFO si plusieurs attendent ; timeout 10 min)
 
 ### Nouveautés 0.4.0
 
@@ -101,7 +103,7 @@ Commandes slash :
 - Hits session + user assemblés en `mem.context` pour le chat et les agents
 - Mémoire épisodique agent (`mem.episodic_*`) et `memory.remember` / `memory.recall`
 - **Bootstrap mémoire d'abord** : `task.assess` puis `mem.bootstrap` structuré (faits actifs + voisins similar ; supersédés omis)
-- **Mémorisation auto depuis le chat** (opt-in Settings, défaut OFF) : après chaque tour,
+- **Mémorisation auto depuis le chat** (Settings, **activée** par défaut) : après chaque tour,
   `mem.extract` propose des faits durables → `mem.user.remember` avec `source=chat` ;
   secrets filtrés ; badge **`[chat]`** dans la liste Mémoire
 
@@ -140,6 +142,7 @@ Boucle Observe / Think / Act avec caps, confirmation et audit.
 | Outils | Natif, module WASM, MCP, ou runtime (plan / spawn / mémoire) |
 | MCP | Serveurs stdio optionnels (`share/mcp/servers.yaml.example`) |
 | Sous-agents | `agent.spawn` / `agent.await` avec un brief étroit |
+| `user.ask` | Pause et question à l'utilisateur dans le chat lié ; réponse via steer |
 | Hot-grant | `cap.request` sous trust + confirmation |
 | Authoring | `skill.create` ; WASM scripté via `ext-rt` (`module.scaffold` / `package`) |
 | Think Qwen | Blocs hybrides `<think>` retirés des prompts et de l'UI |
@@ -208,7 +211,7 @@ Persistés dans `var/run/preferences.json` (migration depuis `onboarding.json` s
 |--------|---------|
 | Général | Langue **en** / **fr** ; trust **low** / **medium** ; Inférence **auto** / **gpu** / **cpu** |
 | Modèles | Routage `local_only` / `balanced` |
-| Réseau / Mémoire | Autoriser le réseau ; **Mémorisation auto depuis le chat** (E14, défaut off) |
+| Réseau / Mémoire | Autoriser le réseau ; **Mémorisation auto depuis le chat** (E14, **activée** par défaut) |
 | Agents | Modèle par défaut, max steps (1–128), timeout (60–86400 s) |
 | Schedules | Intervalle de déclenchement agent (`schedule.*`) |
 | Secrets | Clés Brave / GitHub / OpenAI → vault chiffré (jamais réaffichées) |
