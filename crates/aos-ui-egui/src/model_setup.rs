@@ -130,6 +130,10 @@ impl eframe::App for SetupApp {
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
+            egui::ScrollArea::vertical()
+                .id_salt("model_setup")
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
             let title = if self.lang_fr {
                 "Choix des modèles (auto-best)"
             } else {
@@ -294,6 +298,7 @@ impl eframe::App for SetupApp {
                 if ui.button(cancel).clicked() {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                 }
+            });
             });
         });
     }

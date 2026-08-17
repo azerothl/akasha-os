@@ -25,7 +25,8 @@ use aos_proto::{
     InferParams, InferRequest, McpServerInfo, MemContextRequest, MemContextResponse, MemEpisodicDeleteRequest,
     MemExtractRequest, MemExtractResponse, MemHit, MemListRequest, MemRememberResponse, MemUpdateRequest,
     MemUserRecallRequest, MemUserRememberRequest, MemWorkingRequest, LoadRequest, ModelInfo, ModelState,
-    ModuleInvokeRequest, ModuleInvokeResponse, NetFetchRequest, NetFetchResponse, NetModeRequest,
+    ModuleCatalogue, ModuleIdRequest, ModuleInfo, ModuleInstallRequest, ModuleInvokeRequest, ModuleInvokeResponse, CancelRequest,
+    NetFetchRequest, NetFetchResponse, NetModeRequest,
     PendingConfirmation, SecretListRequest, SecretListResponse, SecretSetRequest, SetRoutingRequest,
     SkillInfo, SystemMetrics, TokenEvent, WebBrowseRequest,
     WebBrowseResponse, WebSearchHit, WebSearchRequest, WebSearchResponse, CHAT_DELEGATION_PROMPT,
@@ -276,6 +277,16 @@ enum Cmd {
         content: String,
         attachments: Vec<ChatAttachment>,
     },
+    ChatCancel { inference_id: u64 },
+    CatalogueRefresh,
+    ModuleList,
+    ModuleInstall {
+        source_dir: String,
+        approved_caps: Option<Vec<String>>,
+    },
+    ModuleUninstall {
+        name: String,
+    },
 }
 
 enum Evt {
@@ -339,6 +350,12 @@ enum Evt {
     PromptOptimized(String),
     Models(Vec<ModelInfo>),
     AgentTrace(AgentTrace),
+    InferStarted { inference_id: u64 },
+    ChatCancelled,
+    Catalogue(ModuleCatalogue),
+    InstalledModules(Vec<ModuleInfo>),
+    ModuleInstalled(String),
+    ModuleUninstalled(String),
 }
 
 #[derive(Debug, Clone)]
@@ -507,6 +524,14 @@ fn apply_theme(ctx: &egui::Context, theme: &str) {
         }
         _ => ctx.set_visuals(egui::Visuals::dark()),
     }
+}
+
+/// Vertical scroll that takes the remaining panel and appears only on overflow.
+fn overflow_scroll(ui: &mut egui::Ui, id: &'static str, add_contents: impl FnOnce(&mut egui::Ui)) {
+    egui::ScrollArea::vertical()
+        .id_salt(id)
+        .auto_shrink([false, false])
+        .show(ui, add_contents);
 }
 
 fn slash_completions(prefix: &str) -> Vec<(&'static str, &'static str)> {
@@ -941,6 +966,9 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                         let mut full = String::new();
                         while let Some(ev) = rx.recv().await {
                             match ev {
+                                Ok(TokenEvent::Started { inference_id }) => {
+                                    let _ = evt_tx.send(Evt::InferStarted { inference_id });
+                                }
                                 Ok(TokenEvent::Delta { text }) => {
                                     full.push_str(&text);
                                     let _ = evt_tx.send(Evt::Delta(text));
@@ -1340,6 +1368,111 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
             {
                 Ok(_) => {
                     let _ = evt_tx.send(Evt::Status(format!("secret `{name}` enregistré (chiffré)")));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::ChatCancel { inference_id } => {
+            match bus
+                .call::<CancelRequest, bool>(
+                    "model.cancel",
+                    &CancelRequest { inference_id },
+                    vec![],
+                )
+                .await
+            {
+                Ok(_) => {
+                    let _ = evt_tx.send(Evt::ChatCancelled);
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::CatalogueRefresh => {
+            match bus
+                .call::<(), ModuleCatalogue>("module.catalogue", &(), vec![])
+                .await
+            {
+                Ok(c) => {
+                    let _ = evt_tx.send(Evt::Catalogue(c));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::ModuleList => {
+            match bus
+                .call::<(), Vec<ModuleInfo>>("module.list", &(), vec![])
+                .await
+            {
+                Ok(list) => {
+                    let _ = evt_tx.send(Evt::InstalledModules(list));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::ModuleInstall {
+            source_dir,
+            approved_caps,
+        } => {
+            match bus
+                .call::<ModuleInstallRequest, aos_proto::ModuleInfo>(
+                    "module.install",
+                    &ModuleInstallRequest {
+                        source_dir: source_dir.clone(),
+                        approved_caps,
+                        actor: "human:ui".into(),
+                        actor_caps: vec![],
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(info) => {
+                    let _ = evt_tx.send(Evt::ModuleInstalled(format!(
+                        "{} v{} (quarantined={})",
+                        info.name, info.version, info.quarantined
+                    )));
+                    if let Ok(list) = bus
+                        .call::<(), Vec<ModuleInfo>>("module.list", &(), vec![])
+                        .await
+                    {
+                        let _ = evt_tx.send(Evt::InstalledModules(list));
+                    }
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::ModuleUninstall { name } => {
+            match bus
+                .call::<ModuleIdRequest, Result<(), String>>(
+                    "module.uninstall",
+                    &ModuleIdRequest {
+                        module: name.clone(),
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(Ok(())) => {
+                    let _ = evt_tx.send(Evt::ModuleUninstalled(name));
+                    if let Ok(list) = bus
+                        .call::<(), Vec<ModuleInfo>>("module.list", &(), vec![])
+                        .await
+                    {
+                        let _ = evt_tx.send(Evt::InstalledModules(list));
+                    }
+                }
+                Ok(Err(e)) => {
+                    let _ = evt_tx.send(Evt::Error(e));
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));
@@ -1781,7 +1914,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
         }
         Cmd::AgentSteer { id, text } => {
             match bus
-                .call::<AgentSteerRequest, ()>(
+                .call::<AgentSteerRequest, bool>(
                     aos_agent::intents::STEER,
                     &AgentSteerRequest {
                         agent_id: id,
@@ -2640,7 +2773,7 @@ async fn invoke_tasks(
 
 async fn agent_id_cmd(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>, intent: &str, id: String) {
     match bus
-        .call::<AgentIdRequest, ()>(intent, &AgentIdRequest { agent_id: id }, vec![])
+        .call::<AgentIdRequest, bool>(intent, &AgentIdRequest { agent_id: id }, vec![])
         .await
     {
         Ok(_) => {
@@ -2661,6 +2794,9 @@ struct UiApp {
     streaming: String,
     input: String,
     chat_pending: bool,
+    chat_inference_id: Option<u64>,
+    catalogue: Option<ModuleCatalogue>,
+    installed_modules: Vec<ModuleInfo>,
     sessions: Vec<ChatSessionMeta>,
     active_session: Option<String>,
     rename_buf: String,
@@ -2765,6 +2901,7 @@ impl UiApp {
         let show_onboarding = !onboarding.completed;
         let t = i18n::strings(&prefs.language);
         let _ = cmd_tx.send(Cmd::SessionBootstrap);
+        let _ = cmd_tx.send(Cmd::CatalogueRefresh);
         let _ = cmd_tx.send(Cmd::SetRouting {
             mode: prefs.routing.clone(),
         });
@@ -2800,6 +2937,9 @@ impl UiApp {
             streaming: String::new(),
             input: String::new(),
             chat_pending: false,
+            chat_inference_id: None,
+            catalogue: None,
+            installed_modules: Vec::new(),
             sessions: Vec::new(),
             active_session: None,
             rename_buf: String::new(),
@@ -3005,6 +3145,7 @@ impl UiApp {
             .collect();
         self.streaming.clear();
         self.chat_pending = true;
+        self.chat_inference_id = None;
         self.status = "assistant : génération…".into();
         let model_id = self
             .sessions
@@ -3170,6 +3311,7 @@ impl eframe::App for UiApp {
                     }
                     self.streaming.clear();
                     self.chat_pending = false;
+                    self.chat_inference_id = None;
                     if self.status.starts_with("assistant :") {
                         self.status.clear();
                     }
@@ -3179,6 +3321,7 @@ impl eframe::App for UiApp {
                     self.chat.push(ChatLine::plain("système", m));
                     self.streaming.clear();
                     self.chat_pending = false;
+                    self.chat_inference_id = None;
                 }
                 Evt::Status(m) => self.status = m,
                 Evt::MemExtracted { n } => {
@@ -3511,6 +3654,7 @@ impl eframe::App for UiApp {
                     self.chat = chat;
                     self.streaming.clear();
                     self.chat_pending = false;
+                    self.chat_inference_id = None;
                 }
                 Evt::MemHits(h) => self.mem_hits = h,
                 Evt::SecretList { names, encrypted } => {
@@ -3537,6 +3681,30 @@ impl eframe::App for UiApp {
                 Evt::Models(list) => self.model_infos = list,
                 Evt::AgentTrace(t) => {
                     self.agent_traces.insert(t.agent_id.clone(), t);
+                }
+                Evt::InferStarted { inference_id } => {
+                    self.chat_inference_id = Some(inference_id);
+                }
+                Evt::ChatCancelled => {
+                    self.chat_pending = false;
+                    self.chat_inference_id = None;
+                    if !self.streaming.is_empty() {
+                        let partial = std::mem::take(&mut self.streaming);
+                        self.chat.push(ChatLine::plain("assistant", partial));
+                    }
+                    let t = i18n::strings(&self.prefs.language);
+                    self.status = t.chat_stopped.into();
+                }
+                Evt::Catalogue(c) => self.catalogue = Some(c),
+                Evt::InstalledModules(list) => self.installed_modules = list,
+                Evt::ModuleInstalled(msg) => {
+                    self.status = msg;
+                    let _ = self.cmd_tx.send(Cmd::CatalogueRefresh);
+                    let _ = self.cmd_tx.send(Cmd::ModuleList);
+                }
+                Evt::ModuleUninstalled(name) => {
+                    self.status = format!("uninstalled {name}");
+                    let _ = self.cmd_tx.send(Cmd::ModuleList);
                 }
             }
         }
@@ -3809,6 +3977,7 @@ impl eframe::App for UiApp {
         });
 
         egui::SidePanel::left("tabs").exact_width(140.0).show(ctx, |ui| {
+            overflow_scroll(ui, "nav_sidebar", |ui| {
             ui.heading("Preview");
             for (tab, label, hint) in [
                 (Tab::Chat, t.tab_chat, t.tab_hint_chat),
@@ -3853,6 +4022,8 @@ impl eframe::App for UiApp {
                     }
                     if tab == Tab::Settings {
                         let _ = self.cmd_tx.send(Cmd::ScheduleList);
+                        let _ = self.cmd_tx.send(Cmd::CatalogueRefresh);
+                        let _ = self.cmd_tx.send(Cmd::ModuleList);
                     }
                 }
             }
@@ -3910,6 +4081,7 @@ impl eframe::App for UiApp {
             } else {
                 ui.label("…");
             }
+            });
         });
 
         self.poll_agent_trace(ctx);
@@ -3921,20 +4093,21 @@ impl eframe::App for UiApp {
             Tab::Chat => self.ui_chat(ui),
             Tab::Memory => self.ui_memory(ui),
             Tab::Notes => self.ui_notes(ui),
-            Tab::Tasks => self.ui_tasks(ui),
-            Tab::Agents => self.ui_agents(ui),
-            Tab::Models => self.ui_models(ui),
+            Tab::Tasks => overflow_scroll(ui, "tasks", |ui| self.ui_tasks(ui)),
+            Tab::Agents => overflow_scroll(ui, "agents", |ui| self.ui_agents(ui)),
+            Tab::Models => overflow_scroll(ui, "models", |ui| self.ui_models(ui)),
             Tab::Audit => self.ui_audit(ui),
-            Tab::Caps => self.ui_caps(ui),
-            Tab::Scenarios => self.ui_scenarios(ui),
-            Tab::Feedback => self.ui_feedback(ui),
-            Tab::Settings => self.ui_settings(ui),
+            Tab::Caps => overflow_scroll(ui, "caps", |ui| self.ui_caps(ui)),
+            Tab::Scenarios => overflow_scroll(ui, "scenarios", |ui| self.ui_scenarios(ui)),
+            Tab::Feedback => overflow_scroll(ui, "feedback", |ui| self.ui_feedback(ui)),
+            Tab::Settings => overflow_scroll(ui, "settings", |ui| self.ui_settings(ui)),
         });
     }
 }
 
 impl UiApp {
     fn ui_chat(&mut self, ui: &mut egui::Ui) {
+        let t = i18n::strings(&self.prefs.language);
         let full = ui.available_size();
         let side_w = 220.0_f32;
         let gap = 8.0_f32;
@@ -3946,6 +4119,8 @@ impl UiApp {
                 egui::vec2(side_w, full.y),
                 egui::Layout::top_down(egui::Align::Min).with_cross_justify(true),
                 |ui| {
+                    ui.set_width(side_w);
+                    overflow_scroll(ui, "chat_side", |ui| {
                     ui.set_width(side_w);
                     ui.heading("Sessions");
                     ui.label("Model");
@@ -4049,11 +4224,7 @@ impl UiApp {
                     }
                     ui.separator();
                     ui.heading("Web / fichiers");
-                    egui::ScrollArea::vertical()
-                        .id_salt("web_tools")
-                        .auto_shrink([false, false])
-                        .show(ui, |ui| {
-                            ui.set_min_width(side_w - 16.0);
+                    ui.set_min_width(side_w - 16.0);
                             ui.add(
                                 egui::TextEdit::singleline(&mut self.web_query)
                                     .desired_width(side_w - 20.0)
@@ -4129,7 +4300,7 @@ impl UiApp {
                                 let dir = aos_home().join("var/storage/data/downloads");
                                 open_os_folder(&dir);
                             }
-                        });
+                    });
                 },
             );
 
@@ -4177,7 +4348,13 @@ impl UiApp {
                                 } else {
                                     text
                                 };
+                            ui.horizontal(|ui| {
                                 ui.label(format!("[{role}]"));
+                                if ui.small_button(t.btn_copy).clicked() {
+                                    ui.ctx().copy_text(text.clone());
+                                    self.status = t.copied.into();
+                                }
+                            });
                                 if !text.is_empty() {
                                     if role == "assistant" {
                                         ui.push_id(("chat_md", i), |ui| {
@@ -4292,6 +4469,15 @@ impl UiApp {
                                 self.chat_refocus = false;
                             }
                             let send_btn = ui.button("Envoyer").on_hover_text(t.tip_send);
+                            if self.chat_pending {
+                                if ui.button(t.chat_stop).clicked() {
+                                    if let Some(id) = self.chat_inference_id {
+                                        let _ = self.cmd_tx.send(Cmd::ChatCancel {
+                                            inference_id: id,
+                                        });
+                                    }
+                                }
+                            }
                             let send = send_btn.clicked()
                                 || (r.lost_focus()
                                     && ui.input(|i| i.key_pressed(egui::Key::Enter)));
@@ -5419,6 +5605,63 @@ impl UiApp {
         ui.weak(t.settings_brave_hint);
 
         ui.add_space(12.0);
+        ui.heading(t.settings_catalogue);
+        ui.weak(t.settings_catalogue_blurb);
+        if ui.button(t.settings_secret_list).clicked() {
+            let _ = self.cmd_tx.send(Cmd::CatalogueRefresh);
+            let _ = self.cmd_tx.send(Cmd::ModuleList);
+        }
+        match self.catalogue.clone() {
+            Some(cat) if cat.signature_ok => {
+                for e in cat.entries {
+                    let installed = self
+                        .installed_modules
+                        .iter()
+                        .find(|m| m.name == e.name)
+                        .cloned();
+                    ui.horizontal(|ui| {
+                        let mut label = format!("{} {} ({})", e.name, e.version, e.kind);
+                        if let Some(m) = &installed {
+                            label.push_str(&format!(" [{}]", t.settings_catalogue_installed));
+                            if m.quarantined {
+                                label.push_str(" [quarantine]");
+                            }
+                        }
+                        ui.label(label);
+                        if e.kind == "module" {
+                            if installed.is_some() {
+                                if ui.button(t.settings_catalogue_uninstall).clicked() {
+                                    let _ = self.cmd_tx.send(Cmd::ModuleUninstall {
+                                        name: e.name.clone(),
+                                    });
+                                }
+                            } else if ui.button(t.settings_catalogue_install).clicked() {
+                                let src = aos_home().join(&e.path);
+                                let _ = self.cmd_tx.send(Cmd::ModuleInstall {
+                                    source_dir: src.to_string_lossy().into_owned(),
+                                    approved_caps: None,
+                                });
+                            }
+                        }
+                    });
+                    if !e.attested_caps.is_empty() {
+                        ui.weak(format!(
+                            "{}: {}",
+                            t.settings_catalogue_caps,
+                            e.attested_caps.join(", ")
+                        ));
+                    }
+                }
+            }
+            Some(_) => {
+                ui.weak(t.settings_catalogue_unsigned);
+            }
+            None => {
+                ui.weak(t.settings_catalogue_unsigned);
+            }
+        }
+
+        ui.add_space(12.0);
         ui.heading(t.schedule_heading);
         egui::Grid::new("settings_schedules")
             .num_columns(2)
@@ -5791,6 +6034,11 @@ impl UiApp {
             ui.text_edit_singleline(&mut self.fb_scenario);
         });
         ui.text_edit_multiline(&mut self.fb_body);
+        let t = i18n::strings(&self.prefs.language);
+        if ui.button(t.btn_copy).clicked() {
+            ui.ctx().copy_text(self.fb_body.clone());
+            self.status = t.copied.into();
+        }
         let security = self.fb_category.eq_ignore_ascii_case("security");
         if security {
             self.fb_github = false;

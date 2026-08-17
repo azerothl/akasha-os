@@ -152,6 +152,17 @@ pub struct UiStrings {
     pub chat_hint_agent_ask_many: &'static str,
     pub chat_ask_queue: &'static str,
     pub slash_pick: &'static str,
+    pub btn_copy: &'static str,
+    pub copied: &'static str,
+    pub chat_stop: &'static str,
+    pub chat_stopped: &'static str,
+    pub settings_catalogue: &'static str,
+    pub settings_catalogue_blurb: &'static str,
+    pub settings_catalogue_unsigned: &'static str,
+    pub settings_catalogue_install: &'static str,
+    pub settings_catalogue_uninstall: &'static str,
+    pub settings_catalogue_installed: &'static str,
+    pub settings_catalogue_caps: &'static str,
 }
 
 const EN: UiStrings = UiStrings {
@@ -305,6 +316,17 @@ const EN: UiStrings = UiStrings {
     chat_hint_agent_ask_many: "answer « {agent} » ({n} waiting)…",
     chat_ask_queue: "{n} questions waiting — next: « {agent} ». Click a card to choose.",
     slash_pick: "Slash commands",
+    btn_copy: "Copy",
+    copied: "Copied to clipboard",
+    chat_stop: "Stop",
+    chat_stopped: "Generation stopped",
+    settings_catalogue: "Local module catalogue",
+    settings_catalogue_blurb: "Signed local registry (E10). Not a network store. Install still asks for cap review.",
+    settings_catalogue_unsigned: "Catalogue signature missing or invalid — install from folder still works.",
+    settings_catalogue_install: "Install",
+    settings_catalogue_uninstall: "Uninstall",
+    settings_catalogue_installed: "installed",
+    settings_catalogue_caps: "attested caps",
 };
 
 const FR: UiStrings = UiStrings {
@@ -458,6 +480,17 @@ const FR: UiStrings = UiStrings {
     chat_hint_agent_ask_many: "répondez à « {agent} » ({n} en attente)…",
     chat_ask_queue: "{n} questions en attente — prochaine : « {agent} ». Cliquez une carte pour choisir.",
     slash_pick: "Commandes slash",
+    btn_copy: "Copier",
+    copied: "Copié dans le presse-papiers",
+    chat_stop: "Stop",
+    chat_stopped: "Génération arrêtée",
+    settings_catalogue: "Catalogue local de modules",
+    settings_catalogue_blurb: "Registre local signé (E10). Pas un store réseau. L'install demande toujours la revue de caps.",
+    settings_catalogue_unsigned: "Signature catalogue absente ou invalide — l'install depuis un dossier reste possible.",
+    settings_catalogue_install: "Installer",
+    settings_catalogue_uninstall: "Désinstaller",
+    settings_catalogue_installed: "installé",
+    settings_catalogue_caps: "caps attestées",
 };
 
 pub fn strings(lang: &str) -> UiStrings {
