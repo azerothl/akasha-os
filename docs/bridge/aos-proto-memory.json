@@ -1,0 +1,1031 @@
+{
+  "$defs": {
+    "MemContextRequest": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "k": {
+          "default": 5,
+          "format": "uint",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "query": {
+          "type": "string"
+        },
+        "session_id": {
+          "default": null,
+          "description": "Session chat active (`session:<id>`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "title": "MemContextRequest",
+      "type": "object"
+    },
+    "MemContextResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "definitions": {
+        "MemHit": {
+          "properties": {
+            "id": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "kind": {
+              "description": "Kind optionnel (`fact` / `episode`).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "metadata": true,
+            "namespace": {
+              "type": "string"
+            },
+            "pinned": {
+              "default": false,
+              "type": "boolean"
+            },
+            "relations": {
+              "description": "Relations sortantes (1 hop) pour l'UI / bootstrap.",
+              "items": {
+                "$ref": "#/definitions/MemRelation"
+              },
+              "type": "array"
+            },
+            "score": {
+              "format": "float",
+              "type": "number"
+            },
+            "superseded": {
+              "default": false,
+              "description": "True si un autre souvenir `supersedes` celui-ci.",
+              "type": "boolean"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "metadata",
+            "namespace",
+            "score",
+            "text"
+          ],
+          "type": "object"
+        },
+        "MemRelation": {
+          "properties": {
+            "from": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "rel": {
+              "$ref": "#/definitions/MemRelationKind"
+            },
+            "to": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "from",
+            "rel",
+            "to"
+          ],
+          "type": "object"
+        },
+        "MemRelationKind": {
+          "description": "Relation typée entre souvenirs (E6 / Preview 0.4).",
+          "enum": [
+            "similar",
+            "updates",
+            "supersedes"
+          ],
+          "type": "string"
+        }
+      },
+      "properties": {
+        "prompt_block": {
+          "type": "string"
+        },
+        "session_hits": {
+          "items": {
+            "$ref": "#/definitions/MemHit"
+          },
+          "type": "array"
+        },
+        "user_hits": {
+          "items": {
+            "$ref": "#/definitions/MemHit"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "prompt_block",
+        "session_hits",
+        "user_hits"
+      ],
+      "title": "MemContextResponse",
+      "type": "object"
+    },
+    "MemEpisodicDeleteRequest": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "description": "`mem.episodic_delete` — par id, ou par namespace + métadonnée (`path`, etc.).",
+      "properties": {
+        "id": {
+          "default": null,
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "meta_key": {
+          "default": null,
+          "description": "Clé de métadonnée (ex. `\"path\"`) lorsque `id` est absent.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "meta_value": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "namespace": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "title": "MemEpisodicDeleteRequest",
+      "type": "object"
+    },
+    "MemEpisodicQueryRequest": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "description": "`mem.episodic_query`.",
+      "properties": {
+        "k": {
+          "default": 5,
+          "format": "uint",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "namespace": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "query": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "title": "MemEpisodicQueryRequest",
+      "type": "object"
+    },
+    "MemEpisodicWriteRequest": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "description": "`mem.episodic_write`.",
+      "properties": {
+        "auto_link": {
+          "default": false,
+          "description": "Si true, auto-crée `updates`/`supersedes` vers un hit proche du même namespace.",
+          "type": "boolean"
+        },
+        "auto_link_threshold": {
+          "default": 0.8199999928474426,
+          "format": "float",
+          "type": "number"
+        },
+        "kind": {
+          "default": null,
+          "description": "Kind optionnel : `fact` ou `episode`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "metadata": {
+          "default": null
+        },
+        "namespace": {
+          "description": "Namespace (`agent:<id>`, `module:<nom>`).",
+          "type": "string"
+        },
+        "pinned": {
+          "default": false,
+          "type": "boolean"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "namespace",
+        "text"
+      ],
+      "title": "MemEpisodicWriteRequest",
+      "type": "object"
+    },
+    "MemExtractOutcome": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "definitions": {
+        "MemExtractOutcomeKind": {
+          "description": "Issue pour un candidat (stocké, skip dédup, ou filtré secret).",
+          "enum": [
+            "stored",
+            "skipped_duplicate",
+            "filtered_secret",
+            "skipped_empty"
+          ],
+          "type": "string"
+        },
+        "MemRelation": {
+          "properties": {
+            "from": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "rel": {
+              "$ref": "#/definitions/MemRelationKind"
+            },
+            "to": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "from",
+            "rel",
+            "to"
+          ],
+          "type": "object"
+        },
+        "MemRelationKind": {
+          "description": "Relation typée entre souvenirs (E6 / Preview 0.4).",
+          "enum": [
+            "similar",
+            "updates",
+            "supersedes"
+          ],
+          "type": "string"
+        }
+      },
+      "properties": {
+        "auto_relations": {
+          "items": {
+            "$ref": "#/definitions/MemRelation"
+          },
+          "type": "array"
+        },
+        "id": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "kind": {
+          "$ref": "#/definitions/MemExtractOutcomeKind"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "text"
+      ],
+      "title": "MemExtractOutcome",
+      "type": "object"
+    },
+    "MemExtractOutcomeKind": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "description": "Issue pour un candidat (stocké, skip dédup, ou filtré secret).",
+      "enum": [
+        "stored",
+        "skipped_duplicate",
+        "filtered_secret",
+        "skipped_empty"
+      ],
+      "title": "MemExtractOutcomeKind",
+      "type": "string"
+    },
+    "MemExtractRequest": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "description": "`mem.extract` — extraction LLM de faits durables depuis un tour de chat (E14).",
+      "properties": {
+        "assistant_text": {
+          "type": "string"
+        },
+        "model_id": {
+          "default": null,
+          "description": "Id modèle instruct (défaut = modèle système).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "persist": {
+          "default": true,
+          "description": "Si false, extrait sans écrire (dry-run / tests).",
+          "type": "boolean"
+        },
+        "session_id": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "user_text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "assistant_text",
+        "user_text"
+      ],
+      "title": "MemExtractRequest",
+      "type": "object"
+    },
+    "MemExtractResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "definitions": {
+        "MemExtractOutcome": {
+          "properties": {
+            "auto_relations": {
+              "items": {
+                "$ref": "#/definitions/MemRelation"
+              },
+              "type": "array"
+            },
+            "id": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "kind": {
+              "$ref": "#/definitions/MemExtractOutcomeKind"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "text"
+          ],
+          "type": "object"
+        },
+        "MemExtractOutcomeKind": {
+          "description": "Issue pour un candidat (stocké, skip dédup, ou filtré secret).",
+          "enum": [
+            "stored",
+            "skipped_duplicate",
+            "filtered_secret",
+            "skipped_empty"
+          ],
+          "type": "string"
+        },
+        "MemExtractedFact": {
+          "description": "Un fait proposé par l'extracteur (avant filtre / persist).",
+          "properties": {
+            "supersedes_hint": {
+              "default": null,
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "type": "object"
+        },
+        "MemRelation": {
+          "properties": {
+            "from": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "rel": {
+              "$ref": "#/definitions/MemRelationKind"
+            },
+            "to": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "from",
+            "rel",
+            "to"
+          ],
+          "type": "object"
+        },
+        "MemRelationKind": {
+          "description": "Relation typée entre souvenirs (E6 / Preview 0.4).",
+          "enum": [
+            "similar",
+            "updates",
+            "supersedes"
+          ],
+          "type": "string"
+        }
+      },
+      "properties": {
+        "facts_proposed": {
+          "items": {
+            "$ref": "#/definitions/MemExtractedFact"
+          },
+          "type": "array"
+        },
+        "outcomes": {
+          "items": {
+            "$ref": "#/definitions/MemExtractOutcome"
+          },
+          "type": "array"
+        },
+        "stored": {
+          "description": "Nombre de faits réellement écrits.",
+          "format": "uint",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "facts_proposed",
+        "outcomes",
+        "stored"
+      ],
+      "title": "MemExtractResponse",
+      "type": "object"
+    },
+    "MemExtractedFact": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "description": "Un fait proposé par l'extracteur (avant filtre / persist).",
+      "properties": {
+        "supersedes_hint": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "MemExtractedFact",
+      "type": "object"
+    },
+    "MemHit": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "definitions": {
+        "MemRelation": {
+          "properties": {
+            "from": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "rel": {
+              "$ref": "#/definitions/MemRelationKind"
+            },
+            "to": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "from",
+            "rel",
+            "to"
+          ],
+          "type": "object"
+        },
+        "MemRelationKind": {
+          "description": "Relation typée entre souvenirs (E6 / Preview 0.4).",
+          "enum": [
+            "similar",
+            "updates",
+            "supersedes"
+          ],
+          "type": "string"
+        }
+      },
+      "properties": {
+        "id": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "kind": {
+          "description": "Kind optionnel (`fact` / `episode`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "metadata": true,
+        "namespace": {
+          "type": "string"
+        },
+        "pinned": {
+          "default": false,
+          "type": "boolean"
+        },
+        "relations": {
+          "description": "Relations sortantes (1 hop) pour l'UI / bootstrap.",
+          "items": {
+            "$ref": "#/definitions/MemRelation"
+          },
+          "type": "array"
+        },
+        "score": {
+          "format": "float",
+          "type": "number"
+        },
+        "superseded": {
+          "default": false,
+          "description": "True si un autre souvenir `supersedes` celui-ci.",
+          "type": "boolean"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "metadata",
+        "namespace",
+        "score",
+        "text"
+      ],
+      "title": "MemHit",
+      "type": "object"
+    },
+    "MemListRequest": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "description": "`mem.list` — liste les entrées d'un namespace (F-MEM-05).",
+      "properties": {
+        "include_superseded": {
+          "default": false,
+          "description": "Inclure les souvenirs supersédés (défaut false).",
+          "type": "boolean"
+        },
+        "namespace": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "namespace"
+      ],
+      "title": "MemListRequest",
+      "type": "object"
+    },
+    "MemNeighborsRequest": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "definitions": {
+        "MemRelationKind": {
+          "description": "Relation typée entre souvenirs (E6 / Preview 0.4).",
+          "enum": [
+            "similar",
+            "updates",
+            "supersedes"
+          ],
+          "type": "string"
+        }
+      },
+      "description": "`mem.neighbors` — voisinage 1 hop.",
+      "properties": {
+        "id": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "rel": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/MemRelationKind"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "MemNeighborsRequest",
+      "type": "object"
+    },
+    "MemRelateRequest": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "definitions": {
+        "MemRelationKind": {
+          "description": "Relation typée entre souvenirs (E6 / Preview 0.4).",
+          "enum": [
+            "similar",
+            "updates",
+            "supersedes"
+          ],
+          "type": "string"
+        }
+      },
+      "description": "`mem.relate` — crée une arête typée entre deux souvenirs.",
+      "properties": {
+        "from": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "rel": {
+          "$ref": "#/definitions/MemRelationKind"
+        },
+        "to": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "from",
+        "rel",
+        "to"
+      ],
+      "title": "MemRelateRequest",
+      "type": "object"
+    },
+    "MemRelation": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "definitions": {
+        "MemRelationKind": {
+          "description": "Relation typée entre souvenirs (E6 / Preview 0.4).",
+          "enum": [
+            "similar",
+            "updates",
+            "supersedes"
+          ],
+          "type": "string"
+        }
+      },
+      "properties": {
+        "from": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "rel": {
+          "$ref": "#/definitions/MemRelationKind"
+        },
+        "to": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "from",
+        "rel",
+        "to"
+      ],
+      "title": "MemRelation",
+      "type": "object"
+    },
+    "MemRelationKind": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "description": "Relation typée entre souvenirs (E6 / Preview 0.4).",
+      "enum": [
+        "similar",
+        "updates",
+        "supersedes"
+      ],
+      "title": "MemRelationKind",
+      "type": "string"
+    },
+    "MemRememberResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "definitions": {
+        "MemRelation": {
+          "properties": {
+            "from": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "rel": {
+              "$ref": "#/definitions/MemRelationKind"
+            },
+            "to": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "from",
+            "rel",
+            "to"
+          ],
+          "type": "object"
+        },
+        "MemRelationKind": {
+          "description": "Relation typée entre souvenirs (E6 / Preview 0.4).",
+          "enum": [
+            "similar",
+            "updates",
+            "supersedes"
+          ],
+          "type": "string"
+        }
+      },
+      "description": "Réponse enrichie de `mem.user.remember` / write avec auto-link.",
+      "properties": {
+        "auto_relations": {
+          "items": {
+            "$ref": "#/definitions/MemRelation"
+          },
+          "type": "array"
+        },
+        "id": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "MemRememberResponse",
+      "type": "object"
+    },
+    "MemSharedReadRequest": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "MemSharedReadRequest",
+      "type": "object"
+    },
+    "MemSharedWriteRequest": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "value": true
+      },
+      "required": [
+        "name",
+        "value"
+      ],
+      "title": "MemSharedWriteRequest",
+      "type": "object"
+    },
+    "MemStats": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "description": "`mem.stats` — compteurs pour le /help de l'UI.",
+      "properties": {
+        "episodic_total": {
+          "format": "uint",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "namespaces": {
+          "items": {
+            "items": [
+              {
+                "type": "string"
+              },
+              {
+                "format": "uint",
+                "minimum": 0.0,
+                "type": "integer"
+              }
+            ],
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "working_agents": {
+          "format": "uint",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "episodic_total",
+        "namespaces",
+        "working_agents"
+      ],
+      "title": "MemStats",
+      "type": "object"
+    },
+    "MemUnrelateRequest": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "definitions": {
+        "MemRelationKind": {
+          "description": "Relation typée entre souvenirs (E6 / Preview 0.4).",
+          "enum": [
+            "similar",
+            "updates",
+            "supersedes"
+          ],
+          "type": "string"
+        }
+      },
+      "description": "`mem.unrelate` — retire une arête.",
+      "properties": {
+        "from": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "rel": {
+          "$ref": "#/definitions/MemRelationKind"
+        },
+        "to": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "from",
+        "rel",
+        "to"
+      ],
+      "title": "MemUnrelateRequest",
+      "type": "object"
+    },
+    "MemUpdateRequest": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "description": "`mem.update` — remplace le texte d'un souvenir (et optionnellement supersède l'ancien).",
+      "properties": {
+        "id": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "metadata": {
+          "default": null
+        },
+        "pinned": {
+          "default": null,
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "supersede": {
+          "default": false,
+          "description": "Si true, crée une nouvelle entrée et `supersedes` l'ancienne.",
+          "type": "boolean"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "text"
+      ],
+      "title": "MemUpdateRequest",
+      "type": "object"
+    },
+    "MemUserRecallRequest": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "k": {
+          "default": 5,
+          "format": "uint",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "query": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "title": "MemUserRecallRequest",
+      "type": "object"
+    },
+    "MemUserRememberRequest": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "auto_link": {
+          "default": true,
+          "description": "Si true (défaut), lie automatiquement un hit proche via `updates`/`supersedes`.",
+          "type": "boolean"
+        },
+        "auto_link_threshold": {
+          "default": 0.8199999928474426,
+          "description": "Seuil cosinus pour l'auto-link (défaut 0.82).",
+          "format": "float",
+          "type": "number"
+        },
+        "metadata": {
+          "default": null
+        },
+        "pinned": {
+          "default": false,
+          "type": "boolean"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "MemUserRememberRequest",
+      "type": "object"
+    },
+    "MemWorkingRequest": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "description": "`mem.working_set` / `mem.working_get`.",
+      "properties": {
+        "agent_id": {
+          "type": "string"
+        },
+        "messages": {
+          "default": [],
+          "items": {
+            "items": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "agent_id"
+      ],
+      "title": "MemWorkingRequest",
+      "type": "object"
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "JSON Schema (draft-07) for mem.* bus payloads, including E6 relations and E14 mem.extract. Canonical wire format remains CBOR on the OS intent bus.",
+  "title": "Akasha OS aos-proto memory intents",
+  "version": "0.6.0"
+}

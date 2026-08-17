@@ -4,7 +4,10 @@
 //! (`aos-ipc`). Elles définissent le contrat entre `aos-modeld`, `aos-agentd`,
 //! `aos-ui` et les futurs modules.
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+
+pub mod bridge;
 
 // ---------------------------------------------------------------------------
 // Model API (§11.1)
@@ -845,7 +848,7 @@ pub struct FsSetClassRequest {
 // ---------------------------------------------------------------------------
 
 /// `mem.working_set` / `mem.working_get`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MemWorkingRequest {
     pub agent_id: String,
     #[serde(default)]
@@ -853,7 +856,7 @@ pub struct MemWorkingRequest {
 }
 
 /// `mem.episodic_write`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MemEpisodicWriteRequest {
     /// Namespace (`agent:<id>`, `module:<nom>`).
     pub namespace: String,
@@ -887,7 +890,7 @@ impl Default for MemEpisodicWriteRequest {
 }
 
 /// `mem.episodic_query`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MemEpisodicQueryRequest {
     pub query: String,
     #[serde(default = "default_k")]
@@ -897,7 +900,7 @@ pub struct MemEpisodicQueryRequest {
 }
 
 /// `mem.episodic_delete` — par id, ou par namespace + métadonnée (`path`, etc.).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MemEpisodicDeleteRequest {
     #[serde(default)]
     pub id: Option<u64>,
@@ -915,7 +918,7 @@ fn default_k() -> usize {
 }
 
 /// `mem.stats` — compteurs pour le /help de l'UI.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MemStats {
     pub episodic_total: usize,
     pub namespaces: Vec<(String, usize)>,
@@ -923,7 +926,7 @@ pub struct MemStats {
 }
 
 /// Relation typée entre souvenirs (E6 / Preview 0.4).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum MemRelationKind {
     Similar,
@@ -950,14 +953,14 @@ impl MemRelationKind {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MemRelation {
     pub from: u64,
     pub rel: MemRelationKind,
     pub to: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MemHit {
     pub id: u64,
     pub namespace: String,
@@ -978,7 +981,7 @@ pub struct MemHit {
 }
 
 /// `mem.relate` — crée une arête typée entre deux souvenirs.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MemRelateRequest {
     pub from: u64,
     pub rel: MemRelationKind,
@@ -986,7 +989,7 @@ pub struct MemRelateRequest {
 }
 
 /// `mem.unrelate` — retire une arête.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MemUnrelateRequest {
     pub from: u64,
     pub rel: MemRelationKind,
@@ -994,7 +997,7 @@ pub struct MemUnrelateRequest {
 }
 
 /// `mem.neighbors` — voisinage 1 hop.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MemNeighborsRequest {
     pub id: u64,
     #[serde(default)]
@@ -1002,7 +1005,7 @@ pub struct MemNeighborsRequest {
 }
 
 /// `mem.list` — liste les entrées d'un namespace (F-MEM-05).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MemListRequest {
     pub namespace: String,
     /// Inclure les souvenirs supersédés (défaut false).
@@ -1011,7 +1014,7 @@ pub struct MemListRequest {
 }
 
 /// `mem.update` — remplace le texte d'un souvenir (et optionnellement supersède l'ancien).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MemUpdateRequest {
     pub id: u64,
     pub text: String,
@@ -1025,7 +1028,7 @@ pub struct MemUpdateRequest {
 }
 
 /// Réponse enrichie de `mem.user.remember` / write avec auto-link.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MemRememberResponse {
     pub id: u64,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -1126,6 +1129,31 @@ pub struct ModuleInstallRequest {
     pub actor: String,
     #[serde(default)]
     pub actor_caps: Vec<String>,
+}
+
+/// Entrée du catalogue local signé (E10 / Preview 0.6).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CatalogueEntry {
+    pub name: String,
+    pub version: String,
+    /// `module` | `mcp`
+    pub kind: String,
+    /// Chemin relatif à la racine Preview (`share/...`).
+    pub path: String,
+    /// SHA-256 du WASM (`module`) ou du fichier (`mcp`), optionnellement préfixé `sha256:`.
+    pub hash: String,
+    #[serde(default)]
+    pub attested_caps: Vec<String>,
+}
+
+/// `module.catalogue` — registre local signé (pas un store réseau).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModuleCatalogue {
+    pub version: u32,
+    pub entries: Vec<CatalogueEntry>,
+    /// True si `catalogue.yaml.sig` a été vérifiée avec `catalogue.pub`.
+    #[serde(default)]
+    pub signature_ok: bool,
 }
 
 /// `module.scaffold` — génère un squelette de module (script ou rust).
@@ -1360,7 +1388,7 @@ pub struct NetModeRequest {
 
 /// `secrets.get` — usage restreint aux services (jamais aux agents, §9.2).
 /// L'identité fait foi via `Intent.from` (bus) ; `actor` est ignoré s'il diverge.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct SecretGetRequest {
     pub name: String,
     /// Déprécié : conservé pour compat ; le daemon utilise `Intent.from`.
@@ -1369,7 +1397,7 @@ pub struct SecretGetRequest {
 }
 
 /// `secrets.set` — écriture depuis UI Settings / services.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct SecretSetRequest {
     pub name: String,
     /// Valeur vide = suppression.
@@ -1377,10 +1405,10 @@ pub struct SecretSetRequest {
 }
 
 /// `secrets.list` — noms uniquement.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct SecretListRequest {}
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct SecretListResponse {
     pub names: Vec<String>,
     pub encrypted: bool,
@@ -1600,18 +1628,18 @@ pub struct ChatSessionGetResponse {
 // Memory partagée / user (PC.7)
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MemSharedReadRequest {
     pub name: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MemSharedWriteRequest {
     pub name: String,
     pub value: serde_json::Value,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MemUserRememberRequest {
     pub text: String,
     #[serde(default)]
@@ -1646,14 +1674,14 @@ fn default_auto_link_threshold() -> f32 {
     0.82
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MemUserRecallRequest {
     pub query: String,
     #[serde(default = "default_k")]
     pub k: usize,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MemContextRequest {
     /// Session chat active (`session:<id>`).
     #[serde(default)]
@@ -1663,7 +1691,7 @@ pub struct MemContextRequest {
     pub k: usize,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MemContextResponse {
     pub session_hits: Vec<MemHit>,
     pub user_hits: Vec<MemHit>,
@@ -1671,7 +1699,7 @@ pub struct MemContextResponse {
 }
 
 /// `mem.extract` — extraction LLM de faits durables depuis un tour de chat (E14).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MemExtractRequest {
     pub user_text: String,
     pub assistant_text: String,
@@ -1698,7 +1726,7 @@ impl Default for MemExtractRequest {
 }
 
 /// Un fait proposé par l'extracteur (avant filtre / persist).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MemExtractedFact {
     pub text: String,
     #[serde(default)]
@@ -1706,7 +1734,7 @@ pub struct MemExtractedFact {
 }
 
 /// Issue pour un candidat (stocké, skip dédup, ou filtré secret).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum MemExtractOutcomeKind {
     Stored,
@@ -1715,7 +1743,7 @@ pub enum MemExtractOutcomeKind {
     SkippedEmpty,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MemExtractOutcome {
     pub kind: MemExtractOutcomeKind,
     pub text: String,
@@ -1725,7 +1753,7 @@ pub struct MemExtractOutcome {
     pub auto_relations: Vec<MemRelation>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MemExtractResponse {
     pub facts_proposed: Vec<MemExtractedFact>,
     pub outcomes: Vec<MemExtractOutcome>,
