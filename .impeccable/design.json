@@ -107,7 +107,7 @@
       },
       "label": {
         "displayName": "Label",
-        "purpose": "Paper-plate captions in Fira 600 uppercase."
+        "purpose": "Honesty Host / NVIDIA / Boot in Archivo Narrow 700, signal."
       }
     },
     "motion": [
@@ -152,7 +152,7 @@
       "refersTo": "key",
       "description": "Primary control: hydrogen rail with key glyph. Install on the landing, Download on install. Winds the orrery on hover.",
       "html": "<a class=\"ds-key\" href=\"#\"><svg class=\"ds-key-glyph\" viewBox=\"0 0 32 32\" aria-hidden=\"true\"><path fill=\"currentColor\" d=\"M13.5 6.5a5.5 5.5 0 1 0 1.2 8.1L19 19l1.8-1.8 1.4 1.4 1.8-1.8-1.4-1.4 2.2-2.2-1.8-1.8-2.2 2.2-1.2-1.2 2-2-1.8-1.8-6.3 6.3A5.5 5.5 0 0 0 13.5 6.5Zm-3.2 2.3a3.2 3.2 0 1 1 0 6.4 3.2 3.2 0 0 1 0-6.4Z\"/></svg><span class=\"ds-key-label\">Install</span><span class=\"ds-key-hint\">Wind the orrery</span></a>",
-      "css": ".ds-key { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 80px; padding: 16px 24px; background: var(--hydrogen, #e85d4c); color: var(--paper, #dce6f0); font-family: \"Archivo Narrow\", \"Arial Narrow\", sans-serif; font-weight: 700; letter-spacing: 0.04em; text-decoration: none; text-transform: uppercase; border-radius: 0; } .ds-key-glyph { display: block; width: 2.4rem; height: 2.4rem; flex: 0 0 auto; } .ds-key-label { font-size: clamp(1.8rem, 4vw, 2.6rem); line-height: 0.9; letter-spacing: -0.02em; } .ds-key-hint { font-size: 1.05rem; letter-spacing: 0.08em; opacity: 0.92; } .ds-key:hover, .ds-key:focus-visible { color: var(--void, #070b14); background: var(--paper, #dce6f0); } .ds-key:focus-visible { outline: 2px solid var(--signal, #3ee0c4); outline-offset: 4px; }"
+      "css": ".ds-key { display: flex; align-items: center; justify-content: center; gap: 24px; min-height: 80px; padding: 16px 24px; background: var(--hydrogen, #e85d4c); color: var(--paper, #dce6f0); font-family: \"Archivo Narrow\", \"Arial Narrow\", sans-serif; font-weight: 700; letter-spacing: 0.04em; text-decoration: none; text-transform: uppercase; text-align: center; border-radius: 0; } .ds-key-glyph { display: block; width: 2.4rem; height: 2.4rem; flex: 0 0 auto; } .ds-key-label { font-size: clamp(1.8rem, 4vw, 2.6rem); line-height: 0.9; letter-spacing: -0.02em; } .ds-key-hint { font-size: 1.05rem; letter-spacing: 0.08em; opacity: 0.92; } .ds-key:hover, .ds-key:focus-visible { color: var(--void, #070b14); background: var(--paper, #dce6f0); } .ds-key:focus-visible { outline: 2px solid var(--signal, #3ee0c4); outline-offset: 4px; }"
     },
     {
       "name": "Continue",
@@ -179,12 +179,12 @@
       "css": ".ds-lang { display: flex; } .ds-lang button { appearance: none; display: inline-flex; align-items: center; min-height: 40px; border: 0; background: transparent; color: var(--mute, color-mix(in srgb, #3ee0c4 48%, #070b14)); padding: 0 12px; font-family: \"Archivo Narrow\", \"Arial Narrow\", sans-serif; font-size: 1.05rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; border-radius: 0; } .ds-lang button:hover, .ds-lang button:focus-visible { color: var(--paper, #dce6f0); } .ds-lang button:focus-visible { outline: 2px solid var(--signal, #3ee0c4); outline-offset: 4px; } .ds-lang button[aria-pressed=\"true\"] { color: var(--void, #070b14); background: var(--signal, #3ee0c4); }"
     },
     {
-      "name": "Paper Plate",
+      "name": "Honesty Stack",
       "kind": "card",
       "refersTo": "plate",
-      "description": "Landing honesty sheet: Fira caption on paper, void type. Cut-face gaps between plates.",
+      "description": "Landing honesty on void: Archivo cyan title, Fira paper body, centered. Cut-face gaps, no paper sheet.",
       "html": "<article class=\"ds-plate\"><h2>Host</h2><p>Preview 0.5.0 is a host app on Windows or Linux x64.</p></article>",
-      "css": ".ds-plate { background: var(--paper, #dce6f0); color: var(--void, #070b14); padding: 16px; border-radius: 0; } .ds-plate h2 { margin: 0 0 8px; color: var(--void, #070b14); font-family: \"Fira Sans\", \"Segoe UI\", sans-serif; font-size: 0.82rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; } .ds-plate p { margin: 0; color: var(--void, #070b14); font-family: \"Fira Sans\", \"Segoe UI\", sans-serif; font-size: 0.98rem; line-height: 1.55; }"
+      "css": ".ds-plate { background: transparent; color: var(--paper, #dce6f0); padding: 0; text-align: center; } .ds-plate h2 { margin: 0 0 8px; color: var(--signal, #3ee0c4); font-family: \"Archivo Narrow\", \"Arial Narrow\", sans-serif; font-size: 1.05rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; } .ds-plate p { margin: 0 auto; max-width: 32ch; color: var(--paper, #dce6f0); font-family: \"Fira Sans\", \"Segoe UI\", sans-serif; font-size: 0.98rem; line-height: 1.55; }"
     },
     {
       "name": "Honesty Swipe",
@@ -192,7 +192,7 @@
       "refersTo": "swipe",
       "description": "One cyan bar: HOST / NVIDIA rec. / NOT BOOTABLE. Archivo Narrow uppercase, void type.",
       "html": "<p class=\"ds-swipe\">HOST · NVIDIA rec. · NOT BOOTABLE</p>",
-      "css": ".ds-swipe { margin: 0; padding: 12px 0; color: var(--void, #070b14); background: var(--signal, #3ee0c4); font-family: \"Archivo Narrow\", \"Arial Narrow\", sans-serif; font-size: clamp(1.05rem, 1.6vw, 1.35rem); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; text-indent: 12px; border-radius: 0; }"
+      "css": ".ds-swipe { margin: 0; width: 100%; padding: 12px; color: var(--void, #070b14); background: var(--signal, #3ee0c4); font-family: \"Archivo Narrow\", \"Arial Narrow\", sans-serif; font-size: clamp(1.05rem, 1.6vw, 1.35rem); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; text-align: center; border-radius: 0; }"
     },
     {
       "name": "Doc Band",
@@ -213,13 +213,13 @@
   ],
   "narrative": {
     "northStar": "The Orrery",
-    "overview": "The public site is a mechanical orrery in night ether, not an AI-OS product hero and not a radio correlator. A live canvas draws MEMORY, CAPS, GPU, and AGENTS on elliptical rails; capability rods run from the hub to each globe. The landing fold is that machine on the left and an honesty stack on the right: Fira lede, one cyan swipe of HOST / NVIDIA rec. / NOT BOOTABLE, then paper plates. The hydrogen winding key sits flush on the bottom rail. Inner pages are the same ether dimmed, with copy and cut-face stacks on void.\n\nPersonality is precise and technical. Honesty about Preview (host app, NVIDIA recommended, not bootable) sits in the same register as the thesis. Density is instrument-like: an 8px unit, flush square chrome, Archivo Narrow on the machine. Confirmed rejections: an AI-OS hero, a spectrogram correlator, a split-flap board, and a card grid of features. The header is the circular A-mark plus the words Akasha OS — never Station.",
+    "overview": "The public site is a mechanical orrery in night ether, not an AI-OS product hero and not a radio correlator. A live canvas draws MEMORY, CAPS, GPU, and AGENTS on elliptical rails; capability rods run from the hub to each globe. The landing fold is that machine on the left and an honesty stack on the right: Fira lede, one cyan swipe of HOST / NVIDIA rec. / NOT BOOTABLE, then cut-face Host / NVIDIA / Boot on void. The hydrogen winding key sits flush on the bottom rail. Inner pages are the same ether dimmed, with copy and cut-face stacks on void.\n\nPersonality is precise and technical. Honesty about Preview (host app, NVIDIA recommended, not bootable) sits in the same register as the thesis. Density is instrument-like: an 8px unit, flush square chrome, Archivo Narrow on the machine. Confirmed rejections: an AI-OS hero, a spectrogram correlator, a split-flap board, and a card grid of features. The header is the circular A-mark plus the words Akasha OS — never Station.",
     "keyCharacteristics": [
       "Night void field with a live canvas orrery (MEMORY, CAPS, GPU, AGENTS); plate weather dims the ether to 38% and tucks it to the corner",
       "Archivo Narrow 700 on rails, swipe, headlines, and the winding key; Archivo Narrow 600 on canvas orbit IDs",
-      "Fira Sans 400 / 500 / 600 for lede, running copy, and paper-plate captions",
+      "Fira Sans 400 / 500 / 600 for lede, running copy, and honesty body",
       "Hydrogen reserved for the Install / Download winding key",
-      "Honesty as one cyan swipe plus paper plates; inner pages continue in cyan, not hydrogen",
+      "Honesty as one cyan swipe plus centered void stacks; inner pages continue in cyan, not hydrogen",
       "Square bezels; integer unit `--u` (8px); two weathers (`body.sky` vs `body.plate`)"
     ],
     "rules": [
@@ -235,7 +235,7 @@
       },
       {
         "name": "The Two Voices Rule",
-        "body": "Archivo Narrow speaks the machine (rails, swipe, titles, winding key, continue). Fira Sans speaks the plates and the log (lede, captions, copy). Do not swap them.",
+        "body": "Archivo Narrow speaks the machine (rails, swipe, titles, winding key, continue, Host / NVIDIA / Boot). Fira Sans speaks the log (lede, body, copy). Do not swap them.",
         "section": "typography"
       },
       {
@@ -250,7 +250,7 @@
       },
       {
         "name": "The Cut-Face Rule",
-        "body": "Paper plates, grants, ticks, and chapter bands are separated by void gaps. Do not wrap them in a card grid.",
+        "body": "Honesty stacks, grants, ticks, and chapter bands are separated by void gaps. Do not wrap them in a card grid or sit them on paper sheets.",
         "section": "layout"
       },
       {
@@ -260,7 +260,7 @@
       },
       {
         "name": "The Field Not Card Rule",
-        "body": "Do not lift content on drop shadows to imply cards. The live orrery and tonal wells (paper on void, 8% signal mix under pre) carry depth.",
+        "body": "Do not lift content on drop shadows to imply cards. Do not sit honesty on paper sheets. The live orrery and tonal wells (8% signal mix under pre) carry depth.",
         "section": "elevation"
       },
       {
@@ -271,7 +271,7 @@
     ],
     "dos": [
       "Do let the live orrery fill the sky fold; keep the landing h1 visually hidden.",
-      "Do put HOST / NVIDIA rec. / NOT BOOTABLE in one cyan swipe, then paper plates.",
+      "Do put HOST / NVIDIA rec. / NOT BOOTABLE in one cyan swipe, then Host / NVIDIA / Boot on void.",
       "Do keep hydrogen on the Install / Download winding key only; wind the orrery on key hover.",
       "Do use cyan continue links on inner pages and 404.",
       "Do set current nav and language as void type on a signal well.",
