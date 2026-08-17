@@ -138,8 +138,11 @@ mod tests {
             .as_ptr()
     }
 
+    static TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[test]
     fn mint_check_revoke_via_abi_c() {
+        let _guard = TEST_LOCK.lock().unwrap();
         aos_cap_init();
         let path = obj("fs:/p4/gate.md\0");
         let id = aos_cap_mint(1, path, aos_sel4_abi::READ | aos_sel4_abi::WRITE);
@@ -152,6 +155,7 @@ mod tests {
 
     #[test]
     fn mint_refuse_au_plafond() {
+        let _guard = TEST_LOCK.lock().unwrap();
         aos_cap_init();
         let path = obj("fs:/x\0");
         for _ in 0..aos_sel4_abi::MAX_CAPS {
