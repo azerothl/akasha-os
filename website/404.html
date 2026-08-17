@@ -9,32 +9,43 @@
     <link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png" />
     <meta property="og:image" content="https://azerothl.github.io/akasha-os/og.png" />
-    <meta name="theme-color" content="#0d0d0d" />
+    <meta name="theme-color" content="#070b14" />
   </head>
-  <body>
+  <body class="sky">
+    <!--
+      THESIS: A missing orbit is empty ether, not a silent radio band.
+      OWN-WORLD: Orrery — live rails, cyan continue, no hydrogen (Install owns red).
+      STORY: The tester returns home and winds the machine.
+      FIRST VIEWPORT: Orrery still turning; Not found; Home.
+      FORM: Orrery, seed c1699dbf reroll 1.
+      FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+    -->
+    <canvas class="ether" data-ether aria-hidden="true"></canvas>
     <a class="skip" href="#content">Skip to content</a>
-    <div class="board">
-      <header class="board-head">
+    <div class="shell">
+      <header class="axis">
         <a class="mark" href="./" aria-label="Akasha OS home">
           <img src="logo.svg" alt="" width="40" height="40" />
+          <span class="mark-id">Akasha OS</span>
         </a>
-        <p class="clock" data-clock>00:00:00</p>
-        <nav class="destinations" aria-label="Primary">
+        <nav class="lanes" aria-label="Primary">
           <a href="grant.html">grant</a>
           <a href="why.html">why</a>
           <a href="install.html">install</a>
           <a href="docs/">docs</a>
           <a href="about.html">about</a>
         </nav>
+        <div class="lang" role="group" aria-label="Language">
+          <button type="button" data-set-lang="en" aria-pressed="true">EN</button>
+          <button type="button" data-set-lang="fr" aria-pressed="false">FR</button>
+        </div>
       </header>
       <main id="content" class="lost">
-        <div class="flap flap-title">
-          <span class="flap-dest">NOT FOUND</span>
-          <span class="flap-note">404</span>
-        </div>
-        <a class="flap flap-gate" href="./">
-          <span class="flap-code">GATE</span>
-          <span class="flap-dest">HOME</span>
+        <h1>Not found</h1>
+        <p class="lede" data-lang="en">This orbit is empty. The orrery is still turning.</p>
+        <p class="lede" data-lang="fr">Cette orbite est vide. Le planétaire tourne encore.</p>
+        <a class="continue pager" href="./">
+          <span class="continue-label">Home</span>
         </a>
       </main>
     </div>

@@ -13,25 +13,26 @@
     <link rel="icon" href="../favicon-32.png" sizes="32x32" type="image/png" />
     <link rel="apple-touch-icon" href="../apple-touch-icon.png" />
     <meta property="og:image" content="https://azerothl.github.io/akasha-os/og.png" />
-    <meta name="theme-color" content="#0d0d0d" />
+    <meta name="theme-color" content="#070b14" />
   </head>
-  <body>
+  <body class="plate">
     <!--
       THESIS: Docs are a man page for the host, not a repo dump of kernel specs.
-      OWN-WORLD: Host Console — amber phosphor, TOC as open lines.
+      OWN-WORLD: Orrery inner plate — void, cyan rails.
       STORY: A tester finds the next procedure without leaving the site or cloning the repo.
       FIRST VIEWPORT: What this manual is, then the chapter log.
-      FORM: Host Console Read surface, seed a54b2068.
+      FORM: Orrery inner plate, seed c1699dbf reroll 1.
       FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
     -->
+        <canvas class="ether" data-ether aria-hidden="true"></canvas>
     <a class="skip" href="#content">Skip to content</a>
-    <div class="board">
-      <header class="board-head">
+    <div class="shell">
+      <header class="axis">
         <a class="mark" href="../" aria-label="Akasha OS home">
           <img src="../logo.svg" alt="" width="40" height="40" />
+          <span class="mark-id">Akasha OS</span>
         </a>
-        <p class="clock" data-clock>00:00:00</p>
-        <nav class="destinations" aria-label="Primary">
+        <nav class="lanes" aria-label="Primary">
           <a href="../grant.html">grant</a>
           <a href="../why.html">why</a>
           <a href="../install.html">install</a>
@@ -43,7 +44,8 @@
           <button type="button" data-set-lang="fr" aria-pressed="false">FR</button>
         </div>
       </header>
-      <main id="content" >
+      <main id="content" class="plate-main">
+
         <h1>
           <span data-lang="en">
             User manual for Preview <span data-aos-version>0.5.0</span>.
@@ -58,58 +60,32 @@
           </span>
         </h1>
         <p class="hist" data-lang="en">
-          This is not a bootable OS. You need Windows or Linux x64 and an NVIDIA
-          GPU. No cargo required for Releases; see
+          This is not a bootable OS. You need Windows or Linux x64. NVIDIA is
+          recommended; a slower CPU path exists. No cargo required for Releases; see
           <a href="build.html">build</a> if you compile from source. Specs, ADRs, and the seL4 track stay in the
           <a href="https://github.com/azerothl/akasha-os">repository</a>.
         </p>
         <p class="hist" data-lang="fr">
-          Ce n’est pas un OS bootable. Il faut Windows ou Linux x64 et un GPU
-          NVIDIA. Pas de cargo pour les Releases ; voir
+          Ce n’est pas un OS bootable. Il faut Windows ou Linux x64. NVIDIA
+          est recommandé ; un chemin CPU plus lent existe. Pas de cargo pour les Releases ; voir
           <a href="build.html">build</a> pour compiler depuis les sources. Specs, ADR et piste seL4 restent dans le
           <a href="https://github.com/azerothl/akasha-os">dépôt</a>.
         </p>
 
-        <h2 data-lang="en"># chapters</h2>
-        <h2 data-lang="fr"># chapitres</h2>
-        <a class="flap" href="../install.html">
-          <span class="flap-code">1</span>
-          <span class="flap-dest">INSTALL</span>
-          <span class="flap-note">OPEN</span>
-        </a>
-        <a class="flap" href="first-run.html">
-          <span class="flap-code">2</span>
-          <span class="flap-dest">FIRST-RUN</span>
-          <span class="flap-note">OPEN</span>
-        </a>
-        <a class="flap" href="use.html">
-          <span class="flap-code">3</span>
-          <span class="flap-dest">USE</span>
-          <span class="flap-note">OPEN</span>
-        </a>
-        <a class="flap" href="network.html">
-          <span class="flap-code">4</span>
-          <span class="flap-dest">NETWORK</span>
-          <span class="flap-note">OPEN</span>
-        </a>
-        <a class="flap" href="feedback.html">
-          <span class="flap-code">5</span>
-          <span class="flap-dest">FEEDBACK</span>
-          <span class="flap-note">OPEN</span>
-        </a>
-        <a class="flap" href="limits.html">
-          <span class="flap-code">6</span>
-          <span class="flap-dest">LIMITS</span>
-          <span class="flap-note">OPEN</span>
-        </a>
-        <a class="flap" href="build.html">
-          <span class="flap-code">7</span>
-          <span class="flap-dest">BUILD</span>
-          <span class="flap-note">OPEN</span>
-        </a>
+        <h2 data-lang="en">chapters</h2>
+        <h2 data-lang="fr">chapitres</h2>
+        <nav class="chapters" aria-label="Chapters">
+        <a href="../install.html" class="doc-band"><span class="band-hz">1</span><span class="band-name">INSTALL</span></a>
+        <a href="first-run.html" class="doc-band"><span class="band-hz">2</span><span class="band-name">FIRST-RUN</span></a>
+        <a href="use.html" class="doc-band"><span class="band-hz">3</span><span class="band-name">USE</span></a>
+        <a href="network.html" class="doc-band"><span class="band-hz">4</span><span class="band-name">NETWORK</span></a>
+        <a href="feedback.html" class="doc-band"><span class="band-hz">5</span><span class="band-name">FEEDBACK</span></a>
+        <a href="limits.html" class="doc-band"><span class="band-hz">6</span><span class="band-name">LIMITS</span></a>
+        <a href="build.html" class="doc-band"><span class="band-hz">7</span><span class="band-name">BUILD</span></a>
+        </nav>
 
-        <h2 data-lang="en"># start here</h2>
-        <h2 data-lang="fr"># commencer ici</h2>
+        <h2 data-lang="en">start here</h2>
+        <h2 data-lang="fr">commencer ici</h2>
         <p class="hist" data-lang="en">
           If <code>nvidia-smi -L</code> already lists a GPU, open
           <a href="../install.html">install</a>. After launch, stay in
@@ -125,9 +101,8 @@
           la cohorte Preview.
         </p>
 
-        <a class="flap flap-gate" href="../install.html">
-          <span class="flap-code">GATE</span>
-          <span class="flap-dest">INSTALL</span>
+        <a class="continue pager" href="../install.html">
+          <span class="continue-label">INSTALL</span>
         </a>
       </main>
       <footer>

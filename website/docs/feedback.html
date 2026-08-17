@@ -13,24 +13,25 @@
     <link rel="icon" href="../favicon-32.png" sizes="32x32" type="image/png" />
     <link rel="apple-touch-icon" href="../apple-touch-icon.png" />
     <meta property="og:image" content="https://azerothl.github.io/akasha-os/og.png" />
-    <meta name="theme-color" content="#0d0d0d" />
+    <meta name="theme-color" content="#070b14" />
   </head>
-  <body>
+  <body class="plate">
     <!--
       THESIS: Feedback is a protocol printed as steps, not a “contact us” card.
-      OWN-WORLD: Host Console. FORM: seed a54b2068.
+      OWN-WORLD: Orrery inner plate — void, cyan rails. FORM: seed c1699dbf reroll 1.
       STORY: Cohort tester walks the paths, then files from the Feedback tab.
       FIRST VIEWPORT: Goal line — no cargo, feedback from the UI.
       FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
     -->
+        <canvas class="ether" data-ether aria-hidden="true"></canvas>
     <a class="skip" href="#content">Skip to content</a>
-    <div class="board">
-      <header class="board-head">
+    <div class="shell">
+      <header class="axis">
         <a class="mark" href="../" aria-label="Akasha OS home">
           <img src="../logo.svg" alt="" width="40" height="40" />
+          <span class="mark-id">Akasha OS</span>
         </a>
-        <p class="clock" data-clock>00:00:00</p>
-        <nav class="destinations" aria-label="Primary">
+        <nav class="lanes" aria-label="Primary">
           <a href="../grant.html">grant</a>
           <a href="../why.html">why</a>
           <a href="../install.html">install</a>
@@ -42,7 +43,8 @@
           <button type="button" data-set-lang="fr" aria-pressed="false">FR</button>
         </div>
       </header>
-      <main id="content" >
+      <main id="content" class="plate-main">
+
         <h1>
           <span data-lang="en">
             Preview cohort protocol. Install without cargo or a clone,
@@ -56,17 +58,17 @@
           </span>
         </h1>
 
-        <h2 data-lang="en"># before you start</h2>
-        <h2 data-lang="fr"># avant de commencer</h2>
-        <ul class="loglines">
+        <h2 data-lang="en">before you start</h2>
+        <h2 data-lang="fr">avant de commencer</h2>
+        <ul class="ticks">
           <li>Windows <span data-lang="en">or</span><span data-lang="fr">ou</span> Linux x64 + NVIDIA (<code>nvidia-smi</code>)</li>
           <li><a href="../install.html">install</a> → launch Akasha OS Preview (<code>aos-session</code>)</li>
           <li data-lang="en">Banner: Preview on Windows/Linux — this is not the bootable OS yet</li>
           <li data-lang="fr">Bannière : Preview on Windows/Linux — this is not the bootable OS yet</li>
         </ul>
 
-        <h2 data-lang="en"># walk the paths</h2>
-        <h2 data-lang="fr"># parcourir les chemins</h2>
+        <h2 data-lang="en">walk the paths</h2>
+        <h2 data-lang="fr">parcourir les chemins</h2>
         <ol class="steps">
           <li data-lang="en">Finish model setup and the 4-step tutorial. Chat offline. Optionally change the session model.</li>
           <li data-lang="fr">Terminer le réglage des modèles et le tutoriel (4 étapes). Chat hors ligne. Changer éventuellement le modèle de session.</li>
@@ -92,8 +94,8 @@
           <li data-lang="fr">Dépannage (Aide) : lancer le diagnostic. S’il y a des anomalies, un rapport GitHub peut s’ouvrir.</li>
         </ol>
 
-        <h2 data-lang="en"># send from the UI</h2>
-        <h2 data-lang="fr"># envoyer depuis l’UI</h2>
+        <h2 data-lang="en">send from the UI</h2>
+        <h2 data-lang="fr">envoyer depuis l’UI</h2>
         <p class="hist" data-lang="en">
           Feedback tab (or Report): title, category (bug / ux / perf / security),
           severity, body. Create a GitHub issue is checked by default, except
@@ -119,10 +121,9 @@
           automatique hors recherche, téléchargement et envoi GitHub explicites.
         </p>
 
-        <p class="prompt hist pager">
-          <span class="ps">$</span>
-          <a class="run" href="limits.html">open limits.html</a>
-        </p>
+        <a class="continue pager" href="limits.html">
+          <span class="continue-label">Limits</span>
+        </a>
       </main>
       <footer>
         <p>AKASHA OS · <a href="https://github.com/azerothl/akasha-os">github.com/azerothl/akasha-os</a></p>

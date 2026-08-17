@@ -13,25 +13,26 @@
     <link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png" />
     <meta property="og:image" content="https://azerothl.github.io/akasha-os/og.png" />
-    <meta name="theme-color" content="#0d0d0d" />
+    <meta name="theme-color" content="#070b14" />
   </head>
-  <body>
+  <body class="plate">
     <!--
-      THESIS: Powers are destination rows, not feature tiles.
-      OWN-WORLD: Split-Flap Board — yellow flaps, red GATE, Big Shoulders.
-      STORY: A tester reads each grant as a flipped row, then walks to docs.
-      FIRST VIEWPORT: GRANT title flap, then rated rows and copy.
-      FORM: Split-Flap Board inner page, seed 5ff66a2a.
+      THESIS: Grants are the rods that constrain each orbit, not feature tiles.
+      OWN-WORLD: Orrery inner plate — void, cyan labels, cut-face gaps.
+      STORY: A tester reads each grant as a constraint, then walks to docs.
+      FIRST VIEWPORT: Honesty + the grant list as plates in the ether.
+      FORM: Orrery inner plate, seed c1699dbf reroll 1.
       FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
     -->
+    <canvas class="ether" data-ether aria-hidden="true"></canvas>
     <a class="skip" href="#content">Skip to content</a>
-    <div class="board">
-      <header class="board-head">
+    <div class="shell">
+      <header class="axis">
         <a class="mark" href="./" aria-label="Akasha OS home">
           <img src="logo.svg" alt="" width="40" height="40" />
+          <span class="mark-id">Akasha OS</span>
         </a>
-        <p class="clock" data-clock>00:00:00</p>
-        <nav class="destinations" aria-label="Primary">
+        <nav class="lanes" aria-label="Primary">
           <a href="grant.html" aria-current="page">grant</a>
           <a href="why.html">why</a>
           <a href="install.html">install</a>
@@ -43,7 +44,7 @@
           <button type="button" data-set-lang="fr" aria-pressed="false">FR</button>
         </div>
       </header>
-      <main id="content" >
+      <main id="content" class="plate-main">
         <h1>
           <span data-lang="en">
             Agents act only with unforgeable, revocable tokens. Preview
@@ -56,138 +57,152 @@
             ci-dessous à la session hôte. La sortie réseau reste refusée par défaut.
           </span>
         </h1>
-        <div class="flap flap-title">
-          <span class="flap-dest">GRANT</span>
-          <span class="flap-note">PREVIEW <span data-aos-version>0.5.0</span></span>
-        </div>
 
-        <h2 data-lang="en"># session GRANT</h2>
-        <h2 data-lang="fr"># session GRANT</h2>
-        <p class="hist" data-lang="en">
-          Parallel persisted conversations. In the Chat tab, open several sessions,
-          talk in each, and restart Preview: histories must come back. Each session
-          can pick its own model from the session combo (offerings listed in Models).
-        </p>
-        <p class="hist" data-lang="fr">
-          Conversations parallèles persistées. Dans l’onglet Chat, ouvrez plusieurs
-          sessions, parlez dans chacune, puis redémarrez Preview : les historiques
-          doivent revenir. Chaque session peut choisir son modèle (catalogue dans Models).
-        </p>
+        <article class="grant">
+          <h2 data-lang="en">session GRANT</h2>
+          <h2 data-lang="fr">session GRANT</h2>
+          <p class="hist" data-lang="en">
+            Parallel persisted conversations. In the Chat tab, open several sessions,
+            talk in each, and restart Preview: histories must come back. Each session
+            can pick its own model from the session combo (offerings listed in Models).
+          </p>
+          <p class="hist" data-lang="fr">
+            Conversations parallèles persistées. Dans l’onglet Chat, ouvrez plusieurs
+            sessions, parlez dans chacune, puis redémarrez Preview : les historiques
+            doivent revenir. Chaque session peut choisir son modèle (catalogue dans Models).
+          </p>
+        </article>
 
-        <h2 data-lang="en"># gpu GRANT</h2>
-        <h2 data-lang="fr"># gpu GRANT</h2>
-        <p class="hist" data-lang="en">
-          Placement, scheduling, and local GGUF inference. First launch probes VRAM,
-          RAM, and disk, then offers a pack for your tier (including a
-          <strong>cpu</strong> pack when NVIDIA is absent). Confirm
-          <code>nvidia-smi -L</code> when you expect GPU mode.
-        </p>
-        <p class="hist" data-lang="fr">
-          Placement, ordonnancement et inférence GGUF locale. Le premier lancement
-          sonde VRAM, RAM et disque, puis propose un pack pour votre palier
-          (y compris un pack <strong>cpu</strong> sans NVIDIA). Vérifiez
-          <code>nvidia-smi -L</code> si vous attendez le mode GPU.
-        </p>
+        <article class="grant">
+          <h2 data-lang="en">gpu GRANT</h2>
+          <h2 data-lang="fr">gpu GRANT</h2>
+          <p class="hist" data-lang="en">
+            Placement, scheduling, and local GGUF inference. First launch probes VRAM,
+            RAM, and disk, then offers a pack for your tier (including a
+            <strong>cpu</strong> pack when NVIDIA is absent). Confirm
+            <code>nvidia-smi -L</code> when you expect GPU mode.
+          </p>
+          <p class="hist" data-lang="fr">
+            Placement, ordonnancement et inférence GGUF locale. Le premier lancement
+            sonde VRAM, RAM et disque, puis propose un pack pour votre palier
+            (y compris un pack <strong>cpu</strong> sans NVIDIA). Vérifiez
+            <code>nvidia-smi -L</code> si vous attendez le mode GPU.
+          </p>
+        </article>
 
-        <h2 data-lang="en"># net DENY</h2>
-        <h2 data-lang="fr"># net DENY</h2>
-        <p class="hist" data-lang="en">
-          Search and fetch are opt-in. Leave <strong>Allow network</strong> off
-          and web search must fail (<code>offline_strict</code>). Turn it on only
-          when you mean to search or download. Optional Brave key:
-          <code>var/secrets/keys.yaml</code> → <code>brave_search_api_key</code>;
-          otherwise DuckDuckGo HTML.
-        </p>
-        <p class="hist" data-lang="fr">
-          Recherche et fetch en opt-in. Laissez <strong>Allow network</strong>
-          éteint : la recherche web doit échouer (<code>offline_strict</code>).
-          Activez-le seulement pour chercher ou télécharger. Clé Brave optionnelle :
-          <code>var/secrets/keys.yaml</code> → <code>brave_search_api_key</code> ;
-          sinon DuckDuckGo HTML.
-        </p>
+        <article class="grant">
+          <h2 data-lang="en">net DENY</h2>
+          <h2 data-lang="fr">net DENY</h2>
+          <p class="hist" data-lang="en">
+            Search and fetch are opt-in. Leave <strong>Allow network</strong> off
+            and web search must fail (<code>offline_strict</code>). Turn it on only
+            when you mean to search or download. Optional Brave key:
+            <code>var/secrets/keys.yaml</code> → <code>brave_search_api_key</code>;
+            otherwise DuckDuckGo HTML.
+          </p>
+          <p class="hist" data-lang="fr">
+            Recherche et fetch en opt-in. Laissez <strong>Allow network</strong>
+            éteint : la recherche web doit échouer (<code>offline_strict</code>).
+            Activez-le seulement pour chercher ou télécharger. Clé Brave optionnelle :
+            <code>var/secrets/keys.yaml</code> → <code>brave_search_api_key</code> ;
+            sinon DuckDuckGo HTML.
+          </p>
+        </article>
 
-        <h2 data-lang="en"># audit ON</h2>
-        <h2 data-lang="fr"># audit ON</h2>
-        <p class="hist" data-lang="en">
-          Signed events in the Audit tab. Sensitive actions raise a confirmation
-          banner: Deny once, Accept another. Timeout is deny (fail-closed).
-          Feedback writes a local report under <code>var/feedback/</code> and can
-          open a GitHub issue. Security reports are not published.
-        </p>
-        <p class="hist" data-lang="fr">
-          Événements signés dans l’onglet Audit. Une action sensible affiche une
-          bannière : Deny une fois, Accept une autre. Timeout = refus (fail-closed).
-          Le feedback écrit un rapport local sous <code>var/feedback/</code> et
-          peut ouvrir une issue GitHub. Les rapports sécurité ne sont pas publiés.
-        </p>
+        <article class="grant">
+          <h2 data-lang="en">audit ON</h2>
+          <h2 data-lang="fr">audit ON</h2>
+          <p class="hist" data-lang="en">
+            Signed events in the Audit tab. Sensitive actions raise a confirmation
+            banner: Deny once, Accept another. Timeout is deny (fail-closed).
+            Feedback writes a local report under <code>var/feedback/</code> and can
+            open a GitHub issue. Security reports are not published.
+          </p>
+          <p class="hist" data-lang="fr">
+            Événements signés dans l’onglet Audit. Une action sensible affiche une
+            bannière : Deny une fois, Accept une autre. Timeout = refus (fail-closed).
+            Le feedback écrit un rapport local sous <code>var/feedback/</code> et
+            peut ouvrir une issue GitHub. Les rapports sécurité ne sont pas publiés.
+          </p>
+        </article>
 
-        <h2 data-lang="en"># memory GRANT</h2>
-        <h2 data-lang="fr"># memory GRANT</h2>
-        <p class="hist" data-lang="en">
-          Long-term user facts. Memory tab: remember (“I prefer French”), then
-          Recall. The next Chat turn can use that context
-          (<code>mem.context</code> injected before infer).
-        </p>
-        <p class="hist" data-lang="fr">
-          Faits utilisateur long terme. Onglet Memory : remember (« je préfère
-          le français »), puis Recall. Le prochain tour Chat peut s’en servir
-          (<code>mem.context</code> injecté avant l’inférence).
-        </p>
+        <article class="grant">
+          <h2 data-lang="en">memory GRANT</h2>
+          <h2 data-lang="fr">memory GRANT</h2>
+          <p class="hist" data-lang="en">
+            Long-term user facts. Memory tab: remember (“I prefer French”), then
+            Recall. The next Chat turn can use that context
+            (<code>mem.context</code> injected before infer).
+          </p>
+          <p class="hist" data-lang="fr">
+            Faits utilisateur long terme. Onglet Memory : remember (« je préfère
+            le français »), puis Recall. Le prochain tour Chat peut s’en servir
+            (<code>mem.context</code> injecté avant l’inférence).
+          </p>
+        </article>
 
-        <h2 data-lang="en"># notes GRANT</h2>
-        <h2 data-lang="fr"># notes GRANT</h2>
-        <p class="hist" data-lang="en">
-          Human- and agent-authored notes, shipped as a WASM module. Notes tab:
-          title + body → Create, then List. An agent can create a note via the
-          <code>TOOL:</code> convention on the model side.
-        </p>
-        <p class="hist" data-lang="fr">
-          Notes humaines et agents, module WASM. Onglet Notes : titre + corps →
-          Create, puis List. Un agent peut créer une note via la convention
-          <code>TOOL:</code> côté modèle.
-        </p>
+        <article class="grant">
+          <h2 data-lang="en">notes GRANT</h2>
+          <h2 data-lang="fr">notes GRANT</h2>
+          <p class="hist" data-lang="en">
+            Human- and agent-authored notes, shipped as a WASM module. Notes tab:
+            title + body → Create, then List. An agent can create a note via the
+            <code>TOOL:</code> convention on the model side.
+          </p>
+          <p class="hist" data-lang="fr">
+            Notes humaines et agents, module WASM. Onglet Notes : titre + corps →
+            Create, puis List. Un agent peut créer une note via la convention
+            <code>TOOL:</code> côté modèle.
+          </p>
+        </article>
 
-        <h2 data-lang="en"># agents GRANT</h2>
-        <h2 data-lang="fr"># agents GRANT</h2>
-        <p class="hist" data-lang="en">
-          Goal loop, skills, tools, optional MCP. Agents tab: create an agent
-          with a task and a model. Preview skills include notes-writer, research,
-          file-author, and planner. Optional stdio MCP servers live in
-          <code>share/mcp/servers.yaml.example</code>.
-        </p>
-        <p class="hist" data-lang="fr">
-          Boucle de goal, skills, outils, MCP optionnel. Onglet Agents : créez
-          un agent avec une tâche et un modèle. Skills Preview : notes-writer,
-          research, file-author, planner. Serveurs MCP stdio optionnels :
-          <code>share/mcp/servers.yaml.example</code>.
-        </p>
+        <article class="grant">
+          <h2 data-lang="en">agents GRANT</h2>
+          <h2 data-lang="fr">agents GRANT</h2>
+          <p class="hist" data-lang="en">
+            Goal loop, skills, tools, optional MCP. Agents tab: create an agent
+            with a task and a model. Preview skills include notes-writer, research,
+            file-author, and planner. Optional stdio MCP servers live in
+            <code>share/mcp/servers.yaml.example</code>.
+          </p>
+          <p class="hist" data-lang="fr">
+            Boucle de goal, skills, outils, MCP optionnel. Onglet Agents : créez
+            un agent avec une tâche et un modèle. Skills Preview : notes-writer,
+            research, file-author, planner. Serveurs MCP stdio optionnels :
+            <code>share/mcp/servers.yaml.example</code>.
+          </p>
+        </article>
 
-        <h2 data-lang="en"># update GRANT</h2>
-        <h2 data-lang="fr"># update GRANT</h2>
-        <p class="hist" data-lang="en">
-          Non-destructive overlays from GitHub Releases. A banner appears when a
-          newer Release exists. Download writes the archive under
-          <code>var/updates/</code>; the next launch applies <code>bin/</code>
-          and <code>share/</code> without touching <code>var/</code> or
-          overwriting <code>etc/*.yaml</code> (writes <code>.new</code> if needed).
-          Apply is not fully automatic.
-        </p>
-        <p class="hist" data-lang="fr">
-          Overlay non destructif depuis GitHub Releases. Une bannière apparaît
-          si une Release plus récente existe. Download écrit l’archive sous
-          <code>var/updates/</code> ; le lancement suivant applique
-          <code>bin/</code> et <code>share/</code> sans toucher <code>var/</code>
-          ni écraser <code>etc/*.yaml</code> (fichiers <code>.new</code> si besoin).
-          L’application n’est pas entièrement automatique.
-        </p>
+        <article class="grant">
+          <h2 data-lang="en">update GRANT</h2>
+          <h2 data-lang="fr">update GRANT</h2>
+          <p class="hist" data-lang="en">
+            Non-destructive overlays from GitHub Releases. A banner appears when a
+            newer Release exists. Download writes the archive under
+            <code>var/updates/</code>; the next launch applies <code>bin/</code>
+            and <code>share/</code> without touching <code>var/</code> or
+            overwriting <code>etc/*.yaml</code> (writes <code>.new</code> if needed).
+            Apply is not fully automatic.
+          </p>
+          <p class="hist" data-lang="fr">
+            Overlay non destructif depuis GitHub Releases. Une bannière apparaît
+            si une Release plus récente existe. Download écrit l’archive sous
+            <code>var/updates/</code> ; le lancement suivant applique
+            <code>bin/</code> et <code>share/</code> sans toucher <code>var/</code>
+            ni écraser <code>etc/*.yaml</code> (fichiers <code>.new</code> si besoin).
+            L’application n’est pas entièrement automatique.
+          </p>
+        </article>
 
-        <a class="flap flap-gate" href="docs/">
-          <span class="flap-code">GATE</span>
-          <span class="flap-dest">DOCS</span>
+        <a class="continue pager" href="docs/">
+          <span class="continue-label">Docs</span>
         </a>
       </main>
       <footer>
-        <p>AKASHA OS · <a href="https://github.com/azerothl/akasha-os">github.com/azerothl/akasha-os</a></p>
+        <p>
+          AKASHA OS ·
+          <a href="https://github.com/azerothl/akasha-os">github.com/azerothl/akasha-os</a>
+        </p>
       </footer>
     </div>
     <script src="app.js"></script>

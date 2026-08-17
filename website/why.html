@@ -13,25 +13,26 @@
     <link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png" />
     <meta property="og:image" content="https://azerothl.github.io/akasha-os/og.png" />
-    <meta name="theme-color" content="#0d0d0d" />
+    <meta name="theme-color" content="#070b14" />
   </head>
-  <body>
+  <body class="plate">
     <!--
-      THESIS: The why page is an argument in the UART, not a manifesto hero.
-      OWN-WORLD: Host Console — amber phosphor, Azeret Mono, comments as headings.
-      STORY: A tester can tell a neighboring chat app from this host, then open install.
-      FIRST VIEWPORT: Honesty + the claim that agents are system services.
-      FORM: Host Console inner page, seed a54b2068.
+      THESIS: Why is the orrery argument: agents are bodies, capabilities are the rods — not a chat wrapper on POSIX.
+      OWN-WORLD: Orrery inner plate — void, cyan rails, Archivo Narrow.
+      STORY: A tester can tell a neighboring chat app from this host, then winds Install.
+      FIRST VIEWPORT: Honesty + agents as system services.
+      FORM: Orrery inner plate, seed c1699dbf reroll 1.
       FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
     -->
+    <canvas class="ether" data-ether aria-hidden="true"></canvas>
     <a class="skip" href="#content">Skip to content</a>
-    <div class="board">
-      <header class="board-head">
+    <div class="shell">
+      <header class="axis">
         <a class="mark" href="./" aria-label="Akasha OS home">
           <img src="logo.svg" alt="" width="40" height="40" />
+          <span class="mark-id">Akasha OS</span>
         </a>
-        <p class="clock" data-clock>00:00:00</p>
-        <nav class="destinations" aria-label="Primary">
+        <nav class="lanes" aria-label="Primary">
           <a href="grant.html">grant</a>
           <a href="why.html" aria-current="page">why</a>
           <a href="install.html">install</a>
@@ -43,7 +44,7 @@
           <button type="button" data-set-lang="fr" aria-pressed="false">FR</button>
         </div>
       </header>
-      <main id="content" >
+      <main id="content" class="plate-main">
         <h1>
           <span data-lang="en">
             Most agent stacks are applications on a general-purpose OS.
@@ -59,8 +60,8 @@
           </span>
         </h1>
 
-        <h2 data-lang="en"># not a chat wrapper</h2>
-        <h2 data-lang="fr"># pas un wrapper de chat</h2>
+        <h2 data-lang="en">Not a chat wrapper</h2>
+        <h2 data-lang="fr">Pas un wrapper de chat</h2>
         <p class="hist" data-lang="en">
           A neighboring chat wrapper or “AI desktop” cannot truthfully claim that
           agents, models, and tools are kernel-adjacent services with capability
@@ -74,8 +75,8 @@
           sur POSIX et espèrent que l’OS hôte suffise. Ce projet non.
         </p>
 
-        <h2 data-lang="en"># capabilities, not ambient trust</h2>
-        <h2 data-lang="fr"># des capacités, pas une confiance ambiante</h2>
+        <h2 data-lang="en">Capabilities, not ambient trust</h2>
+        <h2 data-lang="fr">Des capacités, pas une confiance ambiante</h2>
         <p class="hist" data-lang="en">
           An agent can act only inside tokens it was granted: a file, a network
           path, a tool, a lifetime. Tokens are unforgeable and revocable. There
@@ -91,8 +92,8 @@
           possibles parce qu’ils sont auditables et retirables.
         </p>
 
-        <h2 data-lang="en"># semantic IPC</h2>
-        <h2 data-lang="fr"># IPC sémantique</h2>
+        <h2 data-lang="en">Semantic IPC</h2>
+        <h2 data-lang="fr">IPC sémantique</h2>
         <p class="hist" data-lang="en">
           The agent’s native language on this system is typed intents on the
           bus, not <code>open()</code> / <code>read()</code> / <code>write()</code>.
@@ -107,25 +108,26 @@
           Les modules exposent un schéma typé, consommé pareil par humains et agents.
         </p>
 
-        <h2 data-lang="en"># first-class GPU</h2>
-        <h2 data-lang="fr"># GPU de premier plan</h2>
+        <h2 data-lang="en">First-class GPU</h2>
+        <h2 data-lang="fr">GPU de premier plan</h2>
         <p class="hist" data-lang="en">
           Inference latency, not a classic CPU scheduler, is the bottleneck.
           Placement and local GGUF inference are runtime concerns: the host
           probes VRAM, picks a pack, and runs models as a system service
-          (<code>modeld</code>), not as an app plugin. Preview requires NVIDIA.
-          That limit is the product, not fine print.
+          (<code>modeld</code>), not as an app plugin. NVIDIA is recommended;
+          a slower CPU path exists. That limit is the product, not fine print.
         </p>
         <p class="hist" data-lang="fr">
           Le goulot, c’est la latence d’inférence, pas un scheduler CPU classique.
           Placement et inférence GGUF locale sont des affaires de runtime : l’hôte
           sonde la VRAM, choisit un pack, et fait tourner les modèles comme
-          service (<code>modeld</code>), pas comme plugin d’appli. Preview exige
-          NVIDIA. Cette limite est le produit, pas une note de bas de page.
+          service (<code>modeld</code>), pas comme plugin d’appli. NVIDIA est
+          recommandé ; un chemin CPU plus lent existe. Cette limite est le
+          produit, pas une note de bas de page.
         </p>
 
-        <h2 data-lang="en"># offline by default</h2>
-        <h2 data-lang="fr"># hors ligne par défaut</h2>
+        <h2 data-lang="en">Offline by default</h2>
+        <h2 data-lang="fr">Hors ligne par défaut</h2>
         <p class="hist" data-lang="en">
           Network egress is deny-by-default (<code>offline_strict</code>). Chat
           must work without the network after models are on disk. Search, fetch,
@@ -139,8 +141,8 @@
           Pas d’upload automatique de votre session.
         </p>
 
-        <h2 data-lang="en"># host now, seL4 later</h2>
-        <h2 data-lang="fr"># hôte maintenant, seL4 plus tard</h2>
+        <h2 data-lang="en">Host now, seL4 later</h2>
+        <h2 data-lang="fr">Hôte maintenant, seL4 plus tard</h2>
         <p class="hist" data-lang="en">
           Preview is userspace scaffolding on Windows or Linux (ADR 0001).
           A seL4 / Microkit track exists in the repo and is not what you
@@ -154,13 +156,15 @@
           de <code>install.ps1</code> ou <code>install.sh</code>.
         </p>
 
-        <p class="prompt hist pager">
-          <span class="ps">$</span>
-          <a class="run" href="install.html">install --preview</a>
-        </p>
+        <a class="continue pager" href="install.html">
+          <span class="continue-label">Install</span>
+        </a>
       </main>
       <footer>
-        <p>AKASHA OS · <a href="https://github.com/azerothl/akasha-os">github.com/azerothl/akasha-os</a></p>
+        <p>
+          AKASHA OS ·
+          <a href="https://github.com/azerothl/akasha-os">github.com/azerothl/akasha-os</a>
+        </p>
       </footer>
     </div>
     <script src="app.js"></script>

@@ -13,24 +13,25 @@
     <link rel="icon" href="../favicon-32.png" sizes="32x32" type="image/png" />
     <link rel="apple-touch-icon" href="../apple-touch-icon.png" />
     <meta property="og:image" content="https://azerothl.github.io/akasha-os/og.png" />
-    <meta name="theme-color" content="#0d0d0d" />
+    <meta name="theme-color" content="#070b14" />
   </head>
-  <body>
+  <body class="plate">
     <!--
       THESIS: First run is a procedure on the host UART, not an onboarding carousel.
-      OWN-WORLD: Host Console. FORM: seed a54b2068.
+      OWN-WORLD: Orrery inner plate — void, cyan rails. FORM: seed c1699dbf reroll 1.
       STORY: Tester finishes model setup and the four-step tutorial before exploring tabs.
       FIRST VIEWPORT: Honesty + before-you-launch checks.
       FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
     -->
+        <canvas class="ether" data-ether aria-hidden="true"></canvas>
     <a class="skip" href="#content">Skip to content</a>
-    <div class="board">
-      <header class="board-head">
+    <div class="shell">
+      <header class="axis">
         <a class="mark" href="../" aria-label="Akasha OS home">
           <img src="../logo.svg" alt="" width="40" height="40" />
+          <span class="mark-id">Akasha OS</span>
         </a>
-        <p class="clock" data-clock>00:00:00</p>
-        <nav class="destinations" aria-label="Primary">
+        <nav class="lanes" aria-label="Primary">
           <a href="../grant.html">grant</a>
           <a href="../why.html">why</a>
           <a href="../install.html">install</a>
@@ -42,7 +43,8 @@
           <button type="button" data-set-lang="fr" aria-pressed="false">FR</button>
         </div>
       </header>
-      <main id="content" >
+      <main id="content" class="plate-main">
+
         <h1>
           <span data-lang="en">
             First launch after <a href="../install.html">install</a>.
@@ -56,8 +58,8 @@
           </span>
         </h1>
 
-        <h2 data-lang="en"># before you launch</h2>
-        <h2 data-lang="fr"># avant de lancer</h2>
+        <h2 data-lang="en">before you launch</h2>
+        <h2 data-lang="fr">avant de lancer</h2>
         <ol class="steps">
           <li data-lang="en">Recent NVIDIA driver (<code>nvidia-smi -L</code> OK).</li>
           <li data-lang="fr">Pilote NVIDIA récent (<code>nvidia-smi -L</code> OK).</li>
@@ -67,8 +69,8 @@
           <li data-lang="fr">Installé via <code>install.ps1</code> / <code>install.sh</code>, ou lancez <code>bin/aos-session</code>.</li>
         </ol>
 
-        <h2 data-lang="en"># model setup</h2>
-        <h2 data-lang="fr"># réglage des modèles</h2>
+        <h2 data-lang="en">model setup</h2>
+        <h2 data-lang="fr">réglage des modèles</h2>
         <p class="hist" data-lang="en">
           On first launch (no <code>var/models/installed.json</code> yet),
           <code>aos-session</code> probes GPU VRAM / RAM / disk →
@@ -81,7 +83,7 @@
           <code>var/run/hardware.json</code>, puis ouvre la fenêtre Model selection
           (auto-meilleur pour votre palier) :
         </p>
-        <ul class="loglines">
+        <ul class="ticks">
           <li>low &lt;10 GiB VRAM → Qwen3.5-4B + Embedding 0.6B</li>
           <li>mid 10–20 GiB <span data-lang="en">(e.g. RTX 4080 SUPER)</span><span data-lang="fr">(ex. RTX 4080 SUPER)</span> → Qwen3.5-9B + Embedding 0.6B</li>
           <li>high ≥20 GiB → Qwen3 30B-A3B + Embedding 0.6B</li>
@@ -103,21 +105,22 @@
           Preview on Windows/Linux — this is not the bootable OS yet.
         </p>
 
-        <h2 data-lang="en"># if setup is cancelled</h2>
-        <h2 data-lang="fr"># si le réglage est annulé</h2>
+        <h2 data-lang="en">if setup is cancelled</h2>
+        <h2 data-lang="fr">si le réglage est annulé</h2>
         <p class="hist" data-lang="en">
           Delete nothing. Relaunch to reopen model selection. No GPU means
-          install the NVIDIA driver — there is no CPU mode in 0.1.
-          Daemon logs: <code>var/run/*.stderr.log</code> (Troubleshooting button).
+          a slower CPU pack is available in Preview 0.5.0; NVIDIA remains
+          recommended. Daemon logs: <code>var/run/*.stderr.log</code>
+          (Troubleshooting button).
         </p>
         <p class="hist" data-lang="fr">
           Ne supprimez rien. Relancez pour rouvrir la sélection de modèles.
-          Pas de GPU : installez le pilote NVIDIA — pas de mode CPU en 0.1.
+          Pas de GPU : installez le pilote NVIDIA — un pack CPU existe en Preview 0.5.0 (plus lent). NVIDIA reste recommandé.
           Journaux : <code>var/run/*.stderr.log</code> (bouton Troubleshooting).
         </p>
 
-        <h2 data-lang="en"># later model updates</h2>
-        <h2 data-lang="fr"># mises à jour de modèles plus tard</h2>
+        <h2 data-lang="en">later model updates</h2>
+        <h2 data-lang="fr">mises à jour de modèles plus tard</h2>
         <p class="hist" data-lang="en">
           If <code>catalog-offerings.json</code> recommends models you do not
           have, a banner appears → Open Models → Download. Restart Preview after
@@ -132,10 +135,9 @@
           CLI : <code>aos-session --download-models &lt;id&gt;…</code>
         </p>
 
-        <p class="prompt hist pager">
-          <span class="ps">$</span>
-          <a class="run" href="use.html">open use.html</a>
-        </p>
+        <a class="continue pager" href="use.html">
+          <span class="continue-label">Use</span>
+        </a>
       </main>
       <footer>
         <p>AKASHA OS · <a href="https://github.com/azerothl/akasha-os">github.com/azerothl/akasha-os</a></p>

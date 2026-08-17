@@ -6,12 +6,12 @@
     <title>Akasha OS: About</title>
     <meta
       name="description"
-      content="Why the name Akasha OS: origins, memory, sound, and the ambition behind an agent-native operating system."
+      content="Why the name Akasha OS: ether, memory, and an agent-native operating system."
     />
     <meta property="og:title" content="Akasha OS: About" />
     <meta
       property="og:description"
-      content="Why the name Akasha OS: origins, memory, sound, and the ambition behind an agent-native operating system."
+      content="Why the name Akasha OS: ether, memory, and an agent-native operating system."
     />
     <meta property="og:type" content="website" />
     <link rel="stylesheet" href="styles.css" />
@@ -19,17 +19,26 @@
     <link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png" />
     <meta property="og:image" content="https://azerothl.github.io/akasha-os/og.png" />
-    <meta name="theme-color" content="#0d0d0d" />
+    <meta name="theme-color" content="#070b14" />
   </head>
-  <body>
+  <body class="plate">
+    <!--
+      THESIS: About is the nameplate of the orrery: ākāśa as the medium, not a myth landing.
+      OWN-WORLD: Orrery inner plate — void, cyan labels.
+      STORY: A tester learns why the OS is named for ether, then returns to install.
+      FIRST VIEWPORT: Name as substrate; references marked as inspirations.
+      FORM: Orrery inner plate, seed c1699dbf reroll 1.
+      FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+    -->
+    <canvas class="ether" data-ether aria-hidden="true"></canvas>
     <a class="skip" href="#content">Skip to content</a>
-    <div class="board">
-      <header class="board-head">
+    <div class="shell">
+      <header class="axis">
         <a class="mark" href="./" aria-label="Akasha OS home">
           <img src="logo.svg" alt="" width="40" height="40" />
+          <span class="mark-id">Akasha OS</span>
         </a>
-        <p class="clock" data-clock>00:00:00</p>
-        <nav class="destinations" aria-label="Primary">
+        <nav class="lanes" aria-label="Primary">
           <a href="grant.html">grant</a>
           <a href="why.html">why</a>
           <a href="install.html">install</a>
@@ -41,171 +50,112 @@
           <button type="button" data-set-lang="fr" aria-pressed="false">FR</button>
         </div>
       </header>
-        <main id="content" >
-          <section class="transcript" aria-labelledby="name-title">
-            <h1 id="name-title">
-              <span data-lang="en">Why the name.</span>
-              <span data-lang="fr">Pourquoi ce nom.</span>
-            </h1>
-            <p class="brand-hero">
-              <img src="logo.svg" width="88" height="88" alt="Akasha OS" />
-            </p>
-            <p data-lang="en">
-              Akasha OS is not an agent runtime bolted onto a general-purpose OS.
-              The name carries that ambition: a system meant as a foundation, not
-              a guest. The references below are <em>inspirations</em>, not
-              affiliations.
-            </p>
-            <p data-lang="fr">
-              Akasha OS n’est pas un runtime d’agents posé sur un OS généraliste.
-              Le nom porte cette ambition: un système pensé comme une fondation,
-              pas comme un invité. Les références ci-dessous sont des
-              <em>inspirations</em>, pas des affiliations.
-            </p>
-          </section>
+      <main id="content" class="plate-main">
+        <h1>
+          <span data-lang="en">Ākāśa, the medium.</span>
+          <span data-lang="fr">Ākāśa, le milieu.</span>
+        </h1>
+        <p class="brand-hero">
+          <img src="logo.svg" width="88" height="88" alt="Akasha OS" />
+        </p>
+        <p class="hist" data-lang="en">
+          Akasha OS is not an agent runtime bolted onto a general-purpose OS.
+          The name is the thesis: a system meant as the space agents occupy,
+          not a guest on someone else’s kernel. The references below are
+          <em>inspirations</em>, not affiliations.
+        </p>
+        <p class="hist" data-lang="fr">
+          Akasha OS n’est pas un runtime d’agents posé sur un OS généraliste.
+          Le nom est la thèse : un système pensé comme l’espace qu’occupent
+          les agents, pas comme un invité sur le noyau d’un autre. Les
+          références ci-dessous sont des <em>inspirations</em>, pas des
+          affiliations.
+        </p>
 
-          <section class="transcript" id="origins" aria-labelledby="orig-title">
-            <h2 class="hist" id="orig-title">
-              name.origin
-            </h2>
-            <p data-lang="en">
-              Several traditions and stories converge on the word <em>Akasha</em>.
-              Together they sketch what we want the product to feel like.
-            </p>
-            <p data-lang="fr">
-              Plusieurs traditions et récits convergent sur le mot
-              <em>Akasha</em>. Ensemble, ils esquissent ce que nous voulons faire
-              ressentir du produit.
-            </p>
-            <p>
-              <strong data-lang="en">Origin and sovereignty.</strong>
-              <strong data-lang="fr">Origine et souveraineté.</strong>
-              <span data-lang="en">
-                In Anne Rice’s <cite>The Queen of the Damned</cite>, Akasha is the
-                first vampire, source of the others, imperial, near-divine. For
-                an OS, that evokes a foundational system: first of its line, the
-                base on which everything else is built.
-              </span>
-              <span data-lang="fr">
-                Dans <cite>La Reine des damnés</cite> d’Anne Rice, Akasha est la
-                première vampire, source des autres, figure impériale, puissance
-                quasi divine. Pour un OS, cela évoque un système fondateur:
-                premier de sa lignée, base sur laquelle le reste se construit.
-              </span>
-            </p>
-            <p>
-              <strong data-lang="en">Universal memory.</strong>
-              <strong data-lang="fr">Mémoire universelle.</strong>
-              <span data-lang="en">
-                In Hindu and related esoteric thought, Akasha names the ether:
-                the fifth element, a reservoir of information, sometimes called
-                the akashic records. For this OS: memory, knowledge, and agents
-                as first-class services. A hub of typed intents, not a claim of
-                omniscience.
-              </span>
-              <span data-lang="fr">
-                Dans l’hindouisme et certaines philosophies ésotériques, Akasha
-                désigne l’éther: le cinquième élément, un réservoir
-                d’information, parfois les « archives akashiques ». Pour cet OS:
-                mémoire, connaissance et agents comme services de premier plan.
-                Un hub d’intents typés, pas une promesse d’omniscience.
-              </span>
-            </p>
-            <p>
-              <strong data-lang="en">Sound.</strong>
-              <strong data-lang="fr">Sonorité.</strong>
-              <span data-lang="en">
-                Short, fluid, and uncommon. Easy to remember; elegant and
-                forceful at once. A distinctive mark rather than a generic
-                tech acronym.
-              </span>
-              <span data-lang="fr">
-                Court, fluide, peu commun. Facile à retenir; élégant et
-                puissant à la fois. Une marque distinctive plutôt qu’un
-                acronyme tech générique.
-              </span>
-            </p>
-            <p>
-              <strong data-lang="en">Beyond the classic frame.</strong>
-              <strong data-lang="fr">Au-delà du cadre classique.</strong>
-              <span data-lang="en">
-                The name signals a break with traditional OS assumptions:
-                Windows, Linux, POSIX as the agent’s native tongue. Akasha OS
-                aims to be agent-native: more than a tool, a living platform
-                with capabilities, audit, and policy at the core.
-              </span>
-              <span data-lang="fr">
-                Le nom signale une rupture avec les OS traditionnels:
-                Windows, Linux, POSIX comme langage natif de l’agent. Akasha OS
-                se veut agent-natif: plus qu’un outil, une plateforme vivante
-                avec capacités, audit et politiques au cœur.
-              </span>
-            </p>
-            <p>
-              <strong data-lang="en">A name that tells a story.</strong>
-              <strong data-lang="fr">Un nom qui raconte une histoire.</strong>
-              <span data-lang="en">
-                Names with myth or cultural aura create curiosity and narrative
-                value. Akasha gives the brand an ambition from the first
-                syllable: not a feature list, but a stance.
-              </span>
-              <span data-lang="fr">
-                Les noms qui portent une mythologie ou une aura culturelle
-                créent de la curiosité et une valeur narrative. Akasha donne à
-                la marque une ambition dès la première syllabe: pas une liste
-                de fonctionnalités, une posture.
-              </span>
-            </p>
-          </section>
+        <h2 id="orig-title">ether</h2>
+        <p class="hist" data-lang="en">
+          In Sanskrit, <em>ākāśa</em> names the sky, space, the fifth element:
+          the medium in which the other elements exist. Later esoteric
+          traditions speak of akashic records: a reservoir of what has been
+          thought and done. For this OS that is not omniscience. It is memory,
+          knowledge, and agents as first-class services; typed intents on a
+          bus; a substrate, not a séance.
+        </p>
+        <p class="hist" data-lang="fr">
+          En sanskrit, <em>ākāśa</em> désigne le ciel, l’espace, le cinquième
+          élément : le milieu dans lequel les autres existent. Des traditions
+          ésotériques parlent ensuite d’archives akashiques : un réservoir de
+          ce qui a été pensé et fait. Pour cet OS, ce n’est pas l’omniscience.
+          C’est la mémoire, la connaissance et les agents comme services de
+          premier plan ; des intents typés sur un bus ; un substrat, pas une
+          séance.
+        </p>
 
-          <section class="transcript" id="synthesis" aria-labelledby="short-title">
-            <h2 class="hist" id="short-title">
-              name.summary
-            </h2>
-            <p data-lang="en">
-              An OS named Akasha can embody original power, universal memory,
-              connected intelligence, mystic elegance, and technological
-              sovereignty. The same through-line as capability-based security,
-              semantic IPC, and offline-first design.
-            </p>
-            <p data-lang="fr">
-              Un OS nommé Akasha peut incarner la puissance originelle, la
-              mémoire universelle, l’intelligence connectée, l’élégance mystique
-              et une souveraineté technologique. Le même fil que les capacités,
-              l’IPC sémantique et l’offline-first.
-            </p>
-            <h2 class="hist" id="license-title">license</h2>
-            <p data-lang="en">
-              AGPL-3.0-only: free use, modify, and distribute (including commercially)
-              if you honor AGPL (source available, including network use). Keep NOTICE
-              and credit Akasha OS. Commercial: proprietary forks and closed SaaS;
-              attribution and royalty. Contact
-              <a href="mailto:loic.peaudecerf@proton.me">loic.peaudecerf@proton.me</a>.
-              The Akasha OS trademark is reserved.
-            </p>
-            <p data-lang="fr">
-              AGPL-3.0-only : usage, modification et distribution libres (y compris
-              commercialement) si vous respectez l’AGPL (source disponible, y compris
-              en usage réseau). Conservez NOTICE et créditez Akasha OS. Commerciale :
-              forks propriétaires et SaaS fermé ; attribution et redevance. Contact
-              <a href="mailto:loic.peaudecerf@proton.me">loic.peaudecerf@proton.me</a>.
-              La marque Akasha OS est réservée.
-            </p>
-            <p class="prompt hist">
-              <span class="ps">$</span>
-              <a class="run" href="./">
-                <span data-lang="en">cd /</span>
-                <span data-lang="fr">cd /</span>
-              </a>
-            </p>
-          </section>
-        </main>
-        <footer>
-          <p>AKASHA OS</p>
-          <p>
-            <a href="https://github.com/azerothl/akasha-os">github.com/azerothl/akasha-os</a>
-          </p>
-        </footer>
+        <h2>origin</h2>
+        <p class="hist" data-lang="en">
+          In Anne Rice’s <cite>The Queen of the Damned</cite>, Akasha is the
+          first vampire, source of the others. For an OS, that is a
+          foundational system: first of its line, the base on which the rest
+          is built. Still a host Preview today, with a separate seL4 track.
+        </p>
+        <p class="hist" data-lang="fr">
+          Dans <cite>La Reine des damnés</cite> d’Anne Rice, Akasha est la
+          première vampire, source des autres. Pour un OS, c’est un système
+          fondateur : premier de sa lignée, base sur laquelle le reste se
+          construit. Aujourd’hui encore une Preview hôte, avec une piste seL4
+          séparée.
+        </p>
+
+        <h2>sound</h2>
+        <p class="hist" data-lang="en">
+          Short, fluid, uncommon. Easy to remember; elegant and forceful at
+          once. A mark rather than a generic tech acronym.
+        </p>
+        <p class="hist" data-lang="fr">
+          Court, fluide, peu commun. Facile à retenir ; élégant et puissant à
+          la fois. Une marque plutôt qu’un acronyme tech générique.
+        </p>
+
+        <h2>frame</h2>
+        <p class="hist" data-lang="en">
+          The name signals a break with POSIX as the agent’s native tongue.
+          Akasha OS aims to be agent-native: capabilities, audit, and policy
+          at the core, more than a chat wrapper on Windows or Linux.
+        </p>
+        <p class="hist" data-lang="fr">
+          Le nom signale une rupture avec POSIX comme langue native de
+          l’agent. Akasha OS se veut agent-natif : capacités, audit et
+          politiques au cœur, plus qu’un wrapper de chat sur Windows ou Linux.
+        </p>
+
+        <h2>license</h2>
+        <p class="hist" data-lang="en">
+          AGPL-3.0-only: free use, modify, and distribute (including commercially)
+          if you honor AGPL (source available, including network use). Keep NOTICE
+          and credit Akasha OS. Commercial: proprietary forks and closed SaaS;
+          attribution and royalty. Contact
+          <a href="mailto:loic.peaudecerf@proton.me">loic.peaudecerf@proton.me</a>.
+          The Akasha OS trademark is reserved.
+        </p>
+        <p class="hist" data-lang="fr">
+          AGPL-3.0-only : usage, modification et distribution libres (y compris
+          commercialement) si vous respectez l’AGPL (source disponible, y compris
+          en usage réseau). Conservez NOTICE et créditez Akasha OS. Commerciale :
+          forks propriétaires et SaaS fermé ; attribution et redevance. Contact
+          <a href="mailto:loic.peaudecerf@proton.me">loic.peaudecerf@proton.me</a>.
+          La marque Akasha OS est réservée.
+        </p>
+
+        <a class="continue pager" href="./">
+          <span class="continue-label">Home</span>
+        </a>
+      </main>
+      <footer>
+        <p>
+          AKASHA OS ·
+          <a href="https://github.com/azerothl/akasha-os">github.com/azerothl/akasha-os</a>
+        </p>
+      </footer>
     </div>
     <script src="app.js"></script>
   </body>

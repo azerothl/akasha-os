@@ -1,242 +1,290 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-08-15T13:12:00.000Z",
+  "generatedAt": "2026-08-17T07:42:00.000Z",
   "title": "Design System: Akasha OS",
   "extensions": {
     "colorMeta": {
-      "mask": {
+      "void": {
         "role": "neutral",
-        "displayName": "Mask",
-        "canonical": "#0c0906",
+        "displayName": "Night Void",
+        "canonical": "#070b14",
         "tonalRamp": [
-          "#16110c",
-          "#2c241c",
-          "#443830",
-          "#5c4c40",
-          "#746254",
-          "#8c7a6a",
-          "#b4a090",
-          "#e8dcd0"
+          "#070b14",
+          "#0f1624",
+          "#1a2438",
+          "#2a3850",
+          "#4a5c74",
+          "#7a8ca0",
+          "#a8b8c8",
+          "#dce6f0"
         ]
       },
-      "bezel": {
-        "role": "neutral",
-        "displayName": "Bezel",
-        "canonical": "#1c1610",
-        "tonalRamp": [
-          "#16110c",
-          "#2c241c",
-          "#443830",
-          "#5c4c40",
-          "#746254",
-          "#8c7a6a",
-          "#b4a090",
-          "#e8dcd0"
-        ]
-      },
-      "phosphor": {
+      "signal": {
         "role": "primary",
-        "displayName": "Amber Phosphor",
-        "canonical": "#f6c15a",
+        "displayName": "Cyan Rail",
+        "canonical": "#3ee0c4",
         "tonalRamp": [
-          "#2e1d06",
-          "#4d310a",
-          "#6d450e",
-          "#9a6418",
-          "#c48428",
-          "#e8a04a",
-          "#f0c07a",
-          "#f8e8c8"
+          "#0a241f",
+          "#123d36",
+          "#1a5c52",
+          "#248072",
+          "#2eb8a0",
+          "#3ee0c4",
+          "#7aecd8",
+          "#c5f6ee"
         ]
       },
-      "phosphor-dim": {
-        "role": "neutral",
-        "displayName": "Dim Phosphor",
-        "canonical": "#e0bc78",
+      "hydrogen": {
+        "role": "secondary",
+        "displayName": "Hydrogen",
+        "canonical": "#e85d4c",
         "tonalRamp": [
-          "#2a2114",
-          "#4a3a24",
-          "#6a5334",
-          "#8a6c44",
-          "#aa8554",
-          "#c4a06a",
-          "#d8c090",
-          "#f0e4c8"
+          "#3a1410",
+          "#6a241c",
+          "#9c382c",
+          "#c44c3e",
+          "#e85d4c",
+          "#f08a7c",
+          "#f6b8ae",
+          "#fce8e4"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Cool Paper",
+        "canonical": "#dce6f0",
+        "tonalRamp": [
+          "#1a222c",
+          "#334050",
+          "#4e6074",
+          "#6e8498",
+          "#96a8b8",
+          "#b8c8d4",
+          "#dce6f0",
+          "#f4f7fa"
+        ]
+      },
+      "mute": {
+        "role": "neutral",
+        "displayName": "Dim Rail",
+        "canonical": "color-mix(in srgb, var(--signal) 48%, var(--void))",
+        "tonalRamp": [
+          "#0a1818",
+          "#122828",
+          "#163c3a",
+          "#1a5450",
+          "#214744",
+          "#3a8880",
+          "#7ab8b0",
+          "#c5e8e2"
         ]
       }
     },
     "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Winding-key label (Install / Download). Continue uses the same voice slightly smaller."
+      },
       "headline": {
         "displayName": "Headline",
-        "purpose": "Honesty banner and about titles at body-adjacent size. This world has no display size."
+        "purpose": "Inner-page h1 and 404. Landing h1 is visually hidden."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Inner h2 band labels in cyan uppercase Archivo Narrow."
+      },
+      "rail": {
+        "displayName": "Rail",
+        "purpose": "Nav lanes, language toggles, swipe, honesty dt, wordmark."
+      },
+      "lede": {
+        "displayName": "Lede",
+        "purpose": "Landing thesis and 404 line; Fira 500."
       },
       "body": {
         "displayName": "Body",
-        "purpose": "History, transcript, grant log, and about copy. Measure 72ch."
+        "purpose": "Running copy, history, transcripts. Measure 70ch."
       },
       "label": {
         "displayName": "Label",
-        "purpose": "Status meta and footer at 0.78rem / 0.04em."
-      },
-      "brand": {
-        "displayName": "Brand",
-        "purpose": "AKASHA OS in the status row. Weight 700, full phosphor, 0.08em, no underline."
-      },
-      "live": {
-        "displayName": "Live",
-        "purpose": "The single typing grant line and its prompt at weight 700 / 1.12rem, with a 1px-offset bloom."
-      },
-      "lang": {
-        "displayName": "Lang",
-        "purpose": "EN / FR chips at 0.72rem / 0.06em."
+        "purpose": "Paper-plate captions in Fira 600 uppercase."
       }
     },
     "motion": [
       {
-        "name": "caret-blink",
-        "value": "1.05s steps(1) infinite",
-        "purpose": "Block caret on the live grant line. Disabled when prefers-reduced-motion."
+        "name": "orrery",
+        "value": "requestAnimationFrame elliptical orbits; t += dt * wind",
+        "purpose": "Live canvas orrery. One seeded frame when prefers-reduced-motion: reduce."
       },
       {
-        "name": "type-tick",
-        "value": "18ms",
-        "purpose": "Per-character interval for the live grant string. Instant print when prefers-reduced-motion."
+        "name": "wind",
+        "value": "target 3.4 on .key hover/focus, lerp 0.08 back to 1",
+        "purpose": "Winding the orrery from the hydrogen key. Disabled under reduced motion."
+      },
+      {
+        "name": "scroll",
+        "value": "smooth",
+        "purpose": "html scroll-behavior; auto under prefers-reduced-motion."
       }
     ],
-    "breakpoints": []
+    "breakpoints": [
+      {
+        "name": "fold",
+        "value": "820px",
+        "purpose": "Fold stacks; honesty first; orbit ID rail; sky key sticky bottom."
+      },
+      {
+        "name": "key-wrap",
+        "value": "560px",
+        "purpose": "Winding key wraps; hint takes a full row."
+      },
+      {
+        "name": "orbit-labels",
+        "value": "640px",
+        "purpose": "Canvas orbit IDs draw when canvas clientWidth >= 640."
+      }
+    ]
   },
   "components": [
     {
-      "name": "Language chip",
+      "name": "Winding Key",
       "kind": "button",
-      "refersTo": "button-lang",
-      "description": "EN / FR locale control. Active locale inverts dim phosphor onto the mask.",
-      "html": "<div class=\"ds-lang\" role=\"group\" aria-label=\"Language\"><button type=\"button\" class=\"ds-lang-btn\">EN</button><button type=\"button\" class=\"ds-lang-btn ds-lang-btn-active\" aria-pressed=\"true\">FR</button></div>",
-      "css": ".ds-lang { display: flex; gap: 0.15rem; font-family: \"Azeret Mono\", ui-monospace, \"Cascadia Mono\", Consolas, monospace; } .ds-lang-btn { appearance: none; border: 0; background: transparent; color: var(--phosphor-dim, #c4a06a); padding: 0.1rem 0.35rem; font: inherit; font-size: 0.72rem; letter-spacing: 0.06em; cursor: pointer; } .ds-lang-btn:hover, .ds-lang-btn:focus-visible { color: var(--phosphor, #e8a04a); } .ds-lang-btn:focus-visible { outline: 2px solid var(--phosphor, #e8a04a); outline-offset: 3px; } .ds-lang-btn-active { color: var(--mask, #16110c); background: var(--phosphor-dim, #c4a06a); }"
+      "refersTo": "key",
+      "description": "Primary control: hydrogen rail with key glyph. Install on the landing, Download on install. Winds the orrery on hover.",
+      "html": "<a class=\"ds-key\" href=\"#\"><svg class=\"ds-key-glyph\" viewBox=\"0 0 32 32\" aria-hidden=\"true\"><path fill=\"currentColor\" d=\"M13.5 6.5a5.5 5.5 0 1 0 1.2 8.1L19 19l1.8-1.8 1.4 1.4 1.8-1.8-1.4-1.4 2.2-2.2-1.8-1.8-2.2 2.2-1.2-1.2 2-2-1.8-1.8-6.3 6.3A5.5 5.5 0 0 0 13.5 6.5Zm-3.2 2.3a3.2 3.2 0 1 1 0 6.4 3.2 3.2 0 0 1 0-6.4Z\"/></svg><span class=\"ds-key-label\">Install</span><span class=\"ds-key-hint\">Wind the orrery</span></a>",
+      "css": ".ds-key { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 80px; padding: 16px 24px; background: var(--hydrogen, #e85d4c); color: var(--paper, #dce6f0); font-family: \"Archivo Narrow\", \"Arial Narrow\", sans-serif; font-weight: 700; letter-spacing: 0.04em; text-decoration: none; text-transform: uppercase; border-radius: 0; } .ds-key-glyph { display: block; width: 2.4rem; height: 2.4rem; flex: 0 0 auto; } .ds-key-label { font-size: clamp(1.8rem, 4vw, 2.6rem); line-height: 0.9; letter-spacing: -0.02em; } .ds-key-hint { font-size: 1.05rem; letter-spacing: 0.08em; opacity: 0.92; } .ds-key:hover, .ds-key:focus-visible { color: var(--void, #070b14); background: var(--paper, #dce6f0); } .ds-key:focus-visible { outline: 2px solid var(--signal, #3ee0c4); outline-offset: 4px; }"
     },
     {
-      "name": "Install prompt",
+      "name": "Continue",
       "kind": "button",
-      "refersTo": "link-run",
-      "description": "Docked command line. The action is a dim link, not a filled button.",
-      "html": "<p class=\"ds-prompt\"><span class=\"ds-ps\">$</span><a class=\"ds-run\" href=\"#\">install --preview</a></p>",
-      "css": ".ds-prompt { margin: 0; font-family: \"Azeret Mono\", ui-monospace, \"Cascadia Mono\", Consolas, monospace; font-size: 1rem; font-weight: 400; line-height: 1.55; color: var(--phosphor-dim, #c4a06a); } .ds-ps { margin-right: 0.45rem; } .ds-run { color: var(--phosphor-dim, #c4a06a); font-weight: 400; text-decoration: none; } .ds-run:hover, .ds-run:focus-visible { color: var(--phosphor, #e8a04a); text-decoration: underline; } .ds-run:focus-visible { outline: 2px solid var(--phosphor, #e8a04a); outline-offset: 3px; }"
+      "refersTo": "continue",
+      "description": "Inner-page and 404 pager. Cyan Archivo uppercase, no fill. Not hydrogen.",
+      "html": "<a class=\"ds-continue\" href=\"#\"><span class=\"ds-continue-label\">Docs</span></a>",
+      "css": ".ds-continue { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin: 64px 0 0; padding: 16px 0; color: var(--signal, #3ee0c4); font-family: \"Archivo Narrow\", \"Arial Narrow\", sans-serif; font-weight: 700; letter-spacing: 0.06em; text-decoration: none; text-transform: uppercase; border-radius: 0; background: transparent; } .ds-continue-label { font-size: clamp(1.5rem, 3vw, 2.2rem); line-height: 0.9; } .ds-continue:hover, .ds-continue:focus-visible { color: var(--paper, #dce6f0); } .ds-continue:focus-visible { outline: 2px solid var(--signal, #3ee0c4); outline-offset: 4px; }"
     },
     {
-      "name": "Live grant line",
-      "kind": "custom",
-      "refersTo": "live-line",
-      "description": "The single full-phosphor trace: prompt, typed grant, block caret.",
-      "html": "<p class=\"ds-live-line\"><span class=\"ds-ps\">$</span><span class=\"ds-live\">cap.grant session:preview gpu:nvidia net:deny audit:on offline:default</span><span class=\"ds-caret\" aria-hidden=\"true\"></span></p>",
-      "css": ".ds-live-line { margin: 0; font-family: \"Azeret Mono\", ui-monospace, \"Cascadia Mono\", Consolas, monospace; font-size: 1rem; line-height: 1.55; overflow-wrap: anywhere; color: var(--phosphor, #e8a04a); font-weight: 600; } .ds-live-line .ds-ps { margin-right: 0.45rem; color: var(--phosphor, #e8a04a); } .ds-live { color: var(--phosphor, #e8a04a); font-weight: 600; } .ds-caret { display: inline-block; width: 0.55ch; height: 1em; margin-left: 0.08ch; background: var(--phosphor, #e8a04a); vertical-align: -0.12em; animation: ds-blink 1.05s steps(1) infinite; } @keyframes ds-blink { 50% { opacity: 0; } } @media (prefers-reduced-motion: reduce) { .ds-caret { animation: none; } }"
-    },
-    {
-      "name": "Grant log line",
-      "kind": "custom",
-      "refersTo": "logline",
-      "description": "A capability printed as a dim log line. Focus raises it to full phosphor.",
-      "html": "<ul class=\"ds-loglines\"><li tabindex=\"0\">session GRANT Parallel persisted conversations</li><li tabindex=\"0\">net DENY Search and fetch are opt-in</li></ul>",
-      "css": ".ds-loglines { margin: 0; padding: 0; max-width: 72ch; list-style: none; font-family: \"Azeret Mono\", ui-monospace, \"Cascadia Mono\", Consolas, monospace; font-size: 1rem; font-weight: 400; line-height: 1.55; } .ds-loglines li { margin: 0; padding: 0.12rem 0; color: var(--phosphor-dim, #c4a06a); overflow-wrap: anywhere; cursor: default; } .ds-loglines li:focus, .ds-loglines li:focus-visible { outline: 1px solid var(--phosphor, #e8a04a); outline-offset: 2px; color: var(--phosphor, #e8a04a); }"
-    },
-    {
-      "name": "Status navigation",
+      "name": "Nav Lane",
       "kind": "nav",
-      "refersTo": "link-inline",
-      "description": "Bezel status row: brand, host meta, lowercase section links.",
-      "html": "<header class=\"ds-status\"><a class=\"ds-brand\" href=\"#\">AKASHA OS</a><p class=\"ds-status-meta\">PREVIEW 0.2.0 · HOST</p><nav class=\"ds-nav\" aria-label=\"Primary\"><a href=\"#\">grant</a><a href=\"#\">why</a><a href=\"#\">install</a></nav></header>",
-      "css": ".ds-status { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.55rem 1rem; color: var(--phosphor-dim, #c4a06a); font-family: \"Azeret Mono\", ui-monospace, \"Cascadia Mono\", Consolas, monospace; font-size: 0.78rem; letter-spacing: 0.04em; } .ds-brand { color: var(--phosphor-dim, #c4a06a); font-weight: 600; letter-spacing: 0.08em; text-decoration: none; } .ds-brand:hover, .ds-brand:focus-visible { color: var(--phosphor, #e8a04a); } .ds-brand:focus-visible { outline: 2px solid var(--phosphor, #e8a04a); outline-offset: 3px; } .ds-status-meta { margin: 0; flex: 1 1 auto; } .ds-nav { display: flex; flex-wrap: wrap; gap: 0.55rem 0.85rem; } .ds-nav a { color: var(--phosphor-dim, #c4a06a); text-decoration: none; } .ds-nav a:hover, .ds-nav a:focus-visible { color: var(--phosphor, #e8a04a); } .ds-nav a:focus-visible { outline: 2px solid var(--phosphor, #e8a04a); outline-offset: 3px; }"
+      "refersTo": "nav-lane",
+      "description": "Axis destination. Mute at rest; paper on hover; void on signal when current.",
+      "html": "<nav class=\"ds-lanes\" aria-label=\"Primary\"><a href=\"#\">grant</a><a href=\"#\" aria-current=\"page\">install</a><a href=\"#\">docs</a></nav>",
+      "css": ".ds-lanes { display: flex; flex-wrap: wrap; gap: 0; } .ds-lanes a { display: inline-flex; align-items: center; min-height: 40px; background: transparent; color: var(--mute, color-mix(in srgb, #3ee0c4 48%, #070b14)); padding: 0 12px; font-family: \"Archivo Narrow\", \"Arial Narrow\", sans-serif; font-size: 1.05rem; font-weight: 700; letter-spacing: 0.08em; text-decoration: none; text-transform: uppercase; border-radius: 0; } .ds-lanes a:hover, .ds-lanes a:focus-visible { color: var(--paper, #dce6f0); } .ds-lanes a:focus-visible { outline: 2px solid var(--signal, #3ee0c4); outline-offset: 4px; } .ds-lanes a[aria-current=\"page\"] { color: var(--void, #070b14); background: var(--signal, #3ee0c4); }"
     },
     {
-      "name": "Inline link",
+      "name": "Language Toggle",
+      "kind": "chip",
+      "refersTo": "nav-lane-current",
+      "description": "EN/FR axis pair. Same invert as current lane: void on signal when pressed.",
+      "html": "<div class=\"ds-lang\" role=\"group\" aria-label=\"Language\"><button type=\"button\" aria-pressed=\"true\">EN</button><button type=\"button\" aria-pressed=\"false\">FR</button></div>",
+      "css": ".ds-lang { display: flex; } .ds-lang button { appearance: none; display: inline-flex; align-items: center; min-height: 40px; border: 0; background: transparent; color: var(--mute, color-mix(in srgb, #3ee0c4 48%, #070b14)); padding: 0 12px; font-family: \"Archivo Narrow\", \"Arial Narrow\", sans-serif; font-size: 1.05rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; border-radius: 0; } .ds-lang button:hover, .ds-lang button:focus-visible { color: var(--paper, #dce6f0); } .ds-lang button:focus-visible { outline: 2px solid var(--signal, #3ee0c4); outline-offset: 4px; } .ds-lang button[aria-pressed=\"true\"] { color: var(--void, #070b14); background: var(--signal, #3ee0c4); }"
+    },
+    {
+      "name": "Paper Plate",
+      "kind": "card",
+      "refersTo": "plate",
+      "description": "Landing honesty sheet: Fira caption on paper, void type. Cut-face gaps between plates.",
+      "html": "<article class=\"ds-plate\"><h2>Host</h2><p>Preview 0.5.0 is a host app on Windows or Linux x64.</p></article>",
+      "css": ".ds-plate { background: var(--paper, #dce6f0); color: var(--void, #070b14); padding: 16px; border-radius: 0; } .ds-plate h2 { margin: 0 0 8px; color: var(--void, #070b14); font-family: \"Fira Sans\", \"Segoe UI\", sans-serif; font-size: 0.82rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; } .ds-plate p { margin: 0; color: var(--void, #070b14); font-family: \"Fira Sans\", \"Segoe UI\", sans-serif; font-size: 0.98rem; line-height: 1.55; }"
+    },
+    {
+      "name": "Honesty Swipe",
       "kind": "custom",
-      "refersTo": "link-inline",
-      "description": "Transcript link: dim phosphor, 1px underline, full phosphor on hover and focus.",
-      "html": "<p class=\"ds-hist\">Download from <a class=\"ds-inline\" href=\"#\">GitHub Releases</a>.</p>",
-      "css": ".ds-hist { margin: 0; max-width: 72ch; color: var(--phosphor-dim, #c4a06a); font-family: \"Azeret Mono\", ui-monospace, \"Cascadia Mono\", Consolas, monospace; font-size: 1rem; font-weight: 400; line-height: 1.55; } .ds-inline { color: var(--phosphor-dim, #c4a06a); text-decoration-thickness: 1px; text-underline-offset: 0.22em; } .ds-inline:hover, .ds-inline:focus-visible { color: var(--phosphor, #e8a04a); } .ds-inline:focus-visible { outline: 2px solid var(--phosphor, #e8a04a); outline-offset: 3px; }"
+      "refersTo": "swipe",
+      "description": "One cyan bar: HOST / NVIDIA rec. / NOT BOOTABLE. Archivo Narrow uppercase, void type.",
+      "html": "<p class=\"ds-swipe\">HOST · NVIDIA rec. · NOT BOOTABLE</p>",
+      "css": ".ds-swipe { margin: 0; padding: 12px 0; color: var(--void, #070b14); background: var(--signal, #3ee0c4); font-family: \"Archivo Narrow\", \"Arial Narrow\", sans-serif; font-size: clamp(1.05rem, 1.6vw, 1.35rem); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; text-indent: 12px; border-radius: 0; }"
     },
     {
-      "name": "Skip link",
+      "name": "Doc Band",
       "kind": "nav",
-      "refersTo": "skip",
-      "description": "Focus-revealed skip control: mask field, phosphor type.",
-      "html": "<a class=\"ds-skip\" href=\"#content\">Skip to content</a>",
-      "css": ".ds-skip { display: inline-block; background: var(--mask, #16110c); color: var(--phosphor, #e8a04a); padding: 0.4rem 0.7rem; font-family: \"Azeret Mono\", ui-monospace, \"Cascadia Mono\", Consolas, monospace; font-size: 1rem; text-decoration-thickness: 1px; text-underline-offset: 0.22em; } .ds-skip:hover, .ds-skip:focus-visible { color: var(--phosphor, #e8a04a); } .ds-skip:focus-visible { outline: 2px solid var(--phosphor, #e8a04a); outline-offset: 3px; }"
+      "refersTo": "doc-band",
+      "description": "Chapter row on void: cyan index, paper uppercase name; hover to signal. No fill invert.",
+      "html": "<a class=\"ds-doc-band\" href=\"#\"><span class=\"ds-band-hz\">1</span><span class=\"ds-band-name\">INSTALL</span></a>",
+      "css": ".ds-doc-band { display: flex; align-items: baseline; gap: 16px; color: var(--paper, #dce6f0); text-decoration: none; font-family: \"Archivo Narrow\", \"Arial Narrow\", sans-serif; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; border-radius: 0; background: transparent; } .ds-band-hz { min-width: 2.4rem; color: var(--signal, #3ee0c4); } .ds-doc-band:hover, .ds-doc-band:focus-visible { color: var(--signal, #3ee0c4); } .ds-doc-band:focus-visible { outline: 2px solid var(--signal, #3ee0c4); outline-offset: 4px; }"
     },
     {
-      "name": "404 lost prompt",
-      "kind": "custom",
-      "refersTo": "live-line",
-      "description": "Centered not-found UART: live phosphor line, dim honesty, return prompt.",
-      "html": "<div class=\"ds-lost\"><p class=\"ds-live-line\"><span class=\"ds-ps\">$</span><span>open: not found</span><span class=\"ds-caret\" aria-hidden=\"true\"></span></p><h1 class=\"ds-lost-h\">page not found</h1><p class=\"ds-prompt\"><a class=\"ds-run\" href=\"#\">cd /</a></p></div>",
-      "css": ".ds-lost { min-height: 16rem; display: flex; flex-direction: column; justify-content: center; font-family: \"Azeret Mono\", ui-monospace, \"Cascadia Mono\", Consolas, monospace; } .ds-lost .ds-live-line { margin: 0 0 0.55rem; font-size: 1rem; line-height: 1.55; color: var(--phosphor, #e8a04a); font-weight: 600; } .ds-lost .ds-ps { margin-right: 0.45rem; } .ds-lost .ds-caret { display: inline-block; width: 0.55ch; height: 1em; margin-left: 0.08ch; background: var(--phosphor, #e8a04a); vertical-align: -0.12em; animation: ds-blink 1.05s steps(1) infinite; } @keyframes ds-blink { 50% { opacity: 0; } } .ds-lost-h { margin: 0 0 1.6rem; max-width: 72ch; color: var(--phosphor-dim, #c4a06a); font-size: 1.05rem; font-weight: 400; line-height: 1.5; } .ds-lost .ds-prompt { margin: 0; color: var(--phosphor-dim, #c4a06a); } .ds-lost .ds-run { color: var(--phosphor-dim, #c4a06a); text-decoration: none; } .ds-lost .ds-run:hover, .ds-lost .ds-run:focus-visible { color: var(--phosphor, #e8a04a); text-decoration: underline; } .ds-lost .ds-run:focus-visible { outline: 2px solid var(--phosphor, #e8a04a); outline-offset: 3px; } @media (prefers-reduced-motion: reduce) { .ds-lost .ds-caret { animation: none; } }"
+      "name": "Mark",
+      "kind": "nav",
+      "refersTo": "nav-lane",
+      "description": "Header identity: circular cyan A-mark plus title-case Akasha OS. Never Station.",
+      "html": "<a class=\"ds-mark\" href=\"#\" aria-label=\"Akasha OS home\"><svg class=\"ds-mark-glyph\" viewBox=\"0 0 256 256\" aria-hidden=\"true\"><rect width=\"256\" height=\"256\" fill=\"#070b14\"/><g fill=\"none\" stroke=\"#3ee0c4\"><circle cx=\"128\" cy=\"128\" r=\"104\" stroke-width=\"3.5\"/><circle cx=\"128\" cy=\"128\" r=\"84\" stroke-width=\"2.4\"/><circle cx=\"128\" cy=\"128\" r=\"64\" stroke-width=\"2.4\"/></g><path d=\"M68.4 213.2 L128 48 L187.6 213.2\" fill=\"none\" stroke=\"#3ee0c4\" stroke-width=\"15.5\" stroke-linejoin=\"miter\"/><line x1=\"111\" y1=\"128\" x2=\"145\" y2=\"128\" stroke=\"#3ee0c4\" stroke-width=\"2.25\"/><circle cx=\"128\" cy=\"128\" r=\"8.5\" fill=\"#3ee0c4\"/></svg><span class=\"ds-mark-id\">Akasha OS</span></a>",
+      "css": ".ds-mark { display: flex; align-items: center; gap: 10px; color: var(--paper, #dce6f0); text-decoration: none; } .ds-mark-glyph { display: block; width: 40px; height: 40px; } .ds-mark-id { font-family: \"Archivo Narrow\", \"Arial Narrow\", sans-serif; font-size: 1.15rem; font-weight: 700; letter-spacing: 0.04em; } .ds-mark:hover, .ds-mark:focus-visible { color: var(--paper, #dce6f0); } .ds-mark:focus-visible { outline: 2px solid var(--signal, #3ee0c4); outline-offset: 4px; }"
     }
   ],
   "narrative": {
-    "northStar": "Host Console",
-    "overview": "The public site is a host UART, not a product hero. The first surface is already printed: a dark bezel, a dim status banner, an honesty line at body size, and one grant typing at full amber. Powers are log lines. Install is a prompt docked on the bottom edge of the first viewport. The world refuses the AI-OS card grid — no icon tiles, no metric row, no marketing display face.\n\nPersonality is precise and technical. Density is terminal density: one column, tight line rhythm, generous bezel padding. Aesthetic philosophy is phosphor on a mask, not a themed landing page. Emphasis is intensity and weight, never a second hue or a larger display size. Confirmed visual rejections: card grids, hero metrics, kickers, system display faces, glyph icons, and any gray standing in for dimmed phosphor.",
+    "northStar": "The Orrery",
+    "overview": "The public site is a mechanical orrery in night ether, not an AI-OS product hero and not a radio correlator. A live canvas draws MEMORY, CAPS, GPU, and AGENTS on elliptical rails; capability rods run from the hub to each globe. The landing fold is that machine on the left and an honesty stack on the right: Fira lede, one cyan swipe of HOST / NVIDIA rec. / NOT BOOTABLE, then paper plates. The hydrogen winding key sits flush on the bottom rail. Inner pages are the same ether dimmed, with copy and cut-face stacks on void.\n\nPersonality is precise and technical. Honesty about Preview (host app, NVIDIA recommended, not bootable) sits in the same register as the thesis. Density is instrument-like: an 8px unit, flush square chrome, Archivo Narrow on the machine. Confirmed rejections: an AI-OS hero, a spectrogram correlator, a split-flap board, and a card grid of features. The header is the circular A-mark plus the words Akasha OS — never Station.",
     "keyCharacteristics": [
-      "Self-hosted Azeret Mono as the only voice (400, 600, and 700 on the live trace and wordmark)",
-      "Two amber intensities: full phosphor for the live trace and wordmark; dim phosphor for history, grants, and chrome",
-      "Bezel chassis around a darker glass screen — same brown family, two fills",
-      "Chassis sits in a dark void; glass carries a faint tube glow and static scanlines",
-      "Install prompt docked to the first-viewport floor"
+      "Night void field with a live canvas orrery (MEMORY, CAPS, GPU, AGENTS); plate weather dims the ether to 38% and tucks it to the corner",
+      "Archivo Narrow 700 on rails, swipe, headlines, and the winding key; Archivo Narrow 600 on canvas orbit IDs",
+      "Fira Sans 400 / 500 / 600 for lede, running copy, and paper-plate captions",
+      "Hydrogen reserved for the Install / Download winding key",
+      "Honesty as one cyan swipe plus paper plates; inner pages continue in cyan, not hydrogen",
+      "Square bezels; integer unit `--u` (8px); two weathers (`body.sky` vs `body.plate`)"
     ],
     "rules": [
       {
-        "name": "The One Live Trace Rule",
-        "body": "Only the live grant line (prompt, typed text, caret) sits at full phosphor at rest. History, grant log, honesty banner, and chrome stay dim. Hover, focus, and the active language chip may borrow full phosphor or invert; they are states, not a second live trace.",
+        "name": "The Hydrogen Key Rule",
+        "body": "Hydrogen fills the Install / Download winding key and nowhere else. Continue links, headings, the mark, and hover states stay cyan or paper.",
         "section": "colors"
       },
       {
-        "name": "The Phosphor Ink Rule",
-        "body": "Secondary text is dim phosphor. Never introduce gray, cool white, or a second hue to mean “quieter.”",
+        "name": "The Cyan Rail Rule",
+        "body": "If a control is idle, it sits on mute; if it is live, current, or a destination, it goes to signal — except the one hydrogen key.",
         "section": "colors"
       },
       {
-        "name": "The Single Face Rule",
-        "body": "Azeret Mono is the only voice. Do not add a display pairing or let a system sans become the page voice.",
+        "name": "The Two Voices Rule",
+        "body": "Archivo Narrow speaks the machine (rails, swipe, titles, winding key, continue). Fira Sans speaks the plates and the log (lede, captions, copy). Do not swap them.",
         "section": "typography"
       },
       {
-        "name": "The No-Hero Type Rule",
-        "body": "Headlines stay near body size (1.15rem / 400). The console does not shout with a campaign display size.",
+        "name": "The Hidden Landing Title Rule",
+        "body": "On sky weather the h1 is a screen-reader title only. Do not paint collision-scale type over the orrery.",
         "section": "typography"
       },
       {
-        "name": "The Docked Prompt Rule",
-        "body": "The install (or return) prompt sits on the first-viewport floor, not in a hero CTA cluster.",
+        "name": "The Two Weathers Rule",
+        "body": "body.sky is the night fold (full-bleed orrery, hydrogen key, no footer). body.plate is working copy: ether at 38% opacity, hub shifted to the corner, continue links instead of hydrogen — except install, which keeps the Download key. Do not run the sky fold layout on plate pages.",
+        "section": "layout"
+      },
+      {
+        "name": "The Cut-Face Rule",
+        "body": "Paper plates, grants, ticks, and chapter bands are separated by void gaps. Do not wrap them in a card grid.",
         "section": "layout"
       },
       {
         "name": "The Measure Rule",
-        "body": "Running copy and grant lines wrap at 72ch.",
+        "body": "Running copy wraps at 70ch.",
         "section": "layout"
       },
       {
-        "name": "The Intensity-Not-Shadow Rule",
-        "body": "Do not halo the whole page. The live grant may bloom; the chassis may sit off the void. History stays flat ink.",
+        "name": "The Field Not Card Rule",
+        "body": "Do not lift content on drop shadows to imply cards. The live orrery and tonal wells (paper on void, 8% signal mix under pre) carry depth.",
         "section": "elevation"
       },
       {
-        "name": "The Square Terminal Rule",
-        "body": "No radius. No resting borders. Interaction is outline and intensity, not a filled chip — except the active language control, which inverts dim phosphor onto the mask.",
+        "name": "The Square Bezel Rule",
+        "body": "border-radius stays 0 on chrome. Instruments are milled square. Do not round keys, lanes, plates, or bands. Circles belong to the mark and the orrery, not to buttons.",
         "section": "shapes"
       }
     ],
     "dos": [
-      "Do keep one live trace at full phosphor and leave history, grants, and chrome dim.",
-      "Do dock the primary action to the first-viewport floor with `margin-top: auto`.",
-      "Do wrap running copy at 72ch and pad the bezel with `clamp(1rem, 3vw, 1.75rem)`.",
-      "Do theme selection, caret, focus rings, and scrollbars from phosphor and mask.",
-      "Do honor `prefers-reduced-motion`: no caret blink, no type-in."
+      "Do let the live orrery fill the sky fold; keep the landing h1 visually hidden.",
+      "Do put HOST / NVIDIA rec. / NOT BOOTABLE in one cyan swipe, then paper plates.",
+      "Do keep hydrogen on the Install / Download winding key only; wind the orrery on key hover.",
+      "Do use cyan continue links on inner pages and 404.",
+      "Do set current nav and language as void type on a signal well.",
+      "Do use body.sky for the landing (and 404) and body.plate for procedures.",
+      "Do wrap running copy at 70ch; separate grants and chapters with void gutters."
     ],
     "donts": [
-      "Don't add a second typeface or a display / hero size.",
-      "Don't structure a page as a card grid, metric row, or icon-plus-heading tiles.",
-      "Don't use gray, cool white, or a second hue for secondary text.",
-      "Don't add border-radius, a page-wide halo, or a second hue. The chassis may sit off the void; the live line may bloom.",
-      "Don't place a kicker or eyebrow above a heading.",
-      "Don't use glyph, emoji, or icon-font marks as an icon system."
+      "Don't build an AI-OS hero, a spectrogram correlator, a split-flap board, or a feature card grid.",
+      "Don't label the header Station; the wordmark is Akasha OS.",
+      "Don't use hydrogen for headings, links, continue, the mark, or hover states.",
+      "Don't round corners or lift plates on card shadows.",
+      "Don't put Archivo Narrow on plate captions, or Fira on the winding key.",
+      "Don't imply a bootable OS in chrome, imagery, or the swipe."
     ]
   }
 }

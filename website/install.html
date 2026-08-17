@@ -6,32 +6,33 @@
     <title>Install — Akasha OS Preview</title>
     <meta
       name="description"
-      content="Install Akasha OS Preview on Windows or Linux x64 with an NVIDIA GPU. Zip/tar.gz or build from source."
+      content="Install Akasha OS Preview on Windows or Linux x64. NVIDIA recommended; CPU path available. Zip/tar.gz or build from source."
     />
     <link rel="stylesheet" href="styles.css" />
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png" />
     <meta property="og:image" content="https://azerothl.github.io/akasha-os/og.png" />
-    <meta name="theme-color" content="#0d0d0d" />
+    <meta name="theme-color" content="#070b14" />
   </head>
-  <body>
+  <body class="plate">
     <!--
-      THESIS: Install is a procedure, printed as a console transcript, not a download marketing block.
-      OWN-WORLD: Host Console — amber phosphor, steps as a numbered log, commands in phosphor.
+      THESIS: Install is winding the orrery, not a download marketing block.
+      OWN-WORLD: Orrery inner plate — void, cyan labels, hydrogen key on Download only.
       STORY: A tester checks hardware, downloads the archive, runs the script, launches Preview.
-      FIRST VIEWPORT: Honesty + requirements log + the Releases prompt.
-      FORM: Host Console inner page, seed a54b2068.
+      FIRST VIEWPORT: Honesty + requirements + the hydrogen Download key.
+      FORM: Orrery inner plate, seed c1699dbf reroll 1.
       FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
     -->
+    <canvas class="ether" data-ether aria-hidden="true"></canvas>
     <a class="skip" href="#content">Skip to content</a>
-    <div class="board">
-      <header class="board-head">
+    <div class="shell">
+      <header class="axis">
         <a class="mark" href="./" aria-label="Akasha OS home">
           <img src="logo.svg" alt="" width="40" height="40" />
+          <span class="mark-id">Akasha OS</span>
         </a>
-        <p class="clock" data-clock>00:00:00</p>
-        <nav class="destinations" aria-label="Primary">
+        <nav class="lanes" aria-label="Primary">
           <a href="grant.html">grant</a>
           <a href="why.html">why</a>
           <a href="install.html" aria-current="page">install</a>
@@ -43,7 +44,7 @@
           <button type="button" data-set-lang="fr" aria-pressed="false">FR</button>
         </div>
       </header>
-      <main id="content" >
+      <main id="content" class="plate-main">
         <h1>
           <span data-lang="en">
             This is not a bootable OS. Preview <span data-aos-version>0.5.0</span>
@@ -57,13 +58,19 @@
           </span>
         </h1>
 
-        <p class="prompt hist">
-          <span class="ps">$</span>
-          <a class="run" href="https://github.com/azerothl/akasha-os/releases">install --preview</a>
-        </p>
+        <a class="key" href="https://github.com/azerothl/akasha-os/releases">
+          <svg class="key-glyph" viewBox="0 0 32 32" aria-hidden="true">
+            <path
+              fill="currentColor"
+              d="M13.5 6.5a5.5 5.5 0 1 0 1.2 8.1L19 19l1.8-1.8 1.4 1.4 1.8-1.8-1.4-1.4 2.2-2.2-1.8-1.8-2.2 2.2-1.2-1.2 2-2-1.8-1.8-6.3 6.3A5.5 5.5 0 0 0 13.5 6.5Zm-3.2 2.3a3.2 3.2 0 1 1 0 6.4 3.2 3.2 0 0 1 0-6.4Z"
+            />
+          </svg>
+          <span class="key-label">Download</span>
+          <span class="key-hint">GitHub Releases</span>
+        </a>
 
-        <h2># hw.req</h2>
-        <ul class="loglines" aria-label="Requirements">
+        <h2>hw.req</h2>
+        <ul class="ticks" aria-label="Requirements">
           <li>os GRANT Windows 10/11 x64 <span data-lang="en">or</span><span data-lang="fr">ou</span> Linux x64</li>
           <li>gpu GRANT NVIDIA <span data-lang="en">+ recent driver</span><span data-lang="fr">+ pilote récent</span> (<code>nvidia-smi -L</code>)</li>
           <li>
@@ -81,8 +88,8 @@
           </li>
         </ul>
 
-        <h2 data-lang="en"># Windows</h2>
-        <h2 data-lang="fr"># Windows</h2>
+        <h2 data-lang="en">Windows</h2>
+        <h2 data-lang="fr">Windows</h2>
         <ol class="steps">
           <li data-lang="en">
             Download <code>AgentOS-Preview-&lt;ver&gt;-windows-x64.zip</code> from
@@ -123,8 +130,8 @@
         </p>
         <pre>.\bin\aos-session.exe</pre>
 
-        <h2 data-lang="en"># Linux</h2>
-        <h2 data-lang="fr"># Linux</h2>
+        <h2 data-lang="en">Linux</h2>
+        <h2 data-lang="fr">Linux</h2>
         <ol class="steps">
           <li data-lang="en">
             Download <code>AgentOS-Preview-&lt;ver&gt;-linux-x64.tar.gz</code>, extract.
@@ -143,8 +150,8 @@
           </li>
         </ol>
 
-        <h2 data-lang="en"># package</h2>
-        <h2 data-lang="fr"># paquet</h2>
+        <h2 data-lang="en">package</h2>
+        <h2 data-lang="fr">paquet</h2>
         <pre>bin/            daemons + CUDA runtime
 share/models/   manifest.json (GGUF on first run)
 share/modules/  notes.aospkg, ext-rt.aospkg
@@ -154,8 +161,8 @@ data/models/    catalog.yaml
 VERSION         build semver
 var/            created at run</pre>
 
-        <h2 data-lang="en"># first launch</h2>
-        <h2 data-lang="fr"># premier lancement</h2>
+        <h2 data-lang="en">first launch</h2>
+        <h2 data-lang="fr">premier lancement</h2>
         <ol class="steps">
           <li data-lang="en"><code>aos-session</code> checks NVIDIA and disk, probes VRAM.</li>
           <li data-lang="fr"><code>aos-session</code> vérifie NVIDIA et le disque, sonde la VRAM.</li>
@@ -178,9 +185,9 @@ var/            created at run</pre>
           Suite : <a href="docs/first-run.html">premier lancement</a> dans le manuel.
         </p>
 
-        <h2 data-lang="en"># troubleshooting</h2>
-        <h2 data-lang="fr"># dépannage</h2>
-        <ul class="loglines">
+        <h2 data-lang="en">troubleshooting</h2>
+        <h2 data-lang="fr">dépannage</h2>
+        <ul class="ticks">
           <li data-lang="en">NVIDIA GPU required → install the driver; <code>nvidia-smi -L</code></li>
           <li data-lang="fr">NVIDIA GPU required → installer le pilote ; <code>nvidia-smi -L</code></li>
           <li data-lang="en">Model download failed → network for Hugging Face, or copy GGUFs into <code>share/models/</code></li>
@@ -192,8 +199,8 @@ var/            created at run</pre>
         </ul>
 
         <h2 id="build">
-          <span data-lang="en"># build from source</span>
-          <span data-lang="fr"># build depuis les sources</span>
+          <span data-lang="en">build from source</span>
+          <span data-lang="fr">build depuis les sources</span>
         </h2>
         <p class="hist" data-lang="en">
           Releases are enough to run Preview. Build from source for a local
@@ -210,7 +217,7 @@ var/            created at run</pre>
           et
           <a href="https://github.com/azerothl/akasha-os/blob/main/docs/fr/INSTALL.md#build-depuis-les-sources">INSTALL.md</a>.
         </p>
-        <ul class="loglines">
+        <ul class="ticks">
           <li>rust GRANT stable + <code>wasm32-unknown-unknown</code></li>
           <li>cuda GRANT Toolkit (nvcc) · nvidia-smi OK</li>
           <li>cmake · ninja · clang/libclang <span data-lang="en">(Linux)</span><span data-lang="fr">(Linux)</span></li>
@@ -226,13 +233,15 @@ $env:AOS_HOME = (Resolve-Path .)   # Windows
 export AOS_HOME="$(pwd)"           # Linux
 cargo run -p aos-session --release</pre>
 
-        <p class="prompt hist pager">
-          <span class="ps">$</span>
-          <a class="run" href="docs/">open docs/</a>
-        </p>
+        <a class="continue pager" href="docs/">
+          <span class="continue-label">Docs</span>
+        </a>
       </main>
       <footer>
-        <p>AKASHA OS · <a href="https://github.com/azerothl/akasha-os">github.com/azerothl/akasha-os</a></p>
+        <p>
+          AKASHA OS ·
+          <a href="https://github.com/azerothl/akasha-os">github.com/azerothl/akasha-os</a>
+        </p>
       </footer>
     </div>
     <script src="app.js"></script>
