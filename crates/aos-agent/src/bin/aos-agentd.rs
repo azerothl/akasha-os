@@ -67,6 +67,21 @@ async fn send_control(bus: &BusClient, agent_id: &str, cmd: &ControlCmd) -> Cont
     }
 }
 
+/// Public `agent.pause` / `resume` / `steer` / `retry` return `bool`, not the
+/// internal worker [`ControlResp`] (which encodes `Ack` as a CBOR string).
+async fn respond_control(ctx: aos_ipc::IntentCtx, r: ControlResp) {
+    match r {
+        ControlResp::Ack | ControlResp::State(_) => {
+            let _ = ctx.respond(aos_ipc::msg::Status::Ok, &true).await;
+        }
+        ControlResp::Error(e) => {
+            let _ = ctx
+                .respond_error(aos_ipc::msg::Status::InternalError, &e)
+                .await;
+        }
+    }
+}
+
 fn build_spec(agent_id: &str, req: &AgentCreateRequest) -> AgentSpec {
     let goal = req.resolved_goal();
     let skill_docs = load_skills(&req.skills);
@@ -402,7 +417,7 @@ async fn main() {
                 match ctx.payload::<AgentIdRequest>() {
                     Ok(req) => {
                         let r = send_control(&bus, &req.agent_id, &ControlCmd::Pause).await;
-                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &r).await;
+                        respond_control(ctx, r).await;
                     }
                     Err(_) => {
                         let _ = ctx
@@ -421,7 +436,7 @@ async fn main() {
                 match ctx.payload::<AgentIdRequest>() {
                     Ok(req) => {
                         let r = send_control(&bus, &req.agent_id, &ControlCmd::Resume).await;
-                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &r).await;
+                        respond_control(ctx, r).await;
                     }
                     Err(_) => {
                         let _ = ctx
@@ -494,7 +509,7 @@ async fn main() {
                                         persist::update_info_sidecar(&e.info);
                                     }
                                 }
-                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &r).await;
+                                respond_control(ctx, r).await;
                             }
                             AgentState::Failed | AgentState::Killed | AgentState::Done
                                 if pid.is_none() =>
@@ -588,7 +603,7 @@ async fn main() {
                             },
                         )
                         .await;
-                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &r).await;
+                        respond_control(ctx, r).await;
                     }
                     Err(_) => {
                         let _ = ctx
