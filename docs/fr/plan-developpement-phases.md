@@ -435,5 +435,5 @@ Les exigences `Must` de `specs-fonctionnelles.md` doivent être **toutes couvert
 - `FEATURES.md` — catalogue Preview livrée
 - `reflexion-agent-os.md` — cadrage et pistes ouvertes
 - `paysage-concurrentiel.md` — enquête OS / runtimes agentiques (août 2026)
-- `plan-evolutions.md` — priorités post-paysage E1–E13 (pas une gate P6)
+- `plan-evolutions.md` — priorités post-paysage E1–E14 (pas une gate P6) ; Preview 0.6 = schémas E8 + keyring E7 + catalogue E10
 - (à créer au fil de l'eau) publiés : `adr/0001-microkernel.md` (P4 hôte + **phase PV** seL4 VM), `adr/0002-model-placement.md` (P0), `adr/0003-ui-framework.md` (accepté : egui), `adr/0005-offload-etat-de-l-art.md` (pré-P1)

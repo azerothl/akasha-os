@@ -1,4 +1,4 @@
-# Fonctionnalités Preview — Akasha OS 0.5.0
+# Fonctionnalités Preview — Akasha OS 0.6.0
 
 **Langue :** [English](../FEATURES.md) | Français
 
@@ -7,7 +7,15 @@ Ce n'est **pas** l'OS bootable. Les exigences v1 sont dans
 [specs-fonctionnelles.md](specs-fonctionnelles.md) ; les gates dans
 [STATUS.md](STATUS.md).
 
-> Date : 17/08/2026 · Preview **0.5.0**
+> Date : 17/08/2026 · Preview **0.6.0**
+
+### Nouveautés 0.6.0
+
+- **Schémas pont sibling** (E8) : export JSON Schema de `mem.*` / `secrets.*` sous [`docs/bridge/`](../bridge/)
+- **Contrat** HTTP JSON ↔ intents CBOR dans [sibling-bridge.md](sibling-bridge.md) (pas de daemon live)
+- **Keyring OS** pour la clé maître du vault (E7) : Credential Manager / Secret Service ; fallback fichier 0600 (`AOS_SECRETS_FILE_KEY=1`)
+- **Catalogue local signé** (E10) : `share/modules/catalogue.yaml` + ed25519 ; vérif hash à l'install ; liste / Installer dans Settings
+- Chat **Stop** annule le `model.infer` en cours ; **Copier** sur les messages et le corps Dépannage
 
 ### Nouveautés 0.5.0
 
@@ -77,7 +85,7 @@ Voir [FIRST-RUN.md](FIRST-RUN.md).
 
 - Conversations **parallèles persistées** ; l'historique survit au redémarrage
 - **Modèle par session** (sinon le modèle instruct par défaut)
-- Réponses streamées du modèle local (offline par défaut)
+- Réponses streamées du modèle local (offline par défaut) ; **Stop** annule l'inférence ; **Copier** sur les messages
 - **Cartes agent** dans le chat quand un agent de fond est lié (`/agent` ou délégation)
 - Injection `mem.context` avant infer (hits session + faits utilisateur)
 
@@ -214,7 +222,8 @@ Persistés dans `var/run/preferences.json` (migration depuis `onboarding.json` s
 | Réseau / Mémoire | Autoriser le réseau ; **Mémorisation auto depuis le chat** (E14, **activée** par défaut) |
 | Agents | Modèle par défaut, max steps (1–128), timeout (60–86400 s) |
 | Schedules | Intervalle de déclenchement agent (`schedule.*`) |
-| Secrets | Clés Brave / GitHub / OpenAI → vault chiffré (jamais réaffichées) |
+| Secrets | Clés Brave / GitHub / OpenAI → vault chiffré ; clé maître dans le keyring OS |
+| Modules | Catalogue local signé (E10) ; l'install demande toujours la revue de caps |
 | Web | Moteur de recherche, max caractères browse, max octets fetch |
 
 ---
@@ -247,15 +256,16 @@ Piste VM seL4 (PV.1–PV.3) séparée : [phases/phase-vm-sel4.md](phases/phase-v
 
 ---
 
-## 11. Hors Preview 0.5.0
+## 11. Hors Preview 0.6.0
 
 - Image bootable / fer nu
 - macOS
 - Application automatique complète des updates (téléchargement maintenant, apply au prochain lancement)
 - Génération audio / vidéo native
-- Marketplace public de modules (revue de caps locale seulement)
+- Marketplace public de modules (catalogue local signé seulement)
 - Canaux de messagerie (Slack/Discord/etc.) dans le noyau OS
 - Comptes multi-utilisateur simultanés
 - Pipeline multi-GPU complet (P5.2 ; hôte mono-GPU)
+- Daemon HTTP sibling live / enveloppe TPM
 
 Protocole cohorte : [TESTER.md](TESTER.md).

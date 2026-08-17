@@ -6,6 +6,7 @@
 > Date: 15/08/2026  
 > Status: draft  
 > Reference: `docs/functional-specs.md`, `docs/vision.md`, `docs/FEATURES.md`  
+> Changes v0.6.0: Preview 0.6.0 — E8 schema export + HTTP↔bus contract; E7 OS keyring; E10 signed local catalogue.
 > Changes v0.5.0: Preview 0.5.0 — auto-remember from chat (E14); `user.ask` mid-task.
 > Changes v0.4.0: Preview 0.4.0 — typed memory graph, secrets vault, module cap review.
 > Changes v0.3.1: Preview 0.3.0 — notes package resync, in-app troubleshoot, Split-Flap public site.
@@ -724,7 +725,7 @@ The WASM ABI host additionally exposes: `web.search`, `web.browse`, `net.fetch`,
 
 ### 9.2 Secrets
 
-- `secrets` service: encrypted storage (hardware key if available, otherwise derived envelope key)
+- `secrets` service: encrypted vault (`vault.enc`, ChaCha20-Poly1305); master key in the OS keyring (Windows Credential Manager / Linux Secret Service) with file 0600 / DPAPI fallback; TPM envelope later
 - agents receive **usage caps** (e.g. sign a request) not raw secrecy, except for admin exceptions
 
 ### 9.3 Audit

@@ -497,5 +497,5 @@ deferred if necessary.
 - `docs/FEATURES.md` — shipped Preview catalogue
 - `docs/vision.md` — framing and open directions
 - `docs/competitive-landscape.md` — agentic OS / runtime survey (August 2026)
-- `docs/evolution-roadmap.md` — post-landscape priorities E1–E14 (not a P6 gate); Preview 0.5 = E14
+- `docs/evolution-roadmap.md` — post-landscape priorities E1–E14 (not a P6 gate); Preview 0.6 = E8 schemas + E7-keyring + E10 catalogue
 - (to be created as work progresses) published: `adr/0001-microkernel.md` (P4 host + **phase PV** seL4 VM), `adr/0002-model-placement.md` (P0), `adr/0003-ui-framework.md` (accepted: egui), `adr/0005-offload-etat-de-l-art.md` (pre-P1)

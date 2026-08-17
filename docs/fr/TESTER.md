@@ -86,6 +86,8 @@ Bannière attendue : *Preview sur Windows/Linux — ce n'est pas encore l'OS boo
 
 - **Settings → Secrets** : saisir une clé Brave (ou GitHub) → **Enregistrer**.
 - Le magasin live est `vault.enc` (pas de YAML clair) ; **Lister** ne montre que les noms.
+- Après first-run, `var/secrets/master.backend` vaut `keyring` ou `file`. Si
+  `keyring`, `master.key` doit être absent.
 
 ### 7c. Revue de caps module (P04.4)
 
@@ -111,6 +113,23 @@ Bannière attendue : *Preview sur Windows/Linux — ce n'est pas encore l'OS boo
   carte s’il y en a plusieurs).
 - L’agent reprend avec la réponse. Sans réponse ~10 min, la tâche continue
   (pas de blocage infini).
+
+### 7f. Keyring OS (P06.3)
+
+- Après Settings → Secrets **Enregistrer**, redémarrer : la clé fonctionne encore.
+- `var/secrets/master.backend` vaut `keyring` ou `file`. Sous Windows, attendre
+  `keyring` et pas de `master.key` lisible.
+
+### 7g. Catalogue local signé (P06.4)
+
+- **Settings → Catalogue local de modules** : notes / tasks / ext-rt listés.
+- **Installer** un module listé → confirmation de revue de caps (comme 7c).
+- Altérer un WASM packagé tout en gardant l'entrée catalogue doit refuser.
+
+### 7h. Stop chat + Copier (P06.5)
+
+- Pendant un stream, **Stop** interrompt la génération.
+- **Copier** sur un message (ou le corps Dépannage / Retour) met le texte dans le presse-papiers.
 
 ### 8. Recherche web (PC.8 / PC.13)
 
@@ -179,7 +198,7 @@ et envoi de retour GitHub).
 - Au moins un fichier `var/feedback/fb-*.json` exploitable par retour
 - Gates PC.6–PC.9 et PC.11–PC.13 cochés sur au moins une machine
 
-## Hors scope Preview 0.5.0
+## Hors scope Preview 0.6.0
 
 - Boot seL4 / fer nu
 - macOS

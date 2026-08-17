@@ -7,10 +7,23 @@ Summary of delivered phases. Detail: [development-plan.md](development-plan.md),
 
 **Headline:** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview:** 0.5.0 (17/08/2026) — host app on Windows/Linux; NVIDIA optional
-(CPU path). Opt-in auto fact extraction from chat → long-term memory (E14).
-Agents can `user.ask` mid-task (chat Q&A, 10 min timeout). Typed memory graph,
-encrypted secrets vault, module cap review. Not a bootable OS. Cohort gate still open.
+**Preview:** 0.6.0 (17/08/2026) — host app on Windows/Linux; NVIDIA optional
+(CPU path). Sibling-bridge JSON Schema + HTTP↔bus contract (E8). Vault master
+key in OS keyring (E7). Local signed module catalogue (E10). Opt-in auto fact
+extraction (E14). Not a bootable OS. Cohort gate still open.
+
+## P06 — Preview 0.6.0 (E8 / E7-keyring / E10)
+
+| # | Evolution | Status |
+|---|-----------|--------|
+| P06.1 | E8 JSON Schema export `mem.*` / `secrets.*` | done |
+| P06.2 | E8 HTTP↔bus contract (no live daemon) | done |
+| P06.3 | E7 OS keyring wrap of vault master key | done |
+| P06.4 | E10 local signed module catalogue | done |
+| P06.5 | Stretch: chat Stop + clipboard | done |
+| P06.6 | Docs / packaging / version 0.6.0 | done |
+
+Detail: [phases/phase-preview-06.md](phases/phase-preview-06.md).
 
 ## P05 — Preview 0.5.0 (E14)
 

@@ -6,6 +6,7 @@
 > Date : 15/08/2026  
 > Statut : brouillon  
 > Référence : `specs-fonctionnelles.md`, `reflexion-agent-os.md`, `FEATURES.md`  
+> Changements v0.6.0 : Preview 0.6.0 — export schémas E8 + contrat HTTP↔bus ; keyring OS E7 ; catalogue local signé E10.
 > Changements v0.5.0 : Preview 0.5.0 — mémorisation auto depuis le chat (E14) ; `user.ask` en cours de tâche.
 > Changements v0.4.0 : Preview 0.4.0 — graphe mémoire typé, vault secrets, revue de caps modules.
 > Changements v0.3.1 : Preview 0.3.0 — resync du module notes, dépannage in-app, site Split-Flap.
@@ -724,7 +725,7 @@ Le host ABI WASM expose en plus : `web.search`, `web.browse`, `net.fetch`, `file
 
 ### 9.2 Secrets
 
-- service `secrets` : stockage chiffré (clé hardware si dispo, sinon clé enveloppe dérivée)
+- service `secrets` : vault chiffré (`vault.enc`, ChaCha20-Poly1305) ; clé maître dans le keyring OS (Credential Manager Windows / Secret Service Linux) avec fallback fichier 0600 / DPAPI ; enveloppe TPM plus tard
 - les agents reçoivent des **caps d'usage** (ex. signer une requête) pas le secret brut, sauf exception admin
 
 ### 9.3 Audit

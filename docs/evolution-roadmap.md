@@ -60,7 +60,8 @@ Goal: wider tester cohort + clearer OS differentiator, without becoming OpenClaw
 
 **Status:** E1–E5 implemented in Preview **0.3.0** — [phase-preview-03.md](phases/phase-preview-03.md).  
 E6 / E7-lite / E10-lite shipped in Preview **0.4.0** — [phase-preview-04.md](phases/phase-preview-04.md).  
-E14 shipped in Preview **0.5.0** — [phase-preview-05.md](phases/phase-preview-05.md).
+E14 shipped in Preview **0.5.0** — [phase-preview-05.md](phases/phase-preview-05.md).  
+E8 schema export + HTTP↔bus contract, E7 OS keyring, E10 signed local catalogue ship in Preview **0.6.0** — [phase-preview-06.md](phases/phase-preview-06.md).
 
 **Out of near-term scope:** native Telegram/Discord, public marketplace, desktop computer-use.
 
@@ -71,10 +72,10 @@ E14 shipped in Preview **0.5.0** — [phase-preview-05.md](phases/phase-preview-
 | ID | Evolution | Motivation | Notes |
 |----|-----------|------------|-------|
 | **E6** | **Typed memory graph** (`similar` / `updates` / …) + richer bootstrap | Sibling already rich; Hermes LT; A-MEM | **Shipped 0.4.0** — conceptual borrow of sibling `memory_relations`, not a code merge |
-| **E7** | **Secrets vault** (OS keyring + usage caps; never raw keys to agents) | Sibling vault; F-SEC-04 | **Shipped E7-lite 0.4.0** (`vault.enc` + DPAPI/0600); full TPM later |
-| **E8** | **Sibling bridge** (documented + minimal): aligned intent / memory / WASM ABI schemas; later optional “Akasha assistant as module” | Landscape risk (d) duplication | **Docs 0.4.0** — [sibling-bridge.md](sibling-bridge.md); **not** one binary |
+| **E7** | **Secrets vault** (OS keyring + usage caps; never raw keys to agents) | Sibling vault; F-SEC-04 | **E7-lite 0.4.0** (`vault.enc` + DPAPI/0600); **E7-keyring 0.6.0** (CredMan / Secret Service, file 0600 fallback); full TPM later |
+| **E8** | **Sibling bridge** (documented + minimal): aligned intent / memory / WASM ABI schemas; later optional “Akasha assistant as module” | Landscape risk (d) duplication | **Docs 0.4.0** — [sibling-bridge.md](sibling-bridge.md); **schema export + HTTP↔bus contract 0.6.0**; **not** one binary |
 | **E9** | **P5.2 multi-GPU** when hardware is available | Partial P5 gate | [phases/phase-p5.md](phases/phase-p5.md) |
-| **E10** | **Local MCP / module marketplace** (signed catalogue, cap review) | ClawHub-shaped distribution without becoming ClawHub | **E10-lite 0.4.0** — cap review on install + MCP example; no network store |
+| **E10** | **Local MCP / module marketplace** (signed catalogue, cap review) | ClawHub-shaped distribution without becoming ClawHub | **E10-lite 0.4.0** — cap review on install + MCP example; **signed local catalogue 0.6.0**; no network store |
 | **E14** | **Auto fact extraction from chat → long-term memory** | Chat today only *reads* `mem.context`; facts must be Remember’d by hand | **Shipped 0.5.0** — opt-in Settings; post-turn LLM extract → `mem.user.remember` + dedup/`supersedes`; never auto-store secrets |
 
 ---
@@ -105,7 +106,7 @@ E14 shipped in Preview **0.5.0** — [phase-preview-05.md](phases/phase-preview-
 | **P0–P5 / PV / PC** | Executable phase gates ([development-plan.md](development-plan.md), [STATUS.md](STATUS.md)) |
 | **E1–E14** | Prioritization after competitive analysis; schedule **after** PC cohort gate closes |
 
-Do **not** invent a P6 number until PC is closed and STATUS is updated. E1–E5 shipped in Preview **0.3.0**; E6 / E7-lite / E10-lite shipped in Preview **0.4.0**; **E14** shipped in Preview **0.5.0**. Next focus: remaining Horizon B (full E7 TPM, E8 bridge runtime, E9 multi-GPU when HW available) + PC cohort close.
+Do **not** invent a P6 number until PC is closed and STATUS is updated. E1–E5 shipped in Preview **0.3.0**; E6 / E7-lite / E10-lite shipped in Preview **0.4.0**; **E14** shipped in Preview **0.5.0**; E8 schemas + E7-keyring + E10 catalogue shipped in Preview **0.6.0**. Next focus: remaining Horizon B (full E7 TPM, live HTTP adapter if a daemon is scheduled, E9 multi-GPU when HW available) + PC cohort close.
 
 Suggested sequencing once PC closes:
 

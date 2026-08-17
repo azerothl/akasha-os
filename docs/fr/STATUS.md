@@ -7,11 +7,23 @@ Résumé des phases livrées. Détail : [plan-developpement-phases.md](plan-deve
 
 **En-tête :** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview :** 0.5.0 (17/08/2026) — appli hôte Windows/Linux ; NVIDIA optionnel
-(chemin CPU). Extraction auto opt-in des faits du chat → mémoire LT (E14).
-Les agents peuvent `user.ask` en cours de tâche (Q&R chat, timeout 10 min).
-Graphe mémoire typé, vault secrets, revue de caps modules.
-Pas un OS bootable. Gate cohorte encore ouverte.
+**Preview :** 0.6.0 (17/08/2026) — appli hôte Windows/Linux ; NVIDIA optionnel
+(chemin CPU). Schémas pont sibling + contrat HTTP↔bus (E8). Clé maître vault
+dans le keyring OS (E7). Catalogue local signé de modules (E10). Extraction
+auto de faits (E14). Pas un OS bootable. Gate cohorte encore ouverte.
+
+## P06 — Preview 0.6.0 (E8 / E7-keyring / E10)
+
+| # | Évolution | État |
+|---|-----------|------|
+| P06.1 | E8 export JSON Schema `mem.*` / `secrets.*` | fait |
+| P06.2 | E8 contrat HTTP↔bus (pas de daemon live) | fait |
+| P06.3 | E7 enveloppe keyring OS de la clé maître | fait |
+| P06.4 | E10 catalogue local signé de modules | fait |
+| P06.5 | Stretch : Stop chat + presse-papiers | fait |
+| P06.6 | Docs / packaging / version 0.6.0 | fait |
+
+Détail : [phases/phase-preview-06.md](phases/phase-preview-06.md).
 
 ## P05 — Preview 0.5.0 (E14)
 

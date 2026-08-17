@@ -6,7 +6,7 @@
 > Date: 15/08/2026  
 > Status: draft  
 > Reference: `docs/vision.md`  
-> Changes v0.5.0: Preview 0.5.0 — auto-remember from chat (E14); `user.ask` mid-task; appendix §12.
+> Changes v0.6.0: Preview 0.6.0 — E8 schema export + HTTP↔bus contract; E7 OS keyring; E10 signed local catalogue.
 > Changes v0.4.0: Preview 0.4.0 — typed memory graph, secrets vault, module cap review; appendix §12.
 > Changes v0.3.1: Preview 0.3.0 — notes package resync, in-app troubleshoot, Split-Flap public site; appendix §12.
 > Changes v0.3: Preview 0.1.2 coverage — F-AGT-11, F-NET-01/02, F-UI-09; appendix §12.  
@@ -365,12 +365,12 @@ Single package exposing:
 
 - `docs/vision.md` — founding reflection  
 - `docs/technical-specs.md` — technical specifications  
-- `docs/FEATURES.md` — shipped Preview 0.5.0 catalogue  
+- `docs/FEATURES.md` — shipped Preview 0.6.0 catalogue  
 - (future) `adr/` — Architecture Decision Records  
 
 ---
 
-## 12. Preview 0.5.0 coverage (host)
+## 12. Preview 0.6.0 coverage (host)
 
 Mapping of this spec onto the **installable host Preview** (not the bootable OS).
 Detail: `docs/FEATURES.md`.
@@ -385,5 +385,7 @@ Detail: `docs/FEATURES.md`.
 | F-MEM-01–02, 05 | Working / episodic / user facts; Memory tab |
 | F-MOD / F-EXT | notes.aospkg, ext-rt, declarative skills, `cap.request` |
 | F-UI-01–05, 09 | Dual surface + transparency panel + Settings |
-| F-SEC-01–08 | Caps, confirm, egress deny-by-default, auditd isolation |
+| F-SEC-01–08 | Caps, confirm, egress deny-by-default, auditd isolation; vault master key in OS keyring (file 0600 fallback); agents denied `secrets.get` |
+| F-MOD catalogue | Signed local `share/modules/catalogue.yaml`; hash check on `module.install` |
+| E8 bridge | JSON Schema `docs/bridge/` + HTTP JSON ↔ CBOR contract (no live daemon) |
 | F-NET-01–02 | Multi-engine search + `web.browse` |  

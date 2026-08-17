@@ -1,4 +1,4 @@
-# Preview features — Akasha OS 0.5.0
+# Preview features — Akasha OS 0.6.0
 
 **Language:** English | [Français](fr/FEATURES.md)
 
@@ -7,7 +7,15 @@ This is **not** the bootable OS. Target v1 requirements live in
 [functional-specs.md](functional-specs.md); phase gates in
 [STATUS.md](STATUS.md).
 
-> Date: 17/08/2026 · Preview **0.5.0**
+> Date: 17/08/2026 · Preview **0.6.0**
+
+### What's new in 0.6.0
+
+- **Sibling bridge schemas** (E8): JSON Schema export of `mem.*` / `secrets.*` under [`docs/bridge/`](bridge/)
+- HTTP JSON ↔ CBOR intent **contract** in [sibling-bridge.md](sibling-bridge.md) (no live daemon)
+- **OS keyring** for the vault master key (E7): Windows Credential Manager / Linux Secret Service; file 0600 fallback (`AOS_SECRETS_FILE_KEY=1`)
+- **Local signed module catalogue** (E10): `share/modules/catalogue.yaml` + ed25519; hash check on install; Settings list / Install
+- Chat **Stop** cancels the in-flight `model.infer`; **Copy** on messages and Troubleshoot body
 
 ### What's new in 0.5.0
 
@@ -24,7 +32,7 @@ This is **not** the bootable OS. Target v1 requirements live in
 
 - Typed memory graph (`similar` / `updates` / `supersedes`) + auto-link on remember
 - Memory tab: list / edit / delete / supersede; structured agent bootstrap
-- Encrypted secrets vault (Settings); MCP `${secret:name}` interpolation
+- Encrypted secrets vault (Settings); MCP `${secret:name}`
 - Module install requires cap review (no auto-approve); refuse → quarantine
 - `share/mcp/servers.yaml.example`; `latest.json` lists CUDA **and** CPU artefacts
 - Sibling bridge contract doc ([sibling-bridge.md](sibling-bridge.md))
@@ -77,7 +85,7 @@ See [FIRST-RUN.md](FIRST-RUN.md).
 
 - Parallel **persisted** conversations; history survives restart
 - **Per-session model** combo (falls back to the default instruct model)
-- Streaming replies from the local model (offline by default)
+- Streaming replies from the local model (offline by default); **Stop** cancels infer; **Copy** on messages
 - Chat **agent cards** when a background agent is attached (`/agent` or assistant delegation)
 - `mem.context` injection before infer (session hits + user facts)
 
@@ -214,7 +222,8 @@ Persisted in `var/run/preferences.json` (migrated from `onboarding.json` if need
 | Network / Memory | Allow network (same as sidebar); **Auto-remember from chat** (E14, **on** by default) |
 | Agents | Default model, max steps (1–128), timeout (60–86400 s) |
 | Schedules | Interval agent fires (`schedule.*`) |
-| Secrets | Brave / GitHub / OpenAI keys → encrypted vault (never shown back) |
+| Secrets | Brave / GitHub / OpenAI keys → encrypted vault; master key in OS keyring |
+| Modules | Local signed catalogue (E10); Install still requires cap review |
 | Web | Search engine, browse max chars, fetch max bytes |
 
 ---
@@ -247,15 +256,16 @@ seL4 VM track (PV.1–PV.3) is separate: see [phases/phase-vm-sel4.md](phases/ph
 
 ---
 
-## 11. Not in Preview 0.5.0
+## 11. Not in Preview 0.6.0
 
 - Bootable / bare-metal image
 - macOS
 - Fully automatic update apply (download now, apply on next launch)
 - Native audio / video generation
-- Public module marketplace (local cap review only)
+- Public module marketplace (local signed catalogue only)
 - Messaging channels (Slack/Discord/etc.) in the OS core
 - Simultaneous multi-user accounts
 - Complete multi-GPU pipeline (P5.2; single-GPU hosts only)
+- Live HTTP sibling daemon / TPM hardware envelope
 
 Cohort protocol: [TESTER.md](TESTER.md).

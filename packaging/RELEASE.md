@@ -7,8 +7,8 @@
 Tag then push:
 
 ```bash
-git tag v0.5.0
-git push origin v0.5.0
+git tag v0.6.0
+git push origin v0.6.0
 ```
 
 The workflow [`.github/workflows/preview-release.yml`](../.github/workflows/preview-release.yml)
@@ -36,13 +36,12 @@ GGUFs are downloaded on **first run** via `share/models/manifest.json`.
 ## Release notes (draft)
 
 ```
-Akasha OS Preview 0.5.0 — auto-remember from chat (E14) + user.ask
+Akasha OS Preview 0.6.0 — sibling-bridge schemas (E8) + OS keyring (E7) + local catalogue (E10)
 
-- Opt-in Settings: after each chat turn, extract durable facts → Memory
-- mem.extract (local_only, low priority) + secret filter (never auto-store keys)
-- Auto-link updates/supersedes; Memory [chat] badge; toast on store
-- Non-blocking / coalesced extract
-- user.ask: agents can pause mid-task and question the user in chat (10 min timeout)
+- JSON Schema export of mem.* / secrets.* under docs/bridge/; HTTP JSON ↔ CBOR contract (no live daemon)
+- Vault master key in Windows Credential Manager / Linux Secret Service; file 0600 fallback
+- Signed local share/modules/catalogue.yaml; hash check on module.install; Settings list / Install
+- Chat Stop cancels in-flight infer; Copy on messages and Troubleshoot
 
 Not a bootable OS. See FIRST-RUN.md / INSTALL.md / TESTER.md
 ```

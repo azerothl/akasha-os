@@ -6,7 +6,7 @@
     <title>What's new — Akasha OS Preview</title>
     <meta
       name="description"
-      content="What each Akasha OS Preview version added, from 0.5.0 back to 0.1.0. Host app on Windows/Linux, not a bootable OS."
+      content="What each Akasha OS Preview version added, from 0.6.0 back to 0.1.0. Host app on Windows/Linux, not a bootable OS."
     />
     <link rel="stylesheet" href="../styles.css" />
     <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
@@ -19,8 +19,8 @@
     <!--
       THESIS: The version log is a cut-face journal of what shipped, not a feature card grid and not a marketing changelog.
       OWN-WORLD: Orrery inner plate — void, cyan rails, grant gutters.
-      STORY: A tester sees what 0.5.0 added, then walks earlier Previews without leaving the site.
-      FIRST VIEWPORT: Honesty line, compact version rail, then 0.5.0 ticks.
+      STORY: A tester sees what 0.6.0 added, then walks earlier Previews without leaving the site.
+      FIRST VIEWPORT: Honesty line, compact version rail, then 0.6.0 ticks.
       FORM: Orrery inner plate, seed c1699dbf reroll 1.
       FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
     -->
@@ -50,12 +50,12 @@
           <span data-lang="en">
             What each Preview added, newest first. This is the version log,
             not the full feature catalogue. Preview
-            <span data-aos-version>0.5.0</span> is a host app, not a bootable OS.
+            <span data-aos-version>0.6.0</span> is a host app, not a bootable OS.
           </span>
           <span data-lang="fr">
             Ce que chaque Preview a ajouté, plus récent en premier. C’est le
             journal des versions, pas le catalogue complet. La Preview
-            <span data-aos-version>0.5.0</span> est une appli hôte, pas un OS
+            <span data-aos-version>0.6.0</span> est une appli hôte, pas un OS
             bootable.
           </span>
         </h1>
@@ -69,6 +69,7 @@
         </p>
 
         <nav class="log-toc" aria-label="Versions">
+          <a href="#v0-6-0">0.6.0</a>
           <a href="#v0-5-0">0.5.0</a>
           <a href="#v0-4-0">0.4.0</a>
           <a href="#v0-3-0">0.3.0</a>
@@ -77,6 +78,23 @@
           <a href="#v0-1-1">0.1.1</a>
           <a href="#v0-1-0">0.1.0</a>
         </nav>
+
+        <article class="grant" id="v0-6-0">
+          <h2>0.6.0</h2>
+          <p class="rev-when">17/08/2026</p>
+          <ul class="ticks">
+            <li data-lang="en"><strong>Sibling bridge schemas</strong> (E8): JSON Schema export of <code>mem.*</code> / <code>secrets.*</code>.</li>
+            <li data-lang="fr"><strong>Schémas pont sibling</strong> (E8) : export JSON Schema de <code>mem.*</code> / <code>secrets.*</code>.</li>
+            <li data-lang="en">HTTP JSON ↔ CBOR intent contract (no live daemon in the OS process).</li>
+            <li data-lang="fr">Contrat HTTP JSON ↔ intents CBOR (pas de daemon live dans le process OS).</li>
+            <li data-lang="en"><strong>OS keyring</strong> for the vault master key (E7): Credential Manager / Secret Service, file 0600 fallback.</li>
+            <li data-lang="fr"><strong>Keyring OS</strong> pour la clé maître du vault (E7) : Credential Manager / Secret Service, fallback fichier 0600.</li>
+            <li data-lang="en"><strong>Local signed module catalogue</strong> (E10): hash check on install; Settings list / Install.</li>
+            <li data-lang="fr"><strong>Catalogue local signé</strong> (E10) : vérif hash à l’install ; liste / Installer dans Settings.</li>
+            <li data-lang="en">Chat <strong>Stop</strong> cancels in-flight infer; <strong>Copy</strong> on messages and Troubleshoot.</li>
+            <li data-lang="fr">Chat <strong>Stop</strong> annule l’inférence en cours ; <strong>Copier</strong> sur messages et Dépannage.</li>
+          </ul>
+        </article>
 
         <article class="grant" id="v0-5-0">
           <h2>0.5.0</h2>

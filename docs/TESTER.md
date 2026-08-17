@@ -86,6 +86,8 @@ Expected banner: *Preview on Windows/Linux — this is not the bootable OS yet*.
 - **Settings → Secrets**: set a Brave (or GitHub) key → **Save**.
 - Confirm status mentions encrypted vault; `var/secrets/keys.yaml` should be
   absent or renamed `.migrated` (live store is `vault.enc`).
+- After first run, `var/secrets/master.backend` is `keyring` or `file`. If
+  `keyring`, `master.key` should be absent. Headless Linux may keep a 0600 file.
 - **List configured** shows names only (never values).
 
 ### 7c. Module cap review (P04.4)
@@ -112,6 +114,23 @@ Expected banner: *Preview on Windows/Linux — this is not the bootable OS yet*.
   type the reply in the same thread (or **Répondre** on the card if several wait).
 - The agent should resume with your answer. Leaving it unanswered ~10 min
   continues the task without blocking forever.
+
+### 7f. OS keyring (P06.3)
+
+- After Settings → Secrets **Save**, restart Preview: the key still works.
+- `var/secrets/master.backend` is `keyring` or `file`. On Windows, expect
+  `keyring` and no readable `master.key`.
+
+### 7g. Local signed catalogue (P06.4)
+
+- **Settings → Local module catalogue**: notes / tasks / ext-rt listed.
+- **Install** on a listed module → cap review confirmation (same as 7c).
+- Tampering with a packaged WASM while keeping the catalogue entry must refuse.
+
+### 7h. Chat Stop + Copy (P06.5)
+
+- During a streaming reply, **Stop** interrupts generation.
+- **Copy** on a chat line (or Troubleshoot / Feedback body) puts text on the clipboard.
 
 ### 8. Web search (PC.8 / PC.13)
 
@@ -176,7 +195,7 @@ GitHub feedback submit).
 - At least one usable `var/feedback/fb-*.json` per report
 - Gates PC.6–PC.9 and PC.11–PC.13 checked on at least one machine
 
-## Out of scope Preview 0.5.0
+## Out of scope Preview 0.6.0
 
 - seL4 / bare-metal boot
 - macOS

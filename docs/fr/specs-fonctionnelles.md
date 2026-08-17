@@ -6,7 +6,7 @@
 > Date : 15/08/2026  
 > Statut : brouillon  
 > Référence : `reflexion-agent-os.md`  
-> Changements v0.5.0 : Preview 0.5.0 — mémorisation auto depuis le chat (E14) ; `user.ask` en cours de tâche ; annexe §12.
+> Changements v0.6.0 : Preview 0.6.0 — export schémas E8 + contrat HTTP↔bus ; keyring OS E7 ; catalogue local signé E10.
 > Changements v0.4.0 : Preview 0.4.0 — graphe mémoire typé, vault secrets, revue de caps modules ; annexe §12.
 > Changements v0.3.1 : Preview 0.3.0 — resync du module notes, dépannage in-app, site Split-Flap ; annexe §12.
 > Changements v0.3 : couverture Preview 0.1.2 — F-AGT-11, F-NET-01/02, F-UI-09 ; annexe §12.  
@@ -365,12 +365,12 @@ Package unique exposant :
 
 - `reflexion-agent-os.md` — réflexion fondatrice  
 - `specs-techniques.md` — spécifications techniques  
-- `FEATURES.md` — catalogue Preview 0.5.0 livrée  
+- `FEATURES.md` — catalogue Preview 0.6.0 livrée  
 - (futur) `adr/` — Architecture Decision Records  
 
 ---
 
-## 12. Couverture Preview 0.5.0 (hôte)
+## 12. Couverture Preview 0.6.0 (hôte)
 
 Correspondance de cette spec avec la **Preview hôte installable** (pas l'OS bootable).
 Détail : `FEATURES.md`.
@@ -385,5 +385,7 @@ Détail : `FEATURES.md`.
 | F-MEM-01–02, 05 | Working / épisodique / faits user ; onglet Mémoire |
 | F-MOD / F-EXT | notes.aospkg, ext-rt, skills déclaratives, `cap.request` |
 | F-UI-01–05, 09 | Double surface + panneau transparence + Settings |
-| F-SEC-01–08 | Caps, confirm, egress deny-by-default, isolation auditd |
+| F-SEC-01–08 | Caps, confirm, egress deny-by-default, isolation auditd ; clé maître du vault dans le keyring OS (fallback fichier 0600) ; agents interdits de `secrets.get` |
+| F-MOD catalogue | Catalogue local signé `share/modules/catalogue.yaml` ; vérif hash à `module.install` |
+| E8 pont | JSON Schema `docs/bridge/` + contrat HTTP JSON ↔ CBOR (pas de daemon live) |
 | F-NET-01–02 | Recherche multi-moteurs + `web.browse` |

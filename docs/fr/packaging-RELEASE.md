@@ -7,8 +7,8 @@
 Tag puis push :
 
 ```bash
-git tag v0.5.0
-git push origin v0.5.0
+git tag v0.6.0
+git push origin v0.6.0
 ```
 
 Le workflow [`.github/workflows/preview-release.yml`](../../.github/workflows/preview-release.yml)
@@ -36,13 +36,12 @@ Les GGUF sont téléchargés au **premier run** via `share/models/manifest.json`
 ## Notes de version (brouillon)
 
 ```
-Akasha OS Preview 0.5.0 — mémorisation auto depuis le chat (E14) + user.ask
+Akasha OS Preview 0.6.0 — schémas pont sibling (E8) + keyring OS (E7) + catalogue local (E10)
 
-- Opt-in Settings : après chaque tour de chat, extraction de faits durables → Mémoire
-- mem.extract (local_only, basse priorité) + filtre secrets (jamais de clés auto)
-- Auto-lien updates/supersedes ; badge Memory [chat] ; toast à l'écriture
-- Extract non bloquant / coalescé
-- user.ask : l'agent peut interroger l'utilisateur en cours de tâche (timeout 10 min)
+- Export JSON Schema mem.* / secrets.* sous docs/bridge/ ; contrat HTTP JSON ↔ CBOR (pas de daemon live)
+- Clé maître du vault dans Credential Manager / Secret Service ; fallback fichier 0600
+- Catalogue local signé share/modules/catalogue.yaml ; vérif hash à l'install ; liste / Installer dans Settings
+- Chat Stop annule l'inférence en cours ; Copier sur messages et Dépannage
 
 Pas un OS bootable. Voir FIRST-RUN.md / INSTALL.md / TESTER.md
 ```
