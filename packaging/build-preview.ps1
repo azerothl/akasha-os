@@ -17,7 +17,7 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 if (-not $Version) {
     $verFile = Join-Path $root "VERSION"
-    if (Test-Path $verFile) { $Version = (Get-Content $verFile -Raw).Trim() } else { $Version = "0.5.0" }
+    if (Test-Path $verFile) { $Version = (Get-Content $verFile -Raw).Trim() } else { $Version = "0.6.0" }
 }
 $suffix = if ($CpuOnly) { "windows-x64-cpu" } else { "windows-x64" }
 if (-not $OutDir) { $OutDir = Join-Path $root "dist\AgentOS-Preview-$Version-$suffix" }
@@ -131,15 +131,21 @@ if (Test-Path (Join-Path $root "share\models\catalog-offerings.json")) {
     Copy-Item (Join-Path $root "share\models\catalog-offerings.json") "$OutDir\share\models\catalog-offerings.json" -Force
 }
 
+$notesShare = Join-Path $root "share\modules\notes.aospkg"
 $notes = Join-Path $root "modules\notes.aospkg"
-if (Test-Path $notes) {
+if (Test-Path $notesShare) {
+    Copy-Item $notesShare "$OutDir\share\modules\notes.aospkg" -Recurse -Force
+} elseif (Test-Path $notes) {
     Copy-Item $notes "$OutDir\share\modules\notes.aospkg" -Recurse -Force
 } else {
     Write-Warning "notes.aospkg absent — lancer modules\build-notes.ps1"
 }
 
+$tasksShare = Join-Path $root "share\modules\tasks.aospkg"
 $tasks = Join-Path $root "modules\tasks.aospkg"
-if (Test-Path $tasks) {
+if (Test-Path $tasksShare) {
+    Copy-Item $tasksShare "$OutDir\share\modules\tasks.aospkg" -Recurse -Force
+} elseif (Test-Path $tasks) {
     Copy-Item $tasks "$OutDir\share\modules\tasks.aospkg" -Recurse -Force
 } else {
     Write-Warning "tasks.aospkg absent — lancer modules\build-tasks.ps1"
@@ -151,6 +157,12 @@ if (Test-Path $extrt) {
     Copy-Item $extrt "$OutDir\share\modules\ext-rt.aospkg" -Recurse -Force
 } else {
     Write-Warning "ext-rt.aospkg absent — lancer modules\build-ext-rt.ps1"
+}
+
+foreach ($cat in @("catalogue.yaml", "catalogue.yaml.sig", "catalogue.pub")) {
+    $src = Join-Path $root "share\modules\$cat"
+    if (-not (Test-Path $src)) { throw "manque $src (catalogue E10)" }
+    Copy-Item $src (Join-Path $OutDir "share\modules\$cat") -Force
 }
 
 $skillsSrc = Join-Path $root "skills"

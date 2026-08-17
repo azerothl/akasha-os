@@ -92,6 +92,9 @@ jobs:
           $dir = "dist\AgentOS-Preview-$ver-windows-x64"
           if (-not (Test-Path "$dir\bin\aos-session.exe")) { throw "missing aos-session" }
           if (-not (Test-Path "$dir\share\models\manifest.json")) { throw "missing manifest" }
+          if (-not (Test-Path "$dir\share\modules\catalogue.yaml")) { throw "missing catalogue.yaml" }
+          if (-not (Test-Path "$dir\share\modules\catalogue.yaml.sig")) { throw "missing catalogue.yaml.sig" }
+          if (-not (Test-Path "$dir\share\modules\catalogue.pub")) { throw "missing catalogue.pub" }
           $dll = Get-ChildItem "$dir\bin" -Filter "cudart64_*.dll"
           if (-not $dll) { throw "missing CUDA cudart DLL" }
           Compress-Archive -Path "$dir\*" -DestinationPath "dist\AgentOS-Preview-$ver-windows-x64.zip" -Force
@@ -132,6 +135,7 @@ jobs:
           .\packaging\build-preview.ps1 -SkipModels -CpuOnly -Version $ver
           $dir = "dist\AgentOS-Preview-$ver-windows-x64-cpu"
           if (-not (Test-Path "$dir\bin\aos-session.exe")) { throw "missing aos-session" }
+          if (-not (Test-Path "$dir\share\modules\catalogue.yaml")) { throw "missing catalogue.yaml" }
           Compress-Archive -Path "$dir\*" -DestinationPath "dist\AgentOS-Preview-$ver-windows-x64-cpu.zip" -Force
 
       - uses: actions/upload-artifact@v4
@@ -196,6 +200,9 @@ jobs:
           OUT="dist/AgentOS-Preview-${VERSION}-linux-x64"
           test -x "${OUT}/bin/aos-session"
           test -f "${OUT}/share/models/manifest.json"
+          test -f "${OUT}/share/modules/catalogue.yaml"
+          test -f "${OUT}/share/modules/catalogue.yaml.sig"
+          test -f "${OUT}/share/modules/catalogue.pub"
           ls "${OUT}/bin"/libcudart.so* >/dev/null
           echo "== bin layout =="
           ls -lah "${OUT}/bin" | head -n 80
@@ -255,6 +262,7 @@ jobs:
           bash packaging/build-preview.sh
           OUT="dist/AgentOS-Preview-${VERSION}-linux-x64-cpu"
           test -x "${OUT}/bin/aos-session"
+          test -f "${OUT}/share/modules/catalogue.yaml"
           tar -C dist -czf "dist/AgentOS-Preview-${VERSION}-linux-x64-cpu.tar.gz" "AgentOS-Preview-${VERSION}-linux-x64-cpu"
 
       - uses: actions/upload-artifact@v4

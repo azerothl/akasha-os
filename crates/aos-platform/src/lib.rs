@@ -7,6 +7,7 @@
 //! - [`subsystem`] : assemblage exposé sur le bus par `aos-platformd`.
 
 pub mod audit;
+pub mod catalogue;
 pub mod chat_session;
 pub mod confirm;
 pub mod extract;

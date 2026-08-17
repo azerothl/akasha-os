@@ -1880,6 +1880,26 @@ async fn main() {
     }
     {
         let s = sub.clone();
+        svc.on("module.catalogue", move |ctx| {
+            let s = s.clone();
+            async move {
+                let payload = s
+                    .modules
+                    .lock()
+                    .unwrap()
+                    .catalogue()
+                    .map(|c| c.proto().clone())
+                    .unwrap_or(ModuleCatalogue {
+                        version: 0,
+                        entries: vec![],
+                        signature_ok: false,
+                    });
+                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &payload).await;
+            }
+        });
+    }
+    {
+        let s = sub.clone();
         svc.on("module.describe", move |ctx| {
             let s = s.clone();
             async move {

@@ -3,7 +3,7 @@
 # GGUF optionnels (SKIP_MODELS=1) — téléchargés au premier run.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="${VERSION:-$(tr -d '[:space:]' < "${ROOT}/VERSION" 2>/dev/null || echo 0.5.0)}"
+VERSION="${VERSION:-$(tr -d '[:space:]' < "${ROOT}/VERSION" 2>/dev/null || echo 0.6.0)}"
 CPU_ONLY="${CPU_ONLY:-0}"
 if [ "$CPU_ONLY" = "1" ]; then
   OUT="${OUT:-${ROOT}/dist/AgentOS-Preview-${VERSION}-linux-x64-cpu}"
@@ -279,11 +279,17 @@ if [ -f "${ROOT}/share/models/catalog-offerings.json" ]; then
   cp -f "${ROOT}/share/models/catalog-offerings.json" "${OUT}/share/models/catalog-offerings.json"
 fi
 
-if [ -d "${ROOT}/modules/notes.aospkg" ]; then
+if [ -d "${ROOT}/share/modules/notes.aospkg" ]; then
+  rm -rf "${OUT}/share/modules/notes.aospkg"
+  cp -a "${ROOT}/share/modules/notes.aospkg" "${OUT}/share/modules/notes.aospkg"
+elif [ -d "${ROOT}/modules/notes.aospkg" ]; then
   rm -rf "${OUT}/share/modules/notes.aospkg"
   cp -a "${ROOT}/modules/notes.aospkg" "${OUT}/share/modules/notes.aospkg"
 fi
-if [ -d "${ROOT}/modules/tasks.aospkg" ]; then
+if [ -d "${ROOT}/share/modules/tasks.aospkg" ]; then
+  rm -rf "${OUT}/share/modules/tasks.aospkg"
+  cp -a "${ROOT}/share/modules/tasks.aospkg" "${OUT}/share/modules/tasks.aospkg"
+elif [ -d "${ROOT}/modules/tasks.aospkg" ]; then
   rm -rf "${OUT}/share/modules/tasks.aospkg"
   cp -a "${ROOT}/modules/tasks.aospkg" "${OUT}/share/modules/tasks.aospkg"
 fi
@@ -294,6 +300,15 @@ elif [ -d "${ROOT}/modules/ext-rt.aospkg" ]; then
   rm -rf "${OUT}/share/modules/ext-rt.aospkg"
   cp -a "${ROOT}/modules/ext-rt.aospkg" "${OUT}/share/modules/ext-rt.aospkg"
 fi
+
+for cat in catalogue.yaml catalogue.yaml.sig catalogue.pub; do
+  src="${ROOT}/share/modules/${cat}"
+  if [ ! -f "${src}" ]; then
+    echo "ERROR: missing ${src} (E10 catalogue)" >&2
+    exit 1
+  fi
+  cp -f "${src}" "${OUT}/share/modules/${cat}"
+done
 
 if [ -d "${ROOT}/skills" ]; then
   cp -a "${ROOT}/skills/." "${OUT}/share/skills/"

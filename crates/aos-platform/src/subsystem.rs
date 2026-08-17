@@ -36,6 +36,9 @@ pub struct PlatformConfig {
     pub memory_dir: String,
     #[serde(default = "default_modules_dir")]
     pub modules_dir: String,
+    /// Catalogue local signé (E10). Défaut `share/modules/catalogue.yaml`.
+    #[serde(default = "default_catalogue_file")]
+    pub catalogue_file: String,
     #[serde(default = "default_skills_dir")]
     pub skills_dir: String,
     #[serde(default = "default_sessions_dir")]
@@ -79,6 +82,9 @@ fn default_memory_dir() -> String {
 }
 fn default_modules_dir() -> String {
     "var/modules".into()
+}
+fn default_catalogue_file() -> String {
+    "share/modules/catalogue.yaml".into()
 }
 fn default_skills_dir() -> String {
     "var/skills".into()
@@ -160,8 +166,14 @@ impl PlatformSubsystem {
         // Liaison en deux temps propre : le ModuleRuntime délègue les appels
         // système via `LateBoundServices`, résolu une fois le sous-système créé.
         let late = Arc::new(LateBoundServices::default());
-        let rt =
+        let mut rt =
             ModuleRuntime::open(&config.modules_dir, late.clone()).map_err(|e| e.to_string())?;
+        if Path::new(&config.catalogue_file).is_file() {
+            match crate::catalogue::SignedCatalogue::load(&config.catalogue_file) {
+                Ok(cat) => rt.set_catalogue(cat),
+                Err(e) => eprintln!("[aos-platform] catalogue: {e}"),
+            }
+        }
         let skills = crate::skill::SkillStore::open(&config.skills_dir).map_err(|e| e.to_string())?;
         let author =
             crate::module_compile::ModuleAuthor::open(&config.modules_dir).map_err(|e| e.to_string())?;
@@ -171,6 +183,7 @@ impl PlatformSubsystem {
         )
         .map_err(|e| e.to_string())?;
         let secrets = SecretStore::open(&config.secrets_file).map_err(|e| e.to_string())?;
+        let secrets_backend = secrets.master_backend().as_str().to_string();
         let mut net = EgressControl::new();
         if config.net_mode == "offline_strict" {
             net.set_mode(crate::net::NetMode::OfflineStrict);
@@ -199,6 +212,13 @@ impl PlatformSubsystem {
             bus: Mutex::new(None),
         });
         let _ = late.0.set(sub.clone());
+        sub.audit(AuditAppendRequest {
+            trace_id: "boot".into(),
+            actor: "service:platformd".into(),
+            action: "secrets.backend".into(),
+            target: secrets_backend,
+            detail: serde_json::json!({}),
+        });
         Ok(sub)
     }
 

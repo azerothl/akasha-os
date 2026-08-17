@@ -48,6 +48,10 @@ pub enum ModuleError {
     Guest(String),
     #[error("revue de caps requise: {0}")]
     CapReviewRequired(String),
+    #[error("hash catalogue non conforme pour {0}")]
+    CatalogueMismatch(String),
+    #[error("signature catalogue invalide")]
+    CatalogueSignature,
     #[error("io: {0}")]
     Io(String),
 }
@@ -118,6 +122,7 @@ pub struct ModuleRuntime {
     dir: PathBuf,
     installed: HashMap<String, InstalledModule>,
     services: Arc<dyn HostServices>,
+    catalogue: Option<crate::catalogue::SignedCatalogue>,
 }
 
 /// Bornes d'exécution par invocation (§7.4).
@@ -139,9 +144,19 @@ impl ModuleRuntime {
             dir,
             installed: HashMap::new(),
             services,
+            catalogue: None,
         };
         rt.load_registry()?;
         Ok(rt)
+    }
+
+    /// Charge le catalogue local signé (E10). Absent → pas de check hash.
+    pub fn set_catalogue(&mut self, catalogue: crate::catalogue::SignedCatalogue) {
+        self.catalogue = Some(catalogue);
+    }
+
+    pub fn catalogue(&self) -> Option<&crate::catalogue::SignedCatalogue> {
+        self.catalogue.as_ref()
     }
 
     fn registry_path(&self) -> PathBuf {
@@ -232,6 +247,16 @@ impl ModuleRuntime {
         let hash = sha256_hex(&wasm);
         if manifest.hash != hash && manifest.hash != format!("sha256:{hash}") {
             return Err(ModuleError::HashMismatch);
+        }
+        if let Some(cat) = &self.catalogue {
+            cat.check_module_hash(&manifest.name, &hash)
+                .map_err(|e| match e {
+                    crate::catalogue::CatalogueError::HashMismatch(n) => {
+                        ModuleError::CatalogueMismatch(n)
+                    }
+                    crate::catalogue::CatalogueError::BadSignature => ModuleError::CatalogueSignature,
+                    other => ModuleError::BadManifest(other.to_string()),
+                })?;
         }
         let granted = match approved_caps {
             Some(caps) => caps,
@@ -664,6 +689,40 @@ min_os_api: 1
 
         rt.uninstall("echo-test").unwrap();
         assert!(rt.list().is_empty());
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn catalogue_hash_mismatch_refuse() {
+        let base = tmpbase("cat");
+        let pkg = base.join("pkg");
+        make_package(&pkg);
+        let wasm = std::fs::read(pkg.join("module.wasm")).unwrap();
+        let real = sha256_hex(&wasm);
+        let yaml = format!(
+            "version: 1\nentries:\n  - name: echo-test\n    version: \"0.1.0\"\n    kind: module\n    path: pkg\n    hash: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n    attested_caps: []\n"
+        );
+        let yaml_path = base.join("catalogue.yaml");
+        std::fs::write(&yaml_path, &yaml).unwrap();
+        let (pk, sig) = crate::catalogue::sign_preview_catalogue(yaml.as_bytes());
+        std::fs::write(base.join("catalogue.pub"), pk).unwrap();
+        std::fs::write(base.join("catalogue.yaml.sig"), sig).unwrap();
+        let cat = crate::catalogue::SignedCatalogue::load(&yaml_path).unwrap();
+        let mut rt = ModuleRuntime::open(base.join("modules"), Arc::new(EchoServices)).unwrap();
+        rt.set_catalogue(cat);
+        let err = rt.install(&pkg, Some(vec![])).unwrap_err();
+        assert!(matches!(err, ModuleError::CatalogueMismatch(_)));
+        // Honest hash in a second catalogue should install.
+        let yaml_ok = format!(
+            "version: 1\nentries:\n  - name: echo-test\n    version: \"0.1.0\"\n    kind: module\n    path: pkg\n    hash: sha256:{real}\n    attested_caps: []\n"
+        );
+        std::fs::write(&yaml_path, &yaml_ok).unwrap();
+        let (pk, sig) = crate::catalogue::sign_preview_catalogue(yaml_ok.as_bytes());
+        std::fs::write(base.join("catalogue.pub"), pk).unwrap();
+        std::fs::write(base.join("catalogue.yaml.sig"), sig).unwrap();
+        let cat = crate::catalogue::SignedCatalogue::load(&yaml_path).unwrap();
+        rt.set_catalogue(cat);
+        assert!(rt.install(&pkg, Some(vec![])).is_ok());
         let _ = std::fs::remove_dir_all(&base);
     }
 

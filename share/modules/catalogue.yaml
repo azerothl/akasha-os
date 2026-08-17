@@ -1,0 +1,34 @@
+# Local signed module / MCP catalogue (E10 / Preview 0.6).
+# Not a network store. Signature: catalogue.yaml.sig + catalogue.pub (ed25519).
+version: 1
+entries:
+  - name: notes
+    version: "1.1.0"
+    kind: module
+    path: share/modules/notes.aospkg
+    hash: sha256:796d1ab2256924939a298c8fab7ca1077618b9064cfdafa42a6389667054dbf5
+    attested_caps:
+      - fs.read:/documents/notes/**
+      - fs.write:/documents/notes/**
+      - mem.write:module:notes
+      - mem.query:module:notes
+  - name: tasks
+    version: "1.0.0"
+    kind: module
+    path: share/modules/tasks.aospkg
+    hash: sha256:25fcd075392220953454c1a70ad3ceaf6ef0125c101129bcc6b6b40d80993e48
+    attested_caps:
+      - fs.read:/documents/tasks/**
+      - fs.write:/documents/tasks/**
+  - name: ext-rt
+    version: "1.0.0"
+    kind: module
+    path: share/modules/ext-rt.aospkg
+    hash: sha256:4b1103b4f7d98afc06f27562baa5b70fc64ffd342e8e7f882869d65e14fd6cba
+    attested_caps: []
+  - name: mcp-example
+    version: "1.0.0"
+    kind: mcp
+    path: share/mcp/servers.yaml.example
+    hash: sha256:21ee7eca0dfa8a14c3d15fec714e99cc4d1d9de4bc8391a83a780fb384927b8f
+    attested_caps: []
