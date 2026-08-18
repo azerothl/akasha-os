@@ -48,12 +48,12 @@
       <main id="content" class="plate-main">
         <h1>
           <span data-lang="en">
-            This is not a bootable OS. Preview <span data-aos-version>0.7.0</span>
+            This is not a bootable OS. Preview <span data-aos-version>0.8.0</span>
             installs as a host app. No clone, no cargo. Download the archive,
             run the script, launch Akasha OS Preview.
           </span>
           <span data-lang="fr">
-            Ce n’est pas un OS bootable. La Preview <span data-aos-version>0.7.0</span>
+            Ce n’est pas un OS bootable. La Preview <span data-aos-version>0.8.0</span>
             s’installe comme appli hôte. Pas de clone, pas de cargo. Téléchargez
             l’archive, lancez le script, ouvrez Akasha OS Preview.
           </span>
@@ -96,22 +96,47 @@
           </li>
           <li>macos DENY</li>
           <li>
-            <span data-lang="en">cpu-only GRANT in Preview <span data-aos-version>0.7.0</span> (slow OK; NVIDIA optional)</span>
-            <span data-lang="fr">cpu-only GRANT en Preview <span data-aos-version>0.7.0</span> (lent OK ; NVIDIA optionnel)</span>
+            <span data-lang="en">cpu-only GRANT in Preview <span data-aos-version>0.8.0</span> (Settings → Inference; no second zip)</span>
+            <span data-lang="fr">cpu-only GRANT en Preview <span data-aos-version>0.8.0</span> (Réglages → Inférence ; pas de second zip)</span>
           </li>
         </ul>
+
+        <h2 data-lang="en">One command</h2>
+        <h2 data-lang="fr">Une commande</h2>
+        <p class="hist" data-lang="en">
+          Downloads the unified Windows artefact, prints URL + sha256, verifies
+          fail-closed, then overlays into
+          <code>%LOCALAPPDATA%\AgentOS-Preview</code> (keeps <code>var/</code>
+          and <code>etc/</code>).
+        </p>
+        <p class="hist" data-lang="fr">
+          Télécharge l’artefact Windows unifié, affiche URL + sha256, vérifie
+          fail-closed, puis superpose dans
+          <code>%LOCALAPPDATA%\AgentOS-Preview</code> (conserve <code>var/</code>
+          et <code>etc/</code>).
+        </p>
+        <pre>irm https://azerothl.github.io/akasha-os/install.ps1 | iex</pre>
+        <p class="hist" data-lang="en">
+          Linux (prefix <code>~/.local/share/agentos-preview</code>):
+        </p>
+        <p class="hist" data-lang="fr">
+          Linux (préfixe <code>~/.local/share/agentos-preview</code>) :
+        </p>
+        <pre>curl -fsSL https://azerothl.github.io/akasha-os/install.sh | sh</pre>
 
         <h2 data-lang="en">Windows</h2>
         <h2 data-lang="fr">Windows</h2>
         <ol class="steps">
           <li data-lang="en">
-            Download GPU <code>AgentOS-Preview-&lt;ver&gt;-windows-x64.zip</code> or
-            CPU <code>…-windows-x64-cpu.zip</code> from
+            Download the unified zip
+            <code>AgentOS-Preview-&lt;ver&gt;-windows-x64.zip</code>
+            (CUDA + CPU backends inside) from
             <a href="https://github.com/azerothl/akasha-os/releases">GitHub Releases</a>.
           </li>
           <li data-lang="fr">
-            Télécharger GPU <code>AgentOS-Preview-&lt;ver&gt;-windows-x64.zip</code> ou
-            CPU <code>…-windows-x64-cpu.zip</code> depuis
+            Télécharger le zip unifié
+            <code>AgentOS-Preview-&lt;ver&gt;-windows-x64.zip</code>
+            (backends CUDA + CPU inclus) depuis
             <a href="https://github.com/azerothl/akasha-os/releases">GitHub Releases</a>.
           </li>
           <li data-lang="en">Extract, then run:</li>
@@ -149,12 +174,12 @@
         <h2 data-lang="fr">Linux</h2>
         <ol class="steps">
           <li data-lang="en">
-            Download GPU <code>AgentOS-Preview-&lt;ver&gt;-linux-x64.tar.gz</code>
-            or CPU <code>…-linux-x64-cpu.tar.gz</code>, extract.
+            Download <code>AgentOS-Preview-&lt;ver&gt;-linux-x64.tar.gz</code>
+            (CUDA + CPU backends inside), extract.
           </li>
           <li data-lang="fr">
-            Télécharger GPU <code>AgentOS-Preview-&lt;ver&gt;-linux-x64.tar.gz</code>
-            ou CPU <code>…-linux-x64-cpu.tar.gz</code>, extraire.
+            Télécharger <code>AgentOS-Preview-&lt;ver&gt;-linux-x64.tar.gz</code>
+            (backends CUDA + CPU inclus), extraire.
           </li>
           <li><code>./install.sh</code></li>
           <li data-lang="en">
@@ -224,7 +249,7 @@ var/            created at run</pre>
           package, patches, or development. Full write-up:
           <a href="docs/build.html">docs/build</a>
           and
-          <a href="https://github.com/azerothl/akasha-os/blob/main/INSTALL.md#build-from-source">INSTALL.md</a>.
+          <a href="https://github.com/azerothl/akasha-os/blob/main/docs/INSTALL.md#build-from-source">INSTALL.md</a>.
         </p>
         <p class="hist" data-lang="fr">
           Les Releases suffisent pour lancer la Preview. Compilez depuis les

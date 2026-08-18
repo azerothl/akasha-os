@@ -1,30 +1,48 @@
-# Installation — Akasha OS Preview 0.7.0
+# Installation — Akasha OS Preview 0.8.0
 
-**Language:** English | [Français](docs/fr/INSTALL.md)
+**Language:** English | [Français](fr/INSTALL.md)
 
-> Date: 18/08/2026 · Preview **0.7.0**
+> Date: 18/08/2026 · Preview **0.8.0**
 
-**This is not a bootable OS.** Preview 0.7.0 runs on **Windows or Linux x64**
-(host scaffolding, ADR 0001). **NVIDIA is recommended**; a **CPU-only**
-package and boot path exist (slower inference). seL4 is a separate track.
+**This is not a bootable OS.** Preview 0.8.0 runs on **Windows or Linux x64**
+(host scaffolding, ADR 0001). **NVIDIA is recommended**; the **same zip**
+ships a CPU-linked `aos-modeld-cpu` (Settings → Inference). seL4 is a
+separate track.
+
+## One command
+
+Windows:
+
+```powershell
+irm https://azerothl.github.io/akasha-os/install.ps1 | iex
+```
+
+Linux:
+
+```bash
+curl -fsSL https://azerothl.github.io/akasha-os/install.sh | sh
+```
+
+The hosted script reads GitHub Releases `latest.json`, prints the artefact
+URL and sha256, **refuses** on mismatch, then overlays into
+`%LOCALAPPDATA%\AgentOS-Preview` or `~/.local/share/agentos-preview`.
 
 ## Requirements
 
 | | |
 |--|--|
 | OS | Windows 10/11 x64 **or** Linux x64 (recent glibc) |
-| GPU | NVIDIA with a recent driver (`nvidia-smi -L` OK) **or** CPU-only artefact |
-| Disk | ~8 GB free (recommended mid-tier GGUF pack); less for tiny/cpu pack |
-| CUDA | GPU package ships CUDA runtime (driver is enough); CPU package does not |
+| GPU | NVIDIA with a recent driver (`nvidia-smi -L` OK) **or** CPU path in the same artefact |
+| Disk | ~8 GB free (recommended mid-tier GGUF pack); extra ~4.5 GB for optional SD 1.5 + engine |
+| CUDA | Unified package ships CUDA runtime next to `aos-modeld`; CPU binary has no CUDA DLL |
 
 No macOS. CPU inference is supported but degraded.
 
 ## Windows
 
-1. Download from [GitHub Releases](https://github.com/azerothl/akasha-os/releases):
-   - GPU: `AgentOS-Preview-<ver>-windows-x64.zip`
-   - CPU: `AgentOS-Preview-<ver>-windows-x64-cpu.zip`
-2. Extract, then run **one** of:
+1. One-liner above, **or** download from [GitHub Releases](https://github.com/azerothl/akasha-os/releases):
+   - Unified: `AgentOS-Preview-<ver>-windows-x64.zip` (CUDA + CPU backends)
+2. If you downloaded the zip: extract, then run **one** of:
    ```bat
    .\install.cmd
    ```
@@ -64,7 +82,7 @@ Quick start without `install.cmd` (still uses the stable data prefix):
 
 ## Linux
 
-1. Download GPU `…-linux-x64.tar.gz` or CPU `…-linux-x64-cpu.tar.gz`, extract.
+1. One-liner above, **or** download unified `…-linux-x64.tar.gz`, extract.
 2. ```bash
    ./install.sh
    ```
@@ -94,7 +112,7 @@ var/            local data (created at run; agents, mcp, skills overrides)
 4. Opens egui UI + multi-page **tutorial**.
 5. Closing the UI stops the daemons.
 
-See [docs/FIRST-RUN.md](docs/FIRST-RUN.md) and [docs/FEATURES.md](docs/FEATURES.md).
+See [FIRST-RUN.md](FIRST-RUN.md) and [FEATURES.md](FEATURES.md).
 Use the **Models** tab to download additional profiles or switch session/agent
 models.
 
@@ -207,7 +225,7 @@ Gates / demo helpers: `.\demo\run-demo.ps1 -Gate p4` (Windows).
 
 ### CI
 
-GitHub Actions [`.github/workflows/preview-release.yml`](.github/workflows/preview-release.yml)
+GitHub Actions [`.github/workflows/preview-release.yml`](../.github/workflows/preview-release.yml)
 builds Win + Linux on tags `v*` (same scripts, no GGUF in the artifact).
 
 ## Licence

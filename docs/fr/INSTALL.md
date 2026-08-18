@@ -1,12 +1,30 @@
-# Installation — Akasha OS Preview 0.7.0
+# Installation — Akasha OS Preview 0.8.0
 
-**Langue :** [English](../../INSTALL.md) | Français
+**Langue :** [English](../INSTALL.md) | Français
 
-> Date : 18/08/2026 · Preview **0.7.0**
+> Date : 18/08/2026 · Preview **0.8.0**
 
-**Ce n'est pas un OS bootable.** La Preview 0.7.0 tourne **sur Windows ou Linux x64**
-(échafaudage hôte, ADR 0001). **NVIDIA est recommandé** ; un paquet et un chemin
-**CPU-only** existent (inférence plus lente). seL4 = piste séparée.
+**Ce n'est pas un OS bootable.** La Preview 0.8.0 tourne **sur Windows ou Linux x64**
+(échafaudage hôte, ADR 0001). **NVIDIA est recommandé** ; le **même zip**
+embarque `aos-modeld-cpu` (Réglages → Inférence). seL4 = piste séparée.
+
+## Une commande
+
+Windows :
+
+```powershell
+irm https://azerothl.github.io/akasha-os/install.ps1 | iex
+```
+
+Linux :
+
+```bash
+curl -fsSL https://azerothl.github.io/akasha-os/install.sh | sh
+```
+
+Le script lit `latest.json` des GitHub Releases, affiche URL + sha256,
+**refuse** en cas d’écart, puis superpose dans
+`%LOCALAPPDATA%\AgentOS-Preview` ou `~/.local/share/agentos-preview`.
 
 ## Prérequis
 
@@ -14,17 +32,17 @@
 |--|--|
 | OS | Windows 10/11 x64 **ou** Linux x64 (glibc récent) |
 | GPU | NVIDIA avec driver récent (`nvidia-smi -L` OK) **ou** artefact CPU-only |
-| Disque | ~8 Go libre (pack mid recommandé) ; moins pour pack tiny/cpu |
+| Disque | ~8 Go libre (pack mid recommandé) ; ~4,5 Go de plus pour SD 1.5 + moteur (optionnel) |
 | CUDA | Runtime embarqué dans le paquet GPU (driver suffit) ; pas sur le paquet CPU |
 
 Pas de macOS. L'inférence CPU est supportée mais dégradée.
 
 ## Windows
 
-1. Télécharger depuis [GitHub Releases](https://github.com/azerothl/akasha-os/releases) :
-   - GPU : `AgentOS-Preview-<ver>-windows-x64.zip`
-   - CPU : `AgentOS-Preview-<ver>-windows-x64-cpu.zip`
-2. Décompresser, puis lancer **l’un** de :
+1. One-liner ci-dessus, **ou** télécharger le zip unifié
+   `AgentOS-Preview-<ver>-windows-x64.zip` depuis
+   [GitHub Releases](https://github.com/azerothl/akasha-os/releases).
+2. Si vous avez le zip : décompresser, puis lancer **l’un** de :
    ```bat
    .\install.cmd
    ```
@@ -65,7 +83,7 @@ Démarrage rapide sans `install.cmd` (préfixe de données stable quand même) :
 
 ## Linux
 
-1. Télécharger le GPU `…-linux-x64.tar.gz` ou CPU `…-linux-x64-cpu.tar.gz`, extraire.
+1. One-liner ci-dessus, **ou** télécharger `…-linux-x64.tar.gz` unifié, extraire.
 2. ```bash
    ./install.sh
    ```

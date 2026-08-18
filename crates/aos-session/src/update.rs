@@ -283,7 +283,7 @@ fn overlay_share(home: &Path, share_src: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn extract_zip(archive: &Path, dest: &Path) -> Result<(), String> {
+pub(crate) fn extract_zip(archive: &Path, dest: &Path) -> Result<(), String> {
     let file = File::open(archive).map_err(|e| e.to_string())?;
     let mut zip = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
     for i in 0..zip.len() {
@@ -305,7 +305,7 @@ fn extract_zip(archive: &Path, dest: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn extract_tar_gz(archive: &Path, dest: &Path) -> Result<(), String> {
+pub(crate) fn extract_tar_gz(archive: &Path, dest: &Path) -> Result<(), String> {
     let status = std::process::Command::new("tar")
         .args([
             "-xzf",
