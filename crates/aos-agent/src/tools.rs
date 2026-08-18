@@ -223,7 +223,7 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
         ToolDesc {
             name: "module.scaffold".into(),
             description: "Scaffolder un module (script ou rust)".into(),
-            input_schema: serde_json::json!({"type":"object","properties":{"name":{"type":"string"},"kind":{"type":"string"},"description":{"type":"string"},"source":{"type":"string"},"required_caps":{"type":"array"}},"required":["name","description"]}),
+            input_schema: serde_json::json!({"type":"object","properties":{"name":{"type":"string"},"kind":{"type":"string"},"description":{"type":"string"},"source":{"type":"string"},"required_caps":{"type":"array"},"ui":{"type":"string","description":"Optional declarative_ui JSON (widgets: column, row, heading, text, markdown, stat_row, table, line_chart, form, button; bind/source for tool results)"}},"required":["name","description"]}),
             backend: ToolBackend::Native,
             required_caps: vec![],
         },

@@ -1,0 +1,408 @@
+{
+  "$defs": {
+    "DeclUiDocument": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "definitions": {
+        "DeclUiWidget": {
+          "description": "One node in the widget tree.",
+          "properties": {
+            "args": true,
+            "bind": {
+              "description": "Tool name whose JSON result feeds this widget (`table`, `stat_row`, `line_chart`).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "children": {
+              "items": {
+                "$ref": "#/definitions/DeclUiWidget"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "columns": {
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "kind": {
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "series": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source": {
+              "description": "JSON pointer or dotted path into the bind result (optional).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "tool": {
+              "description": "Tool invoked by `button` / submitted by `form`.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        }
+      },
+      "description": "Root document stored in `ui/index.html`.",
+      "properties": {
+        "poll_ms": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "root": {
+          "$ref": "#/definitions/DeclUiWidget"
+        },
+        "title": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "root",
+        "title",
+        "type"
+      ],
+      "title": "DeclUiDocument",
+      "type": "object"
+    },
+    "DeclUiWidget": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "definitions": {
+        "DeclUiWidget": {
+          "description": "One node in the widget tree.",
+          "properties": {
+            "args": true,
+            "bind": {
+              "description": "Tool name whose JSON result feeds this widget (`table`, `stat_row`, `line_chart`).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "children": {
+              "items": {
+                "$ref": "#/definitions/DeclUiWidget"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "columns": {
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "kind": {
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "series": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source": {
+              "description": "JSON pointer or dotted path into the bind result (optional).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "tool": {
+              "description": "Tool invoked by `button` / submitted by `form`.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        }
+      },
+      "description": "One node in the widget tree.",
+      "properties": {
+        "args": true,
+        "bind": {
+          "description": "Tool name whose JSON result feeds this widget (`table`, `stat_row`, `line_chart`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "children": {
+          "items": {
+            "$ref": "#/definitions/DeclUiWidget"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "columns": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "items": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "kind": {
+          "type": "string"
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "series": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "description": "JSON pointer or dotted path into the bind result (optional).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tool": {
+          "description": "Tool invoked by `button` / submitted by `form`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "DeclUiWidget",
+      "type": "object"
+    },
+    "ModuleUiResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "definitions": {
+        "DeclUiDocument": {
+          "description": "Root document stored in `ui/index.html`.",
+          "properties": {
+            "poll_ms": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "root": {
+              "$ref": "#/definitions/DeclUiWidget"
+            },
+            "title": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "root",
+            "title",
+            "type"
+          ],
+          "type": "object"
+        },
+        "DeclUiWidget": {
+          "description": "One node in the widget tree.",
+          "properties": {
+            "args": true,
+            "bind": {
+              "description": "Tool name whose JSON result feeds this widget (`table`, `stat_row`, `line_chart`).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "children": {
+              "items": {
+                "$ref": "#/definitions/DeclUiWidget"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "columns": {
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "kind": {
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "series": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source": {
+              "description": "JSON pointer or dotted path into the bind result (optional).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "tool": {
+              "description": "Tool invoked by `button` / submitted by `form`.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        }
+      },
+      "description": "`module.ui` response — validated document ready for the egui host.",
+      "properties": {
+        "document": {
+          "$ref": "#/definitions/DeclUiDocument"
+        },
+        "module": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "document",
+        "module"
+      ],
+      "title": "ModuleUiResponse",
+      "type": "object"
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Closed widget vocabulary for host-rendered module tabs in Preview 0.7+. Not HTML/JS.",
+  "title": "Akasha OS declarative module UI (E15)",
+  "version": "0.7.0"
+}

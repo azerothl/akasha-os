@@ -4,6 +4,7 @@
 //! audit, scénarios guidés, retours (`feedback.submit`).
 
 mod agent_panel;
+mod decl_ui;
 mod i18n;
 mod model_setup;
 mod notes_panel;
@@ -29,9 +30,10 @@ use aos_proto::{
     NetFetchRequest, NetFetchResponse, NetModeRequest,
     PendingConfirmation, SecretListRequest, SecretListResponse, SecretSetRequest, SetRoutingRequest,
     SkillInfo, SystemMetrics, TokenEvent, WebBrowseRequest,
-    WebBrowseResponse, WebSearchHit, WebSearchRequest, WebSearchResponse, CHAT_DELEGATION_PROMPT,
-    SYSTEM_ASSISTANT_PROMPT,
+    WebBrowseResponse, WebSearchHit, WebSearchRequest, WebSearchResponse,
+    chat_user_wants_module_authoring, CHAT_DELEGATION_PROMPT, SYSTEM_ASSISTANT_PROMPT,
 };
+use aos_proto::decl_ui::ModuleUiResponse;
 use prefs::{load_preferences, save_preferences, Preferences};
 use eframe::egui;
 use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
@@ -111,7 +113,7 @@ fn open_os_folder(dir: &Path) {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 enum Tab {
     Chat,
     Memory,
@@ -124,6 +126,7 @@ enum Tab {
     Scenarios,
     Feedback,
     Settings,
+    Module(String),
 }
 
 fn agent_cap_holder(agent_id: &str) -> String {
@@ -287,6 +290,17 @@ enum Cmd {
     ModuleUninstall {
         name: String,
     },
+    ModuleUiLoad {
+        module: String,
+    },
+    ModuleUiRefresh {
+        module: String,
+    },
+    ModuleUiInvoke {
+        module: String,
+        tool: String,
+        args: serde_json::Value,
+    },
 }
 
 enum Evt {
@@ -356,6 +370,20 @@ enum Evt {
     InstalledModules(Vec<ModuleInfo>),
     ModuleInstalled(String),
     ModuleUninstalled(String),
+    ModuleUiLoaded(ModuleUiResponse),
+    ModuleUiBind {
+        module: String,
+        tool: String,
+        result: serde_json::Value,
+        error: Option<String>,
+    },
+    ModuleUiInvokeDone {
+        module: String,
+        tool: String,
+        ok: bool,
+        result: serde_json::Value,
+        error: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -474,6 +502,29 @@ mod ask_queue_tests {
         assert_eq!(q, vec!["c"]);
         assert!(!chat_has_open_ask(&chat, "a"));
     }
+
+    #[test]
+    fn create_module_dump_delegates_instead_of_display() {
+        let dumped = r#"{"kind":"column","children":[{"kind":"heading","text":"Ping"}]}"#;
+        let spec = chat_delegate_agent_spec("crée un module ping", dumped);
+        let (brief, _skills, tools, prose) = spec.expect("doit déléguer");
+        assert_eq!(brief, "crée un module ping");
+        assert!(tools.iter().any(|t| t == "module.scaffold"));
+        assert!(prose.contains("agent"));
+    }
+
+    #[test]
+    fn explain_module_does_not_delegate() {
+        assert!(chat_delegate_agent_spec("c'est quoi un module", "Un module est un package.").is_none());
+    }
+
+    #[test]
+    fn model_scaffold_action_delegates() {
+        let out = r#"{"action":"module.scaffold","args":{"name":"ping"}}"#;
+        let spec = chat_delegate_agent_spec("fais un ping", out);
+        let (_brief, _skills, tools, _) = spec.expect("doit déléguer");
+        assert!(tools.iter().any(|t| t == "module.scaffold"));
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -527,7 +578,11 @@ fn apply_theme(ctx: &egui::Context, theme: &str) {
 }
 
 /// Vertical scroll that takes the remaining panel and appears only on overflow.
-fn overflow_scroll(ui: &mut egui::Ui, id: &'static str, add_contents: impl FnOnce(&mut egui::Ui)) {
+fn overflow_scroll(
+    ui: &mut egui::Ui,
+    id: impl std::hash::Hash,
+    add_contents: impl FnOnce(&mut egui::Ui),
+) {
     egui::ScrollArea::vertical()
         .id_salt(id)
         .auto_shrink([false, false])
@@ -990,117 +1045,25 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                             return;
                         }
 
-                        // Délégation : agent.spawn / agent.create → worker en fond
-                        if let Some(action) = aos_agent::actions::parse_action(&full) {
-                            if action.action == "agent.spawn" || action.action == "agent.create" {
-                                let brief = action
-                                    .args
-                                    .get("brief")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or("")
-                                    .trim()
-                                    .to_string();
-                                let brief = if brief.is_empty() {
-                                    user_text.clone()
-                                } else {
-                                    brief
-                                };
-                                let (mut skills, mut tools) = chat_agent_kit(&brief);
-                                if let Some(arr) = action.args.get("skills").and_then(|v| v.as_array())
-                                {
-                                    for s in arr {
-                                        if let Some(name) = s.as_str() {
-                                            if !skills.iter().any(|x| x == name) {
-                                                skills.push(name.to_string());
-                                            }
-                                        }
-                                    }
-                                }
-                                if let Some(arr) = action.args.get("tools").and_then(|v| v.as_array())
-                                {
-                                    for t in arr {
-                                        if let Some(name) = t.as_str() {
-                                            if !tools.iter().any(|x| x == name) {
-                                                tools.push(name.to_string());
-                                            }
-                                        }
-                                    }
-                                }
-                                let mut prose = agent_panel::prose_without_json(&full);
-                                if prose.is_empty() {
-                                    prose = "Je lance un agent pour cette tâche.".into();
-                                }
-                                let mut req = AgentCreateRequest::simple(brief.clone());
-                                req.skills = skills;
-                                req.tools = tools;
-                                req.session_id = Some(sid.clone());
-                                req.goal = Some(AgentGoal {
-                                    statement: brief.clone(),
-                                    success_criteria: vec![],
-                                    max_steps,
-                                    max_subagents: CHAT_AGENT_MAX_SUBAGENTS,
-                                    timeout_secs: 3600,
-                                });
-                                req.caps.push("tool.invoke:notes".into());
-                                if req.skills.iter().any(|s| s.contains("task"))
-                                    || req.tools.iter().any(|t| t.starts_with("tasks."))
-                                {
-                                    req.caps.push("tool.invoke:tasks".into());
-                                }
-                                match bus
-                                    .call::<AgentCreateRequest, aos_proto::AgentCreateResponse>(
-                                        aos_agent::intents::CREATE,
-                                        &req,
-                                        vec![],
-                                    )
-                                    .await
-                                {
-                                    Ok(r) => {
-                                        let att = ChatAttachment::AgentRef {
-                                            agent_id: r.agent_id.clone(),
-                                            title: brief.clone(),
-                                            origin: "assistant".into(),
-                                        };
-                                        let _ = bus
-                                            .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
-                                                "chat.session.append",
-                                                &ChatSessionAppendRequest {
-                                                    session_id: sid.clone(),
-                                                    role: "assistant".into(),
-                                                    content: prose.clone(),
-                                                    attachments: vec![att.clone()],
-                                                },
-                                                vec![],
-                                            )
-                                            .await;
-                                        maybe_spawn_mem_extract(
-                                            bus.clone(),
-                                            evt_tx.clone(),
-                                            auto_remember,
-                                            sid.clone(),
-                                            user_text.clone(),
-                                            prose.clone(),
-                                            model_id.clone(),
-                                        );
-                                        let _ = evt_tx.send(Evt::AgentSpawned {
-                                            session_id: sid.clone(),
-                                            agent_id: r.agent_id,
-                                            title: brief,
-                                            origin: "assistant".into(),
-                                            ack: prose,
-                                        });
-                                        let _ = evt_tx.send(Evt::Done {
-                                            text: String::new(),
-                                            session_id: sid,
-                                            attachments: vec![],
-                                        });
-                                    }
-                                    Err(e) => {
-                                        let _ = evt_tx.send(Evt::Error(e.to_string()));
-                                    }
-                                }
-                                return;
-                            }
+                        // Délégation : agent.spawn / filet module → worker en fond
+                        if let Some((brief, skills, tools, prose)) =
+                            chat_delegate_agent_spec(&user_text, &full)
+                        {
+                            spawn_chat_delegate_agent(
+                                bus.clone(),
+                                evt_tx.clone(),
+                                sid,
+                                user_text,
+                                brief,
+                                skills,
+                                tools,
+                                prose,
+                                auto_remember,
+                                model_id,
+                                max_steps,
+                            )
+                            .await;
+                            return;
                         }
 
                         let display = agent_panel::format_assistant_display(&full);
@@ -1479,6 +1442,59 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                 }
             }
         }
+        Cmd::ModuleUiLoad { module } => {
+            match bus
+                .call::<ModuleIdRequest, ModuleUiResponse>(
+                    "module.ui",
+                    &ModuleIdRequest {
+                        module: module.clone(),
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(resp) => {
+                    let binds = resp.document.bind_tools();
+                    let _ = evt_tx.send(Evt::ModuleUiLoaded(resp));
+                    for tool in binds {
+                        invoke_module_bind(&bus, &evt_tx, &module, &tool).await;
+                    }
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(format!("module.ui {module}: {e}")));
+                }
+            }
+        }
+        Cmd::ModuleUiRefresh { module } => {
+            match bus
+                .call::<ModuleIdRequest, ModuleUiResponse>(
+                    "module.ui",
+                    &ModuleIdRequest {
+                        module: module.clone(),
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(resp) => {
+                    let binds = resp.document.bind_tools();
+                    let _ = evt_tx.send(Evt::ModuleUiLoaded(resp));
+                    for tool in binds {
+                        invoke_module_bind(&bus, &evt_tx, &module, &tool).await;
+                    }
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(format!("module.ui {module}: {e}")));
+                }
+            }
+        }
+        Cmd::ModuleUiInvoke {
+            module,
+            tool,
+            args,
+        } => {
+            invoke_module_tool(&bus, &evt_tx, &module, &tool, args).await;
+        }
         Cmd::SecretList => {
             match bus
                 .call::<SecretListRequest, SecretListResponse>(
@@ -1813,6 +1829,11 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                 || req.tools.iter().any(|t| t.starts_with("notes."))
             {
                 req.caps.push("tool.invoke:notes".into());
+            }
+            if req.tools.iter().any(|t| t.starts_with("module.")) {
+                if !req.caps.iter().any(|c| c == "module.install") {
+                    req.caps.push("module.install".into());
+                }
             }
             match bus
                 .call::<AgentCreateRequest, aos_proto::AgentCreateResponse>(
@@ -2339,6 +2360,176 @@ fn chat_agent_max_steps(prefs_max: u32) -> u32 {
     prefs_max.max(CHAT_AGENT_MIN_STEPS).min(128)
 }
 
+fn chat_action_is_self_tool(action: &str) -> bool {
+    matches!(
+        action,
+        "module.scaffold" | "module.package" | "module.install" | "skill.create"
+    )
+}
+
+fn merge_named_args(dst: &mut Vec<String>, args: &serde_json::Value, key: &str) {
+    let Some(arr) = args.get(key).and_then(|v| v.as_array()) else {
+        return;
+    };
+    for item in arr {
+        if let Some(name) = item.as_str() {
+            if !dst.iter().any(|x| x == name) {
+                dst.push(name.to_string());
+            }
+        }
+    }
+}
+
+/// Si le chat doit déléguer : (brief, skills, tools, phrase d'accusé).
+fn chat_delegate_agent_spec(
+    user_text: &str,
+    model_output: &str,
+) -> Option<(String, Vec<String>, Vec<String>, String)> {
+    if let Some(action) = aos_agent::actions::parse_action(model_output) {
+        let spawn = action.action == "agent.spawn" || action.action == "agent.create";
+        let self_tool = chat_action_is_self_tool(&action.action);
+        if spawn || self_tool {
+            let brief = action
+                .args
+                .get("brief")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            let brief = if brief.is_empty() || self_tool {
+                user_text.to_string()
+            } else {
+                brief
+            };
+            let (mut skills, mut tools) = chat_agent_kit(&brief);
+            merge_named_args(&mut skills, &action.args, "skills");
+            merge_named_args(&mut tools, &action.args, "tools");
+            if self_tool {
+                for t in [
+                    "module.scaffold",
+                    "module.package",
+                    "module.install",
+                    "module.list",
+                    "module.describe",
+                ] {
+                    if !tools.iter().any(|x| x == t) {
+                        tools.push(t.into());
+                    }
+                }
+                if action.action == "skill.create" && !tools.iter().any(|x| x == "skill.create") {
+                    tools.push("skill.create".into());
+                }
+            }
+            let mut prose = agent_panel::prose_without_json(model_output);
+            if prose.is_empty() || self_tool {
+                prose = if chat_user_wants_module_authoring(user_text) || self_tool {
+                    "Je lance un agent pour créer le module.".into()
+                } else {
+                    "Je lance un agent pour cette tâche.".into()
+                };
+            }
+            return Some((brief, skills, tools, prose));
+        }
+    }
+    if chat_user_wants_module_authoring(user_text) {
+        let (skills, tools) = chat_agent_kit(user_text);
+        return Some((
+            user_text.to_string(),
+            skills,
+            tools,
+            "Je lance un agent pour créer le module.".into(),
+        ));
+    }
+    None
+}
+
+async fn spawn_chat_delegate_agent(
+    bus: Arc<BusClient>,
+    evt_tx: Sender<Evt>,
+    sid: String,
+    user_text: String,
+    brief: String,
+    skills: Vec<String>,
+    tools: Vec<String>,
+    prose: String,
+    auto_remember: bool,
+    model_id: Option<String>,
+    max_steps: u32,
+) {
+    let mut req = AgentCreateRequest::simple(brief.clone());
+    req.skills = skills;
+    req.tools = tools;
+    req.session_id = Some(sid.clone());
+    req.goal = Some(AgentGoal {
+        statement: brief.clone(),
+        success_criteria: vec![],
+        max_steps,
+        max_subagents: CHAT_AGENT_MAX_SUBAGENTS,
+        timeout_secs: 3600,
+    });
+    req.caps.push("tool.invoke:notes".into());
+    if req.skills.iter().any(|s| s.contains("task"))
+        || req.tools.iter().any(|t| t.starts_with("tasks."))
+    {
+        req.caps.push("tool.invoke:tasks".into());
+    }
+    if req.tools.iter().any(|t| t.starts_with("module.")) {
+        req.caps.push("module.install".into());
+    }
+    match bus
+        .call::<AgentCreateRequest, aos_proto::AgentCreateResponse>(
+            aos_agent::intents::CREATE,
+            &req,
+            vec![],
+        )
+        .await
+    {
+        Ok(r) => {
+            let att = ChatAttachment::AgentRef {
+                agent_id: r.agent_id.clone(),
+                title: brief.clone(),
+                origin: "assistant".into(),
+            };
+            let _ = bus
+                .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
+                    "chat.session.append",
+                    &ChatSessionAppendRequest {
+                        session_id: sid.clone(),
+                        role: "assistant".into(),
+                        content: prose.clone(),
+                        attachments: vec![att.clone()],
+                    },
+                    vec![],
+                )
+                .await;
+            maybe_spawn_mem_extract(
+                bus.clone(),
+                evt_tx.clone(),
+                auto_remember,
+                sid.clone(),
+                user_text,
+                prose.clone(),
+                model_id,
+            );
+            let _ = evt_tx.send(Evt::AgentSpawned {
+                session_id: sid.clone(),
+                agent_id: r.agent_id,
+                title: brief,
+                origin: "assistant".into(),
+                ack: prose,
+            });
+            let _ = evt_tx.send(Evt::Done {
+                text: String::new(),
+                session_id: sid,
+                attachments: vec![],
+            });
+        }
+        Err(e) => {
+            let _ = evt_tx.send(Evt::Error(e.to_string()));
+        }
+    }
+}
+
 fn chat_agent_kit(task: &str) -> (Vec<String>, Vec<String>) {
     let lower = task.to_lowercase();
     let mut skills = vec!["planner".into(), "notes-writer".into()];
@@ -2359,6 +2550,23 @@ fn chat_agent_kit(task: &str) -> (Vec<String>, Vec<String>) {
         "agent.await".into(),
         "user.ask".into(),
     ];
+    if lower.contains("module")
+        || lower.contains("scaffold")
+        || lower.contains("aospkg")
+        || lower.contains("ext-rt")
+    {
+        for t in [
+            "module.scaffold",
+            "module.package",
+            "module.install",
+            "module.list",
+            "module.describe",
+        ] {
+            if !tools.iter().any(|x| x == t) {
+                tools.push(t.into());
+            }
+        }
+    }
     if lower.contains("task") || lower.contains("tâche") || lower.contains("todo") {
         if !skills.iter().any(|s| s == "tasks") {
             skills.push("tasks".into());
@@ -2593,6 +2801,106 @@ async fn run_troubleshoot(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>) {
             let mut draft = req;
             draft.publish_github = !healthy;
             let _ = evt_tx.send(Evt::FeedbackDraft(draft));
+        }
+    }
+}
+
+async fn invoke_module_bind(
+    bus: &Arc<BusClient>,
+    evt_tx: &Sender<Evt>,
+    module: &str,
+    tool: &str,
+) {
+    let req = ModuleInvokeRequest {
+        module: module.to_string(),
+        tool: tool.to_string(),
+        args: serde_json::json!({}),
+        actor: "human:ui".into(),
+        actor_caps: vec![format!("tool.invoke:{module}")],
+        trace_id: format!("ui-mod-bind-{module}-{tool}"),
+    };
+    match bus
+        .call::<ModuleInvokeRequest, ModuleInvokeResponse>("module.invoke", &req, vec![])
+        .await
+    {
+        Ok(r) if r.ok => {
+            let _ = evt_tx.send(Evt::ModuleUiBind {
+                module: module.to_string(),
+                tool: tool.to_string(),
+                result: r.result,
+                error: None,
+            });
+        }
+        Ok(r) => {
+            let _ = evt_tx.send(Evt::ModuleUiBind {
+                module: module.to_string(),
+                tool: tool.to_string(),
+                result: serde_json::Value::Null,
+                error: r.error,
+            });
+        }
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiBind {
+                module: module.to_string(),
+                tool: tool.to_string(),
+                result: serde_json::Value::Null,
+                error: Some(e.to_string()),
+            });
+        }
+    }
+}
+
+async fn invoke_module_tool(
+    bus: &Arc<BusClient>,
+    evt_tx: &Sender<Evt>,
+    module: &str,
+    tool: &str,
+    args: serde_json::Value,
+) {
+    let req = ModuleInvokeRequest {
+        module: module.to_string(),
+        tool: tool.to_string(),
+        args,
+        actor: "human:ui".into(),
+        actor_caps: vec![format!("tool.invoke:{module}")],
+        trace_id: format!("ui-mod-{module}-{tool}"),
+    };
+    match bus
+        .call::<ModuleInvokeRequest, ModuleInvokeResponse>("module.invoke", &req, vec![])
+        .await
+    {
+        Ok(r) if r.ok => {
+            let _ = evt_tx.send(Evt::ModuleUiInvokeDone {
+                module: module.to_string(),
+                tool: tool.to_string(),
+                ok: true,
+                result: r.result.clone(),
+                error: None,
+            });
+            let _ = evt_tx.send(Evt::ModuleUiBind {
+                module: module.to_string(),
+                tool: tool.to_string(),
+                result: r.result,
+                error: None,
+            });
+        }
+        Ok(r) => {
+            let _ = evt_tx.send(Evt::ModuleUiInvokeDone {
+                module: module.to_string(),
+                tool: tool.to_string(),
+                ok: false,
+                result: serde_json::Value::Null,
+                error: r.error.clone(),
+            });
+        }
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiInvokeDone {
+                module: module.to_string(),
+                tool: tool.to_string(),
+                ok: false,
+                result: serde_json::Value::Null,
+                error: Some(e.to_string()),
+            });
         }
     }
 }
@@ -2861,12 +3169,15 @@ struct UiApp {
     onboarding: OnboardingState,
     show_onboarding: bool,
     pending_note_agent: bool,
+    pending_module_agent: bool,
+    pending_module_baseline: Vec<String>,
     // scenarios
     scen_chat: bool,
     scen_note_human: bool,
     scen_note_agent: bool,
     scen_confirm: bool,
     scen_audit: bool,
+    scen_module_agent: bool,
     // feedback
     fb_title: String,
     fb_category: String,
@@ -2889,6 +3200,8 @@ struct UiApp {
     ask_reply_target: Option<String>,
     /// Re-focus chat TextEdit after send (Enter clears focus).
     chat_refocus: bool,
+    decl_panels: HashMap<String, decl_ui::DeclUiPanelState>,
+    decl_md_cache: CommonMarkCache,
 }
 
 impl UiApp {
@@ -2902,6 +3215,7 @@ impl UiApp {
         let t = i18n::strings(&prefs.language);
         let _ = cmd_tx.send(Cmd::SessionBootstrap);
         let _ = cmd_tx.send(Cmd::CatalogueRefresh);
+        let _ = cmd_tx.send(Cmd::ModuleList);
         let _ = cmd_tx.send(Cmd::SetRouting {
             mode: prefs.routing.clone(),
         });
@@ -2995,6 +3309,10 @@ impl UiApp {
                 "tasks.list".into(),
                 "tasks.update".into(),
                 "tasks.complete".into(),
+                "module.scaffold".into(),
+                "module.package".into(),
+                "module.install".into(),
+                "module.list".into(),
             ],
             agent_open_tabs: Vec::new(),
             agent_active_tab: None,
@@ -3010,11 +3328,14 @@ impl UiApp {
             onboarding,
             show_onboarding,
             pending_note_agent: false,
+            pending_module_agent: false,
+            pending_module_baseline: Vec::new(),
             scen_chat: false,
             scen_note_human: false,
             scen_note_agent: false,
             scen_confirm: false,
             scen_audit: false,
+            scen_module_agent: false,
             fb_title: String::new(),
             fb_category: "ux".into(),
             fb_severity: "medium".into(),
@@ -3033,6 +3354,8 @@ impl UiApp {
             download_status: String::new(),
             ask_reply_target: None,
             chat_refocus: false,
+            decl_panels: HashMap::new(),
+            decl_md_cache: CommonMarkCache::default(),
         }
     }
 
@@ -3060,6 +3383,66 @@ impl UiApp {
             .cloned()
             .or_else(|| queue.first().cloned())?;
         self.agents.iter().find(|a| a.agent_id == chosen)
+    }
+
+    fn task_looks_like_module_authoring(task: &str) -> bool {
+        let lower = task.to_lowercase();
+        lower.contains("module")
+            || lower.contains("scaffold")
+            || lower.contains("aospkg")
+            || lower.contains("cohortmod")
+            || lower.contains("ext-rt")
+    }
+
+    fn arm_pending_module_agent(&mut self, task: &str) {
+        if !Self::task_looks_like_module_authoring(task) {
+            return;
+        }
+        self.pending_module_agent = true;
+        self.pending_module_baseline = self
+            .installed_modules
+            .iter()
+            .map(|m| m.name.clone())
+            .collect();
+    }
+
+    fn launch_module_author_agent(&mut self) {
+        const TASK: &str = "Crée un module script nommé cohortmod. Étapes obligatoires dans cet ordre : \
+1) module.scaffold avec name=cohortmod, kind=script, description='module cohorte ping' (pas de rust, pas de compile). \
+2) module.package avec name=cohortmod. \
+3) module.install avec source_dir égal au package_dir renvoyé par package. \
+Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.complete.";
+        self.arm_pending_module_agent(TASK);
+        let t = i18n::strings(&self.prefs.language);
+        let tools = vec![
+            "module.scaffold".into(),
+            "module.package".into(),
+            "module.install".into(),
+            "module.list".into(),
+            "module.describe".into(),
+            "user.ask".into(),
+            "plan.update".into(),
+        ];
+        let _ = self.cmd_tx.send(Cmd::AgentCreate {
+            task: TASK.to_string(),
+            system_prompt: None,
+            skills: vec!["planner".into()],
+            tools,
+            mcp_servers: vec![],
+            documents: vec![],
+            optimize_prompt: false,
+            max_steps: self.prefs.default_max_steps.max(20),
+            timeout_secs: self.prefs.default_timeout_secs.max(180),
+            model_id: if self.agent_model_id.is_empty() {
+                None
+            } else {
+                Some(self.agent_model_id.clone())
+            },
+            session_id: self.active_session.clone(),
+            origin: "form".into(),
+        });
+        self.tab = Tab::Agents;
+        self.status = t.scen_module_agent_launched.into();
     }
 
     fn send_ask_reply(&mut self, session_id: String, agent_id: String, title: String, text: String) {
@@ -3236,6 +3619,7 @@ impl UiApp {
                     attachments: vec![],
                 });
                 self.pending_note_agent = rest.to_lowercase().contains("note");
+                self.arm_pending_module_agent(rest);
                 let (skills, tools) = chat_agent_kit(rest);
                 let _ = self.cmd_tx.send(Cmd::AgentCreate {
                     task: rest.to_string(),
@@ -3339,6 +3723,7 @@ impl eframe::App for UiApp {
                     origin,
                     ack,
                 } => {
+                    self.arm_pending_module_agent(&title);
                     if self.active_session.as_deref() == Some(session_id.as_str()) {
                         self.chat.push(ChatLine {
                             role: "assistant".into(),
@@ -3363,6 +3748,16 @@ impl eframe::App for UiApp {
                         })
                     {
                         let _ = self.cmd_tx.send(Cmd::NotesList);
+                    }
+                    if self.pending_module_agent
+                        && a.iter().any(|ag| {
+                            matches!(
+                                ag.state,
+                                AgentState::Done | AgentState::Failed | AgentState::Killed
+                            )
+                        })
+                    {
+                        let _ = self.cmd_tx.send(Cmd::ModuleList);
                     }
                     let seeding = self.agent_prev_states.is_empty();
                     for ag in &a {
@@ -3694,7 +4089,22 @@ impl eframe::App for UiApp {
                     self.status = t.chat_stopped.into();
                 }
                 Evt::Catalogue(c) => self.catalogue = Some(c),
-                Evt::InstalledModules(list) => self.installed_modules = list,
+                Evt::InstalledModules(list) => {
+                    if self.pending_module_agent {
+                        let new_mod = list.iter().any(|m| {
+                            aos_proto::decl_ui::sidebar_decl_ui_module(
+                                &m.name,
+                                m.ui_mode.as_deref(),
+                            ) && !self.pending_module_baseline.iter().any(|n| n == &m.name)
+                        });
+                        if new_mod {
+                            self.scen_module_agent = true;
+                            self.pending_module_agent = false;
+                            self.pending_module_baseline.clear();
+                        }
+                    }
+                    self.installed_modules = list;
+                }
                 Evt::ModuleInstalled(msg) => {
                     self.status = msg;
                     let _ = self.cmd_tx.send(Cmd::CatalogueRefresh);
@@ -3702,7 +4112,52 @@ impl eframe::App for UiApp {
                 }
                 Evt::ModuleUninstalled(name) => {
                     self.status = format!("uninstalled {name}");
+                    self.decl_panels.remove(&name);
+                    if matches!(&self.tab, Tab::Module(m) if m == &name) {
+                        self.tab = Tab::Settings;
+                    }
                     let _ = self.cmd_tx.send(Cmd::ModuleList);
+                }
+                Evt::ModuleUiLoaded(resp) => {
+                    let module = resp.module.clone();
+                    let title = resp.document.title.clone();
+                    let mut panel = decl_ui::DeclUiPanelState::new(&module);
+                    panel.set_document(resp.document);
+                    panel.status = format!("loaded {title}");
+                    self.decl_panels.insert(module, panel);
+                }
+                Evt::ModuleUiBind {
+                    module,
+                    tool,
+                    result,
+                    error,
+                } => {
+                    if let Some(panel) = self.decl_panels.get_mut(&module) {
+                        panel.set_bind_result(&tool, result);
+                        if let Some(e) = error {
+                            panel.status = format!("{tool}: {e}");
+                        }
+                    }
+                }
+                Evt::ModuleUiInvokeDone {
+                    module,
+                    tool,
+                    ok,
+                    result,
+                    error,
+                } => {
+                    if let Some(panel) = self.decl_panels.get_mut(&module) {
+                        if ok {
+                            // Keep invoke results in the bind cache so widgets bound
+                            // to this tool can update immediately without full reload.
+                            panel.set_bind_result(&tool, result);
+                        }
+                        panel.status = if ok {
+                            format!("{tool} ok")
+                        } else {
+                            error.unwrap_or_else(|| format!("{tool} failed"))
+                        };
+                    }
                 }
             }
         }
@@ -3998,7 +4453,7 @@ impl eframe::App for UiApp {
                     if tab == Tab::Feedback && self.tab != Tab::Feedback {
                         self.fb_result.clear();
                     }
-                    self.tab = tab;
+                    self.tab = tab.clone();
                     if tab == Tab::Audit {
                         let _ = self.cmd_tx.send(Cmd::Audit { last: 40 });
                     }
@@ -4022,6 +4477,35 @@ impl eframe::App for UiApp {
                         let _ = self.cmd_tx.send(Cmd::ScheduleList);
                         let _ = self.cmd_tx.send(Cmd::CatalogueRefresh);
                         let _ = self.cmd_tx.send(Cmd::ModuleList);
+                    }
+                }
+            }
+            let decl_mods: Vec<(String, String)> = self
+                .installed_modules
+                .iter()
+                .filter(|m| {
+                    aos_proto::decl_ui::sidebar_decl_ui_module(
+                        &m.name,
+                        m.ui_mode.as_deref(),
+                    )
+                })
+                .map(|m| {
+                    (
+                        m.name.clone(),
+                        m.ui_title
+                            .clone()
+                            .unwrap_or_else(|| m.name.clone()),
+                    )
+                })
+                .collect();
+            if !decl_mods.is_empty() {
+                ui.separator();
+                ui.weak("Modules");
+                for (name, label) in decl_mods {
+                    let tab = Tab::Module(name.clone());
+                    if ui.selectable_label(self.tab == tab, &label).clicked() {
+                        self.tab = tab;
+                        let _ = self.cmd_tx.send(Cmd::ModuleUiLoad { module: name });
                     }
                 }
             }
@@ -4087,7 +4571,8 @@ impl eframe::App for UiApp {
             self.ui_agent_detail_panel(ctx);
         }
 
-        egui::CentralPanel::default().show(ctx, |ui| match self.tab {
+        let current_tab = self.tab.clone();
+        egui::CentralPanel::default().show(ctx, |ui| match current_tab {
             Tab::Chat => self.ui_chat(ui),
             Tab::Memory => self.ui_memory(ui),
             Tab::Notes => self.ui_notes(ui),
@@ -4099,11 +4584,41 @@ impl eframe::App for UiApp {
             Tab::Scenarios => overflow_scroll(ui, "scenarios", |ui| self.ui_scenarios(ui)),
             Tab::Feedback => overflow_scroll(ui, "feedback", |ui| self.ui_feedback(ui)),
             Tab::Settings => overflow_scroll(ui, "settings", |ui| self.ui_settings(ui)),
+            Tab::Module(name) => {
+                overflow_scroll(ui, ("decl-mod", name.as_str()), |ui| self.ui_decl_module(ui, &name))
+            }
         });
     }
 }
 
 impl UiApp {
+    fn ui_decl_module(&mut self, ui: &mut egui::Ui, module: &str) {
+        if !self.decl_panels.contains_key(module) {
+            let _ = self.cmd_tx.send(Cmd::ModuleUiLoad {
+                module: module.to_string(),
+            });
+            ui.weak("…");
+            return;
+        }
+        let t = i18n::strings(&self.prefs.language);
+        let mut actions = decl_ui::DeclUiActions::default();
+        if let Some(panel) = self.decl_panels.get_mut(module) {
+            actions = panel.ui(ui, &mut self.decl_md_cache, t.decl_ui_refresh);
+        }
+        if actions.refresh {
+            let _ = self.cmd_tx.send(Cmd::ModuleUiRefresh {
+                module: module.to_string(),
+            });
+        }
+        if let Some((tool, args)) = actions.invoke {
+            let _ = self.cmd_tx.send(Cmd::ModuleUiInvoke {
+                module: module.to_string(),
+                tool,
+                args,
+            });
+        }
+    }
+
     fn ui_chat(&mut self, ui: &mut egui::Ui) {
         let t = i18n::strings(&self.prefs.language);
         let full = ui.available_size();
@@ -4900,6 +5415,8 @@ impl UiApp {
 
         if ui.button("Créer l'agent").clicked() && !self.agent_task.is_empty() {
             self.pending_note_agent = self.agent_task.to_lowercase().contains("note");
+            let task = self.agent_task.clone();
+            self.arm_pending_module_agent(&task);
             let documents: Vec<DocumentRef> = self
                 .agent_docs
                 .split(',')
@@ -5944,6 +6461,7 @@ impl UiApp {
     }
 
     fn ui_scenarios(&mut self, ui: &mut egui::Ui) {
+        let t = i18n::strings(&self.prefs.language);
         ui.heading("Scénarios guidés (protocole cohorte)");
         ui.label("Cochez au fur et à mesure — voir aussi docs/TESTER.md");
         ui.checkbox(&mut self.scen_chat, "1. Chat offline (onglet Chat)");
@@ -5963,6 +6481,11 @@ impl UiApp {
             &mut self.scen_audit,
             "5. Vérifier l'audit ; tuer auditd et continuer à chatter",
         );
+        ui.checkbox(&mut self.scen_module_agent, t.scen_module_agent);
+        ui.weak(t.scen_module_agent_hint);
+        if ui.button(t.scen_module_agent_launch).clicked() {
+            self.launch_module_author_agent();
+        }
         ui.label("PC.6–PC.9 : sessions / mémoire / réseau / downloads — voir TESTER.md §6–9");
         ui.separator();
         let done = [
@@ -5971,12 +6494,13 @@ impl UiApp {
             self.scen_note_agent,
             self.scen_confirm,
             self.scen_audit,
+            self.scen_module_agent,
         ]
         .iter()
         .filter(|x| **x)
         .count();
-        ui.label(format!("Progression : {done}/5"));
-        if done == 5 {
+        ui.label(format!("Progression : {done}/6"));
+        if done == 6 {
             ui.colored_label(
                 egui::Color32::LIGHT_GREEN,
                 "Protocole de base terminé — envoyez un retour (onglet Retour).",
@@ -6062,6 +6586,7 @@ impl UiApp {
                     "note_agent": self.scen_note_agent,
                     "confirm": self.scen_confirm,
                     "audit": self.scen_audit,
+                    "module_agent": self.scen_module_agent,
                 },
                 "onboarding": self.onboarding,
             });

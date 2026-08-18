@@ -157,7 +157,7 @@ Extensions OS (si limitation) :
 - cap.request : {"cap":"tool.invoke:foo","reason":"..."}
 - skill.create : {"name":"...","description":"...","body":"...","tools":[]}
 - skill.activate : {"name":"..."}
-- module.scaffold : {"name":"...","kind":"script|rust","description":"..."}
+- module.scaffold : {"name":"...","kind":"script|rust","description":"...","ui":"..."}  (ui optionnel : JSON declarative_ui)
 - module.package : {"name":"..."}  (script/ext-rt, sans rustc)
 - module.compile : {"name":"..."}  (Rust→WASM, confirmation)
 - module.install : {"source_dir":"..."}  (après package/compile)

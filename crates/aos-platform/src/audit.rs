@@ -105,14 +105,23 @@ impl AuditJournal {
             return Ok(());
         }
         let content = std::fs::read_to_string(&path)?;
-        for line in content.lines() {
+        for (i, line) in content.lines().enumerate() {
             if line.trim().is_empty() {
                 continue;
             }
-            let ev: AuditEvent = serde_json::from_str(line)
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
-            self.last_hash = ev.hash.clone();
-            self.events.push(ev);
+            let parsed = parse_audit_line(line);
+            if parsed.is_empty() {
+                eprintln!(
+                    "[audit] ligne {} ignorée (JSON invalide, {} octets)",
+                    i + 1,
+                    line.len()
+                );
+                continue;
+            }
+            for ev in parsed {
+                self.last_hash = ev.hash.clone();
+                self.events.push(ev);
+            }
         }
         Ok(())
     }
@@ -228,6 +237,20 @@ fn hex(bytes: &[u8]) -> String {
     s
 }
 
+/// Une ligne JSONL peut contenir plusieurs objets collés (`}{`) si deux
+/// writers appendent sans newline — on stream-parse au lieu de planter le boot.
+fn parse_audit_line(line: &str) -> Vec<AuditEvent> {
+    let mut out = Vec::new();
+    let stream = serde_json::Deserializer::from_str(line).into_iter::<AuditEvent>();
+    for item in stream {
+        match item {
+            Ok(ev) => out.push(ev),
+            Err(_) => break,
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -301,6 +324,21 @@ mod tests {
         // Falsifie l'événement en mémoire.
         j.events[0].action = "policy.allow".into();
         assert!(j.verify().is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn rejoue_objets_json_colles_sans_newline() {
+        let dir = tmpdir("concat");
+        let mut j = AuditJournal::open(&dir).unwrap();
+        j.append(req("t", "a", "x", "y1"));
+        j.append(req("t", "a", "x", "y2"));
+        let path = dir.join("audit.jsonl");
+        let raw = std::fs::read_to_string(&path).unwrap();
+        let glued = raw.replace("\r\n", "").replace('\n', "");
+        std::fs::write(&path, glued).unwrap();
+        let j2 = AuditJournal::open(&dir).unwrap();
+        assert_eq!(j2.len(), 2);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

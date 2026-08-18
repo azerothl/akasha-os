@@ -8,7 +8,7 @@ use crate::audit::AuditJournal;
 use crate::chat_session::ChatSessionStore;
 use crate::confirm::ConfirmManager;
 use crate::memory::MemoryStore;
-use crate::module_rt::{HostCallCtx, HostServices, ModuleRuntime};
+use crate::module_rt::{read_module_asset_from_dir, HostCallCtx, HostServices, ModuleRuntime};
 use crate::net::EgressControl;
 use crate::policy::PolicyEngine;
 use crate::secrets::SecretStore;
@@ -767,12 +767,9 @@ impl HostServices for PlatformSubsystem {
                     .as_str()
                     .or_else(|| args["rel"].as_str())
                     .unwrap_or("handlers.yaml");
-                let bytes = self
-                    .modules
-                    .lock()
-                    .unwrap()
-                    .read_asset(&ctx.module, rel)
-                    .map_err(|e| e.to_string())?;
+                // Ne pas re-lock `modules` ici : `module.invoke` tient déjà le mutex.
+                let bytes =
+                    read_module_asset_from_dir(&ctx.module_dir, rel).map_err(|e| e.to_string())?;
                 let text = String::from_utf8_lossy(&bytes).to_string();
                 Ok(serde_json::json!({"content": text}))
             }

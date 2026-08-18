@@ -1,6 +1,7 @@
 //! Authoring de modules : scaffold script/rust, package (ext-rt), compile wasm32.
 
 use aos_proto::{
+    decl_ui::{default_document, document_to_json, DeclUiDocument},
     ModuleCompileResponse, ModuleManifest, ModulePackageResponse, ModulePermissions, ModuleScaffoldRequest,
     ModuleScaffoldResponse, ModuleTool, ModuleUi,
 };
@@ -126,6 +127,7 @@ impl ModuleAuthor {
             };
             std::fs::write(dest.join("handlers.yaml"), handlers)
                 .map_err(|e| CompileError::Io(e.to_string()))?;
+            write_scaffold_ui(&dest, req, &tools)?;
             let manifest = ModuleManifest {
                 name: req.name.clone(),
                 version: "0.1.0".into(),
@@ -174,6 +176,7 @@ serde_json = "1"
             );
             std::fs::write(dest.join("Cargo.toml"), cargo)
                 .map_err(|e| CompileError::Io(e.to_string()))?;
+            write_scaffold_ui(&dest, req, &tools)?;
             let manifest = ModuleManifest {
                 name: req.name.clone(),
                 version: "0.1.0".into(),
@@ -270,21 +273,9 @@ serde_json = "1"
         manifest.hash = hash.clone();
         let yaml = serde_yaml::to_string(&manifest).map_err(|e| CompileError::Io(e.to_string()))?;
         std::fs::write(pkg.join("manifest.yaml"), yaml).map_err(|e| CompileError::Io(e.to_string()))?;
-        std::fs::write(
-            pkg.join("ui/index.html"),
-            format!(
-                r#"{{"type":"declarative_ui","title":"{name}","commands":{}}}"#,
-                serde_json::to_string(
-                    &manifest
-                        .tools
-                        .iter()
-                        .map(|t| t.name.clone())
-                        .collect::<Vec<_>>()
-                )
-                .unwrap_or_else(|_| "[]".into())
-            ),
-        )
-        .map_err(|e| CompileError::Io(e.to_string()))?;
+        let ui_doc = load_ui_for_package(&src, &manifest)?;
+        std::fs::write(pkg.join("ui/index.html"), document_to_json(&ui_doc))
+            .map_err(|e| CompileError::Io(e.to_string()))?;
 
         Ok(ModulePackageResponse {
             package_dir: pkg.to_string_lossy().to_string(),
@@ -388,11 +379,16 @@ serde_json = "1"
         manifest.hash = hash.clone();
         let yaml = serde_yaml::to_string(&manifest).map_err(|e| CompileError::Io(e.to_string()))?;
         std::fs::write(pkg.join("manifest.yaml"), yaml).map_err(|e| CompileError::Io(e.to_string()))?;
-        std::fs::write(
-            pkg.join("ui/index.html"),
-            format!(r#"{{"type":"declarative_ui","title":"{name}"}}"#),
-        )
-        .map_err(|e| CompileError::Io(e.to_string()))?;
+        let ui_doc = if crate_dir.join("ui/index.html").exists() {
+            let raw = std::fs::read(crate_dir.join("ui/index.html"))
+                .map_err(|e| CompileError::Io(e.to_string()))?;
+            DeclUiDocument::parse_json(&raw)
+                .map_err(|e| CompileError::Other(format!("ui: {e}")))?
+        } else {
+            ui_document_for_manifest(&manifest)
+        };
+        std::fs::write(pkg.join("ui/index.html"), document_to_json(&ui_doc))
+            .map_err(|e| CompileError::Io(e.to_string()))?;
 
         Ok(ModuleCompileResponse {
             package_dir: pkg.to_string_lossy().to_string(),
@@ -476,6 +472,48 @@ fn default_rust_lib(name: &str) -> String {
 aos_module_sdk::export_module!(handle);
 "#
     )
+}
+
+fn write_scaffold_ui(
+    dest: &Path,
+    req: &ModuleScaffoldRequest,
+    tools: &[ModuleTool],
+) -> Result<(), CompileError> {
+    std::fs::create_dir_all(dest.join("ui")).map_err(|e| CompileError::Io(e.to_string()))?;
+    let doc = if req.ui.trim().is_empty() {
+        ui_document_for_tools(&req.name, &req.description, tools)
+    } else {
+        DeclUiDocument::parse_json(req.ui.as_bytes())
+            .map_err(|e| CompileError::Other(format!("ui: {e}")))?
+    };
+    std::fs::write(dest.join("ui/index.html"), document_to_json(&doc))
+        .map_err(|e| CompileError::Io(e.to_string()))
+}
+
+fn load_ui_for_package(src: &Path, manifest: &ModuleManifest) -> Result<DeclUiDocument, CompileError> {
+    let ui_path = src.join("ui/index.html");
+    if ui_path.exists() {
+        let raw = std::fs::read(&ui_path).map_err(|e| CompileError::Io(e.to_string()))?;
+        DeclUiDocument::parse_json(&raw).map_err(|e| CompileError::Other(format!("ui: {e}")))
+    } else {
+        Ok(ui_document_for_manifest(manifest))
+    }
+}
+
+fn ui_document_for_manifest(manifest: &ModuleManifest) -> DeclUiDocument {
+    ui_document_for_tools(&manifest.name, &manifest.name, &manifest.tools)
+}
+
+fn ui_document_for_tools(name: &str, description: &str, tools: &[ModuleTool]) -> DeclUiDocument {
+    let primary = tools.first();
+    let tool_name = primary
+        .map(|t| t.name.as_str())
+        .unwrap_or(name);
+    let schema = primary
+        .map(|t| t.input_schema.clone())
+        .unwrap_or_else(|| serde_json::json!({"type":"object"}));
+    let title = if description.is_empty() { name } else { description };
+    default_document(title, tool_name, &schema)
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {

@@ -1935,6 +1935,54 @@ async fn main() {
     }
     {
         let s = sub.clone();
+        svc.on("module.ui", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<ModuleIdRequest>() {
+                    Ok(req) => {
+                        let payload = {
+                            let mods = s.modules.lock().unwrap();
+                            mods.load_ui(&req.module)
+                        };
+                        match payload {
+                            Ok(resp) => {
+                                s.audit(AuditAppendRequest {
+                                    trace_id: format!("module-ui-{}", req.module),
+                                    actor: "human:ui".into(),
+                                    action: "module.ui".into(),
+                                    target: req.module.clone(),
+                                    detail: serde_json::json!({
+                                        "title": resp.document.title,
+                                        "tools": resp.document.referenced_tools(),
+                                    }),
+                                });
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &resp).await;
+                            }
+                            Err(e) => {
+                                s.audit(AuditAppendRequest {
+                                    trace_id: format!("module-ui-{}", req.module),
+                                    actor: "human:ui".into(),
+                                    action: "module.ui".into(),
+                                    target: req.module.clone(),
+                                    detail: serde_json::json!({ "ok": false, "error": e.to_string() }),
+                                });
+                                let _ = ctx
+                                    .respond_error(aos_ipc::msg::Status::BadRequest, &e.to_string())
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
         svc.on("module.invoke", move |ctx| {
             let s = s.clone();
             async move {

@@ -105,6 +105,7 @@ async fn main() {
                 tools: vec![],
                 required_caps: vec![format!("fs.write:/documents/{mod_name}/**")],
                 source: String::new(),
+                ui: String::new(),
                 actor: "human:gate".into(),
                 actor_caps: vec![],
             },
@@ -137,6 +138,28 @@ async fn main() {
             Err(e) => e.to_string(),
         },
     });
+
+    if let Ok(pkg) = &packaged {
+        let ui_path = std::path::Path::new(&pkg.package_dir).join("ui/index.html");
+        let (ui_ok, ui_detail) = match std::fs::read(&ui_path) {
+            Ok(raw) => match aos_proto::decl_ui::DeclUiDocument::parse_json(&raw) {
+                Ok(doc) => {
+                    let kinds = doc.collect_widget_kinds();
+                    let beyond_heading = kinds
+                        .iter()
+                        .any(|k| k != "heading" && k != "column" && k != "row");
+                    (beyond_heading, format!("kinds={kinds:?}"))
+                }
+                Err(e) => (false, e.to_string()),
+            },
+            Err(e) => (false, e.to_string()),
+        };
+        checks.push(Check {
+            name: "declarative_ui package ui",
+            ok: ui_ok,
+            detail: ui_detail,
+        });
+    }
 
     // 4. module.install sans cap agent → deny
     if let Ok(pkg) = &packaged {

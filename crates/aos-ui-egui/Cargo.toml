@@ -17,3 +17,4 @@ serde_json.workspace = true
 tokio.workspace = true
 eframe = "0.31"
 egui_commonmark = { version = "0.20", default-features = false, features = ["pulldown_cmark"] }
+egui_plot = "0.31"

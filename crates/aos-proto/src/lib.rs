@@ -8,6 +8,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 pub mod bridge;
+pub mod decl_ui;
 
 // ---------------------------------------------------------------------------
 // Model API (§11.1)
@@ -1052,10 +1053,11 @@ Architecture (services userspace reliés par un bus IPC sémantique CBOR) :
 - aos-agentd : runtime agentic — boucle goal/plan/outils, skills, MCP, sous-agents isolés par capacités ;
 - aos-platformd : modules WASM, mémoire épisodique, FS versionné avec undo, web/files, audit signé, skills.
 
-Extensibilité : si tu butes sur une limitation, tu peux étendre l'OS :
+Extensibilité (uniquement si tu as une boucle d'outils / un catalogue) :
 1. skill.create — recette déclarative (prompt + outils existants) ;
 2. cap.request — demander une capacité manquante (web, fs, module.install…) ;
 3. module.scaffold + module.package (script/ext-rt) ou module.compile (Rust→WASM) puis module.install.
+N'écris jamais un manifeste, handlers.yaml, ni un arbre declarative_ui « pour montrer » un module : exécute les outils, ou délègue.
 
 Tu agis via des actions JSON structurées (ou la convention TOOL: pour compat). Tu n'inventes pas d'outils absents du catalogue. Tu respectes les capacités (caps) et les confirmations bloquantes.
 
@@ -1064,17 +1066,116 @@ Tu réponds en français, de façon concise et factuelle. Si tu ne sais pas, dis
 /// Addendum injecté uniquement dans le chemin chat (pas les workers).
 /// Délégation des tâches complexes via `agent.spawn` sans boucle d'outils.
 pub const CHAT_DELEGATION_PROMPT: &str = "
-Chat (cette session) :
-- Questions, explications, conseils → réponds directement en français, sans JSON.
-- Tâche multi-étapes, outils, notes, fichiers, recherche web, effets de bord →
-  une courte phrase d'accusé puis un objet JSON seul :
-  {\"action\":\"agent.spawn\",\"args\":{\"brief\":\"…\"}}
-  (skills/tools optionnels dans args). Ne lance pas toi-même d'outils.
+Chat (cette session) — tu n'as PAS de boucle d'outils :
+- Questions, explications, conseils → réponds en français, sans JSON.
+- Créer / scaffolder / packager / installer un module ou une skill, ou toute
+  tâche multi-étapes avec effets de bord (notes, fichiers, web) →
+  une courte phrase d'accusé puis UNIQUEMENT cet objet JSON :
+  {\"action\":\"agent.spawn\",\"args\":{\"brief\":\"<demande utilisateur>\"}}
+  N'écris JAMAIS le manifeste, handlers.yaml, ni un arbre declarative_ui.
+  L'agent fera module.scaffold + module.package + module.install.
+- Ne lance pas toi-même d'outils (pas de module.scaffold, pas de TOOL:).
 - Mémoire : tu n'enregistres rien toi-même. Les faits durables (nom, préférences…)
   sont extraits après le tour vers l'onglet Mémoire. N'écris jamais que tu as
   « noté », « enregistré » ou mis en « mémoire épisodique ». Si un bloc
   « Mémoire long terme utilisateur » est présent ci-dessous, utilise-le.
   Si l'utilisateur demande d'oublier, oriente-le vers l'onglet Mémoire.";
+
+/// Intention chat : créer / installer un module ou une skill (pas « c'est quoi »).
+pub fn chat_user_wants_module_authoring(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    let mentions_target = lower.contains("module")
+        || lower.contains("aospkg")
+        || lower.contains("ext-rt")
+        || lower.contains("ext_rt")
+        || lower.contains("skill");
+    if !mentions_target {
+        return false;
+    }
+    let explain = [
+        "c'est quoi",
+        "c est quoi",
+        "qu'est-ce",
+        "qu est-ce",
+        "quest-ce",
+        "explique",
+        "expliquer",
+        "what is",
+        "what's a",
+        "whats a",
+        "how does",
+        "comment fonctionne",
+        "comment marche",
+        "à quoi sert",
+        "a quoi sert",
+        "différence",
+        "difference",
+    ]
+    .iter()
+    .any(|p| lower.contains(p));
+    let create = [
+        "crée",
+        "creer",
+        "créer",
+        "création",
+        "create",
+        "creation",
+        "scaffold",
+        "ajoute",
+        "ajouter",
+        "add a ",
+        "make a",
+        "build a",
+        "fabrique",
+        "génère",
+        "genere",
+        "generate",
+        "packager",
+        "package un",
+        "nouveau module",
+        "new module",
+        "nouvelle skill",
+        "new skill",
+        "module.scaffold",
+        "module.package",
+        "module.install",
+        "skill.create",
+    ]
+    .iter()
+    .any(|p| lower.contains(p));
+    let install_verb = (lower.contains("installe") || lower.contains("install"))
+        && !lower.contains("installé")
+        && !lower.contains("installed");
+    if explain && !create && !install_verb {
+        return false;
+    }
+    create || install_verb
+}
+
+#[cfg(test)]
+mod chat_delegation_tests {
+    use super::chat_user_wants_module_authoring;
+
+    #[test]
+    fn create_module_spawns() {
+        assert!(chat_user_wants_module_authoring("crée un module ping"));
+        assert!(chat_user_wants_module_authoring("Créer un module cohorte"));
+        assert!(chat_user_wants_module_authoring("create a module named ping"));
+        assert!(chat_user_wants_module_authoring("scaffold un module ext-rt"));
+        assert!(chat_user_wants_module_authoring("installe un module"));
+        assert!(chat_user_wants_module_authoring("ajoute une skill notes"));
+        assert!(chat_user_wants_module_authoring("création d'un module ping"));
+    }
+
+    #[test]
+    fn explain_does_not_spawn() {
+        assert!(!chat_user_wants_module_authoring("c'est quoi un module"));
+        assert!(!chat_user_wants_module_authoring("explique les modules"));
+        assert!(!chat_user_wants_module_authoring("what is a skill"));
+        assert!(!chat_user_wants_module_authoring("quels sont les modules installés"));
+        assert!(!chat_user_wants_module_authoring("liste les modules"));
+    }
+}
 
 /// Manifeste double-surface (§7.3).
 // ---------------------------------------------------------------------------
@@ -1171,6 +1272,9 @@ pub struct ModuleScaffoldRequest {
     /// Contenu handlers.yaml (kind=script) ou src/lib.rs (kind=rust).
     #[serde(default)]
     pub source: String,
+    /// Document UI déclaratif JSON (`declarative_ui`) ; vide → arbre par défaut.
+    #[serde(default)]
+    pub ui: String,
     #[serde(default)]
     pub actor: String,
     #[serde(default)]
@@ -1249,13 +1353,18 @@ pub struct ModuleIdRequest {
     pub module: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct ModuleInfo {
     pub name: String,
     pub version: String,
     pub granted_caps: Vec<String>,
     pub tools: Vec<String>,
     pub quarantined: bool,
+    /// `declarative_ui` | `sandboxed_webview` | empty when no human UI.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ui_mode: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ui_title: Option<String>,
 }
 
 // ---------------------------------------------------------------------------

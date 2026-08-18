@@ -2178,6 +2178,11 @@ async fn invoke_native(
                     .and_then(|v| v.as_str())
                     .unwrap_or("")
                     .to_string(),
+                ui: args
+                    .get("ui")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
                 actor: actor.clone(),
                 actor_caps: caps.to_vec(),
             };

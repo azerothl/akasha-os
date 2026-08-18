@@ -8,6 +8,7 @@ use schemars::{schema_for, JsonSchema};
 use serde_json::{json, Map, Value};
 
 use crate::{
+    decl_ui::{DeclUiDocument, DeclUiWidget, ModuleUiResponse},
     MemContextRequest, MemContextResponse, MemEpisodicDeleteRequest, MemEpisodicQueryRequest,
     MemEpisodicWriteRequest, MemExtractOutcome, MemExtractOutcomeKind, MemExtractRequest,
     MemExtractResponse, MemExtractedFact, MemHit, MemListRequest, MemNeighborsRequest,
@@ -98,6 +99,21 @@ pub fn secrets_schema_document() -> Value {
     })
 }
 
+/// JSON Schema for E15 declarative module UI documents (`ui/index.html`).
+pub fn decl_ui_schema_document() -> Value {
+    json!({
+        "$schema": SCHEMA_META,
+        "title": "Akasha OS declarative module UI (E15)",
+        "description": "Closed widget vocabulary for host-rendered module tabs in Preview 0.7+. Not HTML/JS.",
+        "version": "0.7.0",
+        "$defs": defs(&[
+            ("DeclUiDocument", schema_of::<DeclUiDocument>()),
+            ("DeclUiWidget", schema_of::<DeclUiWidget>()),
+            ("ModuleUiResponse", schema_of::<ModuleUiResponse>()),
+        ]),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -113,14 +129,17 @@ mod tests {
         let dir = bridge_dir();
         let mem = to_pretty(&memory_schema_document());
         let sec = to_pretty(&secrets_schema_document());
+        let decl = to_pretty(&decl_ui_schema_document());
         if std::env::var("UPDATE_BRIDGE_SCHEMAS").ok().as_deref() == Some("1") {
             fs::create_dir_all(&dir).expect("docs/bridge");
             fs::write(dir.join("aos-proto-memory.json"), &mem).expect("write memory schema");
             fs::write(dir.join("aos-proto-secrets.json"), &sec).expect("write secrets schema");
+            fs::write(dir.join("aos-proto-decl-ui.json"), &decl).expect("write decl-ui schema");
             return;
         }
         let got_mem = fs::read_to_string(dir.join("aos-proto-memory.json")).unwrap_or_default();
         let got_sec = fs::read_to_string(dir.join("aos-proto-secrets.json")).unwrap_or_default();
+        let got_decl = fs::read_to_string(dir.join("aos-proto-decl-ui.json")).unwrap_or_default();
         assert_eq!(
             got_mem, mem,
             "docs/bridge/aos-proto-memory.json is stale; rerun with UPDATE_BRIDGE_SCHEMAS=1"
@@ -128,6 +147,10 @@ mod tests {
         assert_eq!(
             got_sec, sec,
             "docs/bridge/aos-proto-secrets.json is stale; rerun with UPDATE_BRIDGE_SCHEMAS=1"
+        );
+        assert_eq!(
+            got_decl, decl,
+            "docs/bridge/aos-proto-decl-ui.json is stale; rerun with UPDATE_BRIDGE_SCHEMAS=1"
         );
     }
 }

@@ -20,6 +20,7 @@
 //!   sont admin en v1 mono-utilisateur, §12) ;
 //! - bornes par invocation : fuel CPU + mémoire linéaire limitée (§7.4).
 
+use aos_proto::decl_ui::{DeclUiDocument, ModuleUiResponse};
 use aos_proto::{ModuleInfo, ModuleManifest};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -52,6 +53,8 @@ pub enum ModuleError {
     CatalogueMismatch(String),
     #[error("signature catalogue invalide")]
     CatalogueSignature,
+    #[error("UI déclarative invalide: {0}")]
+    DeclUiInvalid(String),
     #[error("io: {0}")]
     Io(String),
 }
@@ -78,9 +81,24 @@ pub trait HostServices: Send + Sync {
 #[derive(Debug, Clone)]
 pub struct HostCallCtx {
     pub module: String,
+    /// Répertoire d'installation (lecture d'assets sans re-lock du registry).
+    pub module_dir: PathBuf,
     pub granted_caps: Vec<String>,
     pub actor: String,
     pub trace_id: String,
+}
+
+/// Lit un asset relatif au répertoire d'un module installé.
+pub fn read_module_asset_from_dir(dir: &Path, rel: &str) -> Result<Vec<u8>, ModuleError> {
+    let rel = rel.trim_start_matches('/').trim_start_matches('\\');
+    if rel.contains("..") {
+        return Err(ModuleError::BadManifest("chemin asset invalide".into()));
+    }
+    let path = dir.join(rel);
+    if !path.starts_with(dir) {
+        return Err(ModuleError::BadManifest("chemin asset hors module".into()));
+    }
+    std::fs::read(&path).map_err(|e| ModuleError::Io(e.to_string()))
 }
 
 /// État interne d'un Store wasmtime.
@@ -283,13 +301,7 @@ impl ModuleRuntime {
         }
         copy_dir(source_dir, &dest)?;
         let compiled = self.compile(&dest.join("module.wasm"))?;
-        let info = ModuleInfo {
-            name: manifest.name.clone(),
-            version: manifest.version.clone(),
-            granted_caps: granted.clone(),
-            tools: manifest.tools.iter().map(|t| t.name.clone()).collect(),
-            quarantined,
-        };
+        let info = module_info_from_installed(&manifest, granted.clone(), quarantined, Some(&dest));
         self.installed.insert(
             manifest.name.clone(),
             InstalledModule {
@@ -328,14 +340,37 @@ impl ModuleRuntime {
     pub fn list(&self) -> Vec<ModuleInfo> {
         self.installed
             .values()
-            .map(|m| ModuleInfo {
-                name: m.manifest.name.clone(),
-                version: m.manifest.version.clone(),
-                granted_caps: m.granted_caps.clone(),
-                tools: m.manifest.tools.iter().map(|t| t.name.clone()).collect(),
-                quarantined: m.quarantined,
-            })
+            .map(|m| module_info_from_installed(&m.manifest, m.granted_caps.clone(), m.quarantined, Some(&m.dir)))
             .collect()
+    }
+
+    /// `module.ui` — charge et valide le document UI déclaratif (E15).
+    pub fn load_ui(&self, name: &str) -> Result<ModuleUiResponse, ModuleError> {
+        let m = self
+            .installed
+            .get(name)
+            .ok_or_else(|| ModuleError::NotFound(name.into()))?;
+        if m.quarantined {
+            return Err(ModuleError::Quarantined(name.into()));
+        }
+        let ui = m
+            .manifest
+            .ui
+            .as_ref()
+            .ok_or_else(|| ModuleError::BadManifest("pas de section ui".into()))?;
+        if ui.mode != "declarative_ui" {
+            return Err(ModuleError::BadManifest(format!(
+                "mode ui non supporté en Preview: {}",
+                ui.mode
+            )));
+        }
+        let raw = self.read_asset(name, &ui.entry)?;
+        let document = DeclUiDocument::parse_json(&raw)
+            .map_err(|e| ModuleError::DeclUiInvalid(e.to_string()))?;
+        Ok(ModuleUiResponse {
+            module: name.to_string(),
+            document,
+        })
     }
 
     /// `module.describe` : manifeste + schémas (introspection, F-MOD-03).
@@ -357,16 +392,7 @@ impl ModuleRuntime {
 
     /// Lit un fichier asset relatif au package installé (ex. handlers.yaml).
     pub fn read_asset(&self, name: &str, rel: &str) -> Result<Vec<u8>, ModuleError> {
-        let dir = self.module_dir(name)?;
-        let rel = rel.trim_start_matches('/').trim_start_matches('\\');
-        if rel.contains("..") {
-            return Err(ModuleError::BadManifest("chemin asset invalide".into()));
-        }
-        let path = dir.join(rel);
-        if !path.starts_with(dir) {
-            return Err(ModuleError::BadManifest("chemin asset hors module".into()));
-        }
-        std::fs::read(&path).map_err(|e| ModuleError::Io(e.to_string()))
+        read_module_asset_from_dir(self.module_dir(name)?, rel)
     }
 
     pub fn set_quarantined(&mut self, name: &str, quarantined: bool) -> Result<(), ModuleError> {
@@ -413,6 +439,7 @@ impl ModuleRuntime {
             StoreState {
                 ctx: HostCallCtx {
                     module: module.into(),
+                    module_dir: m.dir.clone(),
                     granted_caps: m.granted_caps.clone(),
                     actor: actor.into(),
                     trace_id: trace_id.into(),
@@ -757,4 +784,119 @@ min_os_api: 1
             .is_ok());
         let _ = std::fs::remove_dir_all(&base);
     }
+
+    /// Regression: ext-rt must load handlers without re-locking `ModuleRuntime` (deadlock).
+    #[test]
+    fn ext_rt_handlers_invoke_sans_deadlock() {
+        struct ExtRtServices;
+        impl HostServices for ExtRtServices {
+            fn call(
+                &self,
+                ctx: &HostCallCtx,
+                service: &str,
+                args: serde_json::Value,
+            ) -> Result<serde_json::Value, String> {
+                match service {
+                    "ext.load_handlers" | "ext.asset_read" => {
+                        let rel = args["path"]
+                            .as_str()
+                            .or_else(|| args["rel"].as_str())
+                            .unwrap_or("handlers.yaml");
+                        let bytes = read_module_asset_from_dir(&ctx.module_dir, rel)
+                            .map_err(|e| e.to_string())?;
+                        Ok(serde_json::json!({
+                            "content": String::from_utf8_lossy(&bytes),
+                        }))
+                    }
+                    other => Err(format!("service inconnu: {other}")),
+                }
+            }
+        }
+
+        let base = tmpbase("ext-rt");
+        let pkg = base.join("pkg");
+        let src = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../dist/AgentOS-Preview-0.7.0-windows-x64-cpu/decldemo.aospkg");
+        if !src.join("module.wasm").exists() {
+            eprintln!("skip ext_rt_handlers_invoke_sans_deadlock: decldemo.aospkg absent");
+            return;
+        }
+        std::fs::create_dir_all(&pkg).unwrap();
+        for entry in std::fs::read_dir(&src).unwrap() {
+            let entry = entry.unwrap();
+            let ty = entry.file_type().unwrap();
+            let dest = pkg.join(entry.file_name());
+            if ty.is_dir() {
+                copy_dir_all(&entry.path(), &dest);
+            } else {
+                std::fs::copy(entry.path(), dest).unwrap();
+            }
+        }
+
+        let mut rt = ModuleRuntime::open(base.join("modules"), Arc::new(ExtRtServices)).unwrap();
+        rt.install(&pkg, Some(vec![])).unwrap();
+        let out = rt
+            .invoke(
+                "decldemo",
+                "decldemo.snapshot",
+                &serde_json::json!({}),
+                "human:ui",
+                &[],
+                "t-ext-rt",
+            )
+            .unwrap();
+        assert_eq!(out.get("count").and_then(|v| v.as_i64()), Some(3));
+        assert_eq!(out.get("ok").and_then(|v| v.as_bool()), Some(true));
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    fn copy_dir_all(src: &Path, dst: &Path) {
+        std::fs::create_dir_all(dst).unwrap();
+        for entry in std::fs::read_dir(src).unwrap() {
+            let entry = entry.unwrap();
+            let dest = dst.join(entry.file_name());
+            if entry.file_type().unwrap().is_dir() {
+                copy_dir_all(&entry.path(), &dest);
+            } else {
+                std::fs::copy(entry.path(), dest).unwrap();
+            }
+        }
+    }
+}
+
+fn module_info_from_installed(
+    manifest: &ModuleManifest,
+    granted_caps: Vec<String>,
+    quarantined: bool,
+    dir: Option<&Path>,
+) -> ModuleInfo {
+    let (ui_mode, ui_title) = ui_meta_from_manifest(manifest, dir);
+    ModuleInfo {
+        name: manifest.name.clone(),
+        version: manifest.version.clone(),
+        granted_caps,
+        tools: manifest.tools.iter().map(|t| t.name.clone()).collect(),
+        quarantined,
+        ui_mode,
+        ui_title,
+    }
+}
+
+fn ui_meta_from_manifest(manifest: &ModuleManifest, dir: Option<&Path>) -> (Option<String>, Option<String>) {
+    let Some(ui) = manifest.ui.as_ref() else {
+        return (None, None);
+    };
+    let mode = Some(ui.mode.clone());
+    let mut title = Some(manifest.name.clone());
+    if ui.mode == "declarative_ui" {
+        if let Some(d) = dir {
+            let path = d.join(&ui.entry);
+            if let Ok(raw) = std::fs::read(&path) {
+                if let Ok(doc) = DeclUiDocument::parse_json(&raw) {
+                    title = Some(doc.title);
+                }
+            }
+        }
+    }
+    (mode, title)
 }
