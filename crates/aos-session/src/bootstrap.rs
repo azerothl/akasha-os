@@ -11,16 +11,12 @@ const MIN_FREE_BYTES: u64 = 8 * 1024 * 1024 * 1024; // ~8 Go (packs mid)
 
 #[derive(Debug, Deserialize)]
 struct ModelsManifest {
-    #[allow(dead_code)]
-    version: Option<String>,
     models: Vec<ModelEntry>,
 }
 
 #[derive(Debug, Deserialize)]
 struct ModelEntry {
     filename: String,
-    #[allow(dead_code)]
-    role: Option<String>,
     bytes: Option<u64>,
     #[serde(default)]
     sha256: String,
