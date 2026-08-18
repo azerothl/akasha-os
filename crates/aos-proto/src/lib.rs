@@ -85,6 +85,72 @@ pub struct SetRoutingRequest {
     pub mode: String,
 }
 
+/// Named OpenAI-compatible provider (F-MDL-04 / P08.12).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderRecord {
+    pub id: String,
+    pub preset: String,
+    pub endpoint: String,
+    #[serde(default)]
+    pub secret_name: Option<String>,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default)]
+    pub discovered_models: Vec<String>,
+}
+
+/// Shared presets: `(id, default endpoint, optional vault secret name)`.
+pub const PROVIDER_PRESETS: &[(&str, &str, Option<&str>)] = &[
+    ("openai", "https://api.openai.com/v1", Some("openai_api_key")),
+    (
+        "openrouter",
+        "https://openrouter.ai/api/v1",
+        Some("openrouter_api_key"),
+    ),
+    (
+        "anthropic",
+        "https://api.anthropic.com/v1",
+        Some("anthropic_api_key"),
+    ),
+    (
+        "deepseek",
+        "https://api.deepseek.com/v1",
+        Some("deepseek_api_key"),
+    ),
+    ("z.ai", "https://api.z.ai/api/paas/v4", Some("z_ai_api_key")),
+    ("custom", "", None),
+    ("ollama", "http://127.0.0.1:11434/v1", None),
+    ("vllm", "http://127.0.0.1:8000/v1", None),
+    ("lmstudio", "http://127.0.0.1:1234/v1", None),
+];
+
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderUpsertRequest {
+    pub provider: ProviderRecord,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderIdRequest {
+    pub id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderListResponse {
+    pub providers: Vec<ProviderRecord>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderTestResponse {
+    pub ok: bool,
+    pub message: String,
+    #[serde(default)]
+    pub models: Vec<String>,
+}
+
 /// Élément du flux `model.infer`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TokenEvent {
@@ -1353,6 +1419,16 @@ pub struct ModuleIdRequest {
     pub module: String,
 }
 
+/// `module.uninstall` (F-MOD-01 / P08.7).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModuleUninstallRequest {
+    pub module: String,
+    #[serde(default)]
+    pub actor: String,
+    #[serde(default)]
+    pub actor_caps: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct ModuleInfo {
     pub name: String,
@@ -1682,6 +1758,25 @@ pub enum ChatAttachment {
         #[serde(default)]
         origin: String,
     },
+    Image {
+        path: String,
+    },
+    Audio {
+        path: String,
+    },
+}
+
+impl ChatAttachment {
+    pub fn as_agent_ref(&self) -> Option<(&str, &str, &str)> {
+        match self {
+            Self::AgentRef {
+                agent_id,
+                title,
+                origin,
+            } => Some((agent_id.as_str(), title.as_str(), origin.as_str())),
+            Self::Image { .. } | Self::Audio { .. } => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1773,10 +1868,6 @@ impl Default for MemUserRememberRequest {
             auto_link_threshold: default_auto_link_threshold(),
         }
     }
-}
-
-fn default_true() -> bool {
-    true
 }
 
 fn default_auto_link_threshold() -> f32 {
@@ -2023,4 +2114,52 @@ pub struct FilesGenerateRequest {
 pub struct FilesGenerateResponse {
     pub path: String,
     pub bytes: u64,
+}
+
+// ---------------------------------------------------------------------------
+// Media API (E16 / Preview 0.8)
+// ---------------------------------------------------------------------------
+
+/// `media.image.generate` — prompt → PNG sous `/downloads`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MediaImageGenerateRequest {
+    pub prompt: String,
+    /// Logical FS path (default `/downloads/image-<ts>.png`).
+    #[serde(default)]
+    pub path: Option<String>,
+    /// Offering id (`local:sd-v1-5`). Empty → first installed image pack.
+    #[serde(default)]
+    pub model_id: Option<String>,
+    #[serde(default)]
+    pub actor: String,
+    #[serde(default)]
+    pub caps: Vec<String>,
+    #[serde(default)]
+    pub trace_id: String,
+}
+
+/// `media.audio.generate` — text → WAV TTS sous `/downloads`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MediaAudioGenerateRequest {
+    pub text: String,
+    #[serde(default)]
+    pub path: Option<String>,
+    /// Offering id (`local:piper-en-us` / `local:piper-fr-fr`).
+    #[serde(default)]
+    pub model_id: Option<String>,
+    #[serde(default)]
+    pub actor: String,
+    #[serde(default)]
+    pub caps: Vec<String>,
+    #[serde(default)]
+    pub trace_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MediaGenerateResponse {
+    pub path: String,
+    pub bytes: u64,
+    /// `sdcpp` | `piper` | `stub`
+    pub engine: String,
+    pub model_id: String,
 }

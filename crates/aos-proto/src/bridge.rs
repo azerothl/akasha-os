@@ -104,8 +104,8 @@ pub fn decl_ui_schema_document() -> Value {
     json!({
         "$schema": SCHEMA_META,
         "title": "Akasha OS declarative module UI (E15)",
-        "description": "Closed widget vocabulary for host-rendered module tabs in Preview 0.7+. Not HTML/JS.",
-        "version": "0.7.0",
+        "description": "Closed widget vocabulary for host-rendered module tabs in Preview 0.8. Not HTML/JS.",
+        "version": "0.8.0",
         "$defs": defs(&[
             ("DeclUiDocument", schema_of::<DeclUiDocument>()),
             ("DeclUiWidget", schema_of::<DeclUiWidget>()),

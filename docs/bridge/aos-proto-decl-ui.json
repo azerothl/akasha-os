@@ -402,7 +402,7 @@
     }
   },
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "description": "Closed widget vocabulary for host-rendered module tabs in Preview 0.7+. Not HTML/JS.",
+  "description": "Closed widget vocabulary for host-rendered module tabs in Preview 0.8. Not HTML/JS.",
   "title": "Akasha OS declarative module UI (E15)",
-  "version": "0.7.0"
+  "version": "0.8.0"
 }

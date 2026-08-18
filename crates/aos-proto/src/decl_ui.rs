@@ -3,6 +3,7 @@
 //! Modules ship a JSON widget tree in `ui/index.html` (`type: declarative_ui`).
 //! The egui host paints a closed vocabulary — no HTML/JS webview.
 
+use crate::ModuleTool;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -17,12 +18,26 @@ pub const WIDGET_KINDS: &[&str] = &[
     "stat_row",
     "table",
     "line_chart",
+    "bar_chart",
     "form",
     "button",
+    "select",
+    "radio",
+    "checkbox",
+    "textarea",
+    "image",
+    "audio",
 ];
 
-/// Modules that keep dedicated hardcoded egui tabs in Preview 0.7.
-pub const DECL_UI_SIDEBAR_EXCLUDE: &[&str] = &["notes", "tasks", "ext-rt"];
+/// Bundled modules that must not be uninstalled (boot would restore them).
+pub const BUNDLED_MODULES: &[&str] = &["notes", "tasks", "ext-rt"];
+
+/// Modules that keep dedicated hardcoded egui tabs in Preview.
+pub const DECL_UI_SIDEBAR_EXCLUDE: &[&str] = BUNDLED_MODULES;
+
+pub fn is_bundled_module(name: &str) -> bool {
+    BUNDLED_MODULES.contains(&name)
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DeclUiError {
@@ -88,6 +103,10 @@ pub struct DeclUiWidget {
 pub struct ModuleUiResponse {
     pub module: String,
     pub document: DeclUiDocument,
+    /// Manifest tools (input schemas for forms). Omitted from the dumped JSON Schema.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[schemars(skip)]
+    pub tools: Vec<ModuleTool>,
 }
 
 impl DeclUiDocument {
@@ -156,7 +175,7 @@ impl DeclUiWidget {
                     return Err(DeclUiError::MissingField("text"));
                 }
             }
-            "stat_row" | "table" | "line_chart" => {
+            "stat_row" | "table" | "line_chart" | "bar_chart" => {
                 if self.bind.as_ref().is_none_or(|b| b.is_empty()) {
                     return Err(DeclUiError::MissingField("bind"));
                 }
@@ -164,6 +183,24 @@ impl DeclUiWidget {
             "form" | "button" => {
                 if self.tool.as_ref().is_none_or(|t| t.is_empty()) {
                     return Err(DeclUiError::MissingField("tool"));
+                }
+            }
+            "select" | "radio" => {
+                let has_items = self
+                    .items
+                    .as_ref()
+                    .is_some_and(|i| !i.is_empty());
+                let has_bind = self.bind.as_ref().is_some_and(|b| !b.is_empty());
+                if !has_items && !has_bind {
+                    return Err(DeclUiError::MissingField("items"));
+                }
+            }
+            "checkbox" | "textarea" => {}
+            "image" | "audio" => {
+                let has_bind = self.bind.as_ref().is_some_and(|b| !b.is_empty());
+                let has_text = self.text.as_ref().is_some_and(|t| !t.is_empty());
+                if !has_bind && !has_text {
+                    return Err(DeclUiError::MissingField("bind"));
                 }
             }
             _ => {}
@@ -276,6 +313,24 @@ pub fn default_document(title: &str, primary_tool: &str, input_schema: &serde_js
             args: Some(serde_json::json!({})),
         });
     }
+    if let Some((key, values)) = first_enum_property(input_schema) {
+        children.insert(
+            1,
+            DeclUiWidget {
+                kind: "select".into(),
+                text: None,
+                label: Some(key),
+                bind: None,
+                source: None,
+                tool: Some(primary_tool.to_string()),
+                columns: None,
+                items: Some(values),
+                series: None,
+                children: None,
+                args: None,
+            },
+        );
+    }
     DeclUiDocument {
         doc_type: "declarative_ui".into(),
         title: title.to_string(),
@@ -298,6 +353,22 @@ pub fn default_document(title: &str, primary_tool: &str, input_schema: &serde_js
 
 pub fn document_to_json(doc: &DeclUiDocument) -> String {
     serde_json::to_string_pretty(doc).expect("decl ui json")
+}
+
+fn first_enum_property(schema: &serde_json::Value) -> Option<(String, Vec<String>)> {
+    let props = schema.get("properties")?.as_object()?;
+    for (k, v) in props {
+        if let Some(arr) = v.get("enum").and_then(|e| e.as_array()) {
+            let vals: Vec<String> = arr
+                .iter()
+                .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                .collect();
+            if !vals.is_empty() {
+                return Some((k.clone(), vals));
+            }
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -328,5 +399,30 @@ mod tests {
     fn default_document_validates() {
         let doc = default_document("netmon", "netmon.snapshot", &serde_json::json!({}));
         doc.validate().expect("default ok");
+    }
+
+    #[test]
+    fn default_document_select_when_enum() {
+        let schema = serde_json::json!({
+            "type":"object",
+            "properties":{"mode":{"type":"string","enum":["a","b"]}}
+        });
+        let doc = default_document("demo", "demo.run", &schema);
+        doc.validate().expect("ok");
+        assert!(doc.collect_widget_kinds().iter().any(|k| k == "select"));
+    }
+
+    #[test]
+    fn accepts_bar_chart_and_checkbox() {
+        let raw = br#"{
+            "type":"declarative_ui",
+            "title":"Demo",
+            "root":{"kind":"column","children":[
+                {"kind":"checkbox","label":"On"},
+                {"kind":"bar_chart","bind":"demo.stats"},
+                {"kind":"select","items":["x","y"]}
+            ]}
+        }"#;
+        DeclUiDocument::parse_json(raw).expect("valid");
     }
 }
