@@ -249,7 +249,7 @@ Persisted in `var/run/preferences.json` (migrated from `onboarding.json` if need
 | Feedback | Local `var/feedback/` + optional GitHub issue (security reports stay local) |
 | Troubleshoot | In-app diagnostics (NVIDIA, home, logs); opens a GitHub report when findings exist |
 | App updates | Banner when a newer GitHub Release exists; overlay `bin/` + `share/` without touching `var/` or overwriting `etc/*.yaml` |
-| Site | [azerothl.github.io/akasha-os](https://azerothl.github.io/akasha-os/) — Split-Flap Board, EN/FR |
+| Site | [azerothl.github.io/akasha-os](https://azerothl.github.io/akasha-os/) — orrery, EN/FR |
 
 ---
 

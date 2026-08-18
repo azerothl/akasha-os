@@ -78,21 +78,39 @@
           <li data-lang="fr">Cherchez (par exemple « Akasha OS seL4 ») → titres / URL.</li>
         </ol>
         <p class="hist" data-lang="en">
-          Optional Brave key in <code>var/secrets/keys.yaml</code>:
+          Search engine is set in Settings: <code>auto</code> tries Brave, then
+          DuckDuckGo, then Bing. Optional Brave / GitHub keys live in
+          <strong>Settings → Secrets</strong> (encrypted vault; master key in the
+          OS keyring). Legacy <code>var/secrets/keys.yaml</code> is migrated on boot.
         </p>
         <p class="hist" data-lang="fr">
-          Clé Brave optionnelle dans <code>var/secrets/keys.yaml</code> :
+          Le moteur est dans Settings : <code>auto</code> essaie Brave, puis
+          DuckDuckGo, puis Bing. Les clés Brave / GitHub optionnelles sont dans
+          <strong>Settings → Secrets</strong> (vault chiffré ; clé maître dans le
+          keyring OS). Un ancien <code>var/secrets/keys.yaml</code> est migré au boot.
         </p>
-        <pre>keys:
-  brave_search_api_key: "BSA..."
-  github_token: "ghp_..."   # one-click Feedback issues</pre>
         <p class="hist" data-lang="en">
-          Without a Brave key, search uses DuckDuckGo HTML.
+          Without a Brave key, <code>auto</code> falls through to DuckDuckGo then Bing HTML.
           <code>github_token</code> is only for one-click Feedback issues.
         </p>
         <p class="hist" data-lang="fr">
-          Sans clé Brave, la recherche utilise DuckDuckGo HTML.
+          Sans clé Brave, <code>auto</code> bascule sur DuckDuckGo puis Bing HTML.
           <code>github_token</code> sert uniquement aux issues Feedback en un clic.
+        </p>
+
+        <h2 data-lang="en">browse a page</h2>
+        <h2 data-lang="fr">parcourir une page</h2>
+        <p class="hist" data-lang="en">
+          With network ON: paste a URL → <strong>Browse</strong>
+          (<code>web.browse</code>). Expect title + extracted text (no JavaScript).
+          <strong>Download URL</strong> (<code>net.fetch</code>) saves the raw file
+          under <code>/downloads</code>.
+        </p>
+        <p class="hist" data-lang="fr">
+          Réseau ON : coller une URL → <strong>Browse</strong>
+          (<code>web.browse</code>). Titre + texte extrait (pas de JavaScript).
+          <strong>Download URL</strong> (<code>net.fetch</code>) enregistre le
+          fichier brut sous <code>/downloads</code>.
         </p>
 
         <h2 data-lang="en">download and generate a file</h2>

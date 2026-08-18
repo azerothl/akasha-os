@@ -60,13 +60,13 @@
           </span>
         </h1>
         <p class="hist" data-lang="en">
-          Same hardware honesty as install: Windows or Linux x64, NVIDIA GPU,
-          not a bootable OS. Canonical detail lives in
+          Same hardware honesty as install: Windows or Linux x64, NVIDIA
+          recommended (CPU artefact exists), not a bootable OS. Canonical detail lives in
           <a href="https://github.com/azerothl/akasha-os/blob/main/INSTALL.md#build-from-source">INSTALL.md</a>.
         </p>
         <p class="hist" data-lang="fr">
-          Même honnêteté matérielle que l’install : Windows ou Linux x64, GPU
-          NVIDIA, pas un OS bootable. Le détail canonique est dans
+          Même honnêteté matérielle que l’install : Windows ou Linux x64, NVIDIA
+          recommandé (artefact CPU existant), pas un OS bootable. Le détail canonique est dans
           <a href="https://github.com/azerothl/akasha-os/blob/main/docs/fr/INSTALL.md#build-depuis-les-sources">INSTALL.md</a>.
         </p>
 
@@ -74,9 +74,9 @@
         <h2 data-lang="fr">toolchain</h2>
         <ul class="ticks">
           <li>os GRANT Windows 10/11 x64 <span data-lang="en">or</span><span data-lang="fr">ou</span> Linux x64</li>
-          <li>gpu GRANT NVIDIA (<code>nvidia-smi -L</code>)</li>
+          <li>gpu GRANT NVIDIA (<code>nvidia-smi -L</code>) <span data-lang="en">for the CUDA artefact; omit for <code>-CpuOnly</code></span><span data-lang="fr">pour l’artefact CUDA ; omettre pour <code>-CpuOnly</code></span></li>
           <li>rust GRANT stable + target <code>wasm32-unknown-unknown</code></li>
-          <li>cuda GRANT Toolkit (nvcc), typically 12.x — needed for <code>aos-llama</code> / <code>aos-modeld</code></li>
+          <li>cuda GRANT Toolkit (nvcc), typically 12.x — <span data-lang="en">needed for CUDA <code>aos-modeld</code>; skip with <code>-CpuOnly</code></span><span data-lang="fr">requis pour <code>aos-modeld</code> CUDA ; à omettre avec <code>-CpuOnly</code></span></li>
           <li>cmake · ninja · <span data-lang="en">MSVC-compatible env (Windows) or X11/Wayland + clang/libclang (Linux)</span><span data-lang="fr">env compatible MSVC (Windows) ou X11/Wayland + clang/libclang (Linux)</span></li>
           <li data-lang="en">disk: several GB for <code>target/</code> plus GGUFs on first run</li>
           <li data-lang="fr">disque : plusieurs Go pour <code>target/</code> plus GGUF au premier lancement</li>
@@ -102,11 +102,14 @@ cd akasha-os</pre>
           (<code>-SkipModels</code> / <code>SKIP_MODELS=1</code>) et se
           téléchargent au premier lancement.
         </p>
-        <pre># Windows
+        <pre># Windows (CUDA tester artefact)
 .\packaging\build-preview.ps1 -SkipModels -RequireCuda
+# Windows (no CUDA toolkit on the build host)
+.\packaging\build-preview.ps1 -SkipModels -CpuOnly
 
 # Linux
-SKIP_MODELS=1 REQUIRE_CUDA=1 ./packaging/build-preview.sh</pre>
+SKIP_MODELS=1 REQUIRE_CUDA=1 ./packaging/build-preview.sh
+CPU_ONLY=1 SKIP_MODELS=1 ./packaging/build-preview.sh</pre>
         <p class="hist" data-lang="en">
           Then set <code>AOS_HOME</code> to the dist folder and run
           <code>bin/aos-session</code>, or use the tree like a Release install.
@@ -124,11 +127,13 @@ SKIP_MODELS=1 REQUIRE_CUDA=1 ./packaging/build-preview.sh</pre>
         <h2 data-lang="fr">run de développement</h2>
         <p class="hist" data-lang="en">
           From the repo root after a successful release build of the Preview
-          crates (or after <code>build-preview.*</code>). Still requires NVIDIA.
+          crates (or after <code>build-preview.*</code>). NVIDIA recommended;
+          a CPU-only <code>aos-modeld</code> boots without it.
         </p>
         <p class="hist" data-lang="fr">
           Depuis la racine du dépôt après un build release des crates Preview
-          (ou après <code>build-preview.*</code>). NVIDIA toujours requis.
+          (ou après <code>build-preview.*</code>). NVIDIA recommandé ; un
+          <code>aos-modeld</code> CPU-only démarre sans GPU.
         </p>
         <pre># Windows
 $env:AOS_HOME = (Resolve-Path .)

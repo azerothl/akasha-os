@@ -6,7 +6,7 @@
     <title>Using Preview — Akasha OS</title>
     <meta
       name="description"
-      content="How to use Akasha OS Preview: Chat, Models, Memory, Notes, Agents, Audit."
+      content="How to use Akasha OS Preview: Chat, Models, Memory, Notes, Tasks, Modules, Agents, Settings."
     />
     <link rel="stylesheet" href="../styles.css" />
     <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
@@ -62,20 +62,28 @@
         <h2 data-lang="en">tab map</h2>
         <h2 data-lang="fr">carte des onglets</h2>
         <ul class="ticks">
-          <li data-lang="en">Chat / Sessions — parallel sessions; per-session model combo</li>
-          <li data-lang="fr">Chat / Sessions — sessions parallèles ; modèle par session</li>
-          <li data-lang="en">Models — list / load / download offerings; update banner</li>
-          <li data-lang="fr">Models — lister / charger / télécharger ; bannière de mise à jour</li>
-          <li data-lang="en">Memory — long-term facts (remember / recall)</li>
-          <li data-lang="fr">Memory — faits long terme (remember / recall)</li>
+          <li data-lang="en">Chat / Sessions — parallel sessions; per-session model; Stop / Copy; slash <code>/agent</code></li>
+          <li data-lang="fr">Chat / Sessions — sessions parallèles ; modèle par session ; Stop / Copier ; slash <code>/agent</code></li>
+          <li data-lang="en">Models — list / load / download offerings; TTFT / tok/s; update banner</li>
+          <li data-lang="fr">Models — lister / charger / télécharger ; TTFT / tok/s ; bannière de mise à jour</li>
+          <li data-lang="en">Memory — long-term facts (remember / recall); optional auto-remember from chat</li>
+          <li data-lang="fr">Memory — faits long terme (remember / recall) ; mémorisation auto depuis le chat (opt.)</li>
           <li data-lang="en">Notes — human notes and notes via agent</li>
           <li data-lang="fr">Notes — notes humaines et via agent</li>
-          <li data-lang="en">Agents — tasks with skills / tools; model at create</li>
-          <li data-lang="fr">Agents — tâches avec skills / outils ; modèle à la création</li>
+          <li data-lang="en">Tasks — dual-surface list (same store as agent <code>tasks.*</code>)</li>
+          <li data-lang="fr">Tasks — liste dual-surface (même store que <code>tasks.*</code> côté agent)</li>
+          <li data-lang="en">Modules — dynamic tabs for installed <code>declarative_ui</code> packages (not notes / tasks / ext-rt)</li>
+          <li data-lang="fr">Modules — onglets dynamiques pour les paquets <code>declarative_ui</code> (pas notes / tasks / ext-rt)</li>
+          <li data-lang="en">Agents — goal loop, skills / tools, Detail timeline; model at create</li>
+          <li data-lang="fr">Agents — boucle de goal, skills / outils, timeline Détail ; modèle à la création</li>
+          <li data-lang="en">Caps — list by holder; revoke (audited)</li>
+          <li data-lang="fr">Caps — lister par détenteur ; révoquer (audité)</li>
           <li data-lang="en">Audit — signed events; Refresh; supervisor restarts auditd</li>
           <li data-lang="fr">Audit — événements signés ; Refresh ; le superviseur relance auditd</li>
-          <li data-lang="en">Network (sidebar) — opt-in web search / downloads</li>
-          <li data-lang="fr">Network (barre latérale) — recherche / téléchargements en opt-in</li>
+          <li data-lang="en">Settings — language, secrets vault, module catalogue, schedules, auto-remember</li>
+          <li data-lang="fr">Settings — langue, vault secrets, catalogue de modules, schedules, mémorisation auto</li>
+          <li data-lang="en">Network (sidebar) — opt-in search / browse / fetch</li>
+          <li data-lang="fr">Network (barre latérale) — recherche / browse / fetch en opt-in</li>
           <li data-lang="en">Feedback — GitHub issue on azerothl/akasha-os</li>
           <li data-lang="fr">Feedback — issue GitHub sur azerothl/akasha-os</li>
           <li data-lang="en">Scenarios — cohort protocol (see <a href="feedback.html">feedback</a>)</li>
@@ -90,6 +98,8 @@
           the session model combo. <strong>Stop</strong> interrupts generation;
           <strong>Copy</strong> puts a message on the clipboard. Create three
           sessions, chat in each, restart Preview: histories must reappear.
+          Slash <code>/agent &lt;task&gt;</code> (or « crée un module … ») launches a
+          background agent with a card in the thread.
         </p>
         <p class="hist" data-lang="fr">
           Posez une question (par exemple « Qu’est-ce qu’Akasha OS ? »). Une
@@ -98,6 +108,8 @@
           <strong>Stop</strong> interrompt la génération ; <strong>Copier</strong>
           met le message dans le presse-papiers. Créez trois sessions, parlez
           dans chacune, redémarrez Preview : les historiques doivent réapparaître.
+          Slash <code>/agent &lt;tâche&gt;</code> (ou « crée un module … ») lance un
+          agent en fond avec une carte dans le fil.
         </p>
 
         <h2 data-lang="en">models</h2>
@@ -122,11 +134,16 @@
           Remember a fact (“I prefer French”), then Recall. Back in Chat, the
           next message should be able to use that context
           (<code>mem.context</code> injection before infer).
+          <strong>Auto-remember from chat</strong> is on by default (Settings):
+          durable facts get a <code>[chat]</code> badge; secrets are filtered.
         </p>
         <p class="hist" data-lang="fr">
           Remember un fait (« je préfère le français »), puis Recall. De retour
           dans Chat, le message suivant doit pouvoir s’en servir
           (injection <code>mem.context</code> avant l’inférence).
+          La <strong>mémorisation auto depuis le chat</strong> est activée par
+          défaut (Settings) : les faits durables ont un badge <code>[chat]</code> ;
+          les secrets sont filtrés.
         </p>
 
         <h2 data-lang="en">notes</h2>
@@ -134,15 +151,46 @@
         <p class="hist" data-lang="en">
           Notes tab: title + body → Create, then List. After a Preview update,
           the packaged module is copied on boot if it is newer. To create a
-          note via agent: Agents tab → a task like “create a note titled cohort
-          with content hello”. The agent uses the <code>TOOL:</code> convention.
+          note via agent: Agents tab or Chat <code>/agent</code> → a task like
+          “create a note titled cohort with content hello”.
         </p>
         <p class="hist" data-lang="fr">
           Onglet Notes : titre + corps → Create, puis List. Après une update
           Preview, le module empaqueté est recopié au boot s’il est plus récent.
-          Via agent : onglet Agents → une tâche du type « create a note titled
-          cohort with content hello ». L’agent utilise la convention
-          <code>TOOL:</code>.
+          Via agent : onglet Agents ou Chat <code>/agent</code> → une tâche du type
+          « create a note titled cohort with content hello ».
+        </p>
+
+        <h2 data-lang="en">tasks</h2>
+        <h2 data-lang="fr">tasks</h2>
+        <p class="hist" data-lang="en">
+          Tasks tab: create / list / complete. The same JSON store is visible to
+          agents via <code>tasks.list</code> / <code>tasks.create</code>.
+        </p>
+        <p class="hist" data-lang="fr">
+          Onglet Tasks : créer / lister / terminer. Le même store JSON est visible
+          aux agents via <code>tasks.list</code> / <code>tasks.create</code>.
+        </p>
+
+        <h2 data-lang="en">modules</h2>
+        <h2 data-lang="fr">modules</h2>
+        <p class="hist" data-lang="en">
+          Installed packages with <code>declarative_ui</code> appear under
+          <strong>Modules</strong> (not <code>notes</code>, <code>tasks</code>, or
+          <code>ext-rt</code>). Open a tab: heading, form or button, table bound to
+          a tool. Submit goes through the same cap review as
+          <code>module.invoke</code>. Invalid <code>ui/index.html</code> shows an
+          error banner (no partial widgets). Chat « create a module » or Scenarios
+          can scaffold / package / install one.
+        </p>
+        <p class="hist" data-lang="fr">
+          Les paquets installés avec <code>declarative_ui</code> apparaissent sous
+          <strong>Modules</strong> (pas <code>notes</code>, <code>tasks</code> ni
+          <code>ext-rt</code>). Ouvrir un onglet : heading, formulaire ou bouton,
+          table liée à un outil. Soumettre passe par la même revue de caps que
+          <code>module.invoke</code>. Un <code>ui/index.html</code> invalide affiche
+          une bannière (pas de widgets partiels). Le chat « crée un module » ou
+          Scénarios peut scaffolder / packager / installer.
         </p>
 
         <h2 data-lang="en">agents</h2>
@@ -152,14 +200,29 @@
           notes-writer, research, file-author, planner, tasks. Optional MCP:
           copy <code>share/mcp/servers.yaml.example</code> and add stdio servers.
           Sensitive actions raise a confirmation banner. Deny once, Accept
-          another. Timeout is deny.
+          another. Timeout is deny. Open <strong>Detail</strong> for the step
+          timeline, Pause / Resume / Steer.
         </p>
         <p class="hist" data-lang="fr">
           Créez un agent avec une tâche et un modèle. Skills Preview :
           notes-writer, research, file-author, planner, tasks. MCP optionnel :
           copiez <code>share/mcp/servers.yaml.example</code> et ajoutez des
           serveurs stdio. Une action sensible affiche une bannière. Deny une
-          fois, Accept une autre. Timeout = refus.
+          fois, Accept une autre. Timeout = refus. Ouvrez <strong>Détail</strong>
+          pour la timeline, Pause / Reprendre / Steer.
+        </p>
+
+        <h2 data-lang="en">settings</h2>
+        <h2 data-lang="fr">settings</h2>
+        <p class="hist" data-lang="en">
+          Language en ↔ fr, default agent model / max steps, search engine,
+          auto-remember, Secrets vault, local module catalogue, schedules.
+          Preferences persist in <code>var/run/preferences.json</code>.
+        </p>
+        <p class="hist" data-lang="fr">
+          Langue en ↔ fr, modèle agent / max steps, moteur de recherche,
+          mémorisation auto, vault Secrets, catalogue local de modules, schedules.
+          Les préférences persistent dans <code>var/run/preferences.json</code>.
         </p>
 
         <h2 data-lang="en">audit</h2>

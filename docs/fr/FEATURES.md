@@ -249,7 +249,7 @@ Persistés dans `var/run/preferences.json` (migration depuis `onboarding.json` s
 | Retour | Copie locale `var/feedback/` + issue GitHub optionnelle (security reste local) |
 | Dépannage | Diagnostic in-app (NVIDIA, home, logs) ; ouvre un rapport GitHub s'il y a des anomalies |
 | Updates | Bandeau si une Release plus récente existe ; overlay `bin/` + `share/` sans toucher `var/` ni écraser `etc/*.yaml` |
-| Site | [azerothl.github.io/akasha-os](https://azerothl.github.io/akasha-os/?lang=fr) — tableau à volets, EN/FR |
+| Site | [azerothl.github.io/akasha-os](https://azerothl.github.io/akasha-os/?lang=fr) — planétaire, EN/FR |
 
 ---
 

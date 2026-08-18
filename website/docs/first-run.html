@@ -49,25 +49,27 @@
         <h1>
           <span data-lang="en">
             First launch after <a href="../install.html">install</a>.
-            Preview <span data-aos-version>0.7.0</span> is not a bootable OS. You should already have
-            <code>nvidia-smi -L</code> and about 8 GB free disk.
+            Preview <span data-aos-version>0.7.0</span> is not a bootable OS. NVIDIA is
+            recommended; a slower CPU pack exists. About 8 GB free disk for the
+            mid-tier pack (less for cpu).
           </span>
           <span data-lang="fr">
             Premier lancement après <a href="../install.html">install</a>.
-            La Preview <span data-aos-version>0.7.0</span> n’est pas un OS bootable. Vous devez déjà avoir
-            <code>nvidia-smi -L</code> et environ 8 Go libres.
+            La Preview <span data-aos-version>0.7.0</span> n’est pas un OS bootable. NVIDIA est
+            recommandé ; un pack CPU plus lent existe. Environ 8 Go libres pour le
+            pack mid (moins pour cpu).
           </span>
         </h1>
 
         <h2 data-lang="en">before you launch</h2>
         <h2 data-lang="fr">avant de lancer</h2>
         <ol class="steps">
-          <li data-lang="en">Recent NVIDIA driver (<code>nvidia-smi -L</code> OK).</li>
-          <li data-lang="fr">Pilote NVIDIA récent (<code>nvidia-smi -L</code> OK).</li>
-          <li data-lang="en">~8 GB free (recommended mid-tier pack: 9B + embedding).</li>
-          <li data-lang="fr">~8 Go libres (pack mid recommandé : 9B + embedding).</li>
-          <li data-lang="en">Installed via <code>install.ps1</code> / <code>install.sh</code>, or run <code>bin/aos-session</code>.</li>
-          <li data-lang="fr">Installé via <code>install.ps1</code> / <code>install.sh</code>, ou lancez <code>bin/aos-session</code>.</li>
+          <li data-lang="en">NVIDIA driver (<code>nvidia-smi -L</code> OK), <strong>or</strong> the CPU-only package / Settings → Inference → CPU.</li>
+          <li data-lang="fr">Pilote NVIDIA (<code>nvidia-smi -L</code> OK), <strong>ou</strong> le paquet CPU-only / Settings → Inference → CPU.</li>
+          <li data-lang="en">~8 GB free (recommended mid-tier pack: 9B + embedding); less for the <strong>cpu</strong> pack.</li>
+          <li data-lang="fr">~8 Go libres (pack mid recommandé : 9B + embedding) ; moins pour le pack <strong>cpu</strong>.</li>
+          <li data-lang="en">Installed via <code>install.cmd</code> / <code>install.sh</code>, or run <code>bin/aos-session</code>.</li>
+          <li data-lang="fr">Installé via <code>install.cmd</code> / <code>install.sh</code>, ou lancez <code>bin/aos-session</code>.</li>
         </ol>
 
         <h2 data-lang="en">model setup</h2>
@@ -85,6 +87,7 @@
           (auto-meilleur pour votre palier) :
         </p>
         <ul class="ticks">
+          <li>cpu <span data-lang="en">(no NVIDIA)</span><span data-lang="fr">(sans NVIDIA)</span> → Qwen3.5-4B + Embedding 0.6B</li>
           <li>low &lt;10 GiB VRAM → Qwen3.5-4B + Embedding 0.6B</li>
           <li>mid 10–20 GiB <span data-lang="en">(e.g. RTX 4080 SUPER)</span><span data-lang="fr">(ex. RTX 4080 SUPER)</span> → Qwen3.5-9B + Embedding 0.6B</li>
           <li>high ≥20 GiB → Qwen3 30B-A3B + Embedding 0.6B</li>
@@ -116,7 +119,8 @@
         </p>
         <p class="hist" data-lang="fr">
           Ne supprimez rien. Relancez pour rouvrir la sélection de modèles.
-          Pas de GPU : installez le pilote NVIDIA — un pack CPU existe en Preview 0.7.0 (plus lent). NVIDIA reste recommandé.
+          Pas de GPU : un pack CPU existe en Preview 0.7.0 (plus lent). NVIDIA
+          reste recommandé.
           Journaux : <code>var/run/*.stderr.log</code> (bouton Troubleshooting).
         </p>
 

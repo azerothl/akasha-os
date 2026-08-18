@@ -105,11 +105,13 @@
         <h2 data-lang="fr">Windows</h2>
         <ol class="steps">
           <li data-lang="en">
-            Download <code>AgentOS-Preview-&lt;ver&gt;-windows-x64.zip</code> from
+            Download GPU <code>AgentOS-Preview-&lt;ver&gt;-windows-x64.zip</code> or
+            CPU <code>…-windows-x64-cpu.zip</code> from
             <a href="https://github.com/azerothl/akasha-os/releases">GitHub Releases</a>.
           </li>
           <li data-lang="fr">
-            Télécharger <code>AgentOS-Preview-&lt;ver&gt;-windows-x64.zip</code> depuis
+            Télécharger GPU <code>AgentOS-Preview-&lt;ver&gt;-windows-x64.zip</code> ou
+            CPU <code>…-windows-x64-cpu.zip</code> depuis
             <a href="https://github.com/azerothl/akasha-os/releases">GitHub Releases</a>.
           </li>
           <li data-lang="en">Extract, then run:</li>
@@ -147,10 +149,12 @@
         <h2 data-lang="fr">Linux</h2>
         <ol class="steps">
           <li data-lang="en">
-            Download <code>AgentOS-Preview-&lt;ver&gt;-linux-x64.tar.gz</code>, extract.
+            Download GPU <code>AgentOS-Preview-&lt;ver&gt;-linux-x64.tar.gz</code>
+            or CPU <code>…-linux-x64-cpu.tar.gz</code>, extract.
           </li>
           <li data-lang="fr">
-            Télécharger <code>AgentOS-Preview-&lt;ver&gt;-linux-x64.tar.gz</code>, extraire.
+            Télécharger GPU <code>AgentOS-Preview-&lt;ver&gt;-linux-x64.tar.gz</code>
+            ou CPU <code>…-linux-x64-cpu.tar.gz</code>, extraire.
           </li>
           <li><code>./install.sh</code></li>
           <li data-lang="en">
@@ -165,10 +169,10 @@
 
         <h2 data-lang="en">package</h2>
         <h2 data-lang="fr">paquet</h2>
-        <pre>bin/            daemons + CUDA runtime
+        <pre>bin/            daemons + CUDA runtime (CPU zip has no CUDA DLLs)
 share/models/   manifest.json (GGUF on first run)
-share/modules/  notes.aospkg, ext-rt.aospkg
-share/skills/   notes-writer, research, file-author, planner
+share/modules/  notes.aospkg, tasks.aospkg, ext-rt.aospkg
+share/skills/   notes-writer, research, file-author, planner, tasks
 share/mcp/      servers.yaml.example
 data/models/    catalog.yaml
 VERSION         build semver
@@ -177,14 +181,14 @@ var/            created at run</pre>
         <h2 data-lang="en">first launch</h2>
         <h2 data-lang="fr">premier lancement</h2>
         <ol class="steps">
-          <li data-lang="en"><code>aos-session</code> checks NVIDIA and disk, probes VRAM.</li>
-          <li data-lang="fr"><code>aos-session</code> vérifie NVIDIA et le disque, sonde la VRAM.</li>
+          <li data-lang="en"><code>aos-session</code> checks disk (and NVIDIA if present), probes VRAM / RAM.</li>
+          <li data-lang="fr"><code>aos-session</code> vérifie le disque (et NVIDIA s’il est présent), sonde VRAM / RAM.</li>
           <li data-lang="en">
-            Model setup: confirm the auto-best pack for your GPU tier, then GGUFs
+            Model setup: confirm the auto-best pack for your tier (cpu / low / mid / high), then GGUFs
             download into <code>share/models/</code>.
           </li>
           <li data-lang="fr">
-            Réglage modèles : confirmez le pack auto pour votre palier GPU, puis
+            Réglage modèles : confirmez le pack auto pour votre palier (cpu / low / mid / high), puis
             les GGUF descendent dans <code>share/models/</code>.
           </li>
           <li>bus → capkd → auditd → modeld → platformd → agentd</li>
@@ -201,8 +205,8 @@ var/            created at run</pre>
         <h2 data-lang="en">troubleshooting</h2>
         <h2 data-lang="fr">dépannage</h2>
         <ul class="ticks">
-          <li data-lang="en">NVIDIA GPU required → install the driver; <code>nvidia-smi -L</code></li>
-          <li data-lang="fr">NVIDIA GPU required → installer le pilote ; <code>nvidia-smi -L</code></li>
+          <li data-lang="en">No NVIDIA → use the CPU-only zip/tar.gz, or Settings → Inference → CPU (slow OK)</li>
+          <li data-lang="fr">Pas de NVIDIA → zip/tar.gz CPU-only, ou Settings → Inference → CPU (lent OK)</li>
           <li data-lang="en">Model download failed → network for Hugging Face, or copy GGUFs into <code>share/models/</code></li>
           <li data-lang="fr">Échec téléchargement modèle → réseau vers Hugging Face, ou copier les GGUF dans <code>share/models/</code></li>
           <li data-lang="en">Healthcheck failed → <code>var/run/*.stderr.log</code> (Troubleshooting button)</li>

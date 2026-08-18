@@ -62,7 +62,7 @@
         <h2 data-lang="en">before you start</h2>
         <h2 data-lang="fr">avant de commencer</h2>
         <ul class="ticks">
-          <li>Windows <span data-lang="en">or</span><span data-lang="fr">ou</span> Linux x64 + NVIDIA (<code>nvidia-smi</code>)</li>
+          <li>Windows <span data-lang="en">or</span><span data-lang="fr">ou</span> Linux x64 (NVIDIA recommended; CPU-only package OK)</li>
           <li><a href="../install.html">install</a> → launch Akasha OS Preview (<code>aos-session</code>)</li>
           <li data-lang="en">Banner: Preview on Windows/Linux — this is not the bootable OS yet</li>
           <li data-lang="fr">Bannière : Preview on Windows/Linux — this is not the bootable OS yet</li>
@@ -77,12 +77,14 @@
           <li data-lang="fr">Onglet Models : entrées installées ; Download une alternative si proposée.</li>
           <li data-lang="en">Notes: title + body → Create, then List.</li>
           <li data-lang="fr">Notes : titre + corps → Create, puis List.</li>
-          <li data-lang="en">Agents: task such as “create a note titled cohort with content hello”.</li>
-          <li data-lang="fr">Agents : tâche du type « create a note titled cohort with content hello ».</li>
+          <li data-lang="en">Tasks tab: create a task; an agent with <code>tasks.list</code> should see it.</li>
+          <li data-lang="fr">Onglet Tasks : créer une tâche ; un agent avec <code>tasks.list</code> doit la voir.</li>
+          <li data-lang="en">Agents: task such as “create a note titled cohort with content hello”. Open Detail.</li>
+          <li data-lang="fr">Agents : tâche du type « create a note titled cohort with content hello ». Ouvrir Détail.</li>
           <li data-lang="en">Confirmation banner: Deny once, Accept another. Timeout = deny.</li>
           <li data-lang="fr">Bannière de confirmation : Deny une fois, Accept une autre. Timeout = refus.</li>
-          <li data-lang="en">Audit → Refresh. Kill aos-auditd; chat continues; supervisor restarts it.</li>
-          <li data-lang="fr">Audit → Refresh. Tuer aos-auditd ; le chat continue ; le superviseur le relance.</li>
+          <li data-lang="en">Audit → Refresh. Caps: list holder <code>agent:&lt;id&gt;</code>, revoke a non-critical cap. Kill aos-auditd; chat continues; supervisor restarts it.</li>
+          <li data-lang="fr">Audit → Refresh. Caps : lister le détenteur <code>agent:&lt;id&gt;</code>, révoquer une cap non critique. Tuer aos-auditd ; le chat continue ; le superviseur le relance.</li>
           <li data-lang="en">Three Chat sessions; restart; histories return.</li>
           <li data-lang="fr">Trois sessions Chat ; redémarrer ; les historiques reviennent.</li>
           <li data-lang="en">Memory: remember a fact, Recall, then use it in Chat.</li>
@@ -91,8 +93,10 @@
           <li data-lang="fr">Settings → Secrets : enregistrer une clé ; redémarrer ; <code>master.backend</code> est keyring ou file (pas de <code>master.key</code> lisible sous Windows).</li>
           <li data-lang="en">Settings → Local module catalogue: Install a listed module (cap review). Stop a streaming chat reply; Copy a message.</li>
           <li data-lang="fr">Settings → Catalogue local : Installer un module listé (revue de caps). Stop sur une réponse en flux ; Copier un message.</li>
-          <li data-lang="en">Network off → search fails. Network on → search. Optional download / generate file. See <a href="network.html">network</a>.</li>
-          <li data-lang="fr">Réseau off → recherche échoue. Réseau on → recherche. Téléchargement / fichier optionnels. Voir <a href="network.html">network</a>.</li>
+          <li data-lang="en">Scenarios (or Chat « create a module »): scaffold / package / install a script module; a <strong>Modules</strong> sidebar tab appears (not notes / tasks / ext-rt). Open it, submit once.</li>
+          <li data-lang="fr">Scénarios (ou Chat « crée un module ») : scaffolder / packager / installer un module script ; un onglet <strong>Modules</strong> apparaît (pas notes / tasks / ext-rt). L’ouvrir, soumettre une fois.</li>
+          <li data-lang="en">Network off → search fails. Network on → search (engine <code>auto</code>). Optional Browse URL / download / generate file. See <a href="network.html">network</a>.</li>
+          <li data-lang="fr">Réseau off → recherche échoue. Réseau on → recherche (moteur <code>auto</code>). Browse URL / téléchargement / fichier optionnels. Voir <a href="network.html">network</a>.</li>
           <li data-lang="en">Notes: create a note, then read it from the list (after an update, the packaged WASM must match this release).</li>
           <li data-lang="fr">Notes : créer une note, puis la relire dans la liste (après une update, le WASM empaqueté doit correspondre à cette release).</li>
           <li data-lang="en">Troubleshoot (Help): run diagnostics. If findings exist, a GitHub report can open.</li>

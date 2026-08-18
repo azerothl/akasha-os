@@ -97,16 +97,16 @@
           <p class="hist" data-lang="en">
             Search and fetch are opt-in. Leave <strong>Allow network</strong> off
             and web search must fail (<code>offline_strict</code>). Turn it on only
-            when you mean to search or download. Optional Brave key:
-            <code>var/secrets/keys.yaml</code> → <code>brave_search_api_key</code>;
-            otherwise DuckDuckGo HTML.
+            when you mean to search, browse, or download. Search engine
+            <code>auto</code> is Brave → DuckDuckGo → Bing (Settings). Optional
+            Brave key: <strong>Settings → Secrets</strong>.
           </p>
           <p class="hist" data-lang="fr">
             Recherche et fetch en opt-in. Laissez <strong>Allow network</strong>
             éteint : la recherche web doit échouer (<code>offline_strict</code>).
-            Activez-le seulement pour chercher ou télécharger. Clé Brave optionnelle :
-            <code>var/secrets/keys.yaml</code> → <code>brave_search_api_key</code> ;
-            sinon DuckDuckGo HTML.
+            Activez-le seulement pour chercher, parcourir ou télécharger. Moteur
+            <code>auto</code> : Brave → DuckDuckGo → Bing (Settings). Clé Brave
+            optionnelle : <strong>Settings → Secrets</strong>.
           </p>
         </article>
 
@@ -147,13 +147,13 @@
           <h2 data-lang="fr">notes GRANT</h2>
           <p class="hist" data-lang="en">
             Human- and agent-authored notes, shipped as a WASM module. Notes tab:
-            title + body → Create, then List. An agent can create a note via the
-            <code>TOOL:</code> convention on the model side.
+            title + body → Create, then List. Agents use the same notes tools
+            (JSON actions; <code>TOOL:</code> still accepted).
           </p>
           <p class="hist" data-lang="fr">
             Notes humaines et agents, module WASM. Onglet Notes : titre + corps →
-            Create, puis List. Un agent peut créer une note via la convention
-            <code>TOOL:</code> côté modèle.
+            Create, puis List. Les agents utilisent les mêmes outils notes
+            (actions JSON ; <code>TOOL:</code> encore accepté).
           </p>
         </article>
 
@@ -163,13 +163,13 @@
           <p class="hist" data-lang="en">
             Goal loop, skills, tools, optional MCP. Agents tab: create an agent
             with a task and a model. Preview skills include notes-writer, research,
-            file-author, and planner. Optional stdio MCP servers live in
+            file-author, planner, and tasks. Optional stdio MCP servers live in
             <code>share/mcp/servers.yaml.example</code>.
           </p>
           <p class="hist" data-lang="fr">
             Boucle de goal, skills, outils, MCP optionnel. Onglet Agents : créez
             un agent avec une tâche et un modèle. Skills Preview : notes-writer,
-            research, file-author, planner. Serveurs MCP stdio optionnels :
+            research, file-author, planner, tasks. Serveurs MCP stdio optionnels :
             <code>share/mcp/servers.yaml.example</code>.
           </p>
         </article>
