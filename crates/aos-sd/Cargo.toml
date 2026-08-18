@@ -1,0 +1,10 @@
+[package]
+name = "aos-sd"
+description = "Akasha OS — local image (stable-diffusion.cpp) + TTS (Piper) backends (E16)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+image = { version = "0.25", default-features = false, features = ["png"] }

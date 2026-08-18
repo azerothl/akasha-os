@@ -87,6 +87,9 @@ impl PlacementManager {
         kv_tokens: u32,
         budgets: Budgets,
     ) -> Result<PlacementPlan, PlacementError> {
+        if model.is_media() {
+            return self.place_media_with_budgets(model, profile, budgets);
+        }
         let effective_profile = if !self.hw.has_gpu {
             PlacementProfile::CpuOnly
         } else {
@@ -248,6 +251,59 @@ impl PlacementManager {
         })
     }
 
+    /// Place un modèle image/TTS comme un unique shard `MediaWeights` (E16).
+    /// GPU préféré pour l'image ; RAM/DISK si VRAM insuffisante (TTS CPU).
+    fn place_media_with_budgets(
+        &self,
+        model: &ModelDesc,
+        profile: PlacementProfile,
+        budgets: Budgets,
+    ) -> Result<PlacementPlan, PlacementError> {
+        let effective_profile = if !self.hw.has_gpu {
+            PlacementProfile::CpuOnly
+        } else {
+            profile
+        };
+        let size = model.weights_bytes.max(1);
+        let free = budgets;
+        let prefer_vram = matches!(
+            effective_profile,
+            PlacementProfile::Latency | PlacementProfile::Balanced
+        ) && self.hw.has_gpu;
+        let tier = if prefer_vram && free.vram >= size {
+            Tier::Vram
+        } else if free.ram >= size {
+            Tier::Ram
+        } else if free.disk >= size {
+            Tier::Disk
+        } else {
+            return Err(PlacementError::Impossible {
+                reason: format!(
+                    "poids média {} ({size} o) ne tiennent nulle part",
+                    model.id
+                ),
+                suggestion: "pack plus petit, TTS CPU, ou décharger le LLM".into(),
+            });
+        };
+        let shard = Shard {
+            model_id: model.id.clone(),
+            shard_id: 0,
+            kind: ShardKind::MediaWeights,
+            size_bytes: size,
+            residency: tier,
+            pin_count: 0,
+            last_use_tick: 0,
+            priority_boost: 0,
+        };
+        Ok(PlacementPlan {
+            model_id: model.id.clone(),
+            profile: effective_profile,
+            shards: vec![shard],
+            prefetch_window: 0,
+            kv_tokens: 0,
+        })
+    }
+
     /// Estimation de performance d'un plan (raccourci vers le modèle de coût).
     pub fn estimate(
         &self,
@@ -393,5 +449,28 @@ mod tests {
             let d = idx.min(m.n_layers - 1 - idx);
             assert!(d < m.n_layers / 8, "couche {idx} trop centrale");
         }
+    }
+
+    #[test]
+    fn media_image_prend_vram_quand_disponible() {
+        let m = crate::testutil::model_sd15();
+        let plan = pm()
+            .place_model(&m, PlacementProfile::Balanced, Priority::Interactive, 0)
+            .unwrap();
+        assert!(m.is_media());
+        assert_eq!(plan.shards.len(), 1);
+        assert_eq!(plan.shards[0].kind, ShardKind::MediaWeights);
+        assert_eq!(plan.shards[0].residency, Tier::Vram);
+    }
+
+    #[test]
+    fn media_tts_tient_en_ram_cpu_only() {
+        let pm = PlacementManager::new(HardwareProfile::cpu_only_laptop(), CostModel::default());
+        let m = crate::testutil::model_piper();
+        let plan = pm
+            .place_auto(&m, PlacementProfile::Latency, 0, Budgets::full(&pm.hw))
+            .unwrap();
+        assert_eq!(plan.shards[0].kind, ShardKind::MediaWeights);
+        assert_ne!(plan.shards[0].residency, Tier::Vram);
     }
 }

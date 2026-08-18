@@ -35,8 +35,16 @@ pub struct ModelDesc {
 }
 
 impl ModelDesc {
+    /// Image / TTS (E16) : pas de couches transformer, un shard `MediaWeights`.
+    pub fn is_media(&self) -> bool {
+        self.n_layers == 0 && self.kv_bytes_per_token == 0 && self.weights_bytes > 0
+    }
+
     /// Poids d'une couche transformer (octets), hors tables embed/output.
     pub fn layer_bytes(&self) -> u64 {
+        if self.n_layers == 0 {
+            return self.weights_bytes.saturating_sub(self.embed_bytes);
+        }
         (self.weights_bytes - self.embed_bytes) / u64::from(self.n_layers)
     }
 

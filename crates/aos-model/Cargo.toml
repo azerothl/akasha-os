@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 aos-ipc = { path = "../aos-ipc" }
 aos-llama = { path = "../aos-llama", default-features = false }
+aos-sd = { path = "../aos-sd" }
 aos-placement = { path = "../aos-placement" }
 aos-proto = { path = "../aos-proto" }
 aos-registry = { path = "../aos-registry" }
@@ -19,6 +20,7 @@ futures.workspace = true
 sysinfo = "0.33"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "json"] }
 serde_json.workspace = true
+base64 = "0.22"
 
 [features]
 default = ["cuda"]

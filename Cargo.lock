@@ -226,7 +226,7 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
 name = "aos-agent"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "aos-caps",
  "aos-ipc",
@@ -241,7 +241,7 @@ dependencies = [
 
 [[package]]
 name = "aos-auditd"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "aos-ipc",
  "aos-platform",
@@ -253,7 +253,7 @@ dependencies = [
 
 [[package]]
 name = "aos-capkd"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "aos-caps",
  "aos-ipc",
@@ -264,7 +264,7 @@ dependencies = [
 
 [[package]]
 name = "aos-caps"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "bitflags 2.13.1",
  "hashbrown 0.15.5",
@@ -274,7 +274,7 @@ dependencies = [
 
 [[package]]
 name = "aos-ipc"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "bytes",
  "ciborium",
@@ -287,7 +287,7 @@ dependencies = [
 
 [[package]]
 name = "aos-llama"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "llama-cpp-sys-2",
  "serde",
@@ -296,13 +296,15 @@ dependencies = [
 
 [[package]]
 name = "aos-model"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "aos-ipc",
  "aos-llama",
  "aos-placement",
  "aos-proto",
  "aos-registry",
+ "aos-sd",
+ "base64",
  "futures",
  "reqwest",
  "serde",
@@ -315,7 +317,7 @@ dependencies = [
 
 [[package]]
 name = "aos-placement"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "aos-caps",
  "criterion",
@@ -325,7 +327,7 @@ dependencies = [
 
 [[package]]
 name = "aos-platform"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "aos-agent",
  "aos-caps",
@@ -356,7 +358,7 @@ dependencies = [
 
 [[package]]
 name = "aos-proto"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "schemars",
  "serde",
@@ -365,7 +367,7 @@ dependencies = [
 
 [[package]]
 name = "aos-registry"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "aos-placement",
  "serde",
@@ -374,15 +376,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "aos-sd"
+version = "0.8.0"
+dependencies = [
+ "image",
+ "thiserror 2.0.20",
+]
+
+[[package]]
 name = "aos-sel4-abi"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "aos-caps",
 ]
 
 [[package]]
 name = "aos-sel4-capkd"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "aos-caps",
  "aos-sel4-abi",
@@ -390,7 +400,7 @@ dependencies = [
 
 [[package]]
 name = "aos-session"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "aos-ipc",
  "aos-proto",
@@ -398,7 +408,6 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "serde_yaml",
  "sha2",
  "tokio",
  "winres",
@@ -407,7 +416,7 @@ dependencies = [
 
 [[package]]
 name = "aos-sim"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "aos-caps",
  "aos-placement",
@@ -417,7 +426,7 @@ dependencies = [
 
 [[package]]
 name = "aos-ui"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "aos-agent",
  "aos-ipc",
@@ -432,7 +441,7 @@ dependencies = [
 
 [[package]]
 name = "aos-ui-egui"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "aos-agent",
  "aos-ipc",
@@ -440,6 +449,7 @@ dependencies = [
  "eframe",
  "egui_commonmark",
  "egui_plot",
+ "image",
  "serde",
  "serde_json",
  "tokio",
@@ -448,7 +458,7 @@ dependencies = [
 
 [[package]]
 name = "aos-ui-iced"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "aos-agent",
  "aos-ipc",

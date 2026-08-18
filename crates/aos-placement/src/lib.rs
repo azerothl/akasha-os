@@ -67,6 +67,38 @@ pub(crate) mod testutil {
         }
     }
 
+    /// SD 1.5 ≈ 4 GiB — pack image E16 (un shard MediaWeights).
+    pub fn model_sd15() -> ModelDesc {
+        ModelDesc {
+            id: "local:sd-v1-5".into(),
+            name: "Stable Diffusion 1.5".into(),
+            n_layers: 0,
+            n_params: 8.6e8,
+            weights_bytes: 4 * GIB,
+            embed_bytes: 0,
+            kv_bytes_per_token: 0,
+            context_length: 0,
+            supports_layer_offload: false,
+            privacy_class: PrivacyClass::Local,
+        }
+    }
+
+    /// Voix Piper ~64 MiB — TTS CPU, pas de VRAM.
+    pub fn model_piper() -> ModelDesc {
+        ModelDesc {
+            id: "local:piper-en-us".into(),
+            name: "Piper en_US".into(),
+            n_layers: 0,
+            n_params: 1.0e7,
+            weights_bytes: 64 * 1024 * 1024,
+            embed_bytes: 0,
+            kv_bytes_per_token: 0,
+            context_length: 0,
+            supports_layer_offload: false,
+            privacy_class: PrivacyClass::Local,
+        }
+    }
+
     /// 70B Q4 ≈ 40 GiB, 80 couches — dépasse la RAM de la machine de référence.
     pub fn model_70b() -> ModelDesc {
         ModelDesc {

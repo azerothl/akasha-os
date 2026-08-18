@@ -109,6 +109,36 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
             backend: ToolBackend::Native,
             required_caps: vec!["fs.write:/documents/**".into()],
         },
+        ToolDesc {
+            name: "media.image.generate".into(),
+            description: "Générer une image PNG locale (diffusion) sous /downloads".into(),
+            input_schema: serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "prompt":{"type":"string"},
+                    "path":{"type":"string"},
+                    "model_id":{"type":"string"}
+                },
+                "required":["prompt"]
+            }),
+            backend: ToolBackend::Native,
+            required_caps: vec!["media.generate".into(), "fs.write:/downloads/**".into()],
+        },
+        ToolDesc {
+            name: "media.audio.generate".into(),
+            description: "Synthèse vocale TTS locale (WAV) sous /downloads".into(),
+            input_schema: serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "text":{"type":"string"},
+                    "path":{"type":"string"},
+                    "model_id":{"type":"string"}
+                },
+                "required":["text"]
+            }),
+            backend: ToolBackend::Native,
+            required_caps: vec!["media.generate".into(), "fs.write:/downloads/**".into()],
+        },
         // Runtime
         ToolDesc {
             name: "plan.update".into(),
@@ -223,7 +253,7 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
         ToolDesc {
             name: "module.scaffold".into(),
             description: "Scaffolder un module (script ou rust)".into(),
-            input_schema: serde_json::json!({"type":"object","properties":{"name":{"type":"string"},"kind":{"type":"string"},"description":{"type":"string"},"source":{"type":"string"},"required_caps":{"type":"array"},"ui":{"type":"string","description":"Optional declarative_ui JSON (widgets: column, row, heading, text, markdown, stat_row, table, line_chart, form, button; bind/source for tool results)"}},"required":["name","description"]}),
+            input_schema: serde_json::json!({"type":"object","properties":{"name":{"type":"string"},"kind":{"type":"string"},"description":{"type":"string"},"source":{"type":"string"},"required_caps":{"type":"array"},"ui":{"type":"string","description":"Optional declarative_ui JSON (widgets: column, row, heading, text, markdown, stat_row, table, line_chart, bar_chart, form, button, select, radio, checkbox, textarea, image, audio)"}},"required":["name","description"]}),
             backend: ToolBackend::Native,
             required_caps: vec![],
         },
@@ -247,6 +277,13 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
             input_schema: serde_json::json!({"type":"object","properties":{"source_dir":{"type":"string"},"approved_caps":{"type":"array"}},"required":["source_dir"]}),
             backend: ToolBackend::Native,
             required_caps: vec!["module.install".into()],
+        },
+        ToolDesc {
+            name: "module.uninstall".into(),
+            description: "Désinstaller un module non bundlé (révoke tool.invoke, conserve /documents)".into(),
+            input_schema: serde_json::json!({"type":"object","properties":{"module":{"type":"string"}},"required":["module"]}),
+            backend: ToolBackend::Native,
+            required_caps: vec!["module.uninstall".into()],
         },
         ToolDesc {
             name: "module.list".into(),
@@ -462,6 +499,7 @@ pub fn select_tools(selected: &[String], extra: &[ToolDesc]) -> Vec<ToolDesc> {
         "module.package",
         "module.compile",
         "module.install",
+        "module.uninstall",
         "module.list",
         "module.describe",
     ];
@@ -482,6 +520,8 @@ pub fn select_tools(selected: &[String], extra: &[ToolDesc]) -> Vec<ToolDesc> {
                 || t.name == "mem.context"
                 || t.name == "web.search"
                 || t.name == "files.generate"
+                || t.name == "media.image.generate"
+                || t.name == "media.audio.generate"
         } else {
             keep || selected.iter().any(|s| &t.name == s) || always.contains(&t.name.as_str())
         };

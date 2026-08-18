@@ -224,14 +224,23 @@ impl ChatSessionStore {
         for m in messages {
             out.push_str(&format!("## {}\n\n{}\n\n", m.role, m.content));
             for att in &m.attachments {
-                let ChatAttachment::AgentRef {
-                    agent_id,
-                    title,
-                    origin,
-                } = att;
-                out.push_str(&format!(
-                    "_agent: {agent_id} ({origin}) — {title}_\n\n"
-                ));
+                match att {
+                    ChatAttachment::AgentRef {
+                        agent_id,
+                        title,
+                        origin,
+                    } => {
+                        out.push_str(&format!(
+                            "_agent: {agent_id} ({origin}) — {title}_\n\n"
+                        ));
+                    }
+                    ChatAttachment::Image { path } => {
+                        out.push_str(&format!("_image: {path}_\n\n"));
+                    }
+                    ChatAttachment::Audio { path } => {
+                        out.push_str(&format!("_audio: {path}_\n\n"));
+                    }
+                }
             }
         }
         Ok(out)

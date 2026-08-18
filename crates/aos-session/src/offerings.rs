@@ -1,7 +1,8 @@
 //! Catalogue d'offres GGUF, recommandation hardware, installé, téléchargement.
 
 use crate::bootstrap;
-use crate::hardware::{HardwareInfo, HardwareTier};
+use crate::engines;
+use crate::hardware::HardwareInfo;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs;
@@ -12,6 +13,9 @@ pub struct OfferingsFile {
     pub version: String,
     pub models: Vec<ModelOffering>,
     pub packs: BTreeMap<String, TierPack>,
+    /// Runtime zips (sd.cpp / piper) fetched with the matching media pack.
+    #[serde(default)]
+    pub engines: BTreeMap<String, EngineOffering>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -37,6 +41,69 @@ pub struct ModelOffering {
     pub replaces: Vec<String>,
     #[serde(default)]
     pub optional: bool,
+    /// `text` | `embedding` | `image` | `audio` (E16).
+    #[serde(default)]
+    pub modality: Option<String>,
+    /// Weight format (`gguf`, `safetensors`, `onnx`).
+    #[serde(default = "default_format")]
+    pub format: String,
+    /// Sidecar files (Piper `.onnx.json`, etc.).
+    #[serde(default)]
+    pub extra_files: Vec<OfferingFile>,
+    /// Catalogue engine id (`sdcpp`, `piper`). Inferred from profiles if empty.
+    #[serde(default)]
+    pub engine: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct EngineOffering {
+    #[serde(default)]
+    pub windows: Option<EngineArtifact>,
+    #[serde(default)]
+    pub linux: Option<EngineArtifact>,
+}
+
+impl EngineOffering {
+    pub fn current_os(&self) -> Option<&EngineArtifact> {
+        if cfg!(windows) {
+            self.windows.as_ref()
+        } else if cfg!(target_os = "linux") {
+            self.linux.as_ref()
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EngineArtifact {
+    pub url: String,
+    pub filename: String,
+    #[serde(default)]
+    pub bytes: u64,
+    #[serde(default)]
+    pub sha256: String,
+}
+
+fn default_format() -> String {
+    "gguf".into()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct OfferingFile {
+    pub filename: String,
+    pub url: String,
+    #[serde(default)]
+    pub bytes: u64,
+    #[serde(default)]
+    pub sha256: String,
+}
+
+impl ModelOffering {
+    pub fn is_media(&self) -> bool {
+        self.profiles.iter().any(|p| p == "image" || p == "tts")
+            || matches!(self.modality.as_deref(), Some("image") | Some("audio"))
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -164,7 +231,7 @@ pub fn build_setup_offer(home: &Path, hw: &HardwareInfo) -> Result<ModelSetupOff
     let optional_ids: Vec<String> = offerings
         .models
         .iter()
-        .filter(|m| m.optional && !recommended_ids.contains(&m.id))
+        .filter(|m| m.optional && !recommended_ids.contains(&m.id) && !m.is_media())
         .filter(|m| m.min_vram_mib <= hw.vram_mib.saturating_add(2048))
         .map(|m| m.id.clone())
         .collect();
@@ -262,6 +329,19 @@ pub fn download_ids(home: &Path, ids: &[String]) -> Result<(), String> {
         };
         let path = dir.join(&m.filename);
         bootstrap::download_model_file(&m.url, &path, Some(m.bytes), &m.sha256)?;
+        for extra in &m.extra_files {
+            let extra_path = dir.join(&extra.filename);
+            bootstrap::download_model_file(
+                &extra.url,
+                &extra_path,
+                Some(extra.bytes).filter(|b| *b > 0),
+                &extra.sha256,
+            )?;
+        }
+        if let Some(engine_id) = engines::engine_id_for(m.engine.as_deref(), &m.profiles, m.modality.as_deref())
+        {
+            engines::ensure_engine(home, Some(&offerings), &engine_id)?;
+        }
         inst.models.retain(|x| x.id != *id);
         inst.models.push(InstalledModel {
             id: id.clone(),
@@ -393,6 +473,10 @@ pub fn runtime_model_entries(
                     kv_bytes_per_token: 40_000,
                     replaces: vec![],
                     optional: false,
+                    modality: None,
+                    format: "gguf".into(),
+                    extra_files: vec![],
+                    engine: None,
                 };
                 entries.push((m.id.clone(), stub, model_path(home, &m.filename)));
             }
@@ -423,9 +507,4 @@ fn now_ms() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_millis() as u64
-}
-
-#[allow(dead_code)]
-pub fn tier_label(t: HardwareTier) -> &'static str {
-    t.as_str()
 }

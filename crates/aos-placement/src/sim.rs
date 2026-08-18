@@ -89,6 +89,8 @@ pub struct PlacementSim {
     placed: HashMap<String, PlacedModel>,
     tick: u64,
     events: Vec<SimEvent>,
+    /// `auto` device policy (E17): demote when VRAM is tight, promote when it recovers.
+    auto_demoted: bool,
 }
 
 impl PlacementSim {
@@ -102,6 +104,33 @@ impl PlacementSim {
             placed: HashMap::new(),
             tick: 0,
             events: Vec::new(),
+            auto_demoted: false,
+        }
+    }
+
+    /// Hysteresis for Settings **auto**: MemorySaver when free VRAM < 15%,
+    /// Balanced when it rises above 30%. Pin `cpu`/`gpu` is applied by the
+    /// session (process choice), not here.
+    pub const AUTO_DEMOTE_FREE_FRAC: f64 = 0.15;
+    pub const AUTO_PROMOTE_FREE_FRAC: f64 = 0.30;
+
+    pub fn auto_hysteresis_profile(&mut self) -> PlacementProfile {
+        if !self.hw.has_gpu || self.hw.vram_budget() == 0 {
+            return PlacementProfile::CpuOnly;
+        }
+        let frac = self.free().vram as f64 / self.hw.vram_budget() as f64;
+        if self.auto_demoted {
+            if frac > Self::AUTO_PROMOTE_FREE_FRAC {
+                self.auto_demoted = false;
+                PlacementProfile::Balanced
+            } else {
+                PlacementProfile::MemorySaver
+            }
+        } else if frac < Self::AUTO_DEMOTE_FREE_FRAC {
+            self.auto_demoted = true;
+            PlacementProfile::MemorySaver
+        } else {
+            PlacementProfile::Balanced
         }
     }
 
@@ -701,5 +730,61 @@ mod tests {
         s.unload(&m3.id);
         assert!(s.free().vram > free_before);
         assert!(s.get(&m3.id).is_none());
+    }
+
+    #[test]
+    fn media_evince_ou_cohabite_avec_llm() {
+        let mut s = sim();
+        let llm = model_3b();
+        let img = crate::testutil::model_sd15();
+        s.place(&llm, PlacementProfile::Latency, Priority::AgentNormal, 2048)
+            .unwrap();
+        s.place(&img, PlacementProfile::Balanced, Priority::Interactive, 0)
+            .unwrap();
+        assert!(s.get(&llm.id).is_some());
+        assert!(s.get(&img.id).is_some());
+        let img_pm = s.get(&img.id).unwrap();
+        assert_eq!(
+            img_pm.plan.shards[0].kind,
+            crate::plan::ShardKind::MediaWeights
+        );
+        s.unload(&img.id);
+        assert!(s.get(&img.id).is_none());
+    }
+
+    #[test]
+    fn media_refuse_si_budgets_insuffisants() {
+        let tiny = HardwareProfile {
+            name: "tiny".into(),
+            has_gpu: true,
+            vram_total: 512 * 1024 * 1024,
+            ram_total: 256 * 1024 * 1024,
+            disk_total: 256 * 1024 * 1024,
+            os_reserve_vram: 0,
+            os_reserve_ram: 0,
+            gpu_mem_bw: 100e9,
+            ram_mem_bw: 20e9,
+            disk_seq_bw: 1e9,
+            host_to_device_bw: 10e9,
+            gpu_flops: 1e12,
+            cpu_flops: 1e11,
+        };
+        let mut s = PlacementSim::new(tiny, CostModel::default());
+        let img = crate::testutil::model_sd15();
+        let err = s
+            .place(&img, PlacementProfile::Latency, Priority::Interactive, 0)
+            .unwrap_err();
+        assert!(matches!(err, PlacementError::Impossible { .. }));
+        assert!(s.events().iter().any(|e| matches!(e, SimEvent::Refused { .. })));
+    }
+
+    #[test]
+    fn auto_hysteresis_demote_then_promote() {
+        let mut s = sim();
+        assert_eq!(s.auto_hysteresis_profile(), PlacementProfile::Balanced);
+        s.used.vram = (s.hw.vram_budget() as f64 * 0.90) as u64;
+        assert_eq!(s.auto_hysteresis_profile(), PlacementProfile::MemorySaver);
+        s.used.vram = 0;
+        assert_eq!(s.auto_hysteresis_profile(), PlacementProfile::Balanced);
     }
 }

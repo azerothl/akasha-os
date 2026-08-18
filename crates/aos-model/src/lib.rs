@@ -12,6 +12,8 @@
 
 pub mod backend;
 pub mod config;
+pub mod media;
+pub mod providers;
 pub mod subsystem;
 
 pub use backend::RemoteOpenAiBackend;

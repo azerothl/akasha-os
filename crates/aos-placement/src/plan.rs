@@ -33,6 +33,8 @@ pub enum ShardKind {
     KvCache,
     /// Tables embedding / output.
     Embed,
+    /// Poids diffusion / TTS (E16) — blob unique évincable vs le LLM.
+    MediaWeights,
 }
 
 /// Descripteur de shard (§3.5.2).

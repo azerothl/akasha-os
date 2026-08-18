@@ -100,8 +100,123 @@
       "kv_bytes_per_token": 40000,
       "replaces": [],
       "optional": true
+    },
+    {
+      "id": "local:sd-v1-5",
+      "name": "Stable Diffusion 1.5",
+      "profiles": ["image"],
+      "filename": "v1-5-pruned-emaonly.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/stable-diffusion-v1-5-archive/resolve/main/v1-5-pruned-emaonly.safetensors",
+      "bytes": 4265146304,
+      "sha256": "",
+      "min_vram_mib": 4096,
+      "min_disk_bytes": 4500000000,
+      "quality_score": 70,
+      "speed_score": 60,
+      "n_layers": 0,
+      "n_params": 8.6e8,
+      "weights_bytes": 4265146304,
+      "embed_bytes": 0,
+      "kv_bytes_per_token": 0,
+      "replaces": [],
+      "optional": true,
+      "modality": "image",
+      "format": "safetensors",
+      "engine": "sdcpp"
+    },
+    {
+      "id": "local:piper-en-us",
+      "name": "Piper TTS en_US lessac medium",
+      "profiles": ["tts"],
+      "filename": "en_US-lessac-medium.onnx",
+      "url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx",
+      "bytes": 63201294,
+      "sha256": "",
+      "min_vram_mib": 0,
+      "min_disk_bytes": 70000000,
+      "quality_score": 75,
+      "speed_score": 90,
+      "n_layers": 0,
+      "n_params": 1.0e7,
+      "weights_bytes": 63201294,
+      "embed_bytes": 0,
+      "kv_bytes_per_token": 0,
+      "replaces": [],
+      "optional": true,
+      "modality": "audio",
+      "format": "onnx",
+      "extra_files": [
+        {
+          "filename": "en_US-lessac-medium.onnx.json",
+          "url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json",
+          "bytes": 5000,
+          "sha256": ""
+        }
+      ],
+      "engine": "piper"
+    },
+    {
+      "id": "local:piper-fr-fr",
+      "name": "Piper TTS fr_FR siwis medium",
+      "profiles": ["tts"],
+      "filename": "fr_FR-siwis-medium.onnx",
+      "url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/fr/fr_FR/siwis/medium/fr_FR-siwis-medium.onnx",
+      "bytes": 63201294,
+      "sha256": "",
+      "min_vram_mib": 0,
+      "min_disk_bytes": 70000000,
+      "quality_score": 75,
+      "speed_score": 90,
+      "n_layers": 0,
+      "n_params": 1.0e7,
+      "weights_bytes": 63201294,
+      "embed_bytes": 0,
+      "kv_bytes_per_token": 0,
+      "replaces": [],
+      "optional": true,
+      "modality": "audio",
+      "format": "onnx",
+      "extra_files": [
+        {
+          "filename": "fr_FR-siwis-medium.onnx.json",
+          "url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/fr/fr_FR/siwis/medium/fr_FR-siwis-medium.onnx.json",
+          "bytes": 5000,
+          "sha256": ""
+        }
+      ],
+      "engine": "piper"
     }
   ],
+  "engines": {
+    "sdcpp": {
+      "windows": {
+        "url": "https://github.com/leejet/stable-diffusion.cpp/releases/download/master-820-de298c2/sd-master-de298c2-bin-win-vulkan-x64.zip",
+        "filename": "sd-master-de298c2-bin-win-vulkan-x64.zip",
+        "bytes": 0,
+        "sha256": ""
+      },
+      "linux": {
+        "url": "https://github.com/leejet/stable-diffusion.cpp/releases/download/master-820-de298c2/sd-master-de298c2-bin-Linux-Ubuntu-24.04-x86_64-vulkan.zip",
+        "filename": "sd-master-de298c2-bin-Linux-Ubuntu-24.04-x86_64-vulkan.zip",
+        "bytes": 0,
+        "sha256": ""
+      }
+    },
+    "piper": {
+      "windows": {
+        "url": "https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip",
+        "filename": "piper_windows_amd64.zip",
+        "bytes": 22477236,
+        "sha256": ""
+      },
+      "linux": {
+        "url": "https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_linux_x86_64.tar.gz",
+        "filename": "piper_linux_x86_64.tar.gz",
+        "bytes": 25200000,
+        "sha256": ""
+      }
+    }
+  },
   "packs": {
     "cpu": {
       "embed": "local:qwen3-embedding-0.6b",

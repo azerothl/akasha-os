@@ -3,10 +3,12 @@
 //! Usage : `aos-modeld [config.yaml]` (défaut `demo/modeld.dev.yaml`).
 
 use aos_ipc::{BusClient, BusService, StreamHandle};
-use aos_model::{ModelSubsystem, ModeldConfig};
+use aos_model::{media, providers, ModelSubsystem, ModeldConfig};
 use aos_placement::PlacementProfile;
 use aos_proto::{
-    CancelRequest, InferRequest, LoadRequest, ModelIdRequest, TokenEvent, UnloadRequest,
+    CancelRequest, InferRequest, LoadRequest,
+    MediaAudioGenerateRequest, MediaImageGenerateRequest, ModelIdRequest,
+    TokenEvent, UnloadRequest,
 };
 use aos_registry::ModelRegistry;
 use std::sync::Arc;
@@ -17,25 +19,6 @@ fn parse_profile(s: &str) -> PlacementProfile {
         "memory-saver" => PlacementProfile::MemorySaver,
         "cpu-only" => PlacementProfile::CpuOnly,
         _ => PlacementProfile::Balanced,
-    }
-}
-
-/// Extrait host/port d'un endpoint (`http(s)://hote[:port]/...`).
-fn parse_host_port(endpoint: &str) -> (String, u16) {
-    let without_scheme = endpoint
-        .trim_start_matches("https://")
-        .trim_start_matches("http://");
-    let hostport = without_scheme.split('/').next().unwrap_or("");
-    match hostport.rsplit_once(':') {
-        Some((h, p)) => (h.to_string(), p.parse().unwrap_or(443)),
-        None => (
-            hostport.to_string(),
-            if endpoint.starts_with("https") {
-                443
-            } else {
-                80
-            },
-        ),
     }
 }
 
@@ -255,39 +238,44 @@ async fn main() {
                             })
                             .await;
                         model_id = fallback;
-                    } else if mode == "local_only" {
-                        let _ = stream
-                            .send(&TokenEvent::Error {
-                                message: "mode local_only : backend distant interdit".into(),
-                            })
-                            .await;
-                        let _ = stream.finish(aos_ipc::msg::Status::PermissionDenied).await;
-                        return;
                     } else {
-                        // 2. Contrôle d'egress (§9.5) via platformd net.check.
                         let endpoint = sub.remote_endpoint(&model_id).unwrap_or_default();
-                        let (host, port) = parse_host_port(&endpoint);
-                        let allowed = bus
-                            .call::<aos_proto::NetCheckRequest, bool>(
-                                "net.check",
-                                &aos_proto::NetCheckRequest {
-                                    host: host.clone(),
-                                    port,
-                                    actor: "service:modeld".into(),
-                                    caps: vec![format!("net.connect:{host}:{port}")],
-                                },
-                                vec![],
-                            )
-                            .await
-                            .unwrap_or(false);
-                        if !allowed {
+                        let loopback = aos_model::providers::endpoint_is_loopback(&endpoint);
+                        // local_only still allows loopback (Ollama / vLLM / LM Studio).
+                        if mode == "local_only" && !loopback {
                             let _ = stream
                                 .send(&TokenEvent::Error {
-                                    message: format!("egress refusé vers {host}:{port}"),
+                                    message: "mode local_only : backend WAN interdit".into(),
                                 })
                                 .await;
                             let _ = stream.finish(aos_ipc::msg::Status::PermissionDenied).await;
                             return;
+                        }
+                        let (host, port) = providers::parse_host_port(&endpoint);
+                        if !loopback {
+                            // 2. Contrôle d'egress (§9.5) via platformd net.check.
+                            let allowed = bus
+                                .call::<aos_proto::NetCheckRequest, bool>(
+                                    "net.check",
+                                    &aos_proto::NetCheckRequest {
+                                        host: host.clone(),
+                                        port,
+                                        actor: "service:modeld".into(),
+                                        caps: vec![format!("net.connect:{host}:{port}")],
+                                    },
+                                    vec![],
+                                )
+                                .await
+                                .unwrap_or(false);
+                            if !allowed {
+                                let _ = stream
+                                    .send(&TokenEvent::Error {
+                                        message: format!("egress refusé vers {host}:{port}"),
+                                    })
+                                    .await;
+                                let _ = stream.finish(aos_ipc::msg::Status::PermissionDenied).await;
+                                return;
+                            }
                         }
                         // 3. Exécution distante (flux).
                         let _ = bus
@@ -496,6 +484,245 @@ async fn main() {
                 let _ = ctx.respond(aos_ipc::msg::Status::Ok, &metrics).await;
             }
         });
+    }
+
+    // --- media.image.generate / media.audio.generate (E16) ---
+    {
+        let sub = subsystem.clone();
+        let bus = bus.clone();
+        svc.on("media.image.generate", move |ctx| {
+            let sub = sub.clone();
+            let bus = bus.clone();
+            async move {
+                match ctx.payload::<MediaImageGenerateRequest>() {
+                    Ok(req) => {
+                        if !aos_model::media::actor_may_generate(&req.actor, &req.caps) {
+                            let _ = ctx
+                                .respond_error(
+                                    aos_ipc::msg::Status::PermissionDenied,
+                                    "cap media.generate requise",
+                                )
+                                .await;
+                            return;
+                        }
+                        let dest = req
+                            .path
+                            .clone()
+                            .filter(|p| !p.is_empty())
+                            .unwrap_or_else(aos_model::media::default_image_path);
+                        match media::run_image(&sub, &bus, &req, &dest).await {
+                            Ok(resp) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &resp).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(aos_ipc::msg::Status::InternalError, &e)
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let sub = subsystem.clone();
+        let bus = bus.clone();
+        svc.on("media.audio.generate", move |ctx| {
+            let sub = sub.clone();
+            let bus = bus.clone();
+            async move {
+                match ctx.payload::<MediaAudioGenerateRequest>() {
+                    Ok(req) => {
+                        if !aos_model::media::actor_may_generate(&req.actor, &req.caps) {
+                            let _ = ctx
+                                .respond_error(
+                                    aos_ipc::msg::Status::PermissionDenied,
+                                    "cap media.generate requise",
+                                )
+                                .await;
+                            return;
+                        }
+                        let dest = req
+                            .path
+                            .clone()
+                            .filter(|p| !p.is_empty())
+                            .unwrap_or_else(aos_model::media::default_audio_path);
+                        match media::run_tts(&sub, &bus, &req, &dest).await {
+                            Ok(resp) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &resp).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(aos_ipc::msg::Status::InternalError, &e)
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+
+    // --- provider.* (P08.12) ---
+    {
+        svc.on("provider.list", move |ctx| async move {
+            let list = aos_model::providers::load_all();
+            let _ = ctx
+                .respond(
+                    aos_ipc::msg::Status::Ok,
+                    &aos_proto::ProviderListResponse { providers: list },
+                )
+                .await;
+        });
+    }
+    {
+        let sub = subsystem.clone();
+        let bus = bus.clone();
+        svc.on("provider.upsert", move |ctx| {
+            let sub = sub.clone();
+            let bus = bus.clone();
+            async move {
+                match ctx.payload::<aos_proto::ProviderUpsertRequest>() {
+                    Ok(req) => {
+                        if let Err(e) = aos_model::providers::save(&req.provider) {
+                            let _ = ctx
+                                .respond_error(aos_ipc::msg::Status::InternalError, &e)
+                                .await;
+                            return;
+                        }
+                        sub.remove_provider_models(&req.provider.id);
+                        if req.provider.enabled {
+                            providers::apply_provider_models(&sub, &bus, &req.provider).await;
+                        }
+                        let _ = bus
+                            .call::<aos_proto::AuditAppendRequest, bool>(
+                                "audit.append",
+                                &aos_proto::AuditAppendRequest {
+                                    trace_id: String::new(),
+                                    actor: "human:ui".into(),
+                                    action: "provider.add".into(),
+                                    target: req.provider.id.clone(),
+                                    detail: serde_json::json!({
+                                        "endpoint": req.provider.endpoint,
+                                        "preset": req.provider.preset,
+                                    }),
+                                },
+                                vec![],
+                            )
+                            .await;
+                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &req.provider).await;
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let sub = subsystem.clone();
+        svc.on("provider.remove", move |ctx| {
+            let sub = sub.clone();
+            async move {
+                match ctx.payload::<aos_proto::ProviderIdRequest>() {
+                    Ok(req) => {
+                        let _ = aos_model::providers::remove(&req.id);
+                        sub.remove_provider_models(&req.id);
+                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &true).await;
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let bus = bus.clone();
+        svc.on("provider.test", move |ctx| {
+            let bus = bus.clone();
+            async move {
+                match ctx.payload::<aos_proto::ProviderIdRequest>() {
+                    Ok(req) => {
+                        let Some(p) = aos_model::providers::load_all()
+                            .into_iter()
+                            .find(|x| x.id == req.id)
+                        else {
+                            let _ = ctx
+                                .respond_error(aos_ipc::msg::Status::NotFound, "provider inconnu")
+                                .await;
+                            return;
+                        };
+                        let key = providers::fetch_provider_secret(&bus, p.secret_name.as_deref()).await;
+                        let be = aos_model::RemoteOpenAiBackend::new(
+                            &p.endpoint,
+                            "probe",
+                            key,
+                        );
+                        let models = be.list_models().await.unwrap_or_default();
+                        let ok = be.health().await || !models.is_empty();
+                        let mut rec = p;
+                        if !models.is_empty() {
+                            rec.discovered_models = models.clone();
+                            let _ = aos_model::providers::save(&rec);
+                        }
+                        let _ = bus
+                            .call::<aos_proto::AuditAppendRequest, bool>(
+                                "audit.append",
+                                &aos_proto::AuditAppendRequest {
+                                    trace_id: String::new(),
+                                    actor: "human:ui".into(),
+                                    action: "provider.test".into(),
+                                    target: rec.id.clone(),
+                                    detail: serde_json::json!({ "ok": ok, "n": models.len() }),
+                                },
+                                vec![],
+                            )
+                            .await;
+                        let _ = ctx
+                            .respond(
+                                aos_ipc::msg::Status::Ok,
+                                &aos_proto::ProviderTestResponse {
+                                    ok,
+                                    message: if ok {
+                                        format!("{} modèle(s)", models.len())
+                                    } else {
+                                        "injoignable".into()
+                                    },
+                                    models,
+                                },
+                            )
+                            .await;
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+
+    for p in aos_model::providers::load_all() {
+        if p.enabled {
+            providers::apply_provider_models(&subsystem, &bus, &p).await;
+        }
     }
 
     eprintln!("[aos-modeld] prêt");

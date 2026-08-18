@@ -274,5 +274,6 @@ mod tests {
     #[test]
     fn shard_kind_used() {
         let _ = ShardKind::Embed;
+        let _ = ShardKind::MediaWeights;
     }
 }
