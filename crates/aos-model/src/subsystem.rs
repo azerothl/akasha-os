@@ -3,8 +3,8 @@
 use crate::config::ModeldConfig;
 use aos_llama::{BatchItem, GenParams, LlamaContext, LlamaModel, LoadMode, LoadOptions};
 use aos_placement::{
-    Budgets, CostModel, HardwareProfile, ModelDesc, PlacementManager, PlacementPlan,
-    PlacementProfile, Tier,
+    CostModel, HardwareProfile, ModelDesc, PlacementPlan, PlacementProfile, PlacementSim,
+    Priority, Tier,
 };
 use aos_proto::{
     InferRequest, LoadResponse, ModelInfo, ModelMetrics, ModelState, SystemMetrics, TokenEvent,
@@ -103,20 +103,11 @@ enum LoadAction {
     Fail(String),
 }
 
-/// Résultat matérialisé d'un chargement de modèle.
-type LoadArtifacts = (
-    PlacementPlan,
-    Arc<LlamaModel>,
-    Arc<StdMutex<LlamaContext>>,
-    Arc<AtomicBool>,
-    f64,
-);
-
 /// Model Subsystem (partagé entre handlers du bus).
 pub struct ModelSubsystem {
     inner: Arc<StdMutex<Inner>>,
     pub config: ModeldConfig,
-    pm: PlacementManager,
+    sim: Arc<StdMutex<PlacementSim>>,
 }
 
 impl ModelSubsystem {
@@ -138,7 +129,10 @@ impl ModelSubsystem {
             gpu_flops: 30e12,
             cpu_flops: 2.5e12,
         };
-        let pm = PlacementManager::new(hw, CostModel::default());
+        let sim = Arc::new(StdMutex::new(PlacementSim::new(
+            hw,
+            CostModel::default(),
+        )));
         let mut models = HashMap::new();
         for entry in registry.entries() {
             if let Some(mut desc) = entry.to_model_desc() {
@@ -190,7 +184,7 @@ impl ModelSubsystem {
                 remote_backends: HashMap::new(),
             })),
             config,
-            pm,
+            sim,
         }
     }
 
@@ -267,82 +261,137 @@ impl ModelSubsystem {
 
     fn spawn_load_task(&self, model_id: &str, profile: PlacementProfile, kv_tokens: u32) {
         let inner = self.inner.clone();
-        let pm = self.pm.clone();
+        let sim = self.sim.clone();
         let config = self.config.clone();
         let model_id = model_id.to_string();
         tokio::task::spawn_blocking(move || {
-            let outcome: Result<LoadArtifacts, String> = (|| {
-                let (desc, path) = {
-                    let g = inner.lock().unwrap();
-                    let m = g.models.get(&model_id).ok_or("modèle disparu")?;
-                    (m.desc.clone(), m.path.clone())
-                };
-                let path = path.ok_or_else(|| "aucun chemin de poids configuré".to_string())?;
-                if !path.exists() {
-                    return Err(format!("poids introuvables: {}", path.display()));
+            let (desc, path) = {
+                let g = inner.lock().unwrap();
+                match g.models.get(&model_id) {
+                    Some(m) => (m.desc.clone(), m.path.clone()),
+                    None => {
+                        return;
+                    }
                 }
-                // --- Plan de placement réel (P1.2) ---
-                let plan = pm
-                    .place_auto(&desc, profile, kv_tokens, Budgets::full(&pm.hw))
-                    .map_err(|e| e.to_string())?;
-                let ngl = plan.n_layers_on(Tier::Vram) as i32;
-                let opts = LoadOptions {
-                    n_gpu_layers: ngl,
-                    load_mode: LoadMode::Mmap,
-                    offload_kqv: plan.kv_bytes_on(Tier::Vram) > 0,
-                    n_ctx: (kv_tokens + 1024).max(4096) * config.n_seq_max.max(1),
-                    // Prefill chunké dans aos-llama ; 2048 réduit les round-trips.
-                    n_batch: 2048,
-                    n_ubatch: 512,
-                    n_threads: config.n_threads,
-                    flash_attn: true,
-                    embeddings: false,
-                    n_seq_max: config.n_seq_max.max(1),
+            };
+            let apply_err = |e: String| {
+                let mut g = inner.lock().unwrap();
+                if let Some(m) = g.models.get_mut(&model_id) {
+                    m.loading = false;
+                    m.state = ModelState::Error;
+                    m.load_error = Some(e.clone());
+                }
+                eprintln!("[modeld] échec chargement {model_id}: {e}");
+            };
+            let Some(path) = path else {
+                apply_err("aucun chemin de poids configuré".into());
+                return;
+            };
+            if !path.exists() {
+                apply_err(format!("poids introuvables: {}", path.display()));
+                return;
+            }
+            let plan = {
+                let mut sim = sim.lock().unwrap();
+                if sim.get(&model_id).is_some() {
+                    sim.unload(&model_id);
+                }
+                let inference = std::env::var("AOS_INFERENCE")
+                    .unwrap_or_default()
+                    .to_ascii_lowercase();
+                let effective_profile = match inference.as_str() {
+                    "cpu" => PlacementProfile::CpuOnly,
+                    "auto" => sim.auto_hysteresis_profile(),
+                    _ => profile,
                 };
-                let model = Arc::new(LlamaModel::load(&path, &opts).map_err(|e| e.to_string())?);
-                let ctx = LlamaContext::new(model.clone(), &opts).map_err(|e| e.to_string())?;
-                let abort = ctx.abort_handle();
-                let est = pm.estimate(&plan, &desc, 256, kv_tokens).tok_s;
-                Ok((plan, model, Arc::new(StdMutex::new(ctx)), abort, est))
-            })();
+                match sim.place(&desc, effective_profile, Priority::Interactive, kv_tokens) {
+                    Ok(()) => sim.get(&model_id).map(|p| p.plan.clone()),
+                    Err(e) => {
+                        drop(sim);
+                        apply_err(e.to_string());
+                        return;
+                    }
+                }
+            };
+            let Some(plan) = plan else {
+                apply_err("placement disparu".into());
+                return;
+            };
 
+            if desc.is_media() {
+                let mut g = inner.lock().unwrap();
+                let m = g.models.get_mut(&model_id).expect("modèle disparu");
+                m.loading = false;
+                m.state = ModelState::Loaded;
+                m.plan = Some(plan);
+                m.est_tok_s = None;
+                eprintln!("[modeld] {model_id} média placé (Placement Manager)");
+                return;
+            }
+
+            let ngl = plan.n_layers_on(Tier::Vram) as i32;
+            let opts = LoadOptions {
+                n_gpu_layers: ngl,
+                load_mode: LoadMode::Mmap,
+                offload_kqv: plan.kv_bytes_on(Tier::Vram) > 0,
+                n_ctx: (kv_tokens + 1024).max(4096) * config.n_seq_max.max(1),
+                n_batch: 2048,
+                n_ubatch: 512,
+                n_threads: config.n_threads,
+                flash_attn: true,
+                embeddings: false,
+                n_seq_max: config.n_seq_max.max(1),
+            };
+            let model = match LlamaModel::load(&path, &opts) {
+                Ok(m) => Arc::new(m),
+                Err(e) => {
+                    sim.lock().unwrap().unload(&model_id);
+                    apply_err(e.to_string());
+                    return;
+                }
+            };
+            let ctx = match LlamaContext::new(model.clone(), &opts) {
+                Ok(c) => c,
+                Err(e) => {
+                    sim.lock().unwrap().unload(&model_id);
+                    apply_err(e.to_string());
+                    return;
+                }
+            };
+            let abort = ctx.abort_handle();
+            let est = sim
+                .lock()
+                .unwrap()
+                .estimate(&model_id, 256, kv_tokens)
+                .map(|e| e.tok_s)
+                .unwrap_or(0.0);
             let mut g = inner.lock().unwrap();
             let m = g.models.get_mut(&model_id).expect("modèle disparu");
             m.loading = false;
-            match outcome {
-                Ok((plan, model, ctx, abort, est_tok_s)) => {
-                    // Réconciliation avec les métadonnées réelles du fichier.
-                    m.desc.weights_bytes = model.size_bytes;
-                    m.desc.n_layers = model.n_layer as u32;
-                    m.est_tok_s = Some(est_tok_s);
-                    let offloaded =
-                        plan.layer_bytes_on(Tier::Ram) > 0 || plan.layer_bytes_on(Tier::Disk) > 0;
-                    m.state = if offloaded {
-                        ModelState::PartiallyOffloaded
-                    } else {
-                        ModelState::Loaded
-                    };
-                    m.plan = Some(plan);
-                    m.model = Some(model);
-                    m.ctx = Some(ctx);
-                    m.ctx_abort = Some(abort);
-                    eprintln!(
-                        "[modeld] {} chargé ({}): {}",
-                        model_id,
-                        m.plan.as_ref().map(|p| p.summary()).unwrap_or_default(),
-                        if offloaded {
-                            "offload actif"
-                        } else {
-                            "full GPU/RAM"
-                        }
-                    );
+            m.desc.weights_bytes = model.size_bytes;
+            m.desc.n_layers = model.n_layer as u32;
+            m.est_tok_s = Some(est);
+            let offloaded =
+                plan.layer_bytes_on(Tier::Ram) > 0 || plan.layer_bytes_on(Tier::Disk) > 0;
+            m.state = if offloaded {
+                ModelState::PartiallyOffloaded
+            } else {
+                ModelState::Loaded
+            };
+            m.plan = Some(plan);
+            m.model = Some(model);
+            m.ctx = Some(Arc::new(StdMutex::new(ctx)));
+            m.ctx_abort = Some(abort);
+            eprintln!(
+                "[modeld] {} chargé ({}): {}",
+                model_id,
+                m.plan.as_ref().map(|p| p.summary()).unwrap_or_default(),
+                if offloaded {
+                    "offload actif"
+                } else {
+                    "full GPU/RAM"
                 }
-                Err(e) => {
-                    m.state = ModelState::Error;
-                    m.load_error = Some(e.clone());
-                    eprintln!("[modeld] échec chargement {model_id}: {e}");
-                }
-            }
+            );
         });
     }
 
@@ -693,11 +742,12 @@ impl ModelSubsystem {
         let mut g = self.inner.lock().unwrap();
         match g.models.get_mut(model_id) {
             Some(m) if m.active == 0 && m.pending == 0 && !m.loading => {
-                m.ctx = None; // LlamaContext::drop libère le contexte
-                m.model = None; // puis les poids
+                m.ctx = None;
+                m.model = None;
                 m.ctx_abort = None;
                 m.state = ModelState::OnDisk;
                 m.plan = None;
+                self.sim.lock().unwrap().unload(model_id);
                 true
             }
             _ => false,
@@ -734,6 +784,45 @@ impl ModelSubsystem {
         g.remote_backends.insert(model_id.into(), backend);
         if let Some(m) = g.models.get_mut(model_id) {
             m.state = ModelState::Remote;
+        } else {
+            let desc = ModelDesc {
+                id: model_id.to_string(),
+                name: model_id.to_string(),
+                n_layers: 0,
+                n_params: 0.0,
+                weights_bytes: 0,
+                embed_bytes: 0,
+                kv_bytes_per_token: 0,
+                context_length: 0,
+                supports_layer_offload: false,
+                privacy_class: aos_placement::PrivacyClass::Remote,
+            };
+            let mut rt = ModelRuntime::new(desc, None);
+            rt.state = ModelState::Remote;
+            g.models.insert(model_id.into(), rt);
+        }
+    }
+
+    pub fn remove_remote_backend(&self, model_id: &str) {
+        let mut g = self.inner.lock().unwrap();
+        g.remote_backends.remove(model_id);
+        if model_id.starts_with("remote:") || model_id.starts_with("provider:") {
+            g.models.remove(model_id);
+        }
+    }
+
+    pub fn remove_provider_models(&self, provider_id: &str) {
+        let prefix = format!("provider:{provider_id}:");
+        let mut g = self.inner.lock().unwrap();
+        let ids: Vec<String> = g
+            .models
+            .keys()
+            .filter(|k| k.starts_with(&prefix))
+            .cloned()
+            .collect();
+        for id in ids {
+            g.remote_backends.remove(&id);
+            g.models.remove(&id);
         }
     }
 
@@ -800,5 +889,58 @@ impl ModelSubsystem {
             cpu_percent,
             agents_active: 0,
         }
+    }
+
+    /// First installed media pack of `kind` (`image` | `tts`), or `requested` id.
+    pub fn find_media_model(
+        &self,
+        kind: &str,
+        requested: Option<&str>,
+    ) -> Result<(String, PathBuf), String> {
+        let g = self.inner.lock().unwrap();
+        if let Some(id) = requested.filter(|s| !s.is_empty()) {
+            let m = g
+                .models
+                .get(id)
+                .ok_or_else(|| format!("modèle média inconnu: {id}"))?;
+            if !m.desc.is_media() {
+                return Err(format!("{id} n'est pas un pack média"));
+            }
+            let path = m
+                .path
+                .clone()
+                .ok_or_else(|| format!("pas de poids pour {id}"))?;
+            return Ok((id.to_string(), path));
+        }
+        let mut found: Option<(String, PathBuf)> = None;
+        for (id, m) in &g.models {
+            if !m.desc.is_media() {
+                continue;
+            }
+            let Some(path) = &m.path else {
+                continue;
+            };
+            let matches = match kind {
+                "image" => {
+                    let ext = path
+                        .extension()
+                        .and_then(|e| e.to_str())
+                        .unwrap_or("");
+                    matches!(ext, "safetensors" | "gguf" | "ckpt") || id.contains("sd-")
+                }
+                "tts" => {
+                    path.extension().and_then(|e| e.to_str()) == Some("onnx")
+                        || id.contains("piper")
+                }
+                _ => false,
+            };
+            if matches {
+                found = Some((id.clone(), path.clone()));
+                break;
+            }
+        }
+        found.ok_or_else(|| {
+            format!("aucun pack {kind} installé — téléchargez-le depuis Models (P08.6)")
+        })
     }
 }

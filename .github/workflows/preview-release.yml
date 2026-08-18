@@ -97,6 +97,7 @@ jobs:
           if (-not (Test-Path "$dir\share\modules\catalogue.pub")) { throw "missing catalogue.pub" }
           $dll = Get-ChildItem "$dir\bin" -Filter "cudart64_*.dll"
           if (-not $dll) { throw "missing CUDA cudart DLL" }
+          if (-not (Test-Path "$dir\bin\aos-modeld-cpu.exe")) { throw "missing aos-modeld-cpu" }
           Compress-Archive -Path "$dir\*" -DestinationPath "dist\AgentOS-Preview-$ver-windows-x64.zip" -Force
           sccache --show-stats
 
@@ -104,44 +105,6 @@ jobs:
         with:
           name: preview-windows-x64
           path: dist/AgentOS-Preview-*-windows-x64.zip
-          compression-level: 0
-          retention-days: 7
-
-  windows-cpu:
-    runs-on: windows-2022
-    timeout-minutes: 120
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
-
-      - name: Cache Cargo
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: preview-cpu-windows
-          cache-targets: true
-          cache-all-crates: true
-
-      - name: Build Preview CPU package
-        shell: pwsh
-        run: |
-          $ver = (Get-Content VERSION -Raw).Trim()
-          .\packaging\build-preview.ps1 -SkipModels -CpuOnly -Version $ver
-          $dir = "dist\AgentOS-Preview-$ver-windows-x64-cpu"
-          if (-not (Test-Path "$dir\bin\aos-session.exe")) { throw "missing aos-session" }
-          if (-not (Test-Path "$dir\share\modules\catalogue.yaml")) { throw "missing catalogue.yaml" }
-          Compress-Archive -Path "$dir\*" -DestinationPath "dist\AgentOS-Preview-$ver-windows-x64-cpu.zip" -Force
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: preview-windows-x64-cpu
-          path: dist/AgentOS-Preview-*-windows-x64-cpu.zip
           compression-level: 0
           retention-days: 7
 
@@ -199,6 +162,7 @@ jobs:
           bash packaging/build-preview.sh
           OUT="dist/AgentOS-Preview-${VERSION}-linux-x64"
           test -x "${OUT}/bin/aos-session"
+          test -x "${OUT}/bin/aos-modeld-cpu"
           test -f "${OUT}/share/models/manifest.json"
           test -f "${OUT}/share/modules/catalogue.yaml"
           test -f "${OUT}/share/modules/catalogue.yaml.sig"
@@ -218,62 +182,8 @@ jobs:
           compression-level: 0
           retention-days: 7
 
-  linux-cpu:
-    runs-on: ubuntu-22.04
-    timeout-minutes: 120
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install build deps
-        run: |
-          export DEBIAN_FRONTEND=noninteractive
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq \
-            build-essential pkg-config curl ca-certificates git cmake ninja-build \
-            clang libclang-dev libssl-dev \
-            libx11-dev libxcursor-dev libxrandr-dev libxi-dev libxkbcommon-dev \
-            libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
-            libwayland-dev libasound2-dev xz-utils
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
-
-      - name: Cache Cargo
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: preview-cpu-linux
-          cache-targets: true
-          cache-all-crates: true
-
-      - name: Build Preview CPU package
-        env:
-          SKIP_MODELS: "1"
-          CPU_ONLY: "1"
-          REQUIRE_CUDA: "0"
-        run: |
-          VERSION="$(tr -d '[:space:]' < VERSION)"
-          export VERSION
-          chmod +x packaging/build-preview.sh
-          bash packaging/build-preview.sh
-          OUT="dist/AgentOS-Preview-${VERSION}-linux-x64-cpu"
-          test -x "${OUT}/bin/aos-session"
-          test -f "${OUT}/share/modules/catalogue.yaml"
-          tar -C dist -czf "dist/AgentOS-Preview-${VERSION}-linux-x64-cpu.tar.gz" "AgentOS-Preview-${VERSION}-linux-x64-cpu"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: preview-linux-x64-cpu
-          path: dist/AgentOS-Preview-*-linux-x64-cpu.tar.gz
-          compression-level: 0
-          retention-days: 7
-
   release:
-    needs: [windows, windows-cpu, linux, linux-cpu]
+    needs: [windows, linux]
     runs-on: ubuntu-22.04
     if: startsWith(github.ref, 'refs/tags/v') || inputs.create_release
     permissions:
@@ -306,20 +216,17 @@ jobs:
             fi
           done
 
-          # Prefer listing all four Preview artefacts (Win/Linux × CUDA/CPU).
+          # One tester artefact per OS (CUDA + CPU modeld inside).
           assets_json="["
           first=1
-          for f in release-assets/*windows-x64.zip release-assets/*windows-x64-cpu.zip \
-                   release-assets/*linux-x64.tar.gz release-assets/*linux-x64-cpu.tar.gz; do
+          for f in release-assets/*windows-x64.zip release-assets/*linux-x64.tar.gz; do
             [ -f "$f" ] || continue
             sha=$(sha256sum "$f" | awk '{print $1}')
             base=$(basename "$f")
             os="windows"
             echo "$base" | grep -q linux && os="linux"
-            variant="cuda"
-            echo "$base" | grep -q '\-cpu\.' && variant="cpu"
             if [ "$first" -eq 1 ]; then first=0; else assets_json+=","; fi
-            assets_json+=$(printf '{"name":"%s","os":"%s","variant":"%s","sha256":"%s"}' "$base" "$os" "$variant" "$sha")
+            assets_json+=$(printf '{"name":"%s","os":"%s","sha256":"%s"}' "$base" "$os" "$sha")
           done
           assets_json+="]"
           # Fallback if naming differs: pick any win/linux pair.
@@ -344,7 +251,7 @@ jobs:
             "tag": "v${VERSION}",
             "repo": "azerothl/akasha-os",
             "assets": ${assets_json},
-            "notes": "Akasha OS Preview ${VERSION} — Win/Linux CUDA + CPU. Models download on first run. See FIRST-RUN.md."
+            "notes": "Akasha OS Preview ${VERSION} — Win/Linux unified (CUDA + CPU modeld). Models download on first run. See FIRST-RUN.md."
           }
           EOF
 

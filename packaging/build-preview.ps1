@@ -77,6 +77,19 @@ foreach ($b in $bins) {
     Copy-Item $src (Join-Path $OutDir "bin\$b") -Force
 }
 
+# Unified artefact: CUDA modeld already copied; also ship a CPU-linked binary
+# with no CUDA DLL dependency. Session picks at spawn (E17).
+if ($CpuOnly) {
+    Copy-Item (Join-Path $OutDir "bin\aos-modeld.exe") (Join-Path $OutDir "bin\aos-modeld-cpu.exe") -Force
+} else {
+    Write-Host "== cargo build --release (aos-modeld-cpu, no CUDA) =="
+    cargo build --release -p aos-model --no-default-features
+    if ($LASTEXITCODE -ne 0) { throw "build aos-modeld-cpu failed" }
+    $cpuSrc = Join-Path $binSrc "aos-modeld.exe"
+    if (-not (Test-Path $cpuSrc)) { throw "manque aos-modeld.exe after cpu rebuild" }
+    Copy-Item $cpuSrc (Join-Path $OutDir "bin\aos-modeld-cpu.exe") -Force
+}
+
 if ($CpuOnly) {
     Write-Host "== CPU-only package — skipping CUDA runtime DLL copy =="
 } else {
@@ -207,7 +220,8 @@ if (-not $SkipModels) {
     }
 }
 
-Copy-Item (Join-Path $root "INSTALL.md") "$OutDir\" -ErrorAction SilentlyContinue
+Copy-Item (Join-Path $root "docs\INSTALL.md") "$OutDir\INSTALL.md" -ErrorAction SilentlyContinue
+Copy-Item (Join-Path $root "docs\INSTALL.md") "$OutDir\docs\INSTALL.md" -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $root "docs\TESTER.md") "$OutDir\TESTER.md" -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $root "docs\FIRST-RUN.md") "$OutDir\docs\FIRST-RUN.md" -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $root "docs\FIRST-RUN.md") "$OutDir\FIRST-RUN.md" -ErrorAction SilentlyContinue
@@ -223,6 +237,33 @@ Copy-Item (Join-Path $root "NOTICE") "$OutDir\" -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $root "LICENSE-COMMERCIAL.md") "$OutDir\" -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $PSScriptRoot "install-windows.ps1") "$OutDir\install.ps1" -Force
 Copy-Item (Join-Path $PSScriptRoot "install-windows.cmd") "$OutDir\install.cmd" -Force
+
+# Optional E16 engines (not in git). Drop sd.exe / sd-cli.exe / piper.exe + their DLLs
+# (ggml*.dll, stable-diffusion.dll, …) in share/engines before packaging.
+$engines = Join-Path $root "share\engines"
+if (Test-Path $engines) {
+    $engineNames = @("sd.exe", "sd", "sd-cli.exe", "sd-cli", "piper.exe", "piper")
+    foreach ($eng in $engineNames) {
+        $src = Join-Path $engines $eng
+        if (Test-Path $src) {
+            Copy-Item $src (Join-Path $OutDir "bin\$eng") -Force
+            Write-Host "  + engine $eng"
+        }
+    }
+    Get-ChildItem $engines -File -Filter "*.dll" -ErrorAction SilentlyContinue | ForEach-Object {
+        Copy-Item $_.FullName (Join-Path $OutDir "bin\$($_.Name)") -Force
+        Write-Host "  + engine dll $($_.Name)"
+    }
+    Get-ChildItem $engines -File -Filter "*.ort" -ErrorAction SilentlyContinue | ForEach-Object {
+        Copy-Item $_.FullName (Join-Path $OutDir "bin\$($_.Name)") -Force
+        Write-Host "  + engine $($_.Name)"
+    }
+    $espeak = Join-Path $engines "espeak-ng-data"
+    if (Test-Path $espeak) {
+        Copy-Item $espeak (Join-Path $OutDir "bin\espeak-ng-data") -Recurse -Force
+        Write-Host "  + engine espeak-ng-data"
+    }
+}
 
 @"
 Akasha OS Preview $Version (Windows x64 + NVIDIA)

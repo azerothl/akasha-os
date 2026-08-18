@@ -4,6 +4,7 @@
 //! configs relatives, démarre les daemons, lance egui, arrête proprement.
 
 mod bootstrap;
+mod engines;
 mod hardware;
 mod offerings;
 mod update;
@@ -199,6 +200,7 @@ fn main() {
         );
         std::process::exit(4);
     }
+    engines::repair_installed(&home);
 
     let _ = offerings::detect_model_updates(&home, &hw);
 
@@ -265,6 +267,10 @@ fn main() {
     {
         let s = session.clone();
         thread::spawn(move || platformd_watchdog(s));
+    }
+    {
+        let s = session.clone();
+        thread::spawn(move || modeld_watchdog(s));
     }
 
     let ui = bin_path(&home, "aos-ui-egui");
@@ -865,16 +871,37 @@ fn write_catalog_overlay(
     let catalog_dst = home.join("data/models/catalog.yaml");
     let mut models = Vec::new();
     for (id, o, path) in entries {
-        let caps = if o.profiles.iter().any(|p| p == "embed") && o.profiles.len() == 1 {
-            vec!["embed"]
+        let is_embed = o.profiles.iter().any(|p| p == "embed") && o.profiles.len() == 1;
+        let is_image = o.profiles.iter().any(|p| p == "image")
+            || o.modality.as_deref() == Some("image");
+        let is_tts = o.profiles.iter().any(|p| p == "tts")
+            || o.modality.as_deref() == Some("audio");
+        let (caps, modality, format, backends, offload) = if is_image {
+            (
+                "image",
+                "image",
+                o.format.as_str(),
+                "sdcpp",
+                "false",
+            )
+        } else if is_tts {
+            (
+                "tts",
+                "audio",
+                o.format.as_str(),
+                "piper",
+                "false",
+            )
+        } else if is_embed {
+            ("embed", "embedding", "gguf", "llamacpp", "true")
         } else {
-            vec!["chat", "tools"]
+            ("chat, tools", "text", "gguf", "llamacpp", "true")
         };
         models.push(format!(
             r#"- id: {id}
   name: {name}
   modality: {modality}
-  format: gguf
+  format: {format}
   source:
     type: local_file
     path: {path}
@@ -887,25 +914,19 @@ fn write_catalog_overlay(
     weights_bytes: {weights}
     embed_bytes: {embed}
     kv_bytes_per_token: {kv}
-    supports_layer_offload: true
+    supports_layer_offload: {offload}
   capabilities: [{caps}]
-  backends_compatible: [llamacpp]
+  backends_compatible: [{backends}]
   privacy_class: local
 "#,
             id = id,
             name = o.name.replace(':', "-"),
-            modality = if caps == ["embed"] {
-                "embedding"
-            } else {
-                "text"
-            },
             path = path_yaml(path),
             layers = o.n_layers,
             params = o.n_params,
             weights = o.weights_bytes,
             embed = o.embed_bytes,
             kv = o.kv_bytes_per_token,
-            caps = caps.join(", "),
         ));
     }
     if models.is_empty() {
@@ -932,6 +953,50 @@ fn resolve_model(home: &Path, filename: &str, dirs: &[&str]) -> PathBuf {
 
 fn path_yaml(p: &Path) -> String {
     p.to_string_lossy().replace('\\', "/")
+}
+
+fn inference_mode(home: &Path) -> String {
+    std::fs::read_to_string(home.join("var/run/preferences.json"))
+        .ok()
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+        .and_then(|v| {
+            v.get("inference_mode")
+                .and_then(|m| m.as_str())
+                .map(|s| s.to_string())
+        })
+        .unwrap_or_else(|| "auto".into())
+}
+
+/// CUDA-linked `aos-modeld` vs `aos-modeld-cpu` (no CUDA DLL). Unified zip ships both.
+fn pick_modeld_bin(home: &Path) -> (PathBuf, bool) {
+    let nvidia = bootstrap::nvidia_ok();
+    let mode = inference_mode(home);
+    let want_cpu =
+        mode.eq_ignore_ascii_case("cpu") || (!nvidia && !mode.eq_ignore_ascii_case("gpu"));
+    let cpu_bin = bin_path(home, "aos-modeld-cpu");
+    let gpu_bin = bin_path(home, "aos-modeld");
+    if want_cpu && cpu_bin.exists() {
+        (cpu_bin, true)
+    } else {
+        (gpu_bin, false)
+    }
+}
+
+fn modeld_command(home: &Path) -> Command {
+    let (bin, cpu) = pick_modeld_bin(home);
+    let mut cmd = Command::new(&bin);
+    cmd.arg("etc/modeld.yaml");
+    cmd.env("AOS_INFERENCE", inference_mode(home));
+    if cpu {
+        cmd.env("AOS_CPU_ONLY", "1");
+    } else {
+        cmd.env_remove("AOS_CPU_ONLY");
+    }
+    eprintln!(
+        "[aos-session] modeld {} (cpu={cpu})",
+        bin.file_name().and_then(|n| n.to_str()).unwrap_or("aos-modeld")
+    );
+    cmd
 }
 
 fn daemon_env(cmd: &mut Command, home: &Path) {
@@ -990,8 +1055,7 @@ fn start_daemons(session: &Arc<Session>) -> Result<(), String> {
         list.push(spawn("aos-auditd", cmd)?);
     }
     {
-        let mut cmd = Command::new(bin("aos-modeld"));
-        cmd.arg("etc/modeld.yaml");
+        let cmd = modeld_command(home);
         list.push(spawn("aos-modeld", cmd)?);
     }
     {
@@ -1129,6 +1193,10 @@ fn platformd_watchdog(session: Arc<Session>) {
         cmd.arg("etc/platformd.yaml");
         cmd
     });
+}
+
+fn modeld_watchdog(session: Arc<Session>) {
+    daemon_watchdog(session, "aos-modeld", &|home| modeld_command(home));
 }
 
 fn daemon_watchdog(

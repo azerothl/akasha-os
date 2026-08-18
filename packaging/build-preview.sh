@@ -142,6 +142,16 @@ for b in aos-session aos-busd aos-modeld aos-agentd aos-agent-worker \
          aos-platformd aos-capkd aos-auditd aos-ui-egui; do
   cp -f "${CARGO_TARGET_DIR}/release/${b}" "${OUT}/bin/"
 done
+
+# Unified artefact: CUDA modeld already copied; also ship CPU-linked modeld.
+if [ "$CPU_ONLY" = "1" ]; then
+  cp -f "${OUT}/bin/aos-modeld" "${OUT}/bin/aos-modeld-cpu"
+else
+  echo "== cargo build --release (aos-modeld-cpu, no CUDA) =="
+  cargo build --release -p aos-model --no-default-features
+  cp -f "${CARGO_TARGET_DIR}/release/aos-modeld" "${OUT}/bin/aos-modeld-cpu"
+  chmod +x "${OUT}/bin/aos-modeld-cpu"
+fi
 if command -v strip >/dev/null 2>&1; then
   echo "== strip release binaries =="
   strip --strip-unneeded "${OUT}/bin/"aos-* 2>/dev/null || strip "${OUT}/bin/"aos-* || true
@@ -337,10 +347,11 @@ if [ "$SKIP_MODELS" != "1" ]; then
   done
 fi
 
-cp -f "${ROOT}/INSTALL.md" "${OUT}/" 2>/dev/null || true
+cp -f "${ROOT}/docs/INSTALL.md" "${OUT}/INSTALL.md" 2>/dev/null || true
 cp -f "${ROOT}/docs/TESTER.md" "${OUT}/TESTER.md" 2>/dev/null || true
 cp -f "${ROOT}/docs/FIRST-RUN.md" "${OUT}/FIRST-RUN.md" 2>/dev/null || true
 mkdir -p "${OUT}/docs"
+cp -f "${ROOT}/docs/INSTALL.md" "${OUT}/docs/INSTALL.md" 2>/dev/null || true
 cp -f "${ROOT}/docs/FIRST-RUN.md" "${OUT}/docs/FIRST-RUN.md" 2>/dev/null || true
 cp -f "${ROOT}/docs/STATUS.md" "${OUT}/docs/STATUS.md" 2>/dev/null || true
 cp -f "${ROOT}/docs/FEATURES.md" "${OUT}/docs/FEATURES.md" 2>/dev/null || true
