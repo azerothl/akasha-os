@@ -6,7 +6,7 @@
     <title>What's new — Akasha OS Preview</title>
     <meta
       name="description"
-      content="What each Akasha OS Preview version added, from 0.6.0 back to 0.1.0. Host app on Windows/Linux, not a bootable OS."
+      content="What each Akasha OS Preview version added, from 0.7.0 back to 0.1.0. Host app on Windows/Linux, not a bootable OS."
     />
     <link rel="stylesheet" href="../styles.css" />
     <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
@@ -19,8 +19,8 @@
     <!--
       THESIS: The version log is a cut-face journal of what shipped, not a feature card grid and not a marketing changelog.
       OWN-WORLD: Orrery inner plate — void, cyan rails, grant gutters.
-      STORY: A tester sees what 0.6.0 added, then walks earlier Previews without leaving the site.
-      FIRST VIEWPORT: Honesty line, compact version rail, then 0.6.0 ticks.
+      STORY: A tester sees what 0.7.0 added, then walks earlier Previews without leaving the site.
+      FIRST VIEWPORT: Honesty line, compact version rail, then 0.7.0 ticks.
       FORM: Orrery inner plate, seed c1699dbf reroll 1.
       FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
     -->
@@ -50,12 +50,12 @@
           <span data-lang="en">
             What each Preview added, newest first. This is the version log,
             not the full feature catalogue. Preview
-            <span data-aos-version>0.6.0</span> is a host app, not a bootable OS.
+            <span data-aos-version>0.7.0</span> is a host app, not a bootable OS.
           </span>
           <span data-lang="fr">
             Ce que chaque Preview a ajouté, plus récent en premier. C’est le
             journal des versions, pas le catalogue complet. La Preview
-            <span data-aos-version>0.6.0</span> est une appli hôte, pas un OS
+            <span data-aos-version>0.7.0</span> est une appli hôte, pas un OS
             bootable.
           </span>
         </h1>
@@ -69,6 +69,7 @@
         </p>
 
         <nav class="log-toc" aria-label="Versions">
+          <a href="#v0-7-0">0.7.0</a>
           <a href="#v0-6-0">0.6.0</a>
           <a href="#v0-5-0">0.5.0</a>
           <a href="#v0-4-0">0.4.0</a>
@@ -78,6 +79,23 @@
           <a href="#v0-1-1">0.1.1</a>
           <a href="#v0-1-0">0.1.0</a>
         </nav>
+
+        <article class="grant" id="v0-7-0">
+          <h2>0.7.0</h2>
+          <p class="rev-when">17/08/2026</p>
+          <ul class="ticks">
+            <li data-lang="en"><strong>Declarative module UI host</strong> (E15): dynamic sidebar tabs for modules with <code>declarative_ui</code> — no webview.</li>
+            <li data-lang="fr"><strong>Hôte d’UI de module déclarative</strong> (E15) : onglets dynamiques pour les modules <code>declarative_ui</code> — pas de webview.</li>
+            <li data-lang="en">Closed widget tree in <code>ui/index.html</code>: forms, tables, stats, line charts bound to module tools.</li>
+            <li data-lang="fr">Arbre de widgets fermé dans <code>ui/index.html</code> : formulaires, tables, stats, courbes liées aux outils du module.</li>
+            <li data-lang="en"><code>module.ui</code> validates documents fail-closed; actions route through the same cap review as today.</li>
+            <li data-lang="fr"><code>module.ui</code> valide les documents (fail-closed) ; les actions passent par la même revue de caps qu’aujourd’hui.</li>
+            <li data-lang="en"><code>module.scaffold</code> optional <code>ui</code> JSON; package writes a real tree (not title-only stub).</li>
+            <li data-lang="fr"><code>module.scaffold</code> : champ <code>ui</code> JSON optionnel ; le package écrit un vrai arbre (plus un stub titre seul).</li>
+            <li data-lang="en">Chat « create a module » launches an agent (host fallback if the model dumps widget JSON).</li>
+            <li data-lang="fr">Chat « crée un module » lance un agent (filet hôte si le modèle dump du JSON de widgets).</li>
+          </ul>
+        </article>
 
         <article class="grant" id="v0-6-0">
           <h2>0.6.0</h2>

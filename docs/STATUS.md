@@ -7,10 +7,49 @@ Summary of delivered phases. Detail: [development-plan.md](development-plan.md),
 
 **Headline:** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview:** 0.6.0 (17/08/2026) — host app on Windows/Linux; NVIDIA optional
-(CPU path). Sibling-bridge JSON Schema + HTTP↔bus contract (E8). Vault master
-key in OS keyring (E7). Local signed module catalogue (E10). Opt-in auto fact
-extraction (E14). Not a bootable OS. Cohort gate still open.
+**Preview:** 0.7.0 (18/08/2026) — host-rendered declarative module UI (E15);
+dynamic egui tabs for installed modules with `declarative_ui`. Prior: sibling
+bridge, OS keyring, signed catalogue (0.6.0). Not a bootable OS. Cohort gate
+still open. **Next:** Preview **0.8.0** (E16 + E17) — local image + audio generation and
+a unified CPU/GPU host ([phase-preview-08.md](phases/phase-preview-08.md)).
+After 0.8: Preview **0.9.0** (E18) — mid-token device migrate without cancel.
+
+## P08 — Preview 0.8.0 (E16 + E17) — planned
+
+| # | Evolution | Status |
+|---|-----------|--------|
+| P08.1 | E16 media registry + Placement Manager shards | planned |
+| P08.2 | E16 `media.image.generate` (PNG under `/downloads`) | planned |
+| P08.3 | E16 `media.audio.generate` (TTS) | planned |
+| P08.4 | E16 chat / optional E15 `image`/`audio` widgets | planned |
+| P08.5 | E17 unified artefact + UI / load-based device policy | planned |
+| P08.6 | E16 optional media packs | planned |
+| P08.7 | Cleanup + refactor (Preview host; no behavior change) | planned |
+| P08.8 | Docs / packaging / version 0.8.0 | planned |
+
+Detail: [phases/phase-preview-08.md](phases/phase-preview-08.md).
+
+## P09 — Preview 0.9.0 (E18) — planned
+
+| # | Evolution | Status |
+|---|-----------|--------|
+| P09.1 | E18 mid-token CPU ↔ GPU migrate (stream continues) | planned |
+| P09.2 | E18 UI/`auto` uses migrate; 0.8 cancel+restart is fallback | planned |
+| P09.3 | Docs / packaging / version 0.9.0 | planned |
+
+Detail: [phases/phase-preview-09.md](phases/phase-preview-09.md).
+
+## P07 — Preview 0.7.0 (E15) — done
+
+| # | Evolution | Status |
+|---|-----------|--------|
+| P07.1 | E15 closed widget schema (fail-closed unknown kinds) | done |
+| P07.2 | E15 generic egui tab host for `declarative_ui` modules | done |
+| P07.3 | E15 bind tools → table/chart/form; actions → `tool.invoke` | done |
+| P07.4 | E15 scaffold/package writes a real widget tree | done |
+| P07.5 | Docs / packaging / version 0.7.0 | done |
+
+Detail: [phases/phase-preview-07.md](phases/phase-preview-07.md).
 
 ## P06 — Preview 0.6.0 (E8 / E7-keyring / E10)
 

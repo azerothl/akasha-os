@@ -60,5 +60,7 @@ CPU_ONLY=1 SKIP_MODELS=1 ./packaging/build-preview.sh
 ## Next
 
 Tag `v0.6.0` only when gates P06.1–P06.4 and P06.6 pass. PC cohort gate
-remains independent. After 0.6: full TPM if the OS justifies it, a live
-HTTP adapter only if a daemon is scheduled, E9 when a second GPU exists.
+remains independent. **Next: Preview 0.7.0 / E15** — host-rendered
+declarative module UI ([phase-preview-07.md](phase-preview-07.md)). Then
+full TPM if the OS justifies it, a live HTTP adapter only if a daemon is
+scheduled, E9 when a second GPU exists.

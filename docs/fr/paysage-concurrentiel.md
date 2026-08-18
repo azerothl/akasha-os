@@ -5,13 +5,13 @@
 > Date : 16/08/2026  
 > Périmètre : projets publics ou connexes qui se présentent comme un « OS agentique », un runtime agent ou une couche d’exploitation agentique. Les claims marketing sont recoupés avec README / papers quand c’est possible. Beaucoup de projets disent « OS » sans livrer un noyau.
 
-**Baseline Akasha OS :** Preview **0.6.0**, appli hôte (Windows/Linux + NVIDIA), pas une image bootable. Sources : [README.md](../../README.md), [FEATURES.md](FEATURES.md), [reflexion-agent-os.md](reflexion-agent-os.md), [specs-fonctionnelles.md](specs-fonctionnelles.md), [STATUS.md](STATUS.md).
+**Baseline Akasha OS :** Preview **0.7.0**, appli hôte (Windows/Linux + NVIDIA), pas une image bootable. Sources : [README.md](../../README.md), [FEATURES.md](FEATURES.md), [reflexion-agent-os.md](reflexion-agent-os.md), [specs-fonctionnelles.md](specs-fonctionnelles.md), [STATUS.md](STATUS.md).
 
 ---
 
 ## Ce qu’est Akasha OS
 
-**Positionnement :** OS *agent-natif* — agents, modèles, outils et mémoire comme services système de premier plan, pas une appli posée sur POSIX. La Preview 0.6.0 tourne sur hôte ; une piste seL4 séparée (PV.1–PV.3) prépare le bare metal.
+**Positionnement :** OS *agent-natif* — agents, modèles, outils et mémoire comme services système de premier plan, pas une appli posée sur POSIX. La Preview 0.7.0 tourne sur hôte ; une piste seL4 séparée (PV.1–PV.3) prépare le bare metal.
 
 **Livré sur l’hôte :**
 
@@ -20,6 +20,7 @@
 - Runtime agent (goal loop, skills, MCP, sous-agents, steer / pause)
 - Mémoire long terme + épisodique avec bootstrap mémoire-d’abord
 - Modules WASM dual-surface (notes humain + agent)
+- UI de module déclarative rendue par l’hôte (E15 ; pas de webview)
 - Modèles locaux (llama.cpp CUDA), packs selon VRAM, batching continu, remote OpenAI-compat optionnel
 - Offline-first, egress deny-by-default, confirmation fail-closed, audit hashé
 - Trust manager + `cap.request`, politique déclarative
@@ -87,7 +88,7 @@ Ne pas confondre [azerothl/akasha](https://github.com/azerothl/akasha) avec [ocu
 
 **Surface livrée (phases 0–9+) :** daemon always-on, orchestrateur non bloquant, Slack / Discord / Telegram, mémoire CT + LT (graphe de relations typées), vault / RBAC / redaction, plugins WASM, routeur LLM (embarqué / Ollama / OpenAI / OpenRouter), cluster, RAG + doctor advice, TTS/STT, Home Assistant, discovery, chemin CPU-capable.
 
-| | Akasha (assistant) | Akasha OS (Preview 0.6.0) |
+| | Akasha (assistant) | Akasha OS (Preview 0.7.0) |
 |--|--------------------|---------------------------|
 | Thèse | Guest 24/7 sur Windows/Linux | OS agent-natif (caps, IPC, seL4) |
 | Isolation | Politique outils + WASM + vault | Caps natives `aos-capkd` + WASM sans WASI ambiant |
@@ -97,10 +98,10 @@ Ne pas confondre [azerothl/akasha](https://github.com/azerothl/akasha) avec [ocu
 | Canaux | Slack / Discord / Telegram | aucun |
 | Always-on / cron | daemon + calendrier + tâches | agents fond seulement |
 | Voix / HA / cluster | oui | non |
-| Modules dual-surface | plugins WASM (tools) | `.aospkg` humain + agent (notes) |
+| Modules dual-surface | plugins WASM (tools) | `.aospkg` humain + agent (notes + `declarative_ui`) |
 | UI | TUI + Tauri React | egui natif |
 | Licence | propriétaire | AGPL + commerciale |
-| Maturité | v0.10.0, plus de surface produit | Preview 0.6.0, thèse OS plus poussée |
+| Maturité | v0.10.0, plus de surface produit | Preview 0.7.0, thèse OS plus poussée |
 
 **Lecture :** Akasha *couvre déjà* une grande partie de ce qu’OpenClaw/Hermes vendent (canaux, 24/7, vault, routeur, CPU). Akasha OS *n’essaie pas* de recopier cette couche : il remonte d’un cran (caps, IPC sémantique, GPU-as-service, seL4). Les trous d’Akasha OS vs le marché C existent déjà dans le sibling — réutiliser plutôt que réimplémenter, sans diluer la thèse OS.
 
@@ -119,7 +120,7 @@ Seul projet public qui vise le **même objet** qu’Akasha OS : OS bootable seL4
 | IPC | intents CBOR sémantiques | contrats C Microkit |
 | Inférence / GPU | first-class (placement, batching, packs VRAM) | pas le focus |
 | UI humaine | egui Preview, dual-surface | « pas d’UI humaine requise » ; GUI dans un autre repo |
-| Maturité produit | Preview installable 0.6.0 | ~20★, boot kernel oui, couche agent encore scaffolding |
+| Maturité produit | Preview installable 0.7.0 | ~20★, boot kernel oui, couche agent encore scaffolding |
 | Licence | AGPL + commerciale | dépôt public, petit |
 
 **Lecture :** Akasha OS est **plus avancé côté produit agent + GPU + UI** ; agentOS est **plus avancé côté boot bare-metal**. Ce sont des pairs, pas des clones d’OpenClaw.
@@ -224,7 +225,7 @@ Quatre écarts structurels :
 
 Risques : (a) Hubbard/agentos rattrape la couche agent sur seL4 ; (b) Windows+OpenClaw+NemoClaw normalise l’agent-in-container ; (c) cohort Preview NVIDIA-only alors que le sibling sait déjà faire du CPU ; (d) duplication mémoire/WASM/routeur entre les deux repos si aucun pont n’est décidé.
 
-Réponses produit priorisées (E1–E13, anti-roadmap) : [plan-evolutions.md](plan-evolutions.md).
+Réponses produit priorisées (E1–E15, anti-roadmap) : [plan-evolutions.md](plan-evolutions.md).
 
 ---
 

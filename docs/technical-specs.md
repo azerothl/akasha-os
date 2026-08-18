@@ -6,6 +6,7 @@
 > Date: 15/08/2026  
 > Status: draft  
 > Reference: `docs/functional-specs.md`, `docs/vision.md`, `docs/FEATURES.md`  
+> Changes v0.7.0: Preview 0.7.0 — E15 host-rendered `declarative_ui` widget host (not webview).
 > Changes v0.6.0: Preview 0.6.0 — E8 schema export + HTTP↔bus contract; E7 OS keyring; E10 signed local catalogue.
 > Changes v0.5.0: Preview 0.5.0 — auto-remember from chat (E14); `user.ask` mid-task.
 > Changes v0.4.0: Preview 0.4.0 — typed memory graph, secrets vault, module cap review.
@@ -653,6 +654,13 @@ ui:
   mode: sandboxed_webview  # ou declarative_ui
 min_os_api: 1
 ```
+
+`declarative_ui` (Preview **0.7.0** / E15): JSON widget tree painted by the
+egui host. Closed vocabulary: `column`, `row`, `heading`, `text`, `markdown`,
+`stat_row`, `table`, `line_chart`, `form`, `button`. Unknown kinds are
+refused (fail-closed). Data and actions bind to the module’s tools via
+`tool.invoke`. This is **not** HTML/JS. `sandboxed_webview` remains a
+bare-metal / E13 option, not a Preview host path.
 
 > Example of network capacity for a module requiring external access (e.g. web search): `required_caps: [net.connect:api.example.com:443]` — subject to user review during installation and control of egress (§9.5).
 

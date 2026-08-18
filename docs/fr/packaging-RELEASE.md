@@ -7,8 +7,8 @@
 Tag puis push :
 
 ```bash
-git tag v0.6.0
-git push origin v0.6.0
+git tag v0.7.0
+git push origin v0.7.0
 ```
 
 Le workflow [`.github/workflows/preview-release.yml`](../../.github/workflows/preview-release.yml)
@@ -36,12 +36,12 @@ Les GGUF sont téléchargés au **premier run** via `share/models/manifest.json`
 ## Notes de version (brouillon)
 
 ```
-Akasha OS Preview 0.6.0 — schémas pont sibling (E8) + keyring OS (E7) + catalogue local (E10)
+Akasha OS Preview 0.7.0 — hôte d’UI de module déclarative (E15)
 
-- Export JSON Schema mem.* / secrets.* sous docs/bridge/ ; contrat HTTP JSON ↔ CBOR (pas de daemon live)
-- Clé maître du vault dans Credential Manager / Secret Service ; fallback fichier 0600
-- Catalogue local signé share/modules/catalogue.yaml ; vérif hash à l'install ; liste / Installer dans Settings
-- Chat Stop annule l'inférence en cours ; Copier sur messages et Dépannage
+- Onglets egui dynamiques pour les modules installés avec ui.mode=declarative_ui (arbre de widgets fermé dans ui/index.html)
+- Intent module.ui valide fail-closed ; bind des résultats d’outils ; bouton/formulaire → module.invoke sous revue de caps
+- module.scaffold champ ui optionnel ; package/compile écrivent un vrai arbre (défaut heading + form + table)
+- JSON Schema : docs/bridge/aos-proto-decl-ui.json
 
 Pas un OS bootable. Voir FIRST-RUN.md / INSTALL.md / TESTER.md
 ```

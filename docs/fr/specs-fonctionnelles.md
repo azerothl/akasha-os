@@ -6,6 +6,7 @@
 > Date : 15/08/2026  
 > Statut : brouillon  
 > Référence : `reflexion-agent-os.md`  
+> Changements v0.7.0 : Preview 0.7.0 — F-UI-10 / F-EXT-07 UI de module déclarative rendue par l’hôte (E15) ; pas de webview.
 > Changements v0.6.0 : Preview 0.6.0 — export schémas E8 + contrat HTTP↔bus ; keyring OS E7 ; catalogue local signé E10.
 > Changements v0.4.0 : Preview 0.4.0 — graphe mémoire typé, vault secrets, revue de caps modules ; annexe §12.
 > Changements v0.3.1 : Preview 0.3.0 — resync du module notes, dépannage in-app, site Split-Flap ; annexe §12.
@@ -211,6 +212,7 @@ Package unique exposant :
 | F-EXT-04 | Un agent peut compiler un module Rust→WASM si la toolchain est présente (cap critique) | Should |
 | F-EXT-05 | `module.install` exige une capacité critique + revue des caps (plus d'install anonyme) | Must |
 | F-EXT-06 | Le catalogue d'outils (`module.describe` + skills) est injecté dans le prompt agent | Must |
+| F-EXT-07 | Un agent peut écrire une **UI de module déclarative** (arbre de widgets fermé) consommée par l’hôte ; les kinds inconnus sont refusés | Should |
 
 ### 5.8 Interface utilisateur
 
@@ -225,6 +227,7 @@ Package unique exposant :
 | F-UI-07 | Notifications priorisées (agent superviseur), pas de spam | Should |
 | F-UI-08 | Accessibilité de base (contraste, taille texte, navigation clavier) | Should |
 | F-UI-09 | Préférences persistées (langue, routage, trust, réseau, défauts agent, moteur de recherche) éditables depuis Settings | Must |
+| F-UI-10 | Un module installé avec `ui.mode=declarative_ui` obtient une surface humaine rendue par l’hôte (vocabulaire fermé : formulaire, table, stats, courbe) ; pas de webview HTML/JS en Preview | Should |
 
 ### 5.9 Sécurité, privacy, confiance
 
@@ -365,12 +368,12 @@ Package unique exposant :
 
 - `reflexion-agent-os.md` — réflexion fondatrice  
 - `specs-techniques.md` — spécifications techniques  
-- `FEATURES.md` — catalogue Preview 0.6.0 livrée  
+- `FEATURES.md` — catalogue Preview 0.7.0 livrée  
 - (futur) `adr/` — Architecture Decision Records  
 
 ---
 
-## 12. Couverture Preview 0.6.0 (hôte)
+## 12. Couverture Preview 0.7.0 (hôte)
 
 Correspondance de cette spec avec la **Preview hôte installable** (pas l'OS bootable).
 Détail : `FEATURES.md`.
@@ -383,7 +386,8 @@ Détail : `FEATURES.md`.
 | F-AGT-09–10 | Trust low/medium + confirm ; superviseur relance auditd |
 | F-MDL-01–09 | llama.cpp local + remote optionnel ; routage local_only / balanced |
 | F-MEM-01–02, 05 | Working / épisodique / faits user ; onglet Mémoire |
-| F-MOD / F-EXT | notes.aospkg, ext-rt, skills déclaratives, `cap.request` |
+| F-MOD / F-EXT | notes.aospkg, ext-rt, skills déclaratives, `cap.request` ; onglets `declarative_ui` rendus par l’hôte |
+| F-UI-10 / E15 | **Livré Preview 0.7.0** — `declarative_ui` rendue par l’hôte (pas de webview) |
 | F-UI-01–05, 09 | Double surface + panneau transparence + Settings |
 | F-SEC-01–08 | Caps, confirm, egress deny-by-default, isolation auditd ; clé maître du vault dans le keyring OS (fallback fichier 0600) ; agents interdits de `secrets.get` |
 | F-MOD catalogue | Catalogue local signé `share/modules/catalogue.yaml` ; vérif hash à `module.install` |

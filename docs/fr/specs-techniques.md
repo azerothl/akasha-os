@@ -6,6 +6,7 @@
 > Date : 15/08/2026  
 > Statut : brouillon  
 > Référence : `specs-fonctionnelles.md`, `reflexion-agent-os.md`, `FEATURES.md`  
+> Changements v0.7.0 : Preview 0.7.0 — hôte E15 de widgets `declarative_ui` (pas de webview).
 > Changements v0.6.0 : Preview 0.6.0 — export schémas E8 + contrat HTTP↔bus ; keyring OS E7 ; catalogue local signé E10.
 > Changements v0.5.0 : Preview 0.5.0 — mémorisation auto depuis le chat (E14) ; `user.ask` en cours de tâche.
 > Changements v0.4.0 : Preview 0.4.0 — graphe mémoire typé, vault secrets, revue de caps modules.
@@ -653,6 +654,13 @@ ui:
   mode: sandboxed_webview  # ou declarative_ui
 min_os_api: 1
 ```
+
+`declarative_ui` (Preview **0.7.0** / E15) : arbre de widgets JSON peint par
+l’hôte egui. Vocabulaire fermé : `column`, `row`, `heading`, `text`,
+`markdown`, `stat_row`, `table`, `line_chart`, `form`, `button`. Les kinds
+inconnus sont refusés (fail-closed). Données et actions liées aux outils du
+module via `tool.invoke`. Ce n’est **pas** du HTML/JS. `sandboxed_webview`
+reste une option fer nu / E13, pas un chemin Preview hôte.
 
 > Exemple de capacité réseau pour un module nécessitant un accès externe (ex. recherche web) : `required_caps: [net.connect:api.example.com:443]` — soumise à revue utilisateur à l'installation et au contrôle d'egress (§9.5).
 

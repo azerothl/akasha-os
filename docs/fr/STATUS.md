@@ -7,10 +7,50 @@ Résumé des phases livrées. Détail : [plan-developpement-phases.md](plan-deve
 
 **En-tête :** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview :** 0.6.0 (17/08/2026) — appli hôte Windows/Linux ; NVIDIA optionnel
-(chemin CPU). Schémas pont sibling + contrat HTTP↔bus (E8). Clé maître vault
-dans le keyring OS (E7). Catalogue local signé de modules (E10). Extraction
-auto de faits (E14). Pas un OS bootable. Gate cohorte encore ouverte.
+**Preview :** 0.7.0 (18/08/2026) — UI de module déclarative rendue par l’hôte (E15) ;
+onglets egui dynamiques pour les modules installés `declarative_ui`. Précédent :
+pont sibling, keyring OS, catalogue signé (0.6.0). Pas un OS bootable. Gate
+cohorte encore ouverte. **Suite :** Preview **0.8.0** (E16 + E17) — génération
+locale image + audio et hôte CPU/GPU unifié
+([phase-preview-08.md](phases/phase-preview-08.md)).
+Après 0.8 : Preview **0.9.0** (E18) — migration de device mid-token sans cancel.
+
+## P08 — Preview 0.8.0 (E16 + E17) — prévu
+
+| # | Évolution | État |
+|---|-----------|------|
+| P08.1 | E16 registre média + shards Placement Manager | prévu |
+| P08.2 | E16 `media.image.generate` (PNG sous `/downloads`) | prévu |
+| P08.3 | E16 `media.audio.generate` (TTS) | prévu |
+| P08.4 | E16 chat / widgets E15 `image`/`audio` optionnels | prévu |
+| P08.5 | E17 artefact unifié + politique device UI / charge | prévu |
+| P08.6 | E16 packs média optionnels | prévu |
+| P08.7 | Nettoyage + refacto (hôte Preview ; pas de changement de comportement) | prévu |
+| P08.8 | Docs / packaging / version 0.8.0 | prévu |
+
+Détail : [phases/phase-preview-08.md](phases/phase-preview-08.md).
+
+## P09 — Preview 0.9.0 (E18) — prévu
+
+| # | Évolution | État |
+|---|-----------|------|
+| P09.1 | E18 migrate CPU ↔ GPU en milieu de token (le stream continue) | prévu |
+| P09.2 | E18 UI/`auto` utilise migrate ; cancel+restart 0.8 = fallback | prévu |
+| P09.3 | Docs / packaging / version 0.9.0 | prévu |
+
+Détail : [phases/phase-preview-09.md](phases/phase-preview-09.md).
+
+## P07 — Preview 0.7.0 (E15) — fait
+
+| # | Évolution | État |
+|---|-----------|------|
+| P07.1 | E15 schéma de widgets fermé (kinds inconnus refusés) | fait |
+| P07.2 | E15 hôte d’onglet egui générique pour les modules `declarative_ui` | fait |
+| P07.3 | E15 bind outils → table/courbe/formulaire ; actions → `tool.invoke` | fait |
+| P07.4 | E15 scaffold/package écrit un vrai arbre de widgets | fait |
+| P07.5 | Docs / packaging / version 0.7.0 | fait |
+
+Détail : [phases/phase-preview-07.md](phases/phase-preview-07.md).
 
 ## P06 — Preview 0.6.0 (E8 / E7-keyring / E10)
 

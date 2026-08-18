@@ -8,7 +8,7 @@
 first-class GPU, offline-first. Preview builds run on a Windows/Linux host
 (NVIDIA); a seL4 bare-metal track is separate.
 
-> This is **not** a bootable OS image yet. Preview 0.6.0 is an installable host
+> This is **not** a bootable OS image yet. Preview 0.7.0 is an installable host
 > app for testers (Windows/Linux; NVIDIA optional via CPU path).
 
 ## Why Akasha OS
@@ -43,7 +43,7 @@ Full catalogue: [docs/FEATURES.md](docs/FEATURES.md).
 - NVIDIA GPU + recent driver (`nvidia-smi -L`) **or** CPU-only mode (slower)
 - ~4 GB free disk (binaries + GGUF models downloaded on first run)
 
-No macOS in Preview 0.6.0.
+No macOS in Preview 0.7.0.
 
 ## Quick start
 
@@ -80,7 +80,7 @@ cargo run -p aos-session --release
 | [docs/development-plan.md](docs/development-plan.md) | Phase plan |
 | [docs/vision.md](docs/vision.md) | Product vision |
 | [docs/competitive-landscape.md](docs/competitive-landscape.md) | Agentic OS landscape vs Akasha OS |
-| [docs/evolution-roadmap.md](docs/evolution-roadmap.md) | Post-landscape evolution priorities (E1–E13) |
+| [docs/evolution-roadmap.md](docs/evolution-roadmap.md) | Post-landscape evolution priorities (E1–E15) |
 | [docs/I18N.md](docs/I18N.md) | Language layout (EN / FR) |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Contribution license terms |
 

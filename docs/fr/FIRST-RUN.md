@@ -1,10 +1,10 @@
-# Premier lancement — Akasha OS Preview 0.6.0
+# Premier lancement — Akasha OS Preview 0.7.0
 
 **Langue :** [English](../FIRST-RUN.md) | Français
 
-> Date : 17/08/2026 · Preview **0.6.0**
+> Date : 18/08/2026 · Preview **0.7.0**
 
-**Ce n'est pas un OS bootable.** La Preview 0.6.0 tourne sur Windows ou Linux x64.
+**Ce n'est pas un OS bootable.** La Preview 0.7.0 tourne sur Windows ou Linux x64.
 **NVIDIA est recommandé** ; le boot CPU-only fonctionne (plus lent).
 
 Catalogue : [FEATURES.md](FEATURES.md).

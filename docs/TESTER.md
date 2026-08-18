@@ -1,8 +1,8 @@
-# Tester protocol — Akasha OS Preview 0.6.0
+# Tester protocol — Akasha OS Preview 0.7.0
 
 **Language:** English | [Français](fr/TESTER.md)
 
-> Date: 17/08/2026 · Preview **0.6.0**
+> Date: 18/08/2026 · Preview **0.7.0**
 
 Thank you for testing Preview. Goal: install **without** `cargo` or cloning
 the repo, exercise the main paths, and send feedback **from the UI**.
@@ -184,6 +184,30 @@ GitHub feedback submit).
 - Complex tasks should show a **complex** badge (`task.assess`) and may spawn
   a child agent (planner).
 
+### 15. Create a module via agent (0.7.0 / E15)
+
+- **Scenarios** tab → **Launch agent: create module cohortmod**
+  (or Chat: « crée un module ping » — Preview spawns an agent even if the
+  model dumps UI JSON; or Agents / `/agent` with scaffold + package + install).
+- Accept the **cap review** for `module.install` if prompted (same as 7c).
+- After the agent finishes, a new sidebar tab **Modules → cohortmod** appears
+  (not `notes` / `tasks` / `ext-rt`).
+- Open it: heading, form or button, table bound to the primary tool.
+- Submit once; the result should refresh. Check the scenario box when done.
+
+### 14. Declarative module UI (0.7.0 / E15)
+
+- In **Settings → Modules** (or via agent): `module.scaffold` a script module,
+  then `module.package` and `module.install` with cap review.
+- After install, a new sidebar tab under **Modules** should appear (not for
+  `notes`, `tasks`, or `ext-rt`).
+- Open the tab: you should see a heading, a form or button, and a table bound
+  to the primary tool result.
+- Submit the form or click the button: confirm cap review if prompted; result
+  should refresh in the UI.
+- **Refresh** reloads bind tools; invalid `ui/index.html` shows an error banner
+  (no partial widgets).
+
 ### 13. Notes after update + Troubleshoot (0.2.0)
 
 - After installing over a previous Preview, open **Notes**, create a note, then
@@ -197,11 +221,11 @@ GitHub feedback submit).
 - At least one usable `var/feedback/fb-*.json` per report
 - Gates PC.6–PC.9 and PC.11–PC.13 checked on at least one machine
 
-## Out of scope Preview 0.6.0
+## Out of scope Preview 0.7.0
 
 - seL4 / bare-metal boot
 - macOS
 - 32B model in the installer
 - Fully automatic update apply
-- Native audio/video generation
+- Native audio/video generation (still image + TTS planned for 0.8.0; video stays out)
 - Public marketplace / messaging channels / multi-GPU

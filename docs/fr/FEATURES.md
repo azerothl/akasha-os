@@ -1,4 +1,4 @@
-# Fonctionnalités Preview — Akasha OS 0.6.0
+# Fonctionnalités Preview — Akasha OS 0.7.0
 
 **Langue :** [English](../FEATURES.md) | Français
 
@@ -7,7 +7,18 @@ Ce n'est **pas** l'OS bootable. Les exigences v1 sont dans
 [specs-fonctionnelles.md](specs-fonctionnelles.md) ; les gates dans
 [STATUS.md](STATUS.md).
 
-> Date : 17/08/2026 · Preview **0.6.0**
+> Date : 18/08/2026 · Preview **0.7.0**
+
+### Nouveautés 0.7.0
+
+- **Hôte d’UI de module déclarative** (E15) : les modules installés avec `ui.mode=declarative_ui` obtiennent un onglet dynamique dans la barre latérale — pas de webview, pas de nouvel onglet egui codé à la main par module
+- Arbre de widgets fermé dans `ui/index.html` (`type: declarative_ui`) : `column`, `row`, `heading`, `text`, `markdown`, `stat_row`, `table`, `line_chart`, `form`, `button`
+- Intent **`module.ui`** : platformd valide le document (fail-closed) ; l’hôte lie les résultats d’outils et route boutons/formulaires via la même revue de caps que `module.invoke`
+- **`module.scaffold`** : champ optionnel `ui` JSON ; package/compile copient un vrai arbre (défaut : heading + form + table sur le premier outil)
+- Export JSON Schema : [`docs/bridge/aos-proto-decl-ui.json`](../bridge/aos-proto-decl-ui.json)
+- Onglets Notes et Tasks restent codés à la main ; `notes`, `tasks` et `ext-rt` exclus des onglets dynamiques
+- Chat **« crée un module »** lance un agent (filet hôte si le modèle dump du JSON d’UI au lieu de `agent.spawn`)
+- Scénarios : lancer un agent pour scaffolder / packager / installer un module script
 
 ### Nouveautés 0.6.0
 
@@ -256,16 +267,17 @@ Piste VM seL4 (PV.1–PV.3) séparée : [phases/phase-vm-sel4.md](phases/phase-v
 
 ---
 
-## 11. Hors Preview 0.6.0
+## 11. Hors Preview 0.7.0
 
 - Image bootable / fer nu
 - macOS
 - Application automatique complète des updates (téléchargement maintenant, apply au prochain lancement)
-- Génération audio / vidéo native
+- Génération audio / vidéo native (audio + image fixe prévus en Preview **0.8.0** / E16 ; la vidéo reste hors)
 - Marketplace public de modules (catalogue local signé seulement)
 - Canaux de messagerie (Slack/Discord/etc.) dans le noyau OS
 - Comptes multi-utilisateur simultanés
 - Pipeline multi-GPU complet (P5.2 ; hôte mono-GPU)
 - Daemon HTTP sibling live / enveloppe TPM
+- Webview sandboxée / UI module HTML/JS (compositor E13)
 
 Protocole cohorte : [TESTER.md](TESTER.md).

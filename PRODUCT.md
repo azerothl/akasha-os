@@ -14,7 +14,7 @@ Other audiences (systems/security/AI researchers, commercial-license evaluators)
 
 ## Product Purpose
 
-Akasha OS is an agent-native operating system: agents, models, tools, and memory are first-class system services with explicit capabilities, audit, and policy. Preview 0.6.0 is an installable host app on Windows/Linux (NVIDIA optional via CPU path), not a bootable OS image. A seL4 bare-metal track is separate.
+Akasha OS is an agent-native operating system: agents, models, tools, and memory are first-class system services with explicit capabilities, audit, and policy. Preview 0.7.0 is an installable host app on Windows/Linux (NVIDIA optional via CPU path), not a bootable OS image. A seL4 bare-metal track is separate.
 
 Success for the public site: a tester understands the thesis (capabilities, semantic IPC, first-class GPU, offline-by-default), then downloads Preview and follows the tester protocol.
 
@@ -40,7 +40,7 @@ Confirmed Preview surfaces: parallel persisted chat sessions; long-term memory (
 Constraints:
 
 - This is not a bootable OS image yet. Future work must never imply otherwise.
-- Preview 0.6.0: Windows/Linux x64; NVIDIA GPU recommended; CPU-only path available; ~4 GB disk. No macOS.
+- Preview 0.7.0: Windows/Linux x64; NVIDIA GPU recommended; CPU-only path available; ~4 GB disk. No macOS.
 - Dual licensing: AGPL-3.0-only and a commercial license (attribution + royalty). The Akasha OS trademark is reserved.
 - Site and product copy are bilingual EN / FR with equivalent content.
 - Stack for the public site is already decided: static HTML / CSS / JS in `website/`.

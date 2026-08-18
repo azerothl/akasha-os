@@ -2,36 +2,52 @@
 
 **Langue :** [English](../development-plan.md) | Français
 
-> Version : 1.3  
-> Date : 15/08/2026  
+> Version : 1.4  
+> Date : 18/08/2026  
 > Statut : plan de référence  
-> Références : `specs-fonctionnelles.md`, `specs-techniques.md`, `reflexion-agent-os.md`, `FEATURES.md`
+> Références : `specs-fonctionnelles.md`, `specs-techniques.md`, `reflexion-agent-os.md`, `FEATURES.md`, `plan-evolutions.md`
 
 ---
 
 ## 0. Vue d'ensemble
 
-Le développement d'Agent OS est découpé en **8 phases (P0 à P5 + PV + PC)**.
+Le développement d'Agent OS a **deux couches** à ne pas fusionner :
+
+1. **Phases de fondation (P0–P5 + PV + PC)** — prouver placement, caps, WASM,
+   sécurité, isolation hôte, échafaudage seL4, et la Preview installable.
+   Fer nu = après PV (ADR 0001).
+2. **Incréments Preview (P03–P09)** — livrer des releases de l’appli hôte
+   **sans inventer une gate P6** tant que la cohorte PC est ouverte. Numérotation
+   `P0n` / Preview `0.n.0` (E* du [plan-evolutions.md](plan-evolutions.md)).
+
 P0–P5 prouvent et polissent le système **sur l'hôte** ; **PV** est l'échafaudage
 **noyau seL4** (VM QEMU, sans GPU) ; **PC** est la **Preview distribuable**
-pour une cohorte de testeurs (installeur Win/Linux, pas seL4). Fer nu = suite
-(ADR 0001). La stratégie `specs-techniques.md` §1.3 reste : prouver les
-algorithmes agentiques en userspace avant d'engager le port microkernel.
+pour une cohorte de testeurs (installeur Win/Linux, pas seL4). La stratégie
+`specs-techniques.md` §1.3 reste : prouver les algorithmes agentiques en
+userspace avant d'engager le port microkernel.
 
-| Phase | Socle | Objectif central | Durée indicative |
-|-------|-------|------------------|------------------|
-| **P0** | Simulateur / proto Rust standalone | Valider l'**algorithme de placement** RAM/GPU/disque et le modèle de capacités | ~6-8 semaines |
-| **P1** | Linux host (processus isolés) | **Model Subsystem complet** : inférence locale, offload réel, agents multi-process, UI minimale | ~10-14 semaines |
-| **P2** | Linux host | **Modules WASM + mémoire + audit/undo** | ~8-10 semaines |
-| **P3** | Linux host | **Backends distants, routage privacy, sécurité complète** | ~6-8 semaines |
-| **P4** | Hôte (caps userspace) | **Sémantique microkernel** (`aos-capkd`, isolation processus) — seL4 reporté (GPU) | ~12-16 semaines |
-| **PV** | QEMU + seL4 (sans GPU) | **Port noyau réel** : PDs Microkit, IPC seL4, rejeu gate P4 CPU-only | ~8-10 semaines |
-| **PC** | Hôte Win/Linux + NVIDIA | **Preview 0.1** installable : session, egui, feedback cohorte | ~2-4 semaines |
-| **P5** | Hôte GPU / polish | **GPU/NPU first-class**, multi-GPU, polish (parallèle à PV/PC) | ~10-12 semaines |
+| Phase | Socle | Objectif central | Durée indicative | État |
+|-------|-------|------------------|------------------|------|
+| **P0** | Simulateur / proto Rust standalone | Valider l'**algorithme de placement** RAM/GPU/disque et le modèle de capacités | ~6-8 semaines | fait |
+| **P1** | Linux host (processus isolés) | **Model Subsystem complet** : inférence locale, offload réel, agents multi-process, UI minimale | ~10-14 semaines | fait |
+| **P2** | Linux host | **Modules WASM + mémoire + audit/undo** | ~8-10 semaines | fait |
+| **P3** | Linux host | **Backends distants, routage privacy, sécurité complète** | ~6-8 semaines | fait |
+| **P4** | Hôte (caps userspace) | **Sémantique microkernel** (`aos-capkd`, isolation processus) — seL4 reporté (GPU) | ~12-16 semaines | fait |
+| **PV** | QEMU + seL4 (sans GPU) | **Port noyau réel** : PDs Microkit, IPC seL4, rejeu gate P4 CPU-only | ~8-10 semaines | PV.1–PV.3 ✅ |
+| **PC** | Hôte Win/Linux + NVIDIA | **Preview 0.1** installable : session, egui, feedback cohorte | ~2-4 semaines | 🚧 cohorte |
+| **P5** | Hôte GPU / polish | **GPU/NPU first-class**, multi-GPU, polish (parallèle à PV/PC) | ~10-12 semaines | P5.1 ✅ |
+| **P03** | Hôte Preview Win/Linux | Preview **0.3.0** — E1–E5 (chemin CPU, scheduler, tasks, UI caps, métriques) | livré | fait |
+| **P04** | Hôte Preview Win/Linux | Preview **0.4.0** — E6 / E7-lite / E10-lite (graphe mémoire, vault, revue caps) | livré | fait |
+| **P05** | Hôte Preview Win/Linux | Preview **0.5.0** — E14 (mémorisation auto depuis le chat) | livré | fait |
+| **P06** | Hôte Preview Win/Linux | Preview **0.6.0** — E8 / E7-keyring / E10 (schémas pont, keyring OS, catalogue) | livré | fait |
+| **P07** | Hôte Preview Win/Linux | Preview **0.7.0** — E15 (UI de module déclarative rendue par l’hôte) | livré | fait |
+| **P08** | Hôte Preview Win/Linux | Preview **0.8.0** — E16 image+audio + E17 hôte CPU/GPU unifié | ~4-6 semaines | prévu |
+| **P09** | Hôte Preview Win/Linux | Preview **0.9.0** — E18 migration device mid-token (sans cancel) | ~2-4 semaines | prévu |
 
-**Total indicatif** : ~60-80 semaines en séquence naïve ; **PV ∥ P5 ∥ PC**
-rapproche le chemin critique. Ces durées sont des ordres de grandeur —
-chaque gate de sortie prime sur le calendrier.
+**Total indicatif** (fondation) : ~60-80 semaines en séquence naïve ;
+**PV ∥ P5 ∥ PC** rapproche le chemin critique. Les incréments Preview
+(P03–P09) tournent sur la stack hôte déjà livrée. Ces durées sont des
+ordres de grandeur — chaque gate de sortie prime sur le calendrier.
 
 ---
 
@@ -49,6 +65,13 @@ Chaque phase se termine par un **gate de sortie** : une démonstration exécutab
 | **Gate PV** | Boot seL4/Microkit sous QEMU `virt` (sans GPU) ; intents `cap.*` via PD bus ; révocation immédiate ; stop Audit sans tuer CapKernel |
 | **Gate PC** | 3 testeurs Win + 1 Linux installent Preview sans toolchain ; protocole TESTER.md ; ≥1 `feedback.submit` exploitable |
 | **Gate P5** | Continuous batching multi-agents avec période de dégradation < 20% sur 8 flux simultanés, multi-GPU pipeline fonctionnel, port aarch64 validé sur au moins une machine cible |
+| **Gate P03** | Métriques + UI caps + boot CPU-only + fire scheduler + tasks dual-surface — [phases/phase-preview-03.md](phases/phase-preview-03.md) |
+| **Gate P04** | Graphe mémoire typé + vault + revue de caps module — [phases/phase-preview-04.md](phases/phase-preview-04.md) |
+| **Gate P05** | Extract chat opt-in → `mem.user.remember` (secrets filtrés) — [phases/phase-preview-05.md](phases/phase-preview-05.md) |
+| **Gate P06** | Schémas pont + keyring OS + catalogue local signé — [phases/phase-preview-06.md](phases/phase-preview-06.md) |
+| **Gate P07** | Schéma `declarative_ui` fermé ; onglet egui générique lié aux outils du module — [phases/phase-preview-07.md](phases/phase-preview-07.md) |
+| **Gate P08** | Image + TTS locaux sous caps ; artefact CPU/GPU unifié avec UI + auto selon la charge ; nettoyage/refacto sans changement de comportement — [phases/phase-preview-08.md](phases/phase-preview-08.md) |
+| **Gate P09** | Migration CPU ↔ GPU en milieu de token sans cancel du stream live ; migrate en échec → fallback cancel+restart 0.8 (audité) — [phases/phase-preview-09.md](phases/phase-preview-09.md) |
 
 ---
 
@@ -327,18 +350,18 @@ compiler. UI egui = surface principale ; retours via `feedback.submit`
 
 ### Gates de sortie (Gate PC)
 
-- [ ] Installeur / archive Win + Linux sans `cargo`
-- [ ] Protocole `docs/TESTER.md` jouable depuis egui
-- [ ] ≥1 retour `feedback.submit` exploitable en cohorte pilote
+- [x] Installeur / archive Win + Linux sans `cargo`
+- [x] Protocole `docs/TESTER.md` jouable depuis egui
+- [x] ≥1 retour `feedback.submit` exploitable en cohorte pilote
 
 ```powershell
 .\packaging\build-preview.ps1
 # Linux : ./packaging/build-preview.sh
 ```
 
-> Statut PC (15/08/2026) : Preview **0.2.0** livrée (session, egui,
-> modèles selon le matériel, transparence, Settings, browse multi-moteurs,
-> resync notes, dépannage in-app, site Split-Flap).
+> Statut PC (18/08/2026) : Preview **0.7.0** est la release hôte courante
+> (UI de module déclarative). PC.1–PC.14 livrés depuis 0.1 ; le travail
+> produit suivant est les incréments P03–P09, pas un nouveau numéro PC.n.
 > Gate cohorte encore ouverte — voir `INSTALL.md` et `FEATURES.md`.
 
 ### Risques spécifiques
@@ -379,6 +402,127 @@ Exploiter pleinement le GPU/NPU comme citoyen de première classe du scheduler, 
 
 ---
 
+## Incréments Preview (P03–P09)
+
+Ces phases s’empilent **sur** la stack hôte PC. Elles **ne remplacent pas**
+P0–P5 / PV / PC et **ne sont pas** une gate P6. Détail :
+`docs/fr/phases/phase-preview-0n.md`. Catalogue livré : [FEATURES.md](FEATURES.md).
+Priorités : E1–E18 dans [plan-evolutions.md](plan-evolutions.md).
+
+### P03 — Preview 0.3.0 (E1–E5) — fait
+
+Prouver la thèse OS dans l’UI testeur et élargir la cohorte.
+
+| # | Évolution | Livrable |
+|---|-----------|----------|
+| P03.1 | E5 | TTFT / tok/s / VRAM live dans la barre + Models |
+| P03.2 | E4 | Onglet Caps : `cap.list` + revoke (audité) |
+| P03.3 | E1 | Boot CPU-only + pack first-run `cpu` + packaging CPU |
+| P03.4 | E2 | `schedule.*` cap-gated + UI Settings |
+| P03.5 | E3 | Module `tasks` dual-surface + onglet Tasks |
+
+### P04 — Preview 0.4.0 (E6 / E7-lite / E10-lite) — fait
+
+| # | Évolution | Livrable |
+|---|-----------|----------|
+| P04.1–P04.2 | E6 | Graphe mémoire typé + UI Mémoire + bootstrap structuré |
+| P04.3 | E7-lite | `vault.enc` chiffré ; secrets Settings ; MCP `${secret:…}` |
+| P04.4 | E10-lite | Revue de caps à `module.install` ; exemple MCP |
+| P04.5 | Docs | Contrat sibling-bridge ; quatre artefacts CUDA/CPU |
+
+### P05 — Preview 0.5.0 (E14) — fait
+
+`mem.extract` post-tour opt-in → `mem.user.remember` + E6
+`updates`/`supersedes`. Filtre secrets. Toggle Settings (défaut on).
+`user.ask` en cours de tâche.
+
+### P06 — Preview 0.6.0 (E8 / E7-keyring / E10) — fait
+
+| # | Évolution | Livrable |
+|---|-----------|----------|
+| P06.1–P06.2 | E8 | Export JSON Schema `mem.*` / `secrets.*` ; contrat HTTP JSON ↔ CBOR (pas de daemon live) |
+| P06.3 | E7 | Clé maître du vault dans le keyring OS (CredMan / Secret Service ; fallback fichier 0600) |
+| P06.4 | E10 | `share/modules/catalogue.yaml` local signé ; vérif hash à l’install |
+| P06.5 | Stretch | Stop chat → `model.cancel` ; copie presse-papiers |
+
+### P07 — Preview 0.7.0 (E15) — fait
+
+**Arbre de widgets fermé** (`declarative_ui`) rendu par l’hôte egui. Un
+module installé obtient un onglet générique sans webview et sans onglet
+shell codé à la main. Vocabulaire : `column`, `row`, `heading`, `text`,
+`markdown`, `stat_row`, `table`, `line_chart`, `form`, `button`.
+Notes/Tasks restent codés à la main.
+
+### P08 — Preview 0.8.0 (E16 + E17) — prévu
+
+**Objectif :** **génération d’image** et **génération audio (TTS)** locales
+comme charges du Model Subsystem, un **artefact hôte CPU/GPU unifié**
+(bascule UI + auto selon la charge), plus une **passe de nettoyage /
+refacto** avant le tag. Pas un sidecar cloud-only. Pas de vidéo. Pas de
+voix always-on (STT / voix 24/7 au sibling). Pas de webview.
+
+Pourquoi ça appartient à l’OS : diffusion et TTS **se disputent la VRAM**
+avec le LLM chargé (éviction F-PLC-06 / refus+alternative F-PLC-09). Un
+agent n’a pas le droit ambiant de générer du média ; il lui faut
+`media.generate` + `fs.write` sur l’arbre des téléchargements. La politique
+device est le même Placement Manager, pas un second installeur.
+
+| # | Évolution | Livrable | État |
+|---|-----------|----------|------|
+| P08.1 | E16 registre | Image + TTS dans le catalogue / offerings ; shards évincables vs le LLM | prévu |
+| P08.2 | E16 image | Intent `media.image.generate` (prompt → PNG sous `/downloads`) ; revue de caps ; audit | prévu |
+| P08.3 | E16 audio | Intent `media.audio.generate` (texte → WAV/OGG TTS) ; même famille de caps ; audit | prévu |
+| P08.4 | E16 surface | Le chat montre l’image / joue le clip ; kinds E15 `image` / `audio` optionnels | prévu |
+| P08.5 | E17 device | Un artefact Win + un Linux ; Settings gpu/cpu/auto sans réinstall ; auto suit la charge VRAM/CPU (hystérésis) | prévu |
+| P08.6 | E16 packs | Packs média optionnels (téléchargés, pas cuits dans le zip) ; GPU préféré pour l’image | prévu |
+| P08.7 | Hygiène | Nettoyage + refacto des crates hôte Preview (code mort, découpes, nommage) ; pas de changement de comportement | prévu |
+| P08.8 | Docs / ship | Docs de phase, FEATURES/STATUS/TESTER, version 0.8.0, site, packaging | prévu |
+
+Séquençage : P08.1 → P08.2 ∥ P08.3 ∥ P08.5 → P08.4 → P08.6 → P08.7 → P08.8.  
+Détail : [phases/phase-preview-08.md](phases/phase-preview-08.md).
+
+**Hors P08 :** génération vidéo, APIs image cloud comme chemin par défaut,
+micro always-on / STT, canaux de messagerie. La migration de device en
+milieu de token sans cancel est **P09 / E18**, pas un abandon. Aussi hors :
+E7 TPM, daemon HTTP sibling live, E9 / P5.2 (il faut un 2e GPU), compositor
+E13, fermeture cohort PC, macOS, fer nu.
+
+### P09 — Preview 0.9.0 (E18) — prévu
+
+**Objectif :** garder un stream `model.infer` **live** quand on passe CPU ↔
+GPU (pin UI ou `auto` charge / pression VRAM E16). 0.8 change déjà de
+device par cancel + restart de `aos-modeld`. 0.9 migre KV/état dans le
+Model Subsystem : les tokens déjà affichés restent, la suite de la
+complétion continue. Si migrate échoue : fallback 0.8, audité, pas de
+perte/duplication silencieuse de tokens.
+
+| # | Évolution | Livrable | État |
+|---|-----------|----------|------|
+| P09.1 | E18 migrate | Infer actif CPU ↔ GPU sans abort du stream | prévu |
+| P09.2 | E18 policy | UI/`auto` live utilise migrate ; cancel+restart 0.8 = fallback | prévu |
+| P09.3 | Docs / ship | FEATURES/STATUS/TESTER, version 0.9.0, site, packaging | prévu |
+
+Séquençage : P09.1 → P09.2 → P09.3. Dépend de P08 / E17.  
+Détail : [phases/phase-preview-09.md](phases/phase-preview-09.md).
+
+### Reste après 0.9 (pas une nouvelle P6)
+
+P09 est l’incrément Preview suivant 0.8. Le reste est planifié quand le
+hardware ou un daemon existe ; toujours Horizon B / C :
+
+| Item | Notes |
+|------|--------|
+| **E7 TPM** | Enveloppe matérielle de la clé maître (keyring déjà livré en 0.6) |
+| **E8 live** | Daemon HTTP sibling si/quand planifié (contrat livré en 0.6) |
+| **E9 / P5.2** | Pipeline multi-GPU quand un 2e GPU existe |
+| **P5.3 / E11** | `AccelDevice` + fer nu (après PV.4) |
+| **P5.5** | Hôte aarch64 validé |
+| **P5.4 restant** | Accessibilité (F-UI-08) |
+| **Cohorte PC** | 3 Win + 1 Linux ; indépendante des incréments Preview |
+| **E12 / E13** | Horizon C (préemption cognitive, compositor / webview optionnelle) |
+
+---
+
 ## Matrice de dépendances entre phases
 
 ```
@@ -388,8 +532,11 @@ P0 (simulateur)
        │     └──> P3 (Remote + sécu)  [P2 fournit le sandbox et l'audit]
        │           └──> P4 (caps userspace hôte) [P3 fige les interfaces]
        │                 ├──> P5 (GPU first-class, hôte) [parallèle]
-       │                 └──> PV (seL4 VM, sans GPU) [port noyau]
-       │                       └──> fer nu (produit) [PV vert + AccelDevice P5.3]
+       │                 ├──> PV (seL4 VM, sans GPU) [port noyau]
+       │                 │     └──> fer nu (produit) [PV vert + AccelDevice P5.3]
+       │                 └──> PC (Preview 0.1 installable)
+       │                       └──> P03 → P04 → P05 → P06 → P07 → P08 → P09
+       │                             (incréments Preview sur l'hôte ; pas P6)
        └──> (P1.7 aarch64, parallèle à P1, non bloquant)
 ```
 
@@ -398,6 +545,9 @@ P0 (simulateur)
 - P4 dépend de P3 (on ne porte pas des interfaces encore en mouvement)
 - **PV et P5 sont parallèles** (ADR 0001) : GPU sur l'hôte, noyau dans la VM
 - Le fer nu attend un gate PV vert, pas un passthrough GPU depuis Windows
+- **P03–P09 n'attendent pas la gate cohorte PC** ; ils ne doivent pas inventer un numéro P6
+- P08 (E16/E17) dépend du Model Subsystem P1 + E15 P07 si des kinds de widgets sont ajoutés ; il **ne** dépend **pas** de E9 / TPM / HTTP sibling live
+- P09 (E18) dépend de P08 E17 (chemin cancel+restart livré d'abord)
 
 ---
 
@@ -408,14 +558,14 @@ P0 (simulateur)
 | Flux | Responsabilités | Phases principales |
 |------|-----------------|-------------------|
 | **Flux Noyau & Sécurité** | Microkernel, caps, IPC, drivers | P0, P4, **PV**, P5 |
-| **Flux Modèles & Inférence** | Model Subsystem, placement, scheduler, backends | P0, P1, P3, P5 |
-| **Flux Agents & UX** | Agent Runtime, UI, modules, mémoire, audit | P1, P2, P3, P5 |
+| **Flux Modèles & Inférence** | Model Subsystem, placement, scheduler, backends | P0, P1, P3, P5, **P08**, **P09** |
+| **Flux Agents & UX** | Agent Runtime, UI, modules, mémoire, audit | P1, P2, P3, P5, **PC**, **P03–P09** |
 
 Une équipe de 3-5 personnes peut couvrir ces 3 flux avec des rotations ; les phases sont pensées pour être majoritairement séquentielles mais avec des recouvrements partiels (ex. P1.7 aarch64 en parallèle de P1).
 
 ### Priorités par phase (rappel)
 
-Les exigences `Must` de `specs-fonctionnelles.md` doivent être **toutes couvertes à la fin de P3** (sauf celles explicitement liées au microkernel, couvertes en P4). Les `Should` et `Could` sont répartis sur P4/PV/P5 ou reportés si nécessaire.
+Les exigences `Must` de `specs-fonctionnelles.md` doivent être **toutes couvertes à la fin de P3** (sauf celles explicitement liées au microkernel, couvertes en P4). Les `Should` et `Could` sont répartis sur P4/PV/P5 ou reportés si nécessaire. Les incréments Preview (P03–P09) couvrent les priorités produit E* sur l'hôte sans attendre le reste P5.2 / PV.4 / cohorte PC.
 
 ---
 
@@ -432,8 +582,10 @@ Les exigences `Must` de `specs-fonctionnelles.md` doivent être **toutes couvert
 
 - `specs-fonctionnelles.md` — exigences produit
 - `specs-techniques.md` — architecture technique
-- `FEATURES.md` — catalogue Preview livrée
+- `FEATURES.md` — catalogue Preview livrée (actuellement 0.7.0)
+- `STATUS.md` — résumé des phases livrées
 - `reflexion-agent-os.md` — cadrage et pistes ouvertes
 - `paysage-concurrentiel.md` — enquête OS / runtimes agentiques (août 2026)
-- `plan-evolutions.md` — priorités post-paysage E1–E14 (pas une gate P6) ; Preview 0.6 = schémas E8 + keyring E7 + catalogue E10
-- (à créer au fil de l'eau) publiés : `adr/0001-microkernel.md` (P4 hôte + **phase PV** seL4 VM), `adr/0002-model-placement.md` (P0), `adr/0003-ui-framework.md` (accepté : egui), `adr/0005-offload-etat-de-l-art.md` (pré-P1)
+- `plan-evolutions.md` — priorités post-paysage E1–E18 (pas une gate P6)
+- `phases/phase-preview-03.md` … `phase-preview-09.md` — plans d’incréments Preview
+- (ADRs publiés) : `adr/0001-microkernel.md` (P4 hôte + **phase PV** seL4 VM), `adr/0002-model-placement.md` (P0), `adr/0003-ui-framework.md` (accepté : egui), `adr/0005-offload-etat-de-l-art.md` (pré-P1)

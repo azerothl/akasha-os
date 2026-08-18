@@ -8,7 +8,7 @@
 first-class, offline-first. La Preview tourne sur hôte Windows/Linux
 (NVIDIA) ; la piste seL4 est séparée.
 
-> Ce n'est **pas** encore un OS bootable. La Preview 0.6.0 est une application
+> Ce n'est **pas** encore un OS bootable. La Preview 0.7.0 est une application
 > hôte installable pour testeurs (Windows/Linux ; NVIDIA optionnel via chemin CPU).
 
 ## Pourquoi Akasha OS
@@ -39,7 +39,7 @@ Catalogue : [FEATURES.md](FEATURES.md).
 ## Prérequis
 
 Windows 10/11 x64 **ou** Linux x64 ; GPU NVIDIA **ou** mode CPU-only (plus lent) ;
-~4 Go disque. Pas de macOS en Preview 0.6.0.
+~4 Go disque. Pas de macOS en Preview 0.7.0.
 
 ## Démarrage rapide
 
@@ -71,7 +71,7 @@ cargo run -p aos-session --release
 | [../functional-specs.md](../functional-specs.md) | Specs fonctionnelles (EN) |
 | [specs-fonctionnelles.md](specs-fonctionnelles.md) | Specs fonctionnelles (FR) |
 | [paysage-concurrentiel.md](paysage-concurrentiel.md) | Paysage OS agentiques vs Akasha OS |
-| [plan-evolutions.md](plan-evolutions.md) | Priorités d’évolution post-paysage (E1–E13) |
+| [plan-evolutions.md](plan-evolutions.md) | Priorités d’évolution post-paysage (E1–E15) |
 | [I18N.md](I18N.md) | Convention multilingue |
 | [../../CONTRIBUTING.md](../../CONTRIBUTING.md) | Contributions |
 

@@ -61,6 +61,7 @@ CPU_ONLY=1 SKIP_MODELS=1 ./packaging/build-preview.sh
 ## Suite
 
 Tag `v0.6.0` seulement quand les gates P06.1–P06.4 et P06.6 passent. La gate
-cohort PC reste indépendante. Après 0.6 : TPM plein si l'OS le justifie,
-adaptateur HTTP live seulement si un daemon est planifié, E9 quand un 2e GPU
-existe.
+cohort PC reste indépendante. **Suite : Preview 0.7.0 / E15** — UI de module
+déclarative rendue par l’hôte ([phase-preview-07.md](phase-preview-07.md)).
+Puis TPM plein si l'OS le justifie, adaptateur HTTP live seulement si un
+daemon est planifié, E9 quand un 2e GPU existe.

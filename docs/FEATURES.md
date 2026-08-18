@@ -1,4 +1,4 @@
-# Preview features — Akasha OS 0.6.0
+# Preview features — Akasha OS 0.7.0
 
 **Language:** English | [Français](fr/FEATURES.md)
 
@@ -7,7 +7,18 @@ This is **not** the bootable OS. Target v1 requirements live in
 [functional-specs.md](functional-specs.md); phase gates in
 [STATUS.md](STATUS.md).
 
-> Date: 17/08/2026 · Preview **0.6.0**
+> Date: 18/08/2026 · Preview **0.7.0**
+
+### What's new in 0.7.0
+
+- **Declarative module UI host** (E15): installed modules with `ui.mode=declarative_ui` get a dynamic sidebar tab — no webview, no new hardcoded egui tab per module
+- Closed widget tree in `ui/index.html` (`type: declarative_ui`): `column`, `row`, `heading`, `text`, `markdown`, `stat_row`, `table`, `line_chart`, `form`, `button`
+- **`module.ui`** intent: platformd validates the document (fail-closed); host binds tool results and routes button/form submits through the same cap review as `module.invoke`
+- **`module.scaffold`** optional `ui` JSON; package/compile copy a real widget tree (default: heading + form + table on the primary tool)
+- JSON Schema export: [`docs/bridge/aos-proto-decl-ui.json`](bridge/aos-proto-decl-ui.json)
+- Notes and Tasks tabs stay hardcoded; `notes`, `tasks`, and `ext-rt` are excluded from dynamic module tabs
+- Chat **« crée un module »** launches an agent (host fallback if the model dumps UI JSON instead of `agent.spawn`)
+- Scenarios: launch an agent to scaffold / package / install a script module
 
 ### What's new in 0.6.0
 
@@ -256,16 +267,17 @@ seL4 VM track (PV.1–PV.3) is separate: see [phases/phase-vm-sel4.md](phases/ph
 
 ---
 
-## 11. Not in Preview 0.6.0
+## 11. Not in Preview 0.7.0
 
 - Bootable / bare-metal image
 - macOS
 - Fully automatic update apply (download now, apply on next launch)
-- Native audio / video generation
+- Native audio / video generation (audio + still image planned for Preview **0.8.0** / E16; video stays out)
 - Public module marketplace (local signed catalogue only)
 - Messaging channels (Slack/Discord/etc.) in the OS core
 - Simultaneous multi-user accounts
 - Complete multi-GPU pipeline (P5.2; single-GPU hosts only)
 - Live HTTP sibling daemon / TPM hardware envelope
+- Sandboxed webview / HTML/JS module UI (E13 compositor)
 
 Cohort protocol: [TESTER.md](TESTER.md).

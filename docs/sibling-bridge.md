@@ -2,7 +2,7 @@
 
 **Language:** English | [Français](fr/sibling-bridge.md)
 
-> Date: 17/08/2026 · Preview **0.6.0**  
+> Date: 18/08/2026 · Preview **0.7.0**  
 > Status: contract freeze + JSON Schema export (no live daemon)  
 > Related: [competitive-landscape.md](competitive-landscape.md), [evolution-roadmap.md](evolution-roadmap.md) E8, [docs/bridge/](bridge/)
 
@@ -17,7 +17,7 @@ not duplicated blindly; optional “assistant as module” remains a later optio
 | Area | Live schema | Notes |
 |------|-------------|-------|
 | Intents / IPC | [`crates/aos-proto`](../crates/aos-proto/src/lib.rs) + CBOR bus | Typed intents; `Intent.from` is caller identity |
-| JSON Schema export | [`docs/bridge/`](bridge/) | Draft-07 JSON view of `mem.*` and `secrets.*` payloads |
+| JSON Schema export | [`docs/bridge/`](bridge/) | Draft-07 JSON view of `mem.*`, `secrets.*`, and E15 `declarative_ui` |
 | Memory | `mem.*` + E6 relations + E14 `mem.extract` | Flat episodic JSONL + `relations.jsonl`; chat→LT extract opt-in |
 | Secrets | `secrets.get` / `set` / `list` | Encrypted vault; master key in OS keyring (file 0600 fallback); raw values only for services (`platformd`, `modeld`, `agentd`) |
 | WASM ABI | [`module_rt`](../crates/aos-platform/src/module_rt.rs) + [`modules/sdk`](../modules/sdk) | Dual-surface (tools + UI); `host_call` only; `secrets.get` prohibited in guest |
@@ -35,7 +35,7 @@ not duplicated blindly; optional “assistant as module” remains a later optio
 
 ## HTTP JSON ↔ CBOR intent mapping (contract only)
 
-Preview **0.6.0 does not run** an HTTP adapter inside the OS process. A future
+Preview **0.7.0 does not run** an HTTP adapter inside the OS process. A future
 bridge daemon (separate binary, optional) MAY expose JSON over HTTP and
 forward to the CBOR bus. Until that daemon exists, this table is the freeze.
 

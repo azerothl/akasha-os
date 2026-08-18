@@ -2,7 +2,7 @@
 
 **Langue :** [English](../sibling-bridge.md) | Français
 
-> Date : 17/08/2026 · Preview **0.6.0**  
+> Date : 18/08/2026 · Preview **0.7.0**  
 > Statut : gel de contrats + export JSON Schema (pas de daemon live)  
 > Lié : [paysage-concurrentiel.md](paysage-concurrentiel.md), [plan-evolutions.md](plan-evolutions.md) E8, [docs/bridge/](../bridge/)
 
@@ -18,14 +18,14 @@ plus tard.
 | Zone | Schéma live | Notes |
 |------|-------------|-------|
 | Intents / IPC | [`crates/aos-proto`](../../crates/aos-proto/src/lib.rs) + bus CBOR | Intents typés ; `Intent.from` = identité appelant |
-| Export JSON Schema | [`docs/bridge/`](../bridge/) | Vue JSON draft-07 des payloads `mem.*` et `secrets.*` |
+| Export JSON Schema | [`docs/bridge/`](../bridge/) | Vue JSON draft-07 des payloads `mem.*`, `secrets.*` et E15 `declarative_ui` |
 | Mémoire | `mem.*` + relations E6 + E14 `mem.extract` | JSONL épisodique + `relations.jsonl` ; extract chat→LT opt-in |
 | Secrets | `secrets.get` / `set` / `list` | Vault chiffré ; clé maître dans le keyring OS (fallback fichier 0600) ; brut réservé aux services |
 | ABI WASM | [`module_rt`](../../crates/aos-platform/src/module_rt.rs) + SDK | Dual-surface ; `secrets.get` interdit au guest |
 
 ## Mapping HTTP JSON ↔ intents CBOR (contrat seulement)
 
-La Preview **0.6.0 n'exécute pas** d'adaptateur HTTP dans le process OS. Un
+La Preview **0.7.0 n'exécute pas** d'adaptateur HTTP dans le process OS. Un
 futur daemon de pont (binaire séparé, optionnel) PEUT exposer du JSON HTTP
 et relayer vers le bus CBOR. Jusqu'à ce daemon, ce tableau est le gel.
 

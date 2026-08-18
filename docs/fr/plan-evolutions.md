@@ -2,12 +2,12 @@
 
 **Langue :** [English](../evolution-roadmap.md) | Français
 
-> Date : 16/08/2026  
+> Date : 18/08/2026  
 > Statut : couche de priorisation (pas un nouveau numéro de phase P6)  
 > Dérivé de : [paysage-concurrentiel.md](paysage-concurrentiel.md)  
 > Lié à : [plan-developpement-phases.md](plan-developpement-phases.md), [FEATURES.md](FEATURES.md), [STATUS.md](STATUS.md), [reflexion-agent-os.md](reflexion-agent-os.md)
 
-Ce document propose des **évolutions produit (E1–E13)** après l’enquête concurrentielle d’août 2026. Il **ne remplace pas** P0–P5 / PV / PC. Fermer d’abord la gate cohort PC ; ensuite planifier le travail E* au-dessus des livrables P5 / PV restants.
+Ce document propose des **évolutions produit (E1–E18)** après l’enquête concurrentielle d’août 2026. Il **ne remplace pas** P0–P5 / PV / PC. Fermer d’abord la gate cohort PC ; ensuite planifier le travail E* au-dessus des livrables P5 / PV restants. Les incréments Preview (P03–P09) livrent déjà des E* sur l’hôte sans attendre cette gate cohorte.
 
 ---
 
@@ -61,9 +61,12 @@ Objectif : cohort plus large + différenciateur OS plus visible, sans devenir un
 **Statut :** E1–E5 implémentés dans Preview **0.3.0** — [phase-preview-03.md](phases/phase-preview-03.md).  
 E6 / E7-lite / E10-lite livrés dans Preview **0.4.0** — [phase-preview-04.md](phases/phase-preview-04.md).  
 E14 livré dans Preview **0.5.0** — [phase-preview-05.md](phases/phase-preview-05.md).  
-Export schémas E8 + contrat HTTP↔bus, keyring OS E7, catalogue local signé E10 livrés dans Preview **0.6.0** — [phase-preview-06.md](phases/phase-preview-06.md).
+Export schémas E8 + contrat HTTP↔bus, keyring OS E7, catalogue local signé E10 livrés dans Preview **0.6.0** — [phase-preview-06.md](phases/phase-preview-06.md).  
+**E15** (UI de module déclarative rendue par l’hôte) livré en Preview **0.7.0** — [phases/phase-preview-07.md](phases/phase-preview-07.md).  
+**Prochaine Preview :** **E16** génération locale image + audio et **E17**
+hôte CPU/GPU unifié — Preview **0.8.0** (prévu) — [phases/phase-preview-08.md](phases/phase-preview-08.md).
 
-**Hors scope court terme :** Telegram/Discord natifs, marketplace public, computer-use desktop.
+**Hors scope court terme :** Telegram/Discord natifs, marketplace public, computer-use desktop, `sandboxed_webview`.
 
 ---
 
@@ -77,6 +80,10 @@ Export schémas E8 + contrat HTTP↔bus, keyring OS E7, catalogue local signé E
 | **E9** | **P5.2 multi-GPU** quand le hardware est dispo | Gate P5 partielle | [phases/phase-p5.md](phases/phase-p5.md) |
 | **E10** | **Marketplace MCP / modules locale** (catalogue signé, revue de caps) | Distribution type ClawHub sans devenir ClawHub | **E10-lite 0.4.0** — revue de caps + exemple MCP ; **catalogue local signé 0.6.0** ; pas de store réseau |
 | **E14** | **Extraction auto de faits du chat → mémoire long terme** | Le chat ne fait que *lire* `mem.context` ; les faits demandent Remember manuel | **Livré 0.5.0** — opt-in Settings ; extraction LLM post-tour → `mem.user.remember` + dédup/`supersedes` ; jamais de secrets auto |
+| **E15** | **UI de module déclarative rendue par l’hôte** (arbre de widgets fermé dans egui ; pas de webview) | La dual-surface est un contrat ; Notes/Tasks sont codés à la main ; un module créé par un agent n’a pas de surface humaine | **Preview 0.7.0** — [phases/phase-preview-07.md](phases/phase-preview-07.md) ; vocabulaire : form / table / stat_row / line_chart ; **pas** de HTML/JS ; **pas** E13 |
+| **E16** | **Génération locale d’image + audio (TTS)** | FEATURES liste encore la gén. média native hors Preview ; les testeurs attendent du multimodal sans API hébergée | **Preview 0.8.0 prévu** — [phases/phase-preview-08.md](phases/phase-preview-08.md) ; le Placement Manager possède la VRAM vs le LLM ; cap `media.generate` ; **pas** de vidéo ; **pas** de STT/voix always-on (sibling) |
+| **E17** | **Artefact hôte CPU/GPU unifié** + politique device live | Le testeur choisit un zip CUDA ou CPU ; Settings auto/gpu/cpu seulement au prochain boot ; `auto` ignore la charge | **Preview 0.8.0 prévu** — un artefact par OS ; la session lance un backend sûr CUDA ou CPU ; bascule UI = restart modeld ; **auto** = hystérésis Placement Manager sur VRAM/CPU (et E16) ; le pin surcharge ; `-CpuOnly` = builder seulement ; **milieu de token sans cancel = E18 / 0.9** |
+| **E18** | **Migration de device en milieu de token** (CPU ↔ GPU, le stream continue) | La bascule 0.8 annule l’infer live ; testeurs / auto-charge ne doivent pas perdre le tour | **Preview 0.9.0 prévu** — [phases/phase-preview-09.md](phases/phase-preview-09.md) ; dépend de E17 ; fallback fail-closed vers cancel+restart 0.8 |
 
 ---
 
@@ -86,7 +93,7 @@ Export schémas E8 + contrat HTTP↔bus, keyring OS E7, catalogue local signé E
 |----|-----------|------------|
 | **E11** | **PV.4+ → bare metal** : même image, AccelDevice (P5.3) | Pair Hubbard/agentos ; la vraie course OS |
 | **E12** | **Context switch cognitif préemptif** (F-AGT-03) | Context manager AIOS ; claim OS |
-| **E13** | **Compositor / dual UI** au-delà de l’egui Preview | [reflexion-agent-os.md](reflexion-agent-os.md) §7 ; pas prioritaire tant que la Preview hôte est le produit |
+| **E13** | **Compositor / dual UI** au-delà de l’egui Preview (`sandboxed_webview` optionnelle sur fer nu) | [reflexion-agent-os.md](reflexion-agent-os.md) §7 ; pas prioritaire tant que la Preview hôte est le produit. Les dashboards Preview passent par **E15**. |
 
 ---
 
@@ -96,6 +103,9 @@ Export schémas E8 + contrat HTTP↔bus, keyring OS E7, catalogue local signé E
 - Fusionner `akasha` + `akasha-os` en un binaire → confusion de marque + dilution de la thèse.
 - Prioriser le computer-use type Adept/Agent-Zero avant caps + GPU + seL4.
 - Marketplace public avant un registre local avec attestation de capacités.
+- Ajouter un TCB Chromium/WebView2 à la Preview pour des dashboards de modules → hôte de widgets fermé (**E15**).
+- Faire d’une API image/TTS hébergée le chemin par défaut au lieu d’un backend local géré par le Placement → E16 est local-first ; le distant est une option routée plus tard.
+- Mettre un micro always-on / STT / voix 24/7 dans le cœur OS → sibling.
 
 ---
 
@@ -104,11 +114,12 @@ Export schémas E8 + contrat HTTP↔bus, keyring OS E7, catalogue local signé E
 | Couche | Rôle |
 |--------|------|
 | **P0–P5 / PV / PC** | Gates exécutables ([plan-developpement-phases.md](plan-developpement-phases.md), [STATUS.md](STATUS.md)) |
-| **E1–E14** | Priorisation après analyse concurrentielle ; planifier **après** la fermeture de la gate cohort PC |
+| **E1–E18** | Priorisation après analyse concurrentielle ; les incréments Preview P03–P09 livrent des E* sans attendre la gate cohort PC |
 
-Ne **pas** inventer un numéro P6 tant que PC n’est pas fermé et que STATUS n’est pas à jour. E1–E5 livrés en Preview **0.3.0** ; E6 / E7-lite / E10-lite en **0.4.0** ; **E14** en **0.5.0** ; E8 schémas + E7-keyring + E10 catalogue en **0.6.0**. Prochain focus : reste Horizon B (E7 TPM, adaptateur HTTP live si un daemon est planifié, E9 multi-GPU) + fermeture cohort PC.
+Ne **pas** inventer un numéro P6 tant que PC n’est pas fermé et que STATUS n’est pas à jour. E1–E5 livrés en Preview **0.3.0** ; E6 / E7-lite / E10-lite en **0.4.0** ; **E14** en **0.5.0** ; E8 schémas + E7-keyring + E10 catalogue en **0.6.0** ; **E15** hôte d’UI de module déclarative livré en Preview **0.7.0**. **Suite : E16 + E17** en Preview **0.8.0**, puis **E18** (migration device mid-token) en Preview **0.9.0**. Puis reste Horizon B (E7 TPM, adaptateur HTTP live si un daemon est planifié, E9 multi-GPU) + fermeture cohort PC.
 
-Séquençage suggéré une fois PC fermé :
+Séquençage suggéré une fois PC fermé (historique ; les incréments Preview
+ont déjà joué cette séquence sur l’hôte en P03–P07, puis E16+E17 en P08) :
 
 1. E5 (métriques) + E4 (UI caps) — prouver la thèse OS dans l’UI testeur  
 2. E1 (chemin CPU) — élargir le cohort  
@@ -120,8 +131,8 @@ Séquençage suggéré une fois PC fermé :
 ## Documents liés
 
 - [paysage-concurrentiel.md](paysage-concurrentiel.md) — enquête qui motive les E*
-- [plan-developpement-phases.md](plan-developpement-phases.md) — gates P0–P5 / PV / PC
+- [plan-developpement-phases.md](plan-developpement-phases.md) — gates P0–P5 / PV / PC + incréments Preview P03–P09
 - [FEATURES.md](FEATURES.md) — surface Preview livrée
 - [specs-fonctionnelles.md](specs-fonctionnelles.md) — exigences F-* (notamment F-AGT-03, F-SEC-04, F-PLC-*)
-- [phases/phase-p5.md](phases/phase-p5.md), [phases/phase-vm-sel4.md](phases/phase-vm-sel4.md), [phases/phase-pc.md](phases/phase-pc.md)
+- [phases/phase-p5.md](phases/phase-p5.md), [phases/phase-vm-sel4.md](phases/phase-vm-sel4.md), [phases/phase-pc.md](phases/phase-pc.md), [phases/phase-preview-07.md](phases/phase-preview-07.md), [phases/phase-preview-08.md](phases/phase-preview-08.md), [phases/phase-preview-09.md](phases/phase-preview-09.md)
 - Sibling : [github.com/azerothl/akasha](https://github.com/azerothl/akasha) (privé)

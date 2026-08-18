@@ -1,8 +1,8 @@
-# Protocole testeur — Akasha OS Preview 0.6.0
+# Protocole testeur — Akasha OS Preview 0.7.0
 
 **Langue :** [English](../TESTER.md) | Français
 
-> Date : 17/08/2026 · Preview **0.6.0**
+> Date : 18/08/2026 · Preview **0.7.0**
 
 Merci de tester la Preview. Objectif : installer **sans** `cargo` ni clone du
 repo, exercer les parcours principaux, et envoyer un retour **depuis l'UI**.
@@ -186,6 +186,30 @@ et envoi de retour GitHub).
 - Une tâche complexe affiche le badge **complex** (`task.assess`) et peut
   spawner un sous-agent (planner).
 
+### 15. Créer un module par agent (0.7.0 / E15)
+
+- Onglet **Scénarios** → **Lancer un agent : créer le module cohortmod**
+  (ou Chat : « crée un module ping » — Preview lance un agent même si le
+  modèle dump du JSON d’UI ; ou Agents / `/agent` : scaffold + package + install).
+- Accepter la **revue de caps** pour `module.install` si demandée (comme 7c).
+- Après l'agent, un nouvel onglet **Modules → cohortmod** apparaît
+  (pas `notes` / `tasks` / `ext-rt`).
+- L'ouvrir : heading, formulaire ou bouton, table liée à l'outil principal.
+- Soumettre une fois ; le résultat doit se rafraîchir. Cocher le scénario.
+
+### 14. UI de module déclarative (0.7.0 / E15)
+
+- Dans **Settings → Modules** (ou via agent) : `module.scaffold` un module script,
+  puis `module.package` et `module.install` avec revue de caps.
+- Après install, un nouvel onglet sous **Modules** doit apparaître (pas pour
+  `notes`, `tasks` ou `ext-rt`).
+- Ouvrir l’onglet : heading, formulaire ou bouton, et table liée au résultat
+  de l’outil principal.
+- Soumettre le formulaire ou cliquer le bouton : revue de caps si demandée ;
+  le résultat doit se rafraîchir dans l’UI.
+- **Refresh** recharge les outils bind ; un `ui/index.html` invalide affiche
+  une bannière d’erreur (pas de widgets partiels).
+
 ### 13. Notes après update + Dépannage (0.2.0)
 
 - Après une install par-dessus une Preview précédente, ouvrir **Notes**, créer
@@ -200,11 +224,11 @@ et envoi de retour GitHub).
 - Au moins un fichier `var/feedback/fb-*.json` exploitable par retour
 - Gates PC.6–PC.9 et PC.11–PC.13 cochés sur au moins une machine
 
-## Hors scope Preview 0.6.0
+## Hors scope Preview 0.7.0
 
 - Boot seL4 / fer nu
 - macOS
 - Modèle 32B dans l'installeur
 - Mise à jour automatique complète
-- Génération audio/vidéo native
+- Génération audio/vidéo native (image fixe + TTS prévus en 0.8.0 ; la vidéo reste hors)
 - Marketplace public / canaux messagerie / multi-GPU
