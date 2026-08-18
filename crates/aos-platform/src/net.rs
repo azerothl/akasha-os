@@ -73,12 +73,20 @@ impl EgressControl {
         })
     }
 
+    fn is_loopback(host: &str) -> bool {
+        matches!(
+            host,
+            "127.0.0.1" | "localhost" | "::1" | "[::1]"
+        )
+    }
+
     /// Vérifie (et journalise) une demande de connexion sortante.
     pub fn check(&mut self, actor: &str, host: &str, port: u16, caps: &[String]) -> bool {
         let allowed = match self.mode {
-            NetMode::OfflineStrict => false,
+            NetMode::OfflineStrict => Self::is_loopback(host),
             NetMode::Online => {
-                Self::has_cap(caps, host, port)
+                Self::is_loopback(host)
+                    || Self::has_cap(caps, host, port)
                     || Self::has_cap(
                         &self.granted.iter().cloned().collect::<Vec<_>>(),
                         host,
@@ -130,6 +138,15 @@ mod tests {
         e.grant("net.connect:*:443".into());
         assert!(e.check("service:modeld", "api.openai.com", 443, &[]));
         e.set_mode(NetMode::OfflineStrict);
+        assert!(!e.check("service:modeld", "api.openai.com", 443, &[]));
+    }
+
+    #[test]
+    fn loopback_compte_comme_local() {
+        let mut e = EgressControl::new();
+        e.set_mode(NetMode::OfflineStrict);
+        assert!(e.check("service:modeld", "127.0.0.1", 11434, &[]));
+        assert!(e.check("service:modeld", "localhost", 1234, &[]));
         assert!(!e.check("service:modeld", "api.openai.com", 443, &[]));
     }
 }

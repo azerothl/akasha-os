@@ -123,4 +123,26 @@ impl RemoteOpenAiBackend {
         }
         matches!(request.send().await, Ok(r) if r.status().is_success() || r.status().as_u16() == 404)
     }
+
+    pub async fn list_models(&self) -> Result<Vec<String>, RemoteError> {
+        let mut request = self.client.get(format!("{}/models", self.endpoint));
+        if let Some(key) = &self.api_key {
+            request = request.bearer_auth(key);
+        }
+        let resp = request.send().await?;
+        if !resp.status().is_success() {
+            return Err(RemoteError::Http(format!("statut {}", resp.status())));
+        }
+        let v: serde_json::Value = resp.json().await.map_err(|e| RemoteError::Http(e.to_string()))?;
+        let ids = v
+            .get("data")
+            .and_then(|d| d.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|m| m.get("id").and_then(|i| i.as_str()).map(|s| s.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        Ok(ids)
+    }
 }
