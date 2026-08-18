@@ -863,28 +863,6 @@ async fn main() {
                 }
                 terminal = Some(AgentState::Failed);
             }
-            ActResult::Blocked { reason, child_id } => {
-                tool_result = reason.clone();
-                step_fail_reason = Some(reason.clone());
-                step_child_id = child_id;
-                shared.paused.store(true, Ordering::SeqCst);
-                report(
-                    &bus,
-                    &agent_id,
-                    AgentOutputEvent::Error {
-                        message: reason.clone(),
-                    },
-                )
-                .await;
-                report(
-                    &bus,
-                    &agent_id,
-                    AgentOutputEvent::StateChanged {
-                        state: AgentState::Blocked,
-                    },
-                )
-                .await;
-            }
         }
 
         match loop_guard.observe(&action.action, &tool_result) {
@@ -1204,12 +1182,6 @@ enum ActResult {
     AskUser {
         question: String,
         choices: Vec<String>,
-    },
-    /// Pause jusqu'à Resume humain (plus utilisé par agent.await).
-    #[allow(dead_code)]
-    Blocked {
-        reason: String,
-        child_id: Option<String>,
     },
 }
 
@@ -2028,6 +2000,72 @@ async fn invoke_native(
                 Err(e) => format!("files.generate err: {e}"),
             }
         }
+        "media.image.generate" => {
+            let prompt = args
+                .get("prompt")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let path = args
+                .get("path")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let model_id = args
+                .get("model_id")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            match bus
+                .call::<aos_proto::MediaImageGenerateRequest, aos_proto::MediaGenerateResponse>(
+                    "media.image.generate",
+                    &aos_proto::MediaImageGenerateRequest {
+                        prompt,
+                        path,
+                        model_id,
+                        actor: actor.clone(),
+                        caps: caps.to_vec(),
+                        trace_id: String::new(),
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(r) => format!("image {} ({} octets, moteur {})", r.path, r.bytes, r.engine),
+                Err(e) => format!("media.image.generate err: {e}"),
+            }
+        }
+        "media.audio.generate" => {
+            let text = args
+                .get("text")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let path = args
+                .get("path")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let model_id = args
+                .get("model_id")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            match bus
+                .call::<aos_proto::MediaAudioGenerateRequest, aos_proto::MediaGenerateResponse>(
+                    "media.audio.generate",
+                    &aos_proto::MediaAudioGenerateRequest {
+                        text,
+                        path,
+                        model_id,
+                        actor: actor.clone(),
+                        caps: caps.to_vec(),
+                        trace_id: String::new(),
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(r) => format!("audio {} ({} octets, moteur {})", r.path, r.bytes, r.engine),
+                Err(e) => format!("media.audio.generate err: {e}"),
+            }
+        }
         "cap.request" => {
             let cap = args
                 .get("cap")
@@ -2269,6 +2307,29 @@ async fn invoke_native(
                     info.name, info.version, info.tools, info.name
                 ),
                 Err(e) => format!("module.install err: {e}"),
+            }
+        }
+        "module.uninstall" => {
+            let module = args
+                .get("module")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            match bus
+                .call::<aos_proto::ModuleUninstallRequest, Result<(), String>>(
+                    "module.uninstall",
+                    &aos_proto::ModuleUninstallRequest {
+                        module: module.clone(),
+                        actor: actor.clone(),
+                        actor_caps: caps.to_vec(),
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(Ok(())) => format!("module désinstallé: {module}"),
+                Ok(Err(e)) => format!("module.uninstall err: {e}"),
+                Err(e) => format!("module.uninstall err: {e}"),
             }
         }
         "module.list" => match bus
