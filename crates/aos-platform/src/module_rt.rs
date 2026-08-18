@@ -831,7 +831,7 @@ min_os_api: 1
         let base = tmpbase("ext-rt");
         let pkg = base.join("pkg");
         let src = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../dist/AgentOS-Preview-0.7.0-windows-x64-cpu/decldemo.aospkg");
+            .join("../../dist/AgentOS-Preview-0.8.0-windows-x64/decldemo.aospkg");
         if !src.join("module.wasm").exists() {
             eprintln!("skip ext_rt_handlers_invoke_sans_deadlock: decldemo.aospkg absent");
             return;

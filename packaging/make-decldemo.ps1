@@ -78,7 +78,7 @@ Copy-Item (Join-Path $pkg "handlers.json") (Join-Path $pkg "assets\handlers.json
 
 $manifest = @"
 name: decldemo
-version: 0.7.0
+version: 0.8.0
 hash: $hash
 permissions:
   required_caps: []

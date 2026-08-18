@@ -17,7 +17,7 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 if (-not $Version) {
     $verFile = Join-Path $root "VERSION"
-    if (Test-Path $verFile) { $Version = (Get-Content $verFile -Raw).Trim() } else { $Version = "0.7.0" }
+    if (Test-Path $verFile) { $Version = (Get-Content $verFile -Raw).Trim() } else { $Version = "0.8.0" }
 }
 $suffix = if ($CpuOnly) { "windows-x64-cpu" } else { "windows-x64" }
 if (-not $OutDir) { $OutDir = Join-Path $root "dist\AgentOS-Preview-$Version-$suffix" }
