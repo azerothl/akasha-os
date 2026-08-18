@@ -3,6 +3,8 @@
 use eframe::egui::{self, Ui};
 use serde::{Deserialize, Serialize};
 
+use crate::i18n::UiStrings;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskItem {
     pub id: String,
@@ -29,33 +31,33 @@ pub struct TasksPanelState {
 }
 
 impl TasksPanelState {
-    pub fn apply_listed(&mut self, tasks: Vec<TaskItem>) {
+    pub fn apply_listed(&mut self, tasks: Vec<TaskItem>, count_tpl: &str) {
         self.tasks = tasks;
-        self.status = format!("{} tâche(s)", self.tasks.len());
+        self.status = count_tpl.replace("{n}", &self.tasks.len().to_string());
     }
 
-    pub fn ui(&mut self, ui: &mut Ui, heading: &str) -> TasksActions {
+    pub fn ui(&mut self, ui: &mut Ui, t: &UiStrings) -> TasksActions {
         let mut actions = TasksActions::default();
-        ui.heading(heading);
+        ui.heading(t.tab_tasks);
         ui.horizontal(|ui| {
-            if ui.button("Rafraîchir").clicked() {
+            if ui.button(t.decl_ui_refresh).clicked() {
                 actions.list = true;
             }
         });
         ui.separator();
         ui.horizontal(|ui| {
-            ui.label("Nouvelle");
+            ui.label(t.tasks_new);
             ui.add(
                 egui::TextEdit::singleline(&mut self.new_title)
                     .desired_width(220.0)
-                    .hint_text("titre"),
+                    .hint_text(t.tasks_title_hint),
             );
             ui.add(
                 egui::TextEdit::singleline(&mut self.new_notes)
                     .desired_width(180.0)
-                    .hint_text("notes"),
+                    .hint_text(t.tasks_notes_hint),
             );
-            if ui.button("Créer").clicked() && !self.new_title.trim().is_empty() {
+            if ui.button(t.tasks_create).clicked() && !self.new_title.trim().is_empty() {
                 actions.create = Some((self.new_title.trim().to_string(), self.new_notes.clone()));
                 self.new_title.clear();
                 self.new_notes.clear();
@@ -63,27 +65,31 @@ impl TasksPanelState {
         });
         ui.separator();
         if self.tasks.is_empty() {
-            ui.weak("Aucune tâche — créez-en une ou demandez à un agent `tasks.create`.");
+            ui.weak(t.tasks_empty);
         } else {
             egui::ScrollArea::vertical()
                 .id_salt("tasks_list")
                 .max_height(420.0)
                 .show(ui, |ui| {
-                    for t in &self.tasks {
+                    for item in &self.tasks {
                         ui.horizontal(|ui| {
-                            let label = if t.done {
-                                format!("✓ {}", t.title)
+                            let label = if item.done {
+                                format!("✓ {}", item.title)
                             } else {
-                                t.title.clone()
+                                item.title.clone()
                             };
                             ui.label(&label);
-                            if !t.notes.is_empty() {
-                                ui.weak(&t.notes);
+                            if !item.notes.is_empty() {
+                                ui.weak(&item.notes);
                             }
-                            ui.monospace(&t.id);
-                            let btn = if t.done { "Réouvrir" } else { "Terminer" };
+                            ui.monospace(&item.id);
+                            let btn = if item.done {
+                                t.tasks_reopen
+                            } else {
+                                t.tasks_complete
+                            };
                             if ui.small_button(btn).clicked() {
-                                actions.complete = Some((t.id.clone(), !t.done));
+                                actions.complete = Some((item.id.clone(), !item.done));
                             }
                         });
                     }

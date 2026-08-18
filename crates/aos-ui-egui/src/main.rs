@@ -10,28 +10,27 @@ mod model_setup;
 mod notes_panel;
 mod prefs;
 mod tasks_panel;
+mod chat_ask;
+mod cmd;
+mod os_open;
+mod runtime;
+mod slash;
 
-use aos_agent::schedule::{
-    ScheduleCreateRequest, ScheduleEntry, ScheduleIdRequest, ScheduleListResponse,
-};
-use aos_agent::intents as agent_intents;
+use chat_ask::{agent_display_title, chat_has_open_ask, pending_ask_ids};
+use cmd::{AgentNotice, ChatLine, Cmd, Evt};
+use os_open::{aos_home, app_icon, bin_aos_session, native_path, open_in_browser, open_os_folder};
+use runtime::runtime_main;
+use slash::{slash_completions, slash_insert_text, SLASH_COMMANDS};
+use aos_agent::schedule::ScheduleEntry;
 use aos_ipc::BusClient;
 use aos_proto::{
-    AgentCreateRequest, AgentGoal, AgentIdRequest, AgentInfo, AgentPromptOptimizeRequest,
-    AgentPromptOptimizeResponse, AgentState, AgentSteerRequest, AgentTrace, AuditEvent, AuditQueryRequest,
-    CapInfo, CapListRequest, CapRevokeRequest, ChatAttachment, ChatMessage, ChatSessionAppendRequest,
-    ChatSessionCreateRequest, ChatSessionGetResponse, ChatSessionIdRequest, ChatSessionMeta,
-    ChatSessionRenameRequest, ChatSessionSetModelRequest, ConfirmResponseRequest, DocumentRef,
-    FeedbackSubmitRequest, FeedbackSubmitResponse, FilesGenerateRequest, FilesGenerateResponse,
-    InferParams, InferRequest, McpServerInfo, MemContextRequest, MemContextResponse, MemEpisodicDeleteRequest,
-    MemExtractRequest, MemExtractResponse, MemHit, MemListRequest, MemRememberResponse, MemUpdateRequest,
-    MemUserRecallRequest, MemUserRememberRequest, MemWorkingRequest, LoadRequest, ModelInfo, ModelState,
-    ModuleCatalogue, ModuleIdRequest, ModuleInfo, ModuleInstallRequest, ModuleInvokeRequest, ModuleInvokeResponse, CancelRequest,
-    NetFetchRequest, NetFetchResponse, NetModeRequest,
-    PendingConfirmation, SecretListRequest, SecretListResponse, SecretSetRequest, SetRoutingRequest,
-    SkillInfo, SystemMetrics, TokenEvent, WebBrowseRequest,
-    WebBrowseResponse, WebSearchHit, WebSearchRequest, WebSearchResponse,
-    chat_user_wants_module_authoring, CHAT_DELEGATION_PROMPT, SYSTEM_ASSISTANT_PROMPT,
+    AgentCreateRequest, AgentGoal, AgentIdRequest, AgentInfo, AgentState, AgentTrace, AuditEvent,
+    CapInfo, ChatAttachment, ChatSessionAppendRequest, ChatSessionGetResponse, ChatSessionIdRequest, ChatSessionMeta, DocumentRef,
+    FeedbackSubmitRequest, FeedbackSubmitResponse, McpServerInfo, MemHit, ModelInfo,
+    ModuleCatalogue, ModuleIdRequest, ModuleInfo, ModuleInvokeRequest, ModuleInvokeResponse,
+    PendingConfirmation, ProviderRecord,
+    SkillInfo, SystemMetrics, WebSearchHit,
+    chat_user_wants_module_authoring,
 };
 use aos_proto::decl_ui::ModuleUiResponse;
 use prefs::{load_preferences, save_preferences, Preferences};
@@ -39,15 +38,10 @@ use eframe::egui;
 use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-
-/// Coalesce : un seul `mem.extract` à la fois (fire-and-forget).
-static MEM_EXTRACT_BUSY: AtomicBool = AtomicBool::new(false);
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct UpdateOffer {
     version: String,
@@ -64,55 +58,6 @@ fn load_update_offer() -> Option<UpdateOffer> {
     serde_json::from_str(&raw).ok()
 }
 
-fn open_in_browser(url: &str) {
-    #[cfg(windows)]
-    {
-        let _ = std::process::Command::new("rundll32")
-            .args(["url.dll,FileProtocolHandler", url])
-            .spawn();
-    }
-    #[cfg(target_os = "linux")]
-    {
-        let _ = std::process::Command::new("xdg-open").arg(url).spawn();
-    }
-    #[cfg(target_os = "macos")]
-    {
-        let _ = std::process::Command::new("open").arg(url).spawn();
-    }
-}
-
-/// Convertit un chemin stocké (`/` ou `\`) en chemin natif.
-fn native_path(stored: &str) -> PathBuf {
-    PathBuf::from(stored.replace(['/', '\\'], std::path::MAIN_SEPARATOR_STR))
-}
-
-/// Ouvre un dossier dans l'explorateur OS.
-///
-/// Sur Windows, `explorer <chemin>` avec des `/` (ou un dossier absent)
-/// ouvre « Mes documents » au lieu de la cible — d'où la normalisation
-/// et `/e,chemin`.
-fn open_os_folder(dir: &Path) {
-    let _ = std::fs::create_dir_all(dir);
-    #[cfg(windows)]
-    {
-        let mut path = dir.to_string_lossy().replace('/', "\\");
-        if let Some(stripped) = path.strip_prefix(r"\\?\") {
-            path = stripped.to_string();
-        }
-        let _ = std::process::Command::new("explorer")
-            .arg(format!("/e,{path}"))
-            .spawn();
-    }
-    #[cfg(target_os = "linux")]
-    {
-        let _ = std::process::Command::new("xdg-open").arg(dir).spawn();
-    }
-    #[cfg(target_os = "macos")]
-    {
-        let _ = std::process::Command::new("open").arg(dir).spawn();
-    }
-}
-
 #[derive(Clone, PartialEq, Eq)]
 enum Tab {
     Chat,
@@ -121,6 +66,7 @@ enum Tab {
     Tasks,
     Agents,
     Models,
+    Providers,
     Audit,
     Caps,
     Scenarios,
@@ -154,398 +100,6 @@ impl Default for OnboardingState {
         }
     }
 }
-
-enum Cmd {
-    /// Chat session active : historique + texte user (persisté côté platformd).
-    Chat {
-        session_id: String,
-        history: Vec<(String, String)>,
-        user_text: String,
-        model_id: Option<String>,
-        /// E14 : déclencher mem.extract après le tour (Settings, défaut ON).
-        auto_remember: bool,
-        max_steps: u32,
-    },
-    SessionBootstrap,
-    SessionCreate { title: Option<String> },
-    SessionSelect { id: String },
-    SessionRename { id: String, title: String },
-    SessionDelete { id: String },
-    SessionExport { id: String },
-    MemRecall { query: String },
-    MemRemember { text: String, pinned: bool },
-    MemList { include_superseded: bool },
-    MemDelete { id: u64 },
-    MemWipeUser,
-    MemSupersede { id: u64, text: String },
-    MemEdit { id: u64, text: String },
-    SecretSet { name: String, value: String },
-    SecretList,
-    NetSetMode { online: bool },
-    SetRouting { mode: String },
-    WebSearch { query: String, engine: String },
-    WebBrowse { url: String, max_chars: usize },
-    NetFetch { url: String, max_bytes: u64 },
-    FilesGenerate {
-        format: String,
-        path: String,
-        content: String,
-        title: Option<String>,
-    },
-    Help,
-    NotesList,
-    NotesCreate { title: String, content: String },
-    NotesUpdate {
-        title: String,
-        path: String,
-        content: String,
-    },
-    NotesRead {
-        title: Option<String>,
-        path: Option<String>,
-        slug: Option<String>,
-    },
-    NotesSearch { query: String },
-    NotesRelated {
-        path: String,
-        topic: String,
-    },
-    Confirm { id: String, approved: bool },
-    AgentCreate {
-        task: String,
-        system_prompt: Option<String>,
-        skills: Vec<String>,
-        tools: Vec<String>,
-        mcp_servers: Vec<String>,
-        documents: Vec<DocumentRef>,
-        optimize_prompt: bool,
-        max_steps: u32,
-        timeout_secs: u64,
-        model_id: Option<String>,
-        session_id: Option<String>,
-        /// `slash` | `assistant` | `form`
-        origin: String,
-    },
-    AgentKill { id: String },
-    AgentPause { id: String },
-    AgentResume { id: String },
-    AgentRetry { id: String },
-    AgentSteer { id: String, text: String },
-    AgentTrace { id: String },
-    AgentPromptOptimize {
-        goal: String,
-        skills: Vec<String>,
-        tools: Vec<String>,
-        current: Option<String>,
-    },
-    AgentCatalogRefresh,
-    Troubleshoot,
-    Audit { last: usize },
-    CapList { holder: String },
-    CapRevoke {
-        holder: String,
-        cap_id: u64,
-        tree: bool,
-    },
-    ScheduleList,
-    ScheduleCreate {
-        goal: String,
-        interval_secs: u64,
-    },
-    ScheduleCancel {
-        id: String,
-    },
-    TasksList,
-    TasksCreate {
-        title: String,
-        notes: String,
-    },
-    TasksComplete {
-        id: String,
-        done: bool,
-    },
-    Feedback(FeedbackSubmitRequest),
-    KillAuditd,
-    RefreshConfirms,
-    ModelsRefresh,
-    ModelLoad { model_id: String },
-    SessionSetModel {
-        session_id: String,
-        model_id: Option<String>,
-    },
-    /// Append chat sans infer (slash /agent, etc.).
-    SessionAppend {
-        session_id: String,
-        role: String,
-        content: String,
-        attachments: Vec<ChatAttachment>,
-    },
-    ChatCancel { inference_id: u64 },
-    CatalogueRefresh,
-    ModuleList,
-    ModuleInstall {
-        source_dir: String,
-        approved_caps: Option<Vec<String>>,
-    },
-    ModuleUninstall {
-        name: String,
-    },
-    ModuleUiLoad {
-        module: String,
-    },
-    ModuleUiRefresh {
-        module: String,
-    },
-    ModuleUiInvoke {
-        module: String,
-        tool: String,
-        args: serde_json::Value,
-    },
-}
-
-enum Evt {
-    Delta(String),
-    Done {
-        text: String,
-        session_id: String,
-        attachments: Vec<ChatAttachment>,
-    },
-    Error(String),
-    Status(String),
-    ChatSystem(String),
-    Metrics(SystemMetrics),
-    Agents(Vec<AgentInfo>),
-    AgentSpawned {
-        session_id: String,
-        agent_id: String,
-        title: String,
-        origin: String,
-        ack: String,
-    },
-    NotesListed(Vec<notes_panel::NoteListItem>),
-    NoteLoaded(notes_panel::NoteDetail),
-    NotesSearchHits(Vec<notes_panel::NoteSearchHit>),
-    NotesRelated(Vec<notes_panel::NoteRelatedHit>),
-    NotesSaved {
-        path: String,
-        slug: String,
-        title: String,
-    },
-    /// Payload brut (compat scénarios / debug).
-    Notes(String),
-    Audit(Vec<AuditEvent>),
-    Caps {
-        holder: String,
-        caps: Vec<CapInfo>,
-    },
-    Schedules(Vec<ScheduleEntry>),
-    TasksListed(Vec<tasks_panel::TaskItem>),
-    Confirms(Vec<PendingConfirmation>),
-    FeedbackOk(FeedbackSubmitResponse),
-    /// Préremplit le formulaire Retour (dépannage) sans publier tout de suite.
-    FeedbackDraft(FeedbackSubmitRequest),
-    Sessions(Vec<ChatSessionMeta>),
-    SessionLoaded {
-        id: String,
-        messages: Vec<ChatLine>,
-    },
-    MemHits(Vec<MemHit>),
-    MemExtracted { n: usize },
-    SecretList {
-        names: Vec<String>,
-        encrypted: bool,
-    },
-    WebResults(Vec<WebSearchHit>),
-    BrowsePreview(String),
-    NetMode(bool),
-    FileOk(String),
-    Skills(Vec<SkillInfo>),
-    McpServers(Vec<McpServerInfo>),
-    PromptOptimized(String),
-    Models(Vec<ModelInfo>),
-    AgentTrace(AgentTrace),
-    InferStarted { inference_id: u64 },
-    ChatCancelled,
-    Catalogue(ModuleCatalogue),
-    InstalledModules(Vec<ModuleInfo>),
-    ModuleInstalled(String),
-    ModuleUninstalled(String),
-    ModuleUiLoaded(ModuleUiResponse),
-    ModuleUiBind {
-        module: String,
-        tool: String,
-        result: serde_json::Value,
-        error: Option<String>,
-    },
-    ModuleUiInvokeDone {
-        module: String,
-        tool: String,
-        ok: bool,
-        result: serde_json::Value,
-        error: Option<String>,
-    },
-}
-
-#[derive(Debug, Clone)]
-struct ChatLine {
-    role: String,
-    text: String,
-    attachments: Vec<ChatAttachment>,
-}
-
-impl ChatLine {
-    fn plain(role: impl Into<String>, text: impl Into<String>) -> Self {
-        Self {
-            role: role.into(),
-            text: text.into(),
-            attachments: Vec::new(),
-        }
-    }
-}
-
-fn ask_origin_closes(origin: &str) -> bool {
-    origin == "ask-reply" || origin == "ask-timeout"
-}
-
-/// File FIFO des `user.ask` encore ouverts pour des agents actuellement bloqués.
-fn pending_ask_ids(chat: &[ChatLine], blocked_ids: &[String]) -> Vec<String> {
-    let blocked: std::collections::HashSet<&str> =
-        blocked_ids.iter().map(String::as_str).collect();
-    let mut order: Vec<String> = Vec::new();
-    for line in chat {
-        for att in &line.attachments {
-            let ChatAttachment::AgentRef {
-                agent_id, origin, ..
-            } = att;
-            if origin == "ask" && blocked.contains(agent_id.as_str()) {
-                if !order.iter().any(|id| id == agent_id) {
-                    order.push(agent_id.clone());
-                }
-            } else if ask_origin_closes(origin) {
-                order.retain(|id| id != agent_id);
-            }
-        }
-    }
-    for id in blocked_ids {
-        if !order.iter().any(|x| x == id) {
-            order.push(id.clone());
-        }
-    }
-    order
-}
-
-fn chat_has_open_ask(chat: &[ChatLine], agent_id: &str) -> bool {
-    let mut open = false;
-    for line in chat {
-        for att in &line.attachments {
-            let ChatAttachment::AgentRef {
-                agent_id: id,
-                origin,
-                ..
-            } = att;
-            if id != agent_id {
-                continue;
-            }
-            if origin == "ask" {
-                open = true;
-            } else if ask_origin_closes(origin) {
-                open = false;
-            }
-        }
-    }
-    open
-}
-
-fn agent_display_title(ag: &AgentInfo) -> String {
-    let t = ag.directive.trim();
-    if t.is_empty() {
-        ag.agent_id.clone()
-    } else {
-        t.chars().take(48).collect()
-    }
-}
-
-#[cfg(test)]
-mod ask_queue_tests {
-    use super::*;
-
-    fn ask_line(id: &str, origin: &str) -> ChatLine {
-        ChatLine {
-            role: "assistant".into(),
-            text: origin.into(),
-            attachments: vec![ChatAttachment::AgentRef {
-                agent_id: id.into(),
-                title: id.into(),
-                origin: origin.into(),
-            }],
-        }
-    }
-
-    #[test]
-    fn fifo_then_close() {
-        let chat = vec![ask_line("a", "ask"), ask_line("b", "ask")];
-        let q = pending_ask_ids(&chat, &["a".into(), "b".into()]);
-        assert_eq!(q, vec!["a", "b"]);
-        let chat = vec![
-            ask_line("a", "ask"),
-            ask_line("b", "ask"),
-            ask_line("a", "ask-reply"),
-        ];
-        let q = pending_ask_ids(&chat, &["b".into()]);
-        assert_eq!(q, vec!["b"]);
-    }
-
-    #[test]
-    fn timeout_closes_and_blocked_without_card_appends() {
-        let chat = vec![ask_line("a", "ask"), ask_line("a", "ask-timeout")];
-        let q = pending_ask_ids(&chat, &["c".into()]);
-        assert_eq!(q, vec!["c"]);
-        assert!(!chat_has_open_ask(&chat, "a"));
-    }
-
-    #[test]
-    fn create_module_dump_delegates_instead_of_display() {
-        let dumped = r#"{"kind":"column","children":[{"kind":"heading","text":"Ping"}]}"#;
-        let spec = chat_delegate_agent_spec("crée un module ping", dumped);
-        let (brief, _skills, tools, prose) = spec.expect("doit déléguer");
-        assert_eq!(brief, "crée un module ping");
-        assert!(tools.iter().any(|t| t == "module.scaffold"));
-        assert!(prose.contains("agent"));
-    }
-
-    #[test]
-    fn explain_module_does_not_delegate() {
-        assert!(chat_delegate_agent_spec("c'est quoi un module", "Un module est un package.").is_none());
-    }
-
-    #[test]
-    fn model_scaffold_action_delegates() {
-        let out = r#"{"action":"module.scaffold","args":{"name":"ping"}}"#;
-        let spec = chat_delegate_agent_spec("fais un ping", out);
-        let (_brief, _skills, tools, _) = spec.expect("doit déléguer");
-        assert!(tools.iter().any(|t| t == "module.scaffold"));
-    }
-}
-
-#[derive(Debug, Clone)]
-struct AgentNotice {
-    agent_id: String,
-    session_id: String,
-    summary: String,
-}
-
-const SLASH_COMMANDS: &[(&str, &str)] = &[
-    ("<texte>", "discuter avec l'assistant (modèle local)"),
-    ("/commands", "cette liste"),
-    ("/help", "état du système (services, agents, modèles)"),
-    ("/agent <tâche>", "lancer un agent en fond (carte dans le chat)"),
-    ("/notes", "lister les notes"),
-    ("/notenew <titre> | <contenu>", "créer une note"),
-    ("/notesearch <requête>", "recherche sémantique dans les notes"),
-    ("/audit [n]", "n derniers événements d'audit"),
-    ("/kill <id>", "tuer un agent"),
-    ("/pause <id>", "suspendre un agent"),
-];
 
 fn apply_theme(ctx: &egui::Context, theme: &str) {
     match theme {
@@ -589,29 +143,6 @@ fn overflow_scroll(
         .show(ui, add_contents);
 }
 
-fn slash_completions(prefix: &str) -> Vec<(&'static str, &'static str)> {
-    if !prefix.starts_with('/') {
-        return Vec::new();
-    }
-    let token = prefix.split_whitespace().next().unwrap_or(prefix);
-    SLASH_COMMANDS
-        .iter()
-        .copied()
-        .filter(|(cmd, _)| {
-            !cmd.starts_with('<') && cmd.split_whitespace().next().unwrap_or(cmd).starts_with(token)
-        })
-        .collect()
-}
-
-fn slash_insert_text(cmd_pattern: &str) -> String {
-    let base = cmd_pattern.split_whitespace().next().unwrap_or(cmd_pattern);
-    format!("{base} ")
-}
-
-pub(crate) fn app_icon() -> egui::IconData {
-    eframe::icon_data::from_png_bytes(include_bytes!("../assets/icon.png")).expect("app icon")
-}
-
 fn main() -> eframe::Result<()> {
     if std::env::var_os("AOS_MODEL_SETUP").is_some() {
         return model_setup::run();
@@ -643,26 +174,6 @@ fn main() -> eframe::Result<()> {
     )
 }
 
-fn aos_home() -> PathBuf {
-    std::env::var("AOS_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
-}
-
-fn bin_aos_session() -> PathBuf {
-    let exe = if cfg!(windows) {
-        "aos-session.exe"
-    } else {
-        "aos-session"
-    };
-    let p = aos_home().join("bin").join(exe);
-    if p.exists() {
-        p
-    } else {
-        PathBuf::from(exe)
-    }
-}
-
 fn onboarding_path() -> PathBuf {
     aos_home().join("var/run/onboarding.json")
 }
@@ -683,1595 +194,7 @@ fn save_onboarding(state: &OnboardingState) {
     }
 }
 
-async fn runtime_main(cmd_rx: Receiver<Cmd>, evt_tx: Sender<Evt>, egui_ctx: egui::Context) {
-    let bus = match BusClient::connect("127.0.0.1:24701", "ui-egui").await {
-        Ok(b) => b,
-        Err(e) => {
-            let _ = evt_tx.send(Evt::Error(format!(
-                "bus injoignable ({e}). Lancez via aos-session."
-            )));
-            return;
-        }
-    };
-
-    // Poll métriques / agents / confirms
-    {
-        let bus = bus.clone();
-        let evt_tx = evt_tx.clone();
-        let egui_ctx = egui_ctx.clone();
-        tokio::spawn(async move {
-            loop {
-                if let Ok(m) = bus
-                    .call::<(), SystemMetrics>("model.metrics", &(), vec![])
-                    .await
-                {
-                    let _ = evt_tx.send(Evt::Metrics(m));
-                }
-                if let Ok(a) = bus
-                    .call::<(), Vec<AgentInfo>>(aos_agent::intents::LIST, &(), vec![])
-                    .await
-                {
-                    let _ = evt_tx.send(Evt::Agents(a));
-                }
-                if let Ok(models) = bus
-                    .call::<(), Vec<ModelInfo>>("model.list", &(), vec![])
-                    .await
-                {
-                    let _ = evt_tx.send(Evt::Models(models));
-                }
-                if let Ok(c) = bus
-                    .call::<(), Vec<PendingConfirmation>>("confirm.list", &(), vec![])
-                    .await
-                {
-                    let _ = evt_tx.send(Evt::Confirms(c));
-                }
-                egui_ctx.request_repaint();
-                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-            }
-        });
-    }
-
-    while let Ok(cmd) = cmd_rx.recv() {
-        let bus = bus.clone();
-        let evt_tx = evt_tx.clone();
-        let egui_ctx = egui_ctx.clone();
-        tokio::spawn(async move {
-            handle_cmd(bus, evt_tx, cmd).await;
-            egui_ctx.request_repaint();
-        });
-    }
-}
-
-/// E14 : fire-and-forget `mem.extract` (coalesce si déjà en cours).
-fn maybe_spawn_mem_extract(
-    bus: Arc<BusClient>,
-    evt_tx: Sender<Evt>,
-    enabled: bool,
-    session_id: String,
-    user_text: String,
-    assistant_text: String,
-    model_id: Option<String>,
-) {
-    if !enabled {
-        return;
-    }
-    if user_text.trim().is_empty() && assistant_text.trim().is_empty() {
-        return;
-    }
-    if MEM_EXTRACT_BUSY
-        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-        .is_err()
-    {
-        return; // skip — extract précédent encore en cours
-    }
-    tokio::spawn(async move {
-        let req = MemExtractRequest {
-            user_text,
-            assistant_text,
-            session_id: Some(session_id),
-            model_id,
-            persist: true,
-        };
-        let result = bus
-            .call::<MemExtractRequest, MemExtractResponse>("mem.extract", &req, vec![])
-            .await;
-        MEM_EXTRACT_BUSY.store(false, Ordering::SeqCst);
-        match result {
-            Ok(resp) if resp.stored > 0 => {
-                let _ = evt_tx.send(Evt::MemExtracted { n: resp.stored });
-            }
-            Ok(_) => {}
-            Err(e) => {
-                let _ = evt_tx.send(Evt::Status(format!("mem.extract: {e}")));
-            }
-        }
-    });
-}
-
-async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
-    match cmd {
-        Cmd::SessionBootstrap => {
-            let list: Vec<ChatSessionMeta> = bus
-                .call("chat.session.list", &(), vec![])
-                .await
-                .unwrap_or_default();
-            if list.is_empty() {
-                match bus
-                    .call::<ChatSessionCreateRequest, ChatSessionMeta>(
-                        "chat.session.create",
-                        &ChatSessionCreateRequest {
-                            title: Some("Session 1".into()),
-                            model_id: None,
-                        },
-                        vec![],
-                    )
-                    .await
-                {
-                    Ok(m) => {
-                        let _ = evt_tx.send(Evt::Sessions(vec![m.clone()]));
-                        let _ = evt_tx.send(Evt::SessionLoaded {
-                            id: m.id,
-                            messages: vec![],
-                        });
-                    }
-                    Err(e) => {
-                        let _ = evt_tx.send(Evt::Error(format!("session create: {e}")));
-                    }
-                }
-            } else {
-                let id = list[0].id.clone();
-                let _ = evt_tx.send(Evt::Sessions(list));
-                load_session(&bus, &evt_tx, &id).await;
-            }
-        }
-        Cmd::SessionCreate { title } => {
-            match bus
-                .call::<ChatSessionCreateRequest, ChatSessionMeta>(
-                    "chat.session.create",
-                    &ChatSessionCreateRequest {
-                        title,
-                        model_id: None,
-                    },
-                    vec![],
-                )
-                .await
-            {
-                Ok(m) => {
-                    let list: Vec<ChatSessionMeta> = bus
-                        .call("chat.session.list", &(), vec![])
-                        .await
-                        .unwrap_or_default();
-                    let _ = evt_tx.send(Evt::Sessions(list));
-                    let _ = evt_tx.send(Evt::SessionLoaded {
-                        id: m.id,
-                        messages: vec![],
-                    });
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(e.to_string()));
-                }
-            }
-        }
-        Cmd::SessionSelect { id } => {
-            load_session(&bus, &evt_tx, &id).await;
-        }
-        Cmd::SessionRename { id, title } => {
-            let _ = bus
-                .call::<ChatSessionRenameRequest, ChatSessionMeta>(
-                    "chat.session.rename",
-                    &ChatSessionRenameRequest {
-                        session_id: id.clone(),
-                        title,
-                    },
-                    vec![],
-                )
-                .await;
-            let list: Vec<ChatSessionMeta> = bus
-                .call("chat.session.list", &(), vec![])
-                .await
-                .unwrap_or_default();
-            let _ = evt_tx.send(Evt::Sessions(list));
-        }
-        Cmd::SessionDelete { id } => {
-            let _ = bus
-                .call::<ChatSessionIdRequest, bool>(
-                    "chat.session.delete",
-                    &ChatSessionIdRequest { session_id: id },
-                    vec![],
-                )
-                .await;
-            let _ = evt_tx.send(Evt::Status("session supprimée".into()));
-            let list: Vec<ChatSessionMeta> = bus
-                .call("chat.session.list", &(), vec![])
-                .await
-                .unwrap_or_default();
-            if list.is_empty() {
-                match bus
-                    .call::<ChatSessionCreateRequest, ChatSessionMeta>(
-                        "chat.session.create",
-                        &ChatSessionCreateRequest {
-                            title: Some("Session 1".into()),
-                            model_id: None,
-                        },
-                        vec![],
-                    )
-                    .await
-                {
-                    Ok(m) => {
-                        let list2: Vec<ChatSessionMeta> = bus
-                            .call("chat.session.list", &(), vec![])
-                            .await
-                            .unwrap_or_default();
-                        let _ = evt_tx.send(Evt::Sessions(list2));
-                        let _ = evt_tx.send(Evt::SessionLoaded {
-                            id: m.id,
-                            messages: vec![],
-                        });
-                    }
-                    Err(e) => {
-                        let _ = evt_tx.send(Evt::Error(e.to_string()));
-                    }
-                }
-            } else {
-                let id = list[0].id.clone();
-                let _ = evt_tx.send(Evt::Sessions(list));
-                load_session(&bus, &evt_tx, &id).await;
-            }
-        }
-        Cmd::SessionExport { id } => {
-            match bus
-                .call::<ChatSessionIdRequest, String>(
-                    "chat.session.export",
-                    &ChatSessionIdRequest { session_id: id },
-                    vec![],
-                )
-                .await
-            {
-                Ok(md) => {
-                    let path = aos_home().join("var/downloads").join(format!(
-                        "session-export-{}.md",
-                        chrono_like_stamp()
-                    ));
-                    let _ = std::fs::create_dir_all(path.parent().unwrap());
-                    match std::fs::write(&path, md) {
-                        Ok(()) => {
-                            let _ = evt_tx.send(Evt::FileOk(path.display().to_string()));
-                        }
-                        Err(e) => {
-                            let _ = evt_tx.send(Evt::Error(e.to_string()));
-                        }
-                    }
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(e.to_string()));
-                }
-            }
-        }
-        Cmd::Chat {
-            session_id,
-            history,
-            user_text,
-            model_id,
-            auto_remember,
-            max_steps,
-        } => {
-            let _ = evt_tx.send(Evt::Status(
-                "assistant : génération en cours…".into(),
-            ));
-            let _ = bus
-                .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
-                    "chat.session.append",
-                    &ChatSessionAppendRequest {
-                        session_id: session_id.clone(),
-                        role: "user".into(),
-                        content: user_text.clone(),
-                        attachments: vec![],
-                    },
-                    vec![],
-                )
-                .await;
-
-            let mem_block = bus
-                .call::<MemContextRequest, MemContextResponse>(
-                    "mem.context",
-                    &MemContextRequest {
-                        session_id: Some(session_id.clone()),
-                        query: user_text.clone(),
-                        k: 5,
-                    },
-                    vec![],
-                )
-                .await
-                .ok()
-                .map(|r| r.prompt_block)
-                .unwrap_or_default();
-
-            let mut system = SYSTEM_ASSISTANT_PROMPT.to_string();
-            system.push_str(CHAT_DELEGATION_PROMPT);
-            if !mem_block.trim().is_empty() {
-                system.push_str("\n\n");
-                system.push_str(&mem_block);
-            }
-            let mut messages = vec![ChatMessage {
-                role: "system".into(),
-                content: system,
-            }];
-            messages.extend(history.into_iter().map(|(r, c)| ChatMessage {
-                role: r,
-                content: c,
-            }));
-            let req = InferRequest {
-                model_id: model_id.clone(),
-                messages,
-                params: InferParams {
-                    max_tokens: 512,
-                    ..Default::default()
-                },
-                priority: 8,
-                data_refs: vec![],
-                routing: Some("local_only".into()),
-            };
-            let sid = session_id.clone();
-            let infer = async {
-                match bus
-                    .call_stream::<InferRequest, TokenEvent>("model.infer", &req, vec![])
-                    .await
-                {
-                    Ok(mut rx) => {
-                        let mut full = String::new();
-                        while let Some(ev) = rx.recv().await {
-                            match ev {
-                                Ok(TokenEvent::Started { inference_id }) => {
-                                    let _ = evt_tx.send(Evt::InferStarted { inference_id });
-                                }
-                                Ok(TokenEvent::Delta { text }) => {
-                                    full.push_str(&text);
-                                    let _ = evt_tx.send(Evt::Delta(text));
-                                }
-                                Ok(TokenEvent::Done { .. }) => break,
-                                Ok(TokenEvent::Error { message }) => {
-                                    let _ = evt_tx.send(Evt::Error(message));
-                                    return;
-                                }
-                                _ => {}
-                            }
-                        }
-                        if full.is_empty() {
-                            let _ = evt_tx.send(Evt::Done {
-                                text: String::new(),
-                                session_id: sid,
-                                attachments: vec![],
-                            });
-                            return;
-                        }
-
-                        // Délégation : agent.spawn / filet module → worker en fond
-                        if let Some((brief, skills, tools, prose)) =
-                            chat_delegate_agent_spec(&user_text, &full)
-                        {
-                            spawn_chat_delegate_agent(
-                                bus.clone(),
-                                evt_tx.clone(),
-                                sid,
-                                user_text,
-                                brief,
-                                skills,
-                                tools,
-                                prose,
-                                auto_remember,
-                                model_id,
-                                max_steps,
-                            )
-                            .await;
-                            return;
-                        }
-
-                        let display = agent_panel::format_assistant_display(&full);
-                        let _ = bus
-                            .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
-                                "chat.session.append",
-                                &ChatSessionAppendRequest {
-                                    session_id: sid.clone(),
-                                    role: "assistant".into(),
-                                    content: display.clone(),
-                                    attachments: vec![],
-                                },
-                                vec![],
-                            )
-                            .await;
-                        maybe_spawn_mem_extract(
-                            bus.clone(),
-                            evt_tx.clone(),
-                            auto_remember,
-                            sid.clone(),
-                            user_text.clone(),
-                            display.clone(),
-                            model_id.clone(),
-                        );
-                        let _ = evt_tx.send(Evt::Done {
-                            text: display,
-                            session_id: sid,
-                            attachments: vec![],
-                        });
-                    }
-                    Err(e) => {
-                        let _ = evt_tx.send(Evt::Error(e.to_string()));
-                    }
-                }
-            };
-            match tokio::time::timeout(std::time::Duration::from_secs(180), infer).await {
-                Ok(()) => {}
-                Err(_) => {
-                    let _ = evt_tx.send(Evt::Error(
-                        "timeout chat (180 s) — modeld a peut-être planté (voir var/run/aos-modeld.stderr.log) ; relancez aos-session".into(),
-                    ));
-                }
-            }
-        }
-        Cmd::MemRecall { query } => {
-            match bus
-                .call::<MemUserRecallRequest, Vec<MemHit>>(
-                    "mem.user.recall",
-                    &MemUserRecallRequest { query, k: 8 },
-                    vec![],
-                )
-                .await
-            {
-                Ok(hits) => {
-                    let _ = evt_tx.send(Evt::MemHits(hits));
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(e.to_string()));
-                }
-            }
-        }
-        Cmd::MemRemember { text, pinned } => {
-            match bus
-                .call::<MemUserRememberRequest, MemRememberResponse>(
-                    "mem.user.remember",
-                    &MemUserRememberRequest {
-                        text,
-                        metadata: serde_json::json!({"source": "ui"}),
-                        pinned,
-                        ..Default::default()
-                    },
-                    vec![],
-                )
-                .await
-            {
-                Ok(r) => {
-                    let extra = if r.auto_relations.is_empty() {
-                        String::new()
-                    } else {
-                        format!(" (+{} relation(s))", r.auto_relations.len())
-                    };
-                    let _ = evt_tx.send(Evt::Status(format!(
-                        "mémoire enregistrée ({}{})",
-                        r.id, extra
-                    )));
-                    // Refresh list
-                    if let Ok(hits) = bus
-                        .call::<MemListRequest, Vec<MemHit>>(
-                            "mem.list",
-                            &MemListRequest {
-                                namespace: "user:default".into(),
-                                include_superseded: true,
-                            },
-                            vec![],
-                        )
-                        .await
-                    {
-                        let _ = evt_tx.send(Evt::MemHits(hits));
-                    }
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(e.to_string()));
-                }
-            }
-        }
-        Cmd::MemList { include_superseded } => {
-            match bus
-                .call::<MemListRequest, Vec<MemHit>>(
-                    "mem.list",
-                    &MemListRequest {
-                        namespace: "user:default".into(),
-                        include_superseded,
-                    },
-                    vec![],
-                )
-                .await
-            {
-                Ok(hits) => {
-                    let _ = evt_tx.send(Evt::MemHits(hits));
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(e.to_string()));
-                }
-            }
-        }
-        Cmd::MemDelete { id } => {
-            match bus
-                .call::<MemEpisodicDeleteRequest, serde_json::Value>(
-                    "mem.episodic_delete",
-                    &MemEpisodicDeleteRequest {
-                        id: Some(id),
-                        namespace: None,
-                        meta_key: None,
-                        meta_value: None,
-                    },
-                    vec![],
-                )
-                .await
-            {
-                Ok(_) => {
-                    let _ = evt_tx.send(Evt::Status(format!("souvenir {id} supprimé")));
-                    if let Ok(hits) = bus
-                        .call::<MemListRequest, Vec<MemHit>>(
-                            "mem.list",
-                            &MemListRequest {
-                                namespace: "user:default".into(),
-                                include_superseded: true,
-                            },
-                            vec![],
-                        )
-                        .await
-                    {
-                        let _ = evt_tx.send(Evt::MemHits(hits));
-                    }
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(e.to_string()));
-                }
-            }
-        }
-        Cmd::MemWipeUser => {
-            match bus
-                .call::<MemWorkingRequest, usize>(
-                    "mem.wipe",
-                    &MemWorkingRequest {
-                        agent_id: "user:default".into(),
-                        messages: vec![],
-                    },
-                    vec![],
-                )
-                .await
-            {
-                Ok(n) => {
-                    let _ = evt_tx.send(Evt::Status(format!("mémoire utilisateur effacée ({n})")));
-                    let _ = evt_tx.send(Evt::MemHits(Vec::new()));
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(e.to_string()));
-                }
-            }
-        }
-        Cmd::MemSupersede { id, text } => {
-            match bus
-                .call::<MemUpdateRequest, MemRememberResponse>(
-                    "mem.update",
-                    &MemUpdateRequest {
-                        id,
-                        text,
-                        metadata: None,
-                        pinned: Some(true),
-                        supersede: true,
-                    },
-                    vec![],
-                )
-                .await
-            {
-                Ok(r) => {
-                    let _ = evt_tx.send(Evt::Status(format!(
-                        "remplacé → id {} (supersedes {id})",
-                        r.id
-                    )));
-                    if let Ok(hits) = bus
-                        .call::<MemListRequest, Vec<MemHit>>(
-                            "mem.list",
-                            &MemListRequest {
-                                namespace: "user:default".into(),
-                                include_superseded: true,
-                            },
-                            vec![],
-                        )
-                        .await
-                    {
-                        let _ = evt_tx.send(Evt::MemHits(hits));
-                    }
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(e.to_string()));
-                }
-            }
-        }
-        Cmd::MemEdit { id, text } => {
-            match bus
-                .call::<MemUpdateRequest, MemRememberResponse>(
-                    "mem.update",
-                    &MemUpdateRequest {
-                        id,
-                        text,
-                        metadata: None,
-                        pinned: None,
-                        supersede: false,
-                    },
-                    vec![],
-                )
-                .await
-            {
-                Ok(r) => {
-                    let _ = evt_tx.send(Evt::Status(format!("souvenir {} mis à jour", r.id)));
-                    if let Ok(hits) = bus
-                        .call::<MemListRequest, Vec<MemHit>>(
-                            "mem.list",
-                            &MemListRequest {
-                                namespace: "user:default".into(),
-                                include_superseded: true,
-                            },
-                            vec![],
-                        )
-                        .await
-                    {
-                        let _ = evt_tx.send(Evt::MemHits(hits));
-                    }
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(e.to_string()));
-                }
-            }
-        }
-        Cmd::SecretSet { name, value } => {
-            match bus
-                .call::<SecretSetRequest, bool>(
-                    "secrets.set",
-                    &SecretSetRequest { name: name.clone(), value },
-                    vec![],
-                )
-                .await
-            {
-                Ok(_) => {
-                    let _ = evt_tx.send(Evt::Status(format!("secret `{name}` enregistré (chiffré)")));
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(e.to_string()));
-                }
-            }
-        }
-        Cmd::ChatCancel { inference_id } => {
-            match bus
-                .call::<CancelRequest, bool>(
-                    "model.cancel",
-                    &CancelRequest { inference_id },
-                    vec![],
-                )
-                .await
-            {
-                Ok(_) => {
-                    let _ = evt_tx.send(Evt::ChatCancelled);
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(e.to_string()));
-                }
-            }
-        }
-        Cmd::CatalogueRefresh => {
-            match bus
-                .call::<(), ModuleCatalogue>("module.catalogue", &(), vec![])
-                .await
-            {
-                Ok(c) => {
-                    let _ = evt_tx.send(Evt::Catalogue(c));
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(e.to_string()));
-                }
-            }
-        }
-        Cmd::ModuleList => {
-            match bus
-                .call::<(), Vec<ModuleInfo>>("module.list", &(), vec![])
-                .await
-            {
-                Ok(list) => {
-                    let _ = evt_tx.send(Evt::InstalledModules(list));
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(e.to_string()));
-                }
-            }
-        }
-        Cmd::ModuleInstall {
-            source_dir,
-            approved_caps,
-        } => {
-            match bus
-                .call::<ModuleInstallRequest, aos_proto::ModuleInfo>(
-                    "module.install",
-                    &ModuleInstallRequest {
-                        source_dir: source_dir.clone(),
-                        approved_caps,
-                        actor: "human:ui".into(),
-                        actor_caps: vec![],
-                    },
-                    vec![],
-                )
-                .await
-            {
-                Ok(info) => {
-                    let _ = evt_tx.send(Evt::ModuleInstalled(format!(
-                        "{} v{} (quarantined={})",
-                        info.name, info.version, info.quarantined
-                    )));
-                    if let Ok(list) = bus
-                        .call::<(), Vec<ModuleInfo>>("module.list", &(), vec![])
-                        .await
-                    {
-                        let _ = evt_tx.send(Evt::InstalledModules(list));
-                    }
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(e.to_string()));
-                }
-            }
-        }
-        Cmd::ModuleUninstall { name } => {
-            match bus
-                .call::<ModuleIdRequest, Result<(), String>>(
-                    "module.uninstall",
-                    &ModuleIdRequest {
-                        module: name.clone(),
-                    },
-                    vec![],
-                )
-                .await
-            {
-                Ok(Ok(())) => {
-                    let _ = evt_tx.send(Evt::ModuleUninstalled(name));
-                    if let Ok(list) = bus
-                        .call::<(), Vec<ModuleInfo>>("module.list", &(), vec![])
-                        .await
-                    {
-                        let _ = evt_tx.send(Evt::InstalledModules(list));
-                    }
-                }
-                Ok(Err(e)) => {
-                    let _ = evt_tx.send(Evt::Error(e));
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(e.to_string()));
-                }
-            }
-        }
-        Cmd::ModuleUiLoad { module } => {
-            match bus
-                .call::<ModuleIdRequest, ModuleUiResponse>(
-                    "module.ui",
-                    &ModuleIdRequest {
-                        module: module.clone(),
-                    },
-                    vec![],
-                )
-                .await
-            {
-                Ok(resp) => {
-                    let binds = resp.document.bind_tools();
-                    let _ = evt_tx.send(Evt::ModuleUiLoaded(resp));
-                    for tool in binds {
-                        invoke_module_bind(&bus, &evt_tx, &module, &tool).await;
-                    }
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(format!("module.ui {module}: {e}")));
-                }
-            }
-        }
-        Cmd::ModuleUiRefresh { module } => {
-            match bus
-                .call::<ModuleIdRequest, ModuleUiResponse>(
-                    "module.ui",
-                    &ModuleIdRequest {
-                        module: module.clone(),
-                    },
-                    vec![],
-                )
-                .await
-            {
-                Ok(resp) => {
-                    let binds = resp.document.bind_tools();
-                    let _ = evt_tx.send(Evt::ModuleUiLoaded(resp));
-                    for tool in binds {
-                        invoke_module_bind(&bus, &evt_tx, &module, &tool).await;
-                    }
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(format!("module.ui {module}: {e}")));
-                }
-            }
-        }
-        Cmd::ModuleUiInvoke {
-            module,
-            tool,
-            args,
-        } => {
-            invoke_module_tool(&bus, &evt_tx, &module, &tool, args).await;
-        }
-        Cmd::SecretList => {
-            match bus
-                .call::<SecretListRequest, SecretListResponse>(
-                    "secrets.list",
-                    &SecretListRequest {},
-                    vec![],
-                )
-                .await
-            {
-                Ok(r) => {
-                    let names = if r.names.is_empty() {
-                        "(aucun)".into()
-                    } else {
-                        r.names.join(", ")
-                    };
-                    let enc = if r.encrypted { "vault.enc" } else { "clair" };
-                    let _ = evt_tx.send(Evt::SecretList {
-                        names: r.names,
-                        encrypted: r.encrypted,
-                    });
-                    let _ = evt_tx.send(Evt::Status(format!("secrets [{enc}]: {names}")));
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(e.to_string()));
-                }
-            }
-        }
-        Cmd::NetSetMode { online } => {
-            let mode = if online {
-                "online".to_string()
-            } else {
-                "offline_strict".to_string()
-            };
-            match bus
-                .call::<NetModeRequest, bool>("net.set_mode", &NetModeRequest { mode }, vec![])
-                .await
-            {
-                Ok(_) => {
-                    let _ = evt_tx.send(Evt::NetMode(online));
-                    let _ = evt_tx.send(Evt::Status(if online {
-                        "réseau autorisé (online)".into()
-                    } else {
-                        "réseau coupé (offline_strict)".into()
-                    }));
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(e.to_string()));
-                }
-            }
-        }
-        Cmd::SetRouting { mode } => {
-            match bus
-                .call::<SetRoutingRequest, bool>(
-                    "model.set_routing",
-                    &SetRoutingRequest { mode: mode.clone() },
-                    vec![],
-                )
-                .await
-            {
-                Ok(_) => {
-                    let _ = evt_tx.send(Evt::Status(format!("routing → {mode}")));
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(format!("model.set_routing: {e}")));
-                }
-            }
-        }
-        Cmd::WebSearch { query, engine } => {
-            let req = WebSearchRequest {
-                query,
-                max_results: 5,
-                caps: vec![
-                    "net.connect:html.duckduckgo.com:443".into(),
-                    "net.connect:api.search.brave.com:443".into(),
-                    "net.connect:www.bing.com:443".into(),
-                    "net.connect:*:*".into(),
-                ],
-                actor: "human:ui".into(),
-                engine,
-            };
-            match bus
-                .call::<WebSearchRequest, WebSearchResponse>("web.search", &req, vec![])
-                .await
-            {
-                Ok(r) => {
-                    let _ = evt_tx.send(Evt::WebResults(r.results));
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(format!("web.search: {e}")));
-                }
-            }
-        }
-        Cmd::WebBrowse { url, max_chars } => {
-            let req = WebBrowseRequest {
-                url,
-                max_chars,
-                caps: vec!["net.connect:*:*".into()],
-                actor: "human:ui".into(),
-            };
-            match bus
-                .call::<WebBrowseRequest, WebBrowseResponse>("web.browse", &req, vec![])
-                .await
-            {
-                Ok(r) => {
-                    let body = if r.text.chars().count() > 2000 {
-                        format!("{}…", r.text.chars().take(2000).collect::<String>())
-                    } else {
-                        r.text
-                    };
-                    let preview = format!("{}\n{}\n\n{}", r.title, r.final_url, body);
-                    let _ = evt_tx.send(Evt::BrowsePreview(preview));
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(format!("web.browse: {e}")));
-                }
-            }
-        }
-        Cmd::NetFetch { url, max_bytes } => {
-            let req = NetFetchRequest {
-                url,
-                dest_path: None,
-                max_bytes,
-                caps: vec![
-                    "net.connect:*:*".into(),
-                    "fs.write:/downloads/**".into(),
-                ],
-                actor: "human:ui".into(),
-            };
-            match bus
-                .call::<NetFetchRequest, NetFetchResponse>("net.fetch", &req, vec![])
-                .await
-            {
-                Ok(r) => {
-                    let _ = evt_tx.send(Evt::FileOk(format!(
-                        "téléchargé {} ({} octets, {})",
-                        r.path, r.bytes, r.content_type
-                    )));
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(format!("net.fetch: {e}")));
-                }
-            }
-        }
-        Cmd::FilesGenerate {
-            format,
-            path,
-            content,
-            title,
-        } => {
-            let req = FilesGenerateRequest {
-                format,
-                path,
-                content,
-                title,
-                caps: vec!["fs.write:/downloads/**".into()],
-                actor: "human:ui".into(),
-            };
-            match bus
-                .call::<FilesGenerateRequest, FilesGenerateResponse>(
-                    "files.generate",
-                    &req,
-                    vec![],
-                )
-                .await
-            {
-                Ok(r) => {
-                    let _ = evt_tx.send(Evt::FileOk(format!(
-                        "généré {} ({} octets)",
-                        r.path, r.bytes
-                    )));
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(format!("files.generate: {e}")));
-                }
-            }
-        }
-        Cmd::Help => {
-            let mut services = Vec::new();
-            for (name, probe) in [
-                ("modeld", "model.list"),
-                ("agentd", "agent.list"),
-                ("platformd", "module.list"),
-                ("capkd", "cap.check"),
-            ] {
-                let up = bus.lookup(probe).await.unwrap_or(false);
-                services.push(format!("{name}: {}", if up { "up" } else { "DOWN" }));
-            }
-            let models: Vec<ModelInfo> = bus
-                .call("model.list", &(), vec![])
-                .await
-                .unwrap_or_default();
-            let loaded = models
-                .iter()
-                .filter(|m| matches!(m.state, ModelState::Loaded | ModelState::PartiallyOffloaded))
-                .count();
-            let agents: Vec<AgentInfo> = bus
-                .call(aos_agent::intents::LIST, &(), vec![])
-                .await
-                .unwrap_or_default();
-            let running = agents
-                .iter()
-                .filter(|a| matches!(a.state, AgentState::Running))
-                .count();
-            let metrics: Option<SystemMetrics> = bus.call("model.metrics", &(), vec![]).await.ok();
-            let mut out = String::from("Akasha OS Preview — état\n");
-            out.push_str(&format!("services : {}\n", services.join(", ")));
-            out.push_str(&format!(
-                "modèles : {loaded} chargés / {} au registry\n",
-                models.len()
-            ));
-            out.push_str(&format!(
-                "agents : {running} running / {} total\n",
-                agents.len()
-            ));
-            if let Some(m) = metrics {
-                out.push_str(&format!(
-                    "hôte : RAM {:.1}/{:.1} GiB, CPU {:.0}%\n",
-                    m.ram_used as f64 / (1 << 30) as f64,
-                    m.ram_total as f64 / (1 << 30) as f64,
-                    m.cpu_percent
-                ));
-            }
-            out.push_str("→ /commands pour la liste des commandes");
-            let _ = evt_tx.send(Evt::ChatSystem(out));
-        }
-        Cmd::NotesList => {
-            invoke_notes(&bus, &evt_tx, "notes.list", serde_json::json!({})).await;
-        }
-        Cmd::NotesCreate { title, content } => {
-            invoke_notes(
-                &bus,
-                &evt_tx,
-                "notes.create",
-                serde_json::json!({ "title": title, "content": content }),
-            )
-            .await;
-        }
-        Cmd::NotesUpdate {
-            title,
-            path,
-            content,
-        } => {
-            invoke_notes(
-                &bus,
-                &evt_tx,
-                "notes.update",
-                serde_json::json!({ "title": title, "path": path, "content": content }),
-            )
-            .await;
-        }
-        Cmd::NotesRead { title, path, slug } => {
-            let mut args = serde_json::json!({});
-            if let Some(t) = title {
-                args["title"] = serde_json::json!(t);
-            }
-            if let Some(p) = path {
-                args["path"] = serde_json::json!(p);
-            }
-            if let Some(s) = slug {
-                args["slug"] = serde_json::json!(s);
-            }
-            invoke_notes(&bus, &evt_tx, "notes.read", args).await;
-        }
-        Cmd::NotesSearch { query } => {
-            invoke_notes(
-                &bus,
-                &evt_tx,
-                "notes.search",
-                serde_json::json!({ "query": query }),
-            )
-            .await;
-        }
-        Cmd::NotesRelated { path, topic } => {
-            let mut args = serde_json::json!({ "path": path });
-            if !topic.is_empty() {
-                args["topic"] = serde_json::json!(topic);
-            }
-            invoke_notes(&bus, &evt_tx, "notes.related", args).await;
-        }
-        Cmd::Confirm { id, approved } => {
-            match bus
-                .call::<ConfirmResponseRequest, bool>(
-                    "confirm.respond",
-                    &ConfirmResponseRequest { id, approved },
-                    vec![],
-                )
-                .await
-            {
-                Ok(_) => {
-                    let _ = evt_tx.send(Evt::Status(if approved {
-                        "confirmation acceptée".into()
-                    } else {
-                        "confirmation refusée".into()
-                    }));
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(e.to_string()));
-                }
-            }
-        }
-        Cmd::AgentCreate {
-            task,
-            system_prompt,
-            skills,
-            tools,
-            mcp_servers,
-            documents,
-            optimize_prompt,
-            max_steps,
-            timeout_secs,
-            model_id,
-            session_id,
-            origin,
-        } => {
-            let mut req = AgentCreateRequest::simple(task.clone());
-            req.system_prompt = system_prompt;
-            req.skills = skills;
-            req.tools = tools;
-            req.mcp_servers = mcp_servers;
-            req.documents = documents;
-            req.optimize_prompt = optimize_prompt;
-            req.session_id = session_id.clone();
-            req.goal = Some(AgentGoal {
-                statement: task.clone(),
-                success_criteria: vec![],
-                max_steps,
-                max_subagents: CHAT_AGENT_MAX_SUBAGENTS,
-                timeout_secs,
-            });
-            req.model_id = model_id;
-            if req.skills.iter().any(|s| s.contains("notes"))
-                || req.tools.iter().any(|t| t.starts_with("notes."))
-            {
-                req.caps.push("tool.invoke:notes".into());
-            }
-            if req.tools.iter().any(|t| t.starts_with("module.")) {
-                if !req.caps.iter().any(|c| c == "module.install") {
-                    req.caps.push("module.install".into());
-                }
-            }
-            match bus
-                .call::<AgentCreateRequest, aos_proto::AgentCreateResponse>(
-                    aos_agent::intents::CREATE,
-                    &req,
-                    vec![],
-                )
-                .await
-            {
-                Ok(r) => {
-                    if let Some(sid) = session_id {
-                        let ack = format!("Agent {} lancé en fond.", r.agent_id);
-                        let att = ChatAttachment::AgentRef {
-                            agent_id: r.agent_id.clone(),
-                            title: task.clone(),
-                            origin: origin.clone(),
-                        };
-                        let _ = bus
-                            .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
-                                "chat.session.append",
-                                &ChatSessionAppendRequest {
-                                    session_id: sid.clone(),
-                                    role: "assistant".into(),
-                                    content: ack.clone(),
-                                    attachments: vec![att],
-                                },
-                                vec![],
-                            )
-                            .await;
-                        let _ = evt_tx.send(Evt::AgentSpawned {
-                            session_id: sid,
-                            agent_id: r.agent_id.clone(),
-                            title: task,
-                            origin,
-                            ack,
-                        });
-                    } else {
-                        let _ = evt_tx.send(Evt::Status(format!("agent créé : {}", r.agent_id)));
-                    }
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(e.to_string()));
-                }
-            }
-        }
-        Cmd::AgentCatalogRefresh => {
-            if let Ok(list) = bus
-                .call::<(), Vec<SkillInfo>>(aos_agent::intents::SKILL_LIST, &(), vec![])
-                .await
-            {
-                let _ = evt_tx.send(Evt::Skills(list));
-            }
-            if let Ok(list) = bus
-                .call::<(), Vec<McpServerInfo>>(aos_agent::intents::MCP_LIST, &(), vec![])
-                .await
-            {
-                let _ = evt_tx.send(Evt::McpServers(list));
-            }
-        }
-        Cmd::AgentPromptOptimize {
-            goal,
-            skills,
-            tools,
-            current,
-        } => {
-            match bus
-                .call::<AgentPromptOptimizeRequest, AgentPromptOptimizeResponse>(
-                    aos_agent::intents::PROMPT_OPTIMIZE,
-                    &AgentPromptOptimizeRequest {
-                        goal,
-                        skills,
-                        tools,
-                        current_prompt: current,
-                        model_id: None,
-                    },
-                    vec![],
-                )
-                .await
-            {
-                Ok(r) => {
-                    let _ = evt_tx.send(Evt::PromptOptimized(r.optimized_prompt));
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(e.to_string()));
-                }
-            }
-        }
-        Cmd::AgentKill { id } => {
-            agent_id_cmd(&bus, &evt_tx, aos_agent::intents::KILL, id).await;
-        }
-        Cmd::AgentPause { id } => {
-            agent_id_cmd(&bus, &evt_tx, aos_agent::intents::PAUSE, id).await;
-        }
-        Cmd::AgentResume { id } => {
-            agent_id_cmd(&bus, &evt_tx, aos_agent::intents::RESUME, id).await;
-        }
-        Cmd::AgentRetry { id } => {
-            agent_id_cmd(&bus, &evt_tx, aos_agent::intents::RETRY, id).await;
-        }
-        Cmd::AgentSteer { id, text } => {
-            match bus
-                .call::<AgentSteerRequest, bool>(
-                    aos_agent::intents::STEER,
-                    &AgentSteerRequest {
-                        agent_id: id,
-                        directive: text,
-                    },
-                    vec![],
-                )
-                .await
-            {
-                Ok(_) => {
-                    let _ = evt_tx.send(Evt::Status("steer envoyé".into()));
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(e.to_string()));
-                }
-            }
-        }
-        Cmd::AgentTrace { id } => {
-            match bus
-                .call::<AgentIdRequest, AgentTrace>(
-                    aos_agent::intents::TRACE,
-                    &AgentIdRequest { agent_id: id },
-                    vec![],
-                )
-                .await
-            {
-                Ok(t) => {
-                    let _ = evt_tx.send(Evt::AgentTrace(t));
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(format!("agent.trace: {e}")));
-                }
-            }
-        }
-        Cmd::Audit { last } => {
-            match bus
-                .call::<AuditQueryRequest, Vec<AuditEvent>>(
-                    "audit.query",
-                    &AuditQueryRequest {
-                        trace_id: None,
-                        actor: None,
-                        action: None,
-                        last,
-                    },
-                    vec![],
-                )
-                .await
-            {
-                Ok(ev) => {
-                    let _ = evt_tx.send(Evt::Audit(ev));
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(e.to_string()));
-                }
-            }
-        }
-        Cmd::CapList { holder } => {
-            match bus
-                .call::<CapListRequest, Vec<CapInfo>>(
-                    "cap.list",
-                    &CapListRequest {
-                        holder: holder.clone(),
-                    },
-                    vec![],
-                )
-                .await
-            {
-                Ok(caps) => {
-                    let _ = evt_tx.send(Evt::Caps { holder, caps });
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(format!("cap.list: {e}")));
-                }
-            }
-        }
-        Cmd::CapRevoke {
-            holder,
-            cap_id,
-            tree,
-        } => {
-            match bus
-                .call::<CapRevokeRequest, u64>(
-                    "cap.revoke",
-                    &CapRevokeRequest {
-                        holder: holder.clone(),
-                        cap: cap_id,
-                        tree,
-                    },
-                    vec![],
-                )
-                .await
-            {
-                Ok(n) => {
-                    let _ = evt_tx.send(Evt::Status(format!(
-                        "cap.revoke: {n} capacité(s) révoquée(s) (holder={holder}, cap={cap_id})"
-                    )));
-                    match bus
-                        .call::<CapListRequest, Vec<CapInfo>>(
-                            "cap.list",
-                            &CapListRequest {
-                                holder: holder.clone(),
-                            },
-                            vec![],
-                        )
-                        .await
-                    {
-                        Ok(caps) => {
-                            let _ = evt_tx.send(Evt::Caps { holder, caps });
-                        }
-                        Err(e) => {
-                            let _ = evt_tx.send(Evt::Error(format!("cap.list: {e}")));
-                        }
-                    }
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(format!("cap.revoke: {e}")));
-                }
-            }
-        }
-        Cmd::ScheduleList => {
-            match bus
-                .call::<(), ScheduleListResponse>(agent_intents::SCHEDULE_LIST, &(), vec![])
-                .await
-            {
-                Ok(r) => {
-                    let _ = evt_tx.send(Evt::Schedules(r.schedules));
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(format!("schedule.list: {e}")));
-                }
-            }
-        }
-        Cmd::ScheduleCreate {
-            goal,
-            interval_secs,
-        } => {
-            match bus
-                .call::<ScheduleCreateRequest, ScheduleEntry>(
-                    agent_intents::SCHEDULE_CREATE,
-                    &ScheduleCreateRequest {
-                        goal,
-                        interval_secs,
-                        model_id: None,
-                    },
-                    vec![],
-                )
-                .await
-            {
-                Ok(e) => {
-                    let _ = evt_tx.send(Evt::Status(format!(
-                        "schedule créé {} ({}s)",
-                        e.id, e.interval_secs
-                    )));
-                    if let Ok(r) = bus
-                        .call::<(), ScheduleListResponse>(agent_intents::SCHEDULE_LIST, &(), vec![])
-                        .await
-                    {
-                        let _ = evt_tx.send(Evt::Schedules(r.schedules));
-                    }
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(format!("schedule.create: {e}")));
-                }
-            }
-        }
-        Cmd::ScheduleCancel { id } => {
-            match bus
-                .call::<ScheduleIdRequest, ScheduleEntry>(
-                    agent_intents::SCHEDULE_CANCEL,
-                    &ScheduleIdRequest { id: id.clone() },
-                    vec![],
-                )
-                .await
-            {
-                Ok(_) => {
-                    let _ = evt_tx.send(Evt::Status(format!("schedule annulé {id}")));
-                    if let Ok(r) = bus
-                        .call::<(), ScheduleListResponse>(agent_intents::SCHEDULE_LIST, &(), vec![])
-                        .await
-                    {
-                        let _ = evt_tx.send(Evt::Schedules(r.schedules));
-                    }
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(format!("schedule.cancel: {e}")));
-                }
-            }
-        }
-        Cmd::TasksList => {
-            invoke_tasks(&bus, &evt_tx, "tasks.list", serde_json::json!({})).await;
-        }
-        Cmd::TasksCreate { title, notes } => {
-            invoke_tasks(
-                &bus,
-                &evt_tx,
-                "tasks.create",
-                serde_json::json!({ "title": title, "notes": notes }),
-            )
-            .await;
-        }
-        Cmd::TasksComplete { id, done } => {
-            invoke_tasks(
-                &bus,
-                &evt_tx,
-                "tasks.complete",
-                serde_json::json!({ "id": id, "done": done }),
-            )
-            .await;
-        }
-        Cmd::Feedback(req) => {
-            match bus
-                .call::<FeedbackSubmitRequest, FeedbackSubmitResponse>(
-                    "feedback.submit",
-                    &req,
-                    vec![],
-                )
-                .await
-            {
-                Ok(r) => {
-                    let _ = evt_tx.send(Evt::FeedbackOk(r));
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(e.to_string()));
-                }
-            }
-        }
-        Cmd::Troubleshoot => {
-            run_troubleshoot(&bus, &evt_tx).await;
-        }
-        Cmd::KillAuditd => {
-            #[cfg(windows)]
-            let _ = std::process::Command::new("taskkill")
-                .args(["/F", "/IM", "aos-auditd.exe"])
-                .status();
-            #[cfg(not(windows))]
-            let _ = std::process::Command::new("pkill")
-                .args(["-x", "aos-auditd"])
-                .status();
-            let _ = evt_tx.send(Evt::Status(
-                "aos-auditd tué — le superviseur de session doit le redémarrer".into(),
-            ));
-        }
-        Cmd::RefreshConfirms => {
-            if let Ok(c) = bus
-                .call::<(), Vec<PendingConfirmation>>("confirm.list", &(), vec![])
-                .await
-            {
-                let _ = evt_tx.send(Evt::Confirms(c));
-            }
-        }
-        Cmd::ModelsRefresh => {
-            if let Ok(models) = bus
-                .call::<(), Vec<ModelInfo>>("model.list", &(), vec![])
-                .await
-            {
-                let _ = evt_tx.send(Evt::Models(models));
-            }
-        }
-        Cmd::ModelLoad { model_id } => {
-            match bus
-                .call::<LoadRequest, ()>(
-                    "model.load",
-                    &LoadRequest {
-                        model_id: model_id.clone(),
-                        profile: "balanced".into(),
-                        kv_tokens: 8192,
-                    },
-                    vec![],
-                )
-                .await
-            {
-                Ok(_) => {
-                    let _ = evt_tx.send(Evt::Status(format!("model load: {model_id}")));
-                    if let Ok(models) = bus
-                        .call::<(), Vec<ModelInfo>>("model.list", &(), vec![])
-                        .await
-                    {
-                        let _ = evt_tx.send(Evt::Models(models));
-                    }
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(e.to_string()));
-                }
-            }
-        }
-        Cmd::SessionSetModel {
-            session_id,
-            model_id,
-        } => {
-            match bus
-                .call::<ChatSessionSetModelRequest, ChatSessionMeta>(
-                    "chat.session.set_model",
-                    &ChatSessionSetModelRequest {
-                        session_id,
-                        model_id,
-                    },
-                    vec![],
-                )
-                .await
-            {
-                Ok(_) => {
-                    if let Ok(list) = bus
-                        .call::<(), Vec<ChatSessionMeta>>("chat.session.list", &(), vec![])
-                        .await
-                    {
-                        let _ = evt_tx.send(Evt::Sessions(list));
-                    }
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(e.to_string()));
-                }
-            }
-        }
-        Cmd::SessionAppend {
-            session_id,
-            role,
-            content,
-            attachments,
-        } => {
-            let _ = bus
-                .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
-                    "chat.session.append",
-                    &ChatSessionAppendRequest {
-                        session_id,
-                        role,
-                        content,
-                        attachments,
-                    },
-                    vec![],
-                )
-                .await;
-        }
-    }
-}
-
-fn chrono_like_stamp() -> String {
+pub(crate) fn chrono_like_stamp() -> String {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs().to_string())
@@ -2313,7 +236,7 @@ fn agent_completion_chat_text(ag: &AgentInfo) -> String {
     }
 }
 
-async fn load_session(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>, id: &str) {
+pub(crate) async fn load_session(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>, id: &str) {
     match bus
         .call::<ChatSessionIdRequest, ChatSessionGetResponse>(
             "chat.session.get",
@@ -2354,7 +277,7 @@ async fn load_session(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>, id: &str) {
 
 /// Kit des agents lancés depuis le chat : plan, notes, sous-agents — toujours.
 const CHAT_AGENT_MIN_STEPS: u32 = 64;
-const CHAT_AGENT_MAX_SUBAGENTS: u32 = 8;
+pub(crate) const CHAT_AGENT_MAX_SUBAGENTS: u32 = 8;
 
 fn chat_agent_max_steps(prefs_max: u32) -> u32 {
     prefs_max.max(CHAT_AGENT_MIN_STEPS).min(128)
@@ -2363,7 +286,7 @@ fn chat_agent_max_steps(prefs_max: u32) -> u32 {
 fn chat_action_is_self_tool(action: &str) -> bool {
     matches!(
         action,
-        "module.scaffold" | "module.package" | "module.install" | "skill.create"
+        "module.scaffold" | "module.package" | "module.install" | "module.uninstall" | "skill.create"
     )
 }
 
@@ -2381,7 +304,7 @@ fn merge_named_args(dst: &mut Vec<String>, args: &serde_json::Value, key: &str) 
 }
 
 /// Si le chat doit déléguer : (brief, skills, tools, phrase d'accusé).
-fn chat_delegate_agent_spec(
+pub(crate) fn chat_delegate_agent_spec(
     user_text: &str,
     model_output: &str,
 ) -> Option<(String, Vec<String>, Vec<String>, String)> {
@@ -2443,7 +366,7 @@ fn chat_delegate_agent_spec(
     None
 }
 
-async fn spawn_chat_delegate_agent(
+pub(crate) async fn spawn_chat_delegate_agent(
     bus: Arc<BusClient>,
     evt_tx: Sender<Evt>,
     sid: String,
@@ -2502,7 +425,7 @@ async fn spawn_chat_delegate_agent(
                     vec![],
                 )
                 .await;
-            maybe_spawn_mem_extract(
+            crate::runtime::maybe_spawn_mem_extract(
                 bus.clone(),
                 evt_tx.clone(),
                 auto_remember,
@@ -2590,7 +513,7 @@ fn chat_agent_kit(task: &str) -> (Vec<String>, Vec<String>) {
 }
 
 /// Collecte un diagnostic Preview, l'archive localement et préremplit l'onglet Retour.
-async fn run_troubleshoot(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>) {
+pub(crate) async fn run_troubleshoot(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>) {
     let _ = evt_tx.send(Evt::Status("Dépannage : collecte des diagnostics…".into()));
     let home = aos_home();
     let version = std::fs::read_to_string(home.join("VERSION"))
@@ -2805,7 +728,30 @@ async fn run_troubleshoot(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>) {
     }
 }
 
-async fn invoke_module_bind(
+pub(crate) async fn load_module_ui(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>, module: &str) {
+    match bus
+        .call::<ModuleIdRequest, ModuleUiResponse>(
+            "module.ui",
+            &ModuleIdRequest {
+                module: module.to_string(),
+            },
+            vec![],
+        )
+        .await
+    {
+        Ok(resp) => {
+            let _ = evt_tx.send(Evt::ModuleUiLoaded(resp));
+        }
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiFailed {
+                module: module.to_string(),
+                error: e.to_string(),
+            });
+        }
+    }
+}
+
+pub(crate) async fn invoke_module_bind(
     bus: &Arc<BusClient>,
     evt_tx: &Sender<Evt>,
     module: &str,
@@ -2850,7 +796,7 @@ async fn invoke_module_bind(
     }
 }
 
-async fn invoke_module_tool(
+pub(crate) async fn invoke_module_tool(
     bus: &Arc<BusClient>,
     evt_tx: &Sender<Evt>,
     module: &str,
@@ -2905,7 +851,7 @@ async fn invoke_module_tool(
     }
 }
 
-async fn invoke_notes(
+pub(crate) async fn invoke_notes(
     bus: &Arc<BusClient>,
     evt_tx: &Sender<Evt>,
     tool: &str,
@@ -3010,7 +956,7 @@ async fn invoke_notes(
     }
 }
 
-async fn invoke_tasks(
+pub(crate) async fn invoke_tasks(
     bus: &Arc<BusClient>,
     evt_tx: &Sender<Evt>,
     tool: &str,
@@ -3079,7 +1025,7 @@ async fn invoke_tasks(
     }
 }
 
-async fn agent_id_cmd(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>, intent: &str, id: String) {
+pub(crate) async fn agent_id_cmd(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>, intent: &str, id: String) {
     match bus
         .call::<AgentIdRequest, bool>(intent, &AgentIdRequest { agent_id: id }, vec![])
         .await
@@ -3193,6 +1139,14 @@ struct UiApp {
     update_offer: Option<UpdateOffer>,
     update_status: String,
     model_infos: Vec<ModelInfo>,
+    providers: Vec<ProviderRecord>,
+    provider_id: String,
+    provider_preset: String,
+    provider_endpoint: String,
+    provider_secret_name: String,
+    provider_secret_value: String,
+    provider_enabled: bool,
+    provider_test_msg: String,
     agent_model_id: String,
     model_updates_msg: String,
     download_status: String,
@@ -3219,6 +1173,7 @@ impl UiApp {
         let _ = cmd_tx.send(Cmd::SetRouting {
             mode: prefs.routing.clone(),
         });
+        let _ = cmd_tx.send(Cmd::ProviderList);
         if prefs.network_online {
             let _ = cmd_tx.send(Cmd::NetSetMode { online: true });
         }
@@ -3349,6 +1304,14 @@ impl UiApp {
             update_offer: load_update_offer(),
             update_status: String::new(),
             model_infos: Vec::new(),
+            providers: Vec::new(),
+            provider_id: String::new(),
+            provider_preset: "openai".into(),
+            provider_endpoint: "https://api.openai.com/v1".into(),
+            provider_secret_name: "openai_api_key".into(),
+            provider_secret_value: String::new(),
+            provider_enabled: true,
+            provider_test_msg: String::new(),
             agent_model_id: default_model,
             model_updates_msg,
             download_status: String::new(),
@@ -3540,6 +1503,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             model_id,
             auto_remember: self.prefs.auto_remember_chat,
             max_steps: chat_agent_max_steps(self.prefs.default_max_steps),
+            routing: self.prefs.routing.clone(),
         });
         self.scen_chat = true;
     }
@@ -3660,6 +1624,28 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 }
                 let _ = self.cmd_tx.send(Cmd::AgentPause {
                     id: rest.to_string(),
+                });
+            }
+            "/image" => {
+                if rest.is_empty() {
+                    self.chat
+                        .push(ChatLine::plain("système", "usage : /image <prompt>"));
+                    return;
+                }
+                self.status = "image : génération…".into();
+                let _ = self.cmd_tx.send(Cmd::MediaImage {
+                    prompt: rest.to_string(),
+                });
+            }
+            "/speak" => {
+                if rest.is_empty() {
+                    self.chat
+                        .push(ChatLine::plain("système", "usage : /speak <texte>"));
+                    return;
+                }
+                self.status = "audio : génération…".into();
+                let _ = self.cmd_tx.send(Cmd::MediaAudio {
+                    text: rest.to_string(),
                 });
             }
             _ => {
@@ -3964,7 +1950,10 @@ impl eframe::App for UiApp {
                     self.caps = caps;
                 }
                 Evt::Schedules(s) => self.schedules = s,
-                Evt::TasksListed(tasks) => self.tasks.apply_listed(tasks),
+                Evt::TasksListed(tasks) => {
+                    let t = i18n::strings(&self.prefs.language);
+                    self.tasks.apply_listed(tasks, t.tasks_count);
+                }
                 Evt::Confirms(c) => self.confirms = c,
                 Evt::FeedbackOk(r) => {
                     let mut msg = format!(
@@ -4065,6 +2054,39 @@ impl eframe::App for UiApp {
                     self.status = msg.clone();
                     self.chat.push(ChatLine::plain("système", msg));
                 }
+                Evt::MediaOk {
+                    kind,
+                    path,
+                    bytes,
+                    engine,
+                } => {
+                    self.status = format!("{kind} → {path} ({bytes} bytes, {engine})");
+                    let att = if kind == "audio" {
+                        ChatAttachment::Audio { path: path.clone() }
+                    } else {
+                        ChatAttachment::Image { path: path.clone() }
+                    };
+                    let note = if engine == "stub" {
+                        format!(
+                            "{kind}: {path}\n(stub — pack média ou moteur sd.cpp/piper absent)"
+                        )
+                    } else {
+                        format!("{kind}: {path} ({engine})")
+                    };
+                    self.chat.push(ChatLine {
+                        role: "assistant".into(),
+                        text: note.clone(),
+                        attachments: vec![att.clone()],
+                    });
+                    if let Some(sid) = self.active_session.clone() {
+                        let _ = self.cmd_tx.send(Cmd::SessionAppend {
+                            session_id: sid,
+                            role: "assistant".into(),
+                            content: note,
+                            attachments: vec![att],
+                        });
+                    }
+                }
                 Evt::Skills(list) => self.skill_catalog = list,
                 Evt::McpServers(list) => self.mcp_catalog = list,
                 Evt::PromptOptimized(p) => {
@@ -4072,6 +2094,22 @@ impl eframe::App for UiApp {
                     self.status = "prompt système optimisé".into();
                 }
                 Evt::Models(list) => self.model_infos = list,
+                Evt::Providers(list) => self.providers = list,
+                Evt::ProviderTested {
+                    ok,
+                    message,
+                    models,
+                } => {
+                    self.provider_test_msg = if ok {
+                        format!("ok — {message}")
+                    } else {
+                        format!("fail — {message}")
+                    };
+                    if !models.is_empty() {
+                        self.provider_test_msg
+                            .push_str(&format!(" ({})", models.join(", ")));
+                    }
+                }
                 Evt::AgentTrace(t) => {
                     self.agent_traces.insert(t.agent_id.clone(), t);
                 }
@@ -4121,10 +2159,29 @@ impl eframe::App for UiApp {
                 Evt::ModuleUiLoaded(resp) => {
                     let module = resp.module.clone();
                     let title = resp.document.title.clone();
-                    let mut panel = decl_ui::DeclUiPanelState::new(&module);
-                    panel.set_document(resp.document);
-                    panel.status = format!("loaded {title}");
-                    self.decl_panels.insert(module, panel);
+                    let binds = {
+                        let panel = self
+                            .decl_panels
+                            .entry(module.clone())
+                            .or_insert_with(|| decl_ui::DeclUiPanelState::new(&module));
+                        panel.set_document(resp.document);
+                        decl_ui::ingest_tool_schemas(&resp.tools, &mut panel.tool_schemas);
+                        panel.status = format!("loaded {title}");
+                        panel.tools_to_bind()
+                    };
+                    for tool in binds {
+                        let _ = self.cmd_tx.send(Cmd::ModuleUiBind {
+                            module: module.clone(),
+                            tool,
+                        });
+                    }
+                }
+                Evt::ModuleUiFailed { module, error } => {
+                    let panel = self
+                        .decl_panels
+                        .entry(module.clone())
+                        .or_insert_with(|| decl_ui::DeclUiPanelState::new(&module));
+                    panel.set_error(error);
                 }
                 Evt::ModuleUiBind {
                     module,
@@ -4394,9 +2451,13 @@ impl eframe::App for UiApp {
                         let rich = matches!(
                             c.action.as_str(),
                             "module.install"
+                                | "module.uninstall"
                                 | "module.compile"
                                 | "skill.create"
                                 | "cap.request"
+                                | "media.generate"
+                                | "media.image.generate"
+                                | "media.audio.generate"
                         );
                         ui.label(format!(
                             "{} — {} sur {}\n{}",
@@ -4439,6 +2500,7 @@ impl eframe::App for UiApp {
                 (Tab::Tasks, t.tab_tasks, t.tab_hint_tasks),
                 (Tab::Agents, t.tab_agents, t.tab_hint_agents),
                 (Tab::Models, t.tab_models, t.tab_hint_models),
+                (Tab::Providers, t.tab_providers, t.tab_hint_providers),
                 (Tab::Audit, t.tab_audit, t.tab_hint_audit),
                 (Tab::Caps, t.tab_caps, t.tab_hint_caps),
                 (Tab::Scenarios, t.tab_scenarios, t.tab_hint_scenarios),
@@ -4454,6 +2516,9 @@ impl eframe::App for UiApp {
                         self.fb_result.clear();
                     }
                     self.tab = tab.clone();
+                    if tab == Tab::Providers {
+                        let _ = self.cmd_tx.send(Cmd::ProviderList);
+                    }
                     if tab == Tab::Audit {
                         let _ = self.cmd_tx.send(Cmd::Audit { last: 40 });
                     }
@@ -4579,6 +2644,7 @@ impl eframe::App for UiApp {
             Tab::Tasks => overflow_scroll(ui, "tasks", |ui| self.ui_tasks(ui)),
             Tab::Agents => overflow_scroll(ui, "agents", |ui| self.ui_agents(ui)),
             Tab::Models => overflow_scroll(ui, "models", |ui| self.ui_models(ui)),
+            Tab::Providers => overflow_scroll(ui, "providers", |ui| self.ui_providers(ui)),
             Tab::Audit => self.ui_audit(ui),
             Tab::Caps => overflow_scroll(ui, "caps", |ui| self.ui_caps(ui)),
             Tab::Scenarios => overflow_scroll(ui, "scenarios", |ui| self.ui_scenarios(ui)),
@@ -4594,11 +2660,11 @@ impl eframe::App for UiApp {
 impl UiApp {
     fn ui_decl_module(&mut self, ui: &mut egui::Ui, module: &str) {
         if !self.decl_panels.contains_key(module) {
+            self.decl_panels
+                .insert(module.to_string(), decl_ui::DeclUiPanelState::new(module));
             let _ = self.cmd_tx.send(Cmd::ModuleUiLoad {
                 module: module.to_string(),
             });
-            ui.weak("…");
-            return;
         }
         let t = i18n::strings(&self.prefs.language);
         let mut actions = decl_ui::DeclUiActions::default();
@@ -4664,7 +2730,55 @@ impl UiApp {
                                         });
                                     }
                                 }
+                                let local_only = self.prefs.routing == "local_only";
+                                ui.weak("Local");
                                 for m in &self.model_infos {
+                                    if m.id.starts_with("provider:") {
+                                        continue;
+                                    }
+                                    if ui
+                                        .selectable_value(
+                                            &mut current,
+                                            m.id.clone(),
+                                            format!("{} [{:?}]", m.id, m.state),
+                                        )
+                                        .changed()
+                                    {
+                                        if let Some(id) = sid.clone() {
+                                            let _ = self.cmd_tx.send(Cmd::SessionSetModel {
+                                                session_id: id,
+                                                model_id: Some(m.id.clone()),
+                                            });
+                                        }
+                                    }
+                                }
+                                ui.weak("Providers");
+                                for m in &self.model_infos {
+                                    if !m.id.starts_with("provider:") {
+                                        continue;
+                                    }
+                                    let pid = m.id.split(':').nth(1).unwrap_or("");
+                                    let loopback = self
+                                        .providers
+                                        .iter()
+                                        .find(|p| p.id == pid)
+                                        .map(|p| {
+                                            let h = p
+                                                .endpoint
+                                                .trim_start_matches("https://")
+                                                .trim_start_matches("http://")
+                                                .split(['/', ':'])
+                                                .next()
+                                                .unwrap_or("");
+                                            matches!(
+                                                h,
+                                                "127.0.0.1" | "localhost" | "::1" | "[::1]"
+                                            )
+                                        })
+                                        .unwrap_or(false);
+                                    if local_only && !loopback {
+                                        continue;
+                                    }
                                     if ui
                                         .selectable_value(
                                             &mut current,
@@ -4882,11 +2996,12 @@ impl UiApp {
                                     }
                                 }
                                 for (j, att) in attachments.iter().enumerate() {
-                                    let ChatAttachment::AgentRef {
-                                        agent_id,
-                                        title,
-                                        origin,
-                                    } = att;
+                                    match att {
+                                        ChatAttachment::AgentRef {
+                                            agent_id,
+                                            title,
+                                            origin,
+                                        } => {
                                     let info =
                                         self.agents.iter().find(|a| a.agent_id == *agent_id);
                                     let selected = reply_id.as_deref() == Some(agent_id.as_str());
@@ -4895,10 +3010,11 @@ impl UiApp {
                                             agent_panel::chat_agent_card(
                                                 ui,
                                                 info,
-                                                agent_id,
-                                                title,
-                                                origin,
+                                                agent_id.as_str(),
+                                                title.as_str(),
+                                                origin.as_str(),
                                                 selected && origin == "ask",
+                                                &t,
                                             )
                                         })
                                         .inner;
@@ -4910,6 +3026,38 @@ impl UiApp {
                                             target_reply = Some(agent_id.clone());
                                         }
                                         agent_panel::ChatCardAction::None => {}
+                                    }
+                                        }
+                                        ChatAttachment::Image { path } => {
+                                            ui.label(format!("image: {path}"));
+                                            if let Some(tex) =
+                                                decl_ui::try_load_png(ui.ctx(), path.as_str())
+                                            {
+                                                let [tw, th] = tex.size();
+                                                let max_w = ui.available_width().min(512.0);
+                                                let scale = if tw.max(th) < 48 {
+                                                    256.0 / tw.max(1) as f32
+                                                } else {
+                                                    (max_w / tw.max(1) as f32).min(1.0)
+                                                };
+                                                ui.add(
+                                                    egui::Image::new(&tex)
+                                                        .fit_to_original_size(scale),
+                                                );
+                                            } else {
+                                                ui.weak(
+                                                    "PNG illisible (chemin /downloads → var/storage/data)",
+                                                );
+                                            }
+                                        }
+                                        ChatAttachment::Audio { path } => {
+                                            ui.horizontal(|ui| {
+                                                ui.label(format!("audio: {path}"));
+                                                if ui.button("Play").clicked() {
+                                                    let _ = decl_ui::open_host_path(path.as_str());
+                                                }
+                                            });
+                                        }
                                     }
                                 }
                                 ui.separator();
@@ -5191,7 +3339,7 @@ impl UiApp {
         let t = i18n::strings(&self.prefs.language);
         ui.weak(t.tasks_blurb);
         ui.separator();
-        let actions = self.tasks.ui(ui, t.tab_tasks);
+        let actions = self.tasks.ui(ui, &t);
         if actions.list {
             let _ = self.cmd_tx.send(Cmd::TasksList);
         }
@@ -5207,7 +3355,7 @@ impl UiApp {
         let t = i18n::strings(&self.prefs.language);
         ui.weak(t.notes_blurb);
         ui.separator();
-        let actions = notes_panel::show_notes_panel(ui, &mut self.notes);
+        let actions = notes_panel::show_notes_panel(ui, &mut self.notes, &t);
         if actions.list {
             let _ = self.cmd_tx.send(Cmd::NotesList);
         }
@@ -5269,10 +3417,10 @@ impl UiApp {
         ui.heading(t.tab_agents);
         ui.weak(t.agents_blurb);
         ui.separator();
-        if ui.button("Rafraîchir catalogues (skills / MCP)").clicked() {
+        if ui.button(t.agents_refresh_catalogs).clicked() {
             let _ = self.cmd_tx.send(Cmd::AgentCatalogRefresh);
         }
-        ui.label("Model");
+        ui.label(t.agents_model);
         egui::ComboBox::from_id_salt("agent_model")
             .selected_text(if self.agent_model_id.is_empty() {
                 "default".to_string()
@@ -5289,21 +3437,21 @@ impl UiApp {
                     );
                 }
             });
-        ui.label("Goal");
+        ui.label(t.agents_goal);
         ui.add(
             egui::TextEdit::multiline(&mut self.agent_task)
                 .desired_rows(3)
                 .desired_width(f32::INFINITY),
         );
-        ui.label("Prompt système (optionnel)");
+        ui.label(t.agents_system_prompt);
         ui.add(
             egui::TextEdit::multiline(&mut self.agent_system_prompt)
                 .desired_rows(2)
                 .desired_width(f32::INFINITY),
         );
         ui.horizontal(|ui| {
-            ui.checkbox(&mut self.agent_optimize, "Optimiser avant démarrage");
-            if ui.button("Optimiser maintenant").clicked() && !self.agent_task.is_empty() {
+            ui.checkbox(&mut self.agent_optimize, t.agents_optimize);
+            if ui.button(t.agents_optimize_now).clicked() && !self.agent_task.is_empty() {
                 let _ = self.cmd_tx.send(Cmd::AgentPromptOptimize {
                     goal: self.agent_task.clone(),
                     skills: self.skill_selected.clone(),
@@ -5323,7 +3471,7 @@ impl UiApp {
 
         ui.collapsing("Skills", |ui| {
             if self.skill_catalog.is_empty() {
-                ui.weak("Aucun catalogue — cliquez Rafraîchir (skills/ livrés au démarrage)");
+                ui.weak(t.agents_catalog_empty);
                 for name in ["notes-writer", "research", "file-author", "planner"] {
                     let mut on = self.skill_selected.iter().any(|s| s == name);
                     if ui.checkbox(&mut on, name).changed() {
@@ -5356,7 +3504,7 @@ impl UiApp {
             }
         });
 
-        ui.collapsing("Outils", |ui| {
+        ui.collapsing(t.agents_tools, |ui| {
             for name in [
                 "notes.create",
                 "notes.list",
@@ -5391,9 +3539,9 @@ impl UiApp {
             }
         });
 
-        ui.collapsing("Serveurs MCP", |ui| {
+        ui.collapsing(t.agents_mcp, |ui| {
             if self.mcp_catalog.is_empty() {
-                ui.weak("Configurer var/mcp/servers.yaml puis Rafraîchir");
+                ui.weak(t.agents_mcp_empty);
             }
             for s in self.mcp_catalog.clone() {
                 let mut on = self.mcp_selected.contains(&s.name);
@@ -5410,10 +3558,10 @@ impl UiApp {
             }
         });
 
-        ui.label("Documents (chemins séparés par virgule)");
+        ui.label(t.agents_docs);
         ui.text_edit_singleline(&mut self.agent_docs);
 
-        if ui.button("Créer l'agent").clicked() && !self.agent_task.is_empty() {
+        if ui.button(t.agents_create).clicked() && !self.agent_task.is_empty() {
             self.pending_note_agent = self.agent_task.to_lowercase().contains("note");
             let task = self.agent_task.clone();
             self.arm_pending_module_agent(&task);
@@ -5491,25 +3639,25 @@ impl UiApp {
                     .collect();
 
                 for a in roots.into_iter().chain(orphans) {
-                    self.draw_agent_row(ui, &a, 0);
+                    self.draw_agent_row(ui, &a, 0, t);
                     let children: Vec<_> = visible
                         .iter()
                         .filter(|c| c.parent_id.as_deref() == Some(a.agent_id.as_str()))
                         .cloned()
                         .collect();
                     for child in children {
-                        self.draw_agent_row(ui, &child, 1);
+                        self.draw_agent_row(ui, &child, 1, t);
                     }
                 }
             });
-        ui.weak("Cliquez un agent pour ouvrir le panneau détail (onglets).");
+        ui.weak(t.agent_click_for_detail);
 
         ui.separator();
-        ui.label("Steer");
+        ui.label(t.agent_steer);
         ui.horizontal(|ui| {
             ui.text_edit_singleline(&mut self.agent_steer_id);
             ui.text_edit_singleline(&mut self.agent_steer_txt);
-            if ui.button("Envoyer").clicked()
+            if ui.button(t.agent_send).clicked()
                 && !self.agent_steer_id.is_empty()
                 && !self.agent_steer_txt.is_empty()
             {
@@ -5521,7 +3669,13 @@ impl UiApp {
         });
     }
 
-    fn draw_agent_row(&mut self, ui: &mut egui::Ui, a: &AgentInfo, indent: usize) {
+    fn draw_agent_row(
+        &mut self,
+        ui: &mut egui::Ui,
+        a: &AgentInfo,
+        indent: usize,
+        t: i18n::UiStrings,
+    ) {
         ui.horizontal(|ui| {
             if indent > 0 {
                 ui.add_space(16.0 * indent as f32);
@@ -5552,7 +3706,7 @@ impl UiApp {
                 ui.small(task);
             }
             if !a.children.is_empty() && indent == 0 {
-                ui.small(format!("(+{} sous-agents)", a.children.len()));
+                ui.small(t.agents_subagents.replace("{n}", &a.children.len().to_string()));
             }
             if let Some(reason) = &a.fail_reason {
                 ui.colored_label(
@@ -5560,12 +3714,12 @@ impl UiApp {
                     agent_panel::truncate(reason, 40),
                 );
             }
-            if ui.small_button("Pause").clicked() {
+            if ui.small_button(t.agent_pause).clicked() {
                 let _ = self.cmd_tx.send(Cmd::AgentPause {
                     id: a.agent_id.clone(),
                 });
             }
-            if ui.small_button("Kill").clicked() {
+            if ui.small_button(t.agent_kill).clicked() {
                 let _ = self.cmd_tx.send(Cmd::AgentKill {
                     id: a.agent_id.clone(),
                 });
@@ -5622,10 +3776,11 @@ impl UiApp {
             .min_width(420.0)
             .resizable(true)
             .show(ctx, |ui| {
+                let t = i18n::strings(&self.prefs.language);
                 ui.horizontal(|ui| {
-                    ui.heading("Détail");
+                    ui.heading(t.agent_detail);
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.small_button("✕ tout").clicked() {
+                        if ui.small_button(t.agent_close_all).clicked() {
                             self.agent_open_tabs.clear();
                             self.agent_active_tab = None;
                             self.agent_traces.clear();
@@ -5697,6 +3852,7 @@ impl UiApp {
                         &mut self.agent_steer_txt,
                         &mut self.chat_md_cache,
                         &open_in_browser,
+                        &t,
                     );
                     if actions.pause {
                         let _ = self.cmd_tx.send(Cmd::AgentPause { id: id.clone() });
@@ -5721,7 +3877,7 @@ impl UiApp {
                                         .unwrap_or_default();
                                     self.chat.push(ChatLine {
                                         role: "vous".into(),
-                                        text: "(débloqué sans répondre)".into(),
+                                        text: t.agent_unblocked.into(),
                                         attachments: vec![ChatAttachment::AgentRef {
                                             agent_id: id.clone(),
                                             title,
@@ -5769,7 +3925,7 @@ impl UiApp {
                         self.open_agent_tab(&child);
                     }
                 } else {
-                    ui.weak("Sélectionnez un onglet.");
+                    ui.weak(t.agents_select_tab);
                 }
             });
     }
@@ -5861,8 +4017,12 @@ impl UiApp {
                         {
                             self.prefs.inference_mode = code.into();
                             save_preferences(&self.prefs);
+                            if let Some(id) = self.chat_inference_id {
+                                let _ = self.cmd_tx.send(Cmd::ChatCancel { inference_id: id });
+                            }
+                            let _ = self.cmd_tx.send(Cmd::RestartModeld);
                             self.status = format!(
-                                "{} — redémarrage session recommandé",
+                                "{} — modeld restarting ({code})",
                                 t.settings_saved
                             );
                         }
@@ -5883,6 +4043,7 @@ impl UiApp {
                     for (code, label) in [
                         ("local_only", t.routing_local),
                         ("balanced", t.settings_routing_balanced),
+                        ("remote_only", t.settings_routing_remote),
                     ] {
                         if ui
                             .selectable_label(self.prefs.routing == code, label)
@@ -6144,7 +4305,9 @@ impl UiApp {
                         }
                         ui.label(label);
                         if e.kind == "module" {
-                            if installed.is_some() {
+                            if aos_proto::decl_ui::is_bundled_module(&e.name) {
+                                ui.weak(t.settings_bundled_locked);
+                            } else if installed.is_some() {
                                 if ui.button(t.settings_catalogue_uninstall).clicked() {
                                     let _ = self.cmd_tx.send(Cmd::ModuleUninstall {
                                         name: e.name.clone(),
@@ -6174,6 +4337,21 @@ impl UiApp {
             None => {
                 ui.weak(t.settings_catalogue_unsigned);
             }
+        }
+
+        ui.add_space(12.0);
+        ui.heading(t.settings_installed_modules);
+        for m in self.installed_modules.clone() {
+            ui.horizontal(|ui| {
+                ui.label(format!("{} v{}", m.name, m.version));
+                if aos_proto::decl_ui::is_bundled_module(&m.name) {
+                    ui.weak(t.settings_bundled_locked);
+                } else if ui.button(t.settings_catalogue_uninstall).clicked() {
+                    let _ = self.cmd_tx.send(Cmd::ModuleUninstall {
+                        name: m.name.clone(),
+                    });
+                }
+            });
         }
 
         ui.add_space(12.0);
@@ -6240,9 +4418,134 @@ impl UiApp {
         }
     }
 
+    fn ui_providers(&mut self, ui: &mut egui::Ui) {
+        let t = i18n::strings(&self.prefs.language);
+        ui.heading(t.tab_providers);
+        ui.weak(t.providers_blurb);
+        ui.separator();
+        if ui.button(t.providers_refresh).clicked() {
+            let _ = self.cmd_tx.send(Cmd::ProviderList);
+        }
+        ui.add_space(6.0);
+        for p in self.providers.clone() {
+            ui.group(|ui| {
+                ui.horizontal(|ui| {
+                    ui.strong(&p.id);
+                    ui.weak(&p.preset);
+                    ui.label(&p.endpoint);
+                    if p.enabled {
+                        ui.weak(t.providers_on);
+                    } else {
+                        ui.weak(t.providers_off);
+                    }
+                    if ui.button(t.providers_test).clicked() {
+                        let _ = self.cmd_tx.send(Cmd::ProviderTest { id: p.id.clone() });
+                    }
+                    if ui.button(t.providers_remove).clicked() {
+                        let _ = self.cmd_tx.send(Cmd::ProviderRemove { id: p.id.clone() });
+                    }
+                    if ui.button(t.providers_edit).clicked() {
+                        self.provider_id = p.id.clone();
+                        self.provider_preset = p.preset.clone();
+                        self.provider_endpoint = p.endpoint.clone();
+                        self.provider_secret_name =
+                            p.secret_name.clone().unwrap_or_default();
+                        self.provider_enabled = p.enabled;
+                    }
+                });
+                if !p.discovered_models.is_empty() {
+                    ui.weak(p.discovered_models.join(", "));
+                }
+            });
+        }
+        ui.separator();
+        ui.label(t.providers_add_edit);
+        ui.horizontal(|ui| {
+            ui.label("id");
+            ui.text_edit_singleline(&mut self.provider_id);
+        });
+        ui.horizontal(|ui| {
+            ui.label(t.providers_preset);
+            egui::ComboBox::from_id_salt("provider_preset")
+                .selected_text(&self.provider_preset)
+                .show_ui(ui, |ui| {
+                    for &(name, endpoint, secret) in aos_proto::PROVIDER_PRESETS {
+                        if ui
+                            .selectable_label(self.provider_preset == name, name)
+                            .clicked()
+                        {
+                            self.provider_preset = name.into();
+                            if self.provider_id.is_empty() {
+                                self.provider_id = name.into();
+                            }
+                            if !endpoint.is_empty() {
+                                self.provider_endpoint = endpoint.into();
+                            }
+                            if let Some(s) = secret {
+                                self.provider_secret_name = s.into();
+                            }
+                        }
+                    }
+                });
+        });
+        ui.horizontal(|ui| {
+            ui.label(t.providers_endpoint);
+            ui.add(
+                egui::TextEdit::singleline(&mut self.provider_endpoint).desired_width(420.0),
+            );
+        });
+        ui.horizontal(|ui| {
+            ui.label(t.providers_secret);
+            ui.text_edit_singleline(&mut self.provider_secret_name);
+        });
+        ui.horizontal(|ui| {
+            ui.label("API key (vault)");
+            ui.add(
+                egui::TextEdit::singleline(&mut self.provider_secret_value)
+                    .password(true)
+                    .desired_width(280.0),
+            );
+        });
+        ui.checkbox(&mut self.provider_enabled, t.providers_enabled);
+        ui.horizontal(|ui| {
+            if ui.button(t.providers_save).clicked() && !self.provider_id.trim().is_empty() {
+                let rec = ProviderRecord {
+                    id: self.provider_id.trim().to_string(),
+                    preset: self.provider_preset.clone(),
+                    endpoint: self.provider_endpoint.trim().to_string(),
+                    secret_name: if self.provider_secret_name.trim().is_empty() {
+                        None
+                    } else {
+                        Some(self.provider_secret_name.trim().to_string())
+                    },
+                    enabled: self.provider_enabled,
+                    discovered_models: Vec::new(),
+                };
+                let secret = if self.provider_secret_value.is_empty() {
+                    None
+                } else {
+                    Some(std::mem::take(&mut self.provider_secret_value))
+                };
+                let _ = self.cmd_tx.send(Cmd::ProviderUpsert {
+                    provider: rec,
+                    secret_value: secret,
+                });
+            }
+            if ui.button(t.providers_test).clicked() && !self.provider_id.trim().is_empty() {
+                let _ = self.cmd_tx.send(Cmd::ProviderTest {
+                    id: self.provider_id.trim().to_string(),
+                });
+            }
+        });
+        if !self.provider_test_msg.is_empty() {
+            ui.label(&self.provider_test_msg);
+        }
+    }
+
     fn ui_models(&mut self, ui: &mut egui::Ui) {
         let t = i18n::strings(&self.prefs.language);
         ui.heading(t.tab_models);
+        ui.weak(t.models_media_packs);
         if ui.button("Refresh list").clicked() {
             let _ = self.cmd_tx.send(Cmd::ModelsRefresh);
         }
@@ -6319,11 +4622,20 @@ impl UiApp {
                         let id = m.get("id").and_then(|x| x.as_str()).unwrap_or("");
                         let name = m.get("name").and_then(|x| x.as_str()).unwrap_or(id);
                         let bytes = m.get("bytes").and_then(|x| x.as_u64()).unwrap_or(0);
+                        let modality = m
+                            .get("modality")
+                            .and_then(|x| x.as_str())
+                            .unwrap_or("");
                         let installed = self.model_infos.iter().any(|x| x.id == id);
                         ui.horizontal(|ui| {
                             ui.label(format!(
-                                "{}{} ({:.1} GiB)",
+                                "{}{}{} ({:.1} GiB)",
                                 if installed { "[ok] " } else { "" },
+                                if modality.is_empty() {
+                                    String::new()
+                                } else {
+                                    format!("[{modality}] ")
+                                },
                                 name,
                                 bytes as f64 / (1 << 30) as f64
                             ));
@@ -6361,12 +4673,13 @@ impl UiApp {
     }
 
     fn ui_audit(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Journal d'audit");
+        let t = i18n::strings(&self.prefs.language);
+        ui.heading(t.audit_heading);
         ui.horizontal(|ui| {
-            if ui.button("Rafraîchir").clicked() {
+            if ui.button(t.decl_ui_refresh).clicked() {
                 let _ = self.cmd_tx.send(Cmd::Audit { last: 50 });
             }
-            if ui.button("Tuer aos-auditd (test P4)").clicked() {
+            if ui.button(t.audit_kill_p4).clicked() {
                 let _ = self.cmd_tx.send(Cmd::KillAuditd);
             }
         });
@@ -6525,16 +4838,15 @@ impl UiApp {
     }
 
     fn ui_feedback(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Retour testeur");
-        ui.label(
-            "Copie locale dans var/feedback/. Une issue GitHub est créée sur azerothl/akasha-os (formulaire navigateur, ou API si jeton / gh).",
-        );
+        let t = i18n::strings(&self.prefs.language);
+        ui.heading(t.feedback_heading);
+        ui.label(t.feedback_blurb);
         ui.horizontal(|ui| {
-            ui.label("Titre");
+            ui.label(t.feedback_title);
             ui.text_edit_singleline(&mut self.fb_title);
         });
         ui.horizontal(|ui| {
-            ui.label("Catégorie");
+            ui.label(t.feedback_category);
             egui::ComboBox::from_id_salt("fb_cat")
                 .selected_text(&self.fb_category)
                 .show_ui(ui, |ui| {
@@ -6542,7 +4854,7 @@ impl UiApp {
                         ui.selectable_value(&mut self.fb_category, c.into(), c);
                     }
                 });
-            ui.label("Sévérité");
+            ui.label(t.feedback_severity);
             egui::ComboBox::from_id_salt("fb_sev")
                 .selected_text(&self.fb_severity)
                 .show_ui(ui, |ui| {
@@ -6552,7 +4864,7 @@ impl UiApp {
                 });
         });
         ui.horizontal(|ui| {
-            ui.label("Scénario");
+            ui.label(t.feedback_scenario);
             ui.text_edit_singleline(&mut self.fb_scenario);
         });
         ui.text_edit_multiline(&mut self.fb_body);
@@ -6616,7 +4928,7 @@ impl UiApp {
         if !self.fb_result.is_empty() {
             ui.separator();
             ui.label(&self.fb_result);
-            if ui.button("Ouvrir le dossier feedback").clicked() {
+            if ui.button(t.feedback_open_folder).clicked() {
                 let dir = self
                     .fb_dir
                     .clone()
@@ -6624,5 +4936,37 @@ impl UiApp {
                 open_os_folder(&dir);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod delegate_tests {
+    use super::*;
+
+    #[test]
+    fn create_module_dump_delegates_instead_of_display() {
+        let dumped = r#"{"kind":"column","children":[{"kind":"heading","text":"Ping"}]}"#;
+        let spec = chat_delegate_agent_spec("crée un module ping", dumped);
+        let (brief, _skills, tools, prose) = spec.expect("doit déléguer");
+        assert_eq!(brief, "crée un module ping");
+        assert!(tools.iter().any(|x| x == "module.scaffold"));
+        assert!(prose.contains("agent"));
+    }
+
+    #[test]
+    fn explain_module_does_not_delegate() {
+        assert!(chat_delegate_agent_spec(
+            "c'est quoi un module",
+            "Un module est un package."
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn model_scaffold_action_delegates() {
+        let out = r#"{"action":"module.scaffold","args":{"name":"ping"}}"#;
+        let spec = chat_delegate_agent_spec("fais un ping", out);
+        let (_brief, _skills, tools, _) = spec.expect("doit déléguer");
+        assert!(tools.iter().any(|x| x == "module.scaffold"));
     }
 }

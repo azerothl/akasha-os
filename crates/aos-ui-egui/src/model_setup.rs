@@ -89,7 +89,7 @@ pub fn run() -> eframe::Result<()> {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([640.0, 560.0])
             .with_title("Akasha OS Preview — Models")
-            .with_icon(crate::app_icon()),
+            .with_icon(crate::os_open::app_icon()),
         ..Default::default()
     };
 

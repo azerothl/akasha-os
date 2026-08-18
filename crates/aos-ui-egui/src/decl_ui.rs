@@ -4,7 +4,7 @@ use aos_proto::decl_ui::{DeclUiDocument, DeclUiWidget};
 use aos_proto::ModuleTool;
 use eframe::egui::{self, Ui};
 use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
-use egui_plot::{Line, Plot, PlotPoints};
+use egui_plot::{Bar, BarChart, Line, Plot, PlotPoints};
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -62,11 +62,17 @@ impl DeclUiPanelState {
     ) -> DeclUiActions {
         let mut actions = DeclUiActions::default();
         if !self.error.is_empty() {
-            ui.colored_label(egui::Color32::RED, &self.error);
+            ui.colored_label(
+                egui::Color32::RED,
+                format!("{}: {}", self.module, self.error),
+            );
+            if ui.button(refresh_label).clicked() {
+                actions.refresh = true;
+            }
             return actions;
         }
         let Some(doc) = self.document.clone() else {
-            ui.weak("…");
+            ui.weak(format!("{}…", self.module));
             return actions;
         };
         ui.horizontal(|ui| {
@@ -172,6 +178,57 @@ impl DeclUiPanelState {
                     render_line_chart(ui, &val, w.series.as_deref());
                 }
             }
+            "bar_chart" => {
+                if let Some(bind) = &w.bind {
+                    let val = resolve_bind(cache, bind, w.source.as_deref());
+                    render_bar_chart(ui, &val, w.series.as_deref());
+                }
+            }
+            "select" => {
+                render_choice(ui, w, form_fields, false);
+            }
+            "radio" => {
+                render_choice(ui, w, form_fields, true);
+            }
+            "checkbox" => {
+                let key = w
+                    .label
+                    .clone()
+                    .or_else(|| w.text.clone())
+                    .unwrap_or_else(|| "flag".into());
+                let mut on = form_fields
+                    .get(&key)
+                    .map(|s| s == "true")
+                    .unwrap_or(false);
+                if ui.checkbox(&mut on, &key).changed() {
+                    form_fields.insert(key, if on { "true".into() } else { "false".into() });
+                }
+            }
+            "textarea" => {
+                let key = w
+                    .label
+                    .clone()
+                    .unwrap_or_else(|| "text".into());
+                form_fields.entry(key.clone()).or_insert_with(String::new);
+                ui.label(&key);
+                ui.text_edit_multiline(form_fields.get_mut(&key).unwrap());
+            }
+            "image" => {
+                let path = media_path(w, cache);
+                ui.label(format!("image: {path}"));
+                if let Some(tex) = try_load_png(ui.ctx(), &path) {
+                    ui.image(&tex);
+                }
+            }
+            "audio" => {
+                let path = media_path(w, cache);
+                ui.horizontal(|ui| {
+                    ui.label(format!("audio: {path}"));
+                    if ui.button("Play").clicked() {
+                        let _ = open_host_path(&path);
+                    }
+                });
+            }
             "button" => {
                 let label = w
                     .label
@@ -194,21 +251,54 @@ impl DeclUiPanelState {
                         .unwrap_or_else(|| serde_json::json!({"type":"object","properties":{}}));
                     let fields = schema_fields(&schema);
                     ui.group(|ui| {
-                        for (key, label) in &fields {
+                        for field in &fields {
                             form_fields
-                                .entry(key.clone())
-                                .or_insert_with(String::new);
+                                .entry(field.key.clone())
+                                .or_insert_with(|| field.default_string());
                             ui.horizontal(|ui| {
-                                ui.label(label);
-                                ui.text_edit_singleline(form_fields.get_mut(key).unwrap());
+                                ui.label(&field.label);
+                                match &field.kind {
+                                    FieldKind::Bool => {
+                                        let mut on = form_fields.get(&field.key).map(|s| s == "true").unwrap_or(false);
+                                        if ui.checkbox(&mut on, "").changed() {
+                                            form_fields.insert(
+                                                field.key.clone(),
+                                                if on { "true".into() } else { "false".into() },
+                                            );
+                                        }
+                                    }
+                                    FieldKind::Enum(vals) => {
+                                        let cur = form_fields
+                                            .get(&field.key)
+                                            .cloned()
+                                            .unwrap_or_default();
+                                        egui::ComboBox::from_id_salt(format!("form-{}", field.key))
+                                            .selected_text(&cur)
+                                            .show_ui(ui, |ui| {
+                                                for v in vals {
+                                                    ui.selectable_value(
+                                                        form_fields.get_mut(&field.key).unwrap(),
+                                                        v.clone(),
+                                                        v,
+                                                    );
+                                                }
+                                            });
+                                    }
+                                    FieldKind::Textarea => {
+                                        ui.text_edit_multiline(form_fields.get_mut(&field.key).unwrap());
+                                    }
+                                    FieldKind::Number | FieldKind::Text => {
+                                        ui.text_edit_singleline(form_fields.get_mut(&field.key).unwrap());
+                                    }
+                                }
                             });
                         }
                         let submit = w.label.as_deref().unwrap_or("Submit");
                         if ui.button(submit).clicked() {
                             let mut args = serde_json::Map::new();
-                            for (key, _) in &fields {
-                                if let Some(v) = form_fields.get(key) {
-                                    args.insert(key.clone(), Value::String(v.clone()));
+                            for field in &fields {
+                                if let Some(v) = form_fields.get(&field.key) {
+                                    args.insert(field.key.clone(), field.parse_value(v));
                                 }
                             }
                             actions.invoke = Some((tool.clone(), Value::Object(args)));
@@ -256,7 +346,7 @@ fn json_pointer_get(val: &Value, pointer: &str) -> Option<Value> {
     Some(cur.clone())
 }
 
-fn schema_fields(schema: &Value) -> Vec<(String, String)> {
+fn schema_fields(schema: &Value) -> Vec<SchemaField> {
     let mut out = Vec::new();
     if let Some(props) = schema.get("properties").and_then(|p| p.as_object()) {
         for (k, v) in props {
@@ -266,11 +356,91 @@ fn schema_fields(schema: &Value) -> Vec<(String, String)> {
                 .and_then(|x| x.as_str())
                 .unwrap_or(k.as_str())
                 .to_string();
-            out.push((k.clone(), label));
+            out.push(SchemaField {
+                key: k.clone(),
+                label,
+                kind: FieldKind::from_schema(v),
+            });
         }
     }
-    out.sort_by(|a, b| a.0.cmp(&b.0));
+    out.sort_by(|a, b| a.key.cmp(&b.key));
     out
+}
+
+#[derive(Clone)]
+struct SchemaField {
+    key: String,
+    label: String,
+    kind: FieldKind,
+}
+
+#[derive(Clone)]
+enum FieldKind {
+    Text,
+    Textarea,
+    Number,
+    Bool,
+    Enum(Vec<String>),
+}
+
+impl FieldKind {
+    fn from_schema(v: &Value) -> Self {
+        if let Some(arr) = v.get("enum").and_then(|e| e.as_array()) {
+            let vals: Vec<String> = arr
+                .iter()
+                .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                .collect();
+            if !vals.is_empty() {
+                return FieldKind::Enum(vals);
+            }
+        }
+        match v.get("type").and_then(|t| t.as_str()) {
+            Some("boolean") => FieldKind::Bool,
+            Some("integer") | Some("number") => FieldKind::Number,
+            Some("string") => {
+                let fmt = v.get("format").and_then(|f| f.as_str()).unwrap_or("");
+                let long = v
+                    .get("maxLength")
+                    .and_then(|m| m.as_u64())
+                    .unwrap_or(0)
+                    > 120;
+                if fmt == "textarea" || long {
+                    FieldKind::Textarea
+                } else {
+                    FieldKind::Text
+                }
+            }
+            _ => FieldKind::Text,
+        }
+    }
+}
+
+impl SchemaField {
+    fn default_string(&self) -> String {
+        match &self.kind {
+            FieldKind::Bool => "false".into(),
+            FieldKind::Enum(v) => v.first().cloned().unwrap_or_default(),
+            _ => String::new(),
+        }
+    }
+
+    fn parse_value(&self, raw: &str) -> Value {
+        match &self.kind {
+            FieldKind::Bool => Value::Bool(raw == "true" || raw == "1"),
+            FieldKind::Number => {
+                if let Ok(i) = raw.parse::<i64>() {
+                    Value::Number(i.into())
+                } else if let Ok(f) = raw.parse::<f64>() {
+                    serde_json::Number::from_f64(f)
+                        .map(Value::Number)
+                        .unwrap_or_else(|| Value::String(raw.to_string()))
+                } else {
+                    Value::String(raw.to_string())
+                }
+            }
+            _ => Value::String(raw.to_string()),
+        }
+    }
 }
 
 fn render_stats(ui: &mut Ui, val: &Value, items: Option<&[String]>) {
@@ -381,6 +551,111 @@ fn render_line_chart(ui: &mut Ui, val: &Value, series_key: Option<&str>) {
                 .name(series_key.unwrap_or("series")),
             );
         });
+}
+
+fn render_bar_chart(ui: &mut Ui, val: &Value, series_key: Option<&str>) {
+    let points = extract_series_points(val, series_key);
+    if points.is_empty() {
+        ui.weak("—");
+        return;
+    }
+    Plot::new("decl_ui_bar")
+        .height(160.0)
+        .show(ui, |plot_ui| {
+            let bars: Vec<Bar> = points
+                .iter()
+                .enumerate()
+                .map(|(i, y)| Bar::new(i as f64, *y))
+                .collect();
+            plot_ui.bar_chart(BarChart::new(bars).name(series_key.unwrap_or("series")));
+        });
+}
+
+fn render_choice(
+    ui: &mut Ui,
+    w: &DeclUiWidget,
+    form_fields: &mut HashMap<String, String>,
+    radio: bool,
+) {
+    let key = w
+        .label
+        .clone()
+        .or_else(|| w.text.clone())
+        .unwrap_or_else(|| "choice".into());
+    let items = w.items.clone().unwrap_or_default();
+    form_fields
+        .entry(key.clone())
+        .or_insert_with(|| items.first().cloned().unwrap_or_default());
+    if radio {
+        ui.label(&key);
+        for item in &items {
+            ui.radio_value(form_fields.get_mut(&key).unwrap(), item.clone(), item);
+        }
+    } else {
+        let cur = form_fields.get(&key).cloned().unwrap_or_default();
+        egui::ComboBox::from_id_salt(format!("select-{key}"))
+            .selected_text(&cur)
+            .show_ui(ui, |ui| {
+                for item in &items {
+                    ui.selectable_value(form_fields.get_mut(&key).unwrap(), item.clone(), item);
+                }
+            });
+    }
+}
+
+fn media_path(w: &DeclUiWidget, cache: &HashMap<String, Value>) -> String {
+    if let Some(bind) = &w.bind {
+        let val = resolve_bind(cache, bind, w.source.as_deref());
+        if let Some(s) = val.as_str() {
+            return s.to_string();
+        }
+        if let Some(s) = val.get("path").and_then(|p| p.as_str()) {
+            return s.to_string();
+        }
+    }
+    w.text.clone().unwrap_or_default()
+}
+
+fn host_file_from_logical(logical: &str) -> std::path::PathBuf {
+    if let Ok(home) = std::env::var("AOS_HOME") {
+        let rel = logical.trim_start_matches('/');
+        return std::path::PathBuf::from(home)
+            .join("var/storage/data")
+            .join(rel);
+    }
+    std::path::PathBuf::from(logical)
+}
+
+pub(crate) fn try_load_png(ctx: &egui::Context, logical: &str) -> Option<egui::TextureHandle> {
+    let path = host_file_from_logical(logical);
+    let bytes = std::fs::read(&path).ok()?;
+    if bytes.len() < 8 || &bytes[..8] != b"\x89PNG\r\n\x1a\n" {
+        return None;
+    }
+    let img = image::load_from_memory(&bytes).ok()?;
+    let rgba = img.to_rgba8();
+    let size = [rgba.width() as usize, rgba.height() as usize];
+    let color = egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
+    Some(ctx.load_texture(logical, color, egui::TextureOptions::LINEAR))
+}
+
+pub(crate) fn open_host_path(logical: &str) -> std::io::Result<()> {
+    let path = host_file_from_logical(logical);
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args(["/C", "start", "", &path.to_string_lossy()])
+            .spawn()?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open").arg(&path).spawn()?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open").arg(&path).spawn()?;
+    }
+    Ok(())
 }
 
 fn extract_series_points(val: &Value, series_key: Option<&str>) -> Vec<f64> {

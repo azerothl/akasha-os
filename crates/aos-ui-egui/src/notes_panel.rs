@@ -4,6 +4,8 @@ use eframe::egui::{self, RichText, Ui};
 use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
 use serde::{Deserialize, Serialize};
 
+use crate::i18n::UiStrings;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NoteListItem {
     pub title: String,
@@ -208,22 +210,26 @@ fn insert_wrap(buf: &mut String, before: &str, after: &str, placeholder: &str) {
 }
 
 /// Dessine l'onglet Notes. Retourne les actions à exécuter.
-pub fn show_notes_panel(ui: &mut Ui, state: &mut NotesPanelState) -> NotesActions {
+pub fn show_notes_panel(
+    ui: &mut Ui,
+    state: &mut NotesPanelState,
+    t: &UiStrings,
+) -> NotesActions {
     let mut actions = NotesActions::default();
 
-    ui.heading("Notes");
+    ui.heading(t.tab_notes);
     ui.horizontal(|ui| {
-        if ui.button("Rafraîchir").clicked() {
+        if ui.button(t.decl_ui_refresh).clicked() {
             actions.list = true;
         }
         ui.text_edit_singleline(&mut state.search_query);
-        if ui.button("Rechercher").clicked() && !state.search_query.is_empty() {
+        if ui.button(t.notes_search).clicked() && !state.search_query.is_empty() {
             actions.search = Some(state.search_query.clone());
         }
-        if ui.button("Nouvelle note").clicked() {
+        if ui.button(t.notes_new).clicked() {
             state.start_new();
         }
-        ui.checkbox(&mut state.show_preview, "Aperçu");
+        ui.checkbox(&mut state.show_preview, t.notes_preview);
     });
     if !state.status.is_empty() {
         ui.weak(&state.status);
@@ -233,9 +239,9 @@ pub fn show_notes_panel(ui: &mut Ui, state: &mut NotesPanelState) -> NotesAction
     ui.columns(2, |cols| {
         // --- Liste ---
         cols[0].vertical(|ui| {
-            ui.label(RichText::new("Liste").strong());
+            ui.label(RichText::new(t.notes_list).strong());
             ui.horizontal(|ui| {
-                ui.label("Filtrer");
+                ui.label(t.notes_filter);
                 ui.text_edit_singleline(&mut state.filter);
             });
             egui::ScrollArea::vertical()
@@ -254,7 +260,7 @@ pub fn show_notes_panel(ui: &mut Ui, state: &mut NotesPanelState) -> NotesAction
                         .cloned()
                         .collect();
                     if items.is_empty() {
-                        ui.weak("Aucune note — créez-en une ou rafraîchissez.");
+                        ui.weak(t.notes_empty);
                     }
                     for n in items {
                         let selected = state.selected_path.as_deref() == Some(n.path.as_str());
@@ -276,7 +282,7 @@ pub fn show_notes_panel(ui: &mut Ui, state: &mut NotesPanelState) -> NotesAction
 
             if !state.search_hits.is_empty() {
                 ui.separator();
-                ui.label(RichText::new("Recherche").strong());
+                ui.label(RichText::new(t.notes_search).strong());
                 egui::ScrollArea::vertical()
                     .id_salt("notes_search")
                     .max_height(160.0)
@@ -379,7 +385,7 @@ pub fn show_notes_panel(ui: &mut Ui, state: &mut NotesPanelState) -> NotesAction
 
             if state.show_preview {
                 ui.separator();
-                ui.label(RichText::new("Aperçu").strong());
+                ui.label(RichText::new(t.notes_preview).strong());
                 let preview = if state.edit_title.is_empty() {
                     state.edit_body.clone()
                 } else {
@@ -397,9 +403,9 @@ pub fn show_notes_panel(ui: &mut Ui, state: &mut NotesPanelState) -> NotesAction
                 let can_save = !state.edit_title.trim().is_empty();
                 if ui
                     .add_enabled(can_save, egui::Button::new(if state.is_new {
-                        "Créer"
+                        t.tasks_create
                     } else {
-                        "Enregistrer"
+                        t.memory_btn_save
                     }))
                     .clicked()
                 {
@@ -413,10 +419,10 @@ pub fn show_notes_panel(ui: &mut Ui, state: &mut NotesPanelState) -> NotesAction
                     }
                 }
                 if let Some(path) = state.edit_path.clone() {
-                    if ui.button("Joindre à un agent").clicked() {
+                    if ui.button(t.notes_attach).clicked() {
                         actions.attach_path = Some(path);
                     }
-                    if ui.button("Notes liées").clicked() {
+                    if ui.button(t.notes_related).clicked() {
                         let topic = state.search_query.clone();
                         actions.related = Some((
                             state.edit_path.clone().unwrap_or_default(),

@@ -38,7 +38,7 @@ tools:
           echo: "{{args.message}}"
           ok: true
 "@
-Set-Content -Path (Join-Path $pkg "handlers.yaml") -Value $handlersYaml -Encoding utf8NoBOM
+Set-Content -Path (Join-Path $pkg "handlers.yaml") -Value $handlersYaml -Encoding utf8
 Copy-Item (Join-Path $pkg "handlers.yaml") (Join-Path $pkg "assets\handlers.yaml") -Force
 
 $handlersJson = @"
@@ -73,7 +73,7 @@ $handlersJson = @"
   }
 }
 "@
-Set-Content -Path (Join-Path $pkg "handlers.json") -Value $handlersJson -Encoding utf8NoBOM
+Set-Content -Path (Join-Path $pkg "handlers.json") -Value $handlersJson -Encoding utf8
 Copy-Item (Join-Path $pkg "handlers.json") (Join-Path $pkg "assets\handlers.json") -Force
 
 $manifest = @"
@@ -104,7 +104,7 @@ ui:
   mode: declarative_ui
 min_os_api: 1
 "@
-Set-Content -Path (Join-Path $pkg "manifest.yaml") -Value $manifest -Encoding utf8NoBOM
+Set-Content -Path (Join-Path $pkg "manifest.yaml") -Value $manifest -Encoding utf8
 
 $ui = @'
 {
@@ -136,6 +136,6 @@ $ui = @'
   }
 }
 '@
-Set-Content -Path (Join-Path $pkg "ui\index.html") -Value $ui -Encoding utf8NoBOM
+Set-Content -Path (Join-Path $pkg "ui\index.html") -Value $ui -Encoding utf8
 
 Write-Host "decldemo.aospkg pret: $pkg (hash $hash)"
