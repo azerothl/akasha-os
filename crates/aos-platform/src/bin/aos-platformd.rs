@@ -2063,12 +2063,96 @@ async fn main() {
         svc.on("module.uninstall", move |ctx| {
             let s = s.clone();
             async move {
-                match ctx.payload::<ModuleIdRequest>() {
+                match ctx.payload::<ModuleUninstallRequest>() {
                     Ok(req) => {
-                        let r = s.modules.lock().unwrap().uninstall(&req.module);
-                        let _ = ctx
-                            .respond(aos_ipc::msg::Status::Ok, &r.map_err(|e| e.to_string()))
+                        let actor = if req.actor.is_empty() {
+                            "human:ui".into()
+                        } else {
+                            req.actor.clone()
+                        };
+                        let allowed = actor.starts_with("human:")
+                            || req
+                                .actor_caps
+                                .iter()
+                                .any(|c| c == "module.uninstall")
+                            || s.granted_caps
+                                .lock()
+                                .unwrap()
+                                .get(actor.strip_prefix("agent:").unwrap_or(&actor))
+                                .map(|caps| caps.iter().any(|c| c == "module.uninstall"))
+                                .unwrap_or(false);
+                        if !allowed {
+                            let _ = ctx
+                                .respond_error(
+                                    aos_ipc::msg::Status::PermissionDenied,
+                                    "module.uninstall : capacité requise",
+                                )
+                                .await;
+                            return;
+                        }
+                        if aos_proto::decl_ui::is_bundled_module(&req.module) {
+                            let _ = ctx
+                                .respond_error(
+                                    aos_ipc::msg::Status::PermissionDenied,
+                                    &format!(
+                                        "module bundlé {} : désinstallation refusée",
+                                        req.module
+                                    ),
+                                )
+                                .await;
+                            return;
+                        }
+                        let (_id, rx) = s
+                            .confirm
+                            .ask(
+                                actor.clone(),
+                                "module.uninstall".into(),
+                                req.module.clone(),
+                                format!(
+                                    "Désinstaller le module {} ? Les caps tool.invoke seront révoquées. Les documents utilisateur sont conservés.",
+                                    req.module
+                                ),
+                                Some(120),
+                            )
                             .await;
+                        if !rx.await.unwrap_or(false) {
+                            let _ = ctx
+                                .respond_error(
+                                    aos_ipc::msg::Status::PermissionDenied,
+                                    "désinstallation refusée (confirmation)",
+                                )
+                                .await;
+                            return;
+                        }
+                        let name = req.module.clone();
+                        let r = s.modules.lock().unwrap().uninstall(&name);
+                        match r {
+                            Ok(()) => {
+                                let needle = format!("tool.invoke:{name}");
+                                {
+                                    let mut g = s.granted_caps.lock().unwrap();
+                                    for caps in g.values_mut() {
+                                        caps.retain(|c| c != &needle && !c.starts_with(&format!("{needle}:")));
+                                    }
+                                }
+                                s.audit(AuditAppendRequest {
+                                    trace_id: String::new(),
+                                    actor,
+                                    action: "module.uninstall".into(),
+                                    target: name.clone(),
+                                    detail: serde_json::json!({ "revoked": needle }),
+                                });
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &Ok::<(), String>(())).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::InternalError,
+                                        &e.to_string(),
+                                    )
+                                    .await;
+                            }
+                        }
                     }
                     Err(_) => {
                         let _ = ctx

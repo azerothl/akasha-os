@@ -55,6 +55,8 @@ pub enum ModuleError {
     CatalogueSignature,
     #[error("UI déclarative invalide: {0}")]
     DeclUiInvalid(String),
+    #[error("module bundlé non désinstallable: {0}")]
+    Bundled(String),
     #[error("io: {0}")]
     Io(String),
 }
@@ -328,6 +330,9 @@ impl ModuleRuntime {
     }
 
     pub fn uninstall(&mut self, name: &str) -> Result<(), ModuleError> {
+        if aos_proto::decl_ui::is_bundled_module(name) {
+            return Err(ModuleError::Bundled(name.into()));
+        }
         let m = self
             .installed
             .remove(name)
@@ -370,6 +375,7 @@ impl ModuleRuntime {
         Ok(ModuleUiResponse {
             module: name.to_string(),
             document,
+            tools: m.manifest.tools.clone(),
         })
     }
 
@@ -716,6 +722,15 @@ min_os_api: 1
 
         rt.uninstall("echo-test").unwrap();
         assert!(rt.list().is_empty());
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn refuse_uninstall_bundled() {
+        let base = tmpbase("bundled");
+        let mut rt = ModuleRuntime::open(base.join("modules"), Arc::new(EchoServices)).unwrap();
+        let err = rt.uninstall("notes").unwrap_err();
+        assert!(matches!(err, ModuleError::Bundled(_)));
         let _ = std::fs::remove_dir_all(&base);
     }
 

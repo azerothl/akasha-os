@@ -383,6 +383,8 @@ impl PlatformSubsystem {
             "secrets",
             "module.install",
             "module.compile",
+            "module.uninstall",
+            "media.generate",
         ];
         let tier = self.trust.lock().unwrap().tier(agent_id);
         let critical = CRITICAL.iter().any(|c| cap.starts_with(c));
