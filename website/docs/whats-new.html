@@ -6,7 +6,7 @@
     <title>What's new — Akasha OS Preview</title>
     <meta
       name="description"
-      content="What each Akasha OS Preview version added, from 0.7.0 back to 0.1.0. Host app on Windows/Linux, not a bootable OS."
+      content="What each Akasha OS Preview version added, from 0.8.0 back to 0.1.0. Host app on Windows/Linux, not a bootable OS."
     />
     <link rel="stylesheet" href="../styles.css" />
     <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
@@ -19,8 +19,8 @@
     <!--
       THESIS: The version log is a cut-face journal of what shipped, not a feature card grid and not a marketing changelog.
       OWN-WORLD: Orrery inner plate — void, cyan rails, grant gutters.
-      STORY: A tester sees what 0.7.0 added, then walks earlier Previews without leaving the site.
-      FIRST VIEWPORT: Honesty line, compact version rail, then 0.7.0 ticks.
+      STORY: A tester sees what 0.8.0 added, then walks earlier Previews without leaving the site.
+      FIRST VIEWPORT: Honesty line, compact version rail, then 0.8.0 ticks.
       FORM: Orrery inner plate, seed c1699dbf reroll 1.
       FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
     -->
@@ -50,12 +50,12 @@
           <span data-lang="en">
             What each Preview added, newest first. This is the version log,
             not the full feature catalogue. Preview
-            <span data-aos-version>0.7.0</span> is a host app, not a bootable OS.
+            <span data-aos-version>0.8.0</span> is a host app, not a bootable OS.
           </span>
           <span data-lang="fr">
             Ce que chaque Preview a ajouté, plus récent en premier. C’est le
             journal des versions, pas le catalogue complet. La Preview
-            <span data-aos-version>0.7.0</span> est une appli hôte, pas un OS
+            <span data-aos-version>0.8.0</span> est une appli hôte, pas un OS
             bootable.
           </span>
         </h1>
@@ -69,6 +69,7 @@
         </p>
 
         <nav class="log-toc" aria-label="Versions">
+          <a href="#v0-8-0">0.8.0</a>
           <a href="#v0-7-0">0.7.0</a>
           <a href="#v0-6-0">0.6.0</a>
           <a href="#v0-5-0">0.5.0</a>
@@ -79,6 +80,21 @@
           <a href="#v0-1-1">0.1.1</a>
           <a href="#v0-1-0">0.1.0</a>
         </nav>
+
+        <article class="grant" id="v0-8-0">
+          <h2>0.8.0</h2>
+          <p class="rev-when">18/08/2026</p>
+          <ul class="ticks">
+            <li data-lang="en"><strong>Image + TTS</strong> (E16): <code>/image</code> and <code>/speak</code> write PNG/WAV under <code>/downloads</code>. Optional packs; Download also installs sd.cpp / piper into <code>bin/</code>.</li>
+            <li data-lang="fr"><strong>Image + TTS</strong> (E16) : <code>/image</code> et <code>/speak</code> écrivent PNG/WAV sous <code>/downloads</code>. Packs optionnels ; Download installe aussi sd.cpp / piper dans <code>bin/</code>.</li>
+            <li data-lang="en">One Win zip / one Linux tarball with CUDA and CPU modeld inside. Settings gpu/cpu restarts the backend.</li>
+            <li data-lang="fr">Un zip Win / un tar Linux avec modeld CUDA et CPU. Réglages gpu/cpu redémarre le backend.</li>
+            <li data-lang="en"><strong>Providers</strong> tab for OpenAI-compat cloud and loopback (Ollama, vLLM, LM Studio).</li>
+            <li data-lang="fr">Onglet <strong>Providers</strong> : cloud OpenAI-compat et loopback (Ollama, vLLM, LM Studio).</li>
+            <li data-lang="en">Module uninstall, richer E15 widgets, one-liner install with sha256 check.</li>
+            <li data-lang="fr">Désinstall de modules, widgets E15 plus riches, install one-liner avec sha256.</li>
+          </ul>
+        </article>
 
         <article class="grant" id="v0-7-0">
           <h2>0.7.0</h2>

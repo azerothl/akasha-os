@@ -7,18 +7,19 @@
 Tag then push:
 
 ```bash
-git tag v0.7.0
-git push origin v0.7.0
+git tag v0.8.0
+git push origin v0.8.0
 ```
 
 The workflow [`.github/workflows/preview-release.yml`](../.github/workflows/preview-release.yml)
-builds Win + Linux **CUDA** and **CPU** (no GGUF) and publishes:
+builds Win + Linux **unified** artefacts (CUDA-linked `aos-modeld` plus
+CPU-linked `aos-modeld-cpu` in the same zip; no GGUF) and publishes:
 
 - `AgentOS-Preview-<ver>-windows-x64.zip`
-- `AgentOS-Preview-<ver>-windows-x64-cpu.zip`
 - `AgentOS-Preview-<ver>-linux-x64.tar.gz`
-- `AgentOS-Preview-<ver>-linux-x64-cpu.tar.gz`
-- `latest.json` (sha256 + metadata for **all four** artefacts)
+- `latest.json` (sha256 + metadata for **two** tester artefacts)
+
+`-CpuOnly` remains a **builder** hatch, not a tester download.
 
 Manual trigger: Actions → **preview-release** → Run workflow.
 
@@ -36,12 +37,13 @@ GGUFs are downloaded on **first run** via `share/models/manifest.json`.
 ## Release notes (draft)
 
 ```
-Akasha OS Preview 0.7.0 — host-rendered declarative module UI (E15)
+Akasha OS Preview 0.8.0 — local image + TTS, unified CPU/GPU artefact
 
-- Dynamic egui tabs for installed modules with ui.mode=declarative_ui (closed widget tree in ui/index.html)
-- module.ui intent validates documents fail-closed; bind tool results; button/form → module.invoke under cap review
-- module.scaffold optional ui JSON; package/compile write a real widget tree (default heading + form + table)
-- JSON Schema: docs/bridge/aos-proto-decl-ui.json
+- media.image.generate / media.audio.generate (PNG/WAV under /downloads); cap media.generate
+- Optional packs (SD 1.5, Piper) not in the zip; Download also fetches sd.cpp / piper into bin/
+- One Win zip / one Linux tarball: aos-modeld (CUDA) + aos-modeld-cpu; Settings gpu/cpu/auto restarts modeld in-session
+- Providers tab (OpenAI-compat cloud + loopback); module uninstall; richer E15 widgets
+- One-liner: irm …/install.ps1 | iex  /  curl …/install.sh | sh (sha256 fail-closed + overlay)
 
 Not a bootable OS. See FIRST-RUN.md / INSTALL.md / TESTER.md
 ```

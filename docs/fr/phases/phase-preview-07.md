@@ -79,7 +79,8 @@ CPU_ONLY=1 SKIP_MODELS=1 ./packaging/build-preview.sh
 ## Suite
 
 Tag `v0.7.0` seulement quand les gates P07.1–P07.5 passent. La gate cohort
-PC reste indépendante. **Suite : Preview 0.8.0 / E16** — génération locale
-d’image + audio (TTS) ([phase-preview-08.md](phase-preview-08.md)). Après 0.8 :
+PC reste indépendante. **Suite : Preview 0.8.0 / E16 + E17 + widgets E15** —
+génération locale d’image + audio (TTS), hôte unifié, vocabulaire de widgets
+plus riche ([phase-preview-08.md](phase-preview-08.md)). Après 0.8 :
 reste Horizon B (E7 TPM, adaptateur HTTP live si un daemon est planifié, E9
 quand un 2e GPU existe).

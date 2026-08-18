@@ -8,8 +8,9 @@
 first-class, offline-first. La Preview tourne sur hôte Windows/Linux
 (NVIDIA) ; la piste seL4 est séparée.
 
-> Ce n'est **pas** encore un OS bootable. La Preview 0.7.0 est une application
-> hôte installable pour testeurs (Windows/Linux ; NVIDIA optionnel via chemin CPU).
+> Ce n'est **pas** encore un OS bootable. La Preview 0.8.0 est une application
+> hôte installable pour testeurs (Windows/Linux ; NVIDIA optionnel via chemin CPU
+> dans le même zip).
 
 ## Pourquoi Akasha OS
 
@@ -23,15 +24,16 @@ Catalogue : [FEATURES.md](FEATURES.md).
 
 | Domaine | Contenu |
 |---------|---------|
-| Chat / Sessions | Conversations persistées ; slash ; modèle par session |
+| Chat / Sessions | Conversations persistées ; slash (`/image`, `/speak`) ; modèle par session |
 | Mémoire | Faits long terme ; bootstrap mémoire d'abord |
 | Notes | Humaines + agents (module WASM) ; resync au boot après une update |
 | Tâches | Module dual-surface + onglet Tasks |
 | Agents | Goal, skills, outils, MCP, scheduler ; timeline |
 | Caps | Liste / révocation dans l'UI |
-| Modèles | Packs selon le matériel (dont CPU) ; métriques TTFT / tok/s / VRAM |
+| Modèles | Packs selon le matériel (dont CPU) ; packs image/TTS optionnels (Download installe aussi sd.cpp / piper) ; métriques TTFT / tok/s / VRAM |
+| Providers | Cloud OpenAI-compat + loopback (Ollama / vLLM / LM Studio) ; clés dans le vault |
 | Réseau | Recherche opt-in (Brave / DDG / Bing) + `web.browse` + fetch |
-| Settings | Langue, thème, trust, routage, défauts agent, moteur |
+| Settings | Langue, thème, trust, routage, gpu/cpu/auto, défauts agent, moteur |
 | Retour | Rapport local + issue GitHub |
 | Dépannage | Diagnostic in-app ; rapport GitHub s'il y a des anomalies |
 | Mises à jour | Overlay non destructif depuis GitHub Releases |
@@ -39,7 +41,7 @@ Catalogue : [FEATURES.md](FEATURES.md).
 ## Prérequis
 
 Windows 10/11 x64 **ou** Linux x64 ; GPU NVIDIA **ou** mode CPU-only (plus lent) ;
-~4 Go disque. Pas de macOS en Preview 0.7.0.
+~4 Go disque. Pas de macOS en Preview 0.8.0.
 
 ## Démarrage rapide
 
@@ -53,7 +55,7 @@ Voir [INSTALL.md](INSTALL.md), [FIRST-RUN.md](FIRST-RUN.md), [TESTER.md](TESTER.
 
 Toolchain, scripts de packaging et run local :
 [INSTALL.md — Build depuis les sources](INSTALL.md#build-depuis-les-sources)
-(anglais : [INSTALL.md — Build from source](../../INSTALL.md#build-from-source)).
+(anglais : [INSTALL.md — Build from source](../INSTALL.md#build-from-source)).
 
 ```powershell
 cargo test --workspace
@@ -68,6 +70,8 @@ cargo run -p aos-session --release
 |-----|-------------|
 | [STATUS.md](STATUS.md) | **État d'avancement** |
 | [FEATURES.md](FEATURES.md) | **Fonctionnalités Preview livrées** |
+| [INSTALL.md](INSTALL.md) | Installation, mises à jour, build depuis les sources |
+| [FIRST-RUN.md](FIRST-RUN.md) | Premier lancement |
 | [../functional-specs.md](../functional-specs.md) | Specs fonctionnelles (EN) |
 | [specs-fonctionnelles.md](specs-fonctionnelles.md) | Specs fonctionnelles (FR) |
 | [paysage-concurrentiel.md](paysage-concurrentiel.md) | Paysage OS agentiques vs Akasha OS |

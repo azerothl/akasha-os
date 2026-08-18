@@ -42,8 +42,8 @@ userspace before committing to the microkernel port.
 | **P05**     | Win/Linux Preview host                | Preview **0.5.0** — E14 (auto-remember from chat)                                             | shipped             | done        |
 | **P06**     | Win/Linux Preview host                | Preview **0.6.0** — E8 / E7-keyring / E10 (bridge schemas, OS keyring, catalogue)             | shipped             | done        |
 | **P07**     | Win/Linux Preview host                | Preview **0.7.0** — E15 (host-rendered declarative module UI)                                 | shipped             | done        |
-| **P08**     | Win/Linux Preview host                | Preview **0.8.0** — E16 image+audio + E17 unified CPU/GPU host                                 | ~4–6 weeks          | planned     |
-| **P09**     | Win/Linux Preview host                | Preview **0.9.0** — E18 mid-token device migrate (no cancel)                                   | ~2–4 weeks          | planned     |
+| **P08**     | Win/Linux Preview host                | Preview **0.8.0** — E16 image+audio + E17 unified CPU/GPU + module uninstall + E15 widgets + Providers | shipped             | done        |
+| **P09**     | Win/Linux Preview host                | Preview **0.9.0** — E18 mid-token migrate + E19 media models/options                         | ~3–5 weeks          | planned     |
 
 
 **Indicative total** (foundation): ~60–80 weeks in a naïve sequence;
@@ -77,8 +77,8 @@ passed.** This prevents technical debt from accumulating in the lower layers.
 | **Gate P05** | Opt-in chat extract → `mem.user.remember` (secrets filtered) — [phase-preview-05.md](phases/phase-preview-05.md) |
 | **Gate P06** | Bridge schemas + OS keyring + signed local catalogue — [phase-preview-06.md](phases/phase-preview-06.md) |
 | **Gate P07** | Closed `declarative_ui` schema; generic egui tab bound to module tools — [phase-preview-07.md](phases/phase-preview-07.md) |
-| **Gate P08** | Local image + TTS under caps; unified CPU/GPU artefact with UI + load-based auto; cleanup/refactor with no behavior change — [phase-preview-08.md](phases/phase-preview-08.md) |
-| **Gate P09** | Mid-token CPU ↔ GPU migrate without cancelling the live stream; failed migrate falls back to 0.8 cancel+restart (audited) — [phase-preview-09.md](phases/phase-preview-09.md) |
+| **Gate P08** | Local image + TTS under caps; unified CPU/GPU artefact; module uninstall; E15 widget pack; Providers tab; one-line install per OS; cleanup/refactor — [phase-preview-08.md](phases/phase-preview-08.md) |
+| **Gate P09** | Mid-token CPU ↔ GPU migrate without cancelling the live stream; failed migrate falls back to 0.8 cancel+restart (audited); closed image/TTS option schema + extra packs (Flux2, Ideogram4, extra Piper voices); leftover P08.8 host hygiene — [phase-preview-09.md](phases/phase-preview-09.md) |
 
 
 ---
@@ -484,7 +484,7 @@ Deliver **Agent OS Preview 0.1**: the same host stack (P1–P5),
 | PC.2      | Preview package                    | `bin/` + first-run GGUF download + notes.aospkg; Win/Linux         |
 | PC.3      | Cohort egui UI                     | Onboarding, notes, confirm, agents, audit, scenarios, banner       |
 | PC.4      | Feedback                           | `feedback.submit` intent → `var/feedback/` + optional GitHub issue |
-| PC.5      | Docs                               | `INSTALL.md`, `docs/TESTER.md`, `docs/FEATURES.md`, `packaging/`   |
+| PC.5      | Docs                               | `docs/INSTALL.md`, `docs/TESTER.md`, `docs/FEATURES.md`, `packaging/`   |
 | PC.6–PC.9 | Sessions / memory / search / files | Persisted chat, `mem.context`, opt-in net, generate                |
 | PC.10     | Release updates                    | Non-destructive overlay of `bin/` + `share/`                       |
 | PC.11     | Transparency                       | Agent detail timeline, sources, pause / steer / retry              |
@@ -506,10 +506,10 @@ Deliver **Agent OS Preview 0.1**: the same host stack (P1–P5),
 # Linux: ./packaging/build-preview.sh
 ```
 
-> PC status (18/08/2026): Preview **0.7.0** is the current host release
-> (declarative module UI). PC.1–PC.14 shipped since 0.1; subsequent product
+> PC status (18/08/2026): Preview **0.8.0** is the current host release
+> (E16 media, E17 unified artefact, Providers). PC.1–PC.14 shipped since 0.1; subsequent product
 > work is Preview increments P03–P09, not a new PC.n number. Cohort gate
-> still open — see `INSTALL.md` and `docs/FEATURES.md`.
+> still open — see `docs/INSTALL.md` and `docs/FEATURES.md`.
 
 
 
@@ -575,7 +575,7 @@ multi-GPU, and apply general polish. **Output: Agent OS v1.0.**
 These phases sit **on top of** the PC host stack. They do **not** replace
 P0–P5 / PV / PC and they are **not** a P6 gate. Detail lives in
 `docs/phases/phase-preview-0n.md` (French mirrors under `docs/fr/phases/`).
-Catalogue of what shipped: [FEATURES.md](FEATURES.md). Priorities: E1–E18 in
+Catalogue of what shipped: [FEATURES.md](FEATURES.md). Priorities: E1–E19 in
 [evolution-roadmap.md](evolution-roadmap.md).
 
 ### P03 — Preview 0.3.0 (E1–E5) — done
@@ -621,56 +621,76 @@ modules get a generic tab without a webview and without a hardcoded shell
 tab. Vocabulary: `column`, `row`, `heading`, `text`, `markdown`, `stat_row`,
 `table`, `line_chart`, `form`, `button`. Notes/Tasks stay hardcoded.
 
-### P08 — Preview 0.8.0 (E16 + E17) — planned
+### P08 — Preview 0.8.0 (E16 + E17 + E15 widgets + Providers) — done
 
 **Goal:** local **image generation** and **audio (TTS) generation** as
 first-class Model Subsystem workloads, a **unified CPU/GPU host artefact**
-(UI switch + load-based auto), plus a **cleanup / refactor pass** before
-tag. Not a cloud-only sidecar. Not video. Not always-on voice (leave STT /
-24/7 voice to the sibling). Not a webview.
+(UI switch + load-based auto), **complete module uninstall** from the tester
+UI (F-MOD-01), an **E15 widget vocabulary expansion**, a **Providers** tab
+(F-MDL-04), **one install command
+per OS**, plus a **cleanup / refactor
+pass** before tag. Not a cloud-only sidecar. Not video. Not always-on voice
+(leave STT / 24/7 voice to the sibling). Not a webview.
 
 Why this belongs in the OS: diffusion and TTS **compete for VRAM** with the
 loaded LLM (F-PLC-06 eviction / F-PLC-09 refuse-with-alternative). Agents
 must not get ambient “can generate media”; they need `media.generate` +
 `fs.write` on the download tree. Device policy is the same Placement Manager,
-not a second installer.
+not a second installer. Module authors still cannot invent widget kinds;
+0.8 grows the **host** closed list (typed `form` fields, select/radio,
+`bar_chart`, `image`/`audio`). P3 already speaks OpenAI-compat; 0.8 exposes
+**named providers** (cloud + loopback) in the UI instead of one Settings key.
 
 | # | Evolution | Deliverable | Status |
 |---|-----------|-------------|--------|
-| P08.1 | E16 registry | Image + TTS entries in the model catalogue / first-run offerings; Placement Manager treats them as evictable shards vs the LLM | planned |
-| P08.2 | E16 image | Intent `media.image.generate` (prompt → PNG under `/downloads`); cap review; audit | planned |
-| P08.3 | E16 audio | Intent `media.audio.generate` (text → WAV/OGG TTS); same cap family; audit | planned |
-| P08.4 | E16 surface | Chat shows the image / plays the clip; optional E15 `image` / `audio` widget kinds | planned |
-| P08.5 | E17 device | One Win + one Linux artefact; Settings gpu/cpu/auto without reinstall; auto follows VRAM/CPU load (hysteresis) | planned |
-| P08.6 | E16 packs | Optional media packs (download, not baked into the zip); GPU preferred for image | planned |
-| P08.7 | Hygiene | Cleanup + refactor of Preview host crates (dead code, splits, naming); no behavior change | planned |
-| P08.8 | Docs / ship | Phase docs, FEATURES/STATUS/TESTER, version 0.8.0, site, packaging | planned |
+| P08.1 | E16 registry | Image + TTS entries in the model catalogue / first-run offerings; Placement Manager treats them as evictable shards vs the LLM | done |
+| P08.2 | E16 image | Intent `media.image.generate` (prompt → PNG under `/downloads`); cap review; audit | done |
+| P08.3 | E16 audio | Intent `media.audio.generate` (text → WAV/OGG TTS); same cap family; audit | done |
+| P08.4 | E16 surface | Chat shows the image / plays the clip (`image` / `audio` kinds in P08.11) | done |
+| P08.5 | E17 device | One Win + one Linux artefact; Settings gpu/cpu/auto without reinstall; auto follows VRAM/CPU load (hysteresis) | done |
+| P08.6 | E16 packs | Optional media packs (download, not baked into the zip); same download fetches sd.cpp / piper into `bin/` if missing; GPU preferred for image | done |
+| P08.7 | F-MOD-01 | Uninstall any non-bundled module from the UI; revoke caps; drop E15 tab; audit | done |
+| P08.8 | Hygiene | Cleanup + refactor of Preview host crates (dead code, splits, naming); no behavior change | done |
+| P08.9 | Install CLI | One documented command per OS: download + sha256 + overlay into the stable prefix | done |
+| P08.10 | Docs / ship | Phase docs, FEATURES/STATUS/TESTER, version 0.8.0, site, packaging | done |
+| P08.11 | E15 widgets | Closed vocabulary: typed `form` + `select` / `radio` / `checkbox` / `textarea` / `bar_chart` / `image` / `audio` | done |
+| P08.12 | F-MDL-04 | Providers tab: OpenAI-compat cloud (OpenRouter, OpenAI, Anthropic, DeepSeek, z.ai) + local (Ollama, vLLM, LM Studio) | done |
 
-Sequencing: P08.1 → P08.2 ∥ P08.3 ∥ P08.5 → P08.4 → P08.6 → P08.7 → P08.8.  
+Sequencing: P08.1 → P08.2 ∥ P08.3 ∥ P08.5 ∥ P08.7 ∥ P08.11 ∥ P08.12 → P08.4 → P08.6 → P08.8 → P08.9 → P08.10.  
 Detail: [phases/phase-preview-08.md](phases/phase-preview-08.md).
 
 **Out of P08:** video generation, cloud image APIs as the default path,
 always-on microphone / STT, messaging channels. Mid-token device migrate
-without cancel is **P09 / E18**, not abandoned. Also out: E7 TPM, live HTTP
+without cancel is **P09 / E18**, not abandoned. Extra image families and
+sd.cpp / Piper options are **P09 / E19**. Also out: E7 TPM, live HTTP
 sibling daemon, E9 / P5.2 (needs a second GPU), E13 compositor, PC cohort
-close, macOS, bare metal.
+close, macOS, bare metal, native Anthropic Messages / Gemini / Bedrock
+(OpenAI-compat presets only).
 
-### P09 — Preview 0.9.0 (E18) — planned
+### P09 — Preview 0.9.0 (E18 + E19) — planned
 
 **Goal:** keep a **live** `model.infer` stream when switching CPU ↔ GPU
-(UI pin or `auto` load / E16 VRAM pressure). 0.8 already switches by
-cancel + `aos-modeld` restart. 0.9 migrates KV/state in the Model
-Subsystem so tokens already shown stay, and the rest of the completion
-continues. If migrate fails: 0.8 fallback, audited, no silent token
-loss/duplication.
+(UI pin or `auto` load / E16 VRAM pressure), and **extend local media
+generation**. 0.8 already switches by cancel + `aos-modeld` restart, and
+hard-codes sd.cpp `-W 512 -H 512 --steps 20` plus Piper defaults on a
+single SD 1.5 pack / two voices. 0.9 migrates KV/state so tokens already
+shown stay; if migrate fails: 0.8 fallback, audited. **E19** adds a
+**closed** option schema (unknown keys refused — no raw argv from agents),
+extra optional image packs (Flux2-class, Ideogram4-class) and extra Piper
+voices, plus Settings / intent to pick them. Offering-owned extras
+(VAE / CLIP / T5) live on the catalogue, not as user-typed paths.
 
 | # | Evolution | Deliverable | Status |
 |---|-----------|-------------|--------|
 | P09.1 | E18 migrate | Active infer CPU ↔ GPU without aborting the stream | planned |
 | P09.2 | E18 policy | Live UI/`auto` uses migrate; 0.8 cancel+restart is fallback | planned |
-| P09.3 | Docs / ship | FEATURES/STATUS/TESTER, version 0.9.0, site, packaging | planned |
+| P09.3 | E19 schema | Closed option objects on `media.*` + Settings; allowlisted sd.cpp / Piper flags | planned |
+| P09.4 | E19 catalogue | Extra optional image packs (Flux2, Ideogram4) + extra Piper voices; `extra_files`; VRAM | planned |
+| P09.5 | E19 surface | Models / Settings pick default pack + options; `/image` and TTS honor them | planned |
+| P09.7 | Hygiene | Finish P08.8 leftovers: split remaining oversized host modules; leftover bilingual chrome; chat role key | planned |
+| P09.6 | Docs / ship | FEATURES/STATUS/TESTER, version 0.9.0, site, packaging | planned |
 
-Sequencing: P09.1 → P09.2 → P09.3. Depends on P08 / E17.  
+Sequencing: P09.1 → P09.2 ; P09.3 ∥ P09.4 → P09.5 → P09.7 → P09.6. Depends on P08 / E16+E17.  
 Detail: [phases/phase-preview-09.md](phases/phase-preview-09.md).
 
 ### Remaining after 0.9 (not a new P6)
@@ -718,7 +738,7 @@ P0 (simulator)
 - Bare metal waits for a green PV gate, not GPU passthrough from Windows
 - **P03–P09 do not wait for the PC cohort gate**; they must not invent a P6 number
 - P08 (E16/E17) depends on P1 Model Subsystem + P07 E15 if widget kinds are added; it does **not** depend on E9 / TPM / live sibling HTTP
-- P09 (E18) depends on P08 E17 (cancel+restart path shipped first)
+- P09 (E18 + E19) depends on P08 E16 engines + E17 cancel+restart (migrate and extra media packs ship on that base)
 
 ---
 
@@ -769,11 +789,11 @@ priorities on the host without waiting for remaining P5.2 / PV.4 / PC cohort.
 
 - `docs/functional-specs.md` — product requirements
 - `docs/technical-specs.md` — technical architecture
-- `docs/FEATURES.md` — shipped Preview catalogue (currently 0.7.0)
+- `docs/FEATURES.md` — shipped Preview catalogue (currently 0.8.0)
 - `docs/STATUS.md` — delivered-phase summary
 - `docs/vision.md` — framing and open directions
 - `docs/competitive-landscape.md` — agentic OS / runtime survey (August 2026)
-- `docs/evolution-roadmap.md` — post-landscape priorities E1–E18 (not a P6 gate)
+- `docs/evolution-roadmap.md` — post-landscape priorities E1–E19 (not a P6 gate)
 - `docs/phases/phase-preview-03.md` … `phase-preview-09.md` — Preview increment plans
 - (published ADRs): `adr/0001-microkernel.md` (P4 host + **phase PV** seL4 VM), `adr/0002-model-placement.md` (P0), `adr/0003-ui-framework.md` (accepted: egui), `adr/0005-offload-etat-de-l-art.md` (pre-P1)
 

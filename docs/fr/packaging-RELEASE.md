@@ -7,18 +7,19 @@
 Tag puis push :
 
 ```bash
-git tag v0.7.0
-git push origin v0.7.0
+git tag v0.8.0
+git push origin v0.8.0
 ```
 
 Le workflow [`.github/workflows/preview-release.yml`](../../.github/workflows/preview-release.yml)
-construit Win + Linux **CUDA** et **CPU** (sans GGUF), publie :
+construit Win + Linux **unifiés** (CUDA `aos-modeld` + CPU `aos-modeld-cpu`
+dans le même zip ; sans GGUF), publie :
 
 - `AgentOS-Preview-<ver>-windows-x64.zip`
-- `AgentOS-Preview-<ver>-windows-x64-cpu.zip`
 - `AgentOS-Preview-<ver>-linux-x64.tar.gz`
-- `AgentOS-Preview-<ver>-linux-x64-cpu.tar.gz`
-- `latest.json` (sha256 + métadonnées pour **les quatre** artefacts)
+- `latest.json` (sha256 + métadonnées pour **deux** artefacts testeur)
+
+`-CpuOnly` reste un hatch **builder**, pas un téléchargement testeur.
 
 Déclenchement manuel : Actions → **preview-release** → Run workflow.
 
@@ -36,12 +37,13 @@ Les GGUF sont téléchargés au **premier run** via `share/models/manifest.json`
 ## Notes de version (brouillon)
 
 ```
-Akasha OS Preview 0.7.0 — hôte d’UI de module déclarative (E15)
+Akasha OS Preview 0.8.0 — image + TTS locaux, artefact CPU/GPU unifié
 
-- Onglets egui dynamiques pour les modules installés avec ui.mode=declarative_ui (arbre de widgets fermé dans ui/index.html)
-- Intent module.ui valide fail-closed ; bind des résultats d’outils ; bouton/formulaire → module.invoke sous revue de caps
-- module.scaffold champ ui optionnel ; package/compile écrivent un vrai arbre (défaut heading + form + table)
-- JSON Schema : docs/bridge/aos-proto-decl-ui.json
+- media.image.generate / media.audio.generate (PNG/WAV sous /downloads) ; cap media.generate
+- Packs optionnels (SD 1.5, Piper) hors zip ; Download tire aussi sd.cpp / piper dans bin/
+- Un zip Win / un tar Linux : aos-modeld (CUDA) + aos-modeld-cpu ; Réglages gpu/cpu/auto redémarre modeld dans la session
+- Onglet Providers (cloud OpenAI-compat + loopback) ; désinstall de modules ; widgets E15 plus riches
+- One-liner : irm …/install.ps1 | iex  /  curl …/install.sh | sh (sha256 fail-closed + overlay)
 
 Pas un OS bootable. Voir FIRST-RUN.md / INSTALL.md / TESTER.md
 ```

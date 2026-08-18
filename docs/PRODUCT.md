@@ -14,7 +14,7 @@ Other audiences (systems/security/AI researchers, commercial-license evaluators)
 
 ## Product Purpose
 
-Akasha OS is an agent-native operating system: agents, models, tools, and memory are first-class system services with explicit capabilities, audit, and policy. Preview 0.7.0 is an installable host app on Windows/Linux (NVIDIA optional via CPU path), not a bootable OS image. A seL4 bare-metal track is separate.
+Akasha OS is an agent-native operating system: agents, models, tools, and memory are first-class system services with explicit capabilities, audit, and policy. Preview 0.8.0 is an installable host app on Windows/Linux (NVIDIA optional via CPU path in the same zip), not a bootable OS image. A seL4 bare-metal track is separate.
 
 Success for the public site: a tester understands the thesis (capabilities, semantic IPC, first-class GPU, offline-by-default), then downloads Preview and follows the tester protocol.
 
@@ -35,12 +35,12 @@ A neighboring chat wrapper or “AI desktop” cannot truthfully claim that agen
 
 ## Capabilities and Constraints
 
-Confirmed Preview surfaces: parallel persisted chat sessions; long-term memory (remember / recall); human- and agent-authored notes and tasks (WASM modules); agent goal loop with skills, tools, scheduler, optional MCP; caps list/revoke; live model metrics; opt-in web search/fetch (offline by default); themes; local feedback report plus GitHub issue; non-destructive update overlays from GitHub Releases.
+Confirmed Preview surfaces: parallel persisted chat sessions; long-term memory (remember / recall); human- and agent-authored notes and tasks (WASM modules); agent goal loop with skills, tools, scheduler, optional MCP; caps list/revoke; live model metrics; optional local image (Stable Diffusion) and TTS (Piper) via Models download (engine arrives with the pack); Providers tab (OpenAI-compat cloud + loopback); module uninstall (non-bundled); opt-in web search/fetch (offline by default); themes; local feedback report plus GitHub issue; non-destructive update overlays from GitHub Releases.
 
 Constraints:
 
 - This is not a bootable OS image yet. Future work must never imply otherwise.
-- Preview 0.7.0: Windows/Linux x64; NVIDIA GPU recommended; CPU-only path available; ~4 GB disk. No macOS.
+- Preview 0.8.0: Windows/Linux x64; NVIDIA GPU recommended; CPU-only path in the same artefact; ~4 GB disk. No macOS.
 - Dual licensing: AGPL-3.0-only and a commercial license (attribution + royalty). The Akasha OS trademark is reserved.
 - Site and product copy are bilingual EN / FR with equivalent content.
 - Stack for the public site is already decided: static HTML / CSS / JS in `website/`.
@@ -59,7 +59,7 @@ Site routes: landing plus grant, why, install, about, an end-user docs hub (`web
 Real, usable:
 
 - Product copy and structure in `website/index.html`, `website/styles.css`, `website/app.js`
-- README, INSTALL, FIRST-RUN, TESTER, STATUS, vision, functional and technical specs (EN + `docs/fr/`)
+- README at repo root; INSTALL, PRODUCT, FIRST-RUN, TESTER, STATUS, vision, functional and technical specs under `docs/` (EN + `docs/fr/`)
 - GitHub repository and Releases
 - In-app tutorial and tester protocol (not screenshots committed as marketing assets)
 

@@ -1,4 +1,4 @@
-# Preview features — Akasha OS 0.7.0
+# Preview features — Akasha OS 0.8.0
 
 **Language:** English | [Français](fr/FEATURES.md)
 
@@ -7,7 +7,18 @@ This is **not** the bootable OS. Target v1 requirements live in
 [functional-specs.md](functional-specs.md); phase gates in
 [STATUS.md](STATUS.md).
 
-> Date: 18/08/2026 · Preview **0.7.0**
+> Date: 18/08/2026 · Preview **0.8.0**
+
+### What's new in 0.8.0
+
+- **Image + TTS** (E16): `media.image.generate` / `media.audio.generate` write PNG/WAV under `/downloads`; cap `media.generate`; Placement Manager accounts for media VRAM
+- Chat slash `/image` / `/speak` shows the PNG and plays the clip; E15 `image` / `audio` widgets bind the same paths
+- Optional media packs (`local:sd-v1-5`, Piper `en_US` / `fr_FR`) — download from Models, **not** in the zip; first-run does not pull them. The same download fetches the sd.cpp / piper engine into `bin/` if it is missing
+- **Unified host artefact** (E17): one Win zip + one Linux tarball; `aos-modeld` (CUDA) + `aos-modeld-cpu` inside; Settings **auto / gpu / cpu** restarts modeld in-session (mid-token migrate stays 0.9)
+- **Module uninstall** (F-MOD-01): Settings lists installed modules; confirm; revoke `tool.invoke:<name>`; refuse bundled `notes` / `tasks` / `ext-rt`
+- **E15 widgets**: typed `form` (JSON Schema), `select` / `radio` / `checkbox` / `textarea` / `bar_chart` / `image` / `audio`
+- **Providers** tab (F-MDL-04): OpenAI-compat cloud + loopback (Ollama / vLLM / LM Studio); keys in the vault; Chat combo groups local vs provider; `local_only` still allows loopback
+- One-liner install: `irm https://azerothl.github.io/akasha-os/install.ps1 | iex` / `curl -fsSL https://azerothl.github.io/akasha-os/install.sh | sh` (sha256 fail-closed + overlay)
 
 ### What's new in 0.7.0
 
@@ -77,7 +88,7 @@ This is **not** the bootable OS. Target v1 requirements live in
 | Disk checks | Refuses to start without enough free space |
 | Hardware probe | Writes `var/run/hardware.json` (VRAM, RAM, disk); tier includes **cpu** |
 | Model selection | Auto-best pack by tier (`cpu` / low / mid / high) |
-| GGUF download | Offerings from `share/models/catalog-offerings.json` → `share/models/` |
+| GGUF download | Offerings from `share/models/catalog-offerings.json` → `share/models/` ; media packs also fetch `bin/sd` / `bin/piper` |
 | In-app tutorial | 4-step onboarding (language, trust, routing, scenarios) |
 | Ordered boot | bus → capkd → auditd → modeld → platformd → agentd → egui |
 
@@ -112,6 +123,8 @@ Slash commands:
 | `/notesearch <query>` | Semantic note search |
 | `/audit [n]` | Last *n* audit events |
 | `/kill <id>` / `/pause <id>` | Control an agent |
+| `/image <prompt>` | Generate a PNG (`media.image.generate`) under `/downloads` |
+| `/speak <text>` | Generate a WAV (`media.audio.generate`) under `/downloads` |
 
 ---
 
@@ -188,13 +201,28 @@ Agent **Detail** (from the Agents tab or a chat card):
 
 ## 6. Models
 
-- Unified local backends (llama.cpp CUDA **or** CPU) + optional remote OpenAI-compatible (P3)
+- Unified local backends (llama.cpp CUDA **or** CPU) + named **Providers** (P08.12 / F-MDL-04)
 - Routing: **local_only** (default) or **balanced** (Settings)
 - Models tab: list / load / download offerings; set session default
 - Live metrics: TTFT, tok/s, VRAM/RAM/disk (sidebar + Models)
 - Green banner when newer packs fit the detected VRAM tier
 - CLI: `aos-session --download-models <id>…`
 - Continuous batching (`generate_batch`, `n_seq_max=8`) on CUDA hosts (P5.1)
+
+### Image + TTS (E16)
+
+- Intents `media.image.generate` / `media.audio.generate`; cap `media.generate`; audit; files under `/downloads`
+- Optional packs (`local:sd-v1-5`, `local:piper-en-us`, `local:piper-fr-fr`) — **not** in the zip; first-run skips them
+- **Download a pack also fetches the engine** (`bin/sd` / `bin/piper` + DLLs / `espeak-ng-data`) if it is missing; boot repairs the same gap
+- Without weights **or** engine, Preview writes a visible stub PNG / short WAV so the pipeline stays testable
+- Placement Manager treats media weights as evictable shards vs the loaded LLM
+
+### Providers (F-MDL-04)
+
+- **Providers** tab: add / list / test / remove OpenAI-compatible cloud and loopback (Ollama / vLLM / LM Studio)
+- API keys live in the vault, never in the provider file
+- Chat combo groups local vs provider; `local_only` still allows loopback; WAN needs **balanced** + Allow network
+- Infer with `secret` data stays local
 
 ---
 
@@ -234,7 +262,7 @@ Persisted in `var/run/preferences.json` (migrated from `onboarding.json` if need
 | Agents | Default model, max steps (1–128), timeout (60–86400 s) |
 | Schedules | Interval agent fires (`schedule.*`) |
 | Secrets | Brave / GitHub / OpenAI keys → encrypted vault; master key in OS keyring |
-| Modules | Local signed catalogue (E10); Install still requires cap review |
+| Modules | Local signed catalogue (E10); Install still requires cap review; Uninstall non-bundled modules (not `notes` / `tasks` / `ext-rt`) |
 | Web | Search engine, browse max chars, fetch max bytes |
 
 ---
@@ -267,17 +295,21 @@ seL4 VM track (PV.1–PV.3) is separate: see [phases/phase-vm-sel4.md](phases/ph
 
 ---
 
-## 11. Not in Preview 0.7.0
+## 11. Not in Preview 0.8.0
 
 - Bootable / bare-metal image
 - macOS
 - Fully automatic update apply (download now, apply on next launch)
-- Native audio / video generation (audio + still image planned for Preview **0.8.0** / E16; video stays out)
+- Video generation / STT / always-on voice
+- Mid-token CPU ↔ GPU migrate (Preview **0.9.0** / E18)
+- Extra image families (Flux2, Ideogram4, …) and sd.cpp / Piper option knobs (Preview **0.9.0** / E19)
+- Native Messages/Gemini/Bedrock APIs (OpenAI-compat Providers only)
 - Public module marketplace (local signed catalogue only)
 - Messaging channels (Slack/Discord/etc.) in the OS core
 - Simultaneous multi-user accounts
 - Complete multi-GPU pipeline (P5.2; single-GPU hosts only)
 - Live HTTP sibling daemon / TPM hardware envelope
 - Sandboxed webview / HTML/JS module UI (E13 compositor)
+- pie/scatter/webview widget kinds
 
 Cohort protocol: [TESTER.md](TESTER.md).

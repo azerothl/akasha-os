@@ -1,17 +1,18 @@
-# Premier lancement — Akasha OS Preview 0.7.0
+# Premier lancement — Akasha OS Preview 0.8.0
 
 **Langue :** [English](../FIRST-RUN.md) | Français
 
-> Date : 18/08/2026 · Preview **0.7.0**
+> Date : 18/08/2026 · Preview **0.8.0**
 
-**Ce n'est pas un OS bootable.** La Preview 0.7.0 tourne sur Windows ou Linux x64.
-**NVIDIA est recommandé** ; le boot CPU-only fonctionne (plus lent).
+**Ce n'est pas un OS bootable.** La Preview 0.8.0 tourne sur Windows ou Linux x64.
+**NVIDIA est recommandé** ; le même zip embarque `aos-modeld-cpu`
+(Réglages → Inférence redémarre modeld dans la session).
 
 Catalogue : [FEATURES.md](FEATURES.md).
 
 ## Avant de lancer
 
-1. Driver NVIDIA (`nvidia-smi -L` OK), **ou** paquet / mode CPU-only.
+1. Driver NVIDIA (`nvidia-smi -L` OK), **ou** Réglages → Inférence → CPU (même zip).
 2. ~8 Go libres (pack mid : 9B + embedding) ; moins pour le pack **cpu**.
 3. Préférer `install.cmd` / `install.sh`, ou lancer `bin/aos-session`
    (synchronise vers `%LOCALAPPDATA%\AgentOS-Preview` /
@@ -40,14 +41,15 @@ Catalogue : `share/models/catalog-offerings.json`.
 
 | Onglet / surface | Usage |
 |------------------|--------|
-| Chat / Sessions | Modèle **par session** ; commandes slash (`/help`, `/agent`, `/notes`…) |
+| Chat / Sessions | Modèle **par session** ; slash (`/help`, `/agent`, `/image`, `/speak`…) |
 | Mémoire | Faits long terme ; injection `mem.context` ; mémorisation auto opt-in depuis le chat (Settings) |
 | Notes | Humaines + via agent (module WASM) |
 | Agents | Goal, skills, outils, MCP ; **modèle** à la création ; **Détail** |
-| Models | Liste / load / download ; bandeau si nouveaux packs |
+| Models | Liste / load / download ; packs image/TTS optionnels (pas dans le zip ; Download installe aussi `bin/sd` / `bin/piper`) |
+| Providers | Cloud OpenAI-compat + loopback (Ollama / vLLM / LM Studio) ; clés dans le vault |
 | Audit | Événements signés ; tuer auditd (le superviseur le relance) |
 | Réseau (barre latérale) | Opt-in `web.search` / `web.browse` / `net.fetch` |
-| Settings | Langue, trust, routage, défauts agent, moteur de recherche, mémorisation auto |
+| Settings | Langue, trust, routage, défauts agent, moteur de recherche, mémorisation auto, gpu/cpu/auto |
 | Retour | Issue GitHub sur azerothl/akasha-os |
 | Scénarios | Protocole cohorte ([TESTER.md](TESTER.md)) |
 
@@ -62,6 +64,7 @@ Préférences dans `var/run/preferences.json` (langue **en** / **fr**, routage,
 trust, modèle agent, max steps, timeout, moteur, limites browse/fetch).
 
 Mises à jour modèles : bandeau vert → Models → Download → redémarrer Preview.
+Un pack média tire aussi le moteur (`sd.cpp` / Piper) dans `bin/` s’il manque.
 
 ## Réseau
 

@@ -6,6 +6,7 @@
 > Date : 15/08/2026  
 > Statut : brouillon  
 > Référence : `specs-fonctionnelles.md`, `reflexion-agent-os.md`, `FEATURES.md`  
+> Changements v0.8.0 : Preview 0.8.0 — E16 `media.*` dans modeld ; Download d’un pack média tire sd.cpp / piper dans `bin/` ; E17 artefact CPU/GPU unifié + hystérésis ; pack widgets E15 ; F-MDL-04 Providers.
 > Changements v0.7.0 : Preview 0.7.0 — hôte E15 de widgets `declarative_ui` (pas de webview).
 > Changements v0.6.0 : Preview 0.6.0 — export schémas E8 + contrat HTTP↔bus ; keyring OS E7 ; catalogue local signé E10.
 > Changements v0.5.0 : Preview 0.5.0 — mémorisation auto depuis le chat (E14) ; `user.ask` en cours de tâche.
@@ -215,7 +216,7 @@ privacy_class: remote
 |---------|------|-------|
 | **Embedded Runtime** | Inférence locale native (cible : llama.cpp-like / candle / ggml) | Obligatoire au boot |
 | **Advanced Local** | Backend optionnel haute perf (type vLLM/TGI si portés) | Phase ultérieure |
-| **Remote OpenAI-compatible** | HTTP/S SSE ou streaming custom | Cloud ou serveur privé |
+| **Remote OpenAI-compatible** | HTTP/S SSE ou streaming custom | Cloud ou serveur privé. Preview **0.8.0** (P08.12) expose un onglet **Providers** : presets nommés (OpenAI, OpenRouter, Anthropic OpenAI-compat, DeepSeek, z.ai, Ollama, vLLM, LM Studio, custom). Clés dans le vault. Loopback = privacy locale. |
 | **Remote gRPC** | Option pour clusters internes | Could |
 
 **API unifiée interne** (tous backends) :
@@ -660,7 +661,10 @@ l’hôte egui. Vocabulaire fermé : `column`, `row`, `heading`, `text`,
 `markdown`, `stat_row`, `table`, `line_chart`, `form`, `button`. Les kinds
 inconnus sont refusés (fail-closed). Données et actions liées aux outils du
 module via `tool.invoke`. Ce n’est **pas** du HTML/JS. `sandboxed_webview`
-reste une option fer nu / E13, pas un chemin Preview hôte.
+reste une option fer nu / E13, pas un chemin Preview hôte. Preview **0.8.0**
+(P08.11) élargit la même liste fermée : champs `form` typés depuis le JSON
+Schema, `select` / `radio` / `checkbox` / `textarea`, `bar_chart`, `image`,
+`audio`.
 
 > Exemple de capacité réseau pour un module nécessitant un accès externe (ex. recherche web) : `required_caps: [net.connect:api.example.com:443]` — soumise à revue utilisateur à l'installation et au contrôle d'egress (§9.5).
 

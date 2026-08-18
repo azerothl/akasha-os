@@ -1,17 +1,18 @@
-# First run — Akasha OS Preview 0.7.0
+# First run — Akasha OS Preview 0.8.0
 
 **Language:** English | [Français](fr/FIRST-RUN.md)
 
-> Date: 18/08/2026 · Preview **0.7.0**
+> Date: 18/08/2026 · Preview **0.8.0**
 
-**This is not a bootable OS.** Preview 0.7.0 runs on Windows or Linux x64.
-**NVIDIA is recommended**; CPU-only boot works with a smaller/slower pack.
+**This is not a bootable OS.** Preview 0.8.0 runs on Windows or Linux x64.
+**NVIDIA is recommended**; the same zip ships a CPU-linked `aos-modeld-cpu`
+(Settings → Inference restarts modeld in-session).
 
 Full feature list: [FEATURES.md](FEATURES.md).
 
 ## Before you launch
 
-1. NVIDIA driver (`nvidia-smi -L` OK), **or** CPU-only package / Settings → Inference → CPU.
+1. NVIDIA driver (`nvidia-smi -L` OK), **or** Settings → Inference → CPU (same zip).
 2. ~8 GB free disk (recommended mid-tier pack: 9B + embedding); less for the **cpu** pack.
 3. Prefer `install.cmd` / `install.sh`, or run `bin/aos-session` (auto-syncs
    into `%LOCALAPPDATA%\AgentOS-Preview` / `~/.local/share/agentos-preview` so
@@ -39,20 +40,21 @@ Catalogue: `share/models/catalog-offerings.json`. Installed registry:
 
 | Tab / surface | Usage |
 |---------------|--------|
-| Chat / Sessions | Parallel sessions; **per-session model**; slash commands (`/help`, `/agent`, `/notes`…) |
+| Chat / Sessions | Parallel sessions; **per-session model**; slash (`/help`, `/agent`, `/image`, `/speak`…) |
 | Memory | Long-term facts (remember / recall); injected as `mem.context`; optional auto-remember from chat (Settings) |
 | Notes | Human notes + via agent (WASM module) |
 | Agents | Goal loop, skills, tools, MCP; **model** at create; **Detail** timeline |
-| Models | List / load / download offerings; update banner when newer packs fit |
+| Models | List / load / download offerings; optional image/TTS packs (not in the zip; Download also installs `bin/sd` / `bin/piper`) |
+| Providers | OpenAI-compat cloud + loopback (Ollama / vLLM / LM Studio); keys in the vault |
 | Audit | Signed events; kill auditd (supervisor restarts it) |
 | Network (sidebar) | Opt-in `web.search` / `web.browse` / `net.fetch` |
-| Settings | Language, trust, routing, agent defaults, search engine, auto-remember |
+| Settings | Language, trust, routing, agent defaults, search engine, auto-remember, gpu/cpu/auto |
 | Feedback | GitHub issue on azerothl/akasha-os |
 | Scenarios | Cohort protocol (see [TESTER.md](TESTER.md)) |
 
 ### Agent detail
 
-Open **Détail** on an agent card or the Agents tab: live state, simple/complex
+Open **Detail** on an agent card or the Agents tab: live state, simple/complex
 badge, sources, step timeline, Pause / Resume / Retry / Kill / Steer.
 
 ### Settings
@@ -65,7 +67,8 @@ browse/fetch limits).
 
 If `catalog-offerings.json` recommends models you do not have yet, a green
 banner appears → **Open Models** → **Download**. Restart Preview after
-download so `etc/modeld.yaml` picks up new paths.
+download so `etc/modeld.yaml` picks up new paths. A media pack download also
+fetches the matching engine into `bin/` when it is missing.
 
 CLI: `aos-session --download-models <id>…`
 

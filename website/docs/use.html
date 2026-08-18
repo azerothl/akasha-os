@@ -49,12 +49,12 @@
         <h1>
           <span data-lang="en">
             After <a href="first-run.html">first run</a> and the four-step
-            tutorial, these are the Preview <span data-aos-version>0.7.0</span> surfaces. Closing the UI stops
+            tutorial, these are the Preview <span data-aos-version>0.8.0</span> surfaces. Closing the UI stops
             the daemons.
           </span>
           <span data-lang="fr">
             Après <a href="first-run.html">first-run</a> et le tutoriel en
-            quatre étapes, voici les surfaces Preview <span data-aos-version>0.7.0</span>. Fermer l’UI arrête
+            quatre étapes, voici les surfaces Preview <span data-aos-version>0.8.0</span>. Fermer l’UI arrête
             les daemons.
           </span>
         </h1>
@@ -62,10 +62,10 @@
         <h2 data-lang="en">tab map</h2>
         <h2 data-lang="fr">carte des onglets</h2>
         <ul class="ticks">
-          <li data-lang="en">Chat / Sessions — parallel sessions; per-session model; Stop / Copy; slash <code>/agent</code></li>
-          <li data-lang="fr">Chat / Sessions — sessions parallèles ; modèle par session ; Stop / Copier ; slash <code>/agent</code></li>
-          <li data-lang="en">Models — list / load / download offerings; TTFT / tok/s; update banner</li>
-          <li data-lang="fr">Models — lister / charger / télécharger ; TTFT / tok/s ; bannière de mise à jour</li>
+          <li data-lang="en">Chat / Sessions — parallel sessions; per-session model; Stop / Copy; slash <code>/agent</code> <code>/image</code> <code>/speak</code></li>
+          <li data-lang="fr">Chat / Sessions — sessions parallèles ; modèle par session ; Stop / Copier ; slash <code>/agent</code> <code>/image</code> <code>/speak</code></li>
+          <li data-lang="en">Models — list / load / download offerings (image/TTS packs fetch sd.cpp / piper); TTFT / tok/s; update banner</li>
+          <li data-lang="fr">Models — lister / charger / télécharger (packs image/TTS tirent sd.cpp / piper) ; TTFT / tok/s ; bannière de mise à jour</li>
           <li data-lang="en">Memory — long-term facts (remember / recall); optional auto-remember from chat</li>
           <li data-lang="fr">Memory — faits long terme (remember / recall) ; mémorisation auto depuis le chat (opt.)</li>
           <li data-lang="en">Notes — human notes and notes via agent</li>
@@ -80,8 +80,10 @@
           <li data-lang="fr">Caps — lister par détenteur ; révoquer (audité)</li>
           <li data-lang="en">Audit — signed events; Refresh; supervisor restarts auditd</li>
           <li data-lang="fr">Audit — événements signés ; Refresh ; le superviseur relance auditd</li>
-          <li data-lang="en">Settings — language, secrets vault, module catalogue, schedules, auto-remember</li>
-          <li data-lang="fr">Settings — langue, vault secrets, catalogue de modules, schedules, mémorisation auto</li>
+          <li data-lang="en">Providers — OpenAI-compat cloud + loopback (Ollama / vLLM / LM Studio); keys in the vault</li>
+          <li data-lang="fr">Providers — cloud OpenAI-compat + loopback (Ollama / vLLM / LM Studio) ; clés dans le vault</li>
+          <li data-lang="en">Settings — language, secrets vault, module catalogue / uninstall, schedules, auto-remember, gpu/cpu/auto</li>
+          <li data-lang="fr">Settings — langue, vault secrets, catalogue / désinstall de modules, schedules, mémorisation auto, gpu/cpu/auto</li>
           <li data-lang="en">Network (sidebar) — opt-in search / browse / fetch</li>
           <li data-lang="fr">Network (barre latérale) — recherche / browse / fetch en opt-in</li>
           <li data-lang="en">Feedback — GitHub issue on azerothl/akasha-os</li>
@@ -100,6 +102,8 @@
           sessions, chat in each, restart Preview: histories must reappear.
           Slash <code>/agent &lt;task&gt;</code> (or « crée un module … ») launches a
           background agent with a card in the thread.
+          <code>/image</code> and <code>/speak</code> write PNG/WAV after you download
+          the optional media packs from Models (the engine is fetched with the pack).
         </p>
         <p class="hist" data-lang="fr">
           Posez une question (par exemple « Qu’est-ce qu’Akasha OS ? »). Une
@@ -110,22 +114,28 @@
           dans chacune, redémarrez Preview : les historiques doivent réapparaître.
           Slash <code>/agent &lt;tâche&gt;</code> (ou « crée un module … ») lance un
           agent en fond avec une carte dans le fil.
+          <code>/image</code> et <code>/speak</code> écrivent PNG/WAV après
+          téléchargement des packs média dans Models (le moteur arrive avec le pack).
         </p>
 
         <h2 data-lang="en">models</h2>
         <h2 data-lang="fr">models</h2>
         <p class="hist" data-lang="en">
           Open Models to see installed entries. Download an alternative if
-          offered. A “Models: …” banner appears when newer offerings fit your
-          VRAM tier. After a download, restart so <code>etc/modeld.yaml</code>
-          sees new paths.
+          offered. Optional image/TTS packs (Stable Diffusion 1.5, Piper) are
+          not in the zip; Download also installs <code>bin/sd</code> /
+          <code>bin/piper</code> if missing. A “Models: …” banner appears when
+          newer offerings fit your VRAM tier. After a download, restart so
+          <code>etc/modeld.yaml</code> sees new paths.
         </p>
         <p class="hist" data-lang="fr">
           Ouvrez Models pour voir les entrées installées. Téléchargez une
-          alternative si elle est proposée. Une bannière « Models: … » apparaît
-          quand de nouvelles offres tiennent dans votre palier VRAM. Après un
-          téléchargement, redémarrez pour que <code>etc/modeld.yaml</code>
-          voie les chemins.
+          alternative si elle est proposée. Les packs image/TTS (Stable
+          Diffusion 1.5, Piper) ne sont pas dans le zip ; Download installe
+          aussi <code>bin/sd</code> / <code>bin/piper</code> s’ils manquent.
+          Une bannière « Models: … » apparaît quand de nouvelles offres
+          tiennent dans votre palier VRAM. Après un téléchargement, redémarrez
+          pour que <code>etc/modeld.yaml</code> voie les chemins.
         </p>
 
         <h2 data-lang="en">memory</h2>

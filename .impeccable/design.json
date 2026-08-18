@@ -183,7 +183,7 @@
       "kind": "card",
       "refersTo": "fact",
       "description": "Landing honesty on void: Archivo cyan title, Fira paper body, centered. Cut-face gaps, no paper sheet. Class is .fact — never .plate (weather class on inner pages).",
-      "html": "<article class=\"ds-fact\"><h2>Host</h2><p>Preview 0.7.0 is a host app on Windows or Linux x64.</p></article>",
+      "html": "<article class=\"ds-fact\"><h2>Host</h2><p>Preview 0.8.0 is a host app on Windows or Linux x64.</p></article>",
       "css": ".ds-fact { background: transparent; color: var(--paper, #dce6f0); padding: 0; text-align: center; } .ds-fact h2 { margin: 0 0 8px; color: var(--signal, #3ee0c4); font-family: \"Archivo Narrow\", \"Arial Narrow\", sans-serif; font-size: 1.05rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; } .ds-fact p { margin: 0 auto; max-width: 36rem; color: var(--paper, #dce6f0); font-family: \"Fira Sans\", \"Segoe UI\", sans-serif; font-size: 0.98rem; line-height: 1.55; }"
     },
     {

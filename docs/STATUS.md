@@ -7,35 +7,43 @@ Summary of delivered phases. Detail: [development-plan.md](development-plan.md),
 
 **Headline:** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview:** 0.7.0 (18/08/2026) — host-rendered declarative module UI (E15);
-dynamic egui tabs for installed modules with `declarative_ui`. Prior: sibling
-bridge, OS keyring, signed catalogue (0.6.0). Not a bootable OS. Cohort gate
-still open. **Next:** Preview **0.8.0** (E16 + E17) — local image + audio generation and
-a unified CPU/GPU host ([phase-preview-08.md](phases/phase-preview-08.md)).
-After 0.8: Preview **0.9.0** (E18) — mid-token device migrate without cancel.
+**Preview:** 0.8.0 (18/08/2026) — local image + TTS (E16; packs download their
+engines), unified CPU/GPU artefact (E17), E15 widget pack, Providers tab,
+complete uninstall, one-liner install. Not a bootable OS. Cohort gate still
+open. **Next:** Preview **0.9.0** (E18 + E19) — mid-token device migrate
+without cancel, plus extra image/TTS models and a closed option schema;
+leftover P08.8 host hygiene (P09.7).
 
-## P08 — Preview 0.8.0 (E16 + E17) — planned
+## P08 — Preview 0.8.0 (E16 + E17 + E15 widgets + Providers) — done
 
 | # | Evolution | Status |
 |---|-----------|--------|
-| P08.1 | E16 media registry + Placement Manager shards | planned |
-| P08.2 | E16 `media.image.generate` (PNG under `/downloads`) | planned |
-| P08.3 | E16 `media.audio.generate` (TTS) | planned |
-| P08.4 | E16 chat / optional E15 `image`/`audio` widgets | planned |
-| P08.5 | E17 unified artefact + UI / load-based device policy | planned |
-| P08.6 | E16 optional media packs | planned |
-| P08.7 | Cleanup + refactor (Preview host; no behavior change) | planned |
-| P08.8 | Docs / packaging / version 0.8.0 | planned |
+| P08.1 | E16 media registry + Placement Manager shards | done |
+| P08.2 | E16 `media.image.generate` (PNG under `/downloads`) | done |
+| P08.3 | E16 `media.audio.generate` (TTS) | done |
+| P08.4 | E16 chat surface (`image`/`audio` kinds in P08.11) | done |
+| P08.5 | E17 unified artefact + UI / load-based device policy | done |
+| P08.6 | E16 optional media packs (Download also fetches sd.cpp / piper) | done |
+| P08.7 | F-MOD-01 module uninstall (UI, revoke caps, drop E15 tab) | done |
+| P08.8 | Cleanup + refactor (Preview host; no behavior change) | done |
+| P08.9 | One-line install per OS (download + sha256 + overlay) | done |
+| P08.10 | Docs / packaging / version 0.8.0 | done |
+| P08.11 | E15 widget vocabulary (select/radio/checkbox/textarea/bar_chart/image/audio + typed forms) | done |
+| P08.12 | F-MDL-04 Providers tab (OpenAI-compat cloud + local servers) | done |
 
 Detail: [phases/phase-preview-08.md](phases/phase-preview-08.md).
 
-## P09 — Preview 0.9.0 (E18) — planned
+## P09 — Preview 0.9.0 (E18 + E19) — planned
 
 | # | Evolution | Status |
 |---|-----------|--------|
 | P09.1 | E18 mid-token CPU ↔ GPU migrate (stream continues) | planned |
 | P09.2 | E18 UI/`auto` uses migrate; 0.8 cancel+restart is fallback | planned |
-| P09.3 | Docs / packaging / version 0.9.0 | planned |
+| P09.3 | E19 closed option schema on `media.*` + Settings (sd.cpp / Piper allowlist) | planned |
+| P09.4 | E19 extra optional packs (Flux2, Ideogram4, extra Piper voices) | planned |
+| P09.5 | E19 Models / Settings surface; `/image` and TTS honor the choice | planned |
+| P09.7 | Finish P08.8 leftovers (split remaining host modules; leftover i18n; chat role key) | planned |
+| P09.6 | Docs / packaging / version 0.9.0 | planned |
 
 Detail: [phases/phase-preview-09.md](phases/phase-preview-09.md).
 

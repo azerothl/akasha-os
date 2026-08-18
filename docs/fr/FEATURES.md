@@ -1,4 +1,4 @@
-# Fonctionnalités Preview — Akasha OS 0.7.0
+# Fonctionnalités Preview — Akasha OS 0.8.0
 
 **Langue :** [English](../FEATURES.md) | Français
 
@@ -7,7 +7,18 @@ Ce n'est **pas** l'OS bootable. Les exigences v1 sont dans
 [specs-fonctionnelles.md](specs-fonctionnelles.md) ; les gates dans
 [STATUS.md](STATUS.md).
 
-> Date : 18/08/2026 · Preview **0.7.0**
+> Date : 18/08/2026 · Preview **0.8.0**
+
+### Nouveautés 0.8.0
+
+- **Image + TTS** (E16) : `media.image.generate` / `media.audio.generate` écrivent PNG/WAV sous `/downloads` ; cap `media.generate` ; le Placement Manager comptabilise la VRAM média
+- Slash chat `/image` / `/speak` : l’image s’affiche, le clip se joue ; widgets E15 `image` / `audio` sur le même chemin
+- Packs média optionnels (`local:sd-v1-5`, Piper `en_US` / `fr_FR`) — téléchargement Models, **pas** dans le zip ; first-run ne les tire pas. Le même Download installe le moteur sd.cpp / piper dans `bin/` s’il manque
+- **Artefact hôte unifié** (E17) : un zip Win + un tar Linux ; `aos-modeld` (CUDA) + `aos-modeld-cpu` ; Settings **auto / gpu / cpu** redémarre modeld dans la session
+- **Désinstall module** (F-MOD-01) : liste des modules installés ; confirm ; révocation `tool.invoke:<name>` ; refus des bundlés
+- **Widgets E15** : `form` typé (JSON Schema), `select` / `radio` / `checkbox` / `textarea` / `bar_chart` / `image` / `audio`
+- Onglet **Providers** (F-MDL-04) : cloud OpenAI-compat + loopback ; clés dans le coffre ; combo Chat local vs provider
+- Install one-liner : `irm https://azerothl.github.io/akasha-os/install.ps1 | iex` / `curl -fsSL https://azerothl.github.io/akasha-os/install.sh | sh`
 
 ### Nouveautés 0.7.0
 
@@ -77,7 +88,7 @@ Ce n'est **pas** l'OS bootable. Les exigences v1 sont dans
 | Contrôles disque | Refuse de démarrer sans espace suffisant |
 | Sonde matériel | Écrit `var/run/hardware.json` (VRAM, RAM, disque) ; tier inclut **cpu** |
 | Choix des modèles | Pack auto-best selon le tier (`cpu` / low / mid / high) |
-| Téléchargement GGUF | Offerings `share/models/catalog-offerings.json` → `share/models/` |
+| Téléchargement GGUF | Offerings `share/models/catalog-offerings.json` → `share/models/` ; packs média tirent aussi `bin/sd` / `bin/piper` |
 | Tutoriel in-app | Onboarding 4 étapes (langue, confiance, routage, scénarios) |
 | Boot ordonné | bus → capkd → auditd → modeld → platformd → agentd → egui |
 
@@ -112,6 +123,8 @@ Commandes slash :
 | `/notesearch <requête>` | Recherche sémantique dans les notes |
 | `/audit [n]` | *n* derniers événements d'audit |
 | `/kill <id>` / `/pause <id>` | Contrôler un agent |
+| `/image <prompt>` | Générer un PNG (`media.image.generate`) sous `/downloads` |
+| `/speak <texte>` | Générer un WAV (`media.audio.generate`) sous `/downloads` |
 
 ---
 
@@ -188,13 +201,28 @@ Skills livrées : **notes-writer**, **research**, **file-author**, **planner**, 
 
 ## 6. Modèles
 
-- Backends locaux unifiés (llama.cpp CUDA **ou** CPU) + remote OpenAI-compatible optionnel (P3)
+- Backends locaux unifiés (llama.cpp CUDA **ou** CPU) + **Providers** nommés (P08.12 / F-MDL-04)
 - Routage : **local_only** (défaut) ou **balanced** (Settings)
 - Onglet Models : lister / charger / télécharger ; défaut de session
 - Métriques live : TTFT, tok/s, VRAM/RAM/disque (barre latérale + Models)
 - Bandeau vert si de nouveaux packs correspondent au tier VRAM
 - CLI : `aos-session --download-models <id>…`
 - Continuous batching (`generate_batch`, `n_seq_max=8`) sur l'hôte (P5.1)
+
+### Image + TTS (E16)
+
+- Intents `media.image.generate` / `media.audio.generate` ; cap `media.generate` ; audit ; fichiers sous `/downloads`
+- Packs optionnels (`local:sd-v1-5`, `local:piper-en-us`, `local:piper-fr-fr`) — **pas** dans le zip ; first-run les saute
+- **Télécharger un pack tire aussi le moteur** (`bin/sd` / `bin/piper` + DLL / `espeak-ng-data`) s’il manque ; le boot répare le même trou
+- Sans poids **ou** sans moteur, Preview écrit un PNG stub visible / un WAV court pour tester le pipeline
+- Le Placement Manager traite les poids média comme shards évincables vs le LLM chargé
+
+### Providers (F-MDL-04)
+
+- Onglet **Providers** : ajouter / lister / tester / retirer cloud OpenAI-compat et loopback (Ollama / vLLM / LM Studio)
+- Les clés API vivent dans le vault, jamais dans le fichier provider
+- Combo Chat : local vs provider ; `local_only` autorise encore le loopback ; le WAN demande **balanced** + Autoriser le réseau
+- Un infer `secret` reste local
 
 ---
 
@@ -234,7 +262,7 @@ Persistés dans `var/run/preferences.json` (migration depuis `onboarding.json` s
 | Agents | Modèle par défaut, max steps (1–128), timeout (60–86400 s) |
 | Schedules | Intervalle de déclenchement agent (`schedule.*`) |
 | Secrets | Clés Brave / GitHub / OpenAI → vault chiffré ; clé maître dans le keyring OS |
-| Modules | Catalogue local signé (E10) ; l'install demande toujours la revue de caps |
+| Modules | Catalogue local signé (E10) ; l'install demande toujours la revue de caps ; désinstall des non-bundlés (pas `notes` / `tasks` / `ext-rt`) |
 | Web | Moteur de recherche, max caractères browse, max octets fetch |
 
 ---
@@ -267,17 +295,21 @@ Piste VM seL4 (PV.1–PV.3) séparée : [phases/phase-vm-sel4.md](phases/phase-v
 
 ---
 
-## 11. Hors Preview 0.7.0
+## 11. Hors Preview 0.8.0
 
 - Image bootable / fer nu
 - macOS
 - Application automatique complète des updates (téléchargement maintenant, apply au prochain lancement)
-- Génération audio / vidéo native (audio + image fixe prévus en Preview **0.8.0** / E16 ; la vidéo reste hors)
+- Vidéo / STT / voix permanente
+- Migration CPU ↔ GPU mid-token (Preview **0.9.0** / E18)
+- Familles d’image extra (Flux2, Ideogram4, …) et réglages sd.cpp / Piper (Preview **0.9.0** / E19)
+- APIs natives Messages/Gemini/Bedrock (Providers OpenAI-compat seulement)
 - Marketplace public de modules (catalogue local signé seulement)
 - Canaux de messagerie (Slack/Discord/etc.) dans le noyau OS
 - Comptes multi-utilisateur simultanés
 - Pipeline multi-GPU complet (P5.2 ; hôte mono-GPU)
 - Daemon HTTP sibling live / enveloppe TPM
 - Webview sandboxée / UI module HTML/JS (compositor E13)
+- kinds pie/scatter/webview
 
 Protocole cohorte : [TESTER.md](TESTER.md).

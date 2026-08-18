@@ -2,7 +2,7 @@
 
 **Langue :** [English](../sibling-bridge.md) | Français
 
-> Date : 18/08/2026 · Preview **0.7.0**  
+> Date : 18/08/2026 · Preview **0.8.0**  
 > Statut : gel de contrats + export JSON Schema (pas de daemon live)  
 > Lié : [paysage-concurrentiel.md](paysage-concurrentiel.md), [plan-evolutions.md](plan-evolutions.md) E8, [docs/bridge/](../bridge/)
 
@@ -25,7 +25,7 @@ plus tard.
 
 ## Mapping HTTP JSON ↔ intents CBOR (contrat seulement)
 
-La Preview **0.7.0 n'exécute pas** d'adaptateur HTTP dans le process OS. Un
+La Preview **0.8.0 n'exécute pas** d'adaptateur HTTP dans le process OS. Un
 futur daemon de pont (binaire séparé, optionnel) PEUT exposer du JSON HTTP
 et relayer vers le bus CBOR. Jusqu'à ce daemon, ce tableau est le gel.
 

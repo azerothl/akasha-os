@@ -6,6 +6,7 @@
 > Date: 15/08/2026  
 > Status: draft  
 > Reference: `docs/vision.md`  
+> Changes v0.8.0: Preview 0.8.0 — E16 image/TTS (packs download engines); E17 unified CPU/GPU artefact; F-MDL-04 Providers; F-MOD-01 uninstall; E15 widget pack.
 > Changes v0.7.0: Preview 0.7.0 — F-UI-10 / F-EXT-07 host-rendered declarative module UI (E15); not a webview.
 > Changes v0.6.0: Preview 0.6.0 — E8 schema export + HTTP↔bus contract; E7 OS keyring; E10 signed local catalogue.
 > Changes v0.4.0: Preview 0.4.0 — typed memory graph, secrets vault, module cap review; appendix §12.
@@ -227,7 +228,7 @@ Single package exposing:
 | F-UI-07 | Prioritized notifications (supervisor agent), no spam | Should |
 | F-UI-08 | Basic accessibility (contrast, text size, keyboard navigation) | Should |
 | F-UI-09 | Persisted user preferences (language, routing, trust, network, agent defaults, search engine) editable from a Settings surface | Must |
-| F-UI-10 | Installed modules with `ui.mode=declarative_ui` get a host-rendered human surface (closed widget vocabulary: form, table, stats, line chart); no HTML/JS webview in Preview | Should |
+| F-UI-10 | Installed modules with `ui.mode=declarative_ui` get a host-rendered human surface (closed widget vocabulary: form, table, stats, charts, select/radio/checkbox, image/audio); no HTML/JS webview in Preview | Should |
 
 ### 5.9 Security, privacy, trust
 
@@ -368,26 +369,30 @@ Single package exposing:
 
 - `docs/vision.md` — founding reflection  
 - `docs/technical-specs.md` — technical specifications  
-- `docs/FEATURES.md` — shipped Preview 0.7.0 catalogue  
+- `docs/FEATURES.md` — shipped Preview 0.8.0 catalogue  
 - (future) `adr/` — Architecture Decision Records  
 
 ---
 
-## 12. Preview 0.7.0 coverage (host)
+## 12. Preview 0.8.0 coverage (host)
 
 Mapping of this spec onto the **installable host Preview** (not the bootable OS).
 Detail: `docs/FEATURES.md`.
 
 | Spec IDs | Preview status |
 |----------|----------------|
-| F-BOOT-01–05 | Hardware probe + model setup + offline chat; no CPU fallback |
+| F-BOOT-01–05 | Hardware probe + model setup + offline chat; CPU backend in the same zip (E17) |
 | F-BOOT-06 | Non-destructive Release overlay (apply on next launch) |
 | F-AGT-01–08, 11 | Goal loop, caps, audit, steer, `task.assess`, memory-first |
 | F-AGT-09–10 | Trust low/medium + confirm; supervisor restart of auditd |
-| F-MDL-01–09 | Local llama.cpp + optional remote; routing local_only / balanced |
+| F-MDL-01–09 | Local llama.cpp + optional remote; routing local_only / balanced / remote_only |
+| F-MDL-04 | **Shipped Preview 0.8.0** — Providers tab (OpenAI-compat cloud + loopback) |
 | F-MEM-01–02, 05 | Working / episodic / user facts; Memory tab |
 | F-MOD / F-EXT | notes.aospkg, ext-rt, declarative skills, `cap.request`; host-rendered `declarative_ui` tabs |
-| F-UI-10 / E15 | **Shipped Preview 0.7.0** — host-rendered `declarative_ui` (not webview) |
+| F-MOD-01 | **Shipped Preview 0.8.0** — uninstall UI, revoke caps, refuse bundled |
+| F-UI-10 / E15 | Shipped 0.7.0; **0.8.0** expands closed kinds (`select`/`radio`/`checkbox`/`textarea`/`bar_chart`/`image`/`audio`, typed `form`) |
+| E16 | **Shipped Preview 0.8.0** — `media.image.generate` / `media.audio.generate` |
+| E17 | **Shipped Preview 0.8.0** — unified artefact; Settings gpu/cpu/auto restarts modeld in-session |
 | F-UI-01–05, 09 | Dual surface + transparency panel + Settings |
 | F-SEC-01–08 | Caps, confirm, egress deny-by-default, auditd isolation; vault master key in OS keyring (file 0600 fallback); agents denied `secrets.get` |
 | F-MOD catalogue | Signed local `share/modules/catalogue.yaml`; hash check on `module.install` |

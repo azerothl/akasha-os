@@ -78,7 +78,8 @@ CPU_ONLY=1 SKIP_MODELS=1 ./packaging/build-preview.sh
 ## Next
 
 Tag `v0.7.0` only when gates P07.1–P07.5 pass. PC cohort gate remains
-independent. **Next: Preview 0.8.0 / E16** — local image + audio (TTS)
-generation ([phase-preview-08.md](phase-preview-08.md)). After 0.8: remaining
+independent. **Next: Preview 0.8.0 / E16 + E17 + E15 widgets** — local image
++ audio (TTS), unified host, richer closed widget vocabulary
+([phase-preview-08.md](phase-preview-08.md)). After 0.8: remaining
 Horizon B (E7 TPM, live HTTP adapter if a daemon is scheduled, E9 when a
 second GPU exists).

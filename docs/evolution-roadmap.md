@@ -7,7 +7,7 @@
 > Derived from: [competitive-landscape.md](competitive-landscape.md)  
 > Relates to: [development-plan.md](development-plan.md), [FEATURES.md](FEATURES.md), [STATUS.md](STATUS.md), [vision.md](vision.md)
 
-This document proposes **product evolutions (E1–E18)** after the August 2026 competitive survey. It does **not** replace P0–P5 / PV / PC. Close the PC cohort gate first; then schedule E* work on top of remaining P5 / PV deliverables. Preview increments (P03–P09) already ship E* on the host without waiting for that cohort gate.
+This document proposes **product evolutions (E1–E19)** after the August 2026 competitive survey. It does **not** replace P0–P5 / PV / PC. Close the PC cohort gate first; then schedule E* work on top of remaining P5 / PV deliverables. Preview increments (P03–P09) already ship E* on the host without waiting for that cohort gate.
 
 ---
 
@@ -63,8 +63,8 @@ E6 / E7-lite / E10-lite shipped in Preview **0.4.0** — [phase-preview-04.md](p
 E14 shipped in Preview **0.5.0** — [phase-preview-05.md](phases/phase-preview-05.md).  
 E8 schema export + HTTP↔bus contract, E7 OS keyring, E10 signed local catalogue shipped in Preview **0.6.0** — [phase-preview-06.md](phases/phase-preview-06.md).  
 **E15** (host-rendered declarative module UI) shipped in Preview **0.7.0** — [phase-preview-07.md](phases/phase-preview-07.md).  
-**Next Preview:** **E16** local image + audio generation and **E17** unified
-CPU/GPU host — Preview **0.8.0** (planned) — [phase-preview-08.md](phases/phase-preview-08.md).
+**E16 + E17 + E15 widget pack + F-MDL-04 Providers** shipped in Preview **0.8.0** — [phase-preview-08.md](phases/phase-preview-08.md).  
+**Next Preview:** **E18** mid-token device migrate + **E19** extra media models/options — Preview **0.9.0** — [phase-preview-09.md](phases/phase-preview-09.md).
 
 **Out of near-term scope:** native Telegram/Discord, public marketplace, desktop computer-use, `sandboxed_webview`.
 
@@ -80,10 +80,11 @@ CPU/GPU host — Preview **0.8.0** (planned) — [phase-preview-08.md](phases/ph
 | **E9** | **P5.2 multi-GPU** when hardware is available | Partial P5 gate | [phases/phase-p5.md](phases/phase-p5.md) |
 | **E10** | **Local MCP / module marketplace** (signed catalogue, cap review) | ClawHub-shaped distribution without becoming ClawHub | **E10-lite 0.4.0** — cap review on install + MCP example; **signed local catalogue 0.6.0**; no network store |
 | **E14** | **Auto fact extraction from chat → long-term memory** | Chat today only *reads* `mem.context`; facts must be Remember’d by hand | **Shipped 0.5.0** — opt-in Settings; post-turn LLM extract → `mem.user.remember` + dedup/`supersedes`; never auto-store secrets |
-| **E15** | **Host-rendered declarative module UI** (closed widget tree in egui; no webview) | Dual-surface is a contract today; Notes/Tasks are hardcoded; agent-created modules have no human surface | **Preview 0.7.0** ✅ — [phase-preview-07.md](phases/phase-preview-07.md); vocabulary: form / table / stat_row / line_chart; **not** HTML/JS; **not** E13 |
-| **E16** | **Local image + audio (TTS) generation** | FEATURES still lists native media gen as out of Preview; testers expect multimodal output without a hosted API | **Preview 0.8.0 planned** — [phase-preview-08.md](phases/phase-preview-08.md); Placement Manager owns VRAM vs the LLM; cap `media.generate`; **not** video; **not** always-on STT/voice (sibling) |
-| **E17** | **Unified CPU/GPU host artefact** + live device policy | Testers pick a CUDA zip or a CPU zip; Settings auto/gpu/cpu only apply on next boot; `auto` ignores load | **Preview 0.8.0 planned** — one artefact per OS; session spawns a CUDA-safe or CPU-safe backend; UI switch restarts modeld; **auto** = Placement Manager hysteresis on VRAM/CPU (and E16); pin overrides; `-CpuOnly` = builder-only; **mid-token without cancel = E18 / 0.9** |
+| **E15** | **Host-rendered declarative module UI** (closed widget tree in egui; no webview) | Dual-surface is a contract today; Notes/Tasks are hardcoded; agent-created modules have no human surface | **Preview 0.7.0** ✅ — [phase-preview-07.md](phases/phase-preview-07.md); **0.8.0 P08.11** expands the closed list (typed `form`, `select`/`radio`/`checkbox`/`textarea`, `bar_chart`, `image`/`audio`); still **not** HTML/JS; **not** E13 |
+| **E16** | **Local image + audio (TTS) generation** | Testers expect multimodal output without a hosted API | **Preview 0.8.0** ✅ — [phase-preview-08.md](phases/phase-preview-08.md); optional packs; Download fetches sd.cpp / piper into `bin/`; Placement Manager owns VRAM vs the LLM; cap `media.generate`; **not** video; **not** always-on STT/voice (sibling); extra families / CLI options = **E19 / 0.9** |
+| **E17** | **Unified CPU/GPU host artefact** + live device policy | Testers used to pick a CUDA zip or a CPU zip; Settings auto/gpu/cpu only applied on next boot | **Preview 0.8.0** ✅ — one artefact per OS; session spawns a CUDA-safe or CPU-safe backend; UI switch restarts modeld; **auto** = Placement Manager hysteresis on VRAM/CPU (and E16); pin overrides; `-CpuOnly` = builder-only; **mid-token without cancel = E18 / 0.9** |
 | **E18** | **Mid-token device migrate** (CPU ↔ GPU, stream continues) | 0.8 switch cancels the live infer; testers/auto-load should not lose the turn | **Preview 0.9.0 planned** — [phase-preview-09.md](phases/phase-preview-09.md); depends on E17; fail-closed fallback to 0.8 cancel+restart |
+| **E19** | **Extensible local media** (extra image models + closed sd.cpp / Piper options) | 0.8 hard-codes SD 1.5 at 512² / 20 steps and two Piper voices; testers want Flux2, Ideogram4, extra voices, and knobs | **Preview 0.9.0 planned** — [phase-preview-09.md](phases/phase-preview-09.md); closed JSON schema (unknown keys refused; no raw argv); offering `extra_files` for VAE/CLIP/T5; Settings + intent; **not** video; **not** img2img as a first-class intent |
 
 ---
 
@@ -106,6 +107,7 @@ CPU/GPU host — Preview **0.8.0** (planned) — [phase-preview-08.md](phases/ph
 - Add a Chromium/WebView2 TCB to Preview to get module dashboards → closed widget host (**E15**).
 - Default to a hosted image/TTS API instead of a Placement-managed local backend → E16 is local-first; remote is a later routed option.
 - Put always-on microphone / STT / 24/7 voice in the OS core → sibling.
+- Let agents pass raw sd.cpp / Piper argv → closed option schema (**E19**).
 
 ---
 
@@ -114,9 +116,9 @@ CPU/GPU host — Preview **0.8.0** (planned) — [phase-preview-08.md](phases/ph
 | Layer | Role |
 |-------|------|
 | **P0–P5 / PV / PC** | Executable phase gates ([development-plan.md](development-plan.md), [STATUS.md](STATUS.md)) |
-| **E1–E18** | Prioritization after competitive analysis; Preview increments P03–P09 ship E* without waiting for the PC cohort gate |
+| **E1–E19** | Prioritization after competitive analysis; Preview increments P03–P09 ship E* without waiting for the PC cohort gate |
 
-Do **not** invent a P6 number until PC is closed and STATUS is updated. E1–E5 shipped in Preview **0.3.0**; E6 / E7-lite / E10-lite shipped in Preview **0.4.0**; **E14** shipped in Preview **0.5.0**; E8 schemas + E7-keyring + E10 catalogue shipped in Preview **0.6.0**; **E15** declarative module UI host shipped in Preview **0.7.0**. **Next: E16 + E17** as Preview **0.8.0**, then **E18** (mid-token device migrate) as Preview **0.9.0**. Then remaining Horizon B (full E7 TPM, live HTTP adapter if a daemon is scheduled, E9 multi-GPU when HW available) + PC cohort close.
+Do **not** invent a P6 number until PC is closed and STATUS is updated. E1–E5 shipped in Preview **0.3.0**; E6 / E7-lite / E10-lite shipped in Preview **0.4.0**; **E14** shipped in Preview **0.5.0**; E8 schemas + E7-keyring + E10 catalogue shipped in Preview **0.6.0**; **E15** declarative module UI host shipped in Preview **0.7.0**. **E16 + E17 + E15 widget pack + F-MDL-04 Providers** shipped in Preview **0.8.0**. **Next: E18 + E19** (mid-token device migrate + extra media models/options) as Preview **0.9.0**. Then remaining Horizon B (full E7 TPM, live HTTP adapter if a daemon is scheduled, E9 multi-GPU when HW available) + PC cohort close.
 
 Suggested sequencing once PC closes (historical; Preview increments already
 ran this on the host as P03–P07, then E16+E17 as P08):

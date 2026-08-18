@@ -8,8 +8,8 @@
 first-class GPU, offline-first. Preview builds run on a Windows/Linux host
 (NVIDIA); a seL4 bare-metal track is separate.
 
-> This is **not** a bootable OS image yet. Preview 0.7.0 is an installable host
-> app for testers (Windows/Linux; NVIDIA optional via CPU path).
+> This is **not** a bootable OS image yet. Preview 0.8.0 is an installable host
+> app for testers (Windows/Linux; NVIDIA optional via CPU path in the same zip).
 
 ## Why Akasha OS
 
@@ -24,15 +24,16 @@ Full catalogue: [docs/FEATURES.md](docs/FEATURES.md).
 
 | Area | What you get |
 |------|----------------|
-| Chat / Sessions | Parallel persisted conversations; slash commands; per-session model |
+| Chat / Sessions | Parallel persisted conversations; slash commands (`/image`, `/speak`); per-session model |
 | Memory | Long-term facts; memory-first agent bootstrap |
 | Notes | Human + agent-authored notes (WASM); resyncs on boot after an update |
 | Tasks | Dual-surface tasks module + Tasks tab |
 | Agents | Goal loop, skills, tools, MCP, scheduler; transparency timeline |
 | Caps | List / revoke capabilities in UI |
-| Models | Hardware-aware packs (incl. CPU); metrics (TTFT / tok/s / VRAM) |
+| Models | Hardware-aware packs (incl. CPU); optional image/TTS packs (Download also installs sd.cpp / piper); metrics (TTFT / tok/s / VRAM) |
+| Providers | OpenAI-compat cloud + loopback (Ollama / vLLM / LM Studio); keys in the vault |
 | Network | Opt-in search (Brave / DDG / Bing) + `web.browse` + fetch |
-| Settings | Language, theme, trust, routing, agent defaults, search engine |
+| Settings | Language, theme, trust, routing, gpu/cpu/auto, agent defaults, search engine |
 | Feedback | Local report + GitHub issue on this repo |
 | Troubleshoot | In-app diagnostics; GitHub report when findings exist |
 | Updates | Non-destructive overlays from GitHub Releases |
@@ -43,7 +44,7 @@ Full catalogue: [docs/FEATURES.md](docs/FEATURES.md).
 - NVIDIA GPU + recent driver (`nvidia-smi -L`) **or** CPU-only mode (slower)
 - ~4 GB free disk (binaries + GGUF models downloaded on first run)
 
-No macOS in Preview 0.7.0.
+No macOS in Preview 0.8.0.
 
 ## Quick start
 
@@ -53,12 +54,12 @@ No macOS in Preview 0.7.0.
 3. Launch **Akasha OS Preview** — first run downloads models if needed, then
    opens the in-app tutorial.
 
-See [INSTALL.md](INSTALL.md) and [docs/FIRST-RUN.md](docs/FIRST-RUN.md).
+See [docs/INSTALL.md](docs/INSTALL.md) and [docs/FIRST-RUN.md](docs/FIRST-RUN.md).
 Cohort protocol: [docs/TESTER.md](docs/TESTER.md).
 
 ### Developers / build from source
 
-Full steps (toolchain, package scripts, `AOS_HOME`): [INSTALL.md — Build from source](INSTALL.md#build-from-source).
+Full steps (toolchain, package scripts, `AOS_HOME`): [INSTALL.md — Build from source](docs/INSTALL.md#build-from-source).
 
 ```powershell
 cargo test --workspace
@@ -74,6 +75,8 @@ cargo run -p aos-session --release
 |-----|-------------|
 | [docs/STATUS.md](docs/STATUS.md) | **Project status** (phases & gates) |
 | [docs/FEATURES.md](docs/FEATURES.md) | **Shipped Preview features** |
+| [docs/INSTALL.md](docs/INSTALL.md) | Install, updates, build from source |
+| [docs/PRODUCT.md](docs/PRODUCT.md) | Product brief (Impeccable) |
 | [docs/FIRST-RUN.md](docs/FIRST-RUN.md) | First-run guide |
 | [docs/functional-specs.md](docs/functional-specs.md) | Functional requirements |
 | [docs/technical-specs.md](docs/technical-specs.md) | Architecture & APIs |

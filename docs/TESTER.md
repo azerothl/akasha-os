@@ -1,8 +1,8 @@
-# Tester protocol — Akasha OS Preview 0.7.0
+# Tester protocol — Akasha OS Preview 0.8.0
 
 **Language:** English | [Français](fr/TESTER.md)
 
-> Date: 18/08/2026 · Preview **0.7.0**
+> Date: 18/08/2026 · Preview **0.8.0**
 
 Thank you for testing Preview. Goal: install **without** `cargo` or cloning
 the repo, exercise the main paths, and send feedback **from the UI**.
@@ -11,7 +11,7 @@ Feature catalogue: [FEATURES.md](FEATURES.md).
 ## Before you start
 
 - Windows or Linux x64 (NVIDIA recommended; CPU-only package / path also OK)
-- Install: see [INSTALL.md](../INSTALL.md)
+- Install: see [INSTALL.md](INSTALL.md)
 - Launch **Akasha OS Preview** (`aos-session`)
 
 Expected banner: *Preview on Windows/Linux — this is not the bootable OS yet*.
@@ -34,8 +34,9 @@ Expected banner: *Preview on Windows/Linux — this is not the bootable OS yet*.
 
 ### 1c. CPU-only (optional)
 
-- On a machine without NVIDIA, or with Settings → Inference → **CPU only** then restart:
-  Preview should start and local chat should work (slow is OK).
+- On a machine without NVIDIA, or with Settings → Inference → **CPU only**:
+  Preview should **restart modeld in the current session** (no reinstall).
+  Local chat should work (slow is OK). GPU pin requires NVIDIA.
 
 ### 2. Human note
 
@@ -215,17 +216,59 @@ GitHub feedback submit).
 - **Troubleshoot** (Help / sidebar): runs diagnostics (NVIDIA, home, logs).
   If findings exist, a GitHub report can open.
 
+### 16. Uninstall a module (0.8.0 / P08.7)
+
+- Scaffold + install a non-bundled module (step 14 or 15).
+- **Settings → Installed modules**: Uninstall (not `notes` / `tasks` / `ext-rt`).
+- Confirm the banner. Tab gone, `tool.invoke:<name>` gone from Caps, audit line present.
+- Re-install still works.
+
+### 17. E15 widgets (0.8.0 / P08.11)
+
+- Scaffold/install a script module whose UI uses `select` (or an `enum` form field),
+  `checkbox` or `radio`, and `bar_chart`. Submit once; result refreshes.
+- Invalid `kind` still shows an error banner (whole document refused).
+
+### 18. Providers (0.8.0 / P08.12)
+
+- **Providers** tab: add **Ollama** (or LM Studio) at `127.0.0.1` — Test works
+  with **local_only** (no Allow network).
+- Add a cloud preset (OpenAI / OpenRouter): key in the vault, never in YAML.
+  Chat combo shows the provider model only when routing is **balanced** /
+  **remote_only** and Allow network is on.
+- `secret` data still never goes remote.
+
+### 19. Image + TTS (0.8.0 / E16)
+
+- Optional: **Models** → **Download** `Stable Diffusion 1.5` and a Piper voice
+  (not in the zip; first-run skips them). The same download installs the
+  **engine** (`bin/sd.exe` / `bin/piper.exe` + DLLs) if it is missing.
+- Restart Preview so `etc/modeld.yaml` lists the pack.
+- Chat: `/image a red cube` then `/speak hello` (or French with `piper-fr-fr`).
+- PNG appears in the conversation; **Play** on the WAV. Files under `/downloads`.
+- Without the pack **or** if the engine zip fails, a stub PNG (color bars) /
+  short WAV is still written so the cap / `/downloads` path is testable.
+
+### 20. One-liner install (0.8.0 / P08.9)
+
+- Windows: `irm https://azerothl.github.io/akasha-os/install.ps1 | iex`
+- Linux: `curl -fsSL https://azerothl.github.io/akasha-os/install.sh | sh`
+- Script must print URL + sha256, refuse on mismatch, overlay into the stable
+  prefix without wiping `var/`.
+
 ## Success criteria (team)
 
 - 3 Windows + 1 Linux testers complete this protocol without a Rust toolchain
 - At least one usable `var/feedback/fb-*.json` per report
 - Gates PC.6–PC.9 and PC.11–PC.13 checked on at least one machine
 
-## Out of scope Preview 0.7.0
+## Out of scope Preview 0.8.0
 
 - seL4 / bare-metal boot
 - macOS
 - 32B model in the installer
 - Fully automatic update apply
-- Native audio/video generation (still image + TTS planned for 0.8.0; video stays out)
+- Video / STT / always-on voice
+- Mid-token CPU ↔ GPU migrate (0.9.0 / E18)
+- Extra image models and sd.cpp / Piper options (0.9.0 / E19)
 - Public marketplace / messaging channels / multi-GPU

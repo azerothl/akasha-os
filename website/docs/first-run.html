@@ -49,13 +49,13 @@
         <h1>
           <span data-lang="en">
             First launch after <a href="../install.html">install</a>.
-            Preview <span data-aos-version>0.7.0</span> is not a bootable OS. NVIDIA is
+            Preview <span data-aos-version>0.8.0</span> is not a bootable OS. NVIDIA is
             recommended; a slower CPU pack exists. About 8 GB free disk for the
             mid-tier pack (less for cpu).
           </span>
           <span data-lang="fr">
             Premier lancement après <a href="../install.html">install</a>.
-            La Preview <span data-aos-version>0.7.0</span> n’est pas un OS bootable. NVIDIA est
+            La Preview <span data-aos-version>0.8.0</span> n’est pas un OS bootable. NVIDIA est
             recommandé ; un pack CPU plus lent existe. Environ 8 Go libres pour le
             pack mid (moins pour cpu).
           </span>
@@ -113,13 +113,13 @@
         <h2 data-lang="fr">si le réglage est annulé</h2>
         <p class="hist" data-lang="en">
           Delete nothing. Relaunch to reopen model selection. No GPU means
-          a slower CPU pack is available in Preview 0.7.0; NVIDIA remains
+          a slower CPU pack is available in Preview 0.8.0 (same zip; Settings → Inference); NVIDIA remains
           recommended. Daemon logs: <code>var/run/*.stderr.log</code>
           (Troubleshooting button).
         </p>
         <p class="hist" data-lang="fr">
           Ne supprimez rien. Relancez pour rouvrir la sélection de modèles.
-          Pas de GPU : un pack CPU existe en Preview 0.7.0 (plus lent). NVIDIA
+          Pas de GPU : un pack CPU existe en Preview 0.8.0 dans le même zip (plus lent ; Réglages → Inférence). NVIDIA
           reste recommandé.
           Journaux : <code>var/run/*.stderr.log</code> (bouton Troubleshooting).
         </p>
@@ -128,13 +128,15 @@
         <h2 data-lang="fr">mises à jour de modèles plus tard</h2>
         <p class="hist" data-lang="en">
           If <code>catalog-offerings.json</code> recommends models you do not
-          have, a banner appears → Open Models → Download. Restart Preview after
+          have, a banner appears → Open Models → Download. Media packs also
+          fetch sd.cpp / piper into <code>bin/</code>. Restart Preview after
           download so <code>etc/modeld.yaml</code> picks up new paths.
           CLI: <code>aos-session --download-models &lt;id&gt;…</code>
         </p>
         <p class="hist" data-lang="fr">
           Si <code>catalog-offerings.json</code> recommande des modèles absents,
-          une bannière apparaît → Open Models → Download. Redémarrez Preview
+          une bannière apparaît → Open Models → Download. Les packs média
+          tirent aussi sd.cpp / piper dans <code>bin/</code>. Redémarrez Preview
           après le téléchargement pour que <code>etc/modeld.yaml</code> voie
           les nouveaux chemins.
           CLI : <code>aos-session --download-models &lt;id&gt;…</code>

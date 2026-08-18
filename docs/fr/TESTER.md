@@ -1,8 +1,8 @@
-# Protocole testeur — Akasha OS Preview 0.7.0
+# Protocole testeur — Akasha OS Preview 0.8.0
 
 **Langue :** [English](../TESTER.md) | Français
 
-> Date : 18/08/2026 · Preview **0.7.0**
+> Date : 18/08/2026 · Preview **0.8.0**
 
 Merci de tester la Preview. Objectif : installer **sans** `cargo` ni clone du
 repo, exercer les parcours principaux, et envoyer un retour **depuis l'UI**.
@@ -34,8 +34,9 @@ Bannière attendue : *Preview sur Windows/Linux — ce n'est pas encore l'OS boo
 
 ### 1c. CPU-only (optionnel)
 
-- Sur une machine sans NVIDIA, ou avec Settings → Inférence → **CPU only** puis redémarrage :
-  la Preview doit démarrer et le chat local doit fonctionner (lent OK).
+- Sur une machine sans NVIDIA, ou avec Settings → Inférence → **CPU only** :
+  modeld redémarre **dans la session** (pas de réinstall). Chat local OK (lent).
+  Le pin GPU exige NVIDIA.
 
 ### 2. Note humaine
 
@@ -218,17 +219,36 @@ et envoi de retour GitHub).
 - **Dépannage** (Aide / barre latérale) : collecte un diagnostic (NVIDIA, home,
   logs). S'il y a des anomalies, un rapport GitHub peut s'ouvrir.
 
+### 16. Désinstaller un module (0.8.0)
+
+- Scaffold + install d’un module non bundlé.
+- **Réglages → Modules installés** : désinstaller (pas `notes` / `tasks` / `ext-rt`).
+- Confirmer. Onglet et caps `tool.invoke:<name>` disparus ; ligne d’audit.
+
+### 17–20. Widgets E15, Providers, image/TTS, one-liner
+
+- Widgets `select` / `checkbox` / `bar_chart` ; kind inconnu = bannière d’erreur.
+- Onglet **Providers** : loopback OK en `local_only` ; cloud = réseau + balanced.
+- **Models** → Download `Stable Diffusion 1.5` / une voix Piper : le même
+  téléchargement installe le **moteur** (`bin/sd.exe` / `bin/piper.exe`) s’il
+  manque. Redémarrer Preview. Chat `/image` et `/speak` → PNG / WAV sous
+  `/downloads`. Stub (barres de couleur / WAV court) seulement si pack ou
+  moteur absent.
+- One-liner : `irm …/install.ps1 | iex` ou `curl …/install.sh | sh` (sha256 fail-closed).
+
 ## Critères de succès (équipe)
 
 - 3 testeurs Windows + 1 Linux suivent ce protocole sans toolchain Rust
 - Au moins un fichier `var/feedback/fb-*.json` exploitable par retour
 - Gates PC.6–PC.9 et PC.11–PC.13 cochés sur au moins une machine
 
-## Hors scope Preview 0.7.0
+## Hors scope Preview 0.8.0
 
 - Boot seL4 / fer nu
 - macOS
 - Modèle 32B dans l'installeur
 - Mise à jour automatique complète
-- Génération audio/vidéo native (image fixe + TTS prévus en 0.8.0 ; la vidéo reste hors)
+- Vidéo / STT / voix permanente
+- Migration mid-token (0.9.0 / E18)
+- Autres modèles d’image et options sd.cpp / Piper (0.9.0 / E19)
 - Marketplace public / canaux messagerie / multi-GPU
