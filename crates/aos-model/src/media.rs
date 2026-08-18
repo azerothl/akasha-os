@@ -1,5 +1,18 @@
 //! E16 media generate: cap check helpers + dest paths.
 
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static MEDIA_TMP_SEQ: AtomicU64 = AtomicU64::new(1);
+
+fn unique_media_temp(prefix: &str, ext: &str) -> PathBuf {
+    let n = MEDIA_TMP_SEQ.fetch_add(1, Ordering::Relaxed);
+    std::env::temp_dir().join(format!(
+        "{prefix}-{}-{n}.{ext}",
+        std::process::id()
+    ))
+}
+
 pub fn actor_may_generate(actor: &str, caps: &[String]) -> bool {
     if actor.is_empty() || actor.starts_with("human:") || actor.starts_with("service:") {
         return true;
@@ -115,7 +128,7 @@ pub async fn run_image(
             .map_err(|e| format!("placement: {e}"))?;
     }
     let prompt = req.prompt.clone();
-    let tmp = std::env::temp_dir().join(format!("aos-img-{}.png", std::process::id()));
+    let tmp = unique_media_temp("aos-img", "png");
     let engine = tokio::task::spawn_blocking(move || {
         aos_sd::generate_image(&weights, &prompt, &tmp).map(|e| (e, tmp))
     })
@@ -169,7 +182,7 @@ pub async fn run_tts(
             .map_err(|e| format!("placement: {e}"))?;
     }
     let text = req.text.clone();
-    let tmp = std::env::temp_dir().join(format!("aos-tts-{}.wav", std::process::id()));
+    let tmp = unique_media_temp("aos-tts", "wav");
     let engine = tokio::task::spawn_blocking(move || {
         aos_sd::generate_speech(&voice, &text, &tmp).map(|e| (e, tmp))
     })
@@ -212,5 +225,12 @@ mod tests {
             &["media.generate".into()]
         ));
         assert!(actor_may_generate("human:ui", &[]));
+    }
+
+    #[test]
+    fn unique_media_temp_does_not_reuse_pid_path() {
+        let a = unique_media_temp("aos-img", "png");
+        let b = unique_media_temp("aos-img", "png");
+        assert_ne!(a, b);
     }
 }

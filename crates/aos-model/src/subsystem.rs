@@ -738,20 +738,34 @@ impl ModelSubsystem {
     }
 
     /// `model.unload`.
+    ///
+    /// Never hold `inner` while waiting on `PlacementSim`: `spawn_load_task`
+    /// holds `sim` during `place` then takes `inner`. Nested `inner` → `sim`
+    /// deadlocks aos-modeld when one model unloads while another is placing.
     pub fn unload(&self, model_id: &str) -> bool {
-        let mut g = self.inner.lock().unwrap();
-        match g.models.get_mut(model_id) {
-            Some(m) if m.active == 0 && m.pending == 0 && !m.loading => {
-                m.ctx = None;
-                m.model = None;
-                m.ctx_abort = None;
-                m.state = ModelState::OnDisk;
-                m.plan = None;
-                self.sim.lock().unwrap().unload(model_id);
-                true
+        {
+            let mut g = self.inner.lock().unwrap();
+            match g.models.get_mut(model_id) {
+                Some(m) if m.active == 0 && m.pending == 0 && !m.loading => {
+                    m.ctx = None;
+                    m.model = None;
+                    m.ctx_abort = None;
+                    m.state = ModelState::OnDisk;
+                    m.plan = None;
+                    // Block a concurrent ensure_loaded from placing until sim is updated.
+                    m.loading = true;
+                }
+                _ => return false,
             }
-            _ => false,
         }
+        self.sim.lock().unwrap().unload(model_id);
+        let mut g = self.inner.lock().unwrap();
+        if let Some(m) = g.models.get_mut(model_id) {
+            if m.loading && m.state == ModelState::OnDisk && m.active == 0 && m.pending == 0 {
+                m.loading = false;
+            }
+        }
+        true
     }
 
     // --- Routage local/distant (§3.7, P3.2) ---

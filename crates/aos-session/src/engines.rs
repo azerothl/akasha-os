@@ -28,10 +28,35 @@ pub fn engine_id_for(
 
 pub fn markers_present(bin: &Path, engine_id: &str) -> bool {
     match engine_id {
-        "piper" => exe_exists(bin, "piper"),
+        "piper" => exe_exists(bin, "piper") && piper_shared_libs_present(bin),
         "sdcpp" => exe_exists(bin, "sd") || exe_exists(bin, "sd-cli"),
         _ => false,
     }
+}
+
+/// Piper’s Linux zip ships `libespeak-ng.so.1`, `libonnxruntime.so.1.14.1`,
+/// `libpiper_phonemize.so.1`. The binary alone is not a complete install.
+fn piper_shared_libs_present(bin: &Path) -> bool {
+    if cfg!(windows) {
+        return true;
+    }
+    let mut espeak = false;
+    let mut onnx = false;
+    let mut phonemize = false;
+    let Ok(entries) = fs::read_dir(bin) else {
+        return false;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
+        if name.starts_with("libespeak-ng.so") {
+            espeak = true;
+        } else if name.starts_with("libonnxruntime.so") {
+            onnx = true;
+        } else if name.starts_with("libpiper_phonemize.so") {
+            phonemize = true;
+        }
+    }
+    espeak && onnx && phonemize
 }
 
 fn exe_exists(dir: &Path, name: &str) -> bool {
@@ -211,12 +236,15 @@ fn keep_runtime_file(name: &str) -> bool {
     if lower.ends_with(".txt") || lower.ends_with(".md") {
         return false;
     }
+    if matches!(lower.as_str(), "piper" | "sd" | "sd-cli") {
+        return true;
+    }
+    // `Path::extension()` on `libespeak-ng.so.1` is `1`, not `so`.
     let ext = Path::new(&lower)
         .extension()
         .and_then(|e| e.to_str())
         .unwrap_or("");
-    matches!(ext, "exe" | "dll" | "ort" | "so" | "dylib")
-        || matches!(lower.as_str(), "piper" | "sd" | "sd-cli")
+    matches!(ext, "exe" | "dll" | "ort" | "so" | "dylib") || lower.contains(".so.")
 }
 
 #[cfg(test)]
@@ -269,15 +297,47 @@ mod tests {
         fs::create_dir_all(extract.join("espeak-ng-data")).unwrap();
         fs::write(extract.join(exe_name("piper")), b"piper").unwrap();
         fs::write(extract.join("espeak-ng.dll"), b"dll").unwrap();
+        fs::write(extract.join("libespeak-ng.so.1"), b"so").unwrap();
+        fs::write(extract.join("libonnxruntime.so.1.14.1"), b"so").unwrap();
+        fs::write(extract.join("libpiper_phonemize.so.1"), b"so").unwrap();
         fs::write(extract.join("espeak-ng-data/fr_dict"), b"fr").unwrap();
         fs::write(extract.join("readme.txt"), b"skip").unwrap();
 
         install_from_extract(&root.join("extract"), &bin, "piper").unwrap();
         assert!(exe_path(&bin, "piper").is_file());
         assert!(bin.join("espeak-ng.dll").is_file());
+        assert!(bin.join("libespeak-ng.so.1").is_file());
+        assert!(bin.join("libonnxruntime.so.1.14.1").is_file());
+        assert!(bin.join("libpiper_phonemize.so.1").is_file());
         assert!(bin.join("espeak-ng-data/fr_dict").is_file());
         assert!(!bin.join("readme.txt").is_file());
         assert!(markers_present(&bin, "piper"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn keep_versioned_linux_shared_libs() {
+        assert!(keep_runtime_file("libespeak-ng.so.1"));
+        assert!(keep_runtime_file("libonnxruntime.so.1.14.1"));
+        assert!(keep_runtime_file("libpiper_phonemize.so.1"));
+        assert!(keep_runtime_file("libfoo.so"));
+        assert!(!keep_runtime_file("readme.txt"));
+    }
+
+    #[test]
+    fn piper_markers_need_shared_libs_on_unix() {
+        let root = temp_dir("piper-incomplete");
+        let bin = root.join("bin");
+        fs::create_dir_all(&bin).unwrap();
+        fs::write(bin.join(exe_name("piper")), b"piper").unwrap();
+        if cfg!(windows) {
+            assert!(markers_present(&bin, "piper"));
+        } else {
+            assert!(
+                !markers_present(&bin, "piper"),
+                "piper binary without .so.N libs is not a complete Linux install"
+            );
+        }
         let _ = fs::remove_dir_all(root);
     }
 
