@@ -47,12 +47,15 @@ pub struct ModelOffering {
     /// Weight format (`gguf`, `safetensors`, `onnx`).
     #[serde(default = "default_format")]
     pub format: String,
-    /// Sidecar files (Piper `.onnx.json`, etc.).
+    /// Sidecar files (Piper `.onnx.json`, VAE/CLIP/T5/LoRA).
     #[serde(default)]
     pub extra_files: Vec<OfferingFile>,
     /// Catalogue engine id (`sdcpp`, `piper`). Inferred from profiles if empty.
     #[serde(default)]
     pub engine: Option<String>,
+    /// Closed engine flags owned by the offering (never user-typed paths).
+    #[serde(default)]
+    pub engine_args: std::collections::BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -97,6 +100,9 @@ pub struct OfferingFile {
     pub bytes: u64,
     #[serde(default)]
     pub sha256: String,
+    /// `vae` | `clip_l` | `clip_g` | `t5xxl` | `lora` | `style`
+    #[serde(default)]
+    pub role: Option<String>,
 }
 
 impl ModelOffering {
@@ -477,6 +483,7 @@ pub fn runtime_model_entries(
                     format: "gguf".into(),
                     extra_files: vec![],
                     engine: None,
+                    engine_args: Default::default(),
                 };
                 entries.push((m.id.clone(), stub, model_path(home, &m.filename)));
             }

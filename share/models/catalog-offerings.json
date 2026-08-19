@@ -1,5 +1,5 @@
 {
-  "version": "0.2.0",
+  "version": "0.3.0",
   "models": [
     {
       "id": "local:qwen3-embedding-0.6b",
@@ -185,6 +185,118 @@
         }
       ],
       "engine": "piper"
+    },
+    {
+      "id": "local:flux2",
+      "name": "Flux 2-class (FLUX.1 schnell fp8)",
+      "profiles": ["image"],
+      "filename": "flux1-schnell-fp8.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/flux1-schnell/resolve/main/flux1-schnell-fp8.safetensors",
+      "bytes": 11900000000,
+      "sha256": "",
+      "min_vram_mib": 12288,
+      "min_disk_bytes": 16000000000,
+      "quality_score": 90,
+      "speed_score": 55,
+      "n_layers": 0,
+      "n_params": 1.2e10,
+      "weights_bytes": 11900000000,
+      "embed_bytes": 0,
+      "kv_bytes_per_token": 0,
+      "replaces": [],
+      "optional": true,
+      "modality": "image",
+      "format": "safetensors",
+      "engine": "sdcpp",
+      "extra_files": [
+        {
+          "filename": "ae.safetensors",
+          "url": "https://huggingface.co/Comfy-Org/flux1-schnell/resolve/main/split_files/vae/ae.safetensors",
+          "bytes": 335000000,
+          "sha256": "",
+          "role": "vae"
+        },
+        {
+          "filename": "clip_l.safetensors",
+          "url": "https://huggingface.co/Comfy-Org/flux1-schnell/resolve/main/split_files/text_encoders/clip_l.safetensors",
+          "bytes": 246000000,
+          "sha256": "",
+          "role": "clip_l"
+        },
+        {
+          "filename": "t5xxl_fp8.safetensors",
+          "url": "https://huggingface.co/Comfy-Org/flux1-schnell/resolve/main/split_files/text_encoders/t5xxl_fp8_e4m3fn.safetensors",
+          "bytes": 4900000000,
+          "sha256": "",
+          "role": "t5xxl"
+        }
+      ],
+      "engine_args": {
+        "diffusion-model": "flux1-schnell-fp8.safetensors"
+      }
+    },
+    {
+      "id": "local:ideogram4",
+      "name": "Ideogram 4-class (SDXL base extra pack)",
+      "profiles": ["image"],
+      "filename": "sd_xl_base_1.0.safetensors",
+      "url": "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors",
+      "bytes": 6938000000,
+      "sha256": "",
+      "min_vram_mib": 8192,
+      "min_disk_bytes": 8000000000,
+      "quality_score": 86,
+      "speed_score": 50,
+      "n_layers": 0,
+      "n_params": 3.5e9,
+      "weights_bytes": 6938000000,
+      "embed_bytes": 0,
+      "kv_bytes_per_token": 0,
+      "replaces": [],
+      "optional": true,
+      "modality": "image",
+      "format": "safetensors",
+      "engine": "sdcpp",
+      "extra_files": [
+        {
+          "filename": "sdxl_vae.safetensors",
+          "url": "https://huggingface.co/stabilityai/sdxl-vae/resolve/main/sdxl_vae.safetensors",
+          "bytes": 335000000,
+          "sha256": "",
+          "role": "vae"
+        }
+      ]
+    },
+    {
+      "id": "local:piper-en-gb",
+      "name": "Piper TTS en_GB alba medium",
+      "profiles": ["tts"],
+      "filename": "en_GB-alba-medium.onnx",
+      "url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/alba/medium/en_GB-alba-medium.onnx",
+      "bytes": 63000000,
+      "sha256": "",
+      "min_vram_mib": 0,
+      "min_disk_bytes": 70000000,
+      "quality_score": 74,
+      "speed_score": 90,
+      "n_layers": 0,
+      "n_params": 1.0e7,
+      "weights_bytes": 63000000,
+      "embed_bytes": 0,
+      "kv_bytes_per_token": 0,
+      "replaces": [],
+      "optional": true,
+      "modality": "audio",
+      "format": "onnx",
+      "engine": "piper",
+      "extra_files": [
+        {
+          "filename": "en_GB-alba-medium.onnx.json",
+          "url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/alba/medium/en_GB-alba-medium.onnx.json",
+          "bytes": 5000,
+          "sha256": ""
+        }
+      ]
     }
   ],
   "engines": {
