@@ -13,6 +13,7 @@ pub mod confirm;
 pub mod extract;
 pub mod feedback;
 pub mod files_gen;
+pub mod intents;
 pub mod memory;
 pub mod module_compile;
 pub mod module_rt;
