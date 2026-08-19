@@ -8,7 +8,7 @@ use aos_placement::PlacementProfile;
 use aos_proto::{
     CancelRequest, InferRequest, LoadRequest,
     MediaAudioGenerateRequest, MediaImageGenerateRequest, ModelIdRequest,
-    TokenEvent, UnloadRequest,
+    TokenEvent, UnloadRequest, MigrateRequest,
 };
 use aos_registry::ModelRegistry;
 use std::sync::Arc;
@@ -396,6 +396,65 @@ async fn main() {
         });
     }
 
+    // --- model.migrate (E18) ---
+    {
+        let sub = subsystem.clone();
+        let bus = bus.clone();
+        svc.on("model.migrate", move |ctx| {
+            let sub = sub.clone();
+            let bus = bus.clone();
+            async move {
+                match ctx.payload::<MigrateRequest>() {
+                    Ok(req) => {
+                        let resp = sub.migrate(&req.target).await;
+                        if resp.fallback || !resp.ok {
+                            let _ = bus
+                                .call::<aos_proto::AuditAppendRequest, bool>(
+                                    "audit.append",
+                                    &aos_proto::AuditAppendRequest {
+                                        trace_id: String::new(),
+                                        actor: "service:modeld".into(),
+                                        action: "model.migrate.fallback".into(),
+                                        target: req.target.clone(),
+                                        detail: serde_json::json!({
+                                            "ok": resp.ok,
+                                            "fallback": resp.fallback,
+                                            "message": resp.message,
+                                        }),
+                                    },
+                                    vec![],
+                                )
+                                .await;
+                        } else {
+                            let _ = bus
+                                .call::<aos_proto::AuditAppendRequest, bool>(
+                                    "audit.append",
+                                    &aos_proto::AuditAppendRequest {
+                                        trace_id: String::new(),
+                                        actor: "service:modeld".into(),
+                                        action: "model.migrate".into(),
+                                        target: req.target.clone(),
+                                        detail: serde_json::json!({
+                                            "profile": resp.profile,
+                                            "message": resp.message,
+                                        }),
+                                    },
+                                    vec![],
+                                )
+                                .await;
+                        }
+                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &resp).await;
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+
     // --- model.backend.add / model.set_routing (P3) ---
     {
         let sub = subsystem.clone();
@@ -522,8 +581,24 @@ async fn main() {
                         }
                     }
                     Err(_) => {
+                        let _ = bus
+                            .call::<aos_proto::AuditAppendRequest, bool>(
+                                "audit.append",
+                                &aos_proto::AuditAppendRequest {
+                                    trace_id: String::new(),
+                                    actor: "service:modeld".into(),
+                                    action: "media.options.refuse".into(),
+                                    target: "media.image.generate".into(),
+                                    detail: serde_json::json!({"reason": "unknown_or_invalid"}),
+                                },
+                                vec![],
+                            )
+                            .await;
                         let _ = ctx
-                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .respond_error(
+                                aos_ipc::msg::Status::BadRequest,
+                                "payload invalide (clés d'options inconnues refusées)",
+                            )
                             .await;
                     }
                 }

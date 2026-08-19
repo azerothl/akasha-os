@@ -1,7 +1,7 @@
 //! Cœur du Model Subsystem : état, scheduler, placement réel.
 
 use crate::config::ModeldConfig;
-use aos_llama::{BatchItem, GenParams, LlamaContext, LlamaModel, LoadMode, LoadOptions};
+use aos_llama::{BatchItem, GenParams, LlamaContext, LlamaModel, LoadMode, LoadOptions, StopReason};
 use aos_placement::{
     CostModel, HardwareProfile, ModelDesc, PlacementPlan, PlacementProfile, PlacementSim,
     Priority, Tier,
@@ -23,6 +23,8 @@ struct DispatchJob {
     messages: Vec<(String, String)>,
     params: GenParams,
     abort: Arc<AtomicBool>,
+    pause: Arc<AtomicBool>,
+    resumed: bool,
     delta_tx: mpsc::Sender<TokenEvent>,
     done_tx: oneshot::Sender<InferOutcome>,
 }
@@ -89,11 +91,17 @@ struct Inner {
     models: HashMap<String, ModelRuntime>,
     /// inference_id → flag d'annulation (jobs en file).
     job_aborts: HashMap<u64, Arc<AtomicBool>>,
+    /// inference_id → pause (E18 migrate, distinct from abort).
+    job_pauses: HashMap<u64, Arc<AtomicBool>>,
     next_inference: u64,
     /// Politique de routage courante (F-MDL-07).
     routing_mode: String,
     /// Backends distants configurés (P3.1).
     remote_backends: HashMap<String, crate::backend::RemoteOpenAiBackend>,
+    /// Pin live `auto` | `gpu` | `cpu` (overrides `AOS_INFERENCE` for reload).
+    inference_pin: String,
+    /// Jobs paused mid-stream waiting for a new context (prefix replay).
+    paused_jobs: Vec<DispatchJob>,
 }
 
 enum LoadAction {
@@ -108,6 +116,18 @@ pub struct ModelSubsystem {
     inner: Arc<StdMutex<Inner>>,
     pub config: ModeldConfig,
     sim: Arc<StdMutex<PlacementSim>>,
+}
+
+/// Prefix already streamed so a new llama context continues the same turn (E18).
+pub fn resume_messages(
+    messages: &[(String, String)],
+    generated: &str,
+) -> Vec<(String, String)> {
+    let mut out = messages.to_vec();
+    if !generated.is_empty() {
+        out.push(("assistant".into(), generated.to_string()));
+    }
+    out
 }
 
 impl ModelSubsystem {
@@ -179,9 +199,14 @@ impl ModelSubsystem {
             inner: Arc::new(StdMutex::new(Inner {
                 models,
                 job_aborts: HashMap::new(),
+                job_pauses: HashMap::new(),
                 next_inference: 1,
                 routing_mode: config.routing.clone(),
                 remote_backends: HashMap::new(),
+                inference_pin: std::env::var("AOS_INFERENCE")
+                    .unwrap_or_default()
+                    .to_ascii_lowercase(),
+                paused_jobs: Vec::new(),
             })),
             config,
             sim,
@@ -296,9 +321,17 @@ impl ModelSubsystem {
                 if sim.get(&model_id).is_some() {
                     sim.unload(&model_id);
                 }
-                let inference = std::env::var("AOS_INFERENCE")
-                    .unwrap_or_default()
-                    .to_ascii_lowercase();
+                let inference = {
+                    let g = inner.lock().unwrap();
+                    let pin = g.inference_pin.trim().to_ascii_lowercase();
+                    if pin.is_empty() {
+                        std::env::var("AOS_INFERENCE")
+                            .unwrap_or_default()
+                            .to_ascii_lowercase()
+                    } else {
+                        pin
+                    }
+                };
                 let effective_profile = match inference.as_str() {
                     "cpu" => PlacementProfile::CpuOnly,
                     "auto" => sim.auto_hysteresis_profile(),
@@ -409,7 +442,7 @@ impl ModelSubsystem {
         ),
         String,
     > {
-        let (job_id, abort, tx) = {
+        let (job_id, abort, pause, tx) = {
             let mut g = self.inner.lock().unwrap();
             if !matches!(
                 g.models.get(model_id).map(|m| &m.state),
@@ -420,7 +453,9 @@ impl ModelSubsystem {
             let id = g.next_inference;
             g.next_inference += 1;
             let abort = Arc::new(AtomicBool::new(false));
+            let pause = Arc::new(AtomicBool::new(false));
             g.job_aborts.insert(id, abort.clone());
+            g.job_pauses.insert(id, pause.clone());
             let m = g.models.get_mut(model_id).unwrap();
             m.pending += 1;
             if m.dispatch.is_none() {
@@ -435,7 +470,7 @@ impl ModelSubsystem {
                 });
             }
             let tx = m.dispatch.clone().unwrap();
-            (id, abort, tx)
+            (id, abort, pause, tx)
         };
 
         let (delta_tx, delta_rx) = mpsc::channel::<TokenEvent>(256);
@@ -455,12 +490,15 @@ impl ModelSubsystem {
                 seed: req.params.seed.unwrap_or(42),
             },
             abort,
+            pause,
+            resumed: false,
             delta_tx,
             done_tx,
         };
         if tx.send(job).await.is_err() {
             let mut g = self.inner.lock().unwrap();
             g.job_aborts.remove(&job_id);
+            g.job_pauses.remove(&job_id);
             if let Some(m) = g.models.get_mut(model_id) {
                 m.pending = m.pending.saturating_sub(1);
             }
@@ -529,6 +567,9 @@ impl ModelSubsystem {
                 }
             }
             for j in &batch {
+                if j.resumed {
+                    continue;
+                }
                 let _ = j
                     .delta_tx
                     .send(TokenEvent::Started {
@@ -545,18 +586,28 @@ impl ModelSubsystem {
             // Handles I/O indexés comme les items du batch (y compris admits).
             struct JobIo {
                 job_id: u64,
+                priority: u8,
+                messages: Vec<(String, String)>,
+                params: GenParams,
                 delta_tx: mpsc::Sender<TokenEvent>,
                 done_tx: Option<oneshot::Sender<InferOutcome>>,
                 abort: Arc<AtomicBool>,
+                pause: Arc<AtomicBool>,
+                generated: String,
             }
             let ios: Arc<StdMutex<Vec<JobIo>>> = Arc::new(StdMutex::new(
                 batch
                     .iter()
                     .map(|j| JobIo {
                         job_id: j.job_id,
+                        priority: j.priority,
+                        messages: j.messages.clone(),
+                        params: j.params.clone(),
                         delta_tx: j.delta_tx.clone(),
                         done_tx: None, // rempli après move
                         abort: j.abort.clone(),
+                        pause: j.pause.clone(),
+                        generated: String::new(),
                     })
                     .collect(),
             ));
@@ -572,6 +623,7 @@ impl ModelSubsystem {
                         messages: j.messages,
                         params: j.params,
                         abort: j.abort,
+                        pause: j.pause,
                     }
                 })
                 .collect();
@@ -604,9 +656,11 @@ impl ModelSubsystem {
                                     return None;
                                 };
                                 drop(g);
-                                let _ = j.delta_tx.try_send(TokenEvent::Started {
-                                    inference_id: j.job_id,
-                                });
+                                if !j.resumed {
+                                    let _ = j.delta_tx.try_send(TokenEvent::Started {
+                                        inference_id: j.job_id,
+                                    });
+                                }
                                 {
                                     let mut st = inner_admit.lock().unwrap();
                                     if let Some(m) = st.models.get_mut(&mid_admit) {
@@ -615,17 +669,23 @@ impl ModelSubsystem {
                                     }
                                 }
                                 let item = BatchItem {
-                                    messages: j.messages,
-                                    params: j.params,
+                                    messages: j.messages.clone(),
+                                    params: j.params.clone(),
                                     abort: j.abort.clone(),
+                                    pause: j.pause.clone(),
                                 };
                                 // Aligné sur out[idx] côté llama (push avant
                                 // tokenize) ; retiré dans on_reject si échec.
                                 ios_admit.lock().unwrap().push(JobIo {
                                     job_id: j.job_id,
+                                    priority: j.priority,
+                                    messages: j.messages,
+                                    params: j.params,
                                     delta_tx: j.delta_tx,
                                     done_tx: Some(j.done_tx),
                                     abort: j.abort,
+                                    pause: j.pause,
+                                    generated: String::new(),
                                 });
                                 Some(item)
                             },
@@ -634,6 +694,7 @@ impl ModelSubsystem {
                                     {
                                         let mut st = inner_reject.lock().unwrap();
                                         st.job_aborts.remove(&io.job_id);
+                                        st.job_pauses.remove(&io.job_id);
                                         if let Some(m) = st.models.get_mut(&mid_reject) {
                                             m.active = m.active.saturating_sub(1);
                                         }
@@ -645,7 +706,10 @@ impl ModelSubsystem {
                             },
                             |i, piece| {
                                 let tx = {
-                                    let g = ios_delta.lock().unwrap();
+                                    let mut g = ios_delta.lock().unwrap();
+                                    if let Some(io) = g.get_mut(i) {
+                                        io.generated.push_str(piece);
+                                    }
                                     g.get(i).map(|io| io.delta_tx.clone())
                                 };
                                 match tx {
@@ -683,7 +747,9 @@ impl ModelSubsystem {
             let mut ios = ios.lock().unwrap();
             if results.is_empty() && !ios.is_empty() {
                 for io in ios.drain(..) {
-                    inner.lock().unwrap().job_aborts.remove(&io.job_id);
+                    let mut g = inner.lock().unwrap();
+                    g.job_aborts.remove(&io.job_id);
+                    g.job_pauses.remove(&io.job_id);
                     if let Some(tx) = io.done_tx {
                         let _ = tx.send(InferOutcome::Failed("contexte disparu".into()));
                     }
@@ -695,6 +761,37 @@ impl ModelSubsystem {
                 results.push(Err(aos_llama::LlamaError::Decode(-5)));
             }
             for (io, res) in ios.drain(..).zip(results.into_iter()) {
+                let paused = matches!(
+                    &res,
+                    Ok(stats) if stats.stopped == StopReason::Paused
+                );
+                if paused {
+                    io.pause.store(false, Ordering::SeqCst);
+                    let remaining = io
+                        .params
+                        .max_tokens
+                        .saturating_sub(match &res {
+                            Ok(s) => s.generated_tokens,
+                            Err(_) => 0,
+                        })
+                        .max(1);
+                    let mut params = io.params.clone();
+                    params.max_tokens = remaining;
+                    if let Some(done_tx) = io.done_tx {
+                        inner.lock().unwrap().paused_jobs.push(DispatchJob {
+                            job_id: io.job_id,
+                            priority: io.priority,
+                            messages: resume_messages(&io.messages, &io.generated),
+                            params,
+                            abort: io.abort,
+                            pause: io.pause,
+                            resumed: true,
+                            delta_tx: io.delta_tx,
+                            done_tx,
+                        });
+                    }
+                    continue;
+                }
                 let outcome = match res {
                     Ok(stats) => {
                         let mut g = inner.lock().unwrap();
@@ -703,6 +800,7 @@ impl ModelSubsystem {
                             m.last_tok_s = Some(stats.tok_s);
                         }
                         g.job_aborts.remove(&io.job_id);
+                        g.job_pauses.remove(&io.job_id);
                         InferOutcome::Done {
                             prompt_tokens: stats.prompt_tokens,
                             generated_tokens: stats.generated_tokens,
@@ -711,7 +809,9 @@ impl ModelSubsystem {
                         }
                     }
                     Err(e) => {
-                        inner.lock().unwrap().job_aborts.remove(&io.job_id);
+                        let mut g = inner.lock().unwrap();
+                        g.job_aborts.remove(&io.job_id);
+                        g.job_pauses.remove(&io.job_id);
                         if io.abort.load(Ordering::SeqCst) {
                             InferOutcome::Cancelled
                         } else {
@@ -724,6 +824,179 @@ impl ModelSubsystem {
                 }
             }
         }
+    }
+
+    /// Prefix already shown so a new context can continue the same turn (E18).
+    pub fn resume_prefix(
+        messages: &[(String, String)],
+        generated: &str,
+    ) -> Vec<(String, String)> {
+        resume_messages(messages, generated)
+    }
+
+    /// In-process device migrate (E18). Fail-closed: caller falls back to 0.8 restart.
+    pub async fn migrate(&self, target: &str) -> aos_proto::MigrateResponse {
+        let pin = match target.trim().to_ascii_lowercase().as_str() {
+            "auto" | "gpu" | "cpu" => target.trim().to_ascii_lowercase(),
+            other => {
+                return aos_proto::MigrateResponse {
+                    ok: false,
+                    fallback: true,
+                    message: format!("cible migrate inconnue: {other}"),
+                    profile: String::new(),
+                };
+            }
+        };
+        {
+            let mut g = self.inner.lock().unwrap();
+            g.inference_pin = pin.clone();
+            for flag in g.job_pauses.values() {
+                flag.store(true, Ordering::SeqCst);
+            }
+        }
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+        loop {
+            let busy = {
+                let g = self.inner.lock().unwrap();
+                g.models.values().any(|m| {
+                    !m.desc.is_media() && (m.active > 0 || m.pending > 0 || m.loading)
+                })
+            };
+            if !busy {
+                break;
+            }
+            if tokio::time::Instant::now() > deadline {
+                return aos_proto::MigrateResponse {
+                    ok: false,
+                    fallback: true,
+                    message: "migrate timeout — fallback cancel+restart".into(),
+                    profile: pin,
+                };
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+        let model_id = {
+            let g = self.inner.lock().unwrap();
+            g.models
+                .iter()
+                .find(|(_, m)| {
+                    !m.desc.is_media()
+                        && matches!(
+                            m.state,
+                            ModelState::Loaded
+                                | ModelState::PartiallyOffloaded
+                                | ModelState::OnDisk
+                        )
+                        && m.path.is_some()
+                })
+                .map(|(id, _)| id.clone())
+                .or_else(|| self.config.default_model.clone())
+        };
+        let Some(model_id) = model_id else {
+            return aos_proto::MigrateResponse {
+                ok: true,
+                fallback: false,
+                message: "aucun modèle local à migrer".into(),
+                profile: pin,
+            };
+        };
+        if let Err(e) = self.force_reload(&model_id).await {
+            let jobs = {
+                let mut g = self.inner.lock().unwrap();
+                std::mem::take(&mut g.paused_jobs)
+            };
+            for j in jobs {
+                let _ = j.done_tx.send(InferOutcome::Cancelled);
+            }
+            return aos_proto::MigrateResponse {
+                ok: false,
+                fallback: true,
+                message: e,
+                profile: pin,
+            };
+        }
+        let jobs = {
+            let mut g = self.inner.lock().unwrap();
+            std::mem::take(&mut g.paused_jobs)
+        };
+        let n = jobs.len();
+        for job in jobs {
+            let tx = {
+                let g = self.inner.lock().unwrap();
+                g.models.get(&model_id).and_then(|m| m.dispatch.clone())
+            };
+            match tx {
+                Some(tx) => {
+                    {
+                        let mut g = self.inner.lock().unwrap();
+                        if let Some(m) = g.models.get_mut(&model_id) {
+                            m.pending += 1;
+                        }
+                    }
+                    if tx.send(job).await.is_err() {
+                        return aos_proto::MigrateResponse {
+                            ok: false,
+                            fallback: true,
+                            message: "dispatcher arrêté après reload".into(),
+                            profile: pin,
+                        };
+                    }
+                }
+                None => {
+                    let _ = job.done_tx.send(InferOutcome::Cancelled);
+                    return aos_proto::MigrateResponse {
+                        ok: false,
+                        fallback: true,
+                        message: "pas de dispatcher après reload".into(),
+                        profile: pin,
+                    };
+                }
+            }
+        }
+        let profile = {
+            let g = self.inner.lock().unwrap();
+            g.models
+                .get(&model_id)
+                .map(|m| format!("{:?}", m.profile).to_lowercase())
+                .unwrap_or(pin.clone())
+        };
+        aos_proto::MigrateResponse {
+            ok: true,
+            fallback: false,
+            message: format!("migré {n} job(s) → {profile}"),
+            profile,
+        }
+    }
+
+    async fn force_reload(&self, model_id: &str) -> Result<(), String> {
+        {
+            let mut g = self.inner.lock().unwrap();
+            let m = g
+                .models
+                .get_mut(model_id)
+                .ok_or_else(|| format!("modèle inconnu: {model_id}"))?;
+            m.ctx = None;
+            m.model = None;
+            m.ctx_abort = None;
+            m.state = ModelState::OnDisk;
+            m.plan = None;
+            m.loading = false;
+        }
+        self.sim.lock().unwrap().unload(model_id);
+        let profile = {
+            let g = self.inner.lock().unwrap();
+            match g.inference_pin.as_str() {
+                "cpu" => PlacementProfile::CpuOnly,
+                _ => PlacementProfile::Balanced,
+            }
+        };
+        self.ensure_loaded(model_id, profile, self.config.default_kv_tokens)
+            .await
+            .map(|_| ())
+    }
+
+    pub fn inference_pin(&self) -> String {
+        self.inner.lock().unwrap().inference_pin.clone()
     }
 
     /// `model.cancel` — annulation coopérative (frontière de token, §3.6).
@@ -906,16 +1179,22 @@ impl ModelSubsystem {
     }
 
     /// First installed media pack of `kind` (`image` | `tts`), or `requested` id.
+    /// Honors persisted prefs (`default_image_model` / `default_audio_model`) when
+    /// the caller did not pass an id (P09.5).
     pub fn find_media_model(
         &self,
         kind: &str,
         requested: Option<&str>,
     ) -> Result<(String, PathBuf), String> {
+        let preferred = requested
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string())
+            .or_else(|| preferred_media_id(kind));
         let g = self.inner.lock().unwrap();
-        if let Some(id) = requested.filter(|s| !s.is_empty()) {
+        if let Some(id) = preferred.filter(|s| !s.is_empty()) {
             let m = g
                 .models
-                .get(id)
+                .get(&id)
                 .ok_or_else(|| format!("modèle média inconnu: {id}"))?;
             if !m.desc.is_media() {
                 return Err(format!("{id} n'est pas un pack média"));
@@ -924,7 +1203,7 @@ impl ModelSubsystem {
                 .path
                 .clone()
                 .ok_or_else(|| format!("pas de poids pour {id}"))?;
-            return Ok((id.to_string(), path));
+            return Ok((id, path));
         }
         let mut found: Option<(String, PathBuf)> = None;
         for (id, m) in &g.models {
@@ -956,5 +1235,52 @@ impl ModelSubsystem {
         found.ok_or_else(|| {
             format!("aucun pack {kind} installé — téléchargez-le depuis Models (P08.6)")
         })
+    }
+
+    pub fn has_live_infer(&self) -> bool {
+        let g = self.inner.lock().unwrap();
+        g.models
+            .values()
+            .any(|m| !m.desc.is_media() && (m.active > 0 || m.pending > 0))
+    }
+}
+
+fn preferred_media_id(kind: &str) -> Option<String> {
+    let home = std::env::var("AOS_HOME").ok()?;
+    let raw = std::fs::read_to_string(std::path::PathBuf::from(home).join("var/run/preferences.json"))
+        .ok()?;
+    let v: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    let key = match kind {
+        "image" => "default_image_model",
+        "tts" => "default_audio_model",
+        _ => return None,
+    };
+    v.get(key)
+        .and_then(|x| x.as_str())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resume_messages;
+    use aos_llama::StopReason;
+
+    #[test]
+    fn prefix_replay_keeps_history_and_appends_assistant() {
+        let msgs = vec![
+            ("system".into(), "tu es un assistant".into()),
+            ("user".into(), "bonjour".into()),
+        ];
+        let out = resume_messages(&msgs, "Salut");
+        assert_eq!(out.len(), 3);
+        assert_eq!(out[2], ("assistant".into(), "Salut".into()));
+        let same = resume_messages(&msgs, "");
+        assert_eq!(same, msgs);
+    }
+
+    #[test]
+    fn paused_is_not_cancelled_reason() {
+        assert_ne!(StopReason::Paused, StopReason::Aborted);
     }
 }

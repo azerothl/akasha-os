@@ -30,7 +30,7 @@ use aos_proto::{
     ProviderTestResponse, ProviderUpsertRequest, SecretListRequest, SecretListResponse,
     SecretSetRequest, SetRoutingRequest, SkillInfo, SystemMetrics, TokenEvent, WebBrowseRequest,
     WebBrowseResponse, WebSearchRequest, WebSearchResponse, AgentState,
-    CHAT_DELEGATION_PROMPT, SYSTEM_ASSISTANT_PROMPT,
+    CHAT_DELEGATION_PROMPT, SYSTEM_ASSISTANT_PROMPT, MigrateRequest, MigrateResponse,
 };
 use eframe::egui;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -1501,35 +1501,39 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                 "aos-auditd tué — le superviseur de session doit le redémarrer".into(),
             ));
         }
-        Cmd::RestartModeld => {
-            let _ = bus
-                .call::<CancelRequest, bool>(
-                    "model.cancel",
-                    &CancelRequest { inference_id: 0 },
+        Cmd::MigrateModeld { target } => {
+            match bus
+                .call::<MigrateRequest, MigrateResponse>(
+                    "model.migrate",
+                    &MigrateRequest {
+                        target: target.clone(),
+                    },
                     vec![],
                 )
-                .await;
-            #[cfg(windows)]
+                .await
             {
-                let _ = std::process::Command::new("taskkill")
-                    .args(["/F", "/IM", "aos-modeld.exe"])
-                    .status();
-                let _ = std::process::Command::new("taskkill")
-                    .args(["/F", "/IM", "aos-modeld-cpu.exe"])
-                    .status();
+                Ok(r) if r.ok && !r.fallback => {
+                    let _ = evt_tx.send(Evt::Status(format!("migrate: {}", r.message)));
+                }
+                Ok(r) => {
+                    let _ = evt_tx.send(Evt::Status(format!(
+                        "migrate fallback ({}) — restarting modeld",
+                        r.message
+                    )));
+                    let _ = evt_tx.send(Evt::Error(r.message));
+                    // 0.8 fail-closed path
+                    handle_restart_modeld(&bus, &evt_tx).await;
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Status(format!(
+                        "migrate failed ({e}) — restarting modeld"
+                    )));
+                    handle_restart_modeld(&bus, &evt_tx).await;
+                }
             }
-            #[cfg(not(windows))]
-            {
-                let _ = std::process::Command::new("pkill")
-                    .args(["-x", "aos-modeld"])
-                    .status();
-                let _ = std::process::Command::new("pkill")
-                    .args(["-x", "aos-modeld-cpu"])
-                    .status();
-            }
-            let _ = evt_tx.send(Evt::Status(
-                "modeld restarting with current inference setting".into(),
-            ));
+        }
+        Cmd::RestartModeld => {
+            handle_restart_modeld(&bus, &evt_tx).await;
         }
         Cmd::RefreshConfirms => {
             if let Ok(c) = bus
@@ -1694,14 +1698,19 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                 }
             }
         }
-        Cmd::MediaImage { prompt } => {
+        Cmd::MediaImage {
+            prompt,
+            model_id,
+            options,
+        } => {
             match bus
                 .call::<MediaImageGenerateRequest, MediaGenerateResponse>(
                     "media.image.generate",
                     &MediaImageGenerateRequest {
-                        prompt,
+                        prompt: prompt.clone(),
                         path: None,
-                        model_id: None,
+                        model_id,
+                        options,
                         actor: "human:ui".into(),
                         caps: vec!["media.generate".into(), "fs.write:/downloads/**".into()],
                         trace_id: String::new(),
@@ -1716,6 +1725,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                         path: r.path,
                         bytes: r.bytes,
                         engine: r.engine,
+                        prompt,
                     });
                 }
                 Err(e) => {
@@ -1723,14 +1733,19 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                 }
             }
         }
-        Cmd::MediaAudio { text } => {
+        Cmd::MediaAudio {
+            text,
+            model_id,
+            options,
+        } => {
             match bus
                 .call::<MediaAudioGenerateRequest, MediaGenerateResponse>(
                     "media.audio.generate",
                     &MediaAudioGenerateRequest {
                         text,
                         path: None,
-                        model_id: None,
+                        model_id,
+                        options,
                         actor: "human:ui".into(),
                         caps: vec!["media.generate".into(), "fs.write:/downloads/**".into()],
                         trace_id: String::new(),
@@ -1745,6 +1760,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                         path: r.path,
                         bytes: r.bytes,
                         engine: r.engine,
+                        prompt: String::new(),
                     });
                 }
                 Err(e) => {
@@ -1800,4 +1816,35 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                 .await;
         }
     }
+}
+
+async fn handle_restart_modeld(bus: &BusClient, evt_tx: &Sender<Evt>) {
+    let _ = bus
+        .call::<CancelRequest, bool>(
+            "model.cancel",
+            &CancelRequest { inference_id: 0 },
+            vec![],
+        )
+        .await;
+    #[cfg(windows)]
+    {
+        let _ = std::process::Command::new("taskkill")
+            .args(["/F", "/IM", "aos-modeld.exe"])
+            .status();
+        let _ = std::process::Command::new("taskkill")
+            .args(["/F", "/IM", "aos-modeld-cpu.exe"])
+            .status();
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = std::process::Command::new("pkill")
+            .args(["-x", "aos-modeld"])
+            .status();
+        let _ = std::process::Command::new("pkill")
+            .args(["-x", "aos-modeld-cpu"])
+            .status();
+    }
+    let _ = evt_tx.send(Evt::Status(
+        "modeld restarting with current inference setting".into(),
+    ));
 }

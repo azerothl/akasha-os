@@ -18,4 +18,4 @@ pub mod subsystem;
 
 pub use backend::RemoteOpenAiBackend;
 pub use config::ModeldConfig;
-pub use subsystem::ModelSubsystem;
+pub use subsystem::{resume_messages, ModelSubsystem};

@@ -218,6 +218,8 @@ pub enum StopReason {
     Eog,
     MaxTokens,
     Aborted,
+    /// Cooperative pause for mid-token device migrate (E18). Not a cancel.
+    Paused,
 }
 
 /// Statistiques d'une génération (Metrics Exporter, F-PLC-08).
@@ -241,6 +243,8 @@ pub struct BatchItem {
     pub messages: Vec<(String, String)>,
     pub params: GenParams,
     pub abort: Arc<AtomicBool>,
+    /// Distinct from `abort`: stop at a token boundary and keep the stream (E18).
+    pub pause: Arc<AtomicBool>,
 }
 
 /// Contexte d'inférence. `n_seq_max` > 1 active le continuous batching.
@@ -624,6 +628,7 @@ impl LlamaContext {
             last: sys::llama_token,
             smpl: *mut sys::llama_sampler,
             abort: Arc<AtomicBool>,
+            pause: Arc<AtomicBool>,
             done: Option<StopReason>,
             ttft_ms: f64,
             t_start: Instant,
@@ -668,6 +673,7 @@ impl LlamaContext {
                         last: 0,
                         smpl: Self::make_sampler(&item.params),
                         abort: item.abort.clone(),
+                        pause: item.pause.clone(),
                         done: None,
                         ttft_ms: f64::MAX,
                         t_start: Instant::now(),
@@ -790,6 +796,7 @@ impl LlamaContext {
                             last: 0,
                             smpl: Self::make_sampler(&item.params),
                             abort: item.abort.clone(),
+                            pause: item.pause.clone(),
                             done: None,
                             ttft_ms: f64::MAX,
                             t_start: Instant::now(),
@@ -838,6 +845,10 @@ impl LlamaContext {
                 }
                 if slot.abort.load(Ordering::SeqCst) {
                     slot.finish(StopReason::Aborted);
+                    continue;
+                }
+                if slot.pause.load(Ordering::SeqCst) {
+                    slot.finish(StopReason::Paused);
                     continue;
                 }
                 if unsafe { sys::llama_vocab_is_eog(vocab, slot.last) } {
@@ -1080,7 +1091,29 @@ impl Drop for LlamaContext {
 
 #[cfg(test)]
 mod tests {
-    use super::{accumulate_pooled_chunk, finish_mean_pool, l2_normalize};
+    use super::{accumulate_pooled_chunk, finish_mean_pool, l2_normalize, StopReason};
+    use super::BatchItem;
+    use super::GenParams;
+    use std::sync::atomic::AtomicBool;
+    use std::sync::Arc;
+
+    #[test]
+    fn paused_is_not_aborted() {
+        assert_ne!(StopReason::Paused, StopReason::Aborted);
+        let item = BatchItem {
+            messages: vec![],
+            params: GenParams {
+                max_tokens: 8,
+                temperature: 0.7,
+                top_p: 0.9,
+                seed: 1,
+            },
+            abort: Arc::new(AtomicBool::new(false)),
+            pause: Arc::new(AtomicBool::new(true)),
+        };
+        assert!(item.pause.load(std::sync::atomic::Ordering::SeqCst));
+        assert!(!item.abort.load(std::sync::atomic::Ordering::SeqCst));
+    }
 
     #[test]
     fn split_mean_matches_full_sequence_mean() {

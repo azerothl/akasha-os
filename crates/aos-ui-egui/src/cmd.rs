@@ -123,7 +123,9 @@ pub(crate) enum Cmd {
     },
     Feedback(FeedbackSubmitRequest),
     KillAuditd,
+    #[allow(dead_code)]
     RestartModeld,
+    MigrateModeld { target: String },
     RefreshConfirms,
     ModelsRefresh,
     ModelLoad { model_id: String },
@@ -134,8 +136,16 @@ pub(crate) enum Cmd {
     },
     ProviderRemove { id: String },
     ProviderTest { id: String },
-    MediaImage { prompt: String },
-    MediaAudio { text: String },
+    MediaImage {
+        prompt: String,
+        model_id: Option<String>,
+        options: aos_proto::MediaImageOptions,
+    },
+    MediaAudio {
+        text: String,
+        model_id: Option<String>,
+        options: aos_proto::MediaAudioOptions,
+    },
     SessionSetModel {
         session_id: String,
         model_id: Option<String>,
@@ -235,6 +245,7 @@ pub(crate) enum Evt {
         path: String,
         bytes: u64,
         engine: String,
+        prompt: String,
     },
     Skills(Vec<SkillInfo>),
     McpServers(Vec<McpServerInfo>),

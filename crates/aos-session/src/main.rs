@@ -968,13 +968,18 @@ fn inference_mode(home: &Path) -> String {
 }
 
 /// CUDA-linked `aos-modeld` vs `aos-modeld-cpu` (no CUDA DLL). Unified zip ships both.
+/// On NVIDIA hosts the CUDA binary stays up for in-process pin cpu/gpu (E18);
+/// `aos-modeld-cpu` is only for machines without NVIDIA.
 fn pick_modeld_bin(home: &Path) -> (PathBuf, bool) {
     let nvidia = bootstrap::nvidia_ok();
     let mode = inference_mode(home);
-    let want_cpu =
-        mode.eq_ignore_ascii_case("cpu") || (!nvidia && !mode.eq_ignore_ascii_case("gpu"));
     let cpu_bin = bin_path(home, "aos-modeld-cpu");
     let gpu_bin = bin_path(home, "aos-modeld");
+    if nvidia && gpu_bin.exists() {
+        return (gpu_bin, false);
+    }
+    let want_cpu =
+        mode.eq_ignore_ascii_case("cpu") || (!nvidia && !mode.eq_ignore_ascii_case("gpu"));
     if want_cpu && cpu_bin.exists() {
         (cpu_bin, true)
     } else {
