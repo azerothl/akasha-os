@@ -177,6 +177,24 @@ pub struct CancelRequest {
     pub inference_id: u64,
 }
 
+/// `model.migrate` — in-process CPU ↔ GPU re-place without aborting the live stream (E18).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MigrateRequest {
+    /// `auto` | `gpu` | `cpu`
+    pub target: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MigrateResponse {
+    pub ok: bool,
+    /// True when the caller should fall back to 0.8 cancel+restart.
+    #[serde(default)]
+    pub fallback: bool,
+    pub message: String,
+    #[serde(default)]
+    pub profile: String,
+}
+
 /// État de résidence d'un modèle (F-MDL-08).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ModelState {
@@ -1747,7 +1765,7 @@ pub struct ChatSessionMeta {
 }
 
 /// Pièce jointe d'un message de session (ex. référence agent en fond).
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ChatAttachment {
     AgentRef {
@@ -1760,9 +1778,19 @@ pub enum ChatAttachment {
     },
     Image {
         path: String,
+        #[serde(default)]
+        prompt: String,
     },
     Audio {
         path: String,
+    },
+    /// In-chat TTS options card (P09.8) — generate after the human confirms.
+    TtsDraft {
+        text: String,
+        #[serde(default)]
+        model_id: Option<String>,
+        #[serde(default)]
+        options: MediaAudioOptions,
     },
 }
 
@@ -1774,7 +1802,7 @@ impl ChatAttachment {
                 title,
                 origin,
             } => Some((agent_id.as_str(), title.as_str(), origin.as_str())),
-            Self::Image { .. } | Self::Audio { .. } => None,
+            Self::Image { .. } | Self::Audio { .. } | Self::TtsDraft { .. } => None,
         }
     }
 }
@@ -2120,6 +2148,37 @@ pub struct FilesGenerateResponse {
 // Media API (E16 / Preview 0.8)
 // ---------------------------------------------------------------------------
 
+/// Closed sd.cpp option object (P09.3). Unknown keys are refused.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(default, deny_unknown_fields)]
+pub struct MediaImageOptions {
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    pub steps: Option<u32>,
+    pub cfg_scale: Option<f32>,
+    pub seed: Option<i64>,
+    pub sampling_method: Option<String>,
+    pub negative_prompt: Option<String>,
+    pub threads: Option<u32>,
+    /// Catalogue style id (not a filesystem path).
+    pub style: Option<String>,
+    /// Catalogue LoRA id (not a filesystem path).
+    pub lora: Option<String>,
+    /// Catalogue VAE id (not a filesystem path).
+    pub vae: Option<String>,
+}
+
+/// Closed Piper option object (P09.3). Unknown keys are refused.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(default, deny_unknown_fields)]
+pub struct MediaAudioOptions {
+    pub length_scale: Option<f32>,
+    pub noise_scale: Option<f32>,
+    pub noise_w: Option<f32>,
+    pub sentence_silence: Option<f32>,
+    pub speaker: Option<u32>,
+}
+
 /// `media.image.generate` — prompt → PNG sous `/downloads`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MediaImageGenerateRequest {
@@ -2130,6 +2189,8 @@ pub struct MediaImageGenerateRequest {
     /// Offering id (`local:sd-v1-5`). Empty → first installed image pack.
     #[serde(default)]
     pub model_id: Option<String>,
+    #[serde(default)]
+    pub options: MediaImageOptions,
     #[serde(default)]
     pub actor: String,
     #[serde(default)]
@@ -2148,6 +2209,8 @@ pub struct MediaAudioGenerateRequest {
     #[serde(default)]
     pub model_id: Option<String>,
     #[serde(default)]
+    pub options: MediaAudioOptions,
+    #[serde(default)]
     pub actor: String,
     #[serde(default)]
     pub caps: Vec<String>,
@@ -2162,4 +2225,24 @@ pub struct MediaGenerateResponse {
     /// `sdcpp` | `piper` | `stub`
     pub engine: String,
     pub model_id: String,
+}
+
+#[cfg(test)]
+mod media_option_tests {
+    use super::{MediaAudioOptions, MediaImageOptions};
+
+    #[test]
+    fn image_options_refuse_unknown_keys() {
+        let err = serde_json::from_str::<MediaImageOptions>(r#"{"steps":8,"argv":"--foo"}"#)
+            .unwrap_err();
+        let s = err.to_string();
+        assert!(s.contains("unknown") || s.contains("argv"), "{s}");
+    }
+
+    #[test]
+    fn audio_options_accept_known() {
+        let o: MediaAudioOptions =
+            serde_json::from_str(r#"{"length_scale":1.1,"speaker":0}"#).unwrap();
+        assert_eq!(o.length_scale, Some(1.1));
+    }
 }
