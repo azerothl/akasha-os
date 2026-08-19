@@ -7,8 +7,8 @@
 Tag puis push :
 
 ```bash
-git tag v0.8.0
-git push origin v0.8.0
+git tag v0.9.0
+git push origin v0.9.0
 ```
 
 Le workflow [`.github/workflows/preview-release.yml`](../../.github/workflows/preview-release.yml)
@@ -37,13 +37,12 @@ Les GGUF sont téléchargés au **premier run** via `share/models/manifest.json`
 ## Notes de version (brouillon)
 
 ```
-Akasha OS Preview 0.8.0 — image + TTS locaux, artefact CPU/GPU unifié
+Akasha OS Preview 0.9.0 — migrate mid-token, studio Image, options média fermées
 
-- media.image.generate / media.audio.generate (PNG/WAV sous /downloads) ; cap media.generate
-- Packs optionnels (SD 1.5, Piper) hors zip ; Download tire aussi sd.cpp / piper dans bin/
-- Un zip Win / un tar Linux : aos-modeld (CUDA) + aos-modeld-cpu ; Réglages gpu/cpu/auto redémarre modeld dans la session
-- Onglet Providers (cloud OpenAI-compat + loopback) ; désinstall de modules ; widgets E15 plus riches
-- One-liner : irm …/install.ps1 | iex  /  curl …/install.sh | sh (sha256 fail-closed + overlay)
+- model.migrate : CPU↔GPU sans abort du stream (pin cpu NVIDIA reste sur le binaire CUDA)
+- Options media.* fermées ; packs Flux2/Ideogram4/Piper extra
+- Onglet studio Image + bouton chat ; /speak ouvre une carte TTS
+- Défauts Settings pack image / voix Piper honorés après restart
 
 Pas un OS bootable. Voir FIRST-RUN.md / INSTALL.md / TESTER.md
 ```

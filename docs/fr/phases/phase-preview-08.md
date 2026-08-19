@@ -272,9 +272,6 @@ CPU_ONLY=1 SKIP_MODELS=1 ./packaging/build-preview.sh   # builder seulement
 ## Suite
 
 Tag `v0.8.0` seulement quand les gates P08.1–P08.12 passent. La gate cohort
-PC reste indépendante. **Suite : Preview 0.9.0 / E18 + E19** — migration de device
-en milieu de token sans cancel, plus packs image/TTS extra et schéma d’options
-fermé, plus reliquat d’hygiène P08.8 ([phase-preview-09.md](phase-preview-09.md)
-P09.7).
+PC reste indépendante. **Preview 0.9.0 / E18 + E19 livrée** — [phase-preview-09.md](phase-preview-09.md).
 Après 0.9 : reste Horizon B (E7 TPM, adaptateur HTTP live si un daemon est
 planifié, E9 quand un 2e GPU existe).

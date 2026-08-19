@@ -8,7 +8,7 @@
 first-class, offline-first. La Preview tourne sur hôte Windows/Linux
 (NVIDIA) ; la piste seL4 est séparée.
 
-> Ce n'est **pas** encore un OS bootable. La Preview 0.8.0 est une application
+> Ce n'est **pas** encore un OS bootable. La Preview 0.9.0 est une application
 > hôte installable pour testeurs (Windows/Linux ; NVIDIA optionnel via chemin CPU
 > dans le même zip).
 
@@ -41,7 +41,7 @@ Catalogue : [FEATURES.md](FEATURES.md).
 ## Prérequis
 
 Windows 10/11 x64 **ou** Linux x64 ; GPU NVIDIA **ou** mode CPU-only (plus lent) ;
-~4 Go disque. Pas de macOS en Preview 0.8.0.
+~4 Go disque. Pas de macOS en Preview 0.9.0.
 
 ## Démarrage rapide
 

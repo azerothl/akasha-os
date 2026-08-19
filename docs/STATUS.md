@@ -7,12 +7,26 @@ Summary of delivered phases. Detail: [development-plan.md](development-plan.md),
 
 **Headline:** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview:** 0.8.0 (18/08/2026) — local image + TTS (E16; packs download their
-engines), unified CPU/GPU artefact (E17), E15 widget pack, Providers tab,
-complete uninstall, one-liner install. Not a bootable OS. Cohort gate still
-open. **Next:** Preview **0.9.0** (E18 + E19) — mid-token device migrate
-without cancel, plus extra image/TTS models and a closed option schema;
-leftover P08.8 host hygiene (P09.7).
+**Preview:** 0.9.0 (19/08/2026) — mid-token CPU↔GPU migrate without aborting
+the live stream (E18); closed `media.*` options, extra Flux2/Ideogram4/Piper
+packs, Image studio + in-chat TTS card (E19). Not a bootable OS. Cohort gate
+still open. **Next:** remaining Horizon B (full E7 TPM, live HTTP adapter if
+scheduled, E9 multi-GPU) + PC cohort close.
+
+## P09 — Preview 0.9.0 (E18 + E19) — done
+
+| # | Evolution | Status |
+|---|-----------|--------|
+| P09.1 | E18 mid-token CPU ↔ GPU migrate (stream continues) | done |
+| P09.2 | E18 UI/`auto` uses migrate; 0.8 cancel+restart is fallback | done |
+| P09.3 | E19 closed option schema on `media.*` + Settings (sd.cpp / Piper allowlist) | done |
+| P09.4 | E19 extra optional packs (Flux2, Ideogram4, extra Piper voices) | done |
+| P09.5 | E19 Models / Settings surface; `/image` and TTS honor the choice | done |
+| P09.8 | E19 Image studio page + chat control; in-chat TTS options card | done |
+| P09.7 | Finish P08.8 leftovers (split remaining host modules; leftover i18n; chat role key) | done |
+| P09.6 | Docs / packaging / version 0.9.0 | done |
+
+Detail: [phases/phase-preview-09.md](phases/phase-preview-09.md).
 
 ## P08 — Preview 0.8.0 (E16 + E17 + E15 widgets + Providers) — done
 
@@ -32,20 +46,6 @@ leftover P08.8 host hygiene (P09.7).
 | P08.12 | F-MDL-04 Providers tab (OpenAI-compat cloud + local servers) | done |
 
 Detail: [phases/phase-preview-08.md](phases/phase-preview-08.md).
-
-## P09 — Preview 0.9.0 (E18 + E19) — planned
-
-| # | Evolution | Status |
-|---|-----------|--------|
-| P09.1 | E18 mid-token CPU ↔ GPU migrate (stream continues) | planned |
-| P09.2 | E18 UI/`auto` uses migrate; 0.8 cancel+restart is fallback | planned |
-| P09.3 | E19 closed option schema on `media.*` + Settings (sd.cpp / Piper allowlist) | planned |
-| P09.4 | E19 extra optional packs (Flux2, Ideogram4, extra Piper voices) | planned |
-| P09.5 | E19 Models / Settings surface; `/image` and TTS honor the choice | planned |
-| P09.7 | Finish P08.8 leftovers (split remaining host modules; leftover i18n; chat role key) | planned |
-| P09.6 | Docs / packaging / version 0.9.0 | planned |
-
-Detail: [phases/phase-preview-09.md](phases/phase-preview-09.md).
 
 ## P07 — Preview 0.7.0 (E15) — done
 

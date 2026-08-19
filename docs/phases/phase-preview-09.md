@@ -6,17 +6,18 @@
 
 Ship **Akasha OS Preview 0.9.0**: **mid-token device migrate** (E18) and
 **extensible local media generation** (E19) — more image models (Flux2,
-Ideogram4, …), a closed set of sd.cpp / Piper options, and a Settings +
-intent surface to pick them. After E17 (0.8), device switch still cancels
+Ideogram4, …), a closed set of sd.cpp / Piper options, a Settings + intent
+surface to pick them, and **chat media plugins** (Image studio page +
+in-chat TTS options card). After E17 (0.8), device switch still cancels
 the in-flight `model.infer`. 0.9 keeps the **same stream** on migrate, and
 stops hard-coding `-W 512 -H 512 --steps 20` / Piper defaults.
 
 Depends on P08 (E16 engines + E17 artefact). Not seL4 / bare metal. Not a
-new P6 gate number. Not arbitrary CLI argv from agents.
+new P6 gate number. Not arbitrary CLI argv from agents. Not a webview.
 
 Priorities: [evolution-roadmap.md](../evolution-roadmap.md) Horizon B
-(E18, E19). Sequencing: P09.1 → P09.2 ; P09.3 ∥ P09.4 → P09.5 → P09.7 →
-P09.6.
+(E18, E19). Sequencing: P09.1 → P09.2 ; P09.3 ∥ P09.4 → P09.5 ∥ P09.8 →
+P09.7 → P09.6.
 
 ## Why after 0.8
 
@@ -33,21 +34,23 @@ sd.cpp and Piper expose dozens of CLI flags. Agents must not get a raw
 shell. Preview 0.9 publishes a **closed JSON object** on
 `media.image.generate` / `media.audio.generate` and in Settings. Keys not
 in the schema are dropped/refused and audited. Per-model extras that the
-engine needs (VAE, CLIP, T5 for Flux) live on the **offering**
-(`extra_files` / `engine_args` in `catalog-offerings.json`), not typed by
-the user as paths.
+engine needs (VAE, CLIP, T5, LoRA) live on the **offering**
+(`extra_files` / `engine_args` in `catalog-offerings.json`). The Image
+studio and TTS chat card **select among those declared ids** — they never
+accept a typed filesystem path.
 
 ## Deliverables
 
 | # | Evolution | Deliverable | Status |
 |---|-----------|-------------|--------|
-| P09.1 | E18 migrate | Placement Manager can move an active infer CPU ↔ GPU without aborting the stream; KV/state owned by Model Subsystem | planned |
-| P09.2 | E18 policy | UI pin and `auto` (load / E16 VRAM pressure) use migrate when a stream is live; 0.8 cancel+restart remains the fallback | planned |
-| P09.3 | E19 schema | Closed option objects on `media.*` + persisted Settings; unknown keys fail-closed; `aos-sd` maps them to allowlisted sd.cpp / Piper flags | planned |
-| P09.4 | E19 catalogue | Extra **optional** image packs (at least Flux2-class + Ideogram4-class) and extra Piper voices; `extra_files` for VAE/CLIP/T5; Placement `min_vram_mib` | planned |
-| P09.5 | E19 surface | Models / Settings: pick default image pack + options; pick Piper voice + synthesis params; `/image` and tools honor them | planned |
-| P09.7 | Hygiene | Finish P08.8 leftovers: split remaining oversized host modules; leftover bilingual chrome; chat role key | planned |
-| P09.6 | Docs / ship | FEATURES/STATUS/TESTER, version 0.9.0, site, packaging | planned |
+| P09.1 | E18 migrate | Placement Manager can move an active infer CPU ↔ GPU without aborting the stream; KV/state owned by Model Subsystem | done |
+| P09.2 | E18 policy | UI pin and `auto` (load / E16 VRAM pressure) use migrate when a stream is live; 0.8 cancel+restart remains the fallback | done |
+| P09.3 | E19 schema | Closed option objects on `media.*` + persisted Settings; unknown keys fail-closed; `aos-sd` maps them to allowlisted sd.cpp / Piper flags | done |
+| P09.4 | E19 catalogue | Extra **optional** image packs (at least Flux2-class + Ideogram4-class) and extra Piper voices; `extra_files` for VAE/CLIP/T5/LoRA; Placement `min_vram_mib` | done |
+| P09.5 | E19 surface | Models / Settings: pick default image pack + options; pick Piper voice + synthesis params; `/image` and tools honor them | done |
+| P09.8 | E19 chat plugins | Host **Image studio** page (style / LoRA / VAE / …); control on a chat image switches to it; TTS ask opens an in-chat options card before generate | done |
+| P09.7 | Hygiene | Finish P08.8 leftovers: split remaining oversized host modules; leftover bilingual chrome; chat role key | done |
+| P09.6 | Docs / ship | FEATURES/STATUS/TESTER, version 0.9.0, site, packaging | done |
 
 Catalogue (once shipped): [`docs/FEATURES.md`](../FEATURES.md).
 
@@ -64,9 +67,13 @@ Mapped from the schema; 0.8 values remain the defaults:
 | `sampling_method` | `--sampling-method` | engine default |
 | `negative_prompt` | `-n` | empty |
 | `threads` | `-t` | engine default |
+| `style` | catalogue style id (prompt prefix and/or mapped flag) | none |
+| `lora` | `--lora` | none; catalogue LoRA ids only |
+| `vae` | `--vae` | pack default; pick among offering `extra_files` |
 
 Offering-owned (not agent-invented paths): `--vae`, `--clip_l`, `--clip_g`,
-`--t5xxl`, `--diffusion-model` when the pack declares them.
+`--t5xxl`, `--diffusion-model`, `--lora` when the pack / catalogue extra
+declares them. The studio lists those ids; it does not take a raw path.
 
 ### Piper options (allowlist)
 
@@ -79,6 +86,28 @@ Offering-owned (not agent-invented paths): `--vae`, `--clip_l`, `--clip_g`,
 | `speaker` | `--speaker` | multi-speaker voice id |
 
 Plus extra optional Piper packs in the catalogue (beyond `en_US` / `fr_FR`).
+
+### Chat media plugins (P09.8)
+
+0.8 drops PNG/WAV into the transcript and fires `/image` / `/speak` with
+Settings defaults. 0.9 adds two **host** surfaces (not WASM marketplace
+plugins, not E13 webview):
+
+1. **Image studio** — a first-class page (sidebar, same chrome as Models)
+   for advanced sd.cpp: prompt, negative prompt, size / steps / CFG / seed /
+   sampler, plus catalogue-declared **style**, **LoRA**, and **VAE**.
+   Every chat message that shows an image gets a control that **switches**
+   to this page with the prompt (and the PNG as preview) prefilled.
+   Generate still goes through `media.image.generate` + cap `media.generate`.
+2. **TTS chat card** — when the user asks to turn text into audio (`/speak`,
+   or a clear TTS request in the turn), the host opens an **inline chat
+   plugin** (E15-style card: voice select + Piper knobs + Generate).
+   TTS does **not** auto-fire with hidden defaults on that path; the card
+   is how the human picks options. An agent may still call
+   `media.audio.generate` with a closed options object.
+
+Prefill from a chat image is navigation + prompt reuse, **not** img2img as
+a first-class intent.
 
 ### Cleanup / refactor leftovers (P09.7)
 
@@ -109,6 +138,7 @@ Not a seL4 rewrite, not a new UI toolkit.
 | P09.3 | Settings / intent can set steps and size; an unknown option key is refused (audited); generated PNG is not always 512² / 20 steps |
 | P09.4 | Catalogue lists ≥1 extra image family (Flux2 or Ideogram4) and ≥1 extra Piper voice; Download + `model_id` uses it; VRAM accounted |
 | P09.5 | Tester picks a non-default image pack and a Piper voice in the UI; `/image` and TTS use that choice after restart |
+| P09.8 | Chat PNG shows a control that opens Image studio with prompt prefilled; studio exposes style / LoRA / VAE from the catalogue; a TTS ask opens an in-chat options card and Generate runs `media.audio.generate`; unknown keys still refused; no webview |
 | P09.7 | Hygiene PR(s) land with no intentional behavior change; `main.rs` / `aos-platformd.rs` split along existing boundaries; Scenarios + chat role key follow Settings language |
 | P09.6 | FEATURES/STATUS/TESTER + version 0.9.0 |
 | Regression | `cargo test --workspace`; gates p4/p5 green on CUDA host |
@@ -123,6 +153,6 @@ bare metal (E11–E13). Speculative decode / multi-backend token fusion.
 
 ## Next
 
-Tag `v0.9.0` only when gates P09.1–P09.7 pass. After 0.9: remaining Horizon B
+Tag `v0.9.0` only when gates P09.1–P09.8 pass. After 0.9: remaining Horizon B
 (E7 TPM, live HTTP adapter if a daemon is scheduled, E9 when a second GPU
 exists).

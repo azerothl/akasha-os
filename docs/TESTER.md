@@ -1,8 +1,8 @@
-# Tester protocol — Akasha OS Preview 0.8.0
+# Tester protocol — Akasha OS Preview 0.9.0
 
 **Language:** English | [Français](fr/TESTER.md)
 
-> Date: 18/08/2026 · Preview **0.8.0**
+> Date: 19/08/2026 · Preview **0.9.0**
 
 Thank you for testing Preview. Goal: install **without** `cargo` or cloning
 the repo, exercise the main paths, and send feedback **from the UI**.
@@ -35,8 +35,8 @@ Expected banner: *Preview on Windows/Linux — this is not the bootable OS yet*.
 ### 1c. CPU-only (optional)
 
 - On a machine without NVIDIA, or with Settings → Inference → **CPU only**:
-  Preview should **restart modeld in the current session** (no reinstall).
-  Local chat should work (slow is OK). GPU pin requires NVIDIA.
+  Preview should **migrate in-process** (the live reply continues; no cancelled
+  turn). `aos-modeld-cpu` is only for hosts without NVIDIA. GPU pin requires NVIDIA.
 
 ### 2. Human note
 
@@ -245,11 +245,26 @@ GitHub feedback submit).
   **engine** (`bin/sd.exe` / `bin/piper.exe` + DLLs) if it is missing.
 - Restart Preview so `etc/modeld.yaml` lists the pack.
 - Chat: `/image a red cube` then `/speak hello` (or French with `piper-fr-fr`).
-- PNG appears in the conversation; **Play** on the WAV. Files under `/downloads`.
+- PNG appears in the conversation; **Open in studio** switches to the Image tab with the prompt filled.
+- `/speak` opens an **in-chat TTS card** (voice + knobs) — Generate writes the WAV. **Play** on the clip. Files under `/downloads`.
 - Without the pack **or** if the engine zip fails, a stub PNG (color bars) /
   short WAV is still written so the cap / `/downloads` path is testable.
 
-### 20. One-liner install (0.8.0 / P08.9)
+### 21. Mid-token migrate (0.9.0 / E18)
+
+- Start a **long** chat completion.
+- While tokens stream, Settings → Inference: switch **gpu ↔ cpu** (NVIDIA host).
+- The reply must continue on the **same** turn — no Stop, no « cancelled » line.
+- Audit may show `model.migrate`. If migrate fails, fallback 0.8 restart is audited as `model.migrate.fallback`.
+
+### 22. Extra media packs + closed options (0.9.0 / E19)
+
+- Models: list `local:flux2` / `local:ideogram4` / `local:piper-en-gb` (optional Download).
+- Settings: pick a non-default image pack + width/steps; pick a Piper voice. Restart.
+- `/image` must use that pack/size. An unknown option key on the intent is refused (audit `media.options.refuse`).
+- Image studio tab: set sampler / negative / catalogue LoRA-VAE if extras exist → Generate.
+
+### 23. One-liner install (0.8.0 / P08.9)
 
 - Windows: `irm https://azerothl.github.io/akasha-os/install.ps1 | iex`
 - Linux: `curl -fsSL https://azerothl.github.io/akasha-os/install.sh | sh`
@@ -262,13 +277,12 @@ GitHub feedback submit).
 - At least one usable `var/feedback/fb-*.json` per report
 - Gates PC.6–PC.9 and PC.11–PC.13 checked on at least one machine
 
-## Out of scope Preview 0.8.0
+## Out of scope Preview 0.9.0
 
 - seL4 / bare-metal boot
 - macOS
 - 32B model in the installer
 - Fully automatic update apply
 - Video / STT / always-on voice
-- Mid-token CPU ↔ GPU migrate (0.9.0 / E18)
-- Extra image models and sd.cpp / Piper options (0.9.0 / E19)
+- img2img / inpaint as a first-class intent
 - Public marketplace / messaging channels / multi-GPU

@@ -258,8 +258,6 @@ CPU_ONLY=1 SKIP_MODELS=1 ./packaging/build-preview.sh   # builder-only
 ## Next
 
 Tag `v0.8.0` only when gates P08.1–P08.12 pass. PC cohort gate remains
-independent. **Next: Preview 0.9.0 / E18 + E19** — mid-token device migrate without
-cancel, plus extra image/TTS packs and a closed option schema, plus leftover
-P08.8 host hygiene ([phase-preview-09.md](phase-preview-09.md) P09.7). After 0.9: remaining
-Horizon B (E7 TPM, live HTTP adapter if a daemon is scheduled, E9 when a
+independent. **Preview 0.9.0 / E18 + E19 shipped** — [phase-preview-09.md](phase-preview-09.md).
+After 0.9: remaining Horizon B (E7 TPM, live HTTP adapter if a daemon is scheduled, E9 when a
 second GPU exists).

@@ -7,12 +7,26 @@ Résumé des phases livrées. Détail : [plan-developpement-phases.md](plan-deve
 
 **En-tête :** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview :** 0.8.0 (18/08/2026) — image + TTS locaux (E16 ; les packs tirent
-leurs moteurs), artefact CPU/GPU unifié (E17), pack widgets E15, onglet
-Providers, désinstall complet, install one-liner. Pas un OS bootable. Gate
-cohorte encore ouverte. **Suite :** Preview **0.9.0** (E18 + E19) —
-migration de device mid-token sans cancel, plus d’autres modèles image/TTS
-et un schéma d’options fermé ; reliquat d’hygiène P08.8 (P09.7).
+**Preview :** 0.9.0 (19/08/2026) — migrate CPU↔GPU en milieu de token sans
+abort du stream (E18) ; options `media.*` fermées, packs Flux2/Ideogram4/Piper
+extra, studio Image + carte TTS (E19). Pas un OS bootable. Gate cohorte encore
+ouverte. **Suite :** reste Horizon B (TPM E7 complet, adaptateur HTTP live si
+planifié, multi-GPU E9) + clôture cohorte PC.
+
+## P09 — Preview 0.9.0 (E18 + E19) — fait
+
+| # | Évolution | État |
+|---|-----------|------|
+| P09.1 | E18 migrate CPU ↔ GPU en milieu de token (le stream continue) | fait |
+| P09.2 | E18 UI/`auto` utilise migrate ; cancel+restart 0.8 = fallback | fait |
+| P09.3 | E19 schéma d’options fermé sur `media.*` + Settings (allowlist sd.cpp / Piper) | fait |
+| P09.4 | E19 packs optionnels extra (Flux2, Ideogram4, voix Piper extra) | fait |
+| P09.5 | E19 surface Models / Settings ; `/image` et TTS honorent le choix | fait |
+| P09.8 | E19 page studio Image + contrôle chat ; carte d’options TTS dans le fil | fait |
+| P09.7 | Finir le reliquat P08.8 (découpes hôte restantes ; i18n restant ; clé de rôle chat) | fait |
+| P09.6 | Docs / packaging / version 0.9.0 | fait |
+
+Détail : [phases/phase-preview-09.md](phases/phase-preview-09.md).
 
 ## P08 — Preview 0.8.0 (E16 + E17 + widgets E15 + Providers) — fait
 
@@ -32,20 +46,6 @@ et un schéma d’options fermé ; reliquat d’hygiène P08.8 (P09.7).
 | P08.12 | F-MDL-04 onglet Providers (cloud + serveurs locaux OpenAI-compat) | fait |
 
 Détail : [phases/phase-preview-08.md](phases/phase-preview-08.md).
-
-## P09 — Preview 0.9.0 (E18 + E19) — prévu
-
-| # | Évolution | État |
-|---|-----------|------|
-| P09.1 | E18 migrate CPU ↔ GPU en milieu de token (le stream continue) | prévu |
-| P09.2 | E18 UI/`auto` utilise migrate ; cancel+restart 0.8 = fallback | prévu |
-| P09.3 | E19 schéma d’options fermé sur `media.*` + Settings (allowlist sd.cpp / Piper) | prévu |
-| P09.4 | E19 packs optionnels extra (Flux2, Ideogram4, voix Piper extra) | prévu |
-| P09.5 | E19 surface Models / Settings ; `/image` et TTS honorent le choix | prévu |
-| P09.7 | Finir le reliquat P08.8 (découpes hôte restantes ; i18n restant ; clé de rôle chat) | prévu |
-| P09.6 | Docs / packaging / version 0.9.0 | prévu |
-
-Détail : [phases/phase-preview-09.md](phases/phase-preview-09.md).
 
 ## P07 — Preview 0.7.0 (E15) — fait
 

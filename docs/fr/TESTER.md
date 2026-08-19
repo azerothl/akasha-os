@@ -1,8 +1,8 @@
-# Protocole testeur — Akasha OS Preview 0.8.0
+# Protocole testeur — Akasha OS Preview 0.9.0
 
 **Langue :** [English](../TESTER.md) | Français
 
-> Date : 18/08/2026 · Preview **0.8.0**
+> Date : 19/08/2026 · Preview **0.9.0**
 
 Merci de tester la Preview. Objectif : installer **sans** `cargo` ni clone du
 repo, exercer les parcours principaux, et envoyer un retour **depuis l'UI**.
@@ -35,8 +35,8 @@ Bannière attendue : *Preview sur Windows/Linux — ce n'est pas encore l'OS boo
 ### 1c. CPU-only (optionnel)
 
 - Sur une machine sans NVIDIA, ou avec Settings → Inférence → **CPU only** :
-  modeld redémarre **dans la session** (pas de réinstall). Chat local OK (lent).
-  Le pin GPU exige NVIDIA.
+  migrate **in-process** (la réponse live continue ; pas de tour cancelled).
+  `aos-modeld-cpu` seulement sans NVIDIA. Le pin GPU exige NVIDIA.
 
 ### 2. Note humaine
 
@@ -231,10 +231,16 @@ et envoi de retour GitHub).
 - Onglet **Providers** : loopback OK en `local_only` ; cloud = réseau + balanced.
 - **Models** → Download `Stable Diffusion 1.5` / une voix Piper : le même
   téléchargement installe le **moteur** (`bin/sd.exe` / `bin/piper.exe`) s’il
-  manque. Redémarrer Preview. Chat `/image` et `/speak` → PNG / WAV sous
-  `/downloads`. Stub (barres de couleur / WAV court) seulement si pack ou
-  moteur absent.
+  manque. Redémarrer Preview. Chat `/image` → PNG ; bouton **Ouvrir dans le studio**.
+  `/speak` ouvre une **carte TTS** (voix + knobs) puis Generate → WAV. Stub si pack
+  ou moteur absent.
 - One-liner : `irm …/install.ps1 | iex` ou `curl …/install.sh | sh` (sha256 fail-closed).
+
+### 21–22. Migrate mid-token + packs extra (0.9.0)
+
+- Longue complétion ; bascule Settings gpu↔cpu : la réponse continue (pas de Stop).
+- Catalogue `local:flux2` / `local:ideogram4` / `local:piper-en-gb` ; Settings pack/voix par défaut.
+- Studio Image : steps/taille/sampler ; clé d’option inconnue refusée.
 
 ## Critères de succès (équipe)
 
@@ -242,13 +248,12 @@ et envoi de retour GitHub).
 - Au moins un fichier `var/feedback/fb-*.json` exploitable par retour
 - Gates PC.6–PC.9 et PC.11–PC.13 cochés sur au moins une machine
 
-## Hors scope Preview 0.8.0
+## Hors scope Preview 0.9.0
 
 - Boot seL4 / fer nu
 - macOS
 - Modèle 32B dans l'installeur
 - Mise à jour automatique complète
 - Vidéo / STT / voix permanente
-- Migration mid-token (0.9.0 / E18)
-- Autres modèles d’image et options sd.cpp / Piper (0.9.0 / E19)
+- img2img / inpaint en intent de première classe
 - Marketplace public / canaux messagerie / multi-GPU

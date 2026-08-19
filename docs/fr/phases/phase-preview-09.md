@@ -7,16 +7,18 @@
 Livrer **Akasha OS Preview 0.9.0** : **migration de device en milieu de
 token** (E18) et **génération média locale extensible** (E19) — d’autres
 modèles d’image (Flux2, Ideogram4, …), un ensemble fermé d’options sd.cpp /
-Piper, et une surface Settings + intents pour les choisir. Après E17 (0.8),
-la bascule de device annule encore le `model.infer` en cours. 0.9 conserve
-le **même flux** à la migration, et cesse de figer `-W 512 -H 512 --steps 20`
-/ les défauts Piper.
+Piper, une surface Settings + intents pour les choisir, et des **plugins
+média dans le chat** (page studio Image + carte d’options TTS). Après E17
+(0.8), la bascule de device annule encore le `model.infer` en cours. 0.9
+conserve le **même flux** à la migration, et cesse de figer
+`-W 512 -H 512 --steps 20` / les défauts Piper.
 
 Dépend de P08 (moteurs E16 + artefact E17). Pas seL4 / fer nu. Pas de nouveau
-numéro de gate P6. Pas d’argv CLI arbitraire venant d’un agent.
+numéro de gate P6. Pas d’argv CLI arbitraire venant d’un agent. Pas de
+webview.
 
 Priorités : [plan-evolutions.md](../plan-evolutions.md) Horizon B (E18, E19).
-Séquençage : P09.1 → P09.2 ; P09.3 ∥ P09.4 → P09.5 → P09.7 → P09.6.
+Séquençage : P09.1 → P09.2 ; P09.3 ∥ P09.4 → P09.5 ∥ P09.8 → P09.7 → P09.6.
 
 ## Pourquoi après 0.8
 
@@ -33,21 +35,23 @@ sd.cpp et Piper exposent des dizaines de flags CLI. Un agent n’a pas droit
 à un shell. Preview 0.9 publie un **objet JSON fermé** sur
 `media.image.generate` / `media.audio.generate` et dans Settings. Les clés
 hors schéma sont rejetées et auditées. Les extras dont le moteur a besoin
-(VAE, CLIP, T5 pour Flux) vivent sur l’**offering** (`extra_files` /
-`engine_args` dans `catalog-offerings.json`), pas saisis comme chemins par
-l’utilisateur.
+(VAE, CLIP, T5, LoRA pour Flux) vivent sur l’**offering**
+(`extra_files` / `engine_args` dans `catalog-offerings.json`). Le studio
+Image et la carte TTS **choisissent parmi ces ids déclarés** — jamais un
+chemin de fichier saisi.
 
 ## Livrables
 
 | # | Évolution | Livrable | État |
 |---|-----------|----------|------|
-| P09.1 | E18 migrate | Le Placement Manager peut déplacer un infer actif CPU ↔ GPU sans abort du stream ; KV/état chez le Model Subsystem | prévu |
-| P09.2 | E18 policy | Pin UI et `auto` (charge / pression VRAM E16) utilisent migrate si un stream est live ; cancel+restart 0.8 reste le fallback | prévu |
-| P09.3 | E19 schéma | Objets d’options fermés sur `media.*` + Settings persistés ; clés inconnues refusées ; `aos-sd` les mappe vers des flags sd.cpp / Piper allowlistés | prévu |
-| P09.4 | E19 catalogue | Packs image **optionnels** supplémentaires (au moins une famille Flux2 + une Ideogram4) et voix Piper en plus ; `extra_files` VAE/CLIP/T5 ; Placement `min_vram_mib` | prévu |
-| P09.5 | E19 surface | Models / Settings : pack image + options par défaut ; voix Piper + params de synthèse ; `/image` et les outils les honorent | prévu |
-| P09.7 | Hygiène | Finir le reliquat P08.8 : découper les modules hôte encore trop gros ; chrome bilingue restant ; clé de rôle chat | prévu |
-| P09.6 | Docs / ship | FEATURES/STATUS/TESTER, version 0.9.0, site, packaging | prévu |
+| P09.1 | E18 migrate | Le Placement Manager peut déplacer un infer actif CPU ↔ GPU sans abort du stream ; KV/état chez le Model Subsystem | fait |
+| P09.2 | E18 policy | Pin UI et `auto` (charge / pression VRAM E16) utilisent migrate si un stream est live ; cancel+restart 0.8 reste le fallback | fait |
+| P09.3 | E19 schéma | Objets d’options fermés sur `media.*` + Settings persistés ; clés inconnues refusées ; `aos-sd` les mappe vers des flags sd.cpp / Piper allowlistés | fait |
+| P09.4 | E19 catalogue | Packs image **optionnels** supplémentaires (au moins une famille Flux2 + une Ideogram4) et voix Piper en plus ; `extra_files` VAE/CLIP/T5 ; Placement `min_vram_mib` | fait |
+| P09.5 | E19 surface | Models / Settings : pack image + options par défaut ; voix Piper + params de synthèse ; `/image` et les outils les honorent | fait |
+| P09.8 | E19 plugins chat | Page **studio Image** hôte (style / LoRA / VAE / …) ; contrôle sur une image du chat pour y basculer ; demande TTS → carte d’options dans le fil avant generate | fait |
+| P09.7 | Hygiène | Finir le reliquat P08.8 : découper les modules hôte encore trop gros ; chrome bilingue restant ; clé de rôle chat | fait |
+| P09.6 | Docs / ship | FEATURES/STATUS/TESTER, version 0.9.0, site, packaging | fait |
 
 Catalogue (une fois livré) : [`docs/fr/FEATURES.md`](../FEATURES.md).
 
@@ -64,10 +68,14 @@ Mappées depuis le schéma ; les valeurs 0.8 restent les défauts :
 | `sampling_method` | `--sampling-method` | défaut moteur |
 | `negative_prompt` | `-n` | vide |
 | `threads` | `-t` | défaut moteur |
+| `style` | id de style catalogue (préfixe de prompt et/ou flag mappé) | aucun |
+| `lora` | `--lora` | aucun ; ids LoRA du catalogue seulement |
+| `vae` | `--vae` | défaut du pack ; choix parmi les `extra_files` de l’offering |
 
 Possédés par l’offering (pas des chemins inventés par l’agent) : `--vae`,
-`--clip_l`, `--clip_g`, `--t5xxl`, `--diffusion-model` si le pack les
-déclare.
+`--clip_l`, `--clip_g`, `--t5xxl`, `--diffusion-model`, `--lora` si le pack
+/ extra de catalogue les déclare. Le studio liste ces ids ; il n’accepte
+pas un chemin brut.
 
 ### Options Piper (allowlist)
 
@@ -81,6 +89,29 @@ déclare.
 
 Plus des packs Piper optionnels supplémentaires au catalogue (au-delà de
 `en_US` / `fr_FR`).
+
+### Plugins média dans le chat (P09.8)
+
+0.8 pose PNG/WAV dans le fil et lance `/image` / `/speak` avec les défauts
+Settings. 0.9 ajoute deux surfaces **hôte** (pas des plugins marketplace
+WASM, pas de webview E13) :
+
+1. **Studio Image** — une page de premier plan (barre latérale, même chrome
+   que Models) pour sd.cpp avancé : prompt, prompt négatif, taille / steps /
+   CFG / seed / sampler, plus **style**, **LoRA** et **VAE** déclarés au
+   catalogue. Chaque message chat qui affiche une image a un contrôle qui
+   **bascule** vers cette page, prompt (et aperçu PNG) préremplis.
+   Generate passe toujours par `media.image.generate` + cap `media.generate`.
+2. **Carte TTS dans le chat** — quand l’utilisateur demande de transformer
+   un texte en audio (`/speak`, ou une demande TTS claire dans le tour),
+   l’hôte ouvre un **plugin inline** (carte style E15 : choix de voix +
+   réglages Piper + Generate). Le TTS **ne part pas** tout seul avec des
+   défauts cachés sur ce chemin ; la carte est le choix humain. Un agent
+   peut toujours appeler `media.audio.generate` avec un objet d’options
+   fermé.
+
+Ouvrir le studio depuis une image du chat, c’est de la navigation + réemploi
+du prompt, **pas** un intent img2img de première classe.
 
 ### Reliquat nettoyage / refacto (P09.7)
 
@@ -111,6 +142,7 @@ inchangés). Pas une réécriture seL4, pas un nouveau toolkit UI.
 | P09.3 | Settings / intent peuvent fixer steps et taille ; une clé d’option inconnue est refusée (auditée) ; le PNG n’est pas toujours 512² / 20 steps |
 | P09.4 | Le catalogue liste ≥1 famille image extra (Flux2 ou Ideogram4) et ≥1 voix Piper extra ; Download + `model_id` l’utilisent ; VRAM comptabilisée |
 | P09.5 | Le testeur choisit un pack image non défaut et une voix Piper dans l’UI ; `/image` et le TTS utilisent ce choix après restart |
+| P09.8 | Le PNG du chat a un contrôle qui ouvre le studio Image avec le prompt prérempli ; le studio expose style / LoRA / VAE du catalogue ; une demande TTS ouvre une carte d’options dans le fil et Generate lance `media.audio.generate` ; clés inconnues toujours refusées ; pas de webview |
 | P09.7 | PR(s) d’hygiène sans changement de comportement volontaire ; `main.rs` / `aos-platformd.rs` découpés selon les frontières existantes ; Scénarios + clé de rôle chat suivent la langue Settings |
 | P09.6 | FEATURES/STATUS/TESTER + version 0.9.0 |
 | Régression | `cargo test --workspace` ; gates p4/p5 verts sur hôte CUDA |
@@ -125,6 +157,6 @@ macOS, fer nu (E11–E13). Speculative decode / fusion multi-backend de tokens.
 
 ## Suite
 
-Tag `v0.9.0` seulement quand les gates P09.1–P09.7 passent. Après 0.9 :
+Tag `v0.9.0` seulement quand les gates P09.1–P09.8 passent. Après 0.9 :
 reste Horizon B (E7 TPM, adaptateur HTTP live si un daemon est planifié, E9
 quand un 2e GPU existe).

@@ -2,8 +2,8 @@
 
 **Language:** English | [Français](fr/plan-developpement-phases.md)
 
-> Version: 1.4  
-> Date: 18/08/2026  
+> Version: 1.5  
+> Date: 19/08/2026  
 > Status: reference plan  
 > References: `docs/functional-specs.md`, `docs/technical-specs.md`, `docs/vision.md`, `docs/FEATURES.md`, `docs/evolution-roadmap.md`
 
@@ -43,7 +43,7 @@ userspace before committing to the microkernel port.
 | **P06**     | Win/Linux Preview host                | Preview **0.6.0** — E8 / E7-keyring / E10 (bridge schemas, OS keyring, catalogue)             | shipped             | done        |
 | **P07**     | Win/Linux Preview host                | Preview **0.7.0** — E15 (host-rendered declarative module UI)                                 | shipped             | done        |
 | **P08**     | Win/Linux Preview host                | Preview **0.8.0** — E16 image+audio + E17 unified CPU/GPU + module uninstall + E15 widgets + Providers | shipped             | done        |
-| **P09**     | Win/Linux Preview host                | Preview **0.9.0** — E18 mid-token migrate + E19 media models/options                         | ~3–5 weeks          | planned     |
+| **P09**     | Win/Linux Preview host                | Preview **0.9.0** — E18 mid-token migrate + E19 media models/options + chat media plugins    | ~4–6 weeks          | done        |
 
 
 **Indicative total** (foundation): ~60–80 weeks in a naïve sequence;
@@ -78,7 +78,7 @@ passed.** This prevents technical debt from accumulating in the lower layers.
 | **Gate P06** | Bridge schemas + OS keyring + signed local catalogue — [phase-preview-06.md](phases/phase-preview-06.md) |
 | **Gate P07** | Closed `declarative_ui` schema; generic egui tab bound to module tools — [phase-preview-07.md](phases/phase-preview-07.md) |
 | **Gate P08** | Local image + TTS under caps; unified CPU/GPU artefact; module uninstall; E15 widget pack; Providers tab; one-line install per OS; cleanup/refactor — [phase-preview-08.md](phases/phase-preview-08.md) |
-| **Gate P09** | Mid-token CPU ↔ GPU migrate without cancelling the live stream; failed migrate falls back to 0.8 cancel+restart (audited); closed image/TTS option schema + extra packs (Flux2, Ideogram4, extra Piper voices); leftover P08.8 host hygiene — [phase-preview-09.md](phases/phase-preview-09.md) |
+| **Gate P09** | Mid-token CPU ↔ GPU migrate without cancelling the live stream; failed migrate falls back to 0.8 cancel+restart (audited); closed image/TTS option schema + extra packs (Flux2, Ideogram4, extra Piper voices); Image studio page + in-chat TTS options card; leftover P08.8 host hygiene — [phase-preview-09.md](phases/phase-preview-09.md) |
 
 
 ---
@@ -667,7 +667,7 @@ sibling daemon, E9 / P5.2 (needs a second GPU), E13 compositor, PC cohort
 close, macOS, bare metal, native Anthropic Messages / Gemini / Bedrock
 (OpenAI-compat presets only).
 
-### P09 — Preview 0.9.0 (E18 + E19) — planned
+### P09 — Preview 0.9.0 (E18 + E19) — done
 
 **Goal:** keep a **live** `model.infer` stream when switching CPU ↔ GPU
 (UI pin or `auto` load / E16 VRAM pressure), and **extend local media
@@ -678,19 +678,23 @@ shown stay; if migrate fails: 0.8 fallback, audited. **E19** adds a
 **closed** option schema (unknown keys refused — no raw argv from agents),
 extra optional image packs (Flux2-class, Ideogram4-class) and extra Piper
 voices, plus Settings / intent to pick them. Offering-owned extras
-(VAE / CLIP / T5) live on the catalogue, not as user-typed paths.
+(VAE / CLIP / T5 / LoRA) live on the catalogue, not as user-typed paths.
+Chat gets **host media plugins**: an Image studio page (advanced sd.cpp
+knobs) and an in-chat TTS options card — not WASM marketplace plugins,
+not a webview.
 
 | # | Evolution | Deliverable | Status |
 |---|-----------|-------------|--------|
-| P09.1 | E18 migrate | Active infer CPU ↔ GPU without aborting the stream | planned |
-| P09.2 | E18 policy | Live UI/`auto` uses migrate; 0.8 cancel+restart is fallback | planned |
-| P09.3 | E19 schema | Closed option objects on `media.*` + Settings; allowlisted sd.cpp / Piper flags | planned |
-| P09.4 | E19 catalogue | Extra optional image packs (Flux2, Ideogram4) + extra Piper voices; `extra_files`; VRAM | planned |
-| P09.5 | E19 surface | Models / Settings pick default pack + options; `/image` and TTS honor them | planned |
-| P09.7 | Hygiene | Finish P08.8 leftovers: split remaining oversized host modules; leftover bilingual chrome; chat role key | planned |
-| P09.6 | Docs / ship | FEATURES/STATUS/TESTER, version 0.9.0, site, packaging | planned |
+| P09.1 | E18 migrate | Active infer CPU ↔ GPU without aborting the stream | done |
+| P09.2 | E18 policy | Live UI/`auto` uses migrate; 0.8 cancel+restart is fallback | done |
+| P09.3 | E19 schema | Closed option objects on `media.*` + Settings; allowlisted sd.cpp / Piper flags | done |
+| P09.4 | E19 catalogue | Extra optional image packs (Flux2, Ideogram4) + extra Piper voices; `extra_files`; VRAM | done |
+| P09.5 | E19 surface | Models / Settings pick default pack + options; `/image` and TTS honor them | done |
+| P09.8 | E19 chat plugins | Image studio page (style / LoRA / VAE / …); chat control on images opens it; TTS ask opens an in-chat options card | done |
+| P09.7 | Hygiene | Finish P08.8 leftovers: split remaining oversized host modules; leftover bilingual chrome; chat role key | done |
+| P09.6 | Docs / ship | FEATURES/STATUS/TESTER, version 0.9.0, site, packaging | done |
 
-Sequencing: P09.1 → P09.2 ; P09.3 ∥ P09.4 → P09.5 → P09.7 → P09.6. Depends on P08 / E16+E17.  
+Sequencing: P09.1 → P09.2 ; P09.3 ∥ P09.4 → P09.5 ∥ P09.8 → P09.7 → P09.6. Depends on P08 / E16+E17.  
 Detail: [phases/phase-preview-09.md](phases/phase-preview-09.md).
 
 ### Remaining after 0.9 (not a new P6)

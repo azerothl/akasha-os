@@ -1,4 +1,4 @@
-# Preview features — Akasha OS 0.8.0
+# Preview features — Akasha OS 0.9.0
 
 **Language:** English | [Français](fr/FEATURES.md)
 
@@ -7,14 +7,23 @@ This is **not** the bootable OS. Target v1 requirements live in
 [functional-specs.md](functional-specs.md); phase gates in
 [STATUS.md](STATUS.md).
 
-> Date: 18/08/2026 · Preview **0.8.0**
+> Date: 19/08/2026 · Preview **0.9.0**
+
+### What's new in 0.9.0
+
+- **Mid-token migrate** (E18): Settings **auto / gpu / cpu** calls `model.migrate` — the live completion continues on the same stream (no Stop, no cancelled turn). On NVIDIA the **cpu** pin stays on the CUDA `aos-modeld` with `n_gpu_layers = 0`. Fail-closed fallback is the 0.8 cancel+restart path (audited)
+- **Closed media options** (E19): `media.image.generate` / `media.audio.generate` take a `deny_unknown_fields` object (size, steps, CFG, seed, sampler, negative, Piper knobs). Unknown keys are refused and audited. `aos-sd` maps only allowlisted flags — never a free-form argv string
+- Extra optional packs: Flux2-class, Ideogram4-class, Piper `en_GB`; `extra_files` for VAE / CLIP / T5 / LoRA; Download pulls sidecars
+- Settings / Models pick the default image pack and Piper voice; `/image` and tools honor them after restart
+- **Image studio** tab (prompt, size, steps, CFG, seed, sampler, catalogue style / LoRA / VAE); **Open in studio** on a chat PNG
+- **TTS card** in chat: `/speak` opens voice + knobs then **Generate** (agents may still call the intent directly)
 
 ### What's new in 0.8.0
 
 - **Image + TTS** (E16): `media.image.generate` / `media.audio.generate` write PNG/WAV under `/downloads`; cap `media.generate`; Placement Manager accounts for media VRAM
 - Chat slash `/image` / `/speak` shows the PNG and plays the clip; E15 `image` / `audio` widgets bind the same paths
 - Optional media packs (`local:sd-v1-5`, Piper `en_US` / `fr_FR`) — download from Models, **not** in the zip; first-run does not pull them. The same download fetches the sd.cpp / piper engine into `bin/` if it is missing
-- **Unified host artefact** (E17): one Win zip + one Linux tarball; `aos-modeld` (CUDA) + `aos-modeld-cpu` inside; Settings **auto / gpu / cpu** restarts modeld in-session (mid-token migrate stays 0.9)
+- **Unified host artefact** (E17): one Win zip + one Linux tarball; `aos-modeld` (CUDA) + `aos-modeld-cpu` inside; Settings **auto / gpu / cpu** (0.9 migrates in-process; 0.8 restarted modeld)
 - **Module uninstall** (F-MOD-01): Settings lists installed modules; confirm; revoke `tool.invoke:<name>`; refuse bundled `notes` / `tasks` / `ext-rt`
 - **E15 widgets**: typed `form` (JSON Schema), `select` / `radio` / `checkbox` / `textarea` / `bar_chart` / `image` / `audio`
 - **Providers** tab (F-MDL-04): OpenAI-compat cloud + loopback (Ollama / vLLM / LM Studio); keys in the vault; Chat combo groups local vs provider; `local_only` still allows loopback
@@ -295,14 +304,13 @@ seL4 VM track (PV.1–PV.3) is separate: see [phases/phase-vm-sel4.md](phases/ph
 
 ---
 
-## 11. Not in Preview 0.8.0
+## 11. Not in Preview 0.9.0
 
 - Bootable / bare-metal image
 - macOS
 - Fully automatic update apply (download now, apply on next launch)
 - Video generation / STT / always-on voice
-- Mid-token CPU ↔ GPU migrate (Preview **0.9.0** / E18)
-- Extra image families (Flux2, Ideogram4, …) and sd.cpp / Piper option knobs (Preview **0.9.0** / E19)
+- img2img / inpaint as a first-class intent
 - Native Messages/Gemini/Bedrock APIs (OpenAI-compat Providers only)
 - Public module marketplace (local signed catalogue only)
 - Messaging channels (Slack/Discord/etc.) in the OS core
@@ -311,5 +319,6 @@ seL4 VM track (PV.1–PV.3) is separate: see [phases/phase-vm-sel4.md](phases/ph
 - Live HTTP sibling daemon / TPM hardware envelope
 - Sandboxed webview / HTML/JS module UI (E13 compositor)
 - pie/scatter/webview widget kinds
+- llama.cpp KV snapshot (`llama_state_*`) — 0.9 uses prefix replay
 
 Cohort protocol: [TESTER.md](TESTER.md).

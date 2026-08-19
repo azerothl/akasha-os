@@ -2,7 +2,7 @@
 
 **Langue :** [English](../evolution-roadmap.md) | Français
 
-> Date : 18/08/2026  
+> Date : 19/08/2026  
 > Statut : couche de priorisation (pas un nouveau numéro de phase P6)  
 > Dérivé de : [paysage-concurrentiel.md](paysage-concurrentiel.md)  
 > Lié à : [plan-developpement-phases.md](plan-developpement-phases.md), [FEATURES.md](FEATURES.md), [STATUS.md](STATUS.md), [reflexion-agent-os.md](reflexion-agent-os.md)
@@ -64,7 +64,7 @@ E14 livré dans Preview **0.5.0** — [phase-preview-05.md](phases/phase-preview
 Export schémas E8 + contrat HTTP↔bus, keyring OS E7, catalogue local signé E10 livrés dans Preview **0.6.0** — [phase-preview-06.md](phases/phase-preview-06.md).  
 **E15** (UI de module déclarative rendue par l’hôte) livré en Preview **0.7.0** — [phases/phase-preview-07.md](phases/phase-preview-07.md).  
 **E16 + E17 + pack widgets E15 + onglet Providers F-MDL-04** livrés en Preview **0.8.0** — [phases/phase-preview-08.md](phases/phase-preview-08.md).  
-**Prochaine Preview :** **E18** migration de device mid-token + **E19** modèles/options média extra — Preview **0.9.0** — [phases/phase-preview-09.md](phases/phase-preview-09.md).
+**Prochaine Preview :** reste Horizon B (TPM E7, adaptateur HTTP live si planifié, multi-GPU E9) + clôture cohorte PC. **E18 + E19** livrés en Preview **0.9.0**.
 
 **Hors scope court terme :** Telegram/Discord natifs, marketplace public, computer-use desktop, `sandboxed_webview`.
 
@@ -83,8 +83,8 @@ Export schémas E8 + contrat HTTP↔bus, keyring OS E7, catalogue local signé E
 | **E15** | **UI de module déclarative rendue par l’hôte** (arbre de widgets fermé dans egui ; pas de webview) | La dual-surface est un contrat ; Notes/Tasks sont codés à la main ; un module créé par un agent n’a pas de surface humaine | **Preview 0.7.0** — [phases/phase-preview-07.md](phases/phase-preview-07.md) ; **0.8.0 P08.11** élargit la liste fermée (`form` typé, `select`/`radio`/`checkbox`/`textarea`, `bar_chart`, `image`/`audio`) ; **pas** de HTML/JS ; **pas** E13 |
 | **E16** | **Génération locale d’image + audio (TTS)** | Les testeurs attendent du multimodal sans API hébergée | **Preview 0.8.0** ✅ — [phases/phase-preview-08.md](phases/phase-preview-08.md) ; packs optionnels ; Download tire sd.cpp / piper dans `bin/` ; le Placement Manager possède la VRAM vs le LLM ; cap `media.generate` ; **pas** de vidéo ; **pas** de STT/voix always-on (sibling) ; familles extra / options CLI = **E19 / 0.9** |
 | **E17** | **Artefact hôte CPU/GPU unifié** + politique device live | Le testeur devait choisir un zip CUDA ou CPU ; Settings auto/gpu/cpu seulement au prochain boot | **Preview 0.8.0** ✅ — un artefact par OS ; la session lance un backend sûr CUDA ou CPU ; bascule UI = restart modeld ; **auto** = hystérésis Placement Manager sur VRAM/CPU (et E16) ; le pin surcharge ; `-CpuOnly` = builder seulement ; **milieu de token sans cancel = E18 / 0.9** |
-| **E18** | **Migration de device en milieu de token** (CPU ↔ GPU, le stream continue) | La bascule 0.8 annule l’infer live ; testeurs / auto-charge ne doivent pas perdre le tour | **Preview 0.9.0 prévu** — [phases/phase-preview-09.md](phases/phase-preview-09.md) ; dépend de E17 ; fallback fail-closed vers cancel+restart 0.8 |
-| **E19** | **Média local extensible** (autres modèles d’image + options sd.cpp / Piper fermées) | 0.8 fige SD 1.5 en 512² / 20 steps et deux voix Piper ; les testeurs veulent Flux2, Ideogram4, d’autres voix, et des réglages | **Preview 0.9.0 prévu** — [phases/phase-preview-09.md](phases/phase-preview-09.md) ; schéma JSON fermé (clés inconnues refusées ; pas d’argv brut) ; `extra_files` d’offering pour VAE/CLIP/T5 ; Settings + intent ; **pas** de vidéo ; **pas** d’img2img en intent de première classe |
+| **E18** | **Migration de device en milieu de token** (CPU ↔ GPU, le stream continue) | La bascule 0.8 annulait l’infer live | **Preview 0.9.0** ✅ — [phases/phase-preview-09.md](phases/phase-preview-09.md) ; rejeu de préfixe ; fallback fail-closed vers cancel+restart 0.8 |
+| **E19** | **Média local extensible** (autres modèles d’image + options sd.cpp / Piper fermées + plugins chat) | 0.8 figeait SD 1.5 en 512² / 20 steps et deux voix Piper | **Preview 0.9.0** ✅ — [phases/phase-preview-09.md](phases/phase-preview-09.md) ; schéma JSON fermé ; Flux2/Ideogram4/Piper extra ; studio Image + carte TTS ; **pas** de vidéo ; **pas** d’img2img en intent de première classe |
 
 ---
 
@@ -118,7 +118,7 @@ Export schémas E8 + contrat HTTP↔bus, keyring OS E7, catalogue local signé E
 | **P0–P5 / PV / PC** | Gates exécutables ([plan-developpement-phases.md](plan-developpement-phases.md), [STATUS.md](STATUS.md)) |
 | **E1–E19** | Priorisation après analyse concurrentielle ; les incréments Preview P03–P09 livrent des E* sans attendre la gate cohort PC |
 
-Ne **pas** inventer un numéro P6 tant que PC n’est pas fermé et que STATUS n’est pas à jour. E1–E5 livrés en Preview **0.3.0** ; E6 / E7-lite / E10-lite en **0.4.0** ; **E14** en **0.5.0** ; E8 schémas + E7-keyring + E10 catalogue en **0.6.0** ; **E15** hôte d’UI de module déclarative livré en Preview **0.7.0**. **E16 + E17 + pack widgets E15 + onglet Providers F-MDL-04** livrés en Preview **0.8.0**. **Suite : E18 + E19** (migration device mid-token + modèles/options média extra) en Preview **0.9.0**. Puis reste Horizon B (E7 TPM, adaptateur HTTP live si un daemon est planifié, E9 multi-GPU) + fermeture cohort PC.
+Ne **pas** inventer un numéro P6 tant que PC n’est pas fermé et que STATUS n’est pas à jour. E1–E5 livrés en Preview **0.3.0** ; E6 / E7-lite / E10-lite en **0.4.0** ; **E14** en **0.5.0** ; E8 schémas + E7-keyring + E10 catalogue en **0.6.0** ; **E15** hôte d’UI de module déclarative livré en Preview **0.7.0**. **E16 + E17 + pack widgets E15 + onglet Providers F-MDL-04** livrés en Preview **0.8.0**. **E18 + E19** livrés en Preview **0.9.0**. Puis reste Horizon B (E7 TPM, adaptateur HTTP live si un daemon est planifié, E9 multi-GPU) + fermeture cohort PC.
 
 Séquençage suggéré une fois PC fermé (historique ; les incréments Preview
 ont déjà joué cette séquence sur l’hôte en P03–P07, puis E16+E17 en P08) :

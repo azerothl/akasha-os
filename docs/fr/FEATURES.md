@@ -1,4 +1,4 @@
-# Fonctionnalités Preview — Akasha OS 0.8.0
+# Fonctionnalités Preview — Akasha OS 0.9.0
 
 **Langue :** [English](../FEATURES.md) | Français
 
@@ -7,7 +7,16 @@ Ce n'est **pas** l'OS bootable. Les exigences v1 sont dans
 [specs-fonctionnelles.md](specs-fonctionnelles.md) ; les gates dans
 [STATUS.md](STATUS.md).
 
-> Date : 18/08/2026 · Preview **0.8.0**
+> Date : 19/08/2026 · Preview **0.9.0**
+
+### Nouveautés 0.9.0
+
+- **Migrate mid-token** (E18) : Settings **auto / gpu / cpu** appelle `model.migrate` — la complétion live continue sur le même stream (pas de Stop, pas de tour cancelled). Sur NVIDIA le pin **cpu** reste sur le binaire CUDA `aos-modeld` avec `n_gpu_layers = 0`. Fallback fail-closed = cancel+restart 0.8 (audité)
+- **Options média fermées** (E19) : `media.image.generate` / `media.audio.generate` portent un objet `deny_unknown_fields` (taille, steps, CFG, seed, sampler, négatif, knobs Piper). Clés inconnues refusées et auditées. `aos-sd` ne mappe que des flags allowlistés
+- Packs optionnels extra : Flux2-class, Ideogram4-class, Piper `en_GB` ; `extra_files` VAE / CLIP / T5 / LoRA
+- Settings / Models : pack image et voix Piper par défaut ; `/image` et les tools les honorent après restart
+- Onglet **studio Image** ; bouton **Ouvrir dans le studio** sur un PNG du chat
+- **Carte TTS** : `/speak` ouvre voix + knobs puis **Générer**
 
 ### Nouveautés 0.8.0
 
@@ -295,14 +304,13 @@ Piste VM seL4 (PV.1–PV.3) séparée : [phases/phase-vm-sel4.md](phases/phase-v
 
 ---
 
-## 11. Hors Preview 0.8.0
+## 11. Hors Preview 0.9.0
 
 - Image bootable / fer nu
 - macOS
 - Application automatique complète des updates (téléchargement maintenant, apply au prochain lancement)
 - Vidéo / STT / voix permanente
-- Migration CPU ↔ GPU mid-token (Preview **0.9.0** / E18)
-- Familles d’image extra (Flux2, Ideogram4, …) et réglages sd.cpp / Piper (Preview **0.9.0** / E19)
+- img2img / inpaint en intent de première classe
 - APIs natives Messages/Gemini/Bedrock (Providers OpenAI-compat seulement)
 - Marketplace public de modules (catalogue local signé seulement)
 - Canaux de messagerie (Slack/Discord/etc.) dans le noyau OS
@@ -311,5 +319,6 @@ Piste VM seL4 (PV.1–PV.3) séparée : [phases/phase-vm-sel4.md](phases/phase-v
 - Daemon HTTP sibling live / enveloppe TPM
 - Webview sandboxée / UI module HTML/JS (compositor E13)
 - kinds pie/scatter/webview
+- snapshot KV llama.cpp (`llama_state_*`) — 0.9 rejoue le préfixe
 
 Protocole cohorte : [TESTER.md](TESTER.md).
