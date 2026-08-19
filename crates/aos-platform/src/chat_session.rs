@@ -234,11 +234,17 @@ impl ChatSessionStore {
                             "_agent: {agent_id} ({origin}) — {title}_\n\n"
                         ));
                     }
-                    ChatAttachment::Image { path } => {
+                    ChatAttachment::Image { path, prompt } => {
                         out.push_str(&format!("_image: {path}_\n\n"));
+                        if !prompt.is_empty() {
+                            out.push_str(&format!("_prompt: {prompt}_\n\n"));
+                        }
                     }
                     ChatAttachment::Audio { path } => {
                         out.push_str(&format!("_audio: {path}_\n\n"));
+                    }
+                    ChatAttachment::TtsDraft { text, .. } => {
+                        out.push_str(&format!("_tts draft: {text}_\n\n"));
                     }
                 }
             }

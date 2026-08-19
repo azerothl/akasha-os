@@ -2014,6 +2014,16 @@ async fn invoke_native(
                 .get("model_id")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
+            let options = match args.get("options") {
+                None => aos_proto::MediaImageOptions::default(),
+                Some(v) => match serde_json::from_value::<aos_proto::MediaImageOptions>(v.clone())
+                {
+                    Ok(o) => o,
+                    Err(e) => {
+                        return format!("media.image.generate err: options refused ({e})");
+                    }
+                },
+            };
             match bus
                 .call::<aos_proto::MediaImageGenerateRequest, aos_proto::MediaGenerateResponse>(
                     "media.image.generate",
@@ -2021,6 +2031,7 @@ async fn invoke_native(
                         prompt,
                         path,
                         model_id,
+                        options,
                         actor: actor.clone(),
                         caps: caps.to_vec(),
                         trace_id: String::new(),
@@ -2047,6 +2058,16 @@ async fn invoke_native(
                 .get("model_id")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
+            let options = match args.get("options") {
+                None => aos_proto::MediaAudioOptions::default(),
+                Some(v) => match serde_json::from_value::<aos_proto::MediaAudioOptions>(v.clone())
+                {
+                    Ok(o) => o,
+                    Err(e) => {
+                        return format!("media.audio.generate err: options refused ({e})");
+                    }
+                },
+            };
             match bus
                 .call::<aos_proto::MediaAudioGenerateRequest, aos_proto::MediaGenerateResponse>(
                     "media.audio.generate",
@@ -2054,6 +2075,7 @@ async fn invoke_native(
                         text,
                         path,
                         model_id,
+                        options,
                         actor: actor.clone(),
                         caps: caps.to_vec(),
                         trace_id: String::new(),

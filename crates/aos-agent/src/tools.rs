@@ -117,7 +117,8 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
                 "properties":{
                     "prompt":{"type":"string"},
                     "path":{"type":"string"},
-                    "model_id":{"type":"string"}
+                    "model_id":{"type":"string"},
+                    "options":{"type":"object","description":"closed sd.cpp options (unknown keys refused)"}
                 },
                 "required":["prompt"]
             }),
@@ -132,7 +133,8 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
                 "properties":{
                     "text":{"type":"string"},
                     "path":{"type":"string"},
-                    "model_id":{"type":"string"}
+                    "model_id":{"type":"string"},
+                    "options":{"type":"object","description":"closed Piper options (unknown keys refused)"}
                 },
                 "required":["text"]
             }),

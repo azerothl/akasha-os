@@ -128,9 +128,12 @@ pub async fn run_image(
             .map_err(|e| format!("placement: {e}"))?;
     }
     let prompt = req.prompt.clone();
+    let mut opts = proto_image_opts(&req.options);
+    apply_catalog_extras(&mut opts, &req.options);
+    apply_offering_sidecars(&mut opts, &model_id);
     let tmp = unique_media_temp("aos-img", "png");
     let engine = tokio::task::spawn_blocking(move || {
-        aos_sd::generate_image(&weights, &prompt, &tmp).map(|e| (e, tmp))
+        aos_sd::generate_image_opts(&weights, &prompt, &tmp, &opts).map(|e| (e, tmp))
     })
     .await
     .map_err(|e| e.to_string())?
@@ -151,6 +154,7 @@ pub async fn run_image(
         engine_s,
     )
     .await?;
+    maybe_auto_migrate(sub).await;
     Ok(aos_proto::MediaGenerateResponse {
         path: dest.to_string(),
         bytes: n,
@@ -182,9 +186,10 @@ pub async fn run_tts(
             .map_err(|e| format!("placement: {e}"))?;
     }
     let text = req.text.clone();
+    let opts = proto_audio_opts(&req.options);
     let tmp = unique_media_temp("aos-tts", "wav");
     let engine = tokio::task::spawn_blocking(move || {
-        aos_sd::generate_speech(&voice, &text, &tmp).map(|e| (e, tmp))
+        aos_sd::generate_speech_opts(&voice, &text, &tmp, &opts).map(|e| (e, tmp))
     })
     .await
     .map_err(|e| e.to_string())?
@@ -233,4 +238,120 @@ mod tests {
         let b = unique_media_temp("aos-img", "png");
         assert_ne!(a, b);
     }
+
+    #[test]
+    fn proto_image_opts_defaults() {
+        let o = proto_image_opts(&aos_proto::MediaImageOptions::default());
+        assert_eq!(o.width, 512);
+        assert_eq!(o.steps, 20);
+    }
+}
+
+fn proto_image_opts(o: &aos_proto::MediaImageOptions) -> aos_sd::ImageGenOpts {
+    aos_sd::ImageGenOpts {
+        width: o.width.unwrap_or(512).clamp(64, 2048),
+        height: o.height.unwrap_or(512).clamp(64, 2048),
+        steps: o.steps.unwrap_or(20).clamp(1, 150),
+        cfg_scale: o.cfg_scale,
+        seed: o.seed,
+        sampling_method: o.sampling_method.clone(),
+        negative_prompt: o.negative_prompt.clone(),
+        threads: o.threads,
+        style_prefix: o.style.clone(),
+        ..aos_sd::ImageGenOpts::default()
+    }
+}
+
+fn proto_audio_opts(o: &aos_proto::MediaAudioOptions) -> aos_sd::SpeechGenOpts {
+    aos_sd::SpeechGenOpts {
+        length_scale: o.length_scale,
+        noise_scale: o.noise_scale,
+        noise_w: o.noise_w,
+        sentence_silence: o.sentence_silence,
+        speaker: o.speaker,
+    }
+}
+
+fn models_dir() -> PathBuf {
+    std::env::var("AOS_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join("share/models")
+}
+
+fn resolve_media_asset(id: &str) -> Option<PathBuf> {
+    if id.is_empty() || id.contains("..") || id.contains('/') || id.contains('\\') {
+        return None;
+    }
+    let dir = models_dir();
+    let p = dir.join(id);
+    if p.is_file() {
+        return Some(p);
+    }
+    for ext in ["safetensors", "gguf", "bin", "onnx"] {
+        let p = dir.join(format!("{id}.{ext}"));
+        if p.is_file() {
+            return Some(p);
+        }
+    }
+    None
+}
+
+fn apply_catalog_extras(opts: &mut aos_sd::ImageGenOpts, o: &aos_proto::MediaImageOptions) {
+    if let Some(id) = o.vae.as_deref() {
+        opts.vae_path = resolve_media_asset(id);
+    }
+    if let Some(id) = o.lora.as_deref() {
+        opts.lora_path = resolve_media_asset(id);
+    }
+}
+
+fn apply_offering_sidecars(opts: &mut aos_sd::ImageGenOpts, model_id: &str) {
+    let path = models_dir().join("catalog-offerings.json");
+    let Ok(raw) = std::fs::read_to_string(path) else {
+        return;
+    };
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) else {
+        return;
+    };
+    let Some(models) = v.get("models").and_then(|m| m.as_array()) else {
+        return;
+    };
+    let Some(m) = models.iter().find(|x| x.get("id").and_then(|i| i.as_str()) == Some(model_id))
+    else {
+        return;
+    };
+    if let Some(extras) = m.get("extra_files").and_then(|e| e.as_array()) {
+        for f in extras {
+            let fname = f.get("filename").and_then(|x| x.as_str()).unwrap_or("");
+            let role = f.get("role").and_then(|x| x.as_str()).unwrap_or("");
+            let resolved = resolve_media_asset(fname);
+            match role {
+                "vae" if opts.vae_path.is_none() => opts.vae_path = resolved,
+                "lora" if opts.lora_path.is_none() => opts.lora_path = resolved,
+                "clip_l" => opts.clip_l_path = resolved,
+                "clip_g" => opts.clip_g_path = resolved,
+                "t5xxl" => opts.t5xxl_path = resolved,
+                _ => {}
+            }
+        }
+    }
+    if let Some(dm) = m
+        .get("engine_args")
+        .and_then(|a| a.get("diffusion-model"))
+        .and_then(|x| x.as_str())
+    {
+        opts.diffusion_model = resolve_media_asset(dm);
+    }
+}
+
+async fn maybe_auto_migrate(sub: &crate::ModelSubsystem) {
+    let pin = sub.inference_pin();
+    if pin.eq_ignore_ascii_case("gpu") || pin.eq_ignore_ascii_case("cpu") {
+        return;
+    }
+    if !sub.has_live_infer() {
+        return;
+    }
+    let _ = sub.migrate("auto").await;
 }

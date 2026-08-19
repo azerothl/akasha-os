@@ -131,35 +131,137 @@ fn which(exe: &str) -> Option<PathBuf> {
     None
 }
 
+/// Allowlisted sd.cpp flags (P09.3). Never pass free-form argv.
+#[derive(Debug, Clone)]
+pub struct ImageGenOpts {
+    pub width: u32,
+    pub height: u32,
+    pub steps: u32,
+    pub cfg_scale: Option<f32>,
+    pub seed: Option<i64>,
+    pub sampling_method: Option<String>,
+    pub negative_prompt: Option<String>,
+    pub threads: Option<u32>,
+    pub vae_path: Option<PathBuf>,
+    pub lora_path: Option<PathBuf>,
+    pub clip_l_path: Option<PathBuf>,
+    pub clip_g_path: Option<PathBuf>,
+    pub t5xxl_path: Option<PathBuf>,
+    pub diffusion_model: Option<PathBuf>,
+    pub style_prefix: Option<String>,
+}
+
+impl Default for ImageGenOpts {
+    fn default() -> Self {
+        Self {
+            width: 512,
+            height: 512,
+            steps: 20,
+            cfg_scale: None,
+            seed: None,
+            sampling_method: None,
+            negative_prompt: None,
+            threads: None,
+            vae_path: None,
+            lora_path: None,
+            clip_l_path: None,
+            clip_g_path: None,
+            t5xxl_path: None,
+            diffusion_model: None,
+            style_prefix: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct SpeechGenOpts {
+    pub length_scale: Option<f32>,
+    pub noise_scale: Option<f32>,
+    pub noise_w: Option<f32>,
+    pub sentence_silence: Option<f32>,
+    pub speaker: Option<u32>,
+}
+
 /// Generate a PNG from `prompt` using sd.cpp, or a stub PNG.
 pub fn generate_image(
     weights: &Path,
     prompt: &str,
     dest: &Path,
 ) -> Result<MediaEngine, MediaError> {
+    generate_image_opts(weights, prompt, dest, &ImageGenOpts::default())
+}
+
+pub fn generate_image_opts(
+    weights: &Path,
+    prompt: &str,
+    dest: &Path,
+    opts: &ImageGenOpts,
+) -> Result<MediaEngine, MediaError> {
     if let Some(parent) = dest.parent() {
         std::fs::create_dir_all(parent)?;
     }
+    let prompt = match &opts.style_prefix {
+        Some(s) if !s.is_empty() => format!("{s}, {prompt}"),
+        _ => prompt.to_string(),
+    };
     if stub_forced() || look_image_bin().is_none() || !weights.exists() {
-        std::fs::write(dest, visible_stub_png(prompt))?;
+        std::fs::write(dest, visible_stub_png(&prompt))?;
         return Ok(MediaEngine::Stub);
     }
     let bin = look_image_bin().expect("sd bin");
-    let output = Command::new(&bin)
-        .current_dir(bin_dir())
+    let mut cmd = Command::new(&bin);
+    cmd.current_dir(bin_dir())
         .arg("-m")
         .arg(weights)
         .arg("-p")
-        .arg(prompt)
+        .arg(&prompt)
         .arg("-o")
         .arg(dest)
         .arg("-W")
-        .arg("512")
+        .arg(opts.width.max(64).to_string())
         .arg("-H")
-        .arg("512")
+        .arg(opts.height.max(64).to_string())
         .arg("--steps")
-        .arg("20")
-        .output()?;
+        .arg(opts.steps.max(1).to_string());
+    if let Some(cfg) = opts.cfg_scale {
+        cmd.arg("--cfg-scale").arg(cfg.to_string());
+    }
+    if let Some(seed) = opts.seed {
+        cmd.arg("--seed").arg(seed.to_string());
+    }
+    if let Some(method) = opts.sampling_method.as_deref().filter(|s| {
+        matches!(
+            *s,
+            "euler" | "euler_a" | "heun" | "dpm2" | "dpm++2m" | "lcm" | "ddim"
+        )
+    }) {
+        cmd.arg("--sampling-method").arg(method);
+    }
+    if let Some(neg) = opts.negative_prompt.as_deref().filter(|s| !s.is_empty()) {
+        cmd.arg("-n").arg(neg);
+    }
+    if let Some(t) = opts.threads {
+        cmd.arg("-t").arg(t.max(1).to_string());
+    }
+    if let Some(p) = &opts.vae_path {
+        cmd.arg("--vae").arg(p);
+    }
+    if let Some(p) = &opts.lora_path {
+        cmd.arg("--lora").arg(p);
+    }
+    if let Some(p) = &opts.clip_l_path {
+        cmd.arg("--clip_l").arg(p);
+    }
+    if let Some(p) = &opts.clip_g_path {
+        cmd.arg("--clip_g").arg(p);
+    }
+    if let Some(p) = &opts.t5xxl_path {
+        cmd.arg("--t5xxl").arg(p);
+    }
+    if let Some(p) = &opts.diffusion_model {
+        cmd.arg("--diffusion-model").arg(p);
+    }
+    let output = cmd.output()?;
     if !output.status.success() {
         let err = String::from_utf8_lossy(&output.stderr);
         let tail = err.chars().rev().take(800).collect::<String>();
@@ -206,6 +308,15 @@ pub fn stub_wav(duration_ms: u32) -> Vec<u8> {
 
 /// Generate WAV from `text` using Piper, or a stub WAV.
 pub fn generate_speech(voice: &Path, text: &str, dest: &Path) -> Result<MediaEngine, MediaError> {
+    generate_speech_opts(voice, text, dest, &SpeechGenOpts::default())
+}
+
+pub fn generate_speech_opts(
+    voice: &Path,
+    text: &str,
+    dest: &Path,
+    opts: &SpeechGenOpts,
+) -> Result<MediaEngine, MediaError> {
     if let Some(parent) = dest.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -224,6 +335,21 @@ pub fn generate_speech(voice: &Path, text: &str, dest: &Path) -> Result<MediaEng
     let espeak = work.join("espeak-ng-data");
     if espeak.is_dir() {
         cmd.arg("--espeak_data").arg(&espeak);
+    }
+    if let Some(v) = opts.length_scale {
+        cmd.arg("--length_scale").arg(v.to_string());
+    }
+    if let Some(v) = opts.noise_scale {
+        cmd.arg("--noise_scale").arg(v.to_string());
+    }
+    if let Some(v) = opts.noise_w {
+        cmd.arg("--noise_w").arg(v.to_string());
+    }
+    if let Some(v) = opts.sentence_silence {
+        cmd.arg("--sentence_silence").arg(v.to_string());
+    }
+    if let Some(v) = opts.speaker {
+        cmd.arg("--speaker").arg(v.to_string());
     }
     let mut child = cmd
         .stdin(Stdio::piped())
@@ -287,6 +413,28 @@ mod tests {
         let eng = generate_speech(Path::new("missing.onnx"), "hello", &dest).unwrap();
         assert_eq!(eng, MediaEngine::Stub);
         assert!(dest.exists());
+        std::env::remove_var("AOS_MEDIA_STUB");
+    }
+
+    #[test]
+    fn image_opts_default_is_512_20() {
+        let o = ImageGenOpts::default();
+        assert_eq!(o.width, 512);
+        assert_eq!(o.steps, 20);
+    }
+
+    #[test]
+    fn generate_image_opts_stub_not_always_512() {
+        std::env::set_var("AOS_MEDIA_STUB", "1");
+        let dir = std::env::temp_dir().join("aos-sd-test");
+        let _ = std::fs::create_dir_all(&dir);
+        let dest = dir.join("out-opts.png");
+        let mut opts = ImageGenOpts::default();
+        opts.width = 768;
+        opts.steps = 8;
+        let eng = generate_image_opts(Path::new("missing.safetensors"), "cube", &dest, &opts)
+            .unwrap();
+        assert_eq!(eng, MediaEngine::Stub);
         std::env::remove_var("AOS_MEDIA_STUB");
     }
 }
