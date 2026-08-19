@@ -11,9 +11,12 @@ mod notes_panel;
 mod prefs;
 mod tasks_panel;
 mod chat_ask;
+mod chat_media;
 mod cmd;
+mod image_studio;
 mod os_open;
 mod runtime;
+mod scenarios_panel;
 mod slash;
 
 use chat_ask::{agent_display_title, chat_has_open_ask, pending_ask_ids};
@@ -66,6 +69,7 @@ enum Tab {
     Tasks,
     Agents,
     Models,
+    Image,
     Providers,
     Audit,
     Caps,
@@ -253,8 +257,7 @@ pub(crate) async fn load_session(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>, id:
                 .into_iter()
                 .map(|m| {
                     let role = match m.role.as_str() {
-                        "user" => "vous".into(),
-                        "assistant" => "assistant".into(),
+                        "vous" => "user".into(),
                         other => other.to_string(),
                     };
                     ChatLine {
@@ -1156,6 +1159,7 @@ struct UiApp {
     chat_refocus: bool,
     decl_panels: HashMap<String, decl_ui::DeclUiPanelState>,
     decl_md_cache: CommonMarkCache,
+    image_studio: image_studio::ImageStudioState,
 }
 
 impl UiApp {
@@ -1319,6 +1323,7 @@ impl UiApp {
             chat_refocus: false,
             decl_panels: HashMap::new(),
             decl_md_cache: CommonMarkCache::default(),
+            image_studio: image_studio::ImageStudioState::default(),
         }
     }
 
@@ -1410,7 +1415,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
 
     fn send_ask_reply(&mut self, session_id: String, agent_id: String, title: String, text: String) {
         self.chat.push(ChatLine {
-            role: "vous".into(),
+            role: "user".into(),
             text: text.clone(),
             attachments: vec![ChatAttachment::AgentRef {
                 agent_id: agent_id.clone(),
@@ -1464,21 +1469,21 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             return;
         }
         if self.chat_pending {
-            self.chat.push(ChatLine::plain("vous", text));
+            self.chat.push(ChatLine::plain("user", text));
             self.chat.push(ChatLine::plain(
                 "système",
                 "réponse précédente encore en cours — patientez.",
             ));
             return;
         }
-        self.chat.push(ChatLine::plain("vous", text.clone()));
+        self.chat.push(ChatLine::plain("user", text.clone()));
         let history: Vec<(String, String)> = self
             .chat
             .iter()
-            .filter(|l| l.role == "vous" || l.role == "assistant")
+            .filter(|l| l.role == "user" || l.role == "vous" || l.role == "assistant")
             .map(|l| {
                 (
-                    if l.role == "vous" {
+                    if l.role == "vous" || l.role == "user" {
                         "user".into()
                     } else {
                         "assistant".into()
@@ -1509,7 +1514,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
     }
 
     fn handle_slash(&mut self, text: &str) {
-        self.chat.push(ChatLine::plain("vous", text));
+        self.chat.push(ChatLine::plain("user", text));
         let mut parts = text.splitn(2, char::is_whitespace);
         let cmd = parts.next().unwrap_or(text);
         let rest = parts.next().unwrap_or("").trim();
@@ -1633,8 +1638,18 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                     return;
                 }
                 self.status = "image : génération…".into();
+                if let Some(sid) = self.active_session.clone() {
+                    let _ = self.cmd_tx.send(Cmd::SessionAppend {
+                        session_id: sid,
+                        role: "user".into(),
+                        content: text.to_string(),
+                        attachments: vec![],
+                    });
+                }
                 let _ = self.cmd_tx.send(Cmd::MediaImage {
                     prompt: rest.to_string(),
+                    model_id: self.prefs.default_image_model.clone(),
+                    options: self.prefs.image_options(),
                 });
             }
             "/speak" => {
@@ -1643,10 +1658,25 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                         .push(ChatLine::plain("système", "usage : /speak <texte>"));
                     return;
                 }
-                self.status = "audio : génération…".into();
-                let _ = self.cmd_tx.send(Cmd::MediaAudio {
+                let att = ChatAttachment::TtsDraft {
                     text: rest.to_string(),
+                    model_id: self.prefs.default_audio_model.clone(),
+                    options: aos_proto::MediaAudioOptions::default(),
+                };
+                self.chat.push(ChatLine {
+                    role: "assistant".into(),
+                    text: rest.to_string(),
+                    attachments: vec![att.clone()],
                 });
+                if let Some(sid) = self.active_session.clone() {
+                    let _ = self.cmd_tx.send(Cmd::SessionAppend {
+                        session_id: sid,
+                        role: "assistant".into(),
+                        content: rest.to_string(),
+                        attachments: vec![att],
+                    });
+                }
+                self.status = i18n::strings(&self.prefs.language).tts_card_blurb.into();
             }
             _ => {
                 self.chat.push(ChatLine::plain(
@@ -2059,13 +2089,20 @@ impl eframe::App for UiApp {
                     path,
                     bytes,
                     engine,
+                    prompt,
                 } => {
                     self.status = format!("{kind} → {path} ({bytes} bytes, {engine})");
                     let att = if kind == "audio" {
                         ChatAttachment::Audio { path: path.clone() }
                     } else {
-                        ChatAttachment::Image { path: path.clone() }
+                        ChatAttachment::Image {
+                            path: path.clone(),
+                            prompt: prompt.clone(),
+                        }
                     };
+                    if kind != "audio" {
+                        self.image_studio.open_from_chat(&prompt, &path);
+                    }
                     let note = if engine == "stub" {
                         format!(
                             "{kind}: {path}\n(stub — pack média ou moteur sd.cpp/piper absent)"
@@ -2500,6 +2537,7 @@ impl eframe::App for UiApp {
                 (Tab::Tasks, t.tab_tasks, t.tab_hint_tasks),
                 (Tab::Agents, t.tab_agents, t.tab_hint_agents),
                 (Tab::Models, t.tab_models, t.tab_hint_models),
+                (Tab::Image, t.tab_image, t.tab_hint_image),
                 (Tab::Providers, t.tab_providers, t.tab_hint_providers),
                 (Tab::Audit, t.tab_audit, t.tab_hint_audit),
                 (Tab::Caps, t.tab_caps, t.tab_hint_caps),
@@ -2644,6 +2682,10 @@ impl eframe::App for UiApp {
             Tab::Tasks => overflow_scroll(ui, "tasks", |ui| self.ui_tasks(ui)),
             Tab::Agents => overflow_scroll(ui, "agents", |ui| self.ui_agents(ui)),
             Tab::Models => overflow_scroll(ui, "models", |ui| self.ui_models(ui)),
+            Tab::Image => overflow_scroll(ui, "image", |ui| {
+                self.image_studio
+                    .ui(ui, &i18n::strings(&self.prefs.language), &self.cmd_tx);
+            }),
             Tab::Providers => overflow_scroll(ui, "providers", |ui| self.ui_providers(ui)),
             Tab::Audit => self.ui_audit(ui),
             Tab::Caps => overflow_scroll(ui, "caps", |ui| self.ui_caps(ui)),
@@ -2957,6 +2999,7 @@ impl UiApp {
                             ui.set_min_height(scroll_h);
                             let mut open_agent: Option<String> = None;
                             let mut target_reply: Option<String> = None;
+                            let mut open_studio: Option<(String, String)> = None;
                             let reply_id = self.blocked_ask_agent().map(|a| a.agent_id.clone());
                             let n = self.chat.len();
                             for i in 0..n {
@@ -2975,8 +3018,13 @@ impl UiApp {
                                 } else {
                                     text
                                 };
+                                let shown_role = if role == "user" || role == "vous" {
+                                    t.chat_you.to_string()
+                                } else {
+                                    role.clone()
+                                };
                             ui.horizontal(|ui| {
-                                ui.label(format!("[{role}]"));
+                                ui.label(format!("[{shown_role}]"));
                                 if ui.small_button(t.btn_copy).clicked() {
                                     ui.ctx().copy_text(text.clone());
                                     self.status = t.copied.into();
@@ -3028,35 +3076,37 @@ impl UiApp {
                                         agent_panel::ChatCardAction::None => {}
                                     }
                                         }
-                                        ChatAttachment::Image { path } => {
-                                            ui.label(format!("image: {path}"));
-                                            if let Some(tex) =
-                                                decl_ui::try_load_png(ui.ctx(), path.as_str())
-                                            {
-                                                let [tw, th] = tex.size();
-                                                let max_w = ui.available_width().min(512.0);
-                                                let scale = if tw.max(th) < 48 {
-                                                    256.0 / tw.max(1) as f32
-                                                } else {
-                                                    (max_w / tw.max(1) as f32).min(1.0)
-                                                };
-                                                ui.add(
-                                                    egui::Image::new(&tex)
-                                                        .fit_to_original_size(scale),
-                                                );
-                                            } else {
-                                                ui.weak(
-                                                    "PNG illisible (chemin /downloads → var/storage/data)",
-                                                );
-                                            }
+                                        ChatAttachment::Image { path, prompt } => {
+                                            chat_media::render_image(
+                                                ui,
+                                                &t,
+                                                path.as_str(),
+                                                prompt.as_str(),
+                                                || {
+                                                    open_studio =
+                                                        Some((prompt.clone(), path.clone()));
+                                                },
+                                            );
                                         }
                                         ChatAttachment::Audio { path } => {
-                                            ui.horizontal(|ui| {
-                                                ui.label(format!("audio: {path}"));
-                                                if ui.button("Play").clicked() {
-                                                    let _ = decl_ui::open_host_path(path.as_str());
-                                                }
-                                            });
+                                            chat_media::render_audio(ui, path.as_str());
+                                        }
+                                        ChatAttachment::TtsDraft { .. } => {
+                                            let piper: Vec<String> = self
+                                                .model_infos
+                                                .iter()
+                                                .filter(|m| m.id.contains("piper"))
+                                                .map(|m| m.id.clone())
+                                                .collect();
+                                            if chat_media::render_tts_card(
+                                                ui,
+                                                &t,
+                                                &self.cmd_tx,
+                                                &mut self.chat[i].attachments[j],
+                                                &piper,
+                                            ) {
+                                                self.status = "audio : génération…".into();
+                                            }
                                         }
                                     }
                                 }
@@ -3064,6 +3114,10 @@ impl UiApp {
                             }
                             if let Some(id) = open_agent {
                                 self.open_agent_tab(&id);
+                            }
+                            if let Some((prompt, path)) = open_studio {
+                                self.image_studio.open_from_chat(&prompt, &path);
+                                self.tab = Tab::Image;
                             }
                             if let Some(id) = target_reply {
                                 self.ask_reply_target = Some(id);
@@ -3876,7 +3930,7 @@ impl UiApp {
                                         .map(|a| a.directive.clone())
                                         .unwrap_or_default();
                                     self.chat.push(ChatLine {
-                                        role: "vous".into(),
+                                        role: "user".into(),
                                         text: t.agent_unblocked.into(),
                                         attachments: vec![ChatAttachment::AgentRef {
                                             agent_id: id.clone(),
@@ -4017,14 +4071,10 @@ impl UiApp {
                         {
                             self.prefs.inference_mode = code.into();
                             save_preferences(&self.prefs);
-                            if let Some(id) = self.chat_inference_id {
-                                let _ = self.cmd_tx.send(Cmd::ChatCancel { inference_id: id });
-                            }
-                            let _ = self.cmd_tx.send(Cmd::RestartModeld);
-                            self.status = format!(
-                                "{} — modeld restarting ({code})",
-                                t.settings_saved
-                            );
+                            let _ = self.cmd_tx.send(Cmd::MigrateModeld {
+                                target: code.to_string(),
+                            });
+                            self.status = format!("{} — migrate ({code})", t.settings_saved);
                         }
                     }
                 });
@@ -4065,6 +4115,86 @@ impl UiApp {
                 if ui.button(t.tab_models).clicked() {
                     self.tab = Tab::Models;
                 }
+                ui.end_row();
+
+                ui.label(t.settings_image_pack);
+                egui::ComboBox::from_id_salt("prefs_image_pack")
+                    .selected_text(
+                        self.prefs
+                            .default_image_model
+                            .clone()
+                            .unwrap_or_else(|| "default".into()),
+                    )
+                    .show_ui(ui, |ui| {
+                        if ui
+                            .selectable_label(self.prefs.default_image_model.is_none(), "default")
+                            .clicked()
+                        {
+                            self.prefs.default_image_model = None;
+                            save_preferences(&self.prefs);
+                        }
+                        for m in self.model_infos.clone() {
+                            if !(m.id.contains("sd-")
+                                || m.id.contains("flux")
+                                || m.id.contains("ideogram")
+                                || m.name.to_ascii_lowercase().contains("image"))
+                            {
+                                continue;
+                            }
+                            let selected =
+                                self.prefs.default_image_model.as_deref() == Some(m.id.as_str());
+                            if ui.selectable_label(selected, &m.id).clicked() {
+                                self.prefs.default_image_model = Some(m.id.clone());
+                                save_preferences(&self.prefs);
+                            }
+                        }
+                    });
+                ui.end_row();
+
+                ui.label(t.settings_piper_voice);
+                egui::ComboBox::from_id_salt("prefs_piper")
+                    .selected_text(
+                        self.prefs
+                            .default_audio_model
+                            .clone()
+                            .unwrap_or_else(|| "default".into()),
+                    )
+                    .show_ui(ui, |ui| {
+                        if ui
+                            .selectable_label(self.prefs.default_audio_model.is_none(), "default")
+                            .clicked()
+                        {
+                            self.prefs.default_audio_model = None;
+                            save_preferences(&self.prefs);
+                        }
+                        for m in self.model_infos.clone() {
+                            if !m.id.contains("piper") {
+                                continue;
+                            }
+                            let selected =
+                                self.prefs.default_audio_model.as_deref() == Some(m.id.as_str());
+                            if ui.selectable_label(selected, &m.id).clicked() {
+                                self.prefs.default_audio_model = Some(m.id.clone());
+                                save_preferences(&self.prefs);
+                            }
+                        }
+                    });
+                ui.end_row();
+
+                ui.label("W / H / steps");
+                ui.horizontal(|ui| {
+                    ui.add(egui::DragValue::new(&mut self.prefs.image_width).range(64..=2048));
+                    ui.add(egui::DragValue::new(&mut self.prefs.image_height).range(64..=2048));
+                    if ui
+                        .add(egui::DragValue::new(&mut self.prefs.image_steps).range(1..=150))
+                        .changed()
+                    {
+                        save_preferences(&self.prefs);
+                    }
+                    if ui.button(t.settings_saved).clicked() {
+                        save_preferences(&self.prefs);
+                    }
+                });
                 ui.end_row();
             });
 
@@ -4775,51 +4905,33 @@ impl UiApp {
 
     fn ui_scenarios(&mut self, ui: &mut egui::Ui) {
         let t = i18n::strings(&self.prefs.language);
-        ui.heading("Scénarios guidés (protocole cohorte)");
-        ui.label("Cochez au fur et à mesure — voir aussi docs/TESTER.md");
-        ui.checkbox(&mut self.scen_chat, "1. Chat offline (onglet Chat)");
-        ui.checkbox(
-            &mut self.scen_note_human,
-            "2. Créer une note humaine (onglet Notes)",
+        let mut flags = scenarios_panel::ScenarioFlags {
+            chat: self.scen_chat,
+            note_human: self.scen_note_human,
+            note_agent: self.scen_note_agent,
+            confirm: self.scen_confirm,
+            audit: self.scen_audit,
+            module_agent: self.scen_module_agent,
+        };
+        let mut launch = false;
+        let mut test_confirm = false;
+        scenarios_panel::ui(
+            ui,
+            &t,
+            &mut flags,
+            || launch = true,
+            || test_confirm = true,
         );
-        ui.checkbox(
-            &mut self.scen_note_agent,
-            "3. Note via agent (créer un agent avec une tâche notes)",
-        );
-        ui.checkbox(
-            &mut self.scen_confirm,
-            "4. Accepter/refuser une confirmation sensible",
-        );
-        ui.checkbox(
-            &mut self.scen_audit,
-            "5. Vérifier l'audit ; tuer auditd et continuer à chatter",
-        );
-        ui.checkbox(&mut self.scen_module_agent, t.scen_module_agent);
-        ui.weak(t.scen_module_agent_hint);
-        if ui.button(t.scen_module_agent_launch).clicked() {
+        self.scen_chat = flags.chat;
+        self.scen_note_human = flags.note_human;
+        self.scen_note_agent = flags.note_agent;
+        self.scen_confirm = flags.confirm;
+        self.scen_audit = flags.audit;
+        self.scen_module_agent = flags.module_agent;
+        if launch {
             self.launch_module_author_agent();
         }
-        ui.label("PC.6–PC.9 : sessions / mémoire / réseau / downloads — voir TESTER.md §6–9");
-        ui.separator();
-        let done = [
-            self.scen_chat,
-            self.scen_note_human,
-            self.scen_note_agent,
-            self.scen_confirm,
-            self.scen_audit,
-            self.scen_module_agent,
-        ]
-        .iter()
-        .filter(|x| **x)
-        .count();
-        ui.label(format!("Progression : {done}/6"));
-        if done == 6 {
-            ui.colored_label(
-                egui::Color32::LIGHT_GREEN,
-                "Protocole de base terminé — envoyez un retour (onglet Retour).",
-            );
-        }
-        if ui.button("Demander une confirmation test (fs.delete)").clicked() {
+        if test_confirm {
             self.status =
                 "Créez puis tentez de supprimer une note sensible, ou utilisez le gate P3 en lab."
                     .into();

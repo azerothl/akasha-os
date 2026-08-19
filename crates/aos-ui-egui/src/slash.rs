@@ -11,8 +11,8 @@ pub(crate) const SLASH_COMMANDS: &[(&str, &str)] = &[
     ("/audit [n]", "n derniers événements d'audit"),
     ("/kill <id>", "tuer un agent"),
     ("/pause <id>", "suspendre un agent"),
-    ("/image <prompt>", "générer une image PNG sous /downloads"),
-    ("/speak <texte>", "synthèse vocale WAV sous /downloads"),
+    ("/image <prompt>", "generate a PNG under /downloads (uses Settings defaults)"),
+    ("/speak <texte>", "open an in-chat TTS card (voice + knobs, then Generate)"),
 ];
 
 pub(crate) fn slash_completions(prefix: &str) -> Vec<(&'static str, &'static str)> {

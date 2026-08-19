@@ -35,6 +35,18 @@ pub struct Preferences {
     pub web_fetch_max_bytes: u64,
     #[serde(default = "default_browse_chars")]
     pub web_browse_max_chars: usize,
+    /// Default image offering id (`local:sd-v1-5`, `local:flux2`, …).
+    #[serde(default)]
+    pub default_image_model: Option<String>,
+    /// Default Piper offering id.
+    #[serde(default)]
+    pub default_audio_model: Option<String>,
+    #[serde(default = "default_image_size")]
+    pub image_width: u32,
+    #[serde(default = "default_image_size")]
+    pub image_height: u32,
+    #[serde(default = "default_image_steps")]
+    pub image_steps: u32,
 }
 
 fn default_language() -> String {
@@ -70,6 +82,12 @@ fn default_browse_chars() -> usize {
 fn default_auto_remember_chat() -> bool {
     true
 }
+fn default_image_size() -> u32 {
+    512
+}
+fn default_image_steps() -> u32 {
+    20
+}
 
 impl Default for Preferences {
     fn default() -> Self {
@@ -87,6 +105,22 @@ impl Default for Preferences {
             web_search_engine: default_search_engine(),
             web_fetch_max_bytes: default_fetch_max(),
             web_browse_max_chars: default_browse_chars(),
+            default_image_model: None,
+            default_audio_model: None,
+            image_width: default_image_size(),
+            image_height: default_image_size(),
+            image_steps: default_image_steps(),
+        }
+    }
+}
+
+impl Preferences {
+    pub fn image_options(&self) -> aos_proto::MediaImageOptions {
+        aos_proto::MediaImageOptions {
+            width: Some(self.image_width.max(64)),
+            height: Some(self.image_height.max(64)),
+            steps: Some(self.image_steps.max(1)),
+            ..aos_proto::MediaImageOptions::default()
         }
     }
 }
