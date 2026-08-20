@@ -15,7 +15,9 @@ use aos_agent::persist;
 use aos_agent::prompt::{compile_system_prompt, optimize_prompt_request, PromptCompileInput};
 use aos_agent::skills::{load_skills, match_skill_by_action, merge_skill_tools, skill_misuse_hint, SkillDoc};
 use aos_agent::tools::{
-    caps_for_tools, caps_subset, classify_action, select_tools, ToolBackend, ToolDesc,
+    canonicalize_tool_name, caps_for_tools, caps_subset, classify_action,
+    is_module_fallback_candidate, normalize_tool_args, resolve_tool_backend, select_tools,
+    ToolBackend, ToolDesc,
 };
 use aos_agent::{intents, CognitiveState, ControlCmd, ControlResp, ReportPayload};
 use aos_ipc::{BusClient, BusService};
@@ -748,15 +750,20 @@ async fn main() {
                     || outcome.contains("capacité requise")
                     || outcome.contains("capacité manquante")
                 {
-                    let hint = if action.action.starts_with("module.install") {
+                    let canonical = canonicalize_tool_name(&action.action);
+                    let hint = if canonical.starts_with("module.install") {
                         "module.install".to_string()
-                    } else if action.action.starts_with("module.compile") {
+                    } else if canonical.starts_with("module.compile") {
                         "module.compile".to_string()
-                    } else if action.action.starts_with("web.") || action.action.starts_with("net.")
+                    } else if canonical.starts_with("web.") || canonical.starts_with("net.")
                     {
                         "net.connect:*".to_string()
-                    } else if action.action.contains('.') {
-                        let mod_name = action.action.split('.').next().unwrap_or("?");
+                    } else if canonical.starts_with("media.") {
+                        "media.generate".to_string()
+                    } else if canonical.starts_with("fs.") {
+                        "fs.write:**".to_string()
+                    } else if canonical.contains('.') {
+                        let mod_name = canonical.split('.').next().unwrap_or("?");
                         format!("tool.invoke:{mod_name}")
                     } else {
                         "tool.invoke:*".to_string()
@@ -1194,8 +1201,10 @@ async fn execute_action(
     mcp_sessions: &mut HashMap<String, McpSession>,
     action: &AgentAction,
 ) -> ActResult {
-    let name = action.action.as_str();
-    let args = &action.args;
+    let canonical = canonicalize_tool_name(&action.action);
+    let name = canonical.as_str();
+    let args_owned = normalize_tool_args(name, &action.args);
+    let args = &args_owned;
     // Skill name used as tool (research, file.author, …) → correction claire
     if tools.iter().all(|t| t.name != name) {
         if let Some(skill) = match_skill_by_action(name, skills) {
@@ -1487,16 +1496,14 @@ async fn execute_action(
             ))
         }
         other => {
-            // Look up tool
-            let desc = tools.iter().find(|t| t.name == other);
-            let backend = desc.map(|d| d.backend.clone());
+            let backend = resolve_tool_backend(other, tools);
             match backend {
                 Some(ToolBackend::Module) => {
                     let outcome =
                         invoke_module(bus, &agent_id, &caps, other, args, &trace_id).await;
                     ActResult::Continue(outcome)
                 }
-                None if other.contains('.') && !other.starts_with("mcp.") => {
+                None if is_module_fallback_candidate(other) => {
                     let outcome =
                         invoke_module(bus, &agent_id, &caps, other, args, &trace_id).await;
                     ActResult::Continue(outcome)
@@ -1532,7 +1539,11 @@ async fn execute_action(
                         ActResult::Continue("nom mcp invalide".into())
                     }
                 }
-                None => ActResult::Continue(format!("outil inconnu: {other}")),
+                None => ActResult::Continue(format!(
+                    "outil inconnu: {other} — ce n'est pas un module WASM. \
+                     TTS : media.audio.generate {{\"text\":\"...\"}} ; \
+                     image : media.image.generate {{\"prompt\":\"...\"}}."
+                )),
             }
         }
     }

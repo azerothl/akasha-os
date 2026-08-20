@@ -571,11 +571,22 @@ pub fn classify_action(
     tools: &[ToolDesc],
     skills: &[(String, Vec<String>)],
 ) -> (String, Option<String>, Option<String>) {
+    let canonical = canonicalize_tool_name(name);
+    let name = canonical.as_str();
     let skill = skills
         .iter()
         .find(|(_, ts)| ts.iter().any(|t| t == name || name.starts_with(t)))
         .map(|(n, _)| n.clone());
     if let Some(t) = tools.iter().find(|t| t.name == name) {
+        let (kind, mcp) = match &t.backend {
+            ToolBackend::Native => ("native".to_string(), None),
+            ToolBackend::Module => ("module".to_string(), None),
+            ToolBackend::Mcp { server } => ("mcp".to_string(), Some(server.clone())),
+            ToolBackend::Runtime => ("runtime".to_string(), None),
+        };
+        return (kind, mcp, skill);
+    }
+    if let Some(t) = builtin_catalog().iter().find(|t| t.name == name) {
         let (kind, mcp) = match &t.backend {
             ToolBackend::Native => ("native".to_string(), None),
             ToolBackend::Module => ("module".to_string(), None),
@@ -596,11 +607,102 @@ pub fn classify_action(
         let server = rest.split(':').next().map(|s| s.to_string());
         return ("mcp".into(), server, skill);
     }
-    if name.contains('.') {
+    if is_module_fallback_candidate(name) {
         ("module".into(), None, skill)
+    } else if name.contains('.') {
+        ("native".into(), None, skill)
     } else {
         ("unknown".into(), None, skill)
     }
+}
+
+/// Noms d'outils hallucinés → catalogue natif (`media.audio.generate`, …).
+pub fn canonicalize_tool_name(name: &str) -> String {
+    let trimmed = name.trim();
+    let stripped = trimmed
+        .strip_prefix("tool.invoke:")
+        .unwrap_or(trimmed)
+        .trim();
+    match stripped {
+        "audio.generate" | "tts.generate" | "tts" | "speak" | "audio.tts" => {
+            "media.audio.generate".into()
+        }
+        "image.generate" | "img.generate" | "image.gen" | "sd.generate" => {
+            "media.image.generate".into()
+        }
+        other => other.to_string(),
+    }
+}
+
+/// Prefixe qui n'est jamais un module WASM (évite `module inconnu: tool`).
+pub fn reserved_tool_prefix(prefix: &str) -> bool {
+    matches!(
+        prefix,
+        "fs" | "media"
+            | "mem"
+            | "web"
+            | "net"
+            | "files"
+            | "cap"
+            | "skill"
+            | "module"
+            | "agent"
+            | "plan"
+            | "user"
+            | "memory"
+            | "docs"
+            | "goal"
+            | "tool"
+            | "audio"
+            | "image"
+            | "tts"
+            | "mcp"
+    )
+}
+
+/// Backend du catalogue filtré, sinon du catalogue builtin (outils natifs
+/// absents du kit sélectionné, ex. `media.audio.generate`).
+pub fn resolve_tool_backend(name: &str, tools: &[ToolDesc]) -> Option<ToolBackend> {
+    if let Some(t) = tools.iter().find(|t| t.name == name) {
+        return Some(t.backend.clone());
+    }
+    builtin_catalog()
+        .into_iter()
+        .find(|t| t.name == name)
+        .map(|t| t.backend)
+}
+
+pub fn is_module_fallback_candidate(name: &str) -> bool {
+    if !name.contains('.') || name.starts_with("mcp.") || name.starts_with("tool.invoke:") {
+        return false;
+    }
+    let prefix = name.split('.').next().unwrap_or("");
+    !reserved_tool_prefix(prefix)
+}
+
+/// Alias d'arguments LLM (`prompt` → `text` pour le TTS).
+pub fn normalize_tool_args(name: &str, args: &serde_json::Value) -> serde_json::Value {
+    let mut out = args.clone();
+    let Some(obj) = out.as_object_mut() else {
+        return out;
+    };
+    if name == "media.audio.generate" && !obj.contains_key("text") {
+        for k in ["prompt", "content", "message", "speech"] {
+            if let Some(v) = obj.get(k).cloned() {
+                obj.insert("text".into(), v);
+                break;
+            }
+        }
+    }
+    if name == "media.image.generate" && !obj.contains_key("prompt") {
+        for k in ["text", "content", "description"] {
+            if let Some(v) = obj.get(k).cloned() {
+                obj.insert("prompt".into(), v);
+                break;
+            }
+        }
+    }
+    out
 }
 
 /// Vérifie que child_caps ⊆ parent_caps.
@@ -657,5 +759,26 @@ mod tests {
         assert!(caps.iter().any(|c| c == "net.connect:*"));
         assert!(tools.iter().any(|t| t.name == "web.browse"));
         assert!(tools.iter().any(|t| t.name == "tasks.create"));
+    }
+
+    #[test]
+    fn canonicalize_audio_aliases() {
+        assert_eq!(
+            canonicalize_tool_name("tool.invoke:audio.generate"),
+            "media.audio.generate"
+        );
+        assert_eq!(canonicalize_tool_name("audio.generate"), "media.audio.generate");
+        assert_eq!(canonicalize_tool_name("tts.generate"), "media.audio.generate");
+        assert_eq!(canonicalize_tool_name("notes.create"), "notes.create");
+        let args = normalize_tool_args(
+            "media.audio.generate",
+            &serde_json::json!({"prompt": "bonjour"}),
+        );
+        assert_eq!(args["text"], "bonjour");
+        assert!(!is_module_fallback_candidate("audio.generate"));
+        assert!(!is_module_fallback_candidate("tool.invoke:audio.generate"));
+        assert!(is_module_fallback_candidate("notes.create"));
+        let (kind, _, _) = classify_action("tool.invoke:audio.generate", &[], &[]);
+        assert_eq!(kind, "native");
     }
 }
