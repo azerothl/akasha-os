@@ -277,6 +277,63 @@ impl StorageFs {
         Ok(version)
     }
 
+    /// Chemins hôtes autorisés pour `write_bytes_from_path` (sorties moteurs locaux).
+    pub fn allowed_ingest_source(path: &Path) -> Result<PathBuf, FsError> {
+        let canonical = std::fs::canonicalize(path)
+            .map_err(|e| FsError::Io(format!("source introuvable: {e}")))?;
+        let temp = std::env::temp_dir();
+        if let Ok(temp_canon) = std::fs::canonicalize(&temp) {
+            if canonical.starts_with(&temp_canon) {
+                return Ok(canonical);
+            }
+        }
+        if let Ok(home) = std::env::var("AOS_HOME") {
+            let var_tmp = PathBuf::from(home).join("var/tmp");
+            if let Ok(vt) = std::fs::canonicalize(&var_tmp) {
+                if canonical.starts_with(&vt) {
+                    return Ok(canonical);
+                }
+            }
+        }
+        Err(FsError::PermissionDenied {
+            cap: "fs.write_from_path".into(),
+            path: canonical.display().to_string(),
+        })
+    }
+
+    /// Copie un fichier hôte vers le storage versionné (évite base64 IPC pour gros PNG).
+    pub fn write_bytes_from_path(
+        &mut self,
+        path: &str,
+        source_host: &Path,
+        actor: &str,
+        caps: &[String],
+    ) -> Result<(u64, u64), FsError> {
+        Self::check_cap(caps, "fs.write", path)?;
+        let source = Self::allowed_ingest_source(source_host)?;
+        self.version_existing(path)?;
+        let host = self.resolve(path)?;
+        if let Some(parent) = host.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::copy(&source, &host)?;
+        let nbytes = std::fs::metadata(&host).map(|m| m.len()).unwrap_or(0);
+        let default_class = self.default_class(path);
+        let version = {
+            let meta = self.index.entry(path.into()).or_insert(FileMeta {
+                class: default_class,
+                version: 0,
+                created_by: actor.into(),
+                deleted: false,
+            });
+            meta.version += 1;
+            meta.deleted = false;
+            meta.version
+        };
+        self.save_index()?;
+        Ok((version, nbytes))
+    }
+
     pub fn read_bytes(
         &self,
         path: &str,

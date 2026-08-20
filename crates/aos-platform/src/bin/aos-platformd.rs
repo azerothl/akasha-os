@@ -1275,6 +1275,52 @@ async fn main() {
     }
     {
         let s = sub.clone();
+        svc.on("fs.write_from_path", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<FsWriteFromPathRequest>() {
+                    Ok(req) => {
+                        let actor = if req.actor.is_empty() {
+                            "human:ui".into()
+                        } else {
+                            req.actor
+                        };
+                        let write_res = s.fs.lock().unwrap().write_bytes_from_path(
+                            &req.path,
+                            std::path::Path::new(&req.source_host_path),
+                            &actor,
+                            &req.caps,
+                        );
+                        match write_res {
+                            Ok((version, bytes)) => {
+                                let _ = ctx
+                                    .respond(
+                                        aos_ipc::msg::Status::Ok,
+                                        &FsWriteFromPathResponse { version, bytes },
+                                    )
+                                    .await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::PermissionDenied,
+                                        &e.to_string(),
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
         svc.on("fs.read_bytes", move |ctx| {
             let s = s.clone();
             async move {
