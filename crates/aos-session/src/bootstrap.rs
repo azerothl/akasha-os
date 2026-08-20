@@ -7,6 +7,11 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+fn emit_download_progress(pct: u64, done: u64, total: u64) {
+    eprintln!("[aos-session]   {pct}% ({done}/{total})");
+    let _ = std::io::stderr().flush();
+}
+
 const MIN_FREE_BYTES: u64 = 8 * 1024 * 1024 * 1024; // ~8 Go (packs mid)
 
 #[derive(Debug, Deserialize)]
@@ -331,8 +336,8 @@ fn download_file(url: &str, dest: &Path, expected: Option<u64>) -> Result<(), St
         if let Some(t) = total {
             if t > 0 {
                 let pct = done * 100 / t;
-                if pct >= last_pct + 5 {
-                    eprintln!("[aos-session]   {pct}% ({done}/{t})");
+                if pct >= last_pct + 5 || pct == 100 {
+                    emit_download_progress(pct.min(100), done, t);
                     last_pct = pct;
                 }
             }

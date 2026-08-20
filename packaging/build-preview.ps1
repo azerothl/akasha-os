@@ -63,6 +63,7 @@ if (-not $SkipBuild) {
 $binSrc = Join-Path $root "target\release"
 New-Item -ItemType Directory -Force -Path `
     "$OutDir\bin", "$OutDir\etc", "$OutDir\share\models", `
+    "$OutDir\share\models\lora", "$OutDir\share\models\vae", "$OutDir\share\models\styles", `
     "$OutDir\share\modules", "$OutDir\share\skills", `
     "$OutDir\data\models", "$OutDir\var", "$OutDir\docs" | Out-Null
 

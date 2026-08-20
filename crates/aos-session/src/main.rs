@@ -69,6 +69,80 @@ fn main() {
         }
     }
 
+    if let Some(pos) = args.iter().position(|a| a == "--remove-model") {
+        let home = resolve_home();
+        std::env::set_var("AOS_HOME", &home);
+        let _ = std::env::set_current_dir(&home);
+        let id = args.get(pos + 1).map(String::as_str).unwrap_or("");
+        if id.is_empty() {
+            eprintln!("[aos-session] usage: aos-session --remove-model <id>");
+            std::process::exit(1);
+        }
+        match offerings::remove_installed_model(&home, id) {
+            Ok(()) => {
+                std::env::set_var("AOS_FORCE_CONFIG", "1");
+                write_runtime_configs(&home);
+                eprintln!("[aos-session] modèle supprimé ({id}) — redémarrez Preview");
+                std::process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("[aos-session] remove model : {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+
+    if let Some(pos) = args.iter().position(|a| a == "--redownload-models") {
+        let home = resolve_home();
+        std::env::set_var("AOS_HOME", &home);
+        let _ = std::env::set_current_dir(&home);
+        let ids: Vec<String> = args[pos + 1..].to_vec();
+        if ids.is_empty() {
+            eprintln!("[aos-session] usage: aos-session --redownload-models <id>…");
+            std::process::exit(1);
+        }
+        match offerings::redownload_ids(&home, &ids) {
+            Ok(()) => {
+                std::env::set_var("AOS_FORCE_CONFIG", "1");
+                write_runtime_configs(&home);
+                eprintln!("[aos-session] modèles re-téléchargés — redémarrez Preview");
+                std::process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("[aos-session] redownload models : {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+
+    if let Some(pos) = args.iter().position(|a| a == "--download-hf-url") {
+        let home = resolve_home();
+        std::env::set_var("AOS_HOME", &home);
+        let _ = std::env::set_current_dir(&home);
+        let url = args.get(pos + 1).map(String::as_str).unwrap_or("");
+        if url.is_empty() {
+            eprintln!("[aos-session] usage: aos-session --download-hf-url <resolve-url> [--name <display>]");
+            std::process::exit(1);
+        }
+        let name = args
+            .iter()
+            .position(|a| a == "--name")
+            .and_then(|i| args.get(i + 1))
+            .map(String::as_str);
+        match offerings::download_hf_url(&home, url, name) {
+            Ok(id) => {
+                std::env::set_var("AOS_FORCE_CONFIG", "1");
+                write_runtime_configs(&home);
+                eprintln!("[aos-session] modèle HF téléchargé ({id}) — redémarrez Preview");
+                std::process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("[aos-session] download HF : {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+
     if let Some(pos) = args.iter().position(|a| a == "--download-models") {
         let home = resolve_home();
         std::env::set_var("AOS_HOME", &home);
@@ -220,27 +294,6 @@ fn main() {
         ctrlc_guard(s);
     }
 
-    if let Err(e) = start_daemons(&session) {
-        eprintln!("[aos-session] démarrage échoué : {e}");
-        eprintln!(
-            "[aos-session] Astuce : consultez var/run/*.stderr.log (GPU, modèles, bus)."
-        );
-        stop_all(&session);
-        std::process::exit(1);
-    }
-
-    if let Err(e) = healthcheck() {
-        eprintln!("[aos-session] healthcheck échoué : {e}");
-        eprintln!(
-            "[aos-session] Causes fréquentes : modèle GGUF manquant, CUDA DLL absente, bus occupé.\n\
-             Logs : var/run/*.stderr.log"
-        );
-        stop_all(&session);
-        std::process::exit(1);
-    }
-    eprintln!("[aos-session] services OK");
-    apply_trust_default(&home);
-
     // Check updates en arrière-plan (best-effort, repo public).
     {
         let home_bg = home.clone();
@@ -273,38 +326,83 @@ fn main() {
         thread::spawn(move || modeld_watchdog(s));
     }
 
-    let ui = bin_path(&home, "aos-ui-egui");
-    let mut ui_cmd = Command::new(&ui);
-    ui_cmd
-        .env("AOS_HOME", &home)
-        .env("AOS_PREVIEW_VERSION", &version)
-        .current_dir(&home);
-    #[cfg(target_os = "linux")]
-    {
-        let bin_dir = home.join("bin");
-        let mut ld = bin_dir.to_string_lossy().to_string();
-        if let Ok(prev) = std::env::var("LD_LIBRARY_PATH") {
-            if !prev.is_empty() {
-                ld = format!("{ld}:{prev}");
-            }
-        }
-        ui_cmd.env("LD_LIBRARY_PATH", &ld);
-    }
-    let status = ui_cmd.status();
+    let restart_flag = home.join("var/run/restart_preview.flag");
+    let mut first_ui = true;
+    loop {
+        session.stop.store(false, Ordering::SeqCst);
 
-    session.stop.store(true, Ordering::SeqCst);
-    stop_all(&session);
-
-    match status {
-        Ok(st) if st.success() => {}
-        Ok(st) => {
-            eprintln!("[aos-session] UI exit {st}");
-            std::process::exit(st.code().unwrap_or(1));
-        }
-        Err(e) => {
-            eprintln!("[aos-session] UI failed: {e}");
+        if let Err(e) = start_daemons(&session) {
+            eprintln!("[aos-session] démarrage échoué : {e}");
+            eprintln!(
+                "[aos-session] Astuce : consultez var/run/*.stderr.log (GPU, modèles, bus)."
+            );
+            stop_all(&session);
             std::process::exit(1);
         }
+
+        if let Err(e) = healthcheck() {
+            eprintln!("[aos-session] healthcheck échoué : {e}");
+            eprintln!(
+                "[aos-session] Causes fréquentes : modèle GGUF manquant, CUDA DLL absente, bus occupé.\n\
+                 Logs : var/run/*.stderr.log"
+            );
+            stop_all(&session);
+            std::process::exit(1);
+        }
+        eprintln!("[aos-session] services OK");
+        if first_ui {
+            apply_trust_default(&home);
+            first_ui = false;
+        }
+
+        let ui = bin_path(&home, "aos-ui-egui");
+        let mut ui_cmd = Command::new(&ui);
+        ui_cmd
+            .env("AOS_HOME", &home)
+            .env("AOS_PREVIEW_VERSION", &version)
+            .current_dir(&home);
+        #[cfg(target_os = "linux")]
+        {
+            let bin_dir = home.join("bin");
+            let mut ld = bin_dir.to_string_lossy().to_string();
+            if let Ok(prev) = std::env::var("LD_LIBRARY_PATH") {
+                if !prev.is_empty() {
+                    ld = format!("{ld}:{prev}");
+                }
+            }
+            ui_cmd.env("LD_LIBRARY_PATH", &ld);
+        }
+        let status = ui_cmd.status();
+
+        let restart = restart_flag.exists();
+        if restart {
+            let _ = fs::remove_file(&restart_flag);
+            std::env::set_var("AOS_FORCE_CONFIG", "1");
+            write_runtime_configs(&home);
+            std::env::remove_var("AOS_FORCE_CONFIG");
+        }
+
+        session.stop.store(true, Ordering::SeqCst);
+        stop_all(&session);
+
+        if restart {
+            eprintln!("[aos-session] redémarrage Preview demandé par l'UI…");
+            thread::sleep(Duration::from_millis(400));
+            continue;
+        }
+
+        match status {
+            Ok(st) if st.success() => {}
+            Ok(st) => {
+                eprintln!("[aos-session] UI exit {st}");
+                std::process::exit(st.code().unwrap_or(1));
+            }
+            Err(e) => {
+                eprintln!("[aos-session] UI failed: {e}");
+                std::process::exit(1);
+            }
+        }
+        break;
     }
 }
 
@@ -583,6 +681,10 @@ fn ensure_layout(home: &Path) {
         "var/updates/staging",
         "etc",
         "share/models",
+        "share/models/lora",
+        "share/models/vae",
+        "share/models/styles",
+        "share/models/upscale",
         "share/modules",
         "share/skills",
         "data/models",

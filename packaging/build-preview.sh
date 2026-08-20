@@ -135,6 +135,7 @@ EOF
 fi
 
 mkdir -p "${OUT}/bin" "${OUT}/etc" "${OUT}/share/models" \
+  "${OUT}/share/models/lora" "${OUT}/share/models/vae" "${OUT}/share/models/styles" "${OUT}/share/models/upscale" \
   "${OUT}/share/modules" "${OUT}/share/skills" \
   "${OUT}/data/models" "${OUT}/var" "${OUT}/docs"
 

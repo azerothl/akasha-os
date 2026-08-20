@@ -56,6 +56,12 @@ pub struct ModelOffering {
     /// Closed engine flags owned by the offering (never user-typed paths).
     #[serde(default)]
     pub engine_args: std::collections::BTreeMap<String, String>,
+    /// Optional UI tags (`moe`, `multimodal`, `vision`, …).
+    #[serde(default)]
+    pub tags: Vec<String>,
+    /// Short catalog blurb for the Models page.
+    #[serde(default)]
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -100,7 +106,7 @@ pub struct OfferingFile {
     pub bytes: u64,
     #[serde(default)]
     pub sha256: String,
-    /// `vae` | `clip_l` | `clip_g` | `t5xxl` | `lora` | `style`
+    /// `vae` | `clip_l` | `clip_g` | `t5xxl` | `lora` | `style` | `uncond` | `llm`
     #[serde(default)]
     pub role: Option<String>,
 }
@@ -180,6 +186,46 @@ pub fn load_offerings(home: &Path) -> Result<OfferingsFile, String> {
     };
     let raw = fs::read_to_string(&p).map_err(|e| format!("offerings: {e}"))?;
     serde_json::from_str(&raw).map_err(|e| format!("offerings parse: {e}"))
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct CustomOfferingsFile {
+    #[serde(default)]
+    models: Vec<ModelOffering>,
+}
+
+pub fn custom_offerings_path(home: &Path) -> PathBuf {
+    home.join("var/models/custom-offerings.json")
+}
+
+fn load_custom_offerings(home: &Path) -> Vec<ModelOffering> {
+    let p = custom_offerings_path(home);
+    let Ok(raw) = fs::read_to_string(p) else {
+        return Vec::new();
+    };
+    serde_json::from_str::<CustomOfferingsFile>(&raw)
+        .map(|f| f.models)
+        .unwrap_or_default()
+}
+
+fn save_custom_offerings(home: &Path, models: &[ModelOffering]) -> Result<(), String> {
+    let dir = home.join("var/models");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let file = CustomOfferingsFile {
+        models: models.to_vec(),
+    };
+    let raw = serde_json::to_string_pretty(&file).map_err(|e| e.to_string())?;
+    fs::write(custom_offerings_path(home), raw).map_err(|e| e.to_string())
+}
+
+pub fn load_merged_offerings(home: &Path) -> Result<OfferingsFile, String> {
+    let mut base = load_offerings(home)?;
+    for m in load_custom_offerings(home) {
+        if !base.models.iter().any(|x| x.id == m.id) {
+            base.models.push(m);
+        }
+    }
+    Ok(base)
 }
 
 pub fn load_installed(home: &Path) -> InstalledFile {
@@ -324,7 +370,7 @@ pub fn migrate_legacy_installed(home: &Path) -> Result<(), String> {
 }
 
 pub fn download_ids(home: &Path, ids: &[String]) -> Result<(), String> {
-    let offerings = load_offerings(home)?;
+    let offerings = load_merged_offerings(home)?;
     let dir = home.join("share/models");
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let mut inst = load_installed(home);
@@ -361,6 +407,71 @@ pub fn download_ids(home: &Path, ids: &[String]) -> Result<(), String> {
     inst.version = offerings.version;
     save_installed(home, &inst)?;
     Ok(())
+}
+
+/// Supprime un modèle installé (fichiers + registre ; custom offering si HF).
+pub fn remove_installed_model(home: &Path, id: &str) -> Result<(), String> {
+    if matches!(
+        id,
+        "local:embedded-instruct" | "local:embedded-embed"
+    ) {
+        return Err("alias système non supprimable".into());
+    }
+    let mut inst = load_installed(home);
+    let Some(idx) = inst.models.iter().position(|m| m.id == id) else {
+        return Err(format!("modèle non installé: {id}"));
+    };
+    let removed = inst.models.remove(idx);
+    let dir = home.join("share/models");
+    if let Ok(offerings) = load_merged_offerings(home) {
+        if let Some(m) = find_offering(&offerings, id) {
+            let _ = fs::remove_file(dir.join(&m.filename));
+            for extra in &m.extra_files {
+                let _ = fs::remove_file(dir.join(&extra.filename));
+            }
+        } else {
+            let _ = fs::remove_file(model_path(home, &removed.filename));
+        }
+    } else {
+        let _ = fs::remove_file(model_path(home, &removed.filename));
+    }
+    if inst.default_chat.as_deref() == Some(id) {
+        inst.default_chat = inst
+            .models
+            .iter()
+            .find(|m| m.profiles.iter().any(|p| p == "chat"))
+            .map(|m| m.id.clone());
+    }
+    if inst.default_embed.as_deref() == Some(id) {
+        inst.default_embed = inst
+            .models
+            .iter()
+            .find(|m| m.profiles.iter().any(|p| p == "embed"))
+            .map(|m| m.id.clone());
+    }
+    save_installed(home, &inst)?;
+    let mut custom = load_custom_offerings(home);
+    if custom.iter().any(|m| m.id == id) {
+        custom.retain(|m| m.id != id);
+        save_custom_offerings(home, &custom)?;
+    }
+    Ok(())
+}
+
+/// Force le re-téléchargement (efface les poids locaux puis `download_ids`).
+pub fn redownload_ids(home: &Path, ids: &[String]) -> Result<(), String> {
+    let offerings = load_merged_offerings(home)?;
+    let dir = home.join("share/models");
+    for id in ids {
+        let Some(m) = find_offering(&offerings, id) else {
+            return Err(format!("modèle inconnu dans offerings: {id}"));
+        };
+        let _ = fs::remove_file(dir.join(&m.filename));
+        for extra in &m.extra_files {
+            let _ = fs::remove_file(dir.join(&extra.filename));
+        }
+    }
+    download_ids(home, ids)
 }
 
 pub fn apply_choice(home: &Path, choice: &ModelSetupChoice) -> Result<(), String> {
@@ -442,7 +553,7 @@ pub fn model_path(home: &Path, filename: &str) -> PathBuf {
 pub fn runtime_model_entries(
     home: &Path,
 ) -> (String, String, Vec<(String, ModelOffering, PathBuf)>) {
-    let offerings = load_offerings(home).ok();
+    let offerings = load_merged_offerings(home).ok();
     let inst = load_installed(home);
     let default_chat = inst
         .default_chat
@@ -484,6 +595,8 @@ pub fn runtime_model_entries(
                     extra_files: vec![],
                     engine: None,
                     engine_args: Default::default(),
+                    tags: vec![],
+                    description: None,
                 };
                 entries.push((m.id.clone(), stub, model_path(home, &m.filename)));
             }
@@ -507,6 +620,155 @@ pub fn runtime_model_entries(
     }
 
     (default_chat, default_embed, entries)
+}
+
+fn infer_format(filename: &str) -> String {
+    let lower = filename.to_ascii_lowercase();
+    if lower.ends_with(".safetensors") {
+        "safetensors".into()
+    } else if lower.ends_with(".onnx") {
+        "onnx".into()
+    } else {
+        "gguf".into()
+    }
+}
+
+fn infer_profiles(filename: &str, format: &str) -> Vec<String> {
+    let lower = filename.to_ascii_lowercase();
+    match format {
+        "safetensors" => vec!["image".into()],
+        "onnx" => vec!["tts".into()],
+        _ if lower.contains("embed") => vec!["embed".into()],
+        _ => vec!["chat".into()],
+    }
+}
+
+fn infer_modality(profiles: &[String], format: &str) -> Option<String> {
+    if profiles.iter().any(|p| p == "image") || format == "safetensors" {
+        Some("image".into())
+    } else if profiles.iter().any(|p| p == "tts") || format == "onnx" {
+        Some("audio".into())
+    } else {
+        None
+    }
+}
+
+fn sanitize_model_id(filename: &str) -> String {
+    let stem = Path::new(filename)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("model");
+    let mut out = String::from("local:hf-");
+    for ch in stem.chars() {
+        if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
+            out.push(ch.to_ascii_lowercase());
+        } else if ch.is_whitespace() || ch == '.' {
+            out.push('-');
+        }
+    }
+    if out.len() <= "local:hf-".len() {
+        out.push_str("custom");
+    }
+    out
+}
+
+fn parse_hf_download_url(url: &str) -> Result<(String, String), String> {
+    let url = url.trim();
+    if url.is_empty() {
+        return Err("URL vide".into());
+    }
+    if !url.starts_with("https://huggingface.co/") {
+        return Err("URL Hugging Face attendue (https://huggingface.co/…)".into());
+    }
+    let rest = url.trim_start_matches("https://huggingface.co/").trim_start_matches('/');
+    let parts: Vec<&str> = rest.split('/').collect();
+    if parts.len() < 4 {
+        return Err("URL HF invalide — attendu …/org/repo/resolve/main/file.gguf".into());
+    }
+    let _repo = format!("{}/{}", parts[0], parts[1]);
+    let resolve_idx = parts
+        .iter()
+        .position(|p| *p == "resolve" || *p == "blob")
+        .ok_or_else(|| "segmente resolve|blob manquant".to_string())?;
+    if resolve_idx + 2 >= parts.len() {
+        return Err("nom de fichier manquant dans l'URL".into());
+    }
+    let filename = parts[resolve_idx + 2..].join("/");
+    if filename.is_empty() || filename.contains("..") {
+        return Err("nom de fichier invalide".into());
+    }
+    let download_url = if parts.get(resolve_idx) == Some(&"blob") {
+        url.replace("/blob/", "/resolve/")
+    } else {
+        url.to_string()
+    };
+    Ok((download_url, filename))
+}
+
+/// Download a Hugging Face resolve URL and register it as a custom offering.
+pub fn download_hf_url(home: &Path, url: &str, name: Option<&str>) -> Result<String, String> {
+    let (download_url, filename) = parse_hf_download_url(url)?;
+    let dir = home.join("share/models");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join(&filename);
+    bootstrap::download_model_file(&download_url, &path, None, "")?;
+    let bytes = fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+    let format = infer_format(&filename);
+    let profiles = infer_profiles(&filename, &format);
+    let modality = infer_modality(&profiles, &format);
+    let id = sanitize_model_id(&filename);
+    let display = name
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| {
+            Path::new(&filename)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or(&filename)
+        });
+    let offering = ModelOffering {
+        id: id.clone(),
+        name: display.to_string(),
+        profiles,
+        filename: filename.clone(),
+        url: download_url,
+        bytes,
+        sha256: String::new(),
+        min_vram_mib: 0,
+        min_disk_bytes: bytes.saturating_add(500_000_000),
+        quality_score: 50,
+        speed_score: 50,
+        n_layers: 0,
+        n_params: 0.0,
+        weights_bytes: bytes,
+        embed_bytes: 0,
+        kv_bytes_per_token: 0,
+        replaces: vec![],
+        optional: true,
+        modality,
+        format,
+        extra_files: vec![],
+        engine: None,
+        engine_args: Default::default(),
+        tags: vec!["custom".into(), "huggingface".into()],
+        description: Some(format!("Import Hugging Face · {filename}")),
+    };
+    let mut custom = load_custom_offerings(home);
+    custom.retain(|m| m.id != id);
+    custom.push(offering.clone());
+    save_custom_offerings(home, &custom)?;
+    let mut inst = load_installed(home);
+    inst.models.retain(|x| x.id != id);
+    inst.models.push(InstalledModel {
+        id: id.clone(),
+        filename,
+        profiles: offering.profiles,
+        bytes,
+        user_pinned: true,
+        installed_ms: now_ms(),
+    });
+    save_installed(home, &inst)?;
+    Ok(id)
 }
 
 fn now_ms() -> u64 {
