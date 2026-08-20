@@ -271,6 +271,13 @@ pub struct ModelMetrics {
     pub vram_bytes: u64,
     pub ram_bytes: u64,
     pub disk_bytes: u64,
+    /// Current sd.cpp denoise step (image/video generation).
+    #[serde(default)]
+    pub media_step: Option<u32>,
+    #[serde(default)]
+    pub media_total_steps: Option<u32>,
+    #[serde(default)]
+    pub last_step_s: Option<f64>,
 }
 
 /// Métriques système agrégées.
@@ -1152,13 +1159,17 @@ Tu réponds en français, de façon concise et factuelle. Si tu ne sais pas, dis
 pub const CHAT_DELEGATION_PROMPT: &str = "
 Chat (cette session) — tu n'as PAS de boucle d'outils :
 - Questions, explications, conseils → réponds en français, sans JSON.
+- Synthèse vocale / TTS / « générer un audio » : n'appelle PAS agent.spawn.
+  Le hôte ouvre une carte TTS (`/speak <texte>`). Réponds en français, sans JSON.
+- Image : `/image <prompt>` ou le studio Image — pas d'agent.spawn.
 - Créer / scaffolder / packager / installer un module ou une skill, ou toute
-  tâche multi-étapes avec effets de bord (notes, fichiers, web) →
+  autre tâche multi-étapes avec effets de bord (notes, fichiers, web) →
   une courte phrase d'accusé puis UNIQUEMENT cet objet JSON :
   {\"action\":\"agent.spawn\",\"args\":{\"brief\":\"<demande utilisateur>\"}}
   N'écris JAMAIS le manifeste, handlers.yaml, ni un arbre declarative_ui.
   L'agent fera module.scaffold + module.package + module.install.
-- Ne lance pas toi-même d'outils (pas de module.scaffold, pas de TOOL:).
+- Ne lance pas toi-même d'outils (pas de module.scaffold, pas de TOOL:, pas de
+  audio.generate ni tool.invoke).
 - Mémoire : tu n'enregistres rien toi-même. Les faits durables (nom, préférences…)
   sont extraits après le tour vers l'onglet Mémoire. N'écris jamais que tu as
   « noté », « enregistré » ou mis en « mémoire épisodique ». Si un bloc
@@ -1236,9 +1247,266 @@ pub fn chat_user_wants_module_authoring(text: &str) -> bool {
     create || install_verb
 }
 
+/// Demande TTS claire dans le tour chat (P09.8) — ouvrir la carte, pas un agent.
+///
+/// `Some(texte)` : le texte à lire (éventuellement vide si l'utilisateur n'a
+/// pas encore fourni ce qu'il faut synthétiser). `None` : pas une demande TTS.
+pub fn chat_tts_request(text: &str) -> Option<String> {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if chat_user_wants_module_authoring(trimmed) {
+        return None;
+    }
+    let lower = trimmed.to_lowercase();
+    let folded = fold_fr(&lower);
+    if !tts_intent(&folded) {
+        return None;
+    }
+    if tts_is_explain_only(&folded) {
+        return None;
+    }
+    Some(extract_tts_spoken_text(trimmed))
+}
+
+fn fold_fr(s: &str) -> String {
+    s.replace(['é', 'è', 'ê', 'ë'], "e")
+        .replace(['à', 'â'], "a")
+        .replace(['ù', 'û'], "u")
+        .replace(['î', 'ï'], "i")
+        .replace('ç', "c")
+        .replace('ô', "o")
+}
+
+fn tts_intent(lower: &str) -> bool {
+    if lower.starts_with("tts")
+        || lower.contains("text to speech")
+        || lower.contains("text-to-speech")
+        || lower.contains("synthèse vocale")
+        || lower.contains("synthese vocale")
+        || lower.contains("lis ce texte")
+        || lower.contains("lire ce texte")
+        || lower.contains("read this text")
+        || lower.contains("à voix haute")
+        || lower.contains("a voix haute")
+    {
+        return true;
+    }
+    let audio = lower.contains("audio")
+        || lower.contains("tts")
+        || lower.contains("wav")
+        || lower.contains("speech")
+        || (lower.contains("voix")
+            && (lower.contains("génér")
+                || lower.contains("gener")
+                || lower.contains("speak")
+                || lower.contains("synth")));
+    let verb = lower.contains("génér")
+        || lower.contains("gener")
+        || lower.contains("create")
+        || lower.contains("generate")
+        || lower.contains("speak")
+        || lower.contains("produi")
+        || lower.contains("synth")
+        || lower.contains("fais ")
+        || lower.contains("fait ")
+        || lower.contains("make ")
+        || lower.contains("peux-tu")
+        || lower.contains("peux tu")
+        || lower.contains("can you")
+        || lower.contains("pourrais");
+    audio && verb
+}
+
+fn tts_is_explain_only(lower: &str) -> bool {
+    let has_payload = first_quoted(lower).is_some()
+        || lower.contains("qui dit")
+        || lower.contains("disant")
+        || lower.contains("that says")
+        || lower.contains("saying ");
+    if has_payload {
+        return false;
+    }
+    [
+        "c'est quoi",
+        "c est quoi",
+        "qu'est-ce",
+        "qu est-ce",
+        "explique",
+        "expliquer",
+        "what is",
+        "what's",
+        "whats a",
+        "how does",
+        "how to",
+        "comment fonctionne",
+        "comment marche",
+        "comment faire",
+        "comment gener",
+        "a quoi sert",
+    ]
+    .iter()
+    .any(|p| lower.contains(p))
+}
+
+fn first_quoted(s: &str) -> Option<String> {
+    let pairs = [('«', '»'), ('"', '"'), ('\'', '\''), ('“', '”')];
+    for (open, close) in pairs {
+        if let Some(start) = s.find(open) {
+            let after = &s[start + open.len_utf8()..];
+            if let Some(end) = after.find(close) {
+                let inner = after[..end].trim();
+                if !inner.is_empty() {
+                    return Some(inner.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+fn extract_tts_spoken_text(text: &str) -> String {
+    if let Some(q) = first_quoted(text) {
+        return q;
+    }
+    let lower = text.to_lowercase();
+    const MARKERS: &[&str] = &[
+        "qui dit ",
+        "disant ",
+        "that says ",
+        "saying ",
+        "avec le texte ",
+        "with text ",
+        "texte :",
+        "texte:",
+        "text:",
+        "text :",
+    ];
+    for marker in MARKERS {
+        if let Some(idx) = lower.find(marker) {
+            let after = text[idx + marker.len()..].trim();
+            let after = after
+                .trim_start_matches([':', '-', '—', '–'])
+                .trim();
+            if !after.is_empty() {
+                return strip_wrapping_quotes(after);
+            }
+        }
+    }
+    if let Some(idx) = text.find(':') {
+        let after = text[idx + 1..].trim();
+        if !after.is_empty() {
+            return strip_wrapping_quotes(after);
+        }
+    }
+    strip_tts_preamble(text)
+}
+
+fn strip_wrapping_quotes(s: &str) -> String {
+    let t = s.trim();
+    if let Some(inner) = first_quoted(t) {
+        return inner;
+    }
+    t.trim_matches(|c: char| "«»\"'“”".contains(c))
+        .trim()
+        .to_string()
+}
+
+fn strip_tts_preamble(text: &str) -> String {
+    let mut rest = text.trim().to_string();
+    const LEAD: &[&str] = &[
+        "s'il te plaît ",
+        "s'il vous plaît ",
+        "s'il te plait ",
+        "s'il vous plait ",
+        "please ",
+        "peux-tu ",
+        "peux tu ",
+        "peut-tu ",
+        "pourrais-tu ",
+        "pourrais tu ",
+        "can you ",
+        "je veux ",
+        "j'aimerais ",
+        "j aimerais ",
+    ];
+    let mut lower = rest.to_lowercase();
+    for p in LEAD {
+        if lower.starts_with(p) {
+            rest = rest[p.len()..].trim().to_string();
+            lower = rest.to_lowercase();
+            break;
+        }
+    }
+    const PHRASES: &[&str] = &[
+        "générer un fichier audio",
+        "genere un fichier audio",
+        "génère un fichier audio",
+        "genere-moi un fichier audio",
+        "génère-moi un fichier audio",
+        "générer un audio",
+        "genere un audio",
+        "génère un audio",
+        "génère-moi un audio",
+        "genere-moi un audio",
+        "generate an audio",
+        "generate audio",
+        "create audio",
+        "make an audio",
+        "make audio",
+        "fais un audio",
+        "fait un audio",
+        "crée un audio",
+        "creer un audio",
+        "créer un audio",
+        "lis ce texte",
+        "lire ce texte",
+        "read this text",
+        "synthèse vocale",
+        "synthese vocale",
+        "text to speech",
+        "text-to-speech",
+        "tts",
+    ];
+    for p in PHRASES {
+        if lower.starts_with(p) {
+            rest = rest[p.len()..].trim().to_string();
+            lower = rest.to_lowercase();
+            break;
+        }
+    }
+    for conn in [" de ", " du ", " d'", " of ", " : ", ": "] {
+        if lower.starts_with(conn.trim_start()) {
+            let skip = if lower.starts_with(conn) {
+                conn.len()
+            } else {
+                conn.trim_start().len()
+            };
+            rest = rest[skip..].trim().to_string();
+            lower = rest.to_lowercase();
+            break;
+        }
+    }
+    if matches!(
+        lower.as_str(),
+        "" | "un audio"
+            | "audio"
+            | "un wav"
+            | "wav"
+            | "tts"
+            | "la voix"
+            | "une voix"
+            | "speech"
+    ) {
+        return String::new();
+    }
+    rest
+}
+
 #[cfg(test)]
 mod chat_delegation_tests {
-    use super::chat_user_wants_module_authoring;
+    use super::{chat_tts_request, chat_user_wants_module_authoring};
 
     #[test]
     fn create_module_spawns() {
@@ -1258,6 +1526,36 @@ mod chat_delegation_tests {
         assert!(!chat_user_wants_module_authoring("what is a skill"));
         assert!(!chat_user_wants_module_authoring("quels sont les modules installés"));
         assert!(!chat_user_wants_module_authoring("liste les modules"));
+    }
+
+    #[test]
+    fn tts_request_opens_card() {
+        assert_eq!(
+            chat_tts_request("génère un audio qui dit bonjour"),
+            Some("bonjour".into())
+        );
+        assert_eq!(
+            chat_tts_request("peux-tu générer un audio de « hello »"),
+            Some("hello".into())
+        );
+        assert_eq!(
+            chat_tts_request("génère un audio : il fait beau"),
+            Some("il fait beau".into())
+        );
+        assert_eq!(
+            chat_tts_request("generate audio that says hello world"),
+            Some("hello world".into())
+        );
+        assert_eq!(chat_tts_request("tts: bonjour"), Some("bonjour".into()));
+        assert_eq!(chat_tts_request("génère un audio"), Some(String::new()));
+    }
+
+    #[test]
+    fn tts_explain_and_module_are_not_cards() {
+        assert!(chat_tts_request("c'est quoi la génération audio").is_none());
+        assert!(chat_tts_request("comment générer un audio").is_none());
+        assert!(chat_tts_request("crée un module ping").is_none());
+        assert!(chat_tts_request("génère une image d'un chat").is_none());
     }
 }
 
@@ -2106,6 +2404,27 @@ pub struct FsWriteBytesRequest {
     pub trace_id: String,
 }
 
+/// Copie un fichier hôte déjà présent (ex. sortie sd.cpp) vers un chemin logique
+/// sans transporter les octets sur le bus IPC.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FsWriteFromPathRequest {
+    pub path: String,
+    /// Chemin absolu sur l'hôte (doit être sous `%TEMP%` ou `$AOS_HOME/var/tmp`).
+    pub source_host_path: String,
+    #[serde(default)]
+    pub actor: String,
+    #[serde(default)]
+    pub caps: Vec<String>,
+    #[serde(default)]
+    pub trace_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FsWriteFromPathResponse {
+    pub version: u64,
+    pub bytes: u64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FsReadBytesRequest {
     pub path: String,
@@ -2160,12 +2479,42 @@ pub struct MediaImageOptions {
     pub sampling_method: Option<String>,
     pub negative_prompt: Option<String>,
     pub threads: Option<u32>,
-    /// Catalogue style id (not a filesystem path).
-    pub style: Option<String>,
-    /// Catalogue LoRA id (not a filesystem path).
-    pub lora: Option<String>,
-    /// Catalogue VAE id (not a filesystem path).
+    /// Style preset ids or custom text fragments (not filesystem paths).
+    #[serde(default)]
+    pub styles: Vec<String>,
+    /// LoRA filenames in `share/models/lora/` (stem used for `<lora:name:scale>`).
+    #[serde(default)]
+    pub loras: Vec<String>,
+    /// Shared LoRA strength for all selected LoRAs (default 1.0).
+    pub lora_scale: Option<f32>,
+    /// Catalogue VAE id in `share/models/vae/` (single override).
     pub vae: Option<String>,
+    /// sd.cpp `--backend` (cpu/gpu/cuda0/vulkan0 or mixed `te=cpu,diffusion=cuda0`).
+    pub backend: Option<String>,
+    /// sd.cpp `--params-backend` (cpu/cuda0/disk or mixed).
+    pub params_backend: Option<String>,
+    /// sd.cpp `--offload-to-cpu` (weights in RAM, staged to GPU).
+    pub offload_to_cpu: Option<bool>,
+    /// sd.cpp `--diffusion-fa` (flash attention).
+    pub diffusion_fa: Option<bool>,
+    /// sd.cpp `--auto-fit` (ignore explicit backend / params-backend).
+    pub auto_fit: Option<bool>,
+    /// sd.cpp `--max-vram` (`-1` = free VRAM minus 1 GiB, or a GiB cap / `cuda0=8`).
+    pub max_vram: Option<String>,
+    /// sd.cpp `--stream-layers` (transformer blocks streamed; needs CPU params).
+    pub stream_layers: Option<bool>,
+    /// sd.cpp `--flow-shift` (flow-matching: Qwen Image, FLUX, Wan…).
+    pub flow_shift: Option<f32>,
+    /// sd.cpp `-M` mode (`img_gen`, `vid_gen`, …).
+    pub sd_mode: Option<String>,
+    /// sd.cpp `--video-frames` (Wan/LTX; `1` ≈ single still).
+    pub video_frames: Option<u32>,
+    /// ESRGAN upscaler filename/id in `share/models/upscale/` (`.pth` / `.safetensors`).
+    pub upscale_model: Option<String>,
+    /// sd.cpp `--upscale-repeats` (default 1 when upscale_model is set).
+    pub upscale_repeats: Option<u32>,
+    /// sd.cpp `--upscale-tile-size` (VRAM tiling; default 128 in sd.cpp).
+    pub upscale_tile_size: Option<u32>,
 }
 
 /// Closed Piper option object (P09.3). Unknown keys are refused.
@@ -2191,6 +2540,28 @@ pub struct MediaImageGenerateRequest {
     pub model_id: Option<String>,
     #[serde(default)]
     pub options: MediaImageOptions,
+    #[serde(default)]
+    pub actor: String,
+    #[serde(default)]
+    pub caps: Vec<String>,
+    #[serde(default)]
+    pub trace_id: String,
+}
+
+/// `media.image.upscale` — ESRGAN upscale of an existing PNG (sd.cpp `--mode upscale`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MediaImageUpscaleRequest {
+    /// Logical path of the source image (e.g. `/downloads/image-123.png`).
+    pub source_path: String,
+    /// Output logical path (default: `{source}-upscaled.png`).
+    #[serde(default)]
+    pub output_path: Option<String>,
+    /// Upscaler filename/id in `share/models/upscale/`.
+    pub upscale_model: String,
+    #[serde(default)]
+    pub upscale_repeats: Option<u32>,
+    #[serde(default)]
+    pub upscale_tile_size: Option<u32>,
     #[serde(default)]
     pub actor: String,
     #[serde(default)]
