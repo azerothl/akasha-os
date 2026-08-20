@@ -114,17 +114,6 @@ impl Default for Preferences {
     }
 }
 
-impl Preferences {
-    pub fn image_options(&self) -> aos_proto::MediaImageOptions {
-        aos_proto::MediaImageOptions {
-            width: Some(self.image_width.max(64)),
-            height: Some(self.image_height.max(64)),
-            steps: Some(self.image_steps.max(1)),
-            ..aos_proto::MediaImageOptions::default()
-        }
-    }
-}
-
 #[derive(Debug, Clone, Deserialize)]
 struct OnboardingSlice {
     #[serde(default)]

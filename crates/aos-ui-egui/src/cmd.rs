@@ -129,6 +129,13 @@ pub(crate) enum Cmd {
     RefreshConfirms,
     ModelsRefresh,
     ModelLoad { model_id: String },
+    ModelDownload { model_id: String },
+    ModelDownloadHf {
+        url: String,
+        name: Option<String>,
+    },
+    ModelRemove { model_id: String },
+    ModelRedownload { model_id: String },
     ProviderList,
     ProviderUpsert {
         provider: ProviderRecord,
@@ -140,6 +147,20 @@ pub(crate) enum Cmd {
         prompt: String,
         model_id: Option<String>,
         options: aos_proto::MediaImageOptions,
+        enrich_prompt: bool,
+        /// Prose rewrite via chat LLM before generation.
+        enhance_prompt_chat: bool,
+        /// When set, sent to sd.cpp as-is (skip LLM enrichment).
+        generation_prompt: Option<String>,
+        /// Visual composition blocks (normalized rects); merged into JSON/text after enrich.
+        composition_blocks: Vec<crate::image_composition::CompositionBlock>,
+    },
+    /// Upscale an existing image (sd.cpp `--mode upscale`).
+    MediaImageUpscale {
+        source_path: String,
+        upscale_model: String,
+        upscale_repeats: u32,
+        upscale_tile_size: u32,
     },
     MediaAudio {
         text: String,
@@ -246,11 +267,39 @@ pub(crate) enum Evt {
         bytes: u64,
         engine: String,
         prompt: String,
+        generation_prompt: Option<String>,
+    },
+    MediaImageEnriched {
+        enriched: String,
+    },
+    MediaImageStarted {
+        enriching: bool,
+        upscaling: bool,
+        total_steps: u32,
+    },
+    MediaImageProgress {
+        enriching: bool,
+        upscaling: bool,
+        step: u32,
+        total_steps: u32,
+        elapsed_secs: u64,
     },
     Skills(Vec<SkillInfo>),
     McpServers(Vec<McpServerInfo>),
     PromptOptimized(String),
     Models(Vec<ModelInfo>),
+    ModelDownloadStarted { model_id: String },
+    ModelDownloadProgress {
+        model_id: String,
+        done_bytes: u64,
+        total_bytes: u64,
+        percent: u8,
+    },
+    ModelDownloadFinished { model_id: String },
+    ModelDownloadFailed {
+        model_id: String,
+        error: String,
+    },
     Providers(Vec<ProviderRecord>),
     ProviderTested {
         ok: bool,

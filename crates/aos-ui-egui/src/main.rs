@@ -7,12 +7,15 @@ mod agent_panel;
 mod decl_ui;
 mod i18n;
 mod model_setup;
+mod models_page;
 mod notes_panel;
 mod prefs;
 mod tasks_panel;
 mod chat_ask;
 mod chat_media;
 mod cmd;
+mod image_composition;
+mod image_prompt;
 mod image_studio;
 mod os_open;
 mod runtime;
@@ -21,7 +24,7 @@ mod slash;
 
 use chat_ask::{agent_display_title, chat_has_open_ask, pending_ask_ids};
 use cmd::{AgentNotice, ChatLine, Cmd, Evt};
-use os_open::{aos_home, app_icon, bin_aos_session, native_path, open_in_browser, open_os_folder};
+use os_open::{aos_home, app_icon, bin_aos_session, native_path, open_in_browser, open_os_folder, open_url, request_preview_restart};
 use runtime::runtime_main;
 use slash::{slash_completions, slash_insert_text, SLASH_COMMANDS};
 use aos_agent::schedule::ScheduleEntry;
@@ -33,7 +36,7 @@ use aos_proto::{
     ModuleCatalogue, ModuleIdRequest, ModuleInfo, ModuleInvokeRequest, ModuleInvokeResponse,
     PendingConfirmation, ProviderRecord,
     SkillInfo, SystemMetrics, WebSearchHit,
-    chat_user_wants_module_authoring,
+    chat_tts_request, chat_user_wants_module_authoring, ModelMetrics,
 };
 use aos_proto::decl_ui::ModuleUiResponse;
 use prefs::{load_preferences, save_preferences, Preferences};
@@ -205,6 +208,53 @@ pub(crate) fn chrono_like_stamp() -> String {
         .unwrap_or_else(|_| "0".into())
 }
 
+fn human_bytes(v: u64) -> String {
+    const GIB: f64 = (1u64 << 30) as f64;
+    const MIB: f64 = (1u64 << 20) as f64;
+    if v >= (1u64 << 30) {
+        format!("{:.2} GiB", v as f64 / GIB)
+    } else if v >= (1u64 << 20) {
+        format!("{:.1} MiB", v as f64 / MIB)
+    } else {
+        format!("{v} B")
+    }
+}
+
+fn format_model_infer_line(mm: &ModelMetrics, t: &i18n::UiStrings) -> String {
+    let vram = format!("{:.0} MiB", mm.vram_bytes as f64 / (1 << 20) as f64);
+    if mm.media_total_steps.is_some() || mm.media_step.is_some() {
+        let step = mm
+            .media_step
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "—".into());
+        let total = mm
+            .media_total_steps
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "—".into());
+        let step_s = mm
+            .last_step_s
+            .map(|v| format!("{v:.2}"))
+            .unwrap_or_else(|| "—".into());
+        format!(
+            "{} {}/{} · {} {} · {} {}",
+            t.metrics_step, step, total, t.metrics_step_s, step_s, t.metrics_vram, vram
+        )
+    } else {
+        let ttft = mm
+            .last_ttft_ms
+            .map(|v| format!("{v:.0} ms"))
+            .unwrap_or_else(|| "—".into());
+        let toks = mm
+            .last_tok_s
+            .map(|v| format!("{v:.1}"))
+            .unwrap_or_else(|| "—".into());
+        format!(
+            "{} {} · {} {} · {} {}",
+            t.metrics_ttft, ttft, t.metrics_tok_s, toks, t.metrics_vram, vram
+        )
+    }
+}
+
 fn agent_is_live(state: &AgentState) -> bool {
     matches!(
         state,
@@ -311,6 +361,9 @@ pub(crate) fn chat_delegate_agent_spec(
     user_text: &str,
     model_output: &str,
 ) -> Option<(String, Vec<String>, Vec<String>, String)> {
+    if chat_tts_request(user_text).is_some() {
+        return None;
+    }
     if let Some(action) = aos_agent::actions::parse_action(model_output) {
         let spawn = action.action == "agent.spawn" || action.action == "agent.create";
         let self_tool = chat_action_is_self_tool(&action.action);
@@ -401,6 +454,10 @@ pub(crate) async fn spawn_chat_delegate_agent(
     }
     if req.tools.iter().any(|t| t.starts_with("module.")) {
         req.caps.push("module.install".into());
+    }
+    if req.tools.iter().any(|t| t.starts_with("media.")) {
+        req.caps.push("media.generate".into());
+        req.caps.push("fs.write:/downloads/**".into());
     }
     match bus
         .call::<AgentCreateRequest, aos_proto::AgentCreateResponse>(
@@ -510,6 +567,27 @@ fn chat_agent_kit(task: &str) -> (Vec<String>, Vec<String>) {
             if !tools.iter().any(|x| x == t) {
                 tools.push(t.into());
             }
+        }
+    }
+    if lower.contains("audio")
+        || lower.contains("tts")
+        || lower.contains("voix")
+        || lower.contains("speech")
+        || lower.contains("speak")
+        || lower.contains("wav")
+        || lower.contains("vocal")
+    {
+        if !tools.iter().any(|x| x == "media.audio.generate") {
+            tools.push("media.audio.generate".into());
+        }
+    }
+    if lower.contains("image")
+        || lower.contains("png")
+        || lower.contains("illustration")
+        || lower.contains("diffusion")
+    {
+        if !tools.iter().any(|x| x == "media.image.generate") {
+            tools.push("media.image.generate".into());
         }
     }
     (skills, tools)
@@ -1153,6 +1231,8 @@ struct UiApp {
     agent_model_id: String,
     model_updates_msg: String,
     download_status: String,
+    model_download: Option<ModelDownloadUiState>,
+    model_download_restart: Option<String>,
     /// Agent visé pour la prochaine réponse `user.ask` (plusieurs bloqués).
     ask_reply_target: Option<String>,
     /// Re-focus chat TextEdit after send (Enter clears focus).
@@ -1160,6 +1240,19 @@ struct UiApp {
     decl_panels: HashMap<String, decl_ui::DeclUiPanelState>,
     decl_md_cache: CommonMarkCache,
     image_studio: image_studio::ImageStudioState,
+    image_generating: Option<image_studio::ImageGenUiState>,
+    models_catalog_tab: models_page::ModelCatalogTab,
+    hf_download_url: String,
+    hf_download_name: String,
+    hf_download_status: String,
+}
+
+#[derive(Debug, Clone)]
+struct ModelDownloadUiState {
+    model_id: String,
+    percent: u8,
+    done_bytes: u64,
+    total_bytes: u64,
 }
 
 impl UiApp {
@@ -1319,11 +1412,18 @@ impl UiApp {
             agent_model_id: default_model,
             model_updates_msg,
             download_status: String::new(),
+            model_download: None,
+            model_download_restart: None,
             ask_reply_target: None,
             chat_refocus: false,
             decl_panels: HashMap::new(),
             decl_md_cache: CommonMarkCache::default(),
             image_studio: image_studio::ImageStudioState::default(),
+            image_generating: None,
+            models_catalog_tab: models_page::ModelCatalogTab::Llm,
+            hf_download_url: String::new(),
+            hf_download_name: String::new(),
+            hf_download_status: String::new(),
         }
     }
 
@@ -1474,6 +1574,26 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 "système",
                 "réponse précédente encore en cours — patientez.",
             ));
+            return;
+        }
+        if let Some(spoken) = chat_tts_request(&text) {
+            self.chat.push(ChatLine::plain("user", text.clone()));
+            if let Some(sid) = self.active_session.clone() {
+                let _ = self.cmd_tx.send(Cmd::SessionAppend {
+                    session_id: sid,
+                    role: "user".into(),
+                    content: text,
+                    attachments: vec![],
+                });
+            }
+            if spoken.trim().is_empty() {
+                self.chat.push(ChatLine::plain(
+                    "système",
+                    "usage : /speak <texte> — indiquez le texte à lire.",
+                ));
+                return;
+            }
+            self.open_tts_card(&spoken);
             return;
         }
         self.chat.push(ChatLine::plain("user", text.clone()));
@@ -1646,10 +1766,20 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                         attachments: vec![],
                     });
                 }
+                let enrich = image_prompt::default_enrich_prompt(
+                    self.prefs.default_image_model.as_deref(),
+                );
                 let _ = self.cmd_tx.send(Cmd::MediaImage {
                     prompt: rest.to_string(),
                     model_id: self.prefs.default_image_model.clone(),
-                    options: self.prefs.image_options(),
+                    options: image_studio::image_options_for_model(
+                        self.prefs.default_image_model.as_deref(),
+                        Some("balanced"),
+                    ),
+                    enrich_prompt: enrich,
+                    enhance_prompt_chat: false,
+                    generation_prompt: None,
+                    composition_blocks: Vec::new(),
                 });
             }
             "/speak" => {
@@ -1658,25 +1788,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                         .push(ChatLine::plain("système", "usage : /speak <texte>"));
                     return;
                 }
-                let att = ChatAttachment::TtsDraft {
-                    text: rest.to_string(),
-                    model_id: self.prefs.default_audio_model.clone(),
-                    options: aos_proto::MediaAudioOptions::default(),
-                };
-                self.chat.push(ChatLine {
-                    role: "assistant".into(),
-                    text: rest.to_string(),
-                    attachments: vec![att.clone()],
-                });
-                if let Some(sid) = self.active_session.clone() {
-                    let _ = self.cmd_tx.send(Cmd::SessionAppend {
-                        session_id: sid,
-                        role: "assistant".into(),
-                        content: rest.to_string(),
-                        attachments: vec![att],
-                    });
-                }
-                self.status = i18n::strings(&self.prefs.language).tts_card_blurb.into();
+                self.open_tts_card(rest);
             }
             _ => {
                 self.chat.push(ChatLine::plain(
@@ -1685,6 +1797,28 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 ));
             }
         }
+    }
+
+    fn open_tts_card(&mut self, spoken: &str) {
+        let att = ChatAttachment::TtsDraft {
+            text: spoken.to_string(),
+            model_id: self.prefs.default_audio_model.clone(),
+            options: aos_proto::MediaAudioOptions::default(),
+        };
+        self.chat.push(ChatLine {
+            role: "assistant".into(),
+            text: spoken.to_string(),
+            attachments: vec![att.clone()],
+        });
+        if let Some(sid) = self.active_session.clone() {
+            let _ = self.cmd_tx.send(Cmd::SessionAppend {
+                session_id: sid,
+                role: "assistant".into(),
+                content: spoken.to_string(),
+                attachments: vec![att],
+            });
+        }
+        self.status = i18n::strings(&self.prefs.language).tts_card_blurb.into();
     }
 }
 
@@ -1715,13 +1849,72 @@ impl eframe::App for UiApp {
                     }
                 }
                 Evt::Error(m) => {
+                    if m.contains("media.image") || m.starts_with("Image:") {
+                        self.image_generating = None;
+                    }
                     self.status = m.clone();
                     self.chat.push(ChatLine::plain("système", m));
                     self.streaming.clear();
                     self.chat_pending = false;
                     self.chat_inference_id = None;
                 }
-                Evt::Status(m) => self.status = m,
+                Evt::Status(m) => {
+                    if let Some(id) = m.strip_prefix("model removed:") {
+                        let id = id.trim().to_string();
+                        self.model_download_restart = Some(id.clone());
+                        let t = i18n::strings(&self.prefs.language);
+                        self.download_status = t.models_removed.to_string();
+                    }
+                    self.status = m;
+                }
+                Evt::ModelDownloadStarted { model_id } => {
+                    self.model_download_restart = None;
+                    self.model_download = Some(ModelDownloadUiState {
+                        model_id: model_id.clone(),
+                        percent: 0,
+                        done_bytes: 0,
+                        total_bytes: 0,
+                    });
+                    let t = i18n::strings(&self.prefs.language);
+                    self.download_status =
+                        t.models_downloading.replace("{}", &model_id);
+                }
+                Evt::ModelDownloadProgress {
+                    model_id,
+                    done_bytes,
+                    total_bytes,
+                    percent,
+                } => {
+                    self.model_download = Some(ModelDownloadUiState {
+                        model_id: model_id.clone(),
+                        percent,
+                        done_bytes,
+                        total_bytes,
+                    });
+                    let t = i18n::strings(&self.prefs.language);
+                    self.download_status = format!(
+                        "{} {percent}%",
+                        t.models_downloading.replace("{}", &model_id)
+                    );
+                }
+                Evt::ModelDownloadFinished { model_id } => {
+                    self.model_download = None;
+                    self.model_download_restart = Some(model_id.clone());
+                    let t = i18n::strings(&self.prefs.language);
+                    self.download_status =
+                        t.models_download_done.replace("{}", &model_id);
+                    self.model_updates_msg.clear();
+                    self.image_studio.on_download_finished(&model_id);
+                }
+                Evt::ModelDownloadFailed { model_id, error } => {
+                    self.model_download = None;
+                    self.model_download_restart = None;
+                    let t = i18n::strings(&self.prefs.language);
+                    self.download_status = format!(
+                        "{}: {error}",
+                        t.models_download_failed.replace("{}", &model_id)
+                    );
+                }
                 Evt::MemExtracted { n } => {
                     let t = i18n::strings(&self.prefs.language);
                     self.status = t.memory_extracted_toast.replace("{}", &n.to_string());
@@ -2084,13 +2277,66 @@ impl eframe::App for UiApp {
                     self.status = msg.clone();
                     self.chat.push(ChatLine::plain("système", msg));
                 }
+                Evt::MediaImageEnriched { enriched } => {
+                    self.image_studio.set_enriched_prompt(&enriched);
+                    self.status = "Image: enhanced prompt ready, generating…".into();
+                }
+                Evt::MediaImageStarted {
+                    enriching,
+                    upscaling,
+                    total_steps,
+                } => {
+                    self.image_generating = Some(image_studio::ImageGenUiState {
+                        enriching,
+                        upscaling,
+                        step: 0,
+                        total_steps,
+                        elapsed_secs: 0,
+                    });
+                    if enriching {
+                        self.status = "Image: rewriting prompt…".into();
+                    } else {
+                        self.status = format!("Image: generating ({total_steps} steps)…");
+                    }
+                }
+                Evt::MediaImageProgress {
+                    enriching,
+                    upscaling,
+                    step,
+                    total_steps,
+                    elapsed_secs,
+                } => {
+                    self.image_generating = Some(image_studio::ImageGenUiState {
+                        enriching,
+                        upscaling,
+                        step,
+                        total_steps,
+                        elapsed_secs,
+                    });
+                    if enriching {
+                        self.status =
+                            format!("Image: rewriting prompt… ({elapsed_secs}s)");
+                    } else if upscaling {
+                        self.status = format!("Image: upscaling… ({elapsed_secs}s)");
+                    } else if step > 0 && total_steps > 0 {
+                        self.status = format!(
+                            "Image: step {step}/{total_steps} ({elapsed_secs}s)"
+                        );
+                    } else {
+                        self.status = format!(
+                            "Image: generating ({total_steps} steps, {elapsed_secs}s)…"
+                        );
+                    }
+                }
                 Evt::MediaOk {
                     kind,
                     path,
                     bytes,
                     engine,
                     prompt,
+                    generation_prompt,
                 } => {
+                    self.image_generating = None;
                     self.status = format!("{kind} → {path} ({bytes} bytes, {engine})");
                     let att = if kind == "audio" {
                         ChatAttachment::Audio { path: path.clone() }
@@ -2101,7 +2347,16 @@ impl eframe::App for UiApp {
                         }
                     };
                     if kind != "audio" {
-                        self.image_studio.open_from_chat(&prompt, &path);
+                        if prompt.is_empty() {
+                            self.image_studio.preview = Some(path.clone());
+                        } else {
+                            self.image_studio.open_from_chat(
+                                &prompt,
+                                &path,
+                                generation_prompt.as_deref(),
+                            );
+                        }
+                        self.tab = Tab::Image;
                     }
                     let note = if engine == "stub" {
                         format!(
@@ -2470,6 +2725,9 @@ impl eframe::App for UiApp {
                     }
                 });
             }
+            if self.model_download_restart.is_some() {
+                self.ui_model_download_restart(ui, ctx);
+            }
             if !self.update_status.is_empty() {
                 ui.label(&self.update_status);
             }
@@ -2638,23 +2896,7 @@ impl eframe::App for UiApp {
                 for mm in &m.models {
                     ui.group(|ui| {
                         ui.label(format!("{} [{:?}]", mm.model_id, mm.state));
-                        let ttft = mm
-                            .last_ttft_ms
-                            .map(|v| format!("{v:.0} ms"))
-                            .unwrap_or_else(|| "—".into());
-                        let toks = mm
-                            .last_tok_s
-                            .map(|v| format!("{v:.1}"))
-                            .unwrap_or_else(|| "—".into());
-                        ui.monospace(format!(
-                            "{} {} · {} {} · {} {:.0} MiB",
-                            t.metrics_ttft,
-                            ttft,
-                            t.metrics_tok_s,
-                            toks,
-                            t.metrics_vram,
-                            mm.vram_bytes as f64 / (1 << 20) as f64
-                        ));
+                        ui.monospace(format_model_infer_line(mm, &t));
                         if mm.queued > 0 || mm.active_inferences > 0 {
                             ui.weak(format!(
                                 "inf={} {}={}",
@@ -2681,10 +2923,12 @@ impl eframe::App for UiApp {
             Tab::Notes => self.ui_notes(ui),
             Tab::Tasks => overflow_scroll(ui, "tasks", |ui| self.ui_tasks(ui)),
             Tab::Agents => overflow_scroll(ui, "agents", |ui| self.ui_agents(ui)),
-            Tab::Models => overflow_scroll(ui, "models", |ui| self.ui_models(ui)),
+            Tab::Models => overflow_scroll(ui, "models", |ui| self.ui_models(ui, ctx)),
             Tab::Image => overflow_scroll(ui, "image", |ui| {
+                let gen = self.image_generating.as_ref();
+                let dl_busy = self.model_download.is_some();
                 self.image_studio
-                    .ui(ui, &i18n::strings(&self.prefs.language), &self.cmd_tx);
+                    .ui(ui, &i18n::strings(&self.prefs.language), &self.cmd_tx, gen, dl_busy);
             }),
             Tab::Providers => overflow_scroll(ui, "providers", |ui| self.ui_providers(ui)),
             Tab::Audit => self.ui_audit(ui),
@@ -3116,7 +3360,7 @@ impl UiApp {
                                 self.open_agent_tab(&id);
                             }
                             if let Some((prompt, path)) = open_studio {
-                                self.image_studio.open_from_chat(&prompt, &path);
+                                self.image_studio.open_from_chat(&prompt, &path, None);
                                 self.tab = Tab::Image;
                             }
                             if let Some(id) = target_reply {
@@ -4672,134 +4916,187 @@ impl UiApp {
         }
     }
 
-    fn ui_models(&mut self, ui: &mut egui::Ui) {
+    fn ui_model_download_restart(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        if self.model_download_restart.is_none() {
+            return;
+        }
+        let t = i18n::strings(&self.prefs.language);
+        ui.horizontal(|ui| {
+            ui.colored_label(
+                egui::Color32::from_rgb(120, 200, 140),
+                self.download_status.as_str(),
+            );
+            if ui.button(t.models_restart_preview).clicked() {
+                request_preview_restart(ctx);
+                self.model_download_restart = None;
+            }
+            if ui.small_button("×").clicked() {
+                self.model_download_restart = None;
+                self.download_status.clear();
+            }
+        });
+    }
+
+    fn ui_models(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         let t = i18n::strings(&self.prefs.language);
         ui.heading(t.tab_models);
-        ui.weak(t.models_media_packs);
-        if ui.button("Refresh list").clicked() {
-            let _ = self.cmd_tx.send(Cmd::ModelsRefresh);
-        }
+        ui.weak(t.tab_hint_models);
+        ui.horizontal(|ui| {
+            if ui.button("Refresh list").clicked() {
+                let _ = self.cmd_tx.send(Cmd::ModelsRefresh);
+            }
+        });
         if !self.model_updates_msg.is_empty() {
             ui.colored_label(
                 egui::Color32::from_rgb(180, 220, 120),
                 &self.model_updates_msg,
             );
         }
-        if !self.download_status.is_empty() {
+        if !self.download_status.is_empty() && self.model_download_restart.is_none() {
             ui.label(&self.download_status);
         }
-        ui.separator();
-        ui.label(t.metrics_live);
-        if let Some(m) = &self.metrics {
-            for mm in &m.models {
-                ui.group(|ui| {
-                    ui.strong(format!("{} [{:?}]", mm.model_id, mm.state));
-                    let ttft = mm
-                        .last_ttft_ms
-                        .map(|v| format!("{v:.1} ms"))
-                        .unwrap_or_else(|| "—".into());
-                    let toks = mm
-                        .last_tok_s
-                        .map(|v| format!("{v:.2}"))
-                        .unwrap_or_else(|| "—".into());
-                    ui.label(format!("{}: {}", t.metrics_ttft, ttft));
-                    ui.label(format!("{}: {}", t.metrics_tok_s, toks));
-                    ui.label(format!(
-                        "{}: {:.2} GiB · {}: {:.2} GiB · {}: {:.2} GiB",
-                        t.metrics_vram,
-                        mm.vram_bytes as f64 / (1 << 30) as f64,
-                        t.metrics_ram,
-                        mm.ram_bytes as f64 / (1 << 30) as f64,
-                        t.metrics_disk,
-                        mm.disk_bytes as f64 / (1 << 30) as f64
-                    ));
-                    ui.weak(format!(
-                        "active={} {}={}",
-                        mm.active_inferences, t.metrics_queued, mm.queued
-                    ));
-                });
-            }
-        } else {
-            ui.label("…");
+        if let Some(dl) = &self.model_download {
+            let frac = (dl.percent as f32 / 100.0).clamp(0.0, 1.0);
+            let txt = if dl.total_bytes > 0 {
+                format!(
+                    "{} · {} / {}",
+                    dl.model_id,
+                    human_bytes(dl.done_bytes),
+                    human_bytes(dl.total_bytes)
+                )
+            } else {
+                format!("{} · {}%", dl.model_id, dl.percent)
+            };
+            ui.add(egui::ProgressBar::new(frac).text(txt));
         }
+        self.ui_model_download_restart(ui, ctx);
+
+        models_page::ui_hf_import(
+            ui,
+            &mut self.hf_download_url,
+            &mut self.hf_download_name,
+            &mut self.hf_download_status,
+            self.model_download.is_some(),
+            &self.cmd_tx,
+            &t,
+        );
+
         ui.separator();
-        ui.label("Installed / registered (model.list)");
-        for m in self.model_infos.clone() {
-            ui.horizontal(|ui| {
-                ui.label(format!("{} — {} [{:?}]", m.id, m.name, m.state));
-                if ui.button("Load").clicked() {
-                    let _ = self.cmd_tx.send(Cmd::ModelLoad {
-                        model_id: m.id.clone(),
-                    });
-                }
-                if ui.button("Set session default").clicked() {
-                    if let Some(sid) = self.active_session.clone() {
-                        let _ = self.cmd_tx.send(Cmd::SessionSetModel {
-                            session_id: sid,
-                            model_id: Some(m.id.clone()),
-                        });
+        models_page::ui_catalog_tab_bar(ui, &mut self.models_catalog_tab, &t);
+
+        let catalog = models_page::load_catalog_models();
+        let installed_rows = models_page::load_installed_rows(&self.model_infos);
+        let busy = self.model_download.is_some();
+
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                match self.models_catalog_tab {
+                    models_page::ModelCatalogTab::Installed => {
+                        if installed_rows.is_empty() {
+                            ui.weak(t.models_catalog_empty);
+                        }
+                        for m in installed_rows {
+                            let id = m.id.clone();
+                            let mut load = false;
+                            let mut set_default = false;
+                            let mut redownload = false;
+                            let mut remove = false;
+                            models_page::ui_installed_card(
+                                ui,
+                                &m,
+                                busy,
+                                &t,
+                                &mut || load = true,
+                                &mut || set_default = true,
+                                &mut || redownload = true,
+                                &mut || remove = true,
+                            );
+                            if load {
+                                let _ = self.cmd_tx.send(Cmd::ModelLoad {
+                                    model_id: id.clone(),
+                                });
+                            }
+                            if set_default {
+                                if let Some(sid) = self.active_session.clone() {
+                                    let _ = self.cmd_tx.send(Cmd::SessionSetModel {
+                                        session_id: sid,
+                                        model_id: Some(id.clone()),
+                                    });
+                                }
+                            }
+                            if redownload {
+                                let _ = self.cmd_tx.send(Cmd::ModelRedownload {
+                                    model_id: id.clone(),
+                                });
+                            }
+                            if remove {
+                                let _ = self.cmd_tx.send(Cmd::ModelRemove {
+                                    model_id: id,
+                                });
+                            }
+                            ui.add_space(6.0);
+                        }
+                        ui.separator();
+                        ui.label(t.metrics_live);
+                        if let Some(m) = &self.metrics {
+                            for mm in &m.models {
+                                ui.group(|ui| {
+                                    ui.strong(format!("{} [{:?}]", mm.model_id, mm.state));
+                                    ui.label(format_model_infer_line(mm, &t));
+                                });
+                            }
+                        }
+                    }
+                    tab => {
+                        let filtered: Vec<_> = catalog
+                            .iter()
+                            .filter(|m| models_page::category_of(m) == tab)
+                            .collect();
+                        if filtered.is_empty() {
+                            ui.weak(t.models_catalog_empty);
+                        }
+                        for m in filtered {
+                            let installed = installed_rows.iter().any(|x| x.id == m.id);
+                            let id = m.id.clone();
+                            let mut download = false;
+                            let mut redownload = false;
+                            let mut remove = false;
+                            let mut open_hf = None;
+                            models_page::ui_model_card(
+                                ui,
+                                m,
+                                installed,
+                                busy,
+                                &t,
+                                &mut || download = true,
+                                &mut || redownload = true,
+                                &mut || remove = true,
+                                &mut |url| open_hf = Some(url.to_string()),
+                            );
+                            if download {
+                                let _ = self.cmd_tx.send(Cmd::ModelDownload {
+                                    model_id: id.clone(),
+                                });
+                            }
+                            if redownload {
+                                let _ = self.cmd_tx.send(Cmd::ModelRedownload {
+                                    model_id: id.clone(),
+                                });
+                            }
+                            if remove {
+                                let _ = self.cmd_tx.send(Cmd::ModelRemove {
+                                    model_id: id.clone(),
+                                });
+                            }
+                            if let Some(url) = open_hf {
+                                open_url(&url);
+                            }
+                            ui.add_space(6.0);
+                        }
                     }
                 }
             });
-        }
-        ui.separator();
-        ui.label("Offerings (download via aos-session)");
-        let offerings_path = aos_home().join("share/models/catalog-offerings.json");
-        if let Ok(raw) = std::fs::read_to_string(offerings_path) {
-            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) {
-                if let Some(arr) = v.get("models").and_then(|m| m.as_array()) {
-                    for m in arr {
-                        let id = m.get("id").and_then(|x| x.as_str()).unwrap_or("");
-                        let name = m.get("name").and_then(|x| x.as_str()).unwrap_or(id);
-                        let bytes = m.get("bytes").and_then(|x| x.as_u64()).unwrap_or(0);
-                        let modality = m
-                            .get("modality")
-                            .and_then(|x| x.as_str())
-                            .unwrap_or("");
-                        let installed = self.model_infos.iter().any(|x| x.id == id);
-                        ui.horizontal(|ui| {
-                            ui.label(format!(
-                                "{}{}{} ({:.1} GiB)",
-                                if installed { "[ok] " } else { "" },
-                                if modality.is_empty() {
-                                    String::new()
-                                } else {
-                                    format!("[{modality}] ")
-                                },
-                                name,
-                                bytes as f64 / (1 << 30) as f64
-                            ));
-                            if !installed && ui.button("Download").clicked() {
-                                let session = bin_aos_session();
-                                let id_owned = id.to_string();
-                                match std::process::Command::new(&session)
-                                    .arg("--download-models")
-                                    .arg(&id_owned)
-                                    .env("AOS_HOME", aos_home())
-                                    .status()
-                                {
-                                    Ok(st) if st.success() => {
-                                        self.download_status = format!(
-                                            "Downloaded {id_owned} — restart Preview to load"
-                                        );
-                                        self.model_updates_msg.clear();
-                                    }
-                                    Ok(st) => {
-                                        self.download_status =
-                                            format!("Download failed (exit {st})");
-                                    }
-                                    Err(e) => {
-                                        self.download_status = format!("Download error: {e}");
-                                    }
-                                }
-                            }
-                        });
-                    }
-                }
-            }
-        } else {
-            ui.label("catalog-offerings.json missing");
-        }
     }
 
     fn ui_audit(&mut self, ui: &mut egui::Ui) {
@@ -5080,5 +5377,13 @@ mod delegate_tests {
         let spec = chat_delegate_agent_spec("fais un ping", out);
         let (_brief, _skills, tools, _) = spec.expect("doit déléguer");
         assert!(tools.iter().any(|x| x == "module.scaffold"));
+    }
+
+    #[test]
+    fn tts_ask_does_not_delegate_agent() {
+        let out = r#"{"action":"agent.spawn","args":{"brief":"tts"}}"#;
+        assert!(chat_delegate_agent_spec("génère un audio qui dit bonjour", out).is_none());
+        let (_skills, tools) = chat_agent_kit("génère un audio de bonjour");
+        assert!(tools.iter().any(|t| t == "media.audio.generate"));
     }
 }

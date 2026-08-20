@@ -1,10 +1,19 @@
-//! OS helpers: home prefix, folder / browser open.
+//! OS helpers: home prefix, folder / browser open, native file picker.
 
 use std::path::{Path, PathBuf};
 use eframe::egui;
 
 pub(crate) fn app_icon() -> egui::IconData {
     eframe::icon_data::from_png_bytes(include_bytes!("../assets/icon.png")).expect("app icon")
+}
+
+pub(crate) fn request_preview_restart(ctx: &egui::Context) {
+    let flag = aos_home().join("var/run/restart_preview.flag");
+    if let Some(parent) = flag.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(&flag, "ui");
+    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
 }
 
 pub(crate) fn open_in_browser(url: &str) {
@@ -53,6 +62,45 @@ pub(crate) fn open_os_folder(dir: &Path) {
     #[cfg(target_os = "macos")]
     {
         let _ = std::process::Command::new("open").arg(dir).spawn();
+    }
+}
+
+/// Native OS file dialog. Returns `None` if the user cancels.
+pub(crate) fn pick_os_file(
+    title: &str,
+    filters: &[(&str, &[&str])],
+    start_dir: Option<&Path>,
+) -> Option<PathBuf> {
+    let mut dlg = rfd::FileDialog::new().set_title(title);
+    for (name, exts) in filters {
+        dlg = dlg.add_filter(*name, exts);
+    }
+    if let Some(dir) = start_dir.filter(|p| p.is_dir()) {
+        dlg = dlg.set_directory(dir);
+    }
+    dlg.pick_file()
+}
+
+pub(crate) fn user_downloads_dir() -> Option<PathBuf> {
+    let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"))?;
+    let dir = PathBuf::from(home).join("Downloads");
+    dir.is_dir().then_some(dir)
+}
+
+pub(crate) fn open_url(url: &str) {
+    #[cfg(windows)]
+    {
+        let _ = std::process::Command::new("cmd")
+            .args(["/C", "start", "", url])
+            .spawn();
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let _ = std::process::Command::new("xdg-open").arg(url).spawn();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("open").arg(url).spawn();
     }
 }
 

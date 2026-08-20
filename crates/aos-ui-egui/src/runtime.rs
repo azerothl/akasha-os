@@ -1,7 +1,7 @@
 //! Background bus runtime: poll + `handle_cmd`.
 
 use crate::cmd::{Cmd, Evt};
-use crate::os_open::aos_home;
+use crate::os_open::{aos_home, bin_aos_session};
 use crate::{
     agent_id_cmd, agent_panel, chat_delegate_agent_spec, chrono_like_stamp, invoke_module_bind,
     invoke_module_tool, invoke_notes, invoke_tasks, load_module_ui, load_session, run_troubleshoot,
@@ -25,7 +25,7 @@ use aos_proto::{
     MemWorkingRequest, LoadRequest, ModelInfo, ModelState, ModuleCatalogue,
     ModuleInfo, ModuleInstallRequest,
     ModuleUninstallRequest, CancelRequest, MediaAudioGenerateRequest, MediaGenerateResponse,
-    MediaImageGenerateRequest, NetFetchRequest, NetFetchResponse, NetModeRequest,
+    MediaImageGenerateRequest, MediaImageUpscaleRequest, NetFetchRequest, NetFetchResponse, NetModeRequest,
     PendingConfirmation, ProviderIdRequest, ProviderListResponse, ProviderRecord,
     ProviderTestResponse, ProviderUpsertRequest, SecretListRequest, SecretListResponse,
     SecretSetRequest, SetRoutingRequest, SkillInfo, SystemMetrics, TokenEvent, WebBrowseRequest,
@@ -33,9 +33,11 @@ use aos_proto::{
     CHAT_DELEGATION_PROMPT, SYSTEM_ASSISTANT_PROMPT, MigrateRequest, MigrateResponse,
 };
 use eframe::egui;
+use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
+use tokio::io::{AsyncBufReadExt, BufReader};
 
 /// Coalesce : un seul `mem.extract` à la fois (fire-and-forget).
 static MEM_EXTRACT_BUSY: AtomicBool = AtomicBool::new(false);
@@ -93,7 +95,7 @@ pub(crate) async fn runtime_main(cmd_rx: Receiver<Cmd>, evt_tx: Sender<Evt>, egu
         let evt_tx = evt_tx.clone();
         let egui_ctx = egui_ctx.clone();
         tokio::spawn(async move {
-            handle_cmd(bus, evt_tx, cmd).await;
+            handle_cmd(bus, evt_tx, egui_ctx.clone(), cmd).await;
             egui_ctx.request_repaint();
         });
     }
@@ -145,7 +147,17 @@ pub(crate) fn maybe_spawn_mem_extract(
     });
 }
 
-async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
+fn push_evt(evt_tx: &Sender<Evt>, egui_ctx: &egui::Context, evt: Evt) {
+    let _ = evt_tx.send(evt);
+    egui_ctx.request_repaint();
+}
+
+async fn handle_cmd(
+    bus: Arc<BusClient>,
+    evt_tx: Sender<Evt>,
+    egui_ctx: egui::Context,
+    cmd: Cmd,
+) {
     match cmd {
         Cmd::SessionBootstrap => {
             let list: Vec<ChatSessionMeta> = bus
@@ -1578,6 +1590,325 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                 }
             }
         }
+        Cmd::ModelDownload { model_id } => {
+            push_evt(
+                &evt_tx,
+                &egui_ctx,
+                Evt::ModelDownloadStarted {
+                    model_id: model_id.clone(),
+                },
+            );
+            let mut child = match tokio::process::Command::new(bin_aos_session())
+                .arg("--download-models")
+                .arg(&model_id)
+                .env("AOS_HOME", aos_home())
+                .stderr(Stdio::piped())
+                .stdout(Stdio::null())
+                .spawn()
+            {
+                Ok(c) => c,
+                Err(e) => {
+                    push_evt(
+                        &evt_tx,
+                        &egui_ctx,
+                        Evt::ModelDownloadFailed {
+                            model_id,
+                            error: format!("spawn failed: {e}"),
+                        },
+                    );
+                    return;
+                }
+            };
+            let stderr = child.stderr.take();
+            let progress_id = model_id.clone();
+            let evt_progress = evt_tx.clone();
+            let ctx_progress = egui_ctx.clone();
+            let read_stderr = tokio::spawn(async move {
+                let Some(stderr) = stderr else {
+                    return;
+                };
+                let mut rd = BufReader::new(stderr).lines();
+                while let Ok(Some(line)) = rd.next_line().await {
+                    if let Some((pct, done, total)) = parse_download_progress_line(&line) {
+                        push_evt(
+                            &evt_progress,
+                            &ctx_progress,
+                            Evt::ModelDownloadProgress {
+                                model_id: progress_id.clone(),
+                                done_bytes: done,
+                                total_bytes: total,
+                                percent: pct,
+                            },
+                        );
+                    }
+                }
+            });
+            let wait = child.wait().await;
+            let _ = read_stderr.await;
+            match wait {
+                Ok(st) if st.success() => {
+                    push_evt(
+                        &evt_tx,
+                        &egui_ctx,
+                        Evt::ModelDownloadFinished {
+                            model_id: model_id.clone(),
+                        },
+                    );
+                    if let Ok(models) = bus.call::<(), Vec<ModelInfo>>("model.list", &(), vec![]).await {
+                        push_evt(&evt_tx, &egui_ctx, Evt::Models(models));
+                    }
+                }
+                Ok(st) => {
+                    push_evt(
+                        &evt_tx,
+                        &egui_ctx,
+                        Evt::ModelDownloadFailed {
+                            model_id,
+                            error: format!("exit {st}"),
+                        },
+                    );
+                }
+                Err(e) => {
+                    push_evt(
+                        &evt_tx,
+                        &egui_ctx,
+                        Evt::ModelDownloadFailed {
+                            model_id,
+                            error: e.to_string(),
+                        },
+                    );
+                }
+            }
+        }
+        Cmd::ModelDownloadHf { url, name } => {
+            let label = name.clone().unwrap_or_else(|| {
+                url.rsplit('/').next().unwrap_or("huggingface").to_string()
+            });
+            push_evt(
+                &evt_tx,
+                &egui_ctx,
+                Evt::ModelDownloadStarted {
+                    model_id: label.clone(),
+                },
+            );
+            let mut child_cmd = tokio::process::Command::new(bin_aos_session());
+            child_cmd
+                .arg("--download-hf-url")
+                .arg(&url)
+                .env("AOS_HOME", aos_home());
+            if let Some(n) = name.as_deref().filter(|s| !s.is_empty()) {
+                child_cmd.arg("--name").arg(n);
+            }
+            let mut child = match child_cmd
+                .stderr(Stdio::piped())
+                .stdout(Stdio::null())
+                .spawn()
+            {
+                Ok(c) => c,
+                Err(e) => {
+                    push_evt(
+                        &evt_tx,
+                        &egui_ctx,
+                        Evt::ModelDownloadFailed {
+                            model_id: label,
+                            error: format!("spawn failed: {e}"),
+                        },
+                    );
+                    return;
+                }
+            };
+            let stderr = child.stderr.take();
+            let progress_id = label.clone();
+            let evt_progress = evt_tx.clone();
+            let ctx_progress = egui_ctx.clone();
+            let read_stderr = tokio::spawn(async move {
+                let Some(stderr) = stderr else {
+                    return;
+                };
+                let mut rd = BufReader::new(stderr).lines();
+                while let Ok(Some(line)) = rd.next_line().await {
+                    if let Some((pct, done, total)) = parse_download_progress_line(&line) {
+                        push_evt(
+                            &evt_progress,
+                            &ctx_progress,
+                            Evt::ModelDownloadProgress {
+                                model_id: progress_id.clone(),
+                                done_bytes: done,
+                                total_bytes: total,
+                                percent: pct,
+                            },
+                        );
+                    }
+                }
+            });
+            let wait = child.wait().await;
+            let _ = read_stderr.await;
+            match wait {
+                Ok(st) if st.success() => {
+                    push_evt(
+                        &evt_tx,
+                        &egui_ctx,
+                        Evt::ModelDownloadFinished {
+                            model_id: label,
+                        },
+                    );
+                    if let Ok(models) = bus.call::<(), Vec<ModelInfo>>("model.list", &(), vec![]).await {
+                        push_evt(&evt_tx, &egui_ctx, Evt::Models(models));
+                    }
+                }
+                Ok(st) => {
+                    push_evt(
+                        &evt_tx,
+                        &egui_ctx,
+                        Evt::ModelDownloadFailed {
+                            model_id: label,
+                            error: format!("exit {st}"),
+                        },
+                    );
+                }
+                Err(e) => {
+                    push_evt(
+                        &evt_tx,
+                        &egui_ctx,
+                        Evt::ModelDownloadFailed {
+                            model_id: label,
+                            error: e.to_string(),
+                        },
+                    );
+                }
+            }
+        }
+        Cmd::ModelRemove { model_id } => {
+            match tokio::process::Command::new(bin_aos_session())
+                .arg("--remove-model")
+                .arg(&model_id)
+                .env("AOS_HOME", aos_home())
+                .output()
+                .await
+            {
+                Ok(out) if out.status.success() => {
+                    push_evt(
+                        &evt_tx,
+                        &egui_ctx,
+                        Evt::Status(format!("model removed: {model_id}")),
+                    );
+                    if let Ok(models) = bus.call::<(), Vec<ModelInfo>>("model.list", &(), vec![]).await {
+                        push_evt(&evt_tx, &egui_ctx, Evt::Models(models));
+                    }
+                }
+                Ok(out) => {
+                    let detail = String::from_utf8_lossy(&out.stderr);
+                    push_evt(
+                        &evt_tx,
+                        &egui_ctx,
+                        Evt::ModelDownloadFailed {
+                            model_id,
+                            error: detail.trim().to_string(),
+                        },
+                    );
+                }
+                Err(e) => {
+                    push_evt(
+                        &evt_tx,
+                        &egui_ctx,
+                        Evt::ModelDownloadFailed {
+                            model_id,
+                            error: format!("spawn failed: {e}"),
+                        },
+                    );
+                }
+            }
+        }
+        Cmd::ModelRedownload { model_id } => {
+            push_evt(
+                &evt_tx,
+                &egui_ctx,
+                Evt::ModelDownloadStarted {
+                    model_id: model_id.clone(),
+                },
+            );
+            let mut child = match tokio::process::Command::new(bin_aos_session())
+                .arg("--redownload-models")
+                .arg(&model_id)
+                .env("AOS_HOME", aos_home())
+                .stderr(Stdio::piped())
+                .stdout(Stdio::null())
+                .spawn()
+            {
+                Ok(c) => c,
+                Err(e) => {
+                    push_evt(
+                        &evt_tx,
+                        &egui_ctx,
+                        Evt::ModelDownloadFailed {
+                            model_id,
+                            error: format!("spawn failed: {e}"),
+                        },
+                    );
+                    return;
+                }
+            };
+            let stderr = child.stderr.take();
+            let progress_id = model_id.clone();
+            let evt_progress = evt_tx.clone();
+            let ctx_progress = egui_ctx.clone();
+            let read_stderr = tokio::spawn(async move {
+                let Some(stderr) = stderr else {
+                    return;
+                };
+                let mut rd = BufReader::new(stderr).lines();
+                while let Ok(Some(line)) = rd.next_line().await {
+                    if let Some((pct, done, total)) = parse_download_progress_line(&line) {
+                        push_evt(
+                            &evt_progress,
+                            &ctx_progress,
+                            Evt::ModelDownloadProgress {
+                                model_id: progress_id.clone(),
+                                done_bytes: done,
+                                total_bytes: total,
+                                percent: pct,
+                            },
+                        );
+                    }
+                }
+            });
+            let wait = child.wait().await;
+            let _ = read_stderr.await;
+            match wait {
+                Ok(st) if st.success() => {
+                    push_evt(
+                        &evt_tx,
+                        &egui_ctx,
+                        Evt::ModelDownloadFinished {
+                            model_id: model_id.clone(),
+                        },
+                    );
+                    if let Ok(models) = bus.call::<(), Vec<ModelInfo>>("model.list", &(), vec![]).await {
+                        push_evt(&evt_tx, &egui_ctx, Evt::Models(models));
+                    }
+                }
+                Ok(st) => {
+                    push_evt(
+                        &evt_tx,
+                        &egui_ctx,
+                        Evt::ModelDownloadFailed {
+                            model_id,
+                            error: format!("exit {st}"),
+                        },
+                    );
+                }
+                Err(e) => {
+                    push_evt(
+                        &evt_tx,
+                        &egui_ctx,
+                        Evt::ModelDownloadFailed {
+                            model_id,
+                            error: e.to_string(),
+                        },
+                    );
+                }
+            }
+        }
         Cmd::ProviderList => {
             match bus
                 .call::<(), ProviderListResponse>("provider.list", &(), vec![])
@@ -1702,34 +2033,229 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
             prompt,
             model_id,
             options,
+            enrich_prompt,
+            enhance_prompt_chat,
+            generation_prompt,
+            composition_blocks,
         } => {
-            match bus
-                .call::<MediaImageGenerateRequest, MediaGenerateResponse>(
-                    "media.image.generate",
-                    &MediaImageGenerateRequest {
-                        prompt: prompt.clone(),
-                        path: None,
-                        model_id,
-                        options,
+            let steps = options.steps.unwrap_or(20);
+            let upscale_enabled = options
+                .upscale_model
+                .as_deref()
+                .is_some_and(|s| !s.is_empty());
+            let original_prompt = prompt.clone();
+            let had_prior = generation_prompt.is_some() || enrich_prompt || enhance_prompt_chat;
+            let mut final_prompt = if let Some(gen) = generation_prompt {
+                gen
+            } else if enrich_prompt {
+                run_prompt_enrichment_phase(
+                    &bus,
+                    &evt_tx,
+                    &egui_ctx,
+                    steps,
+                    &prompt,
+                    model_id.as_deref(),
+                    PromptEnhanceMode::Json,
+                )
+                .await
+            } else if enhance_prompt_chat {
+                run_prompt_enrichment_phase(
+                    &bus,
+                    &evt_tx,
+                    &egui_ctx,
+                    steps,
+                    &prompt,
+                    model_id.as_deref(),
+                    PromptEnhanceMode::ChatProse,
+                )
+                .await
+            } else {
+                prompt.clone()
+            };
+            if !composition_blocks.is_empty() {
+                final_prompt = crate::image_composition::finalize_prompt_with_layout(
+                    &final_prompt,
+                    &composition_blocks,
+                    model_id.as_deref(),
+                    had_prior,
+                );
+                if final_prompt != original_prompt {
+                    push_evt(
+                        &evt_tx,
+                        &egui_ctx,
+                        Evt::MediaImageEnriched {
+                            enriched: final_prompt.clone(),
+                        },
+                    );
+                }
+            }
+            let generation_prompt_sent = if final_prompt != original_prompt {
+                Some(final_prompt.clone())
+            } else {
+                None
+            };
+            push_evt(
+                &evt_tx,
+                &egui_ctx,
+                Evt::MediaImageStarted {
+                    enriching: false,
+                    upscaling: false,
+                    total_steps: steps,
+                },
+            );
+            let gen_bus = bus.clone();
+            let gen_future = tokio::spawn(async move {
+                gen_bus
+                    .call::<MediaImageGenerateRequest, MediaGenerateResponse>(
+                        "media.image.generate",
+                        &MediaImageGenerateRequest {
+                            prompt: final_prompt,
+                            path: None,
+                            model_id,
+                            options,
+                            actor: "human:ui".into(),
+                            caps: vec![
+                                "media.generate".into(),
+                                "fs.write:/downloads/**".into(),
+                            ],
+                            trace_id: String::new(),
+                        },
+                        vec![],
+                    )
+                    .await
+            });
+            let ticker_evt = evt_tx.clone();
+            let ticker_ctx = egui_ctx.clone();
+            let ticker = tokio::spawn(async move {
+                let start = std::time::Instant::now();
+                loop {
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    let elapsed = start.elapsed().as_secs();
+                    let (step, total) = read_image_gen_progress_file().unwrap_or((0, steps));
+                    let upscaling =
+                        upscale_enabled && total > 0 && step >= total && step > 0;
+                    push_evt(
+                        &ticker_evt,
+                        &ticker_ctx,
+                        Evt::MediaImageProgress {
+                            enriching: false,
+                            upscaling,
+                            step,
+                            total_steps: if total > 0 { total } else { steps },
+                            elapsed_secs: elapsed,
+                        },
+                    );
+                }
+            });
+            let result = gen_future.await;
+            ticker.abort();
+            let _ = std::fs::remove_file(image_gen_progress_path());
+            match result {
+                Ok(Ok(r)) => {
+                    push_evt(
+                        &evt_tx,
+                        &egui_ctx,
+                        Evt::MediaOk {
+                            kind: "image".into(),
+                            path: r.path,
+                            bytes: r.bytes,
+                            engine: r.engine,
+                            prompt: original_prompt,
+                            generation_prompt: generation_prompt_sent,
+                        },
+                    );
+                }
+                Ok(Err(e)) => {
+                    push_evt(
+                        &evt_tx,
+                        &egui_ctx,
+                        Evt::Error(format!("media.image.generate: {e}")),
+                    );
+                }
+                Err(e) => {
+                    push_evt(
+                        &evt_tx,
+                        &egui_ctx,
+                        Evt::Error(format!("media.image.generate: {e}")),
+                    );
+                }
+            }
+        }
+        Cmd::MediaImageUpscale {
+            source_path,
+            upscale_model,
+            upscale_repeats,
+            upscale_tile_size,
+        } => {
+            push_evt(
+                &evt_tx,
+                &egui_ctx,
+                Evt::MediaImageStarted {
+                    enriching: false,
+                    upscaling: true,
+                    total_steps: 0,
+                },
+            );
+            let ticker_evt = evt_tx.clone();
+            let ticker_ctx = egui_ctx.clone();
+            let ticker = tokio::spawn(async move {
+                let start = std::time::Instant::now();
+                loop {
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    push_evt(
+                        &ticker_evt,
+                        &ticker_ctx,
+                        Evt::MediaImageProgress {
+                            enriching: false,
+                            upscaling: true,
+                            step: 0,
+                            total_steps: 0,
+                            elapsed_secs: start.elapsed().as_secs(),
+                        },
+                    );
+                }
+            });
+            let result = bus
+                .call::<MediaImageUpscaleRequest, MediaGenerateResponse>(
+                    "media.image.upscale",
+                    &MediaImageUpscaleRequest {
+                        source_path: source_path.clone(),
+                        output_path: None,
+                        upscale_model,
+                        upscale_repeats: Some(upscale_repeats),
+                        upscale_tile_size: Some(upscale_tile_size),
                         actor: "human:ui".into(),
-                        caps: vec!["media.generate".into(), "fs.write:/downloads/**".into()],
+                        caps: vec![
+                            "media.generate".into(),
+                            "fs.write:/downloads/**".into(),
+                        ],
                         trace_id: String::new(),
                     },
                     vec![],
                 )
-                .await
-            {
+                .await;
+            ticker.abort();
+            match result {
                 Ok(r) => {
-                    let _ = evt_tx.send(Evt::MediaOk {
-                        kind: "image".into(),
-                        path: r.path,
-                        bytes: r.bytes,
-                        engine: r.engine,
-                        prompt,
-                    });
+                    push_evt(
+                        &evt_tx,
+                        &egui_ctx,
+                        Evt::MediaOk {
+                            kind: "image".into(),
+                            path: r.path,
+                            bytes: r.bytes,
+                            engine: r.engine,
+                            prompt: String::new(),
+                            generation_prompt: None,
+                        },
+                    );
                 }
                 Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(format!("media.image.generate: {e}")));
+                    push_evt(
+                        &evt_tx,
+                        &egui_ctx,
+                        Evt::Error(format!("media.image.upscale: {e}")),
+                    );
                 }
             }
         }
@@ -1761,6 +2287,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
                         bytes: r.bytes,
                         engine: r.engine,
                         prompt: String::new(),
+                        generation_prompt: None,
                     });
                 }
                 Err(e) => {
@@ -1818,6 +2345,32 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, cmd: Cmd) {
     }
 }
 
+fn image_gen_progress_path() -> std::path::PathBuf {
+    crate::os_open::aos_home().join("var/run/image-gen-progress.json")
+}
+
+fn read_image_gen_progress_file() -> Option<(u32, u32)> {
+    let raw = std::fs::read_to_string(image_gen_progress_path()).ok()?;
+    let v = serde_json::from_str::<serde_json::Value>(&raw).ok()?;
+    let step = v.get("step")?.as_u64()? as u32;
+    let total = v.get("total")?.as_u64()? as u32;
+    Some((step, total))
+}
+
+fn parse_download_progress_line(line: &str) -> Option<(u8, u64, u64)> {
+    // Expected from aos-session bootstrap:
+    // "[aos-session]   35% (123/456)"
+    let pct_pos = line.find('%')?;
+    let pct_start = line[..pct_pos].rfind(' ')?;
+    let percent = line[pct_start..pct_pos].trim().parse::<u8>().ok()?;
+    let open = line.find('(')?;
+    let slash = line[open + 1..].find('/')? + open + 1;
+    let close = line[slash + 1..].find(')')? + slash + 1;
+    let done = line[open + 1..slash].trim().parse::<u64>().ok()?;
+    let total = line[slash + 1..close].trim().parse::<u64>().ok()?;
+    Some((percent.min(100), done, total))
+}
+
 async fn handle_restart_modeld(bus: &BusClient, evt_tx: &Sender<Evt>) {
     let _ = bus
         .call::<CancelRequest, bool>(
@@ -1847,4 +2400,228 @@ async fn handle_restart_modeld(bus: &BusClient, evt_tx: &Sender<Evt>) {
     let _ = evt_tx.send(Evt::Status(
         "modeld restarting with current inference setting".into(),
     ));
+}
+
+async fn run_prompt_enrichment_phase(
+    bus: &BusClient,
+    evt_tx: &Sender<Evt>,
+    egui_ctx: &egui::Context,
+    steps: u32,
+    prompt: &str,
+    model_id: Option<&str>,
+    mode: PromptEnhanceMode,
+) -> String {
+    push_evt(
+        evt_tx,
+        egui_ctx,
+        Evt::MediaImageStarted {
+            enriching: true,
+            upscaling: false,
+            total_steps: steps,
+        },
+    );
+    let enrich_ticker_evt = evt_tx.clone();
+    let enrich_ticker_ctx = egui_ctx.clone();
+    let enrich_ticker = tokio::spawn(async move {
+        let start = std::time::Instant::now();
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            push_evt(
+                &enrich_ticker_evt,
+                &enrich_ticker_ctx,
+                Evt::MediaImageProgress {
+                    enriching: true,
+                    upscaling: false,
+                    step: 0,
+                    total_steps: steps,
+                    elapsed_secs: start.elapsed().as_secs(),
+                },
+            );
+        }
+    });
+    let out = match mode {
+        PromptEnhanceMode::Json => enrich_image_prompt(bus, evt_tx, prompt, model_id).await,
+        PromptEnhanceMode::ChatProse => enhance_image_prompt_chat(bus, evt_tx, prompt).await,
+    };
+    enrich_ticker.abort();
+    match out {
+        Ok(text) => {
+            push_evt(
+                evt_tx,
+                egui_ctx,
+                Evt::MediaImageEnriched {
+                    enriched: text.clone(),
+                },
+            );
+            text
+        }
+        Err(e) => {
+            let label = match mode {
+                PromptEnhanceMode::Json => "JSON enrichment",
+                PromptEnhanceMode::ChatProse => "prompt enhancement",
+            };
+            push_evt(
+                evt_tx,
+                egui_ctx,
+                Evt::Error(format!("{label} failed, using raw prompt: {e}")),
+            );
+            prompt.to_string()
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum PromptEnhanceMode {
+    Json,
+    ChatProse,
+}
+
+async fn enhance_image_prompt_chat(
+    bus: &BusClient,
+    evt_tx: &Sender<Evt>,
+    user_prompt: &str,
+) -> Result<String, String> {
+    use crate::image_prompt::CHAT_ENHANCE_SYSTEM_PROMPT;
+    let out = infer_llm_rewrite(
+        bus,
+        evt_tx,
+        "Chat",
+        CHAT_ENHANCE_SYSTEM_PROMPT,
+        user_prompt,
+    )
+    .await?;
+    Ok(normalize_prose_prompt(&out))
+}
+
+fn normalize_prose_prompt(raw: &str) -> String {
+    let mut s = raw.trim().to_string();
+    if s.starts_with("```") {
+        if let Some(rest) = s.strip_prefix("```") {
+            let rest = rest.trim_start_matches("text").trim_start();
+            if let Some(idx) = rest.rfind("```") {
+                s = rest[..idx].trim().to_string();
+            }
+        }
+    }
+    if s.len() >= 2 {
+        let bytes = s.as_bytes();
+        if (bytes[0] == b'"' && bytes[s.len() - 1] == b'"')
+            || (bytes[0] == b'\'' && bytes[s.len() - 1] == b'\'')
+        {
+            s = s[1..s.len() - 1].to_string();
+        }
+    }
+    s.trim().to_string()
+}
+
+async fn infer_llm_rewrite(
+    bus: &BusClient,
+    evt_tx: &Sender<Evt>,
+    label: &str,
+    system_prompt: &str,
+    user_prompt: &str,
+) -> Result<String, String> {
+    use aos_proto::{ChatMessage, InferParams, InferRequest, TokenEvent};
+    let req = InferRequest {
+        model_id: None,
+        messages: vec![
+            ChatMessage {
+                role: "system".into(),
+                content: system_prompt.to_string(),
+            },
+            ChatMessage {
+                role: "user".into(),
+                content: user_prompt.to_string(),
+            },
+        ],
+        params: InferParams {
+            max_tokens: 2048,
+            temperature: 0.7,
+            top_p: 0.95,
+            seed: None,
+        },
+        priority: 2,
+        data_refs: vec![],
+        routing: None,
+    };
+    let mut rx = bus
+        .call_stream::<InferRequest, TokenEvent>("model.infer", &req, vec![])
+        .await
+        .map_err(|e| e.to_string())?;
+    let mut out = String::new();
+    let mut token_count: u32 = 0;
+    while let Some(ev) = rx.recv().await {
+        match ev {
+            Ok(TokenEvent::Started { .. }) => {
+                let _ = evt_tx.send(Evt::Status(format!(
+                    "{label}: LLM rewriting prompt…"
+                )));
+            }
+            Ok(TokenEvent::Queued { position }) => {
+                let _ = evt_tx.send(Evt::Status(format!(
+                    "{label}: waiting in queue (position {position})…"
+                )));
+            }
+            Ok(TokenEvent::Delta { text }) => {
+                out.push_str(&text);
+                token_count += 1;
+                if token_count % 8 == 0 {
+                    let preview = if out.len() > 80 {
+                        format!("…{}", &out[out.len() - 80..])
+                    } else {
+                        out.clone()
+                    };
+                    let _ = evt_tx.send(Evt::Status(format!(
+                        "{label}: rewriting ({token_count} tok) {preview}"
+                    )));
+                }
+            }
+            Ok(TokenEvent::Done { tok_s, .. }) => {
+                let _ = evt_tx.send(Evt::Status(format!(
+                    "{label}: prompt ready ({token_count} tok, {tok_s:.1} tok/s)"
+                )));
+                break;
+            }
+            Ok(TokenEvent::Error { message }) => return Err(message),
+            _ => {}
+        }
+    }
+    let trimmed = out.trim();
+    if trimmed.is_empty() {
+        return Err("LLM returned empty response".into());
+    }
+    Ok(trimmed.to_string())
+}
+
+async fn enrich_image_prompt(
+    bus: &BusClient,
+    evt_tx: &Sender<Evt>,
+    user_prompt: &str,
+    model_id: Option<&str>,
+) -> Result<String, String> {
+    use crate::image_prompt::{
+        enrichment_status_label, enrichment_system_prompt, prompt_enrichment_kind,
+    };
+    let kind = prompt_enrichment_kind(model_id.unwrap_or("")).ok_or_else(|| {
+        "prompt enrichment not supported for this model".to_string()
+    })?;
+    let label = enrichment_status_label(kind);
+    let system_prompt = enrichment_system_prompt(kind);
+    let out = infer_llm_rewrite(bus, evt_tx, label, system_prompt, user_prompt).await?;
+    let json_str = if let Some(start) = out.find('{') {
+        if let Some(end) = out.rfind('}') {
+            &out[start..=end]
+        } else {
+            out.as_str()
+        }
+    } else {
+        out.as_str()
+    };
+    if serde_json::from_str::<serde_json::Value>(json_str).is_err() {
+        return Err(format!(
+            "LLM output is not valid JSON: {}",
+            &json_str[..json_str.len().min(200)]
+        ));
+    }
+    Ok(json_str.to_string())
 }
