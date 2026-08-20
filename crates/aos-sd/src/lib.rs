@@ -131,7 +131,20 @@ fn which(exe: &str) -> Option<PathBuf> {
     None
 }
 
+/// One LoRA applied via sd.cpp prompt tag `<lora:stem:scale>`.
+#[derive(Debug, Clone)]
+pub struct LoraEntry {
+    pub stem: String,
+    pub scale: f32,
+}
+
 /// Allowlisted sd.cpp flags (P09.3). Never pass free-form argv.
+///
+/// Backend assignment follows
+/// [stable-diffusion.cpp backend.md](https://github.com/leejet/stable-diffusion.cpp/blob/master/docs/backend.md):
+/// `--backend` (compute), `--params-backend` / `--offload-to-cpu` (weights),
+/// `--auto-fit`, `--diffusion-fa`, `--max-vram`, `--stream-layers`
+/// ([performance.md](https://github.com/leejet/stable-diffusion.cpp/blob/master/docs/performance.md)).
 #[derive(Debug, Clone)]
 pub struct ImageGenOpts {
     pub width: u32,
@@ -143,12 +156,47 @@ pub struct ImageGenOpts {
     pub negative_prompt: Option<String>,
     pub threads: Option<u32>,
     pub vae_path: Option<PathBuf>,
-    pub lora_path: Option<PathBuf>,
+    /// LoRAs applied via `<lora:stem:scale>` tags in the prompt.
+    pub lora_entries: Vec<LoraEntry>,
+    /// sd.cpp `--lora-model-dir` (typically `share/models/lora/`).
+    pub lora_model_dir: Option<PathBuf>,
     pub clip_l_path: Option<PathBuf>,
     pub clip_g_path: Option<PathBuf>,
     pub t5xxl_path: Option<PathBuf>,
     pub diffusion_model: Option<PathBuf>,
+    pub uncond_diffusion_model: Option<PathBuf>,
+    pub llm_path: Option<PathBuf>,
     pub style_prefix: Option<String>,
+    /// Compute backend (`cpu`, `gpu`, `cuda0`, `vulkan0`, mixed `te=cpu,diffusion=cuda0`).
+    pub backend: Option<String>,
+    /// Weight residency (`cpu`, `cuda0`, `disk`, mixed). Ignored when `auto_fit`.
+    pub params_backend: Option<String>,
+    pub offload_to_cpu: bool,
+    pub diffusion_fa: bool,
+    pub auto_fit: bool,
+    /// sd.cpp `--max-vram`: GiB cap, negative = free VRAM minus that many GiB (`-1`),
+    /// or per-device `cuda0=6,vulkan0=2`. `0` disables graph-cut segmentation.
+    pub max_vram: Option<String>,
+    /// sd.cpp `--stream-layers` (needs CPU params / `--offload-to-cpu`).
+    pub stream_layers: bool,
+    /// sd.cpp `--upscale-model` (ESRGAN `.pth` / `.safetensors`).
+    pub upscale_model_path: Option<PathBuf>,
+    /// sd.cpp `--upscale-repeats` (0 = disabled).
+    pub upscale_repeats: u32,
+    /// sd.cpp `--upscale-tile-size`.
+    pub upscale_tile_size: Option<u32>,
+    /// sd.cpp `-M` mode (`img_gen`, `vid_gen`, `upscale`, …).
+    pub sd_mode: Option<String>,
+    /// Wan / multi-stage `--high-noise-diffusion-model`.
+    pub high_noise_diffusion_model: Option<PathBuf>,
+    /// Flow-matching models (`--flow-shift`).
+    pub flow_shift: Option<f32>,
+    /// Video frame count (`--video-frames`; `1` ≈ single image for Wan/LTX).
+    pub video_frames: Option<u32>,
+    /// LTX `--embeddings-connectors`.
+    pub embeddings_connectors: Option<PathBuf>,
+    /// LTX `--audio-vae`.
+    pub audio_vae_path: Option<PathBuf>,
 }
 
 impl Default for ImageGenOpts {
@@ -163,14 +211,63 @@ impl Default for ImageGenOpts {
             negative_prompt: None,
             threads: None,
             vae_path: None,
-            lora_path: None,
+            lora_entries: Vec::new(),
+            lora_model_dir: None,
             clip_l_path: None,
             clip_g_path: None,
             t5xxl_path: None,
             diffusion_model: None,
+            uncond_diffusion_model: None,
+            llm_path: None,
             style_prefix: None,
+            backend: None,
+            params_backend: None,
+            offload_to_cpu: false,
+            diffusion_fa: false,
+            auto_fit: false,
+            max_vram: None,
+            stream_layers: false,
+            upscale_model_path: None,
+            upscale_repeats: 0,
+            upscale_tile_size: None,
+            sd_mode: None,
+            high_noise_diffusion_model: None,
+            flow_shift: None,
+            video_frames: None,
+            embeddings_connectors: None,
+            audio_vae_path: None,
         }
     }
+}
+
+/// Closed charset for `--backend` / `--params-backend` (no spaces / argv injection).
+pub fn sanitize_backend_spec(raw: &str) -> Option<String> {
+    let s = raw.trim();
+    if s.is_empty() || s.len() > 128 {
+        return None;
+    }
+    if !s
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '=' | ',' | '&' | '*' | '-' | '_' | '.'))
+    {
+        return None;
+    }
+    Some(s.to_string())
+}
+
+/// Closed charset for `--max-vram` (`-1`, `8`, `cuda0=6,vulkan0=2`).
+pub fn sanitize_max_vram(raw: &str) -> Option<String> {
+    let s = raw.trim();
+    if s.is_empty() || s.len() > 64 {
+        return None;
+    }
+    if !s
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '=' | ',' | '-' | '_' | '.'))
+    {
+        return None;
+    }
+    Some(s.to_string())
 }
 
 #[derive(Debug, Clone, Default)]
@@ -197,37 +294,73 @@ pub fn generate_image_opts(
     dest: &Path,
     opts: &ImageGenOpts,
 ) -> Result<MediaEngine, MediaError> {
-    if let Some(parent) = dest.parent() {
-        std::fs::create_dir_all(parent)?;
+    generate_image_opts_progress(weights, prompt, dest, opts, |_, _| {})
+}
+
+fn prepare_lora_prompt(prompt: String, opts: &ImageGenOpts) -> (String, Option<PathBuf>) {
+    if opts.lora_entries.is_empty() {
+        return (prompt, opts.lora_model_dir.clone());
     }
-    let prompt = match &opts.style_prefix {
-        Some(s) if !s.is_empty() => format!("{s}, {prompt}"),
-        _ => prompt.to_string(),
-    };
-    if stub_forced() || look_image_bin().is_none() || !weights.exists() {
-        std::fs::write(dest, visible_stub_png(&prompt))?;
-        return Ok(MediaEngine::Stub);
+    let mut out = prompt;
+    for entry in &opts.lora_entries {
+        if entry.stem.is_empty() {
+            continue;
+        }
+        let scale = entry.scale.clamp(0.0, 2.0);
+        let tag = format!("<lora:{}:{scale}>", entry.stem);
+        if !out.contains(&format!("<lora:{}:", entry.stem)) {
+            out = format!("{out} {tag}");
+        }
     }
-    let bin = look_image_bin().expect("sd bin");
-    let mut cmd = Command::new(&bin);
-    cmd.current_dir(bin_dir())
-        .arg("-m")
-        .arg(weights)
-        .arg("-p")
-        .arg(&prompt)
-        .arg("-o")
-        .arg(dest)
-        .arg("-W")
-        .arg(opts.width.max(64).to_string())
-        .arg("-H")
-        .arg(opts.height.max(64).to_string())
-        .arg("--steps")
-        .arg(opts.steps.max(1).to_string());
+    (out, opts.lora_model_dir.clone())
+}
+
+fn collect_image_args(
+    weights: &Path,
+    prompt: &str,
+    dest: &Path,
+    opts: &ImageGenOpts,
+    lora_model_dir: Option<&Path>,
+) -> Vec<String> {
+    let mut a = Vec::new();
+    if let Some(mode) = opts
+        .sd_mode
+        .as_deref()
+        .filter(|m| !m.is_empty() && *m != "img_gen")
+    {
+        a.push("-M".into());
+        a.push(mode.to_string());
+    }
+    let dit = opts.diffusion_model.is_some() || opts.uncond_diffusion_model.is_some();
+    if dit {
+        let dm = opts
+            .diffusion_model
+            .as_deref()
+            .unwrap_or(weights);
+        a.push("--diffusion-model".into());
+        a.push(dm.to_string_lossy().into_owned());
+    } else {
+        a.push("-m".into());
+        a.push(weights.to_string_lossy().into_owned());
+    }
+    a.push("-p".into());
+    a.push(prompt.to_string());
+    a.push("-o".into());
+    a.push(dest.to_string_lossy().into_owned());
+    a.push("-W".into());
+    a.push(opts.width.max(64).to_string());
+    a.push("-H".into());
+    a.push(opts.height.max(64).to_string());
+    a.push("--steps".into());
+    a.push(opts.steps.max(1).to_string());
+    a.push("-v".into());
     if let Some(cfg) = opts.cfg_scale {
-        cmd.arg("--cfg-scale").arg(cfg.to_string());
+        a.push("--cfg-scale".into());
+        a.push(cfg.to_string());
     }
     if let Some(seed) = opts.seed {
-        cmd.arg("--seed").arg(seed.to_string());
+        a.push("--seed".into());
+        a.push(seed.to_string());
     }
     if let Some(method) = opts.sampling_method.as_deref().filter(|s| {
         matches!(
@@ -235,40 +368,204 @@ pub fn generate_image_opts(
             "euler" | "euler_a" | "heun" | "dpm2" | "dpm++2m" | "lcm" | "ddim"
         )
     }) {
-        cmd.arg("--sampling-method").arg(method);
+        a.push("--sampling-method".into());
+        a.push(method.to_string());
     }
     if let Some(neg) = opts.negative_prompt.as_deref().filter(|s| !s.is_empty()) {
-        cmd.arg("-n").arg(neg);
+        a.push("-n".into());
+        a.push(neg.to_string());
     }
     if let Some(t) = opts.threads {
-        cmd.arg("-t").arg(t.max(1).to_string());
+        a.push("-t".into());
+        a.push(t.max(1).to_string());
     }
     if let Some(p) = &opts.vae_path {
-        cmd.arg("--vae").arg(p);
+        a.push("--vae".into());
+        a.push(p.to_string_lossy().into_owned());
     }
-    if let Some(p) = &opts.lora_path {
-        cmd.arg("--lora").arg(p);
+    if let Some(dir) = lora_model_dir {
+        a.push("--lora-model-dir".into());
+        a.push(dir.to_string_lossy().into_owned());
     }
     if let Some(p) = &opts.clip_l_path {
-        cmd.arg("--clip_l").arg(p);
+        a.push("--clip_l".into());
+        a.push(p.to_string_lossy().into_owned());
     }
     if let Some(p) = &opts.clip_g_path {
-        cmd.arg("--clip_g").arg(p);
+        a.push("--clip_g".into());
+        a.push(p.to_string_lossy().into_owned());
     }
     if let Some(p) = &opts.t5xxl_path {
-        cmd.arg("--t5xxl").arg(p);
+        a.push("--t5xxl".into());
+        a.push(p.to_string_lossy().into_owned());
     }
-    if let Some(p) = &opts.diffusion_model {
-        cmd.arg("--diffusion-model").arg(p);
+    if let Some(p) = &opts.uncond_diffusion_model {
+        a.push("--uncond-diffusion-model".into());
+        a.push(p.to_string_lossy().into_owned());
     }
-    let output = cmd.output()?;
-    if !output.status.success() {
-        let err = String::from_utf8_lossy(&output.stderr);
-        let tail = err.chars().rev().take(800).collect::<String>();
+    if let Some(p) = &opts.llm_path {
+        a.push("--llm".into());
+        a.push(p.to_string_lossy().into_owned());
+    }
+    if let Some(p) = &opts.high_noise_diffusion_model {
+        a.push("--high-noise-diffusion-model".into());
+        a.push(p.to_string_lossy().into_owned());
+    }
+    if let Some(p) = &opts.embeddings_connectors {
+        a.push("--embeddings-connectors".into());
+        a.push(p.to_string_lossy().into_owned());
+    }
+    if let Some(p) = &opts.audio_vae_path {
+        a.push("--audio-vae".into());
+        a.push(p.to_string_lossy().into_owned());
+    }
+    if let Some(fs) = opts.flow_shift {
+        a.push("--flow-shift".into());
+        a.push(fs.to_string());
+    }
+    if let Some(vf) = opts.video_frames.filter(|n| *n > 0) {
+        a.push("--video-frames".into());
+        a.push(vf.to_string());
+    }
+    if opts.auto_fit {
+        a.push("--auto-fit".into());
+    } else {
+        if let Some(b) = opts.backend.as_deref().and_then(sanitize_backend_spec) {
+            if b != "disk" {
+                a.push("--backend".into());
+                a.push(b);
+            }
+        }
+        if let Some(b) = opts
+            .params_backend
+            .as_deref()
+            .and_then(sanitize_backend_spec)
+        {
+            a.push("--params-backend".into());
+            a.push(b);
+        }
+        if opts.offload_to_cpu {
+            a.push("--offload-to-cpu".into());
+        }
+        if opts.stream_layers {
+            a.push("--stream-layers".into());
+        }
+    }
+    if let Some(v) = opts.max_vram.as_deref().and_then(sanitize_max_vram) {
+        a.push("--max-vram".into());
+        a.push(v);
+    }
+    if opts.diffusion_fa {
+        a.push("--diffusion-fa".into());
+    }
+    if let Some(p) = &opts.upscale_model_path {
+        if opts.upscale_repeats > 0 {
+            a.push("--upscale-model".into());
+            a.push(p.to_string_lossy().into_owned());
+            a.push("--upscale-repeats".into());
+            a.push(opts.upscale_repeats.max(1).to_string());
+            if let Some(tile) = opts.upscale_tile_size {
+                a.push("--upscale-tile-size".into());
+                a.push(tile.clamp(32, 512).to_string());
+            }
+        }
+    }
+    a
+}
+
+fn apply_image_command(
+    cmd: &mut Command,
+    weights: &Path,
+    prompt: &str,
+    dest: &Path,
+    opts: &ImageGenOpts,
+    lora_model_dir: Option<&Path>,
+) {
+    for arg in collect_image_args(weights, prompt, dest, opts, lora_model_dir) {
+        cmd.arg(arg);
+    }
+}
+
+/// Like [`generate_image_opts`] but calls `on_progress(step, total_steps)` when
+/// sd.cpp reports sampling progress on stdout/stderr.
+pub fn generate_image_opts_progress<F>(
+    weights: &Path,
+    prompt: &str,
+    dest: &Path,
+    opts: &ImageGenOpts,
+    on_progress: F,
+) -> Result<MediaEngine, MediaError>
+where
+    F: FnMut(u32, u32) + Send + 'static,
+{
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let prompt = match &opts.style_prefix {
+        Some(s) if !s.is_empty() => format!("{s}, {prompt}"),
+        _ => prompt.to_string(),
+    };
+    let (prompt, lora_model_dir) = prepare_lora_prompt(prompt, opts);
+    if stub_forced() || look_image_bin().is_none() || !weights.exists() {
+        std::fs::write(dest, visible_stub_png(&prompt))?;
+        return Ok(MediaEngine::Stub);
+    }
+    let bin = look_image_bin().expect("sd bin");
+    let mut cmd = Command::new(&bin);
+    cmd.current_dir(bin_dir());
+    apply_image_command(
+        &mut cmd,
+        weights,
+        &prompt,
+        dest,
+        opts,
+        lora_model_dir.as_deref(),
+    );
+    run_sd_cmd(cmd, dest, Some(Box::new(on_progress)))
+}
+
+fn run_sd_cmd(
+    mut cmd: Command,
+    dest: &Path,
+    on_progress: Option<Box<dyn FnMut(u32, u32) + Send>>,
+) -> Result<MediaEngine, MediaError> {
+    use std::sync::mpsc;
+    use std::thread;
+
+    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = cmd.spawn()?;
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+
+    let (tx, rx) = mpsc::channel::<String>();
+    if let Some(out) = stdout {
+        let tx_out = tx.clone();
+        thread::spawn(move || sd_stream_lines(out, tx_out));
+    }
+    if let Some(err) = stderr {
+        let tx_err = tx.clone();
+        thread::spawn(move || sd_stream_lines(err, tx_err));
+    }
+    drop(tx);
+
+    let mut all_log = String::new();
+    let mut cb = on_progress;
+    while let Ok(line) = rx.recv() {
+        all_log.push_str(&line);
+        all_log.push('\n');
+        if let Some(ref mut f) = cb {
+            if let Some((step, total)) = parse_sd_step(&line) {
+                f(step, total);
+            }
+        }
+    }
+    let status = child.wait()?;
+    if !status.success() {
+        let tail = all_log.chars().rev().take(800).collect::<String>();
         let tail: String = tail.chars().rev().collect();
         return Err(MediaError::EngineFailed {
             engine: "sd".into(),
-            detail: format!("exit {}: {tail}", output.status),
+            detail: format!("exit {}: {tail}", status),
         });
     }
     if !dest.exists() {
@@ -278,6 +575,165 @@ pub fn generate_image_opts(
         });
     }
     Ok(MediaEngine::SdCpp)
+}
+
+/// sd.cpp progress bars often use `\r` without `\n`; split on both.
+fn sd_stream_lines<R: std::io::Read + Send + 'static>(
+    reader: R,
+    tx: std::sync::mpsc::Sender<String>,
+) {
+    std::thread::spawn(move || {
+        let mut reader = reader;
+        let mut buf = [0u8; 4096];
+        let mut carry = String::new();
+        loop {
+            match reader.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => {
+                    carry.push_str(&String::from_utf8_lossy(&buf[..n]));
+                    loop {
+                        let Some(pos) = carry.find(|c| c == '\n' || c == '\r') else {
+                            break;
+                        };
+                        let line = carry[..pos].trim().to_string();
+                        carry = carry[pos + 1..].to_string();
+                        while carry.starts_with('\n') || carry.starts_with('\r') {
+                            carry = carry[1..].to_string();
+                        }
+                        if !line.is_empty() {
+                            let _ = tx.send(line);
+                        }
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+        let tail = carry.trim();
+        if !tail.is_empty() {
+            let _ = tx.send(tail.to_string());
+        }
+    });
+}
+
+#[cfg(test)]
+fn parse_sd_step(line: &str) -> Option<(u32, u32)> {
+    parse_sd_step_impl(line)
+}
+
+#[cfg(not(test))]
+fn parse_sd_step(line: &str) -> Option<(u32, u32)> {
+    parse_sd_step_impl(line)
+}
+
+/// Parse sd.cpp progress lines: legacy `step 3/20` or progress bar `| 1/3 - 2.63s/it`.
+fn parse_sd_step_impl(line: &str) -> Option<(u32, u32)> {
+    let line = line.trim_start_matches('\r').trim();
+    if line.is_empty() {
+        return None;
+    }
+    let lower = line.to_ascii_lowercase();
+    if let Some(idx) = lower.find("step ") {
+        if let Some(v) = parse_step_fraction(&line[idx + 5..]) {
+            return Some(v);
+        }
+    }
+    if let Some(idx) = line.rfind('|') {
+        if let Some(v) = parse_step_fraction(line[idx + 1..].trim()) {
+            return Some(v);
+        }
+    }
+    parse_step_fraction(line)
+}
+
+fn parse_step_fraction(raw: &str) -> Option<(u32, u32)> {
+    let slash = raw.find('/')?;
+    let step: u32 = raw[..slash].trim().trim_start_matches('|').trim().parse().ok()?;
+    let after = raw[slash + 1..].trim();
+    let end = after
+        .find(|c: char| !c.is_ascii_digit())
+        .unwrap_or(after.len());
+    let total: u32 = after[..end].trim().parse().ok()?;
+    if total == 0 || total > 500 || step > total {
+        return None;
+    }
+    Some((step, total))
+}
+
+/// Options for sd.cpp `--mode upscale` (ESRGAN on an existing image).
+#[derive(Debug, Clone)]
+pub struct UpscaleOpts {
+    pub upscale_model_path: PathBuf,
+    pub upscale_repeats: u32,
+    pub upscale_tile_size: Option<u32>,
+}
+
+fn collect_upscale_args(source: &Path, dest: &Path, opts: &UpscaleOpts) -> Vec<String> {
+    let mut a = vec![
+        "--mode".into(),
+        "upscale".into(),
+        "-i".into(),
+        source.to_string_lossy().into_owned(),
+        "-o".into(),
+        dest.to_string_lossy().into_owned(),
+        "--upscale-model".into(),
+        opts.upscale_model_path.to_string_lossy().into_owned(),
+        "--upscale-repeats".into(),
+        opts.upscale_repeats.max(1).to_string(),
+    ];
+    if let Some(tile) = opts.upscale_tile_size {
+        a.push("--upscale-tile-size".into());
+        a.push(tile.clamp(32, 512).to_string());
+    }
+    a
+}
+
+/// Upscale `source` PNG/JPG to `dest` using ESRGAN via sd.cpp upscale mode.
+pub fn upscale_image(source: &Path, dest: &Path, opts: &UpscaleOpts) -> Result<MediaEngine, MediaError> {
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    if stub_forced() || look_image_bin().is_none() {
+        stub_upscale_image(source, dest)?;
+        return Ok(MediaEngine::Stub);
+    }
+    if !source.is_file() {
+        return Err(MediaError::EngineFailed {
+            engine: "sd".into(),
+            detail: format!("source image missing: {}", source.display()),
+        });
+    }
+    if !opts.upscale_model_path.is_file() {
+        return Err(MediaError::EngineFailed {
+            engine: "sd".into(),
+            detail: format!(
+                "upscale model missing: {}",
+                opts.upscale_model_path.display()
+            ),
+        });
+    }
+    let bin = look_image_bin().expect("sd bin");
+    let mut cmd = Command::new(&bin);
+    cmd.current_dir(bin_dir());
+    for arg in collect_upscale_args(source, dest, opts) {
+        cmd.arg(arg);
+    }
+    run_sd_cmd(cmd, dest, None)
+}
+
+fn stub_upscale_image(source: &Path, dest: &Path) -> Result<(), MediaError> {
+    use image::imageops::FilterType;
+    let img = image::open(source).map_err(|e| MediaError::EngineFailed {
+        engine: "sd".into(),
+        detail: e.to_string(),
+    })?;
+    let w = img.width().saturating_mul(4).max(1);
+    let h = img.height().saturating_mul(4).max(1);
+    let upscaled = img.resize(w, h, FilterType::Triangle);
+    upscaled.save(dest).map_err(|e| MediaError::EngineFailed {
+        engine: "sd".into(),
+        detail: e.to_string(),
+    })?;
+    Ok(())
 }
 
 /// 16-bit PCM mono WAV (silence + a short click) so the clip is playable.
@@ -436,5 +892,140 @@ mod tests {
             .unwrap();
         assert_eq!(eng, MediaEngine::Stub);
         std::env::remove_var("AOS_MEDIA_STUB");
+    }
+
+    #[test]
+    fn upscale_argv_matches_sdcpp_recipe() {
+        let opts = UpscaleOpts {
+            upscale_model_path: PathBuf::from("RealESRGAN_x4plus_anime_6B.pth"),
+            upscale_repeats: 2,
+            upscale_tile_size: Some(128),
+        };
+        let args = collect_upscale_args(
+            Path::new("in.png"),
+            Path::new("out.png"),
+            &opts,
+        );
+        assert!(args.contains(&"--mode".into()));
+        assert!(args.contains(&"upscale".into()));
+        assert!(args.contains(&"-i".into()));
+        assert!(args.contains(&"in.png".into()));
+        assert!(args.contains(&"-o".into()));
+        assert!(args.contains(&"out.png".into()));
+        assert!(args.contains(&"--upscale-model".into()));
+        assert!(args.contains(&"--upscale-repeats".into()));
+        assert!(args.contains(&"2".into()));
+        assert!(args.contains(&"--upscale-tile-size".into()));
+        assert!(args.contains(&"128".into()));
+    }
+
+    #[test]
+    fn image_gen_upscale_argv() {
+        let mut opts = ImageGenOpts::default();
+        opts.upscale_model_path = Some(PathBuf::from("RealESRGAN_x4plus_anime_6B.pth"));
+        opts.upscale_repeats = 1;
+        opts.upscale_tile_size = Some(128);
+        let args = collect_image_args(
+            Path::new("model.safetensors"),
+            "a cat",
+            Path::new("out.png"),
+            &opts,
+            None,
+        );
+        assert!(args.contains(&"--upscale-model".into()));
+        assert!(args
+            .iter()
+            .any(|x| x.contains("RealESRGAN_x4plus_anime_6B.pth")));
+        assert!(args.contains(&"--upscale-repeats".into()));
+        assert!(args.contains(&"1".into()));
+        assert!(args.contains(&"--upscale-tile-size".into()));
+        assert!(args.contains(&"128".into()));
+    }
+
+    #[test]
+    fn ideogram_argv_matches_sdcpp_recipe() {
+        let mut opts = ImageGenOpts::default();
+        opts.width = 1024;
+        opts.height = 1024;
+        opts.steps = 28;
+        opts.diffusion_model = Some(PathBuf::from("ideogram4-Q4_0.gguf"));
+        opts.uncond_diffusion_model = Some(PathBuf::from("ideogram4_uncond-Q4_0.gguf"));
+        opts.llm_path = Some(PathBuf::from("Qwen3-VL-8B-Instruct-Q4_K_M.gguf"));
+        opts.vae_path = Some(PathBuf::from("flux2_ae.safetensors"));
+        opts.offload_to_cpu = true;
+        opts.diffusion_fa = true;
+        opts.max_vram = Some("-1".into());
+        opts.stream_layers = true;
+        let args = collect_image_args(
+            Path::new("ideogram4-Q4_0.gguf"),
+            r#"{"high_level_description":"a cat"}"#,
+            Path::new("out.png"),
+            &opts,
+            None,
+        );
+        assert!(args.contains(&"--diffusion-model".into()));
+        assert!(args.contains(&"--uncond-diffusion-model".into()));
+        assert!(args.contains(&"--llm".into()));
+        assert!(args.contains(&"--vae".into()));
+        assert!(args.contains(&"--diffusion-fa".into()));
+        assert!(args.contains(&"--offload-to-cpu".into()));
+        assert!(args.contains(&"--max-vram".into()));
+        assert!(args.contains(&"-1".into()));
+        assert!(args.contains(&"--stream-layers".into()));
+        assert!(!args.iter().any(|x| x == "-m"));
+        assert_eq!(sanitize_max_vram("-1").as_deref(), Some("-1"));
+        assert_eq!(sanitize_max_vram("cuda0=8").as_deref(), Some("cuda0=8"));
+        assert!(sanitize_max_vram("8;rm").is_none());
+        assert_eq!(sanitize_backend_spec("te=cpu,diffusion=cuda0").as_deref(), Some("te=cpu,diffusion=cuda0"));
+        assert!(sanitize_backend_spec("cpu; rm -rf").is_none());
+    }
+
+    #[test]
+    fn lora_uses_prompt_tag_and_model_dir() {
+        let mut opts = ImageGenOpts::default();
+        opts.lora_entries.push(LoraEntry {
+            stem: "marblesh".into(),
+            scale: 0.8,
+        });
+        opts.lora_model_dir = Some(PathBuf::from("share/models/lora"));
+        let (prompt, dir) = prepare_lora_prompt("a lovely cat".into(), &opts);
+        assert!(prompt.contains("<lora:marblesh:0.8>"));
+        assert_eq!(dir.as_deref(), Some(Path::new("share/models/lora")));
+        let args = collect_image_args(
+            Path::new("sd-v1-5.safetensors"),
+            &prompt,
+            Path::new("out.png"),
+            &opts,
+            dir.as_deref(),
+        );
+        assert!(args.contains(&"--lora-model-dir".into()));
+        assert!(args.iter().any(|x| x.contains("share/models/lora")));
+        assert!(!args.iter().any(|x| x == "--lora"));
+    }
+
+    #[test]
+    fn parse_sd_step_progress_bar() {
+        assert_eq!(parse_sd_step_impl("| 1/3 - 2.63s/it"), Some((1, 3)));
+        assert_eq!(parse_sd_step_impl("| 2/28 - 1.50s/it"), Some((2, 28)));
+        assert_eq!(parse_sd_step_impl("step 5/20 sampling"), Some((5, 20)));
+        assert_eq!(parse_sd_step_impl("\r| 12/28 - 0.9s/it"), Some((12, 28)));
+        assert!(parse_sd_step_impl("loading weights").is_none());
+    }
+
+    #[test]
+    fn multiple_loras_append_tags() {
+        let mut opts = ImageGenOpts::default();
+        opts.lora_entries.push(LoraEntry {
+            stem: "style_a".into(),
+            scale: 1.0,
+        });
+        opts.lora_entries.push(LoraEntry {
+            stem: "style_b".into(),
+            scale: 0.5,
+        });
+        opts.lora_model_dir = Some(PathBuf::from("share/models/lora"));
+        let (prompt, _) = prepare_lora_prompt("portrait".into(), &opts);
+        assert!(prompt.contains("<lora:style_a:1>"));
+        assert!(prompt.contains("<lora:style_b:0.5>"));
     }
 }
