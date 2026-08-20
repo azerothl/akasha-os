@@ -7,7 +7,8 @@ use aos_model::{media, providers, ModelSubsystem, ModeldConfig};
 use aos_placement::PlacementProfile;
 use aos_proto::{
     CancelRequest, InferRequest, LoadRequest,
-    MediaAudioGenerateRequest, MediaImageGenerateRequest, ModelIdRequest,
+    MediaAudioGenerateRequest, MediaImageGenerateRequest, MediaImageUpscaleRequest,
+    ModelIdRequest,
     TokenEvent, UnloadRequest, MigrateRequest,
 };
 use aos_registry::ModelRegistry;
@@ -599,6 +600,49 @@ async fn main() {
                                 aos_ipc::msg::Status::BadRequest,
                                 "payload invalide (clés d'options inconnues refusées)",
                             )
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let bus = bus.clone();
+        svc.on("media.image.upscale", move |ctx| {
+            let bus = bus.clone();
+            async move {
+                match ctx.payload::<MediaImageUpscaleRequest>() {
+                    Ok(req) => {
+                        if !aos_model::media::actor_may_generate(&req.actor, &req.caps) {
+                            let _ = ctx
+                                .respond_error(
+                                    aos_ipc::msg::Status::PermissionDenied,
+                                    "cap media.generate requise",
+                                )
+                                .await;
+                            return;
+                        }
+                        let dest = req
+                            .output_path
+                            .clone()
+                            .filter(|p| !p.is_empty())
+                            .unwrap_or_else(|| {
+                                aos_model::media::default_upscaled_path(&req.source_path)
+                            });
+                        match media::run_image_upscale(&bus, &req, &dest).await {
+                            Ok(resp) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &resp).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(aos_ipc::msg::Status::InternalError, &e)
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
                             .await;
                     }
                 }

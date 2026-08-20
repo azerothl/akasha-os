@@ -49,6 +49,11 @@ pub struct ModelRuntime {
     pub last_ttft_ms: Option<f64>,
     pub last_tok_s: Option<f64>,
     pub est_tok_s: Option<f64>,
+    /// Image/video generation in flight (sd.cpp).
+    pub media_step: Option<u32>,
+    pub media_total_steps: Option<u32>,
+    pub media_started_ms: Option<u64>,
+    pub last_step_s: Option<f64>,
 }
 
 impl ModelRuntime {
@@ -70,6 +75,10 @@ impl ModelRuntime {
             last_ttft_ms: None,
             last_tok_s: None,
             est_tok_s: None,
+            media_step: None,
+            media_total_steps: None,
+            media_started_ms: None,
+            last_step_s: None,
         }
     }
 }
@@ -112,6 +121,7 @@ enum LoadAction {
 }
 
 /// Model Subsystem (partagé entre handlers du bus).
+#[derive(Clone)]
 pub struct ModelSubsystem {
     inner: Arc<StdMutex<Inner>>,
     pub config: ModeldConfig,
@@ -1166,6 +1176,9 @@ impl ModelSubsystem {
                 vram_bytes: m.plan.as_ref().map(|p| p.bytes_on(Tier::Vram)).unwrap_or(0),
                 ram_bytes: m.plan.as_ref().map(|p| p.bytes_on(Tier::Ram)).unwrap_or(0),
                 disk_bytes: m.plan.as_ref().map(|p| p.bytes_on(Tier::Disk)).unwrap_or(0),
+                media_step: m.media_step,
+                media_total_steps: m.media_total_steps,
+                last_step_s: m.last_step_s,
             })
             .collect();
         SystemMetrics {
@@ -1237,11 +1250,57 @@ impl ModelSubsystem {
         })
     }
 
+    pub fn media_gen_begin(&self, model_id: &str, total_steps: u32) {
+        let mut g = self.inner.lock().unwrap();
+        let Some(m) = g.models.get_mut(model_id) else {
+            return;
+        };
+        m.active = m.active.saturating_add(1);
+        m.media_step = Some(0);
+        m.media_total_steps = Some(total_steps.max(1));
+        m.media_started_ms = Some(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0),
+        );
+    }
+
+    pub fn media_gen_progress(&self, model_id: &str, step: u32, total: u32) {
+        let mut g = self.inner.lock().unwrap();
+        let Some(m) = g.models.get_mut(model_id) else {
+            return;
+        };
+        m.media_step = Some(step);
+        m.media_total_steps = Some(total.max(1));
+        if let Some(start) = m.media_started_ms {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(start);
+            let elapsed = (now.saturating_sub(start)) as f64 / 1000.0;
+            if elapsed > 0.0 && step > 0 {
+                m.last_step_s = Some(step as f64 / elapsed);
+            }
+        }
+    }
+
+    pub fn media_gen_end(&self, model_id: &str) {
+        let mut g = self.inner.lock().unwrap();
+        let Some(m) = g.models.get_mut(model_id) else {
+            return;
+        };
+        m.active = m.active.saturating_sub(1);
+        m.media_step = None;
+        m.media_total_steps = None;
+        m.media_started_ms = None;
+    }
+
     pub fn has_live_infer(&self) -> bool {
         let g = self.inner.lock().unwrap();
         g.models
             .values()
-            .any(|m| !m.desc.is_media() && (m.active > 0 || m.pending > 0))
+            .any(|m| m.active > 0 || m.pending > 0)
     }
 }
 
