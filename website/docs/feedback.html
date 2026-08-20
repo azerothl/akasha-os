@@ -48,89 +48,136 @@
 
         <h1>
           <span data-lang="en">
-            Preview <span data-aos-version>0.9.0</span> cohort protocol. Install without cargo or a clone,
-            exercise the main paths, send feedback from the UI.
-            The same steps live in the Scenarios tab.
+            If you are in the Preview
+            <span data-aos-version>0.9.0</span> cohort, this page is the
+            protocol: install without cargo or a clone, exercise the main
+            paths, then send a report from the UI. The same outline lives in
+            the Scenarios tab.
           </span>
           <span data-lang="fr">
-            Protocole de la cohorte Preview <span data-aos-version>0.9.0</span>. Installer sans cargo ni clone,
-            exercer les chemins principaux, envoyer un retour depuis l’UI.
-            Les mêmes étapes sont dans l’onglet Scenarios.
+            Si vous êtes dans la cohorte Preview
+            <span data-aos-version>0.9.0</span>, cette page est le protocole :
+            installer sans cargo ni clone, exercer les chemins principaux, puis
+            envoyer un rapport depuis l’UI. Le même plan vit dans l’onglet
+            Scenarios.
           </span>
         </h1>
 
-        <h2 data-lang="en">before you start</h2>
-        <h2 data-lang="fr">avant de commencer</h2>
-        <ul class="ticks">
-          <li>Windows <span data-lang="en">or</span><span data-lang="fr">ou</span> Linux x64 (NVIDIA recommended; CPU-only package OK)</li>
-          <li><a href="../install.html">install</a> → launch Akasha OS Preview (<code>aos-session</code>)</li>
-          <li data-lang="en">Banner: Preview on Windows/Linux — this is not the bootable OS yet</li>
-          <li data-lang="fr">Bannière : Preview on Windows/Linux — this is not the bootable OS yet</li>
-        </ul>
+        <aside class="callout">
+          <h3 data-lang="en">What we are asking</h3>
+          <h3 data-lang="fr">Ce que nous demandons</h3>
+          <p data-lang="en">
+            You do not need to be exhaustive on day one. Walk the paths you can
+            honestly cover, note what felt clear or broken, and file from
+            Feedback. A partial report with a real setup is more useful than a
+            perfect checklist left empty.
+          </p>
+          <p data-lang="fr">
+            Vous n’avez pas besoin d’être exhaustif dès le premier jour.
+            Parcourez les chemins que vous pouvez couvrir honnêtement, notez ce
+            qui était clair ou cassé, et envoyez depuis Feedback. Un rapport
+            partiel avec une vraie install vaut mieux qu’une checklist parfaite
+            laissée vide.
+          </p>
+        </aside>
 
-        <h2 data-lang="en">walk the paths</h2>
-        <h2 data-lang="fr">parcourir les chemins</h2>
-        <ol class="steps">
-          <li data-lang="en">Finish model setup and the 4-step tutorial. Chat offline. Optionally change the session model.</li>
-          <li data-lang="fr">Terminer le réglage des modèles et le tutoriel (4 étapes). Chat hors ligne. Changer éventuellement le modèle de session.</li>
-          <li data-lang="en">Models tab: installed entries; Download an alternative if offered.</li>
-          <li data-lang="fr">Onglet Models : entrées installées ; Download une alternative si proposée.</li>
-          <li data-lang="en">Notes: title + body → Create, then List.</li>
-          <li data-lang="fr">Notes : titre + corps → Create, puis List.</li>
-          <li data-lang="en">Tasks tab: create a task; an agent with <code>tasks.list</code> should see it.</li>
-          <li data-lang="fr">Onglet Tasks : créer une tâche ; un agent avec <code>tasks.list</code> doit la voir.</li>
-          <li data-lang="en">Agents: task such as “create a note titled cohort with content hello”. Open Detail.</li>
-          <li data-lang="fr">Agents : tâche du type « create a note titled cohort with content hello ». Ouvrir Détail.</li>
-          <li data-lang="en">Confirmation banner: Deny once, Accept another. Timeout = deny.</li>
-          <li data-lang="fr">Bannière de confirmation : Deny une fois, Accept une autre. Timeout = refus.</li>
-          <li data-lang="en">Audit → Refresh. Caps: list holder <code>agent:&lt;id&gt;</code>, revoke a non-critical cap. Kill aos-auditd; chat continues; supervisor restarts it.</li>
-          <li data-lang="fr">Audit → Refresh. Caps : lister le détenteur <code>agent:&lt;id&gt;</code>, révoquer une cap non critique. Tuer aos-auditd ; le chat continue ; le superviseur le relance.</li>
-          <li data-lang="en">Three Chat sessions; restart; histories return.</li>
-          <li data-lang="fr">Trois sessions Chat ; redémarrer ; les historiques reviennent.</li>
-          <li data-lang="en">Memory: remember a fact, Recall, then use it in Chat.</li>
-          <li data-lang="fr">Memory : remember un fait, Recall, puis l’utiliser dans Chat.</li>
-          <li data-lang="en">Settings → Secrets: save a key; restart; <code>master.backend</code> is keyring or file (no plaintext <code>master.key</code> on Windows).</li>
-          <li data-lang="fr">Settings → Secrets : enregistrer une clé ; redémarrer ; <code>master.backend</code> est keyring ou file (pas de <code>master.key</code> lisible sous Windows).</li>
-          <li data-lang="en">Settings → Local module catalogue: Install a listed module (cap review). Stop a streaming chat reply; Copy a message.</li>
-          <li data-lang="fr">Settings → Catalogue local : Installer un module listé (revue de caps). Stop sur une réponse en flux ; Copier un message.</li>
-          <li data-lang="en">Scenarios (or Chat « create a module »): scaffold / package / install a script module; a <strong>Modules</strong> sidebar tab appears (not notes / tasks / ext-rt). Open it, submit once.</li>
-          <li data-lang="fr">Scénarios (ou Chat « crée un module ») : scaffolder / packager / installer un module script ; un onglet <strong>Modules</strong> apparaît (pas notes / tasks / ext-rt). L’ouvrir, soumettre une fois.</li>
-          <li data-lang="en">Network off → search fails. Network on → search (engine <code>auto</code>). Optional Browse URL / download / generate file. See <a href="network.html">network</a>.</li>
-          <li data-lang="fr">Réseau off → recherche échoue. Réseau on → recherche (moteur <code>auto</code>). Browse URL / téléchargement / fichier optionnels. Voir <a href="network.html">network</a>.</li>
-          <li data-lang="en">Notes: create a note, then read it from the list (after an update, the packaged WASM must match this release).</li>
-          <li data-lang="fr">Notes : créer une note, puis la relire dans la liste (après une update, le WASM empaqueté doit correspondre à cette release).</li>
-          <li data-lang="en">Troubleshoot (Help): run diagnostics. If findings exist, a GitHub report can open.</li>
-          <li data-lang="fr">Dépannage (Aide) : lancer le diagnostic. S’il y a des anomalies, un rapport GitHub peut s’ouvrir.</li>
-          <li data-lang="en">0.8: Uninstall a non-bundled module from Settings. Providers: add loopback (works in local_only). Optional Models Download of SD 1.5 / Piper (engine arrives with the pack) then Chat <code>/image</code> / <code>/speak</code>.</li>
-          <li data-lang="fr">0.8 : Désinstaller un module non bundlé depuis Settings. Providers : ajouter un loopback (marche en local_only). Download optionnel SD 1.5 / Piper (le moteur arrive avec le pack) puis Chat <code>/image</code> / <code>/speak</code>.</li>
-        </ol>
+        <article class="grant">
+          <h2 data-lang="en">Before you start</h2>
+          <h2 data-lang="fr">Avant de commencer</h2>
+          <p class="hist" data-lang="en">
+            You need Windows or Linux x64 (NVIDIA recommended; CPU path OK).
+            Follow <a href="../install.html">install</a>, launch Akasha OS
+            Preview (<code>aos-session</code>), and confirm the banner that this
+            is Preview on Windows/Linux — not the bootable OS yet.
+          </p>
+          <p class="hist" data-lang="fr">
+            Il faut Windows ou Linux x64 (NVIDIA recommandé ; chemin CPU OK).
+            Suivez <a href="../install.html">install</a>, lancez Akasha OS
+            Preview (<code>aos-session</code>), et confirmez la bannière : Preview
+            on Windows/Linux — pas encore l’OS bootable.
+          </p>
+        </article>
 
-        <h2 data-lang="en">send from the UI</h2>
-        <h2 data-lang="fr">envoyer depuis l’UI</h2>
-        <p class="hist" data-lang="en">
-          Feedback tab (or Report): title, category (bug / ux / perf / security),
-          severity, body. Create a GitHub issue is checked by default, except
-          security. Send feedback. A local copy is written under
-          <code>var/feedback/</code>. An issue (or a prefilled GitHub form) opens
-          on <a href="https://github.com/azerothl/akasha-os/issues">azerothl/akasha-os</a>.
-          With a GitHub account, confirm Submit new issue.
-        </p>
-        <p class="hist" data-lang="fr">
-          Onglet Feedback (ou Report) : titre, catégorie (bug / ux / perf / security),
-          sévérité, corps. Create a GitHub issue est coché par défaut, sauf
-          security. Send feedback. Une copie locale est écrite sous
-          <code>var/feedback/</code>. Une issue (ou un formulaire GitHub prérempli)
-          s’ouvre sur <a href="https://github.com/azerothl/akasha-os/issues">azerothl/akasha-os</a>.
-          Avec un compte GitHub, confirmez Submit new issue.
-        </p>
-        <p class="hist" data-lang="en">
-          Security reports are not published. There is no automatic network
-          upload except explicit search, download, and GitHub submit.
-        </p>
-        <p class="hist" data-lang="fr">
-          Les rapports sécurité ne sont pas publiés. Pas d’upload réseau
-          automatique hors recherche, téléchargement et envoi GitHub explicites.
-        </p>
+        <article class="section-plate">
+          <h2 data-lang="en">Walk the paths</h2>
+          <h2 data-lang="fr">Parcourir les chemins</h2>
+          <p class="hist" data-lang="en">
+            Treat the list as a suggested tour rather than a drill sergeant.
+            Skip what your hardware or time cannot support, and say so in the
+            report.
+          </p>
+          <p class="hist" data-lang="fr">
+            Traitez la liste comme une visite suggérée plutôt qu’un sergent.
+            Sautez ce que votre matériel ou votre temps ne permet pas, et
+            dites-le dans le rapport.
+          </p>
+          <ol class="steps">
+            <li data-lang="en">Finish model setup and the 4-step tutorial. Chat offline. Optionally change the session model.</li>
+            <li data-lang="fr">Terminer le réglage des modèles et le tutoriel (4 étapes). Chat hors ligne. Changer éventuellement le modèle de session.</li>
+            <li data-lang="en">Models tab: installed entries; Download an alternative if offered.</li>
+            <li data-lang="fr">Onglet Models : entrées installées ; Download une alternative si proposée.</li>
+            <li data-lang="en">Notes: title + body → Create, then List.</li>
+            <li data-lang="fr">Notes : titre + corps → Create, puis List.</li>
+            <li data-lang="en">Tasks tab: create a task; an agent with <code>tasks.list</code> should see it.</li>
+            <li data-lang="fr">Onglet Tasks : créer une tâche ; un agent avec <code>tasks.list</code> doit la voir.</li>
+            <li data-lang="en">Agents: task such as “create a note titled cohort with content hello”. Open Detail.</li>
+            <li data-lang="fr">Agents : tâche du type « create a note titled cohort with content hello ». Ouvrir Détail.</li>
+            <li data-lang="en">Confirmation banner: Deny once, Accept another. Timeout = deny.</li>
+            <li data-lang="fr">Bannière de confirmation : Deny une fois, Accept une autre. Timeout = refus.</li>
+            <li data-lang="en">Audit → Refresh. Caps: list holder <code>agent:&lt;id&gt;</code>, revoke a non-critical cap. Kill aos-auditd; chat continues; supervisor restarts it.</li>
+            <li data-lang="fr">Audit → Refresh. Caps : lister le détenteur <code>agent:&lt;id&gt;</code>, révoquer une cap non critique. Tuer aos-auditd ; le chat continue ; le superviseur le relance.</li>
+            <li data-lang="en">Three Chat sessions; restart; histories return.</li>
+            <li data-lang="fr">Trois sessions Chat ; redémarrer ; les historiques reviennent.</li>
+            <li data-lang="en">Memory: remember a fact, Recall, then use it in Chat.</li>
+            <li data-lang="fr">Memory : remember un fait, Recall, puis l’utiliser dans Chat.</li>
+            <li data-lang="en">Settings → Secrets: save a key; restart; <code>master.backend</code> is keyring or file (no plaintext <code>master.key</code> on Windows).</li>
+            <li data-lang="fr">Settings → Secrets : enregistrer une clé ; redémarrer ; <code>master.backend</code> est keyring ou file (pas de <code>master.key</code> lisible sous Windows).</li>
+            <li data-lang="en">Settings → Local module catalogue: Install a listed module (cap review). Stop a streaming chat reply; Copy a message.</li>
+            <li data-lang="fr">Settings → Catalogue local : Installer un module listé (revue de caps). Stop sur une réponse en flux ; Copier un message.</li>
+            <li data-lang="en">Scenarios (or Chat « create a module »): scaffold / package / install a script module; a <strong>Modules</strong> sidebar tab appears (not notes / tasks / ext-rt). Open it, submit once.</li>
+            <li data-lang="fr">Scénarios (ou Chat « crée un module ») : scaffolder / packager / installer un module script ; un onglet <strong>Modules</strong> apparaît (pas notes / tasks / ext-rt). L’ouvrir, soumettre une fois.</li>
+            <li data-lang="en">Network off → search fails. Network on → search (engine <code>auto</code>). Optional Browse URL / download / generate file. See <a href="network.html">network</a>.</li>
+            <li data-lang="fr">Réseau off → recherche échoue. Réseau on → recherche (moteur <code>auto</code>). Browse URL / téléchargement / fichier optionnels. Voir <a href="network.html">network</a>.</li>
+            <li data-lang="en">Notes: create a note, then read it from the list (after an update, the packaged WASM must match this release).</li>
+            <li data-lang="fr">Notes : créer une note, puis la relire dans la liste (après une update, le WASM empaqueté doit correspondre à cette release).</li>
+            <li data-lang="en">Troubleshoot (Help): run diagnostics. If findings exist, a GitHub report can open.</li>
+            <li data-lang="fr">Dépannage (Aide) : lancer le diagnostic. S’il y a des anomalies, un rapport GitHub peut s’ouvrir.</li>
+            <li data-lang="en">0.8 surfaces: Uninstall a non-bundled module from Settings. Providers: add loopback (works in local_only). Optional Models Download of SD 1.5 / Piper (engine arrives with the pack) then Chat <code>/image</code> / <code>/speak</code>.</li>
+            <li data-lang="fr">Surfaces 0.8 : Désinstaller un module non bundlé depuis Settings. Providers : ajouter un loopback (marche en local_only). Download optionnel SD 1.5 / Piper (le moteur arrive avec le pack) puis Chat <code>/image</code> / <code>/speak</code>.</li>
+          </ol>
+        </article>
+
+        <article class="grant">
+          <h2 data-lang="en">Send from the UI</h2>
+          <h2 data-lang="fr">Envoyer depuis l’UI</h2>
+          <p class="hist" data-lang="en">
+            Open the Feedback tab (or Report): title, category (bug / ux / perf /
+            security), severity, and body. Create a GitHub issue is checked by
+            default, except for security. Send feedback writes a local copy under
+            <code>var/feedback/</code> and opens an issue (or a prefilled GitHub
+            form) on
+            <a href="https://github.com/azerothl/akasha-os/issues">azerothl/akasha-os</a>.
+            With a GitHub account, confirm Submit new issue.
+          </p>
+          <p class="hist" data-lang="fr">
+            Ouvrez l’onglet Feedback (ou Report) : titre, catégorie (bug / ux /
+            perf / security), sévérité et corps. Create a GitHub issue est coché
+            par défaut, sauf security. Send feedback écrit une copie locale sous
+            <code>var/feedback/</code> et ouvre une issue (ou un formulaire
+            GitHub prérempli) sur
+            <a href="https://github.com/azerothl/akasha-os/issues">azerothl/akasha-os</a>.
+            Avec un compte GitHub, confirmez Submit new issue.
+          </p>
+          <p class="hist" data-lang="en">
+            Security reports are not published. There is no automatic network
+            upload except explicit search, download, and GitHub submit.
+          </p>
+          <p class="hist" data-lang="fr">
+            Les rapports sécurité ne sont pas publiés. Pas d’upload réseau
+            automatique hors recherche, téléchargement et envoi GitHub
+            explicites.
+          </p>
+        </article>
 
         <a class="continue pager" href="limits.html">
           <span class="continue-label">Limits</span>

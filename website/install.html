@@ -16,14 +16,6 @@
     <meta name="theme-color" content="#070b14" />
   </head>
   <body class="plate">
-    <!--
-      THESIS: Install is winding the orrery, not a download marketing block.
-      OWN-WORLD: Orrery inner plate — void, cyan labels, hydrogen key on Download only.
-      STORY: A tester checks hardware, downloads the archive, runs the script, launches Preview.
-      FIRST VIEWPORT: Honesty + requirements + the hydrogen Download key.
-      FORM: Orrery inner plate, seed c1699dbf reroll 1.
-      FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
-    -->
     <canvas class="ether" data-ether aria-hidden="true"></canvas>
     <a class="skip" href="#content">Skip to content</a>
     <div class="shell">
@@ -48,16 +40,38 @@
       <main id="content" class="plate-main">
         <h1>
           <span data-lang="en">
-            This is not a bootable OS. Preview <span data-aos-version>0.9.0</span>
-            installs as a host app. No clone, no cargo. Download the archive,
-            run the script, launch Akasha OS Preview.
+            Preview <span data-aos-version>0.9.0</span> is a host app you
+            install and launch — not a bootable image. No clone, no cargo:
+            download the archive, run the install script, then open Akasha OS
+            Preview.
           </span>
           <span data-lang="fr">
-            Ce n’est pas un OS bootable. La Preview <span data-aos-version>0.9.0</span>
-            s’installe comme appli hôte. Pas de clone, pas de cargo. Téléchargez
-            l’archive, lancez le script, ouvrez Akasha OS Preview.
+            La Preview <span data-aos-version>0.9.0</span> est une appli hôte
+            que vous installez et lancez — pas une image bootable. Pas de clone,
+            pas de cargo : téléchargez l’archive, lancez le script
+            d’installation, puis ouvrez Akasha OS Preview.
           </span>
         </h1>
+
+        <aside class="callout callout-limit">
+          <h3 data-lang="en">Platform notes</h3>
+          <h3 data-lang="fr">Notes de plateforme</h3>
+          <p data-lang="en">
+            Windows 10/11 x64 and Linux x64 are supported. macOS is not.
+            NVIDIA with a recent driver is recommended (<code>nvidia-smi -L</code>);
+            the CUDA runtime ships in the package, so the driver is enough. A
+            CPU path is available in Preview <span data-aos-version>0.9.0</span>
+            via Settings → Inference — no second zip required.
+          </p>
+          <p data-lang="fr">
+            Windows 10/11 x64 et Linux x64 sont pris en charge. macOS ne l’est
+            pas. NVIDIA avec un pilote récent est recommandé
+            (<code>nvidia-smi -L</code>) ; le runtime CUDA est fourni dans le
+            paquet, le pilote suffit. Un chemin CPU est disponible en Preview
+            <span data-aos-version>0.9.0</span> via Réglages → Inférence — pas
+            de second zip.
+          </p>
+        </aside>
 
         <a class="key" href="https://github.com/azerothl/akasha-os/releases">
           <svg class="key-glyph" viewBox="0 0 32 32" aria-hidden="true">
@@ -82,119 +96,153 @@
           </svg>
         </a>
 
-        <h2>hw.req</h2>
-        <ul class="ticks" aria-label="Requirements">
-          <li>os GRANT Windows 10/11 x64 <span data-lang="en">or</span><span data-lang="fr">ou</span> Linux x64</li>
-          <li>gpu GRANT NVIDIA <span data-lang="en">+ recent driver</span><span data-lang="fr">+ pilote récent</span> (<code>nvidia-smi -L</code>)</li>
-          <li>
-            <span data-lang="en">disk ~8 GB free recommended (mid-tier GGUF pack). Binaries plus first-run models.</span>
-            <span data-lang="fr">disque ~8 Go libres recommandés (pack GGUF mid). Binaires plus modèles au premier lancement.</span>
-          </li>
-          <li>
-            <span data-lang="en">cuda runtime ships in the package; the driver is enough</span>
-            <span data-lang="fr">runtime cuda fourni dans le paquet ; le pilote suffit</span>
-          </li>
-          <li>macos DENY</li>
-          <li>
-            <span data-lang="en">cpu-only GRANT in Preview <span data-aos-version>0.9.0</span> (Settings → Inference; no second zip)</span>
-            <span data-lang="fr">cpu-only GRANT en Preview <span data-aos-version>0.9.0</span> (Réglages → Inférence ; pas de second zip)</span>
-          </li>
-        </ul>
+        <article class="grant">
+          <h2 data-lang="en">What you need</h2>
+          <h2 data-lang="fr">Ce qu’il vous faut</h2>
+          <ul class="ticks" aria-label="Requirements">
+            <li data-lang="en">Windows 10/11 x64 or Linux x64</li>
+            <li data-lang="fr">Windows 10/11 x64 ou Linux x64</li>
+            <li data-lang="en">
+              NVIDIA GPU with a recent driver recommended
+              (<code>nvidia-smi -L</code>)
+            </li>
+            <li data-lang="fr">
+              GPU NVIDIA avec pilote récent recommandé
+              (<code>nvidia-smi -L</code>)
+            </li>
+            <li data-lang="en">
+              About 8 GB free disk recommended for a mid-tier GGUF pack
+              (binaries plus first-run models)
+            </li>
+            <li data-lang="fr">
+              Environ 8 Go libres recommandés pour un pack GGUF mid (binaires
+              plus modèles au premier lancement)
+            </li>
+            <li data-lang="en">
+              CUDA runtime is included; installing the driver is enough
+            </li>
+            <li data-lang="fr">
+              Runtime CUDA inclus ; installer le pilote suffit
+            </li>
+            <li data-lang="en">macOS is not supported</li>
+            <li data-lang="fr">macOS n’est pas pris en charge</li>
+            <li data-lang="en">
+              CPU-only works in Preview <span data-aos-version>0.9.0</span>
+              (Settings → Inference; no second zip)
+            </li>
+            <li data-lang="fr">
+              CPU seul fonctionne en Preview <span data-aos-version>0.9.0</span>
+              (Réglages → Inférence ; pas de second zip)
+            </li>
+          </ul>
+        </article>
 
-        <h2 data-lang="en">One command</h2>
-        <h2 data-lang="fr">Une commande</h2>
-        <p class="hist" data-lang="en">
-          Downloads the unified Windows artefact, prints URL + sha256, verifies
-          fail-closed, then overlays into
-          <code>%LOCALAPPDATA%\AgentOS-Preview</code> (keeps <code>var/</code>
-          and <code>etc/</code>).
-        </p>
-        <p class="hist" data-lang="fr">
-          Télécharge l’artefact Windows unifié, affiche URL + sha256, vérifie
-          fail-closed, puis superpose dans
-          <code>%LOCALAPPDATA%\AgentOS-Preview</code> (conserve <code>var/</code>
-          et <code>etc/</code>).
-        </p>
-        <pre>irm https://azerothl.github.io/akasha-os/install.ps1 | iex</pre>
-        <p class="hist" data-lang="en">
-          Linux (prefix <code>~/.local/share/agentos-preview</code>):
-        </p>
-        <p class="hist" data-lang="fr">
-          Linux (préfixe <code>~/.local/share/agentos-preview</code>) :
-        </p>
-        <pre>curl -fsSL https://azerothl.github.io/akasha-os/install.sh | sh</pre>
+        <article class="grant">
+          <h2 data-lang="en">One command</h2>
+          <h2 data-lang="fr">Une commande</h2>
+          <p class="hist" data-lang="en">
+            On Windows, this downloads the unified artefact, prints URL and
+            sha256, verifies fail-closed, then overlays into
+            <code>%LOCALAPPDATA%\AgentOS-Preview</code> while keeping
+            <code>var/</code> and <code>etc/</code>.
+          </p>
+          <p class="hist" data-lang="fr">
+            Sous Windows, cela télécharge l’artefact unifié, affiche URL et
+            sha256, vérifie fail-closed, puis superpose dans
+            <code>%LOCALAPPDATA%\AgentOS-Preview</code> en conservant
+            <code>var/</code> et <code>etc/</code>.
+          </p>
+          <pre>irm https://azerothl.github.io/akasha-os/install.ps1 | iex</pre>
+          <p class="hist" data-lang="en">
+            On Linux the same idea uses prefix
+            <code>~/.local/share/agentos-preview</code>:
+          </p>
+          <p class="hist" data-lang="fr">
+            Sous Linux, même idée avec le préfixe
+            <code>~/.local/share/agentos-preview</code> :
+          </p>
+          <pre>curl -fsSL https://azerothl.github.io/akasha-os/install.sh | sh</pre>
+        </article>
 
-        <h2 data-lang="en">Windows</h2>
-        <h2 data-lang="fr">Windows</h2>
-        <ol class="steps">
-          <li data-lang="en">
-            Download the unified zip
-            <code>AgentOS-Preview-&lt;ver&gt;-windows-x64.zip</code>
-            (CUDA + CPU backends inside) from
-            <a href="https://github.com/azerothl/akasha-os/releases">GitHub Releases</a>.
-          </li>
-          <li data-lang="fr">
-            Télécharger le zip unifié
-            <code>AgentOS-Preview-&lt;ver&gt;-windows-x64.zip</code>
-            (backends CUDA + CPU inclus) depuis
-            <a href="https://github.com/azerothl/akasha-os/releases">GitHub Releases</a>.
-          </li>
-          <li data-lang="en">Extract, then run:</li>
-          <li data-lang="fr">Décompresser, puis :</li>
-        </ol>
-        <pre>.\install.cmd</pre>
-        <p class="hist" data-lang="en">
-          Prefer <code>install.cmd</code> (bypasses Restricted PowerShell
-          policy). Equivalent:
-          <code>powershell -ExecutionPolicy Bypass -File .\install.ps1</code>.
-          Installs under <code>%LOCALAPPDATA%\AgentOS-Preview</code> and keeps
-          <code>var/</code> and <code>etc/</code> on update. Launch
-          <strong>Akasha OS Preview</strong>.
-        </p>
-        <p class="hist" data-lang="fr">
-          Préférez <code>install.cmd</code> (contourne la stratégie PowerShell
-          Restricted). Équivalent :
-          <code>powershell -ExecutionPolicy Bypass -File .\install.ps1</code>.
-          Installe sous <code>%LOCALAPPDATA%\AgentOS-Preview</code> et conserve
-          <code>var/</code> et <code>etc/</code> à la mise à jour. Lancer
-          <strong>Akasha OS Preview</strong>.
-        </p>
-        <p class="hist" data-lang="en">
-          Quick start without <code>install.cmd</code> still uses the stable
-          data prefix (<code>%LOCALAPPDATA%\AgentOS-Preview</code>):
-        </p>
-        <p class="hist" data-lang="fr">
-          Démarrage rapide sans <code>install.cmd</code> : le préfixe de
-          données stable est quand même utilisé
-          (<code>%LOCALAPPDATA%\AgentOS-Preview</code>) :
-        </p>
-        <pre>.\bin\aos-session.exe</pre>
+        <article class="grant">
+          <h2 data-lang="en">Windows step by step</h2>
+          <h2 data-lang="fr">Windows pas à pas</h2>
+          <ol class="steps">
+            <li data-lang="en">
+              Download the unified zip
+              <code>AgentOS-Preview-&lt;ver&gt;-windows-x64.zip</code>
+              (CUDA and CPU backends inside) from
+              <a href="https://github.com/azerothl/akasha-os/releases">GitHub Releases</a>.
+            </li>
+            <li data-lang="fr">
+              Télécharger le zip unifié
+              <code>AgentOS-Preview-&lt;ver&gt;-windows-x64.zip</code>
+              (backends CUDA et CPU inclus) depuis
+              <a href="https://github.com/azerothl/akasha-os/releases">GitHub Releases</a>.
+            </li>
+            <li data-lang="en">Extract, then run:</li>
+            <li data-lang="fr">Décompresser, puis :</li>
+          </ol>
+          <pre>.\install.cmd</pre>
+          <p class="hist" data-lang="en">
+            Prefer <code>install.cmd</code> — it bypasses a Restricted
+            PowerShell policy. The equivalent is
+            <code>powershell -ExecutionPolicy Bypass -File .\install.ps1</code>.
+            Files land under <code>%LOCALAPPDATA%\AgentOS-Preview</code>;
+            updates keep <code>var/</code> and <code>etc/</code>. Launch
+            <strong>Akasha OS Preview</strong> from the Start menu or shortcut.
+          </p>
+          <p class="hist" data-lang="fr">
+            Préférez <code>install.cmd</code> — il contourne la stratégie
+            PowerShell Restricted. L’équivalent est
+            <code>powershell -ExecutionPolicy Bypass -File .\install.ps1</code>.
+            Les fichiers vont sous <code>%LOCALAPPDATA%\AgentOS-Preview</code> ;
+            les mises à jour conservent <code>var/</code> et <code>etc/</code>.
+            Lancez <strong>Akasha OS Preview</strong> depuis le menu Démarrer
+            ou le raccourci.
+          </p>
+          <p class="hist" data-lang="en">
+            Quick start without <code>install.cmd</code> still uses the stable
+            data prefix (<code>%LOCALAPPDATA%\AgentOS-Preview</code>):
+          </p>
+          <p class="hist" data-lang="fr">
+            Démarrage rapide sans <code>install.cmd</code> : le préfixe de
+            données stable est quand même utilisé
+            (<code>%LOCALAPPDATA%\AgentOS-Preview</code>) :
+          </p>
+          <pre>.\bin\aos-session.exe</pre>
+        </article>
 
-        <h2 data-lang="en">Linux</h2>
-        <h2 data-lang="fr">Linux</h2>
-        <ol class="steps">
-          <li data-lang="en">
-            Download <code>AgentOS-Preview-&lt;ver&gt;-linux-x64.tar.gz</code>
-            (CUDA + CPU backends inside), extract.
-          </li>
-          <li data-lang="fr">
-            Télécharger <code>AgentOS-Preview-&lt;ver&gt;-linux-x64.tar.gz</code>
-            (backends CUDA + CPU inclus), extraire.
-          </li>
-          <li><code>./install.sh</code></li>
-          <li data-lang="en">
-            Prefix: <code>~/.local/share/agentos-preview</code> (non-destructive overlay).
-            Run <code>agentos-preview</code>.
-          </li>
-          <li data-lang="fr">
-            Préfixe : <code>~/.local/share/agentos-preview</code> (overlay non destructif).
-            Lancer <code>agentos-preview</code>.
-          </li>
-        </ol>
+        <article class="grant">
+          <h2 data-lang="en">Linux step by step</h2>
+          <h2 data-lang="fr">Linux pas à pas</h2>
+          <ol class="steps">
+            <li data-lang="en">
+              Download
+              <code>AgentOS-Preview-&lt;ver&gt;-linux-x64.tar.gz</code>
+              (CUDA and CPU backends inside), then extract.
+            </li>
+            <li data-lang="fr">
+              Télécharger
+              <code>AgentOS-Preview-&lt;ver&gt;-linux-x64.tar.gz</code>
+              (backends CUDA et CPU inclus), puis extraire.
+            </li>
+            <li><code>./install.sh</code></li>
+            <li data-lang="en">
+              Prefix: <code>~/.local/share/agentos-preview</code>
+              (non-destructive overlay). Run <code>agentos-preview</code>.
+            </li>
+            <li data-lang="fr">
+              Préfixe : <code>~/.local/share/agentos-preview</code>
+              (overlay non destructif). Lancer <code>agentos-preview</code>.
+            </li>
+          </ol>
+        </article>
 
-        <h2 data-lang="en">package</h2>
-        <h2 data-lang="fr">paquet</h2>
-        <pre>bin/            daemons + CUDA runtime (CPU zip has no CUDA DLLs)
+        <article class="grant">
+          <h2 data-lang="en">What the package contains</h2>
+          <h2 data-lang="fr">Ce que contient le paquet</h2>
+          <pre>bin/            daemons + CUDA runtime (CPU zip has no CUDA DLLs)
 share/models/   manifest.json (GGUF on first run)
 share/modules/  notes.aospkg, tasks.aospkg, ext-rt.aospkg
 share/skills/   notes-writer, research, file-author, planner, tasks
@@ -202,69 +250,124 @@ share/mcp/      servers.yaml.example
 data/models/    catalog.yaml
 VERSION         build semver
 var/            created at run</pre>
+        </article>
 
-        <h2 data-lang="en">first launch</h2>
-        <h2 data-lang="fr">premier lancement</h2>
-        <ol class="steps">
-          <li data-lang="en"><code>aos-session</code> checks disk (and NVIDIA if present), probes VRAM / RAM.</li>
-          <li data-lang="fr"><code>aos-session</code> vérifie le disque (et NVIDIA s’il est présent), sonde VRAM / RAM.</li>
-          <li data-lang="en">
-            Model setup: confirm the auto-best pack for your tier (cpu / low / mid / high), then GGUFs
-            download into <code>share/models/</code>.
-          </li>
-          <li data-lang="fr">
-            Réglage modèles : confirmez le pack auto pour votre palier (cpu / low / mid / high), puis
-            les GGUF descendent dans <code>share/models/</code>.
-          </li>
-          <li>bus → capkd → auditd → modeld → platformd → agentd</li>
-          <li data-lang="en">egui UI + multi-page tutorial. Closing the UI stops the daemons.</li>
-          <li data-lang="fr">UI egui + tutoriel multi-pages. Fermer l’UI arrête les daemons.</li>
-        </ol>
-        <p class="hist" data-lang="en">
-          Next: <a href="docs/first-run.html">first run</a> in the user manual.
-        </p>
-        <p class="hist" data-lang="fr">
-          Suite : <a href="docs/first-run.html">premier lancement</a> dans le manuel.
-        </p>
+        <article class="grant">
+          <h2 data-lang="en">First launch</h2>
+          <h2 data-lang="fr">Premier lancement</h2>
+          <ol class="steps">
+            <li data-lang="en">
+              <code>aos-session</code> checks disk (and NVIDIA if present),
+              then probes VRAM and RAM.
+            </li>
+            <li data-lang="fr">
+              <code>aos-session</code> vérifie le disque (et NVIDIA s’il est
+              présent), puis sonde VRAM et RAM.
+            </li>
+            <li data-lang="en">
+              Model setup: confirm the auto-best pack for your tier
+              (cpu / low / mid / high), then GGUFs download into
+              <code>share/models/</code>.
+            </li>
+            <li data-lang="fr">
+              Réglage modèles : confirmez le pack auto pour votre palier
+              (cpu / low / mid / high), puis les GGUF descendent dans
+              <code>share/models/</code>.
+            </li>
+            <li>bus → capkd → auditd → modeld → platformd → agentd</li>
+            <li data-lang="en">
+              egui UI and a multi-page tutorial. Closing the UI stops the
+              daemons.
+            </li>
+            <li data-lang="fr">
+              UI egui et tutoriel multi-pages. Fermer l’UI arrête les daemons.
+            </li>
+          </ol>
+          <p class="hist" data-lang="en">
+            Next: <a href="docs/first-run.html">first run</a> in the user
+            manual.
+          </p>
+          <p class="hist" data-lang="fr">
+            Suite : <a href="docs/first-run.html">premier lancement</a> dans
+            le manuel.
+          </p>
+        </article>
 
-        <h2 data-lang="en">troubleshooting</h2>
-        <h2 data-lang="fr">dépannage</h2>
-        <ul class="ticks">
-          <li data-lang="en">No NVIDIA → use the CPU-only zip/tar.gz, or Settings → Inference → CPU (slow OK)</li>
-          <li data-lang="fr">Pas de NVIDIA → zip/tar.gz CPU-only, ou Settings → Inference → CPU (lent OK)</li>
-          <li data-lang="en">Model download failed → network for Hugging Face, or copy GGUFs into <code>share/models/</code></li>
-          <li data-lang="fr">Échec téléchargement modèle → réseau vers Hugging Face, ou copier les GGUF dans <code>share/models/</code></li>
-          <li data-lang="en">Healthcheck failed → <code>var/run/*.stderr.log</code> (Troubleshooting button)</li>
-          <li data-lang="fr">Healthcheck failed → <code>var/run/*.stderr.log</code> (bouton Troubleshooting)</li>
-          <li data-lang="en">Bus unreachable → always launch via <code>aos-session</code></li>
-          <li data-lang="fr">Bus unreachable → toujours lancer via <code>aos-session</code></li>
-        </ul>
+        <article class="grant">
+          <h2 data-lang="en">If something goes wrong</h2>
+          <h2 data-lang="fr">Si quelque chose ne va pas</h2>
+          <ul class="ticks">
+            <li data-lang="en">
+              No NVIDIA → use Settings → Inference → CPU (slow is OK), or a
+              CPU-oriented archive if you downloaded one separately
+            </li>
+            <li data-lang="fr">
+              Pas de NVIDIA → Réglages → Inférence → CPU (lent OK), ou une
+              archive orientée CPU si vous en avez téléchargé une à part
+            </li>
+            <li data-lang="en">
+              Model download failed → need network to Hugging Face, or copy
+              GGUFs into <code>share/models/</code>
+            </li>
+            <li data-lang="fr">
+              Échec téléchargement modèle → réseau vers Hugging Face, ou
+              copier les GGUF dans <code>share/models/</code>
+            </li>
+            <li data-lang="en">
+              Healthcheck failed → check
+              <code>var/run/*.stderr.log</code> (Troubleshooting button)
+            </li>
+            <li data-lang="fr">
+              Healthcheck failed → voir
+              <code>var/run/*.stderr.log</code> (bouton Troubleshooting)
+            </li>
+            <li data-lang="en">
+              Bus unreachable → always launch via <code>aos-session</code>
+            </li>
+            <li data-lang="fr">
+              Bus unreachable → toujours lancer via <code>aos-session</code>
+            </li>
+          </ul>
+        </article>
 
-        <h2 id="build">
-          <span data-lang="en">build from source</span>
-          <span data-lang="fr">build depuis les sources</span>
-        </h2>
-        <p class="hist" data-lang="en">
-          Releases are enough to run Preview. Build from source for a local
-          package, patches, or development. Full write-up:
-          <a href="docs/build.html">docs/build</a>
-          and
-          <a href="https://github.com/azerothl/akasha-os/blob/main/docs/INSTALL.md#build-from-source">INSTALL.md</a>.
-        </p>
-        <p class="hist" data-lang="fr">
-          Les Releases suffisent pour lancer la Preview. Compilez depuis les
-          sources pour un paquet local, des patches ou du développement.
-          Détail :
-          <a href="docs/build.html">docs/build</a>
-          et
-          <a href="https://github.com/azerothl/akasha-os/blob/main/docs/fr/INSTALL.md#build-depuis-les-sources">INSTALL.md</a>.
-        </p>
-        <ul class="ticks">
-          <li>rust GRANT stable + <code>wasm32-unknown-unknown</code></li>
-          <li>cuda GRANT Toolkit (nvcc) · nvidia-smi OK</li>
-          <li>cmake · ninja · clang/libclang <span data-lang="en">(Linux)</span><span data-lang="fr">(Linux)</span></li>
-        </ul>
-        <pre># Windows
+        <article class="grant" id="build">
+          <h2 data-lang="en">Build from source</h2>
+          <h2 data-lang="fr">Compiler depuis les sources</h2>
+          <p class="hist" data-lang="en">
+            Releases are enough to run Preview. Build from source for a local
+            package, patches, or development. Full write-up:
+            <a href="docs/build.html">docs/build</a>
+            and
+            <a href="https://github.com/azerothl/akasha-os/blob/main/docs/INSTALL.md#build-from-source">INSTALL.md</a>.
+          </p>
+          <p class="hist" data-lang="fr">
+            Les Releases suffisent pour lancer la Preview. Compilez depuis les
+            sources pour un paquet local, des patches ou du développement.
+            Détail :
+            <a href="docs/build.html">docs/build</a>
+            et
+            <a href="https://github.com/azerothl/akasha-os/blob/main/docs/fr/INSTALL.md#build-depuis-les-sources">INSTALL.md</a>.
+          </p>
+          <ul class="ticks">
+            <li data-lang="en">
+              Stable Rust plus the <code>wasm32-unknown-unknown</code> target
+            </li>
+            <li data-lang="fr">
+              Rust stable plus la cible <code>wasm32-unknown-unknown</code>
+            </li>
+            <li data-lang="en">
+              CUDA Toolkit (nvcc) with a working <code>nvidia-smi</code>
+            </li>
+            <li data-lang="fr">
+              CUDA Toolkit (nvcc) avec un <code>nvidia-smi</code> qui répond
+            </li>
+            <li>
+              cmake · ninja · clang/libclang
+              <span data-lang="en">(Linux)</span
+              ><span data-lang="fr">(Linux)</span>
+            </li>
+          </ul>
+          <pre># Windows
 .\packaging\build-preview.ps1 -SkipModels -RequireCuda
 
 # Linux
@@ -274,6 +377,7 @@ SKIP_MODELS=1 REQUIRE_CUDA=1 ./packaging/build-preview.sh
 $env:AOS_HOME = (Resolve-Path .)   # Windows
 export AOS_HOME="$(pwd)"           # Linux
 cargo run -p aos-session --release</pre>
+        </article>
 
         <a class="continue pager" href="docs/">
           <span class="continue-label">Docs</span>

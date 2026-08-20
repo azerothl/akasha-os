@@ -14,9 +14,9 @@ Other audiences (systems/security/AI researchers, commercial-license evaluators)
 
 ## Product Purpose
 
-Akasha OS is an agent-native operating system: agents, models, tools, and memory are first-class system services with explicit capabilities, audit, and policy. Preview 0.8.0 is an installable host app on Windows/Linux (NVIDIA optional via CPU path in the same zip), not a bootable OS image. A seL4 bare-metal track is separate.
+Akasha OS is an agent-native operating system: agents, models, tools, and memory are first-class system services with explicit capabilities, audit, and policy. Preview 0.9.0 is an installable host app on Windows/Linux (NVIDIA optional via CPU path in the same zip), not a bootable OS image. A seL4 bare-metal track is separate.
 
-Success for the public site: a tester understands the thesis (capabilities, semantic IPC, first-class GPU, offline-by-default), then downloads Preview and follows the tester protocol.
+Success for the public site: a tester understands, in full sentences, what Preview can do and how it differs from a chat wrapper; then installs and follows the tester protocol.
 
 ## Positioning
 
@@ -35,12 +35,12 @@ A neighboring chat wrapper or “AI desktop” cannot truthfully claim that agen
 
 ## Capabilities and Constraints
 
-Confirmed Preview surfaces: parallel persisted chat sessions; long-term memory (remember / recall); human- and agent-authored notes and tasks (WASM modules); agent goal loop with skills, tools, scheduler, optional MCP; caps list/revoke; live model metrics; optional local image (Stable Diffusion) and TTS (Piper) via Models download (engine arrives with the pack); Providers tab (OpenAI-compat cloud + loopback); module uninstall (non-bundled); opt-in web search/fetch (offline by default); themes; local feedback report plus GitHub issue; non-destructive update overlays from GitHub Releases.
+Confirmed Preview surfaces: parallel persisted chat sessions; long-term memory (remember / recall); human- and agent-authored notes and tasks (WASM modules); agent goal loop with skills, tools, scheduler, optional MCP; declarative module UI host; caps list/revoke; live model metrics; Image Studio and optional local image/TTS packs via Models; Providers tab (OpenAI-compat cloud + loopback); mid-token migrate; module uninstall (non-bundled); opt-in web search/fetch (offline by default); themes; local feedback report plus GitHub issue; non-destructive update overlays from GitHub Releases.
 
 Constraints:
 
 - This is not a bootable OS image yet. Future work must never imply otherwise.
-- Preview 0.8.0: Windows/Linux x64; NVIDIA GPU recommended; CPU-only path in the same artefact; ~4 GB disk. No macOS.
+- Preview 0.9.0: Windows/Linux x64; NVIDIA GPU recommended; CPU-only path in the same artefact; ~4–8 GB disk recommended. No macOS.
 - Dual licensing: AGPL-3.0-only and a commercial license (attribution + royalty). The Akasha OS trademark is reserved.
 - Site and product copy are bilingual EN / FR with equivalent content.
 - Stack for the public site is already decided: static HTML / CSS / JS in `website/`.
@@ -50,7 +50,8 @@ Site routes: landing plus grant, why, install, about, an end-user docs hub (`web
 ## Brand Commitments
 
 - Name: **Akasha OS**. Trademark reserved.
-- Voice in existing copy: precise, technical, no hype; states limits (not bootable, NVIDIA-only) in the same breath as the thesis.
+- Voice: precise and technical, no hype. Prefer **full sentences and short paragraphs** over keyword stamps (`GRANT` / `DENY` as primary labels). Explain what the user can do in the UI and how Preview can be extended (modules, skills, MCP, Providers). State limits (host app, NVIDIA recommended, not bootable) in the same breath as the thesis, without sounding like a checklist of refusals.
+- Visual hierarchy on the public site: keep the orrery palette (void / cyan / hydrogen / paper); increase section contrast with plate backgrounds, cyan rails under titles, and paper callouts for critical facts — not a new theme.
 - Binding languages: English and French.
 - Identity constraint volunteered by the product itself: honesty about Preview vs the long-term seL4 track.
 
@@ -68,10 +69,11 @@ Must not fabricate: testimonials, named customers, benchmark numbers, press quot
 ## Product Principles
 
 1. Thesis before download — a tester must grasp why this is an OS for agents, not another chat app, before the install CTA.
-2. Honesty is a feature — Preview limits (host app, NVIDIA, not bootable) stay visible; they are not fine print.
-3. Bounded autonomy — capabilities, audit, and deny-by-default network are the product story, not decoration.
-4. Same facts in EN and FR — no language gets a softer or more complete claim.
-5. Proof over theater — only ship claims the repo, releases, or a real run can back.
+2. Explain, then invite — site copy teaches what each surface does and how to extend Preview; it does not bark orders.
+3. Honesty is a feature — Preview limits (host app, NVIDIA, not bootable) stay visible; they are not fine print.
+4. Bounded autonomy — capabilities, audit, and deny-by-default network are the product story, not decoration.
+5. Same facts in EN and FR — no language gets a softer or more complete claim.
+6. Proof over theater — only ship claims the repo, releases, or a real run can back.
 
 ## Accessibility & Inclusion
 

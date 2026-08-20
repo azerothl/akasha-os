@@ -6,7 +6,7 @@
     <title>Using Preview — Akasha OS</title>
     <meta
       name="description"
-      content="How to use Akasha OS Preview: Chat, Models, Memory, Notes, Tasks, Modules, Agents, Settings."
+      content="User manual for Akasha OS Preview 0.9.0: Chat, Models, Memory, Notes, Tasks, Modules, Agents, Caps, Audit, Providers, Settings, Network, Image Studio, TTS, and extending Preview."
     />
     <link rel="stylesheet" href="../styles.css" />
     <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
@@ -19,8 +19,8 @@
     <!--
       THESIS: The UI is a set of grants you operate, documented as a log, not a feature gallery.
       OWN-WORLD: Orrery inner plate — void, cyan rails. FORM: seed c1699dbf reroll 1.
-      STORY: After the tutorial, the tester knows which tab does which grant.
-      FIRST VIEWPORT: Map of tabs as log lines, then procedures.
+      STORY: After the tutorial, the tester knows which surface does which grant.
+      FIRST VIEWPORT: Manual chapter for Preview surfaces, then Extend.
       FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
     -->
         <canvas class="ether" data-ether aria-hidden="true"></canvas>
@@ -48,202 +48,731 @@
 
         <h1>
           <span data-lang="en">
-            After <a href="first-run.html">first run</a> and the four-step
-            tutorial, these are the Preview <span data-aos-version>0.9.0</span> surfaces. Closing the UI stops
-            the daemons.
+            Using Preview <span data-aos-version>0.9.0</span>
           </span>
           <span data-lang="fr">
-            Après <a href="first-run.html">first-run</a> et le tutoriel en
-            quatre étapes, voici les surfaces Preview <span data-aos-version>0.9.0</span>. Fermer l’UI arrête
-            les daemons.
+            Utiliser la Preview <span data-aos-version>0.9.0</span>
           </span>
         </h1>
 
-        <h2 data-lang="en">tab map</h2>
-        <h2 data-lang="fr">carte des onglets</h2>
-        <ul class="ticks">
-          <li data-lang="en">Chat / Sessions — parallel sessions; per-session model; Stop / Copy; slash <code>/agent</code> <code>/image</code> <code>/speak</code></li>
-          <li data-lang="fr">Chat / Sessions — sessions parallèles ; modèle par session ; Stop / Copier ; slash <code>/agent</code> <code>/image</code> <code>/speak</code></li>
-          <li data-lang="en">Models — list / load / download offerings (image/TTS packs fetch sd.cpp / piper); TTFT / tok/s; update banner</li>
-          <li data-lang="fr">Models — lister / charger / télécharger (packs image/TTS tirent sd.cpp / piper) ; TTFT / tok/s ; bannière de mise à jour</li>
-          <li data-lang="en">Memory — long-term facts (remember / recall); optional auto-remember from chat</li>
-          <li data-lang="fr">Memory — faits long terme (remember / recall) ; mémorisation auto depuis le chat (opt.)</li>
-          <li data-lang="en">Notes — human notes and notes via agent</li>
-          <li data-lang="fr">Notes — notes humaines et via agent</li>
-          <li data-lang="en">Tasks — dual-surface list (same store as agent <code>tasks.*</code>)</li>
-          <li data-lang="fr">Tasks — liste dual-surface (même store que <code>tasks.*</code> côté agent)</li>
-          <li data-lang="en">Modules — dynamic tabs for installed <code>declarative_ui</code> packages (not notes / tasks / ext-rt)</li>
-          <li data-lang="fr">Modules — onglets dynamiques pour les paquets <code>declarative_ui</code> (pas notes / tasks / ext-rt)</li>
-          <li data-lang="en">Agents — goal loop, skills / tools, Detail timeline; model at create</li>
-          <li data-lang="fr">Agents — boucle de goal, skills / outils, timeline Détail ; modèle à la création</li>
-          <li data-lang="en">Caps — list by holder; revoke (audited)</li>
-          <li data-lang="fr">Caps — lister par détenteur ; révoquer (audité)</li>
-          <li data-lang="en">Audit — signed events; Refresh; supervisor restarts auditd</li>
-          <li data-lang="fr">Audit — événements signés ; Refresh ; le superviseur relance auditd</li>
-          <li data-lang="en">Providers — OpenAI-compat cloud + loopback (Ollama / vLLM / LM Studio); keys in the vault</li>
-          <li data-lang="fr">Providers — cloud OpenAI-compat + loopback (Ollama / vLLM / LM Studio) ; clés dans le vault</li>
-          <li data-lang="en">Settings — language, secrets vault, module catalogue / uninstall, schedules, auto-remember, gpu/cpu/auto</li>
-          <li data-lang="fr">Settings — langue, vault secrets, catalogue / désinstall de modules, schedules, mémorisation auto, gpu/cpu/auto</li>
-          <li data-lang="en">Network (sidebar) — opt-in search / browse / fetch</li>
-          <li data-lang="fr">Network (barre latérale) — recherche / browse / fetch en opt-in</li>
-          <li data-lang="en">Feedback — GitHub issue on azerothl/akasha-os</li>
-          <li data-lang="fr">Feedback — issue GitHub sur azerothl/akasha-os</li>
-          <li data-lang="en">Scenarios — cohort protocol (see <a href="feedback.html">feedback</a>)</li>
-          <li data-lang="fr">Scenarios — protocole de cohorte (voir <a href="feedback.html">feedback</a>)</li>
-        </ul>
+        <aside class="callout">
+          <h3 data-lang="en">Not a bootable OS</h3>
+          <h3 data-lang="fr">Pas un OS bootable</h3>
+          <p data-lang="en">
+            Preview is a host app on Windows or Linux. Closing the UI stops the
+            daemons. This chapter covers the shipped surfaces after
+            <a href="first-run.html">first run</a> and the four-step tutorial.
+            The full catalogue lives in
+            <a href="https://github.com/azerothl/akasha-os/blob/main/docs/FEATURES.md">FEATURES.md</a>.
+          </p>
+          <p data-lang="fr">
+            La Preview est une appli hôte sur Windows ou Linux. Fermer l’UI
+            arrête les daemons. Ce chapitre couvre les surfaces livrées après
+            <a href="first-run.html">first-run</a> et le tutoriel en quatre
+            étapes. Le catalogue complet est dans
+            <a href="https://github.com/azerothl/akasha-os/blob/main/docs/FEATURES.md">FEATURES.md</a>.
+          </p>
+        </aside>
 
-        <h2 data-lang="en">chat</h2>
-        <h2 data-lang="fr">chat</h2>
+        <article class="grant" id="intro">
+          <h2 data-lang="en">Intro</h2>
+          <h2 data-lang="fr">Intro</h2>
+          <p class="hist" data-lang="en">
+            After install and model setup, egui opens with Chat and a sidebar of
+            grants: Sessions, Models, Memory, Notes, Tasks, Modules (when you
+            install declarative packages), Agents, Caps, Audit, Providers,
+            Settings, Network, Image studio, Feedback, and Scenarios. Each
+            section below is how to operate one of those surfaces. Prefer the
+            local model offline; turn on network only when you mean to search,
+            browse, or fetch.
+          </p>
+          <p class="hist" data-lang="fr">
+            Après install et réglage des modèles, egui ouvre Chat et une barre
+            latérale de grants : Sessions, Models, Memory, Notes, Tasks, Modules
+            (quand vous installez des paquets déclaratifs), Agents, Caps, Audit,
+            Providers, Settings, Network, studio Image, Feedback et Scénarios.
+            Chaque section ci-dessous explique une de ces surfaces. Préférez le
+            modèle local hors ligne ; n’activez le réseau que pour chercher,
+            parcourir ou télécharger.
+          </p>
+        </article>
+
+        <article class="grant" id="chat">
+          <h2 data-lang="en">Chat / Sessions</h2>
+          <h2 data-lang="fr">Chat / Sessions</h2>
+          <p class="hist" data-lang="en">
+            Parallel conversations persist across restart. Each session keeps
+            its own history and can pick its own model from the combo (fallback:
+            the default instruct model). Streaming replies come from the local
+            backend when routing is <code>local_only</code>; once GGUFs are on
+            disk, chat works with Allow network off.
+            <strong>Stop</strong> cancels the in-flight <code>model.infer</code>;
+            <strong>Copy</strong> puts a message (or Troubleshoot body) on the
+            clipboard. Before infer, Preview injects <code>mem.context</code>
+            (session hits plus user facts). Background agents attached via
+            <code>/agent</code> or assistant delegation show as cards in the
+            thread.
+          </p>
+          <p class="hist" data-lang="fr">
+            Les conversations parallèles survivent au redémarrage. Chaque
+            session garde son historique et peut choisir son modèle dans le
+            combo (sinon le modèle instruct par défaut). Les réponses en flux
+            viennent du backend local quand le routage est
+            <code>local_only</code> ; une fois les GGUF sur disque, le chat
+            marche avec Allow network éteint. <strong>Stop</strong> annule le
+            <code>model.infer</code> en cours ; <strong>Copier</strong> met un
+            message (ou le corps Troubleshoot) dans le presse-papiers. Avant
+            l’inférence, la Preview injecte <code>mem.context</code> (hits de
+            session et faits utilisateur). Les agents de fond via
+            <code>/agent</code> ou délégation apparaissent en cartes dans le fil.
+          </p>
+          <p class="hist" data-lang="en">
+            Slash commands (popup above the input with <code>/</code>):
+            <code>/commands</code>, <code>/help</code> (system snapshot),
+            <code>/agent &lt;task&gt;</code>, <code>/notes</code>,
+            <code>/notenew</code>, <code>/notesearch</code>,
+            <code>/audit [n]</code>, <code>/kill</code> / <code>/pause</code>,
+            <code>/image &lt;prompt&gt;</code>, and
+            <code>/speak &lt;text&gt;</code>. Chat « crée un module … » (or
+            “create a module”) launches a scaffold agent. Markdown renders agent
+            actions in the thread.
+          </p>
+          <p class="hist" data-lang="fr">
+            Commandes slash (popup au-dessus de la saisie avec <code>/</code>) :
+            <code>/commands</code>, <code>/help</code> (instantané système),
+            <code>/agent &lt;tâche&gt;</code>, <code>/notes</code>,
+            <code>/notenew</code>, <code>/notesearch</code>,
+            <code>/audit [n]</code>, <code>/kill</code> / <code>/pause</code>,
+            <code>/image &lt;prompt&gt;</code> et
+            <code>/speak &lt;texte&gt;</code>. Le chat « crée un module … »
+            lance un agent de scaffold. Le markdown affiche les actions d’agent
+            dans le fil.
+          </p>
+          <aside class="callout">
+            <p data-lang="en">
+              Create three sessions, chat in each, restart Preview: histories
+              must reappear. That is the cohort check for session persistence.
+            </p>
+            <p data-lang="fr">
+              Créez trois sessions, parlez dans chacune, redémarrez Preview :
+              les historiques doivent réapparaître. C’est le contrôle de
+              persistance de session pour la cohorte.
+            </p>
+          </aside>
+        </article>
+
+        <article class="grant" id="models">
+          <h2 data-lang="en">Models</h2>
+          <h2 data-lang="fr">Models</h2>
+          <p class="hist" data-lang="en">
+            The Models tab lists installed offerings, loads them, and downloads
+            alternatives from <code>share/models/catalog-offerings.json</code>
+            into <code>share/models/</code>. Live metrics (TTFT, tok/s, VRAM /
+            RAM / disk) appear in the sidebar and on this tab. A green banner
+            appears when newer packs fit your detected VRAM tier. After a
+            download, restart so <code>etc/modeld.yaml</code> sees new paths.
+            CLI: <code>aos-session --download-models &lt;id&gt;…</code>.
+          </p>
+          <p class="hist" data-lang="fr">
+            L’onglet Models liste les offres installées, les charge et
+            télécharge des alternatives depuis
+            <code>share/models/catalog-offerings.json</code> vers
+            <code>share/models/</code>. Des métriques live (TTFT, tok/s, VRAM /
+            RAM / disque) apparaissent dans la barre latérale et ici. Une
+            bannière verte s’affiche quand de nouvelles offres tiennent dans
+            votre palier VRAM. Après un téléchargement, redémarrez pour que
+            <code>etc/modeld.yaml</code> voie les chemins. CLI :
+            <code>aos-session --download-models &lt;id&gt;…</code>.
+          </p>
+          <p class="hist" data-lang="en">
+            Optional image and TTS packs (for example <code>local:sd-v1-5</code>,
+            Piper <code>en_US</code> / <code>fr_FR</code>, plus Flux2-class,
+            Ideogram4-class, Piper <code>en_GB</code> in 0.9.0) are
+            <strong>not</strong> in the zip; first-run does not pull them.
+            Download also fetches <code>bin/sd</code> / <code>bin/piper</code>
+            (and sidecars via <code>extra_files</code>) if missing. Settings /
+            Models pick the default image pack and Piper voice; honor them after
+            restart. Without weights or engine, Preview writes a visible stub
+            PNG or short WAV so the pipeline stays testable.
+          </p>
+          <p class="hist" data-lang="fr">
+            Les packs image et TTS optionnels (par ex. <code>local:sd-v1-5</code>,
+            Piper <code>en_US</code> / <code>fr_FR</code>, plus Flux2-class,
+            Ideogram4-class, Piper <code>en_GB</code> en 0.9.0) ne sont
+            <strong>pas</strong> dans le zip ; le first-run ne les tire pas.
+            Download installe aussi <code>bin/sd</code> / <code>bin/piper</code>
+            (et les sidecars via <code>extra_files</code>) s’ils manquent.
+            Settings / Models choisissent le pack image et la voix Piper par
+            défaut ; honorez-les après redémarrage. Sans poids ou moteur, la
+            Preview écrit un PNG stub visible ou un court WAV pour garder le
+            pipeline testable.
+          </p>
+          <aside class="callout">
+            <p data-lang="en">
+              Mid-token migrate (0.9.0): Settings Inference <strong>auto / gpu /
+              cpu</strong> calls <code>model.migrate</code> so a live completion
+              continues on the same stream — no Stop, no cancelled turn. On
+              NVIDIA, the cpu pin stays on the CUDA <code>aos-modeld</code> with
+              <code>n_gpu_layers = 0</code>. Fail-closed fallback is the older
+              cancel-and-restart path (audited).
+            </p>
+            <p data-lang="fr">
+              Migrate mid-token (0.9.0) : Settings Inférence <strong>auto / gpu /
+              cpu</strong> appelle <code>model.migrate</code> pour que la
+              complétion live continue sur le même flux — pas de Stop, pas de
+              tour annulé. Sur NVIDIA, le pin cpu reste sur
+              <code>aos-modeld</code> CUDA avec <code>n_gpu_layers = 0</code>.
+              Le repli fail-closed est l’ancien chemin cancel + restart (audité).
+            </p>
+          </aside>
+        </article>
+
+        <article class="grant" id="memory">
+          <h2 data-lang="en">Memory</h2>
+          <h2 data-lang="fr">Memory</h2>
+          <p class="hist" data-lang="en">
+            Long-term user facts: Remember / Recall / list / edit / delete in
+            the Memory tab. Typed relations <code>similar</code>,
+            <code>updates</code>, and <code>supersedes</code> auto-link on close
+            remembers. Session and user hits assemble as <code>mem.context</code>
+            for chat and agents. Agents also use episodic memory and
+            <code>memory.remember</code> / <code>memory.recall</code>. Bootstrap
+            is memory-first: <code>task.assess</code> then structured
+            <code>mem.bootstrap</code> (active facts and similar neighbors;
+            superseded omitted).
+          </p>
+          <p class="hist" data-lang="fr">
+            Faits utilisateur long terme : Remember / Recall / lister / éditer /
+            supprimer dans l’onglet Memory. Les relations typées
+            <code>similar</code>, <code>updates</code> et <code>supersedes</code>
+            se lient automatiquement. Hits de session et utilisateur forment
+            <code>mem.context</code> pour le chat et les agents. Les agents
+            ont aussi une mémoire épisodique et
+            <code>memory.remember</code> / <code>memory.recall</code>. Le
+            bootstrap est memory-first : <code>task.assess</code> puis
+            <code>mem.bootstrap</code> structuré (faits actifs et voisins
+            similaires ; les supersédés sont omis).
+          </p>
+          <p class="hist" data-lang="en">
+            <strong>Auto-remember from chat</strong> (Settings, on by default):
+            after each turn, low-priority <code>mem.extract</code> proposes
+            durable facts → <code>mem.user.remember</code> with
+            <code>source=chat</code>. Secrets (API keys, tokens, IBAN-like) are
+            never auto-stored (audited). The Memory list shows a
+            <code>[chat]</code> badge on extracted facts. Extraction is
+            non-blocking and skips if a previous extract is still running.
+          </p>
+          <p class="hist" data-lang="fr">
+            <strong>Mémorisation auto depuis le chat</strong> (Settings, activée
+            par défaut) : après chaque tour, un <code>mem.extract</code> basse
+            priorité propose des faits durables →
+            <code>mem.user.remember</code> avec <code>source=chat</code>. Les
+            secrets (clés API, tokens, IBAN-like) ne sont jamais auto-stockés
+            (audité). La liste Memory affiche un badge <code>[chat]</code> sur
+            les faits extraits. L’extraction est non bloquante et saute si une
+            extraction précédente tourne encore.
+          </p>
+        </article>
+
+        <article class="grant" id="notes">
+          <h2 data-lang="en">Notes</h2>
+          <h2 data-lang="fr">Notes</h2>
+          <p class="hist" data-lang="en">
+            Dual-surface WASM module (<code>notes.aospkg</code>). Human UI:
+            title + body → Create, then List / search. Agent tools:
+            <code>notes.create</code>, <code>notes.update</code>,
+            <code>notes.search</code>, and related intents. Same data for humans
+            and agents. On boot, <code>share/modules/notes.aospkg</code> is
+            copied to <code>var/modules/notes</code> when the manifest hash or
+            WASM fingerprint differs, so a Preview update does not keep a stale
+            module. <code>notes.read</code> accepts <code>title</code>,
+            <code>name</code>, <code>path</code>, or <code>slug</code>. Via
+            agent: Agents tab or Chat <code>/agent</code> with a task such as
+            “create a note titled cohort with content hello”.
+          </p>
+          <p class="hist" data-lang="fr">
+            Module WASM dual-surface (<code>notes.aospkg</code>). UI humaine :
+            titre + corps → Create, puis List / search. Outils agent :
+            <code>notes.create</code>, <code>notes.update</code>,
+            <code>notes.search</code>, et intents liés. Les mêmes données pour
+            humains et agents. Au boot,
+            <code>share/modules/notes.aospkg</code> est recopié vers
+            <code>var/modules/notes</code> si le hash manifest ou l’empreinte
+            WASM diffère, pour qu’une update Preview ne garde pas un module
+            périmé. <code>notes.read</code> accepte <code>title</code>,
+            <code>name</code>, <code>path</code> ou <code>slug</code>. Via
+            agent : onglet Agents ou Chat <code>/agent</code> avec une tâche du
+            type « create a note titled cohort with content hello ».
+          </p>
+        </article>
+
+        <article class="grant" id="tasks">
+          <h2 data-lang="en">Tasks</h2>
+          <h2 data-lang="fr">Tasks</h2>
+          <p class="hist" data-lang="en">
+            Dual-surface WASM module (<code>tasks.aospkg</code>). Human UI:
+            create / list / complete. Agent tools:
+            <code>tasks.create</code>, <code>tasks.list</code>,
+            <code>tasks.update</code>, <code>tasks.complete</code>. Same JSON
+            store under <code>/documents/tasks/tasks.json</code>. Resyncs on
+            boot like notes. Skill <code>tasks</code> ships under
+            <code>share/skills/</code>.
+          </p>
+          <p class="hist" data-lang="fr">
+            Module WASM dual-surface (<code>tasks.aospkg</code>). UI humaine :
+            créer / lister / terminer. Outils agent :
+            <code>tasks.create</code>, <code>tasks.list</code>,
+            <code>tasks.update</code>, <code>tasks.complete</code>. Même store
+            JSON sous <code>/documents/tasks/tasks.json</code>. Resync au boot
+            comme notes. La skill <code>tasks</code> est livrée sous
+            <code>share/skills/</code>.
+          </p>
+        </article>
+
+        <article class="grant" id="modules">
+          <h2 data-lang="en">Modules (declarative_ui)</h2>
+          <h2 data-lang="fr">Modules (declarative_ui)</h2>
+          <p class="hist" data-lang="en">
+            Installed packages with <code>ui.mode=declarative_ui</code> get a
+            dynamic sidebar tab under <strong>Modules</strong>. Notes, Tasks,
+            and <code>ext-rt</code> stay hardcoded and are excluded from dynamic
+            tabs. The host paints a closed widget tree from
+            <code>ui/index.html</code> — no webview, no free HTML/JS UI. Widgets
+            include column / row, heading, text, markdown, stat_row, table,
+            line_chart, form (JSON Schema), button, select / radio / checkbox /
+            textarea, bar_chart, image, and audio.
+          </p>
+          <p class="hist" data-lang="fr">
+            Les paquets installés avec <code>ui.mode=declarative_ui</code>
+            obtiennent un onglet dynamique sous <strong>Modules</strong>. Notes,
+            Tasks et <code>ext-rt</code> restent en dur et sont exclus des
+            onglets dynamiques. L’hôte peint un arbre de widgets fermé depuis
+            <code>ui/index.html</code> — pas de webview, pas d’UI HTML/JS libre.
+            Widgets : column / row, heading, text, markdown, stat_row, table,
+            line_chart, form (JSON Schema), button, select / radio / checkbox /
+            textarea, bar_chart, image et audio.
+          </p>
+          <p class="hist" data-lang="en">
+            Intent <code>module.ui</code> validates the document fail-closed;
+            invalid <code>ui/index.html</code> shows an error banner (no partial
+            widgets). Button and form submits use the same cap review as
+            <code>module.invoke</code>. Install still requires confirmation;
+            refuse → quarantine. Settings lists the local signed catalogue and
+            can uninstall non-bundled modules (not <code>notes</code> /
+            <code>tasks</code> / <code>ext-rt</code>).
+          </p>
+          <p class="hist" data-lang="fr">
+            L’intent <code>module.ui</code> valide le document en fail-closed ;
+            un <code>ui/index.html</code> invalide affiche une bannière (pas de
+            widgets partiels). Soumissions bouton / formulaire : même revue de
+            caps que <code>module.invoke</code>. L’install exige encore une
+            confirmation ; refus → quarantaine. Settings liste le catalogue
+            local signé et peut désinstaller les modules non bundle (pas
+            <code>notes</code> / <code>tasks</code> / <code>ext-rt</code>).
+          </p>
+        </article>
+
+        <article class="grant" id="agents">
+          <h2 data-lang="en">Agents</h2>
+          <h2 data-lang="fr">Agents</h2>
+          <p class="hist" data-lang="en">
+            Observe / Think / Act with capability checks, confirmation, and
+            audit. Create an agent with a task and a model (or
+            <code>/agent &lt;task&gt;</code> from Chat). Goal loop:
+            <code>goal.complete</code> / <code>goal.fail</code>; max steps and
+            timeout come from Settings defaults. <code>task.assess</code>
+            classifies simple vs complex; complex activates the planner skill.
+            Shipped skills: notes-writer, research, file-author, planner,
+            tasks. Tools may be native, WASM module, MCP, or runtime (plan /
+            spawn / memory). Sub-agents: <code>agent.spawn</code> /
+            <code>agent.await</code>. Mid-task <code>user.ask</code> pauses in
+            the linked chat (<code>Blocked</code>) until the next reply (FIFO;
+            10 min timeout).
+          </p>
+          <p class="hist" data-lang="fr">
+            Observe / Think / Act avec contrôles de caps, confirmation et audit.
+            Créez un agent avec une tâche et un modèle (ou
+            <code>/agent &lt;tâche&gt;</code> depuis Chat). Boucle de goal :
+            <code>goal.complete</code> / <code>goal.fail</code> ; max steps et
+            timeout depuis Settings. <code>task.assess</code> classe simple vs
+            complexe ; le complexe active la skill planner. Skills livrées :
+            notes-writer, research, file-author, planner, tasks. Outils :
+            natifs, module WASM, MCP ou runtime (plan / spawn / mémoire).
+            Sous-agents : <code>agent.spawn</code> /
+            <code>agent.await</code>. <code>user.ask</code> en cours de tâche
+            met en pause dans le chat lié (<code>Blocked</code>) jusqu’à la
+            prochaine réponse (FIFO ; timeout 10 min).
+          </p>
+          <p class="hist" data-lang="en">
+            Sensitive actions raise a blocking confirmation banner; Deny once,
+            Accept another; timeout = deny (fail-closed). Open
+            <strong>Detail</strong> (Agents tab or chat card) for live state,
+            step <em>n/max</em>, tokens, duration, simple/complex badge, skills
+            and MCP servers, parent / children, Sources (web / document /
+            fetch), and the step timeline (<code>agent.trace</code>). Controls:
+            Pause, Resume, Retry, Kill, Steer. Schedules
+            (<code>schedule.create</code> / list / cancel) live under Settings;
+            ticker min interval 30s; persist in <code>var/schedules/</code>.
+          </p>
+          <p class="hist" data-lang="fr">
+            Une action sensible affiche une bannière de confirmation ; Deny une
+            fois, Accept une autre ; timeout = refus (fail-closed). Ouvrez
+            <strong>Détail</strong> (onglet Agents ou carte chat) pour l’état
+            live, step <em>n/max</em>, tokens, durée, badge simple/complexe,
+            skills et serveurs MCP, parent / enfants, Sources (web / document /
+            fetch) et la timeline (<code>agent.trace</code>). Contrôles :
+            Pause, Reprendre, Retry, Kill, Steer. Les schedules
+            (<code>schedule.create</code> / list / cancel) sont dans Settings ;
+            intervalle min 30 s ; persistance dans <code>var/schedules/</code>.
+          </p>
+        </article>
+
+        <article class="grant" id="caps">
+          <h2 data-lang="en">Caps</h2>
+          <h2 data-lang="fr">Caps</h2>
+          <p class="hist" data-lang="en">
+            Caps tab: list capabilities by holder (<code>cap.list</code>) and
+            revoke (audited). Hot-grant via <code>cap.request</code> still
+            requires trust plus confirmation. Module install and tool invoke
+            paths go through the same review surface — nothing auto-approves a
+            new package.
+          </p>
+          <p class="hist" data-lang="fr">
+            Onglet Caps : lister les capacités par détenteur
+            (<code>cap.list</code>) et révoquer (audité). Le hot-grant via
+            <code>cap.request</code> exige toujours trust plus confirmation.
+            Install de module et invoke d’outil passent par la même revue —
+            rien n’auto-approuve un nouveau paquet.
+          </p>
+        </article>
+
+        <article class="grant" id="audit">
+          <h2 data-lang="en">Audit</h2>
+          <h2 data-lang="fr">Audit</h2>
+          <p class="hist" data-lang="en">
+            Append-only hashed journal of signed events. Audit tab → Refresh.
+            Kill <code>aos-auditd</code>: chat must continue; the supervisor
+            restarts auditd in the background. Slash <code>/audit [n]</code>
+            shows the last <em>n</em> events in Chat.
+          </p>
+          <p class="hist" data-lang="fr">
+            Journal hashé append-only d’événements signés. Onglet Audit →
+            Refresh. Tuer <code>aos-auditd</code> : le chat doit continuer ; le
+            superviseur relance auditd en arrière-plan. Slash
+            <code>/audit [n]</code> montre les <em>n</em> derniers événements
+            dans Chat.
+          </p>
+        </article>
+
+        <article class="grant" id="providers">
+          <h2 data-lang="en">Providers</h2>
+          <h2 data-lang="fr">Providers</h2>
+          <p class="hist" data-lang="en">
+            Providers tab: add / list / test / remove OpenAI-compatible cloud
+            endpoints and loopback (Ollama / vLLM / LM Studio). API keys live in
+            the encrypted vault, never in the provider file. Chat combo groups
+            local vs provider. Routing <code>local_only</code> (default) still
+            allows loopback; WAN cloud needs <code>balanced</code> plus Allow
+            network. Infer with <code>secret</code> data stays local. Native
+            Messages / Gemini / Bedrock APIs are not shipped — OpenAI-compat
+            only.
+          </p>
+          <p class="hist" data-lang="fr">
+            Onglet Providers : ajouter / lister / tester / retirer des endpoints
+            cloud OpenAI-compat et loopback (Ollama / vLLM / LM Studio). Les
+            clés API vivent dans le vault chiffré, jamais dans le fichier
+            provider. Le combo Chat groupe local vs provider. Le routage
+            <code>local_only</code> (défaut) autorise encore le loopback ; le
+            cloud WAN exige <code>balanced</code> plus Allow network. L’inférence
+            avec données <code>secret</code> reste locale. Pas d’API natives
+            Messages / Gemini / Bedrock — OpenAI-compat seulement.
+          </p>
+        </article>
+
+        <article class="grant" id="settings">
+          <h2 data-lang="en">Settings</h2>
+          <h2 data-lang="fr">Settings</h2>
+          <p class="hist" data-lang="en">
+            Preferences persist in <code>var/run/preferences.json</code>
+            (migrated from <code>onboarding.json</code> if needed). Groups:
+            language en / fr; default trust low / medium; Inference auto / gpu /
+            cpu (mid-token migrate in 0.9.0); routing
+            <code>local_only</code> / <code>balanced</code>; Allow network
+            (same as sidebar); Auto-remember from chat; agent default model,
+            max steps (1–128), timeout (60–86400 s); schedules; Secrets vault
+            (Brave / GitHub / OpenAI keys — master key in OS keyring, file 0600
+            fallback with <code>AOS_SECRETS_FILE_KEY=1</code>); local signed
+            module catalogue Install / Uninstall; Web search engine, browse max
+            chars, fetch max bytes; default image pack and Piper voice.
+          </p>
+          <p class="hist" data-lang="fr">
+            Les préférences persistent dans
+            <code>var/run/preferences.json</code> (migrées depuis
+            <code>onboarding.json</code> si besoin). Groupes : langue en / fr ;
+            trust défaut low / medium ; Inférence auto / gpu / cpu (migrate
+            mid-token en 0.9.0) ; routage <code>local_only</code> /
+            <code>balanced</code> ; Allow network (idem barre latérale) ;
+            mémorisation auto ; modèle agent, max steps (1–128), timeout
+            (60–86400 s) ; schedules ; vault Secrets (clés Brave / GitHub /
+            OpenAI — clé maître dans le keyring OS, repli fichier 0600 avec
+            <code>AOS_SECRETS_FILE_KEY=1</code>) ; catalogue local de modules
+            Install / Uninstall ; Web (moteur, max chars browse, max bytes
+            fetch) ; pack image et voix Piper par défaut.
+          </p>
+        </article>
+
+        <article class="grant" id="network">
+          <h2 data-lang="en">Network</h2>
+          <h2 data-lang="fr">Network</h2>
+          <p class="hist" data-lang="en">
+            Default mode is <code>offline_strict</code> (deny-by-default
+            egress). Enable <strong>Allow network</strong> in the sidebar or
+            Settings before search, browse, or fetch. Intents:
+            <code>web.search</code> (engine <code>auto</code> = Brave →
+            DuckDuckGo → Bing, or force one), <code>web.browse</code> (HTML →
+            plain text, no JavaScript), <code>net.fetch</code> (URL into the
+            logical FS, default <code>/downloads/</code>), and
+            <code>files.generate</code> (md / txt / json / csv / png / pdf).
+            Without a Brave key, <code>auto</code> falls through to DuckDuckGo
+            then Bing HTML. Optional keys live under Settings → Secrets.
+          </p>
+          <p class="hist" data-lang="fr">
+            Mode défaut : <code>offline_strict</code> (egress deny-by-default).
+            Activez <strong>Allow network</strong> dans la barre latérale ou
+            Settings avant recherche, browse ou fetch. Intents :
+            <code>web.search</code> (moteur <code>auto</code> = Brave →
+            DuckDuckGo → Bing, ou forcer un), <code>web.browse</code> (HTML →
+            texte, pas de JavaScript), <code>net.fetch</code> (URL dans le FS
+            logique, défaut <code>/downloads/</code>), et
+            <code>files.generate</code> (md / txt / json / csv / png / pdf).
+            Sans clé Brave, <code>auto</code> bascule sur DuckDuckGo puis Bing
+            HTML. Clés optionnelles sous Settings → Secrets.
+          </p>
+          <aside class="callout">
+            <p data-lang="en">
+              Step-by-step prove-deny then allow is in the next chapter:
+              <a href="network.html">Network</a>.
+            </p>
+            <p data-lang="fr">
+              La procédure prouver-le-refus puis autoriser est dans le chapitre
+              suivant : <a href="network.html">Network</a>.
+            </p>
+          </aside>
+        </article>
+
+        <article class="grant" id="image-tts">
+          <h2 data-lang="en">Image Studio &amp; TTS</h2>
+          <h2 data-lang="fr">Studio Image &amp; TTS</h2>
+          <p class="hist" data-lang="en">
+            Intents <code>media.image.generate</code> /
+            <code>media.audio.generate</code> write PNG / WAV under
+            <code>/downloads</code>; cap <code>media.generate</code>; audited.
+            Options are a closed <code>deny_unknown_fields</code> object (size,
+            steps, CFG, seed, sampler, negative, Piper knobs). Unknown keys are
+            refused and audited; <code>aos-sd</code> maps only allowlisted flags
+            — never a free-form argv string. Placement Manager treats media
+            weights as evictable shards vs the loaded LLM.
+          </p>
+          <p class="hist" data-lang="fr">
+            Les intents <code>media.image.generate</code> /
+            <code>media.audio.generate</code> écrivent PNG / WAV sous
+            <code>/downloads</code> ; cap <code>media.generate</code> ; audité.
+            Les options sont un objet fermé <code>deny_unknown_fields</code>
+            (taille, steps, CFG, seed, sampler, negative, knobs Piper). Les clés
+            inconnues sont refusées et auditées ; <code>aos-sd</code> ne mappe
+            que des flags allowlistés — jamais une chaîne argv libre. Le
+            Placement Manager traite les poids média comme shards évincables
+            face au LLM chargé.
+          </p>
+          <p class="hist" data-lang="en">
+            <strong>Image studio</strong> tab: prompt, size, steps, CFG, seed,
+            sampler, catalogue style / LoRA / VAE. From Chat, a generated PNG
+            offers <strong>Open in studio</strong>. Slash <code>/image</code>
+            shows the PNG in the thread. Slash <code>/speak</code> opens an
+            in-chat <strong>TTS card</strong> (voice + knobs) then Generate;
+            agents may still call the audio intent directly. Download media
+            packs from Models first (engine arrives with the pack).
+          </p>
+          <p class="hist" data-lang="fr">
+            Onglet <strong>studio Image</strong> : prompt, taille, steps, CFG,
+            seed, sampler, style / LoRA / VAE du catalogue. Depuis Chat, un PNG
+            généré propose <strong>Ouvrir dans le studio</strong>. Slash
+            <code>/image</code> affiche le PNG dans le fil. Slash
+            <code>/speak</code> ouvre une <strong>carte TTS</strong> (voix +
+            knobs) puis Generate ; les agents peuvent encore appeler l’intent
+            audio directement. Téléchargez d’abord les packs média dans Models
+            (le moteur arrive avec le pack).
+          </p>
+          <aside class="callout callout-limit">
+            <p data-lang="en">
+              Not in Preview 0.9.0: video generation, STT / always-on voice,
+              img2img / inpaint as first-class intents.
+            </p>
+            <p data-lang="fr">
+              Hors Preview 0.9.0 : génération vidéo, STT / voix always-on,
+              img2img / inpaint comme intents de premier plan.
+            </p>
+          </aside>
+        </article>
+
+        <article class="grant" id="extend">
+          <h2 data-lang="en">Extend Preview</h2>
+          <h2 data-lang="fr">Étendre la Preview</h2>
+          <p class="hist" data-lang="en">
+            Preview is meant to be extended on the host without waiting for a
+            bootable image. The extension surfaces below are what ships in
+            0.9.0.
+          </p>
+          <p class="hist" data-lang="fr">
+            La Preview est faite pour être étendue sur l’hôte sans attendre une
+            image bootable. Les surfaces ci-dessous sont celles livrées en
+            0.9.0.
+          </p>
+
+          <h3 data-lang="en">Dual-surface WASM modules</h3>
+          <h3 data-lang="fr">Modules WASM dual-surface</h3>
+          <p class="hist" data-lang="en">
+            A module is a sandboxed WASM package (wasmtime) with tools humans
+            and agents share. Notes and Tasks are the bundled examples: same
+            store, human tab, agent intents. Scripted packages go through
+            <code>ext-rt</code> (<code>module.scaffold</code> /
+            <code>module.package</code>) then install with cap review.
+          </p>
+          <p class="hist" data-lang="fr">
+            Un module est un paquet WASM sandboxed (wasmtime) dont les outils
+            sont partagés humains / agents. Notes et Tasks sont les exemples
+            bundle : même store, onglet humain, intents agent. Les paquets
+            scriptés passent par <code>ext-rt</code>
+            (<code>module.scaffold</code> / <code>module.package</code>) puis
+            install avec revue de caps.
+          </p>
+
+          <h3 data-lang="en">declarative_ui (no webview)</h3>
+          <h3 data-lang="fr">declarative_ui (pas de webview)</h3>
+          <p class="hist" data-lang="en">
+            Set <code>ui.mode=declarative_ui</code> and ship a closed widget
+            tree in <code>ui/index.html</code>. The host validates via
+            <code>module.ui</code> and paints egui widgets — there is no
+            sandboxed HTML/JS compositor in Preview. Schema export:
+            <code>docs/bridge/aos-proto-decl-ui.json</code>. Optional
+            <code>ui</code> JSON on <code>module.scaffold</code>; package /
+            compile copy a real tree (default: heading + form + table on the
+            primary tool).
+          </p>
+          <p class="hist" data-lang="fr">
+            Réglez <code>ui.mode=declarative_ui</code> et livrez un arbre de
+            widgets fermé dans <code>ui/index.html</code>. L’hôte valide via
+            <code>module.ui</code> et peint des widgets egui — pas de
+            compositeur HTML/JS sandboxé en Preview. Schéma :
+            <code>docs/bridge/aos-proto-decl-ui.json</code>. Champ
+            <code>ui</code> JSON optionnel sur <code>module.scaffold</code> ;
+            package / compile copient un vrai arbre (défaut : heading + form +
+            table sur l’outil principal).
+          </p>
+
+          <h3 data-lang="en">Scaffold / package / install</h3>
+          <h3 data-lang="fr">Scaffold / package / install</h3>
+          <p class="hist" data-lang="en">
+            From Chat, ask « crée un module … » (or “create a module”) — the
+            host launches an agent (fallback if the model dumps UI JSON instead
+            of <code>agent.spawn</code>). Scenarios can launch the same
+            scaffold → package → install path for a script module. Settings
+            Install reads the local signed catalogue
+            (<code>share/modules/catalogue.yaml</code> + ed25519); hash check on
+            install.
+          </p>
+          <p class="hist" data-lang="fr">
+            Depuis Chat, demandez « crée un module … » — l’hôte lance un agent
+            (filet si le modèle dump du JSON d’UI au lieu de
+            <code>agent.spawn</code>). Scénarios peut lancer le même chemin
+            scaffold → package → install pour un module script. Settings Install
+            lit le catalogue local signé
+            (<code>share/modules/catalogue.yaml</code> + ed25519) ; contrôle de
+            hash à l’install.
+          </p>
+
+          <h3 data-lang="en">Skills</h3>
+          <h3 data-lang="fr">Skills</h3>
+          <p class="hist" data-lang="en">
+            Declarative recipes under <code>share/skills/</code>, overridable
+            under <code>var/skills/</code>. Agents load them by name; authoring
+            also exposes <code>skill.create</code>. Start from the five shipped
+            skills before adding your own.
+          </p>
+          <p class="hist" data-lang="fr">
+            Recettes déclaratives sous <code>share/skills/</code>, surchargeables
+            sous <code>var/skills/</code>. Les agents les chargent par nom ;
+            l’authoring expose aussi <code>skill.create</code>. Partez des cinq
+            skills livrées avant d’en ajouter.
+          </p>
+
+          <h3 data-lang="en">MCP stdio</h3>
+          <h3 data-lang="fr">MCP stdio</h3>
+          <p class="hist" data-lang="en">
+            Copy <code>share/mcp/servers.yaml.example</code>, add stdio servers,
+            and reference vault secrets with <code>${secret:name}</code>. MCP
+            tools appear in the agent Detail panel alongside native and module
+            tools.
+          </p>
+          <p class="hist" data-lang="fr">
+            Copiez <code>share/mcp/servers.yaml.example</code>, ajoutez des
+            serveurs stdio, et référencez les secrets du vault avec
+            <code>${secret:name}</code>. Les outils MCP apparaissent dans le
+            panneau Détail de l’agent à côté des outils natifs et modules.
+          </p>
+
+          <h3 data-lang="en">Providers as extension</h3>
+          <h3 data-lang="fr">Providers comme extension</h3>
+          <p class="hist" data-lang="en">
+            Beyond local GGUF, add OpenAI-compat cloud or loopback providers
+            from the Providers tab. Keys stay in the vault. Loopback works
+            under <code>local_only</code>; remote cloud needs balanced routing
+            and network grant.
+          </p>
+          <p class="hist" data-lang="fr">
+            Au-delà des GGUF locaux, ajoutez des providers cloud OpenAI-compat
+            ou loopback depuis l’onglet Providers. Les clés restent dans le
+            vault. Le loopback marche sous <code>local_only</code> ; le cloud
+            distant exige le routage balanced et le grant réseau.
+          </p>
+
+          <aside class="callout callout-limit">
+            <h3 data-lang="en">Not available yet</h3>
+            <h3 data-lang="fr">Pas encore disponible</h3>
+            <p data-lang="en">
+              No public module marketplace (local signed catalogue only). No
+              free HTML/JS module UI or sandboxed webview (closed
+              <code>declarative_ui</code> widget tree only). Also out of
+              Preview: bootable / bare-metal image, macOS, messaging channels,
+              multi-user accounts, complete multi-GPU pipeline, live HTTP
+              sibling daemon, TPM hardware envelope, pie / scatter / webview
+              widget kinds.
+            </p>
+            <p data-lang="fr">
+              Pas de marketplace publique de modules (catalogue local signé
+              seulement). Pas d’UI module HTML/JS libre ni de webview sandboxée
+              (arbre <code>declarative_ui</code> fermé seulement). Aussi hors
+              Preview : image bootable / bare-metal, macOS, canaux de
+              messagerie, multi-utilisateur, pipeline multi-GPU complet,
+              daemon sibling HTTP live, enveloppe TPM matérielle, widgets pie /
+              scatter / webview.
+            </p>
+          </aside>
+        </article>
+
         <p class="hist" data-lang="en">
-          Ask a question (for example “What is Akasha OS?”). A streamed reply
-          must work with network off once models are on disk. Optionally change
-          the session model combo. <strong>Stop</strong> interrupts generation;
-          <strong>Copy</strong> puts a message on the clipboard. Create three
-          sessions, chat in each, restart Preview: histories must reappear.
-          Slash <code>/agent &lt;task&gt;</code> (or « crée un module … ») launches a
-          background agent with a card in the thread.
-          <code>/image</code> and <code>/speak</code> write PNG/WAV after you download
-          the optional media packs from Models (the engine is fetched with the pack).
+          Full shipped catalogue:
+          <a href="https://github.com/azerothl/akasha-os/blob/main/docs/FEATURES.md">docs/FEATURES.md</a>
+          on GitHub. Feedback and cohort protocol:
+          <a href="feedback.html">feedback</a>. What Preview will not do:
+          <a href="limits.html">limits</a>.
         </p>
         <p class="hist" data-lang="fr">
-          Posez une question (par exemple « Qu’est-ce qu’Akasha OS ? »). Une
-          réponse en flux doit marcher sans réseau une fois les modèles sur
-          disque. Changez éventuellement le modèle de session.
-          <strong>Stop</strong> interrompt la génération ; <strong>Copier</strong>
-          met le message dans le presse-papiers. Créez trois sessions, parlez
-          dans chacune, redémarrez Preview : les historiques doivent réapparaître.
-          Slash <code>/agent &lt;tâche&gt;</code> (ou « crée un module … ») lance un
-          agent en fond avec une carte dans le fil.
-          <code>/image</code> et <code>/speak</code> écrivent PNG/WAV après
-          téléchargement des packs média dans Models (le moteur arrive avec le pack).
-        </p>
-
-        <h2 data-lang="en">models</h2>
-        <h2 data-lang="fr">models</h2>
-        <p class="hist" data-lang="en">
-          Open Models to see installed entries. Download an alternative if
-          offered. Optional image/TTS packs (Stable Diffusion 1.5, Piper) are
-          not in the zip; Download also installs <code>bin/sd</code> /
-          <code>bin/piper</code> if missing. A “Models: …” banner appears when
-          newer offerings fit your VRAM tier. After a download, restart so
-          <code>etc/modeld.yaml</code> sees new paths.
-        </p>
-        <p class="hist" data-lang="fr">
-          Ouvrez Models pour voir les entrées installées. Téléchargez une
-          alternative si elle est proposée. Les packs image/TTS (Stable
-          Diffusion 1.5, Piper) ne sont pas dans le zip ; Download installe
-          aussi <code>bin/sd</code> / <code>bin/piper</code> s’ils manquent.
-          Une bannière « Models: … » apparaît quand de nouvelles offres
-          tiennent dans votre palier VRAM. Après un téléchargement, redémarrez
-          pour que <code>etc/modeld.yaml</code> voie les chemins.
-        </p>
-
-        <h2 data-lang="en">memory</h2>
-        <h2 data-lang="fr">memory</h2>
-        <p class="hist" data-lang="en">
-          Remember a fact (“I prefer French”), then Recall. Back in Chat, the
-          next message should be able to use that context
-          (<code>mem.context</code> injection before infer).
-          <strong>Auto-remember from chat</strong> is on by default (Settings):
-          durable facts get a <code>[chat]</code> badge; secrets are filtered.
-        </p>
-        <p class="hist" data-lang="fr">
-          Remember un fait (« je préfère le français »), puis Recall. De retour
-          dans Chat, le message suivant doit pouvoir s’en servir
-          (injection <code>mem.context</code> avant l’inférence).
-          La <strong>mémorisation auto depuis le chat</strong> est activée par
-          défaut (Settings) : les faits durables ont un badge <code>[chat]</code> ;
-          les secrets sont filtrés.
-        </p>
-
-        <h2 data-lang="en">notes</h2>
-        <h2 data-lang="fr">notes</h2>
-        <p class="hist" data-lang="en">
-          Notes tab: title + body → Create, then List. After a Preview update,
-          the packaged module is copied on boot if it is newer. To create a
-          note via agent: Agents tab or Chat <code>/agent</code> → a task like
-          “create a note titled cohort with content hello”.
-        </p>
-        <p class="hist" data-lang="fr">
-          Onglet Notes : titre + corps → Create, puis List. Après une update
-          Preview, le module empaqueté est recopié au boot s’il est plus récent.
-          Via agent : onglet Agents ou Chat <code>/agent</code> → une tâche du type
-          « create a note titled cohort with content hello ».
-        </p>
-
-        <h2 data-lang="en">tasks</h2>
-        <h2 data-lang="fr">tasks</h2>
-        <p class="hist" data-lang="en">
-          Tasks tab: create / list / complete. The same JSON store is visible to
-          agents via <code>tasks.list</code> / <code>tasks.create</code>.
-        </p>
-        <p class="hist" data-lang="fr">
-          Onglet Tasks : créer / lister / terminer. Le même store JSON est visible
-          aux agents via <code>tasks.list</code> / <code>tasks.create</code>.
-        </p>
-
-        <h2 data-lang="en">modules</h2>
-        <h2 data-lang="fr">modules</h2>
-        <p class="hist" data-lang="en">
-          Installed packages with <code>declarative_ui</code> appear under
-          <strong>Modules</strong> (not <code>notes</code>, <code>tasks</code>, or
-          <code>ext-rt</code>). Open a tab: heading, form or button, table bound to
-          a tool. Submit goes through the same cap review as
-          <code>module.invoke</code>. Invalid <code>ui/index.html</code> shows an
-          error banner (no partial widgets). Chat « create a module » or Scenarios
-          can scaffold / package / install one.
-        </p>
-        <p class="hist" data-lang="fr">
-          Les paquets installés avec <code>declarative_ui</code> apparaissent sous
-          <strong>Modules</strong> (pas <code>notes</code>, <code>tasks</code> ni
-          <code>ext-rt</code>). Ouvrir un onglet : heading, formulaire ou bouton,
-          table liée à un outil. Soumettre passe par la même revue de caps que
-          <code>module.invoke</code>. Un <code>ui/index.html</code> invalide affiche
-          une bannière (pas de widgets partiels). Le chat « crée un module » ou
-          Scénarios peut scaffolder / packager / installer.
-        </p>
-
-        <h2 data-lang="en">agents</h2>
-        <h2 data-lang="fr">agents</h2>
-        <p class="hist" data-lang="en">
-          Create an agent with a task and a model. Preview skills:
-          notes-writer, research, file-author, planner, tasks. Optional MCP:
-          copy <code>share/mcp/servers.yaml.example</code> and add stdio servers.
-          Sensitive actions raise a confirmation banner. Deny once, Accept
-          another. Timeout is deny. Open <strong>Detail</strong> for the step
-          timeline, Pause / Resume / Steer.
-        </p>
-        <p class="hist" data-lang="fr">
-          Créez un agent avec une tâche et un modèle. Skills Preview :
-          notes-writer, research, file-author, planner, tasks. MCP optionnel :
-          copiez <code>share/mcp/servers.yaml.example</code> et ajoutez des
-          serveurs stdio. Une action sensible affiche une bannière. Deny une
-          fois, Accept une autre. Timeout = refus. Ouvrez <strong>Détail</strong>
-          pour la timeline, Pause / Reprendre / Steer.
-        </p>
-
-        <h2 data-lang="en">settings</h2>
-        <h2 data-lang="fr">settings</h2>
-        <p class="hist" data-lang="en">
-          Language en ↔ fr, default agent model / max steps, search engine,
-          auto-remember, Secrets vault, local module catalogue, schedules.
-          Preferences persist in <code>var/run/preferences.json</code>.
-        </p>
-        <p class="hist" data-lang="fr">
-          Langue en ↔ fr, modèle agent / max steps, moteur de recherche,
-          mémorisation auto, vault Secrets, catalogue local de modules, schedules.
-          Les préférences persistent dans <code>var/run/preferences.json</code>.
-        </p>
-
-        <h2 data-lang="en">audit</h2>
-        <h2 data-lang="fr">audit</h2>
-        <p class="hist" data-lang="en">
-          Audit tab → Refresh (signed events). Kill aos-auditd: chat must
-          continue; the supervisor restarts auditd in the background.
-        </p>
-        <p class="hist" data-lang="fr">
-          Onglet Audit → Refresh (événements signés). Tuer aos-auditd : le chat
-          doit continuer ; le superviseur relance auditd en arrière-plan.
+          Catalogue livré complet :
+          <a href="https://github.com/azerothl/akasha-os/blob/main/docs/FEATURES.md">docs/FEATURES.md</a>
+          sur GitHub. Feedback et protocole de cohorte :
+          <a href="feedback.html">feedback</a>. Ce que la Preview ne fera pas :
+          <a href="limits.html">limits</a>.
         </p>
 
         <a class="continue pager" href="network.html">

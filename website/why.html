@@ -6,7 +6,7 @@
     <title>Why — Akasha OS</title>
     <meta
       name="description"
-      content="Why Akasha OS is an agent-native OS, not a chat wrapper: capabilities, semantic IPC, first-class GPU, offline-first."
+      content="Why Akasha OS treats autonomy as a system problem: capabilities, semantic IPC, first-class GPU, and offline by default."
     />
     <link rel="stylesheet" href="styles.css" />
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
@@ -16,14 +16,6 @@
     <meta name="theme-color" content="#070b14" />
   </head>
   <body class="plate">
-    <!--
-      THESIS: Why is the orrery argument: agents are bodies, capabilities are the rods — not a chat wrapper on POSIX.
-      OWN-WORLD: Orrery inner plate — void, cyan rails, Archivo Narrow.
-      STORY: A tester can tell a neighboring chat app from this host, then winds Install.
-      FIRST VIEWPORT: Honesty + agents as system services.
-      FORM: Orrery inner plate, seed c1699dbf reroll 1.
-      FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
-    -->
     <canvas class="ether" data-ether aria-hidden="true"></canvas>
     <a class="skip" href="#content">Skip to content</a>
     <div class="shell">
@@ -48,124 +40,176 @@
       <main id="content" class="plate-main">
         <h1>
           <span data-lang="en">
-            Most agent stacks are applications on a general-purpose OS.
-            Akasha OS treats autonomy as a system problem. Preview
-            <span data-aos-version>0.9.0</span> is still a host app — not a
-            bootable image. The seL4 track is separate.
+            Most agent stacks are applications sitting on a general-purpose OS.
+            Akasha OS treats autonomy as a system problem instead. Preview
+            <span data-aos-version>0.9.0</span> is still a host app you install
+            and launch — not a bootable image. The seL4 track in the repository
+            is a separate line of work.
           </span>
           <span data-lang="fr">
-            La plupart des stacks agents sont des applications sur un OS
+            La plupart des stacks agents sont des applications posées sur un OS
             généraliste. Akasha OS traite l’autonomie comme un problème système.
-            La Preview <span data-aos-version>0.9.0</span> reste une appli hôte —
-            pas une image bootable. La piste seL4 est séparée.
+            La Preview <span data-aos-version>0.9.0</span> reste une appli hôte
+            que vous installez et lancez — pas une image bootable. La piste seL4
+            du dépôt est une ligne de travail séparée.
           </span>
         </h1>
 
-        <h2 data-lang="en">Not a chat wrapper</h2>
-        <h2 data-lang="fr">Pas un wrapper de chat</h2>
-        <p class="hist" data-lang="en">
-          A neighboring chat wrapper or “AI desktop” cannot truthfully claim that
-          agents, models, and tools are kernel-adjacent services with capability
-          tokens and a signed audit trail. Those products sit on POSIX and hope
-          the host OS is enough. This project does not.
-        </p>
-        <p class="hist" data-lang="fr">
-          Un wrapper de chat voisin ou un « bureau IA » ne peut pas prétendre
-          que agents, modèles et outils sont des services proches du noyau, avec
-          jetons de capacité et journal d’audit signé. Ces produits s’appuient
-          sur POSIX et espèrent que l’OS hôte suffise. Ce projet non.
-        </p>
+        <aside class="callout">
+          <h3 data-lang="en">What this page is for</h3>
+          <h3 data-lang="fr">À quoi sert cette page</h3>
+          <p data-lang="en">
+            Before you install, it helps to know how Preview differs from a chat
+            wrapper or an “AI desktop.” The sections below map each idea to
+            something you can already try in the UI.
+          </p>
+          <p data-lang="fr">
+            Avant d’installer, il est utile de voir en quoi la Preview diffère
+            d’un wrapper de chat ou d’un « bureau IA ». Les sections ci-dessous
+            relient chaque idée à quelque chose que vous pouvez déjà essayer dans
+            l’interface.
+          </p>
+        </aside>
 
-        <h2 data-lang="en">Capabilities, not ambient trust</h2>
-        <h2 data-lang="fr">Des capacités, pas une confiance ambiante</h2>
-        <p class="hist" data-lang="en">
-          An agent can act only inside tokens it was granted: a file, a network
-          path, a tool, a lifetime. Tokens are unforgeable and revocable. There
-          is no coarse Unix uid that means “this agent may do anything the user
-          can.” Broad grants are possible because they stay auditable and can
-          be taken back.
-        </p>
-        <p class="hist" data-lang="fr">
-          Un agent n’agit que dans les jetons qu’on lui a donnés : un fichier,
-          un chemin réseau, un outil, une durée. Les jetons sont infalsifiables
-          et révocables. Pas d’uid Unix grossier qui voudrait dire « cet agent
-          peut tout ce que l’utilisateur peut ». Des grants larges restent
-          possibles parce qu’ils sont auditables et retirables.
-        </p>
+        <article class="grant">
+          <h2 data-lang="en">Not another chat wrapper</h2>
+          <h2 data-lang="fr">Pas un wrapper de chat de plus</h2>
+          <p class="hist" data-lang="en">
+            A neighboring chat product can embed models and tools, but it still
+            borrows the ambient trust of your user account on Windows or Linux.
+            Akasha OS Preview puts agents, models, and tools behind capability
+            tokens and a signed audit trail. When an agent wants to write a note
+            or call a tool, that action is an intent on the system bus — not an
+            unchecked call into the host OS.
+          </p>
+          <p class="hist" data-lang="fr">
+            Un produit de chat voisin peut embarquer des modèles et des outils,
+            mais il emprunte encore la confiance ambiante de votre compte
+            utilisateur sur Windows ou Linux. Akasha OS Preview place agents,
+            modèles et outils derrière des jetons de capacité et un journal
+            d’audit signé. Quand un agent veut écrire une note ou appeler un
+            outil, cette action est un intent sur le bus système — pas un appel
+            non contrôlé vers l’OS hôte.
+          </p>
+        </article>
 
-        <h2 data-lang="en">Semantic IPC</h2>
-        <h2 data-lang="fr">IPC sémantique</h2>
-        <p class="hist" data-lang="en">
-          The agent’s native language on this system is typed intents on the
-          bus, not <code>open()</code> / <code>read()</code> / <code>write()</code>.
-          POSIX remains underneath the host. The point is that the agent does
-          not speak POSIX as its first dialect. Modules expose a typed schema
-          that humans and agents consume the same way.
-        </p>
-        <p class="hist" data-lang="fr">
-          Le langage natif de l’agent ici, ce sont des intents typés sur le bus,
-          pas <code>open()</code> / <code>read()</code> / <code>write()</code>.
-          POSIX reste sous l’hôte. L’agent ne parle pas POSIX en première langue.
-          Les modules exposent un schéma typé, consommé pareil par humains et agents.
-        </p>
+        <article class="grant">
+          <h2 data-lang="en">Capabilities instead of ambient trust</h2>
+          <h2 data-lang="fr">Des capacités plutôt qu’une confiance ambiante</h2>
+          <p class="hist" data-lang="en">
+            An agent may act only inside the tokens it was granted: a file path,
+            a network route, a tool name, a lifetime. Those tokens are meant to
+            be unforgeable and revocable. There is no coarse “this agent may do
+            everything the user can” shortcut. Broad grants remain possible when
+            you choose them, but they stay visible in the Caps tab and can be
+            taken back; sensitive steps still raise a confirmation banner that
+            times out to deny.
+          </p>
+          <p class="hist" data-lang="fr">
+            Un agent n’agit que dans les jetons qu’on lui a donnés : un chemin
+            de fichier, une route réseau, un nom d’outil, une durée. Ces jetons
+            sont conçus pour être infalsifiables et révocables. Il n’y a pas de
+            raccourci grossier du type « cet agent peut tout ce que
+            l’utilisateur peut ». Des grants larges restent possibles si vous
+            les choisissez, mais ils restent visibles dans l’onglet Caps et
+            peuvent être retirés ; les étapes sensibles affichent encore une
+            bannière de confirmation qui expire en refus.
+          </p>
+        </article>
 
-        <h2 data-lang="en">First-class GPU</h2>
-        <h2 data-lang="fr">GPU de premier plan</h2>
-        <p class="hist" data-lang="en">
-          Inference latency, not a classic CPU scheduler, is the bottleneck.
-          Placement and local GGUF inference are runtime concerns: the host
-          probes VRAM, picks a pack, and runs models as a system service
-          (<code>modeld</code>), not as an app plugin. NVIDIA is recommended;
-          a slower CPU path exists. That limit is the product, not fine print.
-        </p>
-        <p class="hist" data-lang="fr">
-          Le goulot, c’est la latence d’inférence, pas un scheduler CPU classique.
-          Placement et inférence GGUF locale sont des affaires de runtime : l’hôte
-          sonde la VRAM, choisit un pack, et fait tourner les modèles comme
-          service (<code>modeld</code>), pas comme plugin d’appli. NVIDIA est
-          recommandé ; un chemin CPU plus lent existe. Cette limite est le
-          produit, pas une note de bas de page.
-        </p>
+        <article class="grant">
+          <h2 data-lang="en">Semantic IPC</h2>
+          <h2 data-lang="fr">IPC sémantique</h2>
+          <p class="hist" data-lang="en">
+            On this host, an agent’s first language is typed intents on the bus
+            — for example creating a note or generating an image — rather than
+            speaking POSIX <code>open</code> / <code>read</code> / <code>write</code>
+            as its native dialect. POSIX still exists underneath Windows and
+            Linux. Modules expose a typed schema that the human UI and the agent
+            consume the same way, so Notes and Tasks stay dual-surface: one
+            store, two faces.
+          </p>
+          <p class="hist" data-lang="fr">
+            Sur cet hôte, la première langue d’un agent, ce sont des intents
+            typés sur le bus — créer une note ou générer une image, par exemple —
+            plutôt que de parler POSIX <code>open</code> / <code>read</code> /
+            <code>write</code> en dialecte natif. POSIX existe toujours sous
+            Windows et Linux. Les modules exposent un schéma typé consommé de la
+            même façon par l’UI humaine et par l’agent : Notes et Tasks restent
+            dual-surface, un seul store, deux faces.
+          </p>
+        </article>
 
-        <h2 data-lang="en">Offline by default</h2>
-        <h2 data-lang="fr">Hors ligne par défaut</h2>
-        <p class="hist" data-lang="en">
-          Network egress is deny-by-default (<code>offline_strict</code>). Chat
-          must work without the network after models are on disk. Search, fetch,
-          and GitHub feedback submit are explicit actions. No automatic upload
-          of your session.
-        </p>
-        <p class="hist" data-lang="fr">
-          La sortie réseau est refusée par défaut (<code>offline_strict</code>).
-          Le chat doit fonctionner sans réseau une fois les modèles sur disque.
-          Recherche, fetch et envoi de feedback GitHub sont des actions explicites.
-          Pas d’upload automatique de votre session.
-        </p>
+        <article class="grant">
+          <h2 data-lang="en">First-class GPU and models</h2>
+          <h2 data-lang="fr">GPU et modèles de premier plan</h2>
+          <p class="hist" data-lang="en">
+            Inference latency is the bottleneck, not a classic CPU scheduler.
+            Preview probes VRAM, RAM, and disk on first launch, suggests a model
+            pack for your tier, and runs GGUF inference through <code>modeld</code>
+            as a system service. You can pin auto / GPU / CPU in Settings and,
+            on NVIDIA, migrate mid-token without cancelling the turn. Image and
+            speech packs download from Models when you want them; they are not
+            forced into the first-run zip.
+          </p>
+          <p class="hist" data-lang="fr">
+            Le goulot, c’est la latence d’inférence, pas un scheduler CPU
+            classique. La Preview sonde VRAM, RAM et disque au premier
+            lancement, propose un pack de modèles pour votre palier, et fait
+            tourner l’inférence GGUF via <code>modeld</code> comme service. Vous
+            pouvez fixer auto / GPU / CPU dans Settings et, sur NVIDIA, migrer
+            en milieu de génération sans annuler le tour. Les packs image et
+            voix se téléchargent depuis Models quand vous le souhaitez ; ils ne
+            sont pas imposés dans le zip de first-run.
+          </p>
+        </article>
 
-        <h2 data-lang="en">Host now, seL4 later</h2>
-        <h2 data-lang="fr">Hôte maintenant, seL4 plus tard</h2>
-        <p class="hist" data-lang="en">
-          Preview is userspace scaffolding on Windows or Linux (ADR 0001).
-          A seL4 / Microkit track exists in the repo and is not what you
-          download from Releases. Do not expect a bootable image from
-          <code>install.cmd</code> or <code>install.sh</code>.
-        </p>
-        <p class="hist" data-lang="fr">
-          Preview est un échafaudage userspace sur Windows ou Linux (ADR 0001).
-          Une piste seL4 / Microkit existe dans le dépôt ; ce n’est pas ce que
-          vous téléchargez depuis Releases. N’attendez pas une image bootable
-          de <code>install.cmd</code> ou <code>install.sh</code>.
-        </p>
+        <article class="grant">
+          <h2 data-lang="en">Offline by default</h2>
+          <h2 data-lang="fr">Hors ligne par défaut</h2>
+          <p class="hist" data-lang="en">
+            Network egress starts denied (<code>offline_strict</code>). After
+            models are on disk, Chat is expected to work with Allow network
+            left off. Search, browse, fetch, and opening a GitHub feedback issue
+            are explicit actions you turn on when you mean them. There is no
+            automatic upload of your session.
+          </p>
+          <p class="hist" data-lang="fr">
+            La sortie réseau commence refusée (<code>offline_strict</code>). Une
+            fois les modèles sur disque, le Chat doit fonctionner avec Allow
+            network éteint. Recherche, browse, fetch et l’ouverture d’une issue
+            GitHub de feedback sont des actions explicites que vous activez quand
+            vous le voulez. Il n’y a pas d’upload automatique de votre session.
+          </p>
+        </article>
 
-        <a class="continue pager" href="install.html">
-          <span class="continue-label">Install</span>
+        <article class="grant">
+          <h2 data-lang="en">Host now, seL4 later</h2>
+          <h2 data-lang="fr">Hôte maintenant, seL4 plus tard</h2>
+          <p class="hist" data-lang="en">
+            Preview is userspace scaffolding on Windows or Linux. That choice
+            lets cohort testers install without cargo and send feedback from
+            the UI. The seL4 / Microkit track in the repo explores a bootable
+            future; it is not what GitHub Releases ship today. Keeping that
+            distinction visible is part of the product story.
+          </p>
+          <p class="hist" data-lang="fr">
+            La Preview est un échafaudage en userspace sur Windows ou Linux. Ce
+            choix permet aux testeurs de cohorte d’installer sans cargo et
+            d’envoyer un retour depuis l’UI. La piste seL4 / Microkit du dépôt
+            explore un futur bootable ; ce n’est pas ce que les Releases GitHub
+            livrent aujourd’hui. Garder cette distinction visible fait partie
+            de l’histoire produit.
+          </p>
+        </article>
+
+        <a class="continue pager" href="grant.html">
+          <span class="continue-label" data-lang="en">What Preview grants</span>
+          <span class="continue-label" data-lang="fr">Ce que la Preview offre</span>
         </a>
       </main>
       <footer>
-        <p>
-          AKASHA OS ·
-          <a href="https://github.com/azerothl/akasha-os">github.com/azerothl/akasha-os</a>
-        </p>
+        <p>AKASHA OS · <a href="https://github.com/azerothl/akasha-os">github.com/azerothl/akasha-os</a></p>
       </footer>
     </div>
     <script src="app.js"></script>

@@ -6,12 +6,12 @@
     <title>Akasha OS — Agent-native operating system</title>
     <meta
       name="description"
-      content="Agent-native OS with capability-based security, semantic IPC, and first-class GPU. Offline-first. Preview on Windows/Linux (NVIDIA recommended)."
+      content="Akasha OS Preview treats agents, models, tools, and memory as system services with capabilities and audit. Host app on Windows/Linux — not a bootable OS."
     />
     <meta property="og:title" content="Akasha OS" />
     <meta
       property="og:description"
-      content="Agent-native OS — capability-based security, semantic IPC, first-class GPU, offline-first."
+      content="Agent-native OS Preview: capabilities, semantic IPC, local GPU inference, offline by default."
     />
     <meta property="og:type" content="website" />
     <link rel="stylesheet" href="styles.css" />
@@ -22,14 +22,6 @@
     <meta name="theme-color" content="#070b14" />
   </head>
   <body class="sky">
-    <!--
-      THESIS: The landing is an orrery in the ether, not an AI-OS hero and not a radio correlator. Agents orbit; capabilities are the rods.
-      OWN-WORLD: Night void #070b14, cyan rails #3ee0c4, hydrogen winding key only, Archivo Narrow on the machine, Fira Sans for plates.
-      STORY: A tester reads HOST / NVIDIA / NOT BOOTABLE as one cyan swipe, then winds INSTALL.
-      FIRST VIEWPORT: Live orrery filling the fold (MEMORY, CAPS, GPU, AGENTS); honesty stack on the right; hydrogen INSTALL key flush to the bottom.
-      FORM: Orrery, grounded list position 1, pick on seed c1699dbf reroll 1.
-      FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
-    -->
     <canvas class="ether" data-ether aria-hidden="true"></canvas>
     <a class="skip" href="#content">Skip to content</a>
     <div class="shell">
@@ -59,39 +51,70 @@
 
         <aside class="honesty">
           <p class="lede" data-lang="en">
-            The medium agents run in. Agents, models, tools, and memory are
-            first-class system services. Preview
-            <span data-aos-version>0.9.0</span> is a host app, not a bootable
-            image.
+            Akasha OS is the medium agents run in. Preview
+            <span data-aos-version>0.9.0</span> installs as a host application
+            on Windows or Linux: chat sessions, memory, WASM modules, agents,
+            and local models are system services with explicit capabilities and
+            a signed audit trail — not plugins glued onto a chat window.
           </p>
           <p class="lede" data-lang="fr">
-            Le milieu où les agents existent. Agents, modèles, outils et mémoire
-            sont des services système. La Preview
-            <span data-aos-version>0.9.0</span> est une appli hôte, pas une image
-            bootable.
+            Akasha OS est le milieu où les agents existent. La Preview
+            <span data-aos-version>0.9.0</span> s’installe comme une application
+            hôte sur Windows ou Linux : sessions de chat, mémoire, modules WASM,
+            agents et modèles locaux sont des services système avec des capacités
+            explicites et un journal d’audit signé — pas des plugins collés à une
+            fenêtre de chat.
           </p>
-          <ul class="orbits">
-            <li>MEMORY</li>
-            <li>CAPS</li>
-            <li>GPU</li>
-            <li>AGENTS</li>
+          <ul class="pillars" aria-label="Core surfaces">
+            <li data-lang="en">Memory that persists across sessions</li>
+            <li data-lang="fr">Mémoire qui survit aux sessions</li>
+            <li data-lang="en">Revocable capability tokens</li>
+            <li data-lang="fr">Jetons de capacité révocables</li>
+            <li data-lang="en">Local GPU inference as a service</li>
+            <li data-lang="fr">Inférence GPU locale comme service</li>
+            <li data-lang="en">Agents with skills, tools, and audit</li>
+            <li data-lang="fr">Agents avec skills, outils et audit</li>
           </ul>
           <div class="sheet">
             <article class="fact">
-              <h2>HOST</h2>
-              <p data-lang="en">Preview <span data-aos-version>0.9.0</span> is a host app on Windows or Linux x64.</p>
-              <p data-lang="fr">La Preview <span data-aos-version>0.9.0</span> est une appli hôte sur Windows ou Linux x64.</p>
+              <h2 data-lang="en">Host Preview</h2>
+              <h2 data-lang="fr">Preview hôte</h2>
+              <p data-lang="en">
+                You download a zip or tarball and run an installer script. The UI
+                and daemons live under your user profile — the same kind of host
+                app you already know how to launch.
+              </p>
+              <p data-lang="fr">
+                Vous téléchargez une archive et lancez un script d’installation.
+                L’UI et les daemons vivent sous votre profil utilisateur — le même
+                genre d’appli hôte que vous savez déjà démarrer.
+              </p>
             </article>
             <article class="fact">
               <h2>NVIDIA</h2>
-              <p data-lang="en">Recommended. A slower CPU path exists when the GPU is absent.</p>
-              <p data-lang="fr">Recommandé. Un chemin CPU plus lent existe sans GPU.</p>
+              <p data-lang="en">
+                A recent NVIDIA GPU is recommended for comfortable local
+                inference. Without one, Preview still starts on a slower CPU path
+                in the same package.
+              </p>
+              <p data-lang="fr">
+                Un GPU NVIDIA récent est recommandé pour une inférence locale
+                confortable. Sans GPU, la Preview démarre quand même sur un
+                chemin CPU plus lent, dans le même paquet.
+              </p>
             </article>
             <article class="fact">
-              <h2 data-lang="en">NOT BOOTABLE</h2>
-              <h2 data-lang="fr">NON BOOTABLE</h2>
-              <p data-lang="en">Denied. This is not a bootable OS image. The seL4 track is separate.</p>
-              <p data-lang="fr">Refusé. Ce n’est pas une image bootable. La piste seL4 est séparée.</p>
+              <h2 data-lang="en">Not a bootable OS</h2>
+              <h2 data-lang="fr">Pas un OS bootable</h2>
+              <p data-lang="en">
+                This release is not a disk image you boot into. A separate seL4
+                track exists in the repository for that longer-term goal.
+              </p>
+              <p data-lang="fr">
+                Cette version n’est pas une image disque que vous démarrez. Une
+                piste seL4 distincte existe dans le dépôt pour cet objectif à
+                plus long terme.
+              </p>
             </article>
           </div>
           <p class="preview">PREVIEW <span data-aos-version>0.9.0</span></p>
@@ -110,8 +133,8 @@
           <span class="key-label">Install</span>
           <span class="key-rule" aria-hidden="true"></span>
           <span class="key-copy">
-            <span class="key-hint" data-lang="en">Wind the orrery</span>
-            <span class="key-hint" data-lang="fr">Remonter le planétaire</span>
+            <span class="key-hint" data-lang="en">Get Preview on your machine</span>
+            <span class="key-hint" data-lang="fr">Installer la Preview chez vous</span>
             <span class="key-sub" data-lang="en">Download Preview <span data-aos-version>0.9.0</span></span>
             <span class="key-sub" data-lang="fr">Télécharger la Preview <span data-aos-version>0.9.0</span></span>
           </span>

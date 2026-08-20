@@ -5,8 +5,10 @@ colors:
   void: "#070b14"
   signal: "#3ee0c4"
   hydrogen: "#e85d4c"
-  paper: "#dce6f0"
-  mute: "color-mix(in srgb, var(--signal) 48%, var(--void))"
+  paper: "#e8eef6"
+  mute: "color-mix(in srgb, var(--signal) 42%, var(--void))"
+  plate: "color-mix(in srgb, var(--paper) 7%, var(--void))"
+  plate-edge: "color-mix(in srgb, var(--signal) 55%, var(--void))"
 typography:
   display:
     fontFamily: "Archivo Narrow, Arial Narrow, sans-serif"
@@ -129,6 +131,7 @@ Personality is precise and technical. Honesty about Preview (host app, NVIDIA re
 - Fira Sans 400 / 500 / 600 for lede, running copy, and honesty captions
 - Hydrogen reserved for the Install / Download winding key
 - Honesty as one paper mill (void type on paper) plus PREVIEW in cyan; inner pages continue in cyan, not hydrogen
+- Section contrast on plate weather: lifted `.grant` / `.section-plate` backgrounds, cyan rail under `h2`, paper `.callout` blocks for critical facts (`.callout-limit` uses hydrogen border)
 - Square bezels; integer unit `--u` (8px); two weathers (`body.sky` vs `body.plate`)
 
 ## Colors
@@ -143,8 +146,9 @@ Night void, cyan rails, and a single hydrogen winding key. Cool paper for type a
 
 ### Neutral
 - **Night Void** (`void`): Page ground, honesty column, skip-link inverse, theme-color, orrery clear. Paper type sits on it.
-- **Cool Paper** (`paper`): Body type, plate fill, key type, hover inverse for links / key / continue.
-- **Dim Rail** (`mute`): Idle nav lanes, language toggles, and footer. Mixed 48% signal into void.
+- Cool Paper (`paper`): Body type, plate fill, key type, hover inverse for links / key / continue. Slightly brighter (`#e8eef6`) for long-form readability.
+- Dim Rail (`mute`): Idle nav lanes, language toggles, and footer. Mixed 42% signal into void.
+- Plate (`plate` / `plate-edge`): Lifted section backgrounds and cyan-tinted edges for `.grant`, `.section-plate`, `.ticks`, and `.doc-band` so inner pages are not a flat void.
 
 ### Named Rules
 **The Hydrogen Key Rule.** Hydrogen fills the Install / Download winding key and nowhere else. Continue links, headings, the mark, and hover states stay cyan or paper.

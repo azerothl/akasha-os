@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Grants — Akasha OS</title>
+    <title>What Preview offers — Akasha OS</title>
     <meta
       name="description"
-      content="Preview capabilities: sessions, GPU, network deny-by-default, audit, memory, notes, agents, and updates."
+      content="What Akasha OS Preview can do: sessions, models, network policy, audit, memory, modules, agents, media, and updates."
     />
     <link rel="stylesheet" href="styles.css" />
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
@@ -16,14 +16,6 @@
     <meta name="theme-color" content="#070b14" />
   </head>
   <body class="plate">
-    <!--
-      THESIS: Grants are the rods that constrain each orbit, not feature tiles.
-      OWN-WORLD: Orrery inner plate — void, cyan labels, cut-face gaps.
-      STORY: A tester reads each grant as a constraint, then walks to docs.
-      FIRST VIEWPORT: Honesty + the grant list as plates in the ether.
-      FORM: Orrery inner plate, seed c1699dbf reroll 1.
-      FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
-    -->
     <canvas class="ether" data-ether aria-hidden="true"></canvas>
     <a class="skip" href="#content">Skip to content</a>
     <div class="shell">
@@ -49,149 +41,238 @@
         <h1>
           <span data-lang="en">
             Agents act only with unforgeable, revocable tokens. Preview
-            <span data-aos-version>0.9.0</span> issues the grants below to the
-            host session. Network egress stays deny-by-default.
+            <span data-aos-version>0.9.0</span> gives the host session the
+            surfaces below. Network egress stays off until you choose otherwise.
           </span>
           <span data-lang="fr">
-            Les agents n’agissent qu’avec des jetons infalsifiables et révocables.
-            La Preview <span data-aos-version>0.9.0</span> émet les grants
-            ci-dessous à la session hôte. La sortie réseau reste refusée par défaut.
+            Les agents n’agissent qu’avec des jetons infalsifiables et
+            révocables. La Preview <span data-aos-version>0.9.0</span> donne à
+            la session hôte les surfaces ci-dessous. La sortie réseau reste
+            éteinte tant que vous ne choisissez pas autrement.
           </span>
         </h1>
 
+        <aside class="callout">
+          <h3 data-lang="en">How to read this page</h3>
+          <h3 data-lang="fr">Comment lire cette page</h3>
+          <p data-lang="en">
+            Each section describes a capability you can exercise after install.
+            For step-by-step use of every tab, see the
+            <a href="docs/use.html">Using Preview</a> chapter. For extending
+            Preview with modules, skills, and MCP, that chapter’s “Extend”
+            section goes deeper.
+          </p>
+          <p data-lang="fr">
+            Chaque section décrit une capacité que vous pouvez exercer après
+            l’installation. Pour le détail onglet par onglet, voir
+            <a href="docs/use.html">Utiliser la Preview</a>. Pour étendre la
+            Preview avec modules, skills et MCP, la section « Étendre » de ce
+            chapitre va plus loin.
+          </p>
+        </aside>
+
         <article class="grant">
-          <h2 data-lang="en">session GRANT</h2>
-          <h2 data-lang="fr">session GRANT</h2>
+          <h2 data-lang="en">Sessions</h2>
+          <h2 data-lang="fr">Sessions</h2>
           <p class="hist" data-lang="en">
-            Parallel persisted conversations. In the Chat tab, open several sessions,
-            talk in each, and restart Preview: histories must come back. Each session
-            can pick its own model from the session combo (offerings listed in Models).
+            Chat keeps several conversations side by side. Each session stores
+            its own history and can pick its own model from the offerings listed
+            under Models. After you close Preview and open it again, those
+            histories are expected to return. Stop cancels an in-flight
+            generation; Copy puts a message on the clipboard. Slash commands
+            such as <code>/agent</code>, <code>/image</code>, and
+            <code>/speak</code> attach media or background agents to the thread.
           </p>
           <p class="hist" data-lang="fr">
-            Conversations parallèles persistées. Dans l’onglet Chat, ouvrez plusieurs
-            sessions, parlez dans chacune, puis redémarrez Preview : les historiques
-            doivent revenir. Chaque session peut choisir son modèle (catalogue dans Models).
+            Le Chat garde plusieurs conversations côte à côte. Chaque session
+            conserve son historique et peut choisir son propre modèle parmi les
+            offres listées sous Models. Après fermeture et réouverture de la
+            Preview, ces historiques sont censés revenir. Stop annule une
+            génération en cours ; Copier met un message dans le presse-papiers.
+            Des commandes slash comme <code>/agent</code>, <code>/image</code>
+            et <code>/speak</code> rattachent média ou agents de fond au fil.
           </p>
         </article>
 
         <article class="grant">
-          <h2 data-lang="en">gpu GRANT</h2>
-          <h2 data-lang="fr">gpu GRANT</h2>
+          <h2 data-lang="en">Local models and GPU placement</h2>
+          <h2 data-lang="fr">Modèles locaux et placement GPU</h2>
           <p class="hist" data-lang="en">
-            Placement, scheduling, and local GGUF inference. First launch probes VRAM,
-            RAM, and disk, then offers a pack for your tier (including a
-            <strong>cpu</strong> pack when NVIDIA is absent). Confirm
-            <code>nvidia-smi -L</code> when you expect GPU mode.
+            On first launch, Preview probes VRAM, RAM, and disk, then offers a
+            GGUF pack suited to your tier — including a CPU pack when NVIDIA is
+            absent. Models lists installed entries, downloads alternatives, and
+            shows live metrics. Settings Inference auto / GPU / CPU can migrate
+            a live completion mid-token on NVIDIA hosts. Optional image and TTS
+            packs are not in the zip; downloading them also fetches the sd.cpp
+            or Piper engine when needed.
           </p>
           <p class="hist" data-lang="fr">
-            Placement, ordonnancement et inférence GGUF locale. Le premier lancement
-            sonde VRAM, RAM et disque, puis propose un pack pour votre palier
-            (y compris un pack <strong>cpu</strong> sans NVIDIA). Vérifiez
-            <code>nvidia-smi -L</code> si vous attendez le mode GPU.
+            Au premier lancement, la Preview sonde VRAM, RAM et disque, puis
+            propose un pack GGUF adapté à votre palier — y compris un pack CPU
+            sans NVIDIA. Models liste les entrées installées, télécharge des
+            alternatives et affiche des métriques en direct. Settings Inférence
+            auto / GPU / CPU peut migrer une complétion en cours au milieu d’un
+            token sur hôtes NVIDIA. Les packs image et TTS optionnels ne sont
+            pas dans le zip ; les télécharger tire aussi le moteur sd.cpp ou
+            Piper si besoin.
           </p>
         </article>
 
         <article class="grant">
-          <h2 data-lang="en">net DENY</h2>
-          <h2 data-lang="fr">net DENY</h2>
+          <h2 data-lang="en">Network stays opt-in</h2>
+          <h2 data-lang="fr">Le réseau reste en opt-in</h2>
           <p class="hist" data-lang="en">
-            Search and fetch are opt-in. Leave <strong>Allow network</strong> off
-            and web search must fail (<code>offline_strict</code>). Turn it on only
-            when you mean to search, browse, or download. Search engine
-            <code>auto</code> is Brave → DuckDuckGo → Bing (Settings). Optional
-            Brave key: <strong>Settings → Secrets</strong>.
+            Search, browse, and fetch are disabled until you enable Allow
+            network. With the default offline mode, web search is expected to
+            fail closed. When you do enable it, the engine preference
+            <code>auto</code> tries Brave, then DuckDuckGo, then Bing. An
+            optional Brave key lives under Settings → Secrets. Chat with local
+            models does not require the network once weights are on disk.
           </p>
           <p class="hist" data-lang="fr">
-            Recherche et fetch en opt-in. Laissez <strong>Allow network</strong>
-            éteint : la recherche web doit échouer (<code>offline_strict</code>).
-            Activez-le seulement pour chercher, parcourir ou télécharger. Moteur
-            <code>auto</code> : Brave → DuckDuckGo → Bing (Settings). Clé Brave
-            optionnelle : <strong>Settings → Secrets</strong>.
+            Recherche, browse et fetch restent désactivés tant que vous
+            n’activez pas Allow network. En mode hors ligne par défaut, la
+            recherche web est censée échouer de façon fermée. Quand vous
+            l’activez, la préférence <code>auto</code> essaie Brave, puis
+            DuckDuckGo, puis Bing. Une clé Brave optionnelle vit sous Settings →
+            Secrets. Le chat avec des modèles locaux n’a pas besoin du réseau
+            une fois les poids sur disque.
           </p>
         </article>
 
         <article class="grant">
-          <h2 data-lang="en">audit ON</h2>
-          <h2 data-lang="fr">audit ON</h2>
+          <h2 data-lang="en">Audit and confirmation</h2>
+          <h2 data-lang="fr">Audit et confirmation</h2>
           <p class="hist" data-lang="en">
-            Signed events in the Audit tab. Sensitive actions raise a confirmation
-            banner: Deny once, Accept another. Timeout is deny (fail-closed).
-            Feedback writes a local report under <code>var/feedback/</code> and can
-            open a GitHub issue. Security reports are not published.
+            The Audit tab shows signed events. Sensitive agent actions raise a
+            confirmation banner: you can deny once and accept another time;
+            timeout refuses the action. Feedback writes a local report under
+            <code>var/feedback/</code> and can open a GitHub issue when you
+            choose. Security-sensitive reports are kept local rather than
+            published automatically.
           </p>
           <p class="hist" data-lang="fr">
-            Événements signés dans l’onglet Audit. Une action sensible affiche une
-            bannière : Deny une fois, Accept une autre. Timeout = refus (fail-closed).
-            Le feedback écrit un rapport local sous <code>var/feedback/</code> et
-            peut ouvrir une issue GitHub. Les rapports sécurité ne sont pas publiés.
+            L’onglet Audit montre des événements signés. Les actions sensibles
+            d’agent affichent une bannière : vous pouvez refuser une fois et
+            accepter une autre ; le timeout refuse l’action. Le feedback écrit
+            un rapport local sous <code>var/feedback/</code> et peut ouvrir une
+            issue GitHub si vous le choisissez. Les rapports liés à la sécurité
+            restent locaux plutôt que publiés automatiquement.
           </p>
         </article>
 
         <article class="grant">
-          <h2 data-lang="en">memory GRANT</h2>
-          <h2 data-lang="fr">memory GRANT</h2>
+          <h2 data-lang="en">Long-term memory</h2>
+          <h2 data-lang="fr">Mémoire long terme</h2>
           <p class="hist" data-lang="en">
-            Long-term user facts. Memory tab: remember (“I prefer French”), then
-            Recall. The next Chat turn can use that context
-            (<code>mem.context</code> injected before infer).
+            The Memory tab stores durable user facts — for example that you
+            prefer French — and lets you recall, edit, or supersede them.
+            Before inference, Chat can inject matching context. Auto-remember
+            from chat is on by default: after a turn, Preview may propose facts
+            with a <code>[chat]</code> badge while filtering secrets so keys
+            and tokens are not stored by accident.
           </p>
           <p class="hist" data-lang="fr">
-            Faits utilisateur long terme. Onglet Memory : remember (« je préfère
-            le français »), puis Recall. Le prochain tour Chat peut s’en servir
-            (<code>mem.context</code> injecté avant l’inférence).
+            L’onglet Memory stocke des faits utilisateur durables — par exemple
+            que vous préférez le français — et permet de les rappeler, éditer
+            ou remplacer. Avant l’inférence, le Chat peut injecter le contexte
+            correspondant. La mémorisation auto depuis le chat est activée par
+            défaut : après un tour, la Preview peut proposer des faits avec un
+            badge <code>[chat]</code> tout en filtrant les secrets pour ne pas
+            stocker clés et jetons par accident.
           </p>
         </article>
 
         <article class="grant">
-          <h2 data-lang="en">notes GRANT</h2>
-          <h2 data-lang="fr">notes GRANT</h2>
+          <h2 data-lang="en">Notes and tasks</h2>
+          <h2 data-lang="fr">Notes et tâches</h2>
           <p class="hist" data-lang="en">
-            Human- and agent-authored notes, shipped as a WASM module. Notes tab:
-            title + body → Create, then List. Agents use the same notes tools
-            (JSON actions; <code>TOOL:</code> still accepted).
+            Notes and Tasks ship as WASM modules with a dual surface: the human
+            tabs and the agent tools share the same store. You create and list
+            notes or tasks in the UI; an agent can call the matching tools with
+            the same data. Packaged modules resync on boot after a Preview
+            update so a newer package is not left behind a stale copy.
           </p>
           <p class="hist" data-lang="fr">
-            Notes humaines et agents, module WASM. Onglet Notes : titre + corps →
-            Create, puis List. Les agents utilisent les mêmes outils notes
-            (actions JSON ; <code>TOOL:</code> encore accepté).
+            Notes et Tasks sont livrés en modules WASM à double surface : les
+            onglets humains et les outils agent partagent le même store. Vous
+            créez et listez notes ou tâches dans l’UI ; un agent peut appeler
+            les outils correspondants sur les mêmes données. Les modules
+            empaquetés se resynchronisent au boot après une mise à jour Preview
+            pour qu’un paquet plus récent ne laisse pas une copie périmée.
           </p>
         </article>
 
         <article class="grant">
-          <h2 data-lang="en">agents GRANT</h2>
-          <h2 data-lang="fr">agents GRANT</h2>
+          <h2 data-lang="en">Agents, skills, and tools</h2>
+          <h2 data-lang="fr">Agents, skills et outils</h2>
           <p class="hist" data-lang="en">
-            Goal loop, skills, tools, optional MCP. Agents tab: create an agent
-            with a task and a model. Preview skills include notes-writer, research,
-            file-author, planner, and tasks. Optional stdio MCP servers live in
+            The Agents tab starts a goal loop with a task and a model. Preview
+            ships skills such as notes-writer, research, file-author, planner,
+            and tasks under <code>share/skills/</code>. Tools may be native,
+            module-backed, MCP stdio servers, or runtime helpers for plan and
+            spawn. Detail shows the step timeline; you can pause, resume, steer,
+            or kill. Optional MCP servers are configured from
             <code>share/mcp/servers.yaml.example</code>.
           </p>
           <p class="hist" data-lang="fr">
-            Boucle de goal, skills, outils, MCP optionnel. Onglet Agents : créez
-            un agent avec une tâche et un modèle. Skills Preview : notes-writer,
-            research, file-author, planner, tasks. Serveurs MCP stdio optionnels :
+            L’onglet Agents démarre une boucle de goal avec une tâche et un
+            modèle. La Preview livre des skills comme notes-writer, research,
+            file-author, planner et tasks sous <code>share/skills/</code>. Les
+            outils peuvent être natifs, portés par un module, des serveurs MCP
+            stdio, ou des aides runtime pour plan et spawn. Détail montre la
+            timeline des étapes ; vous pouvez pauser, reprendre, steerer ou
+            tuer. Les serveurs MCP optionnels se configurent depuis
             <code>share/mcp/servers.yaml.example</code>.
           </p>
         </article>
 
         <article class="grant">
-          <h2 data-lang="en">update GRANT</h2>
-          <h2 data-lang="fr">update GRANT</h2>
+          <h2 data-lang="en">Image Studio and speech</h2>
+          <h2 data-lang="fr">Image Studio et parole</h2>
           <p class="hist" data-lang="en">
-            Non-destructive overlays from GitHub Releases. A banner appears when a
-            newer Release exists. Download writes the archive under
-            <code>var/updates/</code>; the next launch applies <code>bin/</code>
-            and <code>share/</code> without touching <code>var/</code> or
-            overwriting <code>etc/*.yaml</code> (writes <code>.new</code> if needed).
-            Apply is not fully automatic.
+            After you download an image pack from Models, the Image tab becomes
+            a studio: prompt, size, steps, CFG, seed, sampler, styles, LoRAs,
+            optional upscale, and a composition canvas that turns placement
+            blocks into structured layout for the prompt. Chat
+            <code>/image</code> and <code>/speak</code> write PNG or WAV under
+            downloads once the matching pack (and engine) is present. A TTS
+            card can open from <code>/speak</code> so you set voice knobs before
+            generating.
           </p>
           <p class="hist" data-lang="fr">
-            Overlay non destructif depuis GitHub Releases. Une bannière apparaît
-            si une Release plus récente existe. Download écrit l’archive sous
-            <code>var/updates/</code> ; le lancement suivant applique
-            <code>bin/</code> et <code>share/</code> sans toucher <code>var/</code>
-            ni écraser <code>etc/*.yaml</code> (fichiers <code>.new</code> si besoin).
-            L’application n’est pas entièrement automatique.
+            Après téléchargement d’un pack image depuis Models, l’onglet Image
+            devient un studio : prompt, taille, steps, CFG, seed, sampler,
+            styles, LoRA, upscale optionnel, et un canvas de composition qui
+            transforme des blocs de placement en layout structuré pour le
+            prompt. Le chat <code>/image</code> et <code>/speak</code> écrivent
+            PNG ou WAV sous downloads une fois le pack (et le moteur)
+            présents. Une carte TTS peut s’ouvrir depuis <code>/speak</code>
+            pour régler la voix avant de générer.
+          </p>
+        </article>
+
+        <article class="grant">
+          <h2 data-lang="en">Non-destructive updates</h2>
+          <h2 data-lang="fr">Mises à jour non destructives</h2>
+          <p class="hist" data-lang="en">
+            When a newer GitHub Release exists, a banner can appear. Download
+            stores the archive under <code>var/updates/</code>; the next launch
+            overlays <code>bin/</code> and <code>share/</code> without wiping
+            <code>var/</code> or blindly overwriting your
+            <code>etc/*.yaml</code> (conflicting files get a
+            <code>.new</code> sibling). Apply is intentional across launches,
+            not a silent in-place rewrite of your whole home.
+          </p>
+          <p class="hist" data-lang="fr">
+            Quand une Release GitHub plus récente existe, une bannière peut
+            apparaître. Le téléchargement stocke l’archive sous
+            <code>var/updates/</code> ; le lancement suivant superpose
+            <code>bin/</code> et <code>share/</code> sans effacer
+            <code>var/</code> ni écraser aveuglément vos
+            <code>etc/*.yaml</code> (les conflits reçoivent un frère
+            <code>.new</code>). L’application est volontaire d’un lancement à
+            l’autre, pas une réécriture silencieuse de tout le home.
           </p>
         </article>
 
@@ -200,10 +281,7 @@
         </a>
       </main>
       <footer>
-        <p>
-          AKASHA OS ·
-          <a href="https://github.com/azerothl/akasha-os">github.com/azerothl/akasha-os</a>
-        </p>
+        <p>AKASHA OS · <a href="https://github.com/azerothl/akasha-os">github.com/azerothl/akasha-os</a></p>
       </footer>
     </div>
     <script src="app.js"></script>

@@ -6,7 +6,7 @@
     <title>Limits — Akasha OS Preview</title>
     <meta
       name="description"
-      content="What Akasha OS Preview 0.9.0 will not do: not bootable, no macOS, dual license."
+      content="What Akasha OS Preview 0.9.0 will not do yet, and why: host app, platforms, updates, modules, and license."
     />
     <link rel="stylesheet" href="../styles.css" />
     <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
@@ -49,81 +49,204 @@
         <h1>
           <span data-lang="en">
             Preview <span data-aos-version>0.9.0</span> is a host app on
-            Windows or Linux. It is not the long-term seL4 system. These
-            denies are the product, not fine print.
+            Windows or Linux. It is not the long-term seL4 system. The
+            boundaries below are deliberate choices for this Preview, stated
+            in the same register as the thesis.
           </span>
           <span data-lang="fr">
             La Preview <span data-aos-version>0.9.0</span> est une appli hôte
             sur Windows ou Linux. Ce n’est pas le système seL4 à long terme.
-            Ces refus sont le produit, pas une note de bas de page.
+            Les frontières ci-dessous sont des choix délibérés pour cette
+            Preview, dits dans le même registre que la thèse.
           </span>
         </h1>
 
-        <h2 data-lang="en">out of scope in Preview 0.9.0</h2>
-        <h2 data-lang="fr">hors périmètre en Preview 0.9.0</h2>
-        <ul class="ticks">
-          <li data-lang="en">seL4 / bare-metal boot — separate track in the repo</li>
-          <li data-lang="fr">seL4 / boot bare-metal — piste séparée dans le dépôt</li>
-          <li>macos DENY</li>
-          <li data-lang="en">32B model in the installer DENY</li>
-          <li data-lang="fr">modèle 32B dans l’installateur DENY</li>
-          <li data-lang="en">fully automatic update apply DENY (download, then next launch)</li>
-          <li data-lang="fr">application auto des mises à jour DENY (download, puis lancement suivant)</li>
-          <li data-lang="en">native video generation DENY (image + TTS shipped in 0.8.0; video stays out)</li>
-          <li data-lang="fr">génération vidéo native DENY (image + TTS livrés en 0.8.0 ; la vidéo reste hors)</li>
-          <li data-lang="en">public module marketplace DENY (local signed catalogue only)</li>
-          <li data-lang="fr">marketplace publique de modules DENY (catalogue local signé seulement)</li>
-          <li data-lang="en">messaging channels / multi-user / multi-GPU pipeline DENY</li>
-          <li data-lang="fr">canaux de messagerie / multi-utilisateur / pipeline multi-GPU DENY</li>
-          <li data-lang="en">sandboxed webview / HTML/JS module UI DENY (host paints a closed widget tree)</li>
-          <li data-lang="fr">webview sandbox / UI module HTML/JS DENY (l’hôte peint un arbre de widgets fermé)</li>
-        </ul>
+        <aside class="callout callout-limit">
+          <h3 data-lang="en">Honesty first</h3>
+          <h3 data-lang="fr">Honnêteté d’abord</h3>
+          <p data-lang="en">
+            Nothing here is a promise that the feature arrives next week. Each
+            item explains why Preview stops where it does, so you can decide
+            whether the host is enough for your test.
+          </p>
+          <p data-lang="fr">
+            Rien ici n’est une promesse que la fonctionnalité arrive la semaine
+            prochaine. Chaque point explique pourquoi la Preview s’arrête là,
+            pour que vous puissiez juger si l’hôte suffit à votre test.
+          </p>
+        </aside>
 
-        <h2 data-lang="en">license</h2>
-        <h2 data-lang="fr">licence</h2>
-        <p class="hist" data-lang="en">
-          AGPL-3.0-only: free use, modify, and distribute (including commercially)
-          if you honor AGPL (source available, including network use). Keep NOTICE
-          and credit Akasha OS. Commercial: proprietary forks and closed SaaS;
-          attribution and royalty. Contact
-          <a href="mailto:loic.peaudecerf@proton.me">loic.peaudecerf@proton.me</a>.
-          The Akasha OS trademark is reserved.
-        </p>
-        <p class="hist" data-lang="fr">
-          AGPL-3.0-only : usage, modification et distribution libres (y compris
-          commercialement) si vous respectez l’AGPL (source disponible, y compris
-          en usage réseau). Conservez NOTICE et créditez Akasha OS. Commerciale :
-          forks propriétaires et SaaS fermé ; attribution et redevance. Contact
-          <a href="mailto:loic.peaudecerf@proton.me">loic.peaudecerf@proton.me</a>.
-          La marque Akasha OS est réservée.
-        </p>
+        <article class="grant">
+          <h2 data-lang="en">Host, not bare metal</h2>
+          <h2 data-lang="fr">Hôte, pas bare metal</h2>
+          <p class="hist" data-lang="en">
+            Preview installs and runs on top of Windows or Linux. A bootable /
+            bare-metal image is a separate seL4 track in the repository. Keeping
+            that boundary clear avoids confusing an installable tester build
+            with the long-term OS goal.
+          </p>
+          <p class="hist" data-lang="fr">
+            La Preview s’installe et tourne au-dessus de Windows ou Linux. Une
+            image bootable / bare-metal est une piste seL4 séparée dans le
+            dépôt. Garder cette frontière nette évite de confondre un build
+            testeur installable avec l’objectif OS à long terme.
+          </p>
+        </article>
 
-        <h2 data-lang="en">repo docs (not this manual)</h2>
-        <h2 data-lang="fr">docs du dépôt (pas ce manuel)</h2>
-        <p class="hist" data-lang="en">
-          Kernel specs, ADRs, and phase status stay on GitHub:
-          <a href="https://github.com/azerothl/akasha-os/blob/main/docs/STATUS.md">STATUS</a>
-          ·
-          <a href="https://github.com/azerothl/akasha-os/blob/main/docs/vision.md">Vision</a>
-          ·
-          <a href="https://github.com/azerothl/akasha-os/blob/main/docs/functional-specs.md">Functional specs</a>
-          ·
-          <a href="https://github.com/azerothl/akasha-os/blob/main/docs/technical-specs.md">Technical specs</a>
-          ·
-          <a href="https://github.com/azerothl/akasha-os/blob/main/CONTRIBUTING.md">Contributing</a>
-        </p>
-        <p class="hist" data-lang="fr">
-          Specs noyau, ADR et statut des phases restent sur GitHub :
-          <a href="https://github.com/azerothl/akasha-os/blob/main/docs/fr/STATUS.md">STATUS</a>
-          ·
-          <a href="https://github.com/azerothl/akasha-os/blob/main/docs/fr/README.md">README</a>
-          ·
-          <a href="https://github.com/azerothl/akasha-os/blob/main/docs/fr/specs-fonctionnelles.md">Specs fonctionnelles</a>
-          ·
-          <a href="https://github.com/azerothl/akasha-os/blob/main/docs/fr/specs-techniques.md">Specs techniques</a>
-          ·
-          <a href="https://github.com/azerothl/akasha-os/blob/main/CONTRIBUTING.md">Contributions</a>
-        </p>
+        <article class="grant">
+          <h2 data-lang="en">Platforms</h2>
+          <h2 data-lang="fr">Plateformes</h2>
+          <p class="hist" data-lang="en">
+            Windows 10/11 x64 and Linux x64 are the supported hosts. macOS is
+            not in Preview 0.9.0. NVIDIA is recommended; a CPU path exists in
+            the same artefact when a GPU is absent. Simultaneous multi-user
+            accounts and a complete multi-GPU pipeline are also out of scope —
+            Preview targets a single interactive host session.
+          </p>
+          <p class="hist" data-lang="fr">
+            Windows 10/11 x64 et Linux x64 sont les hôtes pris en charge. macOS
+            n’est pas dans la Preview 0.9.0. NVIDIA est recommandé ; un chemin
+            CPU existe dans le même artefact sans GPU. Les comptes multi-utilisateur
+            simultanés et un pipeline multi-GPU complet sont aussi hors périmètre
+            — la Preview vise une session hôte interactive unique.
+          </p>
+        </article>
+
+        <article class="grant">
+          <h2 data-lang="en">Updates</h2>
+          <h2 data-lang="fr">Mises à jour</h2>
+          <p class="hist" data-lang="en">
+            When a newer GitHub Release exists, Preview can show a banner and
+            overlay <code>bin/</code> and <code>share/</code> without touching
+            <code>var/</code> or overwriting your <code>etc/*.yaml</code>. Fully
+            automatic apply — download now, apply silently on the next launch —
+            is not finished yet, so you stay in control of when the overlay
+            lands.
+          </p>
+          <p class="hist" data-lang="fr">
+            Quand une Release GitHub plus récente existe, la Preview peut
+            afficher une bannière et superposer <code>bin/</code> et
+            <code>share/</code> sans toucher <code>var/</code> ni écraser vos
+            <code>etc/*.yaml</code>. L’application pleinement automatique —
+            télécharger maintenant, appliquer silencieusement au prochain
+            lancement — n’est pas terminée : vous gardez la main sur le moment
+            où la superposition arrive.
+          </p>
+        </article>
+
+        <article class="grant">
+          <h2 data-lang="en">Modules and UI surface</h2>
+          <h2 data-lang="fr">Modules et surface d’UI</h2>
+          <p class="hist" data-lang="en">
+            There is no public module marketplace. Install uses a local signed
+            catalogue with capability review. Module UI is a closed declarative
+            widget tree the host paints — not a sandboxed webview or free-form
+            HTML/JS compositor. Widget kinds such as pie, scatter, and webview
+            stay out so the host keeps a fail-closed document shape.
+          </p>
+          <p class="hist" data-lang="fr">
+            Il n’y a pas de marketplace publique de modules. L’install s’appuie
+            sur un catalogue local signé avec revue de caps. L’UI de module est
+            un arbre de widgets déclaratif fermé que l’hôte peint — pas une
+            webview sandbox ni un compositeur HTML/JS libre. Des kinds comme
+            pie, scatter et webview restent hors pour garder une forme de
+            document fail-closed côté hôte.
+          </p>
+        </article>
+
+        <article class="grant">
+          <h2 data-lang="en">Media and voice</h2>
+          <h2 data-lang="fr">Média et voix</h2>
+          <p class="hist" data-lang="en">
+            Image generation and TTS shipped in 0.8.0. Video generation,
+            speech-to-text, and always-on voice are not in 0.9.0. Img2img and
+            inpaint are not first-class intents yet. A 32B model is not offered
+            in the installer packs; first-run tiers stop at the high pack
+            documented in first-run.
+          </p>
+          <p class="hist" data-lang="fr">
+            La génération d’image et le TTS sont arrivés en 0.8.0. La
+            génération vidéo, la reconnaissance vocale et la voix always-on ne
+            sont pas dans 0.9.0. Img2img et inpaint ne sont pas encore des
+            intents de premier plan. Un modèle 32B n’est pas proposé dans les
+            packs de l’installateur ; les paliers first-run s’arrêtent au pack
+            high documenté dans first-run.
+          </p>
+        </article>
+
+        <article class="grant">
+          <h2 data-lang="en">Providers, messaging, and bridge depth</h2>
+          <h2 data-lang="fr">Providers, messagerie et profondeur du pont</h2>
+          <p class="hist" data-lang="en">
+            Cloud models go through OpenAI-compatible Providers only — not
+            native Messages, Gemini, or Bedrock APIs. Messaging channels such
+            as Slack or Discord are not in the OS core. The sibling-bridge
+            contract exists as schemas and documentation; a live HTTP sibling
+            daemon and a TPM hardware envelope are not part of this Preview. On
+            the inference side, 0.9 uses prefix replay rather than a llama.cpp
+            KV snapshot API.
+          </p>
+          <p class="hist" data-lang="fr">
+            Les modèles cloud passent uniquement par des Providers compatibles
+            OpenAI — pas d’API natives Messages, Gemini ou Bedrock. Les canaux
+            de messagerie type Slack ou Discord ne sont pas dans le noyau OS.
+            Le contrat sibling-bridge existe en schémas et documentation ; un
+            daemon HTTP sibling live et une enveloppe matérielle TPM ne font
+            pas partie de cette Preview. Côté inférence, 0.9 utilise le
+            rejeu de préfixe plutôt qu’une API de snapshot KV llama.cpp.
+          </p>
+        </article>
+
+        <article class="section-plate">
+          <h2 data-lang="en">license</h2>
+          <h2 data-lang="fr">licence</h2>
+          <p class="hist" data-lang="en">
+            AGPL-3.0-only: free use, modify, and distribute (including
+            commercially) if you honor AGPL (source available, including network
+            use). Keep NOTICE and credit Akasha OS. Commercial: proprietary
+            forks and closed SaaS; attribution and royalty. Contact
+            <a href="mailto:loic.peaudecerf@proton.me">loic.peaudecerf@proton.me</a>.
+            The Akasha OS trademark is reserved.
+          </p>
+          <p class="hist" data-lang="fr">
+            AGPL-3.0-only : usage, modification et distribution libres (y
+            compris commercialement) si vous respectez l’AGPL (source
+            disponible, y compris en usage réseau). Conservez NOTICE et
+            créditez Akasha OS. Commerciale : forks propriétaires et SaaS
+            fermé ; attribution et redevance. Contact
+            <a href="mailto:loic.peaudecerf@proton.me">loic.peaudecerf@proton.me</a>.
+            La marque Akasha OS est réservée.
+          </p>
+        </article>
+
+        <article class="section-plate">
+          <h2 data-lang="en">repo docs (not this manual)</h2>
+          <h2 data-lang="fr">docs du dépôt (pas ce manuel)</h2>
+          <p class="hist" data-lang="en">
+            Kernel specs, ADRs, and phase status stay on GitHub:
+            <a href="https://github.com/azerothl/akasha-os/blob/main/docs/STATUS.md">STATUS</a>
+            ·
+            <a href="https://github.com/azerothl/akasha-os/blob/main/docs/vision.md">Vision</a>
+            ·
+            <a href="https://github.com/azerothl/akasha-os/blob/main/docs/functional-specs.md">Functional specs</a>
+            ·
+            <a href="https://github.com/azerothl/akasha-os/blob/main/docs/technical-specs.md">Technical specs</a>
+            ·
+            <a href="https://github.com/azerothl/akasha-os/blob/main/CONTRIBUTING.md">Contributing</a>
+          </p>
+          <p class="hist" data-lang="fr">
+            Specs noyau, ADR et statut des phases restent sur GitHub :
+            <a href="https://github.com/azerothl/akasha-os/blob/main/docs/fr/STATUS.md">STATUS</a>
+            ·
+            <a href="https://github.com/azerothl/akasha-os/blob/main/docs/fr/README.md">README</a>
+            ·
+            <a href="https://github.com/azerothl/akasha-os/blob/main/docs/fr/specs-fonctionnelles.md">Specs fonctionnelles</a>
+            ·
+            <a href="https://github.com/azerothl/akasha-os/blob/main/docs/fr/specs-techniques.md">Specs techniques</a>
+            ·
+            <a href="https://github.com/azerothl/akasha-os/blob/main/CONTRIBUTING.md">Contributions</a>
+          </p>
+        </article>
 
         <a class="continue pager" href="./">
           <span class="continue-label">Docs</span>

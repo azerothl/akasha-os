@@ -48,91 +48,142 @@
 
         <h1>
           <span data-lang="en">
-            Network is off by default (<code>offline_strict</code>).
-            Chat after model setup must work without it. Search, fetch, and
-            GitHub feedback submit are explicit actions — not automatic uploads.
+            Preview starts offline. After models are set up, chat is expected
+            to work without leaving the machine. Network egress is a choice you
+            make — not something the host turns on in the background.
           </span>
           <span data-lang="fr">
-            Le réseau est éteint par défaut (<code>offline_strict</code>).
-            Le chat après le réglage des modèles doit marcher sans lui.
-            Recherche, fetch et envoi de feedback GitHub sont des actions
-            explicites — pas des uploads automatiques.
+            La Preview démarre hors ligne. Une fois les modèles réglés, le chat
+            est censé fonctionner sans quitter la machine. La sortie réseau est
+            un choix que vous faites — pas quelque chose que l’hôte active en
+            arrière-plan.
           </span>
         </h1>
 
-        <h2 data-lang="en">prove deny</h2>
-        <h2 data-lang="fr">prouver le refus</h2>
-        <ol class="steps">
-          <li data-lang="en">Leave <strong>Allow network</strong> (sidebar) off.</li>
-          <li data-lang="fr">Laissez <strong>Allow network</strong> (barre latérale) éteint.</li>
-          <li data-lang="en">Search must fail with <code>offline_strict</code>.</li>
-          <li data-lang="fr">La recherche doit échouer avec <code>offline_strict</code>.</li>
-        </ol>
+        <aside class="callout">
+          <h3 data-lang="en">Offline by default</h3>
+          <h3 data-lang="fr">Hors ligne par défaut</h3>
+          <p data-lang="en">
+            The default mode is <code>offline_strict</code>: egress is denied
+            until you enable <strong>Allow network</strong> in the sidebar or
+            Settings. Search, page browse, file download, and GitHub feedback
+            submit are explicit actions. There is no automatic upload of chats
+            or memories.
+          </p>
+          <p data-lang="fr">
+            Le mode par défaut est <code>offline_strict</code> : la sortie est
+            refusée tant que vous n’activez pas <strong>Allow network</strong>
+            dans la barre latérale ou Settings. Recherche, parcours de page,
+            téléchargement et envoi de feedback GitHub sont des actions
+            explicites. Il n’y a pas d’upload automatique des chats ou des
+            mémoires.
+          </p>
+        </aside>
 
-        <h2 data-lang="en">allow, then search</h2>
-        <h2 data-lang="fr">autoriser, puis chercher</h2>
-        <ol class="steps">
-          <li data-lang="en">Enable <strong>Allow network</strong>.</li>
-          <li data-lang="fr">Activez <strong>Allow network</strong>.</li>
-          <li data-lang="en">Search (for example “Akasha OS seL4”) → title/URL results.</li>
-          <li data-lang="fr">Cherchez (par exemple « Akasha OS seL4 ») → titres / URL.</li>
-        </ol>
-        <p class="hist" data-lang="en">
-          Search engine is set in Settings: <code>auto</code> tries Brave, then
-          DuckDuckGo, then Bing. Optional Brave / GitHub keys live in
-          <strong>Settings → Secrets</strong> (encrypted vault; master key in the
-          OS keyring). Legacy <code>var/secrets/keys.yaml</code> is migrated on boot.
-        </p>
-        <p class="hist" data-lang="fr">
-          Le moteur est dans Settings : <code>auto</code> essaie Brave, puis
-          DuckDuckGo, puis Bing. Les clés Brave / GitHub optionnelles sont dans
-          <strong>Settings → Secrets</strong> (vault chiffré ; clé maître dans le
-          keyring OS). Un ancien <code>var/secrets/keys.yaml</code> est migré au boot.
-        </p>
-        <p class="hist" data-lang="en">
-          Without a Brave key, <code>auto</code> falls through to DuckDuckGo then Bing HTML.
-          <code>github_token</code> is only for one-click Feedback issues.
-        </p>
-        <p class="hist" data-lang="fr">
-          Sans clé Brave, <code>auto</code> bascule sur DuckDuckGo puis Bing HTML.
-          <code>github_token</code> sert uniquement aux issues Feedback en un clic.
-        </p>
+        <article class="grant">
+          <h2 data-lang="en">How this relates to chat</h2>
+          <h2 data-lang="fr">Lien avec le chat</h2>
+          <p class="hist" data-lang="en">
+            Local inference, notes, tasks, memory, and agent loops on the host
+            do not need the network grant. When Allow network is off, a web
+            search should fail with <code>offline_strict</code> — that is the
+            intended proof that deny-by-default is real. Turn the grant on only
+            when you want search, browse, fetch, or a one-click GitHub issue
+            from Feedback.
+          </p>
+          <p class="hist" data-lang="fr">
+            L’inférence locale, notes, tasks, mémoire et boucles agent sur
+            l’hôte n’ont pas besoin du grant réseau. Quand Allow network est
+            éteint, une recherche web doit échouer avec
+            <code>offline_strict</code> — c’est la preuve voulue que le refus
+            par défaut est réel. N’activez le grant que pour chercher, parcourir,
+            télécharger, ou ouvrir une issue GitHub en un clic depuis Feedback.
+          </p>
+        </article>
 
-        <h2 data-lang="en">browse a page</h2>
-        <h2 data-lang="fr">parcourir une page</h2>
-        <p class="hist" data-lang="en">
-          With network ON: paste a URL → <strong>Browse</strong>
-          (<code>web.browse</code>). Expect title + extracted text (no JavaScript).
-          <strong>Download URL</strong> (<code>net.fetch</code>) saves the raw file
-          under <code>/downloads</code>.
-        </p>
-        <p class="hist" data-lang="fr">
-          Réseau ON : coller une URL → <strong>Browse</strong>
-          (<code>web.browse</code>). Titre + texte extrait (pas de JavaScript).
-          <strong>Download URL</strong> (<code>net.fetch</code>) enregistre le
-          fichier brut sous <code>/downloads</code>.
-        </p>
+        <article class="grant">
+          <h2 data-lang="en">Allow network, then search</h2>
+          <h2 data-lang="fr">Autoriser le réseau, puis chercher</h2>
+          <p class="hist" data-lang="en">
+            Enable <strong>Allow network</strong>, then ask for a search (for
+            example “Akasha OS seL4”). You should see title and URL results.
+            The search engine lives in Settings under Web:
+            <code>auto</code> tries Brave, then DuckDuckGo, then Bing. You can
+            also force <code>brave</code>, <code>duckduckgo</code>, or
+            <code>bing</code>.
+          </p>
+          <p class="hist" data-lang="fr">
+            Activez <strong>Allow network</strong>, puis demandez une recherche
+            (par exemple « Akasha OS seL4 »). Vous devriez voir titres et URL.
+            Le moteur est dans Settings sous Web : <code>auto</code> essaie
+            Brave, puis DuckDuckGo, puis Bing. Vous pouvez aussi forcer
+            <code>brave</code>, <code>duckduckgo</code> ou <code>bing</code>.
+          </p>
+        </article>
 
-        <h2 data-lang="en">download and generate a file</h2>
-        <h2 data-lang="fr">télécharger et générer un fichier</h2>
-        <ol class="steps">
-          <li data-lang="en">With network ON, paste an image URL → Download URL.</li>
-          <li data-lang="fr">Réseau ON : coller une URL d’image → Download URL.</li>
-          <li>
-            <span data-lang="en">File lands under</span>
-            <span data-lang="fr">Fichier sous</span>
-            <code>/downloads</code>
-            (<code>var/storage/data/downloads/</code>).
-          </li>
-          <li data-lang="en">
-            Generate file: format <code>pdf</code> or <code>png</code>, path
-            <code>/downloads/test.pdf</code>, then Open downloads.
-          </li>
-          <li data-lang="fr">
-            Generate file : format <code>pdf</code> ou <code>png</code>, chemin
-            <code>/downloads/test.pdf</code>, puis Open downloads.
-          </li>
-        </ol>
+        <article class="grant">
+          <h2 data-lang="en">Secrets</h2>
+          <h2 data-lang="fr">Secrets</h2>
+          <p class="hist" data-lang="en">
+            Optional Brave and GitHub keys live in
+            <strong>Settings → Secrets</strong> (encrypted vault; master key in
+            the OS keyring). A legacy <code>var/secrets/keys.yaml</code> is
+            migrated on boot. Without a Brave key, <code>auto</code> falls
+            through to DuckDuckGo then Bing HTML.
+            <code>github_token</code> is only for one-click Feedback issues —
+            not for chat egress.
+          </p>
+          <p class="hist" data-lang="fr">
+            Les clés Brave et GitHub optionnelles sont dans
+            <strong>Settings → Secrets</strong> (vault chiffré ; clé maître dans
+            le keyring OS). Un ancien <code>var/secrets/keys.yaml</code> est
+            migré au boot. Sans clé Brave, <code>auto</code> bascule sur
+            DuckDuckGo puis Bing HTML. <code>github_token</code> sert uniquement
+            aux issues Feedback en un clic — pas à la sortie chat.
+          </p>
+        </article>
+
+        <article class="grant">
+          <h2 data-lang="en">Browse and download</h2>
+          <h2 data-lang="fr">Parcourir et télécharger</h2>
+          <p class="hist" data-lang="en">
+            With network on, paste a URL and use <strong>Browse</strong>
+            (<code>web.browse</code>). Preview returns a title and extracted
+            text, without running JavaScript. <strong>Download URL</strong>
+            (<code>net.fetch</code>) saves the raw file under
+            <code>/downloads</code> (on disk:
+            <code>var/storage/data/downloads/</code>). You can also generate a
+            file (for example <code>pdf</code> or <code>png</code> at
+            <code>/downloads/test.pdf</code>) and open the downloads folder from
+            the UI.
+          </p>
+          <p class="hist" data-lang="fr">
+            Réseau activé : collez une URL et utilisez <strong>Browse</strong>
+            (<code>web.browse</code>). La Preview renvoie un titre et du texte
+            extrait, sans exécuter de JavaScript. <strong>Download URL</strong>
+            (<code>net.fetch</code>) enregistre le fichier brut sous
+            <code>/downloads</code> (sur disque :
+            <code>var/storage/data/downloads/</code>). Vous pouvez aussi
+            générer un fichier (par exemple <code>pdf</code> ou
+            <code>png</code> en <code>/downloads/test.pdf</code>) et ouvrir le
+            dossier downloads depuis l’UI.
+          </p>
+        </article>
+
+        <aside class="callout callout-limit">
+          <h3 data-lang="en">Still a choice</h3>
+          <h3 data-lang="fr">Toujours un choix</h3>
+          <p data-lang="en">
+            Leaving Allow network off is a valid everyday mode. Turn it on for
+            the paths you mean to exercise, then turn it off again if you want
+            the host quiet.
+          </p>
+          <p data-lang="fr">
+            Laisser Allow network éteint est un mode quotidien valide. Activez-le
+            pour les chemins que vous voulez exercer, puis éteignez-le si vous
+            voulez un hôte silencieux.
+          </p>
+        </aside>
 
         <a class="continue pager" href="feedback.html">
           <span class="continue-label">Feedback</span>

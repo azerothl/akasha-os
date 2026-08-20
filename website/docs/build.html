@@ -49,60 +49,103 @@
 
         <h1>
           <span data-lang="en">
-            Build Preview <span data-aos-version>0.9.0</span> from source. Optional. A GitHub Release zip/tar.gz is
-            enough to run. Use this path for a local package, patches, or
+            Building Preview <span data-aos-version>0.9.0</span> from source is
+            optional. A GitHub Release zip or tar.gz is enough to run and test.
+            Use this chapter when you want a local package, patches, or
             development against the tree.
           </span>
           <span data-lang="fr">
-            Compiler la Preview <span data-aos-version>0.9.0</span> depuis les sources. Optionnel. Une archive
-            Release GitHub suffit pour lancer. Cette voie sert pour un paquet
-            local, des patches, ou du développement sur l’arbre.
+            Compiler la Preview <span data-aos-version>0.9.0</span> depuis les
+            sources est optionnel. Une archive Release GitHub suffit pour lancer
+            et tester. Ce chapitre sert quand vous voulez un paquet local, des
+            patches, ou du développement sur l’arbre.
           </span>
         </h1>
         <p class="hist" data-lang="en">
           Same hardware honesty as install: Windows or Linux x64, NVIDIA
-          recommended (CPU artefact exists), not a bootable OS. Canonical detail lives in
+          recommended (CPU artefact exists), not a bootable OS. Canonical detail
+          lives in
           <a href="https://github.com/azerothl/akasha-os/blob/main/docs/INSTALL.md#build-from-source">INSTALL.md</a>.
         </p>
         <p class="hist" data-lang="fr">
           Même honnêteté matérielle que l’install : Windows ou Linux x64, NVIDIA
-          recommandé (artefact CPU existant), pas un OS bootable. Le détail canonique est dans
+          recommandé (artefact CPU existant), pas un OS bootable. Le détail
+          canonique est dans
           <a href="https://github.com/azerothl/akasha-os/blob/main/docs/fr/INSTALL.md#build-depuis-les-sources">INSTALL.md</a>.
         </p>
 
-        <h2 data-lang="en">toolchain</h2>
-        <h2 data-lang="fr">toolchain</h2>
-        <ul class="ticks">
-          <li>os GRANT Windows 10/11 x64 <span data-lang="en">or</span><span data-lang="fr">ou</span> Linux x64</li>
-          <li>gpu GRANT NVIDIA (<code>nvidia-smi -L</code>) <span data-lang="en">for the CUDA artefact; omit for <code>-CpuOnly</code></span><span data-lang="fr">pour l’artefact CUDA ; omettre pour <code>-CpuOnly</code></span></li>
-          <li>rust GRANT stable + target <code>wasm32-unknown-unknown</code></li>
-          <li>cuda GRANT Toolkit (nvcc), typically 12.x — <span data-lang="en">needed for CUDA <code>aos-modeld</code>; skip with <code>-CpuOnly</code></span><span data-lang="fr">requis pour <code>aos-modeld</code> CUDA ; à omettre avec <code>-CpuOnly</code></span></li>
-          <li>cmake · ninja · <span data-lang="en">MSVC-compatible env (Windows) or X11/Wayland + clang/libclang (Linux)</span><span data-lang="fr">env compatible MSVC (Windows) ou X11/Wayland + clang/libclang (Linux)</span></li>
-          <li data-lang="en">disk: several GB for <code>target/</code> plus GGUFs on first run</li>
-          <li data-lang="fr">disque : plusieurs Go pour <code>target/</code> plus GGUF au premier lancement</li>
-        </ul>
-        <pre>rustup target add wasm32-unknown-unknown</pre>
+        <aside class="callout">
+          <h3 data-lang="en">When a Release is enough</h3>
+          <h3 data-lang="fr">Quand une Release suffit</h3>
+          <p data-lang="en">
+            Cohort testers are expected to install from Releases without cargo.
+            Build from source only if you already have the toolchain or need to
+            change the tree.
+          </p>
+          <p data-lang="fr">
+            Les testeurs de cohorte sont censés installer depuis les Releases
+            sans cargo. Ne compilez depuis les sources que si vous avez déjà la
+            toolchain ou devez modifier l’arbre.
+          </p>
+        </aside>
 
-        <h2 data-lang="en">clone</h2>
-        <h2 data-lang="fr">clone</h2>
-        <pre>git clone https://github.com/azerothl/akasha-os.git
+        <article class="grant">
+          <h2 data-lang="en">Toolchain</h2>
+          <h2 data-lang="fr">Toolchain</h2>
+          <p class="hist" data-lang="en">
+            You will need a Windows 10/11 x64 or Linux x64 host, Rust stable with
+            the <code>wasm32-unknown-unknown</code> target, cmake, ninja, and
+            either an MSVC-compatible environment (Windows) or X11/Wayland plus
+            clang/libclang (Linux). NVIDIA and a CUDA Toolkit (typically 12.x,
+            with nvcc) are needed for the CUDA <code>aos-modeld</code>; omit them
+            when you pass <code>-CpuOnly</code> / <code>CPU_ONLY=1</code>. Plan
+            several GB of disk for <code>target/</code>, plus GGUFs on first run.
+          </p>
+          <p class="hist" data-lang="fr">
+            Il vous faut un hôte Windows 10/11 x64 ou Linux x64, Rust stable avec
+            la cible <code>wasm32-unknown-unknown</code>, cmake, ninja, et soit
+            un environnement compatible MSVC (Windows), soit X11/Wayland plus
+            clang/libclang (Linux). NVIDIA et un CUDA Toolkit (souvent 12.x,
+            avec nvcc) sont requis pour <code>aos-modeld</code> CUDA ; omettez-les
+            avec <code>-CpuOnly</code> / <code>CPU_ONLY=1</code>. Prévoyez
+            plusieurs Go de disque pour <code>target/</code>, plus les GGUF au
+            premier lancement.
+          </p>
+          <pre>rustup target add wasm32-unknown-unknown</pre>
+        </article>
+
+        <article class="grant">
+          <h2 data-lang="en">Clone</h2>
+          <h2 data-lang="fr">Clone</h2>
+          <p class="hist" data-lang="en">
+            Clone the repository, then work from its root for the packaging
+            scripts below.
+          </p>
+          <p class="hist" data-lang="fr">
+            Clonez le dépôt, puis travaillez depuis sa racine pour les scripts
+            de packaging ci-dessous.
+          </p>
+          <pre>git clone https://github.com/azerothl/akasha-os.git
 cd akasha-os</pre>
+        </article>
 
-        <h2 data-lang="en">package (recommended)</h2>
-        <h2 data-lang="fr">paquet (recommandé)</h2>
-        <p class="hist" data-lang="en">
-          Builds release bins, packages WASM modules, assembles
-          <code>dist/AgentOS-Preview-&lt;ver&gt;-…</code>. GGUFs are skipped
-          (<code>-SkipModels</code> / <code>SKIP_MODELS=1</code>) and download
-          on first run.
-        </p>
-        <p class="hist" data-lang="fr">
-          Compile les binaires release, empaquete les modules WASM, assemble
-          <code>dist/AgentOS-Preview-&lt;ver&gt;-…</code>. Les GGUF sont omis
-          (<code>-SkipModels</code> / <code>SKIP_MODELS=1</code>) et se
-          téléchargent au premier lancement.
-        </p>
-        <pre># Windows (CUDA tester artefact)
+        <article class="grant">
+          <h2 data-lang="en">Package (recommended)</h2>
+          <h2 data-lang="fr">Paquet (recommandé)</h2>
+          <p class="hist" data-lang="en">
+            The packaging scripts build release binaries, package WASM modules,
+            and assemble <code>dist/AgentOS-Preview-&lt;ver&gt;-…</code>. GGUFs
+            are skipped with <code>-SkipModels</code> /
+            <code>SKIP_MODELS=1</code> and download on first run instead.
+          </p>
+          <p class="hist" data-lang="fr">
+            Les scripts de packaging compilent les binaires release, empaquetent
+            les modules WASM et assemblent
+            <code>dist/AgentOS-Preview-&lt;ver&gt;-…</code>. Les GGUF sont omis
+            avec <code>-SkipModels</code> / <code>SKIP_MODELS=1</code> et se
+            téléchargent au premier lancement.
+          </p>
+          <pre># Windows (CUDA tester artefact)
 .\packaging\build-preview.ps1 -SkipModels -RequireCuda
 # Windows (no CUDA toolkit on the build host)
 .\packaging\build-preview.ps1 -SkipModels -CpuOnly
@@ -110,44 +153,59 @@ cd akasha-os</pre>
 # Linux
 SKIP_MODELS=1 REQUIRE_CUDA=1 ./packaging/build-preview.sh
 CPU_ONLY=1 SKIP_MODELS=1 ./packaging/build-preview.sh</pre>
-        <p class="hist" data-lang="en">
-          Then set <code>AOS_HOME</code> to the dist folder and run
-          <code>bin/aos-session</code>, or use the tree like a Release install.
-          Optional Linux container build:
-          <code>packaging/docker-build-linux.sh</code>.
-        </p>
-        <p class="hist" data-lang="fr">
-          Ensuite pointez <code>AOS_HOME</code> sur le dossier dist et lancez
-          <code>bin/aos-session</code>, ou traitez l’arbre comme une install
-          Release. Build Linux optionnel en conteneur :
-          <code>packaging/docker-build-linux.sh</code>.
-        </p>
+          <p class="hist" data-lang="en">
+            Then set <code>AOS_HOME</code> to the dist folder and run
+            <code>bin/aos-session</code>, or treat the tree like a Release
+            install. Optional Linux container build:
+            <code>packaging/docker-build-linux.sh</code>.
+          </p>
+          <p class="hist" data-lang="fr">
+            Ensuite pointez <code>AOS_HOME</code> sur le dossier dist et lancez
+            <code>bin/aos-session</code>, ou traitez l’arbre comme une install
+            Release. Build Linux optionnel en conteneur :
+            <code>packaging/docker-build-linux.sh</code>.
+          </p>
+        </article>
 
-        <h2 data-lang="en">dev run</h2>
-        <h2 data-lang="fr">run de développement</h2>
-        <p class="hist" data-lang="en">
-          From the repo root after a successful release build of the Preview
-          crates (or after <code>build-preview.*</code>). NVIDIA recommended;
-          a CPU-only <code>aos-modeld</code> boots without it.
-        </p>
-        <p class="hist" data-lang="fr">
-          Depuis la racine du dépôt après un build release des crates Preview
-          (ou après <code>build-preview.*</code>). NVIDIA recommandé ; un
-          <code>aos-modeld</code> CPU-only démarre sans GPU.
-        </p>
-        <pre># Windows
+        <article class="grant">
+          <h2 data-lang="en">Dev run</h2>
+          <h2 data-lang="fr">Run de développement</h2>
+          <p class="hist" data-lang="en">
+            From the repo root after a successful release build of the Preview
+            crates (or after <code>build-preview.*</code>), you can run the
+            session crate directly. NVIDIA is recommended; a CPU-only
+            <code>aos-modeld</code> boots without a GPU.
+          </p>
+          <p class="hist" data-lang="fr">
+            Depuis la racine du dépôt après un build release des crates Preview
+            (ou après <code>build-preview.*</code>), vous pouvez lancer la crate
+            session directement. NVIDIA est recommandé ; un
+            <code>aos-modeld</code> CPU-only démarre sans GPU.
+          </p>
+          <pre># Windows
 $env:AOS_HOME = (Resolve-Path .)
 cargo run -p aos-session --release
 
 # Linux
 export AOS_HOME="$(pwd)"
 cargo run -p aos-session --release</pre>
+        </article>
 
-        <h2 data-lang="en">tests</h2>
-        <h2 data-lang="fr">tests</h2>
-        <pre>cargo test --workspace
+        <article class="grant">
+          <h2 data-lang="en">Tests</h2>
+          <h2 data-lang="fr">Tests</h2>
+          <p class="hist" data-lang="en">
+            Workspace tests and the Windows demo gates are available when you
+            are developing against the tree.
+          </p>
+          <p class="hist" data-lang="fr">
+            Les tests du workspace et les gates demo Windows sont disponibles
+            quand vous développez sur l’arbre.
+          </p>
+          <pre>cargo test --workspace
 # Windows gates / demo
 .\demo\run-demo.ps1 -Gate p4</pre>
+        </article>
 
         <a class="continue pager" href="../install.html">
           <span class="continue-label">Install</span>

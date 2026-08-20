@@ -6,7 +6,7 @@
     <title>What's new — Akasha OS Preview</title>
     <meta
       name="description"
-      content="What each Akasha OS Preview version added, from 0.8.0 back to 0.1.0. Host app on Windows/Linux, not a bootable OS."
+      content="What each Akasha OS Preview version added, from 0.9.0 back to 0.1.0. Host app on Windows/Linux, not a bootable OS."
     />
     <link rel="stylesheet" href="../styles.css" />
     <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
@@ -19,8 +19,8 @@
     <!--
       THESIS: The version log is a cut-face journal of what shipped, not a feature card grid and not a marketing changelog.
       OWN-WORLD: Orrery inner plate — void, cyan rails, grant gutters.
-      STORY: A tester sees what 0.8.0 added, then walks earlier Previews without leaving the site.
-      FIRST VIEWPORT: Honesty line, compact version rail, then 0.8.0 ticks.
+      STORY: A tester sees what 0.9.0 added, then walks earlier Previews without leaving the site.
+      FIRST VIEWPORT: Honesty line, compact version rail, then 0.9.0 ticks.
       FORM: Orrery inner plate, seed c1699dbf reroll 1.
       FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
     -->
@@ -85,19 +85,39 @@
         <article class="grant" id="v0-9-0">
           <h2>0.9.0</h2>
           <p class="rev-when">19/08/2026</p>
+          <p class="hist" data-lang="en">
+            This release tightens live inference placement and closes the media
+            option surface, while giving Image Studio and in-chat TTS a clearer
+            home in the UI.
+          </p>
+          <p class="hist" data-lang="fr">
+            Cette version resserre le placement d’inférence en direct et ferme
+            la surface d’options média, tout en donnant au studio Image et au
+            TTS in-chat une place plus claire dans l’UI.
+          </p>
           <ul class="ticks">
-            <li data-lang="en"><strong>Mid-token migrate</strong> (E18): Settings gpu/cpu/auto keeps the live reply on the same stream. NVIDIA cpu pin stays on the CUDA binary.</li>
-            <li data-lang="fr"><strong>Migrate mid-token</strong> (E18) : Réglages gpu/cpu/auto gardent la réponse live. Le pin cpu NVIDIA reste sur le binaire CUDA.</li>
-            <li data-lang="en"><strong>Closed media options</strong> (E19): size, steps, CFG, sampler, Piper knobs. Unknown keys refused. Extra Flux2 / Ideogram4 / en_GB packs.</li>
-            <li data-lang="fr"><strong>Options média fermées</strong> (E19) : taille, steps, CFG, sampler, knobs Piper. Clés inconnues refusées. Packs Flux2 / Ideogram4 / en_GB.</li>
-            <li data-lang="en"><strong>Image studio</strong> tab + Open in studio on a chat PNG. <code>/speak</code> opens an in-chat TTS card before generate.</li>
-            <li data-lang="fr">Onglet <strong>studio Image</strong> + ouvrir depuis un PNG du chat. <code>/speak</code> ouvre une carte TTS avant generate.</li>
+            <li data-lang="en"><strong>Mid-token migrate</strong> (E18): Settings auto / gpu / cpu keeps the live reply on the same stream — no Stop, no cancelled turn. On NVIDIA, the cpu pin stays on the CUDA binary with zero GPU layers. If migrate cannot continue, Preview falls back to the older cancel-and-restart path and audits it.</li>
+            <li data-lang="fr"><strong>Migrate mid-token</strong> (E18) : Réglages auto / gpu / cpu gardent la réponse live sur le même flux — pas de Stop, pas de tour annulé. Sur NVIDIA, le pin cpu reste sur le binaire CUDA avec zéro couche GPU. Si la migrate ne peut pas continuer, la Preview retombe sur l’ancien chemin annuler-et-redémarrer et l’audite.</li>
+            <li data-lang="en"><strong>Closed media options</strong> (E19): Image and TTS generation take a fixed set of knobs (size, steps, CFG, seed, sampler, negative, Piper settings). Unknown keys are refused and audited; aos-sd only maps allowlisted flags.</li>
+            <li data-lang="fr"><strong>Options média fermées</strong> (E19) : génération image et TTS prennent un jeu fixe de knobs (taille, steps, CFG, seed, sampler, négatif, réglages Piper). Les clés inconnues sont refusées et auditées ; aos-sd ne mappe que des flags allowlistés.</li>
+            <li data-lang="en">Extra optional packs arrive for Flux2-class, Ideogram4-class, and Piper en_GB voices, with sidecars such as VAE / CLIP / T5 / LoRA when Download needs them. Settings and Models pick the default image pack and Piper voice; slash commands honor those defaults after a restart.</li>
+            <li data-lang="fr">Des packs optionnels supplémentaires arrivent pour Flux2-class, Ideogram4-class et les voix Piper en_GB, avec sidecars VAE / CLIP / T5 / LoRA si Download en a besoin. Settings et Models choisissent le pack image et la voix Piper par défaut ; les slash honorent ces défauts après redémarrage.</li>
+            <li data-lang="en">The <strong>Image studio</strong> tab gathers prompt, size, steps, CFG, seed, sampler, and catalogue style / LoRA / VAE. Open in studio appears on a chat PNG. Slash <code>/speak</code> opens an in-chat TTS card (voice and knobs) before Generate; agents may still call the audio intent directly.</li>
+            <li data-lang="fr">L’onglet <strong>studio Image</strong> regroupe prompt, taille, steps, CFG, seed, sampler et style / LoRA / VAE du catalogue. Ouvrir dans le studio apparaît sur un PNG du chat. Slash <code>/speak</code> ouvre une carte TTS (voix et knobs) avant Generate ; les agents peuvent encore appeler l’intent audio directement.</li>
           </ul>
         </article>
 
         <article class="grant" id="v0-8-0">
           <h2>0.8.0</h2>
           <p class="rev-when">18/08/2026</p>
+          <p class="hist" data-lang="en">
+            Media lands on the host: local image and speech packs, a unified
+            CUDA-and-CPU artefact, Providers, and module uninstall.
+          </p>
+          <p class="hist" data-lang="fr">
+            Le média arrive sur l’hôte : packs image et parole locaux, un
+            artefact unifié CUDA et CPU, Providers, et désinstall de modules.
+          </p>
           <ul class="ticks">
             <li data-lang="en"><strong>Image + TTS</strong> (E16): <code>/image</code> and <code>/speak</code> write PNG/WAV under <code>/downloads</code>. Optional packs; Download also installs sd.cpp / piper into <code>bin/</code>.</li>
             <li data-lang="fr"><strong>Image + TTS</strong> (E16) : <code>/image</code> et <code>/speak</code> écrivent PNG/WAV sous <code>/downloads</code>. Packs optionnels ; Download installe aussi sd.cpp / piper dans <code>bin/</code>.</li>
@@ -113,6 +133,14 @@
         <article class="grant" id="v0-7-0">
           <h2>0.7.0</h2>
           <p class="rev-when">17/08/2026</p>
+          <p class="hist" data-lang="en">
+            Modules gain a declarative UI host: dynamic sidebar tabs without a
+            webview, painted from a closed widget tree.
+          </p>
+          <p class="hist" data-lang="fr">
+            Les modules gagnent un hôte d’UI déclarative : onglets dynamiques
+            sans webview, peints depuis un arbre de widgets fermé.
+          </p>
           <ul class="ticks">
             <li data-lang="en"><strong>Declarative module UI host</strong> (E15): dynamic sidebar tabs for modules with <code>declarative_ui</code> — no webview.</li>
             <li data-lang="fr"><strong>Hôte d’UI de module déclarative</strong> (E15) : onglets dynamiques pour les modules <code>declarative_ui</code> — pas de webview.</li>
@@ -130,6 +158,14 @@
         <article class="grant" id="v0-6-0">
           <h2>0.6.0</h2>
           <p class="rev-when">17/08/2026</p>
+          <p class="hist" data-lang="en">
+            Secrets move into the OS keyring, modules gain a local signed
+            catalogue, and chat gets Stop and Copy.
+          </p>
+          <p class="hist" data-lang="fr">
+            Les secrets passent dans le keyring OS, les modules gagnent un
+            catalogue local signé, et le chat reçoit Stop et Copier.
+          </p>
           <ul class="ticks">
             <li data-lang="en"><strong>Sibling bridge schemas</strong> (E8): JSON Schema export of <code>mem.*</code> / <code>secrets.*</code>.</li>
             <li data-lang="fr"><strong>Schémas pont sibling</strong> (E8) : export JSON Schema de <code>mem.*</code> / <code>secrets.*</code>.</li>
@@ -147,6 +183,15 @@
         <article class="grant" id="v0-5-0">
           <h2>0.5.0</h2>
           <p class="rev-when">17/08/2026</p>
+          <p class="hist" data-lang="en">
+            Chat can auto-remember durable facts, with a secret filter and
+            mid-task questions via <code>user.ask</code>.
+          </p>
+          <p class="hist" data-lang="fr">
+            Le chat peut mémoriser automatiquement des faits durables, avec un
+            filtre secrets et des questions en cours de tâche via
+            <code>user.ask</code>.
+          </p>
           <ul class="ticks">
             <li data-lang="en"><strong>Auto-remember from chat</strong> (E14): Settings toggle, on by default.</li>
             <li data-lang="fr"><strong>Mémorisation auto depuis le chat</strong> (E14) : option Settings, activée par défaut.</li>
@@ -168,6 +213,14 @@
         <article class="grant" id="v0-4-0">
           <h2>0.4.0</h2>
           <p class="rev-when">17/08/2026</p>
+          <p class="hist" data-lang="en">
+            Memory becomes a typed graph, secrets get an encrypted vault, and
+            module install requires capability review.
+          </p>
+          <p class="hist" data-lang="fr">
+            La mémoire devient un graphe typé, les secrets gagnent un vault
+            chiffré, et l’install de module exige une revue de caps.
+          </p>
           <ul class="ticks">
             <li data-lang="en">Typed memory graph (<code>similar</code> / <code>updates</code> / <code>supersedes</code>) with auto-link on remember.</li>
             <li data-lang="fr">Graphe mémoire typé (<code>similar</code> / <code>updates</code> / <code>supersedes</code>) avec auto-lien.</li>
@@ -187,6 +240,14 @@
         <article class="grant" id="v0-3-0">
           <h2>0.3.0</h2>
           <p class="rev-when">16/08/2026</p>
+          <p class="hist" data-lang="en">
+            Transparency deepens: live metrics, Caps, CPU packs, scheduler,
+            tasks, and richer chat chrome.
+          </p>
+          <p class="hist" data-lang="fr">
+            La transparence s’approfondit : métriques live, Caps, packs CPU,
+            scheduler, tasks et chrome de chat plus riche.
+          </p>
           <ul class="ticks">
             <li data-lang="en">Live inference metrics (TTFT, tok/s, VRAM) in the sidebar and Models.</li>
             <li data-lang="fr">Métriques d’inférence live (TTFT, tok/s, VRAM) dans la barre latérale et Models.</li>
@@ -212,6 +273,14 @@
         <article class="grant" id="v0-2-0">
           <h2>0.2.0</h2>
           <p class="rev-when">16/08/2026</p>
+          <p class="hist" data-lang="en">
+            The public site becomes bilingual, notes resync after updates, and
+            Troubleshoot lands in the app.
+          </p>
+          <p class="hist" data-lang="fr">
+            Le site public devient bilingue, notes se resynchronise après les
+            updates, et Dépannage arrive dans l’app.
+          </p>
           <ul class="ticks">
             <li data-lang="en">Public site rebuilt bilingual EN/FR (then a split-flap board; the live site is now the orrery).</li>
             <li data-lang="fr">Site public refait bilingue EN/FR (alors un tableau à volets ; le site live est désormais le planétaire).</li>
@@ -245,6 +314,14 @@
         <article class="grant" id="v0-1-0">
           <h2>0.1.0</h2>
           <p class="rev-when">14/08/2026</p>
+          <p class="hist" data-lang="en">
+            The first public Preview: an installable host on Windows or Linux
+            x64, with chat, memory, notes, and opt-in network.
+          </p>
+          <p class="hist" data-lang="fr">
+            La première Preview publique : un hôte installable sur Windows ou
+            Linux x64, avec chat, mémoire, notes et réseau opt-in.
+          </p>
           <ul class="ticks">
             <li data-lang="en">First public Preview: installable host app on Windows or Linux x64. Not a bootable OS.</li>
             <li data-lang="fr">Première Preview publique : appli hôte installable sur Windows ou Linux x64. Pas un OS bootable.</li>
