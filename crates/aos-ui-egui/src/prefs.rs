@@ -22,6 +22,9 @@ pub struct Preferences {
     /// E14 : extraire automatiquement des faits durables après chaque tour de chat.
     #[serde(default = "default_auto_remember_chat")]
     pub auto_remember_chat: bool,
+    /// Download a newer Release into `var/updates/` when detected (apply on next launch).
+    #[serde(default)]
+    pub auto_download_updates: bool,
     #[serde(default)]
     pub default_agent_model: Option<String>,
     #[serde(default = "default_max_steps")]
@@ -99,6 +102,7 @@ impl Default for Preferences {
             theme: default_theme(),
             network_online: false,
             auto_remember_chat: default_auto_remember_chat(),
+            auto_download_updates: false,
             default_agent_model: None,
             default_max_steps: default_max_steps(),
             default_timeout_secs: default_timeout_secs(),

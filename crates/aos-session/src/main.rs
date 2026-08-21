@@ -306,6 +306,20 @@ fn main() {
                         "[aos-session] mise à jour disponible : {} ({})",
                         info.version, info.html_url
                     );
+                    let auto = std::fs::read_to_string(home_bg.join("var/run/preferences.json"))
+                        .ok()
+                        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+                        .and_then(|v| v.get("auto_download_updates")?.as_bool())
+                        .unwrap_or(false);
+                    if auto {
+                        match update::download_update(&home_bg, &info) {
+                            Ok(p) => eprintln!(
+                                "[aos-session] update auto-téléchargée — redémarrez pour appliquer ({})",
+                                p.display()
+                            ),
+                            Err(e) => eprintln!("[aos-session] auto-download update : {e}"),
+                        }
+                    }
                 }
                 Ok(None) => update::clear_update_offer(&home_bg),
                 Err(e) => eprintln!("[aos-session] check update : {e}"),

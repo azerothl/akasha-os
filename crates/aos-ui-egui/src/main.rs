@@ -66,6 +66,15 @@ fn load_update_offer() -> Option<UpdateOffer> {
     serde_json::from_str(&raw).ok()
 }
 
+fn load_pending_update_version() -> Option<String> {
+    let p = aos_home().join("var/updates/pending.json");
+    let raw = std::fs::read_to_string(p).ok()?;
+    let v: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    v.get("version")
+        .and_then(|x| x.as_str())
+        .map(|s| s.to_string())
+}
+
 #[derive(Clone, PartialEq, Eq)]
 enum Tab {
     Chat,
@@ -2797,7 +2806,19 @@ impl eframe::App for UiApp {
                     ui.label(format!("v{}", self.version));
                 });
             });
-            if let Some(offer) = self.update_offer.clone() {
+            if let Some(pending_ver) = load_pending_update_version() {
+                ui.horizontal(|ui| {
+                    ui.colored_label(
+                        egui::Color32::from_rgb(120, 200, 140),
+                        t.update_pending_restart.replace("{}", &pending_ver),
+                    );
+                    if let Some(offer) = self.update_offer.clone() {
+                        if ui.button(t.update_notes).clicked() {
+                            open_in_browser(&offer.html_url);
+                        }
+                    }
+                });
+            } else if let Some(offer) = self.update_offer.clone() {
                 ui.horizontal(|ui| {
                     ui.colored_label(
                         egui::Color32::from_rgb(100, 180, 255),
@@ -4623,6 +4644,19 @@ impl UiApp {
                     .changed()
                 {
                     self.prefs.auto_remember_chat = auto;
+                    save_preferences(&self.prefs);
+                    self.status = t.settings_saved.into();
+                }
+                ui.end_row();
+
+                ui.label(t.settings_auto_download_updates);
+                let mut auto_upd = self.prefs.auto_download_updates;
+                if ui
+                    .checkbox(&mut auto_upd, t.settings_auto_download_updates)
+                    .on_hover_text(t.settings_auto_download_updates_hint)
+                    .changed()
+                {
+                    self.prefs.auto_download_updates = auto_upd;
                     save_preferences(&self.prefs);
                     self.status = t.settings_saved.into();
                 }
