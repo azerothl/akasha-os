@@ -9,6 +9,13 @@
           "minimum": 0.0,
           "type": "integer"
         },
+        "product_k": {
+          "default": 0,
+          "description": "Top-k product-doc RAG hits (`product:docs`). 0 = default (4).",
+          "format": "uint",
+          "minimum": 0.0,
+          "type": "integer"
+        },
         "query": {
           "type": "string"
         },
@@ -115,6 +122,14 @@
         }
       },
       "properties": {
+        "product_hits": {
+          "default": [],
+          "description": "Extraíts docs Preview (FEATURES / STATUS / TESTER).",
+          "items": {
+            "$ref": "#/definitions/MemHit"
+          },
+          "type": "array"
+        },
         "prompt_block": {
           "type": "string"
         },

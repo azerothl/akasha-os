@@ -80,6 +80,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             post(|s, h, b| dispatch(s, h, b, "mem.episodic_query")),
         )
         .route(
+            "/v1/mem/episodic_delete",
+            post(|s, h, b| dispatch(s, h, b, "mem.episodic_delete")),
+        )
+        .route(
+            "/v1/mem/shared_read",
+            post(|s, h, b| dispatch(s, h, b, "mem.shared_read")),
+        )
+        .route(
+            "/v1/mem/shared_write",
+            post(|s, h, b| dispatch(s, h, b, "mem.shared_write")),
+        )
+        .route(
             "/v1/mem/context",
             post(|s, h, b| dispatch(s, h, b, "mem.context")),
         )
@@ -90,6 +102,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route(
             "/v1/mem/user/recall",
             post(|s, h, b| dispatch(s, h, b, "mem.user.recall")),
+        )
+        .route(
+            "/v1/mem/extract",
+            post(|s, h, b| dispatch(s, h, b, "mem.extract")),
+        )
+        .route(
+            "/v1/mem/relate",
+            post(|s, h, b| dispatch(s, h, b, "mem.relate")),
+        )
+        .route(
+            "/v1/mem/unrelate",
+            post(|s, h, b| dispatch(s, h, b, "mem.unrelate")),
+        )
+        .route(
+            "/v1/mem/neighbors",
+            post(|s, h, b| dispatch(s, h, b, "mem.neighbors")),
+        )
+        .route(
+            "/v1/mem/list",
+            post(|s, h, b| dispatch(s, h, b, "mem.list")),
+        )
+        .route(
+            "/v1/mem/update",
+            post(|s, h, b| dispatch(s, h, b, "mem.update")),
         )
         .route(
             "/v1/secrets/list",

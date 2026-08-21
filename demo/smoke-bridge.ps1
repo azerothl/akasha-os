@@ -8,6 +8,8 @@ $base = "http://127.0.0.1:$port/v1"
 
 $exe = if (Test-Path ".\target\release\aos-bridged.exe") {
     ".\target\release\aos-bridged.exe"
+} elseif (Test-Path ".\target\release\aos-bridged") {
+    ".\target\release\aos-bridged"
 } elseif (Get-Command aos-bridged -ErrorAction SilentlyContinue) {
     "aos-bridged"
 } else {
@@ -21,7 +23,14 @@ try {
     if (-not $health.ok) { throw "health not ok" }
     Write-Host "health OK — bus=$($health.bus)"
 
-    $ctx = Invoke-RestMethod -Uri "$base/mem/context" -Method Post -ContentType "application/json" -Body "{}"
+    $null = Invoke-RestMethod -Uri "$base/mem/stats" -Method Post -ContentType "application/json" -Body "{}"
+    Write-Host "mem.stats OK"
+
+    $null = Invoke-RestMethod -Uri "$base/mem/list" -Method Post -ContentType "application/json" `
+        -Body '{"namespace":"user"}'
+    Write-Host "mem.list OK"
+
+    $null = Invoke-RestMethod -Uri "$base/mem/context" -Method Post -ContentType "application/json" -Body "{}"
     Write-Host "mem.context OK"
 
     try {
