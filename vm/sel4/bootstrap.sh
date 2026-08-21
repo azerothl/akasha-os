@@ -24,4 +24,6 @@ if [ ! -x "${SDK_DIR}/bin/microkit" ]; then
 fi
 
 echo "MICROKIT_SDK=${SDK_DIR}"
-"${SDK_DIR}/bin/microkit" --help | head -n 5 || true
+if [ -x "${SDK_DIR}/bin/microkit" ]; then
+    echo "microkit OK"
+fi

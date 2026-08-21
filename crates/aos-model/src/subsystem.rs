@@ -143,6 +143,24 @@ pub fn resume_messages(
 impl ModelSubsystem {
     pub fn new(config: ModeldConfig, registry: &ModelRegistry, ram_total: u64) -> Self {
         let gpu = config.gpu && aos_llama::LlamaBackend::supports_gpu_offload();
+        let n_gpus = if gpu {
+            aos_llama::LlamaBackend::gpu_device_count().max(1)
+        } else {
+            0
+        };
+        let gpus = if n_gpus == 0 {
+            vec![]
+        } else {
+            let each = config.vram_total_bytes / n_gpus as u64;
+            let rem = config.vram_total_bytes % n_gpus as u64;
+            (0..n_gpus)
+                .map(|i| aos_placement::GpuDevice {
+                    id: i as u32,
+                    name: format!("gpu{i}"),
+                    vram_total: each + if i == 0 { rem } else { 0 },
+                })
+                .collect()
+        };
         let hw = HardwareProfile {
             name: "host-p1".into(),
             has_gpu: gpu,
@@ -158,6 +176,7 @@ impl ModelSubsystem {
             host_to_device_bw: 25e9,
             gpu_flops: 30e12,
             cpu_flops: 2.5e12,
+            gpus,
         };
         let sim = Arc::new(StdMutex::new(PlacementSim::new(
             hw,
@@ -384,6 +403,8 @@ impl ModelSubsystem {
                 flash_attn: true,
                 embeddings: false,
                 n_seq_max: config.n_seq_max.max(1),
+                tensor_split: plan.tensor_split.clone(),
+                main_gpu: plan.main_gpu,
             };
             let model = match LlamaModel::load(&path, &opts) {
                 Ok(m) => Arc::new(m),

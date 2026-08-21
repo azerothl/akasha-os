@@ -697,21 +697,30 @@ not a webview.
 Sequencing: P09.1 → P09.2 ; P09.3 ∥ P09.4 → P09.5 ∥ P09.8 → P09.7 → P09.6. Depends on P08 / E16+E17.  
 Detail: [phases/phase-preview-09.md](phases/phase-preview-09.md).
 
-### Remaining after 0.9 (not a new P6)
+### P10 — Preview 0.10.0 (E7 TPM + E8 live + E9 + Media + seL4 internal)
 
-P09 is the next Preview increment after 0.8. The rest is scheduled when
-hardware or a daemon exists; still Horizon B / C:
+| # | Evolution | Deliverable | Status |
+|---|-----------|-------------|--------|
+| P10.1–P10.4 | E7 TPM | Host TPM envelope for vault master (fallback keyring/file) | done |
+| P10.5–P10.8 | E8 live | Separate `aos-bridged` opt-in HTTP↔bus adapter | done |
+| P10.9–P10.11 | E9 | Multi-GPU load/placement path; gate skip on 1 GPU | done |
+| P10.12–P10.14 | Media | Studio polish (upscale/composition docs + UI hygiene) | done |
+| P10.S1–P10.S3 | seL4 | Internal CI + tag `sel4-pv-0.10.0` (not tester zip) | done |
+| P10.15–P10.16 | Docs / ship | FEATURES/STATUS/TESTER, version 0.10.0 | done |
+
+Detail: [phases/phase-preview-10.md](phases/phase-preview-10.md).
+
+### Remaining after 0.10 (not a new P6)
 
 | Item | Notes |
 |------|--------|
-| **E7 TPM** | Hardware envelope of the vault master key (keyring already shipped in 0.6) |
-| **E8 live** | HTTP sibling daemon if/when scheduled (contract shipped in 0.6) |
-| **E9 / P5.2** | Multi-GPU pipeline when a second GPU exists |
+| **E9 hard-green** | Documented 2-GPU run (code path ships in 0.10 with 1-GPU skip) |
 | **P5.3 / E11** | `AccelDevice` + bare metal (after PV.4) |
 | **P5.5** | Validated aarch64 host |
 | **P5.4 remainder** | Accessibility (F-UI-08) |
 | **PC cohort** | 3 Win + 1 Linux testers; independent of Preview increments |
 | **E12 / E13** | Horizon C (cognitive preemption, compositor / optional webview) |
+| **PV.4+** | Bare metal seL4 (internal `sel4-pv-*` gates PV.1–PV.3 only in 0.10) |
 
 ---
 

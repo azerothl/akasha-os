@@ -149,9 +149,10 @@ impl BusClient {
         self.next_id.fetch_add(1, Ordering::Relaxed)
     }
 
-    /// Appel unaire typé.
-    pub async fn call<Req, Resp>(
+    /// Unary call with an explicit `Intent.from` (bridge / multi-tenant clients).
+    pub async fn call_from<Req, Resp>(
         &self,
+        from: &str,
         intent: &str,
         req: &Req,
         caps: Vec<String>,
@@ -170,7 +171,7 @@ impl BusClient {
             caps,
             correlation_id: id,
             wants_stream: false,
-            from: self.from.clone(),
+            from: from.to_string(),
         };
         self.send(Frame::Intent(msg)).await?;
         let (status, payload) = rx.await.map_err(|_| CallError::Closed)??;
@@ -181,6 +182,20 @@ impl BusClient {
             });
         }
         crate::from_cbor(&payload).map_err(|e| CallError::Cbor(e.to_string()))
+    }
+
+    /// Appel unaire typé.
+    pub async fn call<Req, Resp>(
+        &self,
+        intent: &str,
+        req: &Req,
+        caps: Vec<String>,
+    ) -> Result<Resp, CallError>
+    where
+        Req: serde::Serialize,
+        Resp: serde::de::DeserializeOwned,
+    {
+        self.call_from(&self.from, intent, req, caps).await
     }
 
     /// Appel en flux : retourne un récepteur d'éléments typés.

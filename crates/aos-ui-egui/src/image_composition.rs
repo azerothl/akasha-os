@@ -3,10 +3,11 @@
 use crate::i18n::UiStrings;
 use crate::image_prompt::{prompt_enrichment_kind, PromptEnrichmentKind};
 use eframe::egui;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 /// Placement block in normalized frame coords (0..1). Vec order = z-order (back → front).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompositionBlock {
     pub id: u64,
     pub x: f32,
@@ -109,6 +110,46 @@ fn minify_json(v: &Value) -> String {
     serde_json::to_string(v).unwrap_or_else(|_| "{}".into())
 }
 
+/// LLM sometimes emits this typo instead of `compositional_deconstruction`.
+const IDEOGRAM_DECONSTRUCTION_ALIASES: &[&str] = &[
+    "compositional_destruction",
+    "compositional_deconstrution",
+    "composition_deconstruction",
+];
+
+fn take_ideogram_background(obj: &serde_json::Map<String, Value>) -> Value {
+    if let Some(bg) = obj
+        .get("compositional_deconstruction")
+        .and_then(|c| c.get("background"))
+    {
+        if !bg.as_str().map(|s| s.trim().is_empty()).unwrap_or(true) {
+            return bg.clone();
+        }
+        // Keep empty only if no richer alias exists below.
+        let empty = bg.clone();
+        for alias in IDEOGRAM_DECONSTRUCTION_ALIASES {
+            if let Some(bg2) = obj.get(*alias).and_then(|c| c.get("background")) {
+                if !bg2.as_str().map(|s| s.trim().is_empty()).unwrap_or(true) {
+                    return bg2.clone();
+                }
+            }
+        }
+        return empty;
+    }
+    for alias in IDEOGRAM_DECONSTRUCTION_ALIASES {
+        if let Some(bg) = obj.get(*alias).and_then(|c| c.get("background")) {
+            return bg.clone();
+        }
+    }
+    json!("")
+}
+
+fn strip_ideogram_deconstruction_aliases(obj: &mut serde_json::Map<String, Value>) {
+    for alias in IDEOGRAM_DECONSTRUCTION_ALIASES {
+        obj.remove(*alias);
+    }
+}
+
 /// Build a full prompt from the global text + layout blocks (no prior LLM pass).
 pub fn compose_prompt_with_layout(
     base: &str,
@@ -162,18 +203,19 @@ pub fn merge_layout_into_prompt(
     let trimmed = prompt.trim();
     if let Ok(mut v) = serde_json::from_str::<Value>(trimmed) {
         if let Some(obj) = v.as_object_mut() {
+            let has_ideogram_comp = obj.contains_key("compositional_deconstruction")
+                || IDEOGRAM_DECONSTRUCTION_ALIASES
+                    .iter()
+                    .any(|k| obj.contains_key(*k));
             // Ideogram-style
-            if obj.contains_key("compositional_deconstruction")
+            if has_ideogram_comp
                 || matches!(
                     model_id.and_then(prompt_enrichment_kind),
                     Some(PromptEnrichmentKind::Ideogram4)
                 )
             {
-                let background = obj
-                    .get("compositional_deconstruction")
-                    .and_then(|c| c.get("background"))
-                    .cloned()
-                    .unwrap_or(json!(""));
+                let background = take_ideogram_background(obj);
+                strip_ideogram_deconstruction_aliases(obj);
                 obj.insert(
                     "compositional_deconstruction".into(),
                     json!({
@@ -297,7 +339,7 @@ pub fn ui_composition_canvas(
     painter.rect_stroke(
         rect,
         4.0,
-        egui::Stroke::new(1.5, egui::Color32::from_gray(90)),
+        egui::Stroke::new(1.5_f32, egui::Color32::from_gray(90)),
         egui::StrokeKind::Inside,
     );
 
@@ -424,9 +466,9 @@ pub fn ui_composition_canvas(
             egui::Color32::from_rgba_unmultiplied(60 + hue / 2, 100, 160, 70)
         };
         let stroke = if selected_here {
-            egui::Stroke::new(2.0, egui::Color32::from_rgb(120, 190, 255))
+            egui::Stroke::new(2.0_f32, egui::Color32::from_rgb(120, 190, 255))
         } else {
-            egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(200, 200, 220, 160))
+            egui::Stroke::new(1.0_f32, egui::Color32::from_rgba_unmultiplied(200, 200, 220, 160))
         };
         painter.rect_filled(r, 3.0, fill);
         painter.rect_stroke(r, 3.0, stroke, egui::StrokeKind::Inside);
@@ -559,5 +601,30 @@ mod tests {
         assert!(p.contains("still life"));
         assert!(p.contains("Composition (back to front)"));
         assert!(p.contains("vase"));
+    }
+
+    #[test]
+    fn merge_recovers_background_from_destruction_typo() {
+        let llm = r#"{"high_level_description":"alley","style_description":{"aesthetics":"cyber"},"compositional_destruction":{"background":"dark cyberpunk alley","elements":[{"type":"obj","desc":"a cat"}]}}"#;
+        let blocks = vec![CompositionBlock {
+            id: 1,
+            x: 0.35,
+            y: 0.5,
+            w: 0.3,
+            h: 0.3,
+            desc: "studio cat with cyber paw".into(),
+        }];
+        let p = merge_layout_into_prompt(llm, &blocks, Some("local:ideogram4"));
+        let v: Value = serde_json::from_str(&p).unwrap();
+        assert!(v.get("compositional_destruction").is_none());
+        assert_eq!(
+            v["compositional_deconstruction"]["background"],
+            "dark cyberpunk alley"
+        );
+        let els = v["compositional_deconstruction"]["elements"]
+            .as_array()
+            .unwrap();
+        assert_eq!(els.len(), 1);
+        assert_eq!(els[0]["desc"], "studio cat with cyber paw");
     }
 }

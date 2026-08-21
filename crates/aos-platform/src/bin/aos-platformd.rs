@@ -21,6 +21,22 @@ async fn main() {
         Err(e) => eprintln!("[aos-platformd] bus injoignable ({e}) — audit local uniquement"),
     }
 
+    // Product-doc RAG (FEATURES / STATUS / TESTER) — sync so first chat sees it.
+    {
+        let version = std::env::var("AOS_PREVIEW_VERSION")
+            .unwrap_or_else(|_| env!("CARGO_PKG_VERSION").to_string());
+        let s = sub.clone();
+        match tokio::task::spawn_blocking(move || {
+            aos_platform::product_rag::ensure_indexed(&s, &version)
+        })
+        .await
+        {
+            Ok(Ok(n)) => eprintln!("[aos-platformd] product RAG : {n} chunks indexés"),
+            Ok(Err(e)) => eprintln!("[aos-platformd] product RAG skip : {e}"),
+            Err(e) => eprintln!("[aos-platformd] product RAG panic : {e}"),
+        }
+    }
+
     let mut svc = BusService::new("platformd");
 
     // Note P4.4 : `audit.append` is served by `aos-auditd`.
@@ -391,7 +407,8 @@ async fn main() {
                             .session_id
                             .as_ref()
                             .map(|id| format!("session:{id}"));
-                        let (session_hits, user_hits) = {
+                        let product_k = if req.product_k == 0 { 4 } else { req.product_k };
+                        let (session_hits, user_hits, product_hits) = {
                             let mem = s.mem.lock().unwrap();
                             let session_hits = if let Some(ref ns) = sess_ns {
                                 mem.episodic_query(&emb, req.k, Some(ns))
@@ -400,9 +417,16 @@ async fn main() {
                             };
                             let user_hits =
                                 mem.context_user_hits(&emb, req.k);
-                            (session_hits, user_hits)
+                            let product_hits =
+                                aos_platform::product_rag::recall(&mem, &emb, product_k);
+                            (session_hits, user_hits, product_hits)
                         };
                         let mut prompt_block = String::new();
+                        let product_block =
+                            aos_platform::product_rag::format_prompt_block(&product_hits);
+                        if !product_block.is_empty() {
+                            prompt_block.push_str(&product_block);
+                        }
                         if !session_hits.is_empty() {
                             prompt_block.push_str("Mémoire session:\n");
                             for h in &session_hits {
@@ -430,6 +454,7 @@ async fn main() {
                                 &MemContextResponse {
                                     session_hits,
                                     user_hits,
+                                    product_hits,
                                     prompt_block,
                                 },
                             )

@@ -1,6 +1,6 @@
 //! Compilation du prompt système agentic (couches empilées).
 
-use aos_proto::{AgentGoal, AgentSpec, DocumentRef, SYSTEM_ASSISTANT_PROMPT};
+use aos_proto::{AgentGoal, AgentSpec, DocumentRef, PREVIEW_SURFACE_BRIEF, SYSTEM_ASSISTANT_PROMPT};
 
 use crate::skills::SkillDoc;
 use crate::tools::ToolDesc;
@@ -17,8 +17,9 @@ pub struct PromptCompileInput<'a> {
 pub fn compile_system_prompt(input: &PromptCompileInput<'_>) -> String {
     let mut parts: Vec<String> = Vec::new();
 
-    // 1. Base OS
+    // 1. Base OS + brief produit Preview
     parts.push(SYSTEM_ASSISTANT_PROMPT.to_string());
+    parts.push(PREVIEW_SURFACE_BRIEF.to_string());
 
     // 2. Identité
     let mut identity = format!(

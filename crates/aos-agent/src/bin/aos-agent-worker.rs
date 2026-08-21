@@ -1886,6 +1886,7 @@ async fn invoke_native(
                         session_id: None,
                         query,
                         k: 5,
+                        product_k: 4,
                     },
                     vec![],
                 )
@@ -2733,6 +2734,7 @@ async fn recall_memory_bundle(
                 session_id: None,
                 query: query.to_string(),
                 k,
+                product_k: 4,
             },
             vec![],
         )

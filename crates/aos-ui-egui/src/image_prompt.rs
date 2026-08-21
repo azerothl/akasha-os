@@ -13,6 +13,8 @@ pub enum PromptEnrichmentKind {
 pub const IDEOGRAM4_SYSTEM_PROMPT: &str = r##"You convert a short user idea into a structured JSON caption for Ideogram 4. Output ONE minified single-line JSON object and NOTHING else (no markdown, no commentary).
 SCHEMA — keys in this exact order:
 {"high_level_description":"...","style_description":{"aesthetics":"...","lighting":"...","photo":"...","medium":"...","color_palette":["#RRGGBB", "..."]},"compositional_deconstruction":{"background":"...","elements":[ ... ]}}
+- Spell the key exactly: compositional_deconstruction (NOT compositional_destruction).
+- compositional_deconstruction.background must be a non-empty scene/environment string when the user implies a setting.
 - object element: {"type":"obj","desc":"..."} or with optional "bbox":[y_min,x_min,y_max,x_max] in 0–1000 coords
 - text element: {"type":"text","text":"VERBATIM","desc":"..."}
 style_description must contain exactly one of "photo" (with medium "photograph") or "art_style" (illustration, 3d_render, etc.), never both.
@@ -21,7 +23,8 @@ Rules:
 1. Preserve the user's core subject and any quoted text verbatim.
 2. Be specific and concrete — no vague mood-word spam.
 3. Do not add elements the user did not imply.
-4. Output STRICTLY VALID JSON: double quotes, NO trailing commas."##;
+4. Output STRICTLY VALID JSON: double quotes, NO trailing commas.
+5. Emit exactly one compositional_deconstruction object — never a second composition key under another name."##;
 
 /// Generic JSON schema for Flux, SDXL, Z-Image, Qwen Image, Krea, Wan, etc.
 /// Refs: ImagineArt JSON prompting guide, diffusion JSON prompting articles.

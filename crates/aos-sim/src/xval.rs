@@ -65,6 +65,7 @@ pub fn host_profile() -> HardwareProfile {
         // Réglé pour que flops × eff_prefill_cpu ≈ 1,25 TFLOPS effectifs
         // (médiane des mesures pp 0,5B/3B : 1,0 / 1,7 TFLOPS).
         cpu_flops: 2.5e12,
+        gpus: vec![],
     }
 }
 

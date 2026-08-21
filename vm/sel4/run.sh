@@ -23,7 +23,7 @@ if [ ! -f "${RUST_LIB}" ]; then
         echo "== aos-sel4-capkd (aarch64-unknown-none) =="
         rustup target add aarch64-unknown-none
         cargo rustc -p aos-sel4-capkd --manifest-path "${REPO}/Cargo.toml" \
-            --release --target aarch64-unknown-none --offline --crate-type staticlib \
+            --release --target aarch64-unknown-none --crate-type staticlib \
             -- -C panic=abort
     else
         echo "libaos_sel4_capkd.a absent et cargo introuvable." >&2
@@ -31,6 +31,9 @@ if [ ! -f "${RUST_LIB}" ]; then
         exit 1
     fi
 fi
+
+# Windows cargo + WSL make: NTFS mtime can sit a few hundred ms in the future.
+touch "${RUST_LIB}"
 
 make -C "${ROOT}" BUILD_DIR="${BUILD_DIR}" MICROKIT_SDK="${MICROKIT_SDK}" \
     MICROKIT_BOARD="${MICROKIT_BOARD}" MICROKIT_CONFIG="${MICROKIT_CONFIG}" \

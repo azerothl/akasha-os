@@ -7,8 +7,8 @@
 Tag then push:
 
 ```bash
-git tag v0.9.0
-git push origin v0.9.0
+git tag v0.10.0
+git push origin v0.10.0
 ```
 
 The workflow [`.github/workflows/preview-release.yml`](../.github/workflows/preview-release.yml)
@@ -22,6 +22,13 @@ CPU-linked `aos-modeld-cpu` in the same zip; no GGUF) and publishes:
 `-CpuOnly` remains a **builder** hatch, not a tester download.
 
 Manual trigger: Actions → **preview-release** → Run workflow.
+
+### Internal seL4 gate (not a tester release)
+
+Tags matching `sel4-pv-*` (e.g. `sel4-pv-0.10.0`) trigger
+[`.github/workflows/sel4-vm-gate.yml`](../.github/workflows/sel4-vm-gate.yml)
+only. They must **not** use the `v*` prefix (that would publish Preview zips).
+Artefacts: QEMU `loader.img` + serial log — no `latest.json`.
 
 ## Manual
 
@@ -37,12 +44,13 @@ GGUFs are downloaded on **first run** via `share/models/manifest.json`.
 ## Release notes (draft)
 
 ```
-Akasha OS Preview 0.9.0 — mid-token migrate, Image studio, closed media options
+Akasha OS Preview 0.10.0 — Horizon B: TPM vault, sibling bridge, multi-GPU path
 
-- model.migrate: CPU↔GPU without aborting the live stream (NVIDIA pin cpu stays on CUDA binary)
-- Closed media.* options (deny_unknown_fields); Flux2/Ideogram4/Piper extra packs
-- Image studio tab + Open in studio on chat PNGs; /speak opens an in-chat TTS card
-- Settings defaults for image pack / Piper voice honored after restart
+- E7 TPM: vault master prefers host TPM envelope when available (fallback keyring/file)
+- E8: optional aos-bridged loopback HTTP↔bus (mem + secrets); not inside aos-session
+- E9: multi-GPU tensor_split plumbing; P5 gate SKIPs on 1-GPU hosts
+- Media polish: Image studio composition + upscale; Wan/LTX experimental
+- Internal seL4: tag sel4-pv-0.10.0 + CI QEMU gate (not in tester zip)
 
 Not a bootable OS. See FIRST-RUN.md / INSTALL.md / TESTER.md
 ```

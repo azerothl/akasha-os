@@ -6,7 +6,7 @@
     <title>Using Preview — Akasha OS</title>
     <meta
       name="description"
-      content="User manual for Akasha OS Preview 0.9.0: Chat, Models, Memory, Notes, Tasks, Modules, Agents, Caps, Audit, Providers, Settings, Network, Image Studio, TTS, and extending Preview."
+      content="User manual for Akasha OS Preview 0.10.0: Chat, Models, Memory, Notes, Tasks, Modules, Agents, Caps, Audit, Providers, Settings, Network, Image Studio, TTS, and extending Preview."
     />
     <link rel="stylesheet" href="../styles.css" />
     <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
@@ -48,10 +48,10 @@
 
         <h1>
           <span data-lang="en">
-            Using Preview <span data-aos-version>0.9.0</span>
+            Using Preview <span data-aos-version>0.10.0</span>
           </span>
           <span data-lang="fr">
-            Utiliser la Preview <span data-aos-version>0.9.0</span>
+            Utiliser la Preview <span data-aos-version>0.10.0</span>
           </span>
         </h1>
 
@@ -109,7 +109,9 @@
             <strong>Stop</strong> cancels the in-flight <code>model.infer</code>;
             <strong>Copy</strong> puts a message (or Troubleshoot body) on the
             clipboard. Before infer, Preview injects <code>mem.context</code>
-            (session hits plus user facts). Background agents attached via
+            (session hits, user facts, and <strong>product-doc RAG</strong>
+            chunks from FEATURES / STATUS / TESTER). User and assistant messages
+            use distinct bubbles. Background agents attached via
             <code>/agent</code> or assistant delegation show as cards in the
             thread.
           </p>
@@ -123,7 +125,9 @@
             <code>model.infer</code> en cours ; <strong>Copier</strong> met un
             message (ou le corps Troubleshoot) dans le presse-papiers. Avant
             l’inférence, la Preview injecte <code>mem.context</code> (hits de
-            session et faits utilisateur). Les agents de fond via
+            session, faits utilisateur, et chunks <strong>RAG produit</strong>
+            depuis FEATURES / STATUS / TESTER). Les messages user et assistant
+            ont des bulles distinctes. Les agents de fond via
             <code>/agent</code> ou délégation apparaissent en cartes dans le fil.
           </p>
           <p class="hist" data-lang="en">
@@ -586,8 +590,11 @@
           </p>
           <p class="hist" data-lang="en">
             <strong>Image studio</strong> tab: prompt, size, steps, CFG, seed,
-            sampler, catalogue style / LoRA / VAE. From Chat, a generated PNG
-            offers <strong>Open in studio</strong>. Slash <code>/image</code>
+            sampler, catalogue style / LoRA / VAE, <strong>composition</strong>
+            canvas, <strong>upscale</strong>, and <strong>history</strong>
+            (reload prompt / composition from PNG sidecars). From Chat, a
+            generated PNG offers <strong>Open in studio</strong>. Slash
+            <code>/image</code>
             shows the PNG in the thread. Slash <code>/speak</code> opens an
             in-chat <strong>TTS card</strong> (voice + knobs) then Generate;
             agents may still call the audio intent directly. Download media
@@ -595,7 +602,10 @@
           </p>
           <p class="hist" data-lang="fr">
             Onglet <strong>studio Image</strong> : prompt, taille, steps, CFG,
-            seed, sampler, style / LoRA / VAE du catalogue. Depuis Chat, un PNG
+            seed, sampler, style / LoRA / VAE du catalogue, canvas
+            <strong>composition</strong>, <strong>upscale</strong> et
+            <strong>historique</strong> (recharge prompt / composition depuis
+            les sidecars PNG). Depuis Chat, un PNG
             généré propose <strong>Ouvrir dans le studio</strong>. Slash
             <code>/image</code> affiche le PNG dans le fil. Slash
             <code>/speak</code> ouvre une <strong>carte TTS</strong> (voix +
@@ -605,11 +615,11 @@
           </p>
           <aside class="callout callout-limit">
             <p data-lang="en">
-              Not in Preview 0.9.0: video generation, STT / always-on voice,
+              Not in Preview 0.10.0: video generation, STT / always-on voice,
               img2img / inpaint as first-class intents.
             </p>
             <p data-lang="fr">
-              Hors Preview 0.9.0 : génération vidéo, STT / voix always-on,
+              Hors Preview 0.10.0 : génération vidéo, STT / voix always-on,
               img2img / inpaint comme intents de premier plan.
             </p>
           </aside>

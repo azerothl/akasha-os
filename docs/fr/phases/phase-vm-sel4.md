@@ -32,3 +32,13 @@ staticlib `aos-sel4-capkd` (`aarch64-unknown-none`).
 - PDs Rust complets (`sel4-microkit`), plus de glue C
 - Intents CBOR complets (au-delà du sous-ensemble `cap.*`)
 - PV.4 : même image sur fer nu, puis `AccelDevice` (P5.3)
+
+## Versioning d’intégration interne (Preview 0.10+)
+
+| Canal | Tag | Produit |
+|-------|-----|---------|
+| Preview public | `v0.10.0` | Zips testeurs + `latest.json` |
+| seL4 interne | `sel4-pv-0.10.0` (jamais `v*`) | Gate CI seulement — `sel4-vm-gate.yml` |
+
+Le guest seL4 **n’est pas** dans le zip Preview. Les testeurs cohorte ne
+lancent pas QEMU. Local : `.\demo\run-sel4-vm.ps1` ou `vm/sel4/run.sh`.

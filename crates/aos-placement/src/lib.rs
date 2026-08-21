@@ -22,7 +22,7 @@ pub mod plan;
 pub mod sim;
 
 pub use cost::{Bound, CostModel, Estimate};
-pub use hardware::HardwareProfile;
+pub use hardware::{GpuDevice, HardwareProfile};
 pub use manager::{Budgets, PlacementError, PlacementManager};
 pub use model::{ModelDesc, PrivacyClass};
 pub use plan::{PlacementPlan, PlacementProfile, Priority, Shard, ShardKind, Tier};

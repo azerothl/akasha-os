@@ -768,6 +768,7 @@ mod tests {
             host_to_device_bw: 10e9,
             gpu_flops: 1e12,
             cpu_flops: 1e11,
+            gpus: vec![],
         };
         let mut s = PlacementSim::new(tiny, CostModel::default());
         let img = crate::testutil::model_sd15();

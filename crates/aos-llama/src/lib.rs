@@ -11,6 +11,7 @@
 //! | Plan (aos-placement) | llama.cpp |
 //! |----------------------|-----------|
 //! | couches en VRAM | `n_gpu_layers` (préfixe contigu, coût identique, ADR 0002) |
+//! | multi-GPU (E9) | `split_mode=layer` + `tensor_split` / `main_gpu` |
 //! | KV en VRAM | `offload_kqv = true` |
 //! | tier DISK | `load_mode = MMAP` (page-in paresseux) ; `DIRECT_IO` en expérimental |
 //! | couches RAM | calculées CPU (`n_threads`) — comportement natif llama.cpp |
@@ -99,6 +100,10 @@ pub struct LoadOptions {
     pub embeddings: bool,
     /// Séquences simultanées (continuous batching P5.1). 1 = une à la fois.
     pub n_seq_max: u32,
+    /// Proportions layer-pipeline par GPU (llama `tensor_split`). Vide = défaut.
+    pub tensor_split: Vec<f32>,
+    /// GPU principal (scratch / small tensors).
+    pub main_gpu: i32,
 }
 
 impl Default for LoadOptions {
@@ -114,6 +119,8 @@ impl Default for LoadOptions {
             flash_attn: true,
             embeddings: false,
             n_seq_max: 1,
+            tensor_split: vec![],
+            main_gpu: 0,
         }
     }
 }
@@ -125,9 +132,7 @@ pub struct LlamaBackend {
 
 impl LlamaBackend {
     pub fn init() -> Self {
-        unsafe {
-            sys::llama_backend_init();
-        }
+        ensure_llama_backend();
         Self { _private: () }
     }
 
@@ -136,14 +141,49 @@ impl LlamaBackend {
         unsafe { sys::llama_supports_gpu_offload() }
     }
 
+    /// Max devices compilé dans llama.cpp (pas le nombre physique).
     pub fn max_devices() -> usize {
         unsafe { sys::llama_max_devices() }
     }
+
+    /// Nombre de GPU/iGPU physiques enregistrés auprès de ggml (E9 / P5.2).
+    ///
+    /// Distinct de [`Self::max_devices`] (plafond de compilation, souvent 16).
+    /// Retourne 0 si aucun accélérateur n'est visible.
+    pub fn gpu_device_count() -> usize {
+        ensure_llama_backend();
+        unsafe {
+            let n = sys::ggml_backend_dev_count();
+            let mut gpus = 0usize;
+            for i in 0..n {
+                let dev = sys::ggml_backend_dev_get(i);
+                if dev.is_null() {
+                    continue;
+                }
+                let ty = sys::ggml_backend_dev_type(dev);
+                if ty == sys::GGML_BACKEND_DEVICE_TYPE_GPU
+                    || ty == sys::GGML_BACKEND_DEVICE_TYPE_IGPU
+                {
+                    gpus += 1;
+                }
+            }
+            gpus
+        }
+    }
+}
+
+fn ensure_llama_backend() {
+    use std::sync::Once;
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| unsafe {
+        sys::llama_backend_init();
+    });
 }
 
 impl Drop for LlamaBackend {
     fn drop(&mut self) {
-        unsafe { sys::llama_backend_free() };
+        // Backend process-lifetime (Once) — ne pas free ici : modeld / gate
+        // peuvent partager le même init.
     }
 }
 
@@ -163,11 +203,23 @@ unsafe impl Sync for LlamaModel {}
 
 impl LlamaModel {
     pub fn load(path: &Path, opts: &LoadOptions) -> Result<Self, LlamaError> {
+        ensure_llama_backend();
         let cpath = CString::new(path.to_str().ok_or(LlamaError::InvalidPath)?)
             .map_err(|_| LlamaError::InvalidPath)?;
         let mut params = unsafe { sys::llama_model_default_params() };
         params.n_gpu_layers = opts.n_gpu_layers;
         params.split_mode = sys::LLAMA_SPLIT_MODE_LAYER;
+        params.main_gpu = opts.main_gpu;
+        // Keep buffer alive for the duration of `llama_model_load_from_file`.
+        let mut split_buf: Vec<f32> = Vec::new();
+        if !opts.tensor_split.is_empty() {
+            let max = unsafe { sys::llama_max_devices() };
+            split_buf = vec![0.0f32; max];
+            for (i, &v) in opts.tensor_split.iter().enumerate().take(max) {
+                split_buf[i] = v;
+            }
+            params.tensor_split = split_buf.as_ptr();
+        }
         params.load_mode = match opts.load_mode {
             LoadMode::Mmap => sys::LLAMA_LOAD_MODE_MMAP,
             LoadMode::MmapMlock => sys::LLAMA_LOAD_MODE_MMAP_MLOCK,
@@ -175,6 +227,8 @@ impl LlamaModel {
             LoadMode::DirectIo => sys::LLAMA_LOAD_MODE_DIRECT_IO,
         };
         let ptr = unsafe { sys::llama_model_load_from_file(cpath.as_ptr(), params) };
+        // Explicitly drop after FFI so the pointer stays valid during load.
+        drop(split_buf);
         if ptr.is_null() {
             return Err(LlamaError::ModelLoad(path.display().to_string()));
         }

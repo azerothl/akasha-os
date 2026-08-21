@@ -242,18 +242,25 @@ et envoi de retour GitHub).
 - Catalogue `local:flux2` / `local:ideogram4` / `local:piper-en-gb` ; Settings pack/voix par défaut.
 - Studio Image : steps/taille/sampler ; clé d’option inconnue refusée.
 
+### 24–25. Profondeur studio + TPM / bridge (0.10.0)
+
+- Studio Image : blocs **composition** qui se chevauchent → injection dans le prompt ; option **Upscale** RealESRGAN après Download du pack.
+- Wan/LTX = expérimental (pas requis pour la cohorte).
+- `var/secrets/master.backend` peut être `tpm` si TPM présent ; sinon `keyring` / `file`.
+- Optionnel : `aos-bridged` en loopback ; health + `mem.context` OK ; `secrets.get` avec from agent → 403.
+
 ## Critères de succès (équipe)
 
 - 3 testeurs Windows + 1 Linux suivent ce protocole sans toolchain Rust
 - Au moins un fichier `var/feedback/fb-*.json` exploitable par retour
 - Gates PC.6–PC.9 et PC.11–PC.13 cochés sur au moins une machine
 
-## Hors scope Preview 0.9.0
+## Hors scope Preview 0.10.0
 
-- Boot seL4 / fer nu
+- Boot seL4 / fer nu (tag interne `sel4-pv-*` seulement)
 - macOS
 - Modèle 32B dans l'installeur
 - Mise à jour automatique complète
-- Vidéo / STT / voix permanente
+- UI vidéo produit / STT / voix permanente
 - img2img / inpaint en intent de première classe
-- Marketplace public / canaux messagerie / multi-GPU
+- Marketplace public / canaux messagerie / hard-green multi-GPU sans 2e GPU

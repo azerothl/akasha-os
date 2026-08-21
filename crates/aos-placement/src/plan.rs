@@ -45,6 +45,9 @@ pub struct Shard {
     pub kind: ShardKind,
     pub size_bytes: u64,
     pub residency: Tier,
+    /// Index GPU quand `residency == Vram` (pipeline multi-GPU, E9).
+    #[serde(default)]
+    pub device: Option<u32>,
     /// Épinglage (modèle système, semantic pin §3.5.8).
     pub pin_count: u32,
     /// Dernier usage (tick logique du simulateur) — base LRU.
@@ -107,6 +110,12 @@ pub struct PlacementPlan {
     pub prefetch_window: u32,
     /// Contexte KV supposé pour le dimensionnement du cache.
     pub kv_tokens: u32,
+    /// Proportions layer-pipeline pour llama `tensor_split` (vide = 1 GPU / défaut).
+    #[serde(default)]
+    pub tensor_split: Vec<f32>,
+    /// GPU principal (scratch / small tensors).
+    #[serde(default)]
+    pub main_gpu: i32,
 }
 
 impl PlacementPlan {

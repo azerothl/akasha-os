@@ -22,6 +22,8 @@ pub(crate) enum Cmd {
         auto_remember: bool,
         max_steps: u32,
         routing: String,
+        /// Prefs UI language (`fr` / `en`) for product-doc injection.
+        language: String,
     },
     SessionBootstrap,
     SessionCreate { title: Option<String> },
@@ -268,6 +270,10 @@ pub(crate) enum Evt {
         engine: String,
         prompt: String,
         generation_prompt: Option<String>,
+        /// Studio composition at generate time (image only).
+        composition_blocks: Vec<crate::image_composition::CompositionBlock>,
+        #[allow(dead_code)]
+        model_id: String,
     },
     MediaImageEnriched {
         enriched: String,

@@ -625,13 +625,28 @@ impl HostServices for PlatformSubsystem {
             "mem.context" => {
                 let query = args["query"].as_str().unwrap_or("");
                 let k = args["k"].as_u64().unwrap_or(5) as usize;
+                let product_k = args["product_k"].as_u64().unwrap_or(4) as usize;
                 let emb = self.embed_text(query).unwrap_or_default();
-                let hits = self.mem.lock().unwrap().episodic_query(&emb, k, None);
-                let mut prompt_block = String::from("Contexte mémoire:\n");
+                let (hits, product_hits) = {
+                    let mem = self.mem.lock().unwrap();
+                    let hits = mem.episodic_query(&emb, k, None);
+                    let product_hits = crate::product_rag::recall(&mem, &emb, product_k);
+                    (hits, product_hits)
+                };
+                let mut prompt_block = crate::product_rag::format_prompt_block(&product_hits);
+                if prompt_block.is_empty() {
+                    prompt_block.push_str("Contexte mémoire:\n");
+                } else {
+                    prompt_block.push_str("Contexte mémoire:\n");
+                }
                 for h in &hits {
                     prompt_block.push_str(&format!("- {}\n", h.text));
                 }
-                Ok(serde_json::json!({"prompt_block": prompt_block, "hits": hits}))
+                Ok(serde_json::json!({
+                    "prompt_block": prompt_block,
+                    "hits": hits,
+                    "product_hits": product_hits,
+                }))
             }
             "web.search" => {
                 // Cap réseau requise

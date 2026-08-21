@@ -15,9 +15,11 @@ mod chat_ask;
 mod chat_media;
 mod cmd;
 mod image_composition;
+mod image_history;
 mod image_prompt;
 mod image_studio;
 mod os_open;
+mod product_context;
 mod runtime;
 mod scenarios_panel;
 mod slash;
@@ -148,6 +150,108 @@ fn overflow_scroll(
         .id_salt(id)
         .auto_shrink([false, false])
         .show(ui, add_contents);
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ChatBubbleKind {
+    User,
+    Assistant,
+    System,
+}
+
+fn chat_bubble_kind(role: &str) -> ChatBubbleKind {
+    match role {
+        "user" | "vous" => ChatBubbleKind::User,
+        "assistant" => ChatBubbleKind::Assistant,
+        _ => ChatBubbleKind::System,
+    }
+}
+
+fn chat_role_label(kind: ChatBubbleKind, t: &i18n::UiStrings, raw_role: &str) -> String {
+    match kind {
+        ChatBubbleKind::User => t.chat_you.to_string(),
+        ChatBubbleKind::Assistant => t.chat_assistant.to_string(),
+        ChatBubbleKind::System => {
+            if raw_role == "système" || raw_role == "system" {
+                t.chat_system.to_string()
+            } else {
+                raw_role.to_string()
+            }
+        }
+    }
+}
+
+fn chat_bubble_colors(kind: ChatBubbleKind, dark: bool) -> (egui::Color32, egui::Color32, egui::Color32) {
+    // fill, stroke, role label — orrery-ish cyan / mute / paper without purple glow
+    match (kind, dark) {
+        (ChatBubbleKind::User, true) => (
+            egui::Color32::from_rgb(18, 42, 48),
+            egui::Color32::from_rgb(62, 224, 196),
+            egui::Color32::from_rgb(120, 230, 210),
+        ),
+        (ChatBubbleKind::User, false) => (
+            egui::Color32::from_rgb(220, 242, 238),
+            egui::Color32::from_rgb(20, 140, 120),
+            egui::Color32::from_rgb(10, 100, 90),
+        ),
+        (ChatBubbleKind::Assistant, true) => (
+            egui::Color32::from_rgb(28, 32, 40),
+            egui::Color32::from_rgb(90, 100, 120),
+            egui::Color32::from_rgb(180, 190, 210),
+        ),
+        (ChatBubbleKind::Assistant, false) => (
+            egui::Color32::from_rgb(236, 238, 244),
+            egui::Color32::from_rgb(120, 128, 148),
+            egui::Color32::from_rgb(50, 56, 72),
+        ),
+        (ChatBubbleKind::System, true) => (
+            egui::Color32::from_rgb(22, 22, 26),
+            egui::Color32::from_rgb(70, 70, 78),
+            egui::Color32::from_rgb(150, 150, 160),
+        ),
+        (ChatBubbleKind::System, false) => (
+            egui::Color32::from_rgb(242, 242, 244),
+            egui::Color32::from_rgb(170, 170, 178),
+            egui::Color32::from_rgb(100, 100, 110),
+        ),
+    }
+}
+
+/// Role-colored message frame. User sits on the right; assistant/system on the left.
+fn chat_message_frame(
+    ui: &mut egui::Ui,
+    kind: ChatBubbleKind,
+    add_contents: impl FnOnce(&mut egui::Ui),
+) {
+    let dark = ui.visuals().dark_mode;
+    let (fill, stroke, _) = chat_bubble_colors(kind, dark);
+    let max_w = (ui.available_width() * match kind {
+        ChatBubbleKind::User => 0.88,
+        ChatBubbleKind::Assistant => 0.96,
+        ChatBubbleKind::System => 0.92,
+    })
+    .clamp(200.0, ui.available_width());
+
+    let layout = match kind {
+        ChatBubbleKind::User => egui::Layout::right_to_left(egui::Align::Min),
+        _ => egui::Layout::left_to_right(egui::Align::Min),
+    };
+
+    ui.with_layout(layout, |ui| {
+        ui.set_max_width(max_w);
+        egui::Frame::NONE
+            .fill(fill)
+            .stroke(egui::Stroke::new(1.0_f32, stroke))
+            .corner_radius(6.0)
+            .inner_margin(egui::Margin::symmetric(10, 8))
+            .show(ui, |ui| {
+                ui.set_max_width(max_w - 8.0);
+                ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
+                    add_contents(ui);
+                });
+            });
+    });
+    ui.add_space(6.0);
 }
 
 fn main() -> eframe::Result<()> {
@@ -1629,6 +1733,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             auto_remember: self.prefs.auto_remember_chat,
             max_steps: chat_agent_max_steps(self.prefs.default_max_steps),
             routing: self.prefs.routing.clone(),
+            language: self.prefs.language.clone(),
         });
         self.scen_chat = true;
     }
@@ -2335,6 +2440,8 @@ impl eframe::App for UiApp {
                     engine,
                     prompt,
                     generation_prompt,
+                    composition_blocks,
+                    model_id: _,
                 } => {
                     self.image_generating = None;
                     self.status = format!("{kind} → {path} ({bytes} bytes, {engine})");
@@ -2349,12 +2456,20 @@ impl eframe::App for UiApp {
                     if kind != "audio" {
                         if prompt.is_empty() {
                             self.image_studio.preview = Some(path.clone());
+                            // Upscale: try restore prompts/composition from sidecar.
+                            self.image_studio.apply_history_for_path(&path);
                         } else {
                             self.image_studio.open_from_chat(
                                 &prompt,
                                 &path,
                                 generation_prompt.as_deref(),
                             );
+                            if !composition_blocks.is_empty() {
+                                self.image_studio
+                                    .set_composition_blocks(composition_blocks);
+                            } else {
+                                self.image_studio.apply_history_for_path(&path);
+                            }
                         }
                         self.tab = Tab::Image;
                     }
@@ -2887,7 +3002,8 @@ impl eframe::App for UiApp {
             if let Some(m) = &self.metrics {
                 let ratio = m.ram_used as f32 / m.ram_total.max(1) as f32;
                 ui.add(egui::ProgressBar::new(ratio).text(format!(
-                    "RAM {:.1}/{:.1} GiB",
+                    "{} {:.1}/{:.1} GiB",
+                    t.metrics_ram,
                     m.ram_used as f64 / (1 << 30) as f64,
                     m.ram_total as f64 / (1 << 30) as f64
                 )));
@@ -2897,6 +3013,13 @@ impl eframe::App for UiApp {
                     ui.group(|ui| {
                         ui.label(format!("{} [{:?}]", mm.model_id, mm.state));
                         ui.monospace(format_model_infer_line(mm, &t));
+                        if mm.disk_bytes > 0 {
+                            ui.weak(format!(
+                                "{} {}",
+                                t.metrics_disk,
+                                human_bytes(mm.disk_bytes)
+                            ));
+                        }
                         if mm.queued > 0 || mm.active_inferences > 0 {
                             ui.weak(format!(
                                 "inf={} {}={}",
@@ -3262,105 +3385,120 @@ impl UiApp {
                                 } else {
                                     text
                                 };
-                                let shown_role = if role == "user" || role == "vous" {
-                                    t.chat_you.to_string()
-                                } else {
-                                    role.clone()
-                                };
-                            ui.horizontal(|ui| {
-                                ui.label(format!("[{shown_role}]"));
-                                if ui.small_button(t.btn_copy).clicked() {
-                                    ui.ctx().copy_text(text.clone());
-                                    self.status = t.copied.into();
-                                }
-                            });
-                                if !text.is_empty() {
-                                    if role == "assistant" {
-                                        ui.push_id(("chat_md", i), |ui| {
-                                            CommonMarkViewer::new().show(
-                                                ui,
-                                                &mut self.chat_md_cache,
-                                                &text,
-                                            );
-                                        });
-                                    } else {
-                                        ui.add(egui::Label::new(&text).wrap());
+                                let kind = chat_bubble_kind(&role);
+                                let shown_role = chat_role_label(kind, &t, &role);
+                                let (_, _, role_color) =
+                                    chat_bubble_colors(kind, ui.visuals().dark_mode);
+                                chat_message_frame(ui, kind, |ui| {
+                                    ui.horizontal(|ui| {
+                                        ui.colored_label(
+                                            role_color,
+                                            egui::RichText::new(&shown_role).strong().small(),
+                                        );
+                                        if ui.small_button(t.btn_copy).clicked() {
+                                            ui.ctx().copy_text(text.clone());
+                                            self.status = t.copied.into();
+                                        }
+                                    });
+                                    if !text.is_empty() {
+                                        if role == "assistant" {
+                                            ui.push_id(("chat_md", i), |ui| {
+                                                CommonMarkViewer::new().show(
+                                                    ui,
+                                                    &mut self.chat_md_cache,
+                                                    &text,
+                                                );
+                                            });
+                                        } else {
+                                            ui.add(egui::Label::new(&text).wrap());
+                                        }
                                     }
-                                }
-                                for (j, att) in attachments.iter().enumerate() {
-                                    match att {
-                                        ChatAttachment::AgentRef {
-                                            agent_id,
-                                            title,
-                                            origin,
-                                        } => {
-                                    let info =
-                                        self.agents.iter().find(|a| a.agent_id == *agent_id);
-                                    let selected = reply_id.as_deref() == Some(agent_id.as_str());
-                                    let action = ui
-                                        .push_id(("chat_agent_card", i, j, agent_id.as_str()), |ui| {
-                                            agent_panel::chat_agent_card(
-                                                ui,
-                                                info,
-                                                agent_id.as_str(),
-                                                title.as_str(),
-                                                origin.as_str(),
-                                                selected && origin == "ask",
-                                                &t,
-                                            )
-                                        })
-                                        .inner;
-                                    match action {
-                                        agent_panel::ChatCardAction::OpenDetail => {
-                                            open_agent = Some(agent_id.clone());
-                                        }
-                                        agent_panel::ChatCardAction::TargetReply => {
-                                            target_reply = Some(agent_id.clone());
-                                        }
-                                        agent_panel::ChatCardAction::None => {}
-                                    }
-                                        }
-                                        ChatAttachment::Image { path, prompt } => {
-                                            chat_media::render_image(
-                                                ui,
-                                                &t,
-                                                path.as_str(),
-                                                prompt.as_str(),
-                                                || {
-                                                    open_studio =
-                                                        Some((prompt.clone(), path.clone()));
-                                                },
-                                            );
-                                        }
-                                        ChatAttachment::Audio { path } => {
-                                            chat_media::render_audio(ui, path.as_str());
-                                        }
-                                        ChatAttachment::TtsDraft { .. } => {
-                                            let piper: Vec<String> = self
-                                                .model_infos
-                                                .iter()
-                                                .filter(|m| m.id.contains("piper"))
-                                                .map(|m| m.id.clone())
-                                                .collect();
-                                            if chat_media::render_tts_card(
-                                                ui,
-                                                &t,
-                                                &self.cmd_tx,
-                                                &mut self.chat[i].attachments[j],
-                                                &piper,
-                                            ) {
-                                                self.status = "audio : génération…".into();
+                                    for (j, att) in attachments.iter().enumerate() {
+                                        match att {
+                                            ChatAttachment::AgentRef {
+                                                agent_id,
+                                                title,
+                                                origin,
+                                            } => {
+                                                let info = self
+                                                    .agents
+                                                    .iter()
+                                                    .find(|a| a.agent_id == *agent_id);
+                                                let selected =
+                                                    reply_id.as_deref() == Some(agent_id.as_str());
+                                                let action = ui
+                                                    .push_id(
+                                                        (
+                                                            "chat_agent_card",
+                                                            i,
+                                                            j,
+                                                            agent_id.as_str(),
+                                                        ),
+                                                        |ui| {
+                                                            agent_panel::chat_agent_card(
+                                                                ui,
+                                                                info,
+                                                                agent_id.as_str(),
+                                                                title.as_str(),
+                                                                origin.as_str(),
+                                                                selected && origin == "ask",
+                                                                &t,
+                                                            )
+                                                        },
+                                                    )
+                                                    .inner;
+                                                match action {
+                                                    agent_panel::ChatCardAction::OpenDetail => {
+                                                        open_agent = Some(agent_id.clone());
+                                                    }
+                                                    agent_panel::ChatCardAction::TargetReply => {
+                                                        target_reply = Some(agent_id.clone());
+                                                    }
+                                                    agent_panel::ChatCardAction::None => {}
+                                                }
+                                            }
+                                            ChatAttachment::Image { path, prompt } => {
+                                                chat_media::render_image(
+                                                    ui,
+                                                    &t,
+                                                    path.as_str(),
+                                                    prompt.as_str(),
+                                                    || {
+                                                        open_studio =
+                                                            Some((prompt.clone(), path.clone()));
+                                                    },
+                                                );
+                                            }
+                                            ChatAttachment::Audio { path } => {
+                                                chat_media::render_audio(ui, path.as_str());
+                                            }
+                                            ChatAttachment::TtsDraft { .. } => {
+                                                let piper: Vec<String> = self
+                                                    .model_infos
+                                                    .iter()
+                                                    .filter(|m| m.id.contains("piper"))
+                                                    .map(|m| m.id.clone())
+                                                    .collect();
+                                                if chat_media::render_tts_card(
+                                                    ui,
+                                                    &t,
+                                                    &self.cmd_tx,
+                                                    &mut self.chat[i].attachments[j],
+                                                    &piper,
+                                                ) {
+                                                    self.status = "audio : génération…".into();
+                                                }
                                             }
                                         }
                                     }
-                                }
-                                ui.separator();
+                                });
                             }
                             if let Some(id) = open_agent {
                                 self.open_agent_tab(&id);
                             }
                             if let Some((prompt, path)) = open_studio {
                                 self.image_studio.open_from_chat(&prompt, &path, None);
+                                self.image_studio.apply_history_for_path(&path);
                                 self.tab = Tab::Image;
                             }
                             if let Some(id) = target_reply {
@@ -3369,19 +3507,37 @@ impl UiApp {
                                 self.status = "réponse destinée à cet agent".into();
                             }
                             if !self.streaming.is_empty() {
-                                ui.label("[assistant]");
-                                let streaming =
-                                    agent_panel::format_streaming_preview(&self.streaming);
-                                ui.push_id("chat_md_stream", |ui| {
-                                    CommonMarkViewer::new().show(
-                                        ui,
-                                        &mut self.chat_md_cache,
-                                        &streaming,
+                                let (_, _, role_color) = chat_bubble_colors(
+                                    ChatBubbleKind::Assistant,
+                                    ui.visuals().dark_mode,
+                                );
+                                chat_message_frame(ui, ChatBubbleKind::Assistant, |ui| {
+                                    ui.colored_label(
+                                        role_color,
+                                        egui::RichText::new(t.chat_assistant).strong().small(),
                                     );
+                                    let streaming =
+                                        agent_panel::format_streaming_preview(&self.streaming);
+                                    ui.push_id("chat_md_stream", |ui| {
+                                        CommonMarkViewer::new().show(
+                                            ui,
+                                            &mut self.chat_md_cache,
+                                            &streaming,
+                                        );
+                                    });
                                 });
                             } else if self.chat_pending {
-                                ui.label("[assistant]");
-                                ui.weak("… en file / génération");
+                                let (_, _, role_color) = chat_bubble_colors(
+                                    ChatBubbleKind::Assistant,
+                                    ui.visuals().dark_mode,
+                                );
+                                chat_message_frame(ui, ChatBubbleKind::Assistant, |ui| {
+                                    ui.colored_label(
+                                        role_color,
+                                        egui::RichText::new(t.chat_assistant).strong().small(),
+                                    );
+                                    ui.weak("…");
+                                });
                             }
                         });
 
@@ -4983,6 +5139,12 @@ impl UiApp {
 
         ui.separator();
         models_page::ui_catalog_tab_bar(ui, &mut self.models_catalog_tab, &t);
+        if matches!(
+            self.models_catalog_tab,
+            models_page::ModelCatalogTab::Image | models_page::ModelCatalogTab::Audio
+        ) {
+            ui.weak(t.models_media_packs);
+        }
 
         let catalog = models_page::load_catalog_models();
         let installed_rows = models_page::load_installed_rows(&self.model_infos);

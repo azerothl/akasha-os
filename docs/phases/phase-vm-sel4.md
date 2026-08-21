@@ -31,3 +31,13 @@ mint / check / revoke run in `aos-caps::CapStore` via the
 - Full Rust PDs (`sel4-microkit`), less C glue
 - Full CBOR intents (beyond the `cap.*` subset)
 - PV.4: same image on bare metal, then `AccelDevice` (P5.3)
+
+## Internal integration versioning (Preview 0.10+)
+
+| Channel | Tag | Product |
+|---------|-----|---------|
+| Public Preview | `v0.10.0` | Tester Win/Linux zips + `latest.json` via `preview-release.yml` |
+| Internal seL4 | `sel4-pv-0.10.0` (never `v*`) | CI gate only — [`.github/workflows/sel4-vm-gate.yml`](../../.github/workflows/sel4-vm-gate.yml) |
+
+The seL4 guest is **not** in the Preview zip. Cohort testers do not run QEMU.
+Local: `.\demo\run-sel4-vm.ps1` (Windows + WSL) or `vm/sel4/run.sh` on Linux.

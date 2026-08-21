@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/aos-agent", "crates/aos-auditd", "crates/aos-capkd",
+members = ["crates/aos-agent", "crates/aos-auditd", "crates/aos-bridge", "crates/aos-capkd",
     "crates/aos-caps", "crates/aos-ipc", "crates/aos-llama", "crates/aos-model",
     "crates/aos-placement", "crates/aos-platform", "crates/aos-proto",
     "crates/aos-registry", "crates/aos-sel4-abi", "crates/aos-sel4-capkd",
@@ -17,7 +17,7 @@ exclude = [
 ]
 
 [workspace.package]
-version = "0.9.0"
+version = "0.10.0"
 edition = "2021"
 license = "AGPL-3.0-only"
 

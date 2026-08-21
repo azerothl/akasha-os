@@ -1,0 +1,58 @@
+# Internal seL4 VM gate (PV.1–PV.3). Does NOT publish Preview tester zips.
+# Trigger: push to main touching vm/sel4 or aos-sel4-*, manual, or tag sel4-pv-*.
+name: sel4-vm-gate
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "sel4-pv-*"
+    paths:
+      - "vm/sel4/**"
+      - "crates/aos-sel4-abi/**"
+      - "crates/aos-sel4-capkd/**"
+      - "crates/aos-caps/**"
+      - ".github/workflows/sel4-vm-gate.yml"
+  pull_request:
+    paths:
+      - "vm/sel4/**"
+      - "crates/aos-sel4-abi/**"
+      - "crates/aos-sel4-capkd/**"
+      - ".github/workflows/sel4-vm-gate.yml"
+
+jobs:
+  qemu-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust aarch64-unknown-none
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-none
+
+      - name: Bootstrap Microkit SDK + QEMU
+        run: |
+          chmod +x vm/sel4/bootstrap.sh vm/sel4/run.sh
+          ./vm/sel4/bootstrap.sh
+
+      - name: Build aos-sel4-capkd staticlib
+        run: |
+          cargo rustc -p aos-sel4-capkd --release --target aarch64-unknown-none \
+            --crate-type staticlib -- -C panic=abort
+
+      - name: QEMU gate (AOS_GATE_VM_PASS)
+        run: |
+          # run.sh may try --offline rebuild; lib already present
+          ./vm/sel4/run.sh
+
+      - name: Upload loader + serial log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sel4-vm-gate
+          path: |
+            vm/sel4/build/loader.img
+            vm/sel4/build/qemu.log
+          if-no-files-found: warn

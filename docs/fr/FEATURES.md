@@ -1,4 +1,4 @@
-# Fonctionnalités Preview — Akasha OS 0.9.0
+# Fonctionnalités Preview — Akasha OS 0.10.0
 
 **Langue :** [English](../FEATURES.md) | Français
 
@@ -7,7 +7,18 @@ Ce n'est **pas** l'OS bootable. Les exigences v1 sont dans
 [specs-fonctionnelles.md](specs-fonctionnelles.md) ; les gates dans
 [STATUS.md](STATUS.md).
 
-> Date : 19/08/2026 · Preview **0.9.0**
+> Date : 21/08/2026 · Preview **0.10.0**
+
+### Nouveautés 0.10.0
+
+- **E7 TPM** : la clé maître du vault préfère une enveloppe TPM hôte si dispo (Platform Crypto Win / tpm2 Linux) ; sinon keyring OS puis fichier (DPAPI/0600). Pas de scellage PCR
+- **E8 bridge live** : binaire optionnel séparé `aos-bridged` — HTTP loopback `/v1` JSON↔CBOR vers le bus (mem + secrets.list ; secrets.get/set style service). Pas dans `aos-session`
+- **E9 multi-GPU** : plumbing Placement / llama `tensor_split` ; gate P5 **skip** sur 1 GPU (STATUS honnête — hard-green = run 2 GPU)
+- **Polish Media/UX** : canvas **composition** studio, **upscale** RealESRGAN / `media.image.upscale`, expert DiT ; Wan/LTX = **expérimental** (pas requis TESTER). Pas d’img2img/inpaint first-class ; pas d’UI vidéo produit
+- **Historique image** : le studio recharge les sidecars PNG (`*.meta.json`) — prompt, prompt enrichi, composition
+- **Chat UX** : bulles user / assistant distinctes ; fil plus lisible
+- **RAG produit** : au boot, `aos-platformd` indexe `docs/FEATURES|STATUS|TESTER` (+ `fr/`) dans `product:docs` ; chaque `mem.context` ramène top-k chunks (budget plafonné) pour que l’assistant réponde aux questions UI / changelog sans coller tout le catalogue dans le prompt système
+- **seL4 interne** : tag `sel4-pv-0.10.0` + CI QEMU — hors zip testeur / `latest.json`
 
 ### Nouveautés 0.9.0
 
@@ -304,21 +315,23 @@ Piste VM seL4 (PV.1–PV.3) séparée : [phases/phase-vm-sel4.md](phases/phase-v
 
 ---
 
-## 11. Hors Preview 0.9.0
+## 11. Hors Preview 0.10.0
 
 - Image bootable / fer nu
 - macOS
 - Application automatique complète des updates (téléchargement maintenant, apply au prochain lancement)
-- Vidéo / STT / voix permanente
+- UI vidéo produit / STT / voix permanente (Wan/LTX = expérimental catalogue seulement)
 - img2img / inpaint en intent de première classe
 - APIs natives Messages/Gemini/Bedrock (Providers OpenAI-compat seulement)
 - Marketplace public de modules (catalogue local signé seulement)
 - Canaux de messagerie (Slack/Discord/etc.) dans le noyau OS
 - Comptes multi-utilisateur simultanés
-- Pipeline multi-GPU complet (P5.2 ; hôte mono-GPU)
-- Daemon HTTP sibling live / enveloppe TPM
+- Multi-GPU **hard-green** sans run 2 GPU documenté (chemin + skip 1 GPU en 0.10)
+- Scellage PCR / attestation vault
+- Merge binaire sibling / assistant-as-module
 - Webview sandboxée / UI module HTML/JS (compositor E13)
 - kinds pie/scatter/webview
-- snapshot KV llama.cpp (`llama_state_*`) — 0.9 rejoue le préfixe
+- snapshot KV llama.cpp (`llama_state_*`) — 0.9+ rejoue le préfixe
+- Guest seL4 dans le zip Preview public (`sel4-pv-*` interne seulement)
 
 Protocole cohorte : [TESTER.md](TESTER.md).

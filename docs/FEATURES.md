@@ -1,4 +1,4 @@
-# Preview features — Akasha OS 0.9.0
+# Preview features — Akasha OS 0.10.0
 
 **Language:** English | [Français](fr/FEATURES.md)
 
@@ -7,7 +7,18 @@ This is **not** the bootable OS. Target v1 requirements live in
 [functional-specs.md](functional-specs.md); phase gates in
 [STATUS.md](STATUS.md).
 
-> Date: 19/08/2026 · Preview **0.9.0**
+> Date: 21/08/2026 · Preview **0.10.0**
+
+### What's new in 0.10.0
+
+- **E7 TPM**: vault master key prefers a host TPM envelope when available (Windows Platform Crypto / Linux tpm2); still falls back to OS keyring then file (DPAPI/0600). No PCR sealing
+- **E8 live bridge**: optional separate binary `aos-bridged` — loopback HTTP `/v1` JSON↔CBOR to the intent bus (mem + secrets.list; secrets.get/set service-style only). Not inside `aos-session`
+- **E9 multi-GPU path**: Placement / llama layer `tensor_split` plumbing; P5 gate **skips** on 1-GPU hosts (honest STATUS — hard-green needs a 2-GPU run)
+- **Media/UX polish**: Image studio **composition** canvas (overlapping blocks → prompt injection), **upscale** (RealESRGAN / `media.image.upscale`), expert DiT knobs; Wan/LTX catalogue rows are **experimental** (not TESTER-required). No first-class img2img/inpaint; no product video UI
+- **Image history**: studio reloads prior PNG sidecars (`*.meta.json`) — prompt, enriched prompt, composition
+- **Chat UX**: distinct user / assistant bubbles; clearer thread roles
+- **Product RAG**: at boot, `aos-platformd` indexes `docs/FEATURES|STATUS|TESTER` (+ `fr/`) into `product:docs`; each `mem.context` retrieves top-k chunks (budget-capped) so the assistant answers UI / changelog questions without stuffing the full catalogue into the system prompt
+- **Internal seL4**: tag `sel4-pv-0.10.0` + CI QEMU gate (`AOS_GATE_VM_PASS`) — not in the tester zip / `latest.json`
 
 ### What's new in 0.9.0
 
@@ -304,21 +315,23 @@ seL4 VM track (PV.1–PV.3) is separate: see [phases/phase-vm-sel4.md](phases/ph
 
 ---
 
-## 11. Not in Preview 0.9.0
+## 11. Not in Preview 0.10.0
 
 - Bootable / bare-metal image
 - macOS
 - Fully automatic update apply (download now, apply on next launch)
-- Video generation / STT / always-on voice
+- Product video UI / STT / always-on voice (Wan/LTX catalogue rows are experimental only)
 - img2img / inpaint as a first-class intent
 - Native Messages/Gemini/Bedrock APIs (OpenAI-compat Providers only)
 - Public module marketplace (local signed catalogue only)
 - Messaging channels (Slack/Discord/etc.) in the OS core
 - Simultaneous multi-user accounts
-- Complete multi-GPU pipeline (P5.2; single-GPU hosts only)
-- Live HTTP sibling daemon / TPM hardware envelope
+- Multi-GPU **hard-green** without a documented 2-GPU run (code path + 1-GPU skip ship in 0.10)
+- PCR / measured-boot vault sealing / attestation
+- Sibling binary merge / assistant-as-module
 - Sandboxed webview / HTML/JS module UI (E13 compositor)
 - pie/scatter/webview widget kinds
-- llama.cpp KV snapshot (`llama_state_*`) — 0.9 uses prefix replay
+- llama.cpp KV snapshot (`llama_state_*`) — 0.9+ uses prefix replay
+- seL4 guest in the public Preview zip (internal `sel4-pv-*` only)
 
 Cohort protocol: [TESTER.md](TESTER.md).

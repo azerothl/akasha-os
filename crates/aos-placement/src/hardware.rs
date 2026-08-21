@@ -8,6 +8,15 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Un GPU physique (E9 / P5.2 — partition pipeline inter-GPU).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GpuDevice {
+    pub id: u32,
+    pub name: String,
+    /// VRAM totale de ce device (octets).
+    pub vram_total: u64,
+}
+
 /// Caractéristiques d'une machine hôte.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HardwareProfile {
@@ -34,13 +43,43 @@ pub struct HardwareProfile {
     // FLOPs de prefill (FP16/INT8 effectifs selon backend)
     pub gpu_flops: f64,
     pub cpu_flops: f64,
+
+    /// Inventaire multi-GPU (E9). Vide ⇒ pool unique via [`Self::vram_total`].
+    #[serde(default)]
+    pub gpus: Vec<GpuDevice>,
 }
 
 impl HardwareProfile {
+    /// Nombre de GPU utilisables pour le placement (0 = CPU-only).
+    pub fn n_gpus(&self) -> usize {
+        if !self.has_gpu {
+            return 0;
+        }
+        if self.gpus.is_empty() {
+            if self.vram_total > 0 {
+                1
+            } else {
+                0
+            }
+        } else {
+            self.gpus.len()
+        }
+    }
+
+    /// VRAM agrégée (somme des devices si présents, sinon `vram_total`).
+    pub fn vram_total_effective(&self) -> u64 {
+        if self.gpus.is_empty() {
+            self.vram_total
+        } else {
+            self.gpus.iter().map(|g| g.vram_total).sum()
+        }
+    }
+
     /// Budget VRAM allouable au placement.
     pub fn vram_budget(&self) -> u64 {
         if self.has_gpu {
-            self.vram_total.saturating_sub(self.os_reserve_vram)
+            self.vram_total_effective()
+                .saturating_sub(self.os_reserve_vram)
         } else {
             0
         }
@@ -78,6 +117,7 @@ impl HardwareProfile {
             host_to_device_bw: 25e9,
             gpu_flops: 20e12,
             cpu_flops: 0.8e12,
+            gpus: vec![],
         }
     }
 
@@ -98,6 +138,7 @@ impl HardwareProfile {
             host_to_device_bw: 0.0,
             gpu_flops: 0.0,
             cpu_flops: 0.5e12,
+            gpus: vec![],
         }
     }
 
@@ -118,6 +159,28 @@ impl HardwareProfile {
             host_to_device_bw: 25e9,
             gpu_flops: 60e12,
             cpu_flops: 1.5e12,
+            gpus: vec![],
         }
+    }
+
+    /// Profil dual-GPU pour tests de partition pipeline (E9).
+    pub fn dual_gpu_8g() -> Self {
+        const GIB: u64 = 1 << 30;
+        let mut hw = Self::reference_v1();
+        hw.name = "dual-gpu-8g".into();
+        hw.vram_total = 16 * GIB;
+        hw.gpus = vec![
+            GpuDevice {
+                id: 0,
+                name: "gpu0".into(),
+                vram_total: 8 * GIB,
+            },
+            GpuDevice {
+                id: 1,
+                name: "gpu1".into(),
+                vram_total: 8 * GIB,
+            },
+        ];
+        hw
     }
 }

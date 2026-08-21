@@ -1136,7 +1136,7 @@ pub struct MemRememberResponse {
 ///
 /// Base pour le PromptCompiler agentic ; les agents reçoivent en plus
 /// goal, skills, catalogue d'outils et protocole d'actions JSON.
-pub const SYSTEM_ASSISTANT_PROMPT: &str = "Tu es l'assistant système d'Akasha OS, un système d'exploitation agent-natif.
+pub const SYSTEM_ASSISTANT_PROMPT: &str = "Tu es l'assistant système d'Akasha OS Preview — une application hôte Windows/Linux agent-native (pas encore un OS bootable).
 
 Architecture (services userspace reliés par un bus IPC sémantique CBOR) :
 - aos-busd : broker du bus (intents typés, streams, découverte de services) ;
@@ -1152,13 +1152,19 @@ N'écris jamais un manifeste, handlers.yaml, ni un arbre declarative_ui « pour 
 
 Tu agis via des actions JSON structurées (ou la convention TOOL: pour compat). Tu n'inventes pas d'outils absents du catalogue. Tu respectes les capacités (caps) et les confirmations bloquantes.
 
-Tu réponds en français, de façon concise et factuelle. Si tu ne sais pas, dis-le honnêtement.";
+Tu réponds en français, de façon concise et factuelle. Pour les questions sur l'UI, les nouveautés ou « ce qui a changé », utilise les extraits « Documentation produit (RAG) » et le micro-brief injectés — ne dis jamais que tu n'as pas accès au changelog ou à la doc produit. Si un point n'y figure pas, dis-le clairement.";
+
+/// Micro-brief produit (pas le changelog) — le détail vient du RAG `product:docs`.
+pub const PREVIEW_SURFACE_BRIEF: &str = "\
+## Surface produit — Akasha OS Preview (hôte Windows/Linux)
+Onglets : Chat, Mémoire, Notes, Tâches, Agents, Modèles, Caps, Audit, Providers, Image (studio), Settings, Réseau (opt-in).
+Ce n'est pas un OS bootable. Les détails / nouveautés viennent des extraits RAG (FEATURES, STATUS, TESTER) injectés dans le tour — pas d'invention hors de ces sources.";
 
 /// Addendum injecté uniquement dans le chemin chat (pas les workers).
 /// Délégation des tâches complexes via `agent.spawn` sans boucle d'outils.
 pub const CHAT_DELEGATION_PROMPT: &str = "
 Chat (cette session) — tu n'as PAS de boucle d'outils :
-- Questions, explications, conseils → réponds en français, sans JSON.
+- Questions, explications, conseils (y compris « quoi de neuf » / UI) → réponds en français, sans JSON, en t'appuyant sur le brief + extraits RAG produit s'ils sont présents.
 - Synthèse vocale / TTS / « générer un audio » : n'appelle PAS agent.spawn.
   Le hôte ouvre une carte TTS (`/speak <texte>`). Réponds en français, sans JSON.
 - Image : `/image <prompt>` ou le studio Image — pas d'agent.spawn.
@@ -2215,12 +2221,18 @@ pub struct MemContextRequest {
     pub query: String,
     #[serde(default = "default_k")]
     pub k: usize,
+    /// Top-k product-doc RAG hits (`product:docs`). 0 = default (4).
+    #[serde(default)]
+    pub product_k: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MemContextResponse {
     pub session_hits: Vec<MemHit>,
     pub user_hits: Vec<MemHit>,
+    /// Extraíts docs Preview (FEATURES / STATUS / TESTER).
+    #[serde(default)]
+    pub product_hits: Vec<MemHit>,
     pub prompt_block: String,
 }
 

@@ -114,6 +114,7 @@ impl PlacementManager {
                 kind,
                 size_bytes: size,
                 residency: tier,
+                device: None,
                 pin_count: 0,
                 last_use_tick: 0,
                 priority_boost: 0,
@@ -190,13 +191,16 @@ impl PlacementManager {
 
         // Tri par index de couche pour un ordre de forward cohérent.
         shards.sort_by_key(|s| s.shard_id);
-        let plan = PlacementPlan {
+        let mut plan = PlacementPlan {
             model_id: model.id.clone(),
             profile: effective_profile,
             shards,
             prefetch_window: 2,
             kv_tokens: kv_tokens_eff,
+            tensor_split: vec![],
+            main_gpu: 0,
         };
+        self.apply_multi_gpu_partition(&mut plan);
 
         // --- validate_plan (§3.5.3) : seuil critique de tok/s. ---
         let est = self.estimate(&plan, model, 256, kv_tokens_eff);
@@ -291,17 +295,85 @@ impl PlacementManager {
             kind: ShardKind::MediaWeights,
             size_bytes: size,
             residency: tier,
+            device: if tier == Tier::Vram { Some(0) } else { None },
             pin_count: 0,
             last_use_tick: 0,
             priority_boost: 0,
         };
-        Ok(PlacementPlan {
+        let mut plan = PlacementPlan {
             model_id: model.id.clone(),
             profile: effective_profile,
             shards: vec![shard],
             prefetch_window: 0,
             kv_tokens: 0,
-        })
+            tensor_split: vec![],
+            main_gpu: 0,
+        };
+        self.apply_multi_gpu_partition(&mut plan);
+        Ok(plan)
+    }
+
+    /// Partition pipeline inter-GPU (§3.5.7) : fractions `tensor_split` +
+    /// `device` sur les shards VRAM (couches contiguës par capacité).
+    fn apply_multi_gpu_partition(&self, plan: &mut PlacementPlan) {
+        let n = self.hw.n_gpus();
+        if n <= 1 {
+            plan.tensor_split.clear();
+            plan.main_gpu = 0;
+            for s in &mut plan.shards {
+                if s.residency == Tier::Vram {
+                    s.device = Some(0);
+                }
+            }
+            return;
+        }
+
+        let caps: Vec<f32> = if self.hw.gpus.len() >= n {
+            self.hw.gpus[..n]
+                .iter()
+                .map(|g| g.vram_total.max(1) as f32)
+                .collect()
+        } else {
+            vec![1.0; n]
+        };
+        let sum: f32 = caps.iter().sum::<f32>().max(1.0);
+        plan.tensor_split = caps.iter().map(|c| c / sum).collect();
+        plan.main_gpu = 0;
+
+        let mut layer_idxs: Vec<usize> = plan
+            .shards
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| {
+                matches!(s.kind, ShardKind::Layer(_)) && s.residency == Tier::Vram
+            })
+            .map(|(i, _)| i)
+            .collect();
+        layer_idxs.sort_by_key(|&i| match plan.shards[i].kind {
+            ShardKind::Layer(idx) => idx,
+            _ => 0,
+        });
+
+        let n_layers = layer_idxs.len();
+        let mut start = 0usize;
+        let mut cum = 0.0f32;
+        for (gi, frac) in plan.tensor_split.iter().enumerate() {
+            cum += frac;
+            let end = if gi + 1 == n {
+                n_layers
+            } else {
+                ((cum * n_layers as f32).round() as usize).clamp(start, n_layers)
+            };
+            for &si in &layer_idxs[start..end] {
+                plan.shards[si].device = Some(gi as u32);
+            }
+            start = end;
+        }
+        for s in &mut plan.shards {
+            if s.residency == Tier::Vram && s.device.is_none() {
+                s.device = Some(0);
+            }
+        }
     }
 
     /// Estimation de performance d'un plan (raccourci vers le modèle de coût).
@@ -472,5 +544,44 @@ mod tests {
             .unwrap();
         assert_eq!(plan.shards[0].kind, ShardKind::MediaWeights);
         assert_ne!(plan.shards[0].residency, Tier::Vram);
+    }
+
+    #[test]
+    fn multi_gpu_partitionne_tensor_split_et_devices() {
+        let pm = PlacementManager::new(HardwareProfile::dual_gpu_8g(), CostModel::default());
+        assert_eq!(pm.hw.n_gpus(), 2);
+        let m = model_3b();
+        let plan = pm
+            .place_model(&m, PlacementProfile::Latency, Priority::Interactive, 2048)
+            .unwrap();
+        assert_eq!(plan.tensor_split.len(), 2);
+        let sum: f32 = plan.tensor_split.iter().sum();
+        assert!((sum - 1.0).abs() < 1e-3, "split={:?}", plan.tensor_split);
+        let vram_layers: Vec<_> = plan
+            .shards
+            .iter()
+            .filter(|s| matches!(s.kind, ShardKind::Layer(_)) && s.residency == Tier::Vram)
+            .collect();
+        assert!(!vram_layers.is_empty());
+        let devices: std::collections::BTreeSet<_> =
+            vram_layers.iter().filter_map(|s| s.device).collect();
+        assert!(
+            devices.len() >= 2,
+            "attendu ≥2 GPU sur couches VRAM, devices={devices:?}"
+        );
+    }
+
+    #[test]
+    fn single_gpu_laisse_tensor_split_vide() {
+        let plan = pm()
+            .place_model(
+                &model_3b(),
+                PlacementProfile::Latency,
+                Priority::Interactive,
+                2048,
+            )
+            .unwrap();
+        assert!(plan.tensor_split.is_empty());
+        assert_eq!(plan.main_gpu, 0);
     }
 }

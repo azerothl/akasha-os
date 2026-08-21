@@ -6,7 +6,7 @@
     <title>What's new — Akasha OS Preview</title>
     <meta
       name="description"
-      content="What each Akasha OS Preview version added, from 0.9.0 back to 0.1.0. Host app on Windows/Linux, not a bootable OS."
+      content="What each Akasha OS Preview version added, from 0.10.0 back to 0.1.0. Host app on Windows/Linux, not a bootable OS."
     />
     <link rel="stylesheet" href="../styles.css" />
     <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
@@ -19,8 +19,8 @@
     <!--
       THESIS: The version log is a cut-face journal of what shipped, not a feature card grid and not a marketing changelog.
       OWN-WORLD: Orrery inner plate — void, cyan rails, grant gutters.
-      STORY: A tester sees what 0.9.0 added, then walks earlier Previews without leaving the site.
-      FIRST VIEWPORT: Honesty line, compact version rail, then 0.9.0 ticks.
+      STORY: A tester sees what 0.10.0 added, then walks earlier Previews without leaving the site.
+      FIRST VIEWPORT: Honesty line, compact version rail, then 0.10.0 ticks.
       FORM: Orrery inner plate, seed c1699dbf reroll 1.
       FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
     -->
@@ -50,12 +50,12 @@
           <span data-lang="en">
             What each Preview added, newest first. This is the version log,
             not the full feature catalogue. Preview
-            <span data-aos-version>0.9.0</span> is a host app, not a bootable OS.
+            <span data-aos-version>0.10.0</span> is a host app, not a bootable OS.
           </span>
           <span data-lang="fr">
             Ce que chaque Preview a ajouté, plus récent en premier. C’est le
             journal des versions, pas le catalogue complet. La Preview
-            <span data-aos-version>0.9.0</span> est une appli hôte, pas un OS
+            <span data-aos-version>0.10.0</span> est une appli hôte, pas un OS
             bootable.
           </span>
         </h1>
@@ -69,6 +69,7 @@
         </p>
 
         <nav class="log-toc" aria-label="Versions">
+          <a href="#v0-10-0">0.10.0</a>
           <a href="#v0-9-0">0.9.0</a>
           <a href="#v0-8-0">0.8.0</a>
           <a href="#v0-7-0">0.7.0</a>
@@ -81,6 +82,38 @@
           <a href="#v0-1-1">0.1.1</a>
           <a href="#v0-1-0">0.1.0</a>
         </nav>
+
+        <article class="grant" id="v0-10-0">
+          <h2>0.10.0</h2>
+          <p class="rev-when">21/08/2026</p>
+          <p class="hist" data-lang="en">
+            Horizon B closes on the host: TPM vault envelope, a live sibling
+            HTTP bridge, multi-GPU plumbing, Image studio depth, and a product
+            RAG path so the assistant can answer “what’s new / UI” from shipped
+            docs. An internal seL4 CI tag stays out of the tester zip.
+          </p>
+          <p class="hist" data-lang="fr">
+            Horizon B se ferme sur l’hôte : enveloppe vault TPM, bridge HTTP
+            sibling live, plumbing multi-GPU, profondeur du studio Image, et
+            un RAG produit pour que l’assistant réponde aux questions « quoi
+            de neuf / UI » depuis la doc livrée. Un tag CI seL4 interne reste
+            hors du zip testeur.
+          </p>
+          <ul class="ticks">
+            <li data-lang="en"><strong>E7 TPM</strong>: vault master prefers a host TPM envelope when available; still falls back to OS keyring then file. No PCR sealing.</li>
+            <li data-lang="fr"><strong>E7 TPM</strong> : la clé maître préfère une enveloppe TPM hôte si dispo ; sinon keyring OS puis fichier. Pas de scellage PCR.</li>
+            <li data-lang="en"><strong>E8 aos-bridged</strong>: optional loopback HTTP↔bus adapter (mem + secrets); not started by aos-session.</li>
+            <li data-lang="fr"><strong>E8 aos-bridged</strong> : adaptateur HTTP↔bus loopback optionnel (mem + secrets) ; pas démarré par aos-session.</li>
+            <li data-lang="en"><strong>E9</strong>: multi-GPU tensor_split path; P5 gate SKIPs on single-GPU hosts until a documented 2-GPU run.</li>
+            <li data-lang="fr"><strong>E9</strong> : chemin multi-GPU tensor_split ; gate P5 en SKIP sur mono-GPU jusqu’à un run 2 GPU documenté.</li>
+            <li data-lang="en">Image studio <strong>composition</strong>, <strong>upscale</strong>, and <strong>history</strong> (reload prompt / composition from PNG sidecars). Wan/LTX stay experimental.</li>
+            <li data-lang="fr">Studio Image <strong>composition</strong>, <strong>upscale</strong> et <strong>historique</strong> (recharge prompt / composition depuis les sidecars PNG). Wan/LTX restent expérimentaux.</li>
+            <li data-lang="en"><strong>Chat</strong>: distinct user / assistant bubbles.</li>
+            <li data-lang="fr"><strong>Chat</strong> : bulles user / assistant distinctes.</li>
+            <li data-lang="en"><strong>Product RAG</strong>: FEATURES / STATUS / TESTER indexed at boot; <code>mem.context</code> injects top-k chunks for product questions (no full-catalogue stuffing).</li>
+            <li data-lang="fr"><strong>RAG produit</strong> : FEATURES / STATUS / TESTER indexés au boot ; <code>mem.context</code> injecte le top-k pour les questions produit (sans coller tout le catalogue).</li>
+          </ul>
+        </article>
 
         <article class="grant" id="v0-9-0">
           <h2>0.9.0</h2>

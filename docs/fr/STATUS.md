@@ -7,11 +7,24 @@ Résumé des phases livrées. Détail : [plan-developpement-phases.md](plan-deve
 
 **En-tête :** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview :** 0.9.0 (19/08/2026) — migrate CPU↔GPU en milieu de token sans
-abort du stream (E18) ; options `media.*` fermées, packs Flux2/Ideogram4/Piper
-extra, studio Image + carte TTS (E19). Pas un OS bootable. Gate cohorte encore
-ouverte. **Suite :** reste Horizon B (TPM E7 complet, adaptateur HTTP live si
-planifié, multi-GPU E9) + clôture cohorte PC.
+**Preview :** 0.10.0 (20/08/2026) — reste Horizon B : enveloppe vault E7 TPM,
+bridge HTTP sibling E8 live, chemin multi-GPU E9, polish Media/UX ; tag
+interne seL4 `sel4-pv-0.10.0` (hors zip testeur). Pas un OS bootable. Gate
+cohorte encore ouverte. **Suite après 0.10 :** fermeture cohorte PC ;
+Horizon C / PV.4+ quand planifié.
+
+## P10 — Preview 0.10.0 (E7 TPM + E8 live + E9 + Media + seL4 interne) — fait
+
+| # | Évolution | État |
+|---|-----------|------|
+| P10.1–P10.4 | E7 TPM enveloppe clé maître | fait |
+| P10.5–P10.8 | E8 `aos-bridged` adaptateur live minimal | fait |
+| P10.9–P10.11 | E9 chemin multi-GPU + skip 1 GPU | fait |
+| P10.12–P10.14 | Polish Media/UX (studio + hygiene) | fait |
+| P10.S1–P10.S3 | CI seL4 interne / `sel4-pv-0.10.0` | fait |
+| P10.15–P10.16 | Docs / packaging / version 0.10.0 | fait |
+
+Détail : [phases/phase-preview-10.md](phases/phase-preview-10.md).
 
 ## P09 — Preview 0.9.0 (E18 + E19) — fait
 

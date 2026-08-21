@@ -64,7 +64,7 @@ E14 shipped in Preview **0.5.0** — [phase-preview-05.md](phases/phase-preview-
 E8 schema export + HTTP↔bus contract, E7 OS keyring, E10 signed local catalogue shipped in Preview **0.6.0** — [phase-preview-06.md](phases/phase-preview-06.md).  
 **E15** (host-rendered declarative module UI) shipped in Preview **0.7.0** — [phase-preview-07.md](phases/phase-preview-07.md).  
 **E16 + E17 + E15 widget pack + F-MDL-04 Providers** shipped in Preview **0.8.0** — [phase-preview-08.md](phases/phase-preview-08.md).  
-**Next Preview:** remaining Horizon B (full E7 TPM, live HTTP adapter if scheduled, E9 multi-GPU) + PC cohort close. **E18 + E19** shipped in Preview **0.9.0**.
+**E18 + E19** shipped in Preview **0.9.0**. **Next Preview 0.10.0 (P10):** remaining Horizon B (full E7 TPM, live HTTP adapter, E9 multi-GPU) + Media/UX polish + internal seL4 gate (`sel4-pv-0.10.0`). PC cohort close remains after 0.10.
 
 **Out of near-term scope:** native Telegram/Discord, public marketplace, desktop computer-use, `sandboxed_webview`.
 
@@ -75,9 +75,9 @@ E8 schema export + HTTP↔bus contract, E7 OS keyring, E10 signed local catalogu
 | ID | Evolution | Motivation | Notes |
 |----|-----------|------------|-------|
 | **E6** | **Typed memory graph** (`similar` / `updates` / …) + richer bootstrap | Sibling already rich; Hermes LT; A-MEM | **Shipped 0.4.0** — conceptual borrow of sibling `memory_relations`, not a code merge |
-| **E7** | **Secrets vault** (OS keyring + usage caps; never raw keys to agents) | Sibling vault; F-SEC-04 | **E7-lite 0.4.0** (`vault.enc` + DPAPI/0600); **E7-keyring 0.6.0** (CredMan / Secret Service, file 0600 fallback); full TPM later |
-| **E8** | **Sibling bridge** (documented + minimal): aligned intent / memory / WASM ABI schemas; later optional “Akasha assistant as module” | Landscape risk (d) duplication | **Docs 0.4.0** — [sibling-bridge.md](sibling-bridge.md); **schema export + HTTP↔bus contract 0.6.0**; **not** one binary |
-| **E9** | **P5.2 multi-GPU** when hardware is available | Partial P5 gate | [phases/phase-p5.md](phases/phase-p5.md) |
+| **E7** | **Secrets vault** (OS keyring + usage caps; never raw keys to agents) | Sibling vault; F-SEC-04 | **E7-lite 0.4.0** (`vault.enc` + DPAPI/0600); **E7-keyring 0.6.0** (CredMan / Secret Service, file 0600 fallback); **E7 TPM envelope Preview 0.10.0** (host Win/Linux; no PCR) |
+| **E8** | **Sibling bridge** (documented + minimal): aligned intent / memory / WASM ABI schemas; later optional “Akasha assistant as module” | Landscape risk (d) duplication | **Docs 0.4.0** — [sibling-bridge.md](sibling-bridge.md); **schema export + HTTP↔bus contract 0.6.0**; **live `aos-bridged` Preview 0.10.0**; **not** one binary |
+| **E9** | **P5.2 multi-GPU** when hardware is available | Partial P5 gate | [phases/phase-p5.md](phases/phase-p5.md); **code path + skip-if-1-GPU in Preview 0.10.0** |
 | **E10** | **Local MCP / module marketplace** (signed catalogue, cap review) | ClawHub-shaped distribution without becoming ClawHub | **E10-lite 0.4.0** — cap review on install + MCP example; **signed local catalogue 0.6.0**; no network store |
 | **E14** | **Auto fact extraction from chat → long-term memory** | Chat today only *reads* `mem.context`; facts must be Remember’d by hand | **Shipped 0.5.0** — opt-in Settings; post-turn LLM extract → `mem.user.remember` + dedup/`supersedes`; never auto-store secrets |
 | **E15** | **Host-rendered declarative module UI** (closed widget tree in egui; no webview) | Dual-surface is a contract today; Notes/Tasks are hardcoded; agent-created modules have no human surface | **Preview 0.7.0** ✅ — [phase-preview-07.md](phases/phase-preview-07.md); **0.8.0 P08.11** expands the closed list (typed `form`, `select`/`radio`/`checkbox`/`textarea`, `bar_chart`, `image`/`audio`); still **not** HTML/JS; **not** E13 |
@@ -118,7 +118,7 @@ E8 schema export + HTTP↔bus contract, E7 OS keyring, E10 signed local catalogu
 | **P0–P5 / PV / PC** | Executable phase gates ([development-plan.md](development-plan.md), [STATUS.md](STATUS.md)) |
 | **E1–E19** | Prioritization after competitive analysis; Preview increments P03–P09 ship E* without waiting for the PC cohort gate |
 
-Do **not** invent a P6 number until PC is closed and STATUS is updated. E1–E5 shipped in Preview **0.3.0**; E6 / E7-lite / E10-lite shipped in Preview **0.4.0**; **E14** shipped in Preview **0.5.0**; E8 schemas + E7-keyring + E10 catalogue shipped in Preview **0.6.0**; **E15** declarative module UI host shipped in Preview **0.7.0**. **E16 + E17 + E15 widget pack + F-MDL-04 Providers** shipped in Preview **0.8.0**. **E18 + E19** shipped in Preview **0.9.0**. Then remaining Horizon B (full E7 TPM, live HTTP adapter if a daemon is scheduled, E9 multi-GPU when HW available) + PC cohort close.
+Do **not** invent a P6 number until PC is closed and STATUS is updated. E1–E5 shipped in Preview **0.3.0**; E6 / E7-lite / E10-lite shipped in Preview **0.4.0**; **E14** shipped in Preview **0.5.0**; E8 schemas + E7-keyring + E10 catalogue shipped in Preview **0.6.0**; **E15** declarative module UI host shipped in Preview **0.7.0**. **E16 + E17 + E15 widget pack + F-MDL-04 Providers** shipped in Preview **0.8.0**. **E18 + E19** shipped in Preview **0.9.0**. **E7 TPM + E8 live + E9 path + Media polish** ship in Preview **0.10.0** (P10). Then PC cohort close + Horizon C / PV.4+ when scheduled.
 
 Suggested sequencing once PC closes (historical; Preview increments already
 ran this on the host as P03–P07, then E16+E17 as P08):

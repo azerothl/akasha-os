@@ -324,6 +324,7 @@ async fn handle_cmd(
             auto_remember,
             max_steps,
             routing,
+            language,
         } => {
             let _ = evt_tx.send(Evt::Status(
                 "assistant : génération en cours…".into(),
@@ -348,6 +349,7 @@ async fn handle_cmd(
                         session_id: Some(session_id.clone()),
                         query: user_text.clone(),
                         k: 5,
+                        product_k: 4,
                     },
                     vec![],
                 )
@@ -356,8 +358,14 @@ async fn handle_cmd(
                 .map(|r| r.prompt_block)
                 .unwrap_or_default();
 
+            let version = std::env::var("AOS_PREVIEW_VERSION")
+                .unwrap_or_else(|_| env!("CARGO_PKG_VERSION").to_string());
+            let product = crate::product_context::chat_product_context(&version, &language);
+
             let mut system = SYSTEM_ASSISTANT_PROMPT.to_string();
             system.push_str(CHAT_DELEGATION_PROMPT);
+            system.push_str("\n\n");
+            system.push_str(&product);
             if !mem_block.trim().is_empty() {
                 system.push_str("\n\n");
                 system.push_str(&mem_block);
@@ -374,7 +382,7 @@ async fn handle_cmd(
                 model_id: model_id.clone(),
                 messages,
                 params: InferParams {
-                    max_tokens: 512,
+                    max_tokens: 1024,
                     ..Default::default()
                 },
                 priority: 8,
@@ -2152,6 +2160,18 @@ async fn handle_cmd(
             let _ = std::fs::remove_file(image_gen_progress_path());
             match result {
                 Ok(Ok(r)) => {
+                    let gen_prompt = generation_prompt_sent.clone();
+                    let meta = crate::image_history::ImageGenMeta::new(
+                        r.path.clone(),
+                        original_prompt.clone(),
+                        gen_prompt.clone(),
+                        composition_blocks.clone(),
+                        r.model_id.clone(),
+                        r.engine.clone(),
+                    );
+                    if let Err(e) = crate::image_history::write_image_meta(&meta) {
+                        eprintln!("image meta write failed: {e}");
+                    }
                     push_evt(
                         &evt_tx,
                         &egui_ctx,
@@ -2161,7 +2181,9 @@ async fn handle_cmd(
                             bytes: r.bytes,
                             engine: r.engine,
                             prompt: original_prompt,
-                            generation_prompt: generation_prompt_sent,
+                            generation_prompt: gen_prompt,
+                            composition_blocks,
+                            model_id: r.model_id,
                         },
                     );
                 }
@@ -2237,6 +2259,11 @@ async fn handle_cmd(
             ticker.abort();
             match result {
                 Ok(r) => {
+                    let _ = crate::image_history::clone_meta_for_new_path(
+                        &source_path,
+                        &r.path,
+                        &r.engine,
+                    );
                     push_evt(
                         &evt_tx,
                         &egui_ctx,
@@ -2247,6 +2274,8 @@ async fn handle_cmd(
                             engine: r.engine,
                             prompt: String::new(),
                             generation_prompt: None,
+                            composition_blocks: Vec::new(),
+                            model_id: r.model_id,
                         },
                     );
                 }
@@ -2288,6 +2317,8 @@ async fn handle_cmd(
                         engine: r.engine,
                         prompt: String::new(),
                         generation_prompt: None,
+                        composition_blocks: Vec::new(),
+                        model_id: r.model_id,
                     });
                 }
                 Err(e) => {

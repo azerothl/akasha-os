@@ -7,11 +7,24 @@ Summary of delivered phases. Detail: [development-plan.md](development-plan.md),
 
 **Headline:** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview:** 0.9.0 (19/08/2026) — mid-token CPU↔GPU migrate without aborting
-the live stream (E18); closed `media.*` options, extra Flux2/Ideogram4/Piper
-packs, Image studio + in-chat TTS card (E19). Not a bootable OS. Cohort gate
-still open. **Next:** remaining Horizon B (full E7 TPM, live HTTP adapter if
-scheduled, E9 multi-GPU) + PC cohort close.
+**Preview:** 0.10.0 (20/08/2026) — Horizon B remainder: E7 TPM vault envelope,
+E8 live sibling HTTP bridge (`aos-bridged`), E9 multi-GPU path (1-GPU skip),
+Media/UX polish; internal seL4 gate tag `sel4-pv-0.10.0` (not in tester zip).
+Not a bootable OS. Cohort gate still open. **Next:** PC cohort close; Horizon C /
+PV.4+ when scheduled; E9 hard-green after a documented 2-GPU run.
+
+## P10 — Preview 0.10.0 (E7 TPM + E8 live + E9 + Media + seL4 internal) — done
+
+| # | Evolution | Status |
+|---|-----------|--------|
+| P10.1–P10.4 | E7 TPM master-key envelope | done |
+| P10.5–P10.8 | E8 `aos-bridged` minimal live adapter | done |
+| P10.9–P10.11 | E9 multi-GPU path + honest 1-GPU skip | done |
+| P10.12–P10.14 | Media/UX polish (studio depth + hygiene) | done |
+| P10.S1–P10.S3 | Internal seL4 CI / `sel4-pv-0.10.0` | done |
+| P10.15–P10.16 | Docs / packaging / version 0.10.0 | done |
+
+Detail: [phases/phase-preview-10.md](phases/phase-preview-10.md).
 
 ## P09 — Preview 0.9.0 (E18 + E19) — done
 

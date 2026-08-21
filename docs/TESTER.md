@@ -264,6 +264,18 @@ GitHub feedback submit).
 - `/image` must use that pack/size. An unknown option key on the intent is refused (audit `media.options.refuse`).
 - Image studio tab: set sampler / negative / catalogue LoRA-VAE if extras exist → Generate.
 
+### 24. Image studio depth (0.10.0 / Media polish)
+
+- Image studio: add overlapping **composition** blocks on the aspect canvas; Generate injects layout/JSON into the prompt (no first-class img2img).
+- Optional: Download a RealESRGAN / upscale pack → enable **Upscale** on a preview PNG (`media.image.upscale`).
+- Expert mode (DiT / advanced knobs) is optional; Wan/LTX rows are **experimental** — not required for cohort pass.
+- Models Image/Audio tabs show the optional media-packs blurb.
+
+### 25. Vault TPM + sibling bridge (0.10.0 / E7–E8)
+
+- Settings / secrets: after restart, `var/secrets/master.backend` may read `tpm` when a TPM is present; otherwise `keyring` or `file` (unchanged).
+- Optional: start `aos-bridged` (loopback only) against a running session; `GET`/`POST` health + `mem.context` succeed; agent-style `X-Aos-From` on `secrets.get` returns 403.
+
 ### 23. One-liner install (0.8.0 / P08.9)
 
 - Windows: `irm https://azerothl.github.io/akasha-os/install.ps1 | iex`

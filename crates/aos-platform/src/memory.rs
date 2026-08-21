@@ -166,6 +166,10 @@ impl MemoryStore {
         Ok(store)
     }
 
+    pub fn dir(&self) -> &Path {
+        &self.dir
+    }
+
     fn journal_path(&self) -> PathBuf {
         self.dir.join("episodic.jsonl")
     }

@@ -820,9 +820,52 @@ impl ImageStudioState {
         if let Some(json) = generation_prompt.filter(|s| !s.is_empty()) {
             self.enriched_prompt = format_enriched_display(json);
             self.show_enriched_prompt = true;
+            self.use_edited_enriched = true;
         }
         self.preview = Some(path.to_string());
         self.refresh_catalog();
+    }
+
+    /// Restore prompt / enriched / composition from a sidecar next to `path`.
+    pub fn apply_history_for_path(&mut self, path: &str) {
+        if let Some(meta) = crate::image_history::load_image_meta(path) {
+            self.apply_history(&meta);
+        }
+    }
+
+    pub fn apply_history(&mut self, meta: &crate::image_history::ImageGenMeta) {
+        if !meta.prompt.is_empty() {
+            self.prompt = meta.prompt.clone();
+        }
+        if let Some(gen) = meta
+            .generation_prompt
+            .as_deref()
+            .filter(|s| !s.is_empty())
+        {
+            self.enriched_prompt = format_enriched_display(gen);
+            self.show_enriched_prompt = true;
+            self.use_edited_enriched = true;
+        } else if meta.generation_prompt.is_none() {
+            // Keep existing enriched text only if we already had one for this preview.
+        }
+        self.set_composition_blocks(meta.composition_blocks.clone());
+        if !meta.model_id.is_empty() {
+            self.model_id = meta.model_id.clone();
+        }
+        self.preview = Some(meta.path.clone());
+        self.refresh_catalog();
+    }
+
+    pub fn set_composition_blocks(
+        &mut self,
+        blocks: Vec<crate::image_composition::CompositionBlock>,
+    ) {
+        self.composition_next_id = blocks.iter().map(|b| b.id).max().unwrap_or(0).saturating_add(1);
+        if self.composition_next_id == 0 {
+            self.composition_next_id = 1;
+        }
+        self.composition_selected = blocks.last().map(|b| b.id);
+        self.composition_blocks = blocks;
     }
 
     pub fn set_enriched_prompt(&mut self, enriched: &str) {
@@ -993,6 +1036,7 @@ impl ImageStudioState {
                                         });
                                     });
                                 }
+                                ui_image_history(ui, t, self);
                             });
                         });
                 },
@@ -1543,6 +1587,52 @@ fn ui_image_preview(
             on_upscale();
         }
     });
+}
+
+fn ui_image_history(ui: &mut egui::Ui, t: &UiStrings, studio: &mut ImageStudioState) {
+    ui.separator();
+    egui::CollapsingHeader::new(t.studio_history_heading)
+        .default_open(false)
+        .show(ui, |ui| {
+            ui.weak(t.studio_history_hint);
+            let entries = crate::image_history::list_image_history(40);
+            if entries.is_empty() {
+                ui.weak(t.studio_history_empty);
+                return;
+            }
+            for meta in &entries {
+                let selected = studio.preview.as_deref() == Some(meta.path.as_str());
+                let label = meta.truncated_prompt(72);
+                let has_comp = !meta.composition_blocks.is_empty();
+                let has_enriched = meta
+                    .generation_prompt
+                    .as_deref()
+                    .is_some_and(|s| !s.is_empty());
+                let badges = match (has_enriched, has_comp) {
+                    (true, true) => format!(" · {} · {}", t.studio_history_badge_enriched, t.studio_history_badge_composition),
+                    (true, false) => format!(" · {}", t.studio_history_badge_enriched),
+                    (false, true) => format!(" · {}", t.studio_history_badge_composition),
+                    (false, false) => String::new(),
+                };
+                ui.horizontal(|ui| {
+                    if let Some(tex) = decl_ui::try_load_png(ui.ctx(), &meta.path) {
+                        ui.add(
+                            egui::Image::new(&tex)
+                                .fit_to_exact_size(egui::vec2(40.0, 40.0))
+                                .maintain_aspect_ratio(true),
+                        );
+                    }
+                    let text = format!("{label}{badges}");
+                    if ui
+                        .selectable_label(selected, text)
+                        .on_hover_text(&meta.path)
+                        .clicked()
+                    {
+                        studio.apply_history(meta);
+                    }
+                });
+            }
+        });
 }
 
 fn combo_image_pack(

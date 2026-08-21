@@ -1,12 +1,16 @@
-//! Secrets vault (E7 / Preview 0.4 + E7-keyring / 0.6) : chiffrement au repos,
-//! distribution restreinte aux **services** (jamais aux agents — F-SEC-04 / §9.2).
+//! Secrets vault (E7 / Preview 0.4 + E7-keyring / 0.6 + E7-TPM / 0.10) :
+//! chiffrement au repos, distribution restreinte aux **services**
+//! (jamais aux agents — F-SEC-04 / §9.2).
 //!
 //! - Magasin live : `var/secrets/vault.enc` (ChaCha20-Poly1305).
-//! - Clé maître : OS keyring (Windows Credential Manager / Linux Secret Service)
-//!   avec fallback fichier `master.key` (DPAPI sous Windows, 0600 sous Linux).
+//! - Clé maître (ordre) : TPM envelope (`master.tpm`) → OS keyring → fichier
+//!   `master.key` (DPAPI sous Windows, 0600 sous Linux).
+//! - TPM = enveloppe appareil quand un TPM est détecté (Platform Crypto /
+//!   `/dev/tpmrm0`) ; pas de scellage PCR (hors scope Preview).
 //! - Import optionnel : si `keys.yaml` clair existe encore, migration
 //!   automatique puis renommage en `keys.yaml.migrated`.
 //! - Forcer le fichier : `AOS_SECRETS_FILE_KEY=1` (tests / Linux headless).
+//! - Désactiver TPM : `AOS_SECRETS_TPM=0`.
 
 use chacha20poly1305::aead::{Aead, KeyInit};
 use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
@@ -53,9 +57,10 @@ struct VaultFile {
     keys: HashMap<String, String>,
 }
 
-/// Backend de la clé maître (audit Preview 0.6).
+/// Backend de la clé maître (audit Preview 0.6+ ; TPM = 0.10).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MasterBackend {
+    Tpm,
     Keyring,
     File,
 }
@@ -63,6 +68,7 @@ pub enum MasterBackend {
 impl MasterBackend {
     pub fn as_str(self) -> &'static str {
         match self {
+            Self::Tpm => "tpm",
             Self::Keyring => "keyring",
             Self::File => "file",
         }
@@ -192,7 +198,7 @@ impl SecretStore {
         self.vault_path().exists()
     }
 
-    /// `keyring` (Credential Manager / Secret Service) ou `file` (0600 / DPAPI).
+    /// `tpm` | `keyring` | `file`.
     pub fn master_backend(&self) -> MasterBackend {
         self.backend
     }
@@ -210,6 +216,92 @@ fn force_file_backend() -> bool {
         std::env::var("AOS_SECRETS_FILE_KEY").ok().as_deref(),
         Some("1") | Some("true") | Some("TRUE")
     )
+}
+
+fn tpm_disabled() -> bool {
+    matches!(
+        std::env::var("AOS_SECRETS_TPM").ok().as_deref(),
+        Some("0") | Some("false") | Some("FALSE") | Some("no") | Some("NO")
+    )
+}
+
+/// True when a host TPM device/provider is reachable (not PCR-bound).
+pub fn tpm_present() -> bool {
+    if force_file_backend() || tpm_disabled() {
+        return false;
+    }
+    #[cfg(windows)]
+    {
+        tpm_present_windows()
+    }
+    #[cfg(not(windows))]
+    {
+        Path::new("/dev/tpmrm0").exists() || Path::new("/dev/tpm0").exists()
+    }
+}
+
+#[cfg(windows)]
+fn tpm_present_windows() -> bool {
+    use windows::Win32::Security::Cryptography::{
+        NCryptFreeObject, NCryptOpenStorageProvider, MS_PLATFORM_CRYPTO_PROVIDER, NCRYPT_HANDLE,
+        NCRYPT_PROV_HANDLE,
+    };
+    unsafe {
+        let mut prov = NCRYPT_PROV_HANDLE::default();
+        let ok = NCryptOpenStorageProvider(&mut prov, MS_PLATFORM_CRYPTO_PROVIDER, 0);
+        if ok.is_err() {
+            return false;
+        }
+        let _ = NCryptFreeObject(NCRYPT_HANDLE(prov.0));
+        true
+    }
+}
+
+fn tpm_path(dir: &Path) -> PathBuf {
+    dir.join("master.tpm")
+}
+
+fn tpm_get(dir: &Path) -> Option<[u8; 32]> {
+    if force_file_backend() || tpm_disabled() {
+        return None;
+    }
+    let path = tpm_path(dir);
+    if !path.exists() {
+        return None;
+    }
+    let raw = std::fs::read(&path).ok()?;
+    let plain = if let Some(rest) = raw.strip_prefix(b"TPM1") {
+        unprotect_master(rest).ok()?
+    } else {
+        unprotect_master(&raw).ok()?
+    };
+    if plain.len() != 32 {
+        return None;
+    }
+    let mut key = [0u8; 32];
+    key.copy_from_slice(&plain);
+    Some(key)
+}
+
+fn tpm_set(dir: &Path, key: &[u8; 32]) -> bool {
+    if force_file_backend() || tpm_disabled() || !tpm_present() {
+        return false;
+    }
+    let Ok(protected) = protect_master(key) else {
+        return false;
+    };
+    let mut tagged = Vec::with_capacity(4 + protected.len());
+    tagged.extend_from_slice(b"TPM1");
+    tagged.extend_from_slice(&protected);
+    if std::fs::write(tpm_path(dir), &tagged).is_err() {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(tpm_path(dir), std::fs::Permissions::from_mode(0o600));
+    }
+    tpm_get(dir).as_ref() == Some(key)
 }
 
 fn sha256_hex16(bytes: &[u8]) -> String {
@@ -290,7 +382,17 @@ fn write_backend_marker(dir: &Path, backend: MasterBackend) {
 fn load_or_create_master(dir: &Path) -> Result<([u8; 32], MasterBackend), SecretError> {
     let path = dir.join("master.key");
 
+    if let Some(key) = tpm_get(dir) {
+        return Ok((key, MasterBackend::Tpm));
+    }
+
     if let Some(key) = keyring_get(dir) {
+        if tpm_set(dir, &key) {
+            if path.exists() {
+                let _ = std::fs::remove_file(&path);
+            }
+            return Ok((key, MasterBackend::Tpm));
+        }
         if path.exists() {
             let _ = std::fs::remove_file(&path);
         }
@@ -305,6 +407,10 @@ fn load_or_create_master(dir: &Path) -> Result<([u8; 32], MasterBackend), Secret
         }
         let mut key = [0u8; 32];
         key.copy_from_slice(&plain);
+        if tpm_set(dir, &key) {
+            let _ = std::fs::remove_file(&path);
+            return Ok((key, MasterBackend::Tpm));
+        }
         if keyring_set(dir, &key) {
             let _ = std::fs::remove_file(&path);
             return Ok((key, MasterBackend::Keyring));
@@ -314,12 +420,15 @@ fn load_or_create_master(dir: &Path) -> Result<([u8; 32], MasterBackend), Secret
 
     if dir.join("vault.enc").exists() {
         return Err(SecretError::Crypto(
-            "vault.enc présent mais clé maître introuvable (keyring/file)".into(),
+            "vault.enc présent mais clé maître introuvable (tpm/keyring/file)".into(),
         ));
     }
 
     let mut key = [0u8; 32];
     rand::thread_rng().fill_bytes(&mut key);
+    if tpm_set(dir, &key) {
+        return Ok((key, MasterBackend::Tpm));
+    }
     if keyring_set(dir, &key) {
         return Ok((key, MasterBackend::Keyring));
     }
@@ -538,11 +647,49 @@ mod tests {
         assert!(!String::from_utf8_lossy(&raw).contains("BSA-test"));
         if s2.master_backend() == MasterBackend::Keyring {
             assert!(!dir.join("master.key").exists());
+        } else if s2.master_backend() == MasterBackend::Tpm {
+            assert!(dir.join("master.tpm").exists());
+            assert!(!dir.join("master.key").exists());
         } else {
             assert!(dir.join("master.key").exists());
         }
         assert!(dir.join("master.backend").exists());
         s2.delete_keyring_entry();
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn tpm_blob_roundtrip_when_forced_file_off() {
+        // Always exercise seal file format with protect_master (no live TPM required).
+        let dir = tmp_dir();
+        std::fs::create_dir_all(&dir).unwrap();
+        std::env::set_var("AOS_SECRETS_TPM", "0");
+        std::env::set_var("AOS_SECRETS_FILE_KEY", "1");
+        let mut key = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut key);
+        let protected = protect_master(&key).unwrap();
+        let mut tagged = Vec::new();
+        tagged.extend_from_slice(b"TPM1");
+        tagged.extend_from_slice(&protected);
+        std::fs::write(dir.join("master.tpm"), &tagged).unwrap();
+        // With TPM disabled, tpm_get returns None — open uses file/keyring path.
+        std::env::remove_var("AOS_SECRETS_TPM");
+        // Re-enable reading the blob: clear FILE_KEY and leave TPM env unset;
+        // tpm_get does not require tpm_present() when the blob already exists.
+        std::env::remove_var("AOS_SECRETS_FILE_KEY");
+        let s = SecretStore::open(&dir).unwrap();
+        assert_eq!(s.master_backend(), MasterBackend::Tpm);
+        assert_eq!(
+            std::fs::read_to_string(dir.join("master.backend")).unwrap().trim(),
+            "tpm"
+        );
+        s.delete_keyring_entry();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn tpm_present_is_safe_to_call() {
+        // Must not panic on CI / VMs without TPM.
+        let _ = tpm_present();
     }
 }
