@@ -7,11 +7,22 @@ Summary of delivered phases. Detail: [development-plan.md](development-plan.md),
 
 **Headline:** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview:** 0.10.0 (20/08/2026) — Horizon B remainder: E7 TPM vault envelope,
-E8 live sibling HTTP bridge (`aos-bridged`), E9 multi-GPU path (1-GPU skip),
-Media/UX polish; internal seL4 gate tag `sel4-pv-0.10.0` (not in tester zip).
-Not a bootable OS. Cohort gate still open. **Next:** PC cohort close; Horizon C /
-PV.4+ when scheduled; E9 hard-green after a documented 2-GPU run.
+**Preview:** 0.10.1 (21/08/2026) — post-0.10 polish while PC cohort stays open:
+full E8 `mem.*` bridge parity + `aos-bridged` in the Preview zip; opt-in
+auto-download updates; E15 `pie`/`scatter` widgets; first-class img2img
+(`init_image`/`strength` on `media.image.generate`). Real Win TPM seal (`TPM2`)
+landed as a 0.10.0 hotfix. Not a bootable OS. Cohort gate still open. **Next:**
+PC cohort close; Horizon C / PV.4+ when scheduled; E9 hard-green after a
+documented 2-GPU run.
+
+## 0.10.1 — Bridge parity + product polish — done
+
+| # | Item | Status |
+|---|------|--------|
+| Bridge | Full live `mem.*` routes on `aos-bridged` + packaged in zip | done |
+| Updates | Opt-in auto-download; pending banner; apply on next launch | done |
+| E15 | `pie` + `scatter` host widgets (no webview) | done |
+| Media | img2img via closed `init_image` / `strength` options | done |
 
 ## P10 — Preview 0.10.0 (E7 TPM + E8 live + E9 + Media + seL4 internal) — done
 

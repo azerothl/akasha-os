@@ -7,8 +7,8 @@
 Tag then push:
 
 ```bash
-git tag v0.10.0
-git push origin v0.10.0
+git tag v0.10.1
+git push origin v0.10.1
 ```
 
 The workflow [`.github/workflows/preview-release.yml`](../.github/workflows/preview-release.yml)
@@ -44,13 +44,13 @@ GGUFs are downloaded on **first run** via `share/models/manifest.json`.
 ## Release notes (draft)
 
 ```
-Akasha OS Preview 0.10.0 — Horizon B: TPM vault, sibling bridge, multi-GPU path
+Akasha OS Preview 0.10.1 — bridge parity + product polish
 
-- E7 TPM: vault master prefers host TPM envelope when available (fallback keyring/file)
-- E8: optional aos-bridged loopback HTTP↔bus (mem + secrets); not inside aos-session
-- E9: multi-GPU tensor_split plumbing; P5 gate SKIPs on 1-GPU hosts
-- Media polish: Image studio composition + upscale; Wan/LTX experimental
-- Internal seL4: tag sel4-pv-0.10.0 + CI QEMU gate (not in tester zip)
+- E8: full live mem.* routes on aos-bridged; binary ships in Preview bin/
+- Updates: opt-in auto-download; apply still on next launch
+- E15: pie + scatter widgets (no webview)
+- img2img: closed init_image + strength on media.image.generate + Image studio
+- E7: real Win TPM seal (TPM2); presence alone is not enough
 
 Not a bootable OS. See FIRST-RUN.md / INSTALL.md / TESTER.md
 ```

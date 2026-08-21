@@ -1,4 +1,4 @@
-# Fonctionnalités Preview — Akasha OS 0.10.0
+# Fonctionnalités Preview — Akasha OS 0.10.1
 
 **Langue :** [English](../FEATURES.md) | Français
 
@@ -7,14 +7,21 @@ Ce n'est **pas** l'OS bootable. Les exigences v1 sont dans
 [specs-fonctionnelles.md](specs-fonctionnelles.md) ; les gates dans
 [STATUS.md](STATUS.md).
 
-> Date : 21/08/2026 · Preview **0.10.0**
+> Date : 21/08/2026 · Preview **0.10.1**
+
+### Nouveautés 0.10.1
+
+- **Parité bridge E8** : `aos-bridged` expose toute la table `mem.*` en live (+ secrets) ; binaire dans `bin/` du zip Preview ; smoke `mem.stats` / `mem.list`
+- **Téléchargement auto des updates** (opt-in, Settings) : archive dans `var/updates/` ; bandeau « prête — relancer » ; apply toujours au prochain lancement
+- **Widgets E15** : `pie` et `scatter` (hôte egui ; toujours pas de webview)
+- **img2img** : options fermées `init_image` + `strength` sur `media.image.generate` ; studio Image ; inpaint/mask hors scope
 
 ### Nouveautés 0.10.0
 
 - **E7 TPM** : la clé maître du vault préfère un vrai scellage TPM hôte si dispo (Platform Crypto Win `NCrypt` / `TPM_RSA_SRK_SEAL_KEY`) ; sous Linux, fallback keyring/fichier tant que le scellage tpm2 n’est pas branché. La seule présence d’un TPM ne force pas `master.backend=tpm`. Pas de scellage PCR
 - **E8 bridge live** : binaire optionnel séparé `aos-bridged` — HTTP loopback `/v1` JSON↔CBOR vers le bus (mem + secrets.list ; secrets.get/set style service). Pas dans `aos-session`
 - **E9 multi-GPU** : plumbing Placement / llama `tensor_split` ; gate P5 **skip** sur 1 GPU (STATUS honnête — hard-green = run 2 GPU)
-- **Polish Media/UX** : canvas **composition** studio, **upscale** RealESRGAN / `media.image.upscale`, expert DiT ; Wan/LTX = **expérimental** (pas requis TESTER). Pas d’img2img/inpaint first-class ; pas d’UI vidéo produit
+- **Polish Media/UX** : canvas **composition** studio, **upscale** RealESRGAN / `media.image.upscale`, expert DiT ; Wan/LTX = **expérimental** (pas requis TESTER). Pas d’UI vidéo produit
 - **Historique image** : le studio recharge les sidecars PNG (`*.meta.json`) — prompt, prompt enrichi, composition
 - **Chat UX** : bulles user / assistant distinctes ; fil plus lisible
 - **RAG produit** : au boot, `aos-platformd` indexe `docs/FEATURES|STATUS|TESTER` (+ `fr/`) dans `product:docs` ; chaque `mem.context` ramène top-k chunks (budget plafonné) pour que l’assistant réponde aux questions UI / changelog sans coller tout le catalogue dans le prompt système
@@ -43,7 +50,7 @@ Ce n'est **pas** l'OS bootable. Les exigences v1 sont dans
 ### Nouveautés 0.7.0
 
 - **Hôte d’UI de module déclarative** (E15) : les modules installés avec `ui.mode=declarative_ui` obtiennent un onglet dynamique dans la barre latérale — pas de webview, pas de nouvel onglet egui codé à la main par module
-- Arbre de widgets fermé dans `ui/index.html` (`type: declarative_ui`) : `column`, `row`, `heading`, `text`, `markdown`, `stat_row`, `table`, `line_chart`, `form`, `button`
+- Arbre de widgets fermé dans `ui/index.html` (`type: declarative_ui`) : `column`, `row`, `heading`, `text`, `markdown`, `stat_row`, `table`, `line_chart`, `bar_chart`, `pie`, `scatter`, `form`, `button`, `select` / `radio` / `checkbox` / `textarea`, `image`, `audio`
 - Intent **`module.ui`** : platformd valide le document (fail-closed) ; l’hôte lie les résultats d’outils et route boutons/formulaires via la même revue de caps que `module.invoke`
 - **`module.scaffold`** : champ optionnel `ui` JSON ; package/compile copient un vrai arbre (défaut : heading + form + table sur le premier outil)
 - Export JSON Schema : [`docs/bridge/aos-proto-decl-ui.json`](../bridge/aos-proto-decl-ui.json)
@@ -315,13 +322,12 @@ Piste VM seL4 (PV.1–PV.3) séparée : [phases/phase-vm-sel4.md](phases/phase-v
 
 ---
 
-## 11. Hors Preview 0.10.0
+## 11. Hors Preview 0.10.1
 
 - Image bootable / fer nu
 - macOS
-- Application automatique complète des updates (téléchargement maintenant, apply au prochain lancement)
 - UI vidéo produit / STT / voix permanente (Wan/LTX = expérimental catalogue seulement)
-- img2img / inpaint en intent de première classe
+- Inpaint / mask en intent de première classe (img2img via `init_image`/`strength` en 0.10.1)
 - APIs natives Messages/Gemini/Bedrock (Providers OpenAI-compat seulement)
 - Marketplace public de modules (catalogue local signé seulement)
 - Canaux de messagerie (Slack/Discord/etc.) dans le noyau OS
@@ -330,7 +336,7 @@ Piste VM seL4 (PV.1–PV.3) séparée : [phases/phase-vm-sel4.md](phases/phase-v
 - Scellage PCR / attestation vault
 - Merge binaire sibling / assistant-as-module
 - Webview sandboxée / UI module HTML/JS (compositor E13)
-- kinds pie/scatter/webview
+- kind `webview` (pie/scatter livrés en 0.10.1)
 - snapshot KV llama.cpp (`llama_state_*`) — 0.9+ rejoue le préfixe
 - Guest seL4 dans le zip Preview public (`sel4-pv-*` interne seulement)
 

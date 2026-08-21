@@ -242,12 +242,14 @@ et envoi de retour GitHub).
 - Catalogue `local:flux2` / `local:ideogram4` / `local:piper-en-gb` ; Settings pack/voix par défaut.
 - Studio Image : steps/taille/sampler ; clé d’option inconnue refusée.
 
-### 24–25. Profondeur studio + TPM / bridge (0.10.0)
+### 24–26. Profondeur studio + TPM / bridge + polish 0.10.1
 
 - Studio Image : blocs **composition** qui se chevauchent → injection dans le prompt ; option **Upscale** RealESRGAN après Download du pack.
 - Wan/LTX = expérimental (pas requis pour la cohorte).
 - `var/secrets/master.backend` peut être `tpm` seulement si la clé a été scellée via Platform Crypto (blob `TPM2`) ; la seule présence d’un TPM ne suffit pas. Sinon `keyring` / `file`.
-- Optionnel : `aos-bridged` en loopback ; health + `mem.context` OK ; `secrets.get` avec from agent → 403.
+- Optionnel : `aos-bridged` depuis `bin/` en loopback ; health + `mem.context` / `mem.stats` / `mem.list` OK ; `secrets.get` avec from agent → 403. Smoke : `.\demo\smoke-bridge.ps1`.
+- Settings : **Télécharger les mises à jour automatiquement** (off par défaut) → `pending.json` + bandeau « relancer ».
+- Studio : **Partir d'une image** + force → Generate (img2img). Inpaint/mask non requis.
 
 ## Critères de succès (équipe)
 
@@ -255,12 +257,12 @@ et envoi de retour GitHub).
 - Au moins un fichier `var/feedback/fb-*.json` exploitable par retour
 - Gates PC.6–PC.9 et PC.11–PC.13 cochés sur au moins une machine
 
-## Hors scope Preview 0.10.0
+## Hors scope Preview 0.10.1
 
 - Boot seL4 / fer nu (tag interne `sel4-pv-*` seulement)
 - macOS
 - Modèle 32B dans l'installeur
-- Mise à jour automatique complète
 - UI vidéo produit / STT / voix permanente
-- img2img / inpaint en intent de première classe
+- Inpaint / mask en intent de première classe
 - Marketplace public / canaux messagerie / hard-green multi-GPU sans 2e GPU
+- kind `webview`

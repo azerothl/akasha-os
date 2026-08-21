@@ -119,9 +119,11 @@ models.
 ## Updates
 
 A banner appears in the UI when a newer Release exists.
-**Download** writes the archive under `var/updates/`; the **next** launch
-applies `bin/` + `share/` without touching `var/` or overwriting
-`etc/*.yaml` (`.new` files if needed).
+**Download** (or Settings → **Auto-download updates**, opt-in) writes the
+archive under `var/updates/`; the **next** launch applies `bin/` + `share/`
+without touching `var/` or overwriting `etc/*.yaml` (`.new` files if needed).
+When a download is pending, the banner says the update is ready to apply on
+relaunch.
 
 Running a newly extracted Release zip (or `install.cmd` again) overlays the
 same way onto `%LOCALAPPDATA%\AgentOS-Preview` /

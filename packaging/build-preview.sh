@@ -24,13 +24,13 @@ if [ "$SKIP_BUILD" != "1" ]; then
   if [ "$CPU_ONLY" = "1" ]; then
     echo "== cargo build --release (CPU-only) =="
     cargo build --release -p aos-session -p aos-ipc -p aos-agent \
-      -p aos-capkd -p aos-ui-egui
+      -p aos-capkd -p aos-ui-egui -p aos-bridge
     cargo build --release -p aos-model --no-default-features
     cargo build --release -p aos-platform --no-default-features --features embeddings
   else
     echo "== cargo build --release =="
     cargo build --release -p aos-session -p aos-ipc -p aos-model -p aos-agent \
-      -p aos-capkd -p aos-ui-egui
+      -p aos-capkd -p aos-ui-egui -p aos-bridge
     # Build the preview's platform daemon without optional embeddings so Linux
     # release assets keep a single CUDA/llama-linked binary (aos-modeld) and stay
     # under GitHub's 2 GiB artifact limit.
@@ -140,7 +140,7 @@ mkdir -p "${OUT}/bin" "${OUT}/etc" "${OUT}/share/models" \
   "${OUT}/data/models" "${OUT}/var" "${OUT}/docs"
 
 for b in aos-session aos-busd aos-modeld aos-agentd aos-agent-worker \
-         aos-platformd aos-capkd aos-auditd aos-ui-egui; do
+         aos-platformd aos-capkd aos-auditd aos-ui-egui aos-bridged; do
   cp -f "${CARGO_TARGET_DIR}/release/${b}" "${OUT}/bin/"
 done
 

@@ -1,4 +1,4 @@
-# Preview features — Akasha OS 0.10.0
+# Preview features — Akasha OS 0.10.1
 
 **Language:** English | [Français](fr/FEATURES.md)
 
@@ -7,14 +7,21 @@ This is **not** the bootable OS. Target v1 requirements live in
 [functional-specs.md](functional-specs.md); phase gates in
 [STATUS.md](STATUS.md).
 
-> Date: 21/08/2026 · Preview **0.10.0**
+> Date: 21/08/2026 · Preview **0.10.1**
+
+### What's new in 0.10.1
+
+- **E8 bridge parity**: `aos-bridged` exposes the full `mem.*` table live (plus secrets); binary ships in Preview `bin/`; smoke covers `mem.stats` / `mem.list`
+- **Auto-download updates** (opt-in, Settings): when a newer Release is found, download into `var/updates/` in the background; banner shows “ready — relaunch to apply”; apply still on next launch
+- **E15 widgets**: `pie` and `scatter` (host-rendered; still no webview)
+- **img2img**: closed options `init_image` + `strength` on `media.image.generate`; Image studio checkbox + slider; inpaint/mask still out of scope
 
 ### What's new in 0.10.0
 
 - **E7 TPM**: vault master key prefers a real host TPM seal when available (Windows Platform Crypto `NCrypt` / `TPM_RSA_SRK_SEAL_KEY`); Linux falls back to OS keyring then file until tpm2 seal is wired. Presence of a TPM device alone does not set `master.backend=tpm`. No PCR sealing
 - **E8 live bridge**: optional separate binary `aos-bridged` — loopback HTTP `/v1` JSON↔CBOR to the intent bus (mem + secrets.list; secrets.get/set service-style only). Not inside `aos-session`
 - **E9 multi-GPU path**: Placement / llama layer `tensor_split` plumbing; P5 gate **skips** on 1-GPU hosts (honest STATUS — hard-green needs a 2-GPU run)
-- **Media/UX polish**: Image studio **composition** canvas (overlapping blocks → prompt injection), **upscale** (RealESRGAN / `media.image.upscale`), expert DiT knobs; Wan/LTX catalogue rows are **experimental** (not TESTER-required). No first-class img2img/inpaint; no product video UI
+- **Media/UX polish**: Image studio **composition** canvas (overlapping blocks → prompt injection), **upscale** (RealESRGAN / `media.image.upscale`), expert DiT knobs; Wan/LTX catalogue rows are **experimental** (not TESTER-required). No product video UI
 - **Image history**: studio reloads prior PNG sidecars (`*.meta.json`) — prompt, enriched prompt, composition
 - **Chat UX**: distinct user / assistant bubbles; clearer thread roles
 - **Product RAG**: at boot, `aos-platformd` indexes `docs/FEATURES|STATUS|TESTER` (+ `fr/`) into `product:docs`; each `mem.context` retrieves top-k chunks (budget-capped) so the assistant answers UI / changelog questions without stuffing the full catalogue into the system prompt
@@ -43,7 +50,7 @@ This is **not** the bootable OS. Target v1 requirements live in
 ### What's new in 0.7.0
 
 - **Declarative module UI host** (E15): installed modules with `ui.mode=declarative_ui` get a dynamic sidebar tab — no webview, no new hardcoded egui tab per module
-- Closed widget tree in `ui/index.html` (`type: declarative_ui`): `column`, `row`, `heading`, `text`, `markdown`, `stat_row`, `table`, `line_chart`, `form`, `button`
+- Closed widget tree in `ui/index.html` (`type: declarative_ui`): `column`, `row`, `heading`, `text`, `markdown`, `stat_row`, `table`, `line_chart`, `bar_chart`, `pie`, `scatter`, `form`, `button`, `select` / `radio` / `checkbox` / `textarea`, `image`, `audio`
 - **`module.ui`** intent: platformd validates the document (fail-closed); host binds tool results and routes button/form submits through the same cap review as `module.invoke`
 - **`module.scaffold`** optional `ui` JSON; package/compile copy a real widget tree (default: heading + form + table on the primary tool)
 - JSON Schema export: [`docs/bridge/aos-proto-decl-ui.json`](bridge/aos-proto-decl-ui.json)
@@ -315,13 +322,12 @@ seL4 VM track (PV.1–PV.3) is separate: see [phases/phase-vm-sel4.md](phases/ph
 
 ---
 
-## 11. Not in Preview 0.10.0
+## 11. Not in Preview 0.10.1
 
 - Bootable / bare-metal image
 - macOS
-- Fully automatic update apply (download now, apply on next launch)
 - Product video UI / STT / always-on voice (Wan/LTX catalogue rows are experimental only)
-- img2img / inpaint as a first-class intent
+- Inpaint / mask as a first-class intent (img2img via `init_image`/`strength` ships in 0.10.1)
 - Native Messages/Gemini/Bedrock APIs (OpenAI-compat Providers only)
 - Public module marketplace (local signed catalogue only)
 - Messaging channels (Slack/Discord/etc.) in the OS core
@@ -330,7 +336,7 @@ seL4 VM track (PV.1–PV.3) is separate: see [phases/phase-vm-sel4.md](phases/ph
 - PCR / measured-boot vault sealing / attestation
 - Sibling binary merge / assistant-as-module
 - Sandboxed webview / HTML/JS module UI (E13 compositor)
-- pie/scatter/webview widget kinds
+- `webview` widget kind (pie/scatter ship in 0.10.1)
 - llama.cpp KV snapshot (`llama_state_*`) — 0.9+ uses prefix replay
 - seL4 guest in the public Preview zip (internal `sel4-pv-*` only)
 

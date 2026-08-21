@@ -35,7 +35,7 @@ if (-not $SkipBuild) {
     if ($CpuOnly) {
         Write-Host "  (CPU-only: aos-model/aos-llama without CUDA feature)"
         cargo build --release -p aos-session -p aos-ipc -p aos-capkd -p aos-ui-egui `
-            -p aos-agent -p aos-auditd
+            -p aos-agent -p aos-auditd -p aos-bridge
         if ($LASTEXITCODE -ne 0) { throw "build failed" }
         cargo build --release -p aos-model --no-default-features
         if ($LASTEXITCODE -ne 0) { throw "build aos-model cpu failed" }
@@ -43,7 +43,7 @@ if (-not $SkipBuild) {
         if ($LASTEXITCODE -ne 0) { throw "build aos-platform cpu failed" }
     } else {
         cargo build --release -p aos-session -p aos-ipc -p aos-model -p aos-agent `
-            -p aos-platform -p aos-capkd -p aos-ui-egui
+            -p aos-platform -p aos-capkd -p aos-ui-egui -p aos-bridge
         if ($LASTEXITCODE -ne 0) { throw "build failed" }
     }
 
@@ -70,7 +70,7 @@ New-Item -ItemType Directory -Force -Path `
 $bins = @(
     "aos-session.exe", "aos-busd.exe", "aos-modeld.exe", "aos-agentd.exe",
     "aos-agent-worker.exe", "aos-platformd.exe", "aos-capkd.exe",
-    "aos-auditd.exe", "aos-ui-egui.exe"
+    "aos-auditd.exe", "aos-ui-egui.exe", "aos-bridged.exe"
 )
 foreach ($b in $bins) {
     $src = Join-Path $binSrc $b

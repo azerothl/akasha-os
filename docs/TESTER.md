@@ -266,15 +266,20 @@ GitHub feedback submit).
 
 ### 24. Image studio depth (0.10.0 / Media polish)
 
-- Image studio: add overlapping **composition** blocks on the aspect canvas; Generate injects layout/JSON into the prompt (no first-class img2img).
+- Image studio: add overlapping **composition** blocks on the aspect canvas; Generate injects layout/JSON into the prompt.
 - Optional: Download a RealESRGAN / upscale pack → enable **Upscale** on a preview PNG (`media.image.upscale`).
 - Expert mode (DiT / advanced knobs) is optional; Wan/LTX rows are **experimental** — not required for cohort pass.
 - Models Image/Audio tabs show the optional media-packs blurb.
 
-### 25. Vault TPM + sibling bridge (0.10.0 / E7–E8)
+### 25. Vault TPM + sibling bridge (0.10.0–0.10.1 / E7–E8)
 
 - Settings / secrets: after restart, `var/secrets/master.backend` may read `tpm` only when the master was sealed with Platform Crypto (`TPM2` blob); TPM presence alone is not enough. Otherwise `keyring` or `file`.
-- Optional: start `aos-bridged` (loopback only) against a running session; `GET`/`POST` health + `mem.context` succeed; agent-style `X-Aos-From` on `secrets.get` returns 403.
+- Optional: start `aos-bridged` from Preview `bin/` (loopback only) against a running session; health + `mem.context` + `mem.stats` / `mem.list` succeed; agent-style `X-Aos-From` on `secrets.get` returns 403. Smoke: `.\demo\smoke-bridge.ps1`.
+
+### 26. Updates auto-download + img2img (0.10.1)
+
+- Settings: enable **Auto-download updates** (off by default). After a newer Release is detected, `var/updates/pending.json` appears and the banner says relaunch to apply (no Download click needed).
+- Image studio: enable **Start from an image**, pick `/downloads/…` or **Use current preview**, set strength → Generate (img2img). Inpaint/mask not required.
 
 ### 23. One-liner install (0.8.0 / P08.9)
 
@@ -289,12 +294,12 @@ GitHub feedback submit).
 - At least one usable `var/feedback/fb-*.json` per report
 - Gates PC.6–PC.9 and PC.11–PC.13 checked on at least one machine
 
-## Out of scope Preview 0.9.0
+## Out of scope Preview 0.10.1
 
 - seL4 / bare-metal boot
 - macOS
 - 32B model in the installer
-- Fully automatic update apply
-- Video / STT / always-on voice
-- img2img / inpaint as a first-class intent
-- Public marketplace / messaging channels / multi-GPU
+- Product video UI / STT / always-on voice
+- Inpaint / mask as a first-class intent
+- Public marketplace / messaging channels / multi-GPU hard-green
+- `webview` widget kind

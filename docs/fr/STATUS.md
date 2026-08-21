@@ -7,11 +7,21 @@ Résumé des phases livrées. Détail : [plan-developpement-phases.md](plan-deve
 
 **En-tête :** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview :** 0.10.0 (20/08/2026) — reste Horizon B : enveloppe vault E7 TPM,
-bridge HTTP sibling E8 live, chemin multi-GPU E9, polish Media/UX ; tag
-interne seL4 `sel4-pv-0.10.0` (hors zip testeur). Pas un OS bootable. Gate
-cohorte encore ouverte. **Suite après 0.10 :** fermeture cohorte PC ;
-Horizon C / PV.4+ quand planifié.
+**Preview :** 0.10.1 (21/08/2026) — polish post-0.10 pendant que la cohorte PC
+reste ouverte : parité E8 `mem.*` + `aos-bridged` dans le zip ; téléchargement
+auto des updates (opt-in) ; widgets E15 `pie`/`scatter` ; img2img first-class.
+Scellage TPM Win réel (`TPM2`) en correctif 0.10. Pas un OS bootable. Gate
+cohorte encore ouverte. **Suite :** fermeture cohorte PC ; Horizon C / PV.4+
+quand planifié.
+
+## 0.10.1 — Parité bridge + polish produit — fait
+
+| # | Élément | État |
+|---|---------|------|
+| Bridge | Routes `mem.*` live + binaire dans le zip | fait |
+| Updates | Auto-download opt-in + bandeau pending | fait |
+| E15 | Widgets `pie` + `scatter` (pas de webview) | fait |
+| Media | img2img via `init_image` / `strength` | fait |
 
 ## P10 — Preview 0.10.0 (E7 TPM + E8 live + E9 + Media + seL4 interne) — fait
 

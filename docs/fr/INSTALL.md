@@ -119,9 +119,11 @@ Onglet **Models** pour d'autres profils.
 ## Mises à jour
 
 Un bandeau apparaît dans l'UI si une Release plus récente existe.
-**Télécharger** écrit l'archive dans `var/updates/` ; le **prochain**
-lancement applique `bin/` + `share/` sans toucher à `var/` ni écraser
-`etc/*.yaml` (fichiers `.new` si besoin).
+**Télécharger** (ou Settings → **Télécharger les mises à jour automatiquement**,
+opt-in) écrit l'archive dans `var/updates/` ; le **prochain** lancement
+applique `bin/` + `share/` sans toucher à `var/` ni écraser `etc/*.yaml`
+(fichiers `.new` si besoin). Si un téléchargement est en attente, le bandeau
+indique que l'update est prête au relancement.
 
 Lancer un zip de Release fraîchement extrait (ou `install.cmd` à nouveau)
 applique le même overlay vers `%LOCALAPPDATA%\AgentOS-Preview` /
