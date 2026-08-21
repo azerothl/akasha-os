@@ -246,7 +246,7 @@ et envoi de retour GitHub).
 
 - Studio Image : blocs **composition** qui se chevauchent → injection dans le prompt ; option **Upscale** RealESRGAN après Download du pack.
 - Wan/LTX = expérimental (pas requis pour la cohorte).
-- `var/secrets/master.backend` peut être `tpm` si TPM présent ; sinon `keyring` / `file`.
+- `var/secrets/master.backend` peut être `tpm` seulement si la clé a été scellée via Platform Crypto (blob `TPM2`) ; la seule présence d’un TPM ne suffit pas. Sinon `keyring` / `file`.
 - Optionnel : `aos-bridged` en loopback ; health + `mem.context` OK ; `secrets.get` avec from agent → 403.
 
 ## Critères de succès (équipe)

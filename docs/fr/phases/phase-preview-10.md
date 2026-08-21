@@ -29,7 +29,7 @@ P10.S* → P10.13–P10.16.
 
 | # | Évolution | Livrable | État |
 |---|-----------|----------|------|
-| P10.1 | E7 TPM | `MasterBackend::Tpm` (Win CNG/NCrypt + Linux tpm2) unwrap à l’open du `SecretStore` | fait |
+| P10.1 | E7 TPM | `MasterBackend::Tpm` via scellage Platform Crypto Win `NCrypt` (blob `TPM2`) ; Linux keyring/fichier tant que tpm2 n’est pas branché ; legacy `TPM1` migré | fait |
 | P10.2 | E7 TPM | Préférer TPM → keyring → file ; overrides env ; `master.backend=tpm` | fait |
 | P10.3 | E7 TPM | Migration one-shot keyring/file → TPM si hardware ; `vault.enc` inchangé | fait |
 | P10.4 | E7 TPM | Tests skip-if-no-TPM ; TESTER/Settings ; agents toujours refusés sur `secrets.get` | fait |

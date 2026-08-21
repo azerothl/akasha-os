@@ -1,10 +1,15 @@
 # Internal seL4 VM gate (PV.1–PV.3). Does NOT publish Preview tester zips.
 # Trigger: push to main touching vm/sel4 or aos-sel4-*, manual, or tag sel4-pv-*.
+# Note: `branches` + `tags` under push; path filters apply to branch pushes only
+# (GitHub does not evaluate paths for tag pushes). Omitting `branches` made the
+# job tag-only and skipped main commits that touch seL4 paths.
 name: sel4-vm-gate
 
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
     tags:
       - "sel4-pv-*"
     paths:
@@ -18,6 +23,7 @@ on:
       - "vm/sel4/**"
       - "crates/aos-sel4-abi/**"
       - "crates/aos-sel4-capkd/**"
+      - "crates/aos-caps/**"
       - ".github/workflows/sel4-vm-gate.yml"
 
 jobs:

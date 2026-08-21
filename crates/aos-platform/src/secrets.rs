@@ -3,10 +3,14 @@
 //! (jamais aux agents — F-SEC-04 / §9.2).
 //!
 //! - Magasin live : `var/secrets/vault.enc` (ChaCha20-Poly1305).
-//! - Clé maître (ordre) : TPM envelope (`master.tpm`) → OS keyring → fichier
+//! - Clé maître (ordre) : TPM seal (`master.tpm`) → OS keyring → fichier
 //!   `master.key` (DPAPI sous Windows, 0600 sous Linux).
-//! - TPM = enveloppe appareil quand un TPM est détecté (Platform Crypto /
-//!   `/dev/tpmrm0`) ; pas de scellage PCR (hors scope Preview).
+//! - TPM (Windows) : enveloppe via Platform Crypto Provider
+//!   (`NCryptEncrypt` / `TPM_RSA_SRK_SEAL_KEY`). Presence alone is not enough —
+//!   `MasterBackend::Tpm` only when the blob was sealed with that path.
+//! - Linux Preview : pas de scellage tpm2 encore ; `/dev/tpmrm0` presence does
+//!   not select the TPM backend (fallback keyring/file). Pas de PCR.
+//! - Legacy `TPM1` blobs (DPAPI/plaintext mislabeled as TPM) are migrated away.
 //! - Import optionnel : si `keys.yaml` clair existe encore, migration
 //!   automatique puis renommage en `keys.yaml.migrated`.
 //! - Forcer le fichier : `AOS_SECRETS_FILE_KEY=1` (tests / Linux headless).
@@ -226,34 +230,19 @@ fn tpm_disabled() -> bool {
 }
 
 /// True when a host TPM device/provider is reachable (not PCR-bound).
+/// Presence alone does **not** imply `MasterBackend::Tpm` — sealing must succeed.
 pub fn tpm_present() -> bool {
     if force_file_backend() || tpm_disabled() {
         return false;
     }
     #[cfg(windows)]
     {
-        tpm_present_windows()
+        tpm_seal_available_windows()
     }
     #[cfg(not(windows))]
     {
+        // Device node may exist, but Preview has no Linux tpm2 seal path yet.
         Path::new("/dev/tpmrm0").exists() || Path::new("/dev/tpm0").exists()
-    }
-}
-
-#[cfg(windows)]
-fn tpm_present_windows() -> bool {
-    use windows::Win32::Security::Cryptography::{
-        NCryptFreeObject, NCryptOpenStorageProvider, MS_PLATFORM_CRYPTO_PROVIDER, NCRYPT_HANDLE,
-        NCRYPT_PROV_HANDLE,
-    };
-    unsafe {
-        let mut prov = NCRYPT_PROV_HANDLE::default();
-        let ok = NCryptOpenStorageProvider(&mut prov, MS_PLATFORM_CRYPTO_PROVIDER, 0);
-        if ok.is_err() {
-            return false;
-        }
-        let _ = NCryptFreeObject(NCRYPT_HANDLE(prov.0));
-        true
     }
 }
 
@@ -261,6 +250,21 @@ fn tpm_path(dir: &Path) -> PathBuf {
     dir.join("master.tpm")
 }
 
+/// Real Platform Crypto seal (`TPM2` prefix). Legacy `TPM1` was DPAPI/plaintext.
+const TPM_BLOB_V2: &[u8] = b"TPM2";
+const TPM_BLOB_V1_LEGACY: &[u8] = b"TPM1";
+
+fn key32(plain: &[u8]) -> Option<[u8; 32]> {
+    if plain.len() != 32 {
+        return None;
+    }
+    let mut key = [0u8; 32];
+    key.copy_from_slice(plain);
+    Some(key)
+}
+
+/// Load a **real** TPM-sealed master (`TPM2`). Legacy `TPM1` blobs are migrated
+/// out of the TPM backend (they only used DPAPI/plaintext).
 fn tpm_get(dir: &Path) -> Option<[u8; 32]> {
     if force_file_backend() || tpm_disabled() {
         return None;
@@ -270,29 +274,43 @@ fn tpm_get(dir: &Path) -> Option<[u8; 32]> {
         return None;
     }
     let raw = std::fs::read(&path).ok()?;
-    let plain = if let Some(rest) = raw.strip_prefix(b"TPM1") {
-        unprotect_master(rest).ok()?
-    } else {
-        unprotect_master(&raw).ok()?
-    };
-    if plain.len() != 32 {
+    if let Some(rest) = raw.strip_prefix(TPM_BLOB_V2) {
+        return key32(&tpm_unseal(rest).ok()?);
+    }
+    None
+}
+
+/// If a legacy mislabeled `TPM1` blob exists, recover the key and delete the file
+/// so we stop advertising hardware protection we never had.
+fn tpm_migrate_legacy(dir: &Path) -> Option<[u8; 32]> {
+    let path = tpm_path(dir);
+    if !path.exists() {
         return None;
     }
-    let mut key = [0u8; 32];
-    key.copy_from_slice(&plain);
+    let raw = std::fs::read(&path).ok()?;
+    let plain = if let Some(rest) = raw.strip_prefix(TPM_BLOB_V1_LEGACY) {
+        unprotect_master(rest).ok()?
+    } else if raw.starts_with(TPM_BLOB_V2) {
+        return None;
+    } else {
+        // Untagged blob next to a tpm marker — treat as legacy plaintext/DPAPI.
+        unprotect_master(&raw).ok()?
+    };
+    let key = key32(&plain)?;
+    let _ = std::fs::remove_file(&path);
     Some(key)
 }
 
 fn tpm_set(dir: &Path, key: &[u8; 32]) -> bool {
-    if force_file_backend() || tpm_disabled() || !tpm_present() {
+    if force_file_backend() || tpm_disabled() {
         return false;
     }
-    let Ok(protected) = protect_master(key) else {
+    let Ok(sealed) = tpm_seal(key) else {
         return false;
     };
-    let mut tagged = Vec::with_capacity(4 + protected.len());
-    tagged.extend_from_slice(b"TPM1");
-    tagged.extend_from_slice(&protected);
+    let mut tagged = Vec::with_capacity(TPM_BLOB_V2.len() + sealed.len());
+    tagged.extend_from_slice(TPM_BLOB_V2);
+    tagged.extend_from_slice(&sealed);
     if std::fs::write(tpm_path(dir), &tagged).is_err() {
         return false;
     }
@@ -302,6 +320,112 @@ fn tpm_set(dir: &Path, key: &[u8; 32]) -> bool {
         let _ = std::fs::set_permissions(tpm_path(dir), std::fs::Permissions::from_mode(0o600));
     }
     tpm_get(dir).as_ref() == Some(key)
+}
+
+#[cfg(windows)]
+fn tpm_seal_available_windows() -> bool {
+    tpm_with_seal_key_windows(|_key| Ok(())).is_ok()
+}
+
+#[cfg(windows)]
+fn tpm_seal(plain: &[u8]) -> Result<Vec<u8>, SecretError> {
+    tpm_with_seal_key_windows(|key| {
+        use windows::Win32::Security::Cryptography::{NCryptEncrypt, NCRYPT_PAD_PKCS1_FLAG};
+        let mut needed = 0u32;
+        unsafe {
+            NCryptEncrypt(key, Some(plain), None, None, &mut needed, NCRYPT_PAD_PKCS1_FLAG)
+                .map_err(|e| SecretError::Crypto(format!("NCryptEncrypt size: {e}")))?;
+        }
+        let mut out = vec![0u8; needed as usize];
+        let mut written = 0u32;
+        unsafe {
+            NCryptEncrypt(
+                key,
+                Some(plain),
+                None,
+                Some(&mut out),
+                &mut written,
+                NCRYPT_PAD_PKCS1_FLAG,
+            )
+            .map_err(|e| SecretError::Crypto(format!("NCryptEncrypt: {e}")))?;
+        }
+        out.truncate(written as usize);
+        Ok(out)
+    })
+}
+
+#[cfg(windows)]
+fn tpm_unseal(cipher: &[u8]) -> Result<Vec<u8>, SecretError> {
+    tpm_with_seal_key_windows(|key| {
+        use windows::Win32::Security::Cryptography::{NCryptDecrypt, NCRYPT_PAD_PKCS1_FLAG};
+        let mut needed = 0u32;
+        unsafe {
+            NCryptDecrypt(key, Some(cipher), None, None, &mut needed, NCRYPT_PAD_PKCS1_FLAG)
+                .map_err(|e| SecretError::Crypto(format!("NCryptDecrypt size: {e}")))?;
+        }
+        let mut out = vec![0u8; needed as usize];
+        let mut written = 0u32;
+        unsafe {
+            NCryptDecrypt(
+                key,
+                Some(cipher),
+                None,
+                Some(&mut out),
+                &mut written,
+                NCRYPT_PAD_PKCS1_FLAG,
+            )
+            .map_err(|e| SecretError::Crypto(format!("NCryptDecrypt: {e}")))?;
+        }
+        out.truncate(written as usize);
+        Ok(out)
+    })
+}
+
+#[cfg(windows)]
+fn tpm_with_seal_key_windows<T>(
+    f: impl FnOnce(windows::Win32::Security::Cryptography::NCRYPT_KEY_HANDLE) -> Result<T, SecretError>,
+) -> Result<T, SecretError> {
+    use windows::Win32::Security::Cryptography::{
+        NCryptFreeObject, NCryptOpenKey, NCryptOpenStorageProvider, CERT_KEY_SPEC,
+        MS_PLATFORM_CRYPTO_PROVIDER, NCRYPT_FLAGS, NCRYPT_HANDLE, NCRYPT_KEY_HANDLE,
+        NCRYPT_PROV_HANDLE, TPM_RSA_SRK_SEAL_KEY,
+    };
+    unsafe {
+        let mut prov = NCRYPT_PROV_HANDLE::default();
+        NCryptOpenStorageProvider(&mut prov, MS_PLATFORM_CRYPTO_PROVIDER, 0).map_err(|e| {
+            SecretError::Crypto(format!("NCryptOpenStorageProvider: {e}"))
+        })?;
+        let mut key = NCRYPT_KEY_HANDLE::default();
+        let open = NCryptOpenKey(
+            prov,
+            &mut key,
+            TPM_RSA_SRK_SEAL_KEY,
+            CERT_KEY_SPEC(0),
+            NCRYPT_FLAGS(0),
+        );
+        if open.is_err() {
+            let _ = NCryptFreeObject(NCRYPT_HANDLE(prov.0));
+            return Err(SecretError::Crypto(format!("NCryptOpenKey seal: {open:?}")));
+        }
+        let result = f(key);
+        let _ = NCryptFreeObject(NCRYPT_HANDLE(key.0));
+        let _ = NCryptFreeObject(NCRYPT_HANDLE(prov.0));
+        result
+    }
+}
+
+#[cfg(not(windows))]
+fn tpm_seal(_plain: &[u8]) -> Result<Vec<u8>, SecretError> {
+    Err(SecretError::Crypto(
+        "TPM seal unavailable on this platform (Linux tpm2 envelope not wired)".into(),
+    ))
+}
+
+#[cfg(not(windows))]
+fn tpm_unseal(_cipher: &[u8]) -> Result<Vec<u8>, SecretError> {
+    Err(SecretError::Crypto(
+        "TPM unseal unavailable on this platform (Linux tpm2 envelope not wired)".into(),
+    ))
 }
 
 fn sha256_hex16(bytes: &[u8]) -> String {
@@ -384,6 +508,30 @@ fn load_or_create_master(dir: &Path) -> Result<([u8; 32], MasterBackend), Secret
 
     if let Some(key) = tpm_get(dir) {
         return Ok((key, MasterBackend::Tpm));
+    }
+
+    // Legacy TPM1 (DPAPI/plaintext with a tpm marker) — recover then re-home.
+    if let Some(key) = tpm_migrate_legacy(dir) {
+        if tpm_set(dir, &key) {
+            if path.exists() {
+                let _ = std::fs::remove_file(&path);
+            }
+            return Ok((key, MasterBackend::Tpm));
+        }
+        if keyring_set(dir, &key) {
+            if path.exists() {
+                let _ = std::fs::remove_file(&path);
+            }
+            return Ok((key, MasterBackend::Keyring));
+        }
+        let protected = protect_master(&key)?;
+        std::fs::write(&path, protected)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+        }
+        return Ok((key, MasterBackend::File));
     }
 
     if let Some(key) = keyring_get(dir) {
@@ -659,8 +807,8 @@ mod tests {
     }
 
     #[test]
-    fn tpm_blob_roundtrip_when_forced_file_off() {
-        // Always exercise seal file format with protect_master (no live TPM required).
+    fn legacy_tpm1_blob_migrates_off_tpm_marker() {
+        // TPM1 was DPAPI/plaintext with a misleading tpm backend marker.
         let dir = tmp_dir();
         std::fs::create_dir_all(&dir).unwrap();
         std::env::set_var("AOS_SECRETS_TPM", "0");
@@ -672,24 +820,59 @@ mod tests {
         tagged.extend_from_slice(b"TPM1");
         tagged.extend_from_slice(&protected);
         std::fs::write(dir.join("master.tpm"), &tagged).unwrap();
-        // With TPM disabled, tpm_get returns None — open uses file/keyring path.
+        // Also need vault.enc so open doesn't create a fresh key after migrate…
+        // Actually: migrate removes master.tpm then falls through; with FILE_KEY
+        // and no vault, load_or_create would create a new key. Seed vault first.
+        {
+            let cipher = ChaCha20Poly1305::new(Key::from_slice(&key));
+            let nonce_bytes = [7u8; 12];
+            let nonce = Nonce::from_slice(&nonce_bytes);
+            let plaintext = serde_json::to_vec(&VaultFile {
+                keys: HashMap::from([("k".into(), "v".into())]),
+            })
+            .unwrap();
+            let ciphertext = cipher.encrypt(nonce, plaintext.as_ref()).unwrap();
+            let mut out = Vec::new();
+            out.extend_from_slice(&nonce_bytes);
+            out.extend_from_slice(&ciphertext);
+            std::fs::write(dir.join("vault.enc"), out).unwrap();
+        }
         std::env::remove_var("AOS_SECRETS_TPM");
-        // Re-enable reading the blob: clear FILE_KEY and leave TPM env unset;
-        // tpm_get does not require tpm_present() when the blob already exists.
-        std::env::remove_var("AOS_SECRETS_FILE_KEY");
+        // Keep FILE_KEY so we don't pick keyring / real TPM for the re-home.
         let s = SecretStore::open(&dir).unwrap();
-        assert_eq!(s.master_backend(), MasterBackend::Tpm);
+        assert_ne!(s.master_backend(), MasterBackend::Tpm);
+        assert!(!dir.join("master.tpm").exists());
+        assert_eq!(s.get("k", "platformd").unwrap(), "v");
         assert_eq!(
-            std::fs::read_to_string(dir.join("master.backend")).unwrap().trim(),
-            "tpm"
+            std::fs::read_to_string(dir.join("master.backend"))
+                .unwrap()
+                .trim(),
+            s.master_backend().as_str()
         );
         s.delete_keyring_entry();
         let _ = std::fs::remove_dir_all(&dir);
+        std::env::remove_var("AOS_SECRETS_FILE_KEY");
     }
 
     #[test]
     fn tpm_present_is_safe_to_call() {
         // Must not panic on CI / VMs without TPM.
         let _ = tpm_present();
+    }
+
+    #[test]
+    fn tpm_set_does_not_claim_tpm_without_seal() {
+        // With TPM disabled, presence-gated DPAPI must not write a tpm marker.
+        let dir = tmp_dir();
+        std::fs::create_dir_all(&dir).unwrap();
+        std::env::set_var("AOS_SECRETS_TPM", "0");
+        std::env::set_var("AOS_SECRETS_FILE_KEY", "1");
+        let mut key = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut key);
+        assert!(!tpm_set(&dir, &key));
+        assert!(!dir.join("master.tpm").exists());
+        std::env::remove_var("AOS_SECRETS_TPM");
+        std::env::remove_var("AOS_SECRETS_FILE_KEY");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -11,7 +11,7 @@ Ce n'est **pas** l'OS bootable. Les exigences v1 sont dans
 
 ### Nouveautés 0.10.0
 
-- **E7 TPM** : la clé maître du vault préfère une enveloppe TPM hôte si dispo (Platform Crypto Win / tpm2 Linux) ; sinon keyring OS puis fichier (DPAPI/0600). Pas de scellage PCR
+- **E7 TPM** : la clé maître du vault préfère un vrai scellage TPM hôte si dispo (Platform Crypto Win `NCrypt` / `TPM_RSA_SRK_SEAL_KEY`) ; sous Linux, fallback keyring/fichier tant que le scellage tpm2 n’est pas branché. La seule présence d’un TPM ne force pas `master.backend=tpm`. Pas de scellage PCR
 - **E8 bridge live** : binaire optionnel séparé `aos-bridged` — HTTP loopback `/v1` JSON↔CBOR vers le bus (mem + secrets.list ; secrets.get/set style service). Pas dans `aos-session`
 - **E9 multi-GPU** : plumbing Placement / llama `tensor_split` ; gate P5 **skip** sur 1 GPU (STATUS honnête — hard-green = run 2 GPU)
 - **Polish Media/UX** : canvas **composition** studio, **upscale** RealESRGAN / `media.image.upscale`, expert DiT ; Wan/LTX = **expérimental** (pas requis TESTER). Pas d’img2img/inpaint first-class ; pas d’UI vidéo produit

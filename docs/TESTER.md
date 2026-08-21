@@ -273,7 +273,7 @@ GitHub feedback submit).
 
 ### 25. Vault TPM + sibling bridge (0.10.0 / E7–E8)
 
-- Settings / secrets: after restart, `var/secrets/master.backend` may read `tpm` when a TPM is present; otherwise `keyring` or `file` (unchanged).
+- Settings / secrets: after restart, `var/secrets/master.backend` may read `tpm` only when the master was sealed with Platform Crypto (`TPM2` blob); TPM presence alone is not enough. Otherwise `keyring` or `file`.
 - Optional: start `aos-bridged` (loopback only) against a running session; `GET`/`POST` health + `mem.context` succeed; agent-style `X-Aos-From` on `secrets.get` returns 403.
 
 ### 23. One-liner install (0.8.0 / P08.9)

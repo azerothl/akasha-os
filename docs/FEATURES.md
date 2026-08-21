@@ -11,7 +11,7 @@ This is **not** the bootable OS. Target v1 requirements live in
 
 ### What's new in 0.10.0
 
-- **E7 TPM**: vault master key prefers a host TPM envelope when available (Windows Platform Crypto / Linux tpm2); still falls back to OS keyring then file (DPAPI/0600). No PCR sealing
+- **E7 TPM**: vault master key prefers a real host TPM seal when available (Windows Platform Crypto `NCrypt` / `TPM_RSA_SRK_SEAL_KEY`); Linux falls back to OS keyring then file until tpm2 seal is wired. Presence of a TPM device alone does not set `master.backend=tpm`. No PCR sealing
 - **E8 live bridge**: optional separate binary `aos-bridged` — loopback HTTP `/v1` JSON↔CBOR to the intent bus (mem + secrets.list; secrets.get/set service-style only). Not inside `aos-session`
 - **E9 multi-GPU path**: Placement / llama layer `tensor_split` plumbing; P5 gate **skips** on 1-GPU hosts (honest STATUS — hard-green needs a 2-GPU run)
 - **Media/UX polish**: Image studio **composition** canvas (overlapping blocks → prompt injection), **upscale** (RealESRGAN / `media.image.upscale`), expert DiT knobs; Wan/LTX catalogue rows are **experimental** (not TESTER-required). No first-class img2img/inpaint; no product video UI
