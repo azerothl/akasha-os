@@ -19,6 +19,8 @@ pub const WIDGET_KINDS: &[&str] = &[
     "table",
     "line_chart",
     "bar_chart",
+    "pie",
+    "scatter",
     "form",
     "button",
     "select",
@@ -175,7 +177,7 @@ impl DeclUiWidget {
                     return Err(DeclUiError::MissingField("text"));
                 }
             }
-            "stat_row" | "table" | "line_chart" | "bar_chart" => {
+            "stat_row" | "table" | "line_chart" | "bar_chart" | "pie" | "scatter" => {
                 if self.bind.as_ref().is_none_or(|b| b.is_empty()) {
                     return Err(DeclUiError::MissingField("bind"));
                 }
@@ -376,8 +378,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn rejects_unknown_kind() {
-        let raw = br#"{"type":"declarative_ui","title":"X","root":{"kind":"canvas"}}"#;
+    fn accepts_pie_and_scatter() {
+        let raw = br#"{
+            "type":"declarative_ui",
+            "title":"Charts",
+            "root":{"kind":"column","children":[
+                {"kind":"pie","bind":"stats.breakdown"},
+                {"kind":"scatter","bind":"stats.points","series":"y"}
+            ]}
+        }"#;
+        DeclUiDocument::parse_json(raw).expect("pie+scatter valid");
+    }
+
+    #[test]
+    fn rejects_webview_kind() {
+        let raw = br#"{"type":"declarative_ui","title":"X","root":{"kind":"webview"}}"#;
         let err = DeclUiDocument::parse_json(raw).unwrap_err();
         assert!(matches!(err, DeclUiError::UnknownKind(_)));
     }

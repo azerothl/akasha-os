@@ -4,7 +4,7 @@ use aos_proto::decl_ui::{DeclUiDocument, DeclUiWidget};
 use aos_proto::ModuleTool;
 use eframe::egui::{self, Ui};
 use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
-use egui_plot::{Bar, BarChart, Line, Plot, PlotPoints};
+use egui_plot::{Bar, BarChart, Line, Plot, PlotPoints, Points};
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -182,6 +182,18 @@ impl DeclUiPanelState {
                 if let Some(bind) = &w.bind {
                     let val = resolve_bind(cache, bind, w.source.as_deref());
                     render_bar_chart(ui, &val, w.series.as_deref());
+                }
+            }
+            "pie" => {
+                if let Some(bind) = &w.bind {
+                    let val = resolve_bind(cache, bind, w.source.as_deref());
+                    render_pie(ui, &val);
+                }
+            }
+            "scatter" => {
+                if let Some(bind) = &w.bind {
+                    let val = resolve_bind(cache, bind, w.source.as_deref());
+                    render_scatter(ui, &val, w.series.as_deref());
                 }
             }
             "select" => {
@@ -568,6 +580,196 @@ fn render_bar_chart(ui: &mut Ui, val: &Value, series_key: Option<&str>) {
                 .map(|(i, y)| Bar::new(i as f64, *y))
                 .collect();
             plot_ui.bar_chart(BarChart::new(bars).name(series_key.unwrap_or("series")));
+        });
+}
+
+fn extract_pie_slices(val: &Value) -> Vec<(String, f64)> {
+    let mut out = Vec::new();
+    let arr = match val {
+        Value::Array(a) => a.as_slice(),
+        Value::Object(o) => o
+            .get("items")
+            .or_else(|| o.get("slices"))
+            .and_then(|v| v.as_array())
+            .map(|a| a.as_slice())
+            .unwrap_or(&[]),
+        _ => &[],
+    };
+    for item in arr {
+        match item {
+            Value::Object(m) => {
+                let label = m
+                    .get("label")
+                    .or_else(|| m.get("name"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("—")
+                    .to_string();
+                let value = m
+                    .get("value")
+                    .and_then(|v| v.as_f64())
+                    .or_else(|| m.get("value").and_then(|v| v.as_i64()).map(|i| i as f64))
+                    .unwrap_or(0.0);
+                if value > 0.0 {
+                    out.push((label, value));
+                }
+            }
+            Value::Array(pair) if pair.len() >= 2 => {
+                let label = pair[0].as_str().unwrap_or("—").to_string();
+                let value = pair[1]
+                    .as_f64()
+                    .or_else(|| pair[1].as_i64().map(|i| i as f64))
+                    .unwrap_or(0.0);
+                if value > 0.0 {
+                    out.push((label, value));
+                }
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+fn render_pie(ui: &mut Ui, val: &Value) {
+    let slices = extract_pie_slices(val);
+    if slices.is_empty() {
+        ui.weak("—");
+        return;
+    }
+    let total: f64 = slices.iter().map(|(_, v)| *v).sum();
+    if total <= 0.0 {
+        ui.weak("—");
+        return;
+    }
+    let (rect, _resp) = ui.allocate_exact_size(egui::vec2(160.0, 160.0), egui::Sense::hover());
+    let center = rect.center();
+    let radius = rect.width().min(rect.height()) * 0.42;
+    let palette = [
+        egui::Color32::from_rgb(70, 130, 220),
+        egui::Color32::from_rgb(220, 120, 70),
+        egui::Color32::from_rgb(90, 180, 110),
+        egui::Color32::from_rgb(180, 90, 180),
+        egui::Color32::from_rgb(220, 180, 60),
+        egui::Color32::from_rgb(90, 180, 200),
+    ];
+    let mut angle = -std::f32::consts::FRAC_PI_2;
+    let painter = ui.painter();
+    for (i, (label, value)) in slices.iter().enumerate() {
+        let sweep = ((value / total) as f32) * std::f32::consts::TAU;
+        let color = palette[i % palette.len()];
+        let steps = ((sweep.abs() / 0.12).ceil() as usize).max(3);
+        let mut points = vec![center];
+        for s in 0..=steps {
+            let a = angle + sweep * (s as f32 / steps as f32);
+            points.push(center + egui::vec2(a.cos() * radius, a.sin() * radius));
+        }
+        painter.add(egui::Shape::convex_polygon(
+            points,
+            color,
+            egui::Stroke::new(1.0, egui::Color32::from_gray(30)),
+        ));
+        let mid = angle + sweep * 0.5;
+        let tip = center + egui::vec2(mid.cos() * (radius * 0.62), mid.sin() * (radius * 0.62));
+        if sweep > 0.25 {
+            painter.text(
+                tip,
+                egui::Align2::CENTER_CENTER,
+                label,
+                egui::FontId::proportional(11.0),
+                egui::Color32::WHITE,
+            );
+        }
+        angle += sweep;
+    }
+    ui.horizontal_wrapped(|ui| {
+        for (i, (label, value)) in slices.iter().enumerate() {
+            let color = palette[i % palette.len()];
+            ui.colored_label(color, format!("{label}: {value:.1}"));
+        }
+    });
+}
+
+fn extract_xy_points(val: &Value, series_key: Option<&str>) -> Vec<[f64; 2]> {
+    let mut out = Vec::new();
+    let arr = match val {
+        Value::Array(a) => a.as_slice(),
+        Value::Object(o) => {
+            if let Some(key) = series_key {
+                if let Some(series) = o.get(key).and_then(|v| v.as_array()) {
+                    series.as_slice()
+                } else {
+                    o.get("points")
+                        .or_else(|| o.get("items"))
+                        .and_then(|v| v.as_array())
+                        .map(|a| a.as_slice())
+                        .unwrap_or(&[])
+                }
+            } else {
+                o.get("points")
+                    .or_else(|| o.get("items"))
+                    .and_then(|v| v.as_array())
+                    .map(|a| a.as_slice())
+                    .unwrap_or(&[])
+            }
+        }
+        _ => &[],
+    };
+    for (i, item) in arr.iter().enumerate() {
+        match item {
+            Value::Object(m) => {
+                let x = m
+                    .get("x")
+                    .and_then(|v| v.as_f64())
+                    .or_else(|| m.get("x").and_then(|v| v.as_i64()).map(|n| n as f64))
+                    .unwrap_or(i as f64);
+                let y = m
+                    .get("y")
+                    .or_else(|| series_key.and_then(|k| m.get(k)))
+                    .and_then(|v| v.as_f64())
+                    .or_else(|| {
+                        m.get("y")
+                            .or_else(|| series_key.and_then(|k| m.get(k)))
+                            .and_then(|v| v.as_i64())
+                            .map(|n| n as f64)
+                    })
+                    .unwrap_or(0.0);
+                out.push([x, y]);
+            }
+            Value::Array(pair) if pair.len() >= 2 => {
+                let x = pair[0]
+                    .as_f64()
+                    .or_else(|| pair[0].as_i64().map(|n| n as f64))
+                    .unwrap_or(i as f64);
+                let y = pair[1]
+                    .as_f64()
+                    .or_else(|| pair[1].as_i64().map(|n| n as f64))
+                    .unwrap_or(0.0);
+                out.push([x, y]);
+            }
+            Value::Number(n) => {
+                if let Some(y) = n.as_f64() {
+                    out.push([i as f64, y]);
+                }
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+fn render_scatter(ui: &mut Ui, val: &Value, series_key: Option<&str>) {
+    let points = extract_xy_points(val, series_key);
+    if points.is_empty() {
+        ui.weak("—");
+        return;
+    }
+    Plot::new("decl_ui_scatter")
+        .height(160.0)
+        .show(ui, |plot_ui| {
+            plot_ui.points(
+                Points::new(PlotPoints::from_iter(points.into_iter()))
+                    .radius(3.0)
+                    .name(series_key.unwrap_or("points")),
+            );
         });
 }
 
