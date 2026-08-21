@@ -197,6 +197,10 @@ pub struct ImageGenOpts {
     pub embeddings_connectors: Option<PathBuf>,
     /// LTX `--audio-vae`.
     pub audio_vae_path: Option<PathBuf>,
+    /// Host path for sd.cpp `--init-img` (img2img).
+    pub init_image_path: Option<PathBuf>,
+    /// sd.cpp `--strength` (0..=1) when `init_image_path` is set.
+    pub strength: Option<f32>,
 }
 
 impl Default for ImageGenOpts {
@@ -236,12 +240,33 @@ impl Default for ImageGenOpts {
             video_frames: None,
             embeddings_connectors: None,
             audio_vae_path: None,
+            init_image_path: None,
+            strength: None,
         }
     }
 }
 
-/// Closed charset for `--backend` / `--params-backend` (no spaces / argv injection).
+/// Default mixed compute backend for DiT + LLM packs (encoders on CPU, diffusion on GPU).
+pub const DEFAULT_MIXED_BACKEND: &str = "te=cpu,llm=cpu,diffusion=gpu,vae=cpu";
+
+/// Closed charset for `--backend` (no spaces / argv injection).
+/// Maps UI aliases `mixed` / `mixte` to [`DEFAULT_MIXED_BACKEND`] (sd.cpp rejects bare `mixte`).
 pub fn sanitize_backend_spec(raw: &str) -> Option<String> {
+    sanitize_backend_token(raw, BackendRole::Compute)
+}
+
+/// Closed charset for `--params-backend`. Aliases `mixed` / `mixte` → `cpu`.
+pub fn sanitize_params_backend_spec(raw: &str) -> Option<String> {
+    sanitize_backend_token(raw, BackendRole::Params)
+}
+
+#[derive(Clone, Copy)]
+enum BackendRole {
+    Compute,
+    Params,
+}
+
+fn sanitize_backend_token(raw: &str, role: BackendRole) -> Option<String> {
     let s = raw.trim();
     if s.is_empty() || s.len() > 128 {
         return None;
@@ -251,6 +276,24 @@ pub fn sanitize_backend_spec(raw: &str) -> Option<String> {
         .all(|c| c.is_ascii_alphanumeric() || matches!(c, '=' | ',' | '&' | '*' | '-' | '_' | '.'))
     {
         return None;
+    }
+    let lower = s.to_ascii_lowercase();
+    if lower == "mixed" || lower == "mixte" {
+        return Some(match role {
+            BackendRole::Compute => DEFAULT_MIXED_BACKEND.to_string(),
+            BackendRole::Params => "cpu".into(),
+        });
+    }
+    // Reject bare unknown tokens (sd.cpp: "backend 'X' was not found").
+    if !lower.contains('=') {
+        let ok = matches!(
+            lower.as_str(),
+            "cpu" | "gpu" | "cuda" | "cuda0" | "vulkan" | "vulkan0" | "metal" | "disk"
+        ) || lower.starts_with("cuda")
+            || lower.starts_with("vulkan");
+        if !ok {
+            return None;
+        }
     }
     Some(s.to_string())
 }
@@ -439,7 +482,7 @@ fn collect_image_args(
         if let Some(b) = opts
             .params_backend
             .as_deref()
-            .and_then(sanitize_backend_spec)
+            .and_then(sanitize_params_backend_spec)
         {
             a.push("--params-backend".into());
             a.push(b);
@@ -468,6 +511,15 @@ fn collect_image_args(
                 a.push("--upscale-tile-size".into());
                 a.push(tile.clamp(32, 512).to_string());
             }
+        }
+    }
+    if let Some(p) = &opts.init_image_path {
+        if p.exists() {
+            a.push("--init-img".into());
+            a.push(p.to_string_lossy().into_owned());
+            let strength = opts.strength.unwrap_or(0.75).clamp(0.0, 1.0);
+            a.push("--strength".into());
+            a.push(format!("{strength:.4}"));
         }
     }
     a
@@ -895,6 +947,28 @@ mod tests {
     }
 
     #[test]
+    fn image_gen_init_img_argv() {
+        let dir = std::env::temp_dir().join("aos-sd-init-img");
+        let _ = std::fs::create_dir_all(&dir);
+        let init = dir.join("base.png");
+        std::fs::write(&init, b"fake").unwrap();
+        let mut opts = ImageGenOpts::default();
+        opts.init_image_path = Some(init.clone());
+        opts.strength = Some(0.42);
+        let args = collect_image_args(
+            Path::new("model.safetensors"),
+            "cat",
+            Path::new("out.png"),
+            &opts,
+            None,
+        );
+        assert!(args.contains(&"--init-img".into()));
+        assert!(args.iter().any(|a| a.ends_with("base.png")));
+        assert!(args.contains(&"--strength".into()));
+        assert!(args.contains(&"0.4200".into()));
+    }
+
+    #[test]
     fn upscale_argv_matches_sdcpp_recipe() {
         let opts = UpscaleOpts {
             upscale_model_path: PathBuf::from("RealESRGAN_x4plus_anime_6B.pth"),
@@ -978,6 +1052,17 @@ mod tests {
         assert!(sanitize_max_vram("8;rm").is_none());
         assert_eq!(sanitize_backend_spec("te=cpu,diffusion=cuda0").as_deref(), Some("te=cpu,diffusion=cuda0"));
         assert!(sanitize_backend_spec("cpu; rm -rf").is_none());
+        assert_eq!(
+            sanitize_backend_spec("mixte").as_deref(),
+            Some(DEFAULT_MIXED_BACKEND)
+        );
+        assert_eq!(
+            sanitize_backend_spec("mixed").as_deref(),
+            Some(DEFAULT_MIXED_BACKEND)
+        );
+        assert_eq!(sanitize_params_backend_spec("mixte").as_deref(), Some("cpu"));
+        assert!(sanitize_backend_spec("bogus").is_none());
+        assert!(sanitize_params_backend_spec("bogus").is_none());
     }
 
     #[test]

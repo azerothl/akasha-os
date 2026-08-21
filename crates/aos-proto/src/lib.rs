@@ -2527,6 +2527,10 @@ pub struct MediaImageOptions {
     pub upscale_repeats: Option<u32>,
     /// sd.cpp `--upscale-tile-size` (VRAM tiling; default 128 in sd.cpp).
     pub upscale_tile_size: Option<u32>,
+    /// Logical path of an init image for img2img (`/downloads/...`).
+    pub init_image: Option<String>,
+    /// img2img denoise strength 0..=1 (sd.cpp `--strength`; default ~0.75 when init set).
+    pub strength: Option<f32>,
 }
 
 /// Closed Piper option object (P09.3). Unknown keys are refused.
@@ -2627,5 +2631,15 @@ mod media_option_tests {
         let o: MediaAudioOptions =
             serde_json::from_str(r#"{"length_scale":1.1,"speaker":0}"#).unwrap();
         assert_eq!(o.length_scale, Some(1.1));
+    }
+
+    #[test]
+    fn image_options_accept_img2img() {
+        let o: MediaImageOptions = serde_json::from_str(
+            r#"{"init_image":"/downloads/base.png","strength":0.65,"steps":12}"#,
+        )
+        .unwrap();
+        assert_eq!(o.init_image.as_deref(), Some("/downloads/base.png"));
+        assert_eq!(o.strength, Some(0.65));
     }
 }

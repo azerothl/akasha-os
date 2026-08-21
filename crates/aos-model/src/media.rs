@@ -477,7 +477,7 @@ fn is_heavy_image_model(model_id: &str) -> bool {
 }
 
 /// Mixed sd.cpp backend for DiT + LLM packs: encoders on CPU, diffusion on GPU.
-const HEAVY_MIXED_BACKEND: &str = "te=cpu,llm=cpu,diffusion=gpu,vae=cpu";
+const HEAVY_MIXED_BACKEND: &str = aos_sd::DEFAULT_MIXED_BACKEND;
 
 fn build_image_gen_opts(
     model_id: &str,
@@ -529,7 +529,7 @@ fn apply_user_image_opts(opts: &mut aos_sd::ImageGenOpts, o: &aos_proto::MediaIm
         opts.params_backend = o
             .params_backend
             .as_deref()
-            .and_then(aos_sd::sanitize_backend_spec);
+            .and_then(aos_sd::sanitize_params_backend_spec);
     }
     if let Some(v) = o.offload_to_cpu {
         opts.offload_to_cpu = v;
@@ -558,6 +558,16 @@ fn apply_user_image_opts(opts: &mut aos_sd::ImageGenOpts, o: &aos_proto::MediaIm
     }
     if let Some(v) = o.video_frames.filter(|n| *n > 0) {
         opts.video_frames = Some(v);
+    }
+    if let Some(raw) = o.init_image.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        let host = logical_media_path(raw);
+        if host.is_file() {
+            opts.init_image_path = Some(host);
+            opts.strength = Some(o.strength.unwrap_or(0.75).clamp(0.0, 1.0));
+        }
+    } else if let Some(s) = o.strength {
+        // Strength without init image is ignored (txt2img).
+        let _ = s;
     }
 }
 
@@ -817,7 +827,7 @@ fn apply_offering_sidecars(opts: &mut aos_sd::ImageGenOpts, model_id: &str) {
         if let Some(b) = args
             .get("params-backend")
             .and_then(|x| x.as_str())
-            .and_then(aos_sd::sanitize_backend_spec)
+            .and_then(aos_sd::sanitize_params_backend_spec)
         {
             opts.params_backend = Some(b);
         }

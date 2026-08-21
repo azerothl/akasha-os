@@ -58,6 +58,10 @@ pub struct ImageStudioState {
     pub upscale_repeats: u32,
     pub upscale_tile_size: u32,
     pub upscalers: Vec<String>,
+    /// img2img: use current preview (or path) as `--init-img`.
+    pub img2img_enabled: bool,
+    pub img2img_strength: f32,
+    pub img2img_path: String,
     pub offload_to_cpu: bool,
     pub diffusion_fa: bool,
     pub auto_fit: bool,
@@ -116,6 +120,9 @@ impl Default for ImageStudioState {
             upscale_repeats: 1,
             upscale_tile_size: 128,
             upscalers: Vec::new(),
+            img2img_enabled: false,
+            img2img_strength: 0.75,
+            img2img_path: String::new(),
             offload_to_cpu: false,
             diffusion_fa: false,
             auto_fit: false,
@@ -574,7 +581,9 @@ impl ImageStudioState {
         self.sd_mode = json_arg_as_string(args.get("mode"));
         self.video_frames = json_arg_as_string(args.get("video-frames"));
         self.backend = json_arg_as_string(args.get("backend"));
+        coerce_backend_alias(&mut self.backend);
         self.params_backend = json_arg_as_string(args.get("params-backend"));
+        coerce_params_backend_alias(&mut self.params_backend);
     }
 
     pub fn refresh_catalog(&mut self) {
@@ -955,6 +964,25 @@ impl ImageStudioState {
             } else {
                 None
             },
+            init_image: if self.img2img_enabled {
+                let path = if !self.img2img_path.trim().is_empty() {
+                    self.img2img_path.trim().to_string()
+                } else {
+                    self.preview.clone().unwrap_or_default()
+                };
+                if path.is_empty() {
+                    None
+                } else {
+                    Some(path)
+                }
+            } else {
+                None
+            },
+            strength: if self.img2img_enabled {
+                Some(self.img2img_strength.clamp(0.0, 1.0))
+            } else {
+                None
+            },
             ..MediaImageOptions::default()
         }
     }
@@ -1239,19 +1267,18 @@ impl ImageStudioState {
                 ui.horizontal(|ui| {
                     ui.label(t.studio_expert_backend);
                     help_icon(ui, t.studio_expert_backend_help);
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.backend)
-                            .desired_width(f32::INFINITY)
-                            .hint_text("te=cpu,llm=cpu,diffusion=gpu,vae=cpu"),
-                    );
+                    coerce_backend_alias(&mut self.backend);
+                    backend_choice_combo(ui, "studio_backend", &mut self.backend, STUDIO_BACKEND_CHOICES);
                 });
                 ui.horizontal(|ui| {
                     ui.label(t.studio_expert_params_backend);
                     help_icon(ui, t.studio_expert_params_backend_help);
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.params_backend)
-                            .desired_width(120.0)
-                            .hint_text("cpu"),
+                    coerce_params_backend_alias(&mut self.params_backend);
+                    backend_choice_combo(
+                        ui,
+                        "studio_params_backend",
+                        &mut self.params_backend,
+                        STUDIO_PARAMS_BACKEND_CHOICES,
                     );
                     ui.label(t.studio_expert_threads);
                     help_icon(ui, t.studio_expert_threads_help);
@@ -1311,6 +1338,66 @@ impl ImageStudioState {
             &self.vaes,
             Some("Optional VAE override for decoding latents to image."),
         );
+        ui.separator();
+        ui.heading(t.studio_img2img_heading);
+        ui.horizontal(|ui| {
+            ui.checkbox(&mut self.img2img_enabled, t.studio_img2img_enable);
+            help_icon(ui, t.studio_img2img_enable_help);
+        });
+        ui.weak(t.studio_img2img_blurb);
+        if self.img2img_enabled {
+            ui.horizontal(|ui| {
+                ui.label(t.studio_img2img_path);
+                help_icon(ui, t.studio_img2img_path_help);
+            });
+            ui.horizontal(|ui| {
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.img2img_path).desired_width(280.0),
+                );
+                if ui.button(t.studio_browse).clicked() {
+                    let start = Path::new(self.img2img_path.trim())
+                        .parent()
+                        .filter(|p| p.is_dir())
+                        .map(|p| p.to_path_buf())
+                        .or_else(|| {
+                            self.preview.as_deref().and_then(|logical| {
+                                let host = aos_home()
+                                    .join("var/storage/data")
+                                    .join(logical.trim_start_matches('/'));
+                                host.parent()
+                                    .filter(|p| p.is_dir())
+                                    .map(|p| p.to_path_buf())
+                            })
+                        })
+                        .or_else(user_downloads_dir)
+                        .unwrap_or_else(aos_home);
+                    if let Some(path) = pick_os_file(
+                        t.studio_img2img_browse_title,
+                        &[
+                            ("Images", &["png", "jpg", "jpeg", "webp", "bmp"]),
+                            ("PNG", &["png"]),
+                            ("All files", &["*"]),
+                        ],
+                        Some(&start),
+                    ) {
+                        self.img2img_path = path.to_string_lossy().into_owned();
+                    }
+                }
+                if let Some(prev) = self.preview.clone() {
+                    if ui.button(t.studio_img2img_use_preview).clicked() {
+                        self.img2img_path = prev;
+                    }
+                }
+            });
+            ui.horizontal(|ui| {
+                ui.label(t.studio_img2img_strength);
+                help_icon(ui, t.studio_img2img_strength_help);
+                ui.add(
+                    egui::Slider::new(&mut self.img2img_strength, 0.05..=1.0)
+                        .fixed_decimals(2),
+                );
+            });
+        }
         ui.separator();
         ui.heading(t.studio_upscale_heading);
         ui.horizontal(|ui| {
@@ -1779,6 +1866,73 @@ fn max_vram_label(value: &str) -> &'static str {
         "12" => "12 GiB",
         _ => "custom",
     }
+}
+
+/// Closed `--backend` choices (value → label). Empty = leave catalog/model defaults.
+const STUDIO_BACKEND_CHOICES: &[(&str, &str)] = &[
+    ("", "catalog"),
+    ("cpu", "cpu"),
+    ("gpu", "gpu"),
+    ("cuda0", "cuda0"),
+    (
+        "te=cpu,llm=cpu,diffusion=gpu,vae=cpu",
+        "mixed DiT+LLM",
+    ),
+    ("te=cpu,diffusion=gpu,vae=cpu", "mixed TE+diff"),
+];
+
+/// Closed `--params-backend` choices.
+const STUDIO_PARAMS_BACKEND_CHOICES: &[(&str, &str)] = &[
+    ("", "catalog"),
+    ("cpu", "cpu"),
+    ("cuda0", "cuda0"),
+    ("disk", "disk"),
+];
+
+fn coerce_backend_alias(value: &mut String) {
+    let lower = value.trim().to_ascii_lowercase();
+    if lower == "mixte" || lower == "mixed" {
+        *value = "te=cpu,llm=cpu,diffusion=gpu,vae=cpu".into();
+    }
+}
+
+fn coerce_params_backend_alias(value: &mut String) {
+    let lower = value.trim().to_ascii_lowercase();
+    if lower == "mixte" || lower == "mixed" {
+        *value = "cpu".into();
+    }
+}
+
+fn backend_choice_label<'a>(value: &'a str, choices: &[(&'a str, &'a str)]) -> &'a str {
+    choices
+        .iter()
+        .find(|(v, _)| *v == value)
+        .map(|(_, label)| *label)
+        .unwrap_or(if value.is_empty() { "catalog" } else { value })
+}
+
+fn backend_choice_combo(
+    ui: &mut egui::Ui,
+    salt: &str,
+    current: &mut String,
+    choices: &[(&str, &str)],
+) {
+    let orphan = if !choices.iter().any(|(v, _)| *v == current.as_str()) && !current.is_empty() {
+        Some(current.clone())
+    } else {
+        None
+    };
+    egui::ComboBox::from_id_salt(salt)
+        .selected_text(backend_choice_label(current, choices))
+        .width(220.0)
+        .show_ui(ui, |ui| {
+            for (value, label) in choices {
+                ui.selectable_value(current, (*value).to_string(), *label);
+            }
+            if let Some(extra) = orphan {
+                ui.selectable_value(current, extra.clone(), extra.as_str());
+            }
+        });
 }
 
 fn combo_plain(
