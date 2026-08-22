@@ -2,7 +2,7 @@
 
 **Language:** English | [Français](fr/sibling-bridge.md)
 
-> Date: 21/08/2026 · Preview **0.10.1**  
+> Date: 23/08/2026 · Preview **0.11.0**  
 > Status: live adapter (`aos-bridged`) with full `mem.*` parity + JSON Schema export  
 > Related: [competitive-landscape.md](competitive-landscape.md), [evolution-roadmap.md](evolution-roadmap.md) E8, [docs/bridge/](bridge/)
 
@@ -35,7 +35,7 @@ not duplicated blindly; optional “assistant as module” remains a later optio
 
 ## HTTP JSON ↔ CBOR intent mapping
 
-Preview **0.10.1** ships an optional separate binary `aos-bridged`
+Preview **0.11.0** ships an optional separate binary `aos-bridged`
 (`crates/aos-bridge`) in the Preview zip `bin/`. It is **not** started by
 `aos-session`. Bind is always `127.0.0.1` (`AOS_BRIDGE_PORT`, default
 `24710`). Bus: `AOS_BUS_ADDR` (default `127.0.0.1:24701`). Smoke:

@@ -1,8 +1,8 @@
-# Tester protocol — Akasha OS Preview 0.9.0
+# Tester protocol — Akasha OS Preview 0.11.0
 
 **Language:** English | [Français](fr/TESTER.md)
 
-> Date: 19/08/2026 · Preview **0.9.0**
+> Date: 23/08/2026 · Preview **0.11.0**
 
 Thank you for testing Preview. Goal: install **without** `cargo` or cloning
 the repo, exercise the main paths, and send feedback **from the UI**.
@@ -285,6 +285,12 @@ GitHub feedback submit).
 - Settings: enable **Auto-download updates** (off by default). After a newer Release is detected, `var/updates/pending.json` appears and the banner says relaunch to apply (no Download click needed).
 - Image studio: enable **Start from an image**, pick `/downloads/…` or **Use current preview**, set strength → Generate (img2img). Inpaint/mask not required.
 
+### 27. Local decode (0.11.0 / E20)
+
+- After a **second** chat turn that reuses the same long context, TTFT on Models / sidebar should drop vs the first (cold) turn.
+- Optional **draft** / **prefix** metrics may appear on that line when prompt-lookup fires (quotes / RAG / repeated prefixes).
+- Streamed tokens must still match a non-speculative reply (exact sampler). Multi-agent / batch N>1 still streams.
+
 ### 23. One-liner install (0.8.0 / P08.9)
 
 - Windows: `irm https://azerothl.github.io/akasha-os/install.ps1 | iex`
@@ -298,7 +304,7 @@ GitHub feedback submit).
 - At least one usable `var/feedback/fb-*.json` per report
 - Gates PC.6–PC.9 and PC.11–PC.13 checked on at least one machine
 
-## Out of scope Preview 0.10.1
+## Out of scope Preview 0.11.0
 
 - seL4 / bare-metal boot
 - macOS

@@ -64,7 +64,7 @@ E14 livré dans Preview **0.5.0** — [phase-preview-05.md](phases/phase-preview
 Export schémas E8 + contrat HTTP↔bus, keyring OS E7, catalogue local signé E10 livrés dans Preview **0.6.0** — [phase-preview-06.md](phases/phase-preview-06.md).  
 **E15** (UI de module déclarative rendue par l’hôte) livré en Preview **0.7.0** — [phases/phase-preview-07.md](phases/phase-preview-07.md).  
 **E16 + E17 + pack widgets E15 + onglet Providers F-MDL-04** livrés en Preview **0.8.0** — [phases/phase-preview-08.md](phases/phase-preview-08.md).  
-**Prochaine Preview :** reste Horizon B (TPM E7, adaptateur HTTP live si planifié, multi-GPU E9) + clôture cohorte PC. **E18 + E19** livrés en Preview **0.9.0**.
+**E18 + E19** livrés en Preview **0.9.0**. **E7 TPM + E8 live + E9 + polish Media** livrés en **0.10.0**. **E20 decode local** livré en Preview **0.11.0** (P11). La clôture cohorte PC reste après 0.11.
 
 **Hors scope court terme :** Telegram/Discord natifs, marketplace public, computer-use desktop, `sandboxed_webview`.
 
@@ -85,8 +85,8 @@ Export schémas E8 + contrat HTTP↔bus, keyring OS E7, catalogue local signé E
 | **E17** | **Artefact hôte CPU/GPU unifié** + politique device live | Le testeur devait choisir un zip CUDA ou CPU ; Settings auto/gpu/cpu seulement au prochain boot | **Preview 0.8.0** ✅ — un artefact par OS ; la session lance un backend sûr CUDA ou CPU ; bascule UI = restart modeld ; **auto** = hystérésis Placement Manager sur VRAM/CPU (et E16) ; le pin surcharge ; `-CpuOnly` = builder seulement ; **milieu de token sans cancel = E18 / 0.9** |
 | **E18** | **Migration de device en milieu de token** (CPU ↔ GPU, le stream continue) | La bascule 0.8 annulait l’infer live | **Preview 0.9.0** ✅ — [phases/phase-preview-09.md](phases/phase-preview-09.md) ; rejeu de préfixe ; fallback fail-closed vers cancel+restart 0.8 |
 | **E19** | **Média local extensible** (autres modèles d’image + options sd.cpp / Piper fermées + plugins chat) | 0.8 figeait SD 1.5 en 512² / 20 steps et deux voix Piper | **Preview 0.9.0** ✅ — [phases/phase-preview-09.md](phases/phase-preview-09.md) ; schéma JSON fermé ; Flux2/Ideogram4/Piper extra ; studio Image + carte TTS ; **pas** de vidéo ; **pas** d’img2img en intent de première classe |
-| **E20** | **Leviers de decode local** (KV Q8, prefix cache `llama_state_*`, speculative prompt-lookup en C1) | TTFT / tok/s chat+agents sans adopter vLLM | **Preview 0.11.0** — [phases/phase-preview-11.md](phases/phase-preview-11.md) ; C1 seulement ; batch N>1 inchangé ; pas de second GGUF draft |
-| **E21** | **Bande passante Placement + ancres sémantiques de préfixe** (inspiré FreeToken, pas une dépendance) | Les papiers MoE/edge insistent sur transfert vs calcul ; les edits d’agent invalident le KV à des offsets arbitraires | **Preview 0.11.x** — [phases/phase-preview-11.md](phases/phase-preview-11.md) §E21 ; RAM mesurée + estimations `nvidia-smi`/PCIe dans `hardware.json` → `HardwareProfile` ; préfixe E20 ancré aux marqueurs tour/outil/pensée ; **LRU par expert MoE hors scope** — voir [moe-expert-offload.md](moe-expert-offload.md) |
+| **E20** | **Leviers de decode local** (KV Q8, prefix cache `llama_state_*`, speculative prompt-lookup en C1) | TTFT / tok/s chat+agents sans adopter vLLM | **Preview 0.11.0** ✅ — [phases/phase-preview-11.md](phases/phase-preview-11.md) ; C1 seulement ; batch N>1 inchangé ; pas de second GGUF draft |
+| **E21** | **Bande passante Placement + ancres sémantiques de préfixe** (inspiré FreeToken, pas une dépendance) | Les papiers MoE/edge insistent sur transfert vs calcul ; les edits d’agent invalident le KV à des offsets arbitraires | **Preview 0.11.0** ✅ — [phases/phase-preview-11.md](phases/phase-preview-11.md) §E21 ; RAM mesurée + estimations `nvidia-smi`/PCIe dans `hardware.json` → `HardwareProfile` ; préfixe E20 ancré aux marqueurs tour/outil/pensée ; **LRU par expert MoE hors scope** — voir [moe-expert-offload.md](moe-expert-offload.md) |
 
 ---
 
@@ -120,7 +120,7 @@ Export schémas E8 + contrat HTTP↔bus, keyring OS E7, catalogue local signé E
 | **P0–P5 / PV / PC** | Gates exécutables ([plan-developpement-phases.md](plan-developpement-phases.md), [STATUS.md](STATUS.md)) |
 | **E1–E20** | Priorisation après analyse concurrentielle ; les incréments Preview P03–P11 livrent des E* sans attendre la gate cohort PC |
 
-Ne **pas** inventer un numéro P6 tant que PC n’est pas fermé et que STATUS n’est pas à jour. E1–E5 livrés en Preview **0.3.0** ; E6 / E7-lite / E10-lite en **0.4.0** ; **E14** en **0.5.0** ; E8 schémas + E7-keyring + E10 catalogue en **0.6.0** ; **E15** hôte d’UI de module déclarative livré en Preview **0.7.0**. **E16 + E17 + pack widgets E15 + onglet Providers F-MDL-04** livrés en Preview **0.8.0**. **E18 + E19** livrés en Preview **0.9.0**. **E7 TPM + E8 live + E9** en **0.10.0**. **E20 decode local** en Preview **0.11.0** (P11). Puis fermeture cohort PC + Horizon C / PV.4+.
+Ne **pas** inventer un numéro P6 tant que PC n’est pas fermé et que STATUS n’est pas à jour. E1–E5 livrés en Preview **0.3.0** ; E6 / E7-lite / E10-lite en **0.4.0** ; **E14** en **0.5.0** ; E8 schémas + E7-keyring + E10 catalogue en **0.6.0** ; **E15** hôte d’UI de module déclarative livré en Preview **0.7.0**. **E16 + E17 + pack widgets E15 + onglet Providers F-MDL-04** livrés en Preview **0.8.0**. **E18 + E19** livrés en Preview **0.9.0**. **E7 TPM + E8 live + E9** livrés en **0.10.0**. **E20 decode local** livré en Preview **0.11.0** (P11). Puis fermeture cohort PC + Horizon C / PV.4+.
 
 Séquençage suggéré une fois PC fermé (historique ; les incréments Preview
 ont déjà joué cette séquence sur l’hôte en P03–P07, puis E16+E17 en P08) :

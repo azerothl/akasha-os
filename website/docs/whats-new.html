@@ -6,7 +6,7 @@
     <title>What's new — Akasha OS Preview</title>
     <meta
       name="description"
-      content="What each Akasha OS Preview version added, from 0.10.0 back to 0.1.0. Host app on Windows/Linux, not a bootable OS."
+      content="What each Akasha OS Preview version added, from 0.11.0 back to 0.1.0. Host app on Windows/Linux, not a bootable OS."
     />
     <link rel="stylesheet" href="../styles.css" />
     <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
@@ -19,8 +19,8 @@
     <!--
       THESIS: The version log is a cut-face journal of what shipped, not a feature card grid and not a marketing changelog.
       OWN-WORLD: Orrery inner plate — void, cyan rails, grant gutters.
-      STORY: A tester sees what 0.10.0 added, then walks earlier Previews without leaving the site.
-      FIRST VIEWPORT: Honesty line, compact version rail, then 0.10.0 ticks.
+      STORY: A tester sees what 0.11.0 added, then walks earlier Previews without leaving the site.
+      FIRST VIEWPORT: Honesty line, compact version rail, then 0.11.0 ticks.
       FORM: Orrery inner plate, seed c1699dbf reroll 1.
       FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
     -->
@@ -69,6 +69,8 @@
         </p>
 
         <nav class="log-toc" aria-label="Versions">
+          <a href="#v0-11-0">0.11.0</a>
+          <a href="#v0-10-1">0.10.1</a>
           <a href="#v0-10-0">0.10.0</a>
           <a href="#v0-9-0">0.9.0</a>
           <a href="#v0-8-0">0.8.0</a>
@@ -82,6 +84,57 @@
           <a href="#v0-1-1">0.1.1</a>
           <a href="#v0-1-0">0.1.0</a>
         </nav>
+
+        <article class="grant" id="v0-11-0">
+          <h2>0.11.0</h2>
+          <p class="rev-when">23/08/2026</p>
+          <p class="hist" data-lang="en">
+            Local decode levers on the existing llama.cpp path: a smaller KV
+            cache, a real prefix cache, and exact prompt-lookup speculation
+            for single-stream chat — without adopting vLLM or a second draft
+            GGUF.
+          </p>
+          <p class="hist" data-lang="fr">
+            Leviers de decode local sur le chemin llama.cpp existant : KV plus
+            compact, vrai prefix cache, et speculation prompt-lookup exacte
+            en mono-flux — sans adopter vLLM ni un second GGUF draft.
+          </p>
+          <ul class="ticks">
+            <li data-lang="en"><strong>E20 KV</strong>: Q8_0 on GPU (F16 on CPU); Placement accounts for typed KV bytes.</li>
+            <li data-lang="fr"><strong>E20 KV</strong> : Q8_0 sur GPU (F16 sur CPU) ; Placement compte les octets KV typés.</li>
+            <li data-lang="en"><strong>Prefix cache</strong>: suffix prefill + warm <code>llama_state_*</code>; lower TTFT on turn 2 / E18 migrate restore.</li>
+            <li data-lang="fr"><strong>Prefix cache</strong> : prefill suffixe + warm <code>llama_state_*</code> ; TTFT plus bas au tour 2 / restore migrate E18.</li>
+            <li data-lang="en"><strong>Prompt-lookup</strong> speculative decode on C1 only; batch N&gt;1 unchanged; exact sampler.</li>
+            <li data-lang="fr"><strong>Prompt-lookup</strong> speculative en C1 seulement ; batch N&gt;1 inchangé ; sampler exact.</li>
+            <li data-lang="en"><strong>Metrics</strong>: <code>draft_accept</code> / <code>prefix_hit</code> on the Models line.</li>
+            <li data-lang="fr"><strong>Métriques</strong> : <code>draft_accept</code> / <code>prefix_hit</code> sur la ligne Models.</li>
+            <li data-lang="en"><strong>E21</strong>: measured RAM + GPU/PCIe bandwidth in <code>hardware.json</code>; semantic prefix snap to ChatML markers. MoE expert LRU stays out of scope.</li>
+            <li data-lang="fr"><strong>E21</strong> : bande passante RAM mesurée + GPU/PCIe dans <code>hardware.json</code> ; ancrage sémantique du préfixe aux marqueurs ChatML. LRU par expert MoE hors scope.</li>
+          </ul>
+        </article>
+
+        <article class="grant" id="v0-10-1">
+          <h2>0.10.1</h2>
+          <p class="rev-when">21/08/2026</p>
+          <p class="hist" data-lang="en">
+            Bridge parity and product polish on top of 0.10.0: full live
+            <code>mem.*</code> on <code>aos-bridged</code>, opt-in auto-download
+            updates, pie/scatter widgets, and closed img2img options.
+          </p>
+          <p class="hist" data-lang="fr">
+            Parité bridge et polish produit sur 0.10.0 : <code>mem.*</code>
+            live complet sur <code>aos-bridged</code>, téléchargement auto
+            opt-in des updates, widgets pie/scatter, et options img2img fermées.
+          </p>
+          <ul class="ticks">
+            <li data-lang="en"><strong>E8</strong>: full live <code>mem.*</code> routes; binary ships in Preview <code>bin/</code>.</li>
+            <li data-lang="fr"><strong>E8</strong> : routes <code>mem.*</code> live ; binaire dans <code>bin/</code> Preview.</li>
+            <li data-lang="en">Opt-in <strong>auto-download</strong> updates; apply still on next launch.</li>
+            <li data-lang="fr">Téléchargement auto des updates <strong>opt-in</strong> ; apply toujours au prochain lancement.</li>
+            <li data-lang="en">E15 <code>pie</code> + <code>scatter</code> (still no webview). Img2img via <code>init_image</code> / <code>strength</code>.</li>
+            <li data-lang="fr">E15 <code>pie</code> + <code>scatter</code> (toujours pas de webview). Img2img via <code>init_image</code> / <code>strength</code>.</li>
+          </ul>
+        </article>
 
         <article class="grant" id="v0-10-0">
           <h2>0.10.0</h2>

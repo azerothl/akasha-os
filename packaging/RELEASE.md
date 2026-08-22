@@ -7,8 +7,8 @@
 Tag then push:
 
 ```bash
-git tag v0.10.1
-git push origin v0.10.1
+git tag v0.11.0
+git push origin v0.11.0
 ```
 
 The workflow [`.github/workflows/preview-release.yml`](../.github/workflows/preview-release.yml)
@@ -44,13 +44,13 @@ GGUFs are downloaded on **first run** via `share/models/manifest.json`.
 ## Release notes (draft)
 
 ```
-Akasha OS Preview 0.10.1 — bridge parity + product polish
+Akasha OS Preview 0.11.0 — E20 local decode
 
-- E8: full live mem.* routes on aos-bridged; binary ships in Preview bin/
-- Updates: opt-in auto-download; apply still on next launch
-- E15: pie + scatter widgets (no webview)
-- img2img: closed init_image + strength on media.image.generate + Image studio
-- E7: real Win TPM seal (TPM2); presence alone is not enough
+- E20: KV Q8_0 on GPU (F16 on CPU); Placement typed KV bytes
+- Prefix cache: memory_seq_rm + warm llama_state_* (lower TTFT on turn 2 / E18 migrate)
+- Prompt-lookup speculative decode on C1; batch N>1 unchanged
+- Metrics: draft_accept / prefix_hit on Models
+- E21: measured RAM + GPU/PCIe bandwidth in hardware.json; semantic prefix anchors
 
 Not a bootable OS. See FIRST-RUN.md / INSTALL.md / TESTER.md
 ```

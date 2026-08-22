@@ -1,10 +1,10 @@
-# Installation — Akasha OS Preview 0.8.0
+# Installation — Akasha OS Preview 0.11.0
 
 **Language:** English | [Français](fr/INSTALL.md)
 
-> Date: 18/08/2026 · Preview **0.8.0**
+> Date: 23/08/2026 · Preview **0.11.0**
 
-**This is not a bootable OS.** Preview 0.8.0 runs on **Windows or Linux x64**
+**This is not a bootable OS.** Preview 0.11.0 runs on **Windows or Linux x64**
 (host scaffolding, ADR 0001). **NVIDIA is recommended**; the **same zip**
 ships a CPU-linked `aos-modeld-cpu` (Settings → Inference). seL4 is a
 separate track.

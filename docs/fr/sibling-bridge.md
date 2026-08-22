@@ -2,7 +2,7 @@
 
 **Langue :** [English](../sibling-bridge.md) | Français
 
-> Date : 21/08/2026 · Preview **0.10.1**  
+> Date : 23/08/2026 · Preview **0.11.0**  
 > Statut : adaptateur live (`aos-bridged`) avec parité `mem.*` complète + export JSON Schema  
 > Lié : [paysage-concurrentiel.md](paysage-concurrentiel.md), [plan-evolutions.md](plan-evolutions.md) E8, [docs/bridge/](../bridge/)
 
@@ -25,7 +25,7 @@ plus tard.
 
 ## Mapping HTTP JSON ↔ intents CBOR
 
-La Preview **0.10.1** livre le binaire optionnel séparé `aos-bridged`
+La Preview **0.11.0** livre le binaire optionnel séparé `aos-bridged`
 (`crates/aos-bridge`) dans `bin/` du zip. Il **n’est pas** démarré par
 `aos-session`. Bind toujours `127.0.0.1` (`AOS_BRIDGE_PORT`, défaut
 `24710`). Bus : `AOS_BUS_ADDR` (défaut `127.0.0.1:24701`). Smoke :

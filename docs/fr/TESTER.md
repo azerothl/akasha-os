@@ -1,8 +1,8 @@
-# Protocole testeur — Akasha OS Preview 0.9.0
+# Protocole testeur — Akasha OS Preview 0.11.0
 
 **Langue :** [English](../TESTER.md) | Français
 
-> Date : 19/08/2026 · Preview **0.9.0**
+> Date : 23/08/2026 · Preview **0.11.0**
 
 Merci de tester la Preview. Objectif : installer **sans** `cargo` ni clone du
 repo, exercer les parcours principaux, et envoyer un retour **depuis l'UI**.
@@ -255,13 +255,19 @@ et envoi de retour GitHub).
 - Settings : **Télécharger les mises à jour automatiquement** (off par défaut) → `pending.json` + bandeau « relancer ».
 - Studio : **Partir d'une image** + force → Generate (img2img). Inpaint/mask non requis.
 
+### 27. Decode local (0.11.0 / E20)
+
+- Après un **deuxième** tour de chat qui réutilise le même long contexte, le TTFT (Models / barre) doit baisser vs le premier tour à froid.
+- Des métriques **draft** / **préfixe** optionnelles peuvent apparaître quand le prompt-lookup se déclenche.
+- Les tokens streamés restent exacts (même sampler). Batch / multi-agents N>1 stream encore.
+
 ## Critères de succès (équipe)
 
 - 3 testeurs Windows + 1 Linux suivent ce protocole sans toolchain Rust
 - Au moins un fichier `var/feedback/fb-*.json` exploitable par retour
 - Gates PC.6–PC.9 et PC.11–PC.13 cochés sur au moins une machine
 
-## Hors scope Preview 0.10.1
+## Hors scope Preview 0.11.0
 
 - Boot seL4 / fer nu (tag interne `sel4-pv-*` seulement)
 - macOS

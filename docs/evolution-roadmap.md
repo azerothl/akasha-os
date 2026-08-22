@@ -64,7 +64,7 @@ E14 shipped in Preview **0.5.0** — [phase-preview-05.md](phases/phase-preview-
 E8 schema export + HTTP↔bus contract, E7 OS keyring, E10 signed local catalogue shipped in Preview **0.6.0** — [phase-preview-06.md](phases/phase-preview-06.md).  
 **E15** (host-rendered declarative module UI) shipped in Preview **0.7.0** — [phase-preview-07.md](phases/phase-preview-07.md).  
 **E16 + E17 + E15 widget pack + F-MDL-04 Providers** shipped in Preview **0.8.0** — [phase-preview-08.md](phases/phase-preview-08.md).  
-**E18 + E19** shipped in Preview **0.9.0**. **Next Preview 0.10.0 (P10):** remaining Horizon B (full E7 TPM, live HTTP adapter, E9 multi-GPU) + Media/UX polish + internal seL4 gate (`sel4-pv-0.10.0`). PC cohort close remains after 0.10.
+**E18 + E19** shipped in Preview **0.9.0**. **E7 TPM + E8 live + E9 path + Media polish** shipped in **0.10.0**. **E20 local decode** shipped in Preview **0.11.0** (P11). PC cohort close remains after 0.11.
 
 **Out of near-term scope:** native Telegram/Discord, public marketplace, desktop computer-use, `sandboxed_webview`.
 
@@ -85,8 +85,8 @@ E8 schema export + HTTP↔bus contract, E7 OS keyring, E10 signed local catalogu
 | **E17** | **Unified CPU/GPU host artefact** + live device policy | Testers used to pick a CUDA zip or a CPU zip; Settings auto/gpu/cpu only applied on next boot | **Preview 0.8.0** ✅ — one artefact per OS; session spawns a CUDA-safe or CPU-safe backend; UI switch restarts modeld; **auto** = Placement Manager hysteresis on VRAM/CPU (and E16); pin overrides; `-CpuOnly` = builder-only; **mid-token without cancel = E18 / 0.9** |
 | **E18** | **Mid-token device migrate** (CPU ↔ GPU, stream continues) | 0.8 switch cancelled the live infer | **Preview 0.9.0** ✅ — [phase-preview-09.md](phases/phase-preview-09.md); prefix replay; fail-closed fallback to 0.8 cancel+restart |
 | **E19** | **Extensible local media** (extra image models + closed sd.cpp / Piper options + chat media plugins) | 0.8 hard-coded SD 1.5 at 512² / 20 steps and two Piper voices | **Preview 0.9.0** ✅ — [phase-preview-09.md](phases/phase-preview-09.md); closed JSON schema; Flux2/Ideogram4/extra Piper; Image studio + in-chat TTS card; **not** video; **not** img2img as a first-class intent |
-| **E20** | **Local decode levers** (KV Q8, `llama_state_*` prefix cache, prompt-lookup speculative on C1) | Chat/agent TTFT + tok/s without adopting vLLM | **Preview 0.11.0** — [phase-preview-11.md](phases/phase-preview-11.md); C1 only; batch N>1 unchanged; no second draft GGUF |
-| **E21** | **Placement bandwidth + semantic prefix anchors** (FreeToken-inspired, not a dependency) | MoE/edge papers stress transfer vs compute; agent edits invalidate KV at arbitrary tokens | **Preview 0.11.x** — [phase-preview-11.md](phases/phase-preview-11.md) §E21; measured RAM + `nvidia-smi`/PCIe estimates in `hardware.json` → `HardwareProfile`; E20 prefix snaps to turn/tool/think markers; **MoE per-expert LRU out of scope** — see [moe-expert-offload.md](moe-expert-offload.md) |
+| **E20** | **Local decode levers** (KV Q8, `llama_state_*` prefix cache, prompt-lookup speculative on C1) | Chat/agent TTFT + tok/s without adopting vLLM | **Preview 0.11.0** ✅ — [phase-preview-11.md](phases/phase-preview-11.md); C1 only; batch N>1 unchanged; no second draft GGUF |
+| **E21** | **Placement bandwidth + semantic prefix anchors** (FreeToken-inspired, not a dependency) | MoE/edge papers stress transfer vs compute; agent edits invalidate KV at arbitrary tokens | **Preview 0.11.0** ✅ — [phase-preview-11.md](phases/phase-preview-11.md) §E21; measured RAM + `nvidia-smi`/PCIe estimates in `hardware.json` → `HardwareProfile`; E20 prefix snaps to turn/tool/think markers; **MoE per-expert LRU out of scope** — see [moe-expert-offload.md](moe-expert-offload.md) |
 
 ---
 
@@ -120,7 +120,7 @@ E8 schema export + HTTP↔bus contract, E7 OS keyring, E10 signed local catalogu
 | **P0–P5 / PV / PC** | Executable phase gates ([development-plan.md](development-plan.md), [STATUS.md](STATUS.md)) |
 | **E1–E20** | Prioritization after competitive analysis; Preview increments P03–P11 ship E* without waiting for the PC cohort gate |
 
-Do **not** invent a P6 number until PC is closed and STATUS is updated. E1–E5 shipped in Preview **0.3.0**; E6 / E7-lite / E10-lite shipped in Preview **0.4.0**; **E14** shipped in Preview **0.5.0**; E8 schemas + E7-keyring + E10 catalogue shipped in Preview **0.6.0**; **E15** declarative module UI host shipped in Preview **0.7.0**. **E16 + E17 + E15 widget pack + F-MDL-04 Providers** shipped in Preview **0.8.0**. **E18 + E19** shipped in Preview **0.9.0**. **E7 TPM + E8 live + E9 path + Media polish** ship in Preview **0.10.0** (P10). **E20 local decode** ships in Preview **0.11.0** (P11). Then PC cohort close + Horizon C / PV.4+ when scheduled.
+Do **not** invent a P6 number until PC is closed and STATUS is updated. E1–E5 shipped in Preview **0.3.0**; E6 / E7-lite / E10-lite shipped in Preview **0.4.0**; **E14** shipped in Preview **0.5.0**; E8 schemas + E7-keyring + E10 catalogue shipped in Preview **0.6.0**; **E15** declarative module UI host shipped in Preview **0.7.0**. **E16 + E17 + E15 widget pack + F-MDL-04 Providers** shipped in Preview **0.8.0**. **E18 + E19** shipped in Preview **0.9.0**. **E7 TPM + E8 live + E9 path + Media polish** shipped in Preview **0.10.0** (P10). **E20 local decode** shipped in Preview **0.11.0** (P11). Then PC cohort close + Horizon C / PV.4+ when scheduled.
 
 Suggested sequencing once PC closes (historical; Preview increments already
 ran this on the host as P03–P07, then E16+E17 as P08):

@@ -42,7 +42,9 @@ userspace avant d'engager le port microkernel.
 | **P06** | Hôte Preview Win/Linux | Preview **0.6.0** — E8 / E7-keyring / E10 (schémas pont, keyring OS, catalogue) | livré | fait |
 | **P07** | Hôte Preview Win/Linux | Preview **0.7.0** — E15 (UI de module déclarative rendue par l’hôte) | livré | fait |
 | **P08** | Hôte Preview Win/Linux | Preview **0.8.0** — E16 image+audio + E17 hôte CPU/GPU + désinstall module + widgets E15 + Providers | livré | fait |
-| **P09** | Hôte Preview Win/Linux | Preview **0.9.0** — E18 migrate mid-token + E19 modèles/options média + plugins chat média | ~4-6 semaines | fait |
+| **P09** | Hôte Preview Win/Linux | Preview **0.9.0** — E18 migrate mid-token + E19 modèles/options média + plugins chat média | livré | fait |
+| **P10** | Hôte Preview Win/Linux | Preview **0.10.0** — E7 TPM + E8 live + E9 + polish Media + seL4 interne | livré | fait |
+| **P11** | Hôte Preview Win/Linux | Preview **0.11.0** — E20 decode local (KV Q8, prefix cache, prompt-lookup C1) | livré | fait |
 
 **Total indicatif** (fondation) : ~60-80 semaines en séquence naïve ;
 **PV ∥ P5 ∥ PC** rapproche le chemin critique. Les incréments Preview
@@ -532,16 +534,32 @@ pas de webview.
 Séquençage : P09.1 → P09.2 ; P09.3 ∥ P09.4 → P09.5 ∥ P09.8 → P09.7 → P09.6. Dépend de P08 / E16+E17.  
 Détail : [phases/phase-preview-09.md](phases/phase-preview-09.md).
 
-### Reste après 0.9 (pas une nouvelle P6)
+### P10 — Preview 0.10.0 — fait
 
-P09 est l’incrément Preview suivant 0.8. Le reste est planifié quand le
+E7 TPM + E8 `aos-bridged` live + E9 chemin multi-GPU + polish Media + seL4 interne. Détail : [phases/phase-preview-10.md](phases/phase-preview-10.md).
+
+### P11 — Preview 0.11.0 (E20 decode local) — fait
+
+| # | Évolution | Livrable | État |
+|---|-----------|----------|------|
+| P11.1 | E20 KV | `LoadOptions.kv_type` Q8_0 (GPU) / F16 ; KV typé Placement | fait |
+| P11.2 | E20 préfixe | prefill suffixe `memory_seq_rm` + warm `llama_state_*` | fait |
+| P11.3 | E20 lookup | Speculative prompt-lookup C1 ; batch N>1 inchangé | fait |
+| P11.4 | E20 métriques | `draft_accept` / `prefix_hit` + UI | fait |
+| P11.5 | Docs / ship | FEATURES/STATUS/TESTER, version 0.11.0 | fait |
+
+Détail : [phases/phase-preview-11.md](phases/phase-preview-11.md).
+
+### Reste après 0.11 (pas une nouvelle P6)
+
+P11 est l’incrément Preview courant. Le reste est planifié quand le
 hardware ou un daemon existe ; toujours Horizon B / C :
 
 | Item | Notes |
 |------|--------|
-| **E7 TPM** | Enveloppe matérielle de la clé maître (keyring déjà livré en 0.6) |
-| **E8 live** | Daemon HTTP sibling si/quand planifié (contrat livré en 0.6) |
-| **E9 / P5.2** | Pipeline multi-GPU quand un 2e GPU existe |
+| **E7 TPM** | Livré en 0.10 (enveloppe hôte ; pas de PCR) |
+| **E8 live** | Livré en 0.10 (`aos-bridged` opt-in) |
+| **E9 / P5.2** | Chemin code en 0.10 ; hard-green = run 2 GPU documenté |
 | **P5.3 / E11** | `AccelDevice` + fer nu (après PV.4) |
 | **P5.5** | Hôte aarch64 validé |
 | **P5.4 restant** | Accessibilité (F-UI-08) |

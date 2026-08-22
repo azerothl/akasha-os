@@ -8,7 +8,7 @@
 first-class GPU, offline-first. Preview builds run on a Windows/Linux host
 (NVIDIA); a seL4 bare-metal track is separate.
 
-> This is **not** a bootable OS image yet. Preview 0.9.0 is an installable host
+> This is **not** a bootable OS image yet. Preview 0.11.0 is an installable host
 > app for testers (Windows/Linux; NVIDIA optional via CPU path in the same zip).
 
 ## Why Akasha OS
@@ -44,7 +44,7 @@ Full catalogue: [docs/FEATURES.md](docs/FEATURES.md).
 - NVIDIA GPU + recent driver (`nvidia-smi -L`) **or** CPU-only mode (slower)
 - ~4 GB free disk (binaries + GGUF models downloaded on first run)
 
-No macOS in Preview 0.9.0.
+No macOS in Preview 0.11.0.
 
 ## Quick start
 

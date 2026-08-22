@@ -1,4 +1,4 @@
-# Preview features — Akasha OS 0.10.1
+# Preview features — Akasha OS 0.11.0
 
 **Language:** English | [Français](fr/FEATURES.md)
 
@@ -7,7 +7,15 @@ This is **not** the bootable OS. Target v1 requirements live in
 [functional-specs.md](functional-specs.md); phase gates in
 [STATUS.md](STATUS.md).
 
-> Date: 21/08/2026 · Preview **0.10.1**
+> Date: 23/08/2026 · Preview **0.11.0**
+
+### What's new in 0.11.0
+
+- **E20 local decode**: KV cache **Q8_0** on GPU (F16 on CPU) via `LoadOptions`; Placement uses typed KV bytes
+- **Prefix cache**: suffix prefill (`memory_seq_rm`) + warm `llama_state_*` — lower TTFT on turn 2 / E18 migrate restore (fail-closed)
+- **Prompt-lookup speculative decode** on single-stream (C1) jobs only; batch N>1 stays the P5.1 path; exact sampler (reject → `memory_seq_rm`)
+- **Metrics**: `draft_accept` / `prefix_hit` on the Models / sidebar line
+- **E21** (same release): measured RAM + GPU/PCIe bandwidth in `hardware.json`; semantic prefix snap to ChatML turn/tool/think markers. MoE per-expert LRU is documented out of scope
 
 ### What's new in 0.10.1
 

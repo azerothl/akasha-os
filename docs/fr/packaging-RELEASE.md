@@ -7,8 +7,8 @@
 Tag puis push :
 
 ```bash
-git tag v0.9.0
-git push origin v0.9.0
+git tag v0.11.0
+git push origin v0.11.0
 ```
 
 Le workflow [`.github/workflows/preview-release.yml`](../../.github/workflows/preview-release.yml)
@@ -37,12 +37,13 @@ Les GGUF sont téléchargés au **premier run** via `share/models/manifest.json`
 ## Notes de version (brouillon)
 
 ```
-Akasha OS Preview 0.9.0 — migrate mid-token, studio Image, options média fermées
+Akasha OS Preview 0.11.0 — E20 decode local
 
-- model.migrate : CPU↔GPU sans abort du stream (pin cpu NVIDIA reste sur le binaire CUDA)
-- Options media.* fermées ; packs Flux2/Ideogram4/Piper extra
-- Onglet studio Image + bouton chat ; /speak ouvre une carte TTS
-- Défauts Settings pack image / voix Piper honorés après restart
+- E20 : KV Q8_0 sur GPU (F16 sur CPU) ; octets KV typés Placement
+- Prefix cache : memory_seq_rm + warm llama_state_* (TTFT tour 2 / migrate E18)
+- Speculative prompt-lookup en C1 ; batch N>1 inchangé
+- Métriques : draft_accept / prefix_hit sur Models
+- E21 : bande passante RAM + GPU/PCIe dans hardware.json ; ancres sémantiques de préfixe
 
 Pas un OS bootable. Voir FIRST-RUN.md / INSTALL.md / TESTER.md
 ```

@@ -7,13 +7,12 @@ Résumé des phases livrées. Détail : [plan-developpement-phases.md](plan-deve
 
 **En-tête :** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview :** 0.10.1 (21/08/2026) — polish post-0.10 pendant que la cohorte PC
-reste ouverte. **E20 decode local** (KV Q8, prefix cache, prompt-lookup C1)
-pour **0.11.0** — [phases/phase-preview-11.md](phases/phase-preview-11.md).
-Pas un OS bootable. Gate cohorte encore ouverte. **Suite :** ship 0.11 ;
-fermeture cohorte PC ; Horizon C / PV.4+ quand planifié.
+**Preview :** 0.11.0 (23/08/2026) — E20 decode local (KV Q8, prefix cache,
+prompt-lookup C1). Pas un OS bootable. Gate cohorte encore ouverte.
+**Suite :** fermeture cohorte PC ; Horizon C / PV.4+ quand planifié ;
+E9 hard-green après un run 2 GPU documenté.
 
-## P11 — Preview 0.11.0 (E20 decode local) — code fait
+## P11 — Preview 0.11.0 (E20 decode local) — fait
 
 | # | Élément | État |
 |---|---------|------|

@@ -43,7 +43,9 @@ userspace before committing to the microkernel port.
 | **P06**     | Win/Linux Preview host                | Preview **0.6.0** — E8 / E7-keyring / E10 (bridge schemas, OS keyring, catalogue)             | shipped             | done        |
 | **P07**     | Win/Linux Preview host                | Preview **0.7.0** — E15 (host-rendered declarative module UI)                                 | shipped             | done        |
 | **P08**     | Win/Linux Preview host                | Preview **0.8.0** — E16 image+audio + E17 unified CPU/GPU + module uninstall + E15 widgets + Providers | shipped             | done        |
-| **P09**     | Win/Linux Preview host                | Preview **0.9.0** — E18 mid-token migrate + E19 media models/options + chat media plugins    | ~4–6 weeks          | done        |
+| **P09**     | Win/Linux Preview host                | Preview **0.9.0** — E18 mid-token migrate + E19 media models/options + chat media plugins    | shipped             | done        |
+| **P10**     | Win/Linux Preview host                | Preview **0.10.0** — E7 TPM + E8 live + E9 path + Media polish + internal seL4               | shipped             | done        |
+| **P11**     | Win/Linux Preview host                | Preview **0.11.0** — E20 local decode (KV Q8, prefix cache, C1 prompt-lookup)                | shipped             | done        |
 
 
 **Indicative total** (foundation): ~60–80 weeks in a naïve sequence;
@@ -710,7 +712,19 @@ Detail: [phases/phase-preview-09.md](phases/phase-preview-09.md).
 
 Detail: [phases/phase-preview-10.md](phases/phase-preview-10.md).
 
-### Remaining after 0.10 (not a new P6)
+### P11 — Preview 0.11.0 (E20 local decode) — done
+
+| # | Evolution | Deliverable | Status |
+|---|-----------|-------------|--------|
+| P11.1 | E20 KV | `LoadOptions.kv_type` Q8_0 (GPU) / F16 ; Placement typed KV | done |
+| P11.2 | E20 prefix | `memory_seq_rm` suffix prefill + warm `llama_state_*` | done |
+| P11.3 | E20 lookup | Prompt-lookup speculative on C1; batch N>1 unchanged | done |
+| P11.4 | E20 metrics | `draft_accept` / `prefix_hit` + UI | done |
+| P11.5 | Docs / ship | FEATURES/STATUS/TESTER, version 0.11.0 | done |
+
+Detail: [phases/phase-preview-11.md](phases/phase-preview-11.md).
+
+### Remaining after 0.11 (not a new P6)
 
 | Item | Notes |
 |------|--------|
