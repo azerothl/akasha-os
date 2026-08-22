@@ -98,7 +98,7 @@ Rich OS-extension confirms (module.install, cap.request, …) keep the caps/mani
 | Focus | 2px `signal` outline on interactive controls; visible keyboard focus in rail and More. |
 | Keyboard | `Ctrl+1`…`Ctrl+4` primary rail; `Ctrl+K` opens a light go-to palette (tabs + slash hint). |
 | Motion | Respect `prefers-reduced-motion` where animations exist (public site key wind); egui chrome stays static. |
-| Scale | Font scale preference in Settings → General (future slice; spec reserves the pref key). |
+| Scale | Interface scale preference in Settings → Me (`ui_scale_percent`: 90 / 100 / 110 / 125). Applied via egui `zoom_factor` across rail, status bar, and panels. |
 | Language | EN/FR parity per [I18N.md](I18N.md). |
 
 ## Progressive disclosure
@@ -115,7 +115,7 @@ Three section headings in **More → Settings** (progressive disclosure for expe
 
 | Group | Contents |
 |-------|----------|
-| **Me** | Language, theme, auto-download updates |
+| **Me** | Language, theme, interface scale, auto-download updates |
 | **Models** | Inference mode, routing (human labels; technical ids in tooltips), default agent/image/audio models, links to Models and Providers tabs |
 | **Trust** | Default agent trust, network opt-in, auto-remember; collapsible: agent limits, web tool caps, secrets vault, module catalogue, schedules |
 
@@ -159,5 +159,5 @@ Tester jargon is fine inside Scenarios, Feedback, and audit export — not on th
 | Orrery token mapping for four themes | in progress |
 | First-run → chat + allowance recap | done |
 | Settings Me/Models/Trust grouping | done |
-| Font scale preference | planned |
+| Interface scale preference | done |
 | Full WCAG audit | planned |

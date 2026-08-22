@@ -98,7 +98,7 @@ Les confirmations d’extension OS (module.install, cap.request, …) gardent l�
 | Focus | Contour `signal` 2px ; focus clavier visible sur rail et Plus. |
 | Clavier | `Ctrl+1`…`Ctrl+4` rail principal ; `Ctrl+K` palette légère (onglets + hint slash). |
 | Mouvement | Respect de `prefers-reduced-motion` là où il y a animation ; chrome egui statique. |
-| Échelle | Préférence taille de police dans Paramètres → Général (tranche future). |
+| Échelle | Préférence d’échelle de l’interface dans Paramètres → Moi (`ui_scale_percent` : 90 / 100 / 110 / 125). Appliquée via `zoom_factor` egui sur rail, barre d’état et panneaux. |
 | Langue | Parité EN/FR selon [I18N.md](I18N.md). |
 
 ## Divulgation progressive
@@ -115,7 +115,7 @@ Trois sections dans **Plus → Paramètres** (repli progressif pour les options 
 
 | Groupe | Contenu |
 |--------|---------|
-| **Moi** | Langue, thème, téléchargement auto des mises à jour |
+| **Moi** | Langue, thème, échelle de l’interface, téléchargement auto des mises à jour |
 | **Modèles** | Mode inférence, routage (libellés humains ; ids techniques en infobulle), modèles agent/image/audio par défaut, liens vers Modèles et Providers |
 | **Confiance** | Confiance agents par défaut, opt-in réseau, mémorisation auto ; repliables : limites agents, plafonds outils web, coffre secrets, catalogue modules, planifications |
 
@@ -159,5 +159,5 @@ Le jargon testeur reste acceptable dans Scénarios, Retour et export audit — p
 | Mapping jetons orrery sur quatre thèmes | en cours |
 | Premier lancement → chat + récap autorisations | fait |
 | Regroupement Paramètres Moi/Modèles/Confiance | fait |
-| Préférence échelle police | planifié |
+| Préférence échelle interface | fait |
 | Audit WCAG complet | planifié |
