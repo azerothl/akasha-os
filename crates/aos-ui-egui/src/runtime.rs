@@ -890,15 +890,18 @@ async fn handle_cmd(
         }
         Cmd::SetRouting { mode } => {
             match bus
-                .call::<SetRoutingRequest, bool>(
+                .call::<SetRoutingRequest, Result<(), String>>(
                     "model.set_routing",
                     &SetRoutingRequest { mode: mode.clone() },
                     vec![],
                 )
                 .await
             {
-                Ok(_) => {
+                Ok(Ok(())) => {
                     let _ = evt_tx.send(Evt::Status(format!("routing → {mode}")));
+                }
+                Ok(Err(e)) => {
+                    let _ = evt_tx.send(Evt::Error(format!("model.set_routing: {e}")));
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(format!("model.set_routing: {e}")));
