@@ -1787,11 +1787,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
     }
 
     fn routing_human_label<'a>(&self, t: &'a i18n::UiStrings) -> &'a str {
-        if self.prefs.routing == "local_only" {
-            t.routing_local_human
-        } else {
-            t.settings_routing_balanced
-        }
+        i18n::routing_label(t, &self.prefs.routing)
     }
 
     fn ui_onboarding_allowance_recap(&self, ui: &mut egui::Ui, t: &i18n::UiStrings) {
@@ -4640,8 +4636,8 @@ impl UiApp {
 
         let label_w = 160.0_f32;
 
-        ui.heading(t.settings_general);
-        egui::Grid::new("settings_general")
+        ui.heading(t.settings_me);
+        egui::Grid::new("settings_me")
             .num_columns(2)
             .spacing([12.0, 8.0])
             .min_col_width(label_w)
@@ -4691,22 +4687,27 @@ impl UiApp {
                     });
                 ui.end_row();
 
-                ui.label(t.trust_default);
-                ui.horizontal(|ui| {
-                    for (code, label) in [("low", t.trust_low), ("medium", t.trust_medium)] {
-                        if ui
-                            .selectable_label(self.prefs.trust_default == code, label)
-                            .clicked()
-                        {
-                            self.prefs.trust_default = code.into();
-                            self.onboarding.trust_default = code.into();
-                            save_preferences(&self.prefs);
-                            save_onboarding(&self.onboarding);
-                        }
-                    }
-                });
+                ui.label(t.settings_auto_download_updates);
+                let mut auto_upd = self.prefs.auto_download_updates;
+                if ui
+                    .checkbox(&mut auto_upd, t.settings_auto_download_updates)
+                    .on_hover_text(t.settings_auto_download_updates_hint)
+                    .changed()
+                {
+                    self.prefs.auto_download_updates = auto_upd;
+                    save_preferences(&self.prefs);
+                    self.status = t.settings_saved.into();
+                }
                 ui.end_row();
+            });
 
+        ui.add_space(12.0);
+        ui.heading(t.settings_models);
+        egui::Grid::new("settings_models")
+            .num_columns(2)
+            .spacing([12.0, 8.0])
+            .min_col_width(label_w)
+            .show(ui, |ui| {
                 ui.label(t.inference_mode);
                 ui.horizontal(|ui| {
                     for (code, label) in [
@@ -4728,24 +4729,15 @@ impl UiApp {
                     }
                 });
                 ui.end_row();
-            });
 
-        ui.add_space(8.0);
-        ui.heading(t.settings_models);
-        egui::Grid::new("settings_models")
-            .num_columns(2)
-            .spacing([12.0, 8.0])
-            .min_col_width(label_w)
-            .show(ui, |ui| {
                 ui.label(t.routing);
                 ui.horizontal(|ui| {
-                    for (code, label) in [
-                        ("local_only", t.routing_local),
-                        ("balanced", t.settings_routing_balanced),
-                        ("remote_only", t.settings_routing_remote),
-                    ] {
+                    for code in ["local_only", "balanced", "remote_only"] {
+                        let label = i18n::routing_label(&t, code);
+                        let tech = i18n::routing_technical(&t, code);
                         if ui
                             .selectable_label(self.prefs.routing == code, label)
+                            .on_hover_text(tech)
                             .clicked()
                         {
                             self.prefs.routing = code.into();
@@ -4760,10 +4752,33 @@ impl UiApp {
                 });
                 ui.end_row();
 
-                ui.label(t.tab_models);
-                if ui.button(t.tab_models).clicked() {
-                    self.tab = Tab::Models;
-                }
+                ui.label(t.settings_default_model);
+                egui::ComboBox::from_id_salt("prefs_agent_model")
+                    .selected_text(
+                        self.prefs
+                            .default_agent_model
+                            .clone()
+                            .unwrap_or_else(|| "default".into()),
+                    )
+                    .show_ui(ui, |ui| {
+                        if ui
+                            .selectable_label(self.prefs.default_agent_model.is_none(), "default")
+                            .clicked()
+                        {
+                            self.prefs.default_agent_model = None;
+                            self.agent_model_id.clear();
+                            save_preferences(&self.prefs);
+                        }
+                        for m in self.model_infos.clone() {
+                            let selected =
+                                self.prefs.default_agent_model.as_deref() == Some(m.id.as_str());
+                            if ui.selectable_label(selected, &m.id).clicked() {
+                                self.prefs.default_agent_model = Some(m.id.clone());
+                                self.agent_model_id = m.id;
+                                save_preferences(&self.prefs);
+                            }
+                        }
+                    });
                 ui.end_row();
 
                 ui.label(t.settings_image_pack);
@@ -4830,30 +4845,75 @@ impl UiApp {
                     });
                 ui.end_row();
 
-                ui.label("W / H / steps");
                 ui.horizontal(|ui| {
-                    ui.add(egui::DragValue::new(&mut self.prefs.image_width).range(64..=2048));
-                    ui.add(egui::DragValue::new(&mut self.prefs.image_height).range(64..=2048));
-                    if ui
-                        .add(egui::DragValue::new(&mut self.prefs.image_steps).range(1..=150))
-                        .changed()
-                    {
-                        save_preferences(&self.prefs);
+                    if ui.button(t.tab_models).clicked() {
+                        self.tab = Tab::Models;
                     }
-                    if ui.button(t.settings_saved).clicked() {
-                        save_preferences(&self.prefs);
+                    if ui
+                        .button(t.tab_providers)
+                        .on_hover_text(t.tab_hint_providers)
+                        .clicked()
+                    {
+                        self.tab = Tab::Providers;
                     }
                 });
                 ui.end_row();
             });
 
-        ui.add_space(8.0);
-        ui.heading(t.settings_network);
-        egui::Grid::new("settings_network")
+        egui::CollapsingHeader::new(t.settings_expert_image_defaults)
+            .default_open(false)
+            .show(ui, |ui| {
+                egui::Grid::new("settings_image_defaults")
+                    .num_columns(2)
+                    .spacing([12.0, 8.0])
+                    .min_col_width(label_w)
+                    .show(ui, |ui| {
+                        ui.label("W / H / steps");
+                        ui.horizontal(|ui| {
+                            ui.add(
+                                egui::DragValue::new(&mut self.prefs.image_width).range(64..=2048),
+                            );
+                            ui.add(
+                                egui::DragValue::new(&mut self.prefs.image_height)
+                                    .range(64..=2048),
+                            );
+                            if ui
+                                .add(egui::DragValue::new(&mut self.prefs.image_steps).range(1..=150))
+                                .changed()
+                            {
+                                save_preferences(&self.prefs);
+                            }
+                            if ui.button(t.settings_saved).clicked() {
+                                save_preferences(&self.prefs);
+                            }
+                        });
+                        ui.end_row();
+                    });
+            });
+
+        ui.add_space(12.0);
+        ui.heading(t.settings_trust);
+        egui::Grid::new("settings_trust")
             .num_columns(2)
             .spacing([12.0, 8.0])
             .min_col_width(label_w)
             .show(ui, |ui| {
+                ui.label(t.trust_default);
+                ui.horizontal(|ui| {
+                    for (code, label) in [("low", t.trust_low), ("medium", t.trust_medium)] {
+                        if ui
+                            .selectable_label(self.prefs.trust_default == code, label)
+                            .clicked()
+                        {
+                            self.prefs.trust_default = code.into();
+                            self.onboarding.trust_default = code.into();
+                            save_preferences(&self.prefs);
+                            save_onboarding(&self.onboarding);
+                        }
+                    }
+                });
+                ui.end_row();
+
                 ui.label(t.network_heading);
                 let mut online = self.prefs.network_online;
                 if ui.checkbox(&mut online, t.allow_network).changed() {
@@ -4876,338 +4936,320 @@ impl UiApp {
                     self.status = t.settings_saved.into();
                 }
                 ui.end_row();
-
-                ui.label(t.settings_auto_download_updates);
-                let mut auto_upd = self.prefs.auto_download_updates;
-                if ui
-                    .checkbox(&mut auto_upd, t.settings_auto_download_updates)
-                    .on_hover_text(t.settings_auto_download_updates_hint)
-                    .changed()
-                {
-                    self.prefs.auto_download_updates = auto_upd;
-                    save_preferences(&self.prefs);
-                    self.status = t.settings_saved.into();
-                }
-                ui.end_row();
             });
 
-        ui.add_space(8.0);
-        ui.heading(t.settings_agents);
-        egui::Grid::new("settings_agents")
-            .num_columns(2)
-            .spacing([12.0, 8.0])
-            .min_col_width(label_w)
+        egui::CollapsingHeader::new(t.settings_expert_agent)
+            .default_open(false)
             .show(ui, |ui| {
-                ui.label(t.settings_default_model);
-                egui::ComboBox::from_id_salt("prefs_agent_model")
-                    .selected_text(
-                        self.prefs
-                            .default_agent_model
-                            .clone()
-                            .unwrap_or_else(|| "default".into()),
-                    )
-                    .show_ui(ui, |ui| {
+                egui::Grid::new("settings_agents")
+                    .num_columns(2)
+                    .spacing([12.0, 8.0])
+                    .min_col_width(label_w)
+                    .show(ui, |ui| {
+                        ui.label(t.settings_max_steps);
                         if ui
-                            .selectable_label(self.prefs.default_agent_model.is_none(), "default")
-                            .clicked()
+                            .add(egui::DragValue::new(&mut self.prefs.default_max_steps).range(1..=128))
+                            .changed()
                         {
-                            self.prefs.default_agent_model = None;
-                            self.agent_model_id.clear();
+                            self.agent_max_steps = self.prefs.default_max_steps;
                             save_preferences(&self.prefs);
                         }
-                        for m in self.model_infos.clone() {
-                            let selected =
-                                self.prefs.default_agent_model.as_deref() == Some(m.id.as_str());
-                            if ui.selectable_label(selected, &m.id).clicked() {
-                                self.prefs.default_agent_model = Some(m.id.clone());
-                                self.agent_model_id = m.id;
-                                save_preferences(&self.prefs);
-                            }
+                        ui.end_row();
+
+                        ui.label(t.settings_timeout);
+                        if ui
+                            .add(
+                                egui::DragValue::new(&mut self.prefs.default_timeout_secs)
+                                    .range(60..=86_400),
+                            )
+                            .changed()
+                        {
+                            self.agent_timeout_secs = self.prefs.default_timeout_secs;
+                            save_preferences(&self.prefs);
                         }
+                        ui.end_row();
                     });
-                ui.end_row();
-
-                ui.label(t.settings_max_steps);
-                if ui
-                    .add(egui::DragValue::new(&mut self.prefs.default_max_steps).range(1..=128))
-                    .changed()
-                {
-                    self.agent_max_steps = self.prefs.default_max_steps;
-                    save_preferences(&self.prefs);
-                }
-                ui.end_row();
-
-                ui.label(t.settings_timeout);
-                if ui
-                    .add(
-                        egui::DragValue::new(&mut self.prefs.default_timeout_secs)
-                            .range(60..=86_400),
-                    )
-                    .changed()
-                {
-                    self.agent_timeout_secs = self.prefs.default_timeout_secs;
-                    save_preferences(&self.prefs);
-                }
-                ui.end_row();
             });
 
-        ui.add_space(8.0);
-        ui.heading(t.settings_web);
-        egui::Grid::new("settings_web")
-            .num_columns(2)
-            .spacing([12.0, 8.0])
-            .min_col_width(label_w)
+        egui::CollapsingHeader::new(t.settings_expert_web)
+            .default_open(false)
             .show(ui, |ui| {
-                ui.label(t.settings_search_engine);
-                egui::ComboBox::from_id_salt("prefs_search_engine")
-                    .selected_text(&self.prefs.web_search_engine)
-                    .show_ui(ui, |ui| {
-                        for eng in ["auto", "brave", "duckduckgo", "bing"] {
-                            if ui
-                                .selectable_label(self.prefs.web_search_engine == eng, eng)
-                                .clicked()
-                            {
-                                self.prefs.web_search_engine = eng.into();
-                                save_preferences(&self.prefs);
-                            }
-                        }
-                    });
-                ui.end_row();
-
-                ui.label(t.settings_browse_chars);
-                if ui
-                    .add(
-                        egui::DragValue::new(&mut self.prefs.web_browse_max_chars)
-                            .range(1000..=100_000),
-                    )
-                    .changed()
-                {
-                    save_preferences(&self.prefs);
-                }
-                ui.end_row();
-
-                ui.label(t.settings_fetch_max);
-                if ui
-                    .add(
-                        egui::DragValue::new(&mut self.prefs.web_fetch_max_bytes)
-                            .range(1024..=200_000_000),
-                    )
-                    .changed()
-                {
-                    save_preferences(&self.prefs);
-                }
-                ui.end_row();
-            });
-        ui.heading(t.settings_secrets);
-        ui.weak(t.settings_secrets_blurb);
-        egui::Grid::new("settings_secrets")
-            .num_columns(2)
-            .spacing([12.0, 8.0])
-            .min_col_width(label_w)
-            .show(ui, |ui| {
-                ui.label("Brave Search");
-                ui.horizontal(|ui| {
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.secret_brave)
-                            .password(true)
-                            .desired_width(220.0)
-                            .hint_text("BSA…"),
-                    );
-                    if ui.button(t.settings_secret_save).clicked() {
-                        let _ = self.cmd_tx.send(Cmd::SecretSet {
-                            name: "brave_search_api_key".into(),
-                            value: self.secret_brave.clone(),
-                        });
-                        self.secret_brave.clear();
-                    }
-                });
-                ui.end_row();
-
-                ui.label("GitHub token");
-                ui.horizontal(|ui| {
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.secret_github)
-                            .password(true)
-                            .desired_width(220.0)
-                            .hint_text("ghp_…"),
-                    );
-                    if ui.button(t.settings_secret_save).clicked() {
-                        let _ = self.cmd_tx.send(Cmd::SecretSet {
-                            name: "github_token".into(),
-                            value: self.secret_github.clone(),
-                        });
-                        self.secret_github.clear();
-                    }
-                });
-                ui.end_row();
-
-                ui.label(t.settings_secret_openai);
-                ui.horizontal(|ui| {
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.secret_openai)
-                            .password(true)
-                            .desired_width(220.0)
-                            .hint_text("sk-…"),
-                    );
-                    if ui.button(t.settings_secret_save).clicked() {
-                        let _ = self.cmd_tx.send(Cmd::SecretSet {
-                            name: "openai_api_key".into(),
-                            value: self.secret_openai.clone(),
-                        });
-                        self.secret_openai.clear();
-                    }
-                });
-                ui.end_row();
-            });
-        ui.horizontal(|ui| {
-            if ui.button(t.settings_secret_list).clicked() {
-                let _ = self.cmd_tx.send(Cmd::SecretList);
-            }
-            if self.secret_vault_encrypted {
-                ui.weak(t.settings_secret_encrypted);
-            }
-            if !self.secret_names.is_empty() {
-                ui.weak(format!("{}: {}", t.settings_secret_configured, self.secret_names.join(", ")));
-            }
-        });
-        ui.weak(t.settings_brave_hint);
-
-        ui.add_space(12.0);
-        ui.heading(t.settings_catalogue);
-        ui.weak(t.settings_catalogue_blurb);
-        if ui.button(t.settings_secret_list).clicked() {
-            let _ = self.cmd_tx.send(Cmd::CatalogueRefresh);
-            let _ = self.cmd_tx.send(Cmd::ModuleList);
-        }
-        match self.catalogue.clone() {
-            Some(cat) if cat.signature_ok => {
-                for e in cat.entries {
-                    let installed = self
-                        .installed_modules
-                        .iter()
-                        .find(|m| m.name == e.name)
-                        .cloned();
-                    ui.horizontal(|ui| {
-                        let mut label = format!("{} {} ({})", e.name, e.version, e.kind);
-                        if let Some(m) = &installed {
-                            label.push_str(&format!(" [{}]", t.settings_catalogue_installed));
-                            if m.quarantined {
-                                label.push_str(" [quarantine]");
-                            }
-                        }
-                        ui.label(label);
-                        if e.kind == "module" {
-                            if aos_proto::decl_ui::is_bundled_module(&e.name) {
-                                ui.weak(t.settings_bundled_locked);
-                            } else if installed.is_some() {
-                                if ui.button(t.settings_catalogue_uninstall).clicked() {
-                                    let _ = self.cmd_tx.send(Cmd::ModuleUninstall {
-                                        name: e.name.clone(),
-                                    });
+                egui::Grid::new("settings_web")
+                    .num_columns(2)
+                    .spacing([12.0, 8.0])
+                    .min_col_width(label_w)
+                    .show(ui, |ui| {
+                        ui.label(t.settings_search_engine);
+                        egui::ComboBox::from_id_salt("prefs_search_engine")
+                            .selected_text(&self.prefs.web_search_engine)
+                            .show_ui(ui, |ui| {
+                                for eng in ["auto", "brave", "duckduckgo", "bing"] {
+                                    if ui
+                                        .selectable_label(
+                                            self.prefs.web_search_engine == eng,
+                                            eng,
+                                        )
+                                        .clicked()
+                                    {
+                                        self.prefs.web_search_engine = eng.into();
+                                        save_preferences(&self.prefs);
+                                    }
                                 }
-                            } else if ui.button(t.settings_catalogue_install).clicked() {
-                                let src = aos_home().join(&e.path);
-                                let _ = self.cmd_tx.send(Cmd::ModuleInstall {
-                                    source_dir: src.to_string_lossy().into_owned(),
-                                    approved_caps: None,
-                                });
-                            }
+                            });
+                        ui.end_row();
+
+                        ui.label(t.settings_browse_chars);
+                        if ui
+                            .add(
+                                egui::DragValue::new(&mut self.prefs.web_browse_max_chars)
+                                    .range(1000..=100_000),
+                            )
+                            .changed()
+                        {
+                            save_preferences(&self.prefs);
                         }
+                        ui.end_row();
+
+                        ui.label(t.settings_fetch_max);
+                        if ui
+                            .add(
+                                egui::DragValue::new(&mut self.prefs.web_fetch_max_bytes)
+                                    .range(1024..=200_000_000),
+                            )
+                            .changed()
+                        {
+                            save_preferences(&self.prefs);
+                        }
+                        ui.end_row();
                     });
-                    if !e.attested_caps.is_empty() {
+            });
+
+        egui::CollapsingHeader::new(t.settings_secrets)
+            .default_open(false)
+            .show(ui, |ui| {
+                ui.weak(t.settings_secrets_blurb);
+                egui::Grid::new("settings_secrets")
+                    .num_columns(2)
+                    .spacing([12.0, 8.0])
+                    .min_col_width(label_w)
+                    .show(ui, |ui| {
+                        ui.label("Brave Search");
+                        ui.horizontal(|ui| {
+                            ui.add(
+                                egui::TextEdit::singleline(&mut self.secret_brave)
+                                    .password(true)
+                                    .desired_width(220.0)
+                                    .hint_text("BSA…"),
+                            );
+                            if ui.button(t.settings_secret_save).clicked() {
+                                let _ = self.cmd_tx.send(Cmd::SecretSet {
+                                    name: "brave_search_api_key".into(),
+                                    value: self.secret_brave.clone(),
+                                });
+                                self.secret_brave.clear();
+                            }
+                        });
+                        ui.end_row();
+
+                        ui.label("GitHub token");
+                        ui.horizontal(|ui| {
+                            ui.add(
+                                egui::TextEdit::singleline(&mut self.secret_github)
+                                    .password(true)
+                                    .desired_width(220.0)
+                                    .hint_text("ghp_…"),
+                            );
+                            if ui.button(t.settings_secret_save).clicked() {
+                                let _ = self.cmd_tx.send(Cmd::SecretSet {
+                                    name: "github_token".into(),
+                                    value: self.secret_github.clone(),
+                                });
+                                self.secret_github.clear();
+                            }
+                        });
+                        ui.end_row();
+
+                        ui.label(t.settings_secret_openai);
+                        ui.horizontal(|ui| {
+                            ui.add(
+                                egui::TextEdit::singleline(&mut self.secret_openai)
+                                    .password(true)
+                                    .desired_width(220.0)
+                                    .hint_text("sk-…"),
+                            );
+                            if ui.button(t.settings_secret_save).clicked() {
+                                let _ = self.cmd_tx.send(Cmd::SecretSet {
+                                    name: "openai_api_key".into(),
+                                    value: self.secret_openai.clone(),
+                                });
+                                self.secret_openai.clear();
+                            }
+                        });
+                        ui.end_row();
+                    });
+                ui.horizontal(|ui| {
+                    if ui.button(t.settings_secret_list).clicked() {
+                        let _ = self.cmd_tx.send(Cmd::SecretList);
+                    }
+                    if self.secret_vault_encrypted {
+                        ui.weak(t.settings_secret_encrypted);
+                    }
+                    if !self.secret_names.is_empty() {
                         ui.weak(format!(
                             "{}: {}",
-                            t.settings_catalogue_caps,
-                            e.attested_caps.join(", ")
+                            t.settings_secret_configured,
+                            self.secret_names.join(", ")
                         ));
                     }
-                }
-            }
-            Some(_) => {
-                ui.weak(t.settings_catalogue_unsigned);
-            }
-            None => {
-                ui.weak(t.settings_catalogue_unsigned);
-            }
-        }
+                });
+                ui.weak(t.settings_brave_hint);
+            });
 
-        ui.add_space(12.0);
-        ui.heading(t.settings_installed_modules);
-        for m in self.installed_modules.clone() {
-            ui.horizontal(|ui| {
-                ui.label(format!("{} v{}", m.name, m.version));
-                if aos_proto::decl_ui::is_bundled_module(&m.name) {
-                    ui.weak(t.settings_bundled_locked);
-                } else if ui.button(t.settings_catalogue_uninstall).clicked() {
-                    let _ = self.cmd_tx.send(Cmd::ModuleUninstall {
-                        name: m.name.clone(),
+        egui::CollapsingHeader::new(t.settings_catalogue)
+            .default_open(false)
+            .show(ui, |ui| {
+                ui.weak(t.settings_catalogue_blurb);
+                if ui.button(t.settings_secret_list).clicked() {
+                    let _ = self.cmd_tx.send(Cmd::CatalogueRefresh);
+                    let _ = self.cmd_tx.send(Cmd::ModuleList);
+                }
+                match self.catalogue.clone() {
+                    Some(cat) if cat.signature_ok => {
+                        for e in cat.entries {
+                            let installed = self
+                                .installed_modules
+                                .iter()
+                                .find(|m| m.name == e.name)
+                                .cloned();
+                            ui.horizontal(|ui| {
+                                let mut label =
+                                    format!("{} {} ({})", e.name, e.version, e.kind);
+                                if let Some(m) = &installed {
+                                    label.push_str(&format!(
+                                        " [{}]",
+                                        t.settings_catalogue_installed
+                                    ));
+                                    if m.quarantined {
+                                        label.push_str(" [quarantine]");
+                                    }
+                                }
+                                ui.label(label);
+                                if e.kind == "module" {
+                                    if aos_proto::decl_ui::is_bundled_module(&e.name) {
+                                        ui.weak(t.settings_bundled_locked);
+                                    } else if installed.is_some() {
+                                        if ui.button(t.settings_catalogue_uninstall).clicked() {
+                                            let _ = self.cmd_tx.send(Cmd::ModuleUninstall {
+                                                name: e.name.clone(),
+                                            });
+                                        }
+                                    } else if ui.button(t.settings_catalogue_install).clicked()
+                                    {
+                                        let src = aos_home().join(&e.path);
+                                        let _ = self.cmd_tx.send(Cmd::ModuleInstall {
+                                            source_dir: src.to_string_lossy().into_owned(),
+                                            approved_caps: None,
+                                        });
+                                    }
+                                }
+                            });
+                            if !e.attested_caps.is_empty() {
+                                ui.weak(format!(
+                                    "{}: {}",
+                                    t.settings_catalogue_caps,
+                                    e.attested_caps.join(", ")
+                                ));
+                            }
+                        }
+                    }
+                    Some(_) => {
+                        ui.weak(t.settings_catalogue_unsigned);
+                    }
+                    None => {
+                        ui.weak(t.settings_catalogue_unsigned);
+                    }
+                }
+
+                ui.add_space(8.0);
+                ui.weak(t.settings_installed_modules);
+                for m in self.installed_modules.clone() {
+                    ui.horizontal(|ui| {
+                        ui.label(format!("{} v{}", m.name, m.version));
+                        if aos_proto::decl_ui::is_bundled_module(&m.name) {
+                            ui.weak(t.settings_bundled_locked);
+                        } else if ui.button(t.settings_catalogue_uninstall).clicked() {
+                            let _ = self.cmd_tx.send(Cmd::ModuleUninstall {
+                                name: m.name.clone(),
+                            });
+                        }
                     });
                 }
             });
-        }
 
-        ui.add_space(12.0);
-        ui.heading(t.schedule_heading);
-        egui::Grid::new("settings_schedules")
-            .num_columns(2)
-            .spacing([12.0, 8.0])
-            .min_col_width(label_w)
+        egui::CollapsingHeader::new(t.schedule_heading)
+            .default_open(false)
             .show(ui, |ui| {
-                ui.label(t.schedule_goal);
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.schedule_goal)
-                        .desired_width(280.0)
-                        .hint_text("agent goal"),
-                );
-                ui.end_row();
+                egui::Grid::new("settings_schedules")
+                    .num_columns(2)
+                    .spacing([12.0, 8.0])
+                    .min_col_width(label_w)
+                    .show(ui, |ui| {
+                        ui.label(t.schedule_goal);
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.schedule_goal)
+                                .desired_width(280.0)
+                                .hint_text("agent goal"),
+                        );
+                        ui.end_row();
 
-                ui.label(t.schedule_interval);
-                ui.horizontal(|ui| {
-                    ui.add(
-                        egui::DragValue::new(&mut self.schedule_interval_secs)
-                            .range(30..=86_400)
-                            .suffix(" s"),
-                    );
-                    if ui
-                        .button(t.schedule_create)
-                        .on_hover_text(t.tip_schedule_create)
-                        .clicked()
-                        && !self.schedule_goal.trim().is_empty()
-                    {
-                        let _ = self.cmd_tx.send(Cmd::ScheduleCreate {
-                            goal: self.schedule_goal.trim().to_string(),
-                            interval_secs: self.schedule_interval_secs.max(30),
+                        ui.label(t.schedule_interval);
+                        ui.horizontal(|ui| {
+                            ui.add(
+                                egui::DragValue::new(&mut self.schedule_interval_secs)
+                                    .range(30..=86_400)
+                                    .suffix(" s"),
+                            );
+                            if ui
+                                .button(t.schedule_create)
+                                .on_hover_text(t.tip_schedule_create)
+                                .clicked()
+                                && !self.schedule_goal.trim().is_empty()
+                            {
+                                let _ = self.cmd_tx.send(Cmd::ScheduleCreate {
+                                    goal: self.schedule_goal.trim().to_string(),
+                                    interval_secs: self.schedule_interval_secs.max(30),
+                                });
+                                self.schedule_goal.clear();
+                            }
+                            if ui.button(t.caps_refresh).clicked() {
+                                let _ = self.cmd_tx.send(Cmd::ScheduleList);
+                            }
                         });
-                        self.schedule_goal.clear();
+                        ui.end_row();
+                    });
+                if self.schedules.is_empty() {
+                    ui.weak("Aucun schedule");
+                } else {
+                    for s in self.schedules.clone() {
+                        ui.horizontal(|ui| {
+                            let flag = if s.enabled { "ON" } else { "OFF" };
+                            ui.monospace(&s.id);
+                            ui.label(format!(
+                                "[{flag}] every {}s · fires={} · {}",
+                                s.interval_secs, s.fire_count, s.goal
+                            ));
+                            if s.enabled
+                                && ui
+                                    .small_button(t.schedule_cancel)
+                                    .on_hover_text(t.tip_schedule_cancel)
+                                    .clicked()
+                            {
+                                let _ = self.cmd_tx.send(Cmd::ScheduleCancel { id: s.id });
+                            }
+                        });
                     }
-                    if ui.button(t.caps_refresh).clicked() {
-                        let _ = self.cmd_tx.send(Cmd::ScheduleList);
-                    }
-                });
-                ui.end_row();
+                }
             });
-        if self.schedules.is_empty() {
-            ui.weak("Aucun schedule");
-        } else {
-            for s in self.schedules.clone() {
-                ui.horizontal(|ui| {
-                    let flag = if s.enabled { "ON" } else { "OFF" };
-                    ui.monospace(&s.id);
-                    ui.label(format!(
-                        "[{flag}] every {}s · fires={} · {}",
-                        s.interval_secs, s.fire_count, s.goal
-                    ));
-                    if s.enabled
-                        && ui
-                            .small_button(t.schedule_cancel)
-                            .on_hover_text(t.tip_schedule_cancel)
-                            .clicked()
-                    {
-                        let _ = self.cmd_tx.send(Cmd::ScheduleCancel { id: s.id });
-                    }
-                });
-            }
-        }
     }
 
     fn ui_providers(&mut self, ui: &mut egui::Ui) {

@@ -87,12 +87,18 @@ pub struct UiStrings {
     pub network_heading: &'static str,
     pub allow_network: &'static str,
     pub settings_title: &'static str,
-    pub settings_general: &'static str,
+    pub settings_me: &'static str,
     pub settings_models: &'static str,
+    pub settings_trust: &'static str,
     pub settings_network: &'static str,
     pub settings_agents: &'static str,
     pub settings_web: &'static str,
     pub settings_routing_balanced: &'static str,
+    pub settings_routing_balanced_human: &'static str,
+    pub settings_routing_remote_human: &'static str,
+    pub settings_expert_image_defaults: &'static str,
+    pub settings_expert_agent: &'static str,
+    pub settings_expert_web: &'static str,
     pub settings_default_model: &'static str,
     pub settings_max_steps: &'static str,
     pub settings_timeout: &'static str,
@@ -511,12 +517,18 @@ const EN: UiStrings = UiStrings {
     network_heading: "Network",
     allow_network: "Allow network",
     settings_title: "Settings",
-    settings_general: "General",
-    settings_models: "Models / routing",
+    settings_me: "Me",
+    settings_models: "Models",
+    settings_trust: "Trust",
     settings_network: "Network",
     settings_agents: "Agent defaults",
     settings_web: "Web tools",
     settings_routing_balanced: "balanced (local + remote if configured)",
+    settings_routing_balanced_human: "Local + remote when configured",
+    settings_routing_remote_human: "Remote models only",
+    settings_expert_image_defaults: "Image generation defaults",
+    settings_expert_agent: "Agent limits",
+    settings_expert_web: "Web tools limits",
     settings_default_model: "Default agent model",
     settings_max_steps: "Default max steps",
     settings_timeout: "Default timeout (seconds)",
@@ -935,12 +947,18 @@ const FR: UiStrings = UiStrings {
     network_heading: "Réseau",
     allow_network: "Autoriser le réseau",
     settings_title: "Paramètres",
-    settings_general: "Général",
-    settings_models: "Modèles / routage",
+    settings_me: "Moi",
+    settings_models: "Modèles",
+    settings_trust: "Confiance",
     settings_network: "Réseau",
     settings_agents: "Défauts agents",
     settings_web: "Outils web",
     settings_routing_balanced: "balanced (local + distant si configuré)",
+    settings_routing_balanced_human: "Local + distant si configuré",
+    settings_routing_remote_human: "Modèles distants uniquement",
+    settings_expert_image_defaults: "Défauts génération d'images",
+    settings_expert_agent: "Limites agents",
+    settings_expert_web: "Limites outils web",
     settings_default_model: "Modèle agent par défaut",
     settings_max_steps: "max_steps par défaut",
     settings_timeout: "Timeout par défaut (secondes)",
@@ -1278,5 +1296,49 @@ pub fn strings(lang: &str) -> UiStrings {
         EN
     } else {
         FR
+    }
+}
+
+/// Human-readable routing label for Settings and onboarding (technical id in tooltip).
+pub fn routing_label<'a>(t: &'a UiStrings, code: &str) -> &'a str {
+    match code {
+        "local_only" => t.routing_local_human,
+        "balanced" => t.settings_routing_balanced_human,
+        "remote_only" => t.settings_routing_remote_human,
+        _ => t.routing_local_human,
+    }
+}
+
+/// Technical routing id for tooltips.
+pub fn routing_technical(t: &UiStrings, code: &str) -> &'static str {
+    match code {
+        "local_only" => t.routing_local,
+        "balanced" => t.settings_routing_balanced,
+        "remote_only" => t.settings_routing_remote,
+        _ => "unknown",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn settings_section_headings_en_fr() {
+        for lang in ["en", "fr"] {
+            let t = strings(lang);
+            assert!(!t.settings_me.is_empty());
+            assert!(!t.settings_models.is_empty());
+            assert!(!t.settings_trust.is_empty());
+        }
+    }
+
+    #[test]
+    fn routing_human_labels_avoid_raw_codes() {
+        let t = strings("en");
+        assert!(!routing_label(&t, "local_only").contains("local_only"));
+        assert!(!routing_label(&t, "balanced").starts_with("balanced ("));
+        assert!(!routing_label(&t, "remote_only").contains("remote_only"));
+        assert!(routing_technical(&t, "local_only").contains("local_only"));
     }
 }
