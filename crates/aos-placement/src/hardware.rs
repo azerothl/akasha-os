@@ -8,6 +8,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::bandwidth::{BandwidthSignals, signals_to_profile_fields};
+
 /// Un GPU physique (E9 / P5.2 — partition pipeline inter-GPU).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GpuDevice {
@@ -181,6 +183,50 @@ impl HardwareProfile {
                 vram_total: 8 * GIB,
             },
         ];
+        hw
+    }
+
+    /// Build a host profile from first-run capacity + bandwidth signals (E21).
+    pub fn from_host_caps(
+        name: impl Into<String>,
+        has_gpu: bool,
+        vram_total: u64,
+        ram_total: u64,
+        disk_total: u64,
+        os_reserve_vram: u64,
+        os_reserve_ram: u64,
+        gpus: Vec<GpuDevice>,
+        bandwidth: &BandwidthSignals,
+    ) -> Self {
+        let (ram_mem_bw, gpu_mem_bw, host_to_device_bw, disk_seq_bw) =
+            signals_to_profile_fields(bandwidth);
+        let mut hw = Self {
+            name: name.into(),
+            has_gpu,
+            vram_total,
+            ram_total,
+            disk_total,
+            os_reserve_vram,
+            os_reserve_ram,
+            gpu_mem_bw,
+            ram_mem_bw,
+            disk_seq_bw,
+            host_to_device_bw,
+            // FLOPs stay reference until llama-bench calibration on this host.
+            gpu_flops: if has_gpu { 20e12 } else { 0.0 },
+            cpu_flops: 0.8e12,
+            gpus,
+        };
+        if !has_gpu {
+            hw.gpu_mem_bw = 0.0;
+            hw.host_to_device_bw = 0.0;
+        } else if hw.gpu_mem_bw <= 0.0 {
+            // Unknown GPU name: keep reference_v1 default, not a fake measurement.
+            hw.gpu_mem_bw = Self::reference_v1().gpu_mem_bw;
+        }
+        if hw.host_to_device_bw <= 0.0 && has_gpu {
+            hw.host_to_device_bw = Self::reference_v1().host_to_device_bw;
+        }
         hw
     }
 }

@@ -33,6 +33,12 @@ use thiserror::Error;
 
 use llama_cpp_sys_2 as sys;
 
+pub mod semantic;
+
+pub use semantic::{
+    anchor_positions_from_pieces, semantic_prefix_len, snap_to_anchor, DEFAULT_BOUNDARY_MARKERS,
+};
+
 #[derive(Debug, Error, Clone)]
 pub enum LlamaError {
     #[error("chemin modèle invalide (non UTF-8 / NUL)")]
@@ -406,6 +412,8 @@ pub struct LlamaContext {
     n_seq_max: u32,
     /// Tokens actuellement en KV pour seq 0 (prefix cache E20, chemin C1).
     seq0_tokens: Vec<sys::llama_token>,
+    /// Cached semantic anchor indices in `seq0_tokens` (E21).
+    seq0_anchors: Vec<usize>,
 }
 
 unsafe impl Send for LlamaContext {}
@@ -452,6 +460,7 @@ impl LlamaContext {
             n_batch: opts.n_batch.max(1),
             n_seq_max: opts.n_seq_max.max(1),
             seq0_tokens: Vec::new(),
+            seq0_anchors: vec![0],
         })
     }
 
@@ -739,6 +748,7 @@ impl LlamaContext {
         }
         if let Some(toks) = seq0_tokens {
             self.seq0_tokens = toks;
+            self.refresh_seq0_anchors();
         }
         Ok(())
     }
@@ -778,14 +788,18 @@ impl LlamaContext {
         Ok(())
     }
 
-    /// Prépare le KV seq 0 pour `prompt_tokens` : réutilise le préfixe commun.
+    /// Prépare le KV seq 0 pour `prompt_tokens` : réutilise le préfixe commun,
+    /// avec ancrage sémantique aux frontières tour/outil/pensée (E21).
     /// Retourne le nombre de tokens déjà en cache (hit).
     fn prepare_seq0_prefix(&mut self, prompt_tokens: &[sys::llama_token]) -> usize {
-        let l = common_prefix_len(&self.seq0_tokens, prompt_tokens);
+        let prev_i32: Vec<i32> = self.seq0_tokens.iter().map(|&t| t as i32).collect();
+        let next_i32: Vec<i32> = prompt_tokens.iter().map(|&t| t as i32).collect();
+        let l = semantic_prefix_len(&prev_i32, &next_i32, &self.seq0_anchors);
         let mem = unsafe { sys::llama_get_memory(self.ptr) };
         if l == 0 {
             unsafe { sys::llama_memory_clear(mem, true) };
             self.seq0_tokens.clear();
+            self.seq0_anchors = vec![0];
             return 0;
         }
         if l < self.seq0_tokens.len() {
@@ -794,8 +808,22 @@ impl LlamaContext {
                 sys::llama_memory_seq_rm(mem, 0, l as sys::llama_pos, -1);
             }
             self.seq0_tokens.truncate(l);
+            self.seq0_anchors.retain(|&p| p <= l);
+            if self.seq0_anchors.is_empty() {
+                self.seq0_anchors.push(0);
+            }
         }
         l
+    }
+
+    fn refresh_seq0_anchors(&mut self) {
+        let pieces: Vec<String> = self
+            .seq0_tokens
+            .iter()
+            .map(|&t| self.token_to_piece(t))
+            .collect();
+        self.seq0_anchors =
+            anchor_positions_from_pieces(&pieces, DEFAULT_BOUNDARY_MARKERS);
     }
 
     /// Prefill seq 0 à partir de `from` (suffixe seulement).
@@ -828,6 +856,7 @@ impl LlamaContext {
                 return Err(LlamaError::Decode(rc));
             }
             self.seq0_tokens = prompt_tokens.to_vec();
+            self.refresh_seq0_anchors();
             return Ok(());
         }
         let mut batch = unsafe { sys::llama_batch_init(self.n_batch as i32, 0, 1) };
@@ -857,6 +886,7 @@ impl LlamaContext {
         }
         unsafe { sys::llama_batch_free(batch) };
         self.seq0_tokens = prompt_tokens.to_vec();
+        self.refresh_seq0_anchors();
         Ok(())
     }
 
@@ -868,6 +898,10 @@ impl LlamaContext {
                 sys::llama_memory_seq_rm(mem, 0, n_prompt as sys::llama_pos, -1);
             }
             self.seq0_tokens.truncate(n_prompt);
+            self.seq0_anchors.retain(|&p| p <= n_prompt);
+            if self.seq0_anchors.is_empty() {
+                self.seq0_anchors.push(0);
+            }
         }
     }
 
@@ -1637,7 +1671,7 @@ impl Drop for LlamaContext {
 mod tests {
     use super::{
         accumulate_pooled_chunk, common_prefix_len, finish_mean_pool, l2_normalize,
-        prompt_lookup_draft, BatchItem, GenParams, KvType, StopReason,
+        prompt_lookup_draft, semantic_prefix_len, BatchItem, GenParams, KvType, StopReason,
     };
     use std::sync::atomic::AtomicBool;
     use std::sync::Arc;
@@ -1701,6 +1735,15 @@ mod tests {
     fn prompt_lookup_empty_without_match() {
         let hay = vec![1, 2, 3, 4, 5];
         assert!(prompt_lookup_draft(&hay, 8, 3, 5).is_empty());
+    }
+
+    #[test]
+    fn semantic_prefix_snaps_on_anchor() {
+        let prev: Vec<i32> = (0..12).collect();
+        let mut next = prev.clone();
+        next[10] = 99;
+        let anchors = vec![0, 6];
+        assert_eq!(semantic_prefix_len(&prev, &next, &anchors), 6);
     }
 
     #[test]

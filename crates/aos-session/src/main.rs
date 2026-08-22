@@ -253,6 +253,29 @@ fn main() {
         hw.vram_mib,
         hw.tier.as_str()
     );
+    if let Some(ref bw) = hw.bandwidth {
+        eprintln!(
+            "[aos-session] bandwidth: RAM {:.1} GB/s ({:?})",
+            bw.ram_mem_bw.bytes_per_sec / 1e9,
+            bw.ram_mem_bw.source
+        );
+        if let Some(ref g) = bw.gpu_mem_bw {
+            eprintln!(
+                "[aos-session] bandwidth: GPU {:.1} GB/s ({:?}) — {}",
+                g.bytes_per_sec / 1e9,
+                g.source,
+                g.detail
+            );
+        }
+        if let Some(ref h) = bw.host_to_device_bw {
+            eprintln!(
+                "[aos-session] bandwidth: H2D {:.1} GB/s ({:?}) — {}",
+                h.bytes_per_sec / 1e9,
+                h.source,
+                h.detail
+            );
+        }
+    }
 
     let _ = offerings::migrate_legacy_installed(&home);
 

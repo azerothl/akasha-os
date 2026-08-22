@@ -48,3 +48,13 @@ model.infer → dispatch_loop
 
 vLLM serving, second draft GGUF, `common` feature, speculative inside multi-seq
 batch, Q4 KV default, version marketing for 381 tok/s reproduction benches.
+
+## E21 — FreeToken-inspired borrowings (not a dependency)
+
+| # | Idea | Deliverable | Status |
+|---|------|-------------|--------|
+| E21.1 | Bandwidth signals | `aos-placement::bandwidth` — measured RAM (`host_probe` 256 MiB), GPU spec lookup + PCIe gen×width from `nvidia-smi`; written to `var/run/hardware.json` ; `ModelSubsystem` maps into `HardwareProfile` ; hybrid decode uses `host_to_device_bw` | done |
+| E21.2 | Semantic prefix anchors | `aos-llama::semantic` — snap E20 `prepare_seq0_prefix` to ChatML turn/tool/think markers ; unit tests | done |
+| E21.3 | MoE expert LRU | **Not implemented** — llama.cpp bindings lack per-expert tensors ; documented in [moe-expert-offload.md](../moe-expert-offload.md) | documented |
+
+Inspired by [arXiv:2608.16157](https://arxiv.org/abs/2608.16157) (FreeToken). Akasha OS does **not** integrate FreeToken, vLLM, SGLang, or a second inference engine.
