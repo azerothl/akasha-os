@@ -417,6 +417,7 @@ name = "aos-session"
 version = "0.10.1"
 dependencies = [
  "aos-ipc",
+ "aos-placement",
  "aos-proto",
  "ctrlc",
  "reqwest",

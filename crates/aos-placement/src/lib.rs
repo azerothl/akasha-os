@@ -14,6 +14,7 @@
 //! Les hypothèses du modèle de coût sont documentées dans
 //! `adr/0002-model-placement.md`.
 
+pub mod bandwidth;
 pub mod cost;
 pub mod hardware;
 pub mod manager;
@@ -21,6 +22,9 @@ pub mod model;
 pub mod plan;
 pub mod sim;
 
+pub use bandwidth::{
+    probe_host_bandwidth, probe_ram_read_bw, BandwidthSignal, BandwidthSignals, BandwidthSource,
+};
 pub use cost::{Bound, CostModel, Estimate};
 pub use hardware::{GpuDevice, HardwareProfile};
 pub use manager::{Budgets, PlacementError, PlacementManager};

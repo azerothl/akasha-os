@@ -139,9 +139,20 @@ impl CostModel {
 
         let t_stream = read_d / disk_bw;
 
+        // Hybrid VRAM+RAM on GPU host: CPU layers stream over PCIe each token (E21).
+        let hybrid_pcie = if hw.has_gpu
+            && hw.host_to_device_bw > 0.0
+            && layer_r > 0.0
+            && layer_v > 0.0
+        {
+            layer_r / hw.host_to_device_bw
+        } else {
+            0.0
+        };
+
         // Prefetch + double buffering (§3.5.4) : le streaming disque se
         // chevauche avec le calcul des tiers rapides.
-        let t_token = t_compute.max(t_stream) + self.overhead_ms / 1000.0;
+        let t_token = t_compute.max(t_stream).max(hybrid_pcie) + self.overhead_ms / 1000.0;
         let tok_s = 1.0 / t_token;
 
         // --- Prefill ---

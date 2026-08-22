@@ -12,6 +12,7 @@
 
 pub mod backend;
 pub mod config;
+pub mod host_hardware;
 pub mod media;
 pub mod providers;
 pub mod subsystem;

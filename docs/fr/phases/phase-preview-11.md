@@ -48,3 +48,13 @@ model.infer → dispatch_loop
 
 Serving vLLM, second GGUF draft, feature `common`, speculative multi-seq,
 Q4 KV par défaut, marketing 381 tok/s.
+
+## E21 — emprunts inspirés FreeToken (pas une dépendance)
+
+| # | Idée | Livrable | Statut |
+|---|------|----------|--------|
+| E21.1 | Signaux bande passante | `aos-placement::bandwidth` — RAM mesurée (`host_probe` 256 Mio), lookup GPU + PCIe gen×largeur via `nvidia-smi` ; écrit dans `var/run/hardware.json` ; `ModelSubsystem` → `HardwareProfile` ; decode hybride utilise `host_to_device_bw` | fait |
+| E21.2 | Ancres sémantiques de préfixe | `aos-llama::semantic` — ancrage E20 `prepare_seq0_prefix` aux marqueurs tour/outil/pensée ChatML ; tests unitaires | fait |
+| E21.3 | LRU expert MoE | **Non implémenté** — bindings llama.cpp sans tenseurs par expert ; documenté dans [moe-expert-offload.md](../moe-expert-offload.md) | documenté |
+
+Inspiré de [arXiv:2608.16157](https://arxiv.org/abs/2608.16157) (FreeToken). Akasha OS **n’intègre pas** FreeToken, vLLM, SGLang ni un second moteur.
