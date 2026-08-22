@@ -4,7 +4,7 @@
 
 Spécification produit durable pour l’**application hôte Preview** (`crates/aos-ui-egui`). Le site public (`website/`) conserve son design system orrery dans [DESIGN.md](../DESIGN.md) ; ce document régit le chrome in-app, la navigation et les libellés sur Preview Windows/Linux.
 
-> Périmètre : shell hôte Preview 0.10.x. Pas l’image seL4 bootable.
+> Périmètre : shell hôte Preview 0.11.x. Pas l’image seL4 bootable.
 
 ## Objectifs
 
