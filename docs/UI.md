@@ -111,13 +111,15 @@ Expert fold: sd.cpp backends, flow-shift, VRAM budget, upscale/img2img — uncha
 
 ### Settings
 
-Grouped mentally (tabs or sections):
+Three section headings in **More → Settings** (progressive disclosure for expert folds):
 
 | Group | Contents |
 |-------|----------|
-| **Me** | Language, theme, font scale, auto-remember, updates |
-| **Models** | Routing, default model, inference mode, media packs |
-| **Trust** | Network, secrets, agent defaults, schedules, catalogue |
+| **Me** | Language, theme, auto-download updates |
+| **Models** | Inference mode, routing (human labels; technical ids in tooltips), default agent/image/audio models, links to Models and Providers tabs |
+| **Trust** | Default agent trust, network opt-in, auto-remember; collapsible: agent limits, web tool caps, secrets vault, module catalogue, schedules |
+
+Expert controls (web fetch limits, secrets, catalogue, schedules, image W/H/steps) stay available behind collapsed headers — not removed, not promoted to the same weight as language/theme.
 
 ## First-run
 
@@ -156,6 +158,6 @@ Tester jargon is fine inside Scenarios, Feedback, and audit export — not on th
 | Status bar (network, model, caps, update, language) | in progress |
 | Orrery token mapping for four themes | in progress |
 | First-run → chat + allowance recap | done |
-| Settings Me/Models/Trust grouping | planned |
+| Settings Me/Models/Trust grouping | done |
 | Font scale preference | planned |
 | Full WCAG audit | planned |

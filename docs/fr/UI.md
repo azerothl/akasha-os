@@ -111,13 +111,15 @@ Repli expert : backends sd.cpp, flow-shift, budget VRAM, upscale/img2img — cap
 
 ### Paramètres
 
-Regroupement mental :
+Trois sections dans **Plus → Paramètres** (repli progressif pour les options expertes) :
 
 | Groupe | Contenu |
 |--------|---------|
-| **Moi** | Langue, thème, échelle police, mémorisation auto, mises à jour |
-| **Modèles** | Routage, modèle par défaut, mode inférence, packs média |
-| **Confiance** | Réseau, secrets, défauts agents, planifications, catalogue |
+| **Moi** | Langue, thème, téléchargement auto des mises à jour |
+| **Modèles** | Mode inférence, routage (libellés humains ; ids techniques en infobulle), modèles agent/image/audio par défaut, liens vers Modèles et Providers |
+| **Confiance** | Confiance agents par défaut, opt-in réseau, mémorisation auto ; repliables : limites agents, plafonds outils web, coffre secrets, catalogue modules, planifications |
+
+Les contrôles experts (limites fetch web, secrets, catalogue, planifications, W/H/steps image) restent accessibles sous en-têtes repliés — non supprimés, pas au même poids visuel que langue/thème.
 
 ## Premier lancement
 
@@ -156,6 +158,6 @@ Le jargon testeur reste acceptable dans Scénarios, Retour et export audit — p
 | Barre d’état (réseau, modèle, caps, update, langue) | en cours |
 | Mapping jetons orrery sur quatre thèmes | en cours |
 | Premier lancement → chat + récap autorisations | fait |
-| Regroupement Paramètres Moi/Modèles/Confiance | planifié |
+| Regroupement Paramètres Moi/Modèles/Confiance | fait |
 | Préférence échelle police | planifié |
 | Audit WCAG complet | planifié |
