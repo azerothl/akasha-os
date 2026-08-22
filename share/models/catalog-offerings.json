@@ -1,5 +1,5 @@
 {
-  "version": "0.3.0",
+  "version": "0.3.1",
   "models": [
     {
       "id": "local:qwen3-embedding-0.6b",
@@ -82,6 +82,50 @@
       "optional": true,
       "tags": ["moe", "reasoning"],
       "description": "Mixture-of-Experts — ~30B total, ~3B actifs par token"
+    },
+    {
+      "id": "local:qwen3.8-27b-instruct",
+      "name": "Qwen3.8 27B UD-Q4_K_M",
+      "profiles": ["chat", "code", "reasoning"],
+      "filename": "Qwen3.8-27B-UD-Q4_K_M.gguf",
+      "url": "https://huggingface.co/unsloth/Qwen3.8-27B-GGUF/resolve/main/Qwen3.8-27B-UD-Q4_K_M.gguf",
+      "bytes": 16464440224,
+      "sha256": "",
+      "min_vram_mib": 20480,
+      "min_disk_bytes": 18000000000,
+      "quality_score": 97,
+      "speed_score": 62,
+      "n_layers": 64,
+      "n_params": 2.7e10,
+      "weights_bytes": 16464440224,
+      "embed_bytes": 500000000,
+      "kv_bytes_per_token": 100000,
+      "replaces": [],
+      "optional": true,
+      "tags": ["dense", "reasoning", "thinking"],
+      "description": "Dense 27B (Unsloth Dynamic 3.0) — tous les paramètres actifs / token ; thinking supprimé en chat Preview"
+    },
+    {
+      "id": "local:qwen3.8-27b-instruct-iq4",
+      "name": "Qwen3.8 27B UD-IQ4_XS",
+      "profiles": ["chat", "code", "reasoning"],
+      "filename": "Qwen3.8-27B-UD-IQ4_XS.gguf",
+      "url": "https://huggingface.co/unsloth/Qwen3.8-27B-GGUF/resolve/main/Qwen3.8-27B-UD-IQ4_XS.gguf",
+      "bytes": 14252845984,
+      "sha256": "",
+      "min_vram_mib": 16384,
+      "min_disk_bytes": 15500000000,
+      "quality_score": 95,
+      "speed_score": 66,
+      "n_layers": 64,
+      "n_params": 2.7e10,
+      "weights_bytes": 14252845984,
+      "embed_bytes": 500000000,
+      "kv_bytes_per_token": 100000,
+      "replaces": [],
+      "optional": true,
+      "tags": ["dense", "reasoning", "thinking"],
+      "description": "Dense 27B quant léger (~14,3 GiB) — mieux sur 16 GiB VRAM ; contexte court recommandé"
     },
     {
       "id": "local:qwen3-4b-instruct-2507",
@@ -724,7 +768,12 @@
     "high": {
       "embed": "local:qwen3-embedding-0.6b",
       "chat": "local:qwen3-30b-a3b-instruct",
-      "alternatives": ["local:qwen3.5-9b-instruct", "local:qwen3.5-4b-instruct"]
+      "alternatives": [
+        "local:qwen3.8-27b-instruct",
+        "local:qwen3.8-27b-instruct-iq4",
+        "local:qwen3.5-9b-instruct",
+        "local:qwen3.5-4b-instruct"
+      ]
     }
   }
 }
