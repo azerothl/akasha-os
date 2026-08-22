@@ -75,10 +75,13 @@ pub fn apply_theme(ctx: &egui::Context, theme: &str) {
     ctx.set_visuals(visuals);
 }
 
-/// Scale the whole Preview chrome (rail, status bar, panels) via `pixels_per_point`.
-pub fn apply_ui_scale(ctx: &egui::Context, base_pixels_per_point: f32, scale_percent: u32) {
+/// Scale the whole Preview chrome (rail, status bar, panels) via egui zoom factor.
+/// Uses `zoom_factor` so OS/monitor DPI changes still apply at runtime.
+pub fn apply_ui_scale(ctx: &egui::Context, scale_percent: u32) {
     let factor = crate::prefs::ui_scale_factor(scale_percent);
-    ctx.set_pixels_per_point(base_pixels_per_point * factor);
+    if (ctx.zoom_factor() - factor).abs() > f32::EPSILON {
+        ctx.set_zoom_factor(factor);
+    }
 }
 
 fn orrery_dark() -> egui::Visuals {

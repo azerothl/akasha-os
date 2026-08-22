@@ -50,7 +50,7 @@ pub struct Preferences {
     pub image_height: u32,
     #[serde(default = "default_image_steps")]
     pub image_steps: u32,
-    /// Interface scale as a percentage (90, 100, 110, 125). Applied via egui `pixels_per_point`.
+    /// Interface scale as a percentage (90, 100, 110, 125). Applied via egui `zoom_factor`.
     #[serde(default = "default_ui_scale_percent")]
     pub ui_scale_percent: u32,
 }
@@ -252,9 +252,13 @@ fn sync_onboarding_language(prefs: &Preferences) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static LOCALE_ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn detect_os_language_defaults_to_en_without_locale() {
+        let _guard = LOCALE_ENV_LOCK.lock().unwrap();
         std::env::remove_var("LC_ALL");
         std::env::remove_var("LC_MESSAGES");
         std::env::remove_var("LANG");
@@ -263,6 +267,7 @@ mod tests {
 
     #[test]
     fn detect_os_language_reads_fr_locale() {
+        let _guard = LOCALE_ENV_LOCK.lock().unwrap();
         std::env::remove_var("LC_ALL");
         std::env::remove_var("LC_MESSAGES");
         std::env::set_var("LANG", "fr_FR.UTF-8");
@@ -272,6 +277,7 @@ mod tests {
 
     #[test]
     fn detect_os_language_reads_en_locale() {
+        let _guard = LOCALE_ENV_LOCK.lock().unwrap();
         std::env::set_var("LC_ALL", "en_GB.UTF-8");
         assert_eq!(detect_os_language(), "en");
         std::env::remove_var("LC_ALL");

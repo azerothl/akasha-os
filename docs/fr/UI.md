@@ -98,7 +98,7 @@ Les confirmations d’extension OS (module.install, cap.request, …) gardent l�
 | Focus | Contour `signal` 2px ; focus clavier visible sur rail et Plus. |
 | Clavier | `Ctrl+1`…`Ctrl+4` rail principal ; `Ctrl+K` palette légère (onglets + hint slash). |
 | Mouvement | Respect de `prefers-reduced-motion` là où il y a animation ; chrome egui statique. |
-| Échelle | Préférence d’échelle dans Paramètres → Moi (`ui_scale_percent` : 90 / 100 / 110 / 125). Appliquée via `pixels_per_point` egui sur rail, barre d’état et panneaux. |
+| Échelle | Préférence d’échelle de l’interface dans Paramètres → Moi (`ui_scale_percent` : 90 / 100 / 110 / 125). Appliquée via `zoom_factor` egui sur rail, barre d’état et panneaux. |
 | Langue | Parité EN/FR selon [I18N.md](I18N.md). |
 
 ## Divulgation progressive
@@ -159,5 +159,5 @@ Le jargon testeur reste acceptable dans Scénarios, Retour et export audit — p
 | Mapping jetons orrery sur quatre thèmes | en cours |
 | Premier lancement → chat + récap autorisations | fait |
 | Regroupement Paramètres Moi/Modèles/Confiance | fait |
-| Préférence échelle police | fait |
+| Préférence échelle interface | fait |
 | Audit WCAG complet | planifié |

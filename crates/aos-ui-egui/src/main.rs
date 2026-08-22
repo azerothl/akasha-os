@@ -266,13 +266,12 @@ fn main() -> eframe::Result<()> {
         &format!("Akasha OS Preview {version}"),
         options,
         Box::new(move |cc| {
-            let base_pixels_per_point = cc.egui_ctx.pixels_per_point();
             let ctx = cc.egui_ctx.clone();
             std::thread::spawn(move || {
                 let rt = tokio::runtime::Runtime::new().expect("tokio");
                 rt.block_on(runtime_main(cmd_rx, evt_tx, ctx));
             });
-            Ok(Box::new(UiApp::new(cmd_tx, evt_rx, version, base_pixels_per_point)))
+            Ok(Box::new(UiApp::new(cmd_tx, evt_rx, version)))
         }),
     )
 }
@@ -1351,8 +1350,6 @@ struct UiApp {
     hf_download_name: String,
     hf_download_status: String,
     show_go_to_palette: bool,
-    /// Native pixels-per-point before user scale (from eframe at startup).
-    base_pixels_per_point: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -1364,12 +1361,7 @@ struct ModelDownloadUiState {
 }
 
 impl UiApp {
-    fn new(
-        cmd_tx: Sender<Cmd>,
-        evt_rx: Receiver<Evt>,
-        version: String,
-        base_pixels_per_point: f32,
-    ) -> Self {
+    fn new(cmd_tx: Sender<Cmd>, evt_rx: Receiver<Evt>, version: String) -> Self {
         let onboarding = load_onboarding();
         let mut prefs = load_preferences();
         if prefs.language.is_empty() {
@@ -1538,7 +1530,6 @@ impl UiApp {
             hf_download_name: String::new(),
             hf_download_status: String::new(),
             show_go_to_palette: false,
-            base_pixels_per_point,
         }
     }
 
@@ -2280,7 +2271,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
 impl eframe::App for UiApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         theme::apply_theme(ctx, &self.prefs.theme);
-        theme::apply_ui_scale(ctx, self.base_pixels_per_point, self.prefs.ui_scale_percent);
+        theme::apply_ui_scale(ctx, self.prefs.ui_scale_percent);
         self.handle_keyboard_shortcuts(ctx);
         while let Ok(ev) = self.evt_rx.try_recv() {
             match ev {
