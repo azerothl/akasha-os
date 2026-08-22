@@ -313,6 +313,9 @@ pub fn ui_composition_canvas(
             b.clamp_in_frame();
             blocks.push(b);
             *selected = Some(id);
+            if preview_path.is_some() && *overlay_opacity > OVERLAY_BLOCK_EDIT_THRESHOLD {
+                *overlay_opacity = OVERLAY_BLOCK_EDIT_THRESHOLD;
+            }
         }
         let can_del = selected.is_some();
         if ui
@@ -350,6 +353,10 @@ pub fn ui_composition_canvas(
         if !overlay_allows_block_editing(preview_path, *overlay_opacity) {
             ui.weak(t.studio_preview_drag_locked);
         }
+    }
+
+    if !blocks.is_empty() && active_blocks(blocks).is_empty() {
+        ui.weak(t.studio_composition_empty_desc_hint);
     }
 
     let allow_block_edit = overlay_allows_block_editing(preview_path, *overlay_opacity);

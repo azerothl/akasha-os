@@ -38,6 +38,7 @@ pub struct ImageStudioState {
     pub preview: Option<String>,
     /// 0..1 opacity for painting `preview` over the composition canvas.
     pub preview_overlay_opacity: f32,
+    show_empty_prompt_hint: bool,
     pub packs: Vec<(String, String)>,
     pub styles: Vec<String>,
     pub loras: Vec<String>,
@@ -103,7 +104,8 @@ impl Default for ImageStudioState {
             model_id: String::new(),
             profile: "balanced".to_string(),
             preview: None,
-            preview_overlay_opacity: 1.0,
+            preview_overlay_opacity: 0.5,
+            show_empty_prompt_hint: false,
             packs: Vec::new(),
             styles: Vec::new(),
             loras: Vec::new(),
@@ -1085,17 +1087,17 @@ impl ImageStudioState {
         generating: Option<&ImageGenUiState>,
     ) {
         ui.horizontal(|ui| {
-            ui.label("Prompt");
-            help_icon(
-                ui,
-                "What to generate. Be specific about subject, style, and composition.",
-            );
+            ui.label(t.studio_prompt);
+            help_icon(ui, t.studio_prompt_help);
         });
-        ui.add(
+        let prompt_response = ui.add(
             egui::TextEdit::multiline(&mut self.prompt)
                 .desired_rows(3)
                 .desired_width(f32::INFINITY),
         );
+        if prompt_response.changed() && !self.prompt.trim().is_empty() {
+            self.show_empty_prompt_hint = false;
+        }
         combo_image_pack(
             ui,
             "pack",
@@ -1113,17 +1115,14 @@ impl ImageStudioState {
             ui.colored_label(egui::Color32::YELLOW, t.studio_model_not_installed);
         }
         ui.horizontal(|ui| {
-            ui.label("W");
-            help_icon(ui, "Image width in pixels.");
+            ui.label(t.studio_width);
+            help_icon(ui, t.studio_width_help);
             ui.add(egui::DragValue::new(&mut self.width).range(64..=2048));
-            ui.label("H");
-            help_icon(ui, "Image height in pixels.");
+            ui.label(t.studio_height);
+            help_icon(ui, t.studio_height_help);
             ui.add(egui::DragValue::new(&mut self.height).range(64..=2048));
-            ui.label("Profile");
-            help_icon(
-                ui,
-                "Preset quality/speed profile for this model (fast, balanced, quality).",
-            );
+            ui.label(t.studio_profile);
+            help_icon(ui, t.studio_profile_help);
             egui::ComboBox::from_id_salt("studio_profile")
                 .selected_text(self.profile.as_str())
                 .show_ui(ui, |ui| {
@@ -1133,6 +1132,44 @@ impl ImageStudioState {
                 });
         });
         self.apply_preset_for_current_model();
+
+        let busy = generating.is_some();
+        let model_ready = models_page::is_model_installed(&self.model_id);
+        let generate_clicked = ui
+            .add_enabled(!busy && model_ready, egui::Button::new(t.studio_generate))
+            .clicked();
+        if generate_clicked && self.prompt.trim().is_empty() {
+            self.show_empty_prompt_hint = true;
+        }
+        if self.show_empty_prompt_hint && self.prompt.trim().is_empty() {
+            ui.colored_label(egui::Color32::LIGHT_RED, t.studio_empty_prompt_hint);
+        }
+        if generate_clicked && !self.prompt.trim().is_empty() && model_ready {
+            let use_edited = self.use_edited_enriched && !self.enriched_prompt.trim().is_empty();
+            let wants_json_enrich = self.enrich_prompt
+                && crate::image_prompt::supports_json_prompt_enrichment(Some(&self.model_id))
+                && !use_edited;
+            let wants_chat_enhance = self.enhance_prompt_chat && !use_edited && !wants_json_enrich;
+            let _ = cmd.send(Cmd::MediaImage {
+                prompt: self.prompt.clone(),
+                model_id: if self.model_id.is_empty() {
+                    None
+                } else {
+                    Some(self.model_id.clone())
+                },
+                options: self.to_options(),
+                enrich_prompt: wants_json_enrich,
+                enhance_prompt_chat: wants_chat_enhance,
+                generation_prompt: if use_edited {
+                    Some(self.enriched_prompt.trim().to_string())
+                } else {
+                    None
+                },
+                composition_blocks: self.composition_blocks.clone(),
+            });
+        }
+
+        ui.add_space(4.0);
 
         egui::CollapsingHeader::new(t.studio_negative)
             .default_open(false)
@@ -1609,39 +1646,6 @@ impl ImageStudioState {
                     });
                 }
             });
-
-        ui.add_space(8.0);
-        let busy = generating.is_some();
-        let model_ready = models_page::is_model_installed(&self.model_id);
-        if ui
-            .add_enabled(!busy && model_ready, egui::Button::new(t.studio_generate))
-            .clicked()
-            && !self.prompt.is_empty()
-            && model_ready
-        {
-            let use_edited = self.use_edited_enriched && !self.enriched_prompt.trim().is_empty();
-            let wants_json_enrich = self.enrich_prompt
-                && crate::image_prompt::supports_json_prompt_enrichment(Some(&self.model_id))
-                && !use_edited;
-            let wants_chat_enhance = self.enhance_prompt_chat && !use_edited && !wants_json_enrich;
-            let _ = cmd.send(Cmd::MediaImage {
-                prompt: self.prompt.clone(),
-                model_id: if self.model_id.is_empty() {
-                    None
-                } else {
-                    Some(self.model_id.clone())
-                },
-                options: self.to_options(),
-                enrich_prompt: wants_json_enrich,
-                enhance_prompt_chat: wants_chat_enhance,
-                generation_prompt: if use_edited {
-                    Some(self.enriched_prompt.trim().to_string())
-                } else {
-                    None
-                },
-                composition_blocks: self.composition_blocks.clone(),
-            });
-        }
     }
 }
 
@@ -2114,24 +2118,24 @@ fn ui_image_progress(ui: &mut egui::Ui, t: &UiStrings, gen: &ImageGenUiState) {
         let pulse = ((gen.elapsed_secs % 3) as f32 / 3.0).max(0.05);
         (
             pulse,
-            format!("Upscaling image (ESRGAN)… ({}s)", gen.elapsed_secs),
+            t.studio_upscaling_progress
+                .replace("{elapsed}", &gen.elapsed_secs.to_string()),
         )
     } else if gen.step > 0 && gen.total_steps > 0 {
         (
             (gen.step as f32 / gen.total_steps as f32).clamp(0.02, 1.0),
-            format!(
-                "Generating image: step {}/{} ({}s)",
-                gen.step, gen.total_steps, gen.elapsed_secs
-            ),
+            t.studio_generating_step
+                .replace("{step}", &gen.step.to_string())
+                .replace("{total}", &gen.total_steps.to_string())
+                .replace("{elapsed}", &gen.elapsed_secs.to_string()),
         )
     } else {
         let est = gen.total_steps.max(1) as f32 * 2.5;
         (
             (gen.elapsed_secs as f32 / est).clamp(0.02, 0.92),
-            format!(
-                "Generating image: {} steps, {}s elapsed…",
-                gen.total_steps, gen.elapsed_secs
-            ),
+            t.studio_generating_indeterminate
+                .replace("{steps}", &gen.total_steps.to_string())
+                .replace("{elapsed}", &gen.elapsed_secs.to_string()),
         )
     };
     ui.add(
