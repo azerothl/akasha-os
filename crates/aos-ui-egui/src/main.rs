@@ -19,6 +19,7 @@ mod image_history;
 mod image_prompt;
 mod image_studio;
 mod nav;
+mod onboarding;
 mod os_open;
 mod product_context;
 mod runtime;
@@ -107,16 +108,25 @@ struct OnboardingState {
     trust_default: String,
     #[serde(default)]
     tutorial_step: u32,
+    /// User sent a chat message during the first-run chat step.
+    #[serde(default)]
+    chat_sent: bool,
+    /// Assistant replied to the first-run chat message.
+    #[serde(default)]
+    first_chat_done: bool,
 }
 
 impl Default for OnboardingState {
     fn default() -> Self {
+        let language = prefs::detect_os_language();
         Self {
             completed: false,
-            language: "en".into(),
+            language: language.clone(),
             routing: "local_only".into(),
             trust_default: "medium".into(),
             tutorial_step: 0,
+            chat_sent: false,
+            first_chat_done: false,
         }
     }
 }
@@ -1727,7 +1737,90 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             routing: self.prefs.routing.clone(),
             language: self.prefs.language.clone(),
         });
+        self.mark_onboarding_chat_sent();
         self.scen_chat = true;
+    }
+
+    fn apply_onboarding_prefs(&mut self) {
+        self.prefs.language = self.onboarding.language.clone();
+        self.prefs.routing = self.onboarding.routing.clone();
+        self.prefs.trust_default = self.onboarding.trust_default.clone();
+        save_preferences(&self.prefs);
+        let _ = self.cmd_tx.send(Cmd::SetRouting {
+            mode: self.prefs.routing.clone(),
+        });
+    }
+
+    fn complete_onboarding(&mut self, status: String) {
+        self.apply_onboarding_prefs();
+        self.onboarding.completed = true;
+        self.onboarding.tutorial_step = onboarding::TUTORIAL_LAST_STEP;
+        save_onboarding(&self.onboarding);
+        self.show_onboarding = false;
+        self.tab = Tab::Chat;
+        self.status = status;
+    }
+
+    fn mark_onboarding_chat_sent(&mut self) {
+        if self.show_onboarding && self.onboarding.tutorial_step == 1 {
+            self.onboarding.chat_sent = true;
+            save_onboarding(&self.onboarding);
+        }
+    }
+
+    fn mark_onboarding_chat_done(&mut self) {
+        if !self.show_onboarding || self.onboarding.tutorial_step != 1 || !self.onboarding.chat_sent {
+            return;
+        }
+        self.onboarding.first_chat_done = true;
+        save_onboarding(&self.onboarding);
+        if onboarding::chat_step_can_advance(self.onboarding.chat_sent, self.onboarding.first_chat_done)
+        {
+            self.onboarding.tutorial_step = 2;
+            save_onboarding(&self.onboarding);
+            if let Some(id) = self.active_session.as_deref() {
+                let holder = format!("session:{id}");
+                self.caps_holder = holder.clone();
+                let _ = self.cmd_tx.send(Cmd::CapList { holder });
+            }
+        }
+    }
+
+    fn routing_human_label<'a>(&self, t: &'a i18n::UiStrings) -> &'a str {
+        if self.prefs.routing == "local_only" {
+            t.routing_local_human
+        } else {
+            t.settings_routing_balanced
+        }
+    }
+
+    fn ui_onboarding_allowance_recap(&self, ui: &mut egui::Ui, t: &i18n::UiStrings) {
+        ui.label(t.onboard_allowance_intro);
+        if self.prefs.network_online {
+            ui.label(t.onboard_allowance_network_on);
+        } else {
+            ui.label(t.onboard_allowance_network_off);
+        }
+        ui.label(
+            t.onboard_allowance_routing
+                .replace("{routing}", self.routing_human_label(t)),
+        );
+        ui.label(
+            t.onboard_allowance_trust
+                .replace("{trust}", &self.prefs.trust_default),
+        );
+        if self.prefs.auto_remember_chat {
+            ui.label(t.onboard_allowance_memory_on);
+        } else {
+            ui.label(t.onboard_allowance_memory_off);
+        }
+        ui.label(
+            t.onboard_allowance_caps
+                .replace("{n}", &self.caps.len().to_string()),
+        );
+        ui.label(t.onboard_allowance_no_agent_tools);
+        ui.add_space(8.0);
+        ui.weak(t.onboard_allowance_scenarios);
     }
 
     fn handle_slash(&mut self, text: &str) {
@@ -2210,6 +2303,7 @@ impl eframe::App for UiApp {
                     if self.status.starts_with("assistant :") {
                         self.status.clear();
                     }
+                    self.mark_onboarding_chat_done();
                 }
                 Evt::Error(m) => {
                     if m.contains("media.image") || m.starts_with("Image:") {
@@ -2885,117 +2979,83 @@ impl eframe::App for UiApp {
         }
 
         let t = i18n::strings(&self.prefs.language);
+        let onboard_t = if self.show_onboarding {
+            i18n::strings(&self.onboarding.language)
+        } else {
+            t
+        };
 
         if self.show_onboarding {
-            egui::Window::new(t.tutorial_title)
+            let step = self.onboarding.tutorial_step;
+            let anchor = if step == 1 {
+                egui::Align2::CENTER_TOP
+            } else {
+                egui::Align2::CENTER_CENTER
+            };
+            egui::Window::new(onboard_t.tutorial_title)
                 .collapsible(false)
                 .resizable(true)
                 .default_width(520.0)
-                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .anchor(anchor, if step == 1 { [0.0, 12.0] } else { [0.0, 0.0] })
                 .show(ctx, |ui| {
-                    let step = self.onboarding.tutorial_step;
-                    ui.label(t.step_of.replace("{}", &(step + 1).to_string()));
+                    ui.label(onboard_t.step_of.replace("{}", &(step + 1).to_string()));
                     ui.separator();
                     match step {
                         0 => {
-                            ui.heading(t.welcome);
-                            ui.label(t.preview_banner.replace("{}", &self.version));
-                            ui.label(t.welcome_body1);
-                            ui.label(t.welcome_body2);
-                        }
-                        1 => {
-                            ui.heading(t.preferences);
-                            ui.label(t.language);
+                            ui.heading(onboard_t.welcome);
+                            ui.label(onboard_t.preview_tagline);
+                            ui.label(onboard_t.welcome_body1);
+                            ui.add_space(8.0);
+                            ui.label(onboard_t.language);
                             ui.horizontal(|ui| {
                                 ui.radio_value(&mut self.onboarding.language, "fr".into(), "Français");
                                 ui.radio_value(&mut self.onboarding.language, "en".into(), "English");
                             });
-                            ui.label(t.routing);
-                            ui.horizontal(|ui| {
-                                ui.radio_value(
-                                    &mut self.onboarding.routing,
-                                    "local_only".into(),
-                                    t.routing_local_human,
-                                );
-                                ui.radio_value(
-                                    &mut self.onboarding.routing,
-                                    "balanced".into(),
-                                    "balanced",
-                                );
-                            });
-                            ui.label(t.trust_default);
-                            ui.horizontal(|ui| {
-                                ui.radio_value(
-                                    &mut self.onboarding.trust_default,
-                                    "low".into(),
-                                    t.trust_low,
-                                );
-                                ui.radio_value(
-                                    &mut self.onboarding.trust_default,
-                                    "medium".into(),
-                                    t.trust_medium,
-                                );
-                            });
                         }
-                        2 => {
-                            ui.heading(t.product_tour);
-                            ui.label(t.tour_chat);
-                            ui.label(t.tour_memory);
-                            ui.label(t.tour_notes);
-                            ui.label(t.tour_agents);
-                            ui.label(t.tour_network);
-                            ui.label(t.tour_feedback);
+                        1 => {
+                            ui.heading(onboard_t.onboard_chat_heading);
+                            ui.label(onboard_t.onboard_chat_body);
+                            if self.onboarding.chat_sent && !self.onboarding.first_chat_done {
+                                ui.weak(onboard_t.onboard_chat_waiting);
+                            }
                         }
                         _ => {
-                            ui.heading(t.test_path);
-                            ui.label(t.test_path_body1);
-                            ui.label(t.test_path_body2);
-                            ui.label(t.test_path_body3);
+                            ui.heading(onboard_t.onboard_allowance_heading);
+                            self.ui_onboarding_allowance_recap(ui, &onboard_t);
                         }
                     }
                     ui.separator();
                     ui.horizontal(|ui| {
-                        if step > 0 && ui.button(t.prev).clicked() {
+                        if step > 0 && ui.button(onboard_t.prev).clicked() {
                             self.onboarding.tutorial_step = step - 1;
                             save_onboarding(&self.onboarding);
-                        }
-                        if step < 3 {
-                            if ui.button(t.next).clicked() {
-                                if step == 1 {
-                                    self.prefs.language = self.onboarding.language.clone();
-                                    self.prefs.routing = self.onboarding.routing.clone();
-                                    self.prefs.trust_default = self.onboarding.trust_default.clone();
-                                    save_preferences(&self.prefs);
-                                    let _ = self.cmd_tx.send(Cmd::SetRouting {
-                                        mode: self.prefs.routing.clone(),
-                                    });
-                                }
-                                self.onboarding.tutorial_step = step + 1;
-                                save_onboarding(&self.onboarding);
+                            if step == 1 {
+                                self.tab = Tab::Chat;
                             }
-                        } else if ui.button(t.finish_tutorial).clicked() {
-                            self.prefs.language = self.onboarding.language.clone();
-                            self.prefs.routing = self.onboarding.routing.clone();
-                            self.prefs.trust_default = self.onboarding.trust_default.clone();
-                            save_preferences(&self.prefs);
-                            let _ = self.cmd_tx.send(Cmd::SetRouting {
-                                mode: self.prefs.routing.clone(),
-                            });
-                            self.onboarding.completed = true;
-                            self.onboarding.tutorial_step = 3;
-                            save_onboarding(&self.onboarding);
-                            self.show_onboarding = false;
-                            self.tab = Tab::Chat;
-                            self.status = t.tutorial_done_status.into();
                         }
-                        if ui.button(t.skip).clicked() {
-                            self.prefs.language = self.onboarding.language.clone();
-                            self.prefs.routing = self.onboarding.routing.clone();
-                            self.prefs.trust_default = self.onboarding.trust_default.clone();
-                            save_preferences(&self.prefs);
-                            self.onboarding.completed = true;
-                            save_onboarding(&self.onboarding);
-                            self.show_onboarding = false;
+                        if step == 0 {
+                            if ui.button(onboard_t.next).clicked() {
+                                self.apply_onboarding_prefs();
+                                self.onboarding.tutorial_step = 1;
+                                save_onboarding(&self.onboarding);
+                                self.tab = Tab::Chat;
+                            }
+                        } else if step == 1 {
+                            let ready = onboarding::chat_step_can_advance(
+                                self.onboarding.chat_sent,
+                                self.onboarding.first_chat_done,
+                            );
+                            ui.add_enabled_ui(ready, |ui| {
+                                if ui.button(onboard_t.next).clicked() {
+                                    self.onboarding.tutorial_step = 2;
+                                    save_onboarding(&self.onboarding);
+                                }
+                            });
+                        } else if ui.button(onboard_t.finish_tutorial).clicked() {
+                            self.complete_onboarding(onboard_t.tutorial_done_status.into());
+                        }
+                        if ui.button(onboard_t.skip).clicked() {
+                            self.complete_onboarding(String::new());
                         }
                     });
                 });
@@ -3046,6 +3106,8 @@ impl eframe::App for UiApp {
                     }
                     if ui.small_button(t.tutorial).clicked() {
                         self.onboarding.tutorial_step = 0;
+                        self.onboarding.chat_sent = false;
+                        self.onboarding.first_chat_done = false;
                         self.onboarding.completed = false;
                         self.show_onboarding = true;
                         save_onboarding(&self.onboarding);

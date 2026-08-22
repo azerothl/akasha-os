@@ -155,7 +155,7 @@ Le jargon testeur reste acceptable dans Scénarios, Retour et export audit — p
 | Rail principal + overflow Plus | en cours |
 | Barre d’état (réseau, modèle, caps, update, langue) | en cours |
 | Mapping jetons orrery sur quatre thèmes | en cours |
-| Premier lancement → chat + récap autorisations | planifié |
+| Premier lancement → chat + récap autorisations | fait |
 | Regroupement Paramètres Moi/Modèles/Confiance | planifié |
 | Préférence échelle police | planifié |
 | Audit WCAG complet | planifié |

@@ -83,7 +83,7 @@ pub fn run() -> eframe::Result<()> {
         .unwrap_or_default();
     let include_optional = false;
     let confirmed = false;
-    let lang_fr = std::env::var("AOS_LANG").ok().as_deref() != Some("en");
+    let lang_fr = crate::prefs::detect_os_language() == "fr";
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()

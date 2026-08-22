@@ -52,8 +52,24 @@ pub struct Preferences {
     pub image_steps: u32,
 }
 
-fn default_language() -> String {
+/// Preview UI language from OS locale when possible (`en` or `fr`).
+pub fn detect_os_language() -> String {
+    for key in ["LC_ALL", "LC_MESSAGES", "LANG"] {
+        if let Ok(raw) = std::env::var(key) {
+            let tag = raw.split('.').next().unwrap_or(&raw).to_ascii_lowercase();
+            if tag.starts_with("fr") {
+                return "fr".into();
+            }
+            if tag.starts_with("en") {
+                return "en".into();
+            }
+        }
+    }
     "en".into()
+}
+
+fn default_language() -> String {
+    detect_os_language()
 }
 fn default_routing() -> String {
     "local_only".into()
@@ -205,5 +221,32 @@ fn sync_onboarding_language(prefs: &Preferences) {
     }
     if let Ok(raw) = serde_json::to_string_pretty(&serde_json::Value::Object(map)) {
         let _ = std::fs::write(&path, raw);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn detect_os_language_defaults_to_en_without_locale() {
+        std::env::remove_var("LC_ALL");
+        std::env::remove_var("LC_MESSAGES");
+        std::env::remove_var("LANG");
+        assert_eq!(detect_os_language(), "en");
+    }
+
+    #[test]
+    fn detect_os_language_reads_fr_locale() {
+        std::env::set_var("LANG", "fr_FR.UTF-8");
+        assert_eq!(detect_os_language(), "fr");
+        std::env::remove_var("LANG");
+    }
+
+    #[test]
+    fn detect_os_language_reads_en_locale() {
+        std::env::set_var("LC_ALL", "en_GB.UTF-8");
+        assert_eq!(detect_os_language(), "en");
+        std::env::remove_var("LC_ALL");
     }
 }

@@ -31,7 +31,7 @@ On first launch (no `var/models/installed.json` yet):
    - **mid** (10–20 GiB, e.g. RTX 4080 SUPER): Qwen3.5-9B + Embedding 0.6B
    - **high** (≥20 GiB): Qwen3 30B-A3B + Embedding 0.6B (optional alternatives listed)
 3. Confirm (or pick alternatives / optional models) → GGUFs download into `share/models/`.
-4. Services start; egui opens with the in-app tutorial.
+4. Services start; egui opens with a short in-app tutorial (language → one chat turn → allowance recap).
 
 Catalogue: `share/models/catalog-offerings.json`. Installed registry:
 `var/models/installed.json`.
