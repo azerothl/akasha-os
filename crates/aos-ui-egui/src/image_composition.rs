@@ -1,5 +1,6 @@
 //! Visual composition canvas + prompt layout injection for Image Studio.
 
+use crate::decl_ui;
 use crate::i18n::UiStrings;
 use crate::image_prompt::{prompt_enrichment_kind, PromptEnrichmentKind};
 use eframe::egui;
@@ -277,6 +278,13 @@ enum DragMode {
     ResizeSe,
 }
 
+/// Block drag/resize is disabled above this overlay opacity when a preview is shown.
+pub const OVERLAY_BLOCK_EDIT_THRESHOLD: f32 = 0.20;
+
+pub fn overlay_allows_block_editing(preview_path: Option<&str>, overlay_opacity: f32) -> bool {
+    preview_path.is_none() || overlay_opacity <= OVERLAY_BLOCK_EDIT_THRESHOLD
+}
+
 /// Right-pane composition editor (aspect frame + overlapping blocks).
 pub fn ui_composition_canvas(
     ui: &mut egui::Ui,
@@ -286,6 +294,8 @@ pub fn ui_composition_canvas(
     blocks: &mut Vec<CompositionBlock>,
     selected: &mut Option<u64>,
     next_id: &mut u64,
+    preview_path: Option<&str>,
+    overlay_opacity: &mut f32,
 ) {
     ui.heading(t.studio_composition_heading);
     ui.weak(t.studio_composition_blurb);
@@ -303,6 +313,9 @@ pub fn ui_composition_canvas(
             b.clamp_in_frame();
             blocks.push(b);
             *selected = Some(id);
+            if preview_path.is_some() && *overlay_opacity > OVERLAY_BLOCK_EDIT_THRESHOLD {
+                *overlay_opacity = OVERLAY_BLOCK_EDIT_THRESHOLD;
+            }
         }
         let can_del = selected.is_some();
         if ui
@@ -324,6 +337,29 @@ pub fn ui_composition_canvas(
         ui.weak(format!("{}×{}", frame_w.max(1), frame_h.max(1)));
     });
 
+    if preview_path.is_some() {
+        ui.horizontal(|ui| {
+            ui.label(t.studio_preview_overlay);
+            ui.label(t.studio_preview_opacity);
+            help_row(ui, t.studio_preview_opacity_help);
+            let mut pct = (*overlay_opacity * 100.0).round().clamp(0.0, 100.0);
+            if ui
+                .add(egui::Slider::new(&mut pct, 0.0..=100.0).suffix("%"))
+                .changed()
+            {
+                *overlay_opacity = (pct / 100.0).clamp(0.0, 1.0);
+            }
+        });
+        if !overlay_allows_block_editing(preview_path, *overlay_opacity) {
+            ui.weak(t.studio_preview_drag_locked);
+        }
+    }
+
+    if !blocks.is_empty() && active_blocks(blocks).is_empty() {
+        ui.weak(t.studio_composition_empty_desc_hint);
+    }
+
+    let allow_block_edit = overlay_allows_block_editing(preview_path, *overlay_opacity);
     let avail = ui.available_width().min(520.0);
     let aspect = frame_w.max(1) as f32 / frame_h.max(1) as f32;
     let (canvas_w, canvas_h) = if aspect >= 1.0 {
@@ -352,7 +388,7 @@ pub fn ui_composition_canvas(
 
     // Hit-test front → back
     let pointer = response.interact_pointer_pos();
-    if response.clicked() {
+    if allow_block_edit && response.clicked() {
         if let Some(pos) = pointer {
             let mut hit: Option<u64> = None;
             for b in blocks.iter().rev() {
@@ -374,7 +410,7 @@ pub fn ui_composition_canvas(
     let drag_id = egui::Id::new("image_comp_drag");
     let mut drag: Option<DragState> = ui.ctx().data(|d| d.get_temp(drag_id));
 
-    if response.drag_started() {
+    if allow_block_edit && response.drag_started() {
         if let Some(pos) = pointer {
             let mut started = false;
             // Prefer resize handle of selected, then body hit front→back
@@ -424,7 +460,7 @@ pub fn ui_composition_canvas(
         }
     }
 
-    if response.dragged() {
+    if allow_block_edit && response.dragged() {
         if let (Some(d), Some(pos)) = (drag.as_ref(), pointer) {
             let dx = (pos.x - d.start_pointer.x) / rect.width().max(1.0);
             let dy = (pos.y - d.start_pointer.y) / rect.height().max(1.0);
@@ -444,7 +480,10 @@ pub fn ui_composition_canvas(
         }
     }
 
-    if response.drag_stopped() {
+    if allow_block_edit && response.drag_stopped() {
+        drag = None;
+    }
+    if !allow_block_edit {
         drag = None;
     }
     ui.ctx().data_mut(|data| {
@@ -487,6 +526,20 @@ pub fn ui_composition_canvas(
         if selected_here {
             let handle = resize_handle_rect(r);
             painter.rect_filled(handle, 2.0, egui::Color32::from_rgb(220, 230, 255));
+        }
+    }
+
+    if let Some(path) = preview_path {
+        if let Some(tex) = decl_ui::try_load_png(ui.ctx(), path) {
+            let alpha = (overlay_opacity.clamp(0.0, 1.0) * 255.0).round() as u8;
+            if alpha > 0 {
+                painter.image(
+                    tex.id(),
+                    rect,
+                    egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                    egui::Color32::from_white_alpha(alpha),
+                );
+            }
         }
     }
 
@@ -543,6 +596,20 @@ fn truncate(s: &str, max_chars: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn overlay_edit_threshold() {
+        assert!(overlay_allows_block_editing(None, 1.0));
+        assert!(overlay_allows_block_editing(Some("/downloads/x.png"), 0.0));
+        assert!(overlay_allows_block_editing(
+            Some("/downloads/x.png"),
+            OVERLAY_BLOCK_EDIT_THRESHOLD
+        ));
+        assert!(!overlay_allows_block_editing(
+            Some("/downloads/x.png"),
+            OVERLAY_BLOCK_EDIT_THRESHOLD + 0.01
+        ));
+    }
 
     #[test]
     fn ideogram_bbox_order() {
