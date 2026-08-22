@@ -36,6 +36,8 @@ pub struct ImageStudioState {
     pub model_id: String,
     pub profile: String,
     pub preview: Option<String>,
+    /// 0..1 opacity for painting `preview` over the composition canvas.
+    pub preview_overlay_opacity: f32,
     pub packs: Vec<(String, String)>,
     pub styles: Vec<String>,
     pub loras: Vec<String>,
@@ -101,6 +103,7 @@ impl Default for ImageStudioState {
             model_id: String::new(),
             profile: "balanced".to_string(),
             preview: None,
+            preview_overlay_opacity: 1.0,
             packs: Vec::new(),
             styles: Vec::new(),
             loras: Vec::new(),
@@ -999,7 +1002,7 @@ impl ImageStudioState {
             self.refresh_catalog();
         }
         self.ui_install_prompt(ui.ctx(), t, cmd, download_busy);
-        ui.heading(t.tab_image);
+        ui.heading(t.tab_create);
         ui.label(t.tab_hint_image);
         ui.add_space(8.0);
         if let Some(gen) = generating {
@@ -1045,6 +1048,8 @@ impl ImageStudioState {
                                     &mut self.composition_blocks,
                                     &mut self.composition_selected,
                                     &mut self.composition_next_id,
+                                    self.preview.as_deref(),
+                                    &mut self.preview_overlay_opacity,
                                 );
                                 if let Some(path) = self.preview.clone() {
                                     let busy = generating.is_some();
@@ -1055,7 +1060,7 @@ impl ImageStudioState {
                                     let upscale_repeats = self.upscale_repeats;
                                     let upscale_tile_size = self.upscale_tile_size;
                                     let path_for_cmd = path.clone();
-                                    ui_image_preview(ui, t, &path, can_upscale, || {
+                                    ui_image_preview_actions(ui, t, &path, can_upscale, || {
                                         let _ = cmd.send(Cmd::MediaImageUpscale {
                                             source_path: path_for_cmd,
                                             upscale_model,
@@ -1091,107 +1096,6 @@ impl ImageStudioState {
                 .desired_rows(3)
                 .desired_width(f32::INFINITY),
         );
-        ui.horizontal(|ui| {
-            ui.checkbox(&mut self.enhance_prompt_chat, t.studio_enhance_prompt_chat);
-            help_icon(ui, t.studio_enhance_prompt_chat_help);
-        });
-        if self.enhance_prompt_chat && self.use_edited_enriched {
-            self.use_edited_enriched = false;
-        }
-        if self.enhance_prompt_chat {
-            self.enrich_prompt = false;
-        }
-        if crate::image_prompt::supports_json_prompt_enrichment(Some(&self.model_id)) {
-            ui.horizontal(|ui| {
-                ui.checkbox(&mut self.enrich_prompt, t.studio_enrich_prompt);
-                help_icon(ui, t.studio_enrich_prompt_help);
-            });
-            if self.enrich_prompt && self.use_edited_enriched {
-                self.use_edited_enriched = false;
-            }
-            if self.enrich_prompt {
-                self.enhance_prompt_chat = false;
-            }
-        }
-        let show_enriched_panel = self.enhance_prompt_chat
-            || crate::image_prompt::supports_json_prompt_enrichment(Some(&self.model_id))
-            || !self.enriched_prompt.trim().is_empty();
-        if show_enriched_panel {
-            ui.horizontal(|ui| {
-                ui.checkbox(
-                    &mut self.use_edited_enriched,
-                    t.studio_use_edited_enriched,
-                );
-                help_icon(ui, t.studio_use_edited_enriched_help);
-            })
-            .response
-            .on_hover_text(t.studio_use_edited_enriched_help);
-            if self.use_edited_enriched {
-                self.enrich_prompt = false;
-                self.enhance_prompt_chat = false;
-            }
-            let hint = if self.enrich_prompt {
-                enrichment_hint(t, &self.model_id)
-            } else {
-                t.studio_enriched_hint_prose
-            };
-            ui_enriched_prompt_panel(
-                ui,
-                t,
-                hint,
-                &mut self.enriched_prompt,
-                &mut self.show_enriched_prompt,
-            );
-        }
-        ui.horizontal(|ui| {
-            ui.label(t.studio_negative);
-            help_icon(
-                ui,
-                "What to avoid in the image (artifacts, extra limbs, blur, watermark, etc.).",
-            );
-        });
-        ui.add(
-            egui::TextEdit::singleline(&mut self.negative).desired_width(f32::INFINITY),
-        );
-        ui.horizontal(|ui| {
-            ui.label("W");
-            help_icon(ui, "Image width in pixels.");
-            ui.add(egui::DragValue::new(&mut self.width).range(64..=2048));
-            ui.label("H");
-            help_icon(ui, "Image height in pixels.");
-            ui.add(egui::DragValue::new(&mut self.height).range(64..=2048));
-            ui.label("steps");
-            help_icon(ui, "Denoising iterations. More steps can improve quality but are slower.");
-            ui.add(egui::DragValue::new(&mut self.steps).range(1..=150));
-            ui.label("CFG");
-            help_icon(
-                ui,
-                "Prompt guidance strength. Higher = closer to prompt, lower = more creative/flexible.",
-            );
-            ui.add(egui::DragValue::new(&mut self.cfg).range(0.0..=20.0).speed(0.1));
-        });
-        ui.horizontal(|ui| {
-            ui.label("seed");
-            help_icon(
-                ui,
-                "Random seed. Empty means random each run; fixed value makes outputs reproducible.",
-            );
-            ui.add(egui::TextEdit::singleline(&mut self.seed).desired_width(80.0));
-            ui.label("sampler");
-            help_icon(ui, "Sampling algorithm used by the diffusion engine.");
-            egui::ComboBox::from_id_salt("studio_sampler")
-                .selected_text(if self.sampler.is_empty() {
-                    "default"
-                } else {
-                    self.sampler.as_str()
-                })
-                .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut self.sampler, String::new(), "default");
-                    for s in ["euler", "euler_a", "heun", "dpm2", "lcm", "ddim"] {
-                        ui.selectable_value(&mut self.sampler, s.to_string(), s);
-                    }
-                });
-        });
         combo_image_pack(
             ui,
             "pack",
@@ -1209,6 +1113,12 @@ impl ImageStudioState {
             ui.colored_label(egui::Color32::YELLOW, t.studio_model_not_installed);
         }
         ui.horizontal(|ui| {
+            ui.label("W");
+            help_icon(ui, "Image width in pixels.");
+            ui.add(egui::DragValue::new(&mut self.width).range(64..=2048));
+            ui.label("H");
+            help_icon(ui, "Image height in pixels.");
+            ui.add(egui::DragValue::new(&mut self.height).range(64..=2048));
             ui.label("Profile");
             help_icon(
                 ui,
@@ -1223,346 +1133,484 @@ impl ImageStudioState {
                 });
         });
         self.apply_preset_for_current_model();
-        ui.horizontal(|ui| {
-            let expert_toggled = ui
-                .checkbox(&mut self.expert_mode, t.studio_expert_mode)
-                .changed();
-            help_icon(ui, t.studio_expert_mode_help);
-            if expert_toggled && self.expert_mode {
-                self.load_expert_defaults_from_catalog();
-            }
-            if self.expert_mode {
-                if ui.button(t.studio_expert_reset).clicked() {
-                    self.load_expert_defaults_from_catalog();
+
+        egui::CollapsingHeader::new(t.studio_negative)
+            .default_open(false)
+            .show(ui, |ui| {
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.negative).desired_width(f32::INFINITY),
+                );
+            });
+
+        egui::CollapsingHeader::new(t.studio_section_enrichment)
+            .default_open(false)
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut self.enhance_prompt_chat, t.studio_enhance_prompt_chat);
+                    help_icon(ui, t.studio_enhance_prompt_chat_help);
+                });
+                if self.enhance_prompt_chat && self.use_edited_enriched {
+                    self.use_edited_enriched = false;
                 }
-            }
-        });
-        if self.expert_mode {
-            ui.group(|ui| {
-                ui.heading(t.studio_expert_heading);
-                ui.weak(t.studio_expert_blurb);
-                ui.horizontal(|ui| {
-                    ui.label(t.studio_expert_flow_shift);
-                    help_icon(ui, t.studio_expert_flow_shift_help);
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.flow_shift)
-                            .desired_width(56.0)
-                            .hint_text("3"),
-                    );
-                    ui.label(t.studio_expert_sd_mode);
-                    help_icon(ui, t.studio_expert_sd_mode_help);
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.sd_mode)
-                            .desired_width(72.0)
-                            .hint_text("img_gen"),
-                    );
-                    ui.label(t.studio_expert_video_frames);
-                    help_icon(ui, t.studio_expert_video_frames_help);
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.video_frames)
-                            .desired_width(48.0)
-                            .hint_text("1"),
-                    );
-                });
-                ui.horizontal(|ui| {
-                    ui.label(t.studio_expert_backend);
-                    help_icon(ui, t.studio_expert_backend_help);
-                    coerce_backend_alias(&mut self.backend);
-                    backend_choice_combo(ui, "studio_backend", &mut self.backend, STUDIO_BACKEND_CHOICES);
-                });
-                ui.horizontal(|ui| {
-                    ui.label(t.studio_expert_params_backend);
-                    help_icon(ui, t.studio_expert_params_backend_help);
-                    coerce_params_backend_alias(&mut self.params_backend);
-                    backend_choice_combo(
-                        ui,
-                        "studio_params_backend",
-                        &mut self.params_backend,
-                        STUDIO_PARAMS_BACKEND_CHOICES,
-                    );
-                    ui.label(t.studio_expert_threads);
-                    help_icon(ui, t.studio_expert_threads_help);
-                    ui.add(egui::DragValue::new(&mut self.threads).range(0..=64).speed(1));
-                });
-                ui.horizontal(|ui| {
-                    ui.checkbox(&mut self.offload_to_cpu, t.studio_expert_offload);
-                    help_icon(ui, t.studio_expert_offload_help);
-                    ui.checkbox(&mut self.diffusion_fa, t.studio_expert_diffusion_fa);
-                    help_icon(ui, t.studio_expert_diffusion_fa_help);
-                    ui.checkbox(&mut self.auto_fit, t.studio_expert_auto_fit);
-                    help_icon(ui, t.studio_expert_auto_fit_help);
-                });
-                ui.horizontal(|ui| {
-                    ui.checkbox(&mut self.stream_layers, t.studio_expert_stream_layers);
-                    help_icon(ui, t.studio_expert_stream_layers_help);
-                    if self.stream_layers {
-                        self.offload_to_cpu = true;
+                if self.enhance_prompt_chat {
+                    self.enrich_prompt = false;
+                }
+                if crate::image_prompt::supports_json_prompt_enrichment(Some(&self.model_id)) {
+                    ui.horizontal(|ui| {
+                        ui.checkbox(&mut self.enrich_prompt, t.studio_enrich_prompt);
+                        help_icon(ui, t.studio_enrich_prompt_help);
+                    });
+                    if self.enrich_prompt && self.use_edited_enriched {
+                        self.use_edited_enriched = false;
                     }
-                    ui.label(t.studio_expert_max_vram);
-                    help_icon(ui, t.studio_expert_max_vram_help);
-                    egui::ComboBox::from_id_salt("studio_max_vram")
-                        .selected_text(max_vram_label(&self.max_vram))
+                    if self.enrich_prompt {
+                        self.enhance_prompt_chat = false;
+                    }
+                }
+                let show_enriched_panel = self.enhance_prompt_chat
+                    || crate::image_prompt::supports_json_prompt_enrichment(Some(&self.model_id))
+                    || !self.enriched_prompt.trim().is_empty();
+                if show_enriched_panel {
+                    ui.horizontal(|ui| {
+                        ui.checkbox(
+                            &mut self.use_edited_enriched,
+                            t.studio_use_edited_enriched,
+                        );
+                        help_icon(ui, t.studio_use_edited_enriched_help);
+                    })
+                    .response
+                    .on_hover_text(t.studio_use_edited_enriched_help);
+                    if self.use_edited_enriched {
+                        self.enrich_prompt = false;
+                        self.enhance_prompt_chat = false;
+                    }
+                    let hint = if self.enrich_prompt {
+                        enrichment_hint(t, &self.model_id)
+                    } else {
+                        t.studio_enriched_hint_prose
+                    };
+                    ui_enriched_prompt_panel(
+                        ui,
+                        t,
+                        hint,
+                        &mut self.enriched_prompt,
+                        &mut self.show_enriched_prompt,
+                    );
+                }
+            });
+
+        egui::CollapsingHeader::new(t.studio_section_sampling)
+            .default_open(false)
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label("steps");
+                    help_icon(
+                        ui,
+                        "Denoising iterations. More steps can improve quality but are slower.",
+                    );
+                    ui.add(egui::DragValue::new(&mut self.steps).range(1..=150));
+                    ui.label("CFG");
+                    help_icon(
+                        ui,
+                        "Prompt guidance strength. Higher = closer to prompt, lower = more creative/flexible.",
+                    );
+                    ui.add(egui::DragValue::new(&mut self.cfg).range(0.0..=20.0).speed(0.1));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("seed");
+                    help_icon(
+                        ui,
+                        "Random seed. Empty means random each run; fixed value makes outputs reproducible.",
+                    );
+                    ui.add(egui::TextEdit::singleline(&mut self.seed).desired_width(80.0));
+                    ui.label("sampler");
+                    help_icon(ui, "Sampling algorithm used by the diffusion engine.");
+                    egui::ComboBox::from_id_salt("studio_sampler")
+                        .selected_text(if self.sampler.is_empty() {
+                            "default"
+                        } else {
+                            self.sampler.as_str()
+                        })
                         .show_ui(ui, |ui| {
-                            ui.selectable_value(&mut self.max_vram, String::new(), "off");
-                            ui.selectable_value(&mut self.max_vram, "-1".to_string(), "auto (−1)");
-                            ui.selectable_value(&mut self.max_vram, "4".to_string(), "4 GiB");
-                            ui.selectable_value(&mut self.max_vram, "6".to_string(), "6 GiB");
-                            ui.selectable_value(&mut self.max_vram, "8".to_string(), "8 GiB");
-                            ui.selectable_value(&mut self.max_vram, "12".to_string(), "12 GiB");
-                            ui.selectable_value(&mut self.max_vram, "0".to_string(), "0 (disable cut)");
+                            ui.selectable_value(&mut self.sampler, String::new(), "default");
+                            for s in ["euler", "euler_a", "heun", "dpm2", "lcm", "ddim"] {
+                                ui.selectable_value(&mut self.sampler, s.to_string(), s);
+                            }
                         });
                 });
             });
-        }
-        multi_select_assets(
-            ui,
-            "style",
-            "Styles",
-            &mut self.selected_styles,
-            &self.styles,
-            Some("Optional style presets (.txt in share/models/styles/) or custom text fragments, comma-joined as prompt prefix."),
-        );
-        multi_select_assets(
-            ui,
-            "lora",
-            "LoRA",
-            &mut self.selected_loras,
-            &self.loras,
-            Some("LoRA adapters in share/models/lora/. Applied via sd.cpp tags <lora:name:1>."),
-        );
-        combo_plain(
-            ui,
-            "vae",
-            "VAE",
-            &mut self.vae,
-            &self.vaes,
-            Some("Optional VAE override for decoding latents to image."),
-        );
-        ui.separator();
-        ui.heading(t.studio_img2img_heading);
-        ui.horizontal(|ui| {
-            ui.checkbox(&mut self.img2img_enabled, t.studio_img2img_enable);
-            help_icon(ui, t.studio_img2img_enable_help);
-        });
-        ui.weak(t.studio_img2img_blurb);
-        if self.img2img_enabled {
-            ui.horizontal(|ui| {
-                ui.label(t.studio_img2img_path);
-                help_icon(ui, t.studio_img2img_path_help);
-            });
-            ui.horizontal(|ui| {
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.img2img_path).desired_width(280.0),
+
+        egui::CollapsingHeader::new(t.studio_section_styles)
+            .default_open(false)
+            .show(ui, |ui| {
+                multi_select_assets(
+                    ui,
+                    "style",
+                    "Styles",
+                    &mut self.selected_styles,
+                    &self.styles,
+                    Some("Optional style presets (.txt in share/models/styles/) or custom text fragments, comma-joined as prompt prefix."),
                 );
-                if ui.button(t.studio_browse).clicked() {
-                    let start = Path::new(self.img2img_path.trim())
-                        .parent()
-                        .filter(|p| p.is_dir())
-                        .map(|p| p.to_path_buf())
-                        .or_else(|| {
-                            self.preview.as_deref().and_then(|logical| {
-                                let host = aos_home()
-                                    .join("var/storage/data")
-                                    .join(logical.trim_start_matches('/'));
-                                host.parent()
-                                    .filter(|p| p.is_dir())
-                                    .map(|p| p.to_path_buf())
-                            })
-                        })
-                        .or_else(user_downloads_dir)
-                        .unwrap_or_else(aos_home);
-                    if let Some(path) = pick_os_file(
-                        t.studio_img2img_browse_title,
-                        &[
-                            ("Images", &["png", "jpg", "jpeg", "webp", "bmp"]),
-                            ("PNG", &["png"]),
-                            ("All files", &["*"]),
-                        ],
-                        Some(&start),
-                    ) {
-                        self.img2img_path = path.to_string_lossy().into_owned();
-                    }
-                }
-                if let Some(prev) = self.preview.clone() {
-                    if ui.button(t.studio_img2img_use_preview).clicked() {
-                        self.img2img_path = prev;
-                    }
-                }
-            });
-            ui.horizontal(|ui| {
-                ui.label(t.studio_img2img_strength);
-                help_icon(ui, t.studio_img2img_strength_help);
-                ui.add(
-                    egui::Slider::new(&mut self.img2img_strength, 0.05..=1.0)
-                        .fixed_decimals(2),
+                multi_select_assets(
+                    ui,
+                    "lora",
+                    "LoRA",
+                    &mut self.selected_loras,
+                    &self.loras,
+                    Some("LoRA adapters in share/models/lora/. Applied via sd.cpp tags <lora:name:1>."),
+                );
+                combo_plain(
+                    ui,
+                    "vae",
+                    "VAE",
+                    &mut self.vae,
+                    &self.vaes,
+                    Some("Optional VAE override for decoding latents to image."),
                 );
             });
-        }
-        ui.separator();
-        ui.heading(t.studio_upscale_heading);
-        ui.horizontal(|ui| {
-            ui.checkbox(&mut self.upscale_enabled, t.studio_upscale_enable);
-            help_icon(ui, t.studio_upscale_enable_help);
-        });
-        ui.weak(t.studio_upscale_blurb);
-        if self.upscalers.is_empty() {
-            ui.colored_label(
-                egui::Color32::from_rgb(240, 190, 100),
-                t.studio_upscale_missing,
-            );
-        } else {
-            combo_plain(
-                ui,
-                "upscale_model",
-                t.studio_upscale_model,
-                &mut self.upscale_model,
-                &self.upscalers,
-                Some(t.studio_upscale_model_help),
-            );
-            ui.horizontal(|ui| {
-                ui.label(t.studio_upscale_repeats);
-                help_icon(ui, t.studio_upscale_repeats_help);
-                ui.add(egui::DragValue::new(&mut self.upscale_repeats).range(1..=4));
-                ui.label(t.studio_upscale_tile);
-                help_icon(ui, t.studio_upscale_tile_help);
-                ui.add(egui::DragValue::new(&mut self.upscale_tile_size).range(32..=512));
-            });
-        }
-        ui.horizontal(|ui| {
-            if ui.button("Open upscale/").clicked() {
-                open_os_folder(&asset_subdir("upscale"));
-            }
-        });
-        ui.separator();
-        ui.heading("Add assets");
-        ui.weak("Place files in share/models/lora/, vae/, or styles/ — or import below.");
-        ui.horizontal(|ui| {
-            if ui.button("Open lora/").clicked() {
-                open_os_folder(&asset_subdir("lora"));
-            }
-            if ui.button("Open vae/").clicked() {
-                open_os_folder(&asset_subdir("vae"));
-            }
-            if ui.button("Open styles/").clicked() {
-                open_os_folder(&asset_subdir("style"));
-            }
-            if ui.button("Civitai (LoRA / styles)").clicked() {
-                open_url("https://civitai.com/models?types=LORA&sort=Most+Downloaded");
-            }
-            if ui.button("Hugging Face (models)").clicked() {
-                open_url("https://huggingface.co/models?pipeline_tag=text-to-image&sort=downloads");
-            }
-        });
-        ui.horizontal(|ui| {
-            ui.label(t.studio_file_path);
-            ui.add(
-                egui::TextEdit::singleline(&mut self.import_path).desired_width(360.0),
-            );
-            if ui.button(t.studio_browse).clicked() {
-                let start = Path::new(self.import_path.trim())
-                    .parent()
-                    .filter(|p| p.is_dir())
-                    .map(|p| p.to_path_buf())
-                    .or_else(user_downloads_dir)
-                    .unwrap_or_else(|| asset_subdir("lora"));
-                if let Some(path) = pick_os_file(
-                    t.studio_browse,
-                    &[
-                        ("Weights", &["safetensors", "ckpt", "pt", "bin"]),
-                        ("Text preset", &["txt"]),
-                        ("Safetensors", &["safetensors"]),
-                        ("All files", &["*"]),
-                    ],
-                    Some(&start),
-                ) {
-                    self.import_path = path.to_string_lossy().into_owned();
-                    if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
-                        let lower = name.to_ascii_lowercase();
-                        if lower.contains("vae") {
-                            self.import_kind = "vae".to_string();
-                        } else if lower.contains("lora") {
-                            self.import_kind = "lora".to_string();
-                        } else if lower.ends_with(".txt") {
-                            self.import_kind = "style".to_string();
-                        } else if lower.ends_with(".pth") {
-                            self.import_kind = "upscale".to_string();
-                        }
-                    }
-                }
-            }
-            egui::ComboBox::from_id_salt("studio_import_kind")
-                .selected_text(self.import_kind.as_str())
-                .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut self.import_kind, "lora".to_string(), "lora");
-                    ui.selectable_value(&mut self.import_kind, "vae".to_string(), "vae");
-                    ui.selectable_value(&mut self.import_kind, "style".to_string(), "style (.txt)");
-                    ui.selectable_value(
-                        &mut self.import_kind,
-                        "upscale".to_string(),
-                        "upscale (.pth)",
-                    );
+
+        egui::CollapsingHeader::new(t.studio_img2img_heading)
+            .default_open(false)
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut self.img2img_enabled, t.studio_img2img_enable);
+                    help_icon(ui, t.studio_img2img_enable_help);
                 });
-            if ui.button(t.studio_import_file).clicked() {
-                match self.import_asset_file() {
-                    Ok(name) => {
-                        self.refresh_catalog();
-                        match self.import_kind.as_str() {
-                            "vae" => self.vae = name.clone(),
-                            "style" => push_unique(&mut self.selected_styles, name.clone()),
-                            _ => push_unique(&mut self.selected_loras, name.clone()),
+                ui.weak(t.studio_img2img_blurb);
+                if self.img2img_enabled {
+                    ui.horizontal(|ui| {
+                        ui.label(t.studio_img2img_path);
+                        help_icon(ui, t.studio_img2img_path_help);
+                    });
+                    ui.horizontal(|ui| {
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.img2img_path).desired_width(280.0),
+                        );
+                        if ui.button(t.studio_browse).clicked() {
+                            let start = Path::new(self.img2img_path.trim())
+                                .parent()
+                                .filter(|p| p.is_dir())
+                                .map(|p| p.to_path_buf())
+                                .or_else(|| {
+                                    self.preview.as_deref().and_then(|logical| {
+                                        let host = aos_home()
+                                            .join("var/storage/data")
+                                            .join(logical.trim_start_matches('/'));
+                                        host.parent()
+                                            .filter(|p| p.is_dir())
+                                            .map(|p| p.to_path_buf())
+                                    })
+                                })
+                                .or_else(user_downloads_dir)
+                                .unwrap_or_else(aos_home);
+                            if let Some(path) = pick_os_file(
+                                t.studio_img2img_browse_title,
+                                &[
+                                    ("Images", &["png", "jpg", "jpeg", "webp", "bmp"]),
+                                    ("PNG", &["png"]),
+                                    ("All files", &["*"]),
+                                ],
+                                Some(&start),
+                            ) {
+                                self.img2img_path = path.to_string_lossy().into_owned();
+                            }
                         }
-                        let src_name = Path::new(self.import_path.trim())
-                            .file_name()
-                            .and_then(|s| s.to_str())
-                            .unwrap_or("");
-                        self.import_status = if src_name == name.as_str() {
-                            format!("Imported {name}")
-                        } else {
-                            format!("Imported as {name} (original name was in use)")
-                        };
-                    }
-                    Err(e) => self.import_status = format!("Import failed: {e}"),
+                        if let Some(prev) = self.preview.clone() {
+                            if ui.button(t.studio_img2img_use_preview).clicked() {
+                                self.img2img_path = prev;
+                            }
+                        }
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label(t.studio_img2img_strength);
+                        help_icon(ui, t.studio_img2img_strength_help);
+                        ui.add(
+                            egui::Slider::new(&mut self.img2img_strength, 0.05..=1.0)
+                                .fixed_decimals(2),
+                        );
+                    });
                 }
-            }
-        });
-        ui.horizontal(|ui| {
-            ui.label("Custom style");
-            ui.add(
-                egui::TextEdit::singleline(&mut self.custom_style_input).desired_width(380.0),
-            );
-            if ui.button("Add style").clicked() {
-                match self.add_custom_style() {
-                    Ok(style) => {
-                        self.refresh_catalog();
-                        push_unique(&mut self.selected_styles, style.clone());
-                        self.import_status = format!("Style added: {style}");
-                    }
-                    Err(e) => self.import_status = format!("Style add failed: {e}"),
+            });
+
+        egui::CollapsingHeader::new(t.studio_upscale_heading)
+            .default_open(false)
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut self.upscale_enabled, t.studio_upscale_enable);
+                    help_icon(ui, t.studio_upscale_enable_help);
+                });
+                ui.weak(t.studio_upscale_blurb);
+                if self.upscalers.is_empty() {
+                    ui.colored_label(
+                        egui::Color32::from_rgb(240, 190, 100),
+                        t.studio_upscale_missing,
+                    );
+                } else {
+                    combo_plain(
+                        ui,
+                        "upscale_model",
+                        t.studio_upscale_model,
+                        &mut self.upscale_model,
+                        &self.upscalers,
+                        Some(t.studio_upscale_model_help),
+                    );
+                    ui.horizontal(|ui| {
+                        ui.label(t.studio_upscale_repeats);
+                        help_icon(ui, t.studio_upscale_repeats_help);
+                        ui.add(egui::DragValue::new(&mut self.upscale_repeats).range(1..=4));
+                        ui.label(t.studio_upscale_tile);
+                        help_icon(ui, t.studio_upscale_tile_help);
+                        ui.add(egui::DragValue::new(&mut self.upscale_tile_size).range(32..=512));
+                    });
                 }
-            }
-        });
-        ui.collapsing("Manage custom assets", |ui| {
-            let reg = load_image_assets_registry();
-            let mut pending_remove: Option<(String, String)> = None;
-            custom_list_row(ui, "Styles", &reg.styles, "style", &mut pending_remove);
-            custom_list_row(ui, "LoRA", &reg.loras, "lora", &mut pending_remove);
-            custom_list_row(ui, "VAE", &reg.vaes, "vae", &mut pending_remove);
-            if let Some((kind, item)) = pending_remove {
-                match self.remove_custom_entry(&kind, &item) {
-                    Ok(()) => {
-                        self.import_status = format!("Removed custom {kind}: {item}");
-                        self.refresh_catalog();
+                ui.horizontal(|ui| {
+                    if ui.button("Open upscale/").clicked() {
+                        open_os_folder(&asset_subdir("upscale"));
                     }
-                    Err(e) => {
-                        self.import_status = format!("Remove failed for {item}: {e}");
+                });
+            });
+
+        egui::CollapsingHeader::new(t.studio_section_import)
+            .default_open(false)
+            .show(ui, |ui| {
+                ui.weak("Place files in share/models/lora/, vae/, or styles/ — or import below.");
+                ui.horizontal(|ui| {
+                    if ui.button("Open lora/").clicked() {
+                        open_os_folder(&asset_subdir("lora"));
                     }
+                    if ui.button("Open vae/").clicked() {
+                        open_os_folder(&asset_subdir("vae"));
+                    }
+                    if ui.button("Open styles/").clicked() {
+                        open_os_folder(&asset_subdir("style"));
+                    }
+                    if ui.button("Civitai (LoRA / styles)").clicked() {
+                        open_url("https://civitai.com/models?types=LORA&sort=Most+Downloaded");
+                    }
+                    if ui.button("Hugging Face (models)").clicked() {
+                        open_url("https://huggingface.co/models?pipeline_tag=text-to-image&sort=downloads");
+                    }
+                });
+                ui.horizontal(|ui| {
+                    ui.label(t.studio_file_path);
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.import_path).desired_width(360.0),
+                    );
+                    if ui.button(t.studio_browse).clicked() {
+                        let start = Path::new(self.import_path.trim())
+                            .parent()
+                            .filter(|p| p.is_dir())
+                            .map(|p| p.to_path_buf())
+                            .or_else(user_downloads_dir)
+                            .unwrap_or_else(|| asset_subdir("lora"));
+                        if let Some(path) = pick_os_file(
+                            t.studio_browse,
+                            &[
+                                ("Weights", &["safetensors", "ckpt", "pt", "bin"]),
+                                ("Text preset", &["txt"]),
+                                ("Safetensors", &["safetensors"]),
+                                ("All files", &["*"]),
+                            ],
+                            Some(&start),
+                        ) {
+                            self.import_path = path.to_string_lossy().into_owned();
+                            if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
+                                let lower = name.to_ascii_lowercase();
+                                if lower.contains("vae") {
+                                    self.import_kind = "vae".to_string();
+                                } else if lower.contains("lora") {
+                                    self.import_kind = "lora".to_string();
+                                } else if lower.ends_with(".txt") {
+                                    self.import_kind = "style".to_string();
+                                } else if lower.ends_with(".pth") {
+                                    self.import_kind = "upscale".to_string();
+                                }
+                            }
+                        }
+                    }
+                    egui::ComboBox::from_id_salt("studio_import_kind")
+                        .selected_text(self.import_kind.as_str())
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut self.import_kind, "lora".to_string(), "lora");
+                            ui.selectable_value(&mut self.import_kind, "vae".to_string(), "vae");
+                            ui.selectable_value(
+                                &mut self.import_kind,
+                                "style".to_string(),
+                                "style (.txt)",
+                            );
+                            ui.selectable_value(
+                                &mut self.import_kind,
+                                "upscale".to_string(),
+                                "upscale (.pth)",
+                            );
+                        });
+                    if ui.button(t.studio_import_file).clicked() {
+                        match self.import_asset_file() {
+                            Ok(name) => {
+                                self.refresh_catalog();
+                                match self.import_kind.as_str() {
+                                    "vae" => self.vae = name.clone(),
+                                    "style" => push_unique(&mut self.selected_styles, name.clone()),
+                                    _ => push_unique(&mut self.selected_loras, name.clone()),
+                                }
+                                let src_name = Path::new(self.import_path.trim())
+                                    .file_name()
+                                    .and_then(|s| s.to_str())
+                                    .unwrap_or("");
+                                self.import_status = if src_name == name.as_str() {
+                                    format!("Imported {name}")
+                                } else {
+                                    format!("Imported as {name} (original name was in use)")
+                                };
+                            }
+                            Err(e) => self.import_status = format!("Import failed: {e}"),
+                        }
+                    }
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Custom style");
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.custom_style_input)
+                            .desired_width(380.0),
+                    );
+                    if ui.button("Add style").clicked() {
+                        match self.add_custom_style() {
+                            Ok(style) => {
+                                self.refresh_catalog();
+                                push_unique(&mut self.selected_styles, style.clone());
+                                self.import_status = format!("Style added: {style}");
+                            }
+                            Err(e) => self.import_status = format!("Style add failed: {e}"),
+                        }
+                    }
+                });
+                ui.collapsing("Manage custom assets", |ui| {
+                    let reg = load_image_assets_registry();
+                    let mut pending_remove: Option<(String, String)> = None;
+                    custom_list_row(ui, "Styles", &reg.styles, "style", &mut pending_remove);
+                    custom_list_row(ui, "LoRA", &reg.loras, "lora", &mut pending_remove);
+                    custom_list_row(ui, "VAE", &reg.vaes, "vae", &mut pending_remove);
+                    if let Some((kind, item)) = pending_remove {
+                        match self.remove_custom_entry(&kind, &item) {
+                            Ok(()) => {
+                                self.import_status = format!("Removed custom {kind}: {item}");
+                                self.refresh_catalog();
+                            }
+                            Err(e) => {
+                                self.import_status = format!("Remove failed for {item}: {e}");
+                            }
+                        }
+                    }
+                    ui.weak("Removing unregisters custom text styles. LoRA/VAE files live in share/models/lora/ and vae/.");
+                });
+                if !self.import_status.is_empty() {
+                    ui.weak(&self.import_status);
                 }
-            }
-            ui.weak("Removing unregisters custom text styles. LoRA/VAE files live in share/models/lora/ and vae/.");
-        });
-        if !self.import_status.is_empty() {
-            ui.weak(&self.import_status);
-        }
+            });
+
+        egui::CollapsingHeader::new(t.studio_expert_heading)
+            .default_open(false)
+            .show(ui, |ui| {
+                ui.weak(t.studio_expert_blurb);
+                ui.horizontal(|ui| {
+                    let expert_toggled = ui
+                        .checkbox(&mut self.expert_mode, t.studio_expert_mode)
+                        .changed();
+                    help_icon(ui, t.studio_expert_mode_help);
+                    if expert_toggled && self.expert_mode {
+                        self.load_expert_defaults_from_catalog();
+                    }
+                    if self.expert_mode {
+                        if ui.button(t.studio_expert_reset).clicked() {
+                            self.load_expert_defaults_from_catalog();
+                        }
+                    }
+                });
+                if self.expert_mode {
+                    ui.horizontal(|ui| {
+                        ui.label(t.studio_expert_flow_shift);
+                        help_icon(ui, t.studio_expert_flow_shift_help);
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.flow_shift)
+                                .desired_width(56.0)
+                                .hint_text("3"),
+                        );
+                        ui.label(t.studio_expert_sd_mode);
+                        help_icon(ui, t.studio_expert_sd_mode_help);
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.sd_mode)
+                                .desired_width(72.0)
+                                .hint_text("img_gen"),
+                        );
+                        ui.label(t.studio_expert_video_frames);
+                        help_icon(ui, t.studio_expert_video_frames_help);
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.video_frames)
+                                .desired_width(48.0)
+                                .hint_text("1"),
+                        );
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label(t.studio_expert_backend);
+                        help_icon(ui, t.studio_expert_backend_help);
+                        coerce_backend_alias(&mut self.backend);
+                        backend_choice_combo(
+                            ui,
+                            "studio_backend",
+                            &mut self.backend,
+                            STUDIO_BACKEND_CHOICES,
+                        );
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label(t.studio_expert_params_backend);
+                        help_icon(ui, t.studio_expert_params_backend_help);
+                        coerce_params_backend_alias(&mut self.params_backend);
+                        backend_choice_combo(
+                            ui,
+                            "studio_params_backend",
+                            &mut self.params_backend,
+                            STUDIO_PARAMS_BACKEND_CHOICES,
+                        );
+                        ui.label(t.studio_expert_threads);
+                        help_icon(ui, t.studio_expert_threads_help);
+                        ui.add(egui::DragValue::new(&mut self.threads).range(0..=64).speed(1));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.checkbox(&mut self.offload_to_cpu, t.studio_expert_offload);
+                        help_icon(ui, t.studio_expert_offload_help);
+                        ui.checkbox(&mut self.diffusion_fa, t.studio_expert_diffusion_fa);
+                        help_icon(ui, t.studio_expert_diffusion_fa_help);
+                        ui.checkbox(&mut self.auto_fit, t.studio_expert_auto_fit);
+                        help_icon(ui, t.studio_expert_auto_fit_help);
+                    });
+                    ui.horizontal(|ui| {
+                        ui.checkbox(&mut self.stream_layers, t.studio_expert_stream_layers);
+                        help_icon(ui, t.studio_expert_stream_layers_help);
+                        if self.stream_layers {
+                            self.offload_to_cpu = true;
+                        }
+                        ui.label(t.studio_expert_max_vram);
+                        help_icon(ui, t.studio_expert_max_vram_help);
+                        egui::ComboBox::from_id_salt("studio_max_vram")
+                            .selected_text(max_vram_label(&self.max_vram))
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(&mut self.max_vram, String::new(), "off");
+                                ui.selectable_value(&mut self.max_vram, "-1".to_string(), "auto (−1)");
+                                ui.selectable_value(&mut self.max_vram, "4".to_string(), "4 GiB");
+                                ui.selectable_value(&mut self.max_vram, "6".to_string(), "6 GiB");
+                                ui.selectable_value(&mut self.max_vram, "8".to_string(), "8 GiB");
+                                ui.selectable_value(&mut self.max_vram, "12".to_string(), "12 GiB");
+                                ui.selectable_value(
+                                    &mut self.max_vram,
+                                    "0".to_string(),
+                                    "0 (disable cut)",
+                                );
+                            });
+                    });
+                }
+            });
+
+        ui.add_space(8.0);
         let busy = generating.is_some();
         let model_ready = models_page::is_model_installed(&self.model_id);
         if ui
@@ -1639,29 +1687,21 @@ fn ui_enriched_prompt_panel(
     );
 }
 
-fn ui_image_preview(
+fn ui_image_preview_actions(
     ui: &mut egui::Ui,
     t: &UiStrings,
     path: &str,
     can_upscale: bool,
     on_upscale: impl FnOnce(),
 ) {
-    ui.separator();
-    ui.heading(t.studio_preview);
-    ui.weak(path);
-    if let Some(tex) = decl_ui::try_load_png(ui.ctx(), path) {
-        let [tw, th] = tex.size();
-        let max_w = ui.available_width().min(640.0);
-        let scale = if tw.max(th) < 48 {
-            256.0 / tw.max(1) as f32
-        } else {
-            (max_w / tw.max(1) as f32).min(1.0)
-        };
-        ui.add(egui::Image::new(&tex).fit_to_original_size(scale));
-        ui.weak(format!("{tw} x {th}"));
-    } else {
-        ui.weak("PNG unreadable (path /downloads → var/storage/data)");
-    }
+    ui.add_space(6.0);
+    ui.horizontal(|ui| {
+        ui.weak(path);
+        if let Some(tex) = decl_ui::try_load_png(ui.ctx(), path) {
+            let [tw, th] = tex.size();
+            ui.weak(format!("{tw}×{th}"));
+        }
+    });
     ui.horizontal(|ui| {
         if ui.button(t.studio_open_file).clicked() {
             let _ = decl_ui::open_host_path(path);
