@@ -1,5 +1,6 @@
-//! Détection matérielle Preview (NVIDIA + RAM + disque).
+//! Détection matérielle Preview (NVIDIA + RAM + disque + bande passante E21).
 
+use aos_placement::{probe_host_bandwidth, BandwidthSignals};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
@@ -34,6 +35,9 @@ pub struct HardwareInfo {
     pub disk_free_bytes: u64,
     pub driver_version: String,
     pub tier: HardwareTier,
+    /// Bandwidth signals for Placement Manager (measured RAM + estimated GPU/PCIe).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bandwidth: Option<BandwidthSignals>,
 }
 
 impl HardwareInfo {
@@ -71,6 +75,8 @@ pub fn probe(home: &Path) -> HardwareInfo {
     } else {
         tier_from_vram(vram_mib)
     };
+    let cpu_only = tier == HardwareTier::Cpu;
+    let bandwidth = Some(probe_host_bandwidth(cpu_only));
     HardwareInfo {
         gpu_name,
         vram_mib,
@@ -78,6 +84,7 @@ pub fn probe(home: &Path) -> HardwareInfo {
         disk_free_bytes,
         driver_version,
         tier,
+        bandwidth,
     }
 }
 

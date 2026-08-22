@@ -1,11 +1,12 @@
 //! Cœur du Model Subsystem : état, scheduler, placement réel.
 
 use crate::config::ModeldConfig;
+use crate::host_hardware::hardware_profile_from_json;
 use aos_llama::{
     BatchItem, GenParams, KvType, LlamaContext, LlamaModel, LoadMode, LoadOptions, StopReason,
 };
 use aos_placement::{
-    CostModel, HardwareProfile, ModelDesc, PlacementPlan, PlacementProfile, PlacementSim,
+    CostModel, ModelDesc, PlacementPlan, PlacementProfile, PlacementSim,
     Priority, Tier,
 };
 use aos_proto::{
@@ -180,22 +181,20 @@ impl ModelSubsystem {
                 })
                 .collect()
         };
-        let hw = HardwareProfile {
-            name: "host-p1".into(),
-            has_gpu: gpu,
-            vram_total: if gpu { config.vram_total_bytes } else { 0 },
-            ram_total,
-            disk_total: 1 << 40,
-            os_reserve_vram: config.os_reserve_vram_bytes,
-            os_reserve_ram: config.os_reserve_ram_bytes,
-            // Mesures hôte (ADR 0002/0005) ; 4080S ≈ 736 GB/s théoriques.
-            gpu_mem_bw: 736e9,
-            ram_mem_bw: 45.24e9,
-            disk_seq_bw: 6e9,
-            host_to_device_bw: 25e9,
-            gpu_flops: 30e12,
-            cpu_flops: 2.5e12,
-            gpus,
+        let hw = {
+            let home = std::env::var("AOS_HOME")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|_| std::path::PathBuf::from("."));
+            hardware_profile_from_json(
+                &home,
+                gpu,
+                if gpu { config.vram_total_bytes } else { 0 },
+                ram_total,
+                config.os_reserve_vram_bytes,
+                config.os_reserve_ram_bytes,
+                n_gpus,
+                gpus,
+            )
         };
         let sim = Arc::new(StdMutex::new(PlacementSim::new(
             hw,
