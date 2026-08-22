@@ -1,7 +1,9 @@
 //! Cœur du Model Subsystem : état, scheduler, placement réel.
 
 use crate::config::ModeldConfig;
-use aos_llama::{BatchItem, GenParams, LlamaContext, LlamaModel, LoadMode, LoadOptions, StopReason};
+use aos_llama::{
+    BatchItem, GenParams, KvType, LlamaContext, LlamaModel, LoadMode, LoadOptions, StopReason,
+};
 use aos_placement::{
     CostModel, HardwareProfile, ModelDesc, PlacementPlan, PlacementProfile, PlacementSim,
     Priority, Tier,
@@ -15,6 +17,14 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex as StdMutex};
 use tokio::sync::{mpsc, oneshot};
+
+const PREFIX_SPEC_PRIORITY: u8 = 2;
+
+/// Snapshot KV chaud pour prefix cache / migrate E18 (E20).
+struct WarmPrefix {
+    tokens: Vec<i32>,
+    state: Vec<u8>,
+}
 
 /// Job envoyé au dispatcher de continuous batching (P5.1).
 struct DispatchJob {
@@ -49,6 +59,12 @@ pub struct ModelRuntime {
     pub last_ttft_ms: Option<f64>,
     pub last_tok_s: Option<f64>,
     pub est_tok_s: Option<f64>,
+    /// E20 : moyenne tokens acceptés / pas speculative.
+    pub last_draft_accept: Option<f64>,
+    /// E20 : tokens de préfixe réutilisés au dernier C1.
+    pub last_prefix_hit: Option<u32>,
+    /// Dernier état KV après un C1 (prefix cache / migrate).
+    warm: Option<WarmPrefix>,
     /// Image/video generation in flight (sd.cpp).
     pub media_step: Option<u32>,
     pub media_total_steps: Option<u32>,
@@ -75,6 +91,9 @@ impl ModelRuntime {
             last_ttft_ms: None,
             last_tok_s: None,
             est_tok_s: None,
+            last_draft_accept: None,
+            last_prefix_hit: None,
+            warm: None,
             media_step: None,
             media_total_steps: None,
             media_started_ms: None,
@@ -392,6 +411,9 @@ impl ModelSubsystem {
             }
 
             let ngl = plan.n_layers_on(Tier::Vram) as i32;
+            let flash_attn = true;
+            let gpu_offload = ngl > 0 && plan.kv_bytes_on(Tier::Vram) > 0;
+            let kv_type = KvType::default_for(gpu_offload, flash_attn);
             let opts = LoadOptions {
                 n_gpu_layers: ngl,
                 load_mode: LoadMode::Mmap,
@@ -400,7 +422,8 @@ impl ModelSubsystem {
                 n_batch: 2048,
                 n_ubatch: 512,
                 n_threads: config.n_threads,
-                flash_attn: true,
+                flash_attn,
+                kv_type,
                 embeddings: false,
                 n_seq_max: config.n_seq_max.max(1),
                 tensor_split: plan.tensor_split.clone(),
@@ -609,10 +632,172 @@ impl ModelSubsystem {
                     .await;
             }
 
-            let ctx = {
-                let g = inner.lock().unwrap();
-                g.models.get(&model_id).and_then(|m| m.ctx.clone())
+            let (ctx, warm) = {
+                let mut g = inner.lock().unwrap();
+                let m = g.models.get_mut(&model_id);
+                let ctx = m.as_ref().and_then(|m| m.ctx.clone());
+                let warm = m.and_then(|m| m.warm.take());
+                (ctx, warm)
             };
+
+            // E20 : speculation C1 ; continuous batching si N>1 (P5.1).
+            if batch.len() == 1 {
+                let job = batch.into_iter().next().unwrap();
+                let mid = model_id.clone();
+                let inner_c1 = inner.clone();
+                let job_id = job.job_id;
+                let abort_flag = job.abort.clone();
+                let pause_flag = job.pause.clone();
+                let result = match ctx {
+                    Some(ctx) => {
+                        tokio::task::spawn_blocking(move || {
+                            let mut guard = ctx.lock().unwrap();
+                            let use_prefix_spec = job.priority >= PREFIX_SPEC_PRIORITY;
+                            if use_prefix_spec && guard.seq0_tokens().is_empty() {
+                                if let Some(w) = warm {
+                                    let _ = guard.state_set(&w.state, Some(w.tokens));
+                                }
+                            }
+                            let generated = Arc::new(StdMutex::new(String::new()));
+                            let generated_cb = generated.clone();
+                            let delta_tx = job.delta_tx.clone();
+                            let on_delta = |piece: &str| {
+                                if let Ok(mut g) = generated_cb.lock() {
+                                    g.push_str(piece);
+                                }
+                                match delta_tx.try_send(TokenEvent::Delta {
+                                    text: piece.to_string(),
+                                }) {
+                                    Ok(()) => true,
+                                    Err(tokio::sync::mpsc::error::TrySendError::Full(ev)) => {
+                                        delta_tx.blocking_send(ev).is_ok()
+                                    }
+                                    Err(
+                                        tokio::sync::mpsc::error::TrySendError::Closed(_),
+                                    ) => false,
+                                }
+                            };
+                            let res = if use_prefix_spec {
+                                guard.generate_lookup(
+                                    &job.messages,
+                                    &job.params,
+                                    job.abort.clone(),
+                                    job.pause.clone(),
+                                    on_delta,
+                                )
+                            } else {
+                                guard.generate(&job.messages, &job.params, on_delta)
+                            };
+                            let gen_text = generated.lock().unwrap().clone();
+                            let warm_out = if use_prefix_spec {
+                                match &res {
+                                    Ok(stats) if stats.stopped != StopReason::Paused => {
+                                        match (guard.state_get(), guard.seq0_tokens().to_vec()) {
+                                            (Ok(state), tokens) if !tokens.is_empty() => {
+                                                Some(WarmPrefix { tokens, state })
+                                            }
+                                            _ => None,
+                                        }
+                                    }
+                                    _ => None,
+                                }
+                            } else {
+                                None
+                            };
+                            (res, job, warm_out, gen_text)
+                        })
+                        .await
+                    }
+                    None => Ok((
+                        Err(aos_llama::LlamaError::ContextCreate),
+                        job,
+                        None,
+                        String::new(),
+                    )),
+                };
+                {
+                    let mut g = inner.lock().unwrap();
+                    if let Some(m) = g.models.get_mut(&model_id) {
+                        m.active = 0;
+                    }
+                }
+                match result {
+                    Ok((res, job, warm_out, gen_text)) => {
+                        if let Some(w) = warm_out {
+                            let mut g = inner_c1.lock().unwrap();
+                            if let Some(m) = g.models.get_mut(&mid) {
+                                m.warm = Some(w);
+                            }
+                        }
+                        let paused = matches!(
+                            &res,
+                            Ok(stats) if stats.stopped == StopReason::Paused
+                        );
+                        if paused {
+                            if let Ok(stats) = &res {
+                                job.pause.store(false, Ordering::SeqCst);
+                                let remaining = job
+                                    .params
+                                    .max_tokens
+                                    .saturating_sub(stats.generated_tokens)
+                                    .max(1);
+                                let mut params = job.params.clone();
+                                params.max_tokens = remaining;
+                                inner_c1.lock().unwrap().paused_jobs.push(DispatchJob {
+                                    job_id: job.job_id,
+                                    priority: job.priority,
+                                    messages: resume_messages(&job.messages, &gen_text),
+                                    params,
+                                    abort: job.abort,
+                                    pause: job.pause,
+                                    resumed: true,
+                                    delta_tx: job.delta_tx,
+                                    done_tx: job.done_tx,
+                                });
+                            }
+                        } else {
+                            let outcome = match res {
+                                Ok(stats) => {
+                                    let mut g = inner_c1.lock().unwrap();
+                                    if let Some(m) = g.models.get_mut(&mid) {
+                                        m.last_ttft_ms = Some(stats.ttft_ms);
+                                        m.last_tok_s = Some(stats.tok_s);
+                                        m.last_draft_accept = stats.draft_accept_avg();
+                                        m.last_prefix_hit = Some(stats.prefix_hit_tokens);
+                                    }
+                                    g.job_aborts.remove(&job.job_id);
+                                    g.job_pauses.remove(&job.job_id);
+                                    InferOutcome::Done {
+                                        prompt_tokens: stats.prompt_tokens,
+                                        generated_tokens: stats.generated_tokens,
+                                        ttft_ms: stats.ttft_ms,
+                                        tok_s: stats.tok_s,
+                                    }
+                                }
+                                Err(e) => {
+                                    let mut g = inner_c1.lock().unwrap();
+                                    g.job_aborts.remove(&job.job_id);
+                                    g.job_pauses.remove(&job.job_id);
+                                    if job.abort.load(Ordering::SeqCst) {
+                                        InferOutcome::Cancelled
+                                    } else {
+                                        InferOutcome::Failed(e.to_string())
+                                    }
+                                }
+                            };
+                            let _ = job.done_tx.send(outcome);
+                        }
+                    }
+                    Err(e) => {
+                        let mut g = inner.lock().unwrap();
+                        g.job_aborts.remove(&job_id);
+                        g.job_pauses.remove(&job_id);
+                        // Job moved into failed join — nothing to ack; flags cleared.
+                        let _ = (abort_flag, pause_flag, e);
+                    }
+                }
+                continue;
+            }
 
             // Handles I/O indexés comme les items du batch (y compris admits).
             struct JobIo {
@@ -1000,6 +1185,26 @@ impl ModelSubsystem {
     }
 
     async fn force_reload(&self, model_id: &str) -> Result<(), String> {
+        // E20 / E18 : snapshot KV avant destruction du contexte.
+        let warm = {
+            let mut g = self.inner.lock().unwrap();
+            let m = g
+                .models
+                .get_mut(model_id)
+                .ok_or_else(|| format!("modèle inconnu: {model_id}"))?;
+            let snap = m.ctx.as_ref().and_then(|ctx| {
+                let guard = ctx.lock().ok()?;
+                let state = guard.state_get().ok()?;
+                let tokens = guard.seq0_tokens().to_vec();
+                if tokens.is_empty() {
+                    None
+                } else {
+                    Some(WarmPrefix { tokens, state })
+                }
+            });
+            m.warm = snap.or_else(|| m.warm.take());
+            m.warm.take()
+        };
         {
             let mut g = self.inner.lock().unwrap();
             let m = g
@@ -1023,7 +1228,28 @@ impl ModelSubsystem {
         };
         self.ensure_loaded(model_id, profile, self.config.default_kv_tokens)
             .await
-            .map(|_| ())
+            .map(|_| ())?;
+        // Restore fail-closed : si ça échoue, les jobs paused rejouent le préfixe texte.
+        if let Some(w) = warm {
+            let ctx = {
+                let g = self.inner.lock().unwrap();
+                g.models.get(model_id).and_then(|m| m.ctx.clone())
+            };
+            if let Some(ctx) = ctx {
+                let ok = {
+                    let mut guard = ctx.lock().unwrap();
+                    guard.state_set(&w.state, Some(w.tokens.clone())).is_ok()
+                };
+                let mut g = self.inner.lock().unwrap();
+                if let Some(m) = g.models.get_mut(model_id) {
+                    if ok {
+                        m.warm = Some(w);
+                    }
+                    // else drop warm — resume_messages path
+                }
+            }
+        }
+        Ok(())
     }
 
     pub fn inference_pin(&self) -> String {
@@ -1056,6 +1282,9 @@ impl ModelSubsystem {
                     m.ctx_abort = None;
                     m.state = ModelState::OnDisk;
                     m.plan = None;
+                    m.warm = None;
+                    m.last_draft_accept = None;
+                    m.last_prefix_hit = None;
                     // Block a concurrent ensure_loaded from placing until sim is updated.
                     m.loading = true;
                 }
@@ -1200,6 +1429,8 @@ impl ModelSubsystem {
                 media_step: m.media_step,
                 media_total_steps: m.media_total_steps,
                 last_step_s: m.last_step_s,
+                draft_accept: m.last_draft_accept,
+                prefix_hit: m.last_prefix_hit,
             })
             .collect();
         SystemMetrics {

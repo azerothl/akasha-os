@@ -25,6 +25,10 @@ Bannière attendue : *Preview sur Windows/Linux — ce n'est pas encore l'OS boo
 - Combo **modèle de session** optionnel (onglet Models liste les offerings).
 - Vérifier une réponse streamée **sans réseau**.
 - Après une réponse, la barre latérale / **Models** doit afficher **TTFT** et **tok/s** (et VRAM sur GPU).
+- Après un **deuxième** tour qui réutilise le même long contexte, le TTFT doit
+  baisser vs un prefill à froid (prefix cache E20). Des métriques **draft** /
+  **préfixe** optionnelles peuvent apparaître (prompts type RAG / citation /
+  patch).
 
 ### 1b. Onglet Models
 

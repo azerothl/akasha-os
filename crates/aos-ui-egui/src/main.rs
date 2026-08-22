@@ -361,10 +361,19 @@ fn format_model_infer_line(mm: &ModelMetrics, t: &i18n::UiStrings) -> String {
             .last_tok_s
             .map(|v| format!("{v:.1}"))
             .unwrap_or_else(|| "—".into());
-        format!(
+        let mut line = format!(
             "{} {} · {} {} · {} {}",
             t.metrics_ttft, ttft, t.metrics_tok_s, toks, t.metrics_vram, vram
-        )
+        );
+        if let Some(d) = mm.draft_accept {
+            line.push_str(&format!(" · {} {d:.1}", t.metrics_draft));
+        }
+        if let Some(p) = mm.prefix_hit {
+            if p > 0 {
+                line.push_str(&format!(" · {} {p}", t.metrics_prefix));
+            }
+        }
+        line
     }
 }
 

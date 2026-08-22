@@ -100,7 +100,14 @@ impl PlacementManager {
             PlacementProfile::MemorySaver => kv_tokens.min(MICRO_BATCH_KV_TOKENS),
             _ => kv_tokens,
         };
-        let kv_bytes = model.kv_bytes(kv_tokens_eff);
+        // E20 : Preview charge en Q8_0 sur GPU (flash-attn) — le plan doit
+        // refléter ~½ des octets catalogue (base F16).
+        let kv_type = if self.hw.has_gpu {
+            crate::model::KvCacheType::Q8_0
+        } else {
+            crate::model::KvCacheType::F16
+        };
+        let kv_bytes = model.kv_bytes_typed(kv_tokens_eff, kv_type);
         let embed_bytes = model.embed_bytes;
         let layer_bytes = model.layer_bytes();
 

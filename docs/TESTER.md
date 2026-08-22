@@ -25,6 +25,10 @@ Expected banner: *Preview on Windows/Linux — this is not the bootable OS yet*.
 - Optionally change the **session model** combo (Models tab lists offerings).
 - Verify a streamed reply **without network**.
 - After one reply, sidebar / **Models** should show **TTFT** and **tok/s** (and VRAM when on GPU).
+- After a **second** turn that reuses the same long context, TTFT should drop
+  vs a cold prefill (E20 prefix cache). Optional **draft** / **prefix** metrics
+  may appear on the same line when speculative lookup fires (RAG / quote /
+  edit-style prompts).
 
 ### 1b. Models tab
 

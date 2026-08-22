@@ -234,7 +234,11 @@ Skills livrées : **notes-writer**, **research**, **file-author**, **planner**, 
 - Métriques live : TTFT, tok/s, VRAM/RAM/disque (barre latérale + Models)
 - Bandeau vert si de nouveaux packs correspondent au tier VRAM
 - CLI : `aos-session --download-models <id>…`
-- Continuous batching (`generate_batch`, `n_seq_max=8`) sur l'hôte (P5.1)
+- Continuous batching (`generate_batch`, `n_seq_max`) sur l'hôte (P5.1)
+- **E20 decode (0.11) :** KV Q8_0 sur GPU (F16 sur CPU) ; réutilisation de
+  préfixe + warm `llama_state_*` (TTFT tour 2 / migrate E18) ; speculative
+  prompt-lookup en **mono-flux** seulement (batch N>1 inchangé)
+- Métriques live : ratio `draft` et tokens `préfixe` optionnels
 
 ### Image + TTS (E16)
 
@@ -322,7 +326,7 @@ Piste VM seL4 (PV.1–PV.3) séparée : [phases/phase-vm-sel4.md](phases/phase-v
 
 ---
 
-## 11. Hors Preview 0.10.1
+## 11. Hors Preview 0.11 (toujours hors scope après E20)
 
 - Image bootable / fer nu
 - macOS
@@ -337,7 +341,7 @@ Piste VM seL4 (PV.1–PV.3) séparée : [phases/phase-vm-sel4.md](phases/phase-v
 - Merge binaire sibling / assistant-as-module
 - Webview sandboxée / UI module HTML/JS (compositor E13)
 - kind `webview` (pie/scatter livrés en 0.10.1)
-- snapshot KV llama.cpp (`llama_state_*`) — 0.9+ rejoue le préfixe
+- Second GGUF draft / vLLM dans le TCB / DFlash2 (E20 = prompt-lookup seulement)
 - Guest seL4 dans le zip Preview public (`sel4-pv-*` interne seulement)
 
 Protocole cohorte : [TESTER.md](TESTER.md).

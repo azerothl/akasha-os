@@ -234,7 +234,11 @@ Agent **Detail** (from the Agents tab or a chat card):
 - Live metrics: TTFT, tok/s, VRAM/RAM/disk (sidebar + Models)
 - Green banner when newer packs fit the detected VRAM tier
 - CLI: `aos-session --download-models <id>…`
-- Continuous batching (`generate_batch`, `n_seq_max=8`) on CUDA hosts (P5.1)
+- Continuous batching (`generate_batch`, `n_seq_max`) on CUDA hosts (P5.1)
+- **E20 decode (0.11):** KV cache Q8_0 on GPU (F16 on CPU); prefix reuse +
+  warm `llama_state_*` for lower TTFT on turn 2 / E18 migrate; prompt-lookup
+  speculative decoding on **single-stream** jobs only (batch N>1 unchanged)
+- Live metrics also show optional `draft` accept ratio and `prefix` hit tokens
 
 ### Image + TTS (E16)
 
@@ -322,7 +326,7 @@ seL4 VM track (PV.1–PV.3) is separate: see [phases/phase-vm-sel4.md](phases/ph
 
 ---
 
-## 11. Not in Preview 0.10.1
+## 11. Not in Preview 0.11 (still out after E20)
 
 - Bootable / bare-metal image
 - macOS
@@ -337,7 +341,7 @@ seL4 VM track (PV.1–PV.3) is separate: see [phases/phase-vm-sel4.md](phases/ph
 - Sibling binary merge / assistant-as-module
 - Sandboxed webview / HTML/JS module UI (E13 compositor)
 - `webview` widget kind (pie/scatter ship in 0.10.1)
-- llama.cpp KV snapshot (`llama_state_*`) — 0.9+ uses prefix replay
+- Second draft GGUF / vLLM-in-TCB / DFlash2 (E20 uses prompt-lookup only)
 - seL4 guest in the public Preview zip (internal `sel4-pv-*` only)
 
 Cohort protocol: [TESTER.md](TESTER.md).

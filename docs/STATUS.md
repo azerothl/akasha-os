@@ -7,13 +7,23 @@ Summary of delivered phases. Detail: [development-plan.md](development-plan.md),
 
 **Headline:** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview:** 0.10.1 (21/08/2026) — post-0.10 polish while PC cohort stays open:
-full E8 `mem.*` bridge parity + `aos-bridged` in the Preview zip; opt-in
-auto-download updates; E15 `pie`/`scatter` widgets; first-class img2img
-(`init_image`/`strength` on `media.image.generate`). Real Win TPM seal (`TPM2`)
-landed as a 0.10.0 hotfix. Not a bootable OS. Cohort gate still open. **Next:**
-PC cohort close; Horizon C / PV.4+ when scheduled; E9 hard-green after a
-documented 2-GPU run.
+**Preview:** 0.10.1 (21/08/2026) — post-0.10 polish while PC cohort stays open.
+**E20 local decode** (KV Q8, prefix cache, C1 prompt-lookup) lands for **0.11.0**
+— [phases/phase-preview-11.md](phases/phase-preview-11.md). Not a bootable OS.
+Cohort gate still open. **Next:** ship 0.11; PC cohort close; Horizon C / PV.4+
+when scheduled; E9 hard-green after a documented 2-GPU run.
+
+## P11 — Preview 0.11.0 (E20 local decode) — code done
+
+| # | Item | Status |
+|---|------|--------|
+| P11.1 | KV Q8_0 / F16 via `LoadOptions` + Placement factor | done |
+| P11.2 | Prefix cache (`memory_seq_rm` + warm `llama_state_*`) + E18 restore | done |
+| P11.3 | Prompt-lookup speculative on C1; batch N>1 unchanged | done |
+| P11.4 | `draft_accept` / `prefix_hit` metrics + UI | done |
+| P11.5 | Docs EN+FR | done |
+
+Detail: [phases/phase-preview-11.md](phases/phase-preview-11.md).
 
 ## 0.10.1 — Bridge parity + product polish — done
 

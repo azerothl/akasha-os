@@ -8,11 +8,22 @@ Résumé des phases livrées. Détail : [plan-developpement-phases.md](plan-deve
 **En-tête :** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
 **Preview :** 0.10.1 (21/08/2026) — polish post-0.10 pendant que la cohorte PC
-reste ouverte : parité E8 `mem.*` + `aos-bridged` dans le zip ; téléchargement
-auto des updates (opt-in) ; widgets E15 `pie`/`scatter` ; img2img first-class.
-Scellage TPM Win réel (`TPM2`) en correctif 0.10. Pas un OS bootable. Gate
-cohorte encore ouverte. **Suite :** fermeture cohorte PC ; Horizon C / PV.4+
-quand planifié.
+reste ouverte. **E20 decode local** (KV Q8, prefix cache, prompt-lookup C1)
+pour **0.11.0** — [phases/phase-preview-11.md](phases/phase-preview-11.md).
+Pas un OS bootable. Gate cohorte encore ouverte. **Suite :** ship 0.11 ;
+fermeture cohorte PC ; Horizon C / PV.4+ quand planifié.
+
+## P11 — Preview 0.11.0 (E20 decode local) — code fait
+
+| # | Élément | État |
+|---|---------|------|
+| P11.1 | KV Q8_0 / F16 + facteur Placement | fait |
+| P11.2 | Prefix cache + restore E18 | fait |
+| P11.3 | Speculative prompt-lookup C1 | fait |
+| P11.4 | Métriques draft / préfixe + UI | fait |
+| P11.5 | Docs EN+FR | fait |
+
+Détail : [phases/phase-preview-11.md](phases/phase-preview-11.md).
 
 ## 0.10.1 — Parité bridge + polish produit — fait
 

@@ -24,7 +24,7 @@ pub mod sim;
 pub use cost::{Bound, CostModel, Estimate};
 pub use hardware::{GpuDevice, HardwareProfile};
 pub use manager::{Budgets, PlacementError, PlacementManager};
-pub use model::{ModelDesc, PrivacyClass};
+pub use model::{KvCacheType, ModelDesc, PrivacyClass};
 pub use plan::{PlacementPlan, PlacementProfile, Priority, Shard, ShardKind, Tier};
 pub use sim::{PlacedModel, PlacementSim, PressureReport, ReprofileReport, RunState, SimEvent};
 

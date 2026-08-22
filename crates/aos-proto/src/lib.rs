@@ -278,6 +278,12 @@ pub struct ModelMetrics {
     pub media_total_steps: Option<u32>,
     #[serde(default)]
     pub last_step_s: Option<f64>,
+    /// E20 : moyenne tokens acceptés / pas de verify speculative (C1).
+    #[serde(default)]
+    pub draft_accept: Option<f64>,
+    /// E20 : tokens de préfixe réutilisés au dernier C1.
+    #[serde(default)]
+    pub prefix_hit: Option<u32>,
 }
 
 /// Métriques système agrégées.

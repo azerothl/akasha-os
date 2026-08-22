@@ -85,6 +85,7 @@ Export schémas E8 + contrat HTTP↔bus, keyring OS E7, catalogue local signé E
 | **E17** | **Artefact hôte CPU/GPU unifié** + politique device live | Le testeur devait choisir un zip CUDA ou CPU ; Settings auto/gpu/cpu seulement au prochain boot | **Preview 0.8.0** ✅ — un artefact par OS ; la session lance un backend sûr CUDA ou CPU ; bascule UI = restart modeld ; **auto** = hystérésis Placement Manager sur VRAM/CPU (et E16) ; le pin surcharge ; `-CpuOnly` = builder seulement ; **milieu de token sans cancel = E18 / 0.9** |
 | **E18** | **Migration de device en milieu de token** (CPU ↔ GPU, le stream continue) | La bascule 0.8 annulait l’infer live | **Preview 0.9.0** ✅ — [phases/phase-preview-09.md](phases/phase-preview-09.md) ; rejeu de préfixe ; fallback fail-closed vers cancel+restart 0.8 |
 | **E19** | **Média local extensible** (autres modèles d’image + options sd.cpp / Piper fermées + plugins chat) | 0.8 figeait SD 1.5 en 512² / 20 steps et deux voix Piper | **Preview 0.9.0** ✅ — [phases/phase-preview-09.md](phases/phase-preview-09.md) ; schéma JSON fermé ; Flux2/Ideogram4/Piper extra ; studio Image + carte TTS ; **pas** de vidéo ; **pas** d’img2img en intent de première classe |
+| **E20** | **Leviers de decode local** (KV Q8, prefix cache `llama_state_*`, speculative prompt-lookup en C1) | TTFT / tok/s chat+agents sans adopter vLLM | **Preview 0.11.0** — [phases/phase-preview-11.md](phases/phase-preview-11.md) ; C1 seulement ; batch N>1 inchangé ; pas de second GGUF draft |
 
 ---
 
@@ -116,9 +117,9 @@ Export schémas E8 + contrat HTTP↔bus, keyring OS E7, catalogue local signé E
 | Couche | Rôle |
 |--------|------|
 | **P0–P5 / PV / PC** | Gates exécutables ([plan-developpement-phases.md](plan-developpement-phases.md), [STATUS.md](STATUS.md)) |
-| **E1–E19** | Priorisation après analyse concurrentielle ; les incréments Preview P03–P09 livrent des E* sans attendre la gate cohort PC |
+| **E1–E20** | Priorisation après analyse concurrentielle ; les incréments Preview P03–P11 livrent des E* sans attendre la gate cohort PC |
 
-Ne **pas** inventer un numéro P6 tant que PC n’est pas fermé et que STATUS n’est pas à jour. E1–E5 livrés en Preview **0.3.0** ; E6 / E7-lite / E10-lite en **0.4.0** ; **E14** en **0.5.0** ; E8 schémas + E7-keyring + E10 catalogue en **0.6.0** ; **E15** hôte d’UI de module déclarative livré en Preview **0.7.0**. **E16 + E17 + pack widgets E15 + onglet Providers F-MDL-04** livrés en Preview **0.8.0**. **E18 + E19** livrés en Preview **0.9.0**. Puis reste Horizon B (E7 TPM, adaptateur HTTP live si un daemon est planifié, E9 multi-GPU) + fermeture cohort PC.
+Ne **pas** inventer un numéro P6 tant que PC n’est pas fermé et que STATUS n’est pas à jour. E1–E5 livrés en Preview **0.3.0** ; E6 / E7-lite / E10-lite en **0.4.0** ; **E14** en **0.5.0** ; E8 schémas + E7-keyring + E10 catalogue en **0.6.0** ; **E15** hôte d’UI de module déclarative livré en Preview **0.7.0**. **E16 + E17 + pack widgets E15 + onglet Providers F-MDL-04** livrés en Preview **0.8.0**. **E18 + E19** livrés en Preview **0.9.0**. **E7 TPM + E8 live + E9** en **0.10.0**. **E20 decode local** en Preview **0.11.0** (P11). Puis fermeture cohort PC + Horizon C / PV.4+.
 
 Séquençage suggéré une fois PC fermé (historique ; les incréments Preview
 ont déjà joué cette séquence sur l’hôte en P03–P07, puis E16+E17 en P08) :
