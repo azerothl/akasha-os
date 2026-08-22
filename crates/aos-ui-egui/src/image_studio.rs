@@ -1021,7 +1021,7 @@ impl ImageStudioState {
                 egui::Layout::top_down(egui::Align::Min),
                 |ui| {
                     egui::ScrollArea::vertical()
-                        .id_salt("image_studio_form")
+                        .id_source("image_studio_form")
                         .auto_shrink([false, false])
                         .show(ui, |ui| {
                             ui.set_min_width(left_w - 8.0);
@@ -1037,7 +1037,7 @@ impl ImageStudioState {
                 egui::Layout::top_down(egui::Align::Min),
                 |ui| {
                     egui::ScrollArea::vertical()
-                        .id_salt("image_studio_right")
+                        .id_source("image_studio_right")
                         .auto_shrink([false, false])
                         .show(ui, |ui| {
                             ui.set_min_width(right_w - 8.0);
@@ -1123,7 +1123,7 @@ impl ImageStudioState {
             ui.add(egui::DragValue::new(&mut self.height).range(64..=2048));
             ui.label(t.studio_profile);
             help_icon(ui, t.studio_profile_help);
-            egui::ComboBox::from_id_salt("studio_profile")
+            egui::ComboBox::from_id_source("studio_profile")
                 .selected_text(self.profile.as_str())
                 .show_ui(ui, |ui| {
                     ui.selectable_value(&mut self.profile, "fast".to_string(), "fast");
@@ -1262,7 +1262,7 @@ impl ImageStudioState {
                     ui.add(egui::TextEdit::singleline(&mut self.seed).desired_width(80.0));
                     ui.label("sampler");
                     help_icon(ui, "Sampling algorithm used by the diffusion engine.");
-                    egui::ComboBox::from_id_salt("studio_sampler")
+                    egui::ComboBox::from_id_source("studio_sampler")
                         .selected_text(if self.sampler.is_empty() {
                             "default"
                         } else {
@@ -1465,7 +1465,7 @@ impl ImageStudioState {
                             }
                         }
                     }
-                    egui::ComboBox::from_id_salt("studio_import_kind")
+                    egui::ComboBox::from_id_source("studio_import_kind")
                         .selected_text(self.import_kind.as_str())
                         .show_ui(ui, |ui| {
                             ui.selectable_value(&mut self.import_kind, "lora".to_string(), "lora");
@@ -1628,7 +1628,7 @@ impl ImageStudioState {
                         }
                         ui.label(t.studio_expert_max_vram);
                         help_icon(ui, t.studio_expert_max_vram_help);
-                        egui::ComboBox::from_id_salt("studio_max_vram")
+                        egui::ComboBox::from_id_source("studio_max_vram")
                             .selected_text(max_vram_label(&self.max_vram))
                             .show_ui(ui, |ui| {
                                 ui.selectable_value(&mut self.max_vram, String::new(), "off");
@@ -1768,7 +1768,7 @@ fn ui_image_history(ui: &mut egui::Ui, t: &UiStrings, studio: &mut ImageStudioSt
 
 fn combo_image_pack(
     ui: &mut egui::Ui,
-    salt: &str,
+    widget_id: &str,
     label: &str,
     current: &mut String,
     installed: &[(String, String)],
@@ -1793,7 +1793,7 @@ fn combo_image_pack(
                 }
             })
             .unwrap_or_else(|| current.clone());
-        egui::ComboBox::from_id_salt(salt)
+        egui::ComboBox::from_id_source(widget_id)
             .selected_text(selected)
             .show_ui(ui, |ui| {
                 for (id, name) in installed {
@@ -1818,7 +1818,7 @@ fn combo_image_pack(
 
 fn multi_select_assets(
     ui: &mut egui::Ui,
-    salt: &str,
+    widget_id: &str,
     label: &str,
     selected: &mut Vec<String>,
     items: &[String],
@@ -1838,7 +1838,7 @@ fn multi_select_assets(
         format!("{} selected", selected.len())
     };
     egui::CollapsingHeader::new(summary)
-        .id_salt(salt)
+        .id_source(widget_id)
         .default_open(!selected.is_empty())
         .show(ui, |ui| {
             if items.is_empty() {
@@ -1957,7 +1957,7 @@ fn backend_choice_label<'a>(value: &'a str, choices: &[(&'a str, &'a str)]) -> &
 
 fn backend_choice_combo(
     ui: &mut egui::Ui,
-    salt: &str,
+    widget_id: &str,
     current: &mut String,
     choices: &[(&str, &str)],
 ) {
@@ -1966,7 +1966,7 @@ fn backend_choice_combo(
     } else {
         None
     };
-    egui::ComboBox::from_id_salt(salt)
+    egui::ComboBox::from_id_source(widget_id)
         .selected_text(backend_choice_label(current, choices))
         .width(220.0)
         .show_ui(ui, |ui| {
@@ -1981,7 +1981,7 @@ fn backend_choice_combo(
 
 fn combo_plain(
     ui: &mut egui::Ui,
-    salt: &str,
+    widget_id: &str,
     label: &str,
     current: &mut String,
     items: &[String],
@@ -1997,7 +1997,7 @@ fn combo_plain(
         } else {
             current.as_str()
         };
-        egui::ComboBox::from_id_salt(salt)
+        egui::ComboBox::from_id_source(widget_id)
             .selected_text(shown)
             .show_ui(ui, |ui| {
                 ui.selectable_value(current, String::new(), "—");
