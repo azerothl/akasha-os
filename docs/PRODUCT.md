@@ -77,4 +77,4 @@ Must not fabricate: testimonials, named customers, benchmark numbers, press quot
 
 ## Accessibility & Inclusion
 
-No product-specific standard was set beyond bilingual EN/FR and the existing skip-link / semantic structure on the landing page. WCAG target is undecided.
+Preview targets **WCAG 2.2 Level AA** for in-app chrome and primary flows (contrast, keyboard, focus, motion). The public site keeps skip-link / semantic structure and bilingual EN/FR. See [UI.md](UI.md) for navigation, status bar, theme tokens, and copy rules.
