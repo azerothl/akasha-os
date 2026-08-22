@@ -33,7 +33,7 @@ Au premier lancement (pas encore de `var/models/installed.json`) :
    - **mid** (10–20 Go) : Qwen3.5-9B + Embedding 0.6B
    - **high** (≥20 Go) : Qwen3 30B-A3B + Embedding 0.6B
 3. Confirmer → téléchargement dans `share/models/`.
-4. Démarrage des services + tutoriel egui.
+4. Démarrage des services + tutoriel egui court (langue → un tour de chat → récap des autorisations).
 
 Catalogue : `share/models/catalog-offerings.json`.
 

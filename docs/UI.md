@@ -155,7 +155,7 @@ Tester jargon is fine inside Scenarios, Feedback, and audit export — not on th
 | Primary rail + More overflow | in progress |
 | Status bar (network, model, caps, update, language) | in progress |
 | Orrery token mapping for four themes | in progress |
-| First-run → chat + allowance recap | planned |
+| First-run → chat + allowance recap | done |
 | Settings Me/Models/Trust grouping | planned |
 | Font scale preference | planned |
 | Full WCAG audit | planned |
