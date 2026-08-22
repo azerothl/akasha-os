@@ -50,7 +50,13 @@ pub struct Preferences {
     pub image_height: u32,
     #[serde(default = "default_image_steps")]
     pub image_steps: u32,
+    /// Interface scale as a percentage (90, 100, 110, 125). Applied via egui `pixels_per_point`.
+    #[serde(default = "default_ui_scale_percent")]
+    pub ui_scale_percent: u32,
 }
+
+/// Preset scale steps exposed in Settings → Me.
+pub const UI_SCALE_PRESETS: [u32; 4] = [90, 100, 110, 125];
 
 /// Preview UI language from OS locale when possible (`en` or `fr`).
 pub fn detect_os_language() -> String {
@@ -107,6 +113,23 @@ fn default_image_size() -> u32 {
 fn default_image_steps() -> u32 {
     20
 }
+fn default_ui_scale_percent() -> u32 {
+    100
+}
+
+/// Clamp persisted or deserialized scale to supported Preview presets.
+pub fn clamp_ui_scale_percent(percent: u32) -> u32 {
+    UI_SCALE_PRESETS
+        .iter()
+        .min_by_key(|preset| preset.abs_diff(percent))
+        .copied()
+        .unwrap_or(default_ui_scale_percent())
+}
+
+/// Multiplier for egui `pixels_per_point` (1.0 = 100%).
+pub fn ui_scale_factor(percent: u32) -> f32 {
+    clamp_ui_scale_percent(percent) as f32 / 100.0
+}
 
 impl Default for Preferences {
     fn default() -> Self {
@@ -130,6 +153,7 @@ impl Default for Preferences {
             image_width: default_image_size(),
             image_height: default_image_size(),
             image_steps: default_image_steps(),
+            ui_scale_percent: default_ui_scale_percent(),
         }
     }
 }
@@ -161,7 +185,8 @@ fn onboarding_path() -> PathBuf {
 pub fn load_preferences() -> Preferences {
     let p = preferences_path();
     if let Ok(raw) = std::fs::read_to_string(&p) {
-        if let Ok(prefs) = serde_json::from_str::<Preferences>(&raw) {
+        if let Ok(mut prefs) = serde_json::from_str::<Preferences>(&raw) {
+            prefs.ui_scale_percent = clamp_ui_scale_percent(prefs.ui_scale_percent);
             return prefs;
         }
     }
@@ -238,6 +263,8 @@ mod tests {
 
     #[test]
     fn detect_os_language_reads_fr_locale() {
+        std::env::remove_var("LC_ALL");
+        std::env::remove_var("LC_MESSAGES");
         std::env::set_var("LANG", "fr_FR.UTF-8");
         assert_eq!(detect_os_language(), "fr");
         std::env::remove_var("LANG");
@@ -248,5 +275,32 @@ mod tests {
         std::env::set_var("LC_ALL", "en_GB.UTF-8");
         assert_eq!(detect_os_language(), "en");
         std::env::remove_var("LC_ALL");
+    }
+
+    #[test]
+    fn ui_scale_defaults_to_one_hundred() {
+        assert_eq!(default_ui_scale_percent(), 100);
+        assert_eq!(Preferences::default().ui_scale_percent, 100);
+        assert!((ui_scale_factor(100) - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn ui_scale_clamps_to_nearest_preset() {
+        assert_eq!(clamp_ui_scale_percent(100), 100);
+        assert_eq!(clamp_ui_scale_percent(95), 90);
+        assert_eq!(clamp_ui_scale_percent(113), 110);
+        assert_eq!(clamp_ui_scale_percent(118), 125);
+        assert_eq!(clamp_ui_scale_percent(200), 125);
+        assert_eq!(clamp_ui_scale_percent(0), 90);
+    }
+
+    #[test]
+    fn ui_scale_persists_in_preferences_json() {
+        let mut prefs = Preferences::default();
+        prefs.ui_scale_percent = 110;
+        let raw = serde_json::to_string(&prefs).expect("serialize prefs");
+        assert!(raw.contains("\"ui_scale_percent\":110"));
+        let loaded: Preferences = serde_json::from_str(&raw).expect("deserialize prefs");
+        assert_eq!(loaded.ui_scale_percent, 110);
     }
 }

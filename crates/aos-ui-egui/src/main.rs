@@ -44,7 +44,7 @@ use aos_proto::{
     chat_tts_request, chat_user_wants_module_authoring, ModelMetrics,
 };
 use aos_proto::decl_ui::ModuleUiResponse;
-use prefs::{load_preferences, save_preferences, Preferences};
+use prefs::{load_preferences, save_preferences, Preferences, UI_SCALE_PRESETS};
 use eframe::egui;
 use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
 use serde::{Deserialize, Serialize};
@@ -266,12 +266,13 @@ fn main() -> eframe::Result<()> {
         &format!("Akasha OS Preview {version}"),
         options,
         Box::new(move |cc| {
+            let base_pixels_per_point = cc.egui_ctx.pixels_per_point();
             let ctx = cc.egui_ctx.clone();
             std::thread::spawn(move || {
                 let rt = tokio::runtime::Runtime::new().expect("tokio");
                 rt.block_on(runtime_main(cmd_rx, evt_tx, ctx));
             });
-            Ok(Box::new(UiApp::new(cmd_tx, evt_rx, version)))
+            Ok(Box::new(UiApp::new(cmd_tx, evt_rx, version, base_pixels_per_point)))
         }),
     )
 }
@@ -1350,6 +1351,8 @@ struct UiApp {
     hf_download_name: String,
     hf_download_status: String,
     show_go_to_palette: bool,
+    /// Native pixels-per-point before user scale (from eframe at startup).
+    base_pixels_per_point: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -1361,7 +1364,12 @@ struct ModelDownloadUiState {
 }
 
 impl UiApp {
-    fn new(cmd_tx: Sender<Cmd>, evt_rx: Receiver<Evt>, version: String) -> Self {
+    fn new(
+        cmd_tx: Sender<Cmd>,
+        evt_rx: Receiver<Evt>,
+        version: String,
+        base_pixels_per_point: f32,
+    ) -> Self {
         let onboarding = load_onboarding();
         let mut prefs = load_preferences();
         if prefs.language.is_empty() {
@@ -1530,6 +1538,7 @@ impl UiApp {
             hf_download_name: String::new(),
             hf_download_status: String::new(),
             show_go_to_palette: false,
+            base_pixels_per_point,
         }
     }
 
@@ -2177,14 +2186,9 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             }
             ui.separator();
             if let Some(pending_ver) = load_pending_update_version() {
-                ui.colored_label(
-                    egui::Color32::from_rgb(120, 200, 140),
-                    t.status_update_pending.replace("{version}", &pending_ver),
-                );
+                ui.label(t.status_update_pending.replace("{version}", &pending_ver));
             } else if let Some(offer) = &self.update_offer {
-                ui.weak(
-                    t.update_available.replace("{}", &offer.version),
-                );
+                ui.label(t.update_available.replace("{}", &offer.version));
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let lang_btn = if self.prefs.language.eq_ignore_ascii_case("en") {
@@ -2276,6 +2280,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
 impl eframe::App for UiApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         theme::apply_theme(ctx, &self.prefs.theme);
+        theme::apply_ui_scale(ctx, self.base_pixels_per_point, self.prefs.ui_scale_percent);
         self.handle_keyboard_shortcuts(ctx);
         while let Ok(ev) = self.evt_rx.try_recv() {
             match ev {
@@ -4680,6 +4685,26 @@ impl UiApp {
                                 .clicked()
                             {
                                 self.prefs.theme = code.into();
+                                save_preferences(&self.prefs);
+                                self.status = t.settings_saved.into();
+                            }
+                        }
+                    });
+                ui.end_row();
+
+                ui.label(t.settings_ui_scale);
+                let scale_label = format!("{}%", self.prefs.ui_scale_percent);
+                egui::ComboBox::from_id_salt("prefs_ui_scale")
+                    .selected_text(scale_label)
+                    .show_ui(ui, |ui| {
+                        for percent in UI_SCALE_PRESETS {
+                            let label = format!("{percent}%");
+                            if ui
+                                .selectable_label(self.prefs.ui_scale_percent == percent, label)
+                                .on_hover_text(t.settings_ui_scale_hint)
+                                .clicked()
+                            {
+                                self.prefs.ui_scale_percent = percent;
                                 save_preferences(&self.prefs);
                                 self.status = t.settings_saved.into();
                             }
