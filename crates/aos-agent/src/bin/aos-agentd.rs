@@ -1265,6 +1265,8 @@ async fn main() {
                     Err(e) => {
                         let status = if e.contains("introuvable") || e.contains("absent") {
                             aos_ipc::msg::Status::NotFound
+                        } else if e.contains("mode salon") {
+                            aos_ipc::msg::Status::BadRequest
                         } else if e == "tour annulé" {
                             aos_ipc::msg::Status::Cancelled
                         } else {

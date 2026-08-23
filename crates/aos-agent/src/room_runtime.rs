@@ -47,9 +47,9 @@ pub fn room_turn_infer_caps() -> Vec<String> {
 }
 
 /// Formate le transcript session pour l'inférence (labels user / assistant (Name)).
+/// Le transcript inclut déjà le dernier message utilisateur (append platform avant conduct).
 pub fn format_transcript_messages(
     session: &ChatSessionGetResponse,
-    member_name: &str,
     system_prompt: &str,
 ) -> Vec<ChatMessage> {
     let mut messages = vec![ChatMessage {
@@ -75,8 +75,20 @@ pub fn format_transcript_messages(
             });
         }
     }
-    let _ = member_name;
     messages
+}
+
+fn member_display_name<'a>(
+    session: &'a ChatSessionGetResponse,
+    agent_id: &str,
+) -> Result<&'a str, String> {
+    session
+        .meta
+        .members
+        .iter()
+        .find(|m| m.agent_id == agent_id)
+        .map(|m| m.display_name.as_str())
+        .ok_or_else(|| format!("membre {agent_id} absent du salon"))
 }
 
 pub fn build_room_system_prompt(spec: &AgentSpec, display_name: &str) -> String {
@@ -175,6 +187,7 @@ async fn run_infer(
                         vec![],
                     )
                     .await;
+                *round.current_inference.lock().await = None;
             }
             return Err("tour annulé".into());
         }
@@ -200,24 +213,16 @@ pub async fn execute_room_turn(
     req: &AgentRoomTurnRequest,
 ) -> Result<AgentRoomTurnResponse, String> {
     let session = fetch_session(bus, &req.session_id).await?;
+    if session.meta.mode != ChatSessionMode::Room {
+        return Err("session n'est pas en mode salon".into());
+    }
+    let display_name = member_display_name(&session, &req.agent_id)?;
     let spec = persist::read_spec(&req.agent_id).ok_or_else(|| {
         format!("spec introuvable pour le membre {}", req.agent_id)
     })?;
-    if !session
-        .meta
-        .members
-        .iter()
-        .any(|m| m.agent_id == req.agent_id)
-    {
-        return Err(format!("membre {} absent du salon", req.agent_id));
-    }
 
-    let system = build_room_system_prompt(&spec, &req.display_name);
-    let mut messages = format_transcript_messages(&session, &req.display_name, &system);
-    messages.push(ChatMessage {
-        role: "user".into(),
-        content: req.user_message.clone(),
-    });
+    let system = build_room_system_prompt(&spec, display_name);
+    let messages = format_transcript_messages(&session, &system);
 
     let model_id = spec.model_id.clone().or(session.meta.model_id.clone());
     let content = run_infer(bus, round, model_id, messages).await?;
@@ -229,7 +234,7 @@ pub async fn execute_room_turn(
         bus,
         &req.session_id,
         &req.agent_id,
-        &req.display_name,
+        display_name,
         &content,
     )
     .await?;
@@ -237,7 +242,7 @@ pub async fn execute_room_turn(
     Ok(AgentRoomTurnResponse {
         content,
         speaker_id: req.agent_id.clone(),
-        speaker_name: req.display_name.clone(),
+        speaker_name: display_name.to_string(),
     })
 }
 
@@ -287,8 +292,8 @@ pub async fn execute_room_conduct(
         let turn_req = AgentRoomTurnRequest {
             session_id: req.session_id.clone(),
             agent_id: member.agent_id.clone(),
-            display_name: member.display_name.clone(),
-            user_message: req.content.clone(),
+            display_name: String::new(),
+            user_message: String::new(),
         };
 
         let reply = match execute_room_turn(bus, round.as_ref(), &turn_req).await {
@@ -323,4 +328,64 @@ pub async fn execute_room_conduct(
         agent_turns,
         cancelled: false,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use aos_proto::{
+        ChatRoomConductorPolicy, ChatRoomMember, ChatSessionMessage, ChatSessionMeta,
+        ChatSessionMode,
+    };
+
+    fn room_session_with_user(content: &str) -> ChatSessionGetResponse {
+        ChatSessionGetResponse {
+            meta: ChatSessionMeta {
+                id: "sess-1".into(),
+                title: "Salon".into(),
+                created_ms: 1,
+                updated_ms: 2,
+                archived: false,
+                message_count: 1,
+                model_id: None,
+                mode: ChatSessionMode::Room,
+                members: vec![ChatRoomMember {
+                    agent_id: "agent-a".into(),
+                    display_name: "Alpha".into(),
+                    persona_id: None,
+                    joined_ms: 1,
+                }],
+                conductor_policy: ChatRoomConductorPolicy::default(),
+            },
+            messages: vec![ChatSessionMessage {
+                role: "user".into(),
+                content: content.into(),
+                ts_ms: 3,
+                attachments: vec![],
+                speaker_id: None,
+                speaker_name: None,
+            }],
+        }
+    }
+
+    #[test]
+    fn infer_messages_do_not_duplicate_user_line() {
+        let session = room_session_with_user("What do you think?");
+        let msgs = format_transcript_messages(&session, "system");
+        assert_eq!(msgs.len(), 2, "system + one user line from transcript");
+        assert_eq!(
+            msgs.iter().filter(|m| m.role == "user").count(),
+            1,
+            "must not append user_message again"
+        );
+        assert_eq!(msgs[1].content, "What do you think?");
+    }
+
+    #[test]
+    fn member_display_name_from_session_not_request() {
+        let session = room_session_with_user("hi");
+        let name = member_display_name(&session, "agent-a").unwrap();
+        assert_eq!(name, "Alpha");
+        assert!(member_display_name(&session, "agent-unknown").is_err());
+    }
 }
