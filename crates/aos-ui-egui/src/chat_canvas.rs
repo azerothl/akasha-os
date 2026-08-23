@@ -587,18 +587,7 @@ mod routing_tests {
 
 /// Explicit vector-canvas intent: toggle phrase, slash, or stroke wording — not bare « dessine ».
 pub fn chat_user_wants_explicit_canvas(text: &str) -> bool {
-    let lower = text.to_lowercase();
-    if lower.contains("/canvas") {
-        return true;
-    }
-    if lower.contains("sur le canvas") || lower.contains("on the canvas") {
-        return true;
-    }
-    // « au trait » = vector strokes on the session canvas (not pixel diffusion).
-    if lower.contains("au trait") {
-        return true;
-    }
-    false
+    aos_agent::tools::explicit_canvas_intent(text)
 }
 
 fn word_boundary_match(lower: &str, pat: &str) -> bool {

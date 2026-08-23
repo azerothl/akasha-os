@@ -726,6 +726,51 @@ fn chat_agent_kit(task: &str) -> (Vec<String>, Vec<String>) {
     chat_agent_kit_ex(task, false)
 }
 
+const AGENT_TOOL_CATALOG: &[&str] = &[
+    "notes.create",
+    "notes.list",
+    "notes.read",
+    "notes.search",
+    "notes.update",
+    "notes.links",
+    "notes.related",
+    "tasks.create",
+    "tasks.list",
+    "tasks.update",
+    "tasks.complete",
+    "fs.read",
+    "fs.write",
+    "fs.list",
+    "web.search",
+    "web.browse",
+    "net.fetch",
+    "files.generate",
+    "canvas.stroke",
+    "canvas.rect",
+    "canvas.ellipse",
+    "canvas.erase",
+    "canvas.clear",
+    "canvas.undo",
+    "canvas.get",
+    "canvas.export",
+    "agent.spawn",
+    "agent.await",
+    "plan.update",
+];
+
+fn ui_agent_tool_checkboxes(ui: &mut egui::Ui, selected: &mut Vec<String>) {
+    for name in AGENT_TOOL_CATALOG {
+        let mut on = selected.iter().any(|t| t == name);
+        if ui.checkbox(&mut on, *name).changed() {
+            if on {
+                selected.push((*name).into());
+            } else {
+                selected.retain(|t| t != name);
+            }
+        }
+    }
+}
+
 fn chat_agent_kit_ex(task: &str, canvas_open: bool) -> (Vec<String>, Vec<String>) {
     let lower = task.to_lowercase();
     let mut skills = vec!["planner".into(), "notes-writer".into()];
@@ -804,21 +849,8 @@ fn chat_agent_kit_ex(task: &str, canvas_open: bool) -> (Vec<String>, Vec<String>
             tools.push("media.image.generate".into());
         }
     }
-    if canvas_open || chat_canvas::chat_user_wants_explicit_canvas(task) {
-        for t in [
-            "canvas.stroke",
-            "canvas.rect",
-            "canvas.ellipse",
-            "canvas.erase",
-            "canvas.clear",
-            "canvas.undo",
-            "canvas.get",
-            "canvas.export",
-        ] {
-            if !tools.iter().any(|x| x == t) {
-                tools.push(t.into());
-            }
-        }
+    if canvas_open || aos_agent::tools::explicit_canvas_intent(task) {
+        aos_agent::tools::merge_canvas_tools(&mut tools, true);
     }
     (skills, tools)
 }
@@ -1478,6 +1510,14 @@ struct UiApp {
     hf_download_status: String,
     show_go_to_palette: bool,
     agent_join_room_on_create: bool,
+    roster_edit_id: Option<String>,
+    roster_edit_display_name: String,
+    roster_edit_role: String,
+    roster_edit_system_prompt: String,
+    roster_edit_skills: Vec<String>,
+    roster_edit_tools: Vec<String>,
+    roster_edit_mcp: Vec<String>,
+    roster_edit_model_id: String,
     /// Last user message for an in-flight room turn (speaker queue in thinking UI).
     room_turn_pending_text: Option<String>,
     /// Room: Members pane toggled from clickable session header.
@@ -1665,6 +1705,14 @@ impl UiApp {
             hf_download_status: String::new(),
             show_go_to_palette: false,
             agent_join_room_on_create: false,
+            roster_edit_id: None,
+            roster_edit_display_name: String::new(),
+            roster_edit_role: String::new(),
+            roster_edit_system_prompt: String::new(),
+            roster_edit_skills: Vec::new(),
+            roster_edit_tools: Vec::new(),
+            roster_edit_mcp: Vec::new(),
+            roster_edit_model_id: String::new(),
             room_turn_pending_text: None,
             room_members_pane_open: false,
             canvas_panel: chat_canvas::CanvasPanelState::default(),
@@ -3194,6 +3242,24 @@ impl eframe::App for UiApp {
                         self.provider_test_msg
                             .push_str(&format!(" ({})", models.join(", ")));
                     }
+                }
+                Evt::AgentSpecLoaded { spec } => {
+                    self.roster_edit_id = Some(spec.agent_id.clone());
+                    self.roster_edit_display_name = spec
+                        .display_name
+                        .clone()
+                        .unwrap_or_else(|| spec.roster_display_name().to_string());
+                    self.roster_edit_role = spec.goal.statement.clone();
+                    self.roster_edit_system_prompt =
+                        spec.system_prompt.clone().unwrap_or_default();
+                    self.roster_edit_skills = spec.skills.clone();
+                    self.roster_edit_tools = spec.tools.clone();
+                    self.roster_edit_mcp = spec.mcp_servers.clone();
+                    self.roster_edit_model_id = spec.model_id.clone().unwrap_or_default();
+                }
+                Evt::AgentRosterSaved { .. } => {
+                    let t = i18n::strings(&self.prefs.language);
+                    self.status = t.agents_edit_saved.into();
                 }
                 Evt::AgentTrace(t) => {
                     self.agent_traces.insert(t.agent_id.clone(), t);
@@ -4951,38 +5017,7 @@ impl UiApp {
             });
 
         ui.collapsing(t.agents_tools, |ui| {
-            for name in [
-                "notes.create",
-                "notes.list",
-                "notes.read",
-                "notes.search",
-                "notes.update",
-                "notes.links",
-                "notes.related",
-                "tasks.create",
-                "tasks.list",
-                "tasks.update",
-                "tasks.complete",
-                "fs.read",
-                "fs.write",
-                "fs.list",
-                "web.search",
-                "web.browse",
-                "net.fetch",
-                "files.generate",
-                "agent.spawn",
-                "agent.await",
-                "plan.update",
-            ] {
-                let mut on = self.tool_selected.iter().any(|t| t == name);
-                if ui.checkbox(&mut on, name).changed() {
-                    if on {
-                        self.tool_selected.push(name.into());
-                    } else {
-                        self.tool_selected.retain(|t| t != name);
-                    }
-                }
-            }
+            ui_agent_tool_checkboxes(ui, &mut self.tool_selected);
         });
 
         ui.collapsing(t.agents_mcp, |ui| {
@@ -5097,18 +5132,28 @@ impl UiApp {
                     .collect();
 
                 for a in roots.into_iter().chain(orphans) {
-                    self.draw_agent_row(ui, &a, 0, t);
+                    self.draw_agent_row(ui, &a, 0, t, !history);
                     let children: Vec<_> = visible
                         .iter()
                         .filter(|c| c.parent_id.as_deref() == Some(a.agent_id.as_str()))
                         .cloned()
                         .collect();
                     for child in children {
-                        self.draw_agent_row(ui, &child, 1, t);
+                        self.draw_agent_row(ui, &child, 1, t, !history);
                     }
                 }
             });
-        ui.weak(t.agent_click_for_detail);
+
+        if !history {
+            if let Some(id) = self.roster_edit_id.clone() {
+                ui.separator();
+                self.ui_roster_edit(ui, &id, t);
+            } else {
+                ui.weak(t.agents_edit_select_hint);
+            }
+        } else {
+            ui.weak(t.agent_click_for_detail);
+        }
 
         ui.separator();
         ui.label(t.agent_steer);
@@ -5127,27 +5172,160 @@ impl UiApp {
         });
     }
 
+    fn ui_roster_edit(&mut self, ui: &mut egui::Ui, agent_id: &str, t: i18n::UiStrings) {
+        ui.heading(t.agents_edit_heading);
+        ui.weak(agent_id);
+        ui.add_space(8.0);
+
+        ui.collapsing(t.agents_edit_identity, |ui| {
+            ui.label(t.agents_display_name);
+            ui.text_edit_singleline(&mut self.roster_edit_display_name);
+            ui.label(t.agents_role);
+            ui.weak(t.agents_role_optional);
+            ui.add(
+                egui::TextEdit::multiline(&mut self.roster_edit_role)
+                    .desired_rows(2)
+                    .desired_width(f32::INFINITY),
+            );
+            ui.label(t.agents_system_prompt);
+            ui.add(
+                egui::TextEdit::multiline(&mut self.roster_edit_system_prompt)
+                    .desired_rows(2)
+                    .desired_width(f32::INFINITY),
+            );
+            ui.label(t.agents_model);
+            egui::ComboBox::from_id_salt("roster_edit_model")
+                .selected_text(if self.roster_edit_model_id.is_empty() {
+                    "default".to_string()
+                } else {
+                    self.roster_edit_model_id.clone()
+                })
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut self.roster_edit_model_id, String::new(), "default");
+                    for m in &self.model_infos {
+                        ui.selectable_value(
+                            &mut self.roster_edit_model_id,
+                            m.id.clone(),
+                            format!("{} [{:?}]", m.id, m.state),
+                        );
+                    }
+                });
+        });
+
+        ui.collapsing("Skills", |ui| {
+            if self.skill_catalog.is_empty() {
+                ui.weak(t.agents_catalog_empty);
+                for name in ["notes-writer", "research", "file-author", "planner"] {
+                    let mut on = self.roster_edit_skills.iter().any(|s| s == name);
+                    if ui.checkbox(&mut on, name).changed() {
+                        if on {
+                            self.roster_edit_skills.push(name.into());
+                        } else {
+                            self.roster_edit_skills.retain(|s| s != name);
+                        }
+                    }
+                }
+            } else {
+                for s in self.skill_catalog.clone() {
+                    let mut on = self.roster_edit_skills.contains(&s.name);
+                    if ui
+                        .checkbox(&mut on, format!("{} — {}", s.name, s.description))
+                        .changed()
+                    {
+                        if on {
+                            self.roster_edit_skills.push(s.name.clone());
+                            for tool in &s.tools {
+                                if !self.roster_edit_tools.contains(tool) {
+                                    self.roster_edit_tools.push(tool.clone());
+                                }
+                            }
+                        } else {
+                            self.roster_edit_skills.retain(|x| x != &s.name);
+                        }
+                    }
+                }
+            }
+        });
+
+        ui.collapsing(t.agents_tools, |ui| {
+            ui_agent_tool_checkboxes(ui, &mut self.roster_edit_tools);
+        });
+
+        ui.collapsing(t.agents_mcp, |ui| {
+            if self.mcp_catalog.is_empty() {
+                ui.weak(t.agents_mcp_empty);
+            }
+            for s in self.mcp_catalog.clone() {
+                let mut on = self.roster_edit_mcp.contains(&s.name);
+                if ui
+                    .checkbox(&mut on, format!("{} ({})", s.name, s.command))
+                    .changed()
+                {
+                    if on {
+                        self.roster_edit_mcp.push(s.name.clone());
+                    } else {
+                        self.roster_edit_mcp.retain(|x| x != &s.name);
+                    }
+                }
+            }
+        });
+
+        if ui.button(t.agents_edit_save).clicked()
+            && !self.roster_edit_display_name.trim().is_empty()
+        {
+            let _ = self.cmd_tx.send(Cmd::AgentRosterUpdate {
+                agent_id: agent_id.to_string(),
+                display_name: self.roster_edit_display_name.clone(),
+                role: self.roster_edit_role.clone(),
+                system_prompt: if self.roster_edit_system_prompt.is_empty() {
+                    None
+                } else {
+                    Some(self.roster_edit_system_prompt.clone())
+                },
+                skills: self.roster_edit_skills.clone(),
+                tools: self.roster_edit_tools.clone(),
+                mcp_servers: self.roster_edit_mcp.clone(),
+                model_id: if self.roster_edit_model_id.is_empty() {
+                    None
+                } else {
+                    Some(self.roster_edit_model_id.clone())
+                },
+            });
+        }
+    }
+
     fn draw_agent_row(
         &mut self,
         ui: &mut egui::Ui,
         a: &AgentInfo,
         indent: usize,
         t: i18n::UiStrings,
+        library_mode: bool,
     ) {
         ui.horizontal(|ui| {
             if indent > 0 {
                 ui.add_space(16.0 * indent as f32);
                 ui.small("↳");
             }
-            let selected = self.agent_active_tab.as_deref() == Some(a.agent_id.as_str());
+            let selected = if library_mode && a.is_roster() {
+                self.roster_edit_id.as_deref() == Some(a.agent_id.as_str())
+            } else {
+                self.agent_active_tab.as_deref() == Some(a.agent_id.as_str())
+            };
             let label = if let Some(pid) = a.persona_id.as_deref() {
                 chat_room::persona_label(&t, pid).to_string()
             } else {
                 agent_panel::truncate(a.display_title(), 48)
             };
-            if ui.selectable_label(selected, &label).on_hover_text(&a.agent_id).clicked()
-            {
-                self.open_agent_tab(&a.agent_id);
+            if ui.selectable_label(selected, &label).on_hover_text(&a.agent_id).clicked() {
+                if library_mode && a.is_roster() {
+                    self.roster_edit_id = Some(a.agent_id.clone());
+                    let _ = self.cmd_tx.send(Cmd::AgentSpecGet {
+                        id: a.agent_id.clone(),
+                    });
+                } else {
+                    self.open_agent_tab(&a.agent_id);
+                }
             }
             ui.weak(&a.agent_id);
             ui.colored_label(
