@@ -1242,11 +1242,13 @@ Chat (cette session) — tu n'as PAS de boucle d'outils :
 - Questions, explications, conseils (y compris « quoi de neuf » / UI) → réponds en français, sans JSON, en t'appuyant sur le brief + extraits RAG produit s'ils sont présents.
 - Synthèse vocale / TTS / « générer un audio » : n'appelle PAS agent.spawn.
   Le hôte ouvre une carte TTS (`/speak <texte>`). Réponds en français, sans JSON.
-- Dessin / illustration sans canvas explicite (« dessine », « draw », « sketch »…) :
+- Dessin / illustration sans canvas ouvert ni marqueur explicite (« dessine », « draw », « sketch »…) :
   une courte phrase d'accusé puis UNIQUEMENT :
   {\"action\":\"agent.spawn\",\"args\":{\"brief\":\"<demande utilisateur>\"}}
   (agent image / media.image.generate — pas le canvas vectoriel).
-- Canvas vectoriel session : uniquement si marqueurs explicites dans le message
+- Canvas vectoriel session : si le panneau canvas est déjà ouvert, tout « dessine » / « draw »
+  va au canvas (canvas.stroke, etc.) — jamais media.image.generate.
+  Sinon, uniquement avec marqueurs explicites dans le message
   (« sur le canvas », « dans le canvas », « on the canvas », « in the canvas »,
   « to the canvas », « sur le canevas », « au trait », `/canvas` dans le texte ;
   le mot seul « canvas » ne suffit PAS) →
