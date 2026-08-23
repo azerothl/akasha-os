@@ -37,13 +37,14 @@ pub fn compile_system_prompt(input: &PromptCompileInput<'_>) -> String {
     }
     parts.push(identity);
 
+    let has_canvas_tools = input.tools.iter().any(|t| t.name.starts_with("canvas."));
     if let Some(sid) = input
         .spec
         .session_id
         .as_deref()
         .filter(|s| !s.is_empty())
     {
-        if input.tools.iter().any(|t| t.name.starts_with("canvas.")) {
+        if has_canvas_tools {
             parts.push(format!(
                 "## Canvas de session\n\
                  Outils `canvas.*` : la session chat liée est `{sid}`. \
@@ -293,5 +294,6 @@ mod tests {
         assert!(out.contains("sess-real"));
         assert!(out.contains("Canvas de session"));
         assert!(out.contains("N'invente jamais"));
+        assert!(!out.contains("Guide dessin canvas"));
     }
 }
