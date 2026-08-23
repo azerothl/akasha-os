@@ -1,6 +1,6 @@
 //! Persistance agents : `var/agents/<id>/spec.json` + `state.json` + registry.
 
-use aos_proto::{AgentInfo, AgentSpec, AgentState, AgentTrace};
+use aos_proto::{AgentInfo, AgentKind, AgentSpec, AgentState, AgentTrace};
 use std::path::{Path, PathBuf};
 
 use crate::CognitiveState;
@@ -174,9 +174,20 @@ pub fn read_info(agent_id: &str) -> Option<AgentInfo> {
 
 pub fn info_from_spec(agent_id: &str) -> Option<AgentInfo> {
     let spec = read_spec(agent_id)?;
+    let is_roster = spec.kind == AgentKind::Roster || spec.goal.max_steps == 0;
+    let title = spec
+        .display_name
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| agent_title(&spec.goal.statement));
     Some(AgentInfo {
         agent_id: spec.agent_id.clone(),
-        state: AgentState::Killed,
+        state: if is_roster {
+            AgentState::Roster
+        } else {
+            AgentState::Killed
+        },
         directive: spec.goal.statement.clone(),
         pid: None,
         caps: spec.caps.clone(),
@@ -190,9 +201,16 @@ pub fn info_from_spec(agent_id: &str) -> Option<AgentInfo> {
         skills: spec.skills.clone(),
         tools: spec.tools.clone(),
         mcp_servers: spec.mcp_servers.clone(),
-        fail_reason: Some("arrêté au redémarrage".into()),
+        fail_reason: if is_roster {
+            None
+        } else {
+            Some("arrêté au redémarrage".into())
+        },
         session_id: spec.session_id.clone(),
-        title: agent_title(&spec.goal.statement),
+        title,
+        kind: spec.kind,
+        display_name: spec.display_name.clone(),
+        persona_id: spec.persona_id.clone(),
     })
 }
 

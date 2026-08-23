@@ -891,14 +891,23 @@ fn ensure_layout(home: &Path) {
             let reg = home.join("var/modules/registry.yaml");
             if let Ok(mut raw) = fs::read_to_string(&reg) {
                 if !raw.contains("name: canvas") {
-                    raw.push_str(
+                    // Match existing list indent (`- name:` vs `  - name:`).
+                    let entry = if raw.lines().any(|l| l.starts_with("- name:")) {
+                        r#"
+- name: canvas
+  granted_caps:
+  - fs.write:/downloads/**
+  quarantined: false
+"#
+                    } else {
                         r#"
   - name: canvas
     granted_caps:
       - fs.write:/downloads/**
     quarantined: false
-"#,
-                    );
+"#
+                    };
+                    raw.push_str(entry);
                     let _ = fs::write(&reg, raw);
                 }
             } else {
