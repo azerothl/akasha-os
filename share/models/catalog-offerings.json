@@ -1,5 +1,5 @@
 {
-  "version": "0.3.1",
+  "version": "0.3.2",
   "models": [
     {
       "id": "local:qwen3-embedding-0.6b",
@@ -146,6 +146,50 @@
       "kv_bytes_per_token": 40000,
       "replaces": [],
       "optional": true
+    },
+    {
+      "id": "local:lfm2.5-8b-a1b",
+      "name": "LFM2.5 8B-A1B Q4",
+      "profiles": ["chat", "code", "reasoning"],
+      "filename": "LFM2.5-8B-A1B-Q4_K_M.gguf",
+      "url": "https://huggingface.co/LiquidAI/LFM2.5-8B-A1B-GGUF/resolve/main/LFM2.5-8B-A1B-Q4_K_M.gguf",
+      "bytes": 5155564768,
+      "sha256": "",
+      "min_vram_mib": 0,
+      "min_disk_bytes": 5700000000,
+      "quality_score": 82,
+      "speed_score": 90,
+      "n_layers": 24,
+      "n_params": 8.3e9,
+      "weights_bytes": 5155564768,
+      "embed_bytes": 250000000,
+      "kv_bytes_per_token": 25000,
+      "replaces": [],
+      "optional": true,
+      "tags": ["moe", "cpu", "reasoning"],
+      "description": "MoE hybride Liquid — 8,3B totaux / 1,5B actifs ; recommandé CPU et GPU faible (KV léger). Licence lfm1.0."
+    },
+    {
+      "id": "local:ornith-1.5-9b",
+      "name": "Ornith 1.5 9B Q4",
+      "profiles": ["chat", "code", "reasoning"],
+      "filename": "Ornith-1.5-9B-Q4_K_M.gguf",
+      "url": "https://huggingface.co/ornith-ai/Ornith-1.5-9B-GGUF/resolve/main/Ornith-1.5-9B-Q4_K_M.gguf",
+      "bytes": 5629108992,
+      "sha256": "",
+      "min_vram_mib": 10240,
+      "min_disk_bytes": 6200000000,
+      "quality_score": 93,
+      "speed_score": 76,
+      "n_layers": 32,
+      "n_params": 9.0e9,
+      "weights_bytes": 5629108992,
+      "embed_bytes": 350000000,
+      "kv_bytes_per_token": 70000,
+      "replaces": [],
+      "optional": true,
+      "tags": ["dense", "reasoning", "thinking"],
+      "description": "Dense 9B (base Qwen3.5) — nettement plus fort en code / agents que Qwen3.5 9B, même gabarit. GPU mid+."
     },
     {
       "id": "local:sd-v1-5",
@@ -752,18 +796,29 @@
   "packs": {
     "cpu": {
       "embed": "local:qwen3-embedding-0.6b",
-      "chat": "local:qwen3.5-4b-instruct",
-      "alternatives": ["local:qwen3-4b-instruct-2507"]
+      "chat": "local:lfm2.5-8b-a1b",
+      "alternatives": [
+        "local:qwen3.5-4b-instruct",
+        "local:qwen3-4b-instruct-2507"
+      ]
     },
     "low": {
       "embed": "local:qwen3-embedding-0.6b",
-      "chat": "local:qwen3.5-4b-instruct",
-      "alternatives": ["local:qwen3-4b-instruct-2507"]
+      "chat": "local:lfm2.5-8b-a1b",
+      "alternatives": [
+        "local:qwen3.5-4b-instruct",
+        "local:qwen3-4b-instruct-2507"
+      ]
     },
     "mid": {
       "embed": "local:qwen3-embedding-0.6b",
       "chat": "local:qwen3.5-9b-instruct",
-      "alternatives": ["local:qwen3.5-4b-instruct", "local:qwen3-4b-instruct-2507"]
+      "alternatives": [
+        "local:ornith-1.5-9b",
+        "local:lfm2.5-8b-a1b",
+        "local:qwen3.5-4b-instruct",
+        "local:qwen3-4b-instruct-2507"
+      ]
     },
     "high": {
       "embed": "local:qwen3-embedding-0.6b",
@@ -771,7 +826,9 @@
       "alternatives": [
         "local:qwen3.8-27b-instruct",
         "local:qwen3.8-27b-instruct-iq4",
+        "local:ornith-1.5-9b",
         "local:qwen3.5-9b-instruct",
+        "local:lfm2.5-8b-a1b",
         "local:qwen3.5-4b-instruct"
       ]
     }
