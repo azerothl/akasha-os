@@ -486,7 +486,7 @@ fn merge_named_args(dst: &mut Vec<String>, args: &serde_json::Value, key: &str) 
 /// Retire les outils incompatibles avec le kit canvas (vectoriel) vs pixel (diffusion).
 fn strip_delegate_kit_tools(tools: &mut Vec<String>, use_canvas: bool) {
     if use_canvas {
-        tools.retain(|t| !t.starts_with("media.image"));
+        tools.retain(|t| !t.starts_with("media.image") && t != "user.ask");
     } else {
         tools.retain(|t| !t.starts_with("canvas."));
     }
@@ -1697,6 +1697,64 @@ impl UiApp {
         self.agents.iter().find(|a| a.agent_id == chosen)
     }
 
+    fn set_canvas_open_local(&mut self, session_id: &str, open: bool) {
+        if let Some(s) = self.sessions.iter_mut().find(|s| s.id == session_id) {
+            s.canvas_open = open;
+        }
+    }
+
+    /// Ouvre le panneau canvas (optimiste côté UI, puis bus).
+    fn open_canvas_face(&mut self, session_id: &str) {
+        let already = self
+            .sessions
+            .iter()
+            .find(|s| s.id == session_id)
+            .map(|s| s.canvas_open)
+            .unwrap_or(false);
+        if already {
+            return;
+        }
+        self.set_canvas_open_local(session_id, true);
+        let _ = self.cmd_tx.send(Cmd::CanvasSetOpen {
+            session_id: session_id.to_string(),
+            open: true,
+        });
+    }
+
+    /// Tue les agents bloqués sur user.ask pour libérer la session (ex. image kit coincé).
+    fn break_stuck_session_agents(&mut self, session_id: &str) {
+        let t = i18n::strings(&self.prefs.language);
+        let blocked: Vec<(String, String)> = self
+            .agents
+            .iter()
+            .filter(|a| {
+                a.session_id.as_deref() == Some(session_id) && a.state == AgentState::Blocked
+            })
+            .map(|a| (a.agent_id.clone(), a.directive.clone()))
+            .collect();
+        let blocked_ids: Vec<String> = blocked.iter().map(|(id, _)| id.clone()).collect();
+        for (agent_id, title) in blocked {
+            self.chat.push(ChatLine {
+                role: "user".into(),
+                text: t.agent_unblocked.into(),
+                attachments: vec![ChatAttachment::AgentRef {
+                    agent_id: agent_id.clone(),
+                    title,
+                    origin: "ask-reply".into(),
+                }],
+                speaker_id: None,
+            });
+            let _ = self.cmd_tx.send(Cmd::AgentKill { id: agent_id });
+        }
+        if self
+            .ask_reply_target
+            .as_ref()
+            .is_some_and(|t| blocked_ids.iter().any(|id| id == t))
+        {
+            self.ask_reply_target = None;
+        }
+    }
+
     fn task_looks_like_module_authoring(task: &str) -> bool {
         let lower = task.to_lowercase();
         lower.contains("module")
@@ -1810,6 +1868,10 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             return;
         };
         let explicit_canvas = chat_canvas::chat_user_wants_explicit_canvas(&text);
+        if explicit_canvas {
+            self.break_stuck_session_agents(&session_id);
+            self.open_canvas_face(&session_id);
+        }
         if !explicit_canvas {
             if let Some((agent_id, title)) = self
                 .blocked_ask_agent()
@@ -3832,9 +3894,11 @@ impl UiApp {
                 .selectable_label(canvas_open, t.session_toggle_canvas)
                 .clicked()
             {
+                let new_open = !canvas_open;
+                self.set_canvas_open_local(&sid, new_open);
                 let _ = self.cmd_tx.send(Cmd::CanvasSetOpen {
                     session_id: sid.clone(),
-                    open: !canvas_open,
+                    open: new_open,
                 });
             }
             if let Some(action) = toolbar_action {
@@ -6596,6 +6660,7 @@ mod delegate_tests {
         let (_brief, _skills, tools, prose) = spec.expect("doit déléguer canvas");
         assert!(tools.iter().any(|x| x == "canvas.stroke"));
         assert!(!tools.iter().any(|x| x == "media.image.generate"));
+        assert!(!tools.iter().any(|x| x == "user.ask"));
         assert!(prose.to_lowercase().contains("canvas") || prose.contains("dessin"));
     }
 
@@ -6644,6 +6709,7 @@ mod delegate_tests {
         let brief = chat_canvas::canvas_agent_brief("dessine sur le canvas");
         assert!(!brief.contains("canvas.draw"));
         assert!(brief.contains("canvas.stroke"));
+        assert!(!brief.contains("canvas.*"));
         assert!(!aos_proto::CHAT_DELEGATION_PROMPT.contains("canvas.draw"));
     }
 
