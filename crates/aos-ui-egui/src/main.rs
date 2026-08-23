@@ -3445,10 +3445,15 @@ impl UiApp {
             ui.horizontal_wrapped(|ui| {
                 ui.label(t.room_members_label);
                 for mem in members {
+                    let name = chat_room::member_display_label(t, mem);
                     ui.horizontal(|ui| {
-                        ui.strong(chat_room::member_display_label(t, mem));
+                        ui.spacing_mut().item_spacing.x = 2.0;
+                        ui.strong(&name);
                         if ui
-                            .small_button("×")
+                            .add(
+                                egui::Label::new(egui::RichText::new("×").weak())
+                                    .sense(egui::Sense::click()),
+                            )
                             .on_hover_text(t.room_member_remove)
                             .clicked()
                         {

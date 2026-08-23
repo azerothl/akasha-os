@@ -2522,7 +2522,7 @@ async fn handle_cmd(
                     refresh_sessions(&bus, &evt_tx).await;
                     load_session(&bus, &evt_tx, &session_id).await;
                     let _ = evt_tx.send(Evt::Status(format!(
-                        "agent retiré du salon ({agent_id})"
+                        "retiré du salon : {agent_id}"
                     )));
                 }
                 Err(e) => {
