@@ -631,8 +631,8 @@ pub fn canvas_agent_brief(user_text: &str) -> String {
          Contexte: canvas vectoriel de session lié — utilise uniquement \
          canvas.stroke, canvas.rect, canvas.ellipse, canvas.erase, canvas.clear, \
          canvas.undo, canvas.get, canvas.export (coords normalisées 0..1). \
-         Commence par canvas.get. Si le dessin est trop pauvre: canvas.clear puis \
-         redessine avec plus de traits et formes. Ne génère pas d'image diffusion \
+         Commence par canvas.get ; poursuis le dessin existant (ajoute des traits, \
+         pas canvas.clear sauf demande). Ne génère pas d'image diffusion \
          (pas media.image.generate). Ne pose pas user.ask pour choisir entre canvas \
          et diffusion — dessine directement."
     )

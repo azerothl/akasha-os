@@ -37,13 +37,17 @@ pub fn compile_system_prompt(input: &PromptCompileInput<'_>) -> String {
     }
     parts.push(identity);
 
+    let has_canvas_tools = input.tools.iter().any(|t| t.name.starts_with("canvas."));
+    if has_canvas_tools {
+        parts.push(CANVAS_DRAWING_GUIDE.to_string());
+    }
     if let Some(sid) = input
         .spec
         .session_id
         .as_deref()
         .filter(|s| !s.is_empty())
     {
-        if input.tools.iter().any(|t| t.name.starts_with("canvas.")) {
+        if has_canvas_tools {
             parts.push(format!(
                 "## Canvas de session\n\
                  Outils `canvas.*` : la session chat liée est `{sid}`. \
@@ -135,6 +139,15 @@ fn format_goal(goal: &AgentGoal) -> String {
     }
     s
 }
+
+const CANVAS_DRAWING_GUIDE: &str = r#"## Guide dessin canvas
+- Toujours `canvas.get` d'abord ; poursuis le dessin existant — ne redémarre pas sauf demande.
+- Coords 0..1 ; margin 0.08–0.12 ; ligne de sol ~y=0.75 ; sujet dans le tiers central.
+- Préfère plusieurs `canvas.stroke` courts (8–20 points) plutôt que 2–3 grosses formes. Couches : silhouette → ouvertures → texture (briques = traits courts répétés, pas un fill) → lumière (ombre sous toit = traits plus foncés).
+- Épaisseur : structure 0.012–0.02 ; détail 0.006–0.01. Couleurs #RRGGBB ; 2–3 teintes + nuance plus foncée pour l'ombre.
+- `canvas.rect` / `canvas.ellipse` : blocs seulement — jamais un rectangle = toute la maison sans traits de toit.
+- Après critique : ajoute des ops, pas de `canvas.clear`.
+- N'invente jamais `canvas.draw` ni des collègues."#;
 
 const ACTION_PROTOCOL: &str = r#"## Protocole d'actions
 
@@ -293,5 +306,51 @@ mod tests {
         assert!(out.contains("sess-real"));
         assert!(out.contains("Canvas de session"));
         assert!(out.contains("N'invente jamais"));
+        assert!(out.contains("margin"));
+        assert!(out.contains("canvas.get"));
+        assert!(out.contains("canvas.stroke"));
+    }
+
+    #[test]
+    fn canvas_drawing_guide_without_session_id() {
+        let spec = AgentSpec {
+            agent_id: "agent-1".into(),
+            goal: AgentGoal {
+                statement: "dessine".into(),
+                ..Default::default()
+            },
+            kind: Default::default(),
+            display_name: None,
+            persona_id: None,
+            system_prompt: None,
+            skills: vec![],
+            tools: vec!["canvas.stroke".into()],
+            mcp_servers: vec![],
+            documents: vec![],
+            caps: vec!["tool.invoke:canvas".into()],
+            model_id: None,
+            parent_id: None,
+            session_id: None,
+            budget: AgentBudget::default(),
+            optimize_prompt: false,
+        };
+        let tools = vec![ToolDesc {
+            name: "canvas.stroke".into(),
+            description: "draw".into(),
+            input_schema: serde_json::json!({"type":"object"}),
+            backend: crate::tools::ToolBackend::Module,
+            required_caps: vec!["tool.invoke:canvas".into()],
+        }];
+        let out = compile_system_prompt(&PromptCompileInput {
+            spec: &spec,
+            skills: &[],
+            tools: &tools,
+            doc_index: &[],
+        });
+        assert!(out.contains("Guide dessin canvas"));
+        assert!(out.contains("margin"));
+        assert!(out.contains("canvas.get"));
+        assert!(out.contains("canvas.stroke"));
+        assert!(!out.contains("Canvas de session"));
     }
 }
