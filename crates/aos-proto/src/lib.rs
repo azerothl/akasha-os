@@ -510,33 +510,6 @@ pub struct AgentCreateResponse {
     pub agent_id: String,
 }
 
-/// `agent.spec.get` — lire la spec persistée d'un agent roster ou worker.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AgentSpecResponse {
-    pub spec: AgentSpec,
-}
-
-/// `agent.roster.update` — met à jour une entrée bibliothèque sans lancer de worker.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AgentRosterUpdateRequest {
-    pub agent_id: String,
-    #[serde(default)]
-    pub display_name: Option<String>,
-    #[serde(default)]
-    pub system_prompt: Option<String>,
-    /// Rôle / directive roster (goal.statement).
-    #[serde(default)]
-    pub role: Option<String>,
-    #[serde(default)]
-    pub skills: Vec<String>,
-    #[serde(default)]
-    pub tools: Vec<String>,
-    #[serde(default)]
-    pub mcp_servers: Vec<String>,
-    #[serde(default)]
-    pub model_id: Option<String>,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentIdRequest {
     pub agent_id: String,

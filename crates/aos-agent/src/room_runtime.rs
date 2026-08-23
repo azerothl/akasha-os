@@ -10,7 +10,7 @@ use crate::room_conductor::{
 use crate::skills::{load_skills, merge_skill_tools};
 use crate::tool_exec::execute_room_tool;
 use crate::tools::{
-    caps_for_tools, explicit_canvas_intent, merge_canvas_tools, select_tools, ToolDesc,
+    caps_for_tools, merge_canvas_tools, select_tools, ToolDesc,
 };
 use aos_ipc::BusClient;
 use aos_proto::{
@@ -112,15 +112,10 @@ fn member_display_name<'a>(
 }
 
 /// Assemble tool ids + caps for a roster member turn.
-pub fn room_member_kit(
-    spec: &AgentSpec,
-    canvas_open: bool,
-    user_message: &str,
-) -> (Vec<String>, Vec<String>) {
+pub fn room_member_kit(spec: &AgentSpec, canvas_open: bool) -> (Vec<String>, Vec<String>) {
     let skill_docs = load_skills(&spec.skills);
     let mut tool_ids = merge_skill_tools(&spec.tools, &skill_docs);
-    let include_canvas = canvas_open || explicit_canvas_intent(user_message);
-    merge_canvas_tools(&mut tool_ids, include_canvas);
+    merge_canvas_tools(&mut tool_ids, canvas_open);
     let tools = select_tools(&tool_ids, &[]);
     let mut caps = spec.caps.clone();
     for c in caps_for_tools(&tools, &spec.mcp_servers) {
@@ -129,17 +124,6 @@ pub fn room_member_kit(
         }
     }
     (tool_ids, caps)
-}
-
-fn latest_user_message(session: &ChatSessionGetResponse, fallback: &str) -> String {
-    session
-        .messages
-        .iter()
-        .rev()
-        .find(|m| m.role == "user")
-        .map(|m| m.content.clone())
-        .filter(|s| !s.trim().is_empty())
-        .unwrap_or_else(|| fallback.to_string())
 }
 
 pub fn build_room_system_prompt(
@@ -405,8 +389,7 @@ pub async fn execute_room_turn(
     })?;
     spec.session_id = Some(req.session_id.clone());
 
-    let user_message = latest_user_message(&session, &req.user_message);
-    let (tool_ids, caps) = room_member_kit(&spec, session.meta.canvas_open, &user_message);
+    let (tool_ids, caps) = room_member_kit(&spec, session.meta.canvas_open);
     let tool_descs = if tool_ids.is_empty() {
         Vec::new()
     } else {
@@ -667,14 +650,14 @@ mod tests {
             budget: Default::default(),
             optimize_prompt: false,
         };
-        let (ids, caps) = room_member_kit(&spec, true, "hello");
+        let (ids, caps) = room_member_kit(&spec, true);
         assert!(ids.iter().any(|x| x == "canvas.stroke"));
         assert!(ids.iter().any(|x| x == "canvas.get"));
         assert!(caps.iter().any(|c| c == "tool.invoke:canvas"));
     }
 
     #[test]
-    fn room_member_kit_canvas_on_explicit_phrase() {
+    fn room_member_kit_no_canvas_when_closed() {
         let spec = AgentSpec {
             agent_id: "agent-x".into(),
             goal: AgentGoal::default(),
@@ -693,8 +676,8 @@ mod tests {
             budget: Default::default(),
             optimize_prompt: false,
         };
-        let (ids, caps) = room_member_kit(&spec, false, "dessine sur le canvas");
-        assert!(ids.iter().any(|x| x == "canvas.stroke"));
-        assert!(caps.iter().any(|c| c == "tool.invoke:canvas"));
+        let (ids, caps) = room_member_kit(&spec, false);
+        assert!(!ids.iter().any(|x| x.starts_with("canvas.")));
+        assert!(!caps.iter().any(|c| c == "tool.invoke:canvas"));
     }
 }
