@@ -187,6 +187,10 @@ pub(crate) enum Cmd {
         session_id: String,
         member: ChatRoomMember,
     },
+    SessionMembersRemove {
+        session_id: String,
+        agent_id: String,
+    },
     RoomAddPersona {
         session_id: String,
         persona_id: String,

@@ -18,7 +18,8 @@ use aos_proto::{
     AgentPromptOptimizeResponse, AgentSteerRequest, AgentTrace, AuditEvent, AuditQueryRequest,
     CapInfo, CapListRequest, CapRevokeRequest, ChatAttachment, ChatMessage, ChatRoomMember,
     ChatSessionAppendRequest, ChatSessionCreateRequest, ChatSessionGetResponse,
-    ChatSessionIdRequest, ChatSessionMembersAddRequest, ChatSessionMeta, ChatSessionRoomTurnCancelRequest,
+    ChatSessionIdRequest, ChatSessionMembersAddRequest, ChatSessionMembersRemoveRequest,
+    ChatSessionMeta, ChatSessionRoomTurnCancelRequest,
     ChatSessionRoomTurnRequest, ChatSessionRoomTurnResponse, ChatSessionSetModeRequest,
     ChatSessionRenameRequest, ChatSessionSetModelRequest, ConfirmResponseRequest,
     FeedbackSubmitRequest, FeedbackSubmitResponse, FilesGenerateRequest, FilesGenerateResponse,
@@ -2496,6 +2497,33 @@ async fn handle_cmd(
                 Ok(_) => {
                     refresh_sessions(&bus, &evt_tx).await;
                     load_session(&bus, &evt_tx, &session_id).await;
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::SessionMembersRemove {
+            session_id,
+            agent_id,
+        } => {
+            match bus
+                .call::<ChatSessionMembersRemoveRequest, ChatSessionMeta>(
+                    "chat.session.members.remove",
+                    &ChatSessionMembersRemoveRequest {
+                        session_id: session_id.clone(),
+                        agent_id: agent_id.clone(),
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(_) => {
+                    refresh_sessions(&bus, &evt_tx).await;
+                    load_session(&bus, &evt_tx, &session_id).await;
+                    let _ = evt_tx.send(Evt::Status(format!(
+                        "agent retiré du salon ({agent_id})"
+                    )));
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));
