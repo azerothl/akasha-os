@@ -571,6 +571,18 @@ mod routing_tests {
         assert_eq!(state.ops.len(), 1);
         assert_eq!(state.ops[0].author_id, "human");
     }
+
+    #[test]
+    fn canvas_agent_brief_contains_drawing_guide() {
+        let brief = super::canvas_agent_brief("dessine sur le canvas une maison");
+        assert!(brief.contains("dessine sur le canvas une maison"));
+        assert!(brief.contains("margin"));
+        assert!(brief.contains("canvas.get"));
+        assert!(brief.contains("canvas.stroke"));
+        assert!(brief.contains("200px"));
+        assert!(brief.contains("rectangle+triangle"));
+        assert!(brief.contains("toit + murs + porte"));
+    }
 }
 
 /// Explicit vector-canvas intent: toggle phrase, slash, or stroke wording — not bare « dessine ».
@@ -625,15 +637,16 @@ pub fn chat_wants_canvas_agent(text: &str, _canvas_open: bool) -> bool {
     chat_user_wants_explicit_canvas(text)
 }
 
+/// Frozen designer copy for delegated canvas agents (brief / goal — not system chrome).
+pub const CANVAS_AGENT_DESIGNER_GUIDE: &str = "\
+Cible visuelle : lisible à 200px — pas un rectangle+triangle.\n\
+Règles : margin 0.08–0.12 ; sujet centré ; couches sol → volumes → détails → 2–3 ombres. \
+Nombreux canvas.stroke courts, 2–3 teintes, épaisseurs variées. Commence par canvas.get. \
+Après critique : ajoute, jamais canvas.clear sauf si l'humain dit effacer.\n\
+Une maison = toit + murs + porte + fenêtre + sol + un élément d'environnement.\n\
+Outils : canvas.stroke, canvas.rect, canvas.ellipse, canvas.erase, canvas.clear, \
+canvas.undo, canvas.get, canvas.export (coords 0..1). Pas media.image.generate.";
+
 pub fn canvas_agent_brief(user_text: &str) -> String {
-    format!(
-        "{user_text}\n\n\
-         Contexte: canvas vectoriel de session lié — utilise uniquement \
-         canvas.stroke, canvas.rect, canvas.ellipse, canvas.erase, canvas.clear, \
-         canvas.undo, canvas.get, canvas.export (coords normalisées 0..1). \
-         Commence par canvas.get ; poursuis le dessin existant (ajoute des traits, \
-         pas canvas.clear sauf demande). Ne génère pas d'image diffusion \
-         (pas media.image.generate). Ne pose pas user.ask pour choisir entre canvas \
-         et diffusion — dessine directement."
-    )
+    format!("{user_text}\n\n{CANVAS_AGENT_DESIGNER_GUIDE}")
 }
