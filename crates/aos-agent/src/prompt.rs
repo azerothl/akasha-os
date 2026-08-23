@@ -37,6 +37,22 @@ pub fn compile_system_prompt(input: &PromptCompileInput<'_>) -> String {
     }
     parts.push(identity);
 
+    if let Some(sid) = input
+        .spec
+        .session_id
+        .as_deref()
+        .filter(|s| !s.is_empty())
+    {
+        if input.tools.iter().any(|t| t.name.starts_with("canvas.")) {
+            parts.push(format!(
+                "## Canvas de session\n\
+                 Outils `canvas.*` : la session chat liée est `{sid}`. \
+                 Omets `session_id` dans les args (le runtime le force). \
+                 N'invente jamais d'id (`chat-1`, `default`, `1`, …)."
+            ));
+        }
+    }
+
     // 3. Prompt utilisateur
     if let Some(user_prompt) = &input.spec.system_prompt {
         if !user_prompt.trim().is_empty() {
@@ -236,5 +252,46 @@ mod tests {
         assert!(!out.contains("Mémoire d'abord"));
         assert!(out.contains("task.assess"));
         assert!(out.contains("plan.update"));
+    }
+
+    #[test]
+    fn canvas_session_binding_in_prompt() {
+        let spec = AgentSpec {
+            agent_id: "agent-1".into(),
+            goal: AgentGoal {
+                statement: "dessine".into(),
+                ..Default::default()
+            },
+            kind: Default::default(),
+            display_name: None,
+            persona_id: None,
+            system_prompt: None,
+            skills: vec![],
+            tools: vec!["canvas.stroke".into()],
+            mcp_servers: vec![],
+            documents: vec![],
+            caps: vec!["tool.invoke:canvas".into()],
+            model_id: None,
+            parent_id: None,
+            session_id: Some("sess-real".into()),
+            budget: AgentBudget::default(),
+            optimize_prompt: false,
+        };
+        let tools = vec![ToolDesc {
+            name: "canvas.stroke".into(),
+            description: "draw".into(),
+            input_schema: serde_json::json!({"type":"object"}),
+            backend: crate::tools::ToolBackend::Module,
+            required_caps: vec!["tool.invoke:canvas".into()],
+        }];
+        let out = compile_system_prompt(&PromptCompileInput {
+            spec: &spec,
+            skills: &[],
+            tools: &tools,
+            doc_index: &[],
+        });
+        assert!(out.contains("sess-real"));
+        assert!(out.contains("Canvas de session"));
+        assert!(out.contains("N'invente jamais"));
     }
 }

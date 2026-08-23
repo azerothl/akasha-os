@@ -1781,16 +1781,10 @@ async fn invoke_module(
     let module = tool.split('.').next().unwrap_or("").to_string();
     let mut args = args.clone();
     if module == "canvas" {
-        let missing = args
-            .get("session_id")
-            .and_then(|v| v.as_str())
-            .map(|s| s.is_empty())
-            .unwrap_or(true);
-        if missing {
-            if let Some(sid) = session_id.filter(|s| !s.is_empty()) {
-                if let Some(obj) = args.as_object_mut() {
-                    obj.insert("session_id".into(), serde_json::json!(sid));
-                }
+        // Always bind the agent chat session — models invent fake ids (chat-1, default).
+        if let Some(sid) = session_id.filter(|s| !s.is_empty()) {
+            if let Some(obj) = args.as_object_mut() {
+                obj.insert("session_id".into(), serde_json::json!(sid));
             }
         }
         if let Some(obj) = args.as_object_mut() {

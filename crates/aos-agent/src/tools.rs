@@ -457,6 +457,12 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
         });
     }
 
+    let sid_schema = || {
+        serde_json::json!({
+            "type":"string",
+            "description":"Omit — runtime binds the agent chat session_id (do not invent chat-1/default)"
+        })
+    };
     let canvas_tools = [
         (
             "canvas.stroke",
@@ -464,12 +470,12 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
             serde_json::json!({
                 "type":"object",
                 "properties":{
-                    "session_id":{"type":"string"},
+                    "session_id": sid_schema(),
                     "points":{"type":"array","items":{"type":"object","properties":{"x":{"type":"number"},"y":{"type":"number"}},"required":["x","y"]}},
                     "color":{"type":"string","description":"#RRGGBB"},
                     "width":{"type":"number","description":"épaisseur relative 0..1"}
                 },
-                "required":["session_id","points"]
+                "required":["points"]
             }),
         ),
         (
@@ -478,14 +484,14 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
             serde_json::json!({
                 "type":"object",
                 "properties":{
-                    "session_id":{"type":"string"},
+                    "session_id": sid_schema(),
                     "x":{"type":"number"},"y":{"type":"number"},
                     "w":{"type":"number"},"h":{"type":"number"},
                     "color":{"type":"string"},
                     "fill":{"type":"boolean"},
                     "width":{"type":"number"}
                 },
-                "required":["session_id","x","y","w","h"]
+                "required":["x","y","w","h"]
             }),
         ),
         (
@@ -494,14 +500,14 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
             serde_json::json!({
                 "type":"object",
                 "properties":{
-                    "session_id":{"type":"string"},
+                    "session_id": sid_schema(),
                     "x":{"type":"number"},"y":{"type":"number"},
                     "w":{"type":"number"},"h":{"type":"number"},
                     "color":{"type":"string"},
                     "fill":{"type":"boolean"},
                     "width":{"type":"number"}
                 },
-                "required":["session_id","x","y","w","h"]
+                "required":["x","y","w","h"]
             }),
         ),
         (
@@ -510,11 +516,11 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
             serde_json::json!({
                 "type":"object",
                 "properties":{
-                    "session_id":{"type":"string"},
+                    "session_id": sid_schema(),
                     "points":{"type":"array"},
                     "width":{"type":"number"}
                 },
-                "required":["session_id","points"]
+                "required":["points"]
             }),
         ),
         (
@@ -522,8 +528,7 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
             "Effacer tout le canvas de session",
             serde_json::json!({
                 "type":"object",
-                "properties":{"session_id":{"type":"string"}},
-                "required":["session_id"]
+                "properties":{"session_id": sid_schema()}
             }),
         ),
         (
@@ -531,8 +536,7 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
             "Annuler la dernière opération canvas",
             serde_json::json!({
                 "type":"object",
-                "properties":{"session_id":{"type":"string"}},
-                "required":["session_id"]
+                "properties":{"session_id": sid_schema()}
             }),
         ),
         (
@@ -541,10 +545,9 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
             serde_json::json!({
                 "type":"object",
                 "properties":{
-                    "session_id":{"type":"string"},
+                    "session_id": sid_schema(),
                     "after_seq":{"type":"integer"}
-                },
-                "required":["session_id"]
+                }
             }),
         ),
         (
@@ -553,12 +556,11 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
             serde_json::json!({
                 "type":"object",
                 "properties":{
-                    "session_id":{"type":"string"},
+                    "session_id": sid_schema(),
                     "path":{"type":"string"},
                     "width":{"type":"integer"},
                     "height":{"type":"integer"}
-                },
-                "required":["session_id"]
+                }
             }),
         ),
     ];
