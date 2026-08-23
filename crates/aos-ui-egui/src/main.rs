@@ -1497,48 +1497,88 @@ struct RosterEditDraft {
     model_id: String,
 }
 
-const ROSTER_TOOL_CATALOG: &[&str] = &[
-    "notes.create",
-    "notes.list",
-    "notes.read",
-    "notes.search",
-    "notes.update",
-    "notes.links",
-    "notes.related",
-    "tasks.create",
-    "tasks.list",
-    "tasks.update",
-    "tasks.complete",
-    "fs.read",
-    "fs.write",
-    "fs.list",
-    "web.search",
-    "web.browse",
-    "net.fetch",
-    "files.generate",
-    "canvas.stroke",
-    "canvas.rect",
-    "canvas.ellipse",
-    "canvas.erase",
-    "canvas.clear",
-    "canvas.undo",
-    "canvas.get",
-    "canvas.export",
-    "agent.spawn",
-    "agent.await",
-    "plan.update",
+const ROSTER_TOOL_GROUPS: &[(&str, &[&str])] = &[
+    (
+        "notes",
+        &[
+            "notes.create",
+            "notes.list",
+            "notes.read",
+            "notes.search",
+            "notes.update",
+            "notes.links",
+            "notes.related",
+        ],
+    ),
+    (
+        "tasks",
+        &[
+            "tasks.create",
+            "tasks.list",
+            "tasks.update",
+            "tasks.complete",
+        ],
+    ),
+    (
+        "files",
+        &["fs.read", "fs.write", "fs.list", "files.generate"],
+    ),
+    (
+        "web",
+        &["web.search", "web.browse", "net.fetch"],
+    ),
+    (
+        "canvas",
+        &[
+            "canvas.stroke",
+            "canvas.rect",
+            "canvas.ellipse",
+            "canvas.erase",
+            "canvas.clear",
+            "canvas.undo",
+            "canvas.get",
+            "canvas.export",
+        ],
+    ),
+    (
+        "agents",
+        &["agent.spawn", "agent.await", "plan.update"],
+    ),
 ];
 
-fn ui_roster_tool_checkboxes(ui: &mut egui::Ui, selected: &mut Vec<String>) {
-    for name in ROSTER_TOOL_CATALOG {
-        let mut on = selected.iter().any(|t| t == name);
-        if ui.checkbox(&mut on, *name).changed() {
-            if on {
-                selected.push((*name).into());
-            } else {
-                selected.retain(|t| t != name);
+fn roster_tool_family_label(t: &i18n::UiStrings, family: &str) -> &'static str {
+    match family {
+        "notes" => t.agents_tool_family_notes,
+        "tasks" => t.agents_tool_family_tasks,
+        "files" => t.agents_tool_family_files,
+        "web" => t.agents_tool_family_web,
+        "canvas" => t.agents_tool_family_canvas,
+        "agents" => t.agents_tool_family_agents,
+        _ => "?",
+    }
+}
+
+fn ui_roster_tool_checkboxes(ui: &mut egui::Ui, t: &i18n::UiStrings, selected: &mut Vec<String>) {
+    for (family, tools) in ROSTER_TOOL_GROUPS {
+        ui.label(roster_tool_family_label(t, family));
+        ui.indent(family, |ui| {
+            for name in *tools {
+                let label = i18n::roster_tool_label(t, name);
+                let mut on = selected.iter().any(|t| t == name);
+                if ui
+                    .checkbox(&mut on, label)
+                    .on_hover_text(*name)
+                    .changed()
+                {
+                    if on {
+                        selected.push((*name).into());
+                    } else {
+                        selected.retain(|t| t != name);
+                    }
+                }
             }
-        }
+        });
+        ui.add_space(4.0);
     }
 }
 
@@ -5306,9 +5346,9 @@ impl UiApp {
         };
         ui.separator();
         ui.collapsing(t.agents_tools, |ui| {
-            ui_roster_tool_checkboxes(ui, &mut draft.tools);
+            ui_roster_tool_checkboxes(ui, &t, &mut draft.tools);
         });
-        ui.collapsing("Skills", |ui| {
+        ui.collapsing(t.agents_skills, |ui| {
             if self.skill_catalog.is_empty() {
                 ui.weak(t.agents_catalog_empty);
                 for name in ["notes-writer", "research", "file-author", "planner"] {
@@ -5349,7 +5389,8 @@ impl UiApp {
             for s in self.mcp_catalog.clone() {
                 let mut on = draft.mcp_servers.contains(&s.name);
                 if ui
-                    .checkbox(&mut on, format!("{} ({})", s.name, s.command))
+                    .checkbox(&mut on, &s.name)
+                    .on_hover_text(&s.command)
                     .changed()
                 {
                     if on {
