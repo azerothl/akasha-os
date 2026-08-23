@@ -5,10 +5,10 @@ const SIGNAL = 0x3ee0c4;
 const PAPER = 0xdce6f0;
 
 const bodies = [
-  { id: "MEMORY", orbit: 0.32, size: 0.055, speed: 0.62, phase: 0.4, kind: "memory" },
-  { id: "CAPS", orbit: 0.56, size: 0.068, speed: 0.41, phase: 1.7, kind: "caps" },
-  { id: "GPU", orbit: 0.68, size: 0.078, speed: 0.27, phase: 3.3, kind: "gpu" },
-  { id: "AGENTS", orbit: 0.8, size: 0.092, speed: 0.16, phase: 5.1, kind: "agents" },
+  { id: "CHAT", orbit: 0.32, size: 0.055, speed: 0.62, phase: 0.4, kind: "chat" },
+  { id: "CREATE", orbit: 0.56, size: 0.068, speed: 0.41, phase: 1.7, kind: "create" },
+  { id: "CAPS", orbit: 0.68, size: 0.078, speed: 0.27, phase: 3.3, kind: "caps" },
+  { id: "GPU", orbit: 0.8, size: 0.092, speed: 0.16, phase: 5.1, kind: "gpu" },
 ];
 
 const rails = [0.2, 0.32, 0.44, 0.56, 0.68, 0.8, 0.92];
@@ -59,11 +59,20 @@ function gearGeometry(radius, teeth, depth) {
 }
 
 function globeMaterial(kind) {
-  if (kind === "memory") {
+  if (kind === "chat") {
     return new THREE.MeshStandardMaterial({
       color: PAPER,
       roughness: 0.42,
       metalness: 0.12,
+    });
+  }
+  if (kind === "create") {
+    return new THREE.MeshStandardMaterial({
+      color: PAPER,
+      emissive: SIGNAL,
+      emissiveIntensity: 0.18,
+      roughness: 0.35,
+      metalness: 0.08,
     });
   }
   if (kind === "caps") {
@@ -82,13 +91,7 @@ function globeMaterial(kind) {
       metalness: 0.85,
     });
   }
-  return new THREE.MeshStandardMaterial({
-    color: PAPER,
-    emissive: SIGNAL,
-    emissiveIntensity: 0.18,
-    roughness: 0.35,
-    metalness: 0.08,
-  });
+  throw new Error(`Unknown globe kind: ${kind}`);
 }
 
 function makeLabel(text) {
