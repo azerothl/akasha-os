@@ -3620,23 +3620,58 @@ impl UiApp {
         });
     }
 
-    fn ui_room_session_header(&mut self, ui: &mut egui::Ui, t: &i18n::UiStrings) {
+    fn dispatch_canvas_ui_action(
+        &mut self,
+        action: Option<chat_canvas::CanvasUiAction>,
+        session_id: &str,
+    ) {
+        match action {
+            Some(chat_canvas::CanvasUiAction::Apply(op)) => {
+                match &op {
+                    aos_proto::CanvasOpBody::Clear => self.canvas_panel.ops.clear(),
+                    aos_proto::CanvasOpBody::Undo => {
+                        let _ = self.canvas_panel.ops.pop();
+                    }
+                    _ => {}
+                }
+                let _ = self.cmd_tx.send(Cmd::CanvasApply {
+                    session_id: session_id.to_string(),
+                    author_id: "human".into(),
+                    op,
+                });
+            }
+            Some(chat_canvas::CanvasUiAction::Export) => {
+                let _ = self.cmd_tx.send(Cmd::CanvasExport {
+                    session_id: session_id.to_string(),
+                });
+            }
+            None => {}
+        }
+    }
+
+    fn canvas_poll_if_due(&mut self, ui: &egui::Ui, session_id: &str) {
+        let now = ui.ctx().input(|i| i.time);
+        if now >= self.canvas_panel.poll_due {
+            self.canvas_panel.poll_due = now + 0.20;
+            let after = if self.canvas_panel.last_seen_seq > 0 {
+                Some(self.canvas_panel.last_seen_seq)
+            } else {
+                None
+            };
+            let _ = self.cmd_tx.send(Cmd::CanvasPoll {
+                session_id: session_id.to_string(),
+                after_seq: after,
+            });
+        }
+    }
+
+    fn ui_session_bar(&mut self, ui: &mut egui::Ui, t: &i18n::UiStrings) {
         let Some(sid) = self.active_session.clone() else {
             return;
         };
         let meta = chat_room::active_session_meta(&self.sessions, Some(sid.as_str()));
         let room = chat_room::session_is_room(meta);
-        if !room {
-            if ui.button(t.room_enable).clicked() {
-                let _ = self.cmd_tx.send(Cmd::SessionSetMode {
-                    session_id: sid,
-                    mode: ChatSessionMode::Room,
-                });
-            }
-            ui.add_space(4.0);
-            return;
-        }
-
+        let canvas_open = meta.map(|m| m.canvas_open).unwrap_or(false);
         let members_vec = meta.map(|m| m.members.clone()).unwrap_or_default();
         let members = members_vec.as_slice();
         let model_id = meta.and_then(|m| m.model_id.clone());
@@ -3644,32 +3679,75 @@ impl UiApp {
             .sessions
             .iter()
             .find(|s| s.id == sid)
-            .map(|s| s.title.as_str())
-            .unwrap_or("Session");
+            .map(|s| s.title.clone())
+            .unwrap_or_else(|| "Session".to_string());
         let count_line = t
             .room_header_member_count
             .replace("{n}", &members.len().to_string());
 
         ui.horizontal(|ui| {
-            let header = egui::RichText::new(session_title).strong();
+            let header = egui::RichText::new(&session_title).strong();
             let title_resp = ui.add(
-                egui::Label::new(header).sense(egui::Sense::click()),
+                egui::Label::new(header).sense(if room {
+                    egui::Sense::click()
+                } else {
+                    egui::Sense::hover()
+                }),
             );
-            if title_resp.clicked() {
+            if room && title_resp.clicked() {
                 self.room_members_pane_open = !self.room_members_pane_open;
             }
-            title_resp.on_hover_text(t.room_header_open_members);
-            if !members.is_empty() {
-                ui.weak(format!("· {count_line}"));
+            if room {
+                title_resp.on_hover_text(t.room_header_open_members);
+                if !members.is_empty() {
+                    ui.weak(format!("· {count_line}"));
+                }
+                if self.room_members_pane_open {
+                    ui.weak("▾");
+                } else {
+                    ui.weak("▸");
+                }
             }
-            if self.room_members_pane_open {
-                ui.weak("▾");
-            } else {
-                ui.weak("▸");
+
+            let mut toolbar_action: Option<chat_canvas::CanvasUiAction> = None;
+            if canvas_open {
+                ui.separator();
+                ui.horizontal_wrapped(|ui| {
+                    toolbar_action = chat_canvas::ui_canvas_toolbar(ui, t, &mut self.canvas_panel);
+                });
+            }
+
+            let toggle_reserve = 150.0_f32;
+            let spare = ui.available_width() - toggle_reserve;
+            if spare > 0.0 {
+                ui.add_space(spare);
+            }
+            if ui.selectable_label(room, t.session_toggle_salon).clicked() {
+                let mode = if room {
+                    ChatSessionMode::Direct
+                } else {
+                    ChatSessionMode::Room
+                };
+                let _ = self.cmd_tx.send(Cmd::SessionSetMode {
+                    session_id: sid.clone(),
+                    mode,
+                });
+            }
+            if ui
+                .selectable_label(canvas_open, t.session_toggle_canvas)
+                .clicked()
+            {
+                let _ = self.cmd_tx.send(Cmd::CanvasSetOpen {
+                    session_id: sid.clone(),
+                    open: !canvas_open,
+                });
+            }
+            if let Some(action) = toolbar_action {
+                self.dispatch_canvas_ui_action(Some(action), &sid);
             }
         });
 
-        if self.room_members_pane_open {
+        if room && self.room_members_pane_open {
             egui::Frame::group(ui.style())
                 .inner_margin(egui::Margin::symmetric(8, 6))
                 .show(ui, |ui| {
@@ -3693,7 +3771,7 @@ impl UiApp {
                 });
         }
 
-        if !members.is_empty() && !self.room_members_pane_open {
+        if room && !members.is_empty() && !self.room_members_pane_open {
             ui.horizontal_wrapped(|ui| {
                 for mem in members {
                     self.ui_room_member_chip(ui, t, &sid, mem);
@@ -3701,74 +3779,236 @@ impl UiApp {
             });
         }
 
-        self.ui_room_persona_shortcuts(ui, t, &sid, members, model_id);
+        if room {
+            self.ui_room_persona_shortcuts(ui, t, &sid, members, model_id);
+        }
 
         ui.add_space(4.0);
     }
 
-    fn ui_canvas_session_header(&mut self, ui: &mut egui::Ui, t: &i18n::UiStrings) {
-        let Some(sid) = self.active_session.clone() else {
-            return;
-        };
-        let open = chat_room::active_session_meta(&self.sessions, Some(sid.as_str()))
-            .map(|m| m.canvas_open)
-            .unwrap_or(false);
-        ui.horizontal(|ui| {
-            if open {
-                if ui.button(t.canvas_disable).clicked() {
-                    let _ = self.cmd_tx.send(Cmd::CanvasSetOpen {
-                        session_id: sid.clone(),
-                        open: false,
+    fn ui_chat_transcript(
+        &mut self,
+        ui: &mut egui::Ui,
+        t: &i18n::UiStrings,
+        room_mode: bool,
+        room_members: &[ChatRoomMember],
+        scroll_h: f32,
+    ) {
+        egui::ScrollArea::vertical()
+            .id_salt("conversation_scroll")
+            .auto_shrink([false, false])
+            .max_height(scroll_h)
+            .min_scrolled_height(scroll_h)
+            .stick_to_bottom(true)
+            .show(ui, |ui| {
+                ui.set_min_width(ui.available_width());
+                ui.set_min_height(scroll_h);
+                let mut open_agent: Option<String> = None;
+                let mut target_reply: Option<String> = None;
+                let mut open_studio: Option<(String, String)> = None;
+                let reply_id = self.blocked_ask_agent().map(|a| a.agent_id.clone());
+                let n = self.chat.len();
+                for i in 0..n {
+                    let role = self.chat[i].role.clone();
+                    let text = self.chat[i].text.clone();
+                    let attachments = self.chat[i].attachments.clone();
+                    let speaker_id = self.chat[i].speaker_id.clone();
+                    let is_completion = attachments.iter().any(|a| {
+                        matches!(
+                            a,
+                            ChatAttachment::AgentRef { origin, .. } if origin == "completion"
+                        )
                     });
-                }
-            } else if ui.button(t.canvas_enable).clicked() {
-                let _ = self.cmd_tx.send(Cmd::CanvasSetOpen {
-                    session_id: sid.clone(),
-                    open: true,
-                });
-            }
-        });
-        if open {
-            let action = chat_canvas::ui_chat_canvas(ui, t, &mut self.canvas_panel);
-            match action {
-                Some(chat_canvas::CanvasUiAction::Apply(op)) => {
-                    // Optimistic local apply for clear/undo feedback
-                    match &op {
-                        aos_proto::CanvasOpBody::Clear => self.canvas_panel.ops.clear(),
-                        aos_proto::CanvasOpBody::Undo => {
-                            let _ = self.canvas_panel.ops.pop();
+                    let text = if role == "assistant"
+                        && !is_completion
+                        && speaker_id.is_none()
+                    {
+                        agent_panel::format_assistant_display(&text)
+                    } else {
+                        text
+                    };
+                    let kind = chat_bubble_kind(&role, speaker_id.as_deref(), room_mode);
+                    let mut shown_role = chat_role_label(kind, t, &role);
+                    if kind == ChatBubbleKind::RoomSpeaker {
+                        if let Some(sid) = speaker_id.as_deref() {
+                            shown_role = room_members
+                                .iter()
+                                .find(|m| m.agent_id == sid)
+                                .map(|m| chat_room::member_display_label(t, m))
+                                .unwrap_or_else(|| sid.to_string());
                         }
-                        _ => {}
                     }
-                    let _ = self.cmd_tx.send(Cmd::CanvasApply {
-                        session_id: sid.clone(),
-                        author_id: "human".into(),
-                        op,
+                    let (fill, stroke, role_color) = if kind == ChatBubbleKind::RoomSpeaker {
+                        if let Some(sid) = speaker_id.as_deref() {
+                            let (r, g, b) =
+                                chat_room::speaker_color_rgb(sid, ui.visuals().dark_mode);
+                            let c = egui::Color32::from_rgb(r, g, b);
+                            (c.gamma_multiply(0.25), c, c)
+                        } else {
+                            chat_bubble_colors(kind, ui.visuals().dark_mode)
+                        }
+                    } else {
+                        chat_bubble_colors(kind, ui.visuals().dark_mode)
+                    };
+                    let frame_colors = if kind == ChatBubbleKind::RoomSpeaker {
+                        Some((fill, stroke))
+                    } else {
+                        None
+                    };
+                    chat_message_frame(ui, kind, frame_colors, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.colored_label(
+                                role_color,
+                                egui::RichText::new(&shown_role).strong().small(),
+                            );
+                            if ui.small_button(t.btn_copy).clicked() {
+                                ui.ctx().copy_text(text.clone());
+                                self.status = t.copied.into();
+                            }
+                        });
+                        if !text.is_empty() {
+                            if role == "assistant" {
+                                ui.push_id(("chat_md", i), |ui| {
+                                    CommonMarkViewer::new().show(
+                                        ui,
+                                        &mut self.chat_md_cache,
+                                        &text,
+                                    );
+                                });
+                            } else {
+                                ui.add(egui::Label::new(&text).wrap());
+                            }
+                        }
+                        for (j, att) in attachments.iter().enumerate() {
+                            match att {
+                                ChatAttachment::AgentRef {
+                                    agent_id,
+                                    title,
+                                    origin,
+                                } => {
+                                    if origin == "room" {
+                                        continue;
+                                    }
+                                    let info = self
+                                        .agents
+                                        .iter()
+                                        .find(|a| a.agent_id == *agent_id);
+                                    let selected =
+                                        reply_id.as_deref() == Some(agent_id.as_str());
+                                    let action = ui
+                                        .push_id(
+                                            ("chat_agent_card", i, j, agent_id.as_str()),
+                                            |ui| {
+                                                agent_panel::chat_agent_card(
+                                                    ui,
+                                                    info,
+                                                    agent_id.as_str(),
+                                                    title.as_str(),
+                                                    origin.as_str(),
+                                                    selected && origin == "ask",
+                                                    t,
+                                                )
+                                            },
+                                        )
+                                        .inner;
+                                    match action {
+                                        agent_panel::ChatCardAction::OpenDetail => {
+                                            open_agent = Some(agent_id.clone());
+                                        }
+                                        agent_panel::ChatCardAction::TargetReply => {
+                                            target_reply = Some(agent_id.clone());
+                                        }
+                                        agent_panel::ChatCardAction::None => {}
+                                    }
+                                }
+                                ChatAttachment::Image { path, prompt } => {
+                                    chat_media::render_image(
+                                        ui,
+                                        t,
+                                        path.as_str(),
+                                        prompt.as_str(),
+                                        || {
+                                            open_studio = Some((prompt.clone(), path.clone()));
+                                        },
+                                    );
+                                }
+                                ChatAttachment::Audio { path } => {
+                                    chat_media::render_audio(ui, path.as_str());
+                                }
+                                ChatAttachment::TtsDraft { .. } => {
+                                    let piper: Vec<String> = self
+                                        .model_infos
+                                        .iter()
+                                        .filter(|m| m.id.contains("piper"))
+                                        .map(|m| m.id.clone())
+                                        .collect();
+                                    if chat_media::render_tts_card(
+                                        ui,
+                                        t,
+                                        &self.cmd_tx,
+                                        &mut self.chat[i].attachments[j],
+                                        &piper,
+                                    ) {
+                                        self.status = "audio : génération…".into();
+                                    }
+                                }
+                            }
+                        }
                     });
                 }
-                Some(chat_canvas::CanvasUiAction::Export) => {
-                    let _ = self.cmd_tx.send(Cmd::CanvasExport {
-                        session_id: sid.clone(),
+                if let Some(id) = open_agent {
+                    self.open_agent_tab(&id);
+                }
+                if let Some((prompt, path)) = open_studio {
+                    self.image_studio.open_from_chat(&prompt, &path, None);
+                    self.image_studio.apply_history_for_path(&path);
+                    self.tab = Tab::Image;
+                }
+                if let Some(id) = target_reply {
+                    self.ask_reply_target = Some(id);
+                    self.chat_refocus = true;
+                    self.status = "réponse destinée à cet agent".into();
+                }
+                if !self.streaming.is_empty() {
+                    let (_, _, role_color) =
+                        chat_bubble_colors(ChatBubbleKind::Assistant, ui.visuals().dark_mode);
+                    chat_message_frame(ui, ChatBubbleKind::Assistant, None, |ui| {
+                        ui.colored_label(
+                            role_color,
+                            egui::RichText::new(t.chat_assistant).strong().small(),
+                        );
+                        let streaming =
+                            agent_panel::format_streaming_preview(&self.streaming);
+                        ui.push_id("chat_md_stream", |ui| {
+                            CommonMarkViewer::new().show(
+                                ui,
+                                &mut self.chat_md_cache,
+                                &streaming,
+                            );
+                        });
+                    });
+                } else if self.chat_pending {
+                    let (_, _, role_color) =
+                        chat_bubble_colors(ChatBubbleKind::Assistant, ui.visuals().dark_mode);
+                    let thinking = if room_mode {
+                        self.room_turn_pending_text
+                            .as_deref()
+                            .and_then(|msg| {
+                                chat_room::format_turn_speaker_queue(t, msg, room_members)
+                            })
+                            .unwrap_or_else(|| t.chat_assistant.to_string())
+                    } else {
+                        t.chat_assistant.to_string()
+                    };
+                    chat_message_frame(ui, ChatBubbleKind::Assistant, None, |ui| {
+                        ui.colored_label(
+                            role_color,
+                            egui::RichText::new(&thinking).strong().small(),
+                        );
+                        ui.weak("…");
                     });
                 }
-                None => {}
-            }
-            // Poll for agent strokes (~200ms)
-            let now = ui.ctx().input(|i| i.time);
-            if now >= self.canvas_panel.poll_due {
-                self.canvas_panel.poll_due = now + 0.20;
-                let after = if self.canvas_panel.last_seen_seq > 0 {
-                    Some(self.canvas_panel.last_seen_seq)
-                } else {
-                    None
-                };
-                let _ = self.cmd_tx.send(Cmd::CanvasPoll {
-                    session_id: sid,
-                    after_seq: after,
-                });
-            }
-        }
-        ui.add_space(4.0);
+            });
     }
 
     fn ui_chat(&mut self, ui: &mut egui::Ui) {
@@ -4029,14 +4269,7 @@ impl UiApp {
                         &self.sessions,
                         self.active_session.as_deref(),
                     ));
-                    if !room_mode {
-                        ui.heading("Conversation");
-                        if let Some(id) = &self.active_session {
-                            ui.weak(format!("session {id}"));
-                        }
-                    }
-                    self.ui_room_session_header(ui, &t);
-                    self.ui_canvas_session_header(ui, &t);
+                    self.ui_session_bar(ui, &t);
 
                     let room_members: Vec<ChatRoomMember> = chat_room::active_session_meta(
                         &self.sessions,
@@ -4044,248 +4277,64 @@ impl UiApp {
                     )
                     .map(|m| m.members.clone())
                     .unwrap_or_default();
+                    let canvas_open = chat_room::active_session_meta(
+                        &self.sessions,
+                        self.active_session.as_deref(),
+                    )
+                    .map(|m| m.canvas_open)
+                    .unwrap_or(false);
+                    let active_sid = self.active_session.clone();
 
                     let input_reserve = 44.0_f32;
-                    let scroll_h = (ui.available_height() - input_reserve).max(120.0);
-                    egui::ScrollArea::vertical()
-                        .id_salt("conversation_scroll")
-                        .auto_shrink([false, false])
-                        .max_height(scroll_h)
-                        .min_scrolled_height(scroll_h)
-                        .stick_to_bottom(true)
-                        .show(ui, |ui| {
-                            ui.set_min_width(ui.available_width());
-                            ui.set_min_height(scroll_h);
-                            let mut open_agent: Option<String> = None;
-                            let mut target_reply: Option<String> = None;
-                            let mut open_studio: Option<(String, String)> = None;
-                            let reply_id = self.blocked_ask_agent().map(|a| a.agent_id.clone());
-                            let n = self.chat.len();
-                            for i in 0..n {
-                                let role = self.chat[i].role.clone();
-                                let text = self.chat[i].text.clone();
-                                let attachments = self.chat[i].attachments.clone();
-                                let speaker_id = self.chat[i].speaker_id.clone();
-                                let is_completion = attachments.iter().any(|a| {
-                                    matches!(
-                                        a,
-                                        ChatAttachment::AgentRef { origin, .. }
-                                            if origin == "completion"
-                                    )
-                                });
-                                let text = if role == "assistant"
-                                    && !is_completion
-                                    && speaker_id.is_none()
-                                {
-                                    agent_panel::format_assistant_display(&text)
-                                } else {
-                                    text
-                                };
-                                let kind = chat_bubble_kind(
-                                    &role,
-                                    speaker_id.as_deref(),
-                                    room_mode,
-                                );
-                                let mut shown_role = chat_role_label(kind, &t, &role);
-                                if kind == ChatBubbleKind::RoomSpeaker {
-                                    if let Some(sid) = speaker_id.as_deref() {
-                                        shown_role = room_members
-                                            .iter()
-                                            .find(|m| m.agent_id == sid)
-                                            .map(|m| chat_room::member_display_label(&t, m))
-                                            .unwrap_or_else(|| sid.to_string());
-                                    }
-                                }
-                                let (fill, stroke, role_color) = if kind == ChatBubbleKind::RoomSpeaker
-                                {
-                                    if let Some(sid) = speaker_id.as_deref() {
-                                        let (r, g, b) =
-                                            chat_room::speaker_color_rgb(sid, ui.visuals().dark_mode);
-                                        let c = egui::Color32::from_rgb(r, g, b);
-                                        (
-                                            c.gamma_multiply(0.25),
-                                            c,
-                                            c,
-                                        )
-                                    } else {
-                                        chat_bubble_colors(kind, ui.visuals().dark_mode)
-                                    }
-                                } else {
-                                    chat_bubble_colors(kind, ui.visuals().dark_mode)
-                                };
-                                let frame_colors = if kind == ChatBubbleKind::RoomSpeaker {
-                                    Some((fill, stroke))
-                                } else {
-                                    None
-                                };
-                                chat_message_frame(ui, kind, frame_colors, |ui| {
-                                    ui.horizontal(|ui| {
-                                        ui.colored_label(
-                                            role_color,
-                                            egui::RichText::new(&shown_role).strong().small(),
-                                        );
-                                        if ui.small_button(t.btn_copy).clicked() {
-                                            ui.ctx().copy_text(text.clone());
-                                            self.status = t.copied.into();
-                                        }
-                                    });
-                                    if !text.is_empty() {
-                                        if role == "assistant" {
-                                            ui.push_id(("chat_md", i), |ui| {
-                                                CommonMarkViewer::new().show(
-                                                    ui,
-                                                    &mut self.chat_md_cache,
-                                                    &text,
-                                                );
-                                            });
-                                        } else {
-                                            ui.add(egui::Label::new(&text).wrap());
-                                        }
-                                    }
-                                    for (j, att) in attachments.iter().enumerate() {
-                                        match att {
-                                            ChatAttachment::AgentRef {
-                                                agent_id,
-                                                title,
-                                                origin,
-                                            } => {
-                                                if origin == "room" {
-                                                    continue;
-                                                }
-                                                let info = self
-                                                    .agents
-                                                    .iter()
-                                                    .find(|a| a.agent_id == *agent_id);
-                                                let selected =
-                                                    reply_id.as_deref() == Some(agent_id.as_str());
-                                                let action = ui
-                                                    .push_id(
-                                                        (
-                                                            "chat_agent_card",
-                                                            i,
-                                                            j,
-                                                            agent_id.as_str(),
-                                                        ),
-                                                        |ui| {
-                                                            agent_panel::chat_agent_card(
-                                                                ui,
-                                                                info,
-                                                                agent_id.as_str(),
-                                                                title.as_str(),
-                                                                origin.as_str(),
-                                                                selected && origin == "ask",
-                                                                &t,
-                                                            )
-                                                        },
-                                                    )
-                                                    .inner;
-                                                match action {
-                                                    agent_panel::ChatCardAction::OpenDetail => {
-                                                        open_agent = Some(agent_id.clone());
-                                                    }
-                                                    agent_panel::ChatCardAction::TargetReply => {
-                                                        target_reply = Some(agent_id.clone());
-                                                    }
-                                                    agent_panel::ChatCardAction::None => {}
-                                                }
-                                            }
-                                            ChatAttachment::Image { path, prompt } => {
-                                                chat_media::render_image(
-                                                    ui,
-                                                    &t,
-                                                    path.as_str(),
-                                                    prompt.as_str(),
-                                                    || {
-                                                        open_studio =
-                                                            Some((prompt.clone(), path.clone()));
-                                                    },
-                                                );
-                                            }
-                                            ChatAttachment::Audio { path } => {
-                                                chat_media::render_audio(ui, path.as_str());
-                                            }
-                                            ChatAttachment::TtsDraft { .. } => {
-                                                let piper: Vec<String> = self
-                                                    .model_infos
-                                                    .iter()
-                                                    .filter(|m| m.id.contains("piper"))
-                                                    .map(|m| m.id.clone())
-                                                    .collect();
-                                                if chat_media::render_tts_card(
-                                                    ui,
-                                                    &t,
-                                                    &self.cmd_tx,
-                                                    &mut self.chat[i].attachments[j],
-                                                    &piper,
-                                                ) {
-                                                    self.status = "audio : génération…".into();
-                                                }
-                                            }
-                                        }
-                                    }
-                                });
-                            }
-                            if let Some(id) = open_agent {
-                                self.open_agent_tab(&id);
-                            }
-                            if let Some((prompt, path)) = open_studio {
-                                self.image_studio.open_from_chat(&prompt, &path, None);
-                                self.image_studio.apply_history_for_path(&path);
-                                self.tab = Tab::Image;
-                            }
-                            if let Some(id) = target_reply {
-                                self.ask_reply_target = Some(id);
-                                self.chat_refocus = true;
-                                self.status = "réponse destinée à cet agent".into();
-                            }
-                            if !self.streaming.is_empty() {
-                                let (_, _, role_color) = chat_bubble_colors(
-                                    ChatBubbleKind::Assistant,
-                                    ui.visuals().dark_mode,
-                                );
-                                chat_message_frame(ui, ChatBubbleKind::Assistant, None, |ui| {
-                                    ui.colored_label(
-                                        role_color,
-                                        egui::RichText::new(t.chat_assistant).strong().small(),
+                    let content_h = (ui.available_height() - input_reserve).max(120.0);
+
+                    if canvas_open {
+                        let split_gap = 8.0_f32;
+                        let canvas_min = 180.0_f32;
+                        ui.horizontal(|ui| {
+                            ui.set_min_height(content_h);
+                            let total_w = ui.available_width();
+                            let canvas_w = ((total_w - split_gap) * 0.42)
+                                .max(canvas_min)
+                                .min(total_w - 220.0);
+                            let transcript_w = (total_w - canvas_w - split_gap).max(200.0);
+
+                            ui.allocate_ui_with_layout(
+                                egui::vec2(transcript_w, content_h),
+                                egui::Layout::top_down(egui::Align::Min).with_cross_justify(true),
+                                |ui| {
+                                    self.ui_chat_transcript(
+                                        ui,
+                                        &t,
+                                        room_mode,
+                                        &room_members,
+                                        content_h,
                                     );
-                                    let streaming =
-                                        agent_panel::format_streaming_preview(&self.streaming);
-                                    ui.push_id("chat_md_stream", |ui| {
-                                        CommonMarkViewer::new().show(
-                                            ui,
-                                            &mut self.chat_md_cache,
-                                            &streaming,
-                                        );
-                                    });
-                                });
-                            } else if self.chat_pending {
-                                let (_, _, role_color) = chat_bubble_colors(
-                                    ChatBubbleKind::Assistant,
-                                    ui.visuals().dark_mode,
-                                );
-                                let thinking = if room_mode {
-                                    self.room_turn_pending_text
-                                        .as_deref()
-                                        .and_then(|msg| {
-                                            chat_room::format_turn_speaker_queue(
-                                                &t,
-                                                msg,
-                                                &room_members,
-                                            )
-                                        })
-                                        .unwrap_or_else(|| t.chat_assistant.to_string())
-                                } else {
-                                    t.chat_assistant.to_string()
-                                };
-                                chat_message_frame(ui, ChatBubbleKind::Assistant, None, |ui| {
-                                    ui.colored_label(
-                                        role_color,
-                                        egui::RichText::new(&thinking).strong().small(),
-                                    );
-                                    ui.weak("…");
-                                });
-                            }
+                                },
+                            );
+                            ui.add_space(split_gap);
+                            ui.allocate_ui_with_layout(
+                                egui::vec2(canvas_w, content_h),
+                                egui::Layout::top_down(egui::Align::Min).with_cross_justify(true),
+                                |ui| {
+                                    if let Some(ref sid) = active_sid {
+                                        let action =
+                                            chat_canvas::ui_canvas_surface(ui, &mut self.canvas_panel);
+                                        self.dispatch_canvas_ui_action(action, sid);
+                                        self.canvas_poll_if_due(ui, sid);
+                                    }
+                                },
+                            );
                         });
+                    } else {
+                        self.ui_chat_transcript(
+                            ui,
+                            &t,
+                            room_mode,
+                            &room_members,
+                            content_h,
+                        );
+                    }
 
                     let completions = slash_completions(&self.input);
                     let mention_hits = if room_mode {

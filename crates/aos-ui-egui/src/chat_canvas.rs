@@ -6,6 +6,7 @@ use eframe::egui::{Color32, Pos2, Sense, Stroke, Ui, Vec2};
 
 use crate::chat_room;
 use crate::i18n::UiStrings;
+use crate::theme::{PAPER, SIGNAL, VOID};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CanvasTool {
@@ -36,8 +37,9 @@ pub struct CanvasPanelState {
     pub drag_current: Option<CanvasPoint>,
     /// Remote ops animating in (seq → start time seconds).
     pub animating: Vec<(u64, f64)>,
-    pub collapsed: bool,
     pub poll_due: f64,
+    /// Awaiting one-step confirmation before clear.
+    pub clear_confirm_open: bool,
 }
 
 impl Default for CanvasPanelState {
@@ -53,8 +55,8 @@ impl Default for CanvasPanelState {
             drag_origin: None,
             drag_current: None,
             animating: Vec::new(),
-            collapsed: false,
             poll_due: 0.0,
+            clear_confirm_open: false,
         }
     }
 }
@@ -174,11 +176,7 @@ fn paint_op(
             }
             let n = ((points.len() as f32) * progress).ceil().max(1.0) as usize;
             let slice = &points[..n.min(points.len())];
-            let bg = if dark {
-                Color32::from_rgb(7, 11, 20)
-            } else {
-                Color32::from_rgb(232, 238, 246)
-            };
+            let bg = canvas_bg(dark);
             let rad = radius_px(rect, *width);
             let screen: Vec<Pos2> = slice.iter().map(|p| to_screen(rect, *p)).collect();
             if screen.len() == 1 {
@@ -256,6 +254,10 @@ fn paint_op(
     }
 }
 
+fn canvas_bg(dark: bool) -> Color32 {
+    if dark { VOID } else { PAPER }
+}
+
 fn ellipse_points(r: eframe::egui::Rect, n: usize) -> Vec<Pos2> {
     let c = r.center();
     let rx = r.width() * 0.5;
@@ -268,71 +270,87 @@ fn ellipse_points(r: eframe::egui::Rect, n: usize) -> Vec<Pos2> {
         .collect()
 }
 
-/// Toolbar + drawing surface.
-pub fn ui_chat_canvas(
+/// Drawing tools for the unified session bar (pen, eraser, shapes, tint, thickness).
+pub fn ui_canvas_toolbar(
     ui: &mut Ui,
     t: &UiStrings,
     state: &mut CanvasPanelState,
 ) -> Option<CanvasUiAction> {
     let mut action: Option<CanvasUiAction> = None;
-    ui.horizontal_wrapped(|ui| {
-        let collapse_label = if state.collapsed {
-            t.canvas_expand
-        } else {
-            t.canvas_collapse
-        };
-        if ui.small_button(collapse_label).clicked() {
-            state.collapsed = !state.collapsed;
-        }
-        ui.strong(t.canvas_title);
-        ui.separator();
-        ui.selectable_value(&mut state.tool, CanvasTool::Pen, t.canvas_tool_pen);
-        ui.selectable_value(&mut state.tool, CanvasTool::Eraser, t.canvas_tool_eraser);
-        ui.selectable_value(&mut state.tool, CanvasTool::Rect, t.canvas_tool_rect);
-        ui.selectable_value(&mut state.tool, CanvasTool::Ellipse, t.canvas_tool_ellipse);
-        let mut rgba = [
-            state.color.r() as f32 / 255.0,
-            state.color.g() as f32 / 255.0,
-            state.color.b() as f32 / 255.0,
-            1.0,
-        ];
-        if ui.color_edit_button_rgba_unmultiplied(&mut rgba).changed() {
-            state.color = Color32::from_rgb(
-                (rgba[0] * 255.0) as u8,
-                (rgba[1] * 255.0) as u8,
-                (rgba[2] * 255.0) as u8,
-            );
-        }
-        ui.add(eframe::egui::Slider::new(&mut state.width, 0.005..=0.06).text(t.canvas_width));
-        if ui.button(t.canvas_undo).clicked() {
-            action = Some(CanvasUiAction::Apply(CanvasOpBody::Undo));
-        }
-        if ui.button(t.canvas_clear).clicked() {
-            action = Some(CanvasUiAction::Apply(CanvasOpBody::Clear));
-        }
-        if ui.button(t.canvas_export).clicked() {
-            action = Some(CanvasUiAction::Export);
-        }
-    });
 
-    if state.collapsed {
-        return action;
+    ui.selectable_value(&mut state.tool, CanvasTool::Pen, t.canvas_tool_pen);
+    ui.selectable_value(&mut state.tool, CanvasTool::Eraser, t.canvas_tool_eraser);
+    ui.selectable_value(&mut state.tool, CanvasTool::Rect, t.canvas_tool_rect);
+    ui.selectable_value(&mut state.tool, CanvasTool::Ellipse, t.canvas_tool_ellipse);
+    ui.label(t.canvas_tint);
+    let mut rgba = [
+        state.color.r() as f32 / 255.0,
+        state.color.g() as f32 / 255.0,
+        state.color.b() as f32 / 255.0,
+        1.0,
+    ];
+    if ui.color_edit_button_rgba_unmultiplied(&mut rgba).changed() {
+        state.color = Color32::from_rgb(
+            (rgba[0] * 255.0) as u8,
+            (rgba[1] * 255.0) as u8,
+            (rgba[2] * 255.0) as u8,
+        );
+    }
+    ui.add(
+        eframe::egui::Slider::new(&mut state.width, 0.005..=0.06).text(t.canvas_width),
+    );
+
+    if ui
+        .button(eframe::egui::RichText::new(t.canvas_undo).weak())
+        .clicked()
+    {
+        action = Some(CanvasUiAction::Apply(CanvasOpBody::Undo));
+    }
+    if ui
+        .button(eframe::egui::RichText::new(t.canvas_export).weak())
+        .clicked()
+    {
+        action = Some(CanvasUiAction::Export);
     }
 
+    if state.clear_confirm_open {
+        ui.label(eframe::egui::RichText::new(t.canvas_clear_confirm).small());
+        if ui
+            .button(eframe::egui::RichText::new(t.canvas_clear_confirm_yes).color(crate::theme::HYDROGEN))
+            .clicked()
+        {
+            state.clear_confirm_open = false;
+            action = Some(CanvasUiAction::Apply(CanvasOpBody::Clear));
+        }
+        if ui.button(t.canvas_clear_confirm_no).clicked() {
+            state.clear_confirm_open = false;
+        }
+    } else if ui
+        .button(eframe::egui::RichText::new(t.canvas_clear).color(crate::theme::HYDROGEN))
+        .clicked()
+    {
+        state.clear_confirm_open = true;
+    }
+
+    action
+}
+
+/// Drawing surface — fills available height in the split pane.
+pub fn ui_canvas_surface(
+    ui: &mut Ui,
+    state: &mut CanvasPanelState,
+) -> Option<CanvasUiAction> {
+    let mut action: Option<CanvasUiAction> = None;
     let dark = ui.visuals().dark_mode;
-    let avail = ui.available_width();
-    let canvas_h = 260.0_f32;
+    let avail = ui.available_size();
+    let canvas_h = avail.y.max(120.0);
+    let canvas_w = avail.x.max(180.0);
     let (response, painter) =
-        ui.allocate_painter(Vec2::new(avail, canvas_h), Sense::click_and_drag());
+        ui.allocate_painter(Vec2::new(canvas_w, canvas_h), Sense::click_and_drag());
     let rect = response.rect;
-    let bg = if dark {
-        Color32::from_rgb(7, 11, 20)
-    } else {
-        Color32::from_rgb(232, 238, 246)
-    };
-    let border = Color32::from_rgb(0x3e, 0xe0, 0xc4);
+    let bg = canvas_bg(dark);
     painter.rect_filled(rect, 0.0, bg);
-    painter.rect_stroke(rect, 0.0, Stroke::new(1.5, border), StrokeKind::Inside);
+    painter.rect_stroke(rect, 0.0, Stroke::new(1.5, SIGNAL), StrokeKind::Inside);
 
     let now = ui.ctx().input(|i| i.time);
     for op in &state.ops {
