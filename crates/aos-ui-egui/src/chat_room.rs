@@ -1,0 +1,204 @@
+//! In-app chat room helpers (slice 3): personas, roster labels, speaker colors, @ mentions.
+
+use aos_proto::{ChatRoomMember, ChatSessionMode, ChatSessionMeta};
+
+/// Built-in salon persona (UI constants — not free-text spoof fields).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RoomPersona {
+    pub id: &'static str,
+    pub display_name: &'static str,
+    pub directive: &'static str,
+    pub system_prompt: &'static str,
+}
+
+pub const ROOM_PERSONAS: &[RoomPersona] = &[
+    RoomPersona {
+        id: "researcher",
+        display_name: "Researcher",
+        directive: "Gather facts and cite sources before recommending action.",
+        system_prompt:
+            "You are a careful researcher. Prefer evidence, nuance, and clear unknowns.",
+    },
+    RoomPersona {
+        id: "critic",
+        display_name: "Critic",
+        directive: "Stress-test ideas: risks, gaps, and failure modes.",
+        system_prompt:
+            "You are a constructive critic. Be direct about weaknesses without being dismissive.",
+    },
+    RoomPersona {
+        id: "coder",
+        display_name: "Coder",
+        directive: "Propose concrete implementation steps and code-shaped answers.",
+        system_prompt:
+            "You are a pragmatic coder. Favor small, testable changes and explicit trade-offs.",
+    },
+    RoomPersona {
+        id: "planner",
+        display_name: "Planner",
+        directive: "Break work into ordered steps with dependencies and checkpoints.",
+        system_prompt:
+            "You are a planner. Organize work into phases, owners, and clear success criteria.",
+    },
+];
+
+pub fn persona_by_id(id: &str) -> Option<&'static RoomPersona> {
+    ROOM_PERSONAS.iter().find(|p| p.id == id)
+}
+
+pub fn active_session_meta<'a>(
+    sessions: &'a [ChatSessionMeta],
+    active_id: Option<&str>,
+) -> Option<&'a ChatSessionMeta> {
+    let id = active_id?;
+    sessions.iter().find(|s| s.id == id)
+}
+
+pub fn session_is_room(meta: Option<&ChatSessionMeta>) -> bool {
+    meta.is_some_and(|m| m.mode == ChatSessionMode::Room)
+}
+
+/// Display name from roster (`speaker_id`); never trust a free-text spoof field on the message.
+pub fn roster_display_name(members: &[ChatRoomMember], speaker_id: &str) -> String {
+    members
+        .iter()
+        .find(|m| m.agent_id == speaker_id)
+        .map(|m| m.display_name.clone())
+        .unwrap_or_else(|| speaker_id.to_string())
+}
+
+/// Stable per-speaker RGB derived from `speaker_id` (orrery hues, no purple glow).
+pub fn speaker_color_rgb(speaker_id: &str, dark: bool) -> (u8, u8, u8) {
+    let h = stable_hash(speaker_id);
+    if dark {
+        (
+            40 + (h % 80) as u8,
+            90 + ((h >> 8) % 70) as u8,
+            100 + ((h >> 16) % 60) as u8,
+        )
+    } else {
+        (
+            180 + (h % 60) as u8,
+            200 + ((h >> 8) % 40) as u8,
+            210 + ((h >> 16) % 30) as u8,
+        )
+    }
+}
+
+fn stable_hash(s: &str) -> u32 {
+    let mut h: u32 = 2_166_136_261;
+    for b in s.bytes() {
+        h = h.wrapping_mul(16_777_619).wrapping_add(u32::from(b));
+    }
+    h
+}
+
+pub fn joined_ms_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64
+}
+
+/// `@` mention completions against the salon roster (display name or agent id prefix).
+pub fn mention_completions(input: &str, members: &[ChatRoomMember]) -> Vec<(String, String)> {
+    let Some(at) = input.rfind('@') else {
+        return Vec::new();
+    };
+    let tail = &input[at + 1..];
+    if tail.contains(' ') {
+        return Vec::new();
+    }
+    let needle = tail.to_ascii_lowercase();
+    let mut out = Vec::new();
+    for m in members {
+        let name_match = !needle.is_empty()
+            && m.display_name.to_ascii_lowercase().starts_with(&needle);
+        let id_match = !needle.is_empty() && m.agent_id.to_ascii_lowercase().starts_with(&needle);
+        if needle.is_empty() || name_match || id_match {
+            out.push((
+                insert_mention(input, at, &m.display_name),
+                m.display_name.clone(),
+            ));
+        }
+    }
+    out
+}
+
+fn insert_mention(input: &str, at: usize, display_name: &str) -> String {
+    let mut out = String::new();
+    out.push_str(&input[..at]);
+    out.push('@');
+    out.push_str(display_name);
+    out.push(' ');
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use aos_proto::ChatSessionMode;
+
+    fn member(id: &str, name: &str) -> ChatRoomMember {
+        ChatRoomMember {
+            agent_id: id.into(),
+            display_name: name.into(),
+            persona_id: None,
+            joined_ms: 0,
+        }
+    }
+
+    #[test]
+    fn roster_lookup_beats_spoof_name() {
+        let members = vec![member("agent-a", "Researcher")];
+        assert_eq!(
+            roster_display_name(&members, "agent-a"),
+            "Researcher"
+        );
+        assert_eq!(roster_display_name(&members, "agent-b"), "agent-b");
+    }
+
+    #[test]
+    fn speaker_color_stable() {
+        let a = speaker_color_rgb("agent-alpha", true);
+        let b = speaker_color_rgb("agent-alpha", true);
+        let c = speaker_color_rgb("agent-beta", true);
+        assert_eq!(a, b);
+        assert_ne!(a, c);
+    }
+
+    #[test]
+    fn mention_completions_prefix() {
+        let members = vec![
+            member("a1", "Researcher"),
+            member("a2", "Coder"),
+        ];
+        let hits = mention_completions("hello @Res", &members);
+        assert_eq!(hits.len(), 1);
+        assert!(hits[0].0.contains("@Researcher"));
+    }
+
+    #[test]
+    fn session_is_room_flag() {
+        let meta = ChatSessionMeta {
+            id: "s".into(),
+            title: "t".into(),
+            created_ms: 0,
+            updated_ms: 0,
+            archived: false,
+            message_count: 0,
+            model_id: None,
+            mode: ChatSessionMode::Room,
+            members: vec![],
+            conductor_policy: Default::default(),
+        };
+        assert!(session_is_room(Some(&meta)));
+    }
+
+    #[test]
+    fn all_personas_defined() {
+        for id in ["researcher", "critic", "coder", "planner"] {
+            assert!(persona_by_id(id).is_some());
+        }
+    }
+}

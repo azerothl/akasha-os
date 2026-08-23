@@ -2,9 +2,10 @@
 
 use aos_agent::schedule::ScheduleEntry;
 use aos_proto::{
-    AgentInfo, AgentTrace, AuditEvent, CapInfo, ChatAttachment, ChatSessionMeta, DocumentRef,
-    FeedbackSubmitRequest, FeedbackSubmitResponse, MemHit, ModelInfo, ModuleCatalogue,
-    ModuleInfo, PendingConfirmation, ProviderRecord, SkillInfo, SystemMetrics, WebSearchHit,
+    AgentInfo, AgentTrace, AuditEvent, CapInfo, ChatAttachment, ChatRoomMember, ChatSessionMeta,
+    ChatSessionMode, DocumentRef, FeedbackSubmitRequest, FeedbackSubmitResponse, MemHit,
+    ModelInfo, ModuleCatalogue, ModuleInfo, PendingConfirmation, ProviderRecord, SkillInfo,
+    SystemMetrics, WebSearchHit,
 };
 use aos_proto::decl_ui::ModuleUiResponse;
 use aos_proto::{McpServerInfo};
@@ -84,6 +85,8 @@ pub(crate) enum Cmd {
         session_id: Option<String>,
         /// `slash` | `assistant` | `form`
         origin: String,
+        /// When true and `session_id` is a Room session, add agent to salon roster after create.
+        join_active_room: bool,
     },
     AgentKill { id: String },
     AgentPause { id: String },
@@ -173,6 +176,26 @@ pub(crate) enum Cmd {
         session_id: String,
         model_id: Option<String>,
     },
+    SessionSetMode {
+        session_id: String,
+        mode: ChatSessionMode,
+    },
+    SessionMembersAdd {
+        session_id: String,
+        member: ChatRoomMember,
+    },
+    RoomAddPersona {
+        session_id: String,
+        persona_id: String,
+        model_id: Option<String>,
+    },
+    RoomTurn {
+        session_id: String,
+        content: String,
+    },
+    RoomTurnCancel {
+        session_id: String,
+    },
     /// Append chat sans infer (slash /agent, etc.).
     SessionAppend {
         session_id: String,
@@ -252,6 +275,12 @@ pub(crate) enum Evt {
     SessionLoaded {
         id: String,
         messages: Vec<ChatLine>,
+        meta: ChatSessionMeta,
+    },
+    RoomTurnDone {
+        session_id: String,
+        agent_turns: u32,
+        cancelled: bool,
     },
     MemHits(Vec<MemHit>),
     MemExtracted { n: usize },
@@ -344,6 +373,7 @@ pub(crate) struct ChatLine {
     pub(crate) role: String,
     pub(crate) text: String,
     pub(crate) attachments: Vec<ChatAttachment>,
+    pub(crate) speaker_id: Option<String>,
 }
 
 impl ChatLine {
@@ -352,6 +382,20 @@ impl ChatLine {
             role: role.into(),
             text: text.into(),
             attachments: Vec::new(),
+            speaker_id: None,
+        }
+    }
+
+    pub(crate) fn with_speaker(
+        role: impl Into<String>,
+        text: impl Into<String>,
+        speaker_id: Option<String>,
+    ) -> Self {
+        Self {
+            role: role.into(),
+            text: text.into(),
+            attachments: Vec::new(),
+            speaker_id,
         }
     }
 }

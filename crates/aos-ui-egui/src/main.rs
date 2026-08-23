@@ -13,6 +13,7 @@ mod prefs;
 mod tasks_panel;
 mod chat_ask;
 mod chat_media;
+mod chat_room;
 mod cmd;
 mod image_composition;
 mod image_history;
@@ -36,7 +37,8 @@ use aos_agent::schedule::ScheduleEntry;
 use aos_ipc::BusClient;
 use aos_proto::{
     AgentCreateRequest, AgentGoal, AgentIdRequest, AgentInfo, AgentState, AgentTrace, AuditEvent,
-    CapInfo, ChatAttachment, ChatSessionAppendRequest, ChatSessionGetResponse, ChatSessionIdRequest, ChatSessionMeta, DocumentRef,
+    CapInfo, ChatAttachment, ChatRoomMember, ChatSessionAppendRequest, ChatSessionGetResponse,
+    ChatSessionIdRequest, ChatSessionMeta, ChatSessionMode, DocumentRef,
     FeedbackSubmitRequest, FeedbackSubmitResponse, McpServerInfo, MemHit, ModelInfo,
     ModuleCatalogue, ModuleIdRequest, ModuleInfo, ModuleInvokeRequest, ModuleInvokeResponse,
     PendingConfirmation, ProviderRecord,
@@ -147,12 +149,14 @@ fn overflow_scroll(
 enum ChatBubbleKind {
     User,
     Assistant,
+    RoomSpeaker,
     System,
 }
 
-fn chat_bubble_kind(role: &str) -> ChatBubbleKind {
+fn chat_bubble_kind(role: &str, speaker_id: Option<&str>, room_mode: bool) -> ChatBubbleKind {
     match role {
         "user" | "vous" => ChatBubbleKind::User,
+        "assistant" if room_mode && speaker_id.is_some() => ChatBubbleKind::RoomSpeaker,
         "assistant" => ChatBubbleKind::Assistant,
         _ => ChatBubbleKind::System,
     }
@@ -162,6 +166,7 @@ fn chat_role_label(kind: ChatBubbleKind, t: &i18n::UiStrings, raw_role: &str) ->
     match kind {
         ChatBubbleKind::User => t.chat_you.to_string(),
         ChatBubbleKind::Assistant => t.chat_assistant.to_string(),
+        ChatBubbleKind::RoomSpeaker => String::new(), // filled from roster
         ChatBubbleKind::System => {
             if raw_role == "système" || raw_role == "system" {
                 t.chat_system.to_string()
@@ -195,6 +200,16 @@ fn chat_bubble_colors(kind: ChatBubbleKind, dark: bool) -> (egui::Color32, egui:
             egui::Color32::from_rgb(120, 128, 148),
             egui::Color32::from_rgb(50, 56, 72),
         ),
+        (ChatBubbleKind::RoomSpeaker, true) => (
+            egui::Color32::from_rgb(28, 32, 40),
+            egui::Color32::from_rgb(90, 100, 120),
+            egui::Color32::from_rgb(180, 190, 210),
+        ),
+        (ChatBubbleKind::RoomSpeaker, false) => (
+            egui::Color32::from_rgb(236, 238, 244),
+            egui::Color32::from_rgb(120, 128, 148),
+            egui::Color32::from_rgb(50, 56, 72),
+        ),
         (ChatBubbleKind::System, true) => (
             egui::Color32::from_rgb(22, 22, 26),
             egui::Color32::from_rgb(70, 70, 78),
@@ -212,13 +227,17 @@ fn chat_bubble_colors(kind: ChatBubbleKind, dark: bool) -> (egui::Color32, egui:
 fn chat_message_frame(
     ui: &mut egui::Ui,
     kind: ChatBubbleKind,
+    color_override: Option<(egui::Color32, egui::Color32)>,
     add_contents: impl FnOnce(&mut egui::Ui),
 ) {
     let dark = ui.visuals().dark_mode;
-    let (fill, stroke, _) = chat_bubble_colors(kind, dark);
+    let (fill, stroke) = color_override.unwrap_or_else(|| {
+        let (f, s, _) = chat_bubble_colors(kind, dark);
+        (f, s)
+    });
     let max_w = (ui.available_width() * match kind {
         ChatBubbleKind::User => 0.88,
-        ChatBubbleKind::Assistant => 0.96,
+        ChatBubbleKind::Assistant | ChatBubbleKind::RoomSpeaker => 0.96,
         ChatBubbleKind::System => 0.92,
     })
     .clamp(200.0, ui.available_width());
@@ -418,12 +437,15 @@ pub(crate) async fn load_session(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>, id:
                         role,
                         text: m.content,
                         attachments: m.attachments,
+                        speaker_id: m.speaker_id,
                     }
                 })
                 .collect();
+            let meta = resp.meta;
             let _ = evt_tx.send(Evt::SessionLoaded {
-                id: resp.meta.id,
+                id: meta.id.clone(),
                 messages,
+                meta,
             });
         }
         Err(e) => {
@@ -585,6 +607,8 @@ pub(crate) async fn spawn_chat_delegate_agent(
                         role: "assistant".into(),
                         content: prose.clone(),
                         attachments: vec![att.clone()],
+                        speaker_id: None,
+                        speaker_name: None,
                     },
                     vec![],
                 )
@@ -1350,6 +1374,8 @@ struct UiApp {
     hf_download_name: String,
     hf_download_status: String,
     show_go_to_palette: bool,
+    agent_join_room_on_create: bool,
+    room_persona_pick: String,
 }
 
 #[derive(Debug, Clone)]
@@ -1530,6 +1556,8 @@ impl UiApp {
             hf_download_name: String::new(),
             hf_download_status: String::new(),
             show_go_to_palette: false,
+            agent_join_room_on_create: false,
+            room_persona_pick: chat_room::ROOM_PERSONAS[0].id.to_string(),
         }
     }
 
@@ -1614,6 +1642,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             },
             session_id: self.active_session.clone(),
             origin: "form".into(),
+            join_active_room: false,
         });
         self.tab = Tab::Agents;
         self.status = t.scen_module_agent_launched.into();
@@ -1628,6 +1657,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 title: title.clone(),
                 origin: "ask-reply".into(),
             }],
+            speaker_id: None,
         });
         let _ = self.cmd_tx.send(Cmd::SessionAppend {
             session_id,
@@ -1703,6 +1733,26 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             return;
         }
         self.chat.push(ChatLine::plain("user", text.clone()));
+        if chat_room::session_is_room(chat_room::active_session_meta(
+            &self.sessions,
+            self.active_session.as_deref(),
+        )) {
+            let Some(session_id) = self.active_session.clone() else {
+                return;
+            };
+            self.streaming.clear();
+            self.chat_pending = true;
+            self.chat_inference_id = None;
+            let t = i18n::strings(&self.prefs.language);
+            self.status = t.room_thinking.into();
+            let _ = self.cmd_tx.send(Cmd::RoomTurn {
+                session_id,
+                content: text,
+            });
+            self.mark_onboarding_chat_sent();
+            self.scen_chat = true;
+            return;
+        }
         let history: Vec<(String, String)> = self
             .chat
             .iter()
@@ -1909,6 +1959,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                     model_id: None,
                     session_id: Some(session_id),
                     origin: "slash".into(),
+                    join_active_room: false,
                 });
                 // Rester dans le chat — carte via Evt::AgentSpawned
             }
@@ -1995,6 +2046,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             role: "assistant".into(),
             text: spoken.to_string(),
             attachments: vec![att.clone()],
+            speaker_id: None,
         });
         if let Some(sid) = self.active_session.clone() {
             let _ = self.cmd_tx.send(Cmd::SessionAppend {
@@ -2287,6 +2339,7 @@ impl eframe::App for UiApp {
                             role: "assistant".into(),
                             text,
                             attachments,
+                            speaker_id: None,
                         });
                     }
                     self.streaming.clear();
@@ -2391,6 +2444,7 @@ impl eframe::App for UiApp {
                                 title,
                                 origin,
                             }],
+                            speaker_id: None,
                         });
                     } else {
                         self.status = format!("agent lancé : {agent_id}");
@@ -2483,6 +2537,7 @@ impl eframe::App for UiApp {
                                                 title: ag.directive.clone(),
                                                 origin: "completion".into(),
                                             }],
+                                            speaker_id: None,
                                         });
                                     }
                                 } else if !seeding
@@ -2535,6 +2590,7 @@ impl eframe::App for UiApp {
                                             title: ag.directive.clone(),
                                             origin: "ask-timeout".into(),
                                         }],
+                                        speaker_id: None,
                                     });
                                 }
                             }
@@ -2563,6 +2619,7 @@ impl eframe::App for UiApp {
                                             title: ag.directive.clone(),
                                             origin: "ask".into(),
                                         }],
+                                        speaker_id: None,
                                     });
                                 } else if !on_this_session
                                     && !self.agent_notified.contains(&ag.agent_id)
@@ -2692,23 +2749,43 @@ impl eframe::App for UiApp {
                     self.tab = Tab::Feedback;
                 }
                 Evt::Sessions(list) => self.sessions = list,
-                Evt::SessionLoaded { id, messages } => {
+                Evt::SessionLoaded { id, messages, meta } => {
+                    let session_changed = self.active_session.as_deref() != Some(id.as_str());
                     self.active_session = Some(id.clone());
-                    self.rename_buf = self
-                        .sessions
-                        .iter()
-                        .find(|s| s.id == id)
-                        .map(|s| s.title.clone())
-                        .unwrap_or_default();
-                    let mut chat = vec![ChatLine::plain(
-                        "système",
-                        format!("Session {id} — historique rechargé."),
-                    )];
-                    chat.extend(messages);
-                    self.chat = chat;
+                    self.rename_buf = meta.title.clone();
+                    if let Some(s) = self.sessions.iter_mut().find(|s| s.id == meta.id) {
+                        *s = meta.clone();
+                    }
+                    if session_changed {
+                        let mut chat = vec![ChatLine::plain(
+                            "système",
+                            format!("Session {id} — historique rechargé."),
+                        )];
+                        chat.extend(messages);
+                        self.chat = chat;
+                    } else {
+                        self.chat = messages;
+                    }
                     self.streaming.clear();
                     self.chat_pending = false;
                     self.chat_inference_id = None;
+                }
+                Evt::RoomTurnDone {
+                    session_id,
+                    agent_turns,
+                    cancelled,
+                } => {
+                    if self.active_session.as_deref() == Some(session_id.as_str()) {
+                        self.chat_pending = false;
+                        self.chat_inference_id = None;
+                        let t = i18n::strings(&self.prefs.language);
+                        self.status = if cancelled {
+                            t.room_turn_cancelled.into()
+                        } else {
+                            t.room_turn_done
+                                .replace("{n}", &agent_turns.to_string())
+                        };
+                    }
                 }
                 Evt::MemHits(h) => self.mem_hits = h,
                 Evt::SecretList { names, encrypted } => {
@@ -2828,6 +2905,7 @@ impl eframe::App for UiApp {
                         role: "assistant".into(),
                         text: note.clone(),
                         attachments: vec![att.clone()],
+                        speaker_id: None,
                     });
                     if let Some(sid) = self.active_session.clone() {
                         let _ = self.cmd_tx.send(Cmd::SessionAppend {
@@ -3335,6 +3413,63 @@ impl UiApp {
         }
     }
 
+    fn ui_room_session_header(&mut self, ui: &mut egui::Ui, t: &i18n::UiStrings) {
+        let Some(sid) = self.active_session.clone() else {
+            return;
+        };
+        let meta = chat_room::active_session_meta(&self.sessions, Some(sid.as_str()));
+        let room = chat_room::session_is_room(meta);
+        ui.horizontal_wrapped(|ui| {
+            if room {
+                ui.label(t.room_members_label);
+                if let Some(m) = meta {
+                    if m.members.is_empty() {
+                        ui.weak(t.room_members_empty);
+                    } else {
+                        for (i, mem) in m.members.iter().enumerate() {
+                            if i > 0 {
+                                ui.label("·");
+                            }
+                            ui.strong(&mem.display_name);
+                        }
+                    }
+                }
+            }
+            if !room && ui.button(t.room_enable).clicked() {
+                let _ = self.cmd_tx.send(Cmd::SessionSetMode {
+                    session_id: sid.clone(),
+                    mode: ChatSessionMode::Room,
+                });
+            }
+            if room {
+                egui::ComboBox::from_id_salt("room_persona_pick")
+                    .selected_text(
+                        chat_room::persona_by_id(&self.room_persona_pick)
+                            .map(|p| p.display_name)
+                            .unwrap_or(self.room_persona_pick.as_str()),
+                    )
+                    .show_ui(ui, |ui| {
+                        for p in chat_room::ROOM_PERSONAS {
+                            ui.selectable_value(
+                                &mut self.room_persona_pick,
+                                p.id.to_string(),
+                                p.display_name,
+                            );
+                        }
+                    });
+                if ui.button(t.room_add_persona).clicked() {
+                    let model_id = meta.and_then(|m| m.model_id.clone());
+                    let _ = self.cmd_tx.send(Cmd::RoomAddPersona {
+                        session_id: sid,
+                        persona_id: self.room_persona_pick.clone(),
+                        model_id,
+                    });
+                }
+            }
+        });
+        ui.add_space(4.0);
+    }
+
     fn ui_chat(&mut self, ui: &mut egui::Ui) {
         let t = i18n::strings(&self.prefs.language);
         let full = ui.available_size();
@@ -3593,6 +3728,18 @@ impl UiApp {
                     if let Some(id) = &self.active_session {
                         ui.weak(format!("session {id}"));
                     }
+                    self.ui_room_session_header(ui, &t);
+
+                    let room_mode = chat_room::session_is_room(chat_room::active_session_meta(
+                        &self.sessions,
+                        self.active_session.as_deref(),
+                    ));
+                    let room_members: Vec<ChatRoomMember> = chat_room::active_session_meta(
+                        &self.sessions,
+                        self.active_session.as_deref(),
+                    )
+                    .map(|m| m.members.clone())
+                    .unwrap_or_default();
 
                     let input_reserve = 44.0_f32;
                     let scroll_h = (ui.available_height() - input_reserve).max(120.0);
@@ -3614,6 +3761,7 @@ impl UiApp {
                                 let role = self.chat[i].role.clone();
                                 let text = self.chat[i].text.clone();
                                 let attachments = self.chat[i].attachments.clone();
+                                let speaker_id = self.chat[i].speaker_id.clone();
                                 let is_completion = attachments.iter().any(|a| {
                                     matches!(
                                         a,
@@ -3621,16 +3769,49 @@ impl UiApp {
                                             if origin == "completion"
                                     )
                                 });
-                                let text = if role == "assistant" && !is_completion {
+                                let text = if role == "assistant"
+                                    && !is_completion
+                                    && speaker_id.is_none()
+                                {
                                     agent_panel::format_assistant_display(&text)
                                 } else {
                                     text
                                 };
-                                let kind = chat_bubble_kind(&role);
-                                let shown_role = chat_role_label(kind, &t, &role);
-                                let (_, _, role_color) =
-                                    chat_bubble_colors(kind, ui.visuals().dark_mode);
-                                chat_message_frame(ui, kind, |ui| {
+                                let kind = chat_bubble_kind(
+                                    &role,
+                                    speaker_id.as_deref(),
+                                    room_mode,
+                                );
+                                let mut shown_role = chat_role_label(kind, &t, &role);
+                                if kind == ChatBubbleKind::RoomSpeaker {
+                                    if let Some(sid) = speaker_id.as_deref() {
+                                        shown_role =
+                                            chat_room::roster_display_name(&room_members, sid);
+                                    }
+                                }
+                                let (fill, stroke, role_color) = if kind == ChatBubbleKind::RoomSpeaker
+                                {
+                                    if let Some(sid) = speaker_id.as_deref() {
+                                        let (r, g, b) =
+                                            chat_room::speaker_color_rgb(sid, ui.visuals().dark_mode);
+                                        let c = egui::Color32::from_rgb(r, g, b);
+                                        (
+                                            c.gamma_multiply(0.25),
+                                            c,
+                                            c,
+                                        )
+                                    } else {
+                                        chat_bubble_colors(kind, ui.visuals().dark_mode)
+                                    }
+                                } else {
+                                    chat_bubble_colors(kind, ui.visuals().dark_mode)
+                                };
+                                let frame_colors = if kind == ChatBubbleKind::RoomSpeaker {
+                                    Some((fill, stroke))
+                                } else {
+                                    None
+                                };
+                                chat_message_frame(ui, kind, frame_colors, |ui| {
                                     ui.horizontal(|ui| {
                                         ui.colored_label(
                                             role_color,
@@ -3661,6 +3842,9 @@ impl UiApp {
                                                 title,
                                                 origin,
                                             } => {
+                                                if origin == "room" {
+                                                    continue;
+                                                }
                                                 let info = self
                                                     .agents
                                                     .iter()
@@ -3752,7 +3936,7 @@ impl UiApp {
                                     ChatBubbleKind::Assistant,
                                     ui.visuals().dark_mode,
                                 );
-                                chat_message_frame(ui, ChatBubbleKind::Assistant, |ui| {
+                                chat_message_frame(ui, ChatBubbleKind::Assistant, None, |ui| {
                                     ui.colored_label(
                                         role_color,
                                         egui::RichText::new(t.chat_assistant).strong().small(),
@@ -3772,10 +3956,15 @@ impl UiApp {
                                     ChatBubbleKind::Assistant,
                                     ui.visuals().dark_mode,
                                 );
-                                chat_message_frame(ui, ChatBubbleKind::Assistant, |ui| {
+                                let thinking = if room_mode {
+                                    t.room_thinking
+                                } else {
+                                    t.chat_assistant
+                                };
+                                chat_message_frame(ui, ChatBubbleKind::Assistant, None, |ui| {
                                     ui.colored_label(
                                         role_color,
-                                        egui::RichText::new(t.chat_assistant).strong().small(),
+                                        egui::RichText::new(thinking).strong().small(),
                                     );
                                     ui.weak("…");
                                 });
@@ -3783,6 +3972,11 @@ impl UiApp {
                         });
 
                     let completions = slash_completions(&self.input);
+                    let mention_hits = if room_mode {
+                        chat_room::mention_completions(&self.input, &room_members)
+                    } else {
+                        Vec::new()
+                    };
                     let ask_queue = self.pending_ask_queue();
                     if ask_queue.len() > 1 {
                         let t = i18n::strings(&self.prefs.language);
@@ -3826,8 +4020,16 @@ impl UiApp {
                             }
                             let send_btn = ui.button("Envoyer").on_hover_text(t.tip_send);
                             if self.chat_pending {
-                                if ui.button(t.chat_stop).clicked() {
-                                    if let Some(id) = self.chat_inference_id {
+                                if room_mode {
+                                    if ui.button(t.chat_stop).clicked() {
+                                        if let Some(sid) = self.active_session.clone() {
+                                            let _ = self.cmd_tx.send(Cmd::RoomTurnCancel {
+                                                session_id: sid,
+                                            });
+                                        }
+                                    }
+                                } else if let Some(id) = self.chat_inference_id {
+                                    if ui.button(t.chat_stop).clicked() {
                                         let _ = self.cmd_tx.send(Cmd::ChatCancel {
                                             inference_id: id,
                                         });
@@ -3847,7 +4049,45 @@ impl UiApp {
                     let input_rect = input_row.inner.rect;
 
                     // Popup au-dessus de l'input, en overlay sur le chat (pas sous le cadre)
-                    if !completions.is_empty() {
+                    if !mention_hits.is_empty() {
+                        let popup_w = input_rect.width().clamp(240.0, chat_w);
+                        let max_h = 180.0_f32;
+                        let mut picked: Option<String> = None;
+                        egui::Area::new(egui::Id::new("mention_completions_popup"))
+                            .order(egui::Order::Foreground)
+                            .fixed_pos(egui::pos2(input_rect.left(), input_rect.top() - 6.0))
+                            .pivot(egui::Align2::LEFT_BOTTOM)
+                            .interactable(true)
+                            .show(ui.ctx(), |ui| {
+                                egui::Frame::popup(ui.style())
+                                    .inner_margin(egui::Margin::same(8))
+                                    .show(ui, |ui| {
+                                        ui.set_min_width(popup_w * 0.85);
+                                        ui.set_max_width(popup_w);
+                                        ui.label(
+                                            egui::RichText::new(t.room_mention_pick)
+                                                .small()
+                                                .strong(),
+                                        );
+                                        egui::ScrollArea::vertical()
+                                            .max_height(max_h)
+                                            .show(ui, |ui| {
+                                                for (text, name) in &mention_hits {
+                                                    if ui
+                                                        .selectable_label(false, name.as_str())
+                                                        .clicked()
+                                                    {
+                                                        picked = Some(text.clone());
+                                                    }
+                                                }
+                                            });
+                                    });
+                            });
+                        if let Some(text) = picked {
+                            self.input = text;
+                            self.chat_refocus = true;
+                        }
+                    } else if !completions.is_empty() {
                         let t = i18n::strings(&self.prefs.language);
                         let popup_w = input_rect.width().clamp(240.0, chat_w);
                         let max_h = 220.0_f32;
@@ -4256,6 +4496,17 @@ impl UiApp {
         ui.label(t.agents_docs);
         ui.text_edit_singleline(&mut self.agent_docs);
 
+        let room_active = chat_room::session_is_room(chat_room::active_session_meta(
+            &self.sessions,
+            self.active_session.as_deref(),
+        ));
+        if room_active {
+            ui.checkbox(
+                &mut self.agent_join_room_on_create,
+                t.agents_join_room_on_create,
+            );
+        }
+
         if ui.button(t.agents_create).clicked() && !self.agent_task.is_empty() {
             self.pending_note_agent = self.agent_task.to_lowercase().contains("note");
             let task = self.agent_task.clone();
@@ -4291,6 +4542,7 @@ impl UiApp {
                 },
                 session_id: self.active_session.clone(),
                 origin: "form".into(),
+                join_active_room: room_active && self.agent_join_room_on_create,
             });
         }
 
@@ -4418,6 +4670,31 @@ impl UiApp {
                 let _ = self.cmd_tx.send(Cmd::AgentKill {
                     id: a.agent_id.clone(),
                 });
+            }
+            if chat_room::session_is_room(chat_room::active_session_meta(
+                &self.sessions,
+                self.active_session.as_deref(),
+            )) {
+                if let Some(sid) = self.active_session.clone() {
+                    let already = chat_room::active_session_meta(
+                        &self.sessions,
+                        Some(sid.as_str()),
+                    )
+                    .is_some_and(|m| {
+                        m.members.iter().any(|mem| mem.agent_id == a.agent_id)
+                    });
+                    if !already && ui.small_button(t.agents_add_to_session).clicked() {
+                        let _ = self.cmd_tx.send(Cmd::SessionMembersAdd {
+                            session_id: sid,
+                            member: aos_proto::ChatRoomMember {
+                                agent_id: a.agent_id.clone(),
+                                display_name: agent_display_title(a),
+                                persona_id: None,
+                                joined_ms: chat_room::joined_ms_now(),
+                            },
+                        });
+                    }
+                }
             }
         });
     }
@@ -4578,6 +4855,7 @@ impl UiApp {
                                             title,
                                             origin: "ask-reply".into(),
                                         }],
+                                        speaker_id: None,
                                     });
                                 }
                             }

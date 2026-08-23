@@ -27,6 +27,8 @@ Spécification produit durable pour l’**application hôte Preview** (`crates/a
 
 Les modules DeclUI installés avec `ui.mode=declarative_ui` apparaissent sous **Plus → Modules**, pas comme pairs du rail principal.
 
+Les **sessions chat** restent sous l’onglet Chat — pas un nouvel onglet rail. Le mode **Direct** est le 1:1 par défaut. Le mode **Room** est un salon multi-agent in-app (pas Telegram/Discord) : **Activer le salon** par session, ajout de personas intégrés (Researcher, Critic, Coder, Planner), envoi via `chat.session.room.turn` (conducteur dans `aos-agentd`). L’en-tête de session affiche une **bande membres** (noms du roster). Les bulles résolvent `speaker_id` via le roster — jamais un champ texte libre. Couleurs stables par `speaker_id`. Les workers hors salon gardent les cartes **AgentRef** ; les réponses salon (`origin: room`) n’y dupliquent pas.
+
 ### Ce qui sort de la liste plate d’onglets
 
 Avant cette spec, ~13 onglets latéraux traitaient Chat, Scénarios, Retour, Caps et Providers à égalité. Après :
