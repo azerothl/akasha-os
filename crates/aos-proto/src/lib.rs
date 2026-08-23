@@ -2244,12 +2244,59 @@ pub struct ChatSessionMembersListResponse {
     pub members: Vec<ChatRoomMember>,
 }
 
-/// Réservé slice futur : tour de salon orchestré par le conducteur (`aos-agentd`).
-/// Intent bus `chat.session.room.turn` — **non implémenté** dans slice 1 (pas de LLM séquentiel).
+/// Tour de salon orchestré par le conducteur (`aos-agentd`).
+/// Intent bus `chat.session.room.turn` — platform valide `mode == room`, relay vers `agent.room_conduct`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatSessionRoomTurnRequest {
     pub session_id: String,
     pub content: String,
+}
+
+/// Annule le tour de salon en cours pour une session (`chat.session.room.turn.cancel`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatSessionRoomTurnCancelRequest {
+    pub session_id: String,
+}
+
+/// Réponse `chat.session.room.turn` après orchestration conducteur.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatSessionRoomTurnResponse {
+    pub agent_turns: u32,
+    #[serde(default)]
+    pub cancelled: bool,
+}
+
+/// `agent.room_conduct` — orchestration complète d'un message utilisateur en salon.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentRoomConductRequest {
+    pub session_id: String,
+    pub content: String,
+}
+
+/// Réponse `agent.room_conduct`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentRoomConductResponse {
+    pub agent_turns: u32,
+    #[serde(default)]
+    pub cancelled: bool,
+}
+
+/// `agent.room_turn` — inférence one-shot d'un membre du salon (sans spawn worker).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentRoomTurnRequest {
+    pub session_id: String,
+    pub agent_id: String,
+    pub display_name: String,
+    /// Message utilisateur déclencheur (dernier tour).
+    pub user_message: String,
+}
+
+/// Réponse `agent.room_turn`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentRoomTurnResponse {
+    pub content: String,
+    pub speaker_id: String,
+    pub speaker_name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
