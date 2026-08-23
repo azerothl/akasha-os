@@ -2,13 +2,14 @@
 
 use crate::persist;
 use crate::room_conductor::{
-    build_initial_queue, detect_peer_address, effective_max_turns,
+    build_initial_queue, detect_peer_address, effective_max_turns, format_roster_for_prompt,
+    sanitize_member_queue,
 };
 use aos_ipc::BusClient;
 use aos_proto::{
     AgentRoomConductRequest, AgentRoomConductResponse, AgentRoomTurnRequest,
     AgentRoomTurnResponse, AgentSpec, CancelRequest, ChatAttachment, ChatMessage,
-    ChatSessionAppendRequest, ChatSessionGetResponse, ChatSessionIdRequest, ChatSessionMessage,
+    ChatRoomMember, ChatSessionAppendRequest, ChatSessionGetResponse, ChatSessionIdRequest, ChatSessionMessage,
     ChatSessionMode, InferParams, InferRequest, TokenEvent,
 };
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -91,12 +92,30 @@ fn member_display_name<'a>(
         .ok_or_else(|| format!("membre {agent_id} absent du salon"))
 }
 
-pub fn build_room_system_prompt(spec: &AgentSpec, display_name: &str) -> String {
+pub fn build_room_system_prompt(
+    spec: &AgentSpec,
+    display_name: &str,
+    members: &[ChatRoomMember],
+    canvas_open: bool,
+) -> String {
+    let roster = format_roster_for_prompt(members);
     let mut out = format!(
         "Tu es {display_name}, membre d'un salon multi-agent in-app. \
-         Réponds en une seule prise, de façon concise. \
-         Pour interpeller un autre membre, utilise @Nom ou @agent_id.\n"
+         Réponds en une seule prise, de façon concise.\n\
+         Membres du salon (tu ne peux @ que ces noms ou ids roster) : {roster}.\n\
+         Ne jamais inventer des collègues fictifs (pas de Dessinateur, Moteur de rendu, \
+         @agent_id_123, etc.). Ne propose pas agent.spawn pour ajouter des membres.\n\
+         Si tu es seul membre, agis toi-même — ne @ personne d'absent.\n\
+         Pour interpeller un autre membre présent, utilise @Nom ou @agent_id du roster.\n"
     );
+    if canvas_open {
+        out.push_str(
+            "Le canvas de session est ouvert : si tu as les outils canvas.*, \
+             tu peux dessiner ou modifier le dessin toi-même (coords 0..1, commence par canvas.get). \
+             Sinon, indique clairement que tu ne peux pas dessiner sans ces outils — \
+             ne délègue pas à un agent inventé.\n",
+        );
+    }
     if let Some(p) = spec.system_prompt.as_deref() {
         let p = p.trim();
         if !p.is_empty() {
@@ -221,7 +240,12 @@ pub async fn execute_room_turn(
         format!("spec introuvable pour le membre {}", req.agent_id)
     })?;
 
-    let system = build_room_system_prompt(&spec, display_name);
+    let system = build_room_system_prompt(
+        &spec,
+        display_name,
+        &session.meta.members,
+        session.meta.canvas_open,
+    );
     let messages = format_transcript_messages(&session, &system);
 
     let model_id = spec.model_id.clone().or(session.meta.model_id.clone());
@@ -261,9 +285,13 @@ pub async fn execute_room_conduct(
     }
 
     let max = effective_max_turns(&session.meta.conductor_policy) as usize;
-    let mut queue = build_initial_queue(&req.content, &session.meta.members);
+    let mut queue =
+        sanitize_member_queue(build_initial_queue(&req.content, &session.meta.members), &session.meta.members);
     if queue.is_empty() {
-        return Err("aucun locuteur déterminé".into());
+        return Ok(AgentRoomConductResponse {
+            agent_turns: 0,
+            cancelled: false,
+        });
     }
 
     let mut agent_turns = 0u32;
@@ -334,8 +362,8 @@ pub async fn execute_room_conduct(
 mod tests {
     use super::*;
     use aos_proto::{
-        ChatRoomConductorPolicy, ChatRoomMember, ChatSessionMessage, ChatSessionMeta,
-        ChatSessionMode,
+        AgentGoal, AgentSpec, ChatRoomConductorPolicy, ChatRoomMember, ChatSessionMessage,
+        ChatSessionMeta, ChatSessionMode,
     };
 
     fn room_session_with_user(content: &str) -> ChatSessionGetResponse {
@@ -388,5 +416,37 @@ mod tests {
         let name = member_display_name(&session, "agent-a").unwrap();
         assert_eq!(name, "Alpha");
         assert!(member_display_name(&session, "agent-unknown").is_err());
+    }
+
+    #[test]
+    fn room_system_prompt_lists_roster_and_canvas_hint() {
+        let members = vec![ChatRoomMember {
+            agent_id: "persona-critic".into(),
+            display_name: "Critic".into(),
+            persona_id: Some("critic".into()),
+            joined_ms: 1,
+        }];
+        let spec = AgentSpec {
+            agent_id: "persona-critic".into(),
+            goal: AgentGoal::default(),
+            kind: Default::default(),
+            display_name: Some("Critic".into()),
+            persona_id: Some("critic".into()),
+            system_prompt: None,
+            skills: vec![],
+            tools: vec![],
+            mcp_servers: vec![],
+            documents: vec![],
+            caps: vec![],
+            model_id: None,
+            parent_id: None,
+            session_id: None,
+            budget: Default::default(),
+            optimize_prompt: false,
+        };
+        let prompt = build_room_system_prompt(&spec, "Critic", &members, true);
+        assert!(prompt.contains("Critic (@persona-critic"));
+        assert!(prompt.contains("canvas.*"));
+        assert!(prompt.contains("Dessinateur"));
     }
 }
