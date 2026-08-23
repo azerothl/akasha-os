@@ -2,51 +2,9 @@
 
 use crate::i18n::{self, UiStrings};
 use aos_agent::room_conductor::build_initial_queue;
-use aos_proto::{ChatRoomMember, ChatSessionMode, ChatSessionMeta};
+use aos_proto::{AgentInfo, AgentKind, AgentState, ChatRoomMember, ChatSessionMode, ChatSessionMeta};
 
-/// Built-in salon persona (UI constants — not free-text spoof fields).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RoomPersona {
-    pub id: &'static str,
-    pub display_name: &'static str,
-    pub directive: &'static str,
-    pub system_prompt: &'static str,
-}
-
-pub const ROOM_PERSONAS: &[RoomPersona] = &[
-    RoomPersona {
-        id: "researcher",
-        display_name: "Researcher",
-        directive: "Gather facts and cite sources before recommending action.",
-        system_prompt:
-            "You are a careful researcher. Prefer evidence, nuance, and clear unknowns.",
-    },
-    RoomPersona {
-        id: "critic",
-        display_name: "Critic",
-        directive: "Stress-test ideas: risks, gaps, and failure modes.",
-        system_prompt:
-            "You are a constructive critic. Be direct about weaknesses without being dismissive.",
-    },
-    RoomPersona {
-        id: "coder",
-        display_name: "Coder",
-        directive: "Propose concrete implementation steps and code-shaped answers.",
-        system_prompt:
-            "You are a pragmatic coder. Favor small, testable changes and explicit trade-offs.",
-    },
-    RoomPersona {
-        id: "planner",
-        display_name: "Planner",
-        directive: "Break work into ordered steps with dependencies and checkpoints.",
-        system_prompt:
-            "You are a planner. Organize work into phases, owners, and clear success criteria.",
-    },
-];
-
-pub fn persona_by_id(id: &str) -> Option<&'static RoomPersona> {
-    ROOM_PERSONAS.iter().find(|p| p.id == id)
-}
+pub use aos_agent::room_personas::{persona_agent_id, persona_by_id, ROOM_PERSONAS};
 
 /// Localized persona chip / roster label (EN + FR via i18n).
 pub fn persona_label(t: &UiStrings, persona_id: &str) -> &'static str {
@@ -100,6 +58,69 @@ pub fn active_session_meta<'a>(
 
 pub fn session_is_room(meta: Option<&ChatSessionMeta>) -> bool {
     meta.is_some_and(|m| m.mode == ChatSessionMode::Room)
+}
+
+/// Merge built-in persona placeholders so the Agents library always lists all four.
+pub fn agents_with_library_placeholders(agents: &[AgentInfo], _t: &UiStrings) -> Vec<AgentInfo> {
+    let mut out = agents.to_vec();
+    for persona in ROOM_PERSONAS {
+        let id = persona_agent_id(persona.id);
+        if out.iter().any(|a| a.agent_id == id) {
+            continue;
+        }
+        let label = persona.display_name;
+        out.push(AgentInfo {
+            agent_id: id,
+            state: AgentState::Roster,
+            directive: String::new(),
+            pid: None,
+            caps: vec![],
+            last_output: String::new(),
+            step: 0,
+            max_steps: 0,
+            current_task: None,
+            parent_id: None,
+            children: vec![],
+            tokens_used: 0,
+            skills: vec![],
+            tools: vec![],
+            mcp_servers: vec![],
+            fail_reason: None,
+            session_id: None,
+            title: label.to_string(),
+            kind: AgentKind::Roster,
+            display_name: Some(label.to_string()),
+            persona_id: Some(persona.id.to_string()),
+        });
+    }
+    out
+}
+
+/// Label for a library roster agent (localized persona or display name).
+pub fn roster_agent_label(t: &UiStrings, agent: &AgentInfo) -> String {
+    if let Some(pid) = agent.persona_id.as_deref() {
+        persona_label(t, pid).to_string()
+    } else {
+        agent.display_title().to_string()
+    }
+}
+
+/// Roster library entries not yet in this session.
+pub fn library_add_candidates(
+    agents: &[AgentInfo],
+    members: &[ChatRoomMember],
+    t: &UiStrings,
+) -> Vec<AgentInfo> {
+    let present = member_ids(members);
+    agents_with_library_placeholders(agents, t)
+        .into_iter()
+        .filter(|a| a.is_roster())
+        .filter(|a| !present.contains(a.agent_id.as_str()))
+        .collect()
+}
+
+pub fn member_ids(members: &[ChatRoomMember]) -> std::collections::HashSet<&str> {
+    members.iter().map(|m| m.agent_id.as_str()).collect()
 }
 
 /// Display name from roster (`speaker_id`); never trust a free-text spoof field on the message.
@@ -195,6 +216,17 @@ mod tests {
     }
 
     #[test]
+    fn library_add_candidates_skips_current_members() {
+        let t = i18n::strings("en");
+        let mut m1 = member("persona-coder", "Coder");
+        m1.persona_id = Some("coder".into());
+        let members = vec![m1];
+        let candidates = library_add_candidates(&[], &members, &t);
+        assert!(!candidates.iter().any(|a| a.persona_id.as_deref() == Some("coder")));
+        assert!(candidates.iter().any(|a| a.persona_id.as_deref() == Some("researcher")));
+    }
+
+    #[test]
     fn roster_lookup_beats_spoof_name() {
         let members = vec![member("agent-a", "Researcher")];
         assert_eq!(
@@ -239,6 +271,29 @@ mod tests {
             conductor_policy: Default::default(),
         };
         assert!(session_is_room(Some(&meta)));
+    }
+
+    #[test]
+    fn library_placeholders_include_four_personas() {
+        let t = i18n::strings("fr");
+        let list = agents_with_library_placeholders(&[], &t);
+        assert_eq!(list.len(), 4);
+        assert!(list.iter().any(|a| a.persona_id.as_deref() == Some("coder")));
+        assert_eq!(
+            list.iter()
+                .find(|a| a.persona_id.as_deref() == Some("coder"))
+                .and_then(|a| a.display_name.as_deref()),
+            Some("Coder")
+        );
+        assert_eq!(
+            roster_agent_label(
+                &t,
+                list.iter()
+                    .find(|a| a.persona_id.as_deref() == Some("coder"))
+                    .unwrap(),
+            ),
+            "Codeur"
+        );
     }
 
     #[test]

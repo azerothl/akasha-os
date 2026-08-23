@@ -369,6 +369,14 @@ pub struct AgentSpec {
     pub agent_id: String,
     pub goal: AgentGoal,
     #[serde(default)]
+    pub kind: AgentKind,
+    /// Libellé roster (ex. « Coder ») — distinct de la directive / objectif.
+    #[serde(default)]
+    pub display_name: Option<String>,
+    /// Persona intégrée (`researcher`, `coder`, …) si applicable.
+    #[serde(default)]
+    pub persona_id: Option<String>,
+    #[serde(default)]
     pub system_prompt: Option<String>,
     #[serde(default)]
     pub skills: Vec<String>,
@@ -394,11 +402,33 @@ pub struct AgentSpec {
     pub optimize_prompt: bool,
 }
 
+impl AgentSpec {
+    pub fn roster_display_name(&self) -> &str {
+        if let Some(n) = self.display_name.as_deref() {
+            let t = n.trim();
+            if !t.is_empty() {
+                return t;
+            }
+        }
+        let d = self.goal.statement.trim();
+        if !d.is_empty() {
+            return d;
+        }
+        self.agent_id.as_str()
+    }
+}
+
 /// `agent.create`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentCreateRequest {
     /// Directive initiale (alias de `goal.statement` pour compat).
     pub directive: String,
+    #[serde(default)]
+    pub kind: AgentKind,
+    #[serde(default)]
+    pub display_name: Option<String>,
+    #[serde(default)]
+    pub persona_id: Option<String>,
     /// Capacités initiales demandées (URIs `cap://` ou `tool.invoke:*`).
     #[serde(default)]
     pub caps: Vec<String>,
@@ -447,6 +477,9 @@ impl AgentCreateRequest {
     pub fn simple(directive: impl Into<String>) -> Self {
         Self {
             directive: directive.into(),
+            kind: AgentKind::default(),
+            display_name: None,
+            persona_id: None,
             caps: Vec::new(),
             model_id: None,
             goal: None,
@@ -460,6 +493,15 @@ impl AgentCreateRequest {
             budget: AgentBudget::default(),
             optimize_prompt: false,
         }
+    }
+
+    /// `true` when `agent.create` should spawn the multi-step worker.
+    pub fn spawns_worker(&self) -> bool {
+        if self.kind == AgentKind::Roster {
+            return false;
+        }
+        let g = self.resolved_goal();
+        !g.statement.trim().is_empty() && g.max_steps > 0
     }
 }
 
@@ -577,6 +619,17 @@ pub enum AgentState {
     Done,
     Killed,
     Failed,
+    /// Spécification roster persistée (salon / Agents) sans worker actif.
+    Roster,
+}
+
+/// Agent de tâche (boucle worker) ou membre roster réutilisable (salon).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentKind {
+    #[default]
+    Task,
+    Roster,
 }
 
 /// Nœud du graphe de tâches.
@@ -641,10 +694,22 @@ pub struct AgentInfo {
     /// Libellé court dérivé de la directive (liste / historique).
     #[serde(default)]
     pub title: String,
+    #[serde(default)]
+    pub kind: AgentKind,
+    #[serde(default)]
+    pub display_name: Option<String>,
+    #[serde(default)]
+    pub persona_id: Option<String>,
 }
 
 impl AgentInfo {
     pub fn display_title(&self) -> &str {
+        if let Some(n) = self.display_name.as_deref() {
+            let t = n.trim();
+            if !t.is_empty() {
+                return t;
+            }
+        }
         let t = self.title.trim();
         if !t.is_empty() {
             return t;
@@ -654,6 +719,10 @@ impl AgentInfo {
             return d;
         }
         self.agent_id.as_str()
+    }
+
+    pub fn is_roster(&self) -> bool {
+        self.kind == AgentKind::Roster || self.state == AgentState::Roster
     }
 }
 
@@ -2792,8 +2861,8 @@ mod media_option_tests {
 #[cfg(test)]
 mod chat_session_room_tests {
     use super::{
-        ChatRoomMember, ChatSessionMessage, ChatSessionMeta, ChatSessionMode,
-        ChatRoomConductorPolicy,
+        AgentCreateRequest, AgentGoal, AgentInfo, AgentKind, AgentState, ChatRoomMember,
+        ChatSessionMessage, ChatSessionMeta, ChatSessionMode, ChatRoomConductorPolicy,
     };
 
     #[test]
@@ -2877,5 +2946,48 @@ mod chat_session_room_tests {
         let back: ChatSessionMessage = serde_json::from_str(&json).unwrap();
         assert_eq!(back.speaker_id.as_deref(), Some("agent-a"));
         assert_eq!(back.speaker_name.as_deref(), Some("Alpha"));
+    }
+
+    #[test]
+    fn agent_info_display_title_prefers_display_name() {
+        let info = AgentInfo {
+            agent_id: "agent-1".into(),
+            state: AgentState::Roster,
+            directive: "Propose concrete implementation steps.".into(),
+            pid: None,
+            caps: vec![],
+            last_output: String::new(),
+            step: 0,
+            max_steps: 0,
+            current_task: None,
+            parent_id: None,
+            children: vec![],
+            tokens_used: 0,
+            skills: vec![],
+            tools: vec![],
+            mcp_servers: vec![],
+            fail_reason: None,
+            session_id: None,
+            title: String::new(),
+            kind: AgentKind::Roster,
+            display_name: Some("Coder".into()),
+            persona_id: Some("coder".into()),
+        };
+        assert_eq!(info.display_title(), "Coder");
+        assert!(info.is_roster());
+    }
+
+    #[test]
+    fn roster_create_request_does_not_spawn_worker() {
+        let mut req = AgentCreateRequest::simple(String::new());
+        req.kind = AgentKind::Roster;
+        req.display_name = Some("Planner".into());
+        assert!(!req.spawns_worker());
+        req.kind = AgentKind::Task;
+        req.goal = Some(AgentGoal {
+            statement: "do work".into(),
+            ..Default::default()
+        });
+        assert!(req.spawns_worker());
     }
 }

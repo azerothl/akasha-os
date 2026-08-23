@@ -14,11 +14,12 @@ use aos_agent::schedule::{
 };
 use aos_ipc::BusClient;
 use aos_proto::{
-    AgentCreateRequest, AgentGoal, AgentIdRequest, AgentInfo, AgentPromptOptimizeRequest,
+    AgentCreateRequest, AgentGoal, AgentIdRequest, AgentInfo, AgentKind, AgentPromptOptimizeRequest,
     AgentPromptOptimizeResponse, AgentSteerRequest, AgentTrace, AuditEvent, AuditQueryRequest,
     CapInfo, CapListRequest, CapRevokeRequest, ChatAttachment, ChatMessage, ChatRoomMember,
     ChatSessionAppendRequest, ChatSessionCreateRequest, ChatSessionGetResponse,
-    ChatSessionIdRequest, ChatSessionMembersAddRequest, ChatSessionMeta, ChatSessionRoomTurnCancelRequest,
+    ChatSessionIdRequest, ChatSessionMembersAddRequest, ChatSessionMembersRemoveRequest,
+    ChatSessionMeta, ChatSessionRoomTurnCancelRequest,
     ChatSessionRoomTurnRequest, ChatSessionRoomTurnResponse, ChatSessionSetModeRequest,
     ChatSessionRenameRequest, ChatSessionSetModelRequest, ConfirmResponseRequest,
     FeedbackSubmitRequest, FeedbackSubmitResponse, FilesGenerateRequest, FilesGenerateResponse,
@@ -1140,6 +1141,7 @@ async fn handle_cmd(
             }
         }
         Cmd::AgentCreate {
+            display_name,
             task,
             system_prompt,
             skills,
@@ -1153,22 +1155,52 @@ async fn handle_cmd(
             session_id,
             origin,
             join_active_room,
+            library,
         } => {
-            let mut req = AgentCreateRequest::simple(task.clone());
-            req.system_prompt = system_prompt;
+            let name = display_name.trim().to_string();
+            if name.is_empty() {
+                let _ = evt_tx.send(Evt::Error("display_name requis".into()));
+                return;
+            }
+            let has_goal = !library && !task.trim().is_empty();
+            let mut req = AgentCreateRequest::simple(if library {
+                String::new()
+            } else {
+                task.clone()
+            });
+            req.kind = if library || !has_goal {
+                AgentKind::Roster
+            } else {
+                AgentKind::Task
+            };
+            req.display_name = Some(name.clone());
+            if library {
+                let role = task.trim();
+                req.system_prompt = if system_prompt.is_some() {
+                    system_prompt
+                } else if role.is_empty() {
+                    None
+                } else {
+                    Some(role.to_string())
+                };
+            } else {
+                req.system_prompt = system_prompt;
+            }
             req.skills = skills;
             req.tools = tools;
             req.mcp_servers = mcp_servers;
             req.documents = documents;
-            req.optimize_prompt = optimize_prompt;
+            req.optimize_prompt = if library { false } else { optimize_prompt };
             req.session_id = session_id.clone();
-            req.goal = Some(AgentGoal {
-                statement: task.clone(),
-                success_criteria: vec![],
-                max_steps,
-                max_subagents: CHAT_AGENT_MAX_SUBAGENTS,
-                timeout_secs,
-            });
+            if has_goal {
+                req.goal = Some(AgentGoal {
+                    statement: task.clone(),
+                    success_criteria: vec![],
+                    max_steps,
+                    max_subagents: CHAT_AGENT_MAX_SUBAGENTS,
+                    timeout_secs,
+                });
+            }
             req.model_id = model_id;
             if req.skills.iter().any(|s| s.contains("notes"))
                 || req.tools.iter().any(|t| t.starts_with("notes."))
@@ -1202,14 +1234,9 @@ async fn handle_cmd(
                                 .await
                             {
                                 if resp.meta.mode == aos_proto::ChatSessionMode::Room {
-                                    let display = if task.len() > 48 {
-                                        format!("{}…", &task[..48])
-                                    } else {
-                                        task.clone()
-                                    };
                                     let member = ChatRoomMember {
                                         agent_id: r.agent_id.clone(),
-                                        display_name: display,
+                                        display_name: name.clone(),
                                         persona_id: None,
                                         joined_ms: room_joined_ms(),
                                     };
@@ -1229,11 +1256,25 @@ async fn handle_cmd(
                             }
                         }
                     }
-                    if let Some(sid) = session_id {
-                        let ack = format!("Agent {} lancé en fond.", r.agent_id);
+                    if library {
+                        let _ = evt_tx.send(Evt::Status(format!(
+                            "« {name} » ajouté à la bibliothèque ({})",
+                            r.agent_id
+                        )));
+                    } else if let Some(sid) = session_id {
+                        let ack = if has_goal {
+                            format!("Agent {} lancé en fond.", r.agent_id)
+                        } else {
+                            format!("Agent roster {} enregistré.", r.agent_id)
+                        };
+                        let card_title = if has_goal {
+                            task.clone()
+                        } else {
+                            name.clone()
+                        };
                         let att = ChatAttachment::AgentRef {
                             agent_id: r.agent_id.clone(),
-                            title: task.clone(),
+                            title: card_title.clone(),
                             origin: origin.clone(),
                         };
                         let _ = bus
@@ -1253,12 +1294,16 @@ async fn handle_cmd(
                         let _ = evt_tx.send(Evt::AgentSpawned {
                             session_id: sid,
                             agent_id: r.agent_id.clone(),
-                            title: task,
+                            title: card_title,
                             origin,
                             ack,
                         });
                     } else {
-                        let _ = evt_tx.send(Evt::Status(format!("agent créé : {}", r.agent_id)));
+                        let _ = evt_tx.send(Evt::Status(format!(
+                            "agent {} : {}",
+                            r.agent_id,
+                            if has_goal { "créé" } else { "roster enregistré" }
+                        )));
                     }
                 }
                 Err(e) => {
@@ -2458,6 +2503,33 @@ async fn handle_cmd(
                 }
             }
         }
+        Cmd::SessionMembersRemove {
+            session_id,
+            agent_id,
+        } => {
+            match bus
+                .call::<ChatSessionMembersRemoveRequest, ChatSessionMeta>(
+                    "chat.session.members.remove",
+                    &ChatSessionMembersRemoveRequest {
+                        session_id: session_id.clone(),
+                        agent_id: agent_id.clone(),
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(_) => {
+                    refresh_sessions(&bus, &evt_tx).await;
+                    load_session(&bus, &evt_tx, &session_id).await;
+                    let _ = evt_tx.send(Evt::Status(format!(
+                        "retiré du salon : {agent_id}"
+                    )));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
         Cmd::RoomAddPersona {
             session_id,
             persona_id,
@@ -2467,17 +2539,9 @@ async fn handle_cmd(
                 let _ = evt_tx.send(Evt::Error(format!("persona inconnue: {persona_id}")));
                 return;
             };
-            let mut req = AgentCreateRequest::simple(persona.directive);
-            req.system_prompt = Some(persona.system_prompt.to_string());
+            let canonical_name = persona.display_name.to_string();
+            let mut req = aos_agent::room_personas::persona_create_request(persona, model_id);
             req.session_id = Some(session_id.clone());
-            req.model_id = model_id;
-            req.goal = Some(AgentGoal {
-                statement: persona.directive.to_string(),
-                success_criteria: vec![],
-                max_steps: 1,
-                max_subagents: 0,
-                timeout_secs: 300,
-            });
             match bus
                 .call::<AgentCreateRequest, aos_proto::AgentCreateResponse>(
                     agent_intents::CREATE,
@@ -2489,7 +2553,7 @@ async fn handle_cmd(
                 Ok(r) => {
                     let member = ChatRoomMember {
                         agent_id: r.agent_id,
-                        display_name: persona.display_name.to_string(),
+                        display_name: canonical_name.clone(),
                         persona_id: Some(persona.id.to_string()),
                         joined_ms: room_joined_ms(),
                     };
@@ -2508,8 +2572,7 @@ async fn handle_cmd(
                             refresh_sessions(&bus, &evt_tx).await;
                             load_session(&bus, &evt_tx, &session_id).await;
                             let _ = evt_tx.send(Evt::Status(format!(
-                                "persona {} ajoutée au salon",
-                                persona.display_name
+                                "« {canonical_name} » ajouté au salon"
                             )));
                         }
                         Err(e) => {

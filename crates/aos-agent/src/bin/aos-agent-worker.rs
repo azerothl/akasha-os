@@ -1663,6 +1663,9 @@ async fn spawn_child(
     let brief = clamp_spawn_brief(brief);
     let req = AgentCreateRequest {
         directive: brief.clone(),
+        kind: Default::default(),
+        display_name: None,
+        persona_id: None,
         caps: caps.to_vec(),
         model_id: parent.model_id.clone(),
         goal: Some(AgentGoal {

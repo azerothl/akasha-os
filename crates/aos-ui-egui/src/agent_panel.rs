@@ -34,6 +34,7 @@ pub fn state_color(state: &AgentState) -> Color32 {
         AgentState::Paused => Color32::from_rgb(160, 160, 180),
         AgentState::Running => Color32::from_rgb(120, 180, 230),
         AgentState::Created => Color32::GRAY,
+        AgentState::Roster => Color32::from_rgb(140, 180, 160),
     }
 }
 
@@ -579,9 +580,9 @@ pub fn draw_agent_detail(
                         actions.retry = true;
                     }
                 }
-                AgentState::Created => {}
+                AgentState::Created | AgentState::Roster => {}
             }
-            if !matches!(a.state, AgentState::Killed | AgentState::Done) {
+            if !matches!(a.state, AgentState::Killed | AgentState::Done | AgentState::Roster) {
                 if ui.button(t.agent_kill).clicked() {
                     actions.kill = true;
                 }

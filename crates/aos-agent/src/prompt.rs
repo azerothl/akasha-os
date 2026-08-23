@@ -201,6 +201,9 @@ mod tests {
                 statement: "écrire une note".into(),
                 ..Default::default()
             },
+            kind: Default::default(),
+            display_name: None,
+            persona_id: None,
             system_prompt: Some("Sois bref.".into()),
             skills: vec![],
             tools: vec!["notes.create".into()],
