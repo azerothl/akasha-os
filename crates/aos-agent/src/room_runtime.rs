@@ -288,7 +288,10 @@ pub async fn execute_room_conduct(
     let mut queue =
         sanitize_member_queue(build_initial_queue(&req.content, &session.meta.members), &session.meta.members);
     if queue.is_empty() {
-        return Err("aucun locuteur déterminé".into());
+        return Ok(AgentRoomConductResponse {
+            agent_turns: 0,
+            cancelled: false,
+        });
     }
 
     let mut agent_turns = 0u32;

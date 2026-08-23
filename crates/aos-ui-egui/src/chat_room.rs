@@ -35,8 +35,16 @@ pub fn format_turn_speaker_queue(
     }
     let names: Vec<String> = queue
         .iter()
-        .map(|id| roster_member_label(t, members, id))
+        .filter_map(|id| {
+            members
+                .iter()
+                .find(|m| m.agent_id == *id)
+                .map(|m| member_display_label(t, m))
+        })
         .collect();
+    if names.is_empty() {
+        return None;
+    }
     Some(names.join(t.room_queue_joiner))
 }
 
@@ -306,6 +314,26 @@ mod tests {
         for id in ["researcher", "critic", "coder", "planner"] {
             assert!(persona_by_id(id).is_some());
         }
+    }
+
+    #[test]
+    fn ghost_mention_no_speaker_queue_label() {
+        let t = i18n::strings("fr");
+        let mut m1 = member("persona-critic", "Critic");
+        m1.persona_id = Some("critic".into());
+        let members = vec![m1];
+        assert!(format_turn_speaker_queue(&t, "@Dessinateur", &members).is_none());
+        assert!(format_turn_speaker_queue(&t, "@agent_id_123", &members).is_none());
+    }
+
+    #[test]
+    fn canvas_update_queues_strip_member_without_at() {
+        let t = i18n::strings("fr");
+        let mut m1 = member("persona-critic", "Critic");
+        m1.persona_id = Some("critic".into());
+        let members = vec![m1];
+        let q = format_turn_speaker_queue(&t, "Mets à jour le dessin", &members).expect("queue");
+        assert!(q.contains(t.persona_critic));
     }
 
     #[test]
