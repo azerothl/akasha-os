@@ -169,6 +169,9 @@ Commandes slash :
 | `/kill <id>` / `/pause <id>` | Contrôler un agent |
 | `/image <prompt>` | Générer un PNG (`media.image.generate`) sous `/downloads` |
 | `/speak <texte>` | Générer un WAV (`media.audio.generate`) sous `/downloads` |
+| `/canvas` | Basculer le canvas de dessin vectoriel partagé de la session |
+
+**Canvas chat (traits vectoriels, live)** — surface de dessin liée à la session (humain + agents). Module WASM bundlé `canvas` : `canvas.stroke` / `rect` / `ellipse` / `erase` / `clear` / `undo` / `get` / `export`. Document dans `var/chat/<id>/canvas.json` (pas de diffusion). Distinct du studio Image et de `/image`.
 
 ---
 
@@ -310,7 +313,7 @@ Persistés dans `var/run/preferences.json` (migration depuis `onboarding.json` s
 | Agents | Modèle par défaut, max steps (1–128), timeout (60–86400 s) |
 | Schedules | Intervalle de déclenchement agent (`schedule.*`) |
 | Secrets | Clés Brave / GitHub / OpenAI → vault chiffré ; clé maître dans le keyring OS |
-| Modules | Catalogue local signé (E10) ; l'install demande toujours la revue de caps ; désinstall des non-bundlés (pas `notes` / `tasks` / `ext-rt`) |
+| Modules | Catalogue local signé (E10) ; l'install demande toujours la revue de caps ; désinstall des non-bundlés (pas `notes` / `tasks` / `ext-rt` / `canvas`) |
 | Web | Moteur de recherche, max caractères browse, max octets fetch |
 
 ---

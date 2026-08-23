@@ -311,6 +311,13 @@ elif [ -d "${ROOT}/modules/ext-rt.aospkg" ]; then
   rm -rf "${OUT}/share/modules/ext-rt.aospkg"
   cp -a "${ROOT}/modules/ext-rt.aospkg" "${OUT}/share/modules/ext-rt.aospkg"
 fi
+if [ -d "${ROOT}/share/modules/canvas.aospkg" ]; then
+  rm -rf "${OUT}/share/modules/canvas.aospkg"
+  cp -a "${ROOT}/share/modules/canvas.aospkg" "${OUT}/share/modules/canvas.aospkg"
+elif [ -d "${ROOT}/modules/canvas.aospkg" ]; then
+  rm -rf "${OUT}/share/modules/canvas.aospkg"
+  cp -a "${ROOT}/modules/canvas.aospkg" "${OUT}/share/modules/canvas.aospkg"
+fi
 
 for cat in catalogue.yaml catalogue.yaml.sig catalogue.pub; do
   src="${ROOT}/share/modules/${cat}"

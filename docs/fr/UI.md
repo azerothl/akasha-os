@@ -29,6 +29,8 @@ Les modules DeclUI installés avec `ui.mode=declarative_ui` apparaissent sous **
 
 Les **sessions chat** restent sous l’onglet Chat — pas un nouvel onglet rail. Le mode **Direct** est le 1:1 par défaut. Le mode **Room** est un salon multi-agent in-app (pas Telegram/Discord) : **Activer le salon** par session, ajout de personas intégrés (Researcher, Critic, Coder, Planner), envoi via `chat.session.room.turn` (conducteur dans `aos-agentd`). L’en-tête de session affiche une **bande membres** (noms du roster). Les bulles résolvent `speaker_id` via le roster — jamais un champ texte libre. Couleurs stables par `speaker_id`. Les workers hors salon gardent les cartes **AgentRef** ; les réponses salon (`origin: room`) n’y dupliquent pas.
 
+Le **canvas chat** est une surface de dessin vectoriel partagée sur la session (pas le studio Image / pas de diffusion). Basculer avec **Activer le canvas** (ou `/canvas`). L’humain dessine (crayon / gomme / rectangle / ellipse) ; les agents utilisent les outils `canvas.*`. Les traits apparaissent en direct (peinture optimiste + poll ~200 ms pour les ops agent, avec courte animation). L’export PNG est un snapshot sous `/downloads`, distinct de `media.image.generate`.
+
 ### Ce qui sort de la liste plate d’onglets
 
 Avant cette spec, ~13 onglets latéraux traitaient Chat, Scénarios, Retour, Caps et Providers à égalité. Après :
