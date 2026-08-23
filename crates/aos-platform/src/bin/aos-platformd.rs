@@ -740,6 +740,8 @@ async fn main() {
                             &req.role,
                             &req.content,
                             req.attachments.clone(),
+                            req.speaker_id.clone(),
+                            req.speaker_name.clone(),
                         );
                         match append_res {
                             Ok(msg) => {
@@ -865,6 +867,156 @@ async fn main() {
             }
         });
     }
+    {
+        let s = sub.clone();
+        svc.on("chat.session.set_mode", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<ChatSessionSetModeRequest>() {
+                    Ok(req) => {
+                        let result = s
+                            .sessions
+                            .lock()
+                            .unwrap()
+                            .set_mode(&req.session_id, req.mode);
+                        match result {
+                            Ok(m) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &m).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::NotFound,
+                                        &e.to_string(),
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("chat.session.members.add", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<ChatSessionMembersAddRequest>() {
+                    Ok(req) => {
+                        let result = s
+                            .sessions
+                            .lock()
+                            .unwrap()
+                            .members_add(&req.session_id, req.member);
+                        match result {
+                            Ok(m) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &m).await;
+                            }
+                            Err(e) => {
+                                let status = if e.to_string().contains("inconnue") {
+                                    aos_ipc::msg::Status::NotFound
+                                } else {
+                                    aos_ipc::msg::Status::BadRequest
+                                };
+                                let _ = ctx.respond_error(status, &e.to_string()).await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("chat.session.members.remove", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<ChatSessionMembersRemoveRequest>() {
+                    Ok(req) => {
+                        let result = s
+                            .sessions
+                            .lock()
+                            .unwrap()
+                            .members_remove(&req.session_id, &req.agent_id);
+                        match result {
+                            Ok(m) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &m).await;
+                            }
+                            Err(e) => {
+                                let status = if e.to_string().contains("inconnue") {
+                                    aos_ipc::msg::Status::NotFound
+                                } else {
+                                    aos_ipc::msg::Status::BadRequest
+                                };
+                                let _ = ctx.respond_error(status, &e.to_string()).await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("chat.session.members.list", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<ChatSessionIdRequest>() {
+                    Ok(req) => {
+                        let result = s.sessions.lock().unwrap().members_list(&req.session_id);
+                        match result {
+                            Ok(members) => {
+                                let _ = ctx
+                                    .respond(
+                                        aos_ipc::msg::Status::Ok,
+                                        &ChatSessionMembersListResponse { members },
+                                    )
+                                    .await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::NotFound,
+                                        &e.to_string(),
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    // Réservé slice futur : conducteur multi-agent (`aos-agentd`). Pas de runtime dans slice 1.
+    svc.on("chat.session.room.turn", move |ctx| async move {
+        let _ = ctx
+            .respond_error(
+                aos_ipc::msg::Status::BadRequest,
+                "chat.session.room.turn réservé — conducteur non implémenté (slice 1)",
+            )
+            .await;
+    });
     {
         let s = sub.clone();
         svc.on("chat.session.archive", move |ctx| {
