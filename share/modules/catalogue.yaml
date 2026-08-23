@@ -26,6 +26,13 @@ entries:
     path: share/modules/ext-rt.aospkg
     hash: sha256:4b1103b4f7d98afc06f27562baa5b70fc64ffd342e8e7f882869d65e14fd6cba
     attested_caps: []
+  - name: canvas
+    version: "1.0.0"
+    kind: module
+    path: share/modules/canvas.aospkg
+    hash: sha256:7946b3227ab76bdeda8633c14f69c82315452c79cdae525f2ebde3543136251f
+    attested_caps:
+      - fs.write:/downloads/**
   - name: mcp-example
     version: "1.0.0"
     kind: mcp

@@ -883,6 +883,38 @@ fn ensure_layout(home: &Path) {
         }
     }
 
+    // Module canvas (chat drawing) — même resync au boot.
+    let canvas_share = home.join("share/modules/canvas.aospkg");
+    let canvas_installed = home.join("var/modules/canvas");
+    if canvas_share.exists() {
+        if bootstrap::sync_packaged_module(&canvas_share, &canvas_installed) {
+            let reg = home.join("var/modules/registry.yaml");
+            if let Ok(mut raw) = fs::read_to_string(&reg) {
+                if !raw.contains("name: canvas") {
+                    raw.push_str(
+                        r#"
+  - name: canvas
+    granted_caps:
+      - fs.write:/downloads/**
+    quarantined: false
+"#,
+                    );
+                    let _ = fs::write(&reg, raw);
+                }
+            } else {
+                let _ = fs::write(
+                    &reg,
+                    r#"installed:
+  - name: canvas
+    granted_caps:
+      - fs.write:/downloads/**
+    quarantined: false
+"#,
+                );
+            }
+        }
+    }
+
     // Runtime scripté ext-rt (template pour modules agent) — package partagé.
     let extrt_share = home.join("share/modules/ext-rt.aospkg");
     let extrt_repo = home.join("modules/ext-rt.aospkg");

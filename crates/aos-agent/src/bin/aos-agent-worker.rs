@@ -1499,13 +1499,29 @@ async fn execute_action(
             let backend = resolve_tool_backend(other, tools);
             match backend {
                 Some(ToolBackend::Module) => {
-                    let outcome =
-                        invoke_module(bus, &agent_id, &caps, other, args, &trace_id).await;
+                    let outcome = invoke_module(
+                        bus,
+                        &agent_id,
+                        &caps,
+                        other,
+                        args,
+                        &trace_id,
+                        spec.session_id.as_deref(),
+                    )
+                    .await;
                     ActResult::Continue(outcome)
                 }
                 None if is_module_fallback_candidate(other) => {
-                    let outcome =
-                        invoke_module(bus, &agent_id, &caps, other, args, &trace_id).await;
+                    let outcome = invoke_module(
+                        bus,
+                        &agent_id,
+                        &caps,
+                        other,
+                        args,
+                        &trace_id,
+                        spec.session_id.as_deref(),
+                    )
+                    .await;
                     ActResult::Continue(outcome)
                 }
                 Some(ToolBackend::Native) => {
@@ -1757,12 +1773,32 @@ async fn invoke_module(
     tool: &str,
     args: &serde_json::Value,
     trace_id: &str,
+    session_id: Option<&str>,
 ) -> String {
     let module = tool.split('.').next().unwrap_or("").to_string();
+    let mut args = args.clone();
+    if module == "canvas" {
+        let missing = args
+            .get("session_id")
+            .and_then(|v| v.as_str())
+            .map(|s| s.is_empty())
+            .unwrap_or(true);
+        if missing {
+            if let Some(sid) = session_id.filter(|s| !s.is_empty()) {
+                if let Some(obj) = args.as_object_mut() {
+                    obj.insert("session_id".into(), serde_json::json!(sid));
+                }
+            }
+        }
+        if let Some(obj) = args.as_object_mut() {
+            obj.entry("author_id".to_string())
+                .or_insert_with(|| serde_json::json!(agent_id));
+        }
+    }
     let req = ModuleInvokeRequest {
         module,
         tool: tool.to_string(),
-        args: args.clone(),
+        args,
         actor: format!("agent:{agent_id}"),
         actor_caps: caps.to_vec(),
         trace_id: trace_id.to_string(),

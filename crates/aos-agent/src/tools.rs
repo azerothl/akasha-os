@@ -456,6 +456,121 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
             required_caps: vec!["tool.invoke:tasks".into()],
         });
     }
+
+    let canvas_tools = [
+        (
+            "canvas.stroke",
+            "Dessiner un trait (polyline) sur le canvas de la session chat (coords 0..1)",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id":{"type":"string"},
+                    "points":{"type":"array","items":{"type":"object","properties":{"x":{"type":"number"},"y":{"type":"number"}},"required":["x","y"]}},
+                    "color":{"type":"string","description":"#RRGGBB"},
+                    "width":{"type":"number","description":"épaisseur relative 0..1"}
+                },
+                "required":["session_id","points"]
+            }),
+        ),
+        (
+            "canvas.rect",
+            "Dessiner un rectangle sur le canvas de session",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id":{"type":"string"},
+                    "x":{"type":"number"},"y":{"type":"number"},
+                    "w":{"type":"number"},"h":{"type":"number"},
+                    "color":{"type":"string"},
+                    "fill":{"type":"boolean"},
+                    "width":{"type":"number"}
+                },
+                "required":["session_id","x","y","w","h"]
+            }),
+        ),
+        (
+            "canvas.ellipse",
+            "Dessiner une ellipse sur le canvas de session",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id":{"type":"string"},
+                    "x":{"type":"number"},"y":{"type":"number"},
+                    "w":{"type":"number"},"h":{"type":"number"},
+                    "color":{"type":"string"},
+                    "fill":{"type":"boolean"},
+                    "width":{"type":"number"}
+                },
+                "required":["session_id","x","y","w","h"]
+            }),
+        ),
+        (
+            "canvas.erase",
+            "Effacer le long d'une polyline (peint le fond)",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id":{"type":"string"},
+                    "points":{"type":"array"},
+                    "width":{"type":"number"}
+                },
+                "required":["session_id","points"]
+            }),
+        ),
+        (
+            "canvas.clear",
+            "Effacer tout le canvas de session",
+            serde_json::json!({
+                "type":"object",
+                "properties":{"session_id":{"type":"string"}},
+                "required":["session_id"]
+            }),
+        ),
+        (
+            "canvas.undo",
+            "Annuler la dernière opération canvas",
+            serde_json::json!({
+                "type":"object",
+                "properties":{"session_id":{"type":"string"}},
+                "required":["session_id"]
+            }),
+        ),
+        (
+            "canvas.get",
+            "Lire les opérations du canvas (after_seq optionnel)",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id":{"type":"string"},
+                    "after_seq":{"type":"integer"}
+                },
+                "required":["session_id"]
+            }),
+        ),
+        (
+            "canvas.export",
+            "Exporter le canvas en PNG sous /downloads (snapshot, pas diffusion)",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id":{"type":"string"},
+                    "path":{"type":"string"},
+                    "width":{"type":"integer"},
+                    "height":{"type":"integer"}
+                },
+                "required":["session_id"]
+            }),
+        ),
+    ];
+    for (name, desc, schema) in canvas_tools {
+        v.push(ToolDesc {
+            name: name.into(),
+            description: desc.into(),
+            input_schema: schema,
+            backend: ToolBackend::Module,
+            required_caps: vec!["tool.invoke:canvas".into()],
+        });
+    }
     v
 }
 
@@ -473,6 +588,14 @@ pub fn default_agent_tools() -> Vec<String> {
         "tasks.list",
         "tasks.update",
         "tasks.complete",
+        "canvas.stroke",
+        "canvas.rect",
+        "canvas.ellipse",
+        "canvas.erase",
+        "canvas.clear",
+        "canvas.undo",
+        "canvas.get",
+        "canvas.export",
         "fs.read",
         "fs.list",
         "fs.write",
@@ -757,11 +880,13 @@ mod tests {
         let caps = caps_for_tools(&tools, &[]);
         assert!(caps.iter().any(|c| c == "tool.invoke:notes"));
         assert!(caps.iter().any(|c| c == "tool.invoke:tasks"));
+        assert!(caps.iter().any(|c| c == "tool.invoke:canvas"));
         assert!(caps.iter().any(|c| c == "fs.read:**"));
         assert!(caps.iter().any(|c| c == "fs.write:**"));
         assert!(caps.iter().any(|c| c == "net.connect:*"));
         assert!(tools.iter().any(|t| t.name == "web.browse"));
         assert!(tools.iter().any(|t| t.name == "tasks.create"));
+        assert!(tools.iter().any(|t| t.name == "canvas.stroke"));
     }
 
     #[test]
