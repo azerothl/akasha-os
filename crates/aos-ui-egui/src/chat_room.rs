@@ -184,7 +184,11 @@ pub fn mention_completions(
         let name_match = !needle.is_empty()
             && m.display_name.to_ascii_lowercase().starts_with(&needle);
         let id_match = !needle.is_empty() && m.agent_id.to_ascii_lowercase().starts_with(&needle);
-        if needle.is_empty() || name_match || id_match {
+        let persona_match = m
+            .persona_id
+            .as_deref()
+            .is_some_and(|p| !needle.is_empty() && p.to_ascii_lowercase().starts_with(&needle));
+        if needle.is_empty() || name_match || id_match || persona_match {
             let label = member_display_label(t, m);
             out.push((insert_mention(input, at, &label), label));
         }

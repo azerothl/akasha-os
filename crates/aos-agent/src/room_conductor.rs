@@ -5,7 +5,13 @@ use aos_proto::{ChatRoomConductorPolicy, ChatRoomMember};
 /// Plafond dur des tours agent par message utilisateur (indépendamment de la politique).
 pub const HARD_MAX_AGENT_TURNS: u32 = 4;
 
-/// Résout un token `@…` vers un `agent_id` membre.
+/// `agent_id` présent dans le roster de session.
+pub fn is_roster_member(agent_id: &str, members: &[ChatRoomMember]) -> bool {
+    members.iter().any(|m| m.agent_id == agent_id)
+}
+
+/// Résout un token `@…` vers un `agent_id` membre du roster (display_name, persona_id, agent_id).
+/// Les `@agent_id_123` inventés hors roster sont ignorés.
 pub fn resolve_mention_token(token: &str, members: &[ChatRoomMember]) -> Option<String> {
     let needle = token.trim_start_matches('@');
     if needle.is_empty() {
@@ -14,9 +20,43 @@ pub fn resolve_mention_token(token: &str, members: &[ChatRoomMember]) -> Option<
     members
         .iter()
         .find(|m| {
-            m.agent_id == needle || m.display_name.eq_ignore_ascii_case(needle)
+            m.agent_id == needle
+                || m.display_name.eq_ignore_ascii_case(needle)
+                || m
+                    .persona_id
+                    .as_deref()
+                    .is_some_and(|p| p.eq_ignore_ascii_case(needle))
         })
         .map(|m| m.agent_id.clone())
+}
+
+/// Filtre une file : uniquement des `agent_id` roster, sans doublons.
+pub fn sanitize_member_queue(queue: Vec<String>, members: &[ChatRoomMember]) -> Vec<String> {
+    let mut out = Vec::new();
+    for id in queue {
+        if is_roster_member(&id, members) && !out.iter().any(|x| x == &id) {
+            out.push(id);
+        }
+    }
+    out
+}
+
+/// Liste lisible des membres pour le prompt système du salon.
+pub fn format_roster_for_prompt(members: &[ChatRoomMember]) -> String {
+    if members.is_empty() {
+        return "aucun".into();
+    }
+    members
+        .iter()
+        .map(|m| {
+            let mut line = format!("{} (@{})", m.display_name, m.agent_id);
+            if let Some(p) = m.persona_id.as_deref() {
+                line.push_str(&format!(" persona={p}"));
+            }
+            line
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// Extrait les mentions `@Name` / `@agent_id` dans l'ordre d'apparition.
@@ -67,41 +107,32 @@ pub fn pick_first_speaker(content: &str, members: &[ChatRoomMember]) -> Option<S
     Some(members[0].agent_id.clone())
 }
 
-/// File initiale : mentions ordonnées, sinon un seul locuteur heuristique.
+/// File initiale : mentions roster ordonnées, sinon un seul locuteur heuristique.
 pub fn build_initial_queue(content: &str, members: &[ChatRoomMember]) -> Vec<String> {
     let mentions = parse_mentions(content, members);
     if !mentions.is_empty() {
-        return mentions;
+        return sanitize_member_queue(mentions, members);
     }
-    pick_first_speaker(content, members)
-        .into_iter()
-        .collect()
+    sanitize_member_queue(
+        pick_first_speaker(content, members)
+            .into_iter()
+            .collect(),
+        members,
+    )
 }
 
-/// Détecte une adresse explicite (`@` ou nom affiché) vers un autre membre.
+/// Détecte une `@mention` roster vers un autre membre (pas de prose / ids inventés).
 pub fn detect_peer_address(
     reply: &str,
     members: &[ChatRoomMember],
     exclude_agent_id: &str,
 ) -> Option<String> {
-    let others: Vec<&ChatRoomMember> = members
-        .iter()
-        .filter(|m| m.agent_id != exclude_agent_id)
-        .collect();
-    if others.is_empty() {
+    if members.len() <= 1 {
         return None;
     }
-    let mentions = parse_mentions(reply, members);
-    for id in mentions {
-        if id != exclude_agent_id {
+    for id in parse_mentions(reply, members) {
+        if id != exclude_agent_id && is_roster_member(&id, members) {
             return Some(id);
-        }
-    }
-    let lower = reply.to_ascii_lowercase();
-    for m in others {
-        let name = m.display_name.trim();
-        if !name.is_empty() && lower.contains(&name.to_ascii_lowercase()) {
-            return Some(m.agent_id.clone());
         }
     }
     None
@@ -203,6 +234,77 @@ mod tests {
         let m = members();
         let peer = detect_peer_address("@Beta can you confirm?", &m, "agent-alpha");
         assert_eq!(peer, Some("agent-beta".into()));
+    }
+
+    #[test]
+    fn invented_agent_id_not_in_speaker_queue() {
+        let m = vec![ChatRoomMember {
+            agent_id: "persona-critic".into(),
+            display_name: "Critic".into(),
+            persona_id: Some("critic".into()),
+            joined_ms: 1,
+        }];
+        let ids = parse_mentions("@agent_id_123 @Critic", &m);
+        assert_eq!(ids, vec![String::from("persona-critic")]);
+        let queue = build_initial_queue("@agent_id_123 update the drawing", &m);
+        assert_eq!(queue, vec![String::from("persona-critic")]);
+        assert!(
+            detect_peer_address(
+                "@agent_id_456 (Dessinateur) please render",
+                &m,
+                "persona-critic"
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn critic_mention_by_display_name_and_persona_id() {
+        let m = vec![ChatRoomMember {
+            agent_id: "persona-critic".into(),
+            display_name: "Critic".into(),
+            persona_id: Some("critic".into()),
+            joined_ms: 1,
+        }];
+        assert_eq!(
+            resolve_mention_token("Critic", &m),
+            Some("persona-critic".into())
+        );
+        assert_eq!(
+            resolve_mention_token("critic", &m),
+            Some("persona-critic".into())
+        );
+        assert_eq!(
+            resolve_mention_token("persona-critic", &m),
+            Some("persona-critic".into())
+        );
+    }
+
+    #[test]
+    fn single_member_room_no_peer_from_invented_mentions() {
+        let m = vec![ChatRoomMember {
+            agent_id: "persona-critic".into(),
+            display_name: "Critic".into(),
+            persona_id: Some("critic".into()),
+            joined_ms: 1,
+        }];
+        let queue = build_initial_queue("please update the house drawing", &m);
+        assert_eq!(queue.len(), 1);
+        assert_eq!(queue[0], "persona-critic");
+    }
+
+    #[test]
+    fn format_roster_for_prompt_lists_members() {
+        let m = vec![ChatRoomMember {
+            agent_id: "persona-critic".into(),
+            display_name: "Critic".into(),
+            persona_id: Some("critic".into()),
+            joined_ms: 1,
+        }];
+        let roster = format_roster_for_prompt(&m);
+        assert!(roster.contains("Critic"));
+        assert!(roster.contains("persona-critic"));
+        assert!(roster.contains("persona=critic"));
     }
 
     #[test]
