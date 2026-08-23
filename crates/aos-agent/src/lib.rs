@@ -15,6 +15,7 @@ pub mod room_runtime;
 pub mod schedule;
 pub mod skills;
 pub mod state;
+pub mod tool_exec;
 pub mod tools;
 
 pub use assess::{parse_assess_response, AssessResult};
