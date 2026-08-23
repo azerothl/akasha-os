@@ -23,7 +23,7 @@ Durable product spec for the **Preview host app** (`crates/aos-ui-egui`). The pu
 | **Primary rail** | Chat · Agents · Create · Memory | Always visible in the left rail. Keyboard: `Ctrl+1` … `Ctrl+4`. |
 | **More (overflow)** | Notes · Tasks · Models · Settings · Caps · Audit · Providers · DeclUI modules · *(tester)* Scenarios · *(tester)* Feedback | Collapsible section. Tester-only surfaces are **not** peer tabs on the rail. |
 
-**Chat sessions** stay 1:1 on the rail today (`ChatSessionMode::Direct`). **Room** (in-app multi-agent salon) is not a new rail tab and is not Telegram/Discord messaging — the backend conductor runs in `aos-agentd` (slice 2); UI for Room mode lands later. Session transcript lines may carry `speaker_id` when Room is surfaced in the UI.
+**Chat sessions** live under the Chat tab — not a new rail tab. **Direct** mode is the default 1:1 assistant. **Room** mode is an in-app multi-agent salon (not Telegram/Discord messaging): enable it per session with **Activer le salon** / **Enable room**, add built-in personas (Researcher, Critic, Coder, Planner), and send messages that route through `chat.session.room.turn` (conductor in `aos-agentd`). The session header shows a **members strip** (roster display names). Bubble labels resolve `speaker_id` via the roster — never a free-text spoof field. Stable per-speaker colors derive from `speaker_id`. Background workers spawned outside the salon still show **AgentRef** cards; room member replies do not duplicate as cards (`origin: room`).
 
 **Create** is the Image Studio tab (`Tab::Image`). Expert sd.cpp controls stay inside the studio behind **Expert mode** — they are not promoted to the rail.
 
@@ -162,4 +162,5 @@ Tester jargon is fine inside Scenarios, Feedback, and audit export — not on th
 | First-run → chat + allowance recap | done |
 | Settings Me/Models/Trust grouping | done |
 | Interface scale preference | done |
+| Chat Room UI (slice 3) | done |
 | Full WCAG audit | planned |

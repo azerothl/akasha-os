@@ -145,6 +145,15 @@ Voir [FIRST-RUN.md](FIRST-RUN.md).
 - Réponses streamées du modèle local (offline par défaut) ; **Stop** annule l'inférence ; **Copier** sur les messages
 - **Cartes agent** dans le chat quand un agent de fond est lié (`/agent` ou délégation)
 - Injection `mem.context` avant infer (hits session + faits utilisateur)
+- **Mode Room** (tranches 1–2 backend, tranche 3 UI) : `ChatSessionMode::Room` étend la même
+  `ChatSession` avec membres de salon et `speaker_id` sur les lignes du transcript.
+  Tranche 2 : **RoomConductor** dans `aos-agentd` (`chat.session.room.turn` →
+  `agent.room_conduct` / `agent.room_turn`). Tranche 3 : UI Chat (onglet existant) :
+  bande membres, **Activer le salon**, personas (Researcher / Critic / Coder / Planner),
+  autocomplétion `@` sur le roster, libellés bulles via roster, indicateur de réflexion + annulation,
+  onglet Agents **Ajouter à la session** (+ case à cocher join-on-create si salon actif).
+  Pas de canal Telegram/Discord — distinct des canaux messagerie
+  (voir [sibling-bridge.md](sibling-bridge.md)).
 
 Commandes slash :
 

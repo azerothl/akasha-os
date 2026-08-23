@@ -1,6 +1,7 @@
 //! Background bus runtime: poll + `handle_cmd`.
 
 use crate::cmd::{Cmd, Evt};
+use crate::chat_room;
 use crate::os_open::{aos_home, bin_aos_session};
 use crate::{
     agent_id_cmd, agent_panel, chat_delegate_agent_spec, chrono_like_stamp, invoke_module_bind,
@@ -15,8 +16,10 @@ use aos_ipc::BusClient;
 use aos_proto::{
     AgentCreateRequest, AgentGoal, AgentIdRequest, AgentInfo, AgentPromptOptimizeRequest,
     AgentPromptOptimizeResponse, AgentSteerRequest, AgentTrace, AuditEvent, AuditQueryRequest,
-    CapInfo, CapListRequest, CapRevokeRequest, ChatAttachment, ChatMessage, ChatSessionAppendRequest,
-    ChatSessionCreateRequest, ChatSessionIdRequest, ChatSessionMeta,
+    CapInfo, CapListRequest, CapRevokeRequest, ChatAttachment, ChatMessage, ChatRoomMember,
+    ChatSessionAppendRequest, ChatSessionCreateRequest, ChatSessionGetResponse,
+    ChatSessionIdRequest, ChatSessionMembersAddRequest, ChatSessionMeta, ChatSessionRoomTurnCancelRequest,
+    ChatSessionRoomTurnRequest, ChatSessionRoomTurnResponse, ChatSessionSetModeRequest,
     ChatSessionRenameRequest, ChatSessionSetModelRequest, ConfirmResponseRequest,
     FeedbackSubmitRequest, FeedbackSubmitResponse, FilesGenerateRequest, FilesGenerateResponse,
     InferParams, InferRequest, McpServerInfo, MemContextRequest, MemContextResponse,
@@ -178,10 +181,7 @@ async fn handle_cmd(
                 {
                     Ok(m) => {
                         let _ = evt_tx.send(Evt::Sessions(vec![m.clone()]));
-                        let _ = evt_tx.send(Evt::SessionLoaded {
-                            id: m.id,
-                            messages: vec![],
-                        });
+                        load_session(&bus, &evt_tx, &m.id).await;
                     }
                     Err(e) => {
                         let _ = evt_tx.send(Evt::Error(format!("session create: {e}")));
@@ -211,10 +211,7 @@ async fn handle_cmd(
                         .await
                         .unwrap_or_default();
                     let _ = evt_tx.send(Evt::Sessions(list));
-                    let _ = evt_tx.send(Evt::SessionLoaded {
-                        id: m.id,
-                        messages: vec![],
-                    });
+                    load_session(&bus, &evt_tx, &m.id).await;
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));
@@ -272,10 +269,7 @@ async fn handle_cmd(
                             .await
                             .unwrap_or_default();
                         let _ = evt_tx.send(Evt::Sessions(list2));
-                        let _ = evt_tx.send(Evt::SessionLoaded {
-                            id: m.id,
-                            messages: vec![],
-                        });
+                        load_session(&bus, &evt_tx, &m.id).await;
                     }
                     Err(e) => {
                         let _ = evt_tx.send(Evt::Error(e.to_string()));
@@ -337,6 +331,8 @@ async fn handle_cmd(
                         role: "user".into(),
                         content: user_text.clone(),
                         attachments: vec![],
+                        speaker_id: None,
+                        speaker_name: None,
                     },
                     vec![],
                 )
@@ -453,6 +449,8 @@ async fn handle_cmd(
                                     role: "assistant".into(),
                                     content: display.clone(),
                                     attachments: vec![],
+                                    speaker_id: None,
+                                    speaker_name: None,
                                 },
                                 vec![],
                             )
@@ -1154,6 +1152,7 @@ async fn handle_cmd(
             model_id,
             session_id,
             origin,
+            join_active_room,
         } => {
             let mut req = AgentCreateRequest::simple(task.clone());
             req.system_prompt = system_prompt;
@@ -1190,6 +1189,46 @@ async fn handle_cmd(
                 .await
             {
                 Ok(r) => {
+                    if join_active_room {
+                        if let Some(sid) = session_id.clone() {
+                            if let Ok(resp) = bus
+                                .call::<ChatSessionIdRequest, ChatSessionGetResponse>(
+                                    "chat.session.get",
+                                    &ChatSessionIdRequest {
+                                        session_id: sid.clone(),
+                                    },
+                                    vec![],
+                                )
+                                .await
+                            {
+                                if resp.meta.mode == aos_proto::ChatSessionMode::Room {
+                                    let display = if task.len() > 48 {
+                                        format!("{}…", &task[..48])
+                                    } else {
+                                        task.clone()
+                                    };
+                                    let member = ChatRoomMember {
+                                        agent_id: r.agent_id.clone(),
+                                        display_name: display,
+                                        persona_id: None,
+                                        joined_ms: room_joined_ms(),
+                                    };
+                                    let _ = bus
+                                        .call::<ChatSessionMembersAddRequest, ChatSessionMeta>(
+                                            "chat.session.members.add",
+                                            &ChatSessionMembersAddRequest {
+                                                session_id: sid.clone(),
+                                                member,
+                                            },
+                                            vec![],
+                                        )
+                                        .await;
+                                    refresh_sessions(&bus, &evt_tx).await;
+                                    load_session(&bus, &evt_tx, &sid).await;
+                                }
+                            }
+                        }
+                    }
                     if let Some(sid) = session_id {
                         let ack = format!("Agent {} lancé en fond.", r.agent_id);
                         let att = ChatAttachment::AgentRef {
@@ -1205,6 +1244,8 @@ async fn handle_cmd(
                                     role: "assistant".into(),
                                     content: ack.clone(),
                                     attachments: vec![att],
+                                    speaker_id: None,
+                                    speaker_name: None,
                                 },
                                 vec![],
                             )
@@ -2371,11 +2412,179 @@ async fn handle_cmd(
                         role,
                         content,
                         attachments,
+                        speaker_id: None,
+                        speaker_name: None,
                     },
                     vec![],
                 )
                 .await;
         }
+        Cmd::SessionSetMode { session_id, mode } => {
+            match bus
+                .call::<ChatSessionSetModeRequest, ChatSessionMeta>(
+                    "chat.session.set_mode",
+                    &ChatSessionSetModeRequest { session_id: session_id.clone(), mode },
+                    vec![],
+                )
+                .await
+            {
+                Ok(_) => {
+                    refresh_sessions(&bus, &evt_tx).await;
+                    load_session(&bus, &evt_tx, &session_id).await;
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::SessionMembersAdd { session_id, member } => {
+            match bus
+                .call::<ChatSessionMembersAddRequest, ChatSessionMeta>(
+                    "chat.session.members.add",
+                    &ChatSessionMembersAddRequest {
+                        session_id: session_id.clone(),
+                        member,
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(_) => {
+                    refresh_sessions(&bus, &evt_tx).await;
+                    load_session(&bus, &evt_tx, &session_id).await;
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::RoomAddPersona {
+            session_id,
+            persona_id,
+            model_id,
+        } => {
+            let Some(persona) = chat_room::persona_by_id(&persona_id) else {
+                let _ = evt_tx.send(Evt::Error(format!("persona inconnue: {persona_id}")));
+                return;
+            };
+            let mut req = AgentCreateRequest::simple(persona.directive);
+            req.system_prompt = Some(persona.system_prompt.to_string());
+            req.session_id = Some(session_id.clone());
+            req.model_id = model_id;
+            req.goal = Some(AgentGoal {
+                statement: persona.directive.to_string(),
+                success_criteria: vec![],
+                max_steps: 1,
+                max_subagents: 0,
+                timeout_secs: 300,
+            });
+            match bus
+                .call::<AgentCreateRequest, aos_proto::AgentCreateResponse>(
+                    agent_intents::CREATE,
+                    &req,
+                    vec![],
+                )
+                .await
+            {
+                Ok(r) => {
+                    let member = ChatRoomMember {
+                        agent_id: r.agent_id,
+                        display_name: persona.display_name.to_string(),
+                        persona_id: Some(persona.id.to_string()),
+                        joined_ms: room_joined_ms(),
+                    };
+                    match bus
+                        .call::<ChatSessionMembersAddRequest, ChatSessionMeta>(
+                            "chat.session.members.add",
+                            &ChatSessionMembersAddRequest {
+                                session_id: session_id.clone(),
+                                member,
+                            },
+                            vec![],
+                        )
+                        .await
+                    {
+                        Ok(_) => {
+                            refresh_sessions(&bus, &evt_tx).await;
+                            load_session(&bus, &evt_tx, &session_id).await;
+                            let _ = evt_tx.send(Evt::Status(format!(
+                                "persona {} ajoutée au salon",
+                                persona.display_name
+                            )));
+                        }
+                        Err(e) => {
+                            let _ = evt_tx.send(Evt::Error(e.to_string()));
+                        }
+                    }
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::RoomTurn { session_id, content } => {
+            let _ = evt_tx.send(Evt::Status("salon : tour en cours…".into()));
+            match bus
+                .call::<ChatSessionRoomTurnRequest, ChatSessionRoomTurnResponse>(
+                    "chat.session.room.turn",
+                    &ChatSessionRoomTurnRequest {
+                        session_id: session_id.clone(),
+                        content,
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(resp) => {
+                    load_session(&bus, &evt_tx, &session_id).await;
+                    let _ = evt_tx.send(Evt::RoomTurnDone {
+                        session_id,
+                        agent_turns: resp.agent_turns,
+                        cancelled: resp.cancelled,
+                    });
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::RoomTurnCancel { session_id } => {
+            match bus
+                .call::<ChatSessionRoomTurnCancelRequest, bool>(
+                    "chat.session.room.turn.cancel",
+                    &ChatSessionRoomTurnCancelRequest { session_id },
+                    vec![],
+                )
+                .await
+            {
+                Ok(_) => {
+                    let _ = evt_tx.send(Evt::ChatCancelled);
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+    }
+}
+
+fn room_joined_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64
+}
+
+pub fn joined_ms_now() -> u64 {
+    room_joined_ms()
+}
+
+async fn refresh_sessions(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>) {
+    if let Ok(list) = bus
+        .call::<(), Vec<ChatSessionMeta>>("chat.session.list", &(), vec![])
+        .await
+    {
+        let _ = evt_tx.send(Evt::Sessions(list));
     }
 }
 
