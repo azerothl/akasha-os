@@ -1870,7 +1870,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             ));
             return;
         };
-        let explicit_canvas = chat_canvas::chat_user_wants_explicit_canvas(&text);
+        let explicit_canvas = chat_canvas::chat_should_open_canvas_face(&text);
         if explicit_canvas {
             self.break_stuck_session_agents(&session_id);
             self.open_canvas_face(&session_id);
