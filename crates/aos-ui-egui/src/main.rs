@@ -487,10 +487,12 @@ fn merge_named_args(dst: &mut Vec<String>, args: &serde_json::Value, key: &str) 
 pub(crate) fn chat_delegate_agent_spec(
     user_text: &str,
     model_output: &str,
+    canvas_open: bool,
 ) -> Option<(String, Vec<String>, Vec<String>, String)> {
     if chat_tts_request(user_text).is_some() {
         return None;
     }
+    let canvas_intent = chat_canvas::chat_wants_canvas_agent(user_text, canvas_open);
     if let Some(action) = aos_agent::actions::parse_action(model_output) {
         let spawn = action.action == "agent.spawn" || action.action == "agent.create";
         let self_tool = chat_action_is_self_tool(&action.action);
@@ -507,9 +509,26 @@ pub(crate) fn chat_delegate_agent_spec(
             } else {
                 brief
             };
-            let (mut skills, mut tools) = chat_agent_kit(&brief);
+            let use_canvas = canvas_open
+                || canvas_intent
+                || chat_canvas::chat_user_wants_canvas_draw(&brief);
+            let brief = if use_canvas && !self_tool {
+                chat_canvas::canvas_agent_brief(user_text)
+            } else {
+                brief
+            };
+            let (mut skills, mut tools) = chat_agent_kit_ex(&brief, use_canvas);
             merge_named_args(&mut skills, &action.args, "skills");
             merge_named_args(&mut tools, &action.args, "tools");
+            if use_canvas {
+                // Ensure canvas tools even if model passed a non-canvas tools list.
+                let (_, canvas_tools) = chat_agent_kit_ex(&brief, true);
+                for t in canvas_tools {
+                    if !tools.iter().any(|x| x == &t) {
+                        tools.push(t);
+                    }
+                }
+            }
             if self_tool {
                 for t in [
                     "module.scaffold",
@@ -530,12 +549,29 @@ pub(crate) fn chat_delegate_agent_spec(
             if prose.is_empty() || self_tool {
                 prose = if chat_user_wants_module_authoring(user_text) || self_tool {
                     "Je lance un agent pour créer le module.".into()
+                } else if use_canvas {
+                    "Je lance un agent pour dessiner sur le canvas.".into()
                 } else {
                     "Je lance un agent pour cette tâche.".into()
                 };
             }
             return Some((brief, skills, tools, prose));
         }
+    }
+    // JSON agent.spawn tronqué / illisible : si intent canvas, déléguer quand même.
+    if canvas_intent
+        && (model_output.contains("agent.spawn")
+            || model_output.contains("\"action\"")
+            || model_output.to_lowercase().contains("relance")
+            || model_output.to_lowercase().contains("agent"))
+    {
+        let (skills, tools) = chat_agent_kit_ex(user_text, true);
+        return Some((
+            chat_canvas::canvas_agent_brief(user_text),
+            skills,
+            tools,
+            "Je lance un agent pour dessiner sur le canvas.".into(),
+        ));
     }
     if chat_user_wants_module_authoring(user_text) {
         let (skills, tools) = chat_agent_kit(user_text);
@@ -546,10 +582,10 @@ pub(crate) fn chat_delegate_agent_spec(
             "Je lance un agent pour créer le module.".into(),
         ));
     }
-    if chat_canvas::chat_user_wants_canvas_draw(user_text) {
+    if canvas_intent {
         let (skills, tools) = chat_agent_kit_ex(user_text, true);
         return Some((
-            user_text.to_string(),
+            chat_canvas::canvas_agent_brief(user_text),
             skills,
             tools,
             "Je lance un agent pour dessiner sur le canvas.".into(),
@@ -1821,6 +1857,14 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             .iter()
             .find(|s| s.id == session_id)
             .and_then(|s| s.model_id.clone());
+        let canvas_open = self
+            .sessions
+            .iter()
+            .find(|s| s.id == session_id)
+            .map(|s| s.canvas_open)
+            .unwrap_or(false)
+            || (self.active_session.as_deref() == Some(session_id.as_str())
+                && (!self.canvas_panel.ops.is_empty() || self.canvas_panel.next_seq > 1));
         let _ = self.cmd_tx.send(Cmd::Chat {
             session_id,
             history,
@@ -1830,6 +1874,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             max_steps: chat_agent_max_steps(self.prefs.default_max_steps),
             routing: self.prefs.routing.clone(),
             language: self.prefs.language.clone(),
+            canvas_open,
         });
         self.mark_onboarding_chat_sent();
         self.scen_chat = true;
@@ -6451,7 +6496,7 @@ mod delegate_tests {
     #[test]
     fn create_module_dump_delegates_instead_of_display() {
         let dumped = r#"{"kind":"column","children":[{"kind":"heading","text":"Ping"}]}"#;
-        let spec = chat_delegate_agent_spec("crée un module ping", dumped);
+        let spec = chat_delegate_agent_spec("crée un module ping", dumped, false);
         let (brief, _skills, tools, prose) = spec.expect("doit déléguer");
         assert_eq!(brief, "crée un module ping");
         assert!(tools.iter().any(|x| x == "module.scaffold"));
@@ -6462,7 +6507,8 @@ mod delegate_tests {
     fn explain_module_does_not_delegate() {
         assert!(chat_delegate_agent_spec(
             "c'est quoi un module",
-            "Un module est un package."
+            "Un module est un package.",
+            false,
         )
         .is_none());
     }
@@ -6470,7 +6516,7 @@ mod delegate_tests {
     #[test]
     fn model_scaffold_action_delegates() {
         let out = r#"{"action":"module.scaffold","args":{"name":"ping"}}"#;
-        let spec = chat_delegate_agent_spec("fais un ping", out);
+        let spec = chat_delegate_agent_spec("fais un ping", out, false);
         let (_brief, _skills, tools, _) = spec.expect("doit déléguer");
         assert!(tools.iter().any(|x| x == "module.scaffold"));
     }
@@ -6478,17 +6524,47 @@ mod delegate_tests {
     #[test]
     fn tts_ask_does_not_delegate_agent() {
         let out = r#"{"action":"agent.spawn","args":{"brief":"tts"}}"#;
-        assert!(chat_delegate_agent_spec("génère un audio qui dit bonjour", out).is_none());
+        assert!(chat_delegate_agent_spec("génère un audio qui dit bonjour", out, false).is_none());
         let (_skills, tools) = chat_agent_kit("génère un audio de bonjour");
         assert!(tools.iter().any(|t| t == "media.audio.generate"));
     }
 
     #[test]
     fn draw_request_delegates_with_canvas_tools() {
-        let spec = chat_delegate_agent_spec("dessine une maison", "Ok.");
+        let spec = chat_delegate_agent_spec("dessine une maison", "Ok.", false);
         let (_brief, _skills, tools, prose) = spec.expect("doit déléguer");
         assert!(tools.iter().any(|x| x == "canvas.stroke"));
         assert!(prose.to_lowercase().contains("canvas") || prose.contains("dessin"));
         assert!(!tools.iter().any(|x| x == "media.image.generate"));
+    }
+
+    #[test]
+    fn canvas_followup_delegates_when_open() {
+        let spec = chat_delegate_agent_spec(
+            "essai encore en ajoutant plus de détails",
+            "Je relance l'agent pour générer une version plus détaillée.",
+            true,
+        );
+        let (brief, _skills, tools, _) = spec.expect("doit déléguer retouche");
+        assert!(tools.iter().any(|x| x == "canvas.stroke"));
+        assert!(brief.contains("canvas"));
+    }
+
+    #[test]
+    fn canvas_truncated_spawn_still_delegates() {
+        let out = r#"{"action":"agent.spawn","args":{"brief":"Génération d'une maison médiévale avec plus de détails en cours..."#;
+        let spec = chat_delegate_agent_spec("vas y", out, true);
+        let (_brief, _skills, tools, _) = spec.expect("JSON tronqué → filet canvas");
+        assert!(tools.iter().any(|x| x == "canvas.stroke"));
+    }
+
+    #[test]
+    fn canvas_followup_without_open_does_not_delegate() {
+        assert!(chat_delegate_agent_spec(
+            "essai encore en ajoutant plus de détails",
+            "D'accord.",
+            false,
+        )
+        .is_none());
     }
 }

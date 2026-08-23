@@ -493,7 +493,65 @@ pub fn chat_user_wants_canvas_draw(text: &str) -> bool {
         "tracer",
         "canvas",
         "esquisse",
+        "redessine",
+        "redessiner",
     ]
     .iter()
     .any(|k| lower.contains(k))
+}
+
+/// Suivi / retouche quand le canvas de session est déjà ouvert.
+pub fn chat_user_wants_canvas_followup(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    [
+        "encore",
+        "retry",
+        "redo",
+        "refais",
+        "recommence",
+        "recommencer",
+        "améliore",
+        "amelior",
+        "détail",
+        "detail",
+        "modifie",
+        "modifier",
+        "plus de",
+        "mieux",
+        "retente",
+        "retenter",
+        "essaie",
+        "essai",
+        "essay",
+        "retouche",
+        "redessine",
+        "clear",
+        "efface",
+        "recommen",
+        "autre version",
+        "nouvelle version",
+        "vas-y",
+        "vas y",
+        "go ahead",
+        "do it",
+        "lance",
+        "relance",
+    ]
+    .iter()
+    .any(|k| lower.contains(k))
+}
+
+/// Déléguer un agent canvas : première demande de dessin, ou suivi si panneau ouvert.
+pub fn chat_wants_canvas_agent(text: &str, canvas_open: bool) -> bool {
+    chat_user_wants_canvas_draw(text) || (canvas_open && chat_user_wants_canvas_followup(text))
+}
+
+pub fn canvas_agent_brief(user_text: &str) -> String {
+    format!(
+        "{user_text}\n\n\
+         Contexte: canvas de session chat déjà lié — utilise uniquement canvas.* \
+         (coords normalisées 0..1). Commence par canvas.get. Si le dessin est trop \
+         pauvre ou à recommencer: canvas.clear puis redessine avec plus de détails \
+         (traits, formes, couleurs). Ne génère pas d'image diffusion."
+    )
 }

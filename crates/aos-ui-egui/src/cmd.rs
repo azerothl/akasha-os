@@ -25,6 +25,8 @@ pub(crate) enum Cmd {
         routing: String,
         /// Prefs UI language (`fr` / `en`) for product-doc injection.
         language: String,
+        /// Session canvas panel open — enables draw/revise agent delegation.
+        canvas_open: bool,
     },
     SessionBootstrap,
     SessionCreate { title: Option<String> },

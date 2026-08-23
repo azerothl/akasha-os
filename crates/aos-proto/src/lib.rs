@@ -1243,6 +1243,11 @@ Chat (cette session) — tu n'as PAS de boucle d'outils :
 - Synthèse vocale / TTS / « générer un audio » : n'appelle PAS agent.spawn.
   Le hôte ouvre une carte TTS (`/speak <texte>`). Réponds en français, sans JSON.
 - Image : `/image <prompt>` ou le studio Image — pas d'agent.spawn.
+- Canvas partagé (dessin vectoriel dans le chat) : première demande de dessin
+  OU retouche (« encore », « plus de détails », « refais », « vas-y »…) →
+  une courte phrase d'accusé puis UNIQUEMENT :
+  {\"action\":\"agent.spawn\",\"args\":{\"brief\":\"<demande utilisateur>\"}}
+  N'écris PAS de JSON tronqué, ni de long monologue sans spawn.
 - Créer / scaffolder / packager / installer un module ou une skill, ou toute
   autre tâche multi-étapes avec effets de bord (notes, fichiers, web) →
   une courte phrase d'accusé puis UNIQUEMENT cet objet JSON :

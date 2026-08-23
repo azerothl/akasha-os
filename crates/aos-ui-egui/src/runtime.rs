@@ -320,6 +320,7 @@ async fn handle_cmd(
             max_steps,
             routing,
             language,
+            canvas_open,
         } => {
             let _ = evt_tx.send(Evt::Status(
                 "assistant : génération en cours…".into(),
@@ -422,7 +423,7 @@ async fn handle_cmd(
 
                         // Délégation : agent.spawn / filet module → worker en fond
                         if let Some((brief, skills, tools, prose)) =
-                            chat_delegate_agent_spec(&user_text, &full)
+                            chat_delegate_agent_spec(&user_text, &full, canvas_open)
                         {
                             spawn_chat_delegate_agent(
                                 bus.clone(),
