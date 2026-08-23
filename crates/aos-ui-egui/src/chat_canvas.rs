@@ -339,6 +339,7 @@ pub fn ui_canvas_toolbar(
 pub fn ui_canvas_surface(
     ui: &mut Ui,
     state: &mut CanvasPanelState,
+    empty_hint: &str,
 ) -> Option<CanvasUiAction> {
     let mut action: Option<CanvasUiAction> = None;
     let dark = ui.visuals().dark_mode;
@@ -477,10 +478,92 @@ pub fn ui_canvas_surface(
         ui.ctx().request_repaint();
     }
 
+    if state.ops.is_empty()
+        && state.draft_points.is_empty()
+        && state.drag_origin.is_none()
+        && !empty_hint.is_empty()
+    {
+        let font = eframe::egui::FontId::proportional(13.0);
+        let galley = ui
+            .painter()
+            .layout_no_wrap(empty_hint.to_string(), font, ui.visuals().weak_text_color());
+        let pos = rect.center() - galley.size() * 0.5;
+        ui.painter().galley(pos, galley, Color32::TRANSPARENT);
+    }
+
     action
 }
 
-pub fn chat_user_wants_canvas_draw(text: &str) -> bool {
+#[cfg(test)]
+mod routing_tests {
+    use super::*;
+
+    #[test]
+    fn bare_draw_is_pixel_not_canvas() {
+        assert!(chat_user_wants_pixel_draw("dessine une maison"));
+        assert!(!chat_user_wants_explicit_canvas("dessine une maison"));
+        assert!(!chat_wants_canvas_agent("dessine une maison", true));
+    }
+
+    #[test]
+    fn explicit_canvas_markers() {
+        assert!(chat_user_wants_explicit_canvas("dessine sur le canvas"));
+        assert!(chat_user_wants_explicit_canvas("draw on the canvas"));
+        assert!(chat_user_wants_explicit_canvas("ajoute au trait une porte"));
+        assert!(chat_user_wants_explicit_canvas("/canvas"));
+        assert!(!chat_user_wants_pixel_draw("dessine sur le canvas"));
+    }
+
+    #[test]
+    fn followup_keywords_do_not_steal_canvas() {
+        for msg in [
+            "encore",
+            "vas-y",
+            "vas y",
+            "lance",
+            "améliore",
+            "go ahead",
+        ] {
+            assert!(
+                !chat_wants_canvas_agent(msg, true),
+                "follow-up {msg} must not route to canvas"
+            );
+        }
+    }
+
+    #[test]
+    fn withdraw_does_not_match_draw() {
+        assert!(!chat_user_wants_pixel_draw("withdraw funds"));
+    }
+}
+
+/// Explicit vector-canvas intent: toggle phrase, slash, or stroke wording — not bare « dessine ».
+pub fn chat_user_wants_explicit_canvas(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    if lower.contains("/canvas") {
+        return true;
+    }
+    if lower.contains("sur le canvas") || lower.contains("on the canvas") {
+        return true;
+    }
+    // « au trait » = vector strokes on the session canvas (not pixel diffusion).
+    if lower.contains("au trait") {
+        return true;
+    }
+    false
+}
+
+fn word_boundary_match(lower: &str, pat: &str) -> bool {
+    lower
+        .split(|c: char| !c.is_alphanumeric())
+        .any(|word| word == pat)
+}
+
+/// Bare draw / sketch wording → Image Studio (pixels), unless explicit canvas markers win.
+pub fn chat_user_wants_pixel_draw(text: &str) -> bool {
+    if chat_user_wants_explicit_canvas(text) {
+        return false;
+    }
     let lower = text.to_lowercase();
     [
         "dessin",
@@ -491,64 +574,19 @@ pub fn chat_user_wants_canvas_draw(text: &str) -> bool {
         "sketch",
         "trace",
         "tracer",
-        "canvas",
         "esquisse",
         "redessine",
         "redessiner",
+        "illustration",
+        "illustrer",
     ]
     .iter()
-    .any(|k| {
-        let pat = k;
-        // Word-boundary check: match only when surrounded by non-alphanumeric characters
-        // to avoid false positives like "withdraw" matching "draw".
-        lower.split(|c: char| !c.is_alphanumeric()).any(|word| word == *pat)
-    })
+    .any(|k| word_boundary_match(&lower, *k))
 }
 
-/// Suivi / retouche quand le canvas de session est déjà ouvert.
-pub fn chat_user_wants_canvas_followup(text: &str) -> bool {
-    let lower = text.to_lowercase();
-    [
-        "encore",
-        "retry",
-        "redo",
-        "refais",
-        "recommence",
-        "recommencer",
-        "améliore",
-        "amelior",
-        "détail",
-        "detail",
-        "modifie",
-        "modifier",
-        "plus de",
-        "mieux",
-        "retente",
-        "retenter",
-        "essaie",
-        "essai",
-        "essay",
-        "retouche",
-        "redessine",
-        "clear",
-        "efface",
-        "recommen",
-        "autre version",
-        "nouvelle version",
-        "vas-y",
-        "vas y",
-        "go ahead",
-        "do it",
-        "lance",
-        "relance",
-    ]
-    .iter()
-    .any(|k| lower.contains(k))
-}
-
-/// Déléguer un agent canvas : première demande de dessin, ou suivi si panneau ouvert.
-pub fn chat_wants_canvas_agent(text: &str, canvas_open: bool) -> bool {
-    chat_user_wants_canvas_draw(text) || (canvas_open && chat_user_wants_canvas_followup(text))
+/// Déléguer un agent canvas : uniquement sur marqueurs explicites (pas « encore » / « vas-y »).
+pub fn chat_wants_canvas_agent(text: &str, _canvas_open: bool) -> bool {
+    chat_user_wants_explicit_canvas(text)
 }
 
 pub fn canvas_agent_brief(user_text: &str) -> String {

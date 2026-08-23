@@ -509,9 +509,8 @@ pub(crate) fn chat_delegate_agent_spec(
             } else {
                 brief
             };
-            let use_canvas = canvas_open
-                || canvas_intent
-                || chat_canvas::chat_user_wants_canvas_draw(&brief);
+            let use_canvas = chat_canvas::chat_user_wants_explicit_canvas(user_text)
+                || chat_canvas::chat_user_wants_explicit_canvas(&brief);
             let brief = if use_canvas && !self_tool {
                 chat_canvas::canvas_agent_brief(user_text)
             } else {
@@ -565,7 +564,7 @@ pub(crate) fn chat_delegate_agent_spec(
             || model_output.to_lowercase().contains("relance")
             || model_output.to_lowercase().contains("agent"))
     {
-        let (skills, tools) = chat_agent_kit_ex(user_text, true);
+        let (skills, tools) = chat_agent_kit_ex(user_text, canvas_open);
         return Some((
             chat_canvas::canvas_agent_brief(user_text),
             skills,
@@ -583,12 +582,21 @@ pub(crate) fn chat_delegate_agent_spec(
         ));
     }
     if canvas_intent {
-        let (skills, tools) = chat_agent_kit_ex(user_text, true);
+        let (skills, tools) = chat_agent_kit_ex(user_text, canvas_open);
         return Some((
             chat_canvas::canvas_agent_brief(user_text),
             skills,
             tools,
             "Je lance un agent pour dessiner sur le canvas.".into(),
+        ));
+    }
+    if chat_canvas::chat_user_wants_pixel_draw(user_text) {
+        let (skills, tools) = chat_agent_kit_ex(user_text, false);
+        return Some((
+            user_text.to_string(),
+            skills,
+            tools,
+            "Je lance un agent pour générer l'image.".into(),
         ));
     }
     None
@@ -768,12 +776,13 @@ fn chat_agent_kit_ex(task: &str, canvas_open: bool) -> (Vec<String>, Vec<String>
         || lower.contains("png")
         || lower.contains("illustration")
         || lower.contains("diffusion")
+        || chat_canvas::chat_user_wants_pixel_draw(task)
     {
         if !tools.iter().any(|x| x == "media.image.generate") {
             tools.push("media.image.generate".into());
         }
     }
-    if canvas_open || chat_canvas::chat_user_wants_canvas_draw(task) {
+    if canvas_open || chat_canvas::chat_user_wants_explicit_canvas(task) {
         for t in [
             "canvas.stroke",
             "canvas.rect",
@@ -3675,7 +3684,14 @@ impl UiApp {
                 match &op {
                     aos_proto::CanvasOpBody::Clear => self.canvas_panel.ops.clear(),
                     aos_proto::CanvasOpBody::Undo => {
-                        let _ = self.canvas_panel.ops.pop();
+                        if let Some(pos) = self
+                            .canvas_panel
+                            .ops
+                            .iter()
+                            .rposition(|o| o.author_id == "human")
+                        {
+                            self.canvas_panel.ops.remove(pos);
+                        }
                     }
                     // Apply optimistically so the stroke/shape is visible immediately without
                     // waiting for the server roundtrip snapshot.
@@ -4372,8 +4388,11 @@ impl UiApp {
                                 egui::Layout::top_down(egui::Align::Min).with_cross_justify(true),
                                 |ui| {
                                     if let Some(ref sid) = active_sid {
-                                        let action =
-                                            chat_canvas::ui_canvas_surface(ui, &mut self.canvas_panel);
+                                        let action = chat_canvas::ui_canvas_surface(
+                                            ui,
+                                            &mut self.canvas_panel,
+                                            t.canvas_empty_hint,
+                                        );
                                         self.dispatch_canvas_ui_action(action, sid);
                                         self.canvas_poll_if_due(ui, sid);
                                     }
@@ -6539,32 +6558,45 @@ mod delegate_tests {
     }
 
     #[test]
-    fn draw_request_delegates_with_canvas_tools() {
+    fn draw_request_delegates_with_image_tools() {
         let spec = chat_delegate_agent_spec("dessine une maison", "Ok.", false);
-        let (_brief, _skills, tools, prose) = spec.expect("doit déléguer");
+        let (_brief, _skills, tools, _prose) = spec.expect("doit déléguer image");
+        assert!(tools.iter().any(|x| x == "media.image.generate"));
+        assert!(!tools.iter().any(|x| x == "canvas.stroke"));
+    }
+
+    #[test]
+    fn explicit_canvas_delegates_with_canvas_tools() {
+        let spec = chat_delegate_agent_spec("dessine sur le canvas une maison", "Ok.", false);
+        let (_brief, _skills, tools, prose) = spec.expect("doit déléguer canvas");
         assert!(tools.iter().any(|x| x == "canvas.stroke"));
-        assert!(prose.to_lowercase().contains("canvas") || prose.contains("dessin"));
         assert!(!tools.iter().any(|x| x == "media.image.generate"));
+        assert!(prose.to_lowercase().contains("canvas") || prose.contains("dessin"));
     }
 
     #[test]
-    fn canvas_followup_delegates_when_open() {
-        let spec = chat_delegate_agent_spec(
+    fn canvas_followup_when_open_does_not_delegate() {
+        assert!(chat_delegate_agent_spec(
             "essai encore en ajoutant plus de détails",
-            "Je relance l'agent pour générer une version plus détaillée.",
+            "D'accord.",
             true,
-        );
-        let (brief, _skills, tools, _) = spec.expect("doit déléguer retouche");
-        assert!(tools.iter().any(|x| x == "canvas.stroke"));
-        assert!(brief.contains("canvas"));
+        )
+        .is_none());
+        assert!(chat_delegate_agent_spec("vas y", "Ok.", true).is_none());
     }
 
     #[test]
-    fn canvas_truncated_spawn_still_delegates() {
+    fn canvas_truncated_spawn_explicit_canvas_delegates() {
         let out = r#"{"action":"agent.spawn","args":{"brief":"Génération d'une maison médiévale avec plus de détails en cours..."#;
-        let spec = chat_delegate_agent_spec("vas y", out, true);
-        let (_brief, _skills, tools, _) = spec.expect("JSON tronqué → filet canvas");
+        let spec = chat_delegate_agent_spec("dessine sur le canvas", out, false);
+        let (_brief, _skills, tools, _) = spec.expect("JSON tronqué + explicit canvas");
         assert!(tools.iter().any(|x| x == "canvas.stroke"));
+    }
+
+    #[test]
+    fn canvas_truncated_spawn_followup_does_not_delegate() {
+        let out = r#"{"action":"agent.spawn","args":{"brief":"Génération..."#;
+        assert!(chat_delegate_agent_spec("vas y", out, true).is_none());
     }
 
     #[test]
