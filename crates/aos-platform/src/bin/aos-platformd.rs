@@ -1285,6 +1285,7 @@ async fn main() {
                                         &CanvasGetResponse {
                                             session_id: meta.id,
                                             canvas_open: meta.canvas_open,
+                                            canvas_aspect: meta.canvas_aspect,
                                             next_seq: doc.next_seq,
                                             ops,
                                         },
@@ -1366,6 +1367,41 @@ async fn main() {
                             .lock()
                             .unwrap()
                             .canvas_set_open(&req.session_id, req.open);
+                        match result {
+                            Ok(meta) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &meta).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::NotFound,
+                                        &e.to_string(),
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("canvas.set_aspect", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<CanvasSetAspectRequest>() {
+                    Ok(req) => {
+                        let result = s
+                            .sessions
+                            .lock()
+                            .unwrap()
+                            .canvas_set_aspect(&req.session_id, req.aspect);
                         match result {
                             Ok(meta) => {
                                 let _ = ctx.respond(aos_ipc::msg::Status::Ok, &meta).await;
@@ -3228,8 +3264,12 @@ fn export_canvas_png(
         .unwrap()
         .canvas_get(&req.session_id, None)
         .map_err(|e| e.to_string())?;
-    let w = req.width.unwrap_or(768);
-    let h = req.height.unwrap_or(512);
+    let w = req
+        .width
+        .unwrap_or_else(|| meta.canvas_aspect.export_dimensions(1024).0);
+    let h = req
+        .height
+        .unwrap_or_else(|| meta.canvas_aspect.export_dimensions(1024).1);
     let bytes = aos_platform::canvas_raster::export_png(&doc, w, h)?;
     let path = req.path.clone().unwrap_or_else(|| {
         format!(

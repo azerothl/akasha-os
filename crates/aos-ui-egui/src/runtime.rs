@@ -321,6 +321,7 @@ async fn handle_cmd(
             routing,
             language,
             canvas_open,
+            canvas_aspect,
         } => {
             let _ = evt_tx.send(Evt::Status(
                 "assistant : génération en cours…".into(),
@@ -423,7 +424,7 @@ async fn handle_cmd(
 
                         // Délégation : agent.spawn / filet module → worker en fond
                         if let Some((brief, skills, tools, prose)) =
-                            chat_delegate_agent_spec(&user_text, &full, canvas_open)
+                            chat_delegate_agent_spec(&user_text, &full, canvas_open, canvas_aspect)
                         {
                             spawn_chat_delegate_agent(
                                 bus.clone(),
@@ -2733,15 +2734,37 @@ async fn handle_cmd(
                 Err(_) => {}
             }
         }
-        Cmd::CanvasExport { session_id } => {
+        Cmd::CanvasSetAspect { session_id, aspect } => {
+            match bus
+                .call::<aos_proto::CanvasSetAspectRequest, ChatSessionMeta>(
+                    "canvas.set_aspect",
+                    &aos_proto::CanvasSetAspectRequest {
+                        session_id: session_id.clone(),
+                        aspect,
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(meta) => {
+                    let _ = evt_tx.send(Evt::CanvasMeta(meta));
+                    refresh_sessions(&bus, &evt_tx).await;
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::CanvasExport { session_id, aspect } => {
+            let (width, height) = aspect.export_dimensions(1024);
             match bus
                 .call::<aos_proto::CanvasExportRequest, serde_json::Value>(
                     "canvas.export",
                     &aos_proto::CanvasExportRequest {
                         session_id: session_id.clone(),
                         path: None,
-                        width: Some(768),
-                        height: Some(512),
+                        width: Some(width),
+                        height: Some(height),
                     },
                     vec![],
                 )

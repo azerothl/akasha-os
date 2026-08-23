@@ -27,6 +27,7 @@ pub(crate) enum Cmd {
         language: String,
         /// Session canvas panel open — enables draw/revise agent delegation.
         canvas_open: bool,
+        canvas_aspect: aos_proto::CanvasAspect,
     },
     SessionBootstrap,
     SessionCreate { title: Option<String> },
@@ -209,6 +210,10 @@ pub(crate) enum Cmd {
         session_id: String,
         open: bool,
     },
+    CanvasSetAspect {
+        session_id: String,
+        aspect: aos_proto::CanvasAspect,
+    },
     CanvasApply {
         session_id: String,
         author_id: String,
@@ -220,6 +225,7 @@ pub(crate) enum Cmd {
     },
     CanvasExport {
         session_id: String,
+        aspect: aos_proto::CanvasAspect,
     },
     /// Append chat sans infer (slash /agent, etc.).
     SessionAppend {

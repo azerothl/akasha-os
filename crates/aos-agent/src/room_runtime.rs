@@ -385,6 +385,7 @@ mod tests {
                 }],
                 conductor_policy: ChatRoomConductorPolicy::default(),
                 canvas_open: false,
+                canvas_aspect: aos_proto::CanvasAspect::Square,
             },
             messages: vec![ChatSessionMessage {
                 role: "user".into(),

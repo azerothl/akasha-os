@@ -1,8 +1,8 @@
 //! Sessions de conversation persistées (Preview PC.6).
 
 use aos_proto::{
-    CanvasDoc, CanvasOp, CanvasOpBody, ChatAttachment, ChatRoomConductorPolicy, ChatRoomMember,
-    ChatSessionMessage, ChatSessionMeta, ChatSessionMode,
+    CanvasAspect, CanvasDoc, CanvasOp, CanvasOpBody, ChatAttachment, ChatRoomConductorPolicy,
+    ChatRoomMember, ChatSessionMessage, ChatSessionMeta, ChatSessionMode,
 };
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -42,6 +42,8 @@ struct MetaFile {
     conductor_policy: ChatRoomConductorPolicy,
     #[serde(default)]
     canvas_open: bool,
+    #[serde(default)]
+    canvas_aspect: CanvasAspect,
 }
 
 /// Magasin de sessions chat sous `var/sessions/<id>/`.
@@ -101,6 +103,7 @@ impl ChatSessionStore {
             members: m.members,
             conductor_policy: m.conductor_policy,
             canvas_open: m.canvas_open,
+            canvas_aspect: m.canvas_aspect,
         }
     }
 
@@ -214,6 +217,18 @@ impl ChatSessionStore {
         Ok(self.to_public(meta))
     }
 
+    pub fn canvas_set_aspect(
+        &self,
+        id: &str,
+        aspect: CanvasAspect,
+    ) -> Result<ChatSessionMeta, SessionError> {
+        let mut meta = self.load_meta(id)?;
+        meta.canvas_aspect = aspect;
+        meta.updated_ms = Self::now_ms();
+        self.save_meta(&meta)?;
+        Ok(self.to_public(meta))
+    }
+
     pub fn create(
         &self,
         title: Option<String>,
@@ -235,6 +250,7 @@ impl ChatSessionStore {
             members: vec![],
             conductor_policy: ChatRoomConductorPolicy::default(),
             canvas_open: false,
+            canvas_aspect: CanvasAspect::default(),
         };
         self.save_meta(&meta)?;
         let _ = fs::write(self.dir(&id).join("messages.jsonl"), "");
@@ -617,6 +633,8 @@ archived: false
         assert!(doc2.ops.is_empty());
         let meta = s.canvas_set_open(&m.id, false).unwrap();
         assert!(!meta.canvas_open);
+        let meta = s.canvas_set_aspect(&m.id, CanvasAspect::Landscape16x9).unwrap();
+        assert_eq!(meta.canvas_aspect, CanvasAspect::Landscape16x9);
         let _ = fs::remove_dir_all(&dir);
     }
 
