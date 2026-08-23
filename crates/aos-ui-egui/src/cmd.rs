@@ -3,9 +3,9 @@
 use aos_agent::schedule::ScheduleEntry;
 use aos_proto::{
     AgentInfo, AgentTrace, AuditEvent, CapInfo, ChatAttachment, ChatRoomMember, ChatSessionMeta,
-    ChatSessionMode, DocumentRef, FeedbackSubmitRequest, FeedbackSubmitResponse, MemHit,
-    ModelInfo, ModuleCatalogue, ModuleInfo, PendingConfirmation, ProviderRecord, SkillInfo,
-    SystemMetrics, WebSearchHit,
+    ChatSessionMode, CanvasOp, CanvasOpBody, DocumentRef, FeedbackSubmitRequest,
+    FeedbackSubmitResponse, MemHit, ModelInfo, ModuleCatalogue, ModuleInfo, PendingConfirmation,
+    ProviderRecord, SkillInfo, SystemMetrics, WebSearchHit,
 };
 use aos_proto::decl_ui::ModuleUiResponse;
 use aos_proto::{McpServerInfo};
@@ -196,6 +196,22 @@ pub(crate) enum Cmd {
     RoomTurnCancel {
         session_id: String,
     },
+    CanvasSetOpen {
+        session_id: String,
+        open: bool,
+    },
+    CanvasApply {
+        session_id: String,
+        author_id: String,
+        op: CanvasOpBody,
+    },
+    CanvasPoll {
+        session_id: String,
+        after_seq: Option<u64>,
+    },
+    CanvasExport {
+        session_id: String,
+    },
     /// Append chat sans infer (slash /agent, etc.).
     SessionAppend {
         session_id: String,
@@ -281,6 +297,19 @@ pub(crate) enum Evt {
         session_id: String,
         agent_turns: u32,
         cancelled: bool,
+    },
+    CanvasMeta(ChatSessionMeta),
+    CanvasSnapshot {
+        session_id: String,
+        canvas_open: bool,
+        next_seq: u64,
+        ops: Vec<CanvasOp>,
+        /// True when this is a delta poll (merge); false = full replace.
+        delta: bool,
+    },
+    CanvasExported {
+        path: String,
+        session_id: String,
     },
     MemHits(Vec<MemHit>),
     MemExtracted { n: usize },

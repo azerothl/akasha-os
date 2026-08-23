@@ -1,0 +1,481 @@
+//! Chat session canvas — shared vector drawing (human + agents).
+
+use aos_proto::{CanvasOp, CanvasOpBody, CanvasPoint};
+use eframe::egui::epaint::{CircleShape, PathShape, PathStroke, RectShape, Shape, StrokeKind};
+use eframe::egui::{Color32, Pos2, Sense, Stroke, Ui, Vec2};
+
+use crate::chat_room;
+use crate::i18n::UiStrings;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CanvasTool {
+    Pen,
+    Eraser,
+    Rect,
+    Ellipse,
+}
+
+#[derive(Debug, Clone)]
+pub enum CanvasUiAction {
+    Apply(CanvasOpBody),
+    Export,
+}
+
+#[derive(Debug, Clone)]
+pub struct CanvasPanelState {
+    pub ops: Vec<CanvasOp>,
+    pub next_seq: u64,
+    pub last_seen_seq: u64,
+    pub tool: CanvasTool,
+    pub color: Color32,
+    pub width: f32,
+    /// In-progress human stroke (optimistic).
+    pub draft_points: Vec<CanvasPoint>,
+    /// Shape drag origin (normalized), when using rect/ellipse.
+    pub drag_origin: Option<CanvasPoint>,
+    pub drag_current: Option<CanvasPoint>,
+    /// Remote ops animating in (seq → start time seconds).
+    pub animating: Vec<(u64, f64)>,
+    pub collapsed: bool,
+    pub poll_due: f64,
+}
+
+impl Default for CanvasPanelState {
+    fn default() -> Self {
+        Self {
+            ops: Vec::new(),
+            next_seq: 1,
+            last_seen_seq: 0,
+            tool: CanvasTool::Pen,
+            color: Color32::from_rgb(0x3e, 0xe0, 0xc4),
+            width: 0.015,
+            draft_points: Vec::new(),
+            drag_origin: None,
+            drag_current: None,
+            animating: Vec::new(),
+            collapsed: false,
+            poll_due: 0.0,
+        }
+    }
+}
+
+impl CanvasPanelState {
+    pub fn apply_snapshot(&mut self, ops: Vec<CanvasOp>, next_seq: u64, now: f64) {
+        for op in &ops {
+            if op.seq > self.last_seen_seq && op.author_id != "human" {
+                self.animating.push((op.seq, now));
+            }
+        }
+        if let Some(max) = ops.iter().map(|o| o.seq).max() {
+            self.last_seen_seq = self.last_seen_seq.max(max);
+        }
+        self.ops = ops;
+        self.next_seq = next_seq.max(self.next_seq);
+        self.animating
+            .retain(|(seq, start)| self.ops.iter().any(|o| o.seq == *seq) && now - start < 0.45);
+    }
+
+    pub fn merge_delta(&mut self, ops: Vec<CanvasOp>, next_seq: u64, now: f64) {
+        for op in ops {
+            if self.ops.iter().any(|o| o.seq == op.seq) {
+                continue;
+            }
+            if op.author_id != "human" {
+                self.animating.push((op.seq, now));
+            }
+            self.last_seen_seq = self.last_seen_seq.max(op.seq);
+            self.ops.push(op);
+        }
+        self.ops.sort_by_key(|o| o.seq);
+        self.next_seq = next_seq.max(self.next_seq);
+        self.animating
+            .retain(|(seq, start)| self.ops.iter().any(|o| o.seq == *seq) && now - start < 0.45);
+    }
+}
+
+pub fn parse_hex_color(s: &str) -> Color32 {
+    let t = s.trim().trim_start_matches('#');
+    if t.len() >= 6 {
+        let r = u8::from_str_radix(&t[0..2], 16).unwrap_or(62);
+        let g = u8::from_str_radix(&t[2..4], 16).unwrap_or(224);
+        let b = u8::from_str_radix(&t[4..6], 16).unwrap_or(196);
+        Color32::from_rgb(r, g, b)
+    } else {
+        Color32::from_rgb(0x3e, 0xe0, 0xc4)
+    }
+}
+
+pub fn color_to_hex(c: Color32) -> String {
+    format!("#{:02x}{:02x}{:02x}", c.r(), c.g(), c.b())
+}
+
+fn author_stroke_color(author_id: &str, stored: &str, dark: bool) -> Color32 {
+    if author_id == "human" {
+        parse_hex_color(stored)
+    } else {
+        let (r, g, b) = chat_room::speaker_color_rgb(author_id, dark);
+        Color32::from_rgb(r, g, b)
+    }
+}
+
+fn to_screen(rect: eframe::egui::Rect, p: CanvasPoint) -> Pos2 {
+    Pos2::new(
+        rect.left() + p.x.clamp(0.0, 1.0) * rect.width(),
+        rect.top() + p.y.clamp(0.0, 1.0) * rect.height(),
+    )
+}
+
+fn to_norm(rect: eframe::egui::Rect, p: Pos2) -> CanvasPoint {
+    CanvasPoint {
+        x: ((p.x - rect.left()) / rect.width()).clamp(0.0, 1.0),
+        y: ((p.y - rect.top()) / rect.height()).clamp(0.0, 1.0),
+    }
+}
+
+fn radius_px(rect: eframe::egui::Rect, width: f32) -> f32 {
+    let side = rect.width().min(rect.height());
+    (width.clamp(0.001, 0.25) * side * 0.5).max(1.0)
+}
+
+fn anim_progress(state: &CanvasPanelState, seq: u64, now: f64) -> f32 {
+    if let Some((_, start)) = state.animating.iter().find(|(s, _)| *s == seq) {
+        ((now - start) / 0.30).clamp(0.0, 1.0) as f32
+    } else {
+        1.0
+    }
+}
+
+fn paint_op(
+    painter: &eframe::egui::Painter,
+    rect: eframe::egui::Rect,
+    op: &CanvasOp,
+    dark: bool,
+    progress: f32,
+) {
+    match &op.body {
+        CanvasOpBody::Stroke {
+            points,
+            color,
+            width,
+        } => {
+            if points.len() < 2 {
+                return;
+            }
+            let n = ((points.len() as f32) * progress).ceil().max(2.0) as usize;
+            let slice = &points[..n.min(points.len())];
+            let c = author_stroke_color(&op.author_id, color, dark);
+            let rad = radius_px(rect, *width);
+            let screen: Vec<Pos2> = slice.iter().map(|p| to_screen(rect, *p)).collect();
+            painter.add(Shape::line(screen, PathStroke::new(rad * 2.0, c)));
+        }
+        CanvasOpBody::Erase { points, width } => {
+            if points.is_empty() {
+                return;
+            }
+            let n = ((points.len() as f32) * progress).ceil().max(1.0) as usize;
+            let slice = &points[..n.min(points.len())];
+            let bg = if dark {
+                Color32::from_rgb(7, 11, 20)
+            } else {
+                Color32::from_rgb(232, 238, 246)
+            };
+            let rad = radius_px(rect, *width);
+            let screen: Vec<Pos2> = slice.iter().map(|p| to_screen(rect, *p)).collect();
+            if screen.len() == 1 {
+                painter.add(Shape::Circle(CircleShape::filled(screen[0], rad, bg)));
+            } else {
+                painter.add(Shape::line(screen, PathStroke::new(rad * 2.0, bg)));
+            }
+        }
+        CanvasOpBody::Rect {
+            x,
+            y,
+            w,
+            h,
+            color,
+            fill,
+            width,
+        } => {
+            let c = author_stroke_color(&op.author_id, color, dark);
+            let a = to_screen(rect, CanvasPoint { x: *x, y: *y });
+            let b = to_screen(
+                rect,
+                CanvasPoint {
+                    x: x + w * progress,
+                    y: y + h * progress,
+                },
+            );
+            let r = eframe::egui::Rect::from_two_pos(a, b);
+            if *fill {
+                painter.add(Shape::Rect(RectShape::filled(r, 0.0, c)));
+            } else {
+                let rad = radius_px(rect, *width);
+                painter.add(Shape::Rect(RectShape::stroke(
+                    r,
+                    0.0,
+                    Stroke::new(rad * 2.0, c),
+                    StrokeKind::Inside,
+                )));
+            }
+        }
+        CanvasOpBody::Ellipse {
+            x,
+            y,
+            w,
+            h,
+            color,
+            fill,
+            width,
+        } => {
+            let c = author_stroke_color(&op.author_id, color, dark);
+            let cx = x + w * 0.5;
+            let cy = y + h * 0.5;
+            let center = to_screen(rect, CanvasPoint { x: cx, y: cy });
+            let rx = (w.abs() * rect.width() * 0.5 * progress).max(1.0);
+            let ry = (h.abs() * rect.height() * 0.5 * progress).max(1.0);
+            let ellipse_rect =
+                eframe::egui::Rect::from_center_size(center, Vec2::new(rx * 2.0, ry * 2.0));
+            if *fill {
+                painter.add(Shape::Path(PathShape {
+                    points: ellipse_points(ellipse_rect, 48),
+                    closed: true,
+                    fill: c,
+                    stroke: PathStroke::NONE,
+                }));
+            } else {
+                let rad = radius_px(rect, *width);
+                painter.add(Shape::Path(PathShape {
+                    points: ellipse_points(ellipse_rect, 48),
+                    closed: true,
+                    fill: Color32::TRANSPARENT,
+                    stroke: PathStroke::new(rad * 2.0, c),
+                }));
+            }
+        }
+        CanvasOpBody::Clear | CanvasOpBody::Undo => {}
+    }
+}
+
+fn ellipse_points(r: eframe::egui::Rect, n: usize) -> Vec<Pos2> {
+    let c = r.center();
+    let rx = r.width() * 0.5;
+    let ry = r.height() * 0.5;
+    (0..n)
+        .map(|i| {
+            let t = std::f32::consts::TAU * (i as f32) / (n as f32);
+            Pos2::new(c.x + rx * t.cos(), c.y + ry * t.sin())
+        })
+        .collect()
+}
+
+/// Toolbar + drawing surface.
+pub fn ui_chat_canvas(
+    ui: &mut Ui,
+    t: &UiStrings,
+    state: &mut CanvasPanelState,
+) -> Option<CanvasUiAction> {
+    let mut action: Option<CanvasUiAction> = None;
+    ui.horizontal_wrapped(|ui| {
+        let collapse_label = if state.collapsed {
+            t.canvas_expand
+        } else {
+            t.canvas_collapse
+        };
+        if ui.small_button(collapse_label).clicked() {
+            state.collapsed = !state.collapsed;
+        }
+        ui.strong(t.canvas_title);
+        ui.separator();
+        ui.selectable_value(&mut state.tool, CanvasTool::Pen, t.canvas_tool_pen);
+        ui.selectable_value(&mut state.tool, CanvasTool::Eraser, t.canvas_tool_eraser);
+        ui.selectable_value(&mut state.tool, CanvasTool::Rect, t.canvas_tool_rect);
+        ui.selectable_value(&mut state.tool, CanvasTool::Ellipse, t.canvas_tool_ellipse);
+        let mut rgba = [
+            state.color.r() as f32 / 255.0,
+            state.color.g() as f32 / 255.0,
+            state.color.b() as f32 / 255.0,
+            1.0,
+        ];
+        if ui.color_edit_button_rgba_unmultiplied(&mut rgba).changed() {
+            state.color = Color32::from_rgb(
+                (rgba[0] * 255.0) as u8,
+                (rgba[1] * 255.0) as u8,
+                (rgba[2] * 255.0) as u8,
+            );
+        }
+        ui.add(eframe::egui::Slider::new(&mut state.width, 0.005..=0.06).text(t.canvas_width));
+        if ui.button(t.canvas_undo).clicked() {
+            action = Some(CanvasUiAction::Apply(CanvasOpBody::Undo));
+        }
+        if ui.button(t.canvas_clear).clicked() {
+            action = Some(CanvasUiAction::Apply(CanvasOpBody::Clear));
+        }
+        if ui.button(t.canvas_export).clicked() {
+            action = Some(CanvasUiAction::Export);
+        }
+    });
+
+    if state.collapsed {
+        return action;
+    }
+
+    let dark = ui.visuals().dark_mode;
+    let avail = ui.available_width();
+    let canvas_h = 260.0_f32;
+    let (response, painter) =
+        ui.allocate_painter(Vec2::new(avail, canvas_h), Sense::click_and_drag());
+    let rect = response.rect;
+    let bg = if dark {
+        Color32::from_rgb(7, 11, 20)
+    } else {
+        Color32::from_rgb(232, 238, 246)
+    };
+    let border = Color32::from_rgb(0x3e, 0xe0, 0xc4);
+    painter.rect_filled(rect, 0.0, bg);
+    painter.rect_stroke(rect, 0.0, Stroke::new(1.5, border), StrokeKind::Inside);
+
+    let now = ui.ctx().input(|i| i.time);
+    for op in &state.ops {
+        let p = anim_progress(state, op.seq, now);
+        paint_op(&painter, rect, op, dark, p);
+    }
+
+    if state.draft_points.len() >= 2 {
+        let screen: Vec<Pos2> = state
+            .draft_points
+            .iter()
+            .map(|p| to_screen(rect, *p))
+            .collect();
+        let c = if state.tool == CanvasTool::Eraser {
+            bg
+        } else {
+            state.color
+        };
+        let rad = radius_px(rect, state.width);
+        painter.add(Shape::line(screen, PathStroke::new(rad * 2.0, c)));
+    }
+    if let (Some(a), Some(b)) = (state.drag_origin, state.drag_current) {
+        let r = eframe::egui::Rect::from_two_pos(to_screen(rect, a), to_screen(rect, b));
+        match state.tool {
+            CanvasTool::Rect => {
+                painter.rect_stroke(r, 0.0, Stroke::new(2.0, state.color), StrokeKind::Inside);
+            }
+            CanvasTool::Ellipse => {
+                painter.add(Shape::Path(PathShape {
+                    points: ellipse_points(r, 48),
+                    closed: true,
+                    fill: Color32::TRANSPARENT,
+                    stroke: PathStroke::new(2.0, state.color),
+                }));
+            }
+            CanvasTool::Pen | CanvasTool::Eraser => {}
+        }
+    }
+
+    if response.dragged() {
+        if let Some(pos) = response.interact_pointer_pos() {
+            let p = to_norm(rect, pos);
+            match state.tool {
+                CanvasTool::Pen | CanvasTool::Eraser => {
+                    if state
+                        .draft_points
+                        .last()
+                        .map(|q| (q.x - p.x).abs() + (q.y - p.y).abs() > 0.002)
+                        .unwrap_or(true)
+                    {
+                        state.draft_points.push(p);
+                    }
+                }
+                CanvasTool::Rect | CanvasTool::Ellipse => {
+                    if state.drag_origin.is_none() {
+                        state.drag_origin = Some(p);
+                    }
+                    state.drag_current = Some(p);
+                }
+            }
+        }
+        ui.ctx().request_repaint();
+    }
+
+    if response.drag_stopped() && action.is_none() {
+        match state.tool {
+            CanvasTool::Pen => {
+                if state.draft_points.len() >= 2 {
+                    action = Some(CanvasUiAction::Apply(CanvasOpBody::Stroke {
+                        points: std::mem::take(&mut state.draft_points),
+                        color: color_to_hex(state.color),
+                        width: state.width,
+                    }));
+                } else {
+                    state.draft_points.clear();
+                }
+            }
+            CanvasTool::Eraser => {
+                if !state.draft_points.is_empty() {
+                    action = Some(CanvasUiAction::Apply(CanvasOpBody::Erase {
+                        points: std::mem::take(&mut state.draft_points),
+                        width: state.width.max(0.03),
+                    }));
+                }
+            }
+            CanvasTool::Rect => {
+                if let (Some(a), Some(b)) = (state.drag_origin.take(), state.drag_current.take()) {
+                    let x = a.x.min(b.x);
+                    let y = a.y.min(b.y);
+                    let w = (a.x - b.x).abs().max(0.01);
+                    let h = (a.y - b.y).abs().max(0.01);
+                    action = Some(CanvasUiAction::Apply(CanvasOpBody::Rect {
+                        x,
+                        y,
+                        w,
+                        h,
+                        color: color_to_hex(state.color),
+                        fill: false,
+                        width: state.width,
+                    }));
+                }
+            }
+            CanvasTool::Ellipse => {
+                if let (Some(a), Some(b)) = (state.drag_origin.take(), state.drag_current.take()) {
+                    let x = a.x.min(b.x);
+                    let y = a.y.min(b.y);
+                    let w = (a.x - b.x).abs().max(0.01);
+                    let h = (a.y - b.y).abs().max(0.01);
+                    action = Some(CanvasUiAction::Apply(CanvasOpBody::Ellipse {
+                        x,
+                        y,
+                        w,
+                        h,
+                        color: color_to_hex(state.color),
+                        fill: false,
+                        width: state.width,
+                    }));
+                }
+            }
+        }
+    }
+
+    if !state.animating.is_empty() {
+        ui.ctx().request_repaint();
+    }
+
+    action
+}
+
+pub fn chat_user_wants_canvas_draw(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    [
+        "dessin",
+        "dessine",
+        "dessiner",
+        "draw",
+        "drawing",
+        "sketch",
+        "trace",
+        "tracer",
+        "canvas",
+        "esquisse",
+    ]
+    .iter()
+    .any(|k| lower.contains(k))
+}

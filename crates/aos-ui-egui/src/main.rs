@@ -12,6 +12,7 @@ mod notes_panel;
 mod prefs;
 mod tasks_panel;
 mod chat_ask;
+mod chat_canvas;
 mod chat_media;
 mod chat_room;
 mod cmd;
@@ -545,6 +546,15 @@ pub(crate) fn chat_delegate_agent_spec(
             "Je lance un agent pour créer le module.".into(),
         ));
     }
+    if chat_canvas::chat_user_wants_canvas_draw(user_text) {
+        let (skills, tools) = chat_agent_kit_ex(user_text, true);
+        return Some((
+            user_text.to_string(),
+            skills,
+            tools,
+            "Je lance un agent pour dessiner sur le canvas.".into(),
+        ));
+    }
     None
 }
 
@@ -583,6 +593,10 @@ pub(crate) async fn spawn_chat_delegate_agent(
     }
     if req.tools.iter().any(|t| t.starts_with("media.")) {
         req.caps.push("media.generate".into());
+        req.caps.push("fs.write:/downloads/**".into());
+    }
+    if req.tools.iter().any(|t| t.starts_with("canvas.")) {
+        req.caps.push("tool.invoke:canvas".into());
         req.caps.push("fs.write:/downloads/**".into());
     }
     match bus
@@ -642,6 +656,10 @@ pub(crate) async fn spawn_chat_delegate_agent(
 }
 
 fn chat_agent_kit(task: &str) -> (Vec<String>, Vec<String>) {
+    chat_agent_kit_ex(task, false)
+}
+
+fn chat_agent_kit_ex(task: &str, canvas_open: bool) -> (Vec<String>, Vec<String>) {
     let lower = task.to_lowercase();
     let mut skills = vec!["planner".into(), "notes-writer".into()];
     let mut tools = vec![
@@ -716,6 +734,22 @@ fn chat_agent_kit(task: &str) -> (Vec<String>, Vec<String>) {
     {
         if !tools.iter().any(|x| x == "media.image.generate") {
             tools.push("media.image.generate".into());
+        }
+    }
+    if canvas_open || chat_canvas::chat_user_wants_canvas_draw(task) {
+        for t in [
+            "canvas.stroke",
+            "canvas.rect",
+            "canvas.ellipse",
+            "canvas.erase",
+            "canvas.clear",
+            "canvas.undo",
+            "canvas.get",
+            "canvas.export",
+        ] {
+            if !tools.iter().any(|x| x == t) {
+                tools.push(t.into());
+            }
         }
     }
     (skills, tools)
@@ -1377,6 +1411,7 @@ struct UiApp {
     agent_join_room_on_create: bool,
     /// Last user message for an in-flight room turn (speaker queue in thinking UI).
     room_turn_pending_text: Option<String>,
+    canvas_panel: chat_canvas::CanvasPanelState,
 }
 
 #[derive(Debug, Clone)]
@@ -1559,6 +1594,7 @@ impl UiApp {
             show_go_to_palette: false,
             agent_join_room_on_create: false,
             room_turn_pending_text: None,
+            canvas_panel: chat_canvas::CanvasPanelState::default(),
         }
     }
 
@@ -2026,6 +2062,22 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                     return;
                 }
                 self.open_tts_card(rest);
+            }
+            "/canvas" => {
+                let Some(sid) = self.active_session.clone() else {
+                    self.chat.push(ChatLine::plain(
+                        "système",
+                        "aucune session — créez-en une d'abord",
+                    ));
+                    return;
+                };
+                let open = chat_room::active_session_meta(&self.sessions, Some(sid.as_str()))
+                    .map(|m| m.canvas_open)
+                    .unwrap_or(false);
+                let _ = self.cmd_tx.send(Cmd::CanvasSetOpen {
+                    session_id: sid,
+                    open: !open,
+                });
             }
             _ => {
                 self.chat.push(ChatLine::plain(
@@ -2771,6 +2823,14 @@ impl eframe::App for UiApp {
                     self.chat_pending = false;
                     self.chat_inference_id = None;
                     self.room_turn_pending_text = None;
+                    if meta.canvas_open {
+                        let _ = self.cmd_tx.send(Cmd::CanvasPoll {
+                            session_id: id.clone(),
+                            after_seq: None,
+                        });
+                    } else {
+                        self.canvas_panel = chat_canvas::CanvasPanelState::default();
+                    }
                 }
                 Evt::RoomTurnDone {
                     session_id,
@@ -2788,6 +2848,47 @@ impl eframe::App for UiApp {
                             t.room_turn_done
                                 .replace("{n}", &agent_turns.to_string())
                         };
+                    }
+                }
+                Evt::CanvasMeta(meta) => {
+                    if let Some(s) = self.sessions.iter_mut().find(|s| s.id == meta.id) {
+                        *s = meta.clone();
+                    }
+                }
+                Evt::CanvasSnapshot {
+                    session_id,
+                    canvas_open,
+                    next_seq,
+                    ops,
+                    delta,
+                } => {
+                    if self.active_session.as_deref() != Some(session_id.as_str()) {
+                        // still update meta open flag
+                    }
+                    if let Some(s) = self.sessions.iter_mut().find(|s| s.id == session_id) {
+                        s.canvas_open = canvas_open;
+                    }
+                    if self.active_session.as_deref() == Some(session_id.as_str()) {
+                        let now = ctx.input(|i| i.time);
+                        if delta {
+                            self.canvas_panel.merge_delta(ops, next_seq, now);
+                        } else {
+                            self.canvas_panel.apply_snapshot(ops, next_seq, now);
+                        }
+                    }
+                }
+                Evt::CanvasExported { path, session_id } => {
+                    if self.active_session.as_deref() == Some(session_id.as_str()) {
+                        self.status = format!("Canvas → {path}");
+                        self.chat.push(ChatLine {
+                            role: "assistant".into(),
+                            text: format!("Canvas exporté : {path}"),
+                            attachments: vec![ChatAttachment::Image {
+                                path,
+                                prompt: "canvas export".into(),
+                            }],
+                            speaker_id: None,
+                        });
                     }
                 }
                 Evt::MemHits(h) => self.mem_hits = h,
@@ -3461,6 +3562,71 @@ impl UiApp {
         ui.add_space(4.0);
     }
 
+    fn ui_canvas_session_header(&mut self, ui: &mut egui::Ui, t: &i18n::UiStrings) {
+        let Some(sid) = self.active_session.clone() else {
+            return;
+        };
+        let open = chat_room::active_session_meta(&self.sessions, Some(sid.as_str()))
+            .map(|m| m.canvas_open)
+            .unwrap_or(false);
+        ui.horizontal(|ui| {
+            if open {
+                if ui.button(t.canvas_disable).clicked() {
+                    let _ = self.cmd_tx.send(Cmd::CanvasSetOpen {
+                        session_id: sid.clone(),
+                        open: false,
+                    });
+                }
+            } else if ui.button(t.canvas_enable).clicked() {
+                let _ = self.cmd_tx.send(Cmd::CanvasSetOpen {
+                    session_id: sid.clone(),
+                    open: true,
+                });
+            }
+        });
+        if open {
+            let action = chat_canvas::ui_chat_canvas(ui, t, &mut self.canvas_panel);
+            match action {
+                Some(chat_canvas::CanvasUiAction::Apply(op)) => {
+                    // Optimistic local apply for clear/undo feedback
+                    match &op {
+                        aos_proto::CanvasOpBody::Clear => self.canvas_panel.ops.clear(),
+                        aos_proto::CanvasOpBody::Undo => {
+                            let _ = self.canvas_panel.ops.pop();
+                        }
+                        _ => {}
+                    }
+                    let _ = self.cmd_tx.send(Cmd::CanvasApply {
+                        session_id: sid.clone(),
+                        author_id: "human".into(),
+                        op,
+                    });
+                }
+                Some(chat_canvas::CanvasUiAction::Export) => {
+                    let _ = self.cmd_tx.send(Cmd::CanvasExport {
+                        session_id: sid.clone(),
+                    });
+                }
+                None => {}
+            }
+            // Poll for agent strokes (~200ms)
+            let now = ui.ctx().input(|i| i.time);
+            if now >= self.canvas_panel.poll_due {
+                self.canvas_panel.poll_due = now + 0.20;
+                let after = if self.canvas_panel.last_seen_seq > 0 {
+                    Some(self.canvas_panel.last_seen_seq)
+                } else {
+                    None
+                };
+                let _ = self.cmd_tx.send(Cmd::CanvasPoll {
+                    session_id: sid,
+                    after_seq: after,
+                });
+            }
+        }
+        ui.add_space(4.0);
+    }
+
     fn ui_chat(&mut self, ui: &mut egui::Ui) {
         let t = i18n::strings(&self.prefs.language);
         let full = ui.available_size();
@@ -3720,6 +3886,7 @@ impl UiApp {
                         ui.weak(format!("session {id}"));
                     }
                     self.ui_room_session_header(ui, &t);
+                    self.ui_canvas_session_header(ui, &t);
 
                     let room_mode = chat_room::session_is_room(chat_room::active_session_meta(
                         &self.sessions,
@@ -6159,5 +6326,14 @@ mod delegate_tests {
         assert!(chat_delegate_agent_spec("génère un audio qui dit bonjour", out).is_none());
         let (_skills, tools) = chat_agent_kit("génère un audio de bonjour");
         assert!(tools.iter().any(|t| t == "media.audio.generate"));
+    }
+
+    #[test]
+    fn draw_request_delegates_with_canvas_tools() {
+        let spec = chat_delegate_agent_spec("dessine une maison", "Ok.");
+        let (_brief, _skills, tools, prose) = spec.expect("doit déléguer");
+        assert!(tools.iter().any(|x| x == "canvas.stroke"));
+        assert!(prose.to_lowercase().contains("canvas") || prose.contains("dessin"));
+        assert!(!tools.iter().any(|x| x == "media.image.generate"));
     }
 }
