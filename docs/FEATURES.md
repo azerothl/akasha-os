@@ -50,7 +50,7 @@ This is **not** the bootable OS. Target v1 requirements live in
 - Chat slash `/image` / `/speak` shows the PNG and plays the clip; E15 `image` / `audio` widgets bind the same paths
 - Optional media packs (`local:sd-v1-5`, Piper `en_US` / `fr_FR`) — download from Models, **not** in the zip; first-run does not pull them. The same download fetches the sd.cpp / piper engine into `bin/` if it is missing
 - **Unified host artefact** (E17): one Win zip + one Linux tarball; `aos-modeld` (CUDA) + `aos-modeld-cpu` inside; Settings **auto / gpu / cpu** (0.9 migrates in-process; 0.8 restarted modeld)
-- **Module uninstall** (F-MOD-01): Settings lists installed modules; confirm; revoke `tool.invoke:<name>`; refuse bundled `notes` / `tasks` / `ext-rt`
+- **Module uninstall** (F-MOD-01): Settings lists installed modules; confirm; revoke `tool.invoke:<name>`; refuse bundled `notes` / `tasks` / `ext-rt` / `canvas`
 - **E15 widgets**: typed `form` (JSON Schema), `select` / `radio` / `checkbox` / `textarea` / `bar_chart` / `image` / `audio`
 - **Providers** tab (F-MDL-04): OpenAI-compat cloud + loopback (Ollama / vLLM / LM Studio); keys in the vault; Chat combo groups local vs provider; `local_only` still allows loopback
 - One-liner install: `irm https://azerothl.github.io/akasha-os/install.ps1 | iex` / `curl -fsSL https://azerothl.github.io/akasha-os/install.sh | sh` (sha256 fail-closed + overlay)
@@ -169,6 +169,9 @@ Slash commands:
 | `/kill <id>` / `/pause <id>` | Control an agent |
 | `/image <prompt>` | Generate a PNG (`media.image.generate`) under `/downloads` |
 | `/speak <text>` | Generate a WAV (`media.audio.generate`) under `/downloads` |
+| `/canvas` | Toggle the shared vector drawing canvas for this session |
+
+**Chat canvas (vector strokes, live)** — session-scoped drawing surface (human + agents). Bundled WASM module `canvas` exposes `canvas.stroke` / `rect` / `ellipse` / `erase` / `clear` / `undo` / `get` / `export`. Document persists as `var/sessions/<id>/canvas.json` (not diffusion). Distinct from Image Studio composition blocks and `/image`.
 
 ---
 
@@ -310,7 +313,7 @@ Persisted in `var/run/preferences.json` (migrated from `onboarding.json` if need
 | Agents | Default model, max steps (1–128), timeout (60–86400 s) |
 | Schedules | Interval agent fires (`schedule.*`) |
 | Secrets | Brave / GitHub / OpenAI keys → encrypted vault; master key in OS keyring |
-| Modules | Local signed catalogue (E10); Install still requires cap review; Uninstall non-bundled modules (not `notes` / `tasks` / `ext-rt`) |
+| Modules | Local signed catalogue (E10); Install still requires cap review; Uninstall non-bundled modules (not `notes` / `tasks` / `ext-rt` / `canvas`) |
 | Web | Search engine, browse max chars, fetch max bytes |
 
 ---

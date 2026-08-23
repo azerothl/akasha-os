@@ -58,6 +58,11 @@ if (-not $SkipBuild) {
         pwsh -NoProfile -File (Join-Path $root "modules\build-ext-rt.ps1")
         if ($LASTEXITCODE -ne 0) { throw "build-ext-rt.ps1 failed ($LASTEXITCODE)" }
     }
+    if (Test-Path (Join-Path $root "modules\build-canvas.ps1")) {
+        Write-Host "== package canvas module =="
+        pwsh -NoProfile -File (Join-Path $root "modules\build-canvas.ps1")
+        if ($LASTEXITCODE -ne 0) { throw "build-canvas.ps1 failed ($LASTEXITCODE)" }
+    }
 }
 
 $binSrc = Join-Path $root "target\release"
@@ -171,6 +176,16 @@ if (Test-Path $extrt) {
     Copy-Item $extrt "$OutDir\share\modules\ext-rt.aospkg" -Recurse -Force
 } else {
     Write-Warning "ext-rt.aospkg absent — lancer modules\build-ext-rt.ps1"
+}
+
+$canvasShare = Join-Path $root "share\modules\canvas.aospkg"
+$canvas = Join-Path $root "modules\canvas.aospkg"
+if (Test-Path $canvasShare) {
+    Copy-Item $canvasShare "$OutDir\share\modules\canvas.aospkg" -Recurse -Force
+} elseif (Test-Path $canvas) {
+    Copy-Item $canvas "$OutDir\share\modules\canvas.aospkg" -Recurse -Force
+} else {
+    Write-Warning "canvas.aospkg absent — lancer modules\build-canvas.ps1"
 }
 
 foreach ($cat in @("catalogue.yaml", "catalogue.yaml.sig", "catalogue.pub")) {

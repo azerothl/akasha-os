@@ -32,7 +32,7 @@ pub const WIDGET_KINDS: &[&str] = &[
 ];
 
 /// Bundled modules that must not be uninstalled (boot would restore them).
-pub const BUNDLED_MODULES: &[&str] = &["notes", "tasks", "ext-rt"];
+pub const BUNDLED_MODULES: &[&str] = &["notes", "tasks", "ext-rt", "canvas"];
 
 /// Modules that keep dedicated hardcoded egui tabs in Preview.
 pub const DECL_UI_SIDEBAR_EXCLUDE: &[&str] = BUNDLED_MODULES;

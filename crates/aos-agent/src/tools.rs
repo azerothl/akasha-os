@@ -456,7 +456,171 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
             required_caps: vec!["tool.invoke:tasks".into()],
         });
     }
+
+    let sid_schema = || {
+        serde_json::json!({
+            "type":"string",
+            "description":"Omit — runtime binds the agent chat session_id (do not invent chat-1/default)"
+        })
+    };
+    let canvas_tools = [
+        (
+            "canvas.stroke",
+            "Polyline sur le canvas de session (coords 0..1) — préférer plusieurs traits courts (8–20 points) plutôt que peu de grosses formes",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "points":{"type":"array","items":{"type":"object","properties":{"x":{"type":"number"},"y":{"type":"number"}},"required":["x","y"]}},
+                    "color":{"type":"string","description":"#RRGGBB"},
+                    "width":{"type":"number","description":"épaisseur relative 0..1"}
+                },
+                "required":["points"]
+            }),
+        ),
+        (
+            "canvas.rect",
+            "Dessiner un rectangle sur le canvas de session",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "x":{"type":"number"},"y":{"type":"number"},
+                    "w":{"type":"number"},"h":{"type":"number"},
+                    "color":{"type":"string"},
+                    "fill":{"type":"boolean"},
+                    "width":{"type":"number"}
+                },
+                "required":["x","y","w","h"]
+            }),
+        ),
+        (
+            "canvas.ellipse",
+            "Dessiner une ellipse sur le canvas de session",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "x":{"type":"number"},"y":{"type":"number"},
+                    "w":{"type":"number"},"h":{"type":"number"},
+                    "color":{"type":"string"},
+                    "fill":{"type":"boolean"},
+                    "width":{"type":"number"}
+                },
+                "required":["x","y","w","h"]
+            }),
+        ),
+        (
+            "canvas.erase",
+            "Effacer le long d'une polyline (peint le fond)",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "points":{"type":"array"},
+                    "width":{"type":"number"}
+                },
+                "required":["points"]
+            }),
+        ),
+        (
+            "canvas.clear",
+            "Effacer tout le canvas de session",
+            serde_json::json!({
+                "type":"object",
+                "properties":{"session_id": sid_schema()}
+            }),
+        ),
+        (
+            "canvas.undo",
+            "Annuler le dernier trait humain sur le canvas de session",
+            serde_json::json!({
+                "type":"object",
+                "properties":{"session_id": sid_schema()}
+            }),
+        ),
+        (
+            "canvas.get",
+            "Lire le canvas existant (toujours en premier ; after_seq optionnel) — poursuis le dessin, ne redémarre pas sauf demande",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "after_seq":{"type":"integer"}
+                }
+            }),
+        ),
+        (
+            "canvas.export",
+            "Exporter le canvas en PNG sous /downloads (snapshot, pas diffusion)",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "path":{"type":"string"},
+                    "width":{"type":"integer"},
+                    "height":{"type":"integer"}
+                }
+            }),
+        ),
+    ];
+    for (name, desc, schema) in canvas_tools {
+        v.push(ToolDesc {
+            name: name.into(),
+            description: desc.into(),
+            input_schema: schema,
+            backend: ToolBackend::Module,
+            required_caps: vec!["tool.invoke:canvas".into()],
+        });
+    }
     v
+}
+
+/// Canvas tool ids (session vector drawing) — never part of `default_agent_tools`.
+pub const CANVAS_TOOL_IDS: &[&str] = &[
+    "canvas.stroke",
+    "canvas.rect",
+    "canvas.ellipse",
+    "canvas.erase",
+    "canvas.clear",
+    "canvas.undo",
+    "canvas.get",
+    "canvas.export",
+];
+
+/// Phrases that beat Create/image routing — must stay aligned with `chat_canvas` routing.
+const EXPLICIT_CANVAS_MARKERS: &[&str] = &[
+    "/canvas",
+    "/canevas",
+    "sur le canvas",
+    "dans le canvas",
+    "on the canvas",
+    "in the canvas",
+    "to the canvas",
+    "sur le canevas",
+    "dans le canevas",
+    "on the canevas",
+    "in the canevas",
+    "to the canevas",
+    "au trait",
+];
+
+/// Explicit vector-canvas intent (toggle phrase, slash, stroke wording).
+pub fn explicit_canvas_intent(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    EXPLICIT_CANVAS_MARKERS.iter().any(|m| lower.contains(m))
+}
+
+/// Append canvas tools when `include` is true (deduped).
+pub fn merge_canvas_tools(tool_ids: &mut Vec<String>, include: bool) {
+    if !include {
+        return;
+    }
+    for t in CANVAS_TOOL_IDS {
+        if !tool_ids.iter().any(|x| x == t) {
+            tool_ids.push((*t).into());
+        }
+    }
 }
 
 /// Default Preview tool ids (UI agent create + scheduled fires).
@@ -751,17 +915,42 @@ mod tests {
     }
 
     #[test]
+    fn explicit_canvas_intent_markers() {
+        assert!(explicit_canvas_intent("dessine sur le canvas"));
+        assert!(explicit_canvas_intent("dessine dans le canvas"));
+        assert!(explicit_canvas_intent("draw in the canvas"));
+        assert!(explicit_canvas_intent("add to the canvas"));
+        assert!(explicit_canvas_intent("dessine sur le canevas"));
+        assert!(explicit_canvas_intent("/canvas"));
+        assert!(!explicit_canvas_intent("dessine une maison"));
+        assert!(!explicit_canvas_intent("canvas"));
+        assert!(!explicit_canvas_intent("dessine sur canvas"));
+    }
+
+    #[test]
+    fn merge_canvas_tools_adds_invoke_cap_targets() {
+        let mut ids = vec!["notes.create".into()];
+        merge_canvas_tools(&mut ids, true);
+        assert!(ids.iter().any(|x| x == "canvas.stroke"));
+        assert!(ids.iter().any(|x| x == "canvas.get"));
+        let caps = caps_for_tools(&select_tools(&ids, &[]), &[]);
+        assert!(caps.iter().any(|c| c == "tool.invoke:canvas"));
+    }
+
+    #[test]
     fn default_agent_tools_grant_notes_tasks_fs_web() {
         let ids = default_agent_tools();
         let tools = select_tools(&ids, &[]);
         let caps = caps_for_tools(&tools, &[]);
         assert!(caps.iter().any(|c| c == "tool.invoke:notes"));
         assert!(caps.iter().any(|c| c == "tool.invoke:tasks"));
+        assert!(!caps.iter().any(|c| c == "tool.invoke:canvas"));
         assert!(caps.iter().any(|c| c == "fs.read:**"));
         assert!(caps.iter().any(|c| c == "fs.write:**"));
         assert!(caps.iter().any(|c| c == "net.connect:*"));
         assert!(tools.iter().any(|t| t.name == "web.browse"));
         assert!(tools.iter().any(|t| t.name == "tasks.create"));
+        assert!(!tools.iter().any(|t| t.name == "canvas.stroke"));
     }
 
     #[test]

@@ -1242,7 +1242,19 @@ Chat (cette session) — tu n'as PAS de boucle d'outils :
 - Questions, explications, conseils (y compris « quoi de neuf » / UI) → réponds en français, sans JSON, en t'appuyant sur le brief + extraits RAG produit s'ils sont présents.
 - Synthèse vocale / TTS / « générer un audio » : n'appelle PAS agent.spawn.
   Le hôte ouvre une carte TTS (`/speak <texte>`). Réponds en français, sans JSON.
-- Image : `/image <prompt>` ou le studio Image — pas d'agent.spawn.
+- Routage dessin (gelé) :
+  • Panneau canvas OUVERT + « dessine » / « draw » / « sketch » → canvas vectoriel (canvas.stroke…).
+  • Panneau canvas FERMÉ + « dessine » / « draw » / « sketch » sans marqueur → agent image (media.image.generate).
+  • Marqueur explicite (« sur le canvas », « dans le canvas », « au trait », `/canvas`… ;
+    le mot seul « canvas » ne suffit PAS) → canvas vectoriel ; le hôte ouvre le panneau même s'il était fermé.
+  • « encore », « vas-y », « relance » seuls → pas de spawn canvas.
+  Pour le canvas explicite ou ouvert : une courte phrase d'accusé puis UNIQUEMENT :
+  {\"action\":\"agent.spawn\",\"args\":{\"brief\":\"<demande utilisateur>\"}}
+  L'agent utilisera canvas.stroke / canvas.rect / canvas.ellipse — jamais media.image.generate.
+  Pour le dessin sans canvas ouvert ni marqueur : une courte phrase d'accusé puis UNIQUEMENT :
+  {\"action\":\"agent.spawn\",\"args\":{\"brief\":\"<demande utilisateur>\"}}
+  (agent image / media.image.generate — pas le canvas vectoriel).
+  N'écris PAS de JSON tronqué, ni de long monologue sans spawn.
 - Créer / scaffolder / packager / installer un module ou une skill, ou toute
   autre tâche multi-étapes avec effets de bord (notes, fichiers, web) →
   une courte phrase d'accusé puis UNIQUEMENT cet objet JSON :
@@ -2172,6 +2184,68 @@ impl Default for ChatRoomConductorPolicy {
     }
 }
 
+/// Proportions prédéfinies du canvas de session.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum CanvasAspect {
+    #[default]
+    Square,
+    Landscape16x9,
+    Landscape16x10,
+    Portrait9x16,
+    Landscape3x2,
+}
+
+impl CanvasAspect {
+    /// Largeur / hauteur du cadre de dessin.
+    pub fn ratio(&self) -> (f32, f32) {
+        match self {
+            Self::Square => (1.0, 1.0),
+            Self::Landscape16x9 => (16.0, 9.0),
+            Self::Landscape16x10 => (16.0, 10.0),
+            Self::Portrait9x16 => (9.0, 16.0),
+            Self::Landscape3x2 => (3.0, 2.0),
+        }
+    }
+
+    /// Dimensions PNG (long edge = `long_edge`).
+    pub fn export_dimensions(&self, long_edge: u32) -> (u32, u32) {
+        let (rw, rh) = self.ratio();
+        let long = long_edge.max(64);
+        if rw >= rh {
+            let w = long;
+            let h = ((long as f32 * rh / rw).round() as u32).max(64);
+            (w, h)
+        } else {
+            let h = long;
+            let w = ((long as f32 * rw / rh).round() as u32).max(64);
+            (w, h)
+        }
+    }
+
+    /// Libellé court pour agents / brief (FR).
+    pub fn agent_label_fr(&self) -> &'static str {
+        match self {
+            Self::Square => "carré 1:1",
+            Self::Landscape16x9 => "16:9 paysage",
+            Self::Landscape16x10 => "16:10 paysage",
+            Self::Portrait9x16 => "9:16 portrait (vertical)",
+            Self::Landscape3x2 => "3:2 paysage (horizontal)",
+        }
+    }
+
+    /// Libellé court pour agents / brief (EN).
+    pub fn agent_label_en(&self) -> &'static str {
+        match self {
+            Self::Square => "square 1:1",
+            Self::Landscape16x9 => "16:9 landscape",
+            Self::Landscape16x10 => "16:10 landscape",
+            Self::Portrait9x16 => "9:16 portrait (vertical)",
+            Self::Landscape3x2 => "3:2 landscape (horizontal)",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatSessionMeta {
     pub id: String,
@@ -2192,6 +2266,143 @@ pub struct ChatSessionMeta {
     /// Politique du conducteur (sérialisée même en mode direct pour stabilité JSON).
     #[serde(default)]
     pub conductor_policy: ChatRoomConductorPolicy,
+    /// Panneau canvas ouvert dans le chat (défaut fermé).
+    #[serde(default)]
+    pub canvas_open: bool,
+    /// Proportions du canvas de session (défaut carré 1:1).
+    #[serde(default)]
+    pub canvas_aspect: CanvasAspect,
+}
+
+/// Point normalisé 0..1 sur le canvas de session.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub struct CanvasPoint {
+    pub x: f32,
+    pub y: f32,
+}
+
+/// Corps d'une opération de dessin (sans seq / auteur — assignés côté store).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum CanvasOpBody {
+    Stroke {
+        points: Vec<CanvasPoint>,
+        /// `#RRGGBB` ou `#RRGGBBAA`.
+        color: String,
+        /// Épaisseur relative au petit côté du canvas (0..1).
+        width: f32,
+    },
+    Rect {
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        color: String,
+        #[serde(default)]
+        fill: bool,
+        #[serde(default = "default_canvas_stroke_width")]
+        width: f32,
+    },
+    Ellipse {
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        color: String,
+        #[serde(default)]
+        fill: bool,
+        #[serde(default = "default_canvas_stroke_width")]
+        width: f32,
+    },
+    Erase {
+        points: Vec<CanvasPoint>,
+        width: f32,
+    },
+    Clear,
+    Undo,
+}
+
+fn default_canvas_stroke_width() -> f32 {
+    0.01
+}
+
+/// Opération de dessin persistée (document vectoriel de session).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CanvasOp {
+    pub seq: u64,
+    pub author_id: String,
+    pub ts_ms: u64,
+    #[serde(flatten)]
+    pub body: CanvasOpBody,
+}
+
+/// Document canvas d'une session (`var/sessions/<id>/canvas.json`).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct CanvasDoc {
+    #[serde(default)]
+    pub session_id: String,
+    #[serde(default)]
+    pub next_seq: u64,
+    #[serde(default)]
+    pub ops: Vec<CanvasOp>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CanvasGetRequest {
+    pub session_id: String,
+    /// Si défini, ne retourner que les ops avec `seq > after_seq`.
+    #[serde(default)]
+    pub after_seq: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CanvasGetResponse {
+    pub session_id: String,
+    pub canvas_open: bool,
+    #[serde(default)]
+    pub canvas_aspect: CanvasAspect,
+    pub next_seq: u64,
+    pub ops: Vec<CanvasOp>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CanvasApplyRequest {
+    pub session_id: String,
+    pub author_id: String,
+    pub op: CanvasOpBody,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CanvasApplyResponse {
+    pub doc: CanvasDoc,
+    pub canvas_open: bool,
+    /// Op nouvellement commitée (`None` pour `undo`/`clear` sans nouvelle entrée).
+    #[serde(default)]
+    pub applied: Option<CanvasOp>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CanvasSetOpenRequest {
+    pub session_id: String,
+    pub open: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CanvasSetAspectRequest {
+    pub session_id: String,
+    pub aspect: CanvasAspect,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CanvasExportRequest {
+    pub session_id: String,
+    /// Chemin logique sous `/downloads` (défaut auto).
+    #[serde(default)]
+    pub path: Option<String>,
+    #[serde(default)]
+    pub width: Option<u32>,
+    #[serde(default)]
+    pub height: Option<u32>,
 }
 
 /// Pièce jointe d'un message de session (ex. référence agent en fond).
@@ -2861,8 +3072,9 @@ mod media_option_tests {
 #[cfg(test)]
 mod chat_session_room_tests {
     use super::{
-        AgentCreateRequest, AgentGoal, AgentInfo, AgentKind, AgentState, ChatRoomMember,
-        ChatSessionMessage, ChatSessionMeta, ChatSessionMode, ChatRoomConductorPolicy,
+        AgentCreateRequest, AgentGoal, AgentInfo, AgentKind, AgentState, CanvasAspect,
+        ChatRoomMember, ChatSessionMessage, ChatSessionMeta, ChatSessionMode,
+        ChatRoomConductorPolicy,
     };
 
     #[test]
@@ -2913,6 +3125,8 @@ mod chat_session_room_tests {
                 max_agent_turns_per_user: 2,
                 allow_peer_debate: false,
             },
+            canvas_open: false,
+            canvas_aspect: CanvasAspect::Square,
         };
         let json = serde_json::to_string(&m).unwrap();
         let back: ChatSessionMeta = serde_json::from_str(&json).unwrap();
@@ -2921,6 +3135,69 @@ mod chat_session_room_tests {
         assert_eq!(back.members[0].agent_id, "agent-a");
         assert_eq!(back.conductor_policy.max_agent_turns_per_user, 2);
         assert!(!back.conductor_policy.allow_peer_debate);
+        assert!(!back.canvas_open);
+        assert_eq!(back.canvas_aspect, CanvasAspect::Square);
+    }
+
+    #[test]
+    fn canvas_aspect_export_dimensions() {
+        use super::CanvasAspect;
+        assert_eq!(CanvasAspect::Square.export_dimensions(1024), (1024, 1024));
+        assert_eq!(CanvasAspect::Landscape16x9.export_dimensions(1024), (1024, 576));
+        assert_eq!(CanvasAspect::Portrait9x16.export_dimensions(1024), (576, 1024));
+        assert_eq!(CanvasAspect::Landscape3x2.export_dimensions(1024), (1024, 683));
+    }
+
+    #[test]
+    fn legacy_meta_without_canvas_aspect() {
+        let m: ChatSessionMeta = serde_json::from_str(
+            r#"{
+                "id":"sess-1",
+                "title":"Test",
+                "created_ms":1,
+                "updated_ms":2,
+                "archived":false,
+                "message_count":0,
+                "canvas_open":true
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(m.canvas_aspect, CanvasAspect::Square);
+    }
+
+    #[test]
+    fn canvas_op_stroke_roundtrip() {
+        use super::{CanvasOp, CanvasOpBody, CanvasPoint};
+        let op = CanvasOp {
+            seq: 1,
+            author_id: "human".into(),
+            ts_ms: 42,
+            body: CanvasOpBody::Stroke {
+                points: vec![CanvasPoint { x: 0.1, y: 0.2 }, CanvasPoint { x: 0.3, y: 0.4 }],
+                color: "#3ee0c4".into(),
+                width: 0.02,
+            },
+        };
+        let json = serde_json::to_string(&op).unwrap();
+        assert!(json.contains("\"kind\":\"stroke\""));
+        let back: CanvasOp = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, op);
+    }
+
+    #[test]
+    fn legacy_meta_without_canvas_open() {
+        let m: ChatSessionMeta = serde_json::from_str(
+            r#"{
+                "id":"sess-1",
+                "title":"Test",
+                "created_ms":1,
+                "updated_ms":2,
+                "archived":false,
+                "message_count":0
+            }"#,
+        )
+        .unwrap();
+        assert!(!m.canvas_open);
     }
 
     #[test]

@@ -1264,6 +1264,193 @@ async fn main() {
         });
     }
 
+    // --- canvas.* (chat drawing surface) ---
+    {
+        let s = sub.clone();
+        svc.on("canvas.get", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<CanvasGetRequest>() {
+                    Ok(req) => {
+                        let result = s
+                            .sessions
+                            .lock()
+                            .unwrap()
+                            .canvas_get(&req.session_id, req.after_seq);
+                        match result {
+                            Ok((meta, doc, ops)) => {
+                                let _ = ctx
+                                    .respond(
+                                        aos_ipc::msg::Status::Ok,
+                                        &CanvasGetResponse {
+                                            session_id: meta.id,
+                                            canvas_open: meta.canvas_open,
+                                            canvas_aspect: meta.canvas_aspect,
+                                            next_seq: doc.next_seq,
+                                            ops,
+                                        },
+                                    )
+                                    .await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::NotFound,
+                                        &e.to_string(),
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("canvas.apply", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<CanvasApplyRequest>() {
+                    Ok(req) => {
+                        let result = s.sessions.lock().unwrap().canvas_apply(
+                            &req.session_id,
+                            &req.author_id,
+                            req.op,
+                        );
+                        match result {
+                            Ok((meta, doc, applied)) => {
+                                let _ = ctx
+                                    .respond(
+                                        aos_ipc::msg::Status::Ok,
+                                        &CanvasApplyResponse {
+                                            doc,
+                                            canvas_open: meta.canvas_open,
+                                            applied,
+                                        },
+                                    )
+                                    .await;
+                            }
+                            Err(e) => {
+                                let status = if e.to_string().contains("inconnue") {
+                                    aos_ipc::msg::Status::NotFound
+                                } else {
+                                    aos_ipc::msg::Status::BadRequest
+                                };
+                                let _ = ctx.respond_error(status, &e.to_string()).await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("canvas.set_open", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<CanvasSetOpenRequest>() {
+                    Ok(req) => {
+                        let result = s
+                            .sessions
+                            .lock()
+                            .unwrap()
+                            .canvas_set_open(&req.session_id, req.open);
+                        match result {
+                            Ok(meta) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &meta).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::NotFound,
+                                        &e.to_string(),
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("canvas.set_aspect", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<CanvasSetAspectRequest>() {
+                    Ok(req) => {
+                        let result = s
+                            .sessions
+                            .lock()
+                            .unwrap()
+                            .canvas_set_aspect(&req.session_id, req.aspect);
+                        match result {
+                            Ok(meta) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &meta).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::NotFound,
+                                        &e.to_string(),
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("canvas.export", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<CanvasExportRequest>() {
+                    Ok(req) => match export_canvas_png(&s, &req) {
+                        Ok(v) => {
+                            let _ = ctx.respond(aos_ipc::msg::Status::Ok, &v).await;
+                        }
+                        Err(e) => {
+                            let _ = ctx
+                                .respond_error(aos_ipc::msg::Status::InternalError, &e)
+                                .await;
+                        }
+                    },
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+
     // --- web.search / net.fetch / files.generate / fs.*_bytes (PC.8–9) ---
     {
         let s = sub.clone();
@@ -3065,6 +3252,48 @@ async fn main() {
 
     eprintln!("[aos-platformd] prêt");
     let _ = svc.serve(&config.bus).await;
+}
+
+fn export_canvas_png(
+    s: &PlatformSubsystem,
+    req: &CanvasExportRequest,
+) -> Result<serde_json::Value, String> {
+    let (meta, doc, _) = s
+        .sessions
+        .lock()
+        .unwrap()
+        .canvas_get(&req.session_id, None)
+        .map_err(|e| e.to_string())?;
+    let w = req
+        .width
+        .unwrap_or_else(|| meta.canvas_aspect.export_dimensions(1024).0);
+    let h = req
+        .height
+        .unwrap_or_else(|| meta.canvas_aspect.export_dimensions(1024).1);
+    let bytes = aos_platform::canvas_raster::export_png(&doc, w, h)?;
+    let path = req.path.clone().unwrap_or_else(|| {
+        format!(
+            "/downloads/canvas-{}-{}.png",
+            meta.id,
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0)
+        )
+    });
+    let caps = vec!["fs.write:/downloads/**".to_string()];
+    let version = s
+        .fs
+        .lock()
+        .unwrap()
+        .write_bytes(&path, &bytes, "service:platformd", &caps)
+        .map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({
+        "path": path,
+        "bytes": bytes.len(),
+        "version": version,
+        "session_id": meta.id,
+    }))
 }
 
 /// E14 : infer locale basse priorité → parse JSON → filtre secrets → remember.

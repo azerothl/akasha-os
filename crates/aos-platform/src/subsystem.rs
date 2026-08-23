@@ -790,6 +790,117 @@ impl HostServices for PlatformSubsystem {
                 let text = String::from_utf8_lossy(&bytes).to_string();
                 Ok(serde_json::json!({"content": text}))
             }
+            "canvas.get" => {
+                if ctx.module != "canvas" {
+                    return Err("canvas.get réservé au module canvas".into());
+                }
+                let session_id = args["session_id"].as_str().unwrap_or("").to_string();
+                if session_id.is_empty() {
+                    return Err("session_id requis".into());
+                }
+                let after_seq = args["after_seq"].as_u64();
+                let (meta, doc, ops) = self
+                    .sessions
+                    .lock()
+                    .unwrap()
+                    .canvas_get(&session_id, after_seq)
+                    .map_err(|e| e.to_string())?;
+                Ok(serde_json::json!({
+                    "session_id": meta.id,
+                    "canvas_open": meta.canvas_open,
+                    "canvas_aspect": meta.canvas_aspect,
+                    "next_seq": doc.next_seq,
+                    "ops": ops,
+                }))
+            }
+            "canvas.apply" => {
+                if ctx.module != "canvas" {
+                    return Err("canvas.apply réservé au module canvas".into());
+                }
+                let session_id = args["session_id"].as_str().unwrap_or("").to_string();
+                if session_id.is_empty() {
+                    return Err("session_id requis".into());
+                }
+                let author_id = args["author_id"]
+                    .as_str()
+                    .filter(|s| !s.is_empty())
+                    .map(str::to_string)
+                    .unwrap_or_else(|| {
+                        ctx.actor
+                            .strip_prefix("agent:")
+                            .unwrap_or(ctx.actor.as_str())
+                            .to_string()
+                    });
+                let op_val = if args.get("op").is_some() {
+                    args["op"].clone()
+                } else {
+                    args.clone()
+                };
+                let body: aos_proto::CanvasOpBody =
+                    serde_json::from_value(op_val).map_err(|e| format!("op invalide: {e}"))?;
+                let (meta, doc, applied) = self
+                    .sessions
+                    .lock()
+                    .unwrap()
+                    .canvas_apply(&session_id, &author_id, body)
+                    .map_err(|e| e.to_string())?;
+                Ok(serde_json::json!({
+                    "canvas_open": meta.canvas_open,
+                    "canvas_aspect": meta.canvas_aspect,
+                    "next_seq": doc.next_seq,
+                    "ops_len": doc.ops.len(),
+                    "applied": applied,
+                }))
+            }
+            "canvas.export" => {
+                if ctx.module != "canvas" {
+                    return Err("canvas.export réservé au module canvas".into());
+                }
+                let session_id = args["session_id"].as_str().unwrap_or("").to_string();
+                if session_id.is_empty() {
+                    return Err("session_id requis".into());
+                }
+                let width = args["width"].as_u64().unwrap_or(768) as u32;
+                let height = args["height"].as_u64().unwrap_or(512) as u32;
+                let (_, doc, _) = self
+                    .sessions
+                    .lock()
+                    .unwrap()
+                    .canvas_get(&session_id, None)
+                    .map_err(|e| e.to_string())?;
+                let bytes = crate::canvas_raster::export_png(&doc, width, height)?;
+                let path = args["path"]
+                    .as_str()
+                    .filter(|s| !s.is_empty())
+                    .map(str::to_string)
+                    .unwrap_or_else(|| {
+                        format!(
+                            "/downloads/canvas-{}-{}.png",
+                            session_id,
+                            std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .map(|d| d.as_millis())
+                                .unwrap_or(0)
+                        )
+                    });
+                Self::require_cap(ctx, "fs.write", &path)?;
+                let version = self
+                    .fs
+                    .lock()
+                    .unwrap()
+                    .write_bytes(
+                        &path,
+                        &bytes,
+                        &format!("module:{}", ctx.module),
+                        &ctx.granted_caps,
+                    )
+                    .map_err(|e| e.to_string())?;
+                Ok(serde_json::json!({
+                    "path": path,
+                    "bytes": bytes.len(),
+                    "version": version,
+                }))
+            }
             // Escalade interdite depuis WASM
             "module.install"
             | "module.compile"

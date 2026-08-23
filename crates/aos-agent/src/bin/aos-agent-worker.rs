@@ -1499,13 +1499,29 @@ async fn execute_action(
             let backend = resolve_tool_backend(other, tools);
             match backend {
                 Some(ToolBackend::Module) => {
-                    let outcome =
-                        invoke_module(bus, &agent_id, &caps, other, args, &trace_id).await;
+                    let outcome = invoke_module(
+                        bus,
+                        &agent_id,
+                        &caps,
+                        other,
+                        args,
+                        &trace_id,
+                        spec.session_id.as_deref(),
+                    )
+                    .await;
                     ActResult::Continue(outcome)
                 }
                 None if is_module_fallback_candidate(other) => {
-                    let outcome =
-                        invoke_module(bus, &agent_id, &caps, other, args, &trace_id).await;
+                    let outcome = invoke_module(
+                        bus,
+                        &agent_id,
+                        &caps,
+                        other,
+                        args,
+                        &trace_id,
+                        spec.session_id.as_deref(),
+                    )
+                    .await;
                     ActResult::Continue(outcome)
                 }
                 Some(ToolBackend::Native) => {
@@ -1760,12 +1776,35 @@ async fn invoke_module(
     tool: &str,
     args: &serde_json::Value,
     trace_id: &str,
+    session_id: Option<&str>,
 ) -> String {
     let module = tool.split('.').next().unwrap_or("").to_string();
+    let mut args = args.clone();
+    if module == "canvas" {
+        // Fail closed: canvas.* requires a bound session_id; reject calls when none is available.
+        let sid = match session_id.filter(|s| !s.is_empty()) {
+            Some(s) => s,
+            None => return "ERREUR outil: canvas.* requiert un session_id lié".to_string(),
+        };
+        // Always overwrite with the bound session — never trust model-supplied ids.
+        let orig = args.clone();
+        args = serde_json::json!({});
+        if let Some(obj) = args.as_object_mut() {
+            // Merge original args first so tool params are preserved.
+            if let Some(orig_obj) = orig.as_object() {
+                for (k, v) in orig_obj {
+                    obj.insert(k.clone(), v.clone());
+                }
+            }
+            // Then overwrite session_id and author_id unconditionally.
+            obj.insert("session_id".into(), serde_json::json!(sid));
+            obj.insert("author_id".into(), serde_json::json!(agent_id));
+        }
+    }
     let req = ModuleInvokeRequest {
         module,
         tool: tool.to_string(),
-        args: args.clone(),
+        args,
         actor: format!("agent:{agent_id}"),
         actor_caps: caps.to_vec(),
         trace_id: trace_id.to_string(),

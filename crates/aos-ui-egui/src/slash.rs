@@ -13,6 +13,7 @@ pub(crate) const SLASH_COMMANDS: &[(&str, &str)] = &[
     ("/pause <id>", "suspendre un agent"),
     ("/image <prompt>", "generate a PNG under /downloads (uses Settings defaults)"),
     ("/speak <texte>", "open an in-chat TTS card (voice + knobs, then Generate)"),
+    ("/canvas", "toggle the shared drawing canvas for this session"),
 ];
 
 pub(crate) fn slash_completions(prefix: &str) -> Vec<(&'static str, &'static str)> {
