@@ -464,6 +464,12 @@ fn module_manifest_hash(dir: &Path) -> Option<String> {
     None
 }
 
+fn wasm_sha256(dir: &Path) -> Option<String> {
+    let data = fs::read(dir.join("module.wasm")).ok()?;
+    use sha2::{Digest, Sha256};
+    Some(format!("{:x}", Sha256::digest(&data)))
+}
+
 fn wasm_fingerprint(dir: &Path) -> Option<(u64, u64)> {
     let meta = fs::metadata(dir.join("module.wasm")).ok()?;
     let len = meta.len();
@@ -485,10 +491,12 @@ pub fn sync_packaged_module(share_pkg: &Path, installed_dir: &Path) -> bool {
     let need = if !installed_dir.join("module.wasm").exists() {
         true
     } else {
-        let share_hash = module_manifest_hash(share_pkg);
-        let inst_hash = module_manifest_hash(installed_dir);
-        match (share_hash, inst_hash) {
-            (Some(a), Some(b)) => a != b,
+        let share_manifest = module_manifest_hash(share_pkg);
+        let inst_manifest = module_manifest_hash(installed_dir);
+        let share_wasm = wasm_sha256(share_pkg);
+        let inst_wasm = wasm_sha256(installed_dir);
+        match (share_manifest, inst_manifest, share_wasm, inst_wasm) {
+            (Some(a), Some(b), Some(sw), Some(iw)) => a != b || sw != iw,
             _ => wasm_fingerprint(share_pkg) != wasm_fingerprint(installed_dir),
         }
     };
@@ -606,6 +614,31 @@ mod tests {
             "new ui"
         );
         assert!(!installed_dir.join("stale.txt").exists());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn sync_packaged_module_replaces_when_wasm_bytes_differ_same_manifest_hash() {
+        let root = temp_dir("sync-packaged-wasm");
+        let share_pkg = root.join("share/modules/canvas.aospkg");
+        let installed_dir = root.join("var/modules/canvas");
+        fs::create_dir_all(share_pkg.join("ui")).unwrap();
+        fs::create_dir_all(&installed_dir).unwrap();
+
+        let manifest = "name: canvas\nhash: same-hash\nversion: 1.0.0\n";
+        fs::write(share_pkg.join("manifest.yaml"), manifest).unwrap();
+        fs::write(share_pkg.join("module.wasm"), b"new wasm with set_style").unwrap();
+        fs::write(share_pkg.join("ui/index.html"), "ui").unwrap();
+
+        fs::write(installed_dir.join("manifest.yaml"), manifest).unwrap();
+        fs::write(installed_dir.join("module.wasm"), b"old wasm").unwrap();
+
+        assert!(sync_packaged_module(&share_pkg, &installed_dir));
+        assert_eq!(
+            fs::read(installed_dir.join("module.wasm")).unwrap(),
+            b"new wasm with set_style"
+        );
 
         let _ = fs::remove_dir_all(root);
     }
