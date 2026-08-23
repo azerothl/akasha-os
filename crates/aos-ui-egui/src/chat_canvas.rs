@@ -63,6 +63,17 @@ impl Default for CanvasPanelState {
 
 impl CanvasPanelState {
     pub fn apply_snapshot(&mut self, ops: Vec<CanvasOp>, next_seq: u64, now: f64) {
+        let pending_human: Vec<CanvasOp> = self
+            .ops
+            .iter()
+            .filter(|o| o.author_id == "human" && o.seq == 0)
+            .cloned()
+            .collect();
+        let prior_human_server = self
+            .ops
+            .iter()
+            .filter(|o| o.author_id == "human" && o.seq > 0)
+            .count();
         for op in &ops {
             if op.seq > self.last_seen_seq && op.author_id != "human" {
                 self.animating.push((op.seq, now));
@@ -72,6 +83,13 @@ impl CanvasPanelState {
             self.last_seen_seq = self.last_seen_seq.max(max);
         }
         self.ops = ops;
+        let new_human_server = self.ops.iter().filter(|o| o.author_id == "human").count();
+        if new_human_server <= prior_human_server {
+            for p in pending_human {
+                self.ops.push(p);
+            }
+            self.ops.sort_by_key(|o| o.seq);
+        }
         self.next_seq = next_seq.max(self.next_seq);
         self.animating
             .retain(|(seq, start)| self.ops.iter().any(|o| o.seq == *seq) && now - start < 0.45);
@@ -339,6 +357,7 @@ pub fn ui_canvas_toolbar(
 pub fn ui_canvas_surface(
     ui: &mut Ui,
     state: &mut CanvasPanelState,
+    empty_hint: &str,
 ) -> Option<CanvasUiAction> {
     let mut action: Option<CanvasUiAction> = None;
     let dark = ui.visuals().dark_mode;
@@ -477,10 +496,110 @@ pub fn ui_canvas_surface(
         ui.ctx().request_repaint();
     }
 
+    if state.ops.is_empty()
+        && state.draft_points.is_empty()
+        && state.drag_origin.is_none()
+        && !empty_hint.is_empty()
+    {
+        let font = eframe::egui::FontId::proportional(13.0);
+        let galley = ui
+            .painter()
+            .layout_no_wrap(empty_hint.to_string(), font, ui.visuals().weak_text_color());
+        let pos = rect.center() - galley.size() * 0.5;
+        ui.painter().galley(pos, galley, Color32::TRANSPARENT);
+    }
+
     action
 }
 
-pub fn chat_user_wants_canvas_draw(text: &str) -> bool {
+#[cfg(test)]
+mod routing_tests {
+    use super::*;
+
+    #[test]
+    fn bare_draw_is_pixel_not_canvas() {
+        assert!(chat_user_wants_pixel_draw("dessine une maison"));
+        assert!(!chat_user_wants_explicit_canvas("dessine une maison"));
+        assert!(!chat_wants_canvas_agent("dessine une maison", true));
+    }
+
+    #[test]
+    fn explicit_canvas_markers() {
+        assert!(chat_user_wants_explicit_canvas("dessine sur le canvas"));
+        assert!(chat_user_wants_explicit_canvas("draw on the canvas"));
+        assert!(chat_user_wants_explicit_canvas("ajoute au trait une porte"));
+        assert!(chat_user_wants_explicit_canvas("/canvas"));
+        assert!(!chat_user_wants_pixel_draw("dessine sur le canvas"));
+    }
+
+    #[test]
+    fn followup_keywords_do_not_steal_canvas() {
+        for msg in [
+            "encore",
+            "vas-y",
+            "vas y",
+            "lance",
+            "améliore",
+            "go ahead",
+        ] {
+            assert!(
+                !chat_wants_canvas_agent(msg, true),
+                "follow-up {msg} must not route to canvas"
+            );
+        }
+    }
+
+    #[test]
+    fn withdraw_does_not_match_draw() {
+        assert!(!chat_user_wants_pixel_draw("withdraw funds"));
+    }
+
+    #[test]
+    fn apply_snapshot_keeps_pending_human_stroke() {
+        let mut state = CanvasPanelState::default();
+        state.ops.push(CanvasOp {
+            seq: 0,
+            author_id: "human".into(),
+            ts_ms: 0,
+            body: CanvasOpBody::Stroke {
+                points: vec![CanvasPoint { x: 0.1, y: 0.1 }, CanvasPoint { x: 0.2, y: 0.2 }],
+                color: "#3ee0c4".into(),
+                width: 0.01,
+            },
+        });
+        state.apply_snapshot(vec![], 1, 0.0);
+        assert_eq!(state.ops.len(), 1);
+        assert_eq!(state.ops[0].author_id, "human");
+    }
+}
+
+/// Explicit vector-canvas intent: toggle phrase, slash, or stroke wording — not bare « dessine ».
+pub fn chat_user_wants_explicit_canvas(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    if lower.contains("/canvas") {
+        return true;
+    }
+    if lower.contains("sur le canvas") || lower.contains("on the canvas") {
+        return true;
+    }
+    // « au trait » = vector strokes on the session canvas (not pixel diffusion).
+    if lower.contains("au trait") {
+        return true;
+    }
+    false
+}
+
+fn word_boundary_match(lower: &str, pat: &str) -> bool {
+    lower
+        .split(|c: char| !c.is_alphanumeric())
+        .any(|word| word == pat)
+}
+
+/// Bare draw / sketch wording → Image Studio (pixels), unless explicit canvas markers win.
+pub fn chat_user_wants_pixel_draw(text: &str) -> bool {
+    if chat_user_wants_explicit_canvas(text) {
+        return false;
+    }
     let lower = text.to_lowercase();
     [
         "dessin",
@@ -491,72 +610,30 @@ pub fn chat_user_wants_canvas_draw(text: &str) -> bool {
         "sketch",
         "trace",
         "tracer",
-        "canvas",
         "esquisse",
         "redessine",
         "redessiner",
+        "illustration",
+        "illustrer",
     ]
     .iter()
-    .any(|k| {
-        let pat = k;
-        // Word-boundary check: match only when surrounded by non-alphanumeric characters
-        // to avoid false positives like "withdraw" matching "draw".
-        lower.split(|c: char| !c.is_alphanumeric()).any(|word| word == *pat)
-    })
+    .any(|k| word_boundary_match(&lower, *k))
 }
 
-/// Suivi / retouche quand le canvas de session est déjà ouvert.
-pub fn chat_user_wants_canvas_followup(text: &str) -> bool {
-    let lower = text.to_lowercase();
-    [
-        "encore",
-        "retry",
-        "redo",
-        "refais",
-        "recommence",
-        "recommencer",
-        "améliore",
-        "amelior",
-        "détail",
-        "detail",
-        "modifie",
-        "modifier",
-        "plus de",
-        "mieux",
-        "retente",
-        "retenter",
-        "essaie",
-        "essai",
-        "essay",
-        "retouche",
-        "redessine",
-        "clear",
-        "efface",
-        "recommen",
-        "autre version",
-        "nouvelle version",
-        "vas-y",
-        "vas y",
-        "go ahead",
-        "do it",
-        "lance",
-        "relance",
-    ]
-    .iter()
-    .any(|k| lower.contains(k))
-}
-
-/// Déléguer un agent canvas : première demande de dessin, ou suivi si panneau ouvert.
-pub fn chat_wants_canvas_agent(text: &str, canvas_open: bool) -> bool {
-    chat_user_wants_canvas_draw(text) || (canvas_open && chat_user_wants_canvas_followup(text))
+/// Déléguer un agent canvas : uniquement sur marqueurs explicites (pas « encore » / « vas-y »).
+pub fn chat_wants_canvas_agent(text: &str, _canvas_open: bool) -> bool {
+    chat_user_wants_explicit_canvas(text)
 }
 
 pub fn canvas_agent_brief(user_text: &str) -> String {
     format!(
         "{user_text}\n\n\
-         Contexte: canvas de session chat déjà lié — utilise uniquement canvas.* \
-         (coords normalisées 0..1). Commence par canvas.get. Si le dessin est trop \
-         pauvre ou à recommencer: canvas.clear puis redessine avec plus de détails \
-         (traits, formes, couleurs). Ne génère pas d'image diffusion."
+         Contexte: canvas vectoriel de session lié — utilise uniquement \
+         canvas.stroke, canvas.rect, canvas.ellipse, canvas.erase, canvas.clear, \
+         canvas.undo, canvas.get, canvas.export (coords normalisées 0..1). \
+         Commence par canvas.get. Si le dessin est trop pauvre: canvas.clear puis \
+         redessine avec plus de traits et formes. Ne génère pas d'image diffusion \
+         (pas media.image.generate). Ne pose pas user.ask pour choisir entre canvas \
+         et diffusion — dessine directement."
     )
 }

@@ -166,7 +166,9 @@ impl ChatSessionStore {
         doc.session_id = id.into();
         let applied = match body {
             CanvasOpBody::Undo => {
-                let _ = doc.ops.pop();
+                if let Some(pos) = doc.ops.iter().rposition(|o| o.author_id == "human") {
+                    doc.ops.remove(pos);
+                }
                 None
             }
             CanvasOpBody::Clear => {
@@ -610,11 +612,33 @@ archived: false
         let (_, _, delta) = s.canvas_get(&m.id, Some(0)).unwrap();
         assert_eq!(delta.len(), 1);
         let (_, doc2, _) = s
-            .canvas_apply(&m.id, "agent-a", CanvasOpBody::Undo)
+            .canvas_apply(&m.id, "human", CanvasOpBody::Undo)
             .unwrap();
         assert!(doc2.ops.is_empty());
         let meta = s.canvas_set_open(&m.id, false).unwrap();
         assert!(!meta.canvas_open);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn canvas_undo_removes_last_human_op_not_agent() {
+        let dir = std::env::temp_dir().join(format!("aos-sess-undo-human-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let s = ChatSessionStore::open(&dir).unwrap();
+        let m = s.create(Some("Undo".into()), None).unwrap();
+        let stroke = CanvasOpBody::Stroke {
+            points: vec![
+                aos_proto::CanvasPoint { x: 0.1, y: 0.1 },
+                aos_proto::CanvasPoint { x: 0.2, y: 0.2 },
+            ],
+            color: "#3ee0c4".into(),
+            width: 0.02,
+        };
+        s.canvas_apply(&m.id, "human", stroke.clone()).unwrap();
+        s.canvas_apply(&m.id, "agent-a", stroke).unwrap();
+        let (_, doc, _) = s.canvas_apply(&m.id, "human", CanvasOpBody::Undo).unwrap();
+        assert_eq!(doc.ops.len(), 1);
+        assert_eq!(doc.ops[0].author_id, "agent-a");
         let _ = fs::remove_dir_all(&dir);
     }
 }

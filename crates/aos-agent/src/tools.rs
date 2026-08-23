@@ -533,7 +533,7 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
         ),
         (
             "canvas.undo",
-            "Annuler la dernière opération canvas",
+            "Annuler le dernier trait humain sur le canvas de session",
             serde_json::json!({
                 "type":"object",
                 "properties":{"session_id": sid_schema()}
@@ -590,14 +590,6 @@ pub fn default_agent_tools() -> Vec<String> {
         "tasks.list",
         "tasks.update",
         "tasks.complete",
-        "canvas.stroke",
-        "canvas.rect",
-        "canvas.ellipse",
-        "canvas.erase",
-        "canvas.clear",
-        "canvas.undo",
-        "canvas.get",
-        "canvas.export",
         "fs.read",
         "fs.list",
         "fs.write",
@@ -882,13 +874,13 @@ mod tests {
         let caps = caps_for_tools(&tools, &[]);
         assert!(caps.iter().any(|c| c == "tool.invoke:notes"));
         assert!(caps.iter().any(|c| c == "tool.invoke:tasks"));
-        assert!(caps.iter().any(|c| c == "tool.invoke:canvas"));
+        assert!(!caps.iter().any(|c| c == "tool.invoke:canvas"));
         assert!(caps.iter().any(|c| c == "fs.read:**"));
         assert!(caps.iter().any(|c| c == "fs.write:**"));
         assert!(caps.iter().any(|c| c == "net.connect:*"));
         assert!(tools.iter().any(|t| t.name == "web.browse"));
         assert!(tools.iter().any(|t| t.name == "tasks.create"));
-        assert!(tools.iter().any(|t| t.name == "canvas.stroke"));
+        assert!(!tools.iter().any(|t| t.name == "canvas.stroke"));
     }
 
     #[test]
