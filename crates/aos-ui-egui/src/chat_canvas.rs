@@ -577,10 +577,26 @@ mod routing_tests {
     #[test]
     fn explicit_canvas_markers() {
         assert!(chat_user_wants_explicit_canvas("dessine sur le canvas"));
+        assert!(chat_user_wants_explicit_canvas("dessine dans le canvas"));
         assert!(chat_user_wants_explicit_canvas("draw on the canvas"));
+        assert!(chat_user_wants_explicit_canvas("draw in the canvas"));
         assert!(chat_user_wants_explicit_canvas("ajoute au trait une porte"));
         assert!(chat_user_wants_explicit_canvas("/canvas"));
         assert!(!chat_user_wants_pixel_draw("dessine sur le canvas"));
+        assert!(!chat_user_wants_pixel_draw("dessine dans le canvas"));
+    }
+
+    #[test]
+    fn dans_le_canvas_routes_canvas_not_image() {
+        assert!(chat_wants_canvas_agent("dessine dans le canvas", false));
+        assert!(!chat_user_wants_pixel_draw("dessine dans le canvas"));
+    }
+
+    #[test]
+    fn bare_dessine_still_routes_image() {
+        assert!(chat_user_wants_pixel_draw("dessine une maison"));
+        assert!(!chat_user_wants_explicit_canvas("dessine une maison"));
+        assert!(!chat_wants_canvas_agent("dessine une maison", false));
     }
 
     #[test]
@@ -647,20 +663,23 @@ fn fit_board_rect_letterboxes_wide_in_tall_pane() {
     }
 }
 
+/// Phrases that mean the session vector canvas — checked before bare « dessine » / image routing.
+const EXPLICIT_CANVAS_MARKERS: &[&str] = &[
+    "/canvas",
+    "sur le canvas",
+    "dans le canvas",
+    "on the canvas",
+    "in the canvas",
+    "on canvas",
+    "in canvas",
+    // « au trait » = vector strokes on the session canvas (not pixel diffusion).
+    "au trait",
+];
+
 /// Explicit vector-canvas intent: toggle phrase, slash, or stroke wording — not bare « dessine ».
 pub fn chat_user_wants_explicit_canvas(text: &str) -> bool {
     let lower = text.to_lowercase();
-    if lower.contains("/canvas") {
-        return true;
-    }
-    if lower.contains("sur le canvas") || lower.contains("on the canvas") {
-        return true;
-    }
-    // « au trait » = vector strokes on the session canvas (not pixel diffusion).
-    if lower.contains("au trait") {
-        return true;
-    }
-    false
+    EXPLICIT_CANVAS_MARKERS.iter().any(|m| lower.contains(m))
 }
 
 fn word_boundary_match(lower: &str, pat: &str) -> bool {

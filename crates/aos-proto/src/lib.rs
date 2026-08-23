@@ -1247,7 +1247,8 @@ Chat (cette session) — tu n'as PAS de boucle d'outils :
   {\"action\":\"agent.spawn\",\"args\":{\"brief\":\"<demande utilisateur>\"}}
   (agent image / media.image.generate — pas le canvas vectoriel).
 - Canvas vectoriel session : uniquement si marqueurs explicites dans le message
-  (« sur le canvas », « on the canvas », « au trait », `/canvas` dans le texte) →
+  (« sur le canvas », « dans le canvas », « on the canvas », « in the canvas »,
+  « au trait », `/canvas` dans le texte) →
   une courte phrase d'accusé puis UNIQUEMENT :
   {\"action\":\"agent.spawn\",\"args\":{\"brief\":\"<demande utilisateur>\"}}
   L'agent utilisera canvas.stroke / canvas.rect / canvas.ellipse — jamais

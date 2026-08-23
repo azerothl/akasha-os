@@ -795,11 +795,12 @@ fn chat_agent_kit_ex(task: &str, canvas_open: bool) -> (Vec<String>, Vec<String>
             tools.push("media.audio.generate".into());
         }
     }
-    if lower.contains("image")
-        || lower.contains("png")
-        || lower.contains("illustration")
-        || lower.contains("diffusion")
-        || chat_canvas::chat_user_wants_pixel_draw(task)
+    if !chat_canvas::chat_user_wants_explicit_canvas(task)
+        && (lower.contains("image")
+            || lower.contains("png")
+            || lower.contains("illustration")
+            || lower.contains("diffusion")
+            || chat_canvas::chat_user_wants_pixel_draw(task))
     {
         if !tools.iter().any(|x| x == "media.image.generate") {
             tools.push("media.image.generate".into());
@@ -6700,6 +6701,25 @@ mod delegate_tests {
         assert!(!tools.iter().any(|x| x == "media.image.generate"));
         assert!(!tools.iter().any(|x| x == "user.ask"));
         assert!(prose.to_lowercase().contains("canvas") || prose.contains("dessin"));
+    }
+
+    #[test]
+    fn dans_le_canvas_delegates_with_canvas_tools() {
+        let spec = chat_delegate_agent_spec("dessine dans le canvas", "Ok.", false, ASPECT)
+            .expect("dessine dans le canvas doit déléguer canvas");
+        let (_brief, _skills, tools, _prose) = spec;
+        assert!(tools.iter().any(|x| x == "canvas.stroke"));
+        assert!(!tools.iter().any(|x| x == "media.image.generate"));
+        assert!(!tools.iter().any(|x| x == "user.ask"));
+    }
+
+    #[test]
+    fn bare_dessine_delegates_with_image_tools() {
+        let spec = chat_delegate_agent_spec("dessine une maison", "Ok.", false, ASPECT)
+            .expect("dessine une maison doit déléguer image");
+        let (_brief, _skills, tools, _prose) = spec;
+        assert!(tools.iter().any(|x| x == "media.image.generate"));
+        assert!(!tools.iter().any(|x| x == "canvas.stroke"));
     }
 
     #[test]

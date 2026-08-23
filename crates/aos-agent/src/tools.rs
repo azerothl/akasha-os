@@ -588,19 +588,22 @@ pub const CANVAS_TOOL_IDS: &[&str] = &[
     "canvas.export",
 ];
 
+/// Phrases that mean the session vector canvas — must stay aligned with `chat_canvas` routing.
+const EXPLICIT_CANVAS_MARKERS: &[&str] = &[
+    "/canvas",
+    "sur le canvas",
+    "dans le canvas",
+    "on the canvas",
+    "in the canvas",
+    "on canvas",
+    "in canvas",
+    "au trait",
+];
+
 /// Explicit vector-canvas intent (toggle phrase, slash, stroke wording).
 pub fn explicit_canvas_intent(text: &str) -> bool {
     let lower = text.to_lowercase();
-    if lower.contains("/canvas") {
-        return true;
-    }
-    if lower.contains("sur le canvas") || lower.contains("on the canvas") {
-        return true;
-    }
-    if lower.contains("au trait") {
-        return true;
-    }
-    false
+    EXPLICIT_CANVAS_MARKERS.iter().any(|m| lower.contains(m))
 }
 
 /// Append canvas tools when `include` is true (deduped).
@@ -909,6 +912,8 @@ mod tests {
     #[test]
     fn explicit_canvas_intent_markers() {
         assert!(explicit_canvas_intent("dessine sur le canvas"));
+        assert!(explicit_canvas_intent("dessine dans le canvas"));
+        assert!(explicit_canvas_intent("draw in the canvas"));
         assert!(explicit_canvas_intent("/canvas"));
         assert!(!explicit_canvas_intent("dessine une maison"));
     }
