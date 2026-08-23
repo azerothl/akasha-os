@@ -915,12 +915,13 @@ fn fit_board_rect_letterboxes_wide_in_tall_pane() {
     }
 
     #[test]
-    fn canvas_agent_system_prompt_includes_spawn_goal_hint() {
+    fn canvas_agent_system_prompt_forbids_spawn_fanout() {
         let prompt = super::canvas_agent_system_prompt(CanvasAspect::Square);
         assert!(prompt.contains("canvas.set_style"));
         assert!(prompt.contains("Exemple si le sujet est une maison"));
-        assert!(prompt.contains("agent.spawn"));
-        assert!(prompt.contains("ligne Goal"));
+        assert!(prompt.contains("Pas agent.spawn"));
+        assert!(prompt.contains("auteur unique"));
+        assert!(!prompt.contains("agent.spawn : le brief"));
     }
 }
 
@@ -1042,20 +1043,20 @@ Couleur : canvas.set_style {color:\"#RRGGBB\"} ou color= sur chaque op — le te
 après critique, change de teinte pour ombres/détails.\n\
 Après critique : ajoute, jamais canvas.clear sauf si l'humain dit effacer.\n\
 Exemple si le sujet est une maison : toit + murs + porte + fenêtre + sol + un élément d'environnement.\n\
-Outils : canvas.set_style, canvas.stroke, canvas.line, canvas.spline, canvas.rect, canvas.ellipse, \
-canvas.fill (fill:true sur rect/ellipse), canvas.erase, canvas.clear, \
-canvas.undo, canvas.get, canvas.export (coords 0..1). Pas media.image.generate.";
+Outils : canvas.set_style, canvas.stroke, canvas.line, canvas.spline, canvas.rect, canvas.ellipse \
+(fill:true sur rect/ellipse pour remplir), canvas.erase, canvas.clear, \
+canvas.undo, canvas.get, canvas.export (coords 0..1). Pas media.image.generate. Pas agent.spawn.";
 
-const CANVAS_AGENT_SPAWN_GUIDE: &str = "\
-agent.spawn : le brief doit reprendre le sujet demandé par l'utilisateur (ligne Goal), \
-jamais l'exemple maison ni ces règles de style.";
+const CANVAS_AGENT_NO_FANOUT_GUIDE: &str = "\
+Tu es l'auteur unique de ce dessin : traits séquentiels canvas.* (stroke, rect, ellipse fill:true, set_style). \
+Pas de agent.spawn ni agent.await — un seul agent, pas de sous-agents parallèles pour le même sujet.";
 
 /// System prompt addendum for delegated canvas agents (designer rules + frame aspect).
 pub fn canvas_agent_system_prompt(aspect: CanvasAspect) -> String {
     format!(
         "{CANVAS_AGENT_DESIGNER_GUIDE}\n\
          Proportions actuelles du cadre : {aspect_fr} ({aspect_en}).\n\n\
-         {CANVAS_AGENT_SPAWN_GUIDE}",
+         {CANVAS_AGENT_NO_FANOUT_GUIDE}",
         aspect_fr = aspect.agent_label_fr(),
         aspect_en = aspect.agent_label_en(),
     )

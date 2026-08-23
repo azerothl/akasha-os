@@ -484,9 +484,15 @@ fn merge_named_args(dst: &mut Vec<String>, args: &serde_json::Value, key: &str) 
 }
 
 /// Retire les outils incompatibles avec le kit canvas (vectoriel) vs pixel (diffusion).
-fn strip_delegate_kit_tools(tools: &mut Vec<String>, use_canvas: bool) {
+fn strip_delegate_kit_tools(tools: &mut Vec<String>, skills: &mut Vec<String>, use_canvas: bool) {
     if use_canvas {
-        tools.retain(|t| !t.starts_with("media.image") && t != "user.ask");
+        tools.retain(|t| {
+            !t.starts_with("media.image")
+                && t != "user.ask"
+                && t != "agent.spawn"
+                && t != "agent.await"
+        });
+        skills.retain(|s| s != "planner");
     } else {
         tools.retain(|t| !t.starts_with("canvas."));
     }
@@ -497,8 +503,8 @@ fn chat_delegate_kit(
     canvas_open: bool,
     use_canvas: bool,
 ) -> (Vec<String>, Vec<String>) {
-    let (skills, mut tools) = chat_agent_kit_ex(brief, canvas_open || use_canvas);
-    strip_delegate_kit_tools(&mut tools, use_canvas);
+    let (mut skills, mut tools) = chat_agent_kit_ex(brief, canvas_open || use_canvas);
+    strip_delegate_kit_tools(&mut tools, &mut skills, use_canvas);
     (skills, tools)
 }
 
@@ -547,9 +553,9 @@ pub(crate) fn chat_delegate_agent_spec(
                         tools.push(t);
                     }
                 }
-                strip_delegate_kit_tools(&mut tools, true);
+                strip_delegate_kit_tools(&mut tools, &mut skills, true);
             } else {
-                strip_delegate_kit_tools(&mut tools, false);
+                strip_delegate_kit_tools(&mut tools, &mut skills, false);
             }
             if self_tool {
                 for t in [
@@ -673,7 +679,11 @@ pub(crate) async fn spawn_chat_delegate_agent(
         statement: goal_statement.clone(),
         success_criteria: vec![],
         max_steps,
-        max_subagents: CHAT_AGENT_MAX_SUBAGENTS,
+        max_subagents: if canvas_delegate {
+            0
+        } else {
+            CHAT_AGENT_MAX_SUBAGENTS
+        },
         timeout_secs: 3600,
     });
     req.caps.push("tool.invoke:notes".into());
@@ -841,7 +851,6 @@ fn chat_agent_kit_ex(task: &str, canvas_open: bool) -> (Vec<String>, Vec<String>
             "canvas.spline",
             "canvas.rect",
             "canvas.ellipse",
-            "canvas.fill",
             "canvas.erase",
             "canvas.clear",
             "canvas.undo",
@@ -6964,17 +6973,22 @@ mod delegate_tests {
         assert!(tools.iter().any(|x| x == "canvas.stroke"));
         assert!(!tools.iter().any(|x| x == "media.image.generate"));
         assert!(!tools.iter().any(|x| x == "user.ask"));
+        assert!(!tools.iter().any(|x| x == "agent.spawn"));
+        assert!(!tools.iter().any(|x| x == "agent.await"));
+        assert!(!tools.iter().any(|x| x == "canvas.fill"));
     }
 
     #[test]
     fn explicit_canvas_delegates_with_canvas_tools() {
         let spec = chat_delegate_agent_spec("dessine sur le canvas une maison", "Ok.", false, ASPECT);
-        let (brief, _skills, tools, prose) = spec.expect("doit déléguer canvas");
+        let (brief, skills, tools, prose) = spec.expect("doit déléguer canvas");
         assert_eq!(brief, "dessine sur le canvas une maison");
         assert!(!brief.contains("toit + murs"));
         assert!(tools.iter().any(|x| x == "canvas.stroke"));
         assert!(!tools.iter().any(|x| x == "media.image.generate"));
         assert!(!tools.iter().any(|x| x == "user.ask"));
+        assert!(!tools.iter().any(|x| x == "agent.spawn"));
+        assert!(!skills.iter().any(|s| s == "planner"));
         assert!(prose.to_lowercase().contains("canvas") || prose.contains("dessin"));
     }
 
