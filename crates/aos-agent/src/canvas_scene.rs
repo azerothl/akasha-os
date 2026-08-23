@@ -30,7 +30,8 @@ pub async fn fetch_canvas_scene_digest(bus: &BusClient, session_id: &str) -> Opt
 pub fn canvas_scene_prompt_block(digest: &str) -> String {
     format!(
         "## Canvas actuel (canvas.get — ne pas deviner)\n\
-         Commence par `canvas.get` si tu dessines ; ce digest reflète l'état au début du tour :\n\
+         Digest compact (compteurs + bbox par seq, pas le JSON brut). \
+         Commence par `canvas.get` si tu dessines ; état au début du tour :\n\
          ```\n{digest}\n```"
     )
 }

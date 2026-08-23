@@ -2441,32 +2441,85 @@ fn canvas_op_kind_label(body: &CanvasOpBody) -> &'static str {
 }
 
 /// Digest compact du canvas pour injection runtime (agents / room turns).
+/// Résumé : compteurs par kind + bbox par seq — pas de dump JSON des ops.
 pub fn canvas_scene_digest(doc: &CanvasDoc, aspect: CanvasAspect) -> String {
+    use std::collections::BTreeMap;
+
+    let mut kind_counts: BTreeMap<&'static str, u32> = BTreeMap::new();
+    let mut author_counts: BTreeMap<String, u32> = BTreeMap::new();
+    let mut scene_bbox = CanvasBBox::empty();
+    let mut has_scene_bbox = false;
+
+    for op in &doc.ops {
+        let kind = canvas_op_kind_label(&op.body);
+        *kind_counts.entry(kind).or_insert(0) += 1;
+        *author_counts.entry(op.author_id.clone()).or_insert(0) += 1;
+        if let Some(b) = canvas_op_bbox(&op.body) {
+            if has_scene_bbox {
+                scene_bbox.x0 = scene_bbox.x0.min(b.x0);
+                scene_bbox.y0 = scene_bbox.y0.min(b.y0);
+                scene_bbox.x1 = scene_bbox.x1.max(b.x1);
+                scene_bbox.y1 = scene_bbox.y1.max(b.y1);
+            } else {
+                scene_bbox = b;
+                has_scene_bbox = true;
+            }
+        }
+    }
+
     let mut lines = vec![format!(
         "next_seq={} aspect={} ops={}",
         doc.next_seq,
         aspect.agent_label_en(),
         doc.ops.len()
     )];
-    for op in &doc.ops {
+
+    if !kind_counts.is_empty() {
+        let counts: Vec<String> = kind_counts
+            .iter()
+            .map(|(k, n)| format!("{k}={n}"))
+            .collect();
+        lines.push(format!("counts: {}", counts.join(", ")));
+    }
+    if !author_counts.is_empty() {
+        let authors: Vec<String> = author_counts
+            .iter()
+            .map(|(a, n)| format!("{a}={n}"))
+            .collect();
+        lines.push(format!("authors: {}", authors.join(", ")));
+    }
+    if has_scene_bbox {
+        lines.push(format!(
+            "scene_bbox=({:.3},{:.3})-({:.3},{:.3})",
+            scene_bbox.x0, scene_bbox.y0, scene_bbox.x1, scene_bbox.y1
+        ));
+    }
+
+    const MAX_OPS: usize = 48;
+    let truncated = doc.ops.len() > MAX_OPS;
+    let show = if truncated {
+        &doc.ops[doc.ops.len() - MAX_OPS..]
+    } else {
+        &doc.ops[..]
+    };
+    for op in show {
         let kind = canvas_op_kind_label(&op.body);
-        let bbox = canvas_op_bbox(&op.body).map(|b| {
-            format!(
-                "bbox=({:.3},{:.3})-({:.3},{:.3})",
-                b.x0, b.y0, b.x1, b.y1
-            )
-        });
-        match bbox {
-            Some(bb) => lines.push(format!(
-                "seq={} author={} kind={} {bb}",
-                op.seq, op.author_id, kind
-            )),
-            None => lines.push(format!(
-                "seq={} author={} kind={}",
-                op.seq, op.author_id, kind
-            )),
+        if let Some(b) = canvas_op_bbox(&op.body) {
+            lines.push(format!(
+                "seq={} {kind} ({:.3},{:.3})-({:.3},{:.3})",
+                op.seq, b.x0, b.y0, b.x1, b.y1
+            ));
+        } else {
+            lines.push(format!("seq={} {kind}", op.seq));
         }
     }
+    if truncated {
+        lines.push(format!(
+            "... +{} older ops (use canvas.get after_seq for deltas)",
+            doc.ops.len() - MAX_OPS
+        ));
+    }
+
     lines.join("\n")
 }
 
@@ -3404,10 +3457,11 @@ mod chat_session_room_tests {
         assert!(digest.contains("next_seq=3"));
         assert!(digest.contains("seq=1"));
         assert!(digest.contains("seq=2"));
-        assert!(digest.contains("kind=line"));
-        assert!(digest.contains("kind=fill"));
-        assert!(digest.contains("author=human"));
-        assert!(digest.contains("author=agent-a"));
+        assert!(digest.contains("counts:"));
+        assert!(digest.contains("line=1"));
+        assert!(digest.contains("fill=1"));
+        assert!(digest.contains("scene_bbox="));
+        assert!(!digest.contains("author=human"));
     }
 
     #[test]

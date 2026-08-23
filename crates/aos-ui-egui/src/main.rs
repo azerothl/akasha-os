@@ -3914,9 +3914,7 @@ impl UiApp {
             let mut toolbar_action: Option<chat_canvas::CanvasUiAction> = None;
             if canvas_open {
                 ui.separator();
-                ui.horizontal_wrapped(|ui| {
-                    toolbar_action = chat_canvas::ui_canvas_toolbar(ui, t, &mut self.canvas_panel);
-                });
+                toolbar_action = chat_canvas::ui_canvas_toolbar(ui, t, &mut self.canvas_panel);
             }
 
             let toggle_reserve = 150.0_f32;

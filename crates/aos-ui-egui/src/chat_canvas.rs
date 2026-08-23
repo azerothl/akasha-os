@@ -380,6 +380,8 @@ pub fn ui_canvas_toolbar(
     state: &mut CanvasPanelState,
 ) -> Option<CanvasUiAction> {
     let mut action: Option<CanvasUiAction> = None;
+    let compact = ui.spacing().item_spacing;
+    ui.spacing_mut().item_spacing = eframe::egui::vec2(4.0, compact.y);
 
     ui.selectable_value(&mut state.tool, CanvasTool::Pen, t.canvas_tool_pen);
     ui.selectable_value(&mut state.tool, CanvasTool::Eraser, t.canvas_tool_eraser);
@@ -388,7 +390,12 @@ pub fn ui_canvas_toolbar(
     ui.selectable_value(&mut state.tool, CanvasTool::Rect, t.canvas_tool_rect);
     ui.selectable_value(&mut state.tool, CanvasTool::Ellipse, t.canvas_tool_ellipse);
     ui.selectable_value(&mut state.tool, CanvasTool::Fill, t.canvas_tool_fill);
-    ui.checkbox(&mut state.shape_fill, t.canvas_shape_fill);
+
+    if matches!(state.tool, CanvasTool::Rect | CanvasTool::Ellipse) {
+        let fill_label = eframe::egui::RichText::new(t.canvas_fill_toggle).weak();
+        ui.toggle_value(&mut state.shape_fill, fill_label);
+    }
+
     ui.label(t.canvas_tint);
     let mut rgba = [
         state.color.r() as f32 / 255.0,

@@ -681,7 +681,7 @@ mod tests {
             optimize_prompt: false,
         };
         let tools = select_tools(&spec.tools, &[]);
-        let digest = "next_seq=2 aspect=square 1:1 ops=1\nseq=1 author=human kind=stroke";
+        let digest = "next_seq=2 aspect=square 1:1 ops=1\ncounts: stroke=1\nseq=1 stroke (0.1,0.1)-(0.2,0.2)";
         let prompt = build_room_system_prompt(
             &spec,
             "Critic",
