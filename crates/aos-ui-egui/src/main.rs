@@ -3596,7 +3596,7 @@ impl UiApp {
                 });
         }
 
-        if !members.is_empty() {
+        if !members.is_empty() && !self.room_members_pane_open {
             ui.horizontal_wrapped(|ui| {
                 for mem in members {
                     self.ui_room_member_chip(ui, t, &sid, mem);
