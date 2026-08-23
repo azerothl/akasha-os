@@ -529,8 +529,8 @@ pub(crate) fn chat_delegate_agent_spec(
             } else {
                 brief
             };
-            let use_canvas = chat_canvas::chat_user_wants_explicit_canvas(user_text)
-                || chat_canvas::chat_user_wants_explicit_canvas(&brief);
+            let use_canvas = chat_canvas::chat_wants_canvas_agent(user_text, canvas_open)
+                || chat_canvas::chat_wants_canvas_agent(&brief, canvas_open);
             let brief = if use_canvas && !self_tool {
                 chat_canvas::canvas_agent_brief(user_text, canvas_aspect)
             } else {
@@ -613,8 +613,8 @@ pub(crate) fn chat_delegate_agent_spec(
             "Je lance un agent pour dessiner sur le canvas.".into(),
         ));
     }
-    if chat_canvas::chat_user_wants_pixel_draw(user_text) {
-        let (skills, tools) = chat_delegate_kit(user_text, false, false);
+    if chat_canvas::chat_user_wants_pixel_draw(user_text, canvas_open) {
+        let (skills, tools) = chat_delegate_kit(user_text, canvas_open, false);
         return Some((
             user_text.to_string(),
             skills,
@@ -795,11 +795,13 @@ fn chat_agent_kit_ex(task: &str, canvas_open: bool) -> (Vec<String>, Vec<String>
             tools.push("media.audio.generate".into());
         }
     }
-    if lower.contains("image")
-        || lower.contains("png")
-        || lower.contains("illustration")
-        || lower.contains("diffusion")
-        || chat_canvas::chat_user_wants_pixel_draw(task)
+    if !chat_canvas::chat_user_wants_explicit_canvas(task)
+        && !canvas_open
+        && (lower.contains("image")
+            || lower.contains("png")
+            || lower.contains("illustration")
+            || lower.contains("diffusion")
+            || chat_canvas::chat_user_has_draw_wording(task))
     {
         if !tools.iter().any(|x| x == "media.image.generate") {
             tools.push("media.image.generate".into());
@@ -1868,7 +1870,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             ));
             return;
         };
-        let explicit_canvas = chat_canvas::chat_user_wants_explicit_canvas(&text);
+        let explicit_canvas = chat_canvas::chat_should_open_canvas_face(&text);
         if explicit_canvas {
             self.break_stuck_session_agents(&session_id);
             self.open_canvas_face(&session_id);
@@ -6685,11 +6687,21 @@ mod delegate_tests {
     }
 
     #[test]
-    fn draw_request_delegates_with_image_tools() {
+    fn draw_request_delegates_with_image_tools_when_canvas_closed() {
         let spec = chat_delegate_agent_spec("dessine une maison", "Ok.", false, ASPECT);
         let (_brief, _skills, tools, _prose) = spec.expect("doit déléguer image");
         assert!(tools.iter().any(|x| x == "media.image.generate"));
         assert!(!tools.iter().any(|x| x == "canvas.stroke"));
+    }
+
+    #[test]
+    fn draw_request_delegates_with_canvas_tools_when_canvas_open() {
+        let spec = chat_delegate_agent_spec("dessine une maison", "Ok.", true, ASPECT)
+            .expect("canvas ouvert + dessine doit déléguer canvas");
+        let (_brief, _skills, tools, _prose) = spec;
+        assert!(tools.iter().any(|x| x == "canvas.stroke"));
+        assert!(!tools.iter().any(|x| x == "media.image.generate"));
+        assert!(!tools.iter().any(|x| x == "user.ask"));
     }
 
     #[test]
@@ -6700,6 +6712,25 @@ mod delegate_tests {
         assert!(!tools.iter().any(|x| x == "media.image.generate"));
         assert!(!tools.iter().any(|x| x == "user.ask"));
         assert!(prose.to_lowercase().contains("canvas") || prose.contains("dessin"));
+    }
+
+    #[test]
+    fn dans_le_canvas_delegates_with_canvas_tools() {
+        let spec = chat_delegate_agent_spec("dessine dans le canvas", "Ok.", false, ASPECT)
+            .expect("dessine dans le canvas doit déléguer canvas");
+        let (_brief, _skills, tools, _prose) = spec;
+        assert!(tools.iter().any(|x| x == "canvas.stroke"));
+        assert!(!tools.iter().any(|x| x == "media.image.generate"));
+        assert!(!tools.iter().any(|x| x == "user.ask"));
+    }
+
+    #[test]
+    fn bare_dessine_delegates_with_image_tools() {
+        let spec = chat_delegate_agent_spec("dessine une maison", "Ok.", false, ASPECT)
+            .expect("dessine une maison doit déléguer image");
+        let (_brief, _skills, tools, _prose) = spec;
+        assert!(tools.iter().any(|x| x == "media.image.generate"));
+        assert!(!tools.iter().any(|x| x == "canvas.stroke"));
     }
 
     #[test]

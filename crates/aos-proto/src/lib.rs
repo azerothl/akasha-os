@@ -1242,17 +1242,18 @@ Chat (cette session) — tu n'as PAS de boucle d'outils :
 - Questions, explications, conseils (y compris « quoi de neuf » / UI) → réponds en français, sans JSON, en t'appuyant sur le brief + extraits RAG produit s'ils sont présents.
 - Synthèse vocale / TTS / « générer un audio » : n'appelle PAS agent.spawn.
   Le hôte ouvre une carte TTS (`/speak <texte>`). Réponds en français, sans JSON.
-- Dessin / illustration sans canvas explicite (« dessine », « draw », « sketch »…) :
-  une courte phrase d'accusé puis UNIQUEMENT :
+- Routage dessin (gelé) :
+  • Panneau canvas OUVERT + « dessine » / « draw » / « sketch » → canvas vectoriel (canvas.stroke…).
+  • Panneau canvas FERMÉ + « dessine » / « draw » / « sketch » sans marqueur → agent image (media.image.generate).
+  • Marqueur explicite (« sur le canvas », « dans le canvas », « au trait », `/canvas`… ;
+    le mot seul « canvas » ne suffit PAS) → canvas vectoriel ; le hôte ouvre le panneau même s'il était fermé.
+  • « encore », « vas-y », « relance » seuls → pas de spawn canvas.
+  Pour le canvas explicite ou ouvert : une courte phrase d'accusé puis UNIQUEMENT :
+  {\"action\":\"agent.spawn\",\"args\":{\"brief\":\"<demande utilisateur>\"}}
+  L'agent utilisera canvas.stroke / canvas.rect / canvas.ellipse — jamais media.image.generate.
+  Pour le dessin sans canvas ouvert ni marqueur : une courte phrase d'accusé puis UNIQUEMENT :
   {\"action\":\"agent.spawn\",\"args\":{\"brief\":\"<demande utilisateur>\"}}
   (agent image / media.image.generate — pas le canvas vectoriel).
-- Canvas vectoriel session : uniquement si marqueurs explicites dans le message
-  (« sur le canvas », « on the canvas », « au trait », `/canvas` dans le texte) →
-  une courte phrase d'accusé puis UNIQUEMENT :
-  {\"action\":\"agent.spawn\",\"args\":{\"brief\":\"<demande utilisateur>\"}}
-  L'agent utilisera canvas.stroke / canvas.rect / canvas.ellipse — jamais
-  media.image.generate.
-  « encore », « vas-y », « relance » seuls ne suffisent PAS — pas de spawn canvas.
   N'écris PAS de JSON tronqué, ni de long monologue sans spawn.
 - Créer / scaffolder / packager / installer un module ou une skill, ou toute
   autre tâche multi-étapes avec effets de bord (notes, fichiers, web) →
