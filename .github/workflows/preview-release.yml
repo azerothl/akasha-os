@@ -77,6 +77,16 @@ jobs:
           use-local-cache: false
           sub-packages: '["nvcc","cudart","cublas","cublas_dev","nvrtc","nvrtc_dev","thrust","visual_studio_integration"]'
 
+      - name: Assert VERSION matches tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $ver = (Get-Content VERSION -Raw).Trim()
+          $expected = $env:GITHUB_REF_NAME.Substring(1)
+          if ($ver -ne $expected) {
+            throw "VERSION file is '$ver' but tag is '$($env:GITHUB_REF_NAME)'. Update VERSION before tagging."
+          }
+
       - name: Build Preview package
         shell: pwsh
         # Do not force CMAKE_GENERATOR=Ninja on Windows: CUDA+MSVC needs VS env;
@@ -142,6 +152,16 @@ jobs:
           cache-targets: true
           cache-all-crates: true
 
+      - name: Assert VERSION matches tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          EXPECTED="${GITHUB_REF_NAME#v}"
+          if [ "$VERSION" != "$EXPECTED" ]; then
+            echo "::error::VERSION file is '$VERSION' but tag is '$GITHUB_REF_NAME'. Update VERSION before tagging."
+            exit 1
+          fi
+
       - name: Build Preview package
         env:
           CUDA_HOME: /usr/local/cuda
@@ -199,6 +219,13 @@ jobs:
         id: prep
         run: |
           VERSION="$(tr -d '[:space:]' < VERSION)"
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            EXPECTED="${GITHUB_REF_NAME#v}"
+            if [ "$VERSION" != "$EXPECTED" ]; then
+              echo "::error::VERSION file is '$VERSION' but tag is '$GITHUB_REF_NAME'. Update VERSION before tagging."
+              exit 1
+            fi
+          fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           mkdir -p release-assets
           find artifacts -type f \( -name '*.zip' -o -name '*.tar.gz' \) -exec cp {} release-assets/ \;
