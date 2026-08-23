@@ -3677,7 +3677,16 @@ impl UiApp {
                     aos_proto::CanvasOpBody::Undo => {
                         let _ = self.canvas_panel.ops.pop();
                     }
-                    _ => {}
+                    // Apply optimistically so the stroke/shape is visible immediately without
+                    // waiting for the server roundtrip snapshot.
+                    _ => {
+                        self.canvas_panel.ops.push(aos_proto::CanvasOp {
+                            seq: 0,
+                            author_id: "human".into(),
+                            ts_ms: 0,
+                            body: op.clone(),
+                        });
+                    }
                 }
                 let _ = self.cmd_tx.send(Cmd::CanvasApply {
                     session_id: session_id.to_string(),

@@ -1781,15 +1781,24 @@ async fn invoke_module(
     let module = tool.split('.').next().unwrap_or("").to_string();
     let mut args = args.clone();
     if module == "canvas" {
-        // Always bind the agent chat session — models invent fake ids (chat-1, default).
-        if let Some(sid) = session_id.filter(|s| !s.is_empty()) {
-            if let Some(obj) = args.as_object_mut() {
-                obj.insert("session_id".into(), serde_json::json!(sid));
-            }
-        }
+        // Fail closed: canvas.* requires a bound session_id; reject calls when none is available.
+        let sid = match session_id.filter(|s| !s.is_empty()) {
+            Some(s) => s,
+            None => return "ERREUR outil: canvas.* requiert un session_id lié".to_string(),
+        };
+        // Always overwrite with the bound session — never trust model-supplied ids.
+        let orig = args.clone();
+        args = serde_json::json!({});
         if let Some(obj) = args.as_object_mut() {
-            obj.entry("author_id".to_string())
-                .or_insert_with(|| serde_json::json!(agent_id));
+            // Merge original args first so tool params are preserved.
+            if let Some(orig_obj) = orig.as_object() {
+                for (k, v) in orig_obj {
+                    obj.insert(k.clone(), v.clone());
+                }
+            }
+            // Then overwrite session_id and author_id unconditionally.
+            obj.insert("session_id".into(), serde_json::json!(sid));
+            obj.insert("author_id".into(), serde_json::json!(agent_id));
         }
     }
     let req = ModuleInvokeRequest {

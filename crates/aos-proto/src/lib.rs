@@ -2264,7 +2264,7 @@ pub struct CanvasOp {
     pub body: CanvasOpBody,
 }
 
-/// Document canvas d'une session (`var/chat/<id>/canvas.json`).
+/// Document canvas d'une session (`var/sessions/<id>/canvas.json`).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct CanvasDoc {
     #[serde(default)]

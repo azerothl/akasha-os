@@ -171,7 +171,7 @@ Slash commands:
 | `/speak <text>` | Generate a WAV (`media.audio.generate`) under `/downloads` |
 | `/canvas` | Toggle the shared vector drawing canvas for this session |
 
-**Chat canvas (vector strokes, live)** — session-scoped drawing surface (human + agents). Bundled WASM module `canvas` exposes `canvas.stroke` / `rect` / `ellipse` / `erase` / `clear` / `undo` / `get` / `export`. Document persists as `var/chat/<id>/canvas.json` (not diffusion). Distinct from Image Studio composition blocks and `/image`.
+**Chat canvas (vector strokes, live)** — session-scoped drawing surface (human + agents). Bundled WASM module `canvas` exposes `canvas.stroke` / `rect` / `ellipse` / `erase` / `clear` / `undo` / `get` / `export`. Document persists as `var/sessions/<id>/canvas.json` (not diffusion). Distinct from Image Studio composition blocks and `/image`.
 
 ---
 

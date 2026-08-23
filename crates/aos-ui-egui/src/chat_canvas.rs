@@ -497,7 +497,12 @@ pub fn chat_user_wants_canvas_draw(text: &str) -> bool {
         "redessiner",
     ]
     .iter()
-    .any(|k| lower.contains(k))
+    .any(|k| {
+        let pat = k;
+        // Word-boundary check: match only when surrounded by non-alphanumeric characters
+        // to avoid false positives like "withdraw" matching "draw".
+        lower.split(|c: char| !c.is_alphanumeric()).any(|word| word == *pat)
+    })
 }
 
 /// Suivi / retouche quand le canvas de session est déjà ouvert.

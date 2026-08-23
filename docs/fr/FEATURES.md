@@ -171,7 +171,7 @@ Commandes slash :
 | `/speak <texte>` | Générer un WAV (`media.audio.generate`) sous `/downloads` |
 | `/canvas` | Basculer le canvas de dessin vectoriel partagé de la session |
 
-**Canvas chat (traits vectoriels, live)** — surface de dessin liée à la session (humain + agents). Module WASM bundlé `canvas` : `canvas.stroke` / `rect` / `ellipse` / `erase` / `clear` / `undo` / `get` / `export`. Document dans `var/chat/<id>/canvas.json` (pas de diffusion). Distinct du studio Image et de `/image`.
+**Canvas chat (traits vectoriels, live)** — surface de dessin liée à la session (humain + agents). Module WASM bundlé `canvas` : `canvas.stroke` / `rect` / `ellipse` / `erase` / `clear` / `undo` / `get` / `export`. Document dans `var/sessions/<id>/canvas.json` (pas de diffusion). Distinct du studio Image et de `/image`.
 
 ---
 
