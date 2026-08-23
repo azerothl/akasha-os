@@ -595,7 +595,7 @@ async fn main() {
                         .await;
                     return;
                 };
-                if spec.kind != AgentKind::Roster && spec.goal.max_steps > 0 {
+                if spec.kind != AgentKind::Roster {
                     let _ = ctx
                         .respond_error(
                             aos_ipc::msg::Status::BadRequest,

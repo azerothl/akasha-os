@@ -1683,6 +1683,15 @@ mod tests {
     }
 
     #[test]
+    fn routing_human_labels_avoid_raw_codes() {
+        let t = strings("en");
+        assert!(!routing_label(&t, "local_only").contains("local_only"));
+        assert!(!routing_label(&t, "balanced").starts_with("balanced ("));
+        assert!(!routing_label(&t, "remote_only").contains("remote_only"));
+        assert!(routing_technical(&t, "local_only").contains("local_only"));
+    }
+
+    #[test]
     fn roster_tool_labels_avoid_raw_ids() {
         let t = strings("en");
         assert_eq!(roster_tool_label(&t, "notes.create"), "Create note");
