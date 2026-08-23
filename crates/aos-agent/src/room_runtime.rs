@@ -717,6 +717,7 @@ mod tests {
             optimize_prompt: false,
         };
         let (ids, caps) = room_member_kit(&spec, true);
+        assert!(ids.iter().any(|x| x == "canvas.set_style"));
         assert!(ids.iter().any(|x| x == "canvas.stroke"));
         assert!(ids.iter().any(|x| x == "canvas.line"));
         assert!(ids.iter().any(|x| x == "canvas.spline"));

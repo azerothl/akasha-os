@@ -884,15 +884,35 @@ fn fit_board_rect_letterboxes_wide_in_tall_pane() {
     #[test]
     fn canvas_agent_brief_contains_drawing_guide() {
         let brief = super::canvas_agent_brief("dessine sur le canvas une maison", CanvasAspect::Square);
-        assert!(brief.contains("dessine sur le canvas une maison"));
+        assert!(brief.starts_with("dessine sur le canvas une maison"));
         assert!(brief.contains("margin"));
         assert!(brief.contains("canvas.get"));
         assert!(brief.contains("canvas.stroke"));
+        assert!(brief.contains("canvas.set_style"));
         assert!(brief.contains("200px"));
         assert!(brief.contains("rectangle+triangle"));
+        assert!(brief.contains("Exemple si le sujet est une maison"));
         assert!(brief.contains("toit + murs + porte"));
+        assert!(!brief.starts_with("Exemple si le sujet est une maison"));
         assert!(brief.contains("jamais canvas.clear"));
         assert!(brief.contains("carré 1:1"));
+    }
+
+    #[test]
+    fn canvas_agent_brief_non_house_subject_keeps_user_goal_first() {
+        let brief =
+            super::canvas_agent_brief("dessine une canette Coca-Cola", CanvasAspect::Square);
+        assert!(brief.starts_with("dessine une canette Coca-Cola"));
+        assert!(brief.contains("Exemple si le sujet est une maison"));
+    }
+
+    #[test]
+    fn canvas_agent_system_prompt_includes_spawn_goal_hint() {
+        let prompt = super::canvas_agent_system_prompt(CanvasAspect::Square);
+        assert!(prompt.contains("canvas.set_style"));
+        assert!(prompt.contains("Exemple si le sujet est une maison"));
+        assert!(prompt.contains("agent.spawn"));
+        assert!(prompt.contains("ligne Goal"));
     }
 }
 
@@ -1004,7 +1024,7 @@ fn canvas_aspect_chip_labels(t: &UiStrings) -> [(&'static str, CanvasAspect); 5]
 }
 
 
-/// Frozen designer copy for delegated canvas agents (brief / goal — not system chrome).
+/// Frozen designer copy for delegated canvas agents (system prompt — not the user goal).
 pub const CANVAS_AGENT_DESIGNER_GUIDE: &str = "\
 Cible visuelle : lisible à 200px — pas un rectangle+triangle.\n\
 Règles : margin 0.08–0.12 ; sujet centré ; couches sol → volumes → détails → 2–3 ombres. \
@@ -1012,16 +1032,33 @@ Nombreux canvas.stroke courts, 2–3 teintes, épaisseurs variées. Commence par
 Couleur : canvas.set_style {color:\"#RRGGBB\"} ou color= sur chaque op — le teal signal n'est pas la seule teinte ; \
 après critique, change de teinte pour ombres/détails.\n\
 Après critique : ajoute, jamais canvas.clear sauf si l'humain dit effacer.\n\
-Une maison = toit + murs + porte + fenêtre + sol + un élément d'environnement.\n\
+Exemple si le sujet est une maison : toit + murs + porte + fenêtre + sol + un élément d'environnement.\n\
 Outils : canvas.set_style, canvas.stroke, canvas.line, canvas.spline, canvas.rect, canvas.ellipse, \
 canvas.fill (fill:true sur rect/ellipse), canvas.erase, canvas.clear, \
 canvas.undo, canvas.get, canvas.export (coords 0..1). Pas media.image.generate.";
 
-pub fn canvas_agent_brief(user_text: &str, aspect: CanvasAspect) -> String {
+const CANVAS_AGENT_SPAWN_GUIDE: &str = "\
+agent.spawn : le brief doit reprendre le sujet demandé par l'utilisateur (ligne Goal), \
+jamais l'exemple maison ni ces règles de style.";
+
+/// System prompt addendum for delegated canvas agents (designer rules + frame aspect).
+pub fn canvas_agent_system_prompt(aspect: CanvasAspect) -> String {
     format!(
-        "{user_text}\n\n{CANVAS_AGENT_DESIGNER_GUIDE}\n\
-         Proportions actuelles du cadre : {aspect_fr} ({aspect_en}).",
+        "{CANVAS_AGENT_DESIGNER_GUIDE}\n\
+         Proportions actuelles du cadre : {aspect_fr} ({aspect_en}).\n\n\
+         {CANVAS_AGENT_SPAWN_GUIDE}",
         aspect_fr = aspect.agent_label_fr(),
         aspect_en = aspect.agent_label_en(),
+    )
+}
+
+/// Full brief for display / logs: line 1 = user request verbatim, then designer guide.
+pub fn canvas_agent_brief(user_text: &str, aspect: CanvasAspect) -> String {
+    format!(
+        "{}\n\n{}\nProportions actuelles du cadre : {} ({}).",
+        user_text.trim(),
+        CANVAS_AGENT_DESIGNER_GUIDE,
+        aspect.agent_label_fr(),
+        aspect.agent_label_en(),
     )
 }

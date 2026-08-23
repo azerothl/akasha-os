@@ -1667,6 +1667,20 @@ async fn wait_user_answer(
     AskWait::Answer(String::new())
 }
 
+/// Canvas delegates keep the user's subject as the child goal, not designer examples.
+fn canvas_child_goal_statement(parent: &AgentSpec, brief: &str) -> String {
+    let is_canvas_parent = parent.tools.iter().any(|t| t.starts_with("canvas."));
+    if !is_canvas_parent {
+        return brief.to_string();
+    }
+    let user_goal = parent.goal.statement.trim();
+    if user_goal.is_empty() {
+        brief.to_string()
+    } else {
+        user_goal.to_string()
+    }
+}
+
 async fn spawn_child(
     bus: &BusClient,
     shared: &Shared,
@@ -1678,6 +1692,7 @@ async fn spawn_child(
     caps: &[String],
 ) -> ActResult {
     let brief = clamp_spawn_brief(brief);
+    let child_goal_statement = canvas_child_goal_statement(parent, &brief);
     let req = AgentCreateRequest {
         directive: brief.clone(),
         kind: Default::default(),
@@ -1686,7 +1701,7 @@ async fn spawn_child(
         caps: caps.to_vec(),
         model_id: parent.model_id.clone(),
         goal: Some(AgentGoal {
-            statement: brief.clone(),
+            statement: child_goal_statement,
             success_criteria: vec![
                 "Résultat clair et concis (≤ ~800 caractères utiles)".into(),
             ],
@@ -3190,7 +3205,8 @@ fn collect_sources(
 
 #[cfg(test)]
 mod tests {
-    use super::await_child_reject_reason;
+    use super::{await_child_reject_reason, canvas_child_goal_statement};
+    use aos_proto::{AgentGoal, AgentSpec};
 
     #[test]
     fn await_rejects_empty_child_id() {
@@ -3207,5 +3223,62 @@ mod tests {
     #[test]
     fn await_accepts_own_child() {
         assert!(await_child_reject_reason("agent-2", &["agent-2".into()]).is_none());
+    }
+
+    #[test]
+    fn canvas_child_inherits_parent_user_goal_not_house_example() {
+        let parent = AgentSpec {
+            agent_id: "parent".into(),
+            goal: AgentGoal {
+                statement: "dessine une canette Coca-Cola".into(),
+                ..Default::default()
+            },
+            tools: vec!["canvas.stroke".into()],
+            kind: Default::default(),
+            display_name: None,
+            persona_id: None,
+            system_prompt: None,
+            skills: vec![],
+            mcp_servers: vec![],
+            documents: vec![],
+            caps: vec![],
+            model_id: None,
+            parent_id: None,
+            session_id: None,
+            budget: Default::default(),
+            optimize_prompt: false,
+        };
+        let child_goal = canvas_child_goal_statement(
+            &parent,
+            "Une maison = toit + murs + porte + fenêtre",
+        );
+        assert_eq!(child_goal, "dessine une canette Coca-Cola");
+    }
+
+    #[test]
+    fn non_canvas_child_keeps_spawn_brief_as_goal() {
+        let parent = AgentSpec {
+            agent_id: "parent".into(),
+            goal: AgentGoal {
+                statement: "recherche sur le climat".into(),
+                ..Default::default()
+            },
+            tools: vec!["web.search".into()],
+            kind: Default::default(),
+            display_name: None,
+            persona_id: None,
+            system_prompt: None,
+            skills: vec![],
+            mcp_servers: vec![],
+            documents: vec![],
+            caps: vec![],
+            model_id: None,
+            parent_id: None,
+            session_id: None,
+            budget: Default::default(),
+            optimize_prompt: false,
+        };
+        let child_goal = canvas_child_goal_statement(&parent, "résumer les sources A et B");
+        assert_eq!(child_goal, "résumer les sources A et B");
     }
 }

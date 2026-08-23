@@ -465,6 +465,7 @@ async fn handle_cmd(
                                 auto_remember,
                                 model_id,
                                 max_steps,
+                                canvas_aspect,
                             )
                             .await;
                             return;
