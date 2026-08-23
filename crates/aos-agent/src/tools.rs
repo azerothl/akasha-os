@@ -466,7 +466,7 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
     let canvas_tools = [
         (
             "canvas.stroke",
-            "Dessiner un trait (polyline) sur le canvas de la session chat (coords 0..1)",
+            "Polyline sur le canvas de session (coords 0..1) — préférer plusieurs traits courts (8–20 points) plutôt que peu de grosses formes",
             serde_json::json!({
                 "type":"object",
                 "properties":{
@@ -541,7 +541,7 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
         ),
         (
             "canvas.get",
-            "Lire les opérations du canvas (after_seq optionnel)",
+            "Lire le canvas existant (toujours en premier ; after_seq optionnel) — poursuis le dessin, ne redémarre pas sauf demande",
             serde_json::json!({
                 "type":"object",
                 "properties":{

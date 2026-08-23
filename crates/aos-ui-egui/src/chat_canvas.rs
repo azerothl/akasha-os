@@ -624,7 +624,7 @@ mod routing_tests {
     }
 
     #[test]
-    fn fit_board_rect_letterboxes_wide_in_tall_pane() {
+fn fit_board_rect_letterboxes_wide_in_tall_pane() {
         let outer = eframe::egui::Rect::from_min_size(Pos2::ZERO, Vec2::new(400.0, 600.0));
         let board = fit_board_rect(outer, CanvasAspect::Landscape16x9);
         assert!(board.width() <= outer.width());
@@ -708,6 +708,7 @@ fn canvas_aspect_chip_labels(t: &UiStrings) -> [(&'static str, CanvasAspect); 5]
         (t.canvas_aspect_horizontal, CanvasAspect::Landscape3x2),
     ]
 }
+
 
 /// Frozen designer copy for delegated canvas agents (brief / goal — not system chrome).
 pub const CANVAS_AGENT_DESIGNER_GUIDE: &str = "\
