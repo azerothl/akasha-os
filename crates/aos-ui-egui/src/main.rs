@@ -507,6 +507,7 @@ pub(crate) fn chat_delegate_agent_spec(
     user_text: &str,
     model_output: &str,
     canvas_open: bool,
+    canvas_aspect: aos_proto::CanvasAspect,
 ) -> Option<(String, Vec<String>, Vec<String>, String)> {
     if chat_tts_request(user_text).is_some() {
         return None;
@@ -531,7 +532,7 @@ pub(crate) fn chat_delegate_agent_spec(
             let use_canvas = chat_canvas::chat_user_wants_explicit_canvas(user_text)
                 || chat_canvas::chat_user_wants_explicit_canvas(&brief);
             let brief = if use_canvas && !self_tool {
-                chat_canvas::canvas_agent_brief(user_text)
+                chat_canvas::canvas_agent_brief(user_text, canvas_aspect)
             } else {
                 brief
             };
@@ -588,7 +589,7 @@ pub(crate) fn chat_delegate_agent_spec(
     {
         let (skills, tools) = chat_delegate_kit(user_text, canvas_open, true);
         return Some((
-            chat_canvas::canvas_agent_brief(user_text),
+            chat_canvas::canvas_agent_brief(user_text, canvas_aspect),
             skills,
             tools,
             "Je lance un agent pour dessiner sur le canvas.".into(),
@@ -606,7 +607,7 @@ pub(crate) fn chat_delegate_agent_spec(
     if canvas_intent {
         let (skills, tools) = chat_delegate_kit(user_text, canvas_open, true);
         return Some((
-            chat_canvas::canvas_agent_brief(user_text),
+            chat_canvas::canvas_agent_brief(user_text, canvas_aspect),
             skills,
             tools,
             "Je lance un agent pour dessiner sur le canvas.".into(),
@@ -1961,6 +1962,12 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             .unwrap_or(false)
             || (self.active_session.as_deref() == Some(session_id.as_str())
                 && (!self.canvas_panel.ops.is_empty() || self.canvas_panel.next_seq > 1));
+        let canvas_aspect = self
+            .sessions
+            .iter()
+            .find(|s| s.id == session_id)
+            .map(|s| s.canvas_aspect)
+            .unwrap_or_default();
         let _ = self.cmd_tx.send(Cmd::Chat {
             session_id,
             history,
@@ -1971,6 +1978,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             routing: self.prefs.routing.clone(),
             language: self.prefs.language.clone(),
             canvas_open,
+            canvas_aspect,
         });
         self.mark_onboarding_chat_sent();
         self.scen_chat = true;
@@ -3798,8 +3806,24 @@ impl UiApp {
                 });
             }
             Some(chat_canvas::CanvasUiAction::Export) => {
+                let aspect = self
+                    .sessions
+                    .iter()
+                    .find(|s| s.id == session_id)
+                    .map(|s| s.canvas_aspect)
+                    .unwrap_or_default();
                 let _ = self.cmd_tx.send(Cmd::CanvasExport {
                     session_id: session_id.to_string(),
+                    aspect,
+                });
+            }
+            Some(chat_canvas::CanvasUiAction::SetAspect(aspect)) => {
+                if let Some(s) = self.sessions.iter_mut().find(|s| s.id == session_id) {
+                    s.canvas_aspect = aspect;
+                }
+                let _ = self.cmd_tx.send(Cmd::CanvasSetAspect {
+                    session_id: session_id.to_string(),
+                    aspect,
                 });
             }
             None => {}
@@ -3829,6 +3853,7 @@ impl UiApp {
         let meta = chat_room::active_session_meta(&self.sessions, Some(sid.as_str()));
         let room = chat_room::session_is_room(meta);
         let canvas_open = meta.map(|m| m.canvas_open).unwrap_or(false);
+        let canvas_aspect = meta.map(|m| m.canvas_aspect).unwrap_or_default();
         let members_vec = meta.map(|m| m.members.clone()).unwrap_or_default();
         let members = members_vec.as_slice();
         let model_id = meta.and_then(|m| m.model_id.clone());
@@ -3870,7 +3895,12 @@ impl UiApp {
             if canvas_open {
                 ui.separator();
                 ui.horizontal_wrapped(|ui| {
-                    toolbar_action = chat_canvas::ui_canvas_toolbar(ui, t, &mut self.canvas_panel);
+                    toolbar_action = chat_canvas::ui_canvas_toolbar(
+                        ui,
+                        t,
+                        &mut self.canvas_panel,
+                        canvas_aspect,
+                    );
                 });
             }
 
@@ -4442,6 +4472,12 @@ impl UiApp {
                     )
                     .map(|m| m.canvas_open)
                     .unwrap_or(false);
+                    let canvas_aspect = chat_room::active_session_meta(
+                        &self.sessions,
+                        self.active_session.as_deref(),
+                    )
+                    .map(|m| m.canvas_aspect)
+                    .unwrap_or_default();
                     let active_sid = self.active_session.clone();
 
                     let input_reserve = 44.0_f32;
@@ -4480,6 +4516,7 @@ impl UiApp {
                                         let action = chat_canvas::ui_canvas_surface(
                                             ui,
                                             &mut self.canvas_panel,
+                                            canvas_aspect,
                                             t.canvas_empty_hint,
                                         );
                                         self.dispatch_canvas_ui_action(action, sid);
@@ -6609,11 +6646,14 @@ impl UiApp {
 #[cfg(test)]
 mod delegate_tests {
     use super::*;
+    use aos_proto::CanvasAspect;
+
+    const ASPECT: CanvasAspect = CanvasAspect::Square;
 
     #[test]
     fn create_module_dump_delegates_instead_of_display() {
         let dumped = r#"{"kind":"column","children":[{"kind":"heading","text":"Ping"}]}"#;
-        let spec = chat_delegate_agent_spec("crée un module ping", dumped, false);
+        let spec = chat_delegate_agent_spec("crée un module ping", dumped, false, ASPECT);
         let (brief, _skills, tools, prose) = spec.expect("doit déléguer");
         assert_eq!(brief, "crée un module ping");
         assert!(tools.iter().any(|x| x == "module.scaffold"));
@@ -6626,6 +6666,7 @@ mod delegate_tests {
             "c'est quoi un module",
             "Un module est un package.",
             false,
+            ASPECT,
         )
         .is_none());
     }
@@ -6633,7 +6674,7 @@ mod delegate_tests {
     #[test]
     fn model_scaffold_action_delegates() {
         let out = r#"{"action":"module.scaffold","args":{"name":"ping"}}"#;
-        let spec = chat_delegate_agent_spec("fais un ping", out, false);
+        let spec = chat_delegate_agent_spec("fais un ping", out, false, ASPECT);
         let (_brief, _skills, tools, _) = spec.expect("doit déléguer");
         assert!(tools.iter().any(|x| x == "module.scaffold"));
     }
@@ -6641,14 +6682,14 @@ mod delegate_tests {
     #[test]
     fn tts_ask_does_not_delegate_agent() {
         let out = r#"{"action":"agent.spawn","args":{"brief":"tts"}}"#;
-        assert!(chat_delegate_agent_spec("génère un audio qui dit bonjour", out, false).is_none());
+        assert!(chat_delegate_agent_spec("génère un audio qui dit bonjour", out, false, ASPECT).is_none());
         let (_skills, tools) = chat_agent_kit("génère un audio de bonjour");
         assert!(tools.iter().any(|t| t == "media.audio.generate"));
     }
 
     #[test]
     fn draw_request_delegates_with_image_tools() {
-        let spec = chat_delegate_agent_spec("dessine une maison", "Ok.", false);
+        let spec = chat_delegate_agent_spec("dessine une maison", "Ok.", false, ASPECT);
         let (_brief, _skills, tools, _prose) = spec.expect("doit déléguer image");
         assert!(tools.iter().any(|x| x == "media.image.generate"));
         assert!(!tools.iter().any(|x| x == "canvas.stroke"));
@@ -6656,7 +6697,7 @@ mod delegate_tests {
 
     #[test]
     fn explicit_canvas_delegates_with_canvas_tools() {
-        let spec = chat_delegate_agent_spec("dessine sur le canvas une maison", "Ok.", false);
+        let spec = chat_delegate_agent_spec("dessine sur le canvas une maison", "Ok.", false, ASPECT);
         let (_brief, _skills, tools, prose) = spec.expect("doit déléguer canvas");
         assert!(tools.iter().any(|x| x == "canvas.stroke"));
         assert!(!tools.iter().any(|x| x == "media.image.generate"));
@@ -6670,15 +6711,16 @@ mod delegate_tests {
             "essai encore en ajoutant plus de détails",
             "D'accord.",
             true,
+            ASPECT,
         )
         .is_none());
-        assert!(chat_delegate_agent_spec("vas y", "Ok.", true).is_none());
+        assert!(chat_delegate_agent_spec("vas y", "Ok.", true, ASPECT).is_none());
     }
 
     #[test]
     fn canvas_truncated_spawn_explicit_canvas_delegates() {
         let out = r#"{"action":"agent.spawn","args":{"brief":"Génération d'une maison médiévale avec plus de détails en cours..."#;
-        let spec = chat_delegate_agent_spec("dessine sur le canvas", out, false);
+        let spec = chat_delegate_agent_spec("dessine sur le canvas", out, false, ASPECT);
         let (_brief, _skills, tools, _) = spec.expect("JSON tronqué + explicit canvas");
         assert!(tools.iter().any(|x| x == "canvas.stroke"));
     }
@@ -6686,18 +6728,18 @@ mod delegate_tests {
     #[test]
     fn canvas_truncated_spawn_followup_does_not_delegate() {
         let out = r#"{"action":"agent.spawn","args":{"brief":"Génération..."#;
-        assert!(chat_delegate_agent_spec("vas y", out, true).is_none());
+        assert!(chat_delegate_agent_spec("vas y", out, true, ASPECT).is_none());
     }
 
     #[test]
     fn explicit_canvas_after_image_delegate_gets_canvas_tools() {
-        let image = chat_delegate_agent_spec("dessine une maison", "Ok.", false)
+        let image = chat_delegate_agent_spec("dessine une maison", "Ok.", false, ASPECT)
             .expect("image delegate");
         let image_tools = image.2;
         assert!(image_tools.iter().any(|x| x == "media.image.generate"));
         assert!(!image_tools.iter().any(|x| x == "canvas.stroke"));
 
-        let canvas = chat_delegate_agent_spec("dessine sur le canvas", "Ok.", false)
+        let canvas = chat_delegate_agent_spec("dessine sur le canvas", "Ok.", false, ASPECT)
             .expect("canvas delegate after image");
         let canvas_tools = canvas.2;
         assert!(canvas_tools.iter().any(|x| x == "canvas.stroke"));
@@ -6706,9 +6748,10 @@ mod delegate_tests {
 
     #[test]
     fn prompts_never_mention_canvas_draw() {
-        let brief = chat_canvas::canvas_agent_brief("dessine sur le canvas");
+        let brief = chat_canvas::canvas_agent_brief("dessine sur le canvas", ASPECT);
         assert!(!brief.contains("canvas.draw"));
         assert!(brief.contains("canvas.stroke"));
+        assert!(brief.contains("carré 1:1"));
         assert!(!brief.contains("canvas.*"));
         assert!(!aos_proto::CHAT_DELEGATION_PROMPT.contains("canvas.draw"));
     }
@@ -6719,6 +6762,7 @@ mod delegate_tests {
             "essai encore en ajoutant plus de détails",
             "D'accord.",
             false,
+            ASPECT,
         )
         .is_none());
     }

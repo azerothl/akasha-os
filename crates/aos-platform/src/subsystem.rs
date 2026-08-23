@@ -808,6 +808,7 @@ impl HostServices for PlatformSubsystem {
                 Ok(serde_json::json!({
                     "session_id": meta.id,
                     "canvas_open": meta.canvas_open,
+                    "canvas_aspect": meta.canvas_aspect,
                     "next_seq": doc.next_seq,
                     "ops": ops,
                 }))
@@ -845,6 +846,7 @@ impl HostServices for PlatformSubsystem {
                     .map_err(|e| e.to_string())?;
                 Ok(serde_json::json!({
                     "canvas_open": meta.canvas_open,
+                    "canvas_aspect": meta.canvas_aspect,
                     "next_seq": doc.next_seq,
                     "ops_len": doc.ops.len(),
                     "applied": applied,

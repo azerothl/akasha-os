@@ -282,6 +282,7 @@ mod tests {
             members: vec![],
             conductor_policy: Default::default(),
             canvas_open: false,
+            canvas_aspect: aos_proto::CanvasAspect::Square,
         };
         assert!(session_is_room(Some(&meta)));
     }

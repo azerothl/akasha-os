@@ -1,6 +1,6 @@
 //! Chat session canvas — shared vector drawing (human + agents).
 
-use aos_proto::{CanvasOp, CanvasOpBody, CanvasPoint};
+use aos_proto::{CanvasAspect, CanvasOp, CanvasOpBody, CanvasPoint};
 use eframe::egui::epaint::{CircleShape, PathShape, PathStroke, RectShape, Shape, StrokeKind};
 use eframe::egui::{Color32, Pos2, Sense, Stroke, Ui, Vec2};
 
@@ -20,6 +20,7 @@ pub enum CanvasTool {
 pub enum CanvasUiAction {
     Apply(CanvasOpBody),
     Export,
+    SetAspect(CanvasAspect),
 }
 
 #[derive(Debug, Clone)]
@@ -288,11 +289,28 @@ fn ellipse_points(r: eframe::egui::Rect, n: usize) -> Vec<Pos2> {
         .collect()
 }
 
-/// Drawing tools for the unified session bar (pen, eraser, shapes, tint, thickness).
+fn fit_board_rect(outer: eframe::egui::Rect, aspect: CanvasAspect) -> eframe::egui::Rect {
+    let (rw, rh) = aspect.ratio();
+    let target = rw / rh;
+    let outer_aspect = outer.width() / outer.height().max(1.0);
+    let (board_w, board_h) = if target > outer_aspect {
+        let w = outer.width();
+        let h = w / target;
+        (w, h)
+    } else {
+        let h = outer.height();
+        let w = h * target;
+        (w, h)
+    };
+    eframe::egui::Rect::from_center_size(outer.center(), Vec2::new(board_w, board_h))
+}
+
+/// Drawing tools + aspect chips for the unified session bar.
 pub fn ui_canvas_toolbar(
     ui: &mut Ui,
     t: &UiStrings,
     state: &mut CanvasPanelState,
+    aspect: CanvasAspect,
 ) -> Option<CanvasUiAction> {
     let mut action: Option<CanvasUiAction> = None;
 
@@ -300,6 +318,13 @@ pub fn ui_canvas_toolbar(
     ui.selectable_value(&mut state.tool, CanvasTool::Eraser, t.canvas_tool_eraser);
     ui.selectable_value(&mut state.tool, CanvasTool::Rect, t.canvas_tool_rect);
     ui.selectable_value(&mut state.tool, CanvasTool::Ellipse, t.canvas_tool_ellipse);
+    ui.separator();
+    for (label, candidate) in canvas_aspect_chip_labels(t) {
+        if ui.selectable_label(aspect == candidate, label).clicked() && aspect != candidate {
+            action = Some(CanvasUiAction::SetAspect(candidate));
+        }
+    }
+    ui.separator();
     ui.label(t.canvas_tint);
     let mut rgba = [
         state.color.r() as f32 / 255.0,
@@ -353,20 +378,22 @@ pub fn ui_canvas_toolbar(
     action
 }
 
-/// Drawing surface — fills available height in the split pane.
+/// Drawing surface — letterboxed board inside the split pane.
 pub fn ui_canvas_surface(
     ui: &mut Ui,
     state: &mut CanvasPanelState,
+    aspect: CanvasAspect,
     empty_hint: &str,
 ) -> Option<CanvasUiAction> {
     let mut action: Option<CanvasUiAction> = None;
     let dark = ui.visuals().dark_mode;
     let avail = ui.available_size();
-    let canvas_h = avail.y.max(120.0);
-    let canvas_w = avail.x.max(180.0);
+    let pane_h = avail.y.max(120.0);
+    let pane_w = avail.x.max(180.0);
     let (response, painter) =
-        ui.allocate_painter(Vec2::new(canvas_w, canvas_h), Sense::click_and_drag());
-    let rect = response.rect;
+        ui.allocate_painter(Vec2::new(pane_w, pane_h), Sense::click_and_drag());
+    let outer = response.rect;
+    let rect = fit_board_rect(outer, aspect);
     let bg = canvas_bg(dark);
     painter.rect_filled(rect, 0.0, bg);
     painter.rect_stroke(rect, 0.0, Stroke::new(1.5, SIGNAL), StrokeKind::Inside);
@@ -411,6 +438,9 @@ pub fn ui_canvas_surface(
 
     if response.dragged() {
         if let Some(pos) = response.interact_pointer_pos() {
+            if !rect.contains(pos) {
+                return action;
+            }
             let p = to_norm(rect, pos);
             match state.tool {
                 CanvasTool::Pen | CanvasTool::Eraser => {
@@ -435,6 +465,15 @@ pub fn ui_canvas_surface(
     }
 
     if response.drag_stopped() && action.is_none() {
+        let pointer_in_board = response
+            .interact_pointer_pos()
+            .map(|p| rect.contains(p))
+            .unwrap_or(false);
+        if !pointer_in_board {
+            state.draft_points.clear();
+            state.drag_origin = None;
+            state.drag_current = None;
+        } else {
         match state.tool {
             CanvasTool::Pen => {
                 if state.draft_points.len() >= 2 {
@@ -489,6 +528,7 @@ pub fn ui_canvas_surface(
                     }));
                 }
             }
+        }
         }
     }
 
@@ -571,6 +611,15 @@ mod routing_tests {
         assert_eq!(state.ops.len(), 1);
         assert_eq!(state.ops[0].author_id, "human");
     }
+
+    #[test]
+    fn fit_board_rect_letterboxes_wide_in_tall_pane() {
+        let outer = eframe::egui::Rect::from_min_size(Pos2::ZERO, Vec2::new(400.0, 600.0));
+        let board = fit_board_rect(outer, CanvasAspect::Landscape16x9);
+        assert!(board.width() <= outer.width());
+        assert!(board.height() < outer.height());
+        assert!((board.width() / board.height() - 16.0 / 9.0).abs() < 0.01);
+    }
 }
 
 /// Explicit vector-canvas intent: toggle phrase, slash, or stroke wording — not bare « dessine ».
@@ -625,15 +674,27 @@ pub fn chat_wants_canvas_agent(text: &str, _canvas_open: bool) -> bool {
     chat_user_wants_explicit_canvas(text)
 }
 
-pub fn canvas_agent_brief(user_text: &str) -> String {
+fn canvas_aspect_chip_labels(t: &UiStrings) -> [(&'static str, CanvasAspect); 5] {
+    [
+        (t.canvas_aspect_square, CanvasAspect::Square),
+        (t.canvas_aspect_16_9, CanvasAspect::Landscape16x9),
+        (t.canvas_aspect_16_10, CanvasAspect::Landscape16x10),
+        (t.canvas_aspect_vertical, CanvasAspect::Portrait9x16),
+        (t.canvas_aspect_horizontal, CanvasAspect::Landscape3x2),
+    ]
+}
+
+pub fn canvas_agent_brief(user_text: &str, aspect: CanvasAspect) -> String {
     format!(
         "{user_text}\n\n\
-         Contexte: canvas vectoriel de session lié — utilise uniquement \
-         canvas.stroke, canvas.rect, canvas.ellipse, canvas.erase, canvas.clear, \
-         canvas.undo, canvas.get, canvas.export (coords normalisées 0..1). \
-         Commence par canvas.get. Si le dessin est trop pauvre: canvas.clear puis \
-         redessine avec plus de traits et formes. Ne génère pas d'image diffusion \
-         (pas media.image.generate). Ne pose pas user.ask pour choisir entre canvas \
-         et diffusion — dessine directement."
+         Contexte: canvas vectoriel de session lié — proportions {aspect_fr} ({aspect_en}) — \
+         utilise uniquement canvas.stroke, canvas.rect, canvas.ellipse, canvas.erase, \
+         canvas.clear, canvas.undo, canvas.get, canvas.export (coords normalisées 0..1 \
+         sur le cadre de dessin, pas la zone letterbox). Commence par canvas.get. \
+         Si le dessin est trop pauvre: canvas.clear puis redessine avec plus de traits \
+         et formes. Ne génère pas d'image diffusion (pas media.image.generate). \
+         Ne pose pas user.ask pour choisir entre canvas et diffusion — dessine directement.",
+        aspect_fr = aspect.agent_label_fr(),
+        aspect_en = aspect.agent_label_en(),
     )
 }
