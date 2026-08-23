@@ -1,6 +1,6 @@
 //! Chat session canvas — shared vector drawing (human + agents).
 
-use aos_proto::{CanvasAspect, CanvasOp, CanvasOpBody, CanvasPoint};
+use aos_proto::{CanvasAspect, CanvasOp, CanvasOpBody, CanvasPenStyle, CanvasPoint};
 use eframe::egui::epaint::{CircleShape, PathShape, PathStroke, RectShape, Shape, StrokeKind};
 use eframe::egui::{Color32, Pos2, Sense, Stroke, Ui, Vec2};
 
@@ -12,13 +12,20 @@ use crate::theme::{PAPER, SIGNAL, VOID};
 pub enum CanvasTool {
     Pen,
     Eraser,
+    Line,
+    Spline,
     Rect,
     Ellipse,
+    Fill,
 }
 
 #[derive(Debug, Clone)]
 pub enum CanvasUiAction {
     Apply(CanvasOpBody),
+    SetStyle {
+        color: Option<String>,
+        width: Option<f32>,
+    },
     Export,
     SetAspect(CanvasAspect),
 }
@@ -31,6 +38,8 @@ pub struct CanvasPanelState {
     pub tool: CanvasTool,
     pub color: Color32,
     pub width: f32,
+    /// Fill closed shapes (rect / ellipse) instead of stroke outline.
+    pub shape_fill: bool,
     /// In-progress human stroke (optimistic).
     pub draft_points: Vec<CanvasPoint>,
     /// Shape drag origin (normalized), when using rect/ellipse.
@@ -52,6 +61,7 @@ impl Default for CanvasPanelState {
             tool: CanvasTool::Pen,
             color: Color32::from_rgb(0x3e, 0xe0, 0xc4),
             width: 0.015,
+            shape_fill: false,
             draft_points: Vec::new(),
             drag_origin: None,
             drag_current: None,
@@ -111,6 +121,11 @@ impl CanvasPanelState {
         self.next_seq = next_seq.max(self.next_seq);
         self.animating
             .retain(|(seq, start)| self.ops.iter().any(|o| o.seq == *seq) && now - start < 0.45);
+    }
+
+    pub fn sync_pen(&mut self, pen: &CanvasPenStyle) {
+        self.color = parse_hex_color(&pen.color);
+        self.width = pen.width;
     }
 }
 
@@ -269,6 +284,34 @@ fn paint_op(
                 }));
             }
         }
+        CanvasOpBody::Line { p0, p1, color, width } => {
+            let c = author_stroke_color(&op.author_id, color, dark);
+            let rad = radius_px(rect, *width);
+            let end = CanvasPoint {
+                x: p0.x + (p1.x - p0.x) * progress,
+                y: p0.y + (p1.y - p0.y) * progress,
+            };
+            let screen = [to_screen(rect, *p0), to_screen(rect, end)];
+            painter.add(Shape::line(screen.to_vec(), PathStroke::new(rad * 2.0, c)));
+        }
+        CanvasOpBody::Spline { points, color, width } => {
+            if points.len() < 2 {
+                return;
+            }
+            let c = author_stroke_color(&op.author_id, color, dark);
+            let rad = radius_px(rect, *width);
+            let sampled = sample_spline_points(points, 24);
+            let n = ((sampled.len() as f32) * progress).ceil().max(2.0) as usize;
+            let slice = &sampled[..n.min(sampled.len())];
+            let screen: Vec<Pos2> = slice.iter().map(|p| to_screen(rect, *p)).collect();
+            painter.add(Shape::line(screen, PathStroke::new(rad * 2.0, c)));
+        }
+        CanvasOpBody::Fill { x, y, color } => {
+            let c = author_stroke_color(&op.author_id, color, dark);
+            let center = to_screen(rect, CanvasPoint { x: *x, y: *y });
+            let r = (rect.width().min(rect.height()) * 0.012 * progress).max(2.0);
+            painter.add(Shape::Circle(CircleShape::filled(center, r, c)));
+        }
         CanvasOpBody::Clear | CanvasOpBody::Undo => {}
     }
 }
@@ -287,6 +330,40 @@ fn ellipse_points(r: eframe::egui::Rect, n: usize) -> Vec<Pos2> {
             Pos2::new(c.x + rx * t.cos(), c.y + ry * t.sin())
         })
         .collect()
+}
+
+fn sample_spline_points(points: &[CanvasPoint], segments_per_span: usize) -> Vec<CanvasPoint> {
+    if points.len() < 2 {
+        return points.to_vec();
+    }
+    let mut out = Vec::new();
+    let n = points.len();
+    for i in 0..n.saturating_sub(1) {
+        let p0 = if i == 0 { points[0] } else { points[i - 1] };
+        let p1 = points[i];
+        let p2 = points[i + 1];
+        let p3 = if i + 2 < n { points[i + 2] } else { points[i + 1] };
+        let steps = segments_per_span.max(4);
+        let start_j = if i == 0 { 0 } else { 1 };
+        for j in start_j..=steps {
+            let t = j as f32 / steps as f32;
+            let t2 = t * t;
+            let t3 = t2 * t;
+            out.push(CanvasPoint {
+                x: 0.5
+                    * ((2.0 * p1.x)
+                        + (-p0.x + p2.x) * t
+                        + (2.0 * p0.x - 5.0 * p1.x + 4.0 * p2.x - p3.x) * t2
+                        + (-p0.x + 3.0 * p1.x - 3.0 * p2.x + p3.x) * t3),
+                y: 0.5
+                    * ((2.0 * p1.y)
+                        + (-p0.y + p2.y) * t
+                        + (2.0 * p0.y - 5.0 * p1.y + 4.0 * p2.y - p3.y) * t2
+                        + (-p0.y + 3.0 * p1.y - 3.0 * p2.y + p3.y) * t3),
+            });
+        }
+    }
+    out
 }
 
 fn fit_board_rect(outer: eframe::egui::Rect, aspect: CanvasAspect) -> eframe::egui::Rect {
@@ -312,11 +389,22 @@ pub fn ui_canvas_toolbar(
     state: &mut CanvasPanelState,
 ) -> Option<CanvasUiAction> {
     let mut action: Option<CanvasUiAction> = None;
+    let compact = ui.spacing().item_spacing;
+    ui.spacing_mut().item_spacing = eframe::egui::vec2(4.0, compact.y);
 
     ui.selectable_value(&mut state.tool, CanvasTool::Pen, t.canvas_tool_pen);
     ui.selectable_value(&mut state.tool, CanvasTool::Eraser, t.canvas_tool_eraser);
+    ui.selectable_value(&mut state.tool, CanvasTool::Line, t.canvas_tool_line);
+    ui.selectable_value(&mut state.tool, CanvasTool::Spline, t.canvas_tool_spline);
     ui.selectable_value(&mut state.tool, CanvasTool::Rect, t.canvas_tool_rect);
     ui.selectable_value(&mut state.tool, CanvasTool::Ellipse, t.canvas_tool_ellipse);
+    ui.selectable_value(&mut state.tool, CanvasTool::Fill, t.canvas_tool_fill);
+
+    if matches!(state.tool, CanvasTool::Rect | CanvasTool::Ellipse) {
+        let fill_label = eframe::egui::RichText::new(t.canvas_fill_toggle).weak();
+        ui.toggle_value(&mut state.shape_fill, fill_label);
+    }
+
     ui.label(t.canvas_tint);
     let mut rgba = [
         state.color.r() as f32 / 255.0,
@@ -330,10 +418,20 @@ pub fn ui_canvas_toolbar(
             (rgba[1] * 255.0) as u8,
             (rgba[2] * 255.0) as u8,
         );
+        action = Some(CanvasUiAction::SetStyle {
+            color: Some(color_to_hex(state.color)),
+            width: None,
+        });
     }
-    ui.add(
+    let width_resp = ui.add(
         eframe::egui::Slider::new(&mut state.width, 0.005..=0.06).text(t.canvas_width),
     );
+    if width_resp.changed() {
+        action = Some(CanvasUiAction::SetStyle {
+            color: None,
+            width: Some(state.width),
+        });
+    }
 
     if ui
         .button(eframe::egui::RichText::new(t.canvas_undo).weak())
@@ -427,23 +525,55 @@ pub fn ui_canvas_surface(
             state.color
         };
         let rad = radius_px(rect, state.width);
-        painter.add(Shape::line(screen, PathStroke::new(rad * 2.0, c)));
+        match state.tool {
+            CanvasTool::Spline if screen.len() >= 2 => {
+                let sampled: Vec<Pos2> = sample_spline_points(&state.draft_points, 16)
+                    .iter()
+                    .map(|p| to_screen(rect, *p))
+                    .collect();
+                painter.add(Shape::line(sampled, PathStroke::new(rad * 2.0, c)));
+            }
+            _ => {
+                painter.add(Shape::line(screen, PathStroke::new(rad * 2.0, c)));
+            }
+        }
     }
     if let (Some(a), Some(b)) = (state.drag_origin, state.drag_current) {
         let r = eframe::egui::Rect::from_two_pos(to_screen(rect, a), to_screen(rect, b));
         match state.tool {
             CanvasTool::Rect => {
-                painter.rect_stroke(r, 0.0, Stroke::new(2.0, state.color), StrokeKind::Inside);
+                if state.shape_fill {
+                    painter.rect_filled(r, 0.0, state.color);
+                } else {
+                    painter.rect_stroke(r, 0.0, Stroke::new(2.0, state.color), StrokeKind::Inside);
+                }
             }
             CanvasTool::Ellipse => {
                 painter.add(Shape::Path(PathShape {
                     points: ellipse_points(r, 48),
                     closed: true,
-                    fill: Color32::TRANSPARENT,
-                    stroke: PathStroke::new(2.0, state.color),
+                    fill: if state.shape_fill {
+                        state.color
+                    } else {
+                        Color32::TRANSPARENT
+                    },
+                    stroke: if state.shape_fill {
+                        PathStroke::NONE
+                    } else {
+                        PathStroke::new(2.0, state.color)
+                    },
                 }));
             }
-            CanvasTool::Pen | CanvasTool::Eraser => {}
+            CanvasTool::Line => {
+                painter.add(Shape::line(
+                    vec![to_screen(rect, a), to_screen(rect, b)],
+                    PathStroke::new(radius_px(rect, state.width) * 2.0, state.color),
+                ));
+            }
+            CanvasTool::Pen
+            | CanvasTool::Eraser
+            | CanvasTool::Spline
+            | CanvasTool::Fill => {}
         }
     }
 
@@ -454,7 +584,7 @@ pub fn ui_canvas_surface(
             }
             let p = to_norm(rect, pos);
             match state.tool {
-                CanvasTool::Pen | CanvasTool::Eraser => {
+                CanvasTool::Pen | CanvasTool::Eraser | CanvasTool::Spline => {
                     if state
                         .draft_points
                         .last()
@@ -464,15 +594,29 @@ pub fn ui_canvas_surface(
                         state.draft_points.push(p);
                     }
                 }
-                CanvasTool::Rect | CanvasTool::Ellipse => {
+                CanvasTool::Line | CanvasTool::Rect | CanvasTool::Ellipse => {
                     if state.drag_origin.is_none() {
                         state.drag_origin = Some(p);
                     }
                     state.drag_current = Some(p);
                 }
+                CanvasTool::Fill => {}
             }
         }
         ui.ctx().request_repaint();
+    }
+
+    if response.clicked() && state.tool == CanvasTool::Fill {
+        if let Some(pos) = response.interact_pointer_pos() {
+            if rect.contains(pos) {
+                let p = to_norm(rect, pos);
+                action = Some(CanvasUiAction::Apply(CanvasOpBody::Fill {
+                    x: p.x,
+                    y: p.y,
+                    color: color_to_hex(state.color),
+                }));
+            }
+        }
     }
 
     if response.drag_stopped() && action.is_none() {
@@ -505,6 +649,27 @@ pub fn ui_canvas_surface(
                     }));
                 }
             }
+            CanvasTool::Spline => {
+                if state.draft_points.len() >= 2 {
+                    action = Some(CanvasUiAction::Apply(CanvasOpBody::Spline {
+                        points: std::mem::take(&mut state.draft_points),
+                        color: color_to_hex(state.color),
+                        width: state.width,
+                    }));
+                } else {
+                    state.draft_points.clear();
+                }
+            }
+            CanvasTool::Line => {
+                if let (Some(a), Some(b)) = (state.drag_origin.take(), state.drag_current.take()) {
+                    action = Some(CanvasUiAction::Apply(CanvasOpBody::Line {
+                        p0: a,
+                        p1: b,
+                        color: color_to_hex(state.color),
+                        width: state.width,
+                    }));
+                }
+            }
             CanvasTool::Rect => {
                 if let (Some(a), Some(b)) = (state.drag_origin.take(), state.drag_current.take()) {
                     let x = a.x.min(b.x);
@@ -517,7 +682,7 @@ pub fn ui_canvas_surface(
                         w,
                         h,
                         color: color_to_hex(state.color),
-                        fill: false,
+                        fill: state.shape_fill,
                         width: state.width,
                     }));
                 }
@@ -534,11 +699,12 @@ pub fn ui_canvas_surface(
                         w,
                         h,
                         color: color_to_hex(state.color),
-                        fill: false,
+                        fill: state.shape_fill,
                         width: state.width,
                     }));
                 }
             }
+            CanvasTool::Fill => {}
         }
         }
     }
@@ -718,15 +884,35 @@ fn fit_board_rect_letterboxes_wide_in_tall_pane() {
     #[test]
     fn canvas_agent_brief_contains_drawing_guide() {
         let brief = super::canvas_agent_brief("dessine sur le canvas une maison", CanvasAspect::Square);
-        assert!(brief.contains("dessine sur le canvas une maison"));
+        assert!(brief.starts_with("dessine sur le canvas une maison"));
         assert!(brief.contains("margin"));
         assert!(brief.contains("canvas.get"));
         assert!(brief.contains("canvas.stroke"));
+        assert!(brief.contains("canvas.set_style"));
         assert!(brief.contains("200px"));
         assert!(brief.contains("rectangle+triangle"));
+        assert!(brief.contains("Exemple si le sujet est une maison"));
         assert!(brief.contains("toit + murs + porte"));
+        assert!(!brief.starts_with("Exemple si le sujet est une maison"));
         assert!(brief.contains("jamais canvas.clear"));
         assert!(brief.contains("carré 1:1"));
+    }
+
+    #[test]
+    fn canvas_agent_brief_non_house_subject_keeps_user_goal_first() {
+        let brief =
+            super::canvas_agent_brief("dessine une canette Coca-Cola", CanvasAspect::Square);
+        assert!(brief.starts_with("dessine une canette Coca-Cola"));
+        assert!(brief.contains("Exemple si le sujet est une maison"));
+    }
+
+    #[test]
+    fn canvas_agent_system_prompt_includes_spawn_goal_hint() {
+        let prompt = super::canvas_agent_system_prompt(CanvasAspect::Square);
+        assert!(prompt.contains("canvas.set_style"));
+        assert!(prompt.contains("Exemple si le sujet est une maison"));
+        assert!(prompt.contains("agent.spawn"));
+        assert!(prompt.contains("ligne Goal"));
     }
 }
 
@@ -838,21 +1024,41 @@ fn canvas_aspect_chip_labels(t: &UiStrings) -> [(&'static str, CanvasAspect); 5]
 }
 
 
-/// Frozen designer copy for delegated canvas agents (brief / goal — not system chrome).
+/// Frozen designer copy for delegated canvas agents (system prompt — not the user goal).
 pub const CANVAS_AGENT_DESIGNER_GUIDE: &str = "\
 Cible visuelle : lisible à 200px — pas un rectangle+triangle.\n\
 Règles : margin 0.08–0.12 ; sujet centré ; couches sol → volumes → détails → 2–3 ombres. \
 Nombreux canvas.stroke courts, 2–3 teintes, épaisseurs variées. Commence par canvas.get. \
+Couleur : canvas.set_style {color:\"#RRGGBB\"} ou color= sur chaque op — le teal signal n'est pas la seule teinte ; \
+après critique, change de teinte pour ombres/détails.\n\
 Après critique : ajoute, jamais canvas.clear sauf si l'humain dit effacer.\n\
-Une maison = toit + murs + porte + fenêtre + sol + un élément d'environnement.\n\
-Outils : canvas.stroke, canvas.rect, canvas.ellipse, canvas.erase, canvas.clear, \
+Exemple si le sujet est une maison : toit + murs + porte + fenêtre + sol + un élément d'environnement.\n\
+Outils : canvas.set_style, canvas.stroke, canvas.line, canvas.spline, canvas.rect, canvas.ellipse, \
+canvas.fill (fill:true sur rect/ellipse), canvas.erase, canvas.clear, \
 canvas.undo, canvas.get, canvas.export (coords 0..1). Pas media.image.generate.";
 
-pub fn canvas_agent_brief(user_text: &str, aspect: CanvasAspect) -> String {
+const CANVAS_AGENT_SPAWN_GUIDE: &str = "\
+agent.spawn : le brief doit reprendre le sujet demandé par l'utilisateur (ligne Goal), \
+jamais l'exemple maison ni ces règles de style.";
+
+/// System prompt addendum for delegated canvas agents (designer rules + frame aspect).
+pub fn canvas_agent_system_prompt(aspect: CanvasAspect) -> String {
     format!(
-        "{user_text}\n\n{CANVAS_AGENT_DESIGNER_GUIDE}\n\
-         Proportions actuelles du cadre : {aspect_fr} ({aspect_en}).",
+        "{CANVAS_AGENT_DESIGNER_GUIDE}\n\
+         Proportions actuelles du cadre : {aspect_fr} ({aspect_en}).\n\n\
+         {CANVAS_AGENT_SPAWN_GUIDE}",
         aspect_fr = aspect.agent_label_fr(),
         aspect_en = aspect.agent_label_en(),
+    )
+}
+
+/// Full brief for display / logs: line 1 = user request verbatim, then designer guide.
+pub fn canvas_agent_brief(user_text: &str, aspect: CanvasAspect) -> String {
+    format!(
+        "{}\n\n{}\nProportions actuelles du cadre : {} ({}).",
+        user_text.trim(),
+        CANVAS_AGENT_DESIGNER_GUIDE,
+        aspect.agent_label_fr(),
+        aspect.agent_label_en(),
     )
 }

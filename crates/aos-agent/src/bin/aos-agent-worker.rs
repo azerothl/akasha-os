@@ -12,6 +12,7 @@ use aos_agent::context_budget::{
     prompt_budget, sanitize_assistant_for_memory, LoopGuard, LoopVerdict, DEFAULT_N_CTX_HINT,
 };
 use aos_agent::persist;
+use aos_agent::canvas_scene::{canvas_scene_prompt_block, fetch_canvas_scene_digest};
 use aos_agent::prompt::{compile_system_prompt, optimize_prompt_request, PromptCompileInput};
 use aos_agent::skills::{load_skills, match_skill_by_action, merge_skill_tools, skill_misuse_hint, SkillDoc};
 use aos_agent::tools::{
@@ -169,7 +170,7 @@ async fn main() {
         }
     }
 
-    install_system_prompt(&shared, &spec, &skill_docs, &tools).await;
+    install_system_prompt(&bus, &shared, &spec, &skill_docs, &tools).await;
 
     // Index documents
     index_documents(&bus, &agent_id, &spec.caps, &spec.documents).await;
@@ -1666,6 +1667,20 @@ async fn wait_user_answer(
     AskWait::Answer(String::new())
 }
 
+/// Canvas delegates keep the user's subject as the child goal, not designer examples.
+fn canvas_child_goal_statement(parent: &AgentSpec, brief: &str) -> String {
+    let is_canvas_parent = parent.tools.iter().any(|t| t.starts_with("canvas."));
+    if !is_canvas_parent {
+        return brief.to_string();
+    }
+    let user_goal = parent.goal.statement.trim();
+    if user_goal.is_empty() {
+        brief.to_string()
+    } else {
+        user_goal.to_string()
+    }
+}
+
 async fn spawn_child(
     bus: &BusClient,
     shared: &Shared,
@@ -1677,6 +1692,7 @@ async fn spawn_child(
     caps: &[String],
 ) -> ActResult {
     let brief = clamp_spawn_brief(brief);
+    let child_goal_statement = canvas_child_goal_statement(parent, &brief);
     let req = AgentCreateRequest {
         directive: brief.clone(),
         kind: Default::default(),
@@ -1685,7 +1701,7 @@ async fn spawn_child(
         caps: caps.to_vec(),
         model_id: parent.model_id.clone(),
         goal: Some(AgentGoal {
-            statement: brief.clone(),
+            statement: child_goal_statement,
             success_criteria: vec![
                 "Résultat clair et concis (≤ ~800 caractères utiles)".into(),
             ],
@@ -2543,17 +2559,27 @@ async fn index_documents(
 }
 
 async fn install_system_prompt(
+    bus: &BusClient,
     shared: &Shared,
     spec: &AgentSpec,
     skills: &[SkillDoc],
     tools: &[ToolDesc],
 ) {
-    let system = compile_system_prompt(&PromptCompileInput {
+    let mut system = compile_system_prompt(&PromptCompileInput {
         spec,
         skills,
         tools,
         doc_index: &spec.documents,
     });
+    let has_canvas = tools.iter().any(|t| t.name.starts_with("canvas."));
+    if has_canvas {
+        if let Some(sid) = spec.session_id.as_deref().filter(|s| !s.is_empty()) {
+            if let Some(digest) = fetch_canvas_scene_digest(bus, sid).await {
+                system.push_str("\n\n");
+                system.push_str(&canvas_scene_prompt_block(&digest));
+            }
+        }
+    }
     let mut st = shared.state.lock().await;
     if st.working_memory.is_empty() || st.working_memory[0].0 != "system" {
         st.working_memory.insert(0, ("system".into(), system));
@@ -2598,7 +2624,7 @@ async fn apply_assess_to_runtime(
                 spec.caps.push(c);
             }
         }
-        install_system_prompt(shared, spec, skill_docs, tools).await;
+        install_system_prompt(bus, shared, spec, skill_docs, tools).await;
         let _ = persist::write_spec(spec);
         report(
             bus,
@@ -2610,7 +2636,7 @@ async fn apply_assess_to_runtime(
         .await;
     } else if assess.is_complex() {
         // Planner déjà présent : recompile quand même pour coller au protocole à jour
-        install_system_prompt(shared, spec, skill_docs, tools).await;
+        install_system_prompt(bus, shared, spec, skill_docs, tools).await;
     }
 }
 
@@ -3179,7 +3205,8 @@ fn collect_sources(
 
 #[cfg(test)]
 mod tests {
-    use super::await_child_reject_reason;
+    use super::{await_child_reject_reason, canvas_child_goal_statement};
+    use aos_proto::{AgentGoal, AgentSpec};
 
     #[test]
     fn await_rejects_empty_child_id() {
@@ -3196,5 +3223,62 @@ mod tests {
     #[test]
     fn await_accepts_own_child() {
         assert!(await_child_reject_reason("agent-2", &["agent-2".into()]).is_none());
+    }
+
+    #[test]
+    fn canvas_child_inherits_parent_user_goal_not_house_example() {
+        let parent = AgentSpec {
+            agent_id: "parent".into(),
+            goal: AgentGoal {
+                statement: "dessine une canette Coca-Cola".into(),
+                ..Default::default()
+            },
+            tools: vec!["canvas.stroke".into()],
+            kind: Default::default(),
+            display_name: None,
+            persona_id: None,
+            system_prompt: None,
+            skills: vec![],
+            mcp_servers: vec![],
+            documents: vec![],
+            caps: vec![],
+            model_id: None,
+            parent_id: None,
+            session_id: None,
+            budget: Default::default(),
+            optimize_prompt: false,
+        };
+        let child_goal = canvas_child_goal_statement(
+            &parent,
+            "Une maison = toit + murs + porte + fenêtre",
+        );
+        assert_eq!(child_goal, "dessine une canette Coca-Cola");
+    }
+
+    #[test]
+    fn non_canvas_child_keeps_spawn_brief_as_goal() {
+        let parent = AgentSpec {
+            agent_id: "parent".into(),
+            goal: AgentGoal {
+                statement: "recherche sur le climat".into(),
+                ..Default::default()
+            },
+            tools: vec!["web.search".into()],
+            kind: Default::default(),
+            display_name: None,
+            persona_id: None,
+            system_prompt: None,
+            skills: vec![],
+            mcp_servers: vec![],
+            documents: vec![],
+            caps: vec![],
+            model_id: None,
+            parent_id: None,
+            session_id: None,
+            budget: Default::default(),
+            optimize_prompt: false,
+        };
+        let child_goal = canvas_child_goal_statement(&parent, "résumer les sources A et B");
+        assert_eq!(child_goal, "résumer les sources A et B");
     }
 }

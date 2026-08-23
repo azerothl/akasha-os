@@ -507,7 +507,7 @@ pub(crate) fn chat_delegate_agent_spec(
     user_text: &str,
     model_output: &str,
     canvas_open: bool,
-    canvas_aspect: aos_proto::CanvasAspect,
+    _canvas_aspect: aos_proto::CanvasAspect,
 ) -> Option<(String, Vec<String>, Vec<String>, String)> {
     if chat_tts_request(user_text).is_some() {
         return None;
@@ -532,7 +532,7 @@ pub(crate) fn chat_delegate_agent_spec(
             let use_canvas = chat_canvas::chat_wants_canvas_agent(user_text, canvas_open)
                 || chat_canvas::chat_wants_canvas_agent(&brief, canvas_open);
             let brief = if use_canvas && !self_tool {
-                chat_canvas::canvas_agent_brief(user_text, canvas_aspect)
+                user_text.to_string()
             } else {
                 brief
             };
@@ -589,7 +589,7 @@ pub(crate) fn chat_delegate_agent_spec(
     {
         let (skills, tools) = chat_delegate_kit(user_text, canvas_open, true);
         return Some((
-            chat_canvas::canvas_agent_brief(user_text, canvas_aspect),
+            user_text.to_string(),
             skills,
             tools,
             "Je lance un agent pour dessiner sur le canvas.".into(),
@@ -607,7 +607,7 @@ pub(crate) fn chat_delegate_agent_spec(
     if canvas_intent {
         let (skills, tools) = chat_delegate_kit(user_text, canvas_open, true);
         return Some((
-            chat_canvas::canvas_agent_brief(user_text, canvas_aspect),
+            user_text.to_string(),
             skills,
             tools,
             "Je lance un agent pour dessiner sur le canvas.".into(),
@@ -625,6 +625,22 @@ pub(crate) fn chat_delegate_agent_spec(
     None
 }
 
+pub(crate) async fn session_has_running_canvas_agent(bus: &BusClient, session_id: &str) -> bool {
+    let agents: Vec<aos_proto::AgentInfo> = bus
+        .call(aos_agent::intents::LIST, &(), vec![])
+        .await
+        .unwrap_or_default();
+    agents.iter().any(|a| {
+        matches!(
+            a.state,
+            aos_proto::AgentState::Running
+                | aos_proto::AgentState::Blocked
+                | aos_proto::AgentState::Paused
+        ) && a.session_id.as_deref() == Some(session_id)
+            && a.tools.iter().any(|t| t.starts_with("canvas."))
+    })
+}
+
 pub(crate) async fn spawn_chat_delegate_agent(
     bus: Arc<BusClient>,
     evt_tx: Sender<Evt>,
@@ -637,14 +653,24 @@ pub(crate) async fn spawn_chat_delegate_agent(
     auto_remember: bool,
     model_id: Option<String>,
     max_steps: u32,
+    canvas_aspect: aos_proto::CanvasAspect,
 ) {
-    let mut req = AgentCreateRequest::simple(brief.clone());
-    req.display_name = Some(aos_agent::persist::agent_title(&brief));
+    let canvas_delegate = tools.iter().any(|t| t.starts_with("canvas."));
+    let goal_statement = if canvas_delegate {
+        user_text.trim().to_string()
+    } else {
+        brief.clone()
+    };
+    let mut req = AgentCreateRequest::simple(goal_statement.clone());
+    req.display_name = Some(aos_agent::persist::agent_title(&goal_statement));
     req.skills = skills;
     req.tools = tools;
     req.session_id = Some(sid.clone());
+    if canvas_delegate {
+        req.system_prompt = Some(chat_canvas::canvas_agent_system_prompt(canvas_aspect));
+    }
     req.goal = Some(AgentGoal {
-        statement: brief.clone(),
+        statement: goal_statement.clone(),
         success_criteria: vec![],
         max_steps,
         max_subagents: CHAT_AGENT_MAX_SUBAGENTS,
@@ -678,7 +704,7 @@ pub(crate) async fn spawn_chat_delegate_agent(
         Ok(r) => {
             let att = ChatAttachment::AgentRef {
                 agent_id: r.agent_id.clone(),
-                title: brief.clone(),
+                title: goal_statement.clone(),
                 origin: "assistant".into(),
             };
             let _ = bus
@@ -707,7 +733,7 @@ pub(crate) async fn spawn_chat_delegate_agent(
             let _ = evt_tx.send(Evt::AgentSpawned {
                 session_id: sid.clone(),
                 agent_id: r.agent_id,
-                title: brief,
+                title: goal_statement,
                 origin: "assistant".into(),
                 ack: prose,
             });
@@ -809,9 +835,13 @@ fn chat_agent_kit_ex(task: &str, canvas_open: bool) -> (Vec<String>, Vec<String>
     }
     if canvas_open || chat_canvas::chat_user_wants_explicit_canvas(task) {
         for t in [
+            "canvas.set_style",
             "canvas.stroke",
+            "canvas.line",
+            "canvas.spline",
             "canvas.rect",
             "canvas.ellipse",
+            "canvas.fill",
             "canvas.erase",
             "canvas.clear",
             "canvas.undo",
@@ -3120,6 +3150,7 @@ impl eframe::App for UiApp {
                     canvas_open,
                     next_seq,
                     ops,
+                    pen,
                     delta,
                 } => {
                     if self.active_session.as_deref() != Some(session_id.as_str()) {
@@ -3135,6 +3166,7 @@ impl eframe::App for UiApp {
                         } else {
                             self.canvas_panel.apply_snapshot(ops, next_seq, now);
                         }
+                        self.canvas_panel.sync_pen(&pen);
                     }
                 }
                 Evt::CanvasExported { path, session_id } => {
@@ -3926,6 +3958,13 @@ impl UiApp {
                     op,
                 });
             }
+            Some(chat_canvas::CanvasUiAction::SetStyle { color, width }) => {
+                let _ = self.cmd_tx.send(Cmd::CanvasSetStyle {
+                    session_id: session_id.to_string(),
+                    color,
+                    width,
+                });
+            }
             Some(chat_canvas::CanvasUiAction::Export) => {
                 let aspect = self
                     .sessions
@@ -4014,9 +4053,7 @@ impl UiApp {
             let mut toolbar_action: Option<chat_canvas::CanvasUiAction> = None;
             if canvas_open {
                 ui.separator();
-                ui.horizontal_wrapped(|ui| {
-                    toolbar_action = chat_canvas::ui_canvas_toolbar(ui, t, &mut self.canvas_panel);
-                });
+                toolbar_action = chat_canvas::ui_canvas_toolbar(ui, t, &mut self.canvas_panel);
             }
 
             let toggle_reserve = 150.0_f32;
@@ -6932,11 +6969,29 @@ mod delegate_tests {
     #[test]
     fn explicit_canvas_delegates_with_canvas_tools() {
         let spec = chat_delegate_agent_spec("dessine sur le canvas une maison", "Ok.", false, ASPECT);
-        let (_brief, _skills, tools, prose) = spec.expect("doit déléguer canvas");
+        let (brief, _skills, tools, prose) = spec.expect("doit déléguer canvas");
+        assert_eq!(brief, "dessine sur le canvas une maison");
+        assert!(!brief.contains("toit + murs"));
         assert!(tools.iter().any(|x| x == "canvas.stroke"));
         assert!(!tools.iter().any(|x| x == "media.image.generate"));
         assert!(!tools.iter().any(|x| x == "user.ask"));
         assert!(prose.to_lowercase().contains("canvas") || prose.contains("dessin"));
+    }
+
+    #[test]
+    fn canvas_delegate_brief_is_user_goal_not_designer_guide() {
+        let spec = chat_delegate_agent_spec(
+            "dessine une canette Coca-Cola sur le canvas",
+            "Ok.",
+            false,
+            ASPECT,
+        )
+        .expect("canvas delegate");
+        let (brief, _skills, tools, _) = spec;
+        assert!(tools.iter().any(|x| x.starts_with("canvas.")));
+        assert_eq!(brief, "dessine une canette Coca-Cola sur le canvas");
+        assert!(!brief.contains("Exemple si le sujet est une maison"));
+        assert!(!brief.contains("canvas.set_style"));
     }
 
     #[test]

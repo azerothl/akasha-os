@@ -465,8 +465,20 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
     };
     let canvas_tools = [
         (
+            "canvas.set_style",
+            "Définir le crayon de session (couleur #RRGGBB, épaisseur optionnelle) — les ops sans color/width héritent de ce style",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "color":{"type":"string","description":"#RRGGBB"},
+                    "width":{"type":"number","description":"épaisseur relative 0..1"}
+                }
+            }),
+        ),
+        (
             "canvas.stroke",
-            "Polyline sur le canvas de session (coords 0..1) — préférer plusieurs traits courts (8–20 points) plutôt que peu de grosses formes",
+            "Polyline sur le canvas de session (coords 0..1) — couleur/épaisseur optionnelles (héritent du crayon via canvas.set_style)",
             serde_json::json!({
                 "type":"object",
                 "properties":{
@@ -474,6 +486,35 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
                     "points":{"type":"array","items":{"type":"object","properties":{"x":{"type":"number"},"y":{"type":"number"}},"required":["x","y"]}},
                     "color":{"type":"string","description":"#RRGGBB"},
                     "width":{"type":"number","description":"épaisseur relative 0..1"}
+                },
+                "required":["points"]
+            }),
+        ),
+        (
+            "canvas.line",
+            "Segment droit (2 points) sur le canvas de session",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "p0":{"type":"object","properties":{"x":{"type":"number"},"y":{"type":"number"}},"required":["x","y"]},
+                    "p1":{"type":"object","properties":{"x":{"type":"number"},"y":{"type":"number"}},"required":["x","y"]},
+                    "color":{"type":"string"},
+                    "width":{"type":"number"}
+                },
+                "required":["p0","p1"]
+            }),
+        ),
+        (
+            "canvas.spline",
+            "Courbe lisse (points de contrôle) sur le canvas de session",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "points":{"type":"array","items":{"type":"object","properties":{"x":{"type":"number"},"y":{"type":"number"}},"required":["x","y"]}},
+                    "color":{"type":"string"},
+                    "width":{"type":"number"}
                 },
                 "required":["points"]
             }),
@@ -508,6 +549,20 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
                     "width":{"type":"number"}
                 },
                 "required":["x","y","w","h"]
+            }),
+        ),
+        (
+            "canvas.fill",
+            "Remplissage par inondation à un point (coords 0..1) sur le canvas de session",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "x":{"type":"number"},
+                    "y":{"type":"number"},
+                    "color":{"type":"string"}
+                },
+                "required":["x","y"]
             }),
         ),
         (
@@ -578,9 +633,13 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
 
 /// Canvas tool ids (session vector drawing) — never part of `default_agent_tools`.
 pub const CANVAS_TOOL_IDS: &[&str] = &[
+    "canvas.set_style",
     "canvas.stroke",
+    "canvas.line",
+    "canvas.spline",
     "canvas.rect",
     "canvas.ellipse",
+    "canvas.fill",
     "canvas.erase",
     "canvas.clear",
     "canvas.undo",

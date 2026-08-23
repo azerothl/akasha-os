@@ -3,7 +3,7 @@
 use aos_agent::schedule::ScheduleEntry;
 use aos_proto::{
     AgentInfo, AgentTrace, AuditEvent, CapInfo, ChatAttachment, ChatRoomMember, ChatSessionMeta,
-    ChatSessionMode, CanvasOp, CanvasOpBody, DocumentRef, FeedbackSubmitRequest,
+    ChatSessionMode, CanvasOp, CanvasOpBody, CanvasPenStyle, DocumentRef, FeedbackSubmitRequest,
     FeedbackSubmitResponse, MemHit, ModelInfo, ModuleCatalogue, ModuleInfo, PendingConfirmation,
     ProviderRecord, SkillInfo, SystemMetrics, WebSearchHit,
 };
@@ -232,6 +232,11 @@ pub(crate) enum Cmd {
         author_id: String,
         op: CanvasOpBody,
     },
+    CanvasSetStyle {
+        session_id: String,
+        color: Option<String>,
+        width: Option<f32>,
+    },
     CanvasPoll {
         session_id: String,
         after_seq: Option<u64>,
@@ -336,6 +341,7 @@ pub(crate) enum Evt {
         canvas_open: bool,
         next_seq: u64,
         ops: Vec<CanvasOp>,
+        pen: CanvasPenStyle,
         /// True when this is a delta poll (merge); false = full replace.
         delta: bool,
     },

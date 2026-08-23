@@ -1,7 +1,8 @@
 //! Sessions de conversation persistées (Preview PC.6).
 
 use aos_proto::{
-    CanvasAspect, CanvasDoc, CanvasOp, CanvasOpBody, ChatAttachment, ChatRoomConductorPolicy,
+    normalize_canvas_color, resolve_canvas_op_style, CanvasAspect, CanvasDoc, CanvasOp, CanvasOpBody,
+    CanvasPenStyle, ChatAttachment, ChatRoomConductorPolicy,
     ChatRoomMember, ChatSessionMessage, ChatSessionMeta, ChatSessionMode,
 };
 use serde::{Deserialize, Serialize};
@@ -118,6 +119,7 @@ impl ChatSessionStore {
                 session_id: id.into(),
                 next_seq: 1,
                 ops: Vec::new(),
+                pen: CanvasPenStyle::default(),
             });
         }
         let raw = fs::read_to_string(&p).map_err(|e| SessionError::Io(e.to_string()))?;
@@ -167,7 +169,8 @@ impl ChatSessionStore {
         let _ = self.load_meta(id)?;
         let mut doc = self.load_canvas(id)?;
         doc.session_id = id.into();
-        let applied = match body {
+        let mut body = body;
+        let applied = match &mut body {
             CanvasOpBody::Undo => {
                 if let Some(pos) = doc.ops.iter().rposition(|o| o.author_id == "human") {
                     doc.ops.remove(pos);
@@ -178,12 +181,13 @@ impl ChatSessionStore {
                 doc.ops.clear();
                 None
             }
-            other => {
+            _ => {
+                resolve_canvas_op_style(&mut body, &doc.pen);
                 let op = CanvasOp {
                     seq: doc.next_seq,
                     author_id: author_id.into(),
                     ts_ms: Self::now_ms(),
-                    body: other,
+                    body,
                 };
                 doc.next_seq = doc.next_seq.saturating_add(1);
                 doc.ops.push(op.clone());
@@ -198,6 +202,34 @@ impl ChatSessionStore {
         meta.updated_ms = Self::now_ms();
         self.save_meta(&meta)?;
         Ok((self.to_public(meta), doc, applied))
+    }
+
+    /// Met à jour le crayon de session (couleur / épaisseur).
+    pub fn canvas_set_style(
+        &self,
+        id: &str,
+        color: Option<&str>,
+        width: Option<f32>,
+    ) -> Result<(ChatSessionMeta, CanvasDoc), SessionError> {
+        let _ = self.load_meta(id)?;
+        let mut doc = self.load_canvas(id)?;
+        doc.session_id = id.into();
+        if let Some(c) = color {
+            let normalized = normalize_canvas_color(c)
+                .ok_or_else(|| SessionError::BadRequest("color invalide (#RRGGBB)".into()))?;
+            doc.pen.color = normalized;
+        }
+        if let Some(w) = width {
+            if w <= 0.0 {
+                return Err(SessionError::BadRequest("width doit être > 0".into()));
+            }
+            doc.pen.width = w.clamp(0.001, 0.25);
+        }
+        self.save_canvas(&doc)?;
+        let mut meta = self.load_meta(id)?;
+        meta.updated_ms = Self::now_ms();
+        self.save_meta(&meta)?;
+        Ok((self.to_public(meta), doc))
     }
 
     pub fn canvas_set_open(
@@ -657,6 +689,43 @@ archived: false
         let (_, doc, _) = s.canvas_apply(&m.id, "human", CanvasOpBody::Undo).unwrap();
         assert_eq!(doc.ops.len(), 1);
         assert_eq!(doc.ops[0].author_id, "agent-a");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn canvas_set_style_then_stroke_inherits_pen() {
+        let dir = std::env::temp_dir().join(format!("aos-sess-pen-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let s = ChatSessionStore::open(&dir).unwrap();
+        let m = s.create(Some("Pen".into()), None).unwrap();
+        let (_, doc) = s
+            .canvas_set_style(&m.id, Some("#ff4400"), Some(0.025))
+            .unwrap();
+        assert_eq!(doc.pen.color, "#ff4400");
+        assert!((doc.pen.width - 0.025).abs() < 0.0001);
+
+        let (_, _, applied) = s
+            .canvas_apply(
+                &m.id,
+                "agent-a",
+                CanvasOpBody::Stroke {
+                    points: vec![
+                        aos_proto::CanvasPoint { x: 0.1, y: 0.1 },
+                        aos_proto::CanvasPoint { x: 0.3, y: 0.3 },
+                    ],
+                    color: String::new(),
+                    width: 0.0,
+                },
+            )
+            .unwrap();
+        let applied = applied.expect("stroke applied");
+        match applied.body {
+            CanvasOpBody::Stroke { color, width, .. } => {
+                assert_eq!(color, "#ff4400");
+                assert!((width - 0.025).abs() < 0.0001);
+            }
+            other => panic!("expected stroke, got {other:?}"),
+        }
         let _ = fs::remove_dir_all(&dir);
     }
 }

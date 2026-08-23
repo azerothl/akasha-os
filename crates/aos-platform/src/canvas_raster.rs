@@ -1,6 +1,6 @@
 //! Rasterize a session canvas document to PNG (export snapshot, not diffusion).
 
-use aos_proto::{CanvasDoc, CanvasOpBody, CanvasPoint};
+use aos_proto::{CanvasDoc, CanvasOpBody, CanvasPenStyle, CanvasPoint};
 use image::{ImageBuffer, Rgb, RgbImage};
 
 const BG: Rgb<u8> = Rgb([7, 11, 20]); // void
@@ -73,6 +73,27 @@ fn paint_op(img: &mut RgbImage, body: &CanvasOpBody) {
                 let rad = radius(img, *width).max(1);
                 stroke_ellipse(img, cx, cy, rx, ry, c, rad);
             }
+        }
+        CanvasOpBody::Line { p0, p1, color, width } => {
+            let c = parse_color(color).unwrap_or(DEFAULT_FG);
+            let rad = radius(img, *width);
+            let (x0, y0) = to_px(img, p0.x, p0.y);
+            let (x1, y1) = to_px(img, p1.x, p1.y);
+            line(img, x0, y0, x1, y1, rad, c);
+        }
+        CanvasOpBody::Spline { points, color, width } => {
+            if points.len() < 2 {
+                return;
+            }
+            let c = parse_color(color).unwrap_or(DEFAULT_FG);
+            let rad = radius(img, *width);
+            let sampled = sample_spline(points, 24);
+            stroke_polyline(img, &sampled, c, rad);
+        }
+        CanvasOpBody::Fill { x, y, color } => {
+            let c = parse_color(color).unwrap_or(DEFAULT_FG);
+            let (px, py) = to_px(img, *x, *y);
+            flood_fill(img, px, py, c);
         }
         CanvasOpBody::Clear | CanvasOpBody::Undo => {}
     }
@@ -190,6 +211,71 @@ fn stroke_ellipse(img: &mut RgbImage, cx: i32, cy: i32, rx: i32, ry: i32, c: Rgb
     }
 }
 
+fn sample_spline(points: &[CanvasPoint], segments_per_span: usize) -> Vec<CanvasPoint> {
+    if points.len() < 2 {
+        return points.to_vec();
+    }
+    let mut out = Vec::new();
+    let n = points.len();
+    for i in 0..n.saturating_sub(1) {
+        let p0 = if i == 0 { points[0] } else { points[i - 1] };
+        let p1 = points[i];
+        let p2 = points[i + 1];
+        let p3 = if i + 2 < n { points[i + 2] } else { points[i + 1] };
+        let steps = segments_per_span.max(4);
+        let start_j = if i == 0 { 0 } else { 1 };
+        for j in start_j..=steps {
+            let t = j as f32 / steps as f32;
+            out.push(catmull_rom(p0, p1, p2, p3, t));
+        }
+    }
+    out
+}
+
+fn catmull_rom(p0: CanvasPoint, p1: CanvasPoint, p2: CanvasPoint, p3: CanvasPoint, t: f32) -> CanvasPoint {
+    let t2 = t * t;
+    let t3 = t2 * t;
+    CanvasPoint {
+        x: 0.5
+            * ((2.0 * p1.x)
+                + (-p0.x + p2.x) * t
+                + (2.0 * p0.x - 5.0 * p1.x + 4.0 * p2.x - p3.x) * t2
+                + (-p0.x + 3.0 * p1.x - 3.0 * p2.x + p3.x) * t3),
+        y: 0.5
+            * ((2.0 * p1.y)
+                + (-p0.y + p2.y) * t
+                + (2.0 * p0.y - 5.0 * p1.y + 4.0 * p2.y - p3.y) * t2
+                + (-p0.y + 3.0 * p1.y - 3.0 * p2.y + p3.y) * t3),
+    }
+}
+
+fn flood_fill(img: &mut RgbImage, sx: i32, sy: i32, c: Rgb<u8>) {
+    let w = img.width() as i32;
+    let h = img.height() as i32;
+    if sx < 0 || sy < 0 || sx >= w || sy >= h {
+        return;
+    }
+    let target = *img.get_pixel(sx as u32, sy as u32);
+    if target == c {
+        return;
+    }
+    let mut stack = vec![(sx, sy)];
+    while let Some((x, y)) = stack.pop() {
+        if x < 0 || y < 0 || x >= w || y >= h {
+            continue;
+        }
+        let px = img.get_pixel(x as u32, y as u32);
+        if *px != target {
+            continue;
+        }
+        img.put_pixel(x as u32, y as u32, c);
+        stack.push((x + 1, y));
+        stack.push((x - 1, y));
+        stack.push((x, y + 1));
+        stack.push((x, y - 1));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -200,6 +286,7 @@ mod tests {
         let doc = CanvasDoc {
             session_id: "s".into(),
             next_seq: 2,
+            pen: CanvasPenStyle::default(),
             ops: vec![CanvasOp {
                 seq: 1,
                 author_id: "human".into(),
