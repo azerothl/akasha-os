@@ -63,6 +63,17 @@ impl Default for CanvasPanelState {
 
 impl CanvasPanelState {
     pub fn apply_snapshot(&mut self, ops: Vec<CanvasOp>, next_seq: u64, now: f64) {
+        let pending_human: Vec<CanvasOp> = self
+            .ops
+            .iter()
+            .filter(|o| o.author_id == "human" && o.seq == 0)
+            .cloned()
+            .collect();
+        let prior_human_server = self
+            .ops
+            .iter()
+            .filter(|o| o.author_id == "human" && o.seq > 0)
+            .count();
         for op in &ops {
             if op.seq > self.last_seen_seq && op.author_id != "human" {
                 self.animating.push((op.seq, now));
@@ -72,6 +83,13 @@ impl CanvasPanelState {
             self.last_seen_seq = self.last_seen_seq.max(max);
         }
         self.ops = ops;
+        let new_human_server = self.ops.iter().filter(|o| o.author_id == "human").count();
+        if new_human_server <= prior_human_server {
+            for p in pending_human {
+                self.ops.push(p);
+            }
+            self.ops.sort_by_key(|o| o.seq);
+        }
         self.next_seq = next_seq.max(self.next_seq);
         self.animating
             .retain(|(seq, start)| self.ops.iter().any(|o| o.seq == *seq) && now - start < 0.45);
@@ -535,6 +553,24 @@ mod routing_tests {
     fn withdraw_does_not_match_draw() {
         assert!(!chat_user_wants_pixel_draw("withdraw funds"));
     }
+
+    #[test]
+    fn apply_snapshot_keeps_pending_human_stroke() {
+        let mut state = CanvasPanelState::default();
+        state.ops.push(CanvasOp {
+            seq: 0,
+            author_id: "human".into(),
+            ts_ms: 0,
+            body: CanvasOpBody::Stroke {
+                points: vec![CanvasPoint { x: 0.1, y: 0.1 }, CanvasPoint { x: 0.2, y: 0.2 }],
+                color: "#3ee0c4".into(),
+                width: 0.01,
+            },
+        });
+        state.apply_snapshot(vec![], 1, 0.0);
+        assert_eq!(state.ops.len(), 1);
+        assert_eq!(state.ops[0].author_id, "human");
+    }
 }
 
 /// Explicit vector-canvas intent: toggle phrase, slash, or stroke wording — not bare « dessine ».
@@ -592,9 +628,12 @@ pub fn chat_wants_canvas_agent(text: &str, _canvas_open: bool) -> bool {
 pub fn canvas_agent_brief(user_text: &str) -> String {
     format!(
         "{user_text}\n\n\
-         Contexte: canvas de session chat déjà lié — utilise uniquement canvas.* \
-         (coords normalisées 0..1). Commence par canvas.get. Si le dessin est trop \
-         pauvre ou à recommencer: canvas.clear puis redessine avec plus de détails \
-         (traits, formes, couleurs). Ne génère pas d'image diffusion."
+         Contexte: canvas vectoriel de session lié — utilise uniquement \
+         canvas.stroke, canvas.rect, canvas.ellipse, canvas.erase, canvas.clear, \
+         canvas.undo, canvas.get, canvas.export (coords normalisées 0..1). \
+         Commence par canvas.get. Si le dessin est trop pauvre: canvas.clear puis \
+         redessine avec plus de traits et formes. Ne génère pas d'image diffusion \
+         (pas media.image.generate). Ne pose pas user.ask pour choisir entre canvas \
+         et diffusion — dessine directement."
     )
 }
