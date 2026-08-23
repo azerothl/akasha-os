@@ -3853,7 +3853,6 @@ impl UiApp {
         let meta = chat_room::active_session_meta(&self.sessions, Some(sid.as_str()));
         let room = chat_room::session_is_room(meta);
         let canvas_open = meta.map(|m| m.canvas_open).unwrap_or(false);
-        let canvas_aspect = meta.map(|m| m.canvas_aspect).unwrap_or_default();
         let members_vec = meta.map(|m| m.members.clone()).unwrap_or_default();
         let members = members_vec.as_slice();
         let model_id = meta.and_then(|m| m.model_id.clone());
@@ -3895,12 +3894,7 @@ impl UiApp {
             if canvas_open {
                 ui.separator();
                 ui.horizontal_wrapped(|ui| {
-                    toolbar_action = chat_canvas::ui_canvas_toolbar(
-                        ui,
-                        t,
-                        &mut self.canvas_panel,
-                        canvas_aspect,
-                    );
+                    toolbar_action = chat_canvas::ui_canvas_toolbar(ui, t, &mut self.canvas_panel);
                 });
             }
 
@@ -4513,6 +4507,9 @@ impl UiApp {
                                 egui::Layout::top_down(egui::Align::Min).with_cross_justify(true),
                                 |ui| {
                                     if let Some(ref sid) = active_sid {
+                                        let aspect_action =
+                                            chat_canvas::ui_canvas_aspect_row(ui, &t, canvas_aspect);
+                                        self.dispatch_canvas_ui_action(aspect_action, sid);
                                         let action = chat_canvas::ui_canvas_surface(
                                             ui,
                                             &mut self.canvas_panel,
@@ -6752,6 +6749,7 @@ mod delegate_tests {
         assert!(!brief.contains("canvas.draw"));
         assert!(brief.contains("canvas.stroke"));
         assert!(brief.contains("carré 1:1"));
+        assert!(brief.contains("jamais canvas.clear"));
         assert!(!brief.contains("canvas.*"));
         assert!(!aos_proto::CHAT_DELEGATION_PROMPT.contains("canvas.draw"));
     }

@@ -305,12 +305,11 @@ fn fit_board_rect(outer: eframe::egui::Rect, aspect: CanvasAspect) -> eframe::eg
     eframe::egui::Rect::from_center_size(outer.center(), Vec2::new(board_w, board_h))
 }
 
-/// Drawing tools + aspect chips for the unified session bar.
+/// Drawing tools for the unified session bar (pen, eraser, shapes, tint, thickness).
 pub fn ui_canvas_toolbar(
     ui: &mut Ui,
     t: &UiStrings,
     state: &mut CanvasPanelState,
-    aspect: CanvasAspect,
 ) -> Option<CanvasUiAction> {
     let mut action: Option<CanvasUiAction> = None;
 
@@ -318,13 +317,6 @@ pub fn ui_canvas_toolbar(
     ui.selectable_value(&mut state.tool, CanvasTool::Eraser, t.canvas_tool_eraser);
     ui.selectable_value(&mut state.tool, CanvasTool::Rect, t.canvas_tool_rect);
     ui.selectable_value(&mut state.tool, CanvasTool::Ellipse, t.canvas_tool_ellipse);
-    ui.separator();
-    for (label, candidate) in canvas_aspect_chip_labels(t) {
-        if ui.selectable_label(aspect == candidate, label).clicked() && aspect != candidate {
-            action = Some(CanvasUiAction::SetAspect(candidate));
-        }
-    }
-    ui.separator();
     ui.label(t.canvas_tint);
     let mut rgba = [
         state.color.r() as f32 / 255.0,
@@ -375,6 +367,25 @@ pub fn ui_canvas_toolbar(
         state.clear_confirm_open = true;
     }
 
+    action
+}
+
+/// Muted aspect chips on the canvas face, above the letterboxed board.
+pub fn ui_canvas_aspect_row(
+    ui: &mut Ui,
+    t: &UiStrings,
+    aspect: CanvasAspect,
+) -> Option<CanvasUiAction> {
+    let mut action: Option<CanvasUiAction> = None;
+    ui.horizontal_wrapped(|ui| {
+        for (label, candidate) in canvas_aspect_chip_labels(t) {
+            let selected = aspect == candidate;
+            let text = eframe::egui::RichText::new(label).weak();
+            if ui.selectable_label(selected, text).clicked() && !selected {
+                action = Some(CanvasUiAction::SetAspect(candidate));
+            }
+        }
+    });
     action
 }
 
@@ -620,6 +631,20 @@ mod routing_tests {
         assert!(board.height() < outer.height());
         assert!((board.width() / board.height() - 16.0 / 9.0).abs() < 0.01);
     }
+
+    #[test]
+    fn canvas_agent_brief_contains_drawing_guide() {
+        let brief = super::canvas_agent_brief("dessine sur le canvas une maison", CanvasAspect::Square);
+        assert!(brief.contains("dessine sur le canvas une maison"));
+        assert!(brief.contains("margin"));
+        assert!(brief.contains("canvas.get"));
+        assert!(brief.contains("canvas.stroke"));
+        assert!(brief.contains("200px"));
+        assert!(brief.contains("rectangle+triangle"));
+        assert!(brief.contains("toit + murs + porte"));
+        assert!(brief.contains("jamais canvas.clear"));
+        assert!(brief.contains("carré 1:1"));
+    }
 }
 
 /// Explicit vector-canvas intent: toggle phrase, slash, or stroke wording — not bare « dessine ».
@@ -684,16 +709,20 @@ fn canvas_aspect_chip_labels(t: &UiStrings) -> [(&'static str, CanvasAspect); 5]
     ]
 }
 
+/// Frozen designer copy for delegated canvas agents (brief / goal — not system chrome).
+pub const CANVAS_AGENT_DESIGNER_GUIDE: &str = "\
+Cible visuelle : lisible à 200px — pas un rectangle+triangle.\n\
+Règles : margin 0.08–0.12 ; sujet centré ; couches sol → volumes → détails → 2–3 ombres. \
+Nombreux canvas.stroke courts, 2–3 teintes, épaisseurs variées. Commence par canvas.get. \
+Après critique : ajoute, jamais canvas.clear sauf si l'humain dit effacer.\n\
+Une maison = toit + murs + porte + fenêtre + sol + un élément d'environnement.\n\
+Outils : canvas.stroke, canvas.rect, canvas.ellipse, canvas.erase, canvas.clear, \
+canvas.undo, canvas.get, canvas.export (coords 0..1). Pas media.image.generate.";
+
 pub fn canvas_agent_brief(user_text: &str, aspect: CanvasAspect) -> String {
     format!(
-        "{user_text}\n\n\
-         Contexte: canvas vectoriel de session lié — proportions {aspect_fr} ({aspect_en}) — \
-         utilise uniquement canvas.stroke, canvas.rect, canvas.ellipse, canvas.erase, \
-         canvas.clear, canvas.undo, canvas.get, canvas.export (coords normalisées 0..1 \
-         sur le cadre de dessin, pas la zone letterbox). Commence par canvas.get. \
-         Si le dessin est trop pauvre: canvas.clear puis redessine avec plus de traits \
-         et formes. Ne génère pas d'image diffusion (pas media.image.generate). \
-         Ne pose pas user.ask pour choisir entre canvas et diffusion — dessine directement.",
+        "{user_text}\n\n{CANVAS_AGENT_DESIGNER_GUIDE}\n\
+         Proportions actuelles du cadre : {aspect_fr} ({aspect_en}).",
         aspect_fr = aspect.agent_label_fr(),
         aspect_en = aspect.agent_label_en(),
     )
