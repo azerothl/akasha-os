@@ -72,6 +72,7 @@ pub(crate) enum Cmd {
     },
     Confirm { id: String, approved: bool },
     AgentCreate {
+        display_name: String,
         task: String,
         system_prompt: Option<String>,
         skills: Vec<String>,

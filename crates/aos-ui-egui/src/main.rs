@@ -385,15 +385,15 @@ fn agent_is_live(state: &AgentState) -> bool {
     )
 }
 
+fn agent_shown_in_tab(a: &AgentInfo, history: bool) -> bool {
+    if a.is_roster() {
+        return !history;
+    }
+    agent_is_live(&a.state) != history
+}
+
 fn agent_completion_chat_text(ag: &AgentInfo) -> String {
-    let title = {
-        let t = ag.directive.trim();
-        if t.is_empty() {
-            ag.agent_id.clone()
-        } else {
-            t.chars().take(80).collect()
-        }
-    };
+    let title = ag.display_title();
     match ag.state {
         AgentState::Done => {
             let out = ag.last_output.trim();
@@ -562,6 +562,7 @@ pub(crate) async fn spawn_chat_delegate_agent(
     max_steps: u32,
 ) {
     let mut req = AgentCreateRequest::simple(brief.clone());
+    req.display_name = Some(aos_agent::persist::agent_title(&brief));
     req.skills = skills;
     req.tools = tools;
     req.session_id = Some(sid.clone());
@@ -1300,6 +1301,7 @@ struct UiApp {
     schedules: Vec<ScheduleEntry>,
     schedule_goal: String,
     schedule_interval_secs: u64,
+    agent_display_name: String,
     agent_task: String,
     agent_system_prompt: String,
     agent_docs: String,
@@ -1472,6 +1474,7 @@ impl UiApp {
             schedules: Vec::new(),
             schedule_goal: String::new(),
             schedule_interval_secs: 60,
+            agent_display_name: String::new(),
             agent_task: String::new(),
             agent_system_prompt: String::new(),
             agent_docs: String::new(),
@@ -1627,6 +1630,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             "plan.update".into(),
         ];
         let _ = self.cmd_tx.send(Cmd::AgentCreate {
+            display_name: aos_agent::persist::agent_title(TASK),
             task: TASK.to_string(),
             system_prompt: None,
             skills: vec!["planner".into()],
@@ -1947,6 +1951,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 self.arm_pending_module_agent(rest);
                 let (skills, tools) = chat_agent_kit(rest);
                 let _ = self.cmd_tx.send(Cmd::AgentCreate {
+                    display_name: aos_agent::persist::agent_title(rest),
                     task: rest.to_string(),
                     system_prompt: None,
                     skills,
@@ -2547,14 +2552,14 @@ impl eframe::App for UiApp {
                                     && was_active
                                 {
                                     let summary = match ag.state {
-                                        AgentState::Done => format!("{} terminé", ag.agent_id),
+                                        AgentState::Done => format!("{} terminé", ag.display_title()),
                                         AgentState::Failed => format!(
                                             "{} échoué — {}",
-                                            ag.agent_id,
+                                            ag.display_title(),
                                             ag.fail_reason.as_deref().unwrap_or("échec")
                                         ),
-                                        AgentState::Killed => format!("{} arrêté", ag.agent_id),
-                                        _ => format!("{} terminé", ag.agent_id),
+                                        AgentState::Killed => format!("{} arrêté", ag.display_title()),
+                                        _ => format!("{} terminé", ag.display_title()),
                                     };
                                     self.agent_notified.insert(ag.agent_id.clone());
                                     self.agent_notices.push(AgentNotice {
@@ -4375,7 +4380,10 @@ impl UiApp {
                     );
                 }
             });
+        ui.label(t.agents_display_name);
+        ui.text_edit_singleline(&mut self.agent_display_name);
         ui.label(t.agents_goal);
+        ui.weak(t.agents_goal_optional);
         ui.add(
             egui::TextEdit::multiline(&mut self.agent_task)
                 .desired_rows(3)
@@ -4510,7 +4518,7 @@ impl UiApp {
             );
         }
 
-        if ui.button(t.agents_create).clicked() && !self.agent_task.is_empty() {
+        if ui.button(t.agents_create).clicked() && !self.agent_display_name.trim().is_empty() {
             self.pending_note_agent = self.agent_task.to_lowercase().contains("note");
             let task = self.agent_task.clone();
             self.arm_pending_module_agent(&task);
@@ -4525,6 +4533,7 @@ impl UiApp {
                 })
                 .collect();
             let _ = self.cmd_tx.send(Cmd::AgentCreate {
+                display_name: self.agent_display_name.clone(),
                 task: self.agent_task.clone(),
                 system_prompt: if self.agent_system_prompt.is_empty() {
                     None
@@ -4558,7 +4567,7 @@ impl UiApp {
         let visible: Vec<AgentInfo> = self
             .agents
             .iter()
-            .filter(|a| agent_is_live(&a.state) != history)
+            .filter(|a| agent_shown_in_tab(a, history))
             .cloned()
             .collect();
         egui::ScrollArea::vertical()
@@ -4640,18 +4649,24 @@ impl UiApp {
             ui.weak(&a.agent_id);
             ui.colored_label(
                 agent_panel::state_color(&a.state),
-                format!("{:?}", a.state),
-            );
-            ui.label(format!(
-                "step {}/{}{}",
-                a.step,
-                a.max_steps,
-                if a.tokens_used > 0 {
-                    format!(" · {} tok", a.tokens_used)
+                if a.is_roster() {
+                    "Roster".to_string()
                 } else {
-                    String::new()
-                }
-            ));
+                    format!("{:?}", a.state)
+                },
+            );
+            if !a.is_roster() {
+                ui.label(format!(
+                    "step {}/{}{}",
+                    a.step,
+                    a.max_steps,
+                    if a.tokens_used > 0 {
+                        format!(" · {} tok", a.tokens_used)
+                    } else {
+                        String::new()
+                    }
+                ));
+            }
             if let Some(task) = &a.current_task {
                 ui.small(task);
             }
@@ -4664,15 +4679,17 @@ impl UiApp {
                     agent_panel::truncate(reason, 40),
                 );
             }
-            if ui.small_button(t.agent_pause).clicked() {
-                let _ = self.cmd_tx.send(Cmd::AgentPause {
-                    id: a.agent_id.clone(),
-                });
-            }
-            if ui.small_button(t.agent_kill).clicked() {
-                let _ = self.cmd_tx.send(Cmd::AgentKill {
-                    id: a.agent_id.clone(),
-                });
+            if !a.is_roster() {
+                if ui.small_button(t.agent_pause).clicked() {
+                    let _ = self.cmd_tx.send(Cmd::AgentPause {
+                        id: a.agent_id.clone(),
+                    });
+                }
+                if ui.small_button(t.agent_kill).clicked() {
+                    let _ = self.cmd_tx.send(Cmd::AgentKill {
+                        id: a.agent_id.clone(),
+                    });
+                }
             }
             if chat_room::session_is_room(chat_room::active_session_meta(
                 &self.sessions,

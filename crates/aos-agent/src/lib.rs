@@ -10,6 +10,7 @@ pub mod mcp;
 pub mod persist;
 pub mod prompt;
 pub mod room_conductor;
+pub mod room_personas;
 pub mod room_runtime;
 pub mod schedule;
 pub mod skills;

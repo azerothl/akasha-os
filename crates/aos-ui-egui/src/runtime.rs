@@ -14,7 +14,7 @@ use aos_agent::schedule::{
 };
 use aos_ipc::BusClient;
 use aos_proto::{
-    AgentCreateRequest, AgentGoal, AgentIdRequest, AgentInfo, AgentPromptOptimizeRequest,
+    AgentCreateRequest, AgentGoal, AgentIdRequest, AgentInfo, AgentKind, AgentPromptOptimizeRequest,
     AgentPromptOptimizeResponse, AgentSteerRequest, AgentTrace, AuditEvent, AuditQueryRequest,
     CapInfo, CapListRequest, CapRevokeRequest, ChatAttachment, ChatMessage, ChatRoomMember,
     ChatSessionAppendRequest, ChatSessionCreateRequest, ChatSessionGetResponse,
@@ -1140,6 +1140,7 @@ async fn handle_cmd(
             }
         }
         Cmd::AgentCreate {
+            display_name,
             task,
             system_prompt,
             skills,
@@ -1154,7 +1155,19 @@ async fn handle_cmd(
             origin,
             join_active_room,
         } => {
+            let name = display_name.trim().to_string();
+            if name.is_empty() {
+                let _ = evt_tx.send(Evt::Error("display_name requis".into()));
+                return;
+            }
+            let has_goal = !task.trim().is_empty();
             let mut req = AgentCreateRequest::simple(task.clone());
+            req.kind = if has_goal {
+                AgentKind::Task
+            } else {
+                AgentKind::Roster
+            };
+            req.display_name = Some(name.clone());
             req.system_prompt = system_prompt;
             req.skills = skills;
             req.tools = tools;
@@ -1162,13 +1175,15 @@ async fn handle_cmd(
             req.documents = documents;
             req.optimize_prompt = optimize_prompt;
             req.session_id = session_id.clone();
-            req.goal = Some(AgentGoal {
-                statement: task.clone(),
-                success_criteria: vec![],
-                max_steps,
-                max_subagents: CHAT_AGENT_MAX_SUBAGENTS,
-                timeout_secs,
-            });
+            if has_goal {
+                req.goal = Some(AgentGoal {
+                    statement: task.clone(),
+                    success_criteria: vec![],
+                    max_steps,
+                    max_subagents: CHAT_AGENT_MAX_SUBAGENTS,
+                    timeout_secs,
+                });
+            }
             req.model_id = model_id;
             if req.skills.iter().any(|s| s.contains("notes"))
                 || req.tools.iter().any(|t| t.starts_with("notes."))
@@ -1202,14 +1217,9 @@ async fn handle_cmd(
                                 .await
                             {
                                 if resp.meta.mode == aos_proto::ChatSessionMode::Room {
-                                    let display = if task.len() > 48 {
-                                        format!("{}…", &task[..48])
-                                    } else {
-                                        task.clone()
-                                    };
                                     let member = ChatRoomMember {
                                         agent_id: r.agent_id.clone(),
-                                        display_name: display,
+                                        display_name: name.clone(),
                                         persona_id: None,
                                         joined_ms: room_joined_ms(),
                                     };
@@ -1230,10 +1240,19 @@ async fn handle_cmd(
                         }
                     }
                     if let Some(sid) = session_id {
-                        let ack = format!("Agent {} lancé en fond.", r.agent_id);
+                        let ack = if has_goal {
+                            format!("Agent {} lancé en fond.", r.agent_id)
+                        } else {
+                            format!("Agent roster {} enregistré.", r.agent_id)
+                        };
+                        let card_title = if has_goal {
+                            task.clone()
+                        } else {
+                            name.clone()
+                        };
                         let att = ChatAttachment::AgentRef {
                             agent_id: r.agent_id.clone(),
-                            title: task.clone(),
+                            title: card_title.clone(),
                             origin: origin.clone(),
                         };
                         let _ = bus
@@ -1253,12 +1272,16 @@ async fn handle_cmd(
                         let _ = evt_tx.send(Evt::AgentSpawned {
                             session_id: sid,
                             agent_id: r.agent_id.clone(),
-                            title: task,
+                            title: card_title,
                             origin,
                             ack,
                         });
                     } else {
-                        let _ = evt_tx.send(Evt::Status(format!("agent créé : {}", r.agent_id)));
+                        let _ = evt_tx.send(Evt::Status(format!(
+                            "agent {} : {}",
+                            r.agent_id,
+                            if has_goal { "créé" } else { "roster enregistré" }
+                        )));
                     }
                 }
                 Err(e) => {
@@ -2467,17 +2490,8 @@ async fn handle_cmd(
                 let _ = evt_tx.send(Evt::Error(format!("persona inconnue: {persona_id}")));
                 return;
             };
-            let mut req = AgentCreateRequest::simple(persona.directive);
-            req.system_prompt = Some(persona.system_prompt.to_string());
+            let mut req = aos_agent::room_personas::persona_create_request(persona, model_id);
             req.session_id = Some(session_id.clone());
-            req.model_id = model_id;
-            req.goal = Some(AgentGoal {
-                statement: persona.directive.to_string(),
-                success_criteria: vec![],
-                max_steps: 1,
-                max_subagents: 0,
-                timeout_secs: 300,
-            });
             match bus
                 .call::<AgentCreateRequest, aos_proto::AgentCreateResponse>(
                     agent_intents::CREATE,

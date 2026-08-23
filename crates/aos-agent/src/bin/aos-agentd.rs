@@ -4,6 +4,7 @@
 //! `--spec-path`. Skills, MCP catalogue, prompt optimize.
 
 use aos_agent::mcp::{list_mcp_servers, load_servers_config, resolve_secret_placeholder};
+use aos_agent::room_personas::{self, persona_agent_id, ROOM_PERSONAS};
 use aos_agent::persist::{self, registry_add};
 use aos_agent::prompt::optimize_prompt_request;
 use aos_agent::room_runtime::{self, RoomRoundState};
@@ -14,7 +15,7 @@ use aos_agent::{intents, ControlCmd, ControlResp, ReportPayload, SubscribeReques
 use aos_caps::{CapStore, HolderId};
 use aos_ipc::{BusClient, BusService};
 use aos_proto::{
-    AgentCreateRequest, AgentCreateResponse, AgentIdRequest, AgentInfo,
+    AgentCreateRequest, AgentCreateResponse, AgentIdRequest, AgentInfo, AgentKind,
     AgentOutputEvent, AgentPromptOptimizeRequest, AgentPromptOptimizeResponse,
     AgentRoomConductRequest, AgentRoomTurnRequest, AgentSpec,
     AgentStartRequest, AgentState, AgentSteerRequest, AgentStepRecord, AgentTrace, ChatAttachment,
@@ -87,7 +88,7 @@ async fn respond_control(ctx: aos_ipc::IntentCtx, r: ControlResp) {
 }
 
 fn build_spec(agent_id: &str, req: &AgentCreateRequest) -> AgentSpec {
-    let goal = req.resolved_goal();
+    let mut spec = room_personas::roster_spec_from_request(agent_id, req);
     let skill_docs = load_skills(&req.skills);
     let tool_ids = merge_skill_tools(&req.tools, &skill_docs);
     let tools = select_tools(&tool_ids, &[]);
@@ -98,23 +99,82 @@ fn build_spec(agent_id: &str, req: &AgentCreateRequest) -> AgentSpec {
         }
     }
     // Default notes cap for simple /agent flows with empty tools
-    if caps.is_empty() {
+    if caps.is_empty() && req.spawns_worker() {
         caps.push("tool.invoke:notes".into());
     }
-    AgentSpec {
-        agent_id: agent_id.to_string(),
-        goal,
-        system_prompt: req.system_prompt.clone(),
-        skills: req.skills.clone(),
-        tools: tool_ids,
-        mcp_servers: req.mcp_servers.clone(),
-        documents: req.documents.clone(),
-        caps,
-        model_id: req.model_id.clone(),
-        parent_id: req.parent_id.clone(),
-        session_id: req.session_id.clone(),
-        budget: req.budget.clone(),
-        optimize_prompt: req.optimize_prompt,
+    spec.tools = tool_ids;
+    spec.caps = caps;
+    if spec.display_name.as_deref().is_none_or(|s| s.trim().is_empty()) {
+        let title = persist::agent_title(&spec.goal.statement);
+        if !title.is_empty() {
+            spec.display_name = Some(title);
+        }
+    }
+    spec
+}
+
+fn roster_info_from_spec(spec: &AgentSpec) -> AgentInfo {
+    let title = spec.roster_display_name().to_string();
+    AgentInfo {
+        agent_id: spec.agent_id.clone(),
+        state: AgentState::Roster,
+        directive: spec.goal.statement.clone(),
+        pid: None,
+        caps: spec.caps.clone(),
+        last_output: String::new(),
+        step: 0,
+        max_steps: 0,
+        current_task: None,
+        parent_id: spec.parent_id.clone(),
+        children: Vec::new(),
+        tokens_used: 0,
+        skills: spec.skills.clone(),
+        tools: spec.tools.clone(),
+        mcp_servers: spec.mcp_servers.clone(),
+        fail_reason: None,
+        session_id: spec.session_id.clone(),
+        title,
+        kind: AgentKind::Roster,
+        display_name: spec.display_name.clone(),
+        persona_id: spec.persona_id.clone(),
+    }
+}
+
+async fn register_roster_agent(
+    shared: &Shared,
+    agent_id: &str,
+    spec: &AgentSpec,
+) -> Result<(), String> {
+    persist::write_spec(spec).map_err(|e| e.to_string())?;
+    persist::registry_add(agent_id);
+    let info = roster_info_from_spec(spec);
+    {
+        let mut rt = shared.lock().await;
+        rt.agents.insert(
+            agent_id.to_string(),
+            AgentEntry {
+                info,
+                subscribers: Vec::new(),
+                trace: Vec::new(),
+            },
+        );
+        persist::update_info_sidecar(&rt.agents[agent_id].info);
+    }
+    Ok(())
+}
+
+async fn ensure_builtin_persona_agents(shared: &Shared) {
+    for persona in ROOM_PERSONAS {
+        let agent_id = persona_agent_id(persona.id);
+        if persist::read_spec(&agent_id).is_some() {
+            continue;
+        }
+        let req = room_personas::persona_create_request(persona, None);
+        let spec = build_spec(&agent_id, &req);
+        match register_roster_agent(shared, &agent_id, &spec).await {
+            Ok(()) => eprintln!("[aos-agentd] persona roster {agent_id} enregistrée"),
+            Err(e) => eprintln!("[aos-agentd] persona {agent_id}: {e}"),
+        }
     }
 }
 
@@ -260,7 +320,15 @@ async fn spawn_worker(
                     title: persist::read_info(agent_id)
                         .map(|i| i.title)
                         .filter(|t| !t.is_empty())
-                        .unwrap_or_else(|| persist::agent_title(&spec.goal.statement)),
+                        .unwrap_or_else(|| {
+                            spec.display_name
+                                .clone()
+                                .filter(|t| !t.trim().is_empty())
+                                .unwrap_or_else(|| persist::agent_title(&spec.goal.statement))
+                        }),
+                    kind: spec.kind,
+                    display_name: spec.display_name.clone(),
+                    persona_id: spec.persona_id.clone(),
                 },
                 subscribers: Vec::new(),
                 trace: restored_trace,
@@ -344,6 +412,7 @@ async fn main() {
         let mut rt = shared.lock().await;
         hydrate_persisted_agents(&mut rt);
     }
+    ensure_builtin_persona_agents(&shared).await;
 
     let mut svc = BusService::new("agentd");
 
@@ -366,8 +435,52 @@ async fn main() {
                         return;
                     }
                 };
-                let agent_id = persist::alloc_agent_id();
+                let agent_id = if let Some(pid) = req.persona_id.as_deref() {
+                    persona_agent_id(pid)
+                } else {
+                    persist::alloc_agent_id()
+                };
                 let spec = build_spec(&agent_id, &req);
+                if !req.spawns_worker() {
+                    if persist::read_spec(&agent_id).is_some() {
+                        let mut rt = shared.lock().await;
+                        if !rt.agents.contains_key(&agent_id) {
+                            let info = roster_info_from_spec(&spec);
+                            rt.agents.insert(
+                                agent_id.clone(),
+                                AgentEntry {
+                                    info,
+                                    subscribers: Vec::new(),
+                                    trace: Vec::new(),
+                                },
+                            );
+                        }
+                        let _ = ctx
+                            .respond(
+                                aos_ipc::msg::Status::Ok,
+                                &AgentCreateResponse { agent_id },
+                            )
+                            .await;
+                        return;
+                    }
+                    match register_roster_agent(&shared, &agent_id, &spec).await {
+                        Ok(()) => {
+                            eprintln!("[aos-agentd] {agent_id} roster enregistré");
+                            let _ = ctx
+                                .respond(
+                                    aos_ipc::msg::Status::Ok,
+                                    &AgentCreateResponse { agent_id },
+                                )
+                                .await;
+                        }
+                        Err(e) => {
+                            let _ = ctx
+                                .respond_error(aos_ipc::msg::Status::InternalError, &e)
+                                .await;
+                        }
+                    }
+                    return;
+                }
                 match spawn_worker(&shared, &bus_addr, &agent_id, &spec, false, Some(&bus)).await {
                     Ok(pid) => {
                         eprintln!("[aos-agentd] {agent_id} créé (pid {pid})");
@@ -863,29 +976,26 @@ async fn main() {
                                         if terminal && was_active {
                                             if let Some(sid) = entry.info.session_id.clone() {
                                                 let summary = match state {
-                                                    AgentState::Done => {
-                                                        agent_done_chat_message(
-                                                            &entry.info.agent_id,
-                                                            &entry.info.directive,
-                                                            &entry.info.last_output,
-                                                        )
-                                                    }
+                                                    AgentState::Done => agent_done_chat_message(
+                                                        &entry.info.agent_id,
+                                                        &entry.info,
+                                                        &entry.info.last_output,
+                                                    ),
                                                     AgentState::Failed => {
                                                         let reason = entry
                                                             .info
                                                             .fail_reason
                                                             .clone()
-                                                            .unwrap_or_else(|| {
-                                                                "échec".into()
-                                                            });
+                                                            .unwrap_or_else(|| "échec".into());
                                                         format!(
-                                                            "Agent {} a échoué : {}",
-                                                            entry.info.agent_id, reason
+                                                            "Agent « {} » a échoué : {}",
+                                                            entry.info.display_title(),
+                                                            reason
                                                         )
                                                     }
                                                     AgentState::Killed => format!(
-                                                        "Agent {} arrêté.",
-                                                        entry.info.agent_id
+                                                        "Agent « {} » arrêté.",
+                                                        entry.info.display_title()
                                                     ),
                                                     _ => String::new(),
                                                 };
@@ -1513,7 +1623,9 @@ fn hydrate_persisted_agents(rt: &mut Runtime) {
                 | AgentState::Paused
                 | AgentState::Blocked
         );
-        if was_live {
+        if info.state == AgentState::Roster || info.kind == AgentKind::Roster {
+            // Roster specs stay idle across restarts.
+        } else if was_live {
             info.state = AgentState::Killed;
             if info.fail_reason.as_ref().map(|s| s.is_empty()).unwrap_or(true) {
                 info.fail_reason = Some("arrêté au redémarrage".into());
@@ -1537,17 +1649,9 @@ fn hydrate_persisted_agents(rt: &mut Runtime) {
     }
 }
 
-fn agent_done_chat_message(agent_id: &str, directive: &str, last_output: &str) -> String {
+fn agent_done_chat_message(_agent_id: &str, info: &AgentInfo, last_output: &str) -> String {
     let out = last_output.trim();
-    let title = {
-        let t = directive.trim();
-        if t.is_empty() {
-            agent_id.to_string()
-        } else {
-            let excerpt: String = t.chars().take(80).collect();
-            excerpt
-        }
-    };
+    let title = info.display_title();
     if out.is_empty() {
         format!("Agent « {title} » terminé.")
     } else {

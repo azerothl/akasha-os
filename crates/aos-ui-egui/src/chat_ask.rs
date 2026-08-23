@@ -55,12 +55,7 @@ pub(crate) fn chat_has_open_ask(chat: &[ChatLine], agent_id: &str) -> bool {
 }
 
 pub(crate) fn agent_display_title(ag: &AgentInfo) -> String {
-    let t = ag.directive.trim();
-    if t.is_empty() {
-        ag.agent_id.clone()
-    } else {
-        t.chars().take(48).collect()
-    }
+    ag.display_title().to_string()
 }
 
 #[cfg(test)]

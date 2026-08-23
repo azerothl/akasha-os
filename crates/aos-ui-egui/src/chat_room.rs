@@ -4,49 +4,7 @@ use crate::i18n::{self, UiStrings};
 use aos_agent::room_conductor::build_initial_queue;
 use aos_proto::{ChatRoomMember, ChatSessionMode, ChatSessionMeta};
 
-/// Built-in salon persona (UI constants — not free-text spoof fields).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RoomPersona {
-    pub id: &'static str,
-    pub display_name: &'static str,
-    pub directive: &'static str,
-    pub system_prompt: &'static str,
-}
-
-pub const ROOM_PERSONAS: &[RoomPersona] = &[
-    RoomPersona {
-        id: "researcher",
-        display_name: "Researcher",
-        directive: "Gather facts and cite sources before recommending action.",
-        system_prompt:
-            "You are a careful researcher. Prefer evidence, nuance, and clear unknowns.",
-    },
-    RoomPersona {
-        id: "critic",
-        display_name: "Critic",
-        directive: "Stress-test ideas: risks, gaps, and failure modes.",
-        system_prompt:
-            "You are a constructive critic. Be direct about weaknesses without being dismissive.",
-    },
-    RoomPersona {
-        id: "coder",
-        display_name: "Coder",
-        directive: "Propose concrete implementation steps and code-shaped answers.",
-        system_prompt:
-            "You are a pragmatic coder. Favor small, testable changes and explicit trade-offs.",
-    },
-    RoomPersona {
-        id: "planner",
-        display_name: "Planner",
-        directive: "Break work into ordered steps with dependencies and checkpoints.",
-        system_prompt:
-            "You are a planner. Organize work into phases, owners, and clear success criteria.",
-    },
-];
-
-pub fn persona_by_id(id: &str) -> Option<&'static RoomPersona> {
-    ROOM_PERSONAS.iter().find(|p| p.id == id)
-}
+pub use aos_agent::room_personas::{persona_agent_id, persona_by_id, RoomPersona, ROOM_PERSONAS};
 
 /// Localized persona chip / roster label (EN + FR via i18n).
 pub fn persona_label(t: &UiStrings, persona_id: &str) -> &'static str {
