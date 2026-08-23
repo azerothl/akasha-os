@@ -1516,6 +1516,103 @@ struct UiApp {
     /// Room: Members pane toggled from clickable session header.
     room_members_pane_open: bool,
     canvas_panel: chat_canvas::CanvasPanelState,
+    roster_edit_drafts: HashMap<String, RosterEditDraft>,
+}
+
+#[derive(Clone, Default)]
+struct RosterEditDraft {
+    display_name: String,
+    role: String,
+    system_prompt: String,
+    skills: Vec<String>,
+    tools: Vec<String>,
+    mcp_servers: Vec<String>,
+    model_id: String,
+}
+
+const ROSTER_TOOL_GROUPS: &[(&str, &[&str])] = &[
+    (
+        "notes",
+        &[
+            "notes.create",
+            "notes.list",
+            "notes.read",
+            "notes.search",
+            "notes.update",
+            "notes.links",
+            "notes.related",
+        ],
+    ),
+    (
+        "tasks",
+        &[
+            "tasks.create",
+            "tasks.list",
+            "tasks.update",
+            "tasks.complete",
+        ],
+    ),
+    (
+        "files",
+        &["fs.read", "fs.write", "fs.list", "files.generate"],
+    ),
+    (
+        "web",
+        &["web.search", "web.browse", "net.fetch"],
+    ),
+    (
+        "canvas",
+        &[
+            "canvas.stroke",
+            "canvas.rect",
+            "canvas.ellipse",
+            "canvas.erase",
+            "canvas.clear",
+            "canvas.undo",
+            "canvas.get",
+            "canvas.export",
+        ],
+    ),
+    (
+        "agents",
+        &["agent.spawn", "agent.await", "plan.update"],
+    ),
+];
+
+fn roster_tool_family_label(t: &i18n::UiStrings, family: &str) -> &'static str {
+    match family {
+        "notes" => t.agents_tool_family_notes,
+        "tasks" => t.agents_tool_family_tasks,
+        "files" => t.agents_tool_family_files,
+        "web" => t.agents_tool_family_web,
+        "canvas" => t.agents_tool_family_canvas,
+        "agents" => t.agents_tool_family_agents,
+        _ => "?",
+    }
+}
+
+fn ui_roster_tool_checkboxes(ui: &mut egui::Ui, t: &i18n::UiStrings, selected: &mut Vec<String>) {
+    for (family, tools) in ROSTER_TOOL_GROUPS {
+        ui.label(roster_tool_family_label(t, family));
+        ui.indent(family, |ui| {
+            for name in *tools {
+                let label = i18n::roster_tool_label(t, name);
+                let mut on = selected.iter().any(|t| t == name);
+                if ui
+                    .checkbox(&mut on, label)
+                    .on_hover_text(*name)
+                    .changed()
+                {
+                    if on {
+                        selected.push((*name).into());
+                    } else {
+                        selected.retain(|t| t != name);
+                    }
+                }
+            }
+        });
+        ui.add_space(4.0);
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1701,6 +1798,7 @@ impl UiApp {
             room_turn_pending_text: None,
             room_members_pane_open: false,
             canvas_panel: chat_canvas::CanvasPanelState::default(),
+            roster_edit_drafts: HashMap::new(),
         }
     }
 
@@ -3236,6 +3334,27 @@ impl eframe::App for UiApp {
                         self.provider_test_msg
                             .push_str(&format!(" ({})", models.join(", ")));
                     }
+                }
+                Evt::AgentSpecLoaded { spec } => {
+                    self.roster_edit_drafts.insert(
+                        spec.agent_id.clone(),
+                        RosterEditDraft {
+                            display_name: spec
+                                .display_name
+                                .clone()
+                                .unwrap_or_else(|| spec.roster_display_name().to_string()),
+                            role: spec.goal.statement.clone(),
+                            system_prompt: spec.system_prompt.clone().unwrap_or_default(),
+                            skills: spec.skills.clone(),
+                            tools: spec.tools.clone(),
+                            mcp_servers: spec.mcp_servers.clone(),
+                            model_id: spec.model_id.clone().unwrap_or_default(),
+                        },
+                    );
+                }
+                Evt::AgentRosterSaved => {
+                    let t = i18n::strings(&self.prefs.language);
+                    self.status = t.agents_edit_saved.into();
                 }
                 Evt::AgentTrace(t) => {
                     self.agent_traces.insert(t.agent_id.clone(), t);
@@ -5283,6 +5402,99 @@ impl UiApp {
         let holder = agent_cap_holder(id);
         self.caps_holder = holder.clone();
         let _ = self.cmd_tx.send(Cmd::CapList { holder });
+        if self
+            .agents
+            .iter()
+            .find(|a| a.agent_id == id)
+            .is_some_and(|a| a.is_roster())
+        {
+            let _ = self.cmd_tx.send(Cmd::AgentSpecGet { id: id.to_string() });
+        }
+    }
+
+    fn ui_roster_detail_edits(&mut self, ui: &mut egui::Ui, agent_id: &str, t: i18n::UiStrings) {
+        let Some(draft) = self.roster_edit_drafts.get_mut(agent_id) else {
+            ui.weak("…");
+            return;
+        };
+        ui.separator();
+        ui.collapsing(t.agents_tools, |ui| {
+            ui_roster_tool_checkboxes(ui, &t, &mut draft.tools);
+        });
+        ui.collapsing(t.agents_skills, |ui| {
+            if self.skill_catalog.is_empty() {
+                ui.weak(t.agents_catalog_empty);
+                for name in ["notes-writer", "research", "file-author", "planner"] {
+                    let mut on = draft.skills.iter().any(|s| s == name);
+                    if ui.checkbox(&mut on, name).changed() {
+                        if on {
+                            draft.skills.push(name.into());
+                        } else {
+                            draft.skills.retain(|s| s != name);
+                        }
+                    }
+                }
+            } else {
+                for s in self.skill_catalog.clone() {
+                    let mut on = draft.skills.contains(&s.name);
+                    if ui
+                        .checkbox(&mut on, format!("{} — {}", s.name, s.description))
+                        .changed()
+                    {
+                        if on {
+                            draft.skills.push(s.name.clone());
+                            for tool in &s.tools {
+                                if !draft.tools.contains(tool) {
+                                    draft.tools.push(tool.clone());
+                                }
+                            }
+                        } else {
+                            draft.skills.retain(|x| x != &s.name);
+                        }
+                    }
+                }
+            }
+        });
+        ui.collapsing(t.agents_mcp, |ui| {
+            if self.mcp_catalog.is_empty() {
+                ui.weak(t.agents_mcp_empty);
+            }
+            for s in self.mcp_catalog.clone() {
+                let mut on = draft.mcp_servers.contains(&s.name);
+                if ui
+                    .checkbox(&mut on, &s.name)
+                    .on_hover_text(&s.command)
+                    .changed()
+                {
+                    if on {
+                        draft.mcp_servers.push(s.name.clone());
+                    } else {
+                        draft.mcp_servers.retain(|x| x != &s.name);
+                    }
+                }
+            }
+        });
+        if ui.button(t.agents_edit_save).clicked() {
+            let draft = draft.clone();
+            let _ = self.cmd_tx.send(Cmd::AgentRosterUpdate {
+                agent_id: agent_id.to_string(),
+                display_name: draft.display_name,
+                role: draft.role,
+                system_prompt: if draft.system_prompt.is_empty() {
+                    None
+                } else {
+                    Some(draft.system_prompt)
+                },
+                skills: draft.skills,
+                tools: draft.tools,
+                mcp_servers: draft.mcp_servers,
+                model_id: if draft.model_id.is_empty() {
+                    None
+                } else {
+                    Some(draft.model_id)
+                },
+            });
+        }
     }
 
     fn close_agent_tab(&mut self, id: &str) {
@@ -5359,6 +5571,16 @@ impl UiApp {
                                         let holder = agent_cap_holder(&id);
                                         self.caps_holder = holder.clone();
                                         let _ = self.cmd_tx.send(Cmd::CapList { holder });
+                                        if self
+                                            .agents
+                                            .iter()
+                                            .find(|a| a.agent_id == id)
+                                            .is_some_and(|a| a.is_roster())
+                                        {
+                                            let _ = self.cmd_tx.send(Cmd::AgentSpecGet {
+                                                id: id.clone(),
+                                            });
+                                        }
                                     }
                                     if ui.small_button("×").clicked() {
                                         self.close_agent_tab(&id);
@@ -5388,6 +5610,9 @@ impl UiApp {
 
                     let info = self.agents.iter().find(|a| a.agent_id == id).cloned();
                     let trace = self.agent_traces.get(&id).cloned();
+                    if info.as_ref().is_some_and(|a| a.is_roster()) {
+                        self.ui_roster_detail_edits(ui, &id, t);
+                    }
                     let actions = agent_panel::draw_agent_detail(
                         ui,
                         info.as_ref(),
