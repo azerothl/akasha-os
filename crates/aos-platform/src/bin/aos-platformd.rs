@@ -1008,15 +1008,167 @@ async fn main() {
             }
         });
     }
-    // Réservé slice futur : conducteur multi-agent (`aos-agentd`). Pas de runtime dans slice 1.
-    svc.on("chat.session.room.turn", move |ctx| async move {
-        let _ = ctx
-            .respond_error(
-                aos_ipc::msg::Status::BadRequest,
-                "chat.session.room.turn réservé — conducteur non implémenté (slice 1)",
-            )
-            .await;
-    });
+    // Tour de salon : validation platform, relay vers conducteur `aos-agentd`.
+    {
+        let s = sub.clone();
+        svc.on("chat.session.room.turn", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<ChatSessionRoomTurnRequest>() {
+                    Ok(req) => {
+                        if req.content.trim().is_empty() {
+                            let _ = ctx
+                                .respond_error(
+                                    aos_ipc::msg::Status::BadRequest,
+                                    "contenu vide",
+                                )
+                                .await;
+                            return;
+                        }
+                        let session = {
+                            let store = s.sessions.lock().unwrap();
+                            store.get(&req.session_id)
+                        };
+                        let Ok((meta, _)) = session else {
+                            let _ = ctx
+                                .respond_error(
+                                    aos_ipc::msg::Status::NotFound,
+                                    "session inconnue",
+                                )
+                                .await;
+                            return;
+                        };
+                        if meta.mode != ChatSessionMode::Room {
+                            let _ = ctx
+                                .respond_error(
+                                    aos_ipc::msg::Status::BadRequest,
+                                    "session n'est pas en mode salon",
+                                )
+                                .await;
+                            return;
+                        }
+                        if meta.members.is_empty() {
+                            let _ = ctx
+                                .respond_error(
+                                    aos_ipc::msg::Status::BadRequest,
+                                    "salon sans membres",
+                                )
+                                .await;
+                            return;
+                        }
+                        let append = s.sessions.lock().unwrap().append(
+                            &req.session_id,
+                            "user",
+                            &req.content,
+                            vec![],
+                            None,
+                            None,
+                        );
+                        if append.is_err() {
+                            let _ = ctx
+                                .respond_error(
+                                    aos_ipc::msg::Status::NotFound,
+                                    "session inconnue",
+                                )
+                                .await;
+                            return;
+                        }
+                        let Some(bus) = s.bus() else {
+                            let _ = ctx
+                                .respond_error(
+                                    aos_ipc::msg::Status::InternalError,
+                                    "bus injoignable — agentd requis",
+                                )
+                                .await;
+                            return;
+                        };
+                        match bus
+                            .call::<AgentRoomConductRequest, AgentRoomConductResponse>(
+                                "agent.room_conduct",
+                                &AgentRoomConductRequest {
+                                    session_id: req.session_id,
+                                    content: req.content,
+                                },
+                                vec![],
+                            )
+                            .await
+                        {
+                            Ok(resp) => {
+                                let _ = ctx
+                                    .respond(
+                                        aos_ipc::msg::Status::Ok,
+                                        &ChatSessionRoomTurnResponse {
+                                            agent_turns: resp.agent_turns,
+                                            cancelled: resp.cancelled,
+                                        },
+                                    )
+                                    .await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::InternalError,
+                                        &e.to_string(),
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("chat.session.room.turn.cancel", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<ChatSessionRoomTurnCancelRequest>() {
+                    Ok(req) => {
+                        let Some(bus) = s.bus() else {
+                            let _ = ctx
+                                .respond_error(
+                                    aos_ipc::msg::Status::InternalError,
+                                    "bus injoignable — agentd requis",
+                                )
+                                .await;
+                            return;
+                        };
+                        match bus
+                            .call::<ChatSessionRoomTurnCancelRequest, bool>(
+                                "agent.room_conduct.cancel",
+                                &req,
+                                vec![],
+                            )
+                            .await
+                        {
+                            Ok(_) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &true).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::InternalError,
+                                        &e.to_string(),
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
     {
         let s = sub.clone();
         svc.on("chat.session.archive", move |ctx| {

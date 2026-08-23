@@ -145,9 +145,10 @@ See [FIRST-RUN.md](FIRST-RUN.md).
 - Streaming replies from the local model (offline by default); **Stop** cancels infer; **Copy** on messages
 - Chat **agent cards** when a background agent is attached (`/agent` or assistant delegation)
 - `mem.context` injection before infer (session hits + user facts)
-- **Room mode** (slice 1, proto + persistence only): `ChatSessionMode::Room` extends the same
+- **Room mode** (slice 1–2): `ChatSessionMode::Room` extends the same
   `ChatSession` with in-app salon members and optional `speaker_id` on session transcript lines.
-  No UI, no Telegram/Discord channel, no conductor runtime yet — distinct from messaging channels
+  Slice 2 adds the backend **RoomConductor** in `aos-agentd` (`chat.session.room.turn` →
+  `agent.room_conduct` / `agent.room_turn`). No UI, no Telegram/Discord channel — distinct from messaging channels
   (see [sibling-bridge.md](sibling-bridge.md)).
 
 Slash commands:
