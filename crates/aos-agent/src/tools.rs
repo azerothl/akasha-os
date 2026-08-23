@@ -588,15 +588,20 @@ pub const CANVAS_TOOL_IDS: &[&str] = &[
     "canvas.export",
 ];
 
-/// Phrases that mean the session vector canvas — must stay aligned with `chat_canvas` routing.
+/// Phrases that beat Create/image routing — must stay aligned with `chat_canvas` routing.
 const EXPLICIT_CANVAS_MARKERS: &[&str] = &[
     "/canvas",
+    "/canevas",
     "sur le canvas",
     "dans le canvas",
     "on the canvas",
     "in the canvas",
-    "on canvas",
-    "in canvas",
+    "to the canvas",
+    "sur le canevas",
+    "dans le canevas",
+    "on the canevas",
+    "in the canevas",
+    "to the canevas",
     "au trait",
 ];
 
@@ -914,8 +919,12 @@ mod tests {
         assert!(explicit_canvas_intent("dessine sur le canvas"));
         assert!(explicit_canvas_intent("dessine dans le canvas"));
         assert!(explicit_canvas_intent("draw in the canvas"));
+        assert!(explicit_canvas_intent("add to the canvas"));
+        assert!(explicit_canvas_intent("dessine sur le canevas"));
         assert!(explicit_canvas_intent("/canvas"));
         assert!(!explicit_canvas_intent("dessine une maison"));
+        assert!(!explicit_canvas_intent("canvas"));
+        assert!(!explicit_canvas_intent("dessine sur canvas"));
     }
 
     #[test]

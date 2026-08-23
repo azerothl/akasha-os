@@ -580,10 +580,31 @@ mod routing_tests {
         assert!(chat_user_wants_explicit_canvas("dessine dans le canvas"));
         assert!(chat_user_wants_explicit_canvas("draw on the canvas"));
         assert!(chat_user_wants_explicit_canvas("draw in the canvas"));
+        assert!(chat_user_wants_explicit_canvas("add to the canvas a door"));
+        assert!(chat_user_wants_explicit_canvas("dessine sur le canevas"));
         assert!(chat_user_wants_explicit_canvas("ajoute au trait une porte"));
         assert!(chat_user_wants_explicit_canvas("/canvas"));
         assert!(!chat_user_wants_pixel_draw("dessine sur le canvas"));
         assert!(!chat_user_wants_pixel_draw("dessine dans le canvas"));
+    }
+
+    #[test]
+    fn lone_canvas_word_is_not_explicit() {
+        for msg in [
+            "canvas",
+            "le canvas",
+            "dessine sur canvas",
+            "draw on canvas",
+            "parle du canvas",
+            "ouvre le canvas",
+        ] {
+            assert!(
+                !chat_user_wants_explicit_canvas(msg),
+                "lone or bare canvas must not route: {msg}"
+            );
+        }
+        assert!(chat_user_wants_pixel_draw("dessine sur canvas"));
+        assert!(chat_user_wants_pixel_draw("draw on canvas"));
     }
 
     #[test]
@@ -663,15 +684,20 @@ fn fit_board_rect_letterboxes_wide_in_tall_pane() {
     }
 }
 
-/// Phrases that mean the session vector canvas — checked before bare « dessine » / image routing.
+/// Phrases that beat Create/image routing — lone « canvas » is not enough.
 const EXPLICIT_CANVAS_MARKERS: &[&str] = &[
     "/canvas",
+    "/canevas",
     "sur le canvas",
     "dans le canvas",
     "on the canvas",
     "in the canvas",
-    "on canvas",
-    "in canvas",
+    "to the canvas",
+    "sur le canevas",
+    "dans le canevas",
+    "on the canevas",
+    "in the canevas",
+    "to the canevas",
     // « au trait » = vector strokes on the session canvas (not pixel diffusion).
     "au trait",
 ];
