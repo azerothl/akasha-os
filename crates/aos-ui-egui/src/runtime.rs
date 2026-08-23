@@ -1154,26 +1154,42 @@ async fn handle_cmd(
             session_id,
             origin,
             join_active_room,
+            library,
         } => {
             let name = display_name.trim().to_string();
             if name.is_empty() {
                 let _ = evt_tx.send(Evt::Error("display_name requis".into()));
                 return;
             }
-            let has_goal = !task.trim().is_empty();
-            let mut req = AgentCreateRequest::simple(task.clone());
-            req.kind = if has_goal {
-                AgentKind::Task
+            let has_goal = !library && !task.trim().is_empty();
+            let mut req = AgentCreateRequest::simple(if library {
+                String::new()
             } else {
+                task.clone()
+            });
+            req.kind = if library || !has_goal {
                 AgentKind::Roster
+            } else {
+                AgentKind::Task
             };
             req.display_name = Some(name.clone());
-            req.system_prompt = system_prompt;
+            if library {
+                let role = task.trim();
+                req.system_prompt = if system_prompt.is_some() {
+                    system_prompt
+                } else if role.is_empty() {
+                    None
+                } else {
+                    Some(role.to_string())
+                };
+            } else {
+                req.system_prompt = system_prompt;
+            }
             req.skills = skills;
             req.tools = tools;
             req.mcp_servers = mcp_servers;
             req.documents = documents;
-            req.optimize_prompt = optimize_prompt;
+            req.optimize_prompt = if library { false } else { optimize_prompt };
             req.session_id = session_id.clone();
             if has_goal {
                 req.goal = Some(AgentGoal {
@@ -1239,7 +1255,12 @@ async fn handle_cmd(
                             }
                         }
                     }
-                    if let Some(sid) = session_id {
+                    if library {
+                        let _ = evt_tx.send(Evt::Status(format!(
+                            "« {name} » ajouté à la bibliothèque ({})",
+                            r.agent_id
+                        )));
+                    } else if let Some(sid) = session_id {
                         let ack = if has_goal {
                             format!("Agent {} lancé en fond.", r.agent_id)
                         } else {
@@ -2484,6 +2505,7 @@ async fn handle_cmd(
         Cmd::RoomAddPersona {
             session_id,
             persona_id,
+            display_name,
             model_id,
         } => {
             let Some(persona) = chat_room::persona_by_id(&persona_id) else {
@@ -2492,6 +2514,7 @@ async fn handle_cmd(
             };
             let mut req = aos_agent::room_personas::persona_create_request(persona, model_id);
             req.session_id = Some(session_id.clone());
+            req.display_name = Some(display_name.clone());
             match bus
                 .call::<AgentCreateRequest, aos_proto::AgentCreateResponse>(
                     agent_intents::CREATE,
@@ -2501,9 +2524,10 @@ async fn handle_cmd(
                 .await
             {
                 Ok(r) => {
+                    let label = display_name.clone();
                     let member = ChatRoomMember {
                         agent_id: r.agent_id,
-                        display_name: persona.display_name.to_string(),
+                        display_name,
                         persona_id: Some(persona.id.to_string()),
                         joined_ms: room_joined_ms(),
                     };
@@ -2522,8 +2546,7 @@ async fn handle_cmd(
                             refresh_sessions(&bus, &evt_tx).await;
                             load_session(&bus, &evt_tx, &session_id).await;
                             let _ = evt_tx.send(Evt::Status(format!(
-                                "persona {} ajoutée au salon",
-                                persona.display_name
+                                "« {label} » ajouté au salon"
                             )));
                         }
                         Err(e) => {

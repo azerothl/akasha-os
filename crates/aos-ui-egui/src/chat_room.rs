@@ -2,7 +2,7 @@
 
 use crate::i18n::{self, UiStrings};
 use aos_agent::room_conductor::build_initial_queue;
-use aos_proto::{ChatRoomMember, ChatSessionMode, ChatSessionMeta};
+use aos_proto::{AgentInfo, AgentKind, AgentState, ChatRoomMember, ChatSessionMode, ChatSessionMeta};
 
 pub use aos_agent::room_personas::{persona_agent_id, persona_by_id, RoomPersona, ROOM_PERSONAS};
 
@@ -58,6 +58,42 @@ pub fn active_session_meta<'a>(
 
 pub fn session_is_room(meta: Option<&ChatSessionMeta>) -> bool {
     meta.is_some_and(|m| m.mode == ChatSessionMode::Room)
+}
+
+/// Merge built-in persona placeholders so the Agents library always lists all four.
+pub fn agents_with_library_placeholders(agents: &[AgentInfo], t: &UiStrings) -> Vec<AgentInfo> {
+    let mut out = agents.to_vec();
+    for persona in ROOM_PERSONAS {
+        let id = persona_agent_id(persona.id);
+        if out.iter().any(|a| a.agent_id == id) {
+            continue;
+        }
+        let label = persona_label(t, persona.id);
+        out.push(AgentInfo {
+            agent_id: id,
+            state: AgentState::Roster,
+            directive: String::new(),
+            pid: None,
+            caps: vec![],
+            last_output: String::new(),
+            step: 0,
+            max_steps: 0,
+            current_task: None,
+            parent_id: None,
+            children: vec![],
+            tokens_used: 0,
+            skills: vec![],
+            tools: vec![],
+            mcp_servers: vec![],
+            fail_reason: None,
+            session_id: None,
+            title: label.to_string(),
+            kind: AgentKind::Roster,
+            display_name: Some(label.to_string()),
+            persona_id: Some(persona.id.to_string()),
+        });
+    }
+    out
 }
 
 /// Display name from roster (`speaker_id`); never trust a free-text spoof field on the message.
@@ -197,6 +233,20 @@ mod tests {
             conductor_policy: Default::default(),
         };
         assert!(session_is_room(Some(&meta)));
+    }
+
+    #[test]
+    fn library_placeholders_include_four_personas() {
+        let t = i18n::strings("fr");
+        let list = agents_with_library_placeholders(&[], &t);
+        assert_eq!(list.len(), 4);
+        assert!(list.iter().any(|a| a.persona_id.as_deref() == Some("coder")));
+        assert_eq!(
+            list.iter()
+                .find(|a| a.persona_id.as_deref() == Some("coder"))
+                .and_then(|a| a.display_name.as_deref()),
+            Some("Codeur")
+        );
     }
 
     #[test]

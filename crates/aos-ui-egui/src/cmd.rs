@@ -84,10 +84,12 @@ pub(crate) enum Cmd {
         timeout_secs: u64,
         model_id: Option<String>,
         session_id: Option<String>,
-        /// `slash` | `assistant` | `form`
+        /// `slash` | `assistant` | `form` | `library`
         origin: String,
         /// When true and `session_id` is a Room session, add agent to salon roster after create.
         join_active_room: bool,
+        /// Agents-tab library entry: persist roster spec only, never spawn a worker.
+        library: bool,
     },
     AgentKill { id: String },
     AgentPause { id: String },
@@ -188,6 +190,8 @@ pub(crate) enum Cmd {
     RoomAddPersona {
         session_id: String,
         persona_id: String,
+        /// Localized roster label (Coder / Chercheur).
+        display_name: String,
         model_id: Option<String>,
     },
     RoomTurn {

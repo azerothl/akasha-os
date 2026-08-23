@@ -1648,6 +1648,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             session_id: self.active_session.clone(),
             origin: "form".into(),
             join_active_room: false,
+            library: false,
         });
         self.tab = Tab::Agents;
         self.status = t.scen_module_agent_launched.into();
@@ -1965,6 +1966,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                     session_id: Some(session_id),
                     origin: "slash".into(),
                     join_active_room: false,
+                    library: false,
                 });
                 // Rester dans le chat — carte via Evt::AgentSpawned
             }
@@ -3458,6 +3460,7 @@ impl UiApp {
                     let _ = self.cmd_tx.send(Cmd::RoomAddPersona {
                         session_id: sid.clone(),
                         persona_id: persona.id.to_string(),
+                        display_name: label.to_string(),
                         model_id,
                     });
                 }
@@ -4363,59 +4366,40 @@ impl UiApp {
         if ui.button(t.agents_refresh_catalogs).clicked() {
             let _ = self.cmd_tx.send(Cmd::AgentCatalogRefresh);
         }
-        ui.label(t.agents_model);
-        egui::ComboBox::from_id_salt("agent_model")
-            .selected_text(if self.agent_model_id.is_empty() {
-                "default".to_string()
-            } else {
-                self.agent_model_id.clone()
-            })
-            .show_ui(ui, |ui| {
-                ui.selectable_value(&mut self.agent_model_id, String::new(), "default");
-                for m in &self.model_infos {
-                    ui.selectable_value(
-                        &mut self.agent_model_id,
-                        m.id.clone(),
-                        format!("{} [{:?}]", m.id, m.state),
-                    );
-                }
-            });
         ui.label(t.agents_display_name);
         ui.text_edit_singleline(&mut self.agent_display_name);
-        ui.label(t.agents_goal);
-        ui.weak(t.agents_goal_optional);
+        ui.label(t.agents_role);
+        ui.weak(t.agents_role_optional);
         ui.add(
             egui::TextEdit::multiline(&mut self.agent_task)
                 .desired_rows(3)
                 .desired_width(f32::INFINITY),
         );
-        ui.label(t.agents_system_prompt);
-        ui.add(
-            egui::TextEdit::multiline(&mut self.agent_system_prompt)
-                .desired_rows(2)
-                .desired_width(f32::INFINITY),
-        );
-        ui.horizontal(|ui| {
-            ui.checkbox(&mut self.agent_optimize, t.agents_optimize);
-            if ui.button(t.agents_optimize_now).clicked() && !self.agent_task.is_empty() {
-                let _ = self.cmd_tx.send(Cmd::AgentPromptOptimize {
-                    goal: self.agent_task.clone(),
-                    skills: self.skill_selected.clone(),
-                    tools: self.tool_selected.clone(),
-                    current: if self.agent_system_prompt.is_empty() {
-                        None
-                    } else {
-                        Some(self.agent_system_prompt.clone())
-                    },
+        ui.collapsing(t.agents_advanced, |ui| {
+            ui.label(t.agents_model);
+            egui::ComboBox::from_id_salt("agent_model")
+                .selected_text(if self.agent_model_id.is_empty() {
+                    "default".to_string()
+                } else {
+                    self.agent_model_id.clone()
+                })
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut self.agent_model_id, String::new(), "default");
+                    for m in &self.model_infos {
+                        ui.selectable_value(
+                            &mut self.agent_model_id,
+                            m.id.clone(),
+                            format!("{} [{:?}]", m.id, m.state),
+                        );
+                    }
                 });
-            }
-            ui.label("max_steps");
-            ui.add(egui::DragValue::new(&mut self.agent_max_steps).range(1..=128));
-            ui.label("timeout_s");
-            ui.add(egui::DragValue::new(&mut self.agent_timeout_secs).range(60..=86_400));
-        });
-
-        ui.collapsing("Skills", |ui| {
+            ui.label(t.agents_system_prompt);
+            ui.add(
+                egui::TextEdit::multiline(&mut self.agent_system_prompt)
+                    .desired_rows(2)
+                    .desired_width(f32::INFINITY),
+            );
+            ui.collapsing("Skills", |ui| {
             if self.skill_catalog.is_empty() {
                 ui.weak(t.agents_catalog_empty);
                 for name in ["notes-writer", "research", "file-author", "planner"] {
@@ -4448,7 +4432,7 @@ impl UiApp {
                     }
                 }
             }
-        });
+            });
 
         ui.collapsing(t.agents_tools, |ui| {
             for name in [
@@ -4506,6 +4490,7 @@ impl UiApp {
 
         ui.label(t.agents_docs);
         ui.text_edit_singleline(&mut self.agent_docs);
+        });
 
         let room_active = chat_room::session_is_room(chat_room::active_session_meta(
             &self.sessions,
@@ -4519,9 +4504,6 @@ impl UiApp {
         }
 
         if ui.button(t.agents_create).clicked() && !self.agent_display_name.trim().is_empty() {
-            self.pending_note_agent = self.agent_task.to_lowercase().contains("note");
-            let task = self.agent_task.clone();
-            self.arm_pending_module_agent(&task);
             let documents: Vec<DocumentRef> = self
                 .agent_docs
                 .split(',')
@@ -4544,7 +4526,7 @@ impl UiApp {
                 tools: self.tool_selected.clone(),
                 mcp_servers: self.mcp_selected.clone(),
                 documents,
-                optimize_prompt: self.agent_optimize,
+                optimize_prompt: false,
                 max_steps: self.agent_max_steps,
                 timeout_secs: self.agent_timeout_secs,
                 model_id: if self.agent_model_id.is_empty() {
@@ -4553,8 +4535,9 @@ impl UiApp {
                     Some(self.agent_model_id.clone())
                 },
                 session_id: self.active_session.clone(),
-                origin: "form".into(),
+                origin: "library".into(),
                 join_active_room: room_active && self.agent_join_room_on_create,
+                library: true,
             });
         }
 
@@ -4564,8 +4547,8 @@ impl UiApp {
             ui.selectable_value(&mut self.agent_show_history, true, t.agents_tab_history);
         });
         let history = self.agent_show_history;
-        let visible: Vec<AgentInfo> = self
-            .agents
+        let library_agents = chat_room::agents_with_library_placeholders(&self.agents, &t);
+        let visible: Vec<AgentInfo> = library_agents
             .iter()
             .filter(|a| agent_shown_in_tab(a, history))
             .cloned()
@@ -4641,7 +4624,11 @@ impl UiApp {
                 ui.small("↳");
             }
             let selected = self.agent_active_tab.as_deref() == Some(a.agent_id.as_str());
-            let label = agent_panel::truncate(a.display_title(), 48);
+            let label = if let Some(pid) = a.persona_id.as_deref() {
+                chat_room::persona_label(&t, pid).to_string()
+            } else {
+                agent_panel::truncate(a.display_title(), 48)
+            };
             if ui.selectable_label(selected, &label).on_hover_text(&a.agent_id).clicked()
             {
                 self.open_agent_tab(&a.agent_id);
