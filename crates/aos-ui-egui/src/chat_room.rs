@@ -96,6 +96,32 @@ pub fn agents_with_library_placeholders(agents: &[AgentInfo], t: &UiStrings) -> 
     out
 }
 
+/// Label for a library roster agent (localized persona or display name).
+pub fn roster_agent_label(t: &UiStrings, agent: &AgentInfo) -> String {
+    if let Some(pid) = agent.persona_id.as_deref() {
+        persona_label(t, pid).to_string()
+    } else {
+        agent.display_title().to_string()
+    }
+}
+
+/// Roster library entries not yet in this session.
+pub fn library_add_candidates(
+    agents: &[AgentInfo],
+    members: &[ChatRoomMember],
+    t: &UiStrings,
+) -> Vec<AgentInfo> {
+    agents_with_library_placeholders(agents, t)
+        .into_iter()
+        .filter(|a| a.is_roster())
+        .filter(|a| !members.iter().any(|m| m.agent_id == a.agent_id))
+        .collect()
+}
+
+pub fn member_ids(members: &[ChatRoomMember]) -> std::collections::HashSet<&str> {
+    members.iter().map(|m| m.agent_id.as_str()).collect()
+}
+
 /// Display name from roster (`speaker_id`); never trust a free-text spoof field on the message.
 pub fn roster_display_name(members: &[ChatRoomMember], speaker_id: &str) -> String {
     members
@@ -186,6 +212,17 @@ mod tests {
             persona_id: None,
             joined_ms: 0,
         }
+    }
+
+    #[test]
+    fn library_add_candidates_skips_current_members() {
+        let t = i18n::strings("en");
+        let mut m1 = member("persona-coder", "Coder");
+        m1.persona_id = Some("coder".into());
+        let members = vec![m1];
+        let candidates = library_add_candidates(&[], &members, &t);
+        assert!(!candidates.iter().any(|a| a.persona_id.as_deref() == Some("coder")));
+        assert!(candidates.iter().any(|a| a.persona_id.as_deref() == Some("researcher")));
     }
 
     #[test]
