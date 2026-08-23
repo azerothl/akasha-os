@@ -1379,6 +1379,8 @@ struct UiApp {
     agent_join_room_on_create: bool,
     /// Last user message for an in-flight room turn (speaker queue in thinking UI).
     room_turn_pending_text: Option<String>,
+    /// Room: Members pane toggled from clickable session header.
+    room_members_pane_open: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -1562,6 +1564,7 @@ impl UiApp {
             show_go_to_palette: false,
             agent_join_room_on_create: false,
             room_turn_pending_text: None,
+            room_members_pane_open: false,
         }
     }
 
@@ -2765,6 +2768,7 @@ impl eframe::App for UiApp {
                         *s = meta.clone();
                     }
                     if session_changed {
+                        self.room_members_pane_open = false;
                         let mut chat = vec![ChatLine::plain(
                             "système",
                             format!("Session {id} — historique rechargé."),
@@ -3424,6 +3428,100 @@ impl UiApp {
         }
     }
 
+    fn ui_room_member_chip(
+        &mut self,
+        ui: &mut egui::Ui,
+        t: &i18n::UiStrings,
+        session_id: &str,
+        mem: &ChatRoomMember,
+    ) {
+        let name = chat_room::member_display_label(t, mem);
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 2.0;
+            ui.strong(&name);
+            if ui
+                .add(
+                    egui::Label::new(egui::RichText::new("×").weak())
+                        .sense(egui::Sense::click()),
+                )
+                .on_hover_text(t.room_member_remove)
+                .clicked()
+            {
+                let _ = self.cmd_tx.send(Cmd::SessionMembersRemove {
+                    session_id: session_id.to_string(),
+                    agent_id: mem.agent_id.clone(),
+                });
+            }
+        });
+    }
+
+    fn ui_room_add_library_chips(
+        &mut self,
+        ui: &mut egui::Ui,
+        t: &i18n::UiStrings,
+        session_id: &str,
+        members: &[ChatRoomMember],
+        model_id: Option<String>,
+        candidates: &[AgentInfo],
+    ) {
+        if candidates.is_empty() {
+            return;
+        }
+        ui.weak(t.room_add_from_library);
+        ui.horizontal_wrapped(|ui| {
+            for agent in candidates {
+                let label = chat_room::roster_agent_label(t, agent);
+                if ui.small_button(&label).clicked() {
+                    if let Some(persona_id) = agent.persona_id.clone() {
+                        let _ = self.cmd_tx.send(Cmd::RoomAddPersona {
+                            session_id: session_id.to_string(),
+                            persona_id,
+                            display_name: label.clone(),
+                            model_id: model_id.clone(),
+                        });
+                    } else {
+                        let _ = self.cmd_tx.send(Cmd::SessionMembersAdd {
+                            session_id: session_id.to_string(),
+                            member: ChatRoomMember {
+                                agent_id: agent.agent_id.clone(),
+                                display_name: label,
+                                persona_id: None,
+                                joined_ms: chat_room::joined_ms_now(),
+                            },
+                        });
+                    }
+                }
+            }
+        });
+    }
+
+    fn ui_room_persona_shortcuts(
+        &mut self,
+        ui: &mut egui::Ui,
+        t: &i18n::UiStrings,
+        session_id: &str,
+        members: &[ChatRoomMember],
+        model_id: Option<String>,
+    ) {
+        ui.horizontal_wrapped(|ui| {
+            for persona in chat_room::ROOM_PERSONAS {
+                let agent_id = chat_room::persona_agent_id(persona.id);
+                if members.iter().any(|m| m.agent_id == agent_id) {
+                    continue;
+                }
+                let label = chat_room::persona_label(t, persona.id);
+                if ui.small_button(label).clicked() {
+                    let _ = self.cmd_tx.send(Cmd::RoomAddPersona {
+                        session_id: session_id.to_string(),
+                        persona_id: persona.id.to_string(),
+                        display_name: label.to_string(),
+                        model_id: model_id.clone(),
+                    });
+                }
+            }
+        });
+    }
+
     fn ui_room_session_header(&mut self, ui: &mut egui::Ui, t: &i18n::UiStrings) {
         let Some(sid) = self.active_session.clone() else {
             return;
@@ -3440,69 +3538,73 @@ impl UiApp {
             ui.add_space(4.0);
             return;
         }
-        let members = meta.map(|m| m.members.as_slice()).unwrap_or(&[]);
+
+        let members_vec = meta.map(|m| m.members.clone()).unwrap_or_default();
+        let members = members_vec.as_slice();
         let model_id = meta.and_then(|m| m.model_id.clone());
+        let session_title = self
+            .sessions
+            .iter()
+            .find(|s| s.id == sid)
+            .map(|s| s.title.as_str())
+            .unwrap_or("Session");
+        let count_line = t
+            .room_header_member_count
+            .replace("{n}", &members.len().to_string());
 
         ui.horizontal(|ui| {
-            ui.strong(t.room_members_heading);
+            let header = egui::RichText::new(session_title).strong();
+            let title_resp = ui.add(
+                egui::Label::new(header).sense(egui::Sense::click()),
+            );
+            if title_resp.clicked() {
+                self.room_members_pane_open = !self.room_members_pane_open;
+            }
+            title_resp.on_hover_text(t.room_header_open_members);
+            if !members.is_empty() {
+                ui.weak(format!("· {count_line}"));
+            }
+            if self.room_members_pane_open {
+                ui.weak("▾");
+            } else {
+                ui.weak("▸");
+            }
         });
-        if members.is_empty() {
-            ui.weak(t.room_members_empty);
-        } else {
+
+        if self.room_members_pane_open {
+            egui::Frame::group(ui.style())
+                .inner_margin(egui::Margin::symmetric(8, 6))
+                .show(ui, |ui| {
+                    ui.strong(t.room_members_heading);
+                    if members.is_empty() {
+                        ui.weak(t.room_members_empty);
+                    } else {
+                        for mem in members {
+                            self.ui_room_member_chip(ui, t, &sid, mem);
+                        }
+                    }
+                    let candidates =
+                        chat_room::library_add_candidates(&self.agents, members, t);
+                    self.ui_room_add_library_chips(
+                        ui,
+                        t,
+                        &sid,
+                        members,
+                        model_id.clone(),
+                        &candidates,
+                    );
+                });
+        }
+
+        if !members.is_empty() {
             ui.horizontal_wrapped(|ui| {
                 for mem in members {
-                    let name = chat_room::member_display_label(t, mem);
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing.x = 2.0;
-                        ui.strong(&name);
-                        if ui
-                            .add(
-                                egui::Label::new(egui::RichText::new("×").weak())
-                                    .sense(egui::Sense::click()),
-                            )
-                            .on_hover_text(t.room_member_remove)
-                            .clicked()
-                        {
-                            let _ = self.cmd_tx.send(Cmd::SessionMembersRemove {
-                                session_id: sid.clone(),
-                                agent_id: mem.agent_id.clone(),
-                            });
-                        }
-                    });
+                    self.ui_room_member_chip(ui, t, &sid, mem);
                 }
             });
         }
 
-        let candidates =
-            chat_room::library_add_candidates(&self.agents, members, t);
-        if !candidates.is_empty() {
-            ui.weak(t.room_add_from_library);
-            ui.horizontal_wrapped(|ui| {
-                for agent in &candidates {
-                    let label = chat_room::roster_agent_label(t, agent);
-                    if ui.small_button(&label).clicked() {
-                        if let Some(persona_id) = agent.persona_id.clone() {
-                            let _ = self.cmd_tx.send(Cmd::RoomAddPersona {
-                                session_id: sid.clone(),
-                                persona_id,
-                                display_name: label.clone(),
-                                model_id: model_id.clone(),
-                            });
-                        } else {
-                            let _ = self.cmd_tx.send(Cmd::SessionMembersAdd {
-                                session_id: sid.clone(),
-                                member: ChatRoomMember {
-                                    agent_id: agent.agent_id.clone(),
-                                    display_name: label,
-                                    persona_id: None,
-                                    joined_ms: chat_room::joined_ms_now(),
-                                },
-                            });
-                        }
-                    }
-                }
-            });
-        }
+        self.ui_room_persona_shortcuts(ui, t, &sid, members, model_id);
 
         ui.add_space(4.0);
     }
@@ -3761,16 +3863,18 @@ impl UiApp {
                 |ui| {
                     ui.set_min_width(chat_w);
                     ui.set_min_height(full.y);
-                    ui.heading("Conversation");
-                    if let Some(id) = &self.active_session {
-                        ui.weak(format!("session {id}"));
-                    }
-                    self.ui_room_session_header(ui, &t);
-
                     let room_mode = chat_room::session_is_room(chat_room::active_session_meta(
                         &self.sessions,
                         self.active_session.as_deref(),
                     ));
+                    if !room_mode {
+                        ui.heading("Conversation");
+                        if let Some(id) = &self.active_session {
+                            ui.weak(format!("session {id}"));
+                        }
+                    }
+                    self.ui_room_session_header(ui, &t);
+
                     let room_members: Vec<ChatRoomMember> = chat_room::active_session_meta(
                         &self.sessions,
                         self.active_session.as_deref(),
