@@ -5,6 +5,15 @@ permissions:
   required_caps:
     - fs.write:/downloads/**
 tools:
+  - name: canvas.set_style
+    description: Set session pen color (#RRGGBB) and optional width; subsequent ops inherit when color/width omitted
+    input_schema:
+      type: object
+      properties:
+        session_id: { type: string }
+        color: { type: string }
+        width: { type: number }
+      required: [session_id]
   - name: canvas.stroke
     description: Draw a polyline stroke (normalized 0..1 points) on the chat session canvas
     input_schema:

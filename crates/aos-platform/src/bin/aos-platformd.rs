@@ -1288,6 +1288,7 @@ async fn main() {
                                             canvas_aspect: meta.canvas_aspect,
                                             next_seq: doc.next_seq,
                                             ops,
+                                            pen: doc.pen.clone(),
                                         },
                                     )
                                     .await;
@@ -1336,6 +1337,54 @@ async fn main() {
                                             doc,
                                             canvas_open: meta.canvas_open,
                                             applied,
+                                        },
+                                    )
+                                    .await;
+                            }
+                            Err(e) => {
+                                let status = if e.to_string().contains("inconnue") {
+                                    aos_ipc::msg::Status::NotFound
+                                } else {
+                                    aos_ipc::msg::Status::BadRequest
+                                };
+                                let _ = ctx.respond_error(status, &e.to_string()).await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("canvas.set_style", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<CanvasSetStyleRequest>() {
+                    Ok(req) => {
+                        let apply_lock = s.canvas_apply_lock(&req.session_id);
+                        let result = {
+                            let _guard = apply_lock.lock().unwrap();
+                            s.sessions.lock().unwrap().canvas_set_style(
+                                &req.session_id,
+                                req.color.as_deref(),
+                                req.width,
+                            )
+                        };
+                        match result {
+                            Ok((meta, doc)) => {
+                                let _ = ctx
+                                    .respond(
+                                        aos_ipc::msg::Status::Ok,
+                                        &CanvasSetStyleResponse {
+                                            doc: doc.clone(),
+                                            canvas_open: meta.canvas_open,
+                                            pen: doc.pen,
                                         },
                                     )
                                     .await;

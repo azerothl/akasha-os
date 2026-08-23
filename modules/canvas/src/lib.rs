@@ -8,6 +8,7 @@ use serde_json::{json, Value};
 
 fn handle(tool: &str, args: &Value) -> Result<Value, String> {
     match tool {
+        "canvas.set_style" => set_style(args),
         "canvas.stroke" => stroke(args),
         "canvas.line" => line(args),
         "canvas.spline" => spline(args),
@@ -53,15 +54,36 @@ fn apply(session_id: &str, author_id: &str, op: Value) -> Result<Value, String> 
 }
 
 #[derive(Deserialize)]
+struct StyleArgs {
+    session_id: String,
+    #[serde(default)]
+    color: Option<String>,
+    #[serde(default)]
+    width: Option<f32>,
+}
+
+fn set_style(args: &Value) -> Result<Value, String> {
+    let a: StyleArgs = aos_module_sdk::parse_args(args)?;
+    let mut payload = json!({ "session_id": a.session_id });
+    if let Some(c) = a.color {
+        payload["color"] = json!(c);
+    }
+    if let Some(w) = a.width {
+        payload["width"] = json!(w);
+    }
+    aos_module_sdk::call("canvas.set_style", &payload)
+}
+
+#[derive(Deserialize)]
 struct StrokeArgs {
     session_id: String,
     #[serde(default)]
     author_id: Option<String>,
     points: Vec<Point>,
-    #[serde(default = "default_color")]
-    color: String,
-    #[serde(default = "default_width")]
-    width: f32,
+    #[serde(default)]
+    color: Option<String>,
+    #[serde(default)]
+    width: Option<f32>,
 }
 
 #[derive(Deserialize)]
@@ -70,12 +92,15 @@ struct Point {
     y: f32,
 }
 
-fn default_color() -> String {
-    "#3ee0c4".into()
-}
-
-fn default_width() -> f32 {
-    0.015
+fn stroke_op(points: Vec<Value>, color: Option<String>, width: Option<f32>) -> Value {
+    let mut op = json!({ "kind": "stroke", "points": points });
+    if let Some(c) = color {
+        op["color"] = json!(c);
+    }
+    if let Some(w) = width {
+        op["width"] = json!(w);
+    }
+    op
 }
 
 fn stroke(args: &Value) -> Result<Value, String> {
@@ -91,12 +116,7 @@ fn stroke(args: &Value) -> Result<Value, String> {
     apply(
         &a.session_id,
         a.author_id.as_deref().unwrap_or("agent"),
-        json!({
-            "kind": "stroke",
-            "points": points,
-            "color": a.color,
-            "width": a.width,
-        }),
+        stroke_op(points, a.color, a.width),
     )
 }
 
@@ -107,24 +127,29 @@ struct LineArgs {
     author_id: Option<String>,
     p0: Point,
     p1: Point,
-    #[serde(default = "default_color")]
-    color: String,
-    #[serde(default = "default_width")]
-    width: f32,
+    #[serde(default)]
+    color: Option<String>,
+    #[serde(default)]
+    width: Option<f32>,
 }
 
 fn line(args: &Value) -> Result<Value, String> {
     let a: LineArgs = aos_module_sdk::parse_args(args)?;
+    let mut op = json!({
+        "kind": "line",
+        "p0": {"x": a.p0.x, "y": a.p0.y},
+        "p1": {"x": a.p1.x, "y": a.p1.y},
+    });
+    if let Some(c) = a.color {
+        op["color"] = json!(c);
+    }
+    if let Some(w) = a.width {
+        op["width"] = json!(w);
+    }
     apply(
         &a.session_id,
         a.author_id.as_deref().unwrap_or("agent"),
-        json!({
-            "kind": "line",
-            "p0": {"x": a.p0.x, "y": a.p0.y},
-            "p1": {"x": a.p1.x, "y": a.p1.y},
-            "color": a.color,
-            "width": a.width,
-        }),
+        op,
     )
 }
 
@@ -138,15 +163,17 @@ fn spline(args: &Value) -> Result<Value, String> {
         .iter()
         .map(|p| json!({"x": p.x, "y": p.y}))
         .collect();
+    let mut op = json!({ "kind": "spline", "points": points });
+    if let Some(c) = a.color {
+        op["color"] = json!(c);
+    }
+    if let Some(w) = a.width {
+        op["width"] = json!(w);
+    }
     apply(
         &a.session_id,
         a.author_id.as_deref().unwrap_or("agent"),
-        json!({
-            "kind": "spline",
-            "points": points,
-            "color": a.color,
-            "width": a.width,
-        }),
+        op,
     )
 }
 
@@ -157,21 +184,24 @@ struct FillArgs {
     author_id: Option<String>,
     x: f32,
     y: f32,
-    #[serde(default = "default_color")]
-    color: String,
+    #[serde(default)]
+    color: Option<String>,
 }
 
 fn fill(args: &Value) -> Result<Value, String> {
     let a: FillArgs = aos_module_sdk::parse_args(args)?;
+    let mut op = json!({
+        "kind": "fill",
+        "x": a.x,
+        "y": a.y,
+    });
+    if let Some(c) = a.color {
+        op["color"] = json!(c);
+    }
     apply(
         &a.session_id,
         a.author_id.as_deref().unwrap_or("agent"),
-        json!({
-            "kind": "fill",
-            "x": a.x,
-            "y": a.y,
-            "color": a.color,
-        }),
+        op,
     )
 }
 
@@ -184,12 +214,27 @@ struct ShapeArgs {
     y: f32,
     w: f32,
     h: f32,
-    #[serde(default = "default_color")]
-    color: String,
+    #[serde(default)]
+    color: Option<String>,
     #[serde(default)]
     fill: bool,
-    #[serde(default = "default_width")]
-    width: f32,
+    #[serde(default)]
+    width: Option<f32>,
+}
+
+fn shape_op(kind: &str, a: &ShapeArgs) -> Value {
+    let mut op = json!({
+        "kind": kind,
+        "x": a.x, "y": a.y, "w": a.w, "h": a.h,
+        "fill": a.fill,
+    });
+    if let Some(c) = &a.color {
+        op["color"] = json!(c);
+    }
+    if let Some(w) = a.width {
+        op["width"] = json!(w);
+    }
+    op
 }
 
 fn rect(args: &Value) -> Result<Value, String> {
@@ -197,13 +242,7 @@ fn rect(args: &Value) -> Result<Value, String> {
     apply(
         &a.session_id,
         a.author_id.as_deref().unwrap_or("agent"),
-        json!({
-            "kind": "rect",
-            "x": a.x, "y": a.y, "w": a.w, "h": a.h,
-            "color": a.color,
-            "fill": a.fill,
-            "width": a.width,
-        }),
+        shape_op("rect", &a),
     )
 }
 
@@ -212,13 +251,7 @@ fn ellipse(args: &Value) -> Result<Value, String> {
     apply(
         &a.session_id,
         a.author_id.as_deref().unwrap_or("agent"),
-        json!({
-            "kind": "ellipse",
-            "x": a.x, "y": a.y, "w": a.w, "h": a.h,
-            "color": a.color,
-            "fill": a.fill,
-            "width": a.width,
-        }),
+        shape_op("ellipse", &a),
     )
 }
 
@@ -228,12 +261,8 @@ struct EraseArgs {
     #[serde(default)]
     author_id: Option<String>,
     points: Vec<Point>,
-    #[serde(default = "default_erase_width")]
-    width: f32,
-}
-
-fn default_erase_width() -> f32 {
-    0.04
+    #[serde(default)]
+    width: Option<f32>,
 }
 
 fn erase(args: &Value) -> Result<Value, String> {
@@ -246,14 +275,14 @@ fn erase(args: &Value) -> Result<Value, String> {
         .iter()
         .map(|p| json!({"x": p.x, "y": p.y}))
         .collect();
+    let mut op = json!({ "kind": "erase", "points": points });
+    if let Some(w) = a.width {
+        op["width"] = json!(w);
+    }
     apply(
         &a.session_id,
         a.author_id.as_deref().unwrap_or("agent"),
-        json!({
-            "kind": "erase",
-            "points": points,
-            "width": a.width,
-        }),
+        op,
     )
 }
 

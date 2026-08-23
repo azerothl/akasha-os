@@ -2287,9 +2287,11 @@ pub struct CanvasPoint {
 pub enum CanvasOpBody {
     Stroke {
         points: Vec<CanvasPoint>,
-        /// `#RRGGBB` ou `#RRGGBBAA`.
+        /// `#RRGGBB` ou `#RRGGBBAA` — vide = crayon de session.
+        #[serde(default)]
         color: String,
-        /// Épaisseur relative au petit côté du canvas (0..1).
+        /// Épaisseur relative au petit côté du canvas (0..1) — ≤0 = crayon de session.
+        #[serde(default)]
         width: f32,
     },
     Rect {
@@ -2297,10 +2299,11 @@ pub enum CanvasOpBody {
         y: f32,
         w: f32,
         h: f32,
+        #[serde(default)]
         color: String,
         #[serde(default)]
         fill: bool,
-        #[serde(default = "default_canvas_stroke_width")]
+        #[serde(default)]
         width: f32,
     },
     Ellipse {
@@ -2308,10 +2311,11 @@ pub enum CanvasOpBody {
         y: f32,
         w: f32,
         h: f32,
+        #[serde(default)]
         color: String,
         #[serde(default)]
         fill: bool,
-        #[serde(default = "default_canvas_stroke_width")]
+        #[serde(default)]
         width: f32,
     },
     Erase {
@@ -2322,19 +2326,24 @@ pub enum CanvasOpBody {
     Line {
         p0: CanvasPoint,
         p1: CanvasPoint,
+        #[serde(default)]
         color: String,
+        #[serde(default)]
         width: f32,
     },
     /// Courbe lisse passant par les points de contrôle.
     Spline {
         points: Vec<CanvasPoint>,
+        #[serde(default)]
         color: String,
+        #[serde(default)]
         width: f32,
     },
     /// Remplissage par inondation à partir d'un point (coords 0..1).
     Fill {
         x: f32,
         y: f32,
+        #[serde(default)]
         color: String,
     },
     Clear,
@@ -2343,6 +2352,77 @@ pub enum CanvasOpBody {
 
 fn default_canvas_stroke_width() -> f32 {
     0.01
+}
+
+fn default_canvas_color() -> String {
+    "#3ee0c4".into()
+}
+
+/// Style de crayon courant pour la session (persisté dans `canvas.json`).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CanvasPenStyle {
+    #[serde(default = "default_canvas_color")]
+    pub color: String,
+    #[serde(default = "default_canvas_pen_width")]
+    pub width: f32,
+}
+
+fn default_canvas_pen_width() -> f32 {
+    0.015
+}
+
+impl Default for CanvasPenStyle {
+    fn default() -> Self {
+        Self {
+            color: default_canvas_color(),
+            width: default_canvas_pen_width(),
+        }
+    }
+}
+
+/// Normalise `#RRGGBB` (6 hex digits).
+pub fn normalize_canvas_color(s: &str) -> Option<String> {
+    let t = s.trim().trim_start_matches('#');
+    if t.len() >= 6 && t.chars().take(6).all(|c| c.is_ascii_hexdigit()) {
+        Some(format!("#{}", &t[..6].to_lowercase()))
+    } else {
+        None
+    }
+}
+
+/// Remplit couleur / épaisseur manquantes depuis le crayon de session.
+pub fn resolve_canvas_op_style(body: &mut CanvasOpBody, pen: &CanvasPenStyle) {
+    match body {
+        CanvasOpBody::Stroke { color, width, .. }
+        | CanvasOpBody::Line { color, width, .. }
+        | CanvasOpBody::Spline { color, width, .. } => {
+            if color.is_empty() {
+                *color = pen.color.clone();
+            }
+            if *width <= 0.0 {
+                *width = pen.width;
+            }
+        }
+        CanvasOpBody::Rect { color, width, .. } | CanvasOpBody::Ellipse { color, width, .. } => {
+            if color.is_empty() {
+                *color = pen.color.clone();
+            }
+            if *width <= 0.0 {
+                *width = pen.width;
+            }
+        }
+        CanvasOpBody::Fill { color, .. } => {
+            if color.is_empty() {
+                *color = pen.color.clone();
+            }
+        }
+        CanvasOpBody::Erase { width, .. } => {
+            if *width <= 0.0 {
+                *width = pen.width.max(0.03);
+            }
+        }
+        CanvasOpBody::Clear | CanvasOpBody::Undo => {}
+    }
 }
 
 /// Boîte englobante normalisée 0..1 pour une opération canvas.
@@ -2468,10 +2548,12 @@ pub fn canvas_scene_digest(doc: &CanvasDoc, aspect: CanvasAspect) -> String {
     }
 
     let mut lines = vec![format!(
-        "next_seq={} aspect={} ops={}",
+        "next_seq={} aspect={} ops={} pen={} width={:.3}",
         doc.next_seq,
         aspect.agent_label_en(),
-        doc.ops.len()
+        doc.ops.len(),
+        doc.pen.color,
+        doc.pen.width
     )];
 
     if !kind_counts.is_empty() {
@@ -2542,6 +2624,9 @@ pub struct CanvasDoc {
     pub next_seq: u64,
     #[serde(default)]
     pub ops: Vec<CanvasOp>,
+    /// Crayon courant (couleur / épaisseur) pour humain et agents.
+    #[serde(default)]
+    pub pen: CanvasPenStyle,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2560,6 +2645,24 @@ pub struct CanvasGetResponse {
     pub canvas_aspect: CanvasAspect,
     pub next_seq: u64,
     pub ops: Vec<CanvasOp>,
+    #[serde(default)]
+    pub pen: CanvasPenStyle,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CanvasSetStyleRequest {
+    pub session_id: String,
+    #[serde(default)]
+    pub color: Option<String>,
+    #[serde(default)]
+    pub width: Option<f32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CanvasSetStyleResponse {
+    pub doc: CanvasDoc,
+    pub canvas_open: bool,
+    pub pen: CanvasPenStyle,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -3422,13 +3525,37 @@ mod chat_session_room_tests {
     }
 
     #[test]
+    fn resolve_canvas_op_style_inherits_pen() {
+        use super::{resolve_canvas_op_style, CanvasOpBody, CanvasPenStyle, CanvasPoint};
+        let pen = CanvasPenStyle {
+            color: "#aabbcc".into(),
+            width: 0.022,
+        };
+        let mut stroke = CanvasOpBody::Stroke {
+            points: vec![CanvasPoint { x: 0.0, y: 0.0 }, CanvasPoint { x: 1.0, y: 1.0 }],
+            color: String::new(),
+            width: 0.0,
+        };
+        resolve_canvas_op_style(&mut stroke, &pen);
+        match stroke {
+            CanvasOpBody::Stroke { color, width, .. } => {
+                assert_eq!(color, "#aabbcc");
+                assert!((width - 0.022).abs() < 0.0001);
+            }
+            _ => panic!("expected stroke"),
+        }
+    }
+
+    #[test]
     fn canvas_scene_digest_contains_seq() {
         use super::{
-            canvas_scene_digest, CanvasAspect, CanvasDoc, CanvasOp, CanvasOpBody, CanvasPoint,
+            canvas_scene_digest, CanvasAspect, CanvasDoc, CanvasOp, CanvasOpBody, CanvasPenStyle,
+            CanvasPoint,
         };
         let doc = CanvasDoc {
             session_id: "sess-1".into(),
             next_seq: 3,
+            pen: CanvasPenStyle::default(),
             ops: vec![
                 CanvasOp {
                     seq: 1,
@@ -3461,7 +3588,7 @@ mod chat_session_room_tests {
         assert!(digest.contains("line=1"));
         assert!(digest.contains("fill=1"));
         assert!(digest.contains("scene_bbox="));
-        assert!(!digest.contains("author=human"));
+        assert!(digest.contains("pen=#"));
     }
 
     #[test]

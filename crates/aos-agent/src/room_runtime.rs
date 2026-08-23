@@ -38,6 +38,7 @@ Quand tu dois utiliser un outil, réponds par un objet JSON unique :
 
 - `action` = nom exact du catalogue (`canvas.stroke`, `canvas.get`, …).
 - Pour le canvas : coords 0..1, commence par `canvas.get`, omets `session_id` (le runtime le force).
+- Couleur : `canvas.set_style` avec `color` #RRGGBB ou `color` sur chaque op — le teal par défaut n'est pas la seule teinte.
 - Quand tu as fini (y compris après des outils), réponds en texte libre SANS JSON — c'est ta réplique visible dans le salon.
 - Pas de `agent.spawn`, `user.ask`, ni collègues inventés."#;
 

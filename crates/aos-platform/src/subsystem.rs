@@ -824,6 +824,31 @@ impl HostServices for PlatformSubsystem {
                     "canvas_aspect": meta.canvas_aspect,
                     "next_seq": doc.next_seq,
                     "ops": ops,
+                    "pen": doc.pen,
+                }))
+            }
+            "canvas.set_style" => {
+                if ctx.module != "canvas" {
+                    return Err("canvas.set_style réservé au module canvas".into());
+                }
+                let session_id = args["session_id"].as_str().unwrap_or("").to_string();
+                if session_id.is_empty() {
+                    return Err("session_id requis".into());
+                }
+                let color = args.get("color").and_then(|v| v.as_str());
+                let width = args.get("width").and_then(|v| v.as_f64()).map(|w| w as f32);
+                let apply_lock = self.canvas_apply_lock(&session_id);
+                let _guard = apply_lock.lock().unwrap();
+                let (meta, doc) = self
+                    .sessions
+                    .lock()
+                    .unwrap()
+                    .canvas_set_style(&session_id, color, width)
+                    .map_err(|e| e.to_string())?;
+                Ok(serde_json::json!({
+                    "canvas_open": meta.canvas_open,
+                    "pen": doc.pen,
+                    "next_seq": doc.next_seq,
                 }))
             }
             "canvas.apply" => {

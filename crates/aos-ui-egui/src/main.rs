@@ -825,6 +825,7 @@ fn chat_agent_kit_ex(task: &str, canvas_open: bool) -> (Vec<String>, Vec<String>
     }
     if canvas_open || chat_canvas::chat_user_wants_explicit_canvas(task) {
         for t in [
+            "canvas.set_style",
             "canvas.stroke",
             "canvas.line",
             "canvas.spline",
@@ -3041,6 +3042,7 @@ impl eframe::App for UiApp {
                     canvas_open,
                     next_seq,
                     ops,
+                    pen,
                     delta,
                 } => {
                     if self.active_session.as_deref() != Some(session_id.as_str()) {
@@ -3056,6 +3058,7 @@ impl eframe::App for UiApp {
                         } else {
                             self.canvas_panel.apply_snapshot(ops, next_seq, now);
                         }
+                        self.canvas_panel.sync_pen(&pen);
                     }
                 }
                 Evt::CanvasExported { path, session_id } => {
@@ -3824,6 +3827,13 @@ impl UiApp {
                     session_id: session_id.to_string(),
                     author_id: "human".into(),
                     op,
+                });
+            }
+            Some(chat_canvas::CanvasUiAction::SetStyle { color, width }) => {
+                let _ = self.cmd_tx.send(Cmd::CanvasSetStyle {
+                    session_id: session_id.to_string(),
+                    color,
+                    width,
                 });
             }
             Some(chat_canvas::CanvasUiAction::Export) => {

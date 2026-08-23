@@ -21,6 +21,7 @@ pub async fn fetch_canvas_scene_digest(bus: &BusClient, session_id: &str) -> Opt
             session_id: resp.session_id,
             next_seq: resp.next_seq,
             ops: resp.ops,
+            pen: resp.pen,
         },
         resp.canvas_aspect,
     ))
@@ -48,7 +49,8 @@ pub fn canvas_tool_outcome_with_digest(base: &str, digest: Option<&str>) -> Stri
 pub fn canvas_tool_mutates_scene(tool: &str) -> bool {
     matches!(
         tool,
-        "canvas.stroke"
+        "canvas.set_style"
+            | "canvas.stroke"
             | "canvas.line"
             | "canvas.spline"
             | "canvas.rect"

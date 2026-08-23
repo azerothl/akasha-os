@@ -2688,6 +2688,7 @@ async fn handle_cmd(
                                 canvas_open: resp.canvas_open,
                                 next_seq: resp.next_seq,
                                 ops: resp.ops,
+                                pen: resp.pen,
                                 delta: false,
                             });
                         }
@@ -2722,11 +2723,44 @@ async fn handle_cmd(
                         canvas_open: resp.canvas_open,
                         next_seq: resp.doc.next_seq,
                         ops: resp.doc.ops,
+                        pen: resp.doc.pen,
                         delta: false,
                     });
                     if resp.canvas_open {
                         refresh_sessions(&bus, &evt_tx).await;
                     }
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::CanvasSetStyle {
+            session_id,
+            color,
+            width,
+        } => {
+            match bus
+                .call::<aos_proto::CanvasSetStyleRequest, aos_proto::CanvasSetStyleResponse>(
+                    "canvas.set_style",
+                    &aos_proto::CanvasSetStyleRequest {
+                        session_id: session_id.clone(),
+                        color,
+                        width,
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(resp) => {
+                    let _ = evt_tx.send(Evt::CanvasSnapshot {
+                        session_id: session_id.clone(),
+                        canvas_open: resp.canvas_open,
+                        next_seq: resp.doc.next_seq,
+                        ops: resp.doc.ops,
+                        pen: resp.pen,
+                        delta: false,
+                    });
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));
@@ -2755,6 +2789,7 @@ async fn handle_cmd(
                         canvas_open: resp.canvas_open,
                         next_seq: resp.next_seq,
                         ops: resp.ops,
+                        pen: resp.pen,
                         delta,
                     });
                 }

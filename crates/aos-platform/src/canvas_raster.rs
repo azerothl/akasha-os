@@ -1,6 +1,6 @@
 //! Rasterize a session canvas document to PNG (export snapshot, not diffusion).
 
-use aos_proto::{CanvasDoc, CanvasOpBody, CanvasPoint};
+use aos_proto::{CanvasDoc, CanvasOpBody, CanvasPenStyle, CanvasPoint};
 use image::{ImageBuffer, Rgb, RgbImage};
 
 const BG: Rgb<u8> = Rgb([7, 11, 20]); // void
@@ -286,6 +286,7 @@ mod tests {
         let doc = CanvasDoc {
             session_id: "s".into(),
             next_seq: 2,
+            pen: CanvasPenStyle::default(),
             ops: vec![CanvasOp {
                 seq: 1,
                 author_id: "human".into(),

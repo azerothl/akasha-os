@@ -1,6 +1,6 @@
 //! Chat session canvas — shared vector drawing (human + agents).
 
-use aos_proto::{CanvasAspect, CanvasOp, CanvasOpBody, CanvasPoint};
+use aos_proto::{CanvasAspect, CanvasOp, CanvasOpBody, CanvasPenStyle, CanvasPoint};
 use eframe::egui::epaint::{CircleShape, PathShape, PathStroke, RectShape, Shape, StrokeKind};
 use eframe::egui::{Color32, Pos2, Sense, Stroke, Ui, Vec2};
 
@@ -22,6 +22,10 @@ pub enum CanvasTool {
 #[derive(Debug, Clone)]
 pub enum CanvasUiAction {
     Apply(CanvasOpBody),
+    SetStyle {
+        color: Option<String>,
+        width: Option<f32>,
+    },
     Export,
     SetAspect(CanvasAspect),
 }
@@ -117,6 +121,11 @@ impl CanvasPanelState {
         self.next_seq = next_seq.max(self.next_seq);
         self.animating
             .retain(|(seq, start)| self.ops.iter().any(|o| o.seq == *seq) && now - start < 0.45);
+    }
+
+    pub fn sync_pen(&mut self, pen: &CanvasPenStyle) {
+        self.color = parse_hex_color(&pen.color);
+        self.width = pen.width;
     }
 }
 
@@ -409,10 +418,20 @@ pub fn ui_canvas_toolbar(
             (rgba[1] * 255.0) as u8,
             (rgba[2] * 255.0) as u8,
         );
+        action = Some(CanvasUiAction::SetStyle {
+            color: Some(color_to_hex(state.color)),
+            width: None,
+        });
     }
-    ui.add(
+    let width_resp = ui.add(
         eframe::egui::Slider::new(&mut state.width, 0.005..=0.06).text(t.canvas_width),
     );
+    if width_resp.changed() {
+        action = Some(CanvasUiAction::SetStyle {
+            color: None,
+            width: Some(state.width),
+        });
+    }
 
     if ui
         .button(eframe::egui::RichText::new(t.canvas_undo).weak())
@@ -990,9 +1009,11 @@ pub const CANVAS_AGENT_DESIGNER_GUIDE: &str = "\
 Cible visuelle : lisible à 200px — pas un rectangle+triangle.\n\
 Règles : margin 0.08–0.12 ; sujet centré ; couches sol → volumes → détails → 2–3 ombres. \
 Nombreux canvas.stroke courts, 2–3 teintes, épaisseurs variées. Commence par canvas.get. \
+Couleur : canvas.set_style {color:\"#RRGGBB\"} ou color= sur chaque op — le teal signal n'est pas la seule teinte ; \
+après critique, change de teinte pour ombres/détails.\n\
 Après critique : ajoute, jamais canvas.clear sauf si l'humain dit effacer.\n\
 Une maison = toit + murs + porte + fenêtre + sol + un élément d'environnement.\n\
-Outils : canvas.stroke, canvas.line, canvas.spline, canvas.rect, canvas.ellipse, \
+Outils : canvas.set_style, canvas.stroke, canvas.line, canvas.spline, canvas.rect, canvas.ellipse, \
 canvas.fill (fill:true sur rect/ellipse), canvas.erase, canvas.clear, \
 canvas.undo, canvas.get, canvas.export (coords 0..1). Pas media.image.generate.";
 
