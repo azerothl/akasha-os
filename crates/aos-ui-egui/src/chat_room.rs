@@ -237,6 +237,7 @@ mod tests {
             mode: ChatSessionMode::Room,
             members: vec![],
             conductor_policy: Default::default(),
+            canvas_open: false,
         };
         assert!(session_is_room(Some(&meta)));
     }

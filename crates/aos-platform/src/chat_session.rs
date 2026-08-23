@@ -1,8 +1,8 @@
 //! Sessions de conversation persistées (Preview PC.6).
 
 use aos_proto::{
-    ChatAttachment, ChatRoomConductorPolicy, ChatRoomMember, ChatSessionMessage,
-    ChatSessionMeta, ChatSessionMode,
+    CanvasDoc, CanvasOp, CanvasOpBody, ChatAttachment, ChatRoomConductorPolicy, ChatRoomMember,
+    ChatSessionMessage, ChatSessionMeta, ChatSessionMode,
 };
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -40,6 +40,8 @@ struct MetaFile {
     members: Vec<ChatRoomMember>,
     #[serde(default)]
     conductor_policy: ChatRoomConductorPolicy,
+    #[serde(default)]
+    canvas_open: bool,
 }
 
 /// Magasin de sessions chat sous `var/sessions/<id>/`.
@@ -98,7 +100,116 @@ impl ChatSessionStore {
             mode: m.mode,
             members: m.members,
             conductor_policy: m.conductor_policy,
+            canvas_open: m.canvas_open,
         }
+    }
+
+    fn canvas_path(&self, id: &str) -> PathBuf {
+        self.dir(id).join("canvas.json")
+    }
+
+    fn load_canvas(&self, id: &str) -> Result<CanvasDoc, SessionError> {
+        let p = self.canvas_path(id);
+        if !p.exists() {
+            return Ok(CanvasDoc {
+                session_id: id.into(),
+                next_seq: 1,
+                ops: Vec::new(),
+            });
+        }
+        let raw = fs::read_to_string(&p).map_err(|e| SessionError::Io(e.to_string()))?;
+        let mut doc: CanvasDoc =
+            serde_json::from_str(&raw).map_err(|e| SessionError::Io(e.to_string()))?;
+        if doc.session_id.is_empty() {
+            doc.session_id = id.into();
+        }
+        if doc.next_seq == 0 {
+            doc.next_seq = doc.ops.iter().map(|o| o.seq).max().unwrap_or(0) + 1;
+        }
+        Ok(doc)
+    }
+
+    fn save_canvas(&self, doc: &CanvasDoc) -> Result<(), SessionError> {
+        let dir = self.dir(&doc.session_id);
+        fs::create_dir_all(&dir).map_err(|e| SessionError::Io(e.to_string()))?;
+        let raw = serde_json::to_string_pretty(doc).map_err(|e| SessionError::Io(e.to_string()))?;
+        fs::write(self.canvas_path(&doc.session_id), raw).map_err(|e| SessionError::Io(e.to_string()))
+    }
+
+    /// Lecture du document canvas (+ filtre optionnel `after_seq`).
+    pub fn canvas_get(
+        &self,
+        id: &str,
+        after_seq: Option<u64>,
+    ) -> Result<(ChatSessionMeta, CanvasDoc, Vec<CanvasOp>), SessionError> {
+        let meta = self.to_public(self.load_meta(id)?);
+        let doc = self.load_canvas(id)?;
+        let ops = match after_seq {
+            Some(after) => doc.ops.iter().filter(|o| o.seq > after).cloned().collect(),
+            None => doc.ops.clone(),
+        };
+        Ok((meta, doc, ops))
+    }
+
+    /// Applique une op ; ouvre automatiquement le canvas si besoin.
+    pub fn canvas_apply(
+        &self,
+        id: &str,
+        author_id: &str,
+        body: CanvasOpBody,
+    ) -> Result<(ChatSessionMeta, CanvasDoc, Option<CanvasOp>), SessionError> {
+        if author_id.trim().is_empty() {
+            return Err(SessionError::BadRequest("author_id requis".into()));
+        }
+        let _ = self.load_meta(id)?;
+        let mut doc = self.load_canvas(id)?;
+        doc.session_id = id.into();
+        let applied = match body {
+            CanvasOpBody::Undo => {
+                let _ = doc.ops.pop();
+                None
+            }
+            CanvasOpBody::Clear => {
+                doc.ops.clear();
+                None
+            }
+            other => {
+                let op = CanvasOp {
+                    seq: doc.next_seq,
+                    author_id: author_id.into(),
+                    ts_ms: Self::now_ms(),
+                    body: other,
+                };
+                doc.next_seq = doc.next_seq.saturating_add(1);
+                doc.ops.push(op.clone());
+                Some(op)
+            }
+        };
+        self.save_canvas(&doc)?;
+        let mut meta = self.load_meta(id)?;
+        if !meta.canvas_open {
+            meta.canvas_open = true;
+        }
+        meta.updated_ms = Self::now_ms();
+        self.save_meta(&meta)?;
+        Ok((self.to_public(meta), doc, applied))
+    }
+
+    pub fn canvas_set_open(
+        &self,
+        id: &str,
+        open: bool,
+    ) -> Result<ChatSessionMeta, SessionError> {
+        let mut meta = self.load_meta(id)?;
+        meta.canvas_open = open;
+        meta.updated_ms = Self::now_ms();
+        self.save_meta(&meta)?;
+        if open {
+            // Ensure canvas.json exists so UI poll has a stable document.
+            let doc = self.load_canvas(id)?;
+            self.save_canvas(&doc)?;
+        }
+        Ok(self.to_public(meta))
     }
 
     pub fn create(
@@ -121,6 +232,7 @@ impl ChatSessionStore {
             mode: ChatSessionMode::Direct,
             members: vec![],
             conductor_policy: ChatRoomConductorPolicy::default(),
+            canvas_open: false,
         };
         self.save_meta(&meta)?;
         let _ = fs::write(self.dir(&id).join("messages.jsonl"), "");
@@ -468,6 +580,41 @@ archived: false
         assert_eq!(msgs.len(), 1);
         assert_eq!(msgs[0].speaker_id.as_deref(), Some("agent-a"));
         assert_eq!(msgs[0].speaker_name.as_deref(), Some("Alpha"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn canvas_apply_undo_persist_and_open() {
+        let dir = std::env::temp_dir().join(format!("aos-sess-canvas-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let s = ChatSessionStore::open(&dir).unwrap();
+        let m = s.create(Some("Canvas".into()), None).unwrap();
+        assert!(!m.canvas_open);
+        let (meta, doc, applied) = s
+            .canvas_apply(
+                &m.id,
+                "human",
+                CanvasOpBody::Stroke {
+                    points: vec![
+                        aos_proto::CanvasPoint { x: 0.1, y: 0.1 },
+                        aos_proto::CanvasPoint { x: 0.5, y: 0.5 },
+                    ],
+                    color: "#3ee0c4".into(),
+                    width: 0.02,
+                },
+            )
+            .unwrap();
+        assert!(meta.canvas_open);
+        assert!(applied.is_some());
+        assert_eq!(doc.ops.len(), 1);
+        let (_, _, delta) = s.canvas_get(&m.id, Some(0)).unwrap();
+        assert_eq!(delta.len(), 1);
+        let (_, doc2, _) = s
+            .canvas_apply(&m.id, "agent-a", CanvasOpBody::Undo)
+            .unwrap();
+        assert!(doc2.ops.is_empty());
+        let meta = s.canvas_set_open(&m.id, false).unwrap();
+        assert!(!meta.canvas_open);
         let _ = fs::remove_dir_all(&dir);
     }
 }

@@ -356,6 +356,7 @@ mod tests {
                     joined_ms: 1,
                 }],
                 conductor_policy: ChatRoomConductorPolicy::default(),
+                canvas_open: false,
             },
             messages: vec![ChatSessionMessage {
                 role: "user".into(),
