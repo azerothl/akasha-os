@@ -1,5 +1,7 @@
 //! In-app chat room helpers (slice 3): personas, roster labels, speaker colors, @ mentions.
 
+use crate::i18n::{self, UiStrings};
+use aos_agent::room_conductor::build_initial_queue;
 use aos_proto::{ChatRoomMember, ChatSessionMode, ChatSessionMeta};
 
 /// Built-in salon persona (UI constants — not free-text spoof fields).
@@ -44,6 +46,48 @@ pub const ROOM_PERSONAS: &[RoomPersona] = &[
 
 pub fn persona_by_id(id: &str) -> Option<&'static RoomPersona> {
     ROOM_PERSONAS.iter().find(|p| p.id == id)
+}
+
+/// Localized persona chip / roster label (EN + FR via i18n).
+pub fn persona_label(t: &UiStrings, persona_id: &str) -> &'static str {
+    i18n::persona_label(t, persona_id)
+}
+
+/// Roster name for UI: localized persona label when `persona_id` is set.
+pub fn member_display_label(t: &UiStrings, member: &ChatRoomMember) -> String {
+    if let Some(pid) = member.persona_id.as_deref() {
+        persona_label(t, pid).to_string()
+    } else {
+        member.display_name.clone()
+    }
+}
+
+/// Speaker queue for an in-flight room turn (`Researcher puis Critic` / `Researcher then Critic`).
+pub fn format_turn_speaker_queue(
+    t: &UiStrings,
+    user_message: &str,
+    members: &[ChatRoomMember],
+) -> Option<String> {
+    if user_message.trim().is_empty() || members.is_empty() {
+        return None;
+    }
+    let queue = build_initial_queue(user_message, members);
+    if queue.is_empty() {
+        return None;
+    }
+    let names: Vec<String> = queue
+        .iter()
+        .map(|id| roster_member_label(t, members, id))
+        .collect();
+    Some(names.join(t.room_queue_joiner))
+}
+
+fn roster_member_label(t: &UiStrings, members: &[ChatRoomMember], agent_id: &str) -> String {
+    members
+        .iter()
+        .find(|m| m.agent_id == agent_id)
+        .map(|m| member_display_label(t, m))
+        .unwrap_or_else(|| agent_id.to_string())
 }
 
 pub fn active_session_meta<'a>(
@@ -101,7 +145,11 @@ pub fn joined_ms_now() -> u64 {
 }
 
 /// `@` mention completions against the salon roster (display name or agent id prefix).
-pub fn mention_completions(input: &str, members: &[ChatRoomMember]) -> Vec<(String, String)> {
+pub fn mention_completions(
+    input: &str,
+    members: &[ChatRoomMember],
+    t: &UiStrings,
+) -> Vec<(String, String)> {
     let Some(at) = input.rfind('@') else {
         return Vec::new();
     };
@@ -116,10 +164,8 @@ pub fn mention_completions(input: &str, members: &[ChatRoomMember]) -> Vec<(Stri
             && m.display_name.to_ascii_lowercase().starts_with(&needle);
         let id_match = !needle.is_empty() && m.agent_id.to_ascii_lowercase().starts_with(&needle);
         if needle.is_empty() || name_match || id_match {
-            out.push((
-                insert_mention(input, at, &m.display_name),
-                m.display_name.clone(),
-            ));
+            let label = member_display_label(t, m);
+            out.push((insert_mention(input, at, &label), label));
         }
     }
     out
@@ -173,7 +219,7 @@ mod tests {
             member("a1", "Researcher"),
             member("a2", "Coder"),
         ];
-        let hits = mention_completions("hello @Res", &members);
+        let hits = mention_completions("hello @Res", &members, &i18n::strings("en"));
         assert_eq!(hits.len(), 1);
         assert!(hits[0].0.contains("@Researcher"));
     }
@@ -200,5 +246,19 @@ mod tests {
         for id in ["researcher", "critic", "coder", "planner"] {
             assert!(persona_by_id(id).is_some());
         }
+    }
+
+    #[test]
+    fn turn_queue_joins_speakers() {
+        let t = i18n::strings("fr");
+        let mut m1 = member("a1", "Researcher");
+        m1.persona_id = Some("researcher".into());
+        let mut m2 = member("a2", "Coder");
+        m2.persona_id = Some("coder".into());
+        let members = vec![m1, m2];
+        let q = format_turn_speaker_queue(&t, "@Researcher @Coder", &members).expect("queue");
+        assert!(q.contains(t.room_queue_joiner));
+        assert!(q.contains(t.persona_researcher));
+        assert!(q.contains(t.persona_coder));
     }
 }

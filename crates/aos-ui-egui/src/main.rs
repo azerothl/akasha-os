@@ -1375,7 +1375,8 @@ struct UiApp {
     hf_download_status: String,
     show_go_to_palette: bool,
     agent_join_room_on_create: bool,
-    room_persona_pick: String,
+    /// Last user message for an in-flight room turn (speaker queue in thinking UI).
+    room_turn_pending_text: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -1557,7 +1558,7 @@ impl UiApp {
             hf_download_status: String::new(),
             show_go_to_palette: false,
             agent_join_room_on_create: false,
-            room_persona_pick: chat_room::ROOM_PERSONAS[0].id.to_string(),
+            room_turn_pending_text: None,
         }
     }
 
@@ -1743,8 +1744,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             self.streaming.clear();
             self.chat_pending = true;
             self.chat_inference_id = None;
-            let t = i18n::strings(&self.prefs.language);
-            self.status = t.room_thinking.into();
+            self.room_turn_pending_text = Some(text.clone());
             let _ = self.cmd_tx.send(Cmd::RoomTurn {
                 session_id,
                 content: text,
@@ -2359,6 +2359,7 @@ impl eframe::App for UiApp {
                     self.streaming.clear();
                     self.chat_pending = false;
                     self.chat_inference_id = None;
+                    self.room_turn_pending_text = None;
                 }
                 Evt::Status(m) => {
                     if let Some(id) = m.strip_prefix("model removed:") {
@@ -2769,6 +2770,7 @@ impl eframe::App for UiApp {
                     self.streaming.clear();
                     self.chat_pending = false;
                     self.chat_inference_id = None;
+                    self.room_turn_pending_text = None;
                 }
                 Evt::RoomTurnDone {
                     session_id,
@@ -2778,6 +2780,7 @@ impl eframe::App for UiApp {
                     if self.active_session.as_deref() == Some(session_id.as_str()) {
                         self.chat_pending = false;
                         self.chat_inference_id = None;
+                        self.room_turn_pending_text = None;
                         let t = i18n::strings(&self.prefs.language);
                         self.status = if cancelled {
                             t.room_turn_cancelled.into()
@@ -2948,6 +2951,7 @@ impl eframe::App for UiApp {
                 Evt::ChatCancelled => {
                     self.chat_pending = false;
                     self.chat_inference_id = None;
+                    self.room_turn_pending_text = None;
                     if !self.streaming.is_empty() {
                         let partial = std::mem::take(&mut self.streaming);
                         self.chat.push(ChatLine::plain("assistant", partial));
@@ -3419,49 +3423,36 @@ impl UiApp {
         };
         let meta = chat_room::active_session_meta(&self.sessions, Some(sid.as_str()));
         let room = chat_room::session_is_room(meta);
-        ui.horizontal_wrapped(|ui| {
-            if room {
-                ui.label(t.room_members_label);
-                if let Some(m) = meta {
-                    if m.members.is_empty() {
-                        ui.weak(t.room_members_empty);
-                    } else {
-                        for (i, mem) in m.members.iter().enumerate() {
-                            if i > 0 {
-                                ui.label("·");
-                            }
-                            ui.strong(&mem.display_name);
-                        }
-                    }
-                }
-            }
-            if !room && ui.button(t.room_enable).clicked() {
+        if !room {
+            if ui.button(t.room_enable).clicked() {
                 let _ = self.cmd_tx.send(Cmd::SessionSetMode {
-                    session_id: sid.clone(),
+                    session_id: sid,
                     mode: ChatSessionMode::Room,
                 });
             }
-            if room {
-                egui::ComboBox::from_id_salt("room_persona_pick")
-                    .selected_text(
-                        chat_room::persona_by_id(&self.room_persona_pick)
-                            .map(|p| p.display_name)
-                            .unwrap_or(self.room_persona_pick.as_str()),
-                    )
-                    .show_ui(ui, |ui| {
-                        for p in chat_room::ROOM_PERSONAS {
-                            ui.selectable_value(
-                                &mut self.room_persona_pick,
-                                p.id.to_string(),
-                                p.display_name,
-                            );
-                        }
-                    });
-                if ui.button(t.room_add_persona).clicked() {
+            ui.add_space(4.0);
+            return;
+        }
+        let members = meta.map(|m| m.members.as_slice()).unwrap_or(&[]);
+        if !members.is_empty() {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(t.room_members_label);
+                for (i, mem) in members.iter().enumerate() {
+                    if i > 0 {
+                        ui.label("·");
+                    }
+                    ui.strong(chat_room::member_display_label(t, mem));
+                }
+            });
+        }
+        ui.horizontal_wrapped(|ui| {
+            for persona in chat_room::ROOM_PERSONAS {
+                let label = chat_room::persona_label(t, persona.id);
+                if ui.small_button(label).clicked() {
                     let model_id = meta.and_then(|m| m.model_id.clone());
                     let _ = self.cmd_tx.send(Cmd::RoomAddPersona {
-                        session_id: sid,
-                        persona_id: self.room_persona_pick.clone(),
+                        session_id: sid.clone(),
+                        persona_id: persona.id.to_string(),
                         model_id,
                     });
                 }
@@ -3785,8 +3776,11 @@ impl UiApp {
                                 let mut shown_role = chat_role_label(kind, &t, &role);
                                 if kind == ChatBubbleKind::RoomSpeaker {
                                     if let Some(sid) = speaker_id.as_deref() {
-                                        shown_role =
-                                            chat_room::roster_display_name(&room_members, sid);
+                                        shown_role = room_members
+                                            .iter()
+                                            .find(|m| m.agent_id == sid)
+                                            .map(|m| chat_room::member_display_label(&t, m))
+                                            .unwrap_or_else(|| sid.to_string());
                                     }
                                 }
                                 let (fill, stroke, role_color) = if kind == ChatBubbleKind::RoomSpeaker
@@ -3957,14 +3951,23 @@ impl UiApp {
                                     ui.visuals().dark_mode,
                                 );
                                 let thinking = if room_mode {
-                                    t.room_thinking
+                                    self.room_turn_pending_text
+                                        .as_deref()
+                                        .and_then(|msg| {
+                                            chat_room::format_turn_speaker_queue(
+                                                &t,
+                                                msg,
+                                                &room_members,
+                                            )
+                                        })
+                                        .unwrap_or_else(|| t.chat_assistant.to_string())
                                 } else {
-                                    t.chat_assistant
+                                    t.chat_assistant.to_string()
                                 };
                                 chat_message_frame(ui, ChatBubbleKind::Assistant, None, |ui| {
                                     ui.colored_label(
                                         role_color,
-                                        egui::RichText::new(thinking).strong().small(),
+                                        egui::RichText::new(&thinking).strong().small(),
                                     );
                                     ui.weak("…");
                                 });
@@ -3973,7 +3976,7 @@ impl UiApp {
 
                     let completions = slash_completions(&self.input);
                     let mention_hits = if room_mode {
-                        chat_room::mention_completions(&self.input, &room_members)
+                        chat_room::mention_completions(&self.input, &room_members, &t)
                     } else {
                         Vec::new()
                     };
@@ -4683,16 +4686,27 @@ impl UiApp {
                     .is_some_and(|m| {
                         m.members.iter().any(|mem| mem.agent_id == a.agent_id)
                     });
-                    if !already && ui.small_button(t.agents_add_to_session).clicked() {
-                        let _ = self.cmd_tx.send(Cmd::SessionMembersAdd {
-                            session_id: sid,
-                            member: aos_proto::ChatRoomMember {
-                                agent_id: a.agent_id.clone(),
-                                display_name: agent_display_title(a),
-                                persona_id: None,
-                                joined_ms: chat_room::joined_ms_now(),
-                            },
-                        });
+                    if !already {
+                        let session_title = self
+                            .sessions
+                            .iter()
+                            .find(|s| s.id == sid)
+                            .map(|s| s.title.as_str())
+                            .unwrap_or("");
+                        let btn = t
+                            .agents_add_to_session
+                            .replace("{title}", session_title);
+                        if ui.small_button(btn).clicked() {
+                            let _ = self.cmd_tx.send(Cmd::SessionMembersAdd {
+                                session_id: sid,
+                                member: aos_proto::ChatRoomMember {
+                                    agent_id: a.agent_id.clone(),
+                                    display_name: agent_display_title(a),
+                                    persona_id: None,
+                                    joined_ms: chat_room::joined_ms_now(),
+                                },
+                            });
+                        }
                     }
                 }
             }
