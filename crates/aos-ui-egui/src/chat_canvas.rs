@@ -592,9 +592,12 @@ pub fn chat_wants_canvas_agent(text: &str, _canvas_open: bool) -> bool {
 pub fn canvas_agent_brief(user_text: &str) -> String {
     format!(
         "{user_text}\n\n\
-         Contexte: canvas de session chat déjà lié — utilise uniquement canvas.* \
-         (coords normalisées 0..1). Commence par canvas.get. Si le dessin est trop \
-         pauvre ou à recommencer: canvas.clear puis redessine avec plus de détails \
-         (traits, formes, couleurs). Ne génère pas d'image diffusion."
+         Contexte: canvas vectoriel de session lié — utilise uniquement \
+         canvas.stroke, canvas.rect, canvas.ellipse, canvas.erase, canvas.clear, \
+         canvas.undo, canvas.get, canvas.export (coords normalisées 0..1). \
+         Commence par canvas.get. Si le dessin est trop pauvre: canvas.clear puis \
+         redessine avec plus de traits et formes. Ne génère pas d'image diffusion \
+         (pas media.image.generate). Ne pose pas user.ask pour choisir entre canvas \
+         et diffusion — dessine directement."
     )
 }

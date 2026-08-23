@@ -483,6 +483,25 @@ fn merge_named_args(dst: &mut Vec<String>, args: &serde_json::Value, key: &str) 
     }
 }
 
+/// Retire les outils incompatibles avec le kit canvas (vectoriel) vs pixel (diffusion).
+fn strip_delegate_kit_tools(tools: &mut Vec<String>, use_canvas: bool) {
+    if use_canvas {
+        tools.retain(|t| !t.starts_with("media.image"));
+    } else {
+        tools.retain(|t| !t.starts_with("canvas."));
+    }
+}
+
+fn chat_delegate_kit(
+    brief: &str,
+    canvas_open: bool,
+    use_canvas: bool,
+) -> (Vec<String>, Vec<String>) {
+    let (skills, mut tools) = chat_agent_kit_ex(brief, canvas_open || use_canvas);
+    strip_delegate_kit_tools(&mut tools, use_canvas);
+    (skills, tools)
+}
+
 /// Si le chat doit déléguer : (brief, skills, tools, phrase d'accusé).
 pub(crate) fn chat_delegate_agent_spec(
     user_text: &str,
@@ -516,7 +535,7 @@ pub(crate) fn chat_delegate_agent_spec(
             } else {
                 brief
             };
-            let (mut skills, mut tools) = chat_agent_kit_ex(&brief, use_canvas);
+            let (mut skills, mut tools) = chat_delegate_kit(&brief, canvas_open, use_canvas);
             merge_named_args(&mut skills, &action.args, "skills");
             merge_named_args(&mut tools, &action.args, "tools");
             if use_canvas {
@@ -527,6 +546,9 @@ pub(crate) fn chat_delegate_agent_spec(
                         tools.push(t);
                     }
                 }
+                strip_delegate_kit_tools(&mut tools, true);
+            } else {
+                strip_delegate_kit_tools(&mut tools, false);
             }
             if self_tool {
                 for t in [
@@ -564,7 +586,7 @@ pub(crate) fn chat_delegate_agent_spec(
             || model_output.to_lowercase().contains("relance")
             || model_output.to_lowercase().contains("agent"))
     {
-        let (skills, tools) = chat_agent_kit_ex(user_text, canvas_open);
+        let (skills, tools) = chat_delegate_kit(user_text, canvas_open, true);
         return Some((
             chat_canvas::canvas_agent_brief(user_text),
             skills,
@@ -582,7 +604,7 @@ pub(crate) fn chat_delegate_agent_spec(
         ));
     }
     if canvas_intent {
-        let (skills, tools) = chat_agent_kit_ex(user_text, canvas_open);
+        let (skills, tools) = chat_delegate_kit(user_text, canvas_open, true);
         return Some((
             chat_canvas::canvas_agent_brief(user_text),
             skills,
@@ -591,7 +613,7 @@ pub(crate) fn chat_delegate_agent_spec(
         ));
     }
     if chat_canvas::chat_user_wants_pixel_draw(user_text) {
-        let (skills, tools) = chat_agent_kit_ex(user_text, false);
+        let (skills, tools) = chat_delegate_kit(user_text, false, false);
         return Some((
             user_text.to_string(),
             skills,
@@ -1787,12 +1809,15 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             ));
             return;
         };
-        if let Some((agent_id, title)) = self
-            .blocked_ask_agent()
-            .map(|ag| (ag.agent_id.clone(), ag.directive.clone()))
-        {
-            self.send_ask_reply(session_id, agent_id, title, text);
-            return;
+        let explicit_canvas = chat_canvas::chat_user_wants_explicit_canvas(&text);
+        if !explicit_canvas {
+            if let Some((agent_id, title)) = self
+                .blocked_ask_agent()
+                .map(|ag| (ag.agent_id.clone(), ag.directive.clone()))
+            {
+                self.send_ask_reply(session_id, agent_id, title, text);
+                return;
+            }
         }
         if self.chat_pending {
             self.chat.push(ChatLine::plain("user", text));
@@ -6597,6 +6622,29 @@ mod delegate_tests {
     fn canvas_truncated_spawn_followup_does_not_delegate() {
         let out = r#"{"action":"agent.spawn","args":{"brief":"Génération..."#;
         assert!(chat_delegate_agent_spec("vas y", out, true).is_none());
+    }
+
+    #[test]
+    fn explicit_canvas_after_image_delegate_gets_canvas_tools() {
+        let image = chat_delegate_agent_spec("dessine une maison", "Ok.", false)
+            .expect("image delegate");
+        let image_tools = image.2;
+        assert!(image_tools.iter().any(|x| x == "media.image.generate"));
+        assert!(!image_tools.iter().any(|x| x == "canvas.stroke"));
+
+        let canvas = chat_delegate_agent_spec("dessine sur le canvas", "Ok.", false)
+            .expect("canvas delegate after image");
+        let canvas_tools = canvas.2;
+        assert!(canvas_tools.iter().any(|x| x == "canvas.stroke"));
+        assert!(!canvas_tools.iter().any(|x| x == "media.image.generate"));
+    }
+
+    #[test]
+    fn prompts_never_mention_canvas_draw() {
+        let brief = chat_canvas::canvas_agent_brief("dessine sur le canvas");
+        assert!(!brief.contains("canvas.draw"));
+        assert!(brief.contains("canvas.stroke"));
+        assert!(!aos_proto::CHAT_DELEGATION_PROMPT.contains("canvas.draw"));
     }
 
     #[test]
