@@ -1585,6 +1585,8 @@ async fn post_user_question(bus: &BusClient, spec: &AgentSpec, body: &str) {
                     title: spec.goal.statement.clone(),
                     origin: "ask".into(),
                 }],
+                speaker_id: None,
+                speaker_name: None,
             },
             vec![],
         )
@@ -1610,6 +1612,8 @@ async fn post_ask_timeout(bus: &BusClient, spec: &AgentSpec, mins: u64) {
                     title: spec.goal.statement.clone(),
                     origin: "ask-timeout".into(),
                 }],
+                speaker_id: None,
+                speaker_name: None,
             },
             vec![],
         )

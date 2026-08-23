@@ -6,6 +6,7 @@
 use aos_agent::mcp::{list_mcp_servers, load_servers_config, resolve_secret_placeholder};
 use aos_agent::persist::{self, registry_add};
 use aos_agent::prompt::optimize_prompt_request;
+use aos_agent::room_runtime::{self, RoomRoundState};
 use aos_agent::schedule::{self, ScheduleCreateRequest, ScheduleIdRequest, ScheduleListResponse};
 use aos_agent::skills::{get_skill, list_skills, load_skills, merge_skill_tools};
 use aos_agent::tools::{caps_for_tools, default_agent_tools, select_tools};
@@ -14,9 +15,11 @@ use aos_caps::{CapStore, HolderId};
 use aos_ipc::{BusClient, BusService};
 use aos_proto::{
     AgentCreateRequest, AgentCreateResponse, AgentIdRequest, AgentInfo,
-    AgentOutputEvent, AgentPromptOptimizeRequest, AgentPromptOptimizeResponse, AgentSpec,
+    AgentOutputEvent, AgentPromptOptimizeRequest, AgentPromptOptimizeResponse,
+    AgentRoomConductRequest, AgentRoomTurnRequest, AgentSpec,
     AgentStartRequest, AgentState, AgentSteerRequest, AgentStepRecord, AgentTrace, ChatAttachment,
-    ChatMessage, ChatSessionAppendRequest, InferParams, InferRequest, McpServerInfo, SecretGetRequest,
+    ChatMessage, ChatSessionAppendRequest, ChatSessionRoomTurnCancelRequest,
+    CancelRequest, InferParams, InferRequest, McpServerInfo, SecretGetRequest,
     SkillInfo, TokenEvent,
 };
 use std::collections::HashMap;
@@ -34,6 +37,7 @@ struct AgentEntry {
 struct Runtime {
     agents: HashMap<String, AgentEntry>,
     caps: CapStore,
+    room_rounds: HashMap<String, Arc<RoomRoundState>>,
 }
 
 type Shared = Arc<Mutex<Runtime>>;
@@ -294,6 +298,33 @@ async fn spawn_worker(
     Ok(pid.unwrap_or(0))
 }
 
+async fn cancel_room_round(shared: &Shared, bus: &BusClient, session_id: &str) {
+    let prev = {
+        let mut rt = shared.lock().await;
+        rt.room_rounds.remove(session_id)
+    };
+    if let Some(prev) = prev {
+        prev.cancel();
+        if let Some(id) = *prev.current_inference.lock().await {
+            let _ = bus
+                .call::<CancelRequest, bool>(
+                    "model.cancel",
+                    &CancelRequest { inference_id: id },
+                    vec![],
+                )
+                .await;
+        }
+    }
+}
+
+async fn begin_room_round(shared: &Shared, session_id: &str) -> Arc<RoomRoundState> {
+    let round = Arc::new(RoomRoundState::new());
+    let mut rt = shared.lock().await;
+    rt.room_rounds
+        .insert(session_id.to_string(), round.clone());
+    round
+}
+
 #[tokio::main]
 async fn main() {
     let bus_addr = std::env::args()
@@ -307,6 +338,7 @@ async fn main() {
     let shared: Shared = Arc::new(Mutex::new(Runtime {
         agents: HashMap::new(),
         caps: CapStore::new(),
+        room_rounds: HashMap::new(),
     }));
     {
         let mut rt = shared.lock().await;
@@ -970,6 +1002,8 @@ async fn main() {
                                             title,
                                             origin: "completion".into(),
                                         }],
+                                        speaker_id: None,
+                                        speaker_name: None,
                                     },
                                     vec![],
                                 )
@@ -1196,6 +1230,114 @@ async fn main() {
                             .await;
                     }
                 }
+            }
+        });
+    }
+
+    // --- agent.room_turn (one-shot membre salon) ---
+    {
+        let shared = shared.clone();
+        let bus2 = bus.clone();
+        svc.on(intents::ROOM_TURN, move |ctx| {
+            let shared = shared.clone();
+            let bus = bus2.clone();
+            async move {
+                let req: AgentRoomTurnRequest = match ctx.payload() {
+                    Ok(r) => r,
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                        return;
+                    }
+                };
+                let round = {
+                    let rt = shared.lock().await;
+                    rt.room_rounds
+                        .get(&req.session_id)
+                        .cloned()
+                        .unwrap_or_else(|| Arc::new(RoomRoundState::new()))
+                };
+                match room_runtime::execute_room_turn(&bus, round.as_ref(), &req).await {
+                    Ok(resp) => {
+                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &resp).await;
+                    }
+                    Err(e) => {
+                        let status = if e.contains("introuvable") || e.contains("absent") {
+                            aos_ipc::msg::Status::NotFound
+                        } else if e == "tour annulé" {
+                            aos_ipc::msg::Status::Cancelled
+                        } else {
+                            aos_ipc::msg::Status::InternalError
+                        };
+                        let _ = ctx.respond_error(status, &e).await;
+                    }
+                }
+            }
+        });
+    }
+
+    // --- agent.room_conduct (conducteur salon) ---
+    {
+        let shared = shared.clone();
+        let bus2 = bus.clone();
+        svc.on(intents::ROOM_CONDUCT, move |ctx| {
+            let shared = shared.clone();
+            let bus = bus2.clone();
+            async move {
+                let req: AgentRoomConductRequest = match ctx.payload() {
+                    Ok(r) => r,
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                        return;
+                    }
+                };
+                cancel_room_round(&shared, &bus, &req.session_id).await;
+                let round = begin_room_round(&shared, &req.session_id).await;
+                match room_runtime::execute_room_conduct(&bus, round, &req).await {
+                    Ok(resp) => {
+                        let mut rt = shared.lock().await;
+                        rt.room_rounds.remove(&req.session_id);
+                        drop(rt);
+                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &resp).await;
+                    }
+                    Err(e) => {
+                        let mut rt = shared.lock().await;
+                        rt.room_rounds.remove(&req.session_id);
+                        drop(rt);
+                        let status = if e.contains("mode salon") || e.contains("sans membres") {
+                            aos_ipc::msg::Status::BadRequest
+                        } else {
+                            aos_ipc::msg::Status::InternalError
+                        };
+                        let _ = ctx.respond_error(status, &e).await;
+                    }
+                }
+            }
+        });
+    }
+
+    // --- agent.room_conduct.cancel ---
+    {
+        let shared = shared.clone();
+        let bus2 = bus.clone();
+        svc.on(intents::ROOM_CONDUCT_CANCEL, move |ctx| {
+            let shared = shared.clone();
+            let bus = bus2.clone();
+            async move {
+                let req: ChatSessionRoomTurnCancelRequest = match ctx.payload() {
+                    Ok(r) => r,
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                        return;
+                    }
+                };
+                cancel_room_round(&shared, &bus, &req.session_id).await;
+                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &true).await;
             }
         });
     }

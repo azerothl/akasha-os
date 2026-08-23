@@ -9,6 +9,8 @@ pub mod context_budget;
 pub mod mcp;
 pub mod persist;
 pub mod prompt;
+pub mod room_conductor;
+pub mod room_runtime;
 pub mod schedule;
 pub mod skills;
 pub mod state;
@@ -40,6 +42,9 @@ pub mod intents {
     pub const SCHEDULE_CREATE: &str = "schedule.create";
     pub const SCHEDULE_LIST: &str = "schedule.list";
     pub const SCHEDULE_CANCEL: &str = "schedule.cancel";
+    pub const ROOM_TURN: &str = "agent.room_turn";
+    pub const ROOM_CONDUCT: &str = "agent.room_conduct";
+    pub const ROOM_CONDUCT_CANCEL: &str = "agent.room_conduct.cancel";
 }
 
 /// Payload de contrôle worker → intent `agent.<id>.control`.
