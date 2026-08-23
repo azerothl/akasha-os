@@ -1318,11 +1318,15 @@ async fn main() {
             async move {
                 match ctx.payload::<CanvasApplyRequest>() {
                     Ok(req) => {
-                        let result = s.sessions.lock().unwrap().canvas_apply(
-                            &req.session_id,
-                            &req.author_id,
-                            req.op,
-                        );
+                        let result = {
+                            let apply_lock = s.canvas_apply_lock(&req.session_id);
+                            let _guard = apply_lock.lock().unwrap();
+                            s.sessions.lock().unwrap().canvas_apply(
+                                &req.session_id,
+                                &req.author_id,
+                                req.op,
+                            )
+                        };
                         match result {
                             Ok((meta, doc, applied)) => {
                                 let _ = ctx

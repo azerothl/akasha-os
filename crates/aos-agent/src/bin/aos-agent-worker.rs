@@ -12,6 +12,7 @@ use aos_agent::context_budget::{
     prompt_budget, sanitize_assistant_for_memory, LoopGuard, LoopVerdict, DEFAULT_N_CTX_HINT,
 };
 use aos_agent::persist;
+use aos_agent::canvas_scene::{canvas_scene_prompt_block, fetch_canvas_scene_digest};
 use aos_agent::prompt::{compile_system_prompt, optimize_prompt_request, PromptCompileInput};
 use aos_agent::skills::{load_skills, match_skill_by_action, merge_skill_tools, skill_misuse_hint, SkillDoc};
 use aos_agent::tools::{
@@ -169,7 +170,7 @@ async fn main() {
         }
     }
 
-    install_system_prompt(&shared, &spec, &skill_docs, &tools).await;
+    install_system_prompt(&bus, &shared, &spec, &skill_docs, &tools).await;
 
     // Index documents
     index_documents(&bus, &agent_id, &spec.caps, &spec.documents).await;
@@ -2543,17 +2544,27 @@ async fn index_documents(
 }
 
 async fn install_system_prompt(
+    bus: &BusClient,
     shared: &Shared,
     spec: &AgentSpec,
     skills: &[SkillDoc],
     tools: &[ToolDesc],
 ) {
-    let system = compile_system_prompt(&PromptCompileInput {
+    let mut system = compile_system_prompt(&PromptCompileInput {
         spec,
         skills,
         tools,
         doc_index: &spec.documents,
     });
+    let has_canvas = tools.iter().any(|t| t.name.starts_with("canvas."));
+    if has_canvas {
+        if let Some(sid) = spec.session_id.as_deref().filter(|s| !s.is_empty()) {
+            if let Some(digest) = fetch_canvas_scene_digest(bus, sid).await {
+                system.push_str("\n\n");
+                system.push_str(&canvas_scene_prompt_block(&digest));
+            }
+        }
+    }
     let mut st = shared.state.lock().await;
     if st.working_memory.is_empty() || st.working_memory[0].0 != "system" {
         st.working_memory.insert(0, ("system".into(), system));
@@ -2598,7 +2609,7 @@ async fn apply_assess_to_runtime(
                 spec.caps.push(c);
             }
         }
-        install_system_prompt(shared, spec, skill_docs, tools).await;
+        install_system_prompt(bus, shared, spec, skill_docs, tools).await;
         let _ = persist::write_spec(spec);
         report(
             bus,
@@ -2610,7 +2621,7 @@ async fn apply_assess_to_runtime(
         .await;
     } else if assess.is_complex() {
         // Planner déjà présent : recompile quand même pour coller au protocole à jour
-        install_system_prompt(shared, spec, skill_docs, tools).await;
+        install_system_prompt(bus, shared, spec, skill_docs, tools).await;
     }
 }
 

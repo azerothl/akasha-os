@@ -5,6 +5,7 @@
 
 pub mod actions;
 pub mod assess;
+pub mod canvas_scene;
 pub mod context_budget;
 pub mod mcp;
 pub mod persist;

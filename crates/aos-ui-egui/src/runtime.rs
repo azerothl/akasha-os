@@ -6,7 +6,7 @@ use crate::os_open::{aos_home, bin_aos_session};
 use crate::{
     agent_id_cmd, agent_panel, chat_delegate_agent_spec, chrono_like_stamp, invoke_module_bind,
     invoke_module_tool, invoke_notes, invoke_tasks, load_module_ui, load_session, run_troubleshoot,
-    spawn_chat_delegate_agent, CHAT_AGENT_MAX_SUBAGENTS,
+    session_has_running_canvas_agent, spawn_chat_delegate_agent, CHAT_AGENT_MAX_SUBAGENTS,
 };
 use aos_agent::intents as agent_intents;
 use aos_agent::schedule::{
@@ -15,7 +15,7 @@ use aos_agent::schedule::{
 use aos_ipc::BusClient;
 use aos_proto::{
     AgentCreateRequest, AgentGoal, AgentIdRequest, AgentInfo, AgentKind, AgentPromptOptimizeRequest,
-    AgentPromptOptimizeResponse, AgentSteerRequest, AgentTrace, AuditEvent, AuditQueryRequest,
+    AgentPromptOptimizeResponse, AgentState, AgentSteerRequest, AgentTrace, AuditEvent, AuditQueryRequest,
     CapInfo, CapListRequest, CapRevokeRequest, ChatAttachment, ChatMessage, ChatRoomMember,
     ChatSessionAppendRequest, ChatSessionCreateRequest, ChatSessionGetResponse,
     ChatSessionIdRequest, ChatSessionMembersAddRequest, ChatSessionMembersRemoveRequest,
@@ -33,7 +33,7 @@ use aos_proto::{
     PendingConfirmation, ProviderIdRequest, ProviderListResponse, ProviderRecord,
     ProviderTestResponse, ProviderUpsertRequest, SecretListRequest, SecretListResponse,
     SecretSetRequest, SetRoutingRequest, SkillInfo, SystemMetrics, TokenEvent, WebBrowseRequest,
-    WebBrowseResponse, WebSearchRequest, WebSearchResponse, AgentState,
+    WebBrowseResponse, WebSearchRequest, WebSearchResponse,
     CHAT_DELEGATION_PROMPT, SYSTEM_ASSISTANT_PROMPT, MigrateRequest, MigrateResponse,
 };
 use eframe::egui;
@@ -426,6 +426,33 @@ async fn handle_cmd(
                         if let Some((brief, skills, tools, prose)) =
                             chat_delegate_agent_spec(&user_text, &full, canvas_open, canvas_aspect)
                         {
+                            let canvas_delegate = tools.iter().any(|t| t.starts_with("canvas."));
+                            if canvas_delegate
+                                && session_has_running_canvas_agent(&bus, &sid).await
+                            {
+                                let _ = bus
+                                    .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
+                                        "chat.session.append",
+                                        &ChatSessionAppendRequest {
+                                            session_id: sid.clone(),
+                                            role: "assistant".into(),
+                                            content: "Un agent canvas dessine déjà sur cette session — \
+                                                      attends qu'il termine ou consulte le canvas mis à jour."
+                                                .into(),
+                                            attachments: vec![],
+                                            speaker_id: None,
+                                            speaker_name: None,
+                                        },
+                                        vec![],
+                                    )
+                                    .await;
+                                let _ = evt_tx.send(Evt::Done {
+                                    text: String::new(),
+                                    session_id: sid,
+                                    attachments: vec![],
+                                });
+                                return;
+                            }
                             spawn_chat_delegate_agent(
                                 bus.clone(),
                                 evt_tx.clone(),

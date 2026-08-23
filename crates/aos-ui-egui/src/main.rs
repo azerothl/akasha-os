@@ -625,6 +625,22 @@ pub(crate) fn chat_delegate_agent_spec(
     None
 }
 
+pub(crate) async fn session_has_running_canvas_agent(bus: &BusClient, session_id: &str) -> bool {
+    let agents: Vec<aos_proto::AgentInfo> = bus
+        .call(aos_agent::intents::LIST, &(), vec![])
+        .await
+        .unwrap_or_default();
+    agents.iter().any(|a| {
+        matches!(
+            a.state,
+            aos_proto::AgentState::Running
+                | aos_proto::AgentState::Blocked
+                | aos_proto::AgentState::Paused
+        ) && a.session_id.as_deref() == Some(session_id)
+            && a.tools.iter().any(|t| t.starts_with("canvas."))
+    })
+}
+
 pub(crate) async fn spawn_chat_delegate_agent(
     bus: Arc<BusClient>,
     evt_tx: Sender<Evt>,
@@ -810,8 +826,11 @@ fn chat_agent_kit_ex(task: &str, canvas_open: bool) -> (Vec<String>, Vec<String>
     if canvas_open || chat_canvas::chat_user_wants_explicit_canvas(task) {
         for t in [
             "canvas.stroke",
+            "canvas.line",
+            "canvas.spline",
             "canvas.rect",
             "canvas.ellipse",
+            "canvas.fill",
             "canvas.erase",
             "canvas.clear",
             "canvas.undo",

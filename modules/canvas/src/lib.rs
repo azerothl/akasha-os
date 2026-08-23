@@ -9,8 +9,11 @@ use serde_json::{json, Value};
 fn handle(tool: &str, args: &Value) -> Result<Value, String> {
     match tool {
         "canvas.stroke" => stroke(args),
+        "canvas.line" => line(args),
+        "canvas.spline" => spline(args),
         "canvas.rect" => rect(args),
         "canvas.ellipse" => ellipse(args),
+        "canvas.fill" => fill(args),
         "canvas.erase" => erase(args),
         "canvas.clear" => clear(args),
         "canvas.undo" => undo(args),
@@ -93,6 +96,81 @@ fn stroke(args: &Value) -> Result<Value, String> {
             "points": points,
             "color": a.color,
             "width": a.width,
+        }),
+    )
+}
+
+#[derive(Deserialize)]
+struct LineArgs {
+    session_id: String,
+    #[serde(default)]
+    author_id: Option<String>,
+    p0: Point,
+    p1: Point,
+    #[serde(default = "default_color")]
+    color: String,
+    #[serde(default = "default_width")]
+    width: f32,
+}
+
+fn line(args: &Value) -> Result<Value, String> {
+    let a: LineArgs = aos_module_sdk::parse_args(args)?;
+    apply(
+        &a.session_id,
+        a.author_id.as_deref().unwrap_or("agent"),
+        json!({
+            "kind": "line",
+            "p0": {"x": a.p0.x, "y": a.p0.y},
+            "p1": {"x": a.p1.x, "y": a.p1.y},
+            "color": a.color,
+            "width": a.width,
+        }),
+    )
+}
+
+fn spline(args: &Value) -> Result<Value, String> {
+    let a: StrokeArgs = aos_module_sdk::parse_args(args)?;
+    if a.points.len() < 2 {
+        return Err("points: au moins 2 points requis pour spline".into());
+    }
+    let points: Vec<Value> = a
+        .points
+        .iter()
+        .map(|p| json!({"x": p.x, "y": p.y}))
+        .collect();
+    apply(
+        &a.session_id,
+        a.author_id.as_deref().unwrap_or("agent"),
+        json!({
+            "kind": "spline",
+            "points": points,
+            "color": a.color,
+            "width": a.width,
+        }),
+    )
+}
+
+#[derive(Deserialize)]
+struct FillArgs {
+    session_id: String,
+    #[serde(default)]
+    author_id: Option<String>,
+    x: f32,
+    y: f32,
+    #[serde(default = "default_color")]
+    color: String,
+}
+
+fn fill(args: &Value) -> Result<Value, String> {
+    let a: FillArgs = aos_module_sdk::parse_args(args)?;
+    apply(
+        &a.session_id,
+        a.author_id.as_deref().unwrap_or("agent"),
+        json!({
+            "kind": "fill",
+            "x": a.x,
+            "y": a.y,
+            "color": a.color,
         }),
     )
 }

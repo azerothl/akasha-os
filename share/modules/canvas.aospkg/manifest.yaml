@@ -15,6 +15,27 @@ tools:
         color: { type: string }
         width: { type: number }
       required: [session_id, points]
+  - name: canvas.line
+    description: Draw a straight line segment (2 points) on the session canvas
+    input_schema:
+      type: object
+      properties:
+        session_id: { type: string }
+        p0: { type: object, properties: { x: { type: number }, y: { type: number } } }
+        p1: { type: object, properties: { x: { type: number }, y: { type: number } } }
+        color: { type: string }
+        width: { type: number }
+      required: [session_id, p0, p1]
+  - name: canvas.spline
+    description: Draw a smooth spline through control points on the session canvas
+    input_schema:
+      type: object
+      properties:
+        session_id: { type: string }
+        points: { type: array, items: { type: object, properties: { x: { type: number }, y: { type: number } } } }
+        color: { type: string }
+        width: { type: number }
+      required: [session_id, points]
   - name: canvas.rect
     description: Draw a rectangle on the session canvas
     input_schema:
@@ -43,6 +64,16 @@ tools:
         fill: { type: boolean }
         width: { type: number }
       required: [session_id, x, y, w, h]
+  - name: canvas.fill
+    description: Flood-fill at a point on the session canvas
+    input_schema:
+      type: object
+      properties:
+        session_id: { type: string }
+        x: { type: number }
+        y: { type: number }
+        color: { type: string }
+      required: [session_id, x, y]
   - name: canvas.erase
     description: Erase along a polyline (paints background)
     input_schema:

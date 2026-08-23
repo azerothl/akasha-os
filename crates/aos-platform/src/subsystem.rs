@@ -15,6 +15,7 @@ use crate::secrets::SecretStore;
 use crate::storage::{glob_match, StorageFs};
 use crate::trust::TrustManager;
 use aos_proto::AuditAppendRequest;
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
@@ -133,6 +134,8 @@ pub struct PlatformSubsystem {
     pub supervisor: Arc<crate::supervisor::Supervisor>,
     /// Client bus : forwarding audit → `aos-auditd` et checks → `aos-capkd`.
     bus: Mutex<Option<Arc<aos_ipc::BusClient>>>,
+    /// Mutex par session pour sérialiser `canvas.apply` (évite interleaving JSON).
+    canvas_apply_locks: Mutex<HashMap<String, Arc<Mutex<()>>>>,
 }
 
 impl PlatformSubsystem {
@@ -210,6 +213,7 @@ impl PlatformSubsystem {
             granted_caps: Mutex::new(std::collections::HashMap::new()),
             supervisor: crate::supervisor::Supervisor::new(),
             bus: Mutex::new(None),
+            canvas_apply_locks: Mutex::new(HashMap::new()),
         });
         let _ = late.0.set(sub.clone());
         sub.audit(AuditAppendRequest {
@@ -229,6 +233,15 @@ impl PlatformSubsystem {
 
     pub fn bus(&self) -> Option<Arc<aos_ipc::BusClient>> {
         self.bus.lock().unwrap().clone()
+    }
+
+    /// Verrou d'application canvas par session (sérialise les écritures concurrentes).
+    pub fn canvas_apply_lock(&self, session_id: &str) -> Arc<Mutex<()>> {
+        let mut locks = self.canvas_apply_locks.lock().unwrap();
+        locks
+            .entry(session_id.to_string())
+            .or_insert_with(|| Arc::new(Mutex::new(())))
+            .clone()
     }
 
     /// Autorise via le noyau de capacités si l'enveloppe porte des
@@ -838,6 +851,8 @@ impl HostServices for PlatformSubsystem {
                 };
                 let body: aos_proto::CanvasOpBody =
                     serde_json::from_value(op_val).map_err(|e| format!("op invalide: {e}"))?;
+                let apply_lock = self.canvas_apply_lock(&session_id);
+                let _guard = apply_lock.lock().unwrap();
                 let (meta, doc, applied) = self
                     .sessions
                     .lock()

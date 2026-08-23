@@ -1,6 +1,10 @@
 //! Runtime bus pour tours de salon (`agent.room_turn` / `agent.room_conduct`).
 
 use crate::actions::{parse_action, AgentAction};
+use crate::canvas_scene::{
+    canvas_scene_prompt_block, canvas_tool_mutates_scene, canvas_tool_outcome_with_digest,
+    fetch_canvas_scene_digest,
+};
 use crate::mcp::open_mcp_tools_with_secrets;
 use crate::persist;
 use crate::room_conductor::{
@@ -133,6 +137,7 @@ pub fn build_room_system_prompt(
     canvas_open: bool,
     tools: &[ToolDesc],
     session_id: &str,
+    canvas_scene_digest: Option<&str>,
 ) -> String {
     let roster = format_roster_for_prompt(members);
     let mut out = format!(
@@ -178,6 +183,10 @@ pub fn build_room_system_prompt(
                 "\nCanvas de session lié : `{session_id}`. \
                  Omets `session_id` dans les args canvas (le runtime le force).\n"
             ));
+            if let Some(digest) = canvas_scene_digest {
+                out.push_str(&canvas_scene_prompt_block(digest));
+                out.push('\n');
+            }
         }
         out.push('\n');
         out.push_str(ROOM_ACTION_PROTOCOL);
@@ -360,6 +369,13 @@ async fn run_room_tool_loop(
         )
         .await;
 
+        let outcome = if canvas_tool_mutates_scene(&action.action) {
+            let digest = fetch_canvas_scene_digest(bus, session_id).await;
+            canvas_tool_outcome_with_digest(&outcome, digest.as_deref())
+        } else {
+            outcome
+        };
+
         messages.push(ChatMessage {
             role: "assistant".into(),
             content: raw,
@@ -396,6 +412,12 @@ pub async fn execute_room_turn(
         select_tools(&tool_ids, &[])
     };
 
+    let canvas_digest = if session.meta.canvas_open {
+        fetch_canvas_scene_digest(bus, &req.session_id).await
+    } else {
+        None
+    };
+
     let system = build_room_system_prompt(
         &spec,
         display_name,
@@ -403,6 +425,7 @@ pub async fn execute_room_turn(
         session.meta.canvas_open,
         &tool_descs,
         &req.session_id,
+        canvas_digest.as_deref(),
     );
     let messages = format_transcript_messages(&session, &system);
 
@@ -625,10 +648,51 @@ mod tests {
             budget: Default::default(),
             optimize_prompt: false,
         };
-        let prompt = build_room_system_prompt(&spec, "Critic", &members, true, &[], "sess-1");
+        let prompt = build_room_system_prompt(&spec, "Critic", &members, true, &[], "sess-1", None);
         assert!(prompt.contains("Critic (@persona-critic"));
         assert!(prompt.contains("canvas.*"));
         assert!(prompt.contains("Dessinateur"));
+    }
+
+    #[test]
+    fn room_system_prompt_includes_scene_digest_when_provided() {
+        let members = vec![ChatRoomMember {
+            agent_id: "persona-critic".into(),
+            display_name: "Critic".into(),
+            persona_id: Some("critic".into()),
+            joined_ms: 1,
+        }];
+        let spec = AgentSpec {
+            agent_id: "persona-critic".into(),
+            goal: AgentGoal::default(),
+            kind: Default::default(),
+            display_name: Some("Critic".into()),
+            persona_id: Some("critic".into()),
+            system_prompt: None,
+            skills: vec![],
+            tools: vec!["canvas.stroke".into()],
+            mcp_servers: vec![],
+            documents: vec![],
+            caps: vec![],
+            model_id: None,
+            parent_id: None,
+            session_id: None,
+            budget: Default::default(),
+            optimize_prompt: false,
+        };
+        let tools = select_tools(&spec.tools, &[]);
+        let digest = "next_seq=2 aspect=square 1:1 ops=1\nseq=1 author=human kind=stroke";
+        let prompt = build_room_system_prompt(
+            &spec,
+            "Critic",
+            &members,
+            true,
+            &tools,
+            "sess-1",
+            Some(digest),
+        );
+        assert!(prompt.contains("seq=1"));
+        assert!(prompt.contains("canvas.get"));
     }
 
     #[test]
@@ -653,6 +717,9 @@ mod tests {
         };
         let (ids, caps) = room_member_kit(&spec, true);
         assert!(ids.iter().any(|x| x == "canvas.stroke"));
+        assert!(ids.iter().any(|x| x == "canvas.line"));
+        assert!(ids.iter().any(|x| x == "canvas.spline"));
+        assert!(ids.iter().any(|x| x == "canvas.fill"));
         assert!(ids.iter().any(|x| x == "canvas.get"));
         assert!(caps.iter().any(|c| c == "tool.invoke:canvas"));
     }
