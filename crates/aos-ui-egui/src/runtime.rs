@@ -2533,16 +2533,15 @@ async fn handle_cmd(
         Cmd::RoomAddPersona {
             session_id,
             persona_id,
-            display_name,
             model_id,
         } => {
             let Some(persona) = chat_room::persona_by_id(&persona_id) else {
                 let _ = evt_tx.send(Evt::Error(format!("persona inconnue: {persona_id}")));
                 return;
             };
+            let canonical_name = persona.display_name.to_string();
             let mut req = aos_agent::room_personas::persona_create_request(persona, model_id);
             req.session_id = Some(session_id.clone());
-            req.display_name = Some(display_name.clone());
             match bus
                 .call::<AgentCreateRequest, aos_proto::AgentCreateResponse>(
                     agent_intents::CREATE,
@@ -2552,10 +2551,9 @@ async fn handle_cmd(
                 .await
             {
                 Ok(r) => {
-                    let label = display_name.clone();
                     let member = ChatRoomMember {
                         agent_id: r.agent_id,
-                        display_name,
+                        display_name: canonical_name.clone(),
                         persona_id: Some(persona.id.to_string()),
                         joined_ms: room_joined_ms(),
                     };
@@ -2574,7 +2572,7 @@ async fn handle_cmd(
                             refresh_sessions(&bus, &evt_tx).await;
                             load_session(&bus, &evt_tx, &session_id).await;
                             let _ = evt_tx.send(Evt::Status(format!(
-                                "« {label} » ajouté au salon"
+                                "« {canonical_name} » ajouté au salon"
                             )));
                         }
                         Err(e) => {

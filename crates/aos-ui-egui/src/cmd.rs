@@ -194,8 +194,6 @@ pub(crate) enum Cmd {
     RoomAddPersona {
         session_id: String,
         persona_id: String,
-        /// Localized roster label (Coder / Chercheur).
-        display_name: String,
         model_id: Option<String>,
     },
     RoomTurn {

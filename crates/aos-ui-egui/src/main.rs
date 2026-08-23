@@ -3460,7 +3460,6 @@ impl UiApp {
         ui: &mut egui::Ui,
         t: &i18n::UiStrings,
         session_id: &str,
-        members: &[ChatRoomMember],
         model_id: Option<String>,
         candidates: &[AgentInfo],
     ) {
@@ -3476,7 +3475,6 @@ impl UiApp {
                         let _ = self.cmd_tx.send(Cmd::RoomAddPersona {
                             session_id: session_id.to_string(),
                             persona_id,
-                            display_name: label.clone(),
                             model_id: model_id.clone(),
                         });
                     } else {
@@ -3514,7 +3512,6 @@ impl UiApp {
                     let _ = self.cmd_tx.send(Cmd::RoomAddPersona {
                         session_id: session_id.to_string(),
                         persona_id: persona.id.to_string(),
-                        display_name: label.to_string(),
                         model_id: model_id.clone(),
                     });
                 }
@@ -3589,7 +3586,6 @@ impl UiApp {
                         ui,
                         t,
                         &sid,
-                        members,
                         model_id.clone(),
                         &candidates,
                     );

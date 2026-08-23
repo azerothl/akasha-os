@@ -4,7 +4,7 @@ use crate::i18n::{self, UiStrings};
 use aos_agent::room_conductor::build_initial_queue;
 use aos_proto::{AgentInfo, AgentKind, AgentState, ChatRoomMember, ChatSessionMode, ChatSessionMeta};
 
-pub use aos_agent::room_personas::{persona_agent_id, persona_by_id, RoomPersona, ROOM_PERSONAS};
+pub use aos_agent::room_personas::{persona_agent_id, persona_by_id, ROOM_PERSONAS};
 
 /// Localized persona chip / roster label (EN + FR via i18n).
 pub fn persona_label(t: &UiStrings, persona_id: &str) -> &'static str {
@@ -61,14 +61,14 @@ pub fn session_is_room(meta: Option<&ChatSessionMeta>) -> bool {
 }
 
 /// Merge built-in persona placeholders so the Agents library always lists all four.
-pub fn agents_with_library_placeholders(agents: &[AgentInfo], t: &UiStrings) -> Vec<AgentInfo> {
+pub fn agents_with_library_placeholders(agents: &[AgentInfo], _t: &UiStrings) -> Vec<AgentInfo> {
     let mut out = agents.to_vec();
     for persona in ROOM_PERSONAS {
         let id = persona_agent_id(persona.id);
         if out.iter().any(|a| a.agent_id == id) {
             continue;
         }
-        let label = persona_label(t, persona.id);
+        let label = persona.display_name;
         out.push(AgentInfo {
             agent_id: id,
             state: AgentState::Roster,
@@ -111,10 +111,11 @@ pub fn library_add_candidates(
     members: &[ChatRoomMember],
     t: &UiStrings,
 ) -> Vec<AgentInfo> {
+    let present = member_ids(members);
     agents_with_library_placeholders(agents, t)
         .into_iter()
         .filter(|a| a.is_roster())
-        .filter(|a| !members.iter().any(|m| m.agent_id == a.agent_id))
+        .filter(|a| !present.contains(a.agent_id.as_str()))
         .collect()
 }
 
@@ -282,7 +283,16 @@ mod tests {
             list.iter()
                 .find(|a| a.persona_id.as_deref() == Some("coder"))
                 .and_then(|a| a.display_name.as_deref()),
-            Some("Codeur")
+            Some("Coder")
+        );
+        assert_eq!(
+            roster_agent_label(
+                &t,
+                list.iter()
+                    .find(|a| a.persona_id.as_deref() == Some("coder"))
+                    .unwrap(),
+            ),
+            "Codeur"
         );
     }
 
