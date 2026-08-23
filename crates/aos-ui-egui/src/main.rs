@@ -3722,15 +3722,6 @@ impl UiApp {
             if spare > 0.0 {
                 ui.add_space(spare);
             }
-            if ui
-                .selectable_label(canvas_open, t.session_toggle_canvas)
-                .clicked()
-            {
-                let _ = self.cmd_tx.send(Cmd::CanvasSetOpen {
-                    session_id: sid.clone(),
-                    open: !canvas_open,
-                });
-            }
             if ui.selectable_label(room, t.session_toggle_salon).clicked() {
                 let mode = if room {
                     ChatSessionMode::Direct
@@ -3740,6 +3731,15 @@ impl UiApp {
                 let _ = self.cmd_tx.send(Cmd::SessionSetMode {
                     session_id: sid.clone(),
                     mode,
+                });
+            }
+            if ui
+                .selectable_label(canvas_open, t.session_toggle_canvas)
+                .clicked()
+            {
+                let _ = self.cmd_tx.send(Cmd::CanvasSetOpen {
+                    session_id: sid.clone(),
+                    open: !canvas_open,
                 });
             }
             if let Some(action) = toolbar_action {

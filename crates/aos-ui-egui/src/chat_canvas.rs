@@ -300,12 +300,18 @@ pub fn ui_canvas_toolbar(
         eframe::egui::Slider::new(&mut state.width, 0.005..=0.06).text(t.canvas_width),
     );
 
-    let _ = ui.add_enabled(false, eframe::egui::Button::new(
-        eframe::egui::RichText::new(t.canvas_undo).weak(),
-    ));
-    let _ = ui.add_enabled(false, eframe::egui::Button::new(
-        eframe::egui::RichText::new(t.canvas_export).weak(),
-    ));
+    if ui
+        .button(eframe::egui::RichText::new(t.canvas_undo).weak())
+        .clicked()
+    {
+        action = Some(CanvasUiAction::Apply(CanvasOpBody::Undo));
+    }
+    if ui
+        .button(eframe::egui::RichText::new(t.canvas_export).weak())
+        .clicked()
+    {
+        action = Some(CanvasUiAction::Export);
+    }
 
     if state.clear_confirm_open {
         ui.label(eframe::egui::RichText::new(t.canvas_clear_confirm).small());
