@@ -576,6 +576,45 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
     v
 }
 
+/// Canvas tool ids (session vector drawing) — never part of `default_agent_tools`.
+pub const CANVAS_TOOL_IDS: &[&str] = &[
+    "canvas.stroke",
+    "canvas.rect",
+    "canvas.ellipse",
+    "canvas.erase",
+    "canvas.clear",
+    "canvas.undo",
+    "canvas.get",
+    "canvas.export",
+];
+
+/// Explicit vector-canvas intent (toggle phrase, slash, stroke wording).
+pub fn explicit_canvas_intent(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    if lower.contains("/canvas") {
+        return true;
+    }
+    if lower.contains("sur le canvas") || lower.contains("on the canvas") {
+        return true;
+    }
+    if lower.contains("au trait") {
+        return true;
+    }
+    false
+}
+
+/// Append canvas tools when `include` is true (deduped).
+pub fn merge_canvas_tools(tool_ids: &mut Vec<String>, include: bool) {
+    if !include {
+        return;
+    }
+    for t in CANVAS_TOOL_IDS {
+        if !tool_ids.iter().any(|x| x == t) {
+            tool_ids.push((*t).into());
+        }
+    }
+}
+
 /// Default Preview tool ids (UI agent create + scheduled fires).
 pub fn default_agent_tools() -> Vec<String> {
     [
@@ -865,6 +904,23 @@ mod tests {
         assert_eq!(kind, "module");
         assert!(mcp.is_none());
         assert_eq!(skill.as_deref(), Some("notes-writer"));
+    }
+
+    #[test]
+    fn explicit_canvas_intent_markers() {
+        assert!(explicit_canvas_intent("dessine sur le canvas"));
+        assert!(explicit_canvas_intent("/canvas"));
+        assert!(!explicit_canvas_intent("dessine une maison"));
+    }
+
+    #[test]
+    fn merge_canvas_tools_adds_invoke_cap_targets() {
+        let mut ids = vec!["notes.create".into()];
+        merge_canvas_tools(&mut ids, true);
+        assert!(ids.iter().any(|x| x == "canvas.stroke"));
+        assert!(ids.iter().any(|x| x == "canvas.get"));
+        let caps = caps_for_tools(&select_tools(&ids, &[]), &[]);
+        assert!(caps.iter().any(|c| c == "tool.invoke:canvas"));
     }
 
     #[test]

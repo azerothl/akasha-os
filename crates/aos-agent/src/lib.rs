@@ -15,6 +15,7 @@ pub mod room_runtime;
 pub mod schedule;
 pub mod skills;
 pub mod state;
+pub mod tool_exec;
 pub mod tools;
 
 pub use assess::{parse_assess_response, AssessResult};
@@ -46,6 +47,8 @@ pub mod intents {
     pub const ROOM_TURN: &str = "agent.room_turn";
     pub const ROOM_CONDUCT: &str = "agent.room_conduct";
     pub const ROOM_CONDUCT_CANCEL: &str = "agent.room_conduct.cancel";
+    pub const SPEC_GET: &str = "agent.spec.get";
+    pub const ROSTER_UPDATE: &str = "agent.roster.update";
 }
 
 /// Payload de contrôle worker → intent `agent.<id>.control`.

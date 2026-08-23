@@ -1,22 +1,41 @@
 //! Runtime bus pour tours de salon (`agent.room_turn` / `agent.room_conduct`).
 
+use crate::actions::{parse_action, AgentAction};
+use crate::mcp::open_mcp_tools_with_secrets;
 use crate::persist;
 use crate::room_conductor::{
     build_initial_queue, detect_peer_address, effective_max_turns, format_roster_for_prompt,
     sanitize_member_queue,
 };
+use crate::skills::{load_skills, merge_skill_tools};
+use crate::tool_exec::execute_room_tool;
+use crate::tools::{
+    caps_for_tools, explicit_canvas_intent, merge_canvas_tools, select_tools, ToolDesc,
+};
 use aos_ipc::BusClient;
 use aos_proto::{
     AgentRoomConductRequest, AgentRoomConductResponse, AgentRoomTurnRequest,
     AgentRoomTurnResponse, AgentSpec, CancelRequest, ChatAttachment, ChatMessage,
-    ChatRoomMember, ChatSessionAppendRequest, ChatSessionGetResponse, ChatSessionIdRequest, ChatSessionMessage,
-    ChatSessionMode, InferParams, InferRequest, TokenEvent,
+    ChatRoomMember, ChatSessionAppendRequest, ChatSessionGetResponse, ChatSessionIdRequest,
+    ChatSessionMessage, ChatSessionMode, InferParams, InferRequest, TokenEvent,
 };
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
 const TRANSCRIPT_LIMIT: usize = 40;
+const MAX_ROOM_TOOL_STEPS: usize = 20;
+
+const ROOM_ACTION_PROTOCOL: &str = r#"## Protocole d'actions (salon)
+
+Quand tu dois utiliser un outil, réponds par un objet JSON unique :
+{"thought":"raisonnement court","action":"<outil>","args":{...}}
+
+- `action` = nom exact du catalogue (`canvas.stroke`, `canvas.get`, …).
+- Pour le canvas : coords 0..1, commence par `canvas.get`, omets `session_id` (le runtime le force).
+- Quand tu as fini (y compris après des outils), réponds en texte libre SANS JSON — c'est ta réplique visible dans le salon.
+- Pas de `agent.spawn`, `user.ask`, ni collègues inventés."#;
 
 /// État d'un tour de salon en cours (annulation cooperative).
 #[derive(Debug)]
@@ -92,11 +111,44 @@ fn member_display_name<'a>(
         .ok_or_else(|| format!("membre {agent_id} absent du salon"))
 }
 
+/// Assemble tool ids + caps for a roster member turn.
+pub fn room_member_kit(
+    spec: &AgentSpec,
+    canvas_open: bool,
+    user_message: &str,
+) -> (Vec<String>, Vec<String>) {
+    let skill_docs = load_skills(&spec.skills);
+    let mut tool_ids = merge_skill_tools(&spec.tools, &skill_docs);
+    let include_canvas = canvas_open || explicit_canvas_intent(user_message);
+    merge_canvas_tools(&mut tool_ids, include_canvas);
+    let tools = select_tools(&tool_ids, &[]);
+    let mut caps = spec.caps.clone();
+    for c in caps_for_tools(&tools, &spec.mcp_servers) {
+        if !caps.contains(&c) {
+            caps.push(c);
+        }
+    }
+    (tool_ids, caps)
+}
+
+fn latest_user_message(session: &ChatSessionGetResponse, fallback: &str) -> String {
+    session
+        .messages
+        .iter()
+        .rev()
+        .find(|m| m.role == "user")
+        .map(|m| m.content.clone())
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| fallback.to_string())
+}
+
 pub fn build_room_system_prompt(
     spec: &AgentSpec,
     display_name: &str,
     members: &[ChatRoomMember],
     canvas_open: bool,
+    tools: &[ToolDesc],
+    session_id: &str,
 ) -> String {
     let roster = format_roster_for_prompt(members);
     let mut out = format!(
@@ -127,6 +179,24 @@ pub fn build_room_system_prompt(
     if !spec.goal.statement.trim().is_empty() {
         out.push_str("\nObjectif / persona : ");
         out.push_str(spec.goal.statement.trim());
+        out.push('\n');
+    }
+    if !tools.is_empty() {
+        out.push_str("\n## Outils disponibles\n");
+        for t in tools {
+            out.push_str(&format!(
+                "- `{}` : {} | schema: {}\n",
+                t.name, t.description, t.input_schema
+            ));
+        }
+        if tools.iter().any(|t| t.name.starts_with("canvas.")) {
+            out.push_str(&format!(
+                "\nCanvas de session lié : `{session_id}`. \
+                 Omets `session_id` dans les args canvas (le runtime le force).\n"
+            ));
+        }
+        out.push('\n');
+        out.push_str(ROOM_ACTION_PROTOCOL);
         out.push('\n');
     }
     out
@@ -177,6 +247,7 @@ async fn run_infer(
     round: &RoomRoundState,
     model_id: Option<String>,
     messages: Vec<ChatMessage>,
+    infer_caps: &[String],
 ) -> Result<String, String> {
     let req = InferRequest {
         model_id,
@@ -191,7 +262,7 @@ async fn run_infer(
         routing: None,
     };
     let mut rx = bus
-        .call_stream::<InferRequest, TokenEvent>("model.infer", &req, room_turn_infer_caps())
+        .call_stream::<InferRequest, TokenEvent>("model.infer", &req, infer_caps.to_vec())
         .await
         .map_err(|e| e.to_string())?;
 
@@ -225,6 +296,99 @@ async fn run_infer(
     Ok(full.trim().to_string())
 }
 
+fn room_reply_from_model(text: &str, parsed: Option<&AgentAction>) -> Option<String> {
+    let (_, clean) = crate::actions::split_reasoning(text);
+    if parsed.is_some() {
+        return None;
+    }
+    let reply = clean.trim();
+    if reply.is_empty() {
+        None
+    } else {
+        Some(reply.to_string())
+    }
+}
+
+async fn run_room_tool_loop(
+    bus: &BusClient,
+    round: &RoomRoundState,
+    agent_id: &str,
+    session_id: &str,
+    model_id: Option<String>,
+    mut messages: Vec<ChatMessage>,
+    tool_descs: &[ToolDesc],
+    caps: &[String],
+    mcp_servers: &[String],
+) -> Result<String, String> {
+    let (mut mcp_sessions, _) = open_mcp_tools_with_secrets(mcp_servers, &HashMap::new()).await;
+    let trace_base = format!(
+        "room-{agent_id}-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0)
+    );
+
+    for step in 0..MAX_ROOM_TOOL_STEPS {
+        let raw = run_infer(bus, round, model_id.clone(), messages.clone(), caps).await?;
+        if raw.is_empty() {
+            return Err("réponse vide".into());
+        }
+
+        let parsed = parse_action(&raw);
+        if let Some(reply) = room_reply_from_model(&raw, parsed.as_ref()) {
+            return Ok(reply);
+        }
+
+        let action = parsed.unwrap_or(AgentAction {
+            thought: String::new(),
+            action: "noop".into(),
+            args: serde_json::json!({}),
+        });
+
+        if action.action == "noop" {
+            if step + 1 >= MAX_ROOM_TOOL_STEPS {
+                return Err("trop d'étapes sans réponse texte".into());
+            }
+            messages.push(ChatMessage {
+                role: "assistant".into(),
+                content: raw,
+            });
+            messages.push(ChatMessage {
+                role: "user".into(),
+                content: "Réponds par un outil JSON valide ou un message texte final pour le salon."
+                    .into(),
+            });
+            continue;
+        }
+
+        let trace_id = format!("{trace_base}-{step}");
+        let outcome = execute_room_tool(
+            bus,
+            agent_id,
+            caps,
+            tool_descs,
+            &action.action,
+            &action.args,
+            &trace_id,
+            Some(session_id),
+            &mut mcp_sessions,
+        )
+        .await;
+
+        messages.push(ChatMessage {
+            role: "assistant".into(),
+            content: raw,
+        });
+        messages.push(ChatMessage {
+            role: "user".into(),
+            content: format!("[outil {}] {outcome}", action.action),
+        });
+    }
+
+    Err("limite d'outils salon atteinte".into())
+}
+
 /// Exécute un tour agent unique (`agent.room_turn`).
 pub async fn execute_room_turn(
     bus: &BusClient,
@@ -236,20 +400,53 @@ pub async fn execute_room_turn(
         return Err("session n'est pas en mode salon".into());
     }
     let display_name = member_display_name(&session, &req.agent_id)?;
-    let spec = persist::read_spec(&req.agent_id).ok_or_else(|| {
+    let mut spec = persist::read_spec(&req.agent_id).ok_or_else(|| {
         format!("spec introuvable pour le membre {}", req.agent_id)
     })?;
+    spec.session_id = Some(req.session_id.clone());
+
+    let user_message = latest_user_message(&session, &req.user_message);
+    let (tool_ids, caps) = room_member_kit(&spec, session.meta.canvas_open, &user_message);
+    let tool_descs = if tool_ids.is_empty() {
+        Vec::new()
+    } else {
+        select_tools(&tool_ids, &[])
+    };
 
     let system = build_room_system_prompt(
         &spec,
         display_name,
         &session.meta.members,
         session.meta.canvas_open,
+        &tool_descs,
+        &req.session_id,
     );
     let messages = format_transcript_messages(&session, &system);
 
     let model_id = spec.model_id.clone().or(session.meta.model_id.clone());
-    let content = run_infer(bus, round, model_id, messages).await?;
+    let content = if tool_descs.is_empty() {
+        run_infer(
+            bus,
+            round,
+            model_id,
+            messages,
+            &room_turn_infer_caps(),
+        )
+        .await?
+    } else {
+        run_room_tool_loop(
+            bus,
+            round,
+            &req.agent_id,
+            &req.session_id,
+            model_id,
+            messages,
+            &tool_descs,
+            &caps,
+            &spec.mcp_servers,
+        )
+        .await?
+    };
     if content.is_empty() {
         return Err("réponse vide".into());
     }
@@ -321,7 +518,7 @@ pub async fn execute_room_conduct(
             session_id: req.session_id.clone(),
             agent_id: member.agent_id.clone(),
             display_name: String::new(),
-            user_message: String::new(),
+            user_message: req.content.clone(),
         };
 
         let reply = match execute_room_turn(bus, round.as_ref(), &turn_req).await {
@@ -444,9 +641,60 @@ mod tests {
             budget: Default::default(),
             optimize_prompt: false,
         };
-        let prompt = build_room_system_prompt(&spec, "Critic", &members, true);
+        let prompt = build_room_system_prompt(&spec, "Critic", &members, true, &[], "sess-1");
         assert!(prompt.contains("Critic (@persona-critic"));
         assert!(prompt.contains("canvas.*"));
         assert!(prompt.contains("Dessinateur"));
+    }
+
+    #[test]
+    fn room_member_kit_adds_canvas_when_open() {
+        let spec = AgentSpec {
+            agent_id: "persona-coder".into(),
+            goal: AgentGoal::default(),
+            kind: Default::default(),
+            display_name: Some("Coder".into()),
+            persona_id: Some("coder".into()),
+            system_prompt: None,
+            skills: vec![],
+            tools: vec![],
+            mcp_servers: vec![],
+            documents: vec![],
+            caps: vec![],
+            model_id: None,
+            parent_id: None,
+            session_id: None,
+            budget: Default::default(),
+            optimize_prompt: false,
+        };
+        let (ids, caps) = room_member_kit(&spec, true, "hello");
+        assert!(ids.iter().any(|x| x == "canvas.stroke"));
+        assert!(ids.iter().any(|x| x == "canvas.get"));
+        assert!(caps.iter().any(|c| c == "tool.invoke:canvas"));
+    }
+
+    #[test]
+    fn room_member_kit_canvas_on_explicit_phrase() {
+        let spec = AgentSpec {
+            agent_id: "agent-x".into(),
+            goal: AgentGoal::default(),
+            kind: Default::default(),
+            display_name: None,
+            persona_id: None,
+            system_prompt: None,
+            skills: vec![],
+            tools: vec![],
+            mcp_servers: vec![],
+            documents: vec![],
+            caps: vec![],
+            model_id: None,
+            parent_id: None,
+            session_id: None,
+            budget: Default::default(),
+            optimize_prompt: false,
+        };
+        let (ids, caps) = room_member_kit(&spec, false, "dessine sur le canvas");
+        assert!(ids.iter().any(|x| x == "canvas.stroke"));
+        assert!(caps.iter().any(|c| c == "tool.invoke:canvas"));
     }
 }
