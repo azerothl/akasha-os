@@ -1,6 +1,9 @@
 //! Sessions de conversation persistées (Preview PC.6).
 
-use aos_proto::{ChatAttachment, ChatSessionMessage, ChatSessionMeta};
+use aos_proto::{
+    ChatAttachment, ChatRoomConductorPolicy, ChatRoomMember, ChatSessionMessage,
+    ChatSessionMeta, ChatSessionMode,
+};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -31,6 +34,12 @@ struct MetaFile {
     archived: bool,
     #[serde(default)]
     model_id: Option<String>,
+    #[serde(default)]
+    mode: ChatSessionMode,
+    #[serde(default)]
+    members: Vec<ChatRoomMember>,
+    #[serde(default)]
+    conductor_policy: ChatRoomConductorPolicy,
 }
 
 /// Magasin de sessions chat sous `var/sessions/<id>/`.
@@ -86,6 +95,9 @@ impl ChatSessionStore {
             archived: m.archived,
             message_count,
             model_id: m.model_id,
+            mode: m.mode,
+            members: m.members,
+            conductor_policy: m.conductor_policy,
         }
     }
 
@@ -106,6 +118,9 @@ impl ChatSessionStore {
             updated_ms: ts,
             archived: false,
             model_id,
+            mode: ChatSessionMode::Direct,
+            members: vec![],
+            conductor_policy: ChatRoomConductorPolicy::default(),
         };
         self.save_meta(&meta)?;
         let _ = fs::write(self.dir(&id).join("messages.jsonl"), "");
@@ -156,6 +171,8 @@ impl ChatSessionStore {
         role: &str,
         content: &str,
         attachments: Vec<ChatAttachment>,
+        speaker_id: Option<String>,
+        speaker_name: Option<String>,
     ) -> Result<ChatSessionMessage, SessionError> {
         if role.is_empty() || content.is_empty() {
             return Err(SessionError::BadRequest("role/content requis".into()));
@@ -166,6 +183,8 @@ impl ChatSessionStore {
             content: content.into(),
             ts_ms: Self::now_ms(),
             attachments,
+            speaker_id,
+            speaker_name,
         };
         let path = self.dir(id).join("messages.jsonl");
         use std::io::Write;
@@ -191,6 +210,63 @@ impl ChatSessionStore {
         meta.updated_ms = Self::now_ms();
         self.save_meta(&meta)?;
         Ok(self.to_public(meta))
+    }
+
+    pub fn set_mode(
+        &self,
+        id: &str,
+        mode: ChatSessionMode,
+    ) -> Result<ChatSessionMeta, SessionError> {
+        let mut meta = self.load_meta(id)?;
+        meta.mode = mode;
+        meta.updated_ms = Self::now_ms();
+        self.save_meta(&meta)?;
+        Ok(self.to_public(meta))
+    }
+
+    pub fn members_add(
+        &self,
+        id: &str,
+        member: ChatRoomMember,
+    ) -> Result<ChatSessionMeta, SessionError> {
+        if member.agent_id.trim().is_empty() {
+            return Err(SessionError::BadRequest("agent_id requis".into()));
+        }
+        if member.display_name.trim().is_empty() {
+            return Err(SessionError::BadRequest("display_name requis".into()));
+        }
+        let mut meta = self.load_meta(id)?;
+        if meta.members.iter().any(|m| m.agent_id == member.agent_id) {
+            return Err(SessionError::BadRequest("membre déjà présent".into()));
+        }
+        meta.members.push(member);
+        meta.updated_ms = Self::now_ms();
+        self.save_meta(&meta)?;
+        Ok(self.to_public(meta))
+    }
+
+    pub fn members_remove(
+        &self,
+        id: &str,
+        agent_id: &str,
+    ) -> Result<ChatSessionMeta, SessionError> {
+        if agent_id.trim().is_empty() {
+            return Err(SessionError::BadRequest("agent_id requis".into()));
+        }
+        let mut meta = self.load_meta(id)?;
+        let before = meta.members.len();
+        meta.members.retain(|m| m.agent_id != agent_id);
+        if meta.members.len() == before {
+            return Err(SessionError::BadRequest("membre introuvable".into()));
+        }
+        meta.updated_ms = Self::now_ms();
+        self.save_meta(&meta)?;
+        Ok(self.to_public(meta))
+    }
+
+    pub fn members_list(&self, id: &str) -> Result<Vec<ChatRoomMember>, SessionError> {
+        let meta = self.load_meta(id)?;
+        Ok(meta.members)
     }
 
     pub fn rename(&self, id: &str, title: &str) -> Result<ChatSessionMeta, SessionError> {
@@ -263,8 +339,8 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         let s = ChatSessionStore::open(&dir).unwrap();
         let m = s.create(Some("Test".into()), None).unwrap();
-        s.append(&m.id, "user", "bonjour", vec![]).unwrap();
-        s.append(&m.id, "assistant", "salut", vec![]).unwrap();
+        s.append(&m.id, "user", "bonjour", vec![], None, None).unwrap();
+        s.append(&m.id, "assistant", "salut", vec![], None, None).unwrap();
         let (meta, msgs) = s.get(&m.id).unwrap();
         assert_eq!(meta.message_count, 2);
         assert_eq!(msgs.len(), 2);
@@ -298,11 +374,100 @@ mod tests {
                 title: "tâche".into(),
                 origin: "slash".into(),
             }],
+            None,
+            None,
         )
         .unwrap();
         let (_, msgs2) = s.get(&m.id).unwrap();
         assert_eq!(msgs2.len(), 3);
         assert_eq!(msgs2[2].attachments.len(), 1);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn legacy_meta_yaml_without_room_fields() {
+        let dir = std::env::temp_dir().join(format!("aos-sess-meta-leg-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let s = ChatSessionStore::open(&dir).unwrap();
+        let m = s.create(Some("Legacy meta".into()), None).unwrap();
+        let meta_path = dir.join(&m.id).join("meta.yaml");
+        fs::write(
+            &meta_path,
+            format!(
+                r#"id: {id}
+title: Legacy meta
+created_ms: 1
+updated_ms: 2
+archived: false
+"#,
+                id = m.id
+            ),
+        )
+        .unwrap();
+        let (meta, _) = s.get(&m.id).unwrap();
+        assert_eq!(meta.mode, ChatSessionMode::Direct);
+        assert!(meta.members.is_empty());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn members_add_remove_and_mode() {
+        let dir = std::env::temp_dir().join(format!("aos-sess-room-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let s = ChatSessionStore::open(&dir).unwrap();
+        let m = s.create(Some("Room".into()), None).unwrap();
+        let meta = s
+            .set_mode(&m.id, ChatSessionMode::Room)
+            .expect("set_mode");
+        assert_eq!(meta.mode, ChatSessionMode::Room);
+        s.members_add(
+            &m.id,
+            ChatRoomMember {
+                agent_id: "agent-a".into(),
+                display_name: "Alpha".into(),
+                persona_id: Some("p1".into()),
+                joined_ms: 100,
+            },
+        )
+        .unwrap();
+        s.members_add(
+            &m.id,
+            ChatRoomMember {
+                agent_id: "agent-b".into(),
+                display_name: "Beta".into(),
+                persona_id: None,
+                joined_ms: 101,
+            },
+        )
+        .unwrap();
+        let members = s.members_list(&m.id).unwrap();
+        assert_eq!(members.len(), 2);
+        s.members_remove(&m.id, "agent-a").unwrap();
+        let members = s.members_list(&m.id).unwrap();
+        assert_eq!(members.len(), 1);
+        assert_eq!(members[0].agent_id, "agent-b");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn append_with_speaker() {
+        let dir = std::env::temp_dir().join(format!("aos-sess-spk-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let s = ChatSessionStore::open(&dir).unwrap();
+        let m = s.create(Some("Speakers".into()), None).unwrap();
+        s.append(
+            &m.id,
+            "assistant",
+            "alpha says hi",
+            vec![],
+            Some("agent-a".into()),
+            Some("Alpha".into()),
+        )
+        .unwrap();
+        let (_, msgs) = s.get(&m.id).unwrap();
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(msgs[0].speaker_id.as_deref(), Some("agent-a"));
+        assert_eq!(msgs[0].speaker_name.as_deref(), Some("Alpha"));
         let _ = fs::remove_dir_all(&dir);
     }
 }

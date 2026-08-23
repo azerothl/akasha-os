@@ -2061,6 +2061,48 @@ pub struct FeedbackSubmitResponse {
 // Chat sessions (Preview PC.6) — conversations parallèles persistées
 // ---------------------------------------------------------------------------
 
+/// Mode de session chat : 1:1 direct (défaut) ou salon multi-agent in-app.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ChatSessionMode {
+    #[default]
+    Direct,
+    /// Salon multi-agent in-app (pas un canal Telegram/Discord).
+    Room,
+}
+
+/// Membre d'un salon (`ChatSessionMode::Room`).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ChatRoomMember {
+    pub agent_id: String,
+    pub display_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub persona_id: Option<String>,
+    pub joined_ms: u64,
+}
+
+fn default_max_agent_turns_per_user() -> u32 {
+    4
+}
+
+/// Politique du conducteur de salon (runtime futur dans `aos-agentd`).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ChatRoomConductorPolicy {
+    #[serde(default = "default_max_agent_turns_per_user")]
+    pub max_agent_turns_per_user: u32,
+    #[serde(default = "default_true")]
+    pub allow_peer_debate: bool,
+}
+
+impl Default for ChatRoomConductorPolicy {
+    fn default() -> Self {
+        Self {
+            max_agent_turns_per_user: default_max_agent_turns_per_user(),
+            allow_peer_debate: true,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatSessionMeta {
     pub id: String,
@@ -2072,6 +2114,15 @@ pub struct ChatSessionMeta {
     /// Modèle instruct pour cette session (`None` = default_model).
     #[serde(default)]
     pub model_id: Option<String>,
+    /// `direct` (défaut) ou `room` — salon in-app uniquement.
+    #[serde(default)]
+    pub mode: ChatSessionMode,
+    /// Membres du salon quand `mode == room`.
+    #[serde(default)]
+    pub members: Vec<ChatRoomMember>,
+    /// Politique du conducteur (sérialisée même en mode direct pour stabilité JSON).
+    #[serde(default)]
+    pub conductor_policy: ChatRoomConductorPolicy,
 }
 
 /// Pièce jointe d'un message de session (ex. référence agent en fond).
@@ -2124,6 +2175,11 @@ pub struct ChatSessionMessage {
     pub ts_ms: u64,
     #[serde(default)]
     pub attachments: Vec<ChatAttachment>,
+    /// Agent membre qui a produit le message en mode salon (`role` peut rester `assistant`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speaker_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speaker_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2158,6 +2214,42 @@ pub struct ChatSessionAppendRequest {
     pub content: String,
     #[serde(default)]
     pub attachments: Vec<ChatAttachment>,
+    #[serde(default)]
+    pub speaker_id: Option<String>,
+    #[serde(default)]
+    pub speaker_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatSessionSetModeRequest {
+    pub session_id: String,
+    pub mode: ChatSessionMode,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatSessionMembersAddRequest {
+    pub session_id: String,
+    pub member: ChatRoomMember,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatSessionMembersRemoveRequest {
+    pub session_id: String,
+    pub agent_id: String,
+}
+
+/// Réponse `chat.session.members.list` — membres persistés du salon.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatSessionMembersListResponse {
+    pub members: Vec<ChatRoomMember>,
+}
+
+/// Réservé slice futur : tour de salon orchestré par le conducteur (`aos-agentd`).
+/// Intent bus `chat.session.room.turn` — **non implémenté** dans slice 1 (pas de LLM séquentiel).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatSessionRoomTurnRequest {
+    pub session_id: String,
+    pub content: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2647,5 +2739,96 @@ mod media_option_tests {
         .unwrap();
         assert_eq!(o.init_image.as_deref(), Some("/downloads/base.png"));
         assert_eq!(o.strength, Some(0.65));
+    }
+}
+
+#[cfg(test)]
+mod chat_session_room_tests {
+    use super::{
+        ChatRoomMember, ChatSessionMessage, ChatSessionMeta, ChatSessionMode,
+        ChatRoomConductorPolicy,
+    };
+
+    #[test]
+    fn legacy_meta_without_mode_or_members() {
+        let m: ChatSessionMeta = serde_json::from_str(
+            r#"{
+                "id":"sess-1",
+                "title":"Test",
+                "created_ms":1,
+                "updated_ms":2,
+                "archived":false,
+                "message_count":0
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(m.mode, ChatSessionMode::Direct);
+        assert!(m.members.is_empty());
+        assert_eq!(m.conductor_policy.max_agent_turns_per_user, 4);
+        assert!(m.conductor_policy.allow_peer_debate);
+    }
+
+    #[test]
+    fn room_meta_with_members_roundtrip() {
+        let m = ChatSessionMeta {
+            id: "sess-room".into(),
+            title: "Salon".into(),
+            created_ms: 10,
+            updated_ms: 20,
+            archived: false,
+            message_count: 3,
+            model_id: None,
+            mode: ChatSessionMode::Room,
+            members: vec![
+                ChatRoomMember {
+                    agent_id: "agent-a".into(),
+                    display_name: "Alpha".into(),
+                    persona_id: Some("p1".into()),
+                    joined_ms: 10,
+                },
+                ChatRoomMember {
+                    agent_id: "agent-b".into(),
+                    display_name: "Beta".into(),
+                    persona_id: None,
+                    joined_ms: 11,
+                },
+            ],
+            conductor_policy: ChatRoomConductorPolicy {
+                max_agent_turns_per_user: 2,
+                allow_peer_debate: false,
+            },
+        };
+        let json = serde_json::to_string(&m).unwrap();
+        let back: ChatSessionMeta = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.mode, ChatSessionMode::Room);
+        assert_eq!(back.members.len(), 2);
+        assert_eq!(back.members[0].agent_id, "agent-a");
+        assert_eq!(back.conductor_policy.max_agent_turns_per_user, 2);
+        assert!(!back.conductor_policy.allow_peer_debate);
+    }
+
+    #[test]
+    fn legacy_message_without_speaker() {
+        let m: ChatSessionMessage =
+            serde_json::from_str(r#"{"role":"user","content":"hi","ts_ms":1}"#).unwrap();
+        assert!(m.speaker_id.is_none());
+        assert!(m.speaker_name.is_none());
+        assert!(m.attachments.is_empty());
+    }
+
+    #[test]
+    fn message_with_speaker_roundtrip() {
+        let m = ChatSessionMessage {
+            role: "assistant".into(),
+            content: "reply".into(),
+            ts_ms: 42,
+            attachments: vec![],
+            speaker_id: Some("agent-a".into()),
+            speaker_name: Some("Alpha".into()),
+        };
+        let json = serde_json::to_string(&m).unwrap();
+        let back: ChatSessionMessage = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.speaker_id.as_deref(), Some("agent-a"));
+        assert_eq!(back.speaker_name.as_deref(), Some("Alpha"));
     }
 }
