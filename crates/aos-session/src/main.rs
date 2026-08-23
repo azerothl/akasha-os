@@ -49,21 +49,32 @@ fn main() {
         std::env::set_var("AOS_HOME", &home);
         let _ = std::env::set_current_dir(&home);
         match update::read_update_offer(&home) {
-            Some(info) => match update::download_update(&home, &info) {
-                Ok(p) => {
+            Some(info) => {
+                if let Some(p) = update::pending_archive_for(&home, &info.version) {
                     eprintln!(
-                        "[aos-session] update téléchargée — redémarrez pour appliquer ({})",
+                        "[aos-session] update déjà en staging — redémarrez pour appliquer ({})",
                         p.display()
                     );
                     std::process::exit(0);
                 }
-                Err(e) => {
-                    eprintln!("[aos-session] download update échoué : {e}");
-                    std::process::exit(1);
+                match update::download_update(&home, &info) {
+                    Ok(p) => {
+                        eprintln!(
+                            "[aos-session] update téléchargée — redémarrez pour appliquer ({})",
+                            p.display()
+                        );
+                        std::process::exit(0);
+                    }
+                    Err(e) => {
+                        eprintln!("[aos-session] download update échoué : {e}");
+                        std::process::exit(1);
+                    }
                 }
-            },
+            }
             None => {
-                eprintln!("[aos-session] aucune offre de mise à jour (var/run/update_available.json)");
+                eprintln!(
+                    "[aos-session] aucune offre de mise à jour (var/run/update_available.json)"
+                );
                 std::process::exit(1);
             }
         }
@@ -176,9 +187,17 @@ fn main() {
 
     // Appliquer une update téléchargée avant de toucher aux binaires en cours.
     match update::apply_pending_update(&home) {
-        Ok(true) => eprintln!("[aos-session] redémarrage recommandé après update"),
+        Ok(true) => {
+            eprintln!("[aos-session] update appliquée — relance du superviseur");
+            reexec_updated(&home);
+        }
         Ok(false) => {}
-        Err(e) => eprintln!("[aos-session] apply update : {e}"),
+        Err(e) => {
+            eprintln!("[aos-session] apply update : {e}");
+            eprintln!(
+                "[aos-session] l'archive reste en attente — fermez toutes les fenêtres Preview puis relancez"
+            );
+        }
     }
 
     ensure_layout(&home);
@@ -321,32 +340,37 @@ fn main() {
     {
         let home_bg = home.clone();
         let ver_bg = version.clone();
-        thread::spawn(move || {
-            match update::check_latest(&ver_bg) {
-                Ok(Some(info)) => {
-                    let _ = update::write_update_offer(&home_bg, &info);
-                    eprintln!(
-                        "[aos-session] mise à jour disponible : {} ({})",
-                        info.version, info.html_url
-                    );
-                    let auto = std::fs::read_to_string(home_bg.join("var/run/preferences.json"))
-                        .ok()
-                        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
-                        .and_then(|v| v.get("auto_download_updates")?.as_bool())
-                        .unwrap_or(false);
-                    if auto {
+        thread::spawn(move || match update::check_latest(&ver_bg) {
+            Ok(Some(info)) => {
+                let _ = update::write_update_offer(&home_bg, &info);
+                eprintln!(
+                    "[aos-session] mise à jour disponible : {} ({})",
+                    info.version, info.html_url
+                );
+                let auto = std::fs::read_to_string(home_bg.join("var/run/preferences.json"))
+                    .ok()
+                    .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+                    .and_then(|v| v.get("auto_download_updates")?.as_bool())
+                    .unwrap_or(false);
+                if auto {
+                    if let Some(p) = update::pending_archive_for(&home_bg, &info.version) {
+                        eprintln!(
+                            "[aos-session] update déjà en staging — redémarrez pour appliquer ({})",
+                            p.display()
+                        );
+                    } else {
                         match update::download_update(&home_bg, &info) {
-                            Ok(p) => eprintln!(
-                                "[aos-session] update auto-téléchargée — redémarrez pour appliquer ({})",
-                                p.display()
-                            ),
-                            Err(e) => eprintln!("[aos-session] auto-download update : {e}"),
-                        }
+                                Ok(p) => eprintln!(
+                                    "[aos-session] update auto-téléchargée — redémarrez pour appliquer ({})",
+                                    p.display()
+                                ),
+                                Err(e) => eprintln!("[aos-session] auto-download update : {e}"),
+                            }
                     }
                 }
-                Ok(None) => update::clear_update_offer(&home_bg),
-                Err(e) => eprintln!("[aos-session] check update : {e}"),
             }
+            Ok(None) => update::clear_update_offer(&home_bg),
+            Err(e) => eprintln!("[aos-session] check update : {e}"),
         });
     }
 
@@ -370,9 +394,7 @@ fn main() {
 
         if let Err(e) = start_daemons(&session) {
             eprintln!("[aos-session] démarrage échoué : {e}");
-            eprintln!(
-                "[aos-session] Astuce : consultez var/run/*.stderr.log (GPU, modèles, bus)."
-            );
+            eprintln!("[aos-session] Astuce : consultez var/run/*.stderr.log (GPU, modèles, bus).");
             stop_all(&session);
             std::process::exit(1);
         }
@@ -574,7 +596,9 @@ fn same_dir(a: &Path, b: &Path) -> bool {
 }
 
 fn portable_requested(pkg: &Path) -> bool {
-    if std::env::var("AOS_PORTABLE").map(|v| v == "1" || v.eq_ignore_ascii_case("true")).unwrap_or(false)
+    if std::env::var("AOS_PORTABLE")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
     {
         return true;
     }
@@ -661,6 +685,31 @@ fn ensure_stable_install(pkg: &Path) -> Result<PathBuf, String> {
     Ok(stable)
 }
 
+/// Relance `bin/aos-session` (le nouveau binaire, pas `current_exe` qui peut
+/// encore pointer vers `aos-session.exe.old` après le rename Windows).
+fn reexec_updated(home: &Path) {
+    let name = if cfg!(windows) {
+        "aos-session.exe"
+    } else {
+        "aos-session"
+    };
+    let packaged = home.join("bin").join(name);
+    let exe = if packaged.exists() {
+        packaged
+    } else {
+        std::env::current_exe().unwrap_or_else(|_| PathBuf::from(name))
+    };
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let mut cmd = Command::new(&exe);
+    cmd.args(&args).env("AOS_HOME", home).current_dir(home);
+    match cmd.spawn() {
+        Ok(_) => std::process::exit(0),
+        Err(e) => eprintln!(
+            "[aos-session] relance après update échouée : {e} — poursuite avec ce processus"
+        ),
+    }
+}
+
 fn resolve_home() -> PathBuf {
     if let Ok(h) = std::env::var("AOS_HOME") {
         return PathBuf::from(h);
@@ -729,6 +778,7 @@ fn ensure_layout(home: &Path) {
     ] {
         let _ = fs::create_dir_all(home.join(d));
     }
+    bootstrap::sweep_old_sidecars(&home.join("bin"));
 
     // Catalogue offerings (copie depuis le package / repo si absent).
     let offerings_dst = home.join("share/models/catalog-offerings.json");
@@ -858,11 +908,7 @@ fn ensure_layout(home: &Path) {
 fn write_runtime_configs(home: &Path) {
     let version = bootstrap::read_version(home);
     let hw = hardware::HardwareInfo::load(home).unwrap_or_else(|| hardware::probe(home));
-    let vram_total = if hw.vram_mib > 0 {
-        hw.vram_bytes()
-    } else {
-        0
-    };
+    let vram_total = if hw.vram_mib > 0 { hw.vram_bytes() } else { 0 };
     let cpu_only = hw.tier == hardware::HardwareTier::Cpu || hw.vram_mib == 0;
     // Reserve embed + OS margin from placement budget (0 on CPU-only).
     let embed_reserve: u64 = if cpu_only { 0 } else { 1_073_741_824 };
@@ -1003,34 +1049,19 @@ embed_model:
     write_catalog_overlay(home, &entries);
 }
 
-fn write_catalog_overlay(
-    home: &Path,
-    entries: &[(String, offerings::ModelOffering, PathBuf)],
-) {
+fn write_catalog_overlay(home: &Path, entries: &[(String, offerings::ModelOffering, PathBuf)]) {
     let catalog_dst = home.join("data/models/catalog.yaml");
     let mut models = Vec::new();
     for (id, o, path) in entries {
         let is_embed = o.profiles.iter().any(|p| p == "embed") && o.profiles.len() == 1;
-        let is_image = o.profiles.iter().any(|p| p == "image")
-            || o.modality.as_deref() == Some("image");
-        let is_tts = o.profiles.iter().any(|p| p == "tts")
-            || o.modality.as_deref() == Some("audio");
+        let is_image =
+            o.profiles.iter().any(|p| p == "image") || o.modality.as_deref() == Some("image");
+        let is_tts =
+            o.profiles.iter().any(|p| p == "tts") || o.modality.as_deref() == Some("audio");
         let (caps, modality, format, backends, offload) = if is_image {
-            (
-                "image",
-                "image",
-                o.format.as_str(),
-                "sdcpp",
-                "false",
-            )
+            ("image", "image", o.format.as_str(), "sdcpp", "false")
         } else if is_tts {
-            (
-                "tts",
-                "audio",
-                o.format.as_str(),
-                "piper",
-                "false",
-            )
+            ("tts", "audio", o.format.as_str(), "piper", "false")
         } else if is_embed {
             ("embed", "embedding", "gguf", "llamacpp", "true")
         } else {
@@ -1138,7 +1169,9 @@ fn modeld_command(home: &Path) -> Command {
     }
     eprintln!(
         "[aos-session] modeld {} (cpu={cpu})",
-        bin.file_name().and_then(|n| n.to_str()).unwrap_or("aos-modeld")
+        bin.file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("aos-modeld")
     );
     cmd
 }
@@ -1174,7 +1207,10 @@ fn start_daemons(session: &Arc<Session>) -> Result<(), String> {
             .spawn()
             .map_err(|e| format!("{name}: {e} ({})", bin(name).display()))?;
         let pid = child.id();
-        let _ = fs::write(home.join("var/run").join(format!("{name}.pid")), pid.to_string());
+        let _ = fs::write(
+            home.join("var/run").join(format!("{name}.pid")),
+            pid.to_string(),
+        );
         eprintln!("[aos-session] {name} up (pid {pid})");
         Ok(Daemon { name, child })
     };
@@ -1343,11 +1379,7 @@ fn modeld_watchdog(session: Arc<Session>) {
     daemon_watchdog(session, "aos-modeld", &|home| modeld_command(home));
 }
 
-fn daemon_watchdog(
-    session: Arc<Session>,
-    name: &'static str,
-    make_cmd: &dyn Fn(&Path) -> Command,
-) {
+fn daemon_watchdog(session: Arc<Session>, name: &'static str, make_cmd: &dyn Fn(&Path) -> Command) {
     while !session.stop.load(Ordering::SeqCst) {
         thread::sleep(Duration::from_secs(2));
         if session.stop.load(Ordering::SeqCst) {
@@ -1377,7 +1409,10 @@ fn daemon_watchdog(
                 match cmd.spawn() {
                     Ok(child) => {
                         let pid = child.id();
-                        let _ = fs::write(home.join("var/run").join(format!("{name}.pid")), pid.to_string());
+                        let _ = fs::write(
+                            home.join("var/run").join(format!("{name}.pid")),
+                            pid.to_string(),
+                        );
                         daemons[pos] = Daemon { name, child };
                         eprintln!("[aos-session] {name} up (pid {pid})");
                     }

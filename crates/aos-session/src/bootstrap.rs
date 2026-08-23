@@ -3,9 +3,11 @@
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::fs::{self, File};
-use std::io::{Read, Write};
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::thread;
+use std::time::Duration;
 
 fn emit_download_progress(pct: u64, done: u64, total: u64) {
     eprintln!("[aos-session]   {pct}% ({done}/{total})");
@@ -80,7 +82,7 @@ pub fn check_disk_space(home: &Path) -> Result<(), String> {
             .map_err(|e| e.to_string())?;
         let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
         if let Ok(free) = s.parse::<u64>() {
-                    if free < MIN_FREE_BYTES {
+            if free < MIN_FREE_BYTES {
                 return Err(format!(
                     "espace disque insuffisant (~{:.1} Go libres, ~8 Go requis)",
                     free as f64 / (1 << 30) as f64
@@ -238,9 +240,7 @@ pub fn download_model_file(
     }
     eprintln!(
         "[aos-session] téléchargement {} (~{:.1} Go)…",
-        dest.file_name()
-            .and_then(|s| s.to_str())
-            .unwrap_or("model"),
+        dest.file_name().and_then(|s| s.to_str()).unwrap_or("model"),
         expected.unwrap_or(0) as f64 / (1 << 30) as f64
     );
     download_file(url, dest, expected)?;
@@ -318,10 +318,7 @@ fn download_file(url: &str, dest: &Path, expected: Option<u64>) -> Result<(), St
         resume_from = 0;
         File::create(&tmp).map_err(|e| e.to_string())?
     };
-    let total = expected.or_else(|| {
-        resp.content_length()
-            .map(|l| l + resume_from)
-    });
+    let total = expected.or_else(|| resp.content_length().map(|l| l + resume_from));
     let mut done = resume_from;
     let mut buf = [0u8; 1024 * 64];
     let mut last_pct = 0u64;
@@ -348,8 +345,8 @@ fn download_file(url: &str, dest: &Path, expected: Option<u64>) -> Result<(), St
     Ok(())
 }
 
-pub fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
-    fs::create_dir_all(dst)?;
+pub fn copy_dir_recursive(src: &Path, dst: &Path) -> io::Result<()> {
+    fs::create_dir_all(dst).map_err(|e| annotate_io(dst, e))?;
     for entry in fs::read_dir(src)? {
         let entry = entry?;
         let ty = entry.file_type()?;
@@ -357,10 +354,100 @@ pub fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
         if ty.is_dir() {
             copy_dir_recursive(&entry.path(), &to)?;
         } else {
-            fs::copy(entry.path(), to)?;
+            replace_file(&entry.path(), &to)?;
         }
     }
     Ok(())
+}
+
+fn annotate_io(path: &Path, err: io::Error) -> io::Error {
+    io::Error::new(err.kind(), format!("{}: {err}", path.display()))
+}
+
+pub(crate) fn is_lock_error(err: &io::Error) -> bool {
+    matches!(
+        err.raw_os_error(),
+        Some(5 | 32 | 33) // ERROR_ACCESS_DENIED / SHARING_VIOLATION / LOCK_VIOLATION
+        | Some(16 | 26) // EBUSY / ETXTBSY
+    )
+}
+
+fn default_old_sidecar(path: &Path) -> PathBuf {
+    let mut name = path.file_name().unwrap_or_default().to_os_string();
+    name.push(".old");
+    path.with_file_name(name)
+}
+
+fn old_sidecar(path: &Path) -> PathBuf {
+    let candidate = default_old_sidecar(path);
+    if !candidate.exists() {
+        return candidate;
+    }
+    let mut name = candidate.file_name().unwrap_or_default().to_os_string();
+    name.push(".");
+    name.push(std::process::id().to_string());
+    path.with_file_name(name)
+}
+
+/// Copy `src` onto `dst`. If `dst` is a running image (Windows error 32),
+/// rename it to `*.old` first — Windows allows renaming a mapped executable.
+pub fn replace_file(src: &Path, dst: &Path) -> io::Result<()> {
+    if let Some(parent) = dst.parent() {
+        fs::create_dir_all(parent).map_err(|e| annotate_io(parent, e))?;
+    }
+    try_copy_with_retry(src, dst)
+        .map(|_| ())
+        .map_err(|e| annotate_io(dst, e))
+}
+
+fn try_copy_with_retry(src: &Path, dst: &Path) -> io::Result<u64> {
+    let mut last = None;
+    for attempt in 0..8u32 {
+        match fs::copy(src, dst) {
+            Ok(n) => {
+                let _ = fs::remove_file(default_old_sidecar(dst));
+                return Ok(n);
+            }
+            Err(e) if is_lock_error(&e) => {
+                let old = old_sidecar(dst);
+                let _ = fs::remove_file(&old);
+                if dst.exists() {
+                    if let Err(ren) = fs::rename(dst, &old) {
+                        last = Some(ren);
+                    } else {
+                        match fs::copy(src, dst) {
+                            Ok(n) => {
+                                let _ = fs::remove_file(&old);
+                                return Ok(n);
+                            }
+                            Err(e2) => {
+                                let _ = fs::rename(&old, dst);
+                                last = Some(e2);
+                            }
+                        }
+                    }
+                } else {
+                    last = Some(e);
+                }
+                thread::sleep(Duration::from_millis(50 * (1 << attempt.min(4))));
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    Err(last.unwrap_or_else(|| io::Error::new(io::ErrorKind::Other, "copy retry exhausted")))
+}
+
+/// Drop leftover `*.old` sidecars from a previous in-place binary replace.
+pub fn sweep_old_sidecars(dir: &Path) {
+    let Ok(rd) = fs::read_dir(dir) else {
+        return;
+    };
+    for ent in rd.filter_map(|e| e.ok()) {
+        let name = ent.file_name();
+        if name.to_string_lossy().contains(".old") {
+            let _ = fs::remove_file(ent.path());
+        }
+    }
 }
 
 fn module_manifest_hash(dir: &Path) -> Option<String> {
@@ -468,6 +555,20 @@ mod tests {
     }
 
     #[test]
+    fn replace_file_overwrites_existing_dest() {
+        let root = temp_dir("replace-file");
+        let src = root.join("src.bin");
+        let dst = root.join("dst.bin");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(&src, b"new").unwrap();
+        fs::write(&dst, b"old").unwrap();
+        super::replace_file(&src, &dst).unwrap();
+        assert_eq!(fs::read(&dst).unwrap(), b"new");
+        assert!(!root.join("dst.bin.old").exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn sync_packaged_module_replaces_outdated_notes_package() {
         let root = temp_dir("sync-packaged-module");
         let share_pkg = root.join("share/modules/notes.aospkg");
@@ -496,7 +597,10 @@ mod tests {
             fs::read_to_string(installed_dir.join("manifest.yaml")).unwrap(),
             "name: notes\nhash: new-hash\nversion: 1.1.0\n"
         );
-        assert_eq!(fs::read(installed_dir.join("module.wasm")).unwrap(), b"new wasm");
+        assert_eq!(
+            fs::read(installed_dir.join("module.wasm")).unwrap(),
+            b"new wasm"
+        );
         assert_eq!(
             fs::read_to_string(installed_dir.join("ui/index.html")).unwrap(),
             "new ui"

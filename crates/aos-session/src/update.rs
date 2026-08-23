@@ -1,10 +1,13 @@
 //! Mises à jour non destructives via GitHub Releases.
 
-use crate::bootstrap::copy_dir_recursive;
+use crate::bootstrap::{copy_dir_recursive, is_lock_error, replace_file, sweep_old_sidecars};
 use serde::Deserialize;
 use std::fs::{self, File};
-use std::io::copy;
+use std::io::{self, copy};
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::thread;
+use std::time::Duration;
 
 const GITHUB_REPO: &str = "azerothl/akasha-os";
 
@@ -133,6 +136,8 @@ pub fn download_update(home: &Path, info: &UpdateInfo) -> Result<PathBuf, String
     }
     let mut file = File::create(&archive).map_err(|e| e.to_string())?;
     copy(&mut resp, &mut file).map_err(|e| e.to_string())?;
+    file.sync_all().map_err(|e| e.to_string())?;
+    drop(file);
     let pending = home.join("var/updates/pending.json");
     let doc = serde_json::json!({
         "version": info.version,
@@ -143,8 +148,21 @@ pub fn download_update(home: &Path, info: &UpdateInfo) -> Result<PathBuf, String
     Ok(archive)
 }
 
+/// Archive déjà téléchargée pour `version` (évite un re-download de ~700 MiB).
+pub fn pending_archive_for(home: &Path, version: &str) -> Option<PathBuf> {
+    let raw = fs::read_to_string(home.join("var/updates/pending.json")).ok()?;
+    let v: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    let ver = v.get("version")?.as_str()?;
+    if ver != version {
+        return None;
+    }
+    let archive = PathBuf::from(v.get("archive")?.as_str()?);
+    archive.exists().then_some(archive)
+}
+
 /// Applique une mise à jour en attente (appelé au tout début de aos-session).
 pub fn apply_pending_update(home: &Path) -> Result<bool, String> {
+    sweep_old_sidecars(&home.join("bin"));
     let pending = home.join("var/updates/pending.json");
     if !pending.exists() {
         return Ok(false);
@@ -156,10 +174,12 @@ pub fn apply_pending_update(home: &Path) -> Result<bool, String> {
         let _ = fs::remove_file(&pending);
         return Err(format!("archive absente: {}", archive.display()));
     }
-    eprintln!("[aos-session] application update depuis {}", archive.display());
-    let extract = home.join("var/updates/extract");
-    let _ = fs::remove_dir_all(&extract);
-    fs::create_dir_all(&extract).map_err(|e| e.to_string())?;
+    eprintln!(
+        "[aos-session] application update depuis {}",
+        archive.display()
+    );
+    release_bin_locks();
+    let extract = prepare_extract_dir(home)?;
 
     if archive
         .file_name()
@@ -177,8 +197,64 @@ pub fn apply_pending_update(home: &Path) -> Result<bool, String> {
 
     let _ = fs::remove_file(&pending);
     let _ = fs::remove_dir_all(&extract);
+    sweep_old_sidecars(&home.join("bin"));
     eprintln!("[aos-session] update appliquée (var/ et etc/ préservés)");
     Ok(true)
+}
+
+fn prepare_extract_dir(home: &Path) -> Result<PathBuf, String> {
+    let updates = home.join("var/updates");
+    fs::create_dir_all(&updates).map_err(|e| e.to_string())?;
+    if let Ok(rd) = fs::read_dir(&updates) {
+        for ent in rd.filter_map(|e| e.ok()) {
+            let name = ent.file_name();
+            let s = name.to_string_lossy();
+            if s == "extract" || s.starts_with("extract-") {
+                let _ = fs::remove_dir_all(ent.path());
+            }
+        }
+    }
+    let dir = updates.join(format!("extract-{}", std::process::id()));
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
+/// Libère les exe daemons/UI d'une session précédente. Ne tue pas `aos-session`
+/// (c'est nous) — l'overlay le remplace via rename `*.old`.
+fn release_bin_locks() {
+    const HELPERS: &[&str] = &[
+        "aos-ui-egui",
+        "aos-busd",
+        "aos-capkd",
+        "aos-auditd",
+        "aos-modeld",
+        "aos-modeld-cpu",
+        "aos-platformd",
+        "aos-agentd",
+        "aos-agent-worker",
+        "aos-bridged",
+    ];
+    #[cfg(windows)]
+    {
+        for name in HELPERS {
+            let _ = Command::new("taskkill")
+                .args(["/F", "/IM", &format!("{name}.exe")])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status();
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        for name in HELPERS {
+            let _ = Command::new("pkill")
+                .args(["-x", name])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status();
+        }
+    }
+    thread::sleep(Duration::from_millis(400));
 }
 
 fn find_package_root(extract: &Path) -> Result<PathBuf, String> {
@@ -222,7 +298,7 @@ pub fn overlay_program(home: &Path, pkg: &Path) -> Result<(), String> {
     ] {
         let src = pkg.join(f);
         if src.exists() {
-            let _ = fs::copy(&src, home.join(f));
+            let _ = replace_file(&src, &home.join(f));
         }
     }
     let etc_src = pkg.join("etc");
@@ -237,12 +313,12 @@ pub fn overlay_program(home: &Path, pkg: &Path) -> Result<(), String> {
             let name = entry.file_name();
             let dst = etc_dst.join(&name);
             if dst.exists() {
-                let _ = fs::copy(
-                    entry.path(),
-                    etc_dst.join(format!("{}.new", name.to_string_lossy())),
+                let _ = replace_file(
+                    &entry.path(),
+                    &etc_dst.join(format!("{}.new", name.to_string_lossy())),
                 );
             } else {
-                let _ = fs::copy(entry.path(), dst);
+                let _ = replace_file(&entry.path(), &dst);
             }
         }
     }
@@ -270,21 +346,51 @@ fn overlay_share(home: &Path, share_src: &Path) -> Result<(), String> {
                 if m.file_type().map(|t| t.is_dir()).unwrap_or(false) {
                     copy_dir_recursive(&m.path(), &to).map_err(|e| e.to_string())?;
                 } else {
-                    let _ = fs::copy(m.path(), to);
+                    let _ = replace_file(&m.path(), &to);
                 }
             }
         } else if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
             let _ = fs::remove_dir_all(&dst);
             copy_dir_recursive(&entry.path(), &dst).map_err(|e| e.to_string())?;
         } else {
-            let _ = fs::copy(entry.path(), dst);
+            let _ = replace_file(&entry.path(), &dst);
         }
     }
     Ok(())
 }
 
+fn open_with_retry(path: &Path) -> io::Result<File> {
+    let mut last = None;
+    for attempt in 0..10u32 {
+        match File::open(path) {
+            Ok(f) => return Ok(f),
+            Err(e) if is_lock_error(&e) => {
+                last = Some(e);
+                thread::sleep(Duration::from_millis(100 * u64::from(attempt + 1)));
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    Err(last.unwrap_or_else(|| io::Error::new(io::ErrorKind::Other, "open retry exhausted")))
+}
+
+fn create_with_retry(path: &Path) -> io::Result<File> {
+    let mut last = None;
+    for attempt in 0..10u32 {
+        match File::create(path) {
+            Ok(f) => return Ok(f),
+            Err(e) if is_lock_error(&e) => {
+                last = Some(e);
+                thread::sleep(Duration::from_millis(100 * u64::from(attempt + 1)));
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    Err(last.unwrap_or_else(|| io::Error::new(io::ErrorKind::Other, "create retry exhausted")))
+}
+
 pub(crate) fn extract_zip(archive: &Path, dest: &Path) -> Result<(), String> {
-    let file = File::open(archive).map_err(|e| e.to_string())?;
+    let file = open_with_retry(archive).map_err(|e| format!("{}: {e}", archive.display()))?;
     let mut zip = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
     for i in 0..zip.len() {
         let mut file = zip.by_index(i).map_err(|e| e.to_string())?;
@@ -298,8 +404,9 @@ pub(crate) fn extract_zip(archive: &Path, dest: &Path) -> Result<(), String> {
             if let Some(p) = outpath.parent() {
                 fs::create_dir_all(p).map_err(|e| e.to_string())?;
             }
-            let mut outfile = File::create(&outpath).map_err(|e| e.to_string())?;
-            copy(&mut file, &mut outfile).map_err(|e| e.to_string())?;
+            let mut outfile =
+                create_with_retry(&outpath).map_err(|e| format!("{}: {e}", outpath.display()))?;
+            copy(&mut file, &mut outfile).map_err(|e| format!("{}: {e}", outpath.display()))?;
         }
     }
     Ok(())
@@ -334,4 +441,65 @@ pub fn clear_update_offer(home: &Path) {
 pub fn read_update_offer(home: &Path) -> Option<UpdateInfo> {
     let raw = fs::read_to_string(home.join("var/run/update_available.json")).ok()?;
     serde_json::from_str(&raw).ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_dir(name: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!("akasha-os-{name}-{}-{nanos}", std::process::id()))
+    }
+
+    #[test]
+    fn is_newer_detects_0_11() {
+        assert!(is_newer("0.10.1", "0.11.0"));
+        assert!(!is_newer("0.11.0", "0.11.0"));
+        assert!(!is_newer("0.11.0", "0.10.1"));
+    }
+
+    #[test]
+    fn overlay_replaces_existing_bin_without_old_sidecar() {
+        let root = temp_dir("overlay-bin");
+        let home = root.join("home");
+        let pkg = root.join("pkg");
+        fs::create_dir_all(pkg.join("bin")).unwrap();
+        fs::create_dir_all(home.join("bin")).unwrap();
+        fs::write(home.join("bin/aos-session.exe"), b"old").unwrap();
+        fs::write(pkg.join("bin/aos-session.exe"), b"new-session").unwrap();
+        overlay_program(&home, &pkg).unwrap();
+        assert_eq!(
+            fs::read(home.join("bin/aos-session.exe")).unwrap(),
+            b"new-session"
+        );
+        assert!(!home.join("bin/aos-session.exe.old").exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn pending_archive_for_requires_existing_zip() {
+        let home = temp_dir("pending-zip");
+        fs::create_dir_all(home.join("var/updates/staging")).unwrap();
+        let archive = home.join("var/updates/staging/AgentOS-Preview-0.11.0-windows-x64.zip");
+        fs::write(&archive, b"zip").unwrap();
+        fs::write(
+            home.join("var/updates/pending.json"),
+            serde_json::json!({
+                "version": "0.11.0",
+                "archive": archive.to_string_lossy(),
+            })
+            .to_string(),
+        )
+        .unwrap();
+        assert!(pending_archive_for(&home, "0.11.0").is_some());
+        assert!(pending_archive_for(&home, "0.12.0").is_none());
+        let _ = fs::remove_file(&archive);
+        assert!(pending_archive_for(&home, "0.11.0").is_none());
+        let _ = fs::remove_dir_all(home);
+    }
 }

@@ -390,7 +390,8 @@ pub fn download_ids(home: &Path, ids: &[String]) -> Result<(), String> {
                 &extra.sha256,
             )?;
         }
-        if let Some(engine_id) = engines::engine_id_for(m.engine.as_deref(), &m.profiles, m.modality.as_deref())
+        if let Some(engine_id) =
+            engines::engine_id_for(m.engine.as_deref(), &m.profiles, m.modality.as_deref())
         {
             engines::ensure_engine(home, Some(&offerings), &engine_id)?;
         }
@@ -411,10 +412,7 @@ pub fn download_ids(home: &Path, ids: &[String]) -> Result<(), String> {
 
 /// Supprime un modèle installé (fichiers + registre ; custom offering si HF).
 pub fn remove_installed_model(home: &Path, id: &str) -> Result<(), String> {
-    if matches!(
-        id,
-        "local:embedded-instruct" | "local:embedded-embed"
-    ) {
+    if matches!(id, "local:embedded-instruct" | "local:embedded-embed") {
         return Err("alias système non supprimable".into());
     }
     let mut inst = load_installed(home);
@@ -505,7 +503,11 @@ pub fn detect_model_updates(home: &Path, hw: &HardwareInfo) -> Option<ModelUpdat
             continue;
         }
         if let Some(m) = find_offering(&offerings, id) {
-            if !inst.models.iter().any(|x| x.user_pinned && x.profiles.iter().any(|p| m.profiles.contains(p))) {
+            if !inst
+                .models
+                .iter()
+                .any(|x| x.user_pinned && x.profiles.iter().any(|p| m.profiles.contains(p)))
+            {
                 available.push(m.clone());
             }
         }
@@ -604,16 +606,18 @@ pub fn runtime_model_entries(
     }
 
     // Ensure legacy aliases point at defaults when using new ids.
-    if !entries.iter().any(|(id, _, _)| id == "local:embedded-instruct") {
+    if !entries
+        .iter()
+        .any(|(id, _, _)| id == "local:embedded-instruct")
+    {
         if let Some((_, o, p)) = entries.iter().find(|(id, _, _)| id == &default_chat) {
-            entries.push((
-                "local:embedded-instruct".into(),
-                o.clone(),
-                p.clone(),
-            ));
+            entries.push(("local:embedded-instruct".into(), o.clone(), p.clone()));
         }
     }
-    if !entries.iter().any(|(id, _, _)| id == "local:embedded-embed") {
+    if !entries
+        .iter()
+        .any(|(id, _, _)| id == "local:embedded-embed")
+    {
         if let Some((_, o, p)) = entries.iter().find(|(id, _, _)| id == &default_embed) {
             entries.push(("local:embedded-embed".into(), o.clone(), p.clone()));
         }
@@ -680,7 +684,9 @@ fn parse_hf_download_url(url: &str) -> Result<(String, String), String> {
     if !url.starts_with("https://huggingface.co/") {
         return Err("URL Hugging Face attendue (https://huggingface.co/…)".into());
     }
-    let rest = url.trim_start_matches("https://huggingface.co/").trim_start_matches('/');
+    let rest = url
+        .trim_start_matches("https://huggingface.co/")
+        .trim_start_matches('/');
     let parts: Vec<&str> = rest.split('/').collect();
     if parts.len() < 4 {
         return Err("URL HF invalide — attendu …/org/repo/resolve/main/file.gguf".into());

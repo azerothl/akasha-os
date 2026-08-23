@@ -111,7 +111,11 @@ pub fn repair_installed(home: &Path) {
             .as_ref()
             .and_then(|o| crate::offerings::find_offering(o, &m.id))
         {
-            engine_id_for(off.engine.as_deref(), &off.profiles, off.modality.as_deref())
+            engine_id_for(
+                off.engine.as_deref(),
+                &off.profiles,
+                off.modality.as_deref(),
+            )
         } else {
             engine_id_for(None, &m.profiles, None)
         };
@@ -139,9 +143,7 @@ fn artifact_for(
             }
         }
     }
-    builtin(engine_id).ok_or_else(|| {
-        format!("pas d'artefact moteur pour {engine_id} sur cet OS")
-    })
+    builtin(engine_id).ok_or_else(|| format!("pas d'artefact moteur pour {engine_id} sur cet OS"))
 }
 
 fn builtin(engine_id: &str) -> Option<EngineArtifact> {
