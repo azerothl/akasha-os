@@ -23,7 +23,7 @@ Durable product spec for the **Preview host app** (`crates/aos-ui-egui`). The pu
 | **Primary rail** | Chat · Agents · Create · Memory | Always visible in the left rail. Keyboard: `Ctrl+1` … `Ctrl+4`. |
 | **More (overflow)** | Notes · Tasks · Models · Settings · Caps · Audit · Providers · DeclUI modules · *(tester)* Scenarios · *(tester)* Feedback | Collapsible section. Tester-only surfaces are **not** peer tabs on the rail. |
 
-**Chat sessions** stay 1:1 on the rail today (`ChatSessionMode::Direct`). **Room** (in-app multi-agent salon, proto + bus intents in slice 1) is not a new rail tab and is not Telegram/Discord messaging — session transcript lines may carry `speaker_id` when Room lands in UI later.
+**Chat sessions** stay 1:1 on the rail today (`ChatSessionMode::Direct`). **Room** (in-app multi-agent salon) is not a new rail tab and is not Telegram/Discord messaging — the backend conductor runs in `aos-agentd` (slice 2); UI for Room mode lands later. Session transcript lines may carry `speaker_id` when Room is surfaced in the UI.
 
 **Create** is the Image Studio tab (`Tab::Image`). Expert sd.cpp controls stay inside the studio behind **Expert mode** — they are not promoted to the rail.
 
