@@ -17,11 +17,11 @@ use aos_ipc::{BusClient, BusService};
 use aos_proto::{
     AgentCreateRequest, AgentCreateResponse, AgentIdRequest, AgentInfo, AgentKind,
     AgentOutputEvent, AgentPromptOptimizeRequest, AgentPromptOptimizeResponse,
-    AgentRoomConductRequest, AgentRoomTurnRequest, AgentSpec,
-    AgentStartRequest, AgentState, AgentSteerRequest, AgentStepRecord, AgentTrace, ChatAttachment,
-    ChatMessage, ChatSessionAppendRequest, ChatSessionRoomTurnCancelRequest,
-    CancelRequest, InferParams, InferRequest, McpServerInfo, SecretGetRequest,
-    SkillInfo, TokenEvent,
+    AgentRoomConductRequest, AgentRoomTurnRequest, AgentRosterUpdateRequest, AgentSpec,
+    AgentSpecResponse, AgentStartRequest, AgentState, AgentSteerRequest, AgentStepRecord,
+    AgentTrace, ChatAttachment, ChatMessage, ChatSessionAppendRequest,
+    ChatSessionRoomTurnCancelRequest, CancelRequest, InferParams, InferRequest, McpServerInfo,
+    SecretGetRequest, SkillInfo, TokenEvent,
 };
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -111,6 +111,55 @@ fn build_spec(agent_id: &str, req: &AgentCreateRequest) -> AgentSpec {
         }
     }
     spec
+}
+
+fn apply_tool_caps(spec: &mut AgentSpec) {
+    let skill_docs = load_skills(&spec.skills);
+    let tool_ids = merge_skill_tools(&spec.tools, &skill_docs);
+    let tools = select_tools(&tool_ids, &[]);
+    spec.tools = tool_ids;
+    let mut caps = Vec::new();
+    for c in caps_for_tools(&tools, &spec.mcp_servers) {
+        if !caps.contains(&c) {
+            caps.push(c);
+        }
+    }
+    if spec.tools.iter().any(|t| t.starts_with("module."))
+        && !caps.iter().any(|c| c == "module.install")
+    {
+        caps.push("module.install".into());
+    }
+    spec.caps = caps;
+}
+
+fn update_roster_from_request(spec: &mut AgentSpec, req: &AgentRosterUpdateRequest) {
+    if let Some(name) = req.display_name.as_ref() {
+        let t = name.trim();
+        if !t.is_empty() {
+            spec.display_name = Some(t.to_string());
+        }
+    }
+    if let Some(prompt) = req.system_prompt.as_ref() {
+        spec.system_prompt = if prompt.trim().is_empty() {
+            None
+        } else {
+            Some(prompt.clone())
+        };
+    }
+    if let Some(role) = req.role.as_ref() {
+        spec.goal.statement = role.clone();
+    }
+    spec.skills = req.skills.clone();
+    spec.tools = req.tools.clone();
+    spec.mcp_servers = req.mcp_servers.clone();
+    if let Some(model) = req.model_id.as_ref() {
+        spec.model_id = if model.trim().is_empty() {
+            None
+        } else {
+            Some(model.clone())
+        };
+    }
+    apply_tool_caps(spec);
 }
 
 fn roster_info_from_spec(spec: &AgentSpec) -> AgentInfo {
@@ -497,6 +546,91 @@ async fn main() {
                             .await;
                     }
                 }
+            }
+        });
+    }
+
+    // --- agent.spec.get ---
+    {
+        svc.on(intents::SPEC_GET, move |ctx| async move {
+            let req: AgentIdRequest = match ctx.payload() {
+                Ok(r) => r,
+                Err(_) => {
+                    let _ = ctx
+                        .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                        .await;
+                    return;
+                }
+            };
+            let Some(spec) = persist::read_spec(&req.agent_id) else {
+                let _ = ctx
+                    .respond_error(aos_ipc::msg::Status::NotFound, "spec introuvable")
+                    .await;
+                return;
+            };
+            let _ = ctx
+                .respond(aos_ipc::msg::Status::Ok, &AgentSpecResponse { spec })
+                .await;
+        });
+    }
+
+    // --- agent.roster.update ---
+    {
+        let shared = shared.clone();
+        svc.on(intents::ROSTER_UPDATE, move |ctx| {
+            let shared = shared.clone();
+            async move {
+                let req: AgentRosterUpdateRequest = match ctx.payload() {
+                    Ok(r) => r,
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                        return;
+                    }
+                };
+                let Some(mut spec) = persist::read_spec(&req.agent_id) else {
+                    let _ = ctx
+                        .respond_error(aos_ipc::msg::Status::NotFound, "spec introuvable")
+                        .await;
+                    return;
+                };
+                if spec.kind != AgentKind::Roster {
+                    let _ = ctx
+                        .respond_error(
+                            aos_ipc::msg::Status::BadRequest,
+                            "seules les entrées roster sont modifiables ici",
+                        )
+                        .await;
+                    return;
+                }
+                update_roster_from_request(&mut spec, &req);
+                if let Err(e) = persist::write_spec(&spec) {
+                    let _ = ctx
+                        .respond_error(aos_ipc::msg::Status::InternalError, &e.to_string())
+                        .await;
+                    return;
+                }
+                let info = roster_info_from_spec(&spec);
+                {
+                    let mut rt = shared.lock().await;
+                    if let Some(entry) = rt.agents.get_mut(&req.agent_id) {
+                        entry.info = info.clone();
+                    } else {
+                        rt.agents.insert(
+                            req.agent_id.clone(),
+                            AgentEntry {
+                                info: info.clone(),
+                                subscribers: Vec::new(),
+                                trace: Vec::new(),
+                            },
+                        );
+                    }
+                    persist::update_info_sidecar(&info);
+                }
+                let _ = ctx
+                    .respond(aos_ipc::msg::Status::Ok, &AgentSpecResponse { spec })
+                    .await;
             }
         });
     }
