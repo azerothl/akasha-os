@@ -106,6 +106,19 @@ pub(crate) enum Cmd {
         current: Option<String>,
     },
     AgentCatalogRefresh,
+    AgentSpecGet {
+        id: String,
+    },
+    AgentRosterUpdate {
+        agent_id: String,
+        display_name: String,
+        role: String,
+        system_prompt: Option<String>,
+        skills: Vec<String>,
+        tools: Vec<String>,
+        mcp_servers: Vec<String>,
+        model_id: Option<String>,
+    },
     Troubleshoot,
     Audit { last: usize },
     CapList { holder: String },
@@ -267,6 +280,10 @@ pub(crate) enum Evt {
     ChatSystem(String),
     Metrics(SystemMetrics),
     Agents(Vec<AgentInfo>),
+    AgentSpecLoaded {
+        spec: aos_proto::AgentSpec,
+    },
+    AgentRosterSaved,
     AgentSpawned {
         session_id: String,
         agent_id: String,

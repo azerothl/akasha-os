@@ -537,10 +537,10 @@ pub fn draw_agent_detail(
         }
 
         ui.horizontal(|ui| {
-            if !a.skills.is_empty() {
+            if !a.is_roster() && !a.skills.is_empty() {
                 ui.small(format!("skills: {}", a.skills.join(", ")));
             }
-            if !a.mcp_servers.is_empty() {
+            if !a.is_roster() && !a.mcp_servers.is_empty() {
                 ui.small(format!("MCP: {}", a.mcp_servers.join(", ")));
             }
         });

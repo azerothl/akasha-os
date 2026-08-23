@@ -15,7 +15,8 @@ use aos_agent::schedule::{
 use aos_ipc::BusClient;
 use aos_proto::{
     AgentCreateRequest, AgentGoal, AgentIdRequest, AgentInfo, AgentKind, AgentPromptOptimizeRequest,
-    AgentPromptOptimizeResponse, AgentSteerRequest, AgentTrace, AuditEvent, AuditQueryRequest,
+    AgentPromptOptimizeResponse, AgentRosterUpdateRequest, AgentSpecResponse, AgentSteerRequest,
+    AgentTrace, AuditEvent, AuditQueryRequest,
     CapInfo, CapListRequest, CapRevokeRequest, ChatAttachment, ChatMessage, ChatRoomMember,
     ChatSessionAppendRequest, ChatSessionCreateRequest, ChatSessionGetResponse,
     ChatSessionIdRequest, ChatSessionMembersAddRequest, ChatSessionMembersRemoveRequest,
@@ -1324,6 +1325,64 @@ async fn handle_cmd(
                 .await
             {
                 let _ = evt_tx.send(Evt::McpServers(list));
+            }
+        }
+        Cmd::AgentSpecGet { id } => {
+            match bus
+                .call::<AgentIdRequest, AgentSpecResponse>(
+                    aos_agent::intents::SPEC_GET,
+                    &AgentIdRequest { agent_id: id },
+                    vec![],
+                )
+                .await
+            {
+                Ok(resp) => {
+                    let _ = evt_tx.send(Evt::AgentSpecLoaded { spec: resp.spec });
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::AgentRosterUpdate {
+            agent_id,
+            display_name,
+            role,
+            system_prompt,
+            skills,
+            tools,
+            mcp_servers,
+            model_id,
+        } => {
+            match bus
+                .call::<AgentRosterUpdateRequest, AgentSpecResponse>(
+                    aos_agent::intents::ROSTER_UPDATE,
+                    &AgentRosterUpdateRequest {
+                        agent_id: agent_id.clone(),
+                        display_name: Some(display_name),
+                        role: Some(role),
+                        system_prompt,
+                        skills,
+                        tools,
+                        mcp_servers,
+                        model_id,
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(_) => {
+                    let _ = evt_tx.send(Evt::AgentRosterSaved);
+                    if let Ok(list) = bus
+                        .call::<(), Vec<AgentInfo>>(aos_agent::intents::LIST, &(), vec![])
+                        .await
+                    {
+                        let _ = evt_tx.send(Evt::Agents(list));
+                    }
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
             }
         }
         Cmd::AgentPromptOptimize {
