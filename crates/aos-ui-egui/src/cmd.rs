@@ -217,6 +217,7 @@ pub(crate) enum Cmd {
     RoomTurn {
         session_id: String,
         content: String,
+        images: Vec<String>,
     },
     RoomTurnCancel {
         session_id: String,

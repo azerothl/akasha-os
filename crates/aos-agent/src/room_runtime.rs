@@ -236,12 +236,32 @@ async fn append_room_reply(
     .map_err(|e| e.to_string())
 }
 
+fn room_images_from_session(session: &ChatSessionGetResponse) -> Vec<String> {
+    session
+        .messages
+        .iter()
+        .rev()
+        .find(|m| m.role == "user")
+        .map(|m| {
+            m.attachments
+                .iter()
+                .filter_map(|a| match a {
+                    ChatAttachment::Image { path, .. } => Some(path.clone()),
+                    _ => None,
+                })
+                .take(4)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 async fn run_infer(
     bus: &BusClient,
     round: &RoomRoundState,
     model_id: Option<String>,
     messages: Vec<ChatMessage>,
     infer_caps: &[String],
+    images: &[String],
 ) -> Result<String, String> {
     let req = InferRequest {
         model_id,
@@ -252,8 +272,8 @@ async fn run_infer(
             ..InferParams::default()
         },
         priority: 6,
-        data_refs: vec![],
-        images: vec![],
+        data_refs: images.to_vec(),
+        images: images.to_vec(),
         routing: None,
     };
     let mut rx = bus
@@ -314,6 +334,7 @@ async fn run_room_tool_loop(
     tool_descs: &[ToolDesc],
     caps: &[String],
     mcp_servers: &[String],
+    images: &[String],
 ) -> Result<String, String> {
     let (mut mcp_sessions, _) = open_mcp_tools_with_secrets(mcp_servers, &HashMap::new()).await;
     let trace_base = format!(
@@ -325,7 +346,17 @@ async fn run_room_tool_loop(
     );
 
     for step in 0..MAX_ROOM_TOOL_STEPS {
-        let raw = run_infer(bus, round, model_id.clone(), messages.clone(), caps).await?;
+        // Vision only on the first model call of the turn.
+        let step_images: &[String] = if step == 0 { images } else { &[] };
+        let raw = run_infer(
+            bus,
+            round,
+            model_id.clone(),
+            messages.clone(),
+            caps,
+            step_images,
+        )
+        .await?;
         if raw.is_empty() {
             return Err("réponse vide".into());
         }
@@ -432,6 +463,7 @@ pub async fn execute_room_turn(
     let messages = format_transcript_messages(&session, &system);
 
     let model_id = spec.model_id.clone().or(session.meta.model_id.clone());
+    let images = room_images_from_session(&session);
     let content = if tool_descs.is_empty() {
         run_infer(
             bus,
@@ -439,6 +471,7 @@ pub async fn execute_room_turn(
             model_id,
             messages,
             &room_turn_infer_caps(),
+            &images,
         )
         .await?
     } else {
@@ -452,6 +485,7 @@ pub async fn execute_room_turn(
             &tool_descs,
             &caps,
             &spec.mcp_servers,
+            &images,
         )
         .await?
     };

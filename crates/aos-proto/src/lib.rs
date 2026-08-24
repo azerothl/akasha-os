@@ -2905,6 +2905,9 @@ pub struct ChatSessionMembersListResponse {
 pub struct ChatSessionRoomTurnRequest {
     pub session_id: String,
     pub content: String,
+    /// Chemins PNG/JPEG pour le tour user (vision).
+    #[serde(default)]
+    pub images: Vec<String>,
 }
 
 /// Annule le tour de salon en cours pour une session (`chat.session.room.turn.cancel`).
@@ -2926,6 +2929,9 @@ pub struct ChatSessionRoomTurnResponse {
 pub struct AgentRoomConductRequest {
     pub session_id: String,
     pub content: String,
+    /// Chemins PNG/JPEG du tour user (propagés aux membres vision).
+    #[serde(default)]
+    pub images: Vec<String>,
 }
 
 /// Réponse `agent.room_conduct`.

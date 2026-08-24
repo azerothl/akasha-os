@@ -2683,7 +2683,11 @@ async fn handle_cmd(
                 }
             }
         }
-        Cmd::RoomTurn { session_id, content } => {
+        Cmd::RoomTurn {
+            session_id,
+            content,
+            images,
+        } => {
             let _ = evt_tx.send(Evt::Status("salon : tour en cours…".into()));
             match bus
                 .call::<ChatSessionRoomTurnRequest, ChatSessionRoomTurnResponse>(
@@ -2691,6 +2695,7 @@ async fn handle_cmd(
                     &ChatSessionRoomTurnRequest {
                         session_id: session_id.clone(),
                         content,
+                        images,
                     },
                     vec![],
                 )

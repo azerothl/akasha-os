@@ -1038,6 +1038,18 @@ async fn infer_turn(
             content: c.clone(),
         })
         .collect();
+    let images: Vec<String> = data_refs
+        .iter()
+        .filter(|p| {
+            let lower = p.to_ascii_lowercase();
+            lower.ends_with(".png")
+                || lower.ends_with(".jpg")
+                || lower.ends_with(".jpeg")
+                || lower.ends_with(".webp")
+        })
+        .cloned()
+        .take(4)
+        .collect();
     let req = InferRequest {
         model_id: spec.model_id.clone(),
         messages,
@@ -1048,7 +1060,7 @@ async fn infer_turn(
         },
         priority: 1,
         data_refs: data_refs.to_vec(),
-        images: vec![],
+        images,
         routing: None,
     };
     let mut rx = match bus

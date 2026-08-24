@@ -1056,11 +1056,19 @@ async fn main() {
                                 .await;
                             return;
                         }
+                        let image_atts: Vec<ChatAttachment> = req
+                            .images
+                            .iter()
+                            .map(|path| ChatAttachment::Image {
+                                path: path.clone(),
+                                prompt: String::new(),
+                            })
+                            .collect();
                         let append = s.sessions.lock().unwrap().append(
                             &req.session_id,
                             "user",
                             &req.content,
-                            vec![],
+                            image_atts,
                             None,
                             None,
                         );
@@ -1088,6 +1096,7 @@ async fn main() {
                                 &AgentRoomConductRequest {
                                     session_id: req.session_id,
                                     content: req.content,
+                                    images: req.images,
                                 },
                                 vec![],
                             )

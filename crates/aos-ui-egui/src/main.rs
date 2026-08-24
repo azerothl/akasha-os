@@ -2120,6 +2120,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             let _ = self.cmd_tx.send(Cmd::RoomTurn {
                 session_id,
                 content: text,
+                images: pending_images,
             });
             self.mark_onboarding_chat_sent();
             self.scen_chat = true;
