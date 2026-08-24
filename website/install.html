@@ -6,7 +6,7 @@
     <title>Install — Akasha OS Preview</title>
     <meta
       name="description"
-      content="Install Akasha OS Preview on Windows or Linux x64. NVIDIA recommended; CPU path available. Zip/tar.gz or build from source."
+      content="Install Akasha OS Preview on Windows, Linux, or Mac (Apple Silicon). NVIDIA recommended on Win/Linux; CPU path available. Unsigned macOS build."
     />
     <link rel="stylesheet" href="styles.css" />
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
@@ -40,13 +40,13 @@
       <main id="content" class="plate-main">
         <h1>
           <span data-lang="en">
-            Preview <span data-aos-version>0.11.0</span> is a host app you
+            Preview <span data-aos-version="0.11.0">0.11.0</span> is a host app you
             install and launch — not a bootable image. No clone, no cargo:
             download the archive, run the install script, then open Akasha OS
             Preview.
           </span>
           <span data-lang="fr">
-            La Preview <span data-aos-version>0.11.0</span> est une appli hôte
+            La Preview <span data-aos-version="0.11.0">0.11.0</span> est une appli hôte
             que vous installez et lancez — pas une image bootable. Pas de clone,
             pas de cargo : téléchargez l’archive, lancez le script
             d’installation, puis ouvrez Akasha OS Preview.
@@ -57,19 +57,23 @@
           <h3 data-lang="en">Platform notes</h3>
           <h3 data-lang="fr">Notes de plateforme</h3>
           <p data-lang="en">
-            Windows 10/11 x64 and Linux x64 are supported. macOS is not.
-            NVIDIA with a recent driver is recommended (<code>nvidia-smi -L</code>);
-            the CUDA runtime ships in the package, so the driver is enough. A
-            CPU path is available in Preview <span data-aos-version>0.11.0</span>
-            via Settings → Inference — no second zip required.
+            Windows 10/11 x64, Linux x64, and macOS on Apple Silicon are
+            supported. Intel Mac is not. On Windows and Linux, NVIDIA with a
+            recent driver is recommended (<code>nvidia-smi -L</code>); the CUDA
+            runtime ships in the package, so the driver is enough. A CPU path is
+            available in Preview <span data-aos-version="0.11.0">0.11.0</span> via
+            Settings → Inference — no second zip required. The macOS build is
+            unsigned — Gatekeeper will warn after download.
           </p>
           <p data-lang="fr">
-            Windows 10/11 x64 et Linux x64 sont pris en charge. macOS ne l’est
-            pas. NVIDIA avec un pilote récent est recommandé
+            Windows 10/11 x64, Linux x64 et macOS sur Apple Silicon sont pris en
+            charge. Mac Intel n’est pas pris en charge. Sous Windows et Linux,
+            NVIDIA avec un pilote récent est recommandé
             (<code>nvidia-smi -L</code>) ; le runtime CUDA est fourni dans le
             paquet, le pilote suffit. Un chemin CPU est disponible en Preview
-            <span data-aos-version>0.11.0</span> via Réglages → Inférence — pas
-            de second zip.
+            <span data-aos-version="0.11.0">0.11.0</span> via Réglages → Inférence — pas
+            de second zip. Le build macOS est non signé — Gatekeeper avertira
+            après le téléchargement.
           </p>
         </aside>
 
@@ -90,41 +94,52 @@
           </p>
         </aside>
 
-        <a class="key" href="https://github.com/azerothl/akasha-os/releases">
-          <svg class="key-glyph" viewBox="0 0 32 32" aria-hidden="true">
-            <path
-              fill="currentColor"
-              d="M13.5 6.5a5.5 5.5 0 1 0 1.2 8.1L19 19l1.8-1.8 1.4 1.4 1.8-1.8-1.4-1.4 2.2-2.2-1.8-1.8-2.2 2.2-1.2-1.2 2-2-1.8-1.8-6.3 6.3A5.5 5.5 0 0 0 13.5 6.5Zm-3.2 2.3a3.2 3.2 0 1 1 0 6.4 3.2 3.2 0 0 1 0-6.4Z"
-            />
-          </svg>
-          <span class="key-label">Download</span>
-          <span class="key-rule" aria-hidden="true"></span>
-          <span class="key-copy">
-            <span class="key-hint">GitHub Releases</span>
-          </span>
-          <svg class="key-arrow" viewBox="0 0 32 32" aria-hidden="true">
-            <path
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.2"
-              stroke-linecap="square"
-              d="M6 16h18M18 8l8 8-8 8"
-            />
-          </svg>
-        </a>
+        <nav class="chapters" aria-label="Download Preview">
+          <a class="doc-band" href="#" data-dl="windows">
+            <span class="band-hz">WIN</span>
+            <span class="band-name" data-lang="en">Windows x64</span>
+            <span class="band-name" data-lang="fr">Windows x64</span>
+          </a>
+          <a class="doc-band" href="#" data-dl="linux">
+            <span class="band-hz">LINUX</span>
+            <span class="band-name" data-lang="en">Linux x64</span>
+            <span class="band-name" data-lang="fr">Linux x64</span>
+          </a>
+          <a class="doc-band" href="#" data-dl="macos">
+            <span class="band-hz">MAC</span>
+            <span class="band-name" data-lang="en">Apple Silicon, unsigned</span>
+            <span class="band-name" data-lang="fr">Apple Silicon, non signé</span>
+          </a>
+        </nav>
+        <p class="hist">
+          <a href="https://github.com/azerothl/akasha-os/releases"
+            >GitHub Releases</a
+          >
+          ·
+          <a
+            href="https://github.com/azerothl/akasha-os/releases/latest/download/latest.json"
+            >latest.json</a
+          >
+        </p>
 
         <article class="grant">
           <h2 data-lang="en">What you need</h2>
           <h2 data-lang="fr">Ce qu’il vous faut</h2>
           <ul class="ticks" aria-label="Requirements">
-            <li data-lang="en">Windows 10/11 x64 or Linux x64</li>
-            <li data-lang="fr">Windows 10/11 x64 ou Linux x64</li>
             <li data-lang="en">
-              NVIDIA GPU with a recent driver recommended
+              Windows 10/11 x64, Linux x64, or macOS on Apple Silicon (not
+              Intel Mac)
+            </li>
+            <li data-lang="fr">
+              Windows 10/11 x64, Linux x64 ou macOS sur Apple Silicon (pas Mac
+              Intel)
+            </li>
+            <li data-lang="en">
+              NVIDIA GPU with a recent driver recommended on Windows and Linux
               (<code>nvidia-smi -L</code>)
             </li>
             <li data-lang="fr">
-              GPU NVIDIA avec pilote récent recommandé
+              GPU NVIDIA avec pilote récent recommandé sous Windows et Linux
               (<code>nvidia-smi -L</code>)
             </li>
             <li data-lang="en">
@@ -141,14 +156,22 @@
             <li data-lang="fr">
               Runtime CUDA inclus ; installer le pilote suffit
             </li>
-            <li data-lang="en">macOS is not supported</li>
-            <li data-lang="fr">macOS n’est pas pris en charge</li>
             <li data-lang="en">
-              CPU-only works in Preview <span data-aos-version>0.11.0</span>
+              macOS build is unsigned — expect a Gatekeeper prompt; run
+              <code>./install.sh</code> after extract (clears quarantine on
+              <code>bin/</code>)
+            </li>
+            <li data-lang="fr">
+              Build macOS non signé — attendez-vous à Gatekeeper ; lancez
+              <code>./install.sh</code> après extraction (lève la quarantaine sur
+              <code>bin/</code>)
+            </li>
+            <li data-lang="en">
+              CPU-only works in Preview <span data-aos-version="0.11.0">0.11.0</span>
               (Settings → Inference; no second zip)
             </li>
             <li data-lang="fr">
-              CPU seul fonctionne en Preview <span data-aos-version>0.11.0</span>
+              CPU seul fonctionne en Preview <span data-aos-version="0.11.0">0.11.0</span>
               (Réglages → Inférence ; pas de second zip)
             </li>
           </ul>
@@ -228,6 +251,42 @@
             (<code>%LOCALAPPDATA%\AgentOS-Preview</code>) :
           </p>
           <pre>.\bin\aos-session.exe</pre>
+        </article>
+
+        <article class="grant">
+          <h2 data-lang="en">macOS step by step</h2>
+          <h2 data-lang="fr">macOS pas à pas</h2>
+          <ol class="steps">
+            <li data-lang="en">
+              Download
+              <code>AgentOS-Preview-&lt;ver&gt;-macos-arm64.zip</code> (Apple
+              Silicon only; unsigned) from the MAC band above or
+              <a href="https://github.com/azerothl/akasha-os/releases">GitHub Releases</a>.
+            </li>
+            <li data-lang="fr">
+              Télécharger
+              <code>AgentOS-Preview-&lt;ver&gt;-macos-arm64.zip</code> (Apple
+              Silicon uniquement ; non signé) via la bande MAC ci-dessus ou
+              <a href="https://github.com/azerothl/akasha-os/releases">GitHub Releases</a>.
+            </li>
+            <li data-lang="en">Unzip, then run:</li>
+            <li data-lang="fr">Décompresser, puis :</li>
+          </ol>
+          <pre>./install.sh</pre>
+          <p class="hist" data-lang="en">
+            Prefix: <code>~/.local/share/agentos-preview</code> (same overlay
+            idea as Linux). Run <code>agentos-preview</code>. Gatekeeper may
+            block unsigned binaries — <code>install.sh</code> clears quarantine
+            on <code>bin/</code>; if needed, right-click Open on
+            <code>aos-session</code> once.
+          </p>
+          <p class="hist" data-lang="fr">
+            Préfixe : <code>~/.local/share/agentos-preview</code> (même overlay
+            que Linux). Lancer <code>agentos-preview</code>. Gatekeeper peut
+            bloquer les binaires non signés — <code>install.sh</code> lève la
+            quarantaine sur <code>bin/</code> ; si besoin, clic droit Ouvrir sur
+            <code>aos-session</code> une fois.
+          </p>
         </article>
 
         <article class="grant">
@@ -315,12 +374,21 @@ var/            created at run</pre>
           <h2 data-lang="fr">Si quelque chose ne va pas</h2>
           <ul class="ticks">
             <li data-lang="en">
-              No NVIDIA → use Settings → Inference → CPU (slow is OK), or a
-              CPU-oriented archive if you downloaded one separately
+              No NVIDIA (Win/Linux) → use Settings → Inference → CPU (slow is
+              OK), or a CPU-oriented archive if you downloaded one separately
             </li>
             <li data-lang="fr">
-              Pas de NVIDIA → Réglages → Inférence → CPU (lent OK), ou une
-              archive orientée CPU si vous en avez téléchargé une à part
+              Pas de NVIDIA (Win/Linux) → Réglages → Inférence → CPU (lent OK),
+              ou une archive orientée CPU si vous en avez téléchargé une à part
+            </li>
+            <li data-lang="en">
+              Gatekeeper blocked macOS launch → run <code>./install.sh</code>
+              again or right-click Open on <code>bin/aos-session</code>
+            </li>
+            <li data-lang="fr">
+              Gatekeeper bloque le lancement macOS → relancer
+              <code>./install.sh</code> ou clic droit Ouvrir sur
+              <code>bin/aos-session</code>
             </li>
             <li data-lang="en">
               Model download failed → need network to Hugging Face, or copy
