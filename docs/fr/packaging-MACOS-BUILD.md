@@ -32,8 +32,16 @@ Préfixe données : `~/.local/share/agentos-preview` (identique à Linux).
 
 ## CI
 
-Le tag `v*` lance [`.github/workflows/preview-release.yml`](../../.github/workflows/preview-release.yml)
-sur `macos-14` (Apple Silicon) et publie :
+Le tag `v*` lance le workflow complet Win/Linux/macOS.
+
+**Rattrapage macOS sur une Release existante** (ex. `v0.11.0` déjà tagué) :
+
+1. Actions → **preview-release** → **Run workflow**
+2. Branche : `main` (ou la branche avec les scripts packaging)
+3. Inputs : `macos_only` = true, `release_version` = `0.11.0`, `upload_release` = true
+4. Exécution — build sur `macos-14`, upload du zip, fusion macOS dans `latest.json` (entrées Win/Linux conservées)
+
+Publication sur tag :
 
 - `AgentOS-Preview-<ver>-macos-arm64.zip`
 

@@ -8,13 +8,25 @@ on:
       - "v*"
   workflow_dispatch:
     inputs:
+      macos_only:
+        description: "macOS Apple Silicon only — build zip and attach to an existing Release (skip Win/Linux)"
+        type: boolean
+        default: true
+      release_version:
+        description: "Release version to attach (e.g. 0.11.0). Empty = VERSION file in checkout."
+        type: string
+        default: "0.11.0"
+      upload_release:
+        description: "Upload macOS zip + refresh latest.json on the GitHub Release"
+        type: boolean
+        default: true
       create_release:
-        description: "Create/upload GitHub Release assets"
+        description: "Full Win/Linux/macOS build and publish a new Release (tag push alternative)"
         type: boolean
         default: false
 
 concurrency:
-  group: preview-release-${{ github.ref }}
+  group: preview-release-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && inputs.macos_only && 'macos-only' || 'full' }}
   cancel-in-progress: true
 
 env:
@@ -37,6 +49,7 @@ permissions:
 
 jobs:
   windows:
+    if: github.event_name != 'workflow_dispatch' || !inputs.macos_only
     runs-on: windows-2022
     timeout-minutes: 180
     steps:
@@ -119,6 +132,7 @@ jobs:
           retention-days: 7
 
   linux:
+    if: github.event_name != 'workflow_dispatch' || !inputs.macos_only
     runs-on: ubuntu-22.04
     timeout-minutes: 180
     container:
@@ -203,10 +217,22 @@ jobs:
           retention-days: 7
 
   macos:
+    if: github.event_name != 'workflow_dispatch' || inputs.macos_only || inputs.create_release
     runs-on: macos-14
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
+
+      - name: Resolve release VERSION
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.release_version }}" ]; then
+            VERSION="${{ inputs.release_version }}"
+          else
+            VERSION="$(tr -d '[:space:]' < VERSION)"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "VERSION=${VERSION}"
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -244,9 +270,9 @@ jobs:
         env:
           SKIP_MODELS: "1"
           RUSTC_WRAPPER: sccache
+          VERSION: ${{ steps.ver.outputs.version }}
         run: |
           sccache --show-stats
-          VERSION="$(tr -d '[:space:]' < VERSION)"
           export VERSION
           chmod +x packaging/build-preview-macos.sh
           ./packaging/build-preview-macos.sh
@@ -270,10 +296,103 @@ jobs:
           compression-level: 0
           retention-days: 7
 
+  release-macos-only:
+    needs: [macos]
+    runs-on: ubuntu-22.04
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.macos_only &&
+      inputs.upload_release &&
+      needs.macos.result == 'success'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: preview-macos-arm64
+          path: artifacts
+
+      - name: Prepare macOS asset + merge latest.json
+        id: prep
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -n "${{ inputs.release_version }}" ]; then
+            VERSION="${{ inputs.release_version }}"
+          else
+            VERSION="$(tr -d '[:space:]' < VERSION)"
+          fi
+          TAG="v${VERSION}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+          mkdir -p release-assets existing-release
+          MAC_ZIP="$(find artifacts -type f -name '*macos-arm64.zip' | head -n1)"
+          if [ -z "${MAC_ZIP}" ] || [ ! -f "${MAC_ZIP}" ]; then
+            echo "::error::macOS zip artifact not found"
+            exit 1
+          fi
+          cp -f "${MAC_ZIP}" "release-assets/$(basename "${MAC_ZIP}")"
+          MAC_NAME="$(basename "${MAC_ZIP}")"
+          MAC_SHA="$(sha256sum "release-assets/${MAC_NAME}" | awk '{print $1}')"
+
+          max=$((2 * 1024 * 1024 * 1024 - 1))
+          size=$(stat -c%s "release-assets/${MAC_NAME}")
+          if [ "$size" -ge "$max" ]; then
+            echo "::error::${MAC_NAME} exceeds GitHub Release 2 GiB asset limit"
+            exit 1
+          fi
+
+          if ! gh release view "${TAG}" -R "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "::error::Release ${TAG} not found — create it first or check release_version"
+            exit 1
+          fi
+
+          gh release download "${TAG}" -R "${GITHUB_REPOSITORY}" -p 'latest.json' -D existing-release 2>/dev/null || true
+
+          if [ -f existing-release/latest.json ]; then
+            jq --arg name "${MAC_NAME}" --arg sha "${MAC_SHA}" \
+              '.assets = ((.assets // []) | map(select(.os != "macos")) + [{"name":$name,"os":"macos","sha256":$sha}])' \
+              existing-release/latest.json > release-assets/latest.json
+          else
+            cat > release-assets/latest.json <<EOF
+          {
+            "version": "${VERSION}",
+            "tag": "${TAG}",
+            "repo": "${GITHUB_REPOSITORY}",
+            "assets": [{"name":"${MAC_NAME}","os":"macos","sha256":"${MAC_SHA}"}],
+            "notes": "Akasha OS Preview ${VERSION} — macOS Apple Silicon (Metal + CPU modeld). Models download on first run. See FIRST-RUN.md."
+          }
+          EOF
+          fi
+
+          echo "== upload assets =="
+          ls -lah release-assets
+
+      - name: Upload to existing GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.prep.outputs.tag }}
+          generate_release_notes: false
+          make_latest: false
+          overwrite_files: true
+          files: |
+            release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   release:
     needs: [windows, linux, macos]
     runs-on: ubuntu-22.04
-    if: startsWith(github.ref, 'refs/tags/v') || inputs.create_release
+    if: >-
+      (startsWith(github.ref, 'refs/tags/v') ||
+        (github.event_name == 'workflow_dispatch' && inputs.create_release && !inputs.macos_only)) &&
+      needs.windows.result == 'success' &&
+      needs.linux.result == 'success' &&
+      needs.macos.result == 'success'
     permissions:
       contents: write
     steps:

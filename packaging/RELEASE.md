@@ -24,6 +24,9 @@ CPU-linked `aos-modeld-cpu` in the same zip; no GGUF) and publishes:
 
 Manual trigger: Actions → **preview-release** → Run workflow.
 
+- **macOS only on existing Release** (no retag): `macos_only` = true, `release_version` = `0.11.0`, `upload_release` = true — attaches the Apple Silicon zip and refreshes `latest.json` on that Release.
+- **Full rebuild**: `create_release` = true, `macos_only` = false.
+
 ### Internal seL4 gate (not a tester release)
 
 Tags matching `sel4-pv-*` (e.g. `sel4-pv-0.10.0`) trigger

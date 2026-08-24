@@ -33,9 +33,20 @@ Data prefix: `~/.local/share/agentos-preview` (same as Linux).
 ## CI
 
 Tag `v*` triggers [`.github/workflows/preview-release.yml`](../.github/workflows/preview-release.yml)
-which builds on `macos-14` (Apple Silicon) and publishes:
+which builds Win + Linux + macOS and publishes release assets.
 
-- `AgentOS-Preview-<ver>-macos-arm64.zip`
+**Backfill macOS on an existing Release** (e.g. `v0.11.0` already tagged):
+
+1. Actions → **preview-release** → **Run workflow**
+2. Branch: `main` (or the branch with packaging scripts)
+3. Inputs: `macos_only` = true, `release_version` = `0.11.0`, `upload_release` = true
+4. Run — builds on `macos-14`, uploads `AgentOS-Preview-0.11.0-macos-arm64.zip`, merges macOS into `latest.json` on that Release (Win/Linux entries preserved)
+
+Tag push builds:
+
+- `AgentOS-Preview-<ver>-windows-x64.zip`
+- `AgentOS-Preview-<ver>-linux-x64.tar.gz`
+- `AgentOS-Preview-<ver>-macos-arm64.zip` (Apple Silicon + Metal; CI unsigned)
 
 Unified artefact ships **Metal** `aos-modeld` + **CPU** `aos-modeld-cpu` (same session logic as Win/Linux).
 

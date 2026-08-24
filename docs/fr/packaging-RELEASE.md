@@ -24,6 +24,9 @@ dans le même zip ; sans GGUF), publie :
 
 Déclenchement manuel : Actions → **preview-release** → Run workflow.
 
+- **macOS seul sur une Release existante** (sans retag) : `macos_only` = true, `release_version` = `0.11.0`, `upload_release` = true — attache le zip Apple Silicon et met à jour `latest.json` sur cette Release.
+- **Rebuild complet** : `create_release` = true, `macos_only` = false.
+
 ## Manuel
 
 | Asset | Commande |
