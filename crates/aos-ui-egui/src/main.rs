@@ -472,14 +472,6 @@ fn session_model_supports_vision(model_id: Option<&str>) -> bool {
         .any(|m| m.id == id && m.profiles.iter().any(|p| p == "vision"))
 }
 
-fn short_path_label(path: &str) -> String {
-    std::path::Path::new(path)
-        .file_name()
-        .and_then(|s| s.to_str())
-        .unwrap_or(path)
-        .to_string()
-}
-
 fn chat_action_is_self_tool(action: &str) -> bool {
     matches!(
         action,
@@ -2018,8 +2010,9 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         if text.is_empty() && pending_images.is_empty() {
             return;
         }
+        let t = i18n::strings(&self.prefs.language);
         let text = if text.is_empty() {
-            "Décris cette image.".to_string()
+            t.chat_empty_image_prompt.to_string()
         } else {
             text
         };
@@ -2198,17 +2191,22 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
     }
 
     fn load_preferred_vision_model(&mut self) {
-        const VISION: &str = "local:gemma-4-e4b";
+        let Some(model_id) = models_page::first_catalog_vision_model_id() else {
+            self.status = i18n::strings(&self.prefs.language)
+                .chat_vision_banner
+                .to_string();
+            return;
+        };
         if let Some(sid) = self.active_session.clone() {
             let _ = self.cmd_tx.send(Cmd::SessionSetModel {
                 session_id: sid,
-                model_id: Some(VISION.into()),
+                model_id: Some(model_id.clone()),
             });
         }
         let _ = self.cmd_tx.send(Cmd::ModelLoad {
-            model_id: VISION.into(),
+            model_id: model_id.clone(),
         });
-        self.status = format!("vision: {VISION}");
+        self.status = format!("vision: {model_id}");
     }
 
     fn apply_onboarding_prefs(&mut self) {
@@ -4246,7 +4244,6 @@ impl UiApp {
                 let mut open_agent: Option<String> = None;
                 let mut target_reply: Option<String> = None;
                 let mut open_studio: Option<(String, String)> = None;
-                let mut queue_image_for_model: Option<String> = None;
                 let reply_id = self.blocked_ask_agent().map(|a| a.agent_id.clone());
                 let n = self.chat.len();
                 for i in 0..n {
@@ -4363,7 +4360,7 @@ impl UiApp {
                                     }
                                 }
                                 ChatAttachment::Image { path, prompt } => {
-                                    let send = chat_media::render_image(
+                                    chat_media::render_image(
                                         ui,
                                         t,
                                         path.as_str(),
@@ -4372,9 +4369,6 @@ impl UiApp {
                                             open_studio = Some((prompt.clone(), path.clone()));
                                         },
                                     );
-                                    if send {
-                                        queue_image_for_model = Some(path.clone());
-                                    }
                                 }
                                 ChatAttachment::Audio { path } => {
                                     chat_media::render_audio(ui, path.as_str());
@@ -4407,9 +4401,6 @@ impl UiApp {
                     self.image_studio.open_from_chat(&prompt, &path, None);
                     self.image_studio.apply_history_for_path(&path);
                     self.tab = Tab::Image;
-                }
-                if let Some(path) = queue_image_for_model {
-                    self.queue_chat_image(path);
                 }
                 if let Some(id) = target_reply {
                     self.ask_reply_target = Some(id);
@@ -4827,49 +4818,20 @@ impl UiApp {
                             && !session_model_supports_vision(session_model.as_deref())
                         {
                             ui.horizontal(|ui| {
-                                ui.colored_label(
-                                    egui::Color32::from_rgb(240, 160, 80),
-                                    t.chat_vision_banner,
-                                );
-                                if ui.button(t.chat_load_vision_model).clicked() {
+                                ui.weak(t.chat_vision_banner);
+                                if ui.small_button(t.chat_load_vision_model).clicked() {
                                     self.load_preferred_vision_model();
                                 }
                             });
                         }
                         if !self.chat_pending_images.is_empty() {
-                            ui.horizontal_wrapped(|ui| {
-                                for path in &self.chat_pending_images {
-                                    ui.weak(format!("📎 {}", short_path_label(path)));
-                                }
-                                if ui.small_button(t.chat_clear_pending_images).clicked() {
-                                    self.chat_pending_images.clear();
-                                }
-                            });
+                            let ctx = ui.ctx().clone();
+                            chat_media::render_pending_image_chips(
+                                ui,
+                                &ctx,
+                                &mut self.chat_pending_images,
+                            );
                         }
-                        ui.horizontal(|ui| {
-                            if ui
-                                .small_button("📎")
-                                .on_hover_text(t.chat_attach_image)
-                                .clicked()
-                            {
-                                if let Some(path) = os_open::pick_os_file(
-                                    t.chat_attach_image,
-                                    &[("Images", &["png", "jpg", "jpeg", "webp"])],
-                                    os_open::user_downloads_dir().as_deref(),
-                                ) {
-                                    self.queue_chat_image(path.to_string_lossy().into_owned());
-                                }
-                            }
-                            if let Some(last) = self.last_session_image.clone() {
-                                if ui
-                                    .small_button(t.chat_last_session_image)
-                                    .on_hover_text(&last)
-                                    .clicked()
-                                {
-                                    self.queue_chat_image(last);
-                                }
-                            }
-                        });
                     }
                     let input_row = ui.with_layout(
                         egui::Layout::left_to_right(egui::Align::Center),
@@ -4891,12 +4853,41 @@ impl UiApp {
                             let r = ui.add(
                                 egui::TextEdit::singleline(&mut self.input)
                                     .id_salt("chat_input")
-                                    .desired_width(ui.available_width() - 90.0)
+                                    .desired_width(ui.available_width() - 130.0)
                                     .hint_text(hint),
                             );
                             if self.chat_refocus {
                                 r.request_focus();
                                 self.chat_refocus = false;
+                            }
+                            let mut attach_from_menu = false;
+                            let mut reuse_last_image = false;
+                            ui.menu_button("📎", |ui| {
+                                if ui.button(t.chat_attach_image).clicked() {
+                                    attach_from_menu = true;
+                                    ui.close_menu();
+                                }
+                                if self.last_session_image.is_some()
+                                    && ui.button(t.chat_last_session_image).clicked()
+                                {
+                                    reuse_last_image = true;
+                                    ui.close_menu();
+                                }
+                            })
+                            .response
+                            .on_hover_text(t.chat_attach_image);
+                            if attach_from_menu {
+                                if let Some(path) = os_open::pick_os_file(
+                                    t.chat_attach_image,
+                                    &[("Images", &["png", "jpg", "jpeg", "webp"])],
+                                    os_open::user_downloads_dir().as_deref(),
+                                ) {
+                                    self.queue_chat_image(path.to_string_lossy().into_owned());
+                                }
+                            } else if reuse_last_image {
+                                if let Some(last) = self.last_session_image.clone() {
+                                    self.queue_chat_image(last);
+                                }
                             }
                             let send_btn = ui.button("Envoyer").on_hover_text(t.tip_send);
                             if self.chat_pending {
