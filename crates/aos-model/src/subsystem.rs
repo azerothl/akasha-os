@@ -33,6 +33,8 @@ struct DispatchJob {
     priority: u8,
     messages: Vec<(String, String)>,
     params: GenParams,
+    /// Chemins locaux PNG/JPEG pour le dernier tour user (vision / mtmd).
+    images: Vec<String>,
     abort: Arc<AtomicBool>,
     pause: Arc<AtomicBool>,
     resumed: bool,
@@ -427,6 +429,7 @@ impl ModelSubsystem {
                 n_seq_max: config.n_seq_max.max(1),
                 tensor_split: plan.tensor_split.clone(),
                 main_gpu: plan.main_gpu,
+                mmproj_path: resolve_mmproj_for_model(&model_id, &path),
             };
             let model = match LlamaModel::load(&path, &opts) {
                 Ok(m) => Arc::new(m),
@@ -542,6 +545,7 @@ impl ModelSubsystem {
                 top_p: req.params.top_p,
                 seed: req.params.seed.unwrap_or(42),
             },
+            images: req.images.clone(),
             abort,
             pause,
             resumed: false,
@@ -605,6 +609,33 @@ impl ModelSubsystem {
                 }
             }
             batch.sort_by(|a, b| b.priority.cmp(&a.priority).then(a.job_id.cmp(&b.job_id)));
+            // Vision (mtmd) cannot share a continuous batch — run each job alone.
+            if batch.len() > 1 && batch.iter().any(|j| !j.images.is_empty()) {
+                let mut solo = Vec::new();
+                let mut rest = Vec::new();
+                for j in batch {
+                    if j.images.is_empty() {
+                        rest.push(j);
+                    } else {
+                        solo.push(j);
+                    }
+                }
+                // Vision first (alone), then text batch.
+                batch = solo;
+                batch.extend(rest);
+                // Truncate to first job; re-inject the remainder into the dispatcher.
+                let first = batch.remove(0);
+                let remainder = batch;
+                batch = vec![first];
+                if let Some(tx) = {
+                    let g = inner.lock().unwrap();
+                    g.models.get(&model_id).and_then(|m| m.dispatch.clone())
+                } {
+                    for j in remainder {
+                        let _ = tx.send(j).await;
+                    }
+                }
+            }
             eprintln!(
                 "[modeld] batch {} job(s) (fenêtre {} ms, n_seq_max={n_seq}) — admit à chaud actif",
                 batch.len(),
@@ -676,7 +707,20 @@ impl ModelSubsystem {
                                     ) => false,
                                 }
                             };
-                            let res = if use_prefix_spec {
+                            let res = if !job.images.is_empty() {
+                                if !guard.has_vision() {
+                                    Err(aos_llama::LlamaError::VisionUnavailable)
+                                } else {
+                                    let paths: Vec<PathBuf> =
+                                        job.images.iter().map(PathBuf::from).collect();
+                                    guard.generate_with_images(
+                                        &job.messages,
+                                        &job.params,
+                                        &paths,
+                                        on_delta,
+                                    )
+                                }
+                            } else if use_prefix_spec {
                                 guard.generate_lookup(
                                     &job.messages,
                                     &job.params,
@@ -747,6 +791,7 @@ impl ModelSubsystem {
                                     priority: job.priority,
                                     messages: resume_messages(&job.messages, &gen_text),
                                     params,
+                                    images: vec![],
                                     abort: job.abort,
                                     pause: job.pause,
                                     resumed: true,
@@ -998,6 +1043,7 @@ impl ModelSubsystem {
                             priority: io.priority,
                             messages: resume_messages(&io.messages, &io.generated),
                             params,
+                            images: vec![],
                             abort: io.abort,
                             pause: io.pause,
                             resumed: true,
@@ -1571,10 +1617,48 @@ fn preferred_media_id(kind: &str) -> Option<String> {
         .map(|s| s.to_string())
 }
 
+/// Résout le sidecar `mmproj` du catalogue à côté des poids GGUF.
+fn resolve_mmproj_for_model(model_id: &str, weights_path: &std::path::Path) -> Option<PathBuf> {
+    let models_dir = weights_path.parent()?;
+    let catalog = models_dir.join("catalog-offerings.json");
+    let catalog = if catalog.is_file() {
+        catalog
+    } else {
+        std::env::var("AOS_HOME")
+            .ok()
+            .map(|h| PathBuf::from(h).join("share/models/catalog-offerings.json"))
+            .filter(|p| p.is_file())?
+    };
+    let raw = std::fs::read_to_string(&catalog).ok()?;
+    let v: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    let models = v.get("models")?.as_array()?;
+    let m = models
+        .iter()
+        .find(|x| x.get("id").and_then(|i| i.as_str()) == Some(model_id))?;
+    let extras = m.get("extra_files")?.as_array()?;
+    for f in extras {
+        if f.get("role").and_then(|r| r.as_str()) != Some("mmproj") {
+            continue;
+        }
+        let fname = f.get("filename").and_then(|x| x.as_str())?;
+        let candidate = models_dir.join(fname);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+        // Fallback: same stem next to weights (download may use remote name).
+        let beside = models_dir.join("mmproj-F16.gguf");
+        if beside.is_file() {
+            return Some(beside);
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
-    use super::resume_messages;
+    use super::{resolve_mmproj_for_model, resume_messages};
     use aos_llama::StopReason;
+    use std::path::PathBuf;
 
     #[test]
     fn prefix_replay_keeps_history_and_appends_assistant() {
@@ -1584,13 +1668,40 @@ mod tests {
         ];
         let out = resume_messages(&msgs, "Salut");
         assert_eq!(out.len(), 3);
-        assert_eq!(out[2], ("assistant".into(), "Salut".into()));
-        let same = resume_messages(&msgs, "");
-        assert_eq!(same, msgs);
+        assert_eq!(out[2].0, "assistant");
+        assert_eq!(out[2].1, "Salut");
+        let _ = StopReason::Eog;
+    }
+
+    #[test]
+    fn resolve_mmproj_reads_catalog_sidecar() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join("share/models");
+        let weights = root.join("gemma-4-E4B-it-Q4_K_M.gguf");
+        // File need not exist — resolver only needs catalog next to it.
+        let path = resolve_mmproj_for_model("local:gemma-4-e4b", &weights);
+        // Without downloaded mmproj on disk, returns None; with catalog+file present, Some.
+        // Ensure we at least parse catalog without panic when sibling missing.
+        let _ = path;
+        let catalog = root.join("catalog-offerings.json");
+        assert!(catalog.is_file());
+        let raw = std::fs::read_to_string(&catalog).unwrap();
+        assert!(raw.contains("\"role\": \"mmproj\"") || raw.contains("\"role\":\"mmproj\""));
     }
 
     #[test]
     fn paused_is_not_cancelled_reason() {
         assert_ne!(StopReason::Paused, StopReason::Aborted);
+    }
+
+    #[test]
+    fn resume_empty_keeps_messages() {
+        let msgs = vec![
+            ("system".into(), "tu es un assistant".into()),
+            ("user".into(), "bonjour".into()),
+        ];
+        let same = resume_messages(&msgs, "");
+        assert_eq!(same, msgs);
     }
 }
