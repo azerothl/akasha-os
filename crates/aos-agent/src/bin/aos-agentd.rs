@@ -1443,6 +1443,7 @@ async fn main() {
                     },
                     priority: 2,
                     data_refs: vec![],
+                    images: vec![],
                     routing: None,
                 };
                 match bus

@@ -40,6 +40,7 @@ async fn infer(
                 },
                 priority: 3,
                 data_refs: vec![],
+                images: vec![],
                 routing: None,
             },
             vec![],

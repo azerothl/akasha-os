@@ -253,6 +253,7 @@ async fn run_infer(
         },
         priority: 6,
         data_refs: vec![],
+        images: vec![],
         routing: None,
     };
     let mut rx = bus

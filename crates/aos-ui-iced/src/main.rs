@@ -141,6 +141,7 @@ async fn runtime_main(cmd_rx: Receiver<Cmd>, evt_tx: Sender<Evt>) {
                         },
                         priority: 3,
                         data_refs: vec![],
+                        images: vec![],
                         routing: None,
                     };
                     match bus

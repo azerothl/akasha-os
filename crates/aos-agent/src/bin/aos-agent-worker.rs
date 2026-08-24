@@ -1048,6 +1048,7 @@ async fn infer_turn(
         },
         priority: 1,
         data_refs: data_refs.to_vec(),
+        images: vec![],
         routing: None,
     };
     let mut rx = match bus
@@ -2701,6 +2702,7 @@ async fn run_task_assess(
         },
         priority: 2,
         data_refs: vec![],
+        images: vec![],
         routing: None,
     };
 
@@ -2977,6 +2979,7 @@ async fn reflect(bus: &BusClient, shared: &Shared, spec: &AgentSpec) -> Option<S
         },
         priority: 1,
         data_refs: vec![],
+        images: vec![],
         routing: None,
     };
     if let Ok(mut rx) = bus
@@ -3045,6 +3048,7 @@ async fn verify_goal(
         },
         priority: 2,
         data_refs: vec![],
+        images: vec![],
         routing: None,
     };
     let mut text = String::new();
@@ -3087,6 +3091,7 @@ async fn optimize_prompt_now(bus: &BusClient, spec: &AgentSpec) -> Result<String
         },
         priority: 2,
         data_refs: vec![],
+        images: vec![],
         routing: None,
     };
     let mut rx = bus

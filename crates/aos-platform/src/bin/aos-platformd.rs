@@ -3539,6 +3539,7 @@ async fn infer_extract_completion(
         },
         priority: 1,
         data_refs: vec![],
+        images: vec![],
         routing: Some("local_only".into()),
     };
     let mut rx = bus

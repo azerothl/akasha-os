@@ -387,6 +387,7 @@ async fn handle_cmd(
                 },
                 priority: 8,
                 data_refs: vec![],
+                images: vec![],
                 routing: Some(routing),
             };
             let sid = session_id.clone();
@@ -3145,6 +3146,7 @@ async fn infer_llm_rewrite(
         },
         priority: 2,
         data_refs: vec![],
+        images: vec![],
         routing: None,
     };
     let mut rx = bus

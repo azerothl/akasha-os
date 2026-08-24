@@ -53,6 +53,7 @@ async fn infer_once(
         },
         priority: 3,
         data_refs: vec![],
+        images: vec![],
         routing: None,
     };
     let mut rx = bus
