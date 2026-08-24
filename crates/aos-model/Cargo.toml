@@ -7,7 +7,7 @@ license.workspace = true
 
 [dependencies]
 aos-ipc = { path = "../aos-ipc" }
-aos-llama = { path = "../aos-llama", default-features = false }
+aos-llama = { path = "../aos-llama", default-features = false, features = ["mtmd"] }
 aos-sd = { path = "../aos-sd" }
 aos-placement = { path = "../aos-placement" }
 aos-proto = { path = "../aos-proto" }

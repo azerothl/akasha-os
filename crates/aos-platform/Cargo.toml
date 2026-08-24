@@ -39,7 +39,7 @@ windows = { version = "0.58", features = [
 [features]
 default = ["embeddings", "cuda"]
 # Pulls llama.cpp. Disable `cuda` for CPU-only packaging.
-embeddings = ["dep:aos-llama"]
+embeddings = ["dep:aos-llama", "aos-llama?/mtmd"]
 cuda = ["aos-llama?/cuda"]
 metal = ["aos-llama?/metal"]
 

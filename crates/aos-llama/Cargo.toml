@@ -11,6 +11,7 @@ thiserror.workspace = true
 serde.workspace = true
 
 [features]
-default = ["cuda"]
+default = ["cuda", "mtmd"]
 cuda = ["llama-cpp-sys-2/cuda"]
 metal = ["llama-cpp-sys-2/metal"]
+mtmd = ["llama-cpp-sys-2/mtmd"]
