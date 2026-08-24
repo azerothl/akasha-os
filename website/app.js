@@ -37,4 +37,23 @@
       window.history.replaceState({}, "", url);
     });
   });
+
+  const versionEl = document.querySelector("[data-aos-version]");
+  const version = versionEl?.textContent?.trim();
+  if (version) {
+    const tag = `v${version}`;
+    const releaseBase = `https://github.com/azerothl/akasha-os/releases/download/${tag}`;
+    const assets = {
+      windows: `AgentOS-Preview-${version}-windows-x64.zip`,
+      linux: `AgentOS-Preview-${version}-linux-x64.tar.gz`,
+      macos: `AgentOS-Preview-${version}-macos-arm64.zip`,
+    };
+    document.querySelectorAll("[data-dl]").forEach((link) => {
+      const platform = link.getAttribute("data-dl");
+      const file = assets[platform];
+      if (file) {
+        link.href = `${releaseBase}/${file}`;
+      }
+    });
+  }
 })();
