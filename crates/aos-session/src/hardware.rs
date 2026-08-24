@@ -66,7 +66,14 @@ pub fn probe(home: &Path) -> HardwareInfo {
     let (gpu_name, vram_mib, driver_version) = if force_cpu {
         ("cpu-only".into(), 0, String::new())
     } else {
-        probe_nvidia()
+        #[cfg(target_os = "macos")]
+        {
+            probe_apple_gpu()
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            probe_nvidia()
+        }
     };
     let ram_mib = probe_ram_mib();
     let disk_free_bytes = probe_disk_free(home).unwrap_or(0);
@@ -125,6 +132,33 @@ fn probe_nvidia() -> (String, u64, String) {
     }
 }
 
+/// Apple Silicon unified memory — no discrete VRAM; report chip GPU name + RAM budget heuristic.
+#[cfg(target_os = "macos")]
+fn probe_apple_gpu() -> (String, u64, String) {
+    if std::env::consts::ARCH != "aarch64" {
+        return ("unsupported-host".into(), 0, String::new());
+    }
+    let name = Command::new("sysctl")
+        .args(["-n", "machdep.cpu.brand_string"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "Apple Silicon".into());
+    let ram_mib = probe_ram_mib();
+    // Unified memory: treat ~70% of RAM as usable GPU budget for tiering.
+    let vram_mib = ram_mib.saturating_mul(70).saturating_div(100);
+    let driver = Command::new("sw_vers")
+        .args(["-productVersion"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| format!("macOS {}", String::from_utf8_lossy(&o.stdout).trim()))
+        .unwrap_or_else(|| "macOS".into());
+    (name, vram_mib, driver)
+}
+
 fn probe_ram_mib() -> u64 {
     #[cfg(windows)]
     {
@@ -153,6 +187,20 @@ fn probe_ram_mib() -> u64 {
                         .and_then(|s| s.parse().ok())
                         .unwrap_or(0);
                     return kib / 1024;
+                }
+            }
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let out = Command::new("sysctl")
+            .args(["-n", "hw.memsize"])
+            .output();
+        if let Ok(out) = out {
+            if out.status.success() {
+                let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                if let Ok(bytes) = s.parse::<u64>() {
+                    return bytes / (1024 * 1024);
                 }
             }
         }
@@ -198,6 +246,22 @@ fn probe_disk_free(home: &Path) -> Result<u64, String> {
             let cols: Vec<_> = line.split_whitespace().collect();
             if cols.len() >= 4 {
                 return cols[3].parse::<u64>().map_err(|e| e.to_string());
+            }
+        }
+        return Err("df parse failed".into());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let out = Command::new("df")
+            .args(["-k", target.to_str().unwrap_or(".")])
+            .output()
+            .map_err(|e| e.to_string())?;
+        let text = String::from_utf8_lossy(&out.stdout);
+        if let Some(line) = text.lines().nth(1) {
+            let cols: Vec<_> = line.split_whitespace().collect();
+            if cols.len() >= 4 {
+                let avail_kib = cols[3].parse::<u64>().map_err(|e| e.to_string())?;
+                return Ok(avail_kib * 1024);
             }
         }
         return Err("df parse failed".into());
