@@ -284,9 +284,12 @@ jobs:
           test -f "${OUT}/share/modules/catalogue.yaml.sig"
           test -f "${OUT}/share/modules/catalogue.pub"
           du -sh "${OUT}"
-          cd dist
-          zip -r "AgentOS-Preview-${VERSION}-macos-arm64.zip" "AgentOS-Preview-${VERSION}-macos-arm64"
-          ls -lh "AgentOS-Preview-${VERSION}-macos-arm64.zip"
+          ZIP="dist/AgentOS-Preview-${VERSION}-macos-arm64.zip"
+          if [ ! -f "${ZIP}" ]; then
+            echo "::error::missing ${ZIP} (build-preview-macos.sh should create it)"
+            exit 1
+          fi
+          ls -lh "${ZIP}"
           sccache --show-stats
 
       - uses: actions/upload-artifact@v4

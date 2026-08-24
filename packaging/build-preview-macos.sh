@@ -20,6 +20,23 @@ if [ "$(uname -m)" != "arm64" ]; then
   exit 1
 fi
 
+# GNU du -sb is unavailable on stock macOS (EX_USAGE / exit 64).
+dir_size_bytes() {
+  local d="$1"
+  if du -sb "$d" >/dev/null 2>&1; then
+    du -sb "$d" | awk '{print $1}'
+  else
+    du -sk "$d" | awk '{print $1 * 1024}'
+  fi
+}
+
+copy_tree() {
+  local src="$1"
+  local dst="$2"
+  echo "cp -R ${src} ${dst}"
+  cp -R "$src" "$dst"
+}
+
 if [ "$SKIP_BUILD" != "1" ]; then
   echo "== cargo build --release (aos-auditd sans llama) =="
   cargo build --release -p aos-auditd
@@ -120,14 +137,30 @@ mkdir -p "${OUT}/bin" "${OUT}/etc" "${OUT}/share/models" \
   "${OUT}/share/modules" "${OUT}/share/skills" \
   "${OUT}/data/models" "${OUT}/var" "${OUT}/docs"
 
-for b in aos-session aos-busd aos-modeld aos-agentd aos-agent-worker \
-         aos-platformd aos-capkd aos-auditd aos-ui-egui aos-bridged; do
-  cp -f "${CARGO_TARGET_DIR}/release/${b}" "${OUT}/bin/"
+PREVIEW_BINS=(
+  aos-session aos-busd aos-modeld aos-agentd aos-agent-worker
+  aos-platformd aos-capkd aos-auditd aos-ui-egui aos-bridged
+)
+
+for b in "${PREVIEW_BINS[@]}"; do
+  src="${CARGO_TARGET_DIR}/release/${b}"
+  if [ ! -f "${src}" ]; then
+    echo "ERROR: missing release binary ${src} (cargo build aos-ipc for aos-busd?)" >&2
+    exit 1
+  fi
+  echo "cp -f ${src} ${OUT}/bin/"
+  cp -f "${src}" "${OUT}/bin/"
 done
 
 echo "== cargo build --release (aos-modeld-cpu, no Metal) =="
 cargo build --release -p aos-model --no-default-features
-cp -f "${CARGO_TARGET_DIR}/release/aos-modeld" "${OUT}/bin/aos-modeld-cpu"
+cpu_src="${CARGO_TARGET_DIR}/release/aos-modeld"
+if [ ! -f "${cpu_src}" ]; then
+  echo "ERROR: missing ${cpu_src} after CPU modeld build" >&2
+  exit 1
+fi
+echo "cp -f ${cpu_src} ${OUT}/bin/aos-modeld-cpu"
+cp -f "${cpu_src}" "${OUT}/bin/aos-modeld-cpu"
 chmod +x "${OUT}/bin/aos-modeld-cpu"
 
 cp -f "${ROOT}/data/models/catalog.yaml" "${OUT}/data/models/"
@@ -145,7 +178,7 @@ for pkg in notes tasks ext-rt canvas; do
   for base in "${ROOT}/share/modules/${pkg}.aospkg" "${ROOT}/modules/${pkg}.aospkg"; do
     if [ -d "${base}" ]; then
       rm -rf "${OUT}/share/modules/${pkg}.aospkg"
-      cp -a "${base}" "${OUT}/share/modules/${pkg}.aospkg"
+      copy_tree "${base}" "${OUT}/share/modules/${pkg}.aospkg"
       break
     fi
   done
@@ -161,7 +194,7 @@ for cat in catalogue.yaml catalogue.yaml.sig catalogue.pub; do
 done
 
 if [ -d "${ROOT}/skills" ]; then
-  cp -a "${ROOT}/skills/." "${OUT}/share/skills/"
+  copy_tree "${ROOT}/skills/." "${OUT}/share/skills/"
 fi
 
 mkdir -p "${OUT}/share/mcp"
@@ -195,7 +228,7 @@ cp -f "${ROOT}/docs/FEATURES.md" "${OUT}/docs/FEATURES.md" 2>/dev/null || true
 cp -f "${ROOT}/docs/I18N.md" "${OUT}/docs/I18N.md" 2>/dev/null || true
 if [ -d "${ROOT}/docs/fr" ]; then
   mkdir -p "${OUT}/docs/fr"
-  cp -a "${ROOT}/docs/fr/." "${OUT}/docs/fr/"
+  copy_tree "${ROOT}/docs/fr/." "${OUT}/docs/fr/"
 fi
 cp -f "${ROOT}/LICENSE" "${OUT}/" 2>/dev/null || true
 cp -f "${ROOT}/NOTICE" "${OUT}/" 2>/dev/null || true
@@ -220,9 +253,19 @@ EOF
 echo "== package prêt : ${OUT} =="
 du -sh "${OUT}"
 MAX_BYTES=$((2 * 1024 * 1024 * 1024 - 1))
-TREE_BYTES="$(du -sb "${OUT}" | awk '{print $1}')"
+TREE_BYTES="$(dir_size_bytes "${OUT}")"
 echo "taille arbre: ${TREE_BYTES} bytes (limite release ${MAX_BYTES})"
 if [ "${TREE_BYTES}" -ge "${MAX_BYTES}" ]; then
   echo "ERROR: package exceeds GitHub Release 2 GiB asset limit" >&2
   exit 1
 fi
+
+ZIP_PATH="${ROOT}/dist/AgentOS-Preview-${VERSION}-macos-arm64.zip"
+if [ ! -d "${OUT}" ]; then
+  echo "ERROR: package directory missing: ${OUT}" >&2
+  exit 1
+fi
+rm -f "${ZIP_PATH}"
+echo "== ditto -c -k --keepParent ${OUT} ${ZIP_PATH} =="
+ditto -c -k --keepParent "${OUT}" "${ZIP_PATH}"
+ls -lh "${ZIP_PATH}"
