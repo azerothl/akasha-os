@@ -40,6 +40,23 @@ pub fn nvidia_ok() -> bool {
         .unwrap_or(false)
 }
 
+#[cfg(target_os = "macos")]
+pub fn apple_silicon_host() -> bool {
+    std::env::consts::ARCH == "aarch64"
+}
+
+/// GPU-backed inference is available on this host (NVIDIA on Win/Linux, Metal on Apple Silicon).
+pub fn gpu_accel_ok() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        return apple_silicon_host();
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        nvidia_ok()
+    }
+}
+
 pub fn show_fatal_dialog(title: &str, body: &str) {
     eprintln!("[aos-session] {title}\n{body}");
     #[cfg(windows)]
@@ -51,6 +68,22 @@ pub fn show_fatal_dialog(title: &str, body: &str) {
         );
         let _ = Command::new("powershell")
             .args(["-NoProfile", "-Command", &ps])
+            .status();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        // Pass title/body as osascript argv — avoids broken dialogs when body has newlines/quotes.
+        let _ = Command::new("osascript")
+            .args([
+                "-e",
+                "on run argv",
+                "-e",
+                "display dialog (item 2 of argv) with title (item 1 of argv) buttons {\"OK\"} default button 1 with icon caution",
+                "-e",
+                "end run",
+            ])
+            .arg(title)
+            .arg(body)
             .status();
     }
 }
@@ -105,6 +138,28 @@ pub fn check_disk_space(home: &Path) -> Result<(), String> {
             let cols: Vec<_> = line.split_whitespace().collect();
             if cols.len() >= 4 {
                 if let Ok(avail) = cols[3].parse::<u64>() {
+                    if avail < MIN_FREE_BYTES {
+                        return Err(format!(
+                            "espace disque insuffisant (~{:.1} Go libres, ~8 Go requis)",
+                            avail as f64 / (1 << 30) as f64
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let out = Command::new("df")
+            .args(["-kP", target.to_str().unwrap_or(".")])
+            .output()
+            .map_err(|e| e.to_string())?;
+        let text = String::from_utf8_lossy(&out.stdout);
+        if let Some(line) = text.lines().nth(1) {
+            let cols: Vec<_> = line.split_whitespace().collect();
+            if cols.len() >= 4 {
+                if let Ok(avail_kib) = cols[3].parse::<u64>() {
+                    let avail = avail_kib * 1024;
                     if avail < MIN_FREE_BYTES {
                         return Err(format!(
                             "espace disque insuffisant (~{:.1} Go libres, ~8 Go requis)",

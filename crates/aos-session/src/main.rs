@@ -185,6 +185,16 @@ fn main() {
     eprintln!("[aos-session] Akasha OS Preview {version}");
     eprintln!("[aos-session] AOS_HOME={}", home.display());
 
+    #[cfg(target_os = "macos")]
+    if !bootstrap::apple_silicon_host() {
+        bootstrap::show_fatal_dialog(
+            "Akasha OS Preview — Apple Silicon requis",
+            "Cette build Preview est pour Mac Apple Silicon (arm64), pas Intel.\n\
+             Voir INSTALL.md / FIRST-RUN.md.",
+        );
+        std::process::exit(2);
+    }
+
     // Appliquer une update téléchargée avant de toucher aux binaires en cours.
     match update::apply_pending_update(&home) {
         Ok(true) => {
@@ -212,7 +222,7 @@ fn main() {
         std::process::exit(3);
     }
 
-    let nvidia = bootstrap::nvidia_ok();
+    let gpu_accel = bootstrap::gpu_accel_ok();
     // Preferences may request CPU inference (Settings → Inference).
     let prefs_cpu = std::fs::read_to_string(home.join("var/run/preferences.json"))
         .ok()
@@ -238,27 +248,36 @@ fn main() {
                     .map(|m| m.eq_ignore_ascii_case("gpu"))
             })
             .unwrap_or(false);
-    if !nvidia && !force_cpu && require_gpu {
-        bootstrap::show_fatal_dialog(
-            "Akasha OS Preview — GPU NVIDIA requis",
+    if !gpu_accel && !force_cpu && require_gpu {
+        let msg = if cfg!(target_os = "macos") {
+            "GPU Metal indisponible sur ce Mac.\n\
+             AOS_REQUIRE_GPU est défini — pas de fallback CPU.\n\
+             Utilisez un Mac Apple Silicon, ou relancez avec AOS_CPU_ONLY=1.\n\
+             Voir INSTALL.md / FIRST-RUN.md."
+        } else {
             "nvidia-smi introuvable ou en échec.\n\
              AOS_REQUIRE_GPU est défini — pas de fallback CPU.\n\
              Installez un driver NVIDIA, ou relancez avec AOS_CPU_ONLY=1.\n\
-             Voir INSTALL.md / FIRST-RUN.md.",
-        );
+             Voir INSTALL.md / FIRST-RUN.md."
+        };
+        bootstrap::show_fatal_dialog("Akasha OS Preview — GPU requis", msg);
         std::process::exit(2);
     }
-    if !nvidia || force_cpu {
+    if !gpu_accel || force_cpu {
         eprintln!(
-            "[aos-session] mode CPU-only (nvidia_ok={}, force_cpu={})",
-            nvidia, force_cpu
+            "[aos-session] mode CPU-only (gpu_accel_ok={}, force_cpu={})",
+            gpu_accel, force_cpu
         );
         std::env::set_var("AOS_CPU_ONLY", "1");
-        if !nvidia && !force_cpu {
-            eprintln!(
-                "[aos-session] NVIDIA absent — démarrage CPU (lent). \
+        if !gpu_accel && !force_cpu {
+            let hint = if cfg!(target_os = "macos") {
+                "GPU Metal absent — démarrage CPU (lent). \
                  Définir AOS_REQUIRE_GPU=1 pour refuser."
-            );
+            } else {
+                "NVIDIA absent — démarrage CPU (lent). \
+                 Définir AOS_REQUIRE_GPU=1 pour refuser."
+            };
+            eprintln!("[aos-session] {hint}");
         }
     }
 
@@ -1178,19 +1197,19 @@ fn inference_mode(home: &Path) -> String {
         .unwrap_or_else(|| "auto".into())
 }
 
-/// CUDA-linked `aos-modeld` vs `aos-modeld-cpu` (no CUDA DLL). Unified zip ships both.
-/// On NVIDIA hosts the CUDA binary stays up for in-process pin cpu/gpu (E18);
-/// `aos-modeld-cpu` is only for machines without NVIDIA.
+/// Metal/CUDA-linked `aos-modeld` vs `aos-modeld-cpu`. Unified zip ships both.
+/// On GPU hosts the accelerated binary stays up for in-process pin cpu/gpu (E18);
+/// `aos-modeld-cpu` is only for machines without GPU acceleration.
 fn pick_modeld_bin(home: &Path) -> (PathBuf, bool) {
-    let nvidia = bootstrap::nvidia_ok();
+    let gpu_accel = bootstrap::gpu_accel_ok();
     let mode = inference_mode(home);
     let cpu_bin = bin_path(home, "aos-modeld-cpu");
     let gpu_bin = bin_path(home, "aos-modeld");
-    if nvidia && gpu_bin.exists() {
+    if gpu_accel && gpu_bin.exists() {
         return (gpu_bin, false);
     }
     let want_cpu =
-        mode.eq_ignore_ascii_case("cpu") || (!nvidia && !mode.eq_ignore_ascii_case("gpu"));
+        mode.eq_ignore_ascii_case("cpu") || (!gpu_accel && !mode.eq_ignore_ascii_case("gpu"));
     if want_cpu && cpu_bin.exists() {
         (cpu_bin, true)
     } else {

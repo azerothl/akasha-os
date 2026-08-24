@@ -17,11 +17,15 @@ dans le même zip ; sans GGUF), publie :
 
 - `AgentOS-Preview-<ver>-windows-x64.zip`
 - `AgentOS-Preview-<ver>-linux-x64.tar.gz`
-- `latest.json` (sha256 + métadonnées pour **deux** artefacts testeur)
+- `AgentOS-Preview-<ver>-macos-arm64.zip` (Apple Silicon + Metal ; CI non signé)
+- `latest.json` (sha256 + métadonnées pour les artefacts testeur)
 
 `-CpuOnly` reste un hatch **builder**, pas un téléchargement testeur.
 
 Déclenchement manuel : Actions → **preview-release** → Run workflow.
+
+- **macOS seul sur une Release existante** (sans retag) : `macos_only` = true, `release_version` = `0.11.0`, `upload_release` = true — attache le zip Apple Silicon et met à jour `latest.json` sur cette Release.
+- **Rebuild complet** : `create_release` = true, `macos_only` = false.
 
 ## Manuel
 
@@ -31,6 +35,7 @@ Déclenchement manuel : Actions → **preview-release** → Run workflow.
 | Windows CPU | `.\packaging\build-preview.ps1 -SkipModels -CpuOnly` puis Compress-Archive |
 | Linux GPU | `SKIP_MODELS=1 REQUIRE_CUDA=1 ./packaging/build-preview.sh` puis `tar czf` |
 | Linux CPU | `CPU_ONLY=1 SKIP_MODELS=1 ./packaging/build-preview.sh` puis `tar czf` |
+| macOS Apple Silicon | `SKIP_MODELS=1 ./packaging/build-preview-macos.sh` puis `zip -r` (voir [packaging-MACOS-BUILD.md](../../packaging/MACOS-BUILD.md)) |
 
 Les GGUF sont téléchargés au **premier run** via `share/models/manifest.json`.
 

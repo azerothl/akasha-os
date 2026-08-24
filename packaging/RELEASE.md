@@ -17,11 +17,15 @@ CPU-linked `aos-modeld-cpu` in the same zip; no GGUF) and publishes:
 
 - `AgentOS-Preview-<ver>-windows-x64.zip`
 - `AgentOS-Preview-<ver>-linux-x64.tar.gz`
-- `latest.json` (sha256 + metadata for **two** tester artefacts)
+- `AgentOS-Preview-<ver>-macos-arm64.zip` (Apple Silicon + Metal; CI unsigned)
+- `latest.json` (sha256 + metadata for tester artefacts)
 
 `-CpuOnly` remains a **builder** hatch, not a tester download.
 
 Manual trigger: Actions → **preview-release** → Run workflow.
+
+- **macOS only on existing Release** (no retag): `macos_only` = true, `release_version` = `0.11.0`, `upload_release` = true — attaches the Apple Silicon zip and refreshes `latest.json` on that Release.
+- **Full rebuild**: `create_release` = true, `macos_only` = false.
 
 ### Internal seL4 gate (not a tester release)
 
@@ -38,6 +42,7 @@ Artefacts: QEMU `loader.img` + serial log — no `latest.json`.
 | Windows CPU | `.\packaging\build-preview.ps1 -SkipModels -CpuOnly` then Compress-Archive |
 | Linux GPU | `SKIP_MODELS=1 REQUIRE_CUDA=1 ./packaging/build-preview.sh` then `tar czf` |
 | Linux CPU | `CPU_ONLY=1 SKIP_MODELS=1 ./packaging/build-preview.sh` then `tar czf` |
+| macOS Apple Silicon | `SKIP_MODELS=1 ./packaging/build-preview-macos.sh` then `zip -r` (see [MACOS-BUILD.md](MACOS-BUILD.md)) |
 
 GGUFs are downloaded on **first run** via `share/models/manifest.json`.
 

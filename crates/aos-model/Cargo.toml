@@ -25,6 +25,7 @@ base64 = "0.22"
 [features]
 default = ["cuda"]
 cuda = ["aos-llama/cuda"]
+metal = ["aos-llama/metal"]
 
 [lib]
 name = "aos_model"

@@ -41,6 +41,7 @@ default = ["embeddings", "cuda"]
 # Pulls llama.cpp. Disable `cuda` for CPU-only packaging.
 embeddings = ["dep:aos-llama"]
 cuda = ["aos-llama?/cuda"]
+metal = ["aos-llama?/metal"]
 
 [dev-dependencies]
 wat = "1"
