@@ -202,8 +202,76 @@ jobs:
           compression-level: 0
           retention-days: 7
 
+  macos:
+    runs-on: macos-14
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: preview-metal-macos
+          cache-targets: true
+          cache-all-crates: true
+
+      - name: Assert VERSION matches tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          EXPECTED="${GITHUB_REF_NAME#v}"
+          if [ "$VERSION" != "$EXPECTED" ]; then
+            echo "::error::VERSION file is '$VERSION' but tag is '$GITHUB_REF_NAME'. Update VERSION before tagging."
+            exit 1
+          fi
+
+      - name: Assert Apple Silicon runner
+        run: |
+          if [ "$(uname -m)" != "arm64" ]; then
+            echo "::error::macos job must run on Apple Silicon (arm64)"
+            exit 1
+          fi
+
+      - name: Build Preview package (Metal)
+        env:
+          SKIP_MODELS: "1"
+          RUSTC_WRAPPER: sccache
+        run: |
+          sccache --show-stats
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          export VERSION
+          chmod +x packaging/build-preview-macos.sh
+          ./packaging/build-preview-macos.sh
+          OUT="dist/AgentOS-Preview-${VERSION}-macos-arm64"
+          test -x "${OUT}/bin/aos-session"
+          test -x "${OUT}/bin/aos-modeld-cpu"
+          test -f "${OUT}/share/models/manifest.json"
+          test -f "${OUT}/share/modules/catalogue.yaml"
+          test -f "${OUT}/share/modules/catalogue.yaml.sig"
+          test -f "${OUT}/share/modules/catalogue.pub"
+          du -sh "${OUT}"
+          cd dist
+          zip -r "AgentOS-Preview-${VERSION}-macos-arm64.zip" "AgentOS-Preview-${VERSION}-macos-arm64"
+          ls -lh "AgentOS-Preview-${VERSION}-macos-arm64.zip"
+          sccache --show-stats
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: preview-macos-arm64
+          path: dist/AgentOS-Preview-*-macos-arm64.zip
+          compression-level: 0
+          retention-days: 7
+
   release:
-    needs: [windows, linux]
+    needs: [windows, linux, macos]
     runs-on: ubuntu-22.04
     if: startsWith(github.ref, 'refs/tags/v') || inputs.create_release
     permissions:
@@ -246,12 +314,13 @@ jobs:
           # One tester artefact per OS (CUDA + CPU modeld inside).
           assets_json="["
           first=1
-          for f in release-assets/*windows-x64.zip release-assets/*linux-x64.tar.gz; do
+          for f in release-assets/*windows-x64.zip release-assets/*linux-x64.tar.gz release-assets/*macos-arm64.zip; do
             [ -f "$f" ] || continue
             sha=$(sha256sum "$f" | awk '{print $1}')
             base=$(basename "$f")
             os="windows"
-            echo "$base" | grep -q linux && os="linux"
+            if echo "$base" | grep -q linux; then os="linux"; fi
+            if echo "$base" | grep -q macos; then os="macos"; fi
             if [ "$first" -eq 1 ]; then first=0; else assets_json+=","; fi
             assets_json+=$(printf '{"name":"%s","os":"%s","sha256":"%s"}' "$base" "$os" "$sha")
           done
@@ -260,13 +329,14 @@ jobs:
           if [ "$assets_json" = "[]" ]; then
             WIN=$(ls release-assets/*windows*.zip 2>/dev/null | head -n1 || true)
             LIN=$(ls release-assets/*linux*.tar.gz 2>/dev/null | head -n1 || true)
+            MAC=$(ls release-assets/*macos*.zip 2>/dev/null | head -n1 || true)
             assets_json="["
             first=1
-            for f in $WIN $LIN; do
+            for f in $WIN $LIN $MAC; do
               [ -n "$f" ] && [ -f "$f" ] || continue
               sha=$(sha256sum "$f" | awk '{print $1}')
               base=$(basename "$f")
-              os="windows"; echo "$base" | grep -q linux && os="linux"
+              os="windows"; echo "$base" | grep -q linux && os="linux"; echo "$base" | grep -q macos && os="macos"
               if [ "$first" -eq 1 ]; then first=0; else assets_json+=","; fi
               assets_json+=$(printf '{"name":"%s","os":"%s","sha256":"%s"}' "$base" "$os" "$sha")
             done
@@ -278,7 +348,7 @@ jobs:
             "tag": "v${VERSION}",
             "repo": "azerothl/akasha-os",
             "assets": ${assets_json},
-            "notes": "Akasha OS Preview ${VERSION} — Win/Linux unified (CUDA + CPU modeld). Models download on first run. See FIRST-RUN.md."
+            "notes": "Akasha OS Preview ${VERSION} — Win/Linux (CUDA + CPU modeld) + macOS Apple Silicon (Metal + CPU modeld). Models download on first run. See FIRST-RUN.md."
           }
           EOF
 
