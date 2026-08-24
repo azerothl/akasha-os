@@ -1,10 +1,12 @@
 {
-  "version": "0.3.3",
+  "version": "0.3.4",
   "models": [
     {
       "id": "local:qwen3-embedding-0.6b",
       "name": "Qwen3 Embedding 0.6B",
-      "profiles": ["embed"],
+      "profiles": [
+        "embed"
+      ],
       "filename": "Qwen3-Embedding-0.6B-Q8_0.gguf",
       "url": "https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/main/Qwen3-Embedding-0.6B-Q8_0.gguf",
       "bytes": 639150592,
@@ -14,17 +16,23 @@
       "quality_score": 70,
       "speed_score": 95,
       "n_layers": 28,
-      "n_params": 6.0e8,
+      "n_params": 600000000.0,
       "weights_bytes": 639150592,
       "embed_bytes": 80000000,
       "kv_bytes_per_token": 20000,
-      "replaces": ["local:embedded-embed", "qwen2.5-0.5b-instruct-q4_k_m.gguf"],
+      "replaces": [
+        "local:embedded-embed",
+        "qwen2.5-0.5b-instruct-q4_k_m.gguf"
+      ],
       "optional": false
     },
     {
       "id": "local:qwen3.5-4b-instruct",
       "name": "Qwen3.5 4B Instruct Q4",
-      "profiles": ["chat", "code"],
+      "profiles": [
+        "chat",
+        "code"
+      ],
       "filename": "Qwen3.5-4B-Q4_K_M.gguf",
       "url": "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf",
       "bytes": 2740937888,
@@ -34,17 +42,24 @@
       "quality_score": 72,
       "speed_score": 92,
       "n_layers": 36,
-      "n_params": 4.0e9,
+      "n_params": 4000000000.0,
       "weights_bytes": 2740937888,
       "embed_bytes": 200000000,
       "kv_bytes_per_token": 40000,
-      "replaces": ["local:embedded-instruct", "qwen2.5-3b-instruct-q4_k_m.gguf"],
+      "replaces": [
+        "local:embedded-instruct",
+        "qwen2.5-3b-instruct-q4_k_m.gguf"
+      ],
       "optional": false
     },
     {
       "id": "local:qwen3.5-9b-instruct",
       "name": "Qwen3.5 9B Instruct Q4",
-      "profiles": ["chat", "code", "reasoning"],
+      "profiles": [
+        "chat",
+        "code",
+        "reasoning"
+      ],
       "filename": "Qwen3.5-9B-Q4_K_M.gguf",
       "url": "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_K_M.gguf",
       "bytes": 5680522464,
@@ -54,7 +69,7 @@
       "quality_score": 88,
       "speed_score": 78,
       "n_layers": 36,
-      "n_params": 9.0e9,
+      "n_params": 9000000000.0,
       "weights_bytes": 5680522464,
       "embed_bytes": 350000000,
       "kv_bytes_per_token": 70000,
@@ -64,7 +79,11 @@
     {
       "id": "local:qwen3-30b-a3b-instruct",
       "name": "Qwen3 30B-A3B Instruct Q4",
-      "profiles": ["chat", "code", "reasoning"],
+      "profiles": [
+        "chat",
+        "code",
+        "reasoning"
+      ],
       "filename": "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf",
       "url": "https://huggingface.co/unsloth/Qwen3-30B-A3B-Instruct-2507-GGUF/resolve/main/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf",
       "bytes": 18556686752,
@@ -74,19 +93,26 @@
       "quality_score": 95,
       "speed_score": 70,
       "n_layers": 48,
-      "n_params": 3.05e10,
+      "n_params": 30500000000.0,
       "weights_bytes": 18556686752,
       "embed_bytes": 500000000,
       "kv_bytes_per_token": 80000,
       "replaces": [],
       "optional": true,
-      "tags": ["moe", "reasoning"],
+      "tags": [
+        "moe",
+        "reasoning"
+      ],
       "description": "Mixture-of-Experts — ~30B total, ~3B actifs par token"
     },
     {
       "id": "local:qwen3.8-27b-instruct",
       "name": "Qwen3.8 27B UD-Q4_K_M",
-      "profiles": ["chat", "code", "reasoning"],
+      "profiles": [
+        "chat",
+        "code",
+        "reasoning"
+      ],
       "filename": "Qwen3.8-27B-UD-Q4_K_M.gguf",
       "url": "https://huggingface.co/unsloth/Qwen3.8-27B-GGUF/resolve/main/Qwen3.8-27B-UD-Q4_K_M.gguf",
       "bytes": 16464440224,
@@ -96,19 +122,27 @@
       "quality_score": 97,
       "speed_score": 62,
       "n_layers": 64,
-      "n_params": 2.7e10,
+      "n_params": 27000000000.0,
       "weights_bytes": 16464440224,
       "embed_bytes": 500000000,
       "kv_bytes_per_token": 100000,
       "replaces": [],
       "optional": true,
-      "tags": ["dense", "reasoning", "thinking"],
+      "tags": [
+        "dense",
+        "reasoning",
+        "thinking"
+      ],
       "description": "Dense 27B (Unsloth Dynamic 3.0) — tous les paramètres actifs / token ; thinking supprimé en chat Preview"
     },
     {
       "id": "local:qwen3.8-27b-instruct-iq4",
       "name": "Qwen3.8 27B UD-IQ4_XS",
-      "profiles": ["chat", "code", "reasoning"],
+      "profiles": [
+        "chat",
+        "code",
+        "reasoning"
+      ],
       "filename": "Qwen3.8-27B-UD-IQ4_XS.gguf",
       "url": "https://huggingface.co/unsloth/Qwen3.8-27B-GGUF/resolve/main/Qwen3.8-27B-UD-IQ4_XS.gguf",
       "bytes": 14252845984,
@@ -118,19 +152,26 @@
       "quality_score": 95,
       "speed_score": 66,
       "n_layers": 64,
-      "n_params": 2.7e10,
+      "n_params": 27000000000.0,
       "weights_bytes": 14252845984,
       "embed_bytes": 500000000,
       "kv_bytes_per_token": 100000,
       "replaces": [],
       "optional": true,
-      "tags": ["dense", "reasoning", "thinking"],
+      "tags": [
+        "dense",
+        "reasoning",
+        "thinking"
+      ],
       "description": "Dense 27B quant léger (~14,3 GiB) — mieux sur 16 GiB VRAM ; contexte court recommandé"
     },
     {
       "id": "local:qwen3-4b-instruct-2507",
       "name": "Qwen3 4B Instruct 2507 Q4",
-      "profiles": ["chat", "code"],
+      "profiles": [
+        "chat",
+        "code"
+      ],
       "filename": "Qwen3-4B-Instruct-2507.Q4_K_M.gguf",
       "url": "https://huggingface.co/MaziyarPanahi/Qwen3-4B-Instruct-2507-GGUF/resolve/main/Qwen3-4B-Instruct-2507.Q4_K_M.gguf",
       "bytes": 2497280448,
@@ -140,7 +181,7 @@
       "quality_score": 74,
       "speed_score": 90,
       "n_layers": 36,
-      "n_params": 4.0e9,
+      "n_params": 4000000000.0,
       "weights_bytes": 2497280448,
       "embed_bytes": 200000000,
       "kv_bytes_per_token": 40000,
@@ -150,7 +191,11 @@
     {
       "id": "local:lfm2.5-8b-a1b",
       "name": "LFM2.5 8B-A1B Q4",
-      "profiles": ["chat", "code", "reasoning"],
+      "profiles": [
+        "chat",
+        "code",
+        "reasoning"
+      ],
       "filename": "LFM2.5-8B-A1B-Q4_K_M.gguf",
       "url": "https://huggingface.co/LiquidAI/LFM2.5-8B-A1B-GGUF/resolve/main/LFM2.5-8B-A1B-Q4_K_M.gguf",
       "bytes": 5155564768,
@@ -160,19 +205,27 @@
       "quality_score": 82,
       "speed_score": 90,
       "n_layers": 24,
-      "n_params": 8.3e9,
+      "n_params": 8300000000.0,
       "weights_bytes": 5155564768,
       "embed_bytes": 250000000,
       "kv_bytes_per_token": 25000,
       "replaces": [],
       "optional": true,
-      "tags": ["moe", "cpu", "reasoning"],
+      "tags": [
+        "moe",
+        "cpu",
+        "reasoning"
+      ],
       "description": "MoE hybride Liquid — 8,3B totaux / 1,5B actifs ; recommandé CPU et GPU faible (KV léger). Licence lfm1.0."
     },
     {
       "id": "local:ornith-1.5-9b",
       "name": "Ornith 1.5 9B Q4",
-      "profiles": ["chat", "code", "reasoning"],
+      "profiles": [
+        "chat",
+        "code",
+        "reasoning"
+      ],
       "filename": "Ornith-1.5-9B-Q4_K_M.gguf",
       "url": "https://huggingface.co/ornith-ai/Ornith-1.5-9B-GGUF/resolve/main/Ornith-1.5-9B-Q4_K_M.gguf",
       "bytes": 5629108992,
@@ -182,19 +235,26 @@
       "quality_score": 93,
       "speed_score": 76,
       "n_layers": 32,
-      "n_params": 9.0e9,
+      "n_params": 9000000000.0,
       "weights_bytes": 5629108992,
       "embed_bytes": 350000000,
       "kv_bytes_per_token": 70000,
       "replaces": [],
       "optional": true,
-      "tags": ["dense", "reasoning", "thinking"],
+      "tags": [
+        "dense",
+        "reasoning",
+        "thinking"
+      ],
       "description": "Dense 9B (base Qwen3.5) — nettement plus fort en code / agents que Qwen3.5 9B, même gabarit. GPU mid+."
     },
     {
       "id": "local:lfm2.5-2.6b",
       "name": "LFM2.5 2.6B Q4",
-      "profiles": ["chat", "code"],
+      "profiles": [
+        "chat",
+        "code"
+      ],
       "filename": "LFM2.5-2.6B-Q4_K_M.gguf",
       "url": "https://huggingface.co/LiquidAI/LFM2.5-2.6B-GGUF/resolve/main/LFM2.5-2.6B-Q4_K_M.gguf",
       "bytes": 1674455040,
@@ -204,19 +264,25 @@
       "quality_score": 68,
       "speed_score": 96,
       "n_layers": 30,
-      "n_params": 2.6e9,
+      "n_params": 2600000000.0,
       "weights_bytes": 1674455040,
       "embed_bytes": 150000000,
       "kv_bytes_per_token": 20000,
       "replaces": [],
       "optional": true,
-      "tags": ["cpu", "dense"],
+      "tags": [
+        "cpu",
+        "dense"
+      ],
       "description": "Dense Liquid 2,6B — fallback CPU RAM serrée (3× plus léger que LFM 8B-A1B). Licence lfm1.0."
     },
     {
       "id": "local:granite-4.1-3b",
       "name": "Granite 4.1 3B Q4",
-      "profiles": ["chat", "code"],
+      "profiles": [
+        "chat",
+        "code"
+      ],
       "filename": "granite-4.1-3b-Q4_K_M.gguf",
       "url": "https://huggingface.co/ibm-granite/granite-4.1-3b-GGUF/resolve/main/granite-4.1-3b-Q4_K_M.gguf",
       "bytes": 2099501664,
@@ -226,41 +292,64 @@
       "quality_score": 66,
       "speed_score": 94,
       "n_layers": 32,
-      "n_params": 3.0e9,
+      "n_params": 3000000000.0,
       "weights_bytes": 2099501664,
       "embed_bytes": 150000000,
       "kv_bytes_per_token": 25000,
       "replaces": [],
       "optional": true,
-      "tags": ["cpu", "dense"],
+      "tags": [
+        "cpu",
+        "dense"
+      ],
       "description": "IBM Granite 4.1 3B — Apache-2.0, CPU / petit GPU. Alternative licence ouverte au LFM 2,6B."
     },
     {
       "id": "local:gemma-4-e4b",
       "name": "Gemma 4 E4B it Q4",
-      "profiles": ["chat", "code"],
+      "profiles": [
+        "chat",
+        "code",
+        "vision"
+      ],
       "filename": "gemma-4-E4B-it-Q4_K_M.gguf",
       "url": "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q4_K_M.gguf",
       "bytes": 4977171584,
       "sha256": "",
       "min_vram_mib": 0,
-      "min_disk_bytes": 5500000000,
+      "min_disk_bytes": 6600000000,
       "quality_score": 80,
       "speed_score": 88,
       "n_layers": 28,
-      "n_params": 8.0e9,
-      "weights_bytes": 4977171584,
+      "n_params": 8000000000.0,
+      "weights_bytes": 5967544256,
       "embed_bytes": 250000000,
       "kv_bytes_per_token": 30000,
       "replaces": [],
       "optional": true,
-      "tags": ["moe", "cpu", "vision"],
-      "description": "Gemma 4 E4B MoE Apache — ~5 Go, 8 Go VRAM. Concurrent non-Qwen du LFM 8B-A1B. Vision native non câblée en chat."
+      "tags": [
+        "moe",
+        "cpu",
+        "vision"
+      ],
+      "description": "Gemma 4 E4B MoE Apache — ~5 Go + mmproj F16. Première alt vision (low). Chat texte ou image via libmtmd.",
+      "extra_files": [
+        {
+          "filename": "mmproj-gemma-4-E4B-it-F16.gguf",
+          "url": "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/mmproj-F16.gguf",
+          "bytes": 990372672,
+          "sha256": "",
+          "role": "mmproj"
+        }
+      ]
     },
     {
       "id": "local:granite-4.1-8b",
       "name": "Granite 4.1 8B Q4",
-      "profiles": ["chat", "code"],
+      "profiles": [
+        "chat",
+        "code"
+      ],
       "filename": "granite-4.1-8b-Q4_K_M.gguf",
       "url": "https://huggingface.co/ibm-granite/granite-4.1-8b-GGUF/resolve/main/granite-4.1-8b-Q4_K_M.gguf",
       "bytes": 5347914400,
@@ -270,41 +359,65 @@
       "quality_score": 78,
       "speed_score": 86,
       "n_layers": 40,
-      "n_params": 8.0e9,
+      "n_params": 8000000000.0,
       "weights_bytes": 5347914400,
       "embed_bytes": 250000000,
       "kv_bytes_per_token": 40000,
       "replaces": [],
       "optional": true,
-      "tags": ["cpu", "dense"],
+      "tags": [
+        "cpu",
+        "dense"
+      ],
       "description": "IBM Granite 4.1 8B Apache — même slot que LFM 8B-A1B, licence plus simple."
     },
     {
       "id": "local:gemma-4-12b-qat",
       "name": "Gemma 4 12B it QAT Q4",
-      "profiles": ["chat", "code"],
+      "profiles": [
+        "chat",
+        "code",
+        "vision"
+      ],
       "filename": "gemma-4-12B-it-qat-UD-Q4_K_XL.gguf",
       "url": "https://huggingface.co/unsloth/gemma-4-12B-it-qat-GGUF/resolve/main/gemma-4-12B-it-qat-UD-Q4_K_XL.gguf",
       "bytes": 6716356800,
       "sha256": "",
-      "min_vram_mib": 8192,
-      "min_disk_bytes": 7500000000,
+      "min_vram_mib": 8448,
+      "min_disk_bytes": 7700000000,
       "quality_score": 90,
       "speed_score": 74,
       "n_layers": 48,
-      "n_params": 1.2e10,
-      "weights_bytes": 6716356800,
+      "n_params": 12000000000.0,
+      "weights_bytes": 6891472640,
       "embed_bytes": 400000000,
       "kv_bytes_per_token": 80000,
       "replaces": [],
       "optional": true,
-      "tags": ["dense", "vision", "qat"],
-      "description": "Gemma 4 12B QAT Unsloth — dense compact ~6,7 Go. Mieux en mid 12 Go. Vision non câblée en chat."
+      "tags": [
+        "dense",
+        "vision",
+        "qat"
+      ],
+      "description": "Gemma 4 12B QAT Unsloth — dense ~6,7 Go + mmproj. Alt vision mid (12 Go+).",
+      "extra_files": [
+        {
+          "filename": "mmproj-gemma-4-12B-it-qat-F16.gguf",
+          "url": "https://huggingface.co/unsloth/gemma-4-12B-it-qat-GGUF/resolve/main/mmproj-F16.gguf",
+          "bytes": 175115840,
+          "sha256": "",
+          "role": "mmproj"
+        }
+      ]
     },
     {
       "id": "local:gpt-oss-20b",
       "name": "gpt-oss 20B Q4",
-      "profiles": ["chat", "code", "reasoning"],
+      "profiles": [
+        "chat",
+        "code",
+        "reasoning"
+      ],
       "filename": "gpt-oss-20b-Q4_K_M.gguf",
       "url": "https://huggingface.co/unsloth/gpt-oss-20b-GGUF/resolve/main/gpt-oss-20b-Q4_K_M.gguf",
       "bytes": 11624759488,
@@ -314,19 +427,26 @@
       "quality_score": 91,
       "speed_score": 72,
       "n_layers": 24,
-      "n_params": 2.1e10,
+      "n_params": 21000000000.0,
       "weights_bytes": 11624759488,
       "embed_bytes": 500000000,
       "kv_bytes_per_token": 80000,
       "replaces": [],
       "optional": true,
-      "tags": ["moe", "reasoning"],
+      "tags": [
+        "moe",
+        "reasoning"
+      ],
       "description": "MoE OpenAI gpt-oss-20b Apache — ~3,6B actifs / 20B. Idéal 12–16 Go VRAM."
     },
     {
       "id": "local:qwen3-coder-30b-a3b",
       "name": "Qwen3 Coder 30B-A3B Q4",
-      "profiles": ["chat", "code", "reasoning"],
+      "profiles": [
+        "chat",
+        "code",
+        "reasoning"
+      ],
       "filename": "Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf",
       "url": "https://huggingface.co/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF/resolve/main/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf",
       "bytes": 18556689568,
@@ -336,19 +456,26 @@
       "quality_score": 94,
       "speed_score": 70,
       "n_layers": 48,
-      "n_params": 3.05e10,
+      "n_params": 30500000000.0,
       "weights_bytes": 18556689568,
       "embed_bytes": 500000000,
       "kv_bytes_per_token": 80000,
       "replaces": [],
       "optional": true,
-      "tags": ["moe", "code"],
+      "tags": [
+        "moe",
+        "code"
+      ],
       "description": "MoE 30B-A3B spécialisé code — même empreinte que Qwen3 30B Instruct 2507."
     },
     {
       "id": "local:glm-4.7-flash",
       "name": "GLM-4.7 Flash Q4",
-      "profiles": ["chat", "code", "reasoning"],
+      "profiles": [
+        "chat",
+        "code",
+        "reasoning"
+      ],
       "filename": "GLM-4.7-Flash-Q4_K_M.gguf",
       "url": "https://huggingface.co/unsloth/GLM-4.7-Flash-GGUF/resolve/main/GLM-4.7-Flash-Q4_K_M.gguf",
       "bytes": 18312339808,
@@ -358,41 +485,65 @@
       "quality_score": 94,
       "speed_score": 68,
       "n_layers": 40,
-      "n_params": 3.0e10,
+      "n_params": 30000000000.0,
       "weights_bytes": 18312339808,
       "embed_bytes": 500000000,
       "kv_bytes_per_token": 80000,
       "replaces": [],
       "optional": true,
-      "tags": ["moe", "reasoning", "code"],
+      "tags": [
+        "moe",
+        "reasoning",
+        "code"
+      ],
       "description": "Zhipu GLM-4.7 Flash MIT — MoE ~18 Go, agents / code. Un seul fichier GGUF."
     },
     {
       "id": "local:gemma-4-26b-a4b",
       "name": "Gemma 4 26B-A4B it Q4",
-      "profiles": ["chat", "code"],
+      "profiles": [
+        "chat",
+        "code",
+        "vision"
+      ],
       "filename": "gemma-4-26B-A4B-it-UD-Q4_K_M.gguf",
       "url": "https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/main/gemma-4-26B-A4B-it-UD-Q4_K_M.gguf",
       "bytes": 16947541728,
       "sha256": "",
-      "min_vram_mib": 16384,
-      "min_disk_bytes": 18500000000,
+      "min_vram_mib": 17664,
+      "min_disk_bytes": 19800000000,
       "quality_score": 94,
       "speed_score": 68,
       "n_layers": 40,
-      "n_params": 2.6e10,
-      "weights_bytes": 16947541728,
+      "n_params": 26000000000.0,
+      "weights_bytes": 18140600512,
       "embed_bytes": 500000000,
       "kv_bytes_per_token": 90000,
       "replaces": [],
       "optional": true,
-      "tags": ["moe", "vision"],
-      "description": "Gemma 4 26B-A4B Apache — 4B actifs, ~17 Go. Diversifie le high Qwen. Vision non câblée en chat."
+      "tags": [
+        "moe",
+        "vision"
+      ],
+      "description": "Gemma 4 26B-A4B Apache — 4B actifs, ~17 Go + mmproj. Alt vision high.",
+      "extra_files": [
+        {
+          "filename": "mmproj-gemma-4-26B-A4B-it-F16.gguf",
+          "url": "https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/main/mmproj-F16.gguf",
+          "bytes": 1193058784,
+          "sha256": "",
+          "role": "mmproj"
+        }
+      ]
     },
     {
       "id": "local:ornith-1.5-35b-a3b",
       "name": "Ornith 1.5 35B-A3B Q4",
-      "profiles": ["chat", "code", "reasoning"],
+      "profiles": [
+        "chat",
+        "code",
+        "reasoning"
+      ],
       "filename": "Ornith-1.5-35B-Q4_K_M.gguf",
       "url": "https://huggingface.co/ornith-ai/Ornith-1.5-35B-A3B-GGUF/resolve/main/Ornith-1.5-35B-Q4_K_M.gguf",
       "bytes": 21713462848,
@@ -402,41 +553,65 @@
       "quality_score": 96,
       "speed_score": 64,
       "n_layers": 40,
-      "n_params": 3.5e10,
+      "n_params": 35000000000.0,
       "weights_bytes": 21713462848,
       "embed_bytes": 500000000,
       "kv_bytes_per_token": 80000,
       "replaces": [],
       "optional": true,
-      "tags": ["moe", "reasoning", "thinking"],
+      "tags": [
+        "moe",
+        "reasoning",
+        "thinking"
+      ],
       "description": "MoE MIT 35B-A3B — paire high du Ornith 9B. Agents / SWE, ~22 Go, 24 Go VRAM."
     },
     {
       "id": "local:qwen3.6-35b-a3b",
       "name": "Qwen3.6 35B-A3B UD-Q4_K_M",
-      "profiles": ["chat", "code", "reasoning"],
+      "profiles": [
+        "chat",
+        "code",
+        "reasoning",
+        "vision"
+      ],
       "filename": "Qwen3.6-35B-A3B-UD-Q4_K_M.gguf",
       "url": "https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF/resolve/main/Qwen3.6-35B-A3B-UD-Q4_K_M.gguf",
       "bytes": 22134528992,
       "sha256": "",
-      "min_vram_mib": 20480,
-      "min_disk_bytes": 24000000000,
+      "min_vram_mib": 21504,
+      "min_disk_bytes": 25000000000,
       "quality_score": 96,
       "speed_score": 64,
       "n_layers": 40,
-      "n_params": 3.5e10,
-      "weights_bytes": 22134528992,
+      "n_params": 35000000000.0,
+      "weights_bytes": 23033812672,
       "embed_bytes": 500000000,
       "kv_bytes_per_token": 80000,
       "replaces": [],
       "optional": true,
-      "tags": ["moe", "reasoning", "vision"],
-      "description": "Successeur du 30B-A3B-2507 — MoE 35B/3B Unsloth Dynamic. ~22 Go Q4 ; 24 Go VRAM."
+      "tags": [
+        "moe",
+        "reasoning",
+        "vision"
+      ],
+      "description": "Qwen3.6 35B-A3B Unsloth Dynamic — ~22 Go + mmproj vision. Alt high multimodal.",
+      "extra_files": [
+        {
+          "filename": "mmproj-Qwen3.6-35B-A3B-F16.gguf",
+          "url": "https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF/resolve/main/mmproj-F16.gguf",
+          "bytes": 899283680,
+          "sha256": "",
+          "role": "mmproj"
+        }
+      ]
     },
     {
       "id": "local:sd-v1-5",
       "name": "Stable Diffusion 1.5",
-      "profiles": ["image"],
+      "profiles": [
+        "image"
+      ],
       "filename": "v1-5-pruned-emaonly.safetensors",
       "url": "https://huggingface.co/Comfy-Org/stable-diffusion-v1-5-archive/resolve/main/v1-5-pruned-emaonly.safetensors",
       "bytes": 4265146304,
@@ -446,7 +621,7 @@
       "quality_score": 70,
       "speed_score": 60,
       "n_layers": 0,
-      "n_params": 8.6e8,
+      "n_params": 860000000.0,
       "weights_bytes": 4265146304,
       "embed_bytes": 0,
       "kv_bytes_per_token": 0,
@@ -459,7 +634,9 @@
     {
       "id": "local:piper-en-us",
       "name": "Piper TTS en_US lessac medium",
-      "profiles": ["tts"],
+      "profiles": [
+        "tts"
+      ],
       "filename": "en_US-lessac-medium.onnx",
       "url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx",
       "bytes": 63201294,
@@ -469,7 +646,7 @@
       "quality_score": 75,
       "speed_score": 90,
       "n_layers": 0,
-      "n_params": 1.0e7,
+      "n_params": 10000000.0,
       "weights_bytes": 63201294,
       "embed_bytes": 0,
       "kv_bytes_per_token": 0,
@@ -490,7 +667,9 @@
     {
       "id": "local:piper-fr-fr",
       "name": "Piper TTS fr_FR siwis medium",
-      "profiles": ["tts"],
+      "profiles": [
+        "tts"
+      ],
       "filename": "fr_FR-siwis-medium.onnx",
       "url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/fr/fr_FR/siwis/medium/fr_FR-siwis-medium.onnx",
       "bytes": 63201294,
@@ -500,7 +679,7 @@
       "quality_score": 75,
       "speed_score": 90,
       "n_layers": 0,
-      "n_params": 1.0e7,
+      "n_params": 10000000.0,
       "weights_bytes": 63201294,
       "embed_bytes": 0,
       "kv_bytes_per_token": 0,
@@ -521,7 +700,9 @@
     {
       "id": "local:flux2",
       "name": "Flux 2-class (FLUX.1 schnell fp8)",
-      "profiles": ["image"],
+      "profiles": [
+        "image"
+      ],
       "filename": "flux1-schnell-fp8.safetensors",
       "url": "https://huggingface.co/Comfy-Org/flux1-schnell/resolve/main/flux1-schnell-fp8.safetensors",
       "bytes": 11900000000,
@@ -531,7 +712,7 @@
       "quality_score": 90,
       "speed_score": 55,
       "n_layers": 0,
-      "n_params": 1.2e10,
+      "n_params": 12000000000.0,
       "weights_bytes": 11900000000,
       "embed_bytes": 0,
       "kv_bytes_per_token": 0,
@@ -576,7 +757,9 @@
     {
       "id": "local:ideogram4",
       "name": "Ideogram 4 (sd.cpp GGUF Q4_0 + Qwen3-VL + FLUX.2 VAE)",
-      "profiles": ["image"],
+      "profiles": [
+        "image"
+      ],
       "filename": "ideogram4-Q4_0.gguf",
       "url": "https://huggingface.co/leejet/ideogram-4-GGUF/resolve/main/ideogram4-Q4_0.gguf",
       "bytes": 5643820832,
@@ -586,7 +769,7 @@
       "quality_score": 92,
       "speed_score": 40,
       "n_layers": 0,
-      "n_params": 9.3e9,
+      "n_params": 9300000000.0,
       "weights_bytes": 5643820832,
       "embed_bytes": 0,
       "kv_bytes_per_token": 0,
@@ -633,7 +816,9 @@
     {
       "id": "local:sdxl-base",
       "name": "Stable Diffusion XL 1.0",
-      "profiles": ["image"],
+      "profiles": [
+        "image"
+      ],
       "filename": "sd_xl_base_1.0.safetensors",
       "url": "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors",
       "bytes": 6938040706,
@@ -643,7 +828,7 @@
       "quality_score": 82,
       "speed_score": 55,
       "n_layers": 0,
-      "n_params": 2.6e9,
+      "n_params": 2600000000.0,
       "weights_bytes": 6938040706,
       "embed_bytes": 0,
       "kv_bytes_per_token": 0,
@@ -652,7 +837,10 @@
       "modality": "image",
       "format": "safetensors",
       "engine": "sdcpp",
-      "tags": ["sdxl", "diffusion"],
+      "tags": [
+        "sdxl",
+        "diffusion"
+      ],
       "description": "SDXL base checkpoint (sd.cpp). Separate VAE recommended.",
       "extra_files": [
         {
@@ -672,7 +860,9 @@
     {
       "id": "local:z-image-turbo",
       "name": "Z-Image Turbo",
-      "profiles": ["image"],
+      "profiles": [
+        "image"
+      ],
       "filename": "z_image_turbo-Q4_K.gguf",
       "url": "https://huggingface.co/leejet/Z-Image-Turbo-GGUF/resolve/main/z_image_turbo-Q4_K.gguf",
       "bytes": 3864250304,
@@ -682,7 +872,7 @@
       "quality_score": 88,
       "speed_score": 75,
       "n_layers": 0,
-      "n_params": 6.0e9,
+      "n_params": 6000000000.0,
       "weights_bytes": 3864250304,
       "embed_bytes": 0,
       "kv_bytes_per_token": 0,
@@ -691,7 +881,10 @@
       "modality": "image",
       "format": "gguf",
       "engine": "sdcpp",
-      "tags": ["turbo", "dit"],
+      "tags": [
+        "turbo",
+        "dit"
+      ],
       "description": "Z-Image Turbo DiT (sd.cpp). Fast turbo sampler; needs VAE + Qwen3 LLM sidecars.",
       "extra_files": [
         {
@@ -723,7 +916,9 @@
     {
       "id": "local:qwen-image-2512",
       "name": "Qwen Image 2512",
-      "profiles": ["image"],
+      "profiles": [
+        "image"
+      ],
       "filename": "qwen-image-2512-Q4_K_M.gguf",
       "url": "https://huggingface.co/unsloth/Qwen-Image-2512-GGUF/resolve/main/qwen-image-2512-Q4_K_M.gguf",
       "bytes": 12000000000,
@@ -733,7 +928,7 @@
       "quality_score": 90,
       "speed_score": 50,
       "n_layers": 0,
-      "n_params": 2.0e10,
+      "n_params": 20000000000.0,
       "weights_bytes": 12000000000,
       "embed_bytes": 0,
       "kv_bytes_per_token": 0,
@@ -742,7 +937,10 @@
       "modality": "image",
       "format": "gguf",
       "engine": "sdcpp",
-      "tags": ["qwen", "dit"],
+      "tags": [
+        "qwen",
+        "dit"
+      ],
       "description": "Qwen Image 2512 DiT (sd.cpp). Needs qwen_image VAE + Qwen2.5-VL LLM.",
       "extra_files": [
         {
@@ -775,7 +973,9 @@
     {
       "id": "local:krea2-raw",
       "name": "Krea 2 Base",
-      "profiles": ["image"],
+      "profiles": [
+        "image"
+      ],
       "filename": "Krea-2-Base-Q4_K_M.gguf",
       "url": "https://huggingface.co/realrebelai/KREA-2_GGUFs/resolve/main/BASE/Krea-2-Base-Q4_K_M.gguf",
       "bytes": 7259460832,
@@ -785,7 +985,7 @@
       "quality_score": 89,
       "speed_score": 48,
       "n_layers": 0,
-      "n_params": 1.4e10,
+      "n_params": 14000000000.0,
       "weights_bytes": 7259460832,
       "embed_bytes": 0,
       "kv_bytes_per_token": 0,
@@ -794,7 +994,10 @@
       "modality": "image",
       "format": "gguf",
       "engine": "sdcpp",
-      "tags": ["krea", "dit"],
+      "tags": [
+        "krea",
+        "dit"
+      ],
       "description": "Krea 2 Base DiT (sd.cpp). Needs Wan 2.1 VAE + Qwen3-VL LLM.",
       "extra_files": [
         {
@@ -826,7 +1029,10 @@
     {
       "id": "local:wan2.2-t2i",
       "name": "Wan 2.2 T2V A14B (single frame)",
-      "profiles": ["image", "video"],
+      "profiles": [
+        "image",
+        "video"
+      ],
       "filename": "Wan2.2-T2V-A14B-LowNoise-Q4_K_M.gguf",
       "url": "https://huggingface.co/QuantStack/Wan2.2-T2V-A14B-GGUF/resolve/main/LowNoise/Wan2.2-T2V-A14B-LowNoise-Q4_K_M.gguf",
       "bytes": 9650090496,
@@ -836,7 +1042,7 @@
       "quality_score": 88,
       "speed_score": 35,
       "n_layers": 0,
-      "n_params": 1.4e10,
+      "n_params": 14000000000.0,
       "weights_bytes": 9650090496,
       "embed_bytes": 0,
       "kv_bytes_per_token": 0,
@@ -845,7 +1051,11 @@
       "modality": "image",
       "format": "gguf",
       "engine": "sdcpp",
-      "tags": ["wan", "video", "large"],
+      "tags": [
+        "wan",
+        "video",
+        "large"
+      ],
       "description": "Wan 2.2 video DiT via sd.cpp vid_gen with 1 frame (experimental T2I). Heavy VRAM; needs high-noise model, VAE, umt5.",
       "extra_files": [
         {
@@ -887,7 +1097,10 @@
     {
       "id": "local:ltx2.3-dev",
       "name": "LTX 2.3 Dev (vid_gen)",
-      "profiles": ["image", "video"],
+      "profiles": [
+        "image",
+        "video"
+      ],
       "filename": "ltx-2.3-22b-dev-Q4_K_M.gguf",
       "url": "https://huggingface.co/unsloth/LTX-2.3-GGUF/resolve/main/ltx-2.3-22b-dev-Q4_K_M.gguf",
       "bytes": 14000000000,
@@ -897,7 +1110,7 @@
       "quality_score": 91,
       "speed_score": 25,
       "n_layers": 0,
-      "n_params": 2.2e10,
+      "n_params": 22000000000.0,
       "weights_bytes": 14000000000,
       "embed_bytes": 0,
       "kv_bytes_per_token": 0,
@@ -906,7 +1119,11 @@
       "modality": "video",
       "format": "gguf",
       "engine": "sdcpp",
-      "tags": ["ltx", "video", "large"],
+      "tags": [
+        "ltx",
+        "video",
+        "large"
+      ],
       "description": "LTX 2.3 audio-video (sd.cpp vid_gen). Single-frame mode in Image Studio is experimental; full video UI coming later.",
       "extra_files": [
         {
@@ -953,7 +1170,9 @@
     {
       "id": "local:realesrgan-x4plus-anime",
       "name": "RealESRGAN x4plus anime 6B",
-      "profiles": ["upscale"],
+      "profiles": [
+        "upscale"
+      ],
       "filename": "RealESRGAN_x4plus_anime_6B.pth",
       "url": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.2.4/RealESRGAN_x4plus_anime_6B.pth",
       "bytes": 17938706,
@@ -963,7 +1182,7 @@
       "quality_score": 80,
       "speed_score": 85,
       "n_layers": 0,
-      "n_params": 6.0e6,
+      "n_params": 6000000.0,
       "weights_bytes": 17938706,
       "embed_bytes": 0,
       "kv_bytes_per_token": 0,
@@ -976,7 +1195,9 @@
     {
       "id": "local:piper-en-gb",
       "name": "Piper TTS en_GB alba medium",
-      "profiles": ["tts"],
+      "profiles": [
+        "tts"
+      ],
       "filename": "en_GB-alba-medium.onnx",
       "url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/alba/medium/en_GB-alba-medium.onnx",
       "bytes": 63000000,
@@ -986,7 +1207,7 @@
       "quality_score": 74,
       "speed_score": 90,
       "n_layers": 0,
-      "n_params": 1.0e7,
+      "n_params": 10000000.0,
       "weights_bytes": 63000000,
       "embed_bytes": 0,
       "kv_bytes_per_token": 0,
