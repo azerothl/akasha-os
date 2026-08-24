@@ -46,7 +46,7 @@ pub fn render_pending_image_chips(
         for (i, path) in paths.iter().enumerate() {
             egui::Frame::new()
                 .fill(ui.visuals().widgets.inactive.bg_fill)
-                .corner_radius(4.0)
+                .corner_radius(0.0)
                 .inner_margin(egui::Margin::symmetric(4, 2))
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
@@ -55,7 +55,7 @@ pub fn render_pending_image_chips(
                             ui.add(
                                 egui::Image::new(&tex)
                                     .max_size(egui::vec2(28.0, 28.0))
-                                    .corner_radius(2.0),
+                                    .corner_radius(0.0),
                             );
                         } else {
                             ui.label(egui::RichText::new("🖼").size(14.0));
