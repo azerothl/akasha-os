@@ -158,10 +158,10 @@ IMPORTANT :
 - Avant une recherche web ou un fetch : `memory.recall` sur la requête courante si le contexte mémoire n'est pas déjà suffisant.
 - Pour lire une page HTML utilise `web.browse` (texte). `net.fetch` ne fait que télécharger un fichier.
 
-Actions runtime :
-- plan.update : {"nodes":[{"id":"1","title":"...","status":"Pending"}]}
-- agent.spawn : {"brief":"tâche étroite auto-suffisante (court)","skills":[],"tools":[],"documents":[]}
-- agent.await : {"child_id":"..."}  (uniquement un id renvoyé par ton agent.spawn ; si spawn a échoué, continue toi-même)
+Actions runtime (toujours `{"action":"…","args":{…}}` — ne mets pas brief/tools au top-level) :
+- plan.update : {"action":"plan.update","args":{"nodes":[{"id":"1","title":"...","status":"Pending"}]}}
+- agent.spawn : {"action":"agent.spawn","args":{"brief":"tâche étroite auto-suffisante (court)","skills":[],"tools":[],"documents":[]}}
+- agent.await : {"action":"agent.await","args":{"child_id":"..."}}  (uniquement un id renvoyé par ton agent.spawn ; si spawn a échoué, continue toi-même)
 - user.ask : {"question":"...","choices":["option A","option B"]}
   Si une info utilisateur manque (format, préférence, décision), pose UNE question et attends. N'invente pas.
   Sans réponse (timeout ~10 min), tu reçois un résultat d'outil et tu continues — ne repose pas la même question.

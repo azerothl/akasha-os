@@ -817,30 +817,56 @@ fn draw_step(
                         rec.tool_result
                             .strip_prefix("sous-agent créé: ")
                             .map(|s| s.trim().to_string())
-                    })
-                    .unwrap_or_else(|| "?".into());
+                    });
                 let brief = rec
                     .args
                     .get("brief")
                     .and_then(|v| v.as_str())
                     .unwrap_or("")
                     .to_string();
-                card_frame(Color32::from_rgb(30, 45, 60)).show(ui, |ui| {
+                let spawn_ok = child.as_ref().is_some_and(|c| !c.is_empty() && c != "?");
+                let fail_msg = if spawn_ok {
+                    None
+                } else if !rec.tool_result.is_empty() {
+                    Some(rec.tool_result.clone())
+                } else {
+                    Some("spawn non lancé (brief/args manquants ?)".into())
+                };
+                card_frame(if spawn_ok {
+                    Color32::from_rgb(30, 45, 60)
+                } else {
+                    Color32::from_rgb(55, 32, 32)
+                })
+                .show(ui, |ui| {
                     ui.label(
-                        RichText::new("Sous-agent spawn")
-                            .color(Color32::from_rgb(140, 190, 255))
-                            .strong(),
+                        RichText::new(if spawn_ok {
+                            "Sous-agent spawn"
+                        } else {
+                            "Sous-agent spawn — échec"
+                        })
+                        .color(if spawn_ok {
+                            Color32::from_rgb(140, 190, 255)
+                        } else {
+                            Color32::from_rgb(240, 140, 140)
+                        })
+                        .strong(),
                     );
                     if !brief.is_empty() {
                         ui.small(&brief);
                     }
-                    if child != "?"
-                        && ui
-                            .button(RichText::new(format!("Ouvrir {child}"))
-                                .color(Color32::from_rgb(160, 200, 255)))
+                    if let Some(msg) = fail_msg {
+                        ui.small(RichText::new(truncate(&msg, 240)).color(Color32::from_rgb(220, 160, 160)));
+                    }
+                    if let Some(child) = child.filter(|c| !c.is_empty() && c != "?") {
+                        if ui
+                            .button(
+                                RichText::new(format!("Ouvrir {child}"))
+                                    .color(Color32::from_rgb(160, 200, 255)),
+                            )
                             .clicked()
-                    {
-                        actions.open_child = Some(child);
+                        {
+                            actions.open_child = Some(child);
+                        }
                     }
                 });
             } else if rec.action == "agent.await" {
