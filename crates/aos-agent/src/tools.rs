@@ -552,20 +552,6 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
             }),
         ),
         (
-            "canvas.fill",
-            "Remplissage par inondation à un point (coords 0..1) sur le canvas de session",
-            serde_json::json!({
-                "type":"object",
-                "properties":{
-                    "session_id": sid_schema(),
-                    "x":{"type":"number"},
-                    "y":{"type":"number"},
-                    "color":{"type":"string"}
-                },
-                "required":["x","y"]
-            }),
-        ),
-        (
             "canvas.erase",
             "Effacer le long d'une polyline (peint le fond)",
             serde_json::json!({
@@ -639,7 +625,6 @@ pub const CANVAS_TOOL_IDS: &[&str] = &[
     "canvas.spline",
     "canvas.rect",
     "canvas.ellipse",
-    "canvas.fill",
     "canvas.erase",
     "canvas.clear",
     "canvas.undo",

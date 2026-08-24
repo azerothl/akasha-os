@@ -12,7 +12,10 @@ use aos_agent::context_budget::{
     prompt_budget, sanitize_assistant_for_memory, LoopGuard, LoopVerdict, DEFAULT_N_CTX_HINT,
 };
 use aos_agent::persist;
-use aos_agent::canvas_scene::{canvas_scene_prompt_block, fetch_canvas_scene_digest};
+use aos_agent::canvas_scene::{
+    agent_has_canvas_tools, canvas_critic_system_prompt, canvas_reflect_user_content,
+    canvas_scene_prompt_block, fetch_canvas_scene_digest,
+};
 use aos_agent::prompt::{compile_system_prompt, optimize_prompt_request, PromptCompileInput};
 use aos_agent::skills::{load_skills, match_skill_by_action, merge_skill_tools, skill_misuse_hint, SkillDoc};
 use aos_agent::tools::{
@@ -298,17 +301,30 @@ async fn main() {
             {
                 let mut st = shared.state.lock().await;
                 if assess.is_complex() {
-                    st.push_user(&format!(
-                        "Goal à accomplir : {}\nCritères : {:?}\n\
-                         Classification : complex — {}. \
-                         Première action obligatoire : plan.update avec des nœuds atomiques. \
-                         Si des nœuds sont indépendants (pas de dépendance de données), \
-                         délègue-les en parallèle via agent.spawn (briefs COURTS auto-suffisants, \
-                         tools/docs minimaux — pas de dump parent) puis agent.await ; \
-                         n'exécute en solo que les nœuds séquentiels ou légers. \
-                         memory.recall sur le nœud / brief courant (pas sur le goal entier).",
-                        spec.goal.statement, spec.goal.success_criteria, assess.reason
-                    ));
+                    let canvas_draw = agent_has_canvas_tools(&spec.tools);
+                    let msg = if canvas_draw {
+                        format!(
+                            "Goal à accomplir : {}\nCritères : {:?}\n\
+                             Classification : complex — {}. \
+                             Dessin canvas : un seul auteur (toi). Pas de agent.spawn — \
+                             canvas.get puis canvas.stroke/rect/ellipse (fill:true pour remplir) en traits séquentiels. \
+                             media.image.generate interdit.",
+                            spec.goal.statement, spec.goal.success_criteria, assess.reason
+                        )
+                    } else {
+                        format!(
+                            "Goal à accomplir : {}\nCritères : {:?}\n\
+                             Classification : complex — {}. \
+                             Première action obligatoire : plan.update avec des nœuds atomiques. \
+                             Si des nœuds sont indépendants (pas de dépendance de données), \
+                             délègue-les en parallèle via agent.spawn (briefs COURTS auto-suffisants, \
+                             tools/docs minimaux — pas de dump parent) puis agent.await ; \
+                             n'exécute en solo que les nœuds séquentiels ou légers. \
+                             memory.recall sur le nœud / brief courant (pas sur le goal entier).",
+                            spec.goal.statement, spec.goal.success_criteria, assess.reason
+                        )
+                    };
+                    st.push_user(&msg);
                 } else {
                     st.push_user(&format!(
                         "Goal à accomplir : {}\nCritères : {:?}\n\
@@ -1373,6 +1389,13 @@ async fn execute_action(
             ActResult::Continue(block)
         }
         "agent.spawn" => {
+            if agent_has_canvas_tools(&spec.tools) {
+                return ActResult::Continue(
+                    "canvas : dessine toi-même avec canvas.stroke/rect/ellipse/… — \
+                     ne spawn pas des sous-agents pour le même dessin (un seul auteur, traits séquentiels)."
+                        .into(),
+                );
+            }
             // Profondeur max 2 : un sous-agent ne spawn pas.
             if spec.parent_id.is_some() {
                 return ActResult::Continue(
@@ -2614,6 +2637,10 @@ async fn apply_assess_to_runtime(
     }
 
     if assess.is_complex() && !spec.skills.iter().any(|s| s == "planner") {
+        if agent_has_canvas_tools(&spec.tools) {
+            install_system_prompt(bus, shared, spec, skill_docs, tools).await;
+            return;
+        }
         spec.skills.push("planner".into());
         *skill_docs = load_skills(&spec.skills);
         let tool_ids = merge_skill_tools(&spec.tools, skill_docs);
@@ -2906,22 +2933,37 @@ async fn bootstrap_memory_recall(
 
 async fn reflect(bus: &BusClient, shared: &Shared, spec: &AgentSpec) -> Option<String> {
     let st = shared.state.lock().await;
-    let progress = format!(
-        "step {}/{} goal={} tasks={:?}",
-        st.step,
-        spec.goal.max_steps,
-        spec.goal.statement,
-        st.plan_stack
-    );
+    let canvas_draw = agent_has_canvas_tools(&spec.tools);
+    let progress = if canvas_draw {
+        canvas_reflect_user_content(
+            st.step,
+            spec.goal.max_steps,
+            &spec.goal.statement,
+            &st.plan_stack,
+            &st.trace,
+        )
+    } else {
+        format!(
+            "step {}/{} goal={} tasks={:?}",
+            st.step,
+            spec.goal.max_steps,
+            spec.goal.statement,
+            st.plan_stack
+        )
+    };
+    let critic_system = if canvas_draw {
+        canvas_critic_system_prompt()
+    } else {
+        "Tu es un critique. En 2 phrases en français: est-ce que l'agent avance vers le goal ? Que faire ensuite ? \
+         Réponds directement, sans balises <think> ni monologue Thinking Process."
+    };
     drop(st);
     let req = InferRequest {
         model_id: spec.model_id.clone(),
         messages: vec![
             ChatMessage {
                 role: "system".into(),
-                content: "Tu es un critique. En 2 phrases en français: est-ce que l'agent avance vers le goal ? Que faire ensuite ? \
-                          Réponds directement, sans balises <think> ni monologue Thinking Process."
-                    .into(),
+                content: critic_system.into(),
             },
             ChatMessage {
                 role: "user".into(),
