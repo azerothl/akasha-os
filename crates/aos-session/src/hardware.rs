@@ -253,7 +253,7 @@ fn probe_disk_free(home: &Path) -> Result<u64, String> {
     #[cfg(target_os = "macos")]
     {
         let out = Command::new("df")
-            .args(["-k", target.to_str().unwrap_or(".")])
+            .args(["-kP", target.to_str().unwrap_or(".")])
             .output()
             .map_err(|e| e.to_string())?;
         let text = String::from_utf8_lossy(&out.stdout);

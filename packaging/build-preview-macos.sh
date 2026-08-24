@@ -33,8 +33,8 @@ dir_size_bytes() {
 copy_tree() {
   local src="$1"
   local dst="$2"
-  echo "cp -R ${src} ${dst}"
-  cp -R "$src" "$dst"
+  echo "cp -a ${src} ${dst}"
+  cp -a "$src" "$dst"
 }
 
 if [ "$SKIP_BUILD" != "1" ]; then
@@ -234,6 +234,7 @@ cp -f "${ROOT}/LICENSE" "${OUT}/" 2>/dev/null || true
 cp -f "${ROOT}/NOTICE" "${OUT}/" 2>/dev/null || true
 cp -f "${ROOT}/LICENSE-COMMERCIAL.md" "${OUT}/" 2>/dev/null || true
 cp -f "$(dirname "$0")/install-macos.sh" "${OUT}/install.sh"
+echo "chmod +x ${OUT}/bin/* ${OUT}/install.sh"
 chmod +x "${OUT}/bin/"* "${OUT}/install.sh"
 
 cat > "${OUT}/README.txt" <<EOF

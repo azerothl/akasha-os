@@ -72,12 +72,19 @@ pub fn show_fatal_dialog(title: &str, body: &str) {
     }
     #[cfg(target_os = "macos")]
     {
-        let safe_title = title.replace('"', "\\\"");
-        let safe_body = body.replace('"', "\\\"");
-        let script = format!(
-            "display dialog \"{safe_body}\" with title \"{safe_title}\" buttons {{\"OK\"}} default button 1 with icon caution"
-        );
-        let _ = Command::new("osascript").args(["-e", &script]).status();
+        // Pass title/body as osascript argv — avoids broken dialogs when body has newlines/quotes.
+        let _ = Command::new("osascript")
+            .args([
+                "-e",
+                "on run argv",
+                "-e",
+                "display dialog (item 2 of argv) with title (item 1 of argv) buttons {\"OK\"} default button 1 with icon caution",
+                "-e",
+                "end run",
+            ])
+            .arg(title)
+            .arg(body)
+            .status();
     }
 }
 
@@ -144,7 +151,7 @@ pub fn check_disk_space(home: &Path) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         let out = Command::new("df")
-            .args(["-k", target.to_str().unwrap_or(".")])
+            .args(["-kP", target.to_str().unwrap_or(".")])
             .output()
             .map_err(|e| e.to_string())?;
         let text = String::from_utf8_lossy(&out.stdout);
