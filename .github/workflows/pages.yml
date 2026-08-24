@@ -40,11 +40,17 @@ jobs:
           n = 0
           for path in Path("website").rglob("*.html"):
               html = path.read_text(encoding="utf-8")
-              next_html, count = re.subn(
-                  r"(<span data-aos-version>)[^<]*(</span>)",
-                  rf"\g<1>{version}\g<2>",
+              next_html, count_attr = re.subn(
+                  r'(<span data-aos-version=")[^"]*(">)[^<]*(</span>)',
+                  rf'\g<1>{version}\g<2>{version}\g<3>',
                   html,
               )
+              next_html, count_legacy = re.subn(
+                  r"(<span data-aos-version>)[^<]*(</span>)",
+                  rf'<span data-aos-version="{version}">{version}\g<2>',
+                  next_html,
+              )
+              count = count_attr + count_legacy
               if count:
                   path.write_text(next_html, encoding="utf-8")
                   n += count

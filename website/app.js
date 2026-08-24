@@ -27,14 +27,32 @@
     applyDownloadLinks(next);
   }
 
-  function applyDownloadLinks(lang) {
+  const VERSION_RE = /^[0-9]+(\.[0-9]+)*$/;
+  const RELEASE_REPO = "azerothl/akasha-os";
+  const DOWNLOAD_PLATFORMS = ["windows", "linux", "macos"];
+
+  function readProductVersion() {
     const versionEl = document.querySelector("[data-aos-version]");
-    const version = versionEl?.textContent?.trim();
+    const raw = versionEl?.getAttribute("data-aos-version")?.trim();
+    if (!raw || !VERSION_RE.test(raw)) {
+      return null;
+    }
+    return raw;
+  }
+
+  function releaseAssetUrl(version, fileName) {
+    const tag = `v${version}`;
+    return new URL(
+      fileName,
+      `https://github.com/${RELEASE_REPO}/releases/download/${tag}/`,
+    ).href;
+  }
+
+  function applyDownloadLinks(lang) {
+    const version = readProductVersion();
     if (!version) {
       return;
     }
-    const tag = `v${version}`;
-    const releaseBase = `https://github.com/azerothl/akasha-os/releases/download/${tag}`;
     const assets = {
       windows: `AgentOS-Preview-${version}-windows-x64.zip`,
       linux: `AgentOS-Preview-${version}-linux-x64.tar.gz`,
@@ -42,11 +60,14 @@
     };
     document.querySelectorAll("[data-dl]").forEach((link) => {
       const platform = link.getAttribute("data-dl");
+      if (!platform || !DOWNLOAD_PLATFORMS.includes(platform)) {
+        return;
+      }
       const file = assets[platform];
       if (!file) {
         return;
       }
-      link.href = `${releaseBase}/${file}`;
+      link.href = releaseAssetUrl(version, file);
       if (platform === "macos") {
         link.title =
           lang === "fr"
