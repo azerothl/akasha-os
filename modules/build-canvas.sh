@@ -29,7 +29,18 @@ fi
 mkdir -p "${STAGING}/ui"
 cp "$WASM_SRC" "${STAGING}/module.wasm"
 
-HASH="$(sha256sum "${STAGING}/module.wasm" | awk '{print $1}')"
+sha256_file() {
+  local f="$1"
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$f" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$f" | awk '{print $1}'
+  else
+    echo "ERROR: sha256sum or shasum required" >&2
+    exit 1
+  fi
+}
+HASH="$(sha256_file "${STAGING}/module.wasm")"
 MANIFEST_TEMPLATE="${SHARE_PKG}/manifest.yaml"
 if [[ ! -f "$MANIFEST_TEMPLATE" ]]; then
   echo "manifest template missing: $MANIFEST_TEMPLATE" >&2
