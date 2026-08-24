@@ -1645,11 +1645,6 @@ fn resolve_mmproj_for_model(model_id: &str, weights_path: &std::path::Path) -> O
         if candidate.is_file() {
             return Some(candidate);
         }
-        // Fallback: same stem next to weights (download may use remote name).
-        let beside = models_dir.join("mmproj-F16.gguf");
-        if beside.is_file() {
-            return Some(beside);
-        }
     }
     None
 }
@@ -1679,15 +1674,34 @@ mod tests {
             .join("../..")
             .join("share/models");
         let weights = root.join("gemma-4-E4B-it-Q4_K_M.gguf");
-        // File need not exist — resolver only needs catalog next to it.
         let path = resolve_mmproj_for_model("local:gemma-4-e4b", &weights);
-        // Without downloaded mmproj on disk, returns None; with catalog+file present, Some.
-        // Ensure we at least parse catalog without panic when sibling missing.
-        let _ = path;
-        let catalog = root.join("catalog-offerings.json");
-        assert!(catalog.is_file());
-        let raw = std::fs::read_to_string(&catalog).unwrap();
-        assert!(raw.contains("\"role\": \"mmproj\"") || raw.contains("\"role\":\"mmproj\""));
+        let expected = root.join("mmproj-gemma-4-E4B-it-F16.gguf");
+        if expected.is_file() {
+            assert_eq!(path.as_deref(), Some(expected.as_path()));
+        } else {
+            assert!(path.is_none());
+        }
+    }
+
+    #[test]
+    fn resolve_mmproj_ignores_generic_mmproj_beside_weights() {
+        let dir = std::env::temp_dir().join(format!(
+            "aos-mmproj-test-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let weights = dir.join("gemma-4-E4B-it-Q4_K_M.gguf");
+        std::fs::write(&weights, b"weights").unwrap();
+        std::fs::write(dir.join("mmproj-F16.gguf"), b"wrong-projector").unwrap();
+        let catalog = dir.join("catalog-offerings.json");
+        std::fs::write(
+            &catalog,
+            r#"{"models":[{"id":"local:gemma-4-e4b","extra_files":[{"role":"mmproj","filename":"mmproj-gemma-4-E4B-it-F16.gguf"}]}]}"#,
+        )
+        .unwrap();
+        assert!(resolve_mmproj_for_model("local:gemma-4-e4b", &weights).is_none());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
