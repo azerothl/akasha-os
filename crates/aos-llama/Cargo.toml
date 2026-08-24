@@ -13,3 +13,4 @@ serde.workspace = true
 [features]
 default = ["cuda"]
 cuda = ["llama-cpp-sys-2/cuda"]
+metal = ["llama-cpp-sys-2/metal"]
