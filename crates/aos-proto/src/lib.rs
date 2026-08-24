@@ -2573,14 +2573,18 @@ pub fn canvas_scene_digest(doc: &CanvasDoc, aspect: CanvasAspect) -> String {
         }
     }
 
-    let mut lines = vec![format!(
-        "next_seq={} aspect={} ops={} pen={} width={:.3}",
-        doc.next_seq,
-        aspect.agent_label_en(),
-        doc.ops.len(),
-        doc.pen.color,
-        doc.pen.width
-    )];
+    let mut lines = vec![
+        format!(
+            "next_seq={} aspect={} ops={} pen={} width={:.3}",
+            doc.next_seq,
+            aspect.agent_label_en(),
+            doc.ops.len(),
+            doc.pen.color,
+            doc.pen.width
+        ),
+        "coords=normalized 0..1 (origin top-left; x→ right, y↓ down; letterboxed board face — not pixels)"
+            .into(),
+    ];
 
     if !kind_counts.is_empty() {
         let counts: Vec<String> = kind_counts
@@ -3607,6 +3611,7 @@ mod chat_session_room_tests {
             ],
         };
         let digest = canvas_scene_digest(&doc, CanvasAspect::Square);
+        assert!(digest.contains("coords=normalized"));
         assert!(digest.contains("next_seq=3"));
         assert!(digest.contains("seq=1"));
         assert!(digest.contains("seq=2"));

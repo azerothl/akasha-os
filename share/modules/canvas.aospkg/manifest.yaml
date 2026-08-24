@@ -1,6 +1,6 @@
 name: canvas
 version: 1.0.0
-hash: 7946b3227ab76bdeda8633c14f69c82315452c79cdae525f2ebde3543136251f
+hash: 791f9bd1f93d0c703bc86a3055a4b70fd0edac8527ac19288788669e7630097b
 permissions:
   required_caps:
     - fs.write:/downloads/**

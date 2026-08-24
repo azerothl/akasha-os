@@ -110,6 +110,10 @@ EOF
     echo '{"type":"declarative_ui","title":"Tasks","commands":["tasks.create","tasks.list","tasks.update","tasks.complete"]}' \
       > "${ROOT}/modules/tasks.aospkg/ui/index.html"
   fi
+  if [ -f "${ROOT}/modules/build-canvas.sh" ]; then
+    echo "== canvas module =="
+  "${ROOT}/modules/build-canvas.sh"
+  fi
   if [ -f "${ROOT}/modules/build-ext-rt.ps1" ] && command -v pwsh >/dev/null 2>&1; then
     echo "== ext-rt module =="
     pwsh -NoProfile -File "${ROOT}/modules/build-ext-rt.ps1" || true

@@ -80,18 +80,14 @@ pub fn parse_action(text: &str) -> Option<AgentAction> {
 fn parse_action_clean(text: &str) -> Option<AgentAction> {
     // 1. Bloc ```json ... ```
     if let Some(json) = extract_json_fence(text) {
-        if let Ok(a) = serde_json::from_str::<AgentAction>(json) {
-            if !a.action.is_empty() {
-                return Some(a);
-            }
+        if let Some(a) = action_from_json_str(json) {
+            return Some(a);
         }
     }
     // 2. Premier objet JSON dans le texte
     if let Some(obj) = extract_first_json_object(text) {
-        if let Ok(a) = serde_json::from_str::<AgentAction>(&obj) {
-            if !a.action.is_empty() {
-                return Some(a);
-            }
+        if let Some(a) = action_from_json_str(&obj) {
+            return Some(a);
         }
     }
     // 3. Compat TOOL:
@@ -103,6 +99,56 @@ fn parse_action_clean(text: &str) -> Option<AgentAction> {
         });
     }
     None
+}
+
+/// Clés réservées du wrapper d'action — tout le reste peut être un arg aplati.
+const ACTION_WRAPPER_KEYS: &[&str] = &["action", "args", "thought", "thinking", "reasoning"];
+
+/// Parse un objet JSON en `AgentAction`, en remontant les champs frères dans `args`.
+///
+/// Les modèles produisent souvent (guidés par les exemples courts du prompt) :
+/// `{"action":"agent.spawn","brief":"…","tools":["canvas.get"]}`
+/// au lieu de `{"action":"agent.spawn","args":{"brief":"…"}}`. Sans lift,
+/// `args` reste vide → spawn refusé (« brief sous-agent vide ») alors que
+/// l'UI affiche quand même « Sous-agent spawn ».
+fn action_from_json_str(json: &str) -> Option<AgentAction> {
+    let value: serde_json::Value = serde_json::from_str(json).ok()?;
+    coerce_action_from_value(value)
+}
+
+fn coerce_action_from_value(value: serde_json::Value) -> Option<AgentAction> {
+    let obj = value.as_object()?;
+    let action = obj.get("action")?.as_str()?.trim().to_string();
+    if action.is_empty() {
+        return None;
+    }
+    let thought = obj
+        .get("thought")
+        .or_else(|| obj.get("thinking"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    let mut args = match obj.get("args") {
+        Some(a) if a.is_object() => a.clone(),
+        Some(a) if !a.is_null() => serde_json::json!({ "value": a.clone() }),
+        _ => serde_json::json!({}),
+    };
+
+    if let Some(map) = args.as_object_mut() {
+        for (k, v) in obj {
+            if ACTION_WRAPPER_KEYS.contains(&k.as_str()) {
+                continue;
+            }
+            map.entry(k.clone()).or_insert_with(|| v.clone());
+        }
+    }
+
+    Some(AgentAction {
+        thought,
+        action,
+        args,
+    })
 }
 
 fn truncate_chars(s: &str, max: usize) -> String {
@@ -193,6 +239,37 @@ mod tests {
     fn parse_raw_object() {
         let a = parse_action(r#"{"action":"goal.complete","args":{"summary":"done"}}"#).unwrap();
         assert_eq!(a.action, "goal.complete");
+    }
+
+    #[test]
+    fn parse_flat_agent_spawn_lifts_brief_and_tools() {
+        // Forme courante : args aplatis au top-level (pas sous "args").
+        let text = r#"{
+  "action": "agent.spawn",
+  "brief": "Identifier le carré bleu dans le canvas et obtenir ses coordonnées.",
+  "tools": ["canvas.get"],
+  "skills": []
+}"#;
+        let a = parse_action(text).unwrap();
+        assert_eq!(a.action, "agent.spawn");
+        assert_eq!(
+            a.args["brief"],
+            "Identifier le carré bleu dans le canvas et obtenir ses coordonnées."
+        );
+        assert_eq!(a.args["tools"], serde_json::json!(["canvas.get"]));
+        assert_eq!(a.args["skills"], serde_json::json!([]));
+    }
+
+    #[test]
+    fn parse_nested_args_wins_over_flat_sibling() {
+        let text = r#"{
+  "action": "agent.spawn",
+  "brief": "flat-ignored-when-nested",
+  "args": {"brief": "nested-wins", "tools": ["canvas.get"]}
+}"#;
+        let a = parse_action(text).unwrap();
+        assert_eq!(a.args["brief"], "nested-wins");
+        assert_eq!(a.args["tools"], serde_json::json!(["canvas.get"]));
     }
 
     #[test]

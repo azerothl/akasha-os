@@ -146,11 +146,11 @@ pub fn color_to_hex(c: Color32) -> String {
 }
 
 fn author_stroke_color(author_id: &str, stored: &str, dark: bool) -> Color32 {
-    if author_id == "human" {
-        parse_hex_color(stored)
-    } else {
+    if stored.trim().is_empty() {
         let (r, g, b) = chat_room::speaker_color_rgb(author_id, dark);
         Color32::from_rgb(r, g, b)
+    } else {
+        parse_hex_color(stored)
     }
 }
 
@@ -882,6 +882,14 @@ fn fit_board_rect_letterboxes_wide_in_tall_pane() {
     }
 
     #[test]
+    fn author_stroke_color_uses_stored_hex_for_agents() {
+        let red = author_stroke_color("agent-a", "#F40009", true);
+        assert_eq!(red, parse_hex_color("#F40009"));
+        let speaker = author_stroke_color("agent-a", "", true);
+        assert_ne!(speaker, parse_hex_color("#F40009"));
+    }
+
+    #[test]
     fn canvas_agent_brief_contains_drawing_guide() {
         let brief = super::canvas_agent_brief("dessine sur le canvas une maison", CanvasAspect::Square);
         assert!(brief.starts_with("dessine sur le canvas une maison"));
@@ -1027,6 +1035,7 @@ fn canvas_aspect_chip_labels(t: &UiStrings) -> [(&'static str, CanvasAspect); 5]
 /// Frozen designer copy for delegated canvas agents (system prompt — not the user goal).
 pub const CANVAS_AGENT_DESIGNER_GUIDE: &str = "\
 Cible visuelle : lisible à 200px — pas un rectangle+triangle.\n\
+Espace : coords normalisées 0..1 sur le cadre visible (origine coin supérieur gauche) — pas des pixels.\n\
 Règles : margin 0.08–0.12 ; sujet centré ; couches sol → volumes → détails → 2–3 ombres. \
 Nombreux canvas.stroke courts, 2–3 teintes, épaisseurs variées. Commence par canvas.get. \
 Couleur : canvas.set_style {color:\"#RRGGBB\"} ou color= sur chaque op — le teal signal n'est pas la seule teinte ; \

@@ -39,95 +39,11 @@ Copy-Item $wasmSrc $wasmDst -Force
 
 $hash = (Get-FileHash -Algorithm SHA256 $wasmDst).Hash.ToLower()
 
-$manifest = @"
-name: canvas
-version: 1.0.0
-hash: $hash
-permissions:
-  required_caps:
-    - fs.write:/downloads/**
-tools:
-  - name: canvas.stroke
-    description: Draw a polyline stroke (normalized 0..1 points) on the chat session canvas
-    input_schema:
-      type: object
-      properties:
-        session_id: { type: string }
-        points: { type: array, items: { type: object, properties: { x: { type: number }, y: { type: number } } } }
-        color: { type: string }
-        width: { type: number }
-      required: [session_id, points]
-  - name: canvas.rect
-    description: Draw a rectangle on the session canvas
-    input_schema:
-      type: object
-      properties:
-        session_id: { type: string }
-        x: { type: number }
-        y: { type: number }
-        w: { type: number }
-        h: { type: number }
-        color: { type: string }
-        fill: { type: boolean }
-        width: { type: number }
-      required: [session_id, x, y, w, h]
-  - name: canvas.ellipse
-    description: Draw an ellipse on the session canvas
-    input_schema:
-      type: object
-      properties:
-        session_id: { type: string }
-        x: { type: number }
-        y: { type: number }
-        w: { type: number }
-        h: { type: number }
-        color: { type: string }
-        fill: { type: boolean }
-        width: { type: number }
-      required: [session_id, x, y, w, h]
-  - name: canvas.erase
-    description: Erase along a polyline (paints background)
-    input_schema:
-      type: object
-      properties:
-        session_id: { type: string }
-        points: { type: array }
-        width: { type: number }
-      required: [session_id, points]
-  - name: canvas.clear
-    description: Clear the session canvas
-    input_schema:
-      type: object
-      properties:
-        session_id: { type: string }
-      required: [session_id]
-  - name: canvas.undo
-    description: Undo the last canvas operation
-    input_schema:
-      type: object
-      properties:
-        session_id: { type: string }
-      required: [session_id]
-  - name: canvas.get
-    description: Read canvas ops (optional after_seq for deltas)
-    input_schema:
-      type: object
-      properties:
-        session_id: { type: string }
-        after_seq: { type: integer }
-      required: [session_id]
-  - name: canvas.export
-    description: Export canvas as PNG under /downloads
-    input_schema:
-      type: object
-      properties:
-        session_id: { type: string }
-        path: { type: string }
-        width: { type: integer }
-        height: { type: integer }
-      required: [session_id]
-min_os_api: 1
-"@
+$manifestTemplate = Join-OsPath $root share modules canvas.aospkg manifest.yaml
+if (-not (Test-Path $manifestTemplate)) {
+    throw "manifest template missing: $manifestTemplate"
+}
+$manifest = (Get-Content $manifestTemplate -Raw) -replace '(?m)^hash:\s*.*$', "hash: $hash"
 [System.IO.File]::WriteAllText((Join-OsPath $pkg manifest.yaml), $manifest)
 
 $uiJson = @'

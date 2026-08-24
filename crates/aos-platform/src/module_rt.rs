@@ -877,6 +877,184 @@ min_os_api: 1
             }
         }
     }
+
+    /// Packaged `share/modules/canvas.aospkg` must dispatch `canvas.set_style` / `canvas.fill`.
+    #[test]
+    fn packaged_canvas_wasm_invokes_set_style_and_fill() {
+        struct CanvasHost;
+        impl HostServices for CanvasHost {
+            fn call(
+                &self,
+                _ctx: &HostCallCtx,
+                service: &str,
+                args: serde_json::Value,
+            ) -> Result<serde_json::Value, String> {
+                match service {
+                    "canvas.set_style" => {
+                        let color = args
+                            .get("color")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("#3ee0c4");
+                        Ok(serde_json::json!({
+                            "pen": {"color": color, "width": 0.015},
+                            "next_seq": 1,
+                            "canvas_open": true,
+                        }))
+                    }
+                    "canvas.apply" => Ok(serde_json::json!({"applied": true})),
+                    _ => Err(format!("unexpected host_call: {service}")),
+                }
+            }
+        }
+
+        let share_pkg = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../share/modules/canvas.aospkg");
+        assert!(
+            share_pkg.join("module.wasm").is_file(),
+            "share/modules/canvas.aospkg/module.wasm missing"
+        );
+
+        let base = tmpbase("canvas-packaged");
+        let mut rt = ModuleRuntime::open(base.join("modules"), Arc::new(CanvasHost)).unwrap();
+        rt.install(&share_pkg, Some(vec!["fs.write:/downloads/**".into()]))
+            .expect("install packaged canvas");
+
+        let style = rt.invoke(
+            "canvas",
+            "canvas.set_style",
+            &serde_json::json!({"session_id": "sess-test", "color": "#F40009"}),
+            "human:ui",
+            &[],
+            "t-canvas-style",
+        );
+        assert!(
+            style.is_ok(),
+            "packaged wasm must handle canvas.set_style: {:?}",
+            style.err()
+        );
+        let style_json = style.unwrap();
+        assert_eq!(
+            style_json["pen"]["color"].as_str(),
+            Some("#F40009"),
+            "set_style should return pen color from host"
+        );
+
+        let fill = rt.invoke(
+            "canvas",
+            "canvas.fill",
+            &serde_json::json!({
+                "session_id": "sess-test",
+                "x": 0.5,
+                "y": 0.5,
+                "color": "#00ff00"
+            }),
+            "human:ui",
+            &[],
+            "t-canvas-fill",
+        );
+        assert!(
+            fill.is_ok(),
+            "packaged wasm must handle canvas.fill: {:?}",
+            fill.err()
+        );
+
+        let unknown_short = rt.invoke(
+            "canvas",
+            "set_style",
+            &serde_json::json!({"session_id": "sess-test", "color": "#F40009"}),
+            "human:ui",
+            &[],
+            "t-canvas-short",
+        );
+        assert!(
+            unknown_short.is_err(),
+            "short tool name set_style must not match — agents use canvas.set_style"
+        );
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn pre_pr41_canvas_wasm_rejects_set_style() {
+        struct CanvasHost;
+        impl HostServices for CanvasHost {
+            fn call(
+                &self,
+                _ctx: &HostCallCtx,
+                service: &str,
+                _args: serde_json::Value,
+            ) -> Result<serde_json::Value, String> {
+                Err(format!("unexpected host_call: {service}"))
+            }
+        }
+
+        let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let output = std::process::Command::new("git")
+            .args([
+                "show",
+                "28e44cc:share/modules/canvas.aospkg/module.wasm",
+            ])
+            .current_dir(&repo)
+            .output()
+            .expect("git show legacy canvas.wasm");
+        if !output.status.success() {
+            eprintln!("skip pre_pr41 test: legacy wasm unavailable");
+            return;
+        }
+        let old_wasm_bytes = output.stdout;
+        let old_hash = sha256_hex(&old_wasm_bytes);
+        assert_eq!(
+            old_hash,
+            "7946b3227ab76bdeda8633c14f69c82315452c79cdae525f2ebde3543136251f"
+        );
+
+        let base = tmpbase("canvas-legacy");
+        let pkg = base.join("pkg");
+        std::fs::create_dir_all(pkg.join("ui")).unwrap();
+        std::fs::write(pkg.join("module.wasm"), &old_wasm_bytes).unwrap();
+        let manifest = format!(
+            r#"name: canvas
+version: 1.0.0
+hash: {old_hash}
+permissions:
+  required_caps:
+    - fs.write:/downloads/**
+tools:
+  - name: canvas.set_style
+    description: set pen
+    input_schema:
+      type: object
+      properties:
+        session_id: {{ type: string }}
+        color: {{ type: string }}
+      required: [session_id]
+min_os_api: 1
+"#
+        );
+        std::fs::write(pkg.join("manifest.yaml"), manifest).unwrap();
+
+        let mut rt = ModuleRuntime::open(base.join("modules"), Arc::new(CanvasHost)).unwrap();
+        rt.install(&pkg, Some(vec!["fs.write:/downloads/**".into()]))
+            .expect("install legacy canvas package");
+
+        let err = rt
+            .invoke(
+                "canvas",
+                "canvas.set_style",
+                &serde_json::json!({"session_id": "sess-test", "color": "#F40009"}),
+                "human:ui",
+                &[],
+                "t-legacy",
+            )
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("outil inconnu: canvas.set_style"),
+            "legacy wasm must reject set_style: {err}"
+        );
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
 }
 
 fn module_info_from_installed(
