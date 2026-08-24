@@ -19,6 +19,8 @@ pub(crate) enum Cmd {
         history: Vec<(String, String)>,
         user_text: String,
         model_id: Option<String>,
+        /// Chemins locaux PNG/JPEG pour le tour user (vision / mtmd).
+        images: Vec<String>,
         /// E14 : déclencher mem.extract après le tour (Settings, défaut ON).
         auto_remember: bool,
         max_steps: u32,

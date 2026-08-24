@@ -317,6 +317,7 @@ async fn handle_cmd(
             history,
             user_text,
             model_id,
+            images,
             auto_remember,
             max_steps,
             routing,
@@ -327,6 +328,13 @@ async fn handle_cmd(
             let _ = evt_tx.send(Evt::Status(
                 "assistant : génération en cours…".into(),
             ));
+            let image_atts: Vec<ChatAttachment> = images
+                .iter()
+                .map(|path| ChatAttachment::Image {
+                    path: path.clone(),
+                    prompt: String::new(),
+                })
+                .collect();
             let _ = bus
                 .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
                     "chat.session.append",
@@ -334,7 +342,7 @@ async fn handle_cmd(
                         session_id: session_id.clone(),
                         role: "user".into(),
                         content: user_text.clone(),
-                        attachments: vec![],
+                        attachments: image_atts,
                         speaker_id: None,
                         speaker_name: None,
                     },
@@ -386,8 +394,8 @@ async fn handle_cmd(
                     ..Default::default()
                 },
                 priority: 8,
-                data_refs: vec![],
-                images: vec![],
+                data_refs: images.clone(),
+                images,
                 routing: Some(routing),
             };
             let sid = session_id.clone();

@@ -13,7 +13,7 @@ pub fn render_image(
     path: &str,
     prompt: &str,
     on_studio: impl FnOnce(),
-) {
+) -> bool {
     ui.label(format!("image: {path}"));
     if !prompt.is_empty() {
         ui.weak(prompt);
@@ -30,9 +30,16 @@ pub fn render_image(
     } else {
         ui.weak("PNG unreadable (path /downloads → var/storage/data)");
     }
-    if ui.button(t.studio_open).clicked() {
-        on_studio();
-    }
+    let mut send_to_model = false;
+    ui.horizontal(|ui| {
+        if ui.button(t.studio_open).clicked() {
+            on_studio();
+        }
+        if ui.button(t.chat_send_image_to_model).clicked() {
+            send_to_model = true;
+        }
+    });
+    send_to_model
 }
 
 pub fn render_audio(ui: &mut egui::Ui, path: &str) {
