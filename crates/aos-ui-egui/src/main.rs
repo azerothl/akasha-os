@@ -4850,16 +4850,6 @@ impl UiApp {
                                         .replace("{n}", &n.to_string())
                                 }
                             };
-                            let r = ui.add(
-                                egui::TextEdit::singleline(&mut self.input)
-                                    .id_salt("chat_input")
-                                    .desired_width(ui.available_width() - 130.0)
-                                    .hint_text(hint),
-                            );
-                            if self.chat_refocus {
-                                r.request_focus();
-                                self.chat_refocus = false;
-                            }
                             let mut attach_from_menu = false;
                             let mut reuse_last_image = false;
                             ui.menu_button("📎", |ui| {
@@ -4888,6 +4878,16 @@ impl UiApp {
                                 if let Some(last) = self.last_session_image.clone() {
                                     self.queue_chat_image(last);
                                 }
+                            }
+                            let r = ui.add(
+                                egui::TextEdit::singleline(&mut self.input)
+                                    .id_salt("chat_input")
+                                    .desired_width(ui.available_width() - 90.0)
+                                    .hint_text(hint),
+                            );
+                            if self.chat_refocus {
+                                r.request_focus();
+                                self.chat_refocus = false;
                             }
                             let send_btn = ui.button("Envoyer").on_hover_text(t.tip_send);
                             if self.chat_pending {
