@@ -6,7 +6,7 @@
     <title>What's new — Akasha OS Preview</title>
     <meta
       name="description"
-      content="What each Akasha OS Preview version added, from 0.11.0 back to 0.1.0. Host app on Windows/Linux, not a bootable OS."
+      content="What each Akasha OS Preview version added, from 0.12.0 back to 0.1.0. Host app on Windows/Linux/Mac, not a bootable OS."
     />
     <link rel="stylesheet" href="../styles.css" />
     <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
@@ -50,12 +50,12 @@
           <span data-lang="en">
             What each Preview added, newest first. This is the version log,
             not the full feature catalogue. Preview
-            <span data-aos-version>0.11.0</span> is a host app, not a bootable OS.
+            <span data-aos-version="0.12.0">0.12.0</span> is a host app, not a bootable OS.
           </span>
           <span data-lang="fr">
             Ce que chaque Preview a ajouté, plus récent en premier. C’est le
             journal des versions, pas le catalogue complet. La Preview
-            <span data-aos-version>0.11.0</span> est une appli hôte, pas un OS
+            <span data-aos-version="0.12.0">0.12.0</span> est une appli hôte, pas un OS
             bootable.
           </span>
         </h1>
@@ -69,6 +69,7 @@
         </p>
 
         <nav class="log-toc" aria-label="Versions">
+          <a href="#v0-12-0">0.12.0</a>
           <a href="#v0-11-0">0.11.0</a>
           <a href="#v0-10-1">0.10.1</a>
           <a href="#v0-10-0">0.10.0</a>
@@ -84,6 +85,30 @@
           <a href="#v0-1-1">0.1.1</a>
           <a href="#v0-1-0">0.1.0</a>
         </nav>
+
+        <article class="grant" id="v0-12-0">
+          <h2>0.12.0</h2>
+          <p class="rev-when">25/08/2026</p>
+          <p class="hist" data-lang="en">
+            Vision chat on the local llama path, canvas agent tools with live
+            styling, and a real Apple Silicon Preview zip on GitHub Releases —
+            same host app, three mill bands (Win / Linux / Mac arm64).
+          </p>
+          <p class="hist" data-lang="fr">
+            Chat vision sur le chemin llama local, outils canvas agent avec
+            style live, et un vrai zip Preview Apple Silicon sur GitHub
+            Releases — même appli hôte, trois bandes mill (Win / Linux / Mac
+            arm64).
+          </p>
+          <ul class="ticks">
+            <li data-lang="en"><strong>Vision</strong>: <code>InferRequest.images</code> + catalog mmproj sidecars; UI paperclip / image chips; gated when the session model lacks vision.</li>
+            <li data-lang="fr"><strong>Vision</strong> : <code>InferRequest.images</code> + sidecars mmproj catalogue ; trombone / puces image UI ; refus si le modèle de session n’a pas la vision.</li>
+            <li data-lang="en"><strong>Canvas</strong>: agent tools with scene awareness; <code>set_style</code> stroke colors live in the WASM module.</li>
+            <li data-lang="fr"><strong>Canvas</strong> : outils agent avec conscience de scène ; couleurs de trait <code>set_style</code> live dans le module WASM.</li>
+            <li data-lang="en"><strong>macOS</strong>: Apple Silicon Preview zip (Metal + CPU modeld); unsigned — Gatekeeper note on the Mac mill tooltip only.</li>
+            <li data-lang="fr"><strong>macOS</strong> : zip Preview Apple Silicon (modeld Metal + CPU) ; non signé — note Gatekeeper sur le tooltip Mac du mill seulement.</li>
+          </ul>
+        </article>
 
         <article class="grant" id="v0-11-0">
           <h2>0.11.0</h2>

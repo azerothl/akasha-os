@@ -1,12 +1,12 @@
-# Premier lancement — Akasha OS Preview 0.11.0
+# Premier lancement — Akasha OS Preview 0.12.0
 
 **Langue :** [English](../FIRST-RUN.md) | Français
 
-> Date : 22/08/2026 · Preview **0.11.0**
+> Date : 25/08/2026 · Preview **0.12.0**
 
-**Ce n'est pas un OS bootable.** La Preview 0.11.0 tourne sur Windows ou Linux x64.
-**NVIDIA est recommandé** ; le même zip embarque `aos-modeld-cpu`
-(Réglages → Inférence redémarre modeld dans la session).
+**Ce n'est pas un OS bootable.** La Preview 0.12.0 tourne sur Windows, Linux x64 ou macOS Apple Silicon.
+**NVIDIA est recommandé sur Win/Linux** ; le même zip embarque `aos-modeld-cpu`
+(Réglages → Inférence redémarre modeld dans la session). Les builds macOS sont non signés.
 
 Catalogue : [FEATURES.md](FEATURES.md).
 

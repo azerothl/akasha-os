@@ -1,13 +1,19 @@
-# Preview features — Akasha OS 0.11.0
+# Preview features — Akasha OS 0.12.0
 
 **Language:** English | [Français](fr/FEATURES.md)
 
-Catalogue of **shipped** Preview features on the Windows/Linux host.
+Catalogue of **shipped** Preview features on the Windows/Linux/macOS host.
 This is **not** the bootable OS. Target v1 requirements live in
 [functional-specs.md](functional-specs.md); phase gates in
 [STATUS.md](STATUS.md).
 
-> Date: 23/08/2026 · Preview **0.11.0**
+> Date: 25/08/2026 · Preview **0.12.0**
+
+### What's new in 0.12.0
+
+- **Vision chat**: `InferRequest.images` carries local PNG/JPEG paths; catalog mmproj sidecars for Gemma / Qwen vision profiles; `generate_with_images` on the llama path; UI paperclip / image chips; gated when the session model lacks vision
+- **Canvas tools**: scene-aware agent tools; `set_style` stroke colors live in the WASM module; draw fan-out fixes
+- **macOS Apple Silicon**: Preview zip on GitHub Releases (Metal + CPU `aos-modeld`); mill third download band; unsigned build — Gatekeeper note on Mac tooltip only
 
 ### What's new in 0.11.0
 
