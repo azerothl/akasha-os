@@ -6,7 +6,7 @@
     <title>What's new — Akasha OS Preview</title>
     <meta
       name="description"
-      content="What each Akasha OS Preview version added, from 0.12.0 back to 0.1.0. Host app on Windows/Linux/Mac, not a bootable OS."
+      content="What each Akasha OS Preview version added, from 0.12.1 back to 0.1.0. Host app on Windows/Linux/Mac, not a bootable OS."
     />
     <link rel="stylesheet" href="../styles.css" />
     <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
@@ -50,12 +50,12 @@
           <span data-lang="en">
             What each Preview added, newest first. This is the version log,
             not the full feature catalogue. Preview
-            <span data-aos-version="0.12.0">0.12.0</span> is a host app, not a bootable OS.
+            <span data-aos-version="0.12.1">0.12.1</span> is a host app, not a bootable OS.
           </span>
           <span data-lang="fr">
             Ce que chaque Preview a ajouté, plus récent en premier. C’est le
             journal des versions, pas le catalogue complet. La Preview
-            <span data-aos-version="0.12.0">0.12.0</span> est une appli hôte, pas un OS
+            <span data-aos-version="0.12.1">0.12.1</span> est une appli hôte, pas un OS
             bootable.
           </span>
         </h1>
@@ -69,6 +69,7 @@
         </p>
 
         <nav class="log-toc" aria-label="Versions">
+          <a href="#v0-12-1">0.12.1</a>
           <a href="#v0-12-0">0.12.0</a>
           <a href="#v0-11-0">0.11.0</a>
           <a href="#v0-10-1">0.10.1</a>
@@ -85,6 +86,28 @@
           <a href="#v0-1-1">0.1.1</a>
           <a href="#v0-1-0">0.1.0</a>
         </nav>
+
+        <article class="grant" id="v0-12-1">
+          <h2>0.12.1</h2>
+          <p class="rev-when">25/08/2026</p>
+          <p class="hist" data-lang="en">
+            Patch on 0.12.0: Gemma 4 chat-template errors on every infer are
+            fixed when llama native apply fails — Jinja fallback via
+            hf-chat-template (minijinja). Same Win / Linux / Mac mill bands.
+          </p>
+          <p class="hist" data-lang="fr">
+            Correctif sur 0.12.0 : les erreurs de chat template Gemma 4 sur
+            chaque infer sont corrigées quand l’application native llama échoue
+            — repli Jinja via hf-chat-template (minijinja). Mêmes bandes mill
+            Win / Linux / Mac.
+          </p>
+          <ul class="ticks">
+            <li data-lang="en"><strong>Chat template</strong>: Jinja fallback for embedded Gemma 4 tool-calling templates that return UNKNOWN from <code>llama_chat_apply_template</code>.</li>
+            <li data-lang="fr"><strong>Chat template</strong> : repli Jinja pour les templates tool-calling Gemma 4 intégrés qui retournent UNKNOWN depuis <code>llama_chat_apply_template</code>.</li>
+            <li data-lang="en"><strong>Gate</strong>: <code>aos-gate-gemma4-vision</code> coordinator for G1 text infer and G2 PNG/mtmd prefill.</li>
+            <li data-lang="fr"><strong>Gate</strong> : coordinateur <code>aos-gate-gemma4-vision</code> pour infer texte G1 et prefill PNG/mtmd G2.</li>
+          </ul>
+        </article>
 
         <article class="grant" id="v0-12-0">
           <h2>0.12.0</h2>

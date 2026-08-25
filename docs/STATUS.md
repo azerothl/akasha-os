@@ -7,8 +7,7 @@ Summary of delivered phases. Detail: [development-plan.md](development-plan.md),
 
 **Headline:** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview:** 0.12.0 (25/08/2026) — vision chat (mmproj + UI), canvas
-`set_style`, macOS Apple Silicon Preview zip. Not a bootable OS. Cohort gate
+**Preview:** 0.12.1 (25/08/2026) — Gemma 4 chat-template fix (#49). Not a bootable OS. Cohort gate
 still open. **Next:** PC cohort close; Horizon C / PV.4+ when scheduled; E9
 hard-green after a documented 2-GPU run.
 
@@ -21,6 +20,7 @@ hard-green after a documented 2-GPU run.
 | P12.3 | Canvas `set_style` + tool orchestration fixes | done |
 | P12.4 | macOS Apple Silicon Preview zip + mill download | done |
 | P12.5 | Docs EN+FR + website 0.12.0 | done |
+| P12.6 | 0.12.1 patch — Gemma 4 Jinja chat-template fallback (#49) | done |
 
 ## P11 — Preview 0.11.0 (E20 local decode) — done
 
