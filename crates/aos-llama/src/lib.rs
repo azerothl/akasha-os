@@ -64,6 +64,10 @@ pub enum LlamaError {
     },
     #[error("échec snapshot / restore d'état llama")]
     StateIo,
+    #[error("images fournies mais aucun projecteur mmproj chargé")]
+    VisionUnavailable,
+    #[error("vision / mtmd: {0}")]
+    Vision(String),
 }
 
 impl LlamaError {
@@ -151,6 +155,8 @@ pub struct LoadOptions {
     pub tensor_split: Vec<f32>,
     /// GPU principal (scratch / small tensors).
     pub main_gpu: i32,
+    /// Chemin du projecteur multimodal (`mmproj-*.gguf`). `None` = texte seul.
+    pub mmproj_path: Option<std::path::PathBuf>,
 }
 
 impl Default for LoadOptions {
@@ -169,6 +175,7 @@ impl Default for LoadOptions {
             n_seq_max: 1,
             tensor_split: vec![],
             main_gpu: 0,
+            mmproj_path: None,
         }
     }
 }
@@ -414,6 +421,9 @@ pub struct LlamaContext {
     seq0_tokens: Vec<sys::llama_token>,
     /// Cached semantic anchor indices in `seq0_tokens` (E21).
     seq0_anchors: Vec<usize>,
+    /// Projecteur multimodal (libmtmd), si `LoadOptions::mmproj_path` était fourni.
+    #[cfg(feature = "mtmd")]
+    mtmd: Option<*mut sys::mtmd_context>,
 }
 
 unsafe impl Send for LlamaContext {}
@@ -452,6 +462,27 @@ impl LlamaContext {
         if ptr.is_null() {
             return Err(LlamaError::ContextCreate);
         }
+        #[cfg(feature = "mtmd")]
+        let mtmd = if let Some(mmproj) = &opts.mmproj_path {
+            let path = mmproj
+                .to_str()
+                .ok_or(LlamaError::InvalidPath)
+                .and_then(|s| CString::new(s).map_err(|_| LlamaError::InvalidPath))?;
+            let mtmd_params = unsafe { sys::mtmd_context_params_default() };
+            let ctx = unsafe {
+                sys::mtmd_init_from_file(path.as_ptr(), model.ptr, mtmd_params)
+            };
+            if ctx.is_null() {
+                unsafe { sys::llama_free(ptr) };
+                return Err(LlamaError::Vision(format!(
+                    "échec mtmd_init_from_file({})",
+                    mmproj.display()
+                )));
+            }
+            Some(ctx)
+        } else {
+            None
+        };
         Ok(Self {
             ptr,
             model,
@@ -461,7 +492,21 @@ impl LlamaContext {
             n_seq_max: opts.n_seq_max.max(1),
             seq0_tokens: Vec::new(),
             seq0_anchors: vec![0],
+            #[cfg(feature = "mtmd")]
+            mtmd,
         })
+    }
+
+    /// `true` si un projecteur mmproj est chargé.
+    pub fn has_vision(&self) -> bool {
+        #[cfg(feature = "mtmd")]
+        {
+            self.mtmd.is_some()
+        }
+        #[cfg(not(feature = "mtmd"))]
+        {
+            false
+        }
     }
 
     /// Demande d'annulation (prend effet à la frontière de token courante).
@@ -582,7 +627,7 @@ impl LlamaContext {
         String::from_utf8_lossy(&bytes).into_owned()
     }
 
-    /// Génère une réponse en streaming.
+    /// Génère une réponse en streaming (texte seul).
     ///
     /// `on_delta` est appelé pour chaque fragment de texte ; retourner `false`
     /// demande l'arrêt coopératif (annulation à la frontière de token, §3.6).
@@ -590,19 +635,24 @@ impl LlamaContext {
         &mut self,
         messages: &[(String, String)],
         params: &GenParams,
+        on_delta: impl FnMut(&str) -> bool,
+    ) -> Result<GenStats, LlamaError> {
+        self.generate_with_images(messages, params, &[] as &[&Path], on_delta)
+    }
+
+    /// Comme [`Self::generate`], avec chemins d'images locaux (PNG/JPEG) pour le
+    /// dernier tour utilisateur. Erreur si `images` non vide sans mmproj.
+    pub fn generate_with_images(
+        &mut self,
+        messages: &[(String, String)],
+        params: &GenParams,
+        images: &[impl AsRef<Path>],
         mut on_delta: impl FnMut(&str) -> bool,
     ) -> Result<GenStats, LlamaError> {
         self.abort.store(false, Ordering::SeqCst);
 
-        let prompt = self.render_prompt(messages)?;
-        let prompt_tokens = self.tokenize(&prompt, false)?;
-        let n_prompt = prompt_tokens.len();
-        if n_prompt + params.max_tokens as usize + 8 > self.n_ctx_seq() as usize {
-            return Err(LlamaError::prompt_too_long(
-                n_prompt,
-                self.n_ctx_seq(),
-                params.max_tokens,
-            ));
+        if !images.is_empty() && !self.has_vision() {
+            return Err(LlamaError::VisionUnavailable);
         }
 
         // KV cache vierge pour cette requête (v1 single-sequence / smoke).
@@ -611,6 +661,23 @@ impl LlamaContext {
             sys::llama_memory_clear(mem, true);
         }
         self.seq0_tokens.clear();
+
+        let n_prompt = if images.is_empty() {
+            let prompt = self.render_prompt(messages)?;
+            let prompt_tokens = self.tokenize(&prompt, false)?;
+            let n_prompt = prompt_tokens.len();
+            if n_prompt + params.max_tokens as usize + 8 > self.n_ctx_seq() as usize {
+                return Err(LlamaError::prompt_too_long(
+                    n_prompt,
+                    self.n_ctx_seq(),
+                    params.max_tokens,
+                ));
+            }
+            self.prefill_text_tokens(&prompt_tokens)?;
+            n_prompt
+        } else {
+            self.prefill_vision(messages, images)?
+        };
 
         // Sampler chain : top_p → temp → dist.
         let sparams = unsafe { sys::llama_sampler_chain_default_params() };
@@ -623,37 +690,6 @@ impl LlamaContext {
         let vocab = unsafe { sys::llama_model_get_vocab(self.model.ptr) };
 
         let t_start = Instant::now();
-
-        // Prefill découpé par n_batch — `llama_batch_get_one(n_prompt)` assert
-        // si n_prompt > n_batch (historique chat long → crash modeld).
-        let mut batch = unsafe { sys::llama_batch_init(self.n_batch as i32, 0, 1) };
-        let mut off = 0usize;
-        while off < n_prompt {
-            batch.n_tokens = 0;
-            let take = (n_prompt - off).min(self.n_batch as usize);
-            for j in 0..take {
-                let is_last = off + j + 1 == n_prompt;
-                unsafe {
-                    Self::batch_add(
-                        &mut batch,
-                        prompt_tokens[off + j],
-                        (off + j) as sys::llama_pos,
-                        0,
-                        is_last,
-                    );
-                }
-            }
-            let rc = unsafe { sys::llama_decode(self.ptr, batch) };
-            if rc != 0 {
-                unsafe {
-                    sys::llama_batch_free(batch);
-                    sys::llama_sampler_free(smpl);
-                }
-                return Err(LlamaError::Decode(rc));
-            }
-            off += take;
-        }
-        unsafe { sys::llama_batch_free(batch) };
 
         let mut generated = 0u32;
         let mut ttft_ms = f64::MAX;
@@ -710,6 +746,153 @@ impl LlamaContext {
             draft_accepted: 0,
             draft_steps: 0,
         })
+    }
+
+    fn prefill_text_tokens(&mut self, prompt_tokens: &[sys::llama_token]) -> Result<(), LlamaError> {
+        let n_prompt = prompt_tokens.len();
+        let mut batch = unsafe { sys::llama_batch_init(self.n_batch as i32, 0, 1) };
+        let mut off = 0usize;
+        while off < n_prompt {
+            batch.n_tokens = 0;
+            let take = (n_prompt - off).min(self.n_batch as usize);
+            for j in 0..take {
+                let is_last = off + j + 1 == n_prompt;
+                unsafe {
+                    Self::batch_add(
+                        &mut batch,
+                        prompt_tokens[off + j],
+                        (off + j) as sys::llama_pos,
+                        0,
+                        is_last,
+                    );
+                }
+            }
+            let rc = unsafe { sys::llama_decode(self.ptr, batch) };
+            if rc != 0 {
+                unsafe { sys::llama_batch_free(batch) };
+                return Err(LlamaError::Decode(rc));
+            }
+            off += take;
+        }
+        unsafe { sys::llama_batch_free(batch) };
+        Ok(())
+    }
+
+    /// Prefill multimodal via libmtmd. Retourne le nombre de positions consommées.
+    #[cfg(feature = "mtmd")]
+    fn prefill_vision(
+        &mut self,
+        messages: &[(String, String)],
+        images: &[impl AsRef<Path>],
+    ) -> Result<usize, LlamaError> {
+        let mtmd = self.mtmd.ok_or(LlamaError::VisionUnavailable)?;
+        let marker = unsafe {
+            let p = sys::mtmd_default_marker();
+            if p.is_null() {
+                "<__media__>"
+            } else {
+                CStr::from_ptr(p).to_str().unwrap_or("<__media__>")
+            }
+        };
+        let mut msgs = messages.to_vec();
+        if let Some((_, content)) = msgs.iter_mut().rev().find(|(r, _)| r == "user") {
+            let mut prefix = String::new();
+            for _ in 0..images.len().min(4) {
+                prefix.push_str(marker);
+                prefix.push('\n');
+            }
+            *content = format!("{prefix}{content}");
+        }
+        let prompt = self.render_prompt(&msgs)?;
+        let cprompt = CString::new(prompt.as_str()).map_err(|_| LlamaError::Tokenize)?;
+        let text = sys::mtmd_input_text {
+            text: cprompt.as_ptr(),
+            text_len: prompt.len(),
+            add_special: true,
+            parse_special: true,
+        };
+
+        let mut bitmaps: Vec<*mut sys::mtmd_bitmap> = Vec::new();
+        let mut bitmap_ptrs: Vec<*const sys::mtmd_bitmap> = Vec::new();
+        for path in images.iter().take(4) {
+            let path_c = path
+                .as_ref()
+                .to_str()
+                .ok_or(LlamaError::InvalidPath)
+                .and_then(|s| CString::new(s).map_err(|_| LlamaError::InvalidPath))?;
+            let wrap = unsafe {
+                sys::mtmd_helper_bitmap_init_from_file(mtmd, path_c.as_ptr(), false)
+            };
+            if wrap.bitmap.is_null() {
+                for b in bitmaps {
+                    unsafe { sys::mtmd_bitmap_free(b) };
+                }
+                return Err(LlamaError::Vision(format!(
+                    "échec lecture image {}",
+                    path.as_ref().display()
+                )));
+            }
+            bitmap_ptrs.push(wrap.bitmap as *const _);
+            bitmaps.push(wrap.bitmap);
+            // video_ctx unused for still images
+            if !wrap.video_ctx.is_null() {
+                unsafe { sys::mtmd_helper_video_free(wrap.video_ctx) };
+            }
+        }
+
+        let chunks = unsafe { sys::mtmd_input_chunks_init() };
+        if chunks.is_null() {
+            for b in bitmaps {
+                unsafe { sys::mtmd_bitmap_free(b) };
+            }
+            return Err(LlamaError::Vision("mtmd_input_chunks_init".into()));
+        }
+        let tok_rc = unsafe {
+            sys::mtmd_tokenize(
+                mtmd,
+                chunks,
+                &text,
+                bitmap_ptrs.as_mut_ptr(),
+                bitmap_ptrs.len(),
+            )
+        };
+        for b in bitmaps {
+            unsafe { sys::mtmd_bitmap_free(b) };
+        }
+        if tok_rc != 0 {
+            unsafe { sys::mtmd_input_chunks_free(chunks) };
+            return Err(LlamaError::Vision(format!("mtmd_tokenize rc={tok_rc}")));
+        }
+
+        let mut n_past: sys::llama_pos = 0;
+        let eval_rc = unsafe {
+            sys::mtmd_helper_eval_chunks(
+                mtmd,
+                self.ptr,
+                chunks,
+                0,
+                0,
+                self.n_batch as i32,
+                true,
+                &mut n_past,
+            )
+        };
+        unsafe { sys::mtmd_input_chunks_free(chunks) };
+        if eval_rc != 0 {
+            return Err(LlamaError::Vision(format!(
+                "mtmd_helper_eval_chunks rc={eval_rc}"
+            )));
+        }
+        Ok(n_past as usize)
+    }
+
+    #[cfg(not(feature = "mtmd"))]
+    fn prefill_vision(
+        &mut self,
+        _messages: &[(String, String)],
+        _images: &[impl AsRef<Path>],
+    ) -> Result<usize, LlamaError> {
+        Err(LlamaError::VisionUnavailable)
     }
 
     pub fn n_seq_max(&self) -> u32 {
@@ -1663,6 +1846,10 @@ fn l2_normalize(v: Vec<f32>) -> Vec<f32> {
 
 impl Drop for LlamaContext {
     fn drop(&mut self) {
+        #[cfg(feature = "mtmd")]
+        if let Some(mtmd) = self.mtmd.take() {
+            unsafe { sys::mtmd_free(mtmd) };
+        }
         unsafe { sys::llama_free(self.ptr) };
     }
 }
@@ -1671,7 +1858,8 @@ impl Drop for LlamaContext {
 mod tests {
     use super::{
         accumulate_pooled_chunk, common_prefix_len, finish_mean_pool, l2_normalize,
-        prompt_lookup_draft, semantic_prefix_len, BatchItem, GenParams, KvType, StopReason,
+        prompt_lookup_draft, semantic_prefix_len, BatchItem, GenParams, KvType, LlamaError,
+        StopReason,
     };
     use std::sync::atomic::AtomicBool;
     use std::sync::Arc;
@@ -1752,5 +1940,14 @@ mod tests {
         assert!((KvType::F16.bytes_factor() - 1.0).abs() < f64::EPSILON);
         assert_eq!(KvType::default_for(true, true), KvType::Q8_0);
         assert_eq!(KvType::default_for(false, true), KvType::F16);
+    }
+
+    #[test]
+    fn vision_errors_are_explicit() {
+        let err = LlamaError::VisionUnavailable;
+        let msg = err.to_string();
+        assert!(msg.contains("mmproj") || msg.contains("projecteur"));
+        let err2 = LlamaError::Vision("bitmap".into());
+        assert!(err2.to_string().contains("vision"));
     }
 }

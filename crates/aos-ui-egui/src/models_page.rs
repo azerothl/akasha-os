@@ -125,6 +125,14 @@ pub fn load_installed_rows(runtime: &[ModelInfo]) -> Vec<InstalledRow> {
         .collect()
 }
 
+/// First catalog offering tagged with the `vision` profile (catalog order).
+pub fn first_catalog_vision_model_id() -> Option<String> {
+    load_catalog_models()
+        .into_iter()
+        .find(|m| m.profiles.iter().any(|p| p == "vision"))
+        .map(|m| m.id)
+}
+
 pub fn load_catalog_models() -> Vec<CatalogModel> {
     let mut out = Vec::new();
     let catalog = aos_home().join("share/models/catalog-offerings.json");
@@ -463,4 +471,18 @@ pub fn ui_installed_card(
 
 fn human_gib(bytes: u64) -> String {
     format!("{:.1} GiB", bytes as f64 / (1 << 30) as f64)
+}
+
+#[cfg(test)]
+mod vision_catalog_tests {
+    use super::first_catalog_vision_model_id;
+    use std::path::PathBuf;
+
+    #[test]
+    fn first_vision_model_follows_catalog_order() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        std::env::set_var("AOS_HOME", root);
+        let id = first_catalog_vision_model_id();
+        assert_eq!(id.as_deref(), Some("local:gemma-4-e4b"));
+    }
 }

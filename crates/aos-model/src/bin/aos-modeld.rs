@@ -160,7 +160,7 @@ async fn main() {
             let sub = sub.clone();
             let bus = bus2.clone();
             async move {
-                let req: InferRequest = match ctx.payload() {
+                let mut req: InferRequest = match ctx.payload() {
                     Ok(r) => r,
                     Err(_) => {
                         let _ = ctx
@@ -169,6 +169,7 @@ async fn main() {
                         return;
                     }
                 };
+                req.ensure_image_data_refs();
                 let stream: StreamHandle = ctx.open_stream();
                 // Résolution du modèle + chargement paresseux si besoin.
                 let mut model_id = match req

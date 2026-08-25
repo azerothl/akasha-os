@@ -1038,6 +1038,18 @@ async fn infer_turn(
             content: c.clone(),
         })
         .collect();
+    let images: Vec<String> = data_refs
+        .iter()
+        .filter(|p| {
+            let lower = p.to_ascii_lowercase();
+            lower.ends_with(".png")
+                || lower.ends_with(".jpg")
+                || lower.ends_with(".jpeg")
+                || lower.ends_with(".webp")
+        })
+        .cloned()
+        .take(4)
+        .collect();
     let req = InferRequest {
         model_id: spec.model_id.clone(),
         messages,
@@ -1048,6 +1060,7 @@ async fn infer_turn(
         },
         priority: 1,
         data_refs: data_refs.to_vec(),
+        images,
         routing: None,
     };
     let mut rx = match bus
@@ -2701,6 +2714,7 @@ async fn run_task_assess(
         },
         priority: 2,
         data_refs: vec![],
+        images: vec![],
         routing: None,
     };
 
@@ -2977,6 +2991,7 @@ async fn reflect(bus: &BusClient, shared: &Shared, spec: &AgentSpec) -> Option<S
         },
         priority: 1,
         data_refs: vec![],
+        images: vec![],
         routing: None,
     };
     if let Ok(mut rx) = bus
@@ -3045,6 +3060,7 @@ async fn verify_goal(
         },
         priority: 2,
         data_refs: vec![],
+        images: vec![],
         routing: None,
     };
     let mut text = String::new();
@@ -3087,6 +3103,7 @@ async fn optimize_prompt_now(bus: &BusClient, spec: &AgentSpec) -> Result<String
         },
         priority: 2,
         data_refs: vec![],
+        images: vec![],
         routing: None,
     };
     let mut rx = bus

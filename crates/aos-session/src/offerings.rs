@@ -106,7 +106,7 @@ pub struct OfferingFile {
     pub bytes: u64,
     #[serde(default)]
     pub sha256: String,
-    /// `vae` | `clip_l` | `clip_g` | `t5xxl` | `lora` | `style` | `uncond` | `llm`
+    /// `vae` | `clip_l` | `clip_g` | `t5xxl` | `lora` | `style` | `uncond` | `llm` | `mmproj`
     #[serde(default)]
     pub role: Option<String>,
 }
@@ -782,4 +782,31 @@ fn now_ms() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_millis() as u64
+}
+
+#[cfg(test)]
+mod vision_catalog_tests {
+    use super::OfferingsFile;
+
+    #[test]
+    fn catalog_parses_mmproj_role_and_vision_profile() {
+        let raw = include_str!("../../../share/models/catalog-offerings.json");
+        let file: OfferingsFile = serde_json::from_str(raw).expect("catalog json");
+        assert_eq!(file.version, "0.3.4");
+        let gemma = file
+            .models
+            .iter()
+            .find(|m| m.id == "local:gemma-4-e4b")
+            .expect("gemma e4b");
+        assert!(gemma.profiles.iter().any(|p| p == "vision"));
+        let mmproj = gemma
+            .extra_files
+            .iter()
+            .find(|f| f.role.as_deref() == Some("mmproj"))
+            .expect("mmproj sidecar");
+        assert!(mmproj.filename.contains("mmproj"));
+        assert!(mmproj.bytes > 0);
+        assert_eq!(file.packs["low"].chat, "local:lfm2.5-8b-a1b");
+        assert_eq!(file.packs["low"].alternatives[0], "local:gemma-4-e4b");
+    }
 }

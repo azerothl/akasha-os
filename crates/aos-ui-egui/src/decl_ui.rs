@@ -818,7 +818,7 @@ fn media_path(w: &DeclUiWidget, cache: &HashMap<String, Value>) -> String {
     w.text.clone().unwrap_or_default()
 }
 
-fn host_file_from_logical(logical: &str) -> std::path::PathBuf {
+pub(crate) fn host_file_from_logical(logical: &str) -> std::path::PathBuf {
     if let Ok(home) = std::env::var("AOS_HOME") {
         let rel = logical.trim_start_matches('/');
         return std::path::PathBuf::from(home)

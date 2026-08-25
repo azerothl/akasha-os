@@ -56,9 +56,54 @@ pub struct InferRequest {
     /// Chemins de données référencés (classification privacy, §3.7/§6.4).
     #[serde(default)]
     pub data_refs: Vec<String>,
+    /// Chemins locaux PNG/JPEG appliqués au dernier message `user` (vision / mtmd).
+    /// Doivent aussi figurer dans `data_refs` pour la classif privacy (voir
+    /// [`InferRequest::ensure_image_data_refs`]).
+    #[serde(default)]
+    pub images: Vec<String>,
     /// Forçage de routage : `local_only` | `remote_only` | `balanced` (F-MDL-07).
     #[serde(default)]
     pub routing: Option<String>,
+}
+
+impl InferRequest {
+    /// Copie chaque chemin de `images` dans `data_refs` s'il n'y est pas déjà.
+    pub fn ensure_image_data_refs(&mut self) {
+        for path in &self.images {
+            if !self.data_refs.iter().any(|r| r == path) {
+                self.data_refs.push(path.clone());
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod infer_request_tests {
+    use super::{ChatMessage, InferParams, InferRequest};
+
+    #[test]
+    fn ensure_image_data_refs_merges_without_dupes() {
+        let mut req = InferRequest {
+            model_id: None,
+            messages: vec![ChatMessage {
+                role: "user".into(),
+                content: "décris".into(),
+            }],
+            params: InferParams::default(),
+            priority: 1,
+            data_refs: vec!["/tmp/doc.txt".into()],
+            images: vec!["/tmp/a.png".into(), "/tmp/doc.txt".into()],
+            routing: None,
+        };
+        req.ensure_image_data_refs();
+        assert_eq!(
+            req.data_refs,
+            vec![
+                "/tmp/doc.txt".to_string(),
+                "/tmp/a.png".to_string(),
+            ]
+        );
+    }
 }
 
 fn default_priority() -> u8 {
@@ -2860,6 +2905,9 @@ pub struct ChatSessionMembersListResponse {
 pub struct ChatSessionRoomTurnRequest {
     pub session_id: String,
     pub content: String,
+    /// Chemins PNG/JPEG pour le tour user (vision).
+    #[serde(default)]
+    pub images: Vec<String>,
 }
 
 /// Annule le tour de salon en cours pour une session (`chat.session.room.turn.cancel`).
@@ -2881,6 +2929,9 @@ pub struct ChatSessionRoomTurnResponse {
 pub struct AgentRoomConductRequest {
     pub session_id: String,
     pub content: String,
+    /// Chemins PNG/JPEG du tour user (propagés aux membres vision).
+    #[serde(default)]
+    pub images: Vec<String>,
 }
 
 /// Réponse `agent.room_conduct`.

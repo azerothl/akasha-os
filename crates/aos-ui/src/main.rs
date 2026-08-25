@@ -312,6 +312,7 @@ async fn run_chat(bus: Arc<BusClient>, history: Vec<(String, String)>, tx: mpsc:
         },
         priority: 3, // interactive
         data_refs: vec![],
+        images: vec![],
         routing: None,
     };
     match bus

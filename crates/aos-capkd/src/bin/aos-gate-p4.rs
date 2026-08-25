@@ -70,6 +70,7 @@ async fn infer_ok(bus: &BusClient, prompt: &str, max_tokens: u32) -> bool {
                 },
                 priority: 3,
                 data_refs: vec![],
+                images: vec![],
                 routing: None,
             },
             vec![],

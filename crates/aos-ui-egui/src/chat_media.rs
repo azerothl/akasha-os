@@ -35,6 +35,63 @@ pub fn render_image(
     }
 }
 
+pub fn render_pending_image_chips(
+    ui: &mut egui::Ui,
+    ctx: &egui::Context,
+    paths: &mut Vec<String>,
+) {
+    let mut remove_idx = None;
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing = egui::vec2(6.0, 4.0);
+        for (i, path) in paths.iter().enumerate() {
+            egui::Frame::new()
+                .fill(ui.visuals().widgets.inactive.bg_fill)
+                .corner_radius(0.0)
+                .inner_margin(egui::Margin::symmetric(4, 2))
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 4.0;
+                        if let Some(tex) = try_load_chat_image(ctx, path) {
+                            ui.add(
+                                egui::Image::new(&tex)
+                                    .max_size(egui::vec2(28.0, 28.0))
+                                    .corner_radius(0.0),
+                            );
+                        } else {
+                            ui.label(egui::RichText::new("🖼").size(14.0));
+                        }
+                        if ui
+                            .add(
+                                egui::Label::new(egui::RichText::new("×").weak())
+                                    .sense(egui::Sense::click()),
+                            )
+                            .clicked()
+                        {
+                            remove_idx = Some(i);
+                        }
+                    });
+                });
+        }
+    });
+    if let Some(i) = remove_idx {
+        paths.remove(i);
+    }
+}
+
+fn try_load_chat_image(ctx: &egui::Context, logical: &str) -> Option<egui::TextureHandle> {
+    let path = decl_ui::host_file_from_logical(logical);
+    let bytes = std::fs::read(&path).ok()?;
+    let img = image::load_from_memory(&bytes).ok()?;
+    let rgba = img.to_rgba8();
+    let size = [rgba.width() as usize, rgba.height() as usize];
+    let color = egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
+    Some(ctx.load_texture(
+        format!("chat-pending:{logical}"),
+        color,
+        egui::TextureOptions::LINEAR,
+    ))
+}
+
 pub fn render_audio(ui: &mut egui::Ui, path: &str) {
     ui.horizontal(|ui| {
         ui.label(format!("audio: {path}"));
