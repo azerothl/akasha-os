@@ -7,8 +7,8 @@
 Tag puis push :
 
 ```bash
-git tag v0.11.0
-git push origin v0.11.0
+git tag v0.12.1
+git push origin v0.12.1
 ```
 
 Le workflow [`.github/workflows/preview-release.yml`](../../.github/workflows/preview-release.yml)
@@ -24,7 +24,7 @@ dans le même zip ; sans GGUF), publie :
 
 Déclenchement manuel : Actions → **preview-release** → Run workflow.
 
-- **macOS seul sur une Release existante** (sans retag) : `macos_only` = true, `release_version` = `0.11.0`, `upload_release` = true — attache le zip Apple Silicon et met à jour `latest.json` sur cette Release.
+- **macOS seul sur une Release existante** (sans retag) : `macos_only` = true, `release_version` = `0.12.1`, `upload_release` = true — attache le zip Apple Silicon et met à jour `latest.json` sur cette Release.
 - **Rebuild complet** : `create_release` = true, `macos_only` = false.
 
 ## Manuel
@@ -42,13 +42,11 @@ Les GGUF sont téléchargés au **premier run** via `share/models/manifest.json`
 ## Notes de version (brouillon)
 
 ```
-Akasha OS Preview 0.11.0 — E20 decode local
+Akasha OS Preview 0.12.1 — correctif chat template Gemma 4
 
-- E20 : KV Q8_0 sur GPU (F16 sur CPU) ; octets KV typés Placement
-- Prefix cache : memory_seq_rm + warm llama_state_* (TTFT tour 2 / migrate E18)
-- Speculative prompt-lookup en C1 ; batch N>1 inchangé
-- Métriques : draft_accept / prefix_hit sur Models
-- E21 : bande passante RAM + GPU/PCIe dans hardware.json ; ancres sémantiques de préfixe
+- Chat template : repli Jinja (hf-chat-template/minijinja) quand l’application native llama échoue sur les templates Gemma 4 intégrés
+- Gate : coordinateur aos-gate-gemma4-vision (G1 texte, G2 PNG/mtmd)
+- Mêmes bandes mill Win/Linux/macOS que 0.12.0
 
 Pas un OS bootable. Voir FIRST-RUN.md / INSTALL.md / TESTER.md
 ```

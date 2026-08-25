@@ -67,7 +67,7 @@ Expect:
 GATE GEMMA4 VISION: PASS
 ```
 
-## Preview 0.12.0 tarball (manual)
+## Preview 0.12.1 tarball (manual)
 
 After installing `local:gemma-4-e4b` from the catalog UI or session offerings:
 
