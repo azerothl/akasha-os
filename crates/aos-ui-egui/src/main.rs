@@ -472,6 +472,34 @@ fn session_model_supports_vision(model_id: Option<&str>) -> bool {
         .any(|m| m.id == id && m.profiles.iter().any(|p| p == "vision"))
 }
 
+/// Vertical space for the fixed send row plus optional stacks that grow upward.
+fn chat_composer_reserve_height(
+    chat_w: f32,
+    ask_queue_len: usize,
+    pending_images_len: usize,
+    show_vision_banner: bool,
+) -> f32 {
+    const INPUT_ROW_H: f32 = 44.0;
+    const ASK_QUEUE_H: f32 = 22.0;
+    const VISION_BANNER_H: f32 = 28.0;
+    const CHIP_W: f32 = 48.0;
+    const CHIP_ROW_H: f32 = 36.0;
+
+    let mut h = INPUT_ROW_H;
+    if ask_queue_len > 1 {
+        h += ASK_QUEUE_H;
+    }
+    if pending_images_len > 0 {
+        if show_vision_banner {
+            h += VISION_BANNER_H;
+        }
+        let chips_per_row = (chat_w / CHIP_W).floor().max(1.0) as usize;
+        let rows = pending_images_len.div_ceil(chips_per_row);
+        h += (rows as f32) * CHIP_ROW_H;
+    }
+    h
+}
+
 fn chat_action_is_self_tool(action: &str) -> bool {
     matches!(
         action,
@@ -4729,8 +4757,21 @@ impl UiApp {
                     .unwrap_or_default();
                     let active_sid = self.active_session.clone();
 
-                    let input_reserve = 44.0_f32;
-                    let content_h = (ui.available_height() - input_reserve).max(120.0);
+                    let ask_queue = self.pending_ask_queue();
+                    let session_model = self
+                        .sessions
+                        .iter()
+                        .find(|s| self.active_session.as_deref() == Some(s.id.as_str()))
+                        .and_then(|s| s.model_id.clone());
+                    let show_vision_banner = !self.chat_pending_images.is_empty()
+                        && !session_model_supports_vision(session_model.as_deref());
+                    let composer_reserve = chat_composer_reserve_height(
+                        chat_w,
+                        ask_queue.len(),
+                        self.chat_pending_images.len(),
+                        show_vision_banner,
+                    );
+                    let content_h = (ui.available_height() - composer_reserve).max(120.0);
 
                     if canvas_open {
                         let split_gap = 8.0_f32;
@@ -4793,131 +4834,127 @@ impl UiApp {
                     } else {
                         Vec::new()
                     };
-                    let ask_queue = self.pending_ask_queue();
-                    if ask_queue.len() > 1 {
-                        let t = i18n::strings(&self.prefs.language);
-                        let title = self
-                            .blocked_ask_agent()
-                            .map(agent_display_title)
-                            .unwrap_or_default();
-                        ui.colored_label(
-                            egui::Color32::from_rgb(240, 190, 100),
-                            t.chat_ask_queue
-                                .replace("{n}", &ask_queue.len().to_string())
-                                .replace("{agent}", &title),
-                        );
-                    }
-                    {
-                        let t = i18n::strings(&self.prefs.language);
-                        let session_model = self
-                            .sessions
-                            .iter()
-                            .find(|s| self.active_session.as_deref() == Some(s.id.as_str()))
-                            .and_then(|s| s.model_id.clone());
-                        if !self.chat_pending_images.is_empty()
-                            && !session_model_supports_vision(session_model.as_deref())
-                        {
-                            ui.horizontal(|ui| {
-                                ui.weak(t.chat_vision_banner);
-                                if ui.small_button(t.chat_load_vision_model).clicked() {
-                                    self.load_preferred_vision_model();
-                                }
-                            });
-                        }
-                        if !self.chat_pending_images.is_empty() {
-                            let ctx = ui.ctx().clone();
-                            chat_media::render_pending_image_chips(
-                                ui,
-                                &ctx,
-                                &mut self.chat_pending_images,
-                            );
-                        }
-                    }
                     let input_row = ui.with_layout(
-                        egui::Layout::left_to_right(egui::Align::Center),
+                        egui::Layout::bottom_up(egui::Align::Min),
                         |ui| {
-                            let t = i18n::strings(&self.prefs.language);
-                            let hint = match ask_queue.len() {
-                                0 => t.chat_hint.to_string(),
-                                1 => t.chat_hint_agent_ask.to_string(),
-                                n => {
-                                    let title = self
-                                        .blocked_ask_agent()
-                                        .map(agent_display_title)
-                                        .unwrap_or_default();
-                                    t.chat_hint_agent_ask_many
-                                        .replace("{agent}", &title)
-                                        .replace("{n}", &n.to_string())
-                                }
-                            };
-                            let mut attach_from_menu = false;
-                            let mut reuse_last_image = false;
-                            ui.menu_button("📎", |ui| {
-                                if self.last_session_image.is_some()
-                                    && ui.button(t.chat_last_session_image).clicked()
-                                {
-                                    reuse_last_image = true;
-                                    ui.close_menu();
-                                }
-                                if ui.button(t.chat_attach_image).clicked() {
-                                    attach_from_menu = true;
-                                    ui.close_menu();
-                                }
-                            })
-                            .response
-                            .on_hover_text(t.chat_attach_image);
-                            if attach_from_menu {
-                                if let Some(path) = os_open::pick_os_file(
-                                    t.chat_attach_image,
-                                    &[("Images", &["png", "jpg", "jpeg", "webp"])],
-                                    os_open::user_downloads_dir().as_deref(),
-                                ) {
-                                    self.queue_chat_image(path.to_string_lossy().into_owned());
-                                }
-                            } else if reuse_last_image {
-                                if let Some(last) = self.last_session_image.clone() {
-                                    self.queue_chat_image(last);
-                                }
-                            }
-                            let r = ui.add(
-                                egui::TextEdit::singleline(&mut self.input)
-                                    .id_salt("chat_input")
-                                    .desired_width(ui.available_width() - 90.0)
-                                    .hint_text(hint),
-                            );
-                            if self.chat_refocus {
-                                r.request_focus();
-                                self.chat_refocus = false;
-                            }
-                            let send_btn = ui.button("Envoyer").on_hover_text(t.tip_send);
-                            if self.chat_pending {
-                                if room_mode {
-                                    if ui.button(t.chat_stop).clicked() {
-                                        if let Some(sid) = self.active_session.clone() {
-                                            let _ = self.cmd_tx.send(Cmd::RoomTurnCancel {
-                                                session_id: sid,
-                                            });
+                            let input_row = ui.with_layout(
+                                egui::Layout::left_to_right(egui::Align::Center),
+                                |ui| {
+                                    let t = i18n::strings(&self.prefs.language);
+                                    let hint = match ask_queue.len() {
+                                        0 => t.chat_hint.to_string(),
+                                        1 => t.chat_hint_agent_ask.to_string(),
+                                        n => {
+                                            let title = self
+                                                .blocked_ask_agent()
+                                                .map(agent_display_title)
+                                                .unwrap_or_default();
+                                            t.chat_hint_agent_ask_many
+                                                .replace("{agent}", &title)
+                                                .replace("{n}", &n.to_string())
+                                        }
+                                    };
+                                    let mut attach_from_menu = false;
+                                    let mut reuse_last_image = false;
+                                    ui.menu_button("📎", |ui| {
+                                        if self.last_session_image.is_some()
+                                            && ui.button(t.chat_last_session_image).clicked()
+                                        {
+                                            reuse_last_image = true;
+                                            ui.close_menu();
+                                        }
+                                        if ui.button(t.chat_attach_image).clicked() {
+                                            attach_from_menu = true;
+                                            ui.close_menu();
+                                        }
+                                    })
+                                    .response
+                                    .on_hover_text(t.chat_attach_image);
+                                    if attach_from_menu {
+                                        if let Some(path) = os_open::pick_os_file(
+                                            t.chat_attach_image,
+                                            &[("Images", &["png", "jpg", "jpeg", "webp"])],
+                                            os_open::user_downloads_dir().as_deref(),
+                                        ) {
+                                            self.queue_chat_image(path.to_string_lossy().into_owned());
+                                        }
+                                    } else if reuse_last_image {
+                                        if let Some(last) = self.last_session_image.clone() {
+                                            self.queue_chat_image(last);
                                         }
                                     }
-                                } else if let Some(id) = self.chat_inference_id {
-                                    if ui.button(t.chat_stop).clicked() {
-                                        let _ = self.cmd_tx.send(Cmd::ChatCancel {
-                                            inference_id: id,
-                                        });
+                                    let r = ui.add(
+                                        egui::TextEdit::singleline(&mut self.input)
+                                            .id_salt("chat_input")
+                                            .desired_width(ui.available_width() - 90.0)
+                                            .hint_text(hint),
+                                    );
+                                    if self.chat_refocus {
+                                        r.request_focus();
+                                        self.chat_refocus = false;
                                     }
-                                }
+                                    let send_btn = ui.button("Envoyer").on_hover_text(t.tip_send);
+                                    if self.chat_pending {
+                                        if room_mode {
+                                            if ui.button(t.chat_stop).clicked() {
+                                                if let Some(sid) = self.active_session.clone() {
+                                                    let _ = self.cmd_tx.send(Cmd::RoomTurnCancel {
+                                                        session_id: sid,
+                                                    });
+                                                }
+                                            }
+                                        } else if let Some(id) = self.chat_inference_id {
+                                            if ui.button(t.chat_stop).clicked() {
+                                                let _ = self.cmd_tx.send(Cmd::ChatCancel {
+                                                    inference_id: id,
+                                                });
+                                            }
+                                        }
+                                    }
+                                    let send = send_btn.clicked()
+                                        || (r.lost_focus()
+                                            && ui.input(|i| i.key_pressed(egui::Key::Enter)));
+                                    if send {
+                                        self.send_chat();
+                                        self.chat_refocus = true;
+                                    }
+                                    r
+                                },
+                            );
+                            if !self.chat_pending_images.is_empty() {
+                                let ctx = ui.ctx().clone();
+                                chat_media::render_pending_image_chips(
+                                    ui,
+                                    &ctx,
+                                    &mut self.chat_pending_images,
+                                );
                             }
-                            let send = send_btn.clicked()
-                                || (r.lost_focus()
-                                    && ui.input(|i| i.key_pressed(egui::Key::Enter)));
-                            if send {
-                                self.send_chat();
-                                self.chat_refocus = true;
+                            if show_vision_banner {
+                                let t = i18n::strings(&self.prefs.language);
+                                ui.horizontal(|ui| {
+                                    ui.weak(t.chat_vision_banner);
+                                    if ui.small_button(t.chat_load_vision_model).clicked() {
+                                        self.load_preferred_vision_model();
+                                    }
+                                });
                             }
-                            r
+                            if ask_queue.len() > 1 {
+                                let t = i18n::strings(&self.prefs.language);
+                                let title = self
+                                    .blocked_ask_agent()
+                                    .map(agent_display_title)
+                                    .unwrap_or_default();
+                                ui.colored_label(
+                                    egui::Color32::from_rgb(240, 190, 100),
+                                    t.chat_ask_queue
+                                        .replace("{n}", &ask_queue.len().to_string())
+                                        .replace("{agent}", &title),
+                                );
+                            }
+                            input_row
                         },
                     );
-                    let input_rect = input_row.inner.rect;
+                    let input_rect = input_row.inner.inner.rect;
 
                     // Popup au-dessus de l'input, en overlay sur le chat (pas sous le cadre)
                     if !mention_hits.is_empty() {
