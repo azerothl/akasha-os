@@ -4853,14 +4853,14 @@ impl UiApp {
                             let mut attach_from_menu = false;
                             let mut reuse_last_image = false;
                             ui.menu_button("📎", |ui| {
-                                if ui.button(t.chat_attach_image).clicked() {
-                                    attach_from_menu = true;
-                                    ui.close_menu();
-                                }
                                 if self.last_session_image.is_some()
                                     && ui.button(t.chat_last_session_image).clicked()
                                 {
                                     reuse_last_image = true;
+                                    ui.close_menu();
+                                }
+                                if ui.button(t.chat_attach_image).clicked() {
+                                    attach_from_menu = true;
                                     ui.close_menu();
                                 }
                             })
