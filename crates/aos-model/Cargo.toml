@@ -38,3 +38,7 @@ path = "src/bin/aos-modeld.rs"
 [[bin]]
 name = "aos-gate-p5"
 path = "src/bin/aos-gate-p5.rs"
+
+[[bin]]
+name = "aos-gate-gemma4-vision"
+path = "src/bin/aos-gate-gemma4-vision.rs"
