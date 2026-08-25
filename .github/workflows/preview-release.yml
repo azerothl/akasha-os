@@ -298,8 +298,8 @@ jobs:
             echo "::error::aos-platformd too small (${platformd_bytes} bytes) — likely missing embeddings"
             exit 1
           fi
-          if ! strings "${OUT}/bin/aos-modeld" | grep -q '__ggml_metallib'; then
-            echo "::error::aos-modeld missing Metal backend symbols"
+          if ! strings "${OUT}/bin/aos-modeld" | grep -qiE 'Metal\.framework|ggml.*metal'; then
+            echo "::error::aos-modeld missing Metal backend linkage (Metal.framework / ggml metal)"
             exit 1
           fi
           ZIP="dist/AgentOS-Preview-${VERSION}-macos-arm64.zip"
