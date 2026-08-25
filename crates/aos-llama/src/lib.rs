@@ -33,6 +33,8 @@ use thiserror::Error;
 
 use llama_cpp_sys_2 as sys;
 
+mod jinja_template;
+
 pub mod semantic;
 
 pub use semantic::{
@@ -523,6 +525,7 @@ impl LlamaContext {
         let model = &self.model;
         match &model.chat_template {
             Some(tmpl) => {
+                let tmpl_s = tmpl.to_string_lossy();
                 let croles: Vec<CString> = messages
                     .iter()
                     .map(|(r, _)| CString::new(r.as_str()).unwrap_or_default())
@@ -557,12 +560,18 @@ impl LlamaContext {
                         )
                     };
                     if n < 0 {
+                        // Native matcher cannot parse complex Jinja (e.g. Gemma 4 tool-calling
+                        // templates embedded in GGUF). Render with minijinja instead.
+                        if let Ok(rendered) =
+                            jinja_template::apply_jinja_chat_template(&tmpl_s, messages, true)
+                        {
+                            return Ok(suppress_hybrid_thinking(&rendered, &tmpl_s));
+                        }
                         return Err(LlamaError::ChatTemplate);
                     }
                     if n as usize <= buf.len() {
                         let bytes: Vec<u8> = buf[..n as usize].iter().map(|b| *b as u8).collect();
                         let rendered = String::from_utf8_lossy(&bytes).into_owned();
-                        let tmpl_s = tmpl.to_string_lossy();
                         return Ok(suppress_hybrid_thinking(&rendered, &tmpl_s));
                     }
                     cap = n as usize + 1024;
