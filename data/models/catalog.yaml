@@ -94,6 +94,27 @@ models:
     backends_compatible: [llamacpp]
     privacy_class: local
 
+  - id: local:gemma-4-e4b
+    name: Gemma 4 E4B it Q4
+    modality: text
+    format: gguf
+    source:
+      type: local_file
+      path: var/models/gemma4-gate/gemma-4-E4B-it-Q4_K_M.gguf
+      sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+    architecture:
+      n_layers: 28
+      n_params: 8.0e9
+      context_length: 131072
+    resource_hints:
+      weights_bytes: 5967544256
+      embed_bytes: 250000000
+      kv_bytes_per_token: 30000
+      supports_layer_offload: true
+    capabilities: [chat, vision]
+    backends_compatible: [llamacpp]
+    privacy_class: local
+
   # --- Backend distant (§3.2, exemple) ----------------------------------------
   - id: remote:openai:gpt-4.1
     name: GPT-4.1 (distant)

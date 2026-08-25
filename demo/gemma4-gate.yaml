@@ -1,0 +1,25 @@
+# Gate coordinator — Gemma 4 E4B text + vision (CPU-friendly).
+#
+# Prérequis : poids + mmproj dans var/models/gemma4-gate/ (voir aos-gate-gemma4-vision).
+# Lancer : aos-busd &  puis  aos-modeld demo/gemma4-gate.yaml
+
+bus: "127.0.0.1:24701"
+gpu: false
+vram_total_bytes: 0
+os_reserve_vram_bytes: 0
+os_reserve_ram_bytes: 2147483648
+default_model: local:gemma-4-e4b
+default_kv_tokens: 4096
+n_threads: 8
+n_seq_max: 1
+batch_window_ms: 150
+routing: local_only
+
+models:
+  local:gemma-4-e4b:
+    path: var/models/gemma4-gate/gemma-4-E4B-it-Q4_K_M.gguf
+    n_layers: 28
+    weights_bytes: 5967544256
+    embed_bytes: 250000000
+    kv_bytes_per_token: 30000
+    n_params: 8.0e9
