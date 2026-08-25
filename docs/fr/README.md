@@ -8,7 +8,7 @@
 first-class, offline-first. La Preview tourne sur hôte Windows/Linux
 (NVIDIA) ; la piste seL4 est séparée.
 
-> Ce n'est **pas** encore un OS bootable. La Preview 0.11.0 est une application
+> Ce n'est **pas** encore un OS bootable. La Preview 0.12.1 est une application
 > hôte installable pour testeurs (Windows/Linux ; NVIDIA optionnel via chemin CPU
 > dans le même zip).
 

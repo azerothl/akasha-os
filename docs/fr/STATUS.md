@@ -7,8 +7,7 @@ Résumé des phases livrées. Détail : [plan-developpement-phases.md](plan-deve
 
 **En-tête :** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview :** 0.12.0 (25/08/2026) — chat vision (mmproj + UI), canvas
-`set_style`, zip Preview Apple Silicon. Pas un OS bootable. Gate cohorte encore
+**Preview :** 0.12.1 (25/08/2026) — correctif chat template Gemma 4 (#49). Pas un OS bootable. Gate cohorte encore
 ouverte. **Suite :** fermeture cohorte PC ; Horizon C / PV.4+ quand planifié ;
 E9 hard-green après un run 2 GPU documenté.
 
@@ -21,6 +20,7 @@ E9 hard-green après un run 2 GPU documenté.
 | P12.3 | Canvas `set_style` + fixes orchestration outils | fait |
 | P12.4 | Zip Preview Apple Silicon + téléchargement mill | fait |
 | P12.5 | Docs FR+EN + site 0.12.0 | fait |
+| P12.6 | Patch 0.12.1 — repli Jinja chat template Gemma 4 (#49) | fait |
 
 ## P11 — Preview 0.11.0 (E20 decode local) — fait
 

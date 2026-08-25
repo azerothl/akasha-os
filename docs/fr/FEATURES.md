@@ -1,4 +1,4 @@
-# Fonctionnalités Preview — Akasha OS 0.12.0
+# Fonctionnalités Preview — Akasha OS 0.12.1
 
 **Langue :** [English](../FEATURES.md) | Français
 
@@ -7,7 +7,12 @@ Ce n'est **pas** l'OS bootable. Les exigences v1 sont dans
 [specs-fonctionnelles.md](specs-fonctionnelles.md) ; les gates dans
 [STATUS.md](STATUS.md).
 
-> Date : 25/08/2026 · Preview **0.12.0**
+> Date : 25/08/2026 · Preview **0.12.1**
+
+### Nouveautés 0.12.1
+
+- **Chat template Gemma 4** : repli Jinja via hf-chat-template (minijinja) quand `llama_chat_apply_template` retourne UNKNOWN sur les templates tool-calling intégrés — corrige les échecs infer « chat template » sur Gemma 4 E4B (texte et vision)
+- **Gate** : coordinateur `aos-gate-gemma4-vision` (infer texte G1, prefill PNG/mtmd G2) ; voir [gemma4-vision-gate.md](../gemma4-vision-gate.md)
 
 ### Nouveautés 0.12.0
 
