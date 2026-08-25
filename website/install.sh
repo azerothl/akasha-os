@@ -34,12 +34,17 @@ if not pick or not pick.get("sha256") or not pick.get("name"):
 print(pick["name"])
 print(pick["sha256"])
 print(doc.get("version") or "")
+print(doc.get("tag") or "")
 PY
 )"
 FILE="$(printf '%s\n' "$NAME" | sed -n '1p')"
 WANT="$(printf '%s\n' "$NAME" | sed -n '2p' | tr 'A-F' 'a-f')"
 VER="$(printf '%s\n' "$NAME" | sed -n '3p')"
-URL="https://github.com/${REPO}/releases/latest/download/${FILE}"
+TAG="$(printf '%s\n' "$NAME" | sed -n '4p')"
+if [ -z "$TAG" ]; then
+  TAG="v${VER}"
+fi
+URL="https://github.com/${REPO}/releases/download/${TAG}/${FILE}"
 echo "version ${VER}"
 echo "url     ${URL}"
 echo "sha256  ${WANT}"

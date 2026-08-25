@@ -15,7 +15,9 @@ if (-not $asset -or -not $asset.sha256 -or -not $asset.name) {
     throw "latest.json has no Windows artefact with sha256 (fail-closed)"
 }
 
-$downloadUrl = "https://github.com/$Repo/releases/latest/download/$($asset.name)"
+$tag = [string]$latest.tag
+if (-not $tag) { $tag = "v$($latest.version)" }
+$downloadUrl = "https://github.com/$Repo/releases/download/$tag/$($asset.name)"
 Write-Host "version $($latest.version)"
 Write-Host "url     $downloadUrl"
 Write-Host "sha256  $($asset.sha256)"
