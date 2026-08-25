@@ -7,10 +7,20 @@ Résumé des phases livrées. Détail : [plan-developpement-phases.md](plan-deve
 
 **En-tête :** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview :** 0.11.0 (23/08/2026) — E20 decode local (KV Q8, prefix cache,
-prompt-lookup C1). Pas un OS bootable. Gate cohorte encore ouverte.
-**Suite :** fermeture cohorte PC ; Horizon C / PV.4+ quand planifié ;
+**Preview :** 0.12.0 (25/08/2026) — chat vision (mmproj + UI), canvas
+`set_style`, zip Preview Apple Silicon. Pas un OS bootable. Gate cohorte encore
+ouverte. **Suite :** fermeture cohorte PC ; Horizon C / PV.4+ quand planifié ;
 E9 hard-green après un run 2 GPU documenté.
+
+## P12 — Preview 0.12.0 (vision + ship macOS) — fait
+
+| # | Item | Statut |
+|---|------|--------|
+| P12.1 | Chemin infer vision + sidecars mmproj catalogue | fait |
+| P12.2 | UI chat images + gate non-vision | fait |
+| P12.3 | Canvas `set_style` + fixes orchestration outils | fait |
+| P12.4 | Zip Preview Apple Silicon + téléchargement mill | fait |
+| P12.5 | Docs FR+EN + site 0.12.0 | fait |
 
 ## P11 — Preview 0.11.0 (E20 decode local) — fait
 

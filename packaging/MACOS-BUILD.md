@@ -35,12 +35,12 @@ Data prefix: `~/.local/share/agentos-preview` (same as Linux).
 Tag `v*` triggers [`.github/workflows/preview-release.yml`](../.github/workflows/preview-release.yml)
 which builds Win + Linux + macOS and publishes release assets.
 
-**Backfill macOS on an existing Release** (e.g. `v0.11.0` already tagged):
+**Backfill macOS on an existing Release** (e.g. `v0.12.0` already tagged):
 
 1. Actions → **preview-release** → **Run workflow**
 2. Branch: `main` (or the branch with packaging scripts)
-3. Inputs: `macos_only` = true, `release_version` = `0.11.0`, `upload_release` = true
-4. Run — builds on `macos-14`, uploads `AgentOS-Preview-0.11.0-macos-arm64.zip`, merges macOS into `latest.json` on that Release (Win/Linux entries preserved)
+3. Inputs: `macos_only` = true, `release_version` = `0.12.0`, `upload_release` = true
+4. Run — builds on `macos-14`, uploads `AgentOS-Preview-0.12.0-macos-arm64.zip`, merges macOS into `latest.json` on that Release (Win/Linux entries preserved)
 
 Tag push builds:
 
@@ -49,6 +49,8 @@ Tag push builds:
 - `AgentOS-Preview-<ver>-macos-arm64.zip` (Apple Silicon + Metal; CI unsigned)
 
 Unified artefact ships **Metal** `aos-modeld` + **CPU** `aos-modeld-cpu` (same session logic as Win/Linux).
+
+**Expected size:** the macOS zip is much smaller than Win/Linux (~30 MB compressed vs ~800 MB) because GGUF models download on first run (`SKIP_MODELS=1` in CI) and Metal binaries do not bundle CUDA runtime DLLs or multi-arch CUDA SASS. A ~30 MB zip with all `aos-*` daemons, modules, and `__ggml_metallib` in `aos-modeld` is a real Preview — not a stub.
 
 ## Codesign / notarization blockers (unsigned CI builds)
 
