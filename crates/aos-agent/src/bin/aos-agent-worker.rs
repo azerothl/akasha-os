@@ -793,7 +793,7 @@ async fn main() {
                 }
                 if canvas_tool_mutates_scene(&action.action) {
                     if let Some(sid) = spec.session_id.as_deref().filter(|s| !s.is_empty()) {
-                        let digest = fetch_canvas_scene_digest(bus, sid).await;
+                        let digest = fetch_canvas_scene_digest(&bus, sid).await;
                         outcome = canvas_tool_outcome_with_digest(&outcome, digest.as_deref());
                     }
                 }
