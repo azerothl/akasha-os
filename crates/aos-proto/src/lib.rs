@@ -3485,6 +3485,8 @@ pub struct MediaImageOptions {
     pub init_image: Option<String>,
     /// img2img denoise strength 0..=1 (sd.cpp `--strength`; default ~0.75 when init set).
     pub strength: Option<f32>,
+    /// Logical path of an inpaint mask PNG (`/downloads/...`; white = regenerate region).
+    pub mask_image: Option<String>,
 }
 
 /// Closed Piper option object (P09.3). Unknown keys are refused.
@@ -3595,6 +3597,15 @@ mod media_option_tests {
         .unwrap();
         assert_eq!(o.init_image.as_deref(), Some("/downloads/base.png"));
         assert_eq!(o.strength, Some(0.65));
+    }
+
+    #[test]
+    fn image_options_accept_inpaint_mask() {
+        let o: MediaImageOptions = serde_json::from_str(
+            r#"{"init_image":"/downloads/base.png","mask_image":"/downloads/mask.png","strength":1.0}"#,
+        )
+        .unwrap();
+        assert_eq!(o.mask_image.as_deref(), Some("/downloads/mask.png"));
     }
 }
 

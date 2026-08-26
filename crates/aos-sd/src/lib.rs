@@ -201,6 +201,8 @@ pub struct ImageGenOpts {
     pub init_image_path: Option<PathBuf>,
     /// sd.cpp `--strength` (0..=1) when `init_image_path` is set.
     pub strength: Option<f32>,
+    /// Host path for sd.cpp `--mask` (inpaint; white = regenerate region).
+    pub mask_image_path: Option<PathBuf>,
 }
 
 impl Default for ImageGenOpts {
@@ -242,6 +244,7 @@ impl Default for ImageGenOpts {
             audio_vae_path: None,
             init_image_path: None,
             strength: None,
+            mask_image_path: None,
         }
     }
 }
@@ -517,9 +520,23 @@ fn collect_image_args(
         if p.exists() {
             a.push("--init-img".into());
             a.push(p.to_string_lossy().into_owned());
-            let strength = opts.strength.unwrap_or(0.75).clamp(0.0, 1.0);
+            let strength = if opts.mask_image_path.is_some() {
+                1.0
+            } else {
+                opts.strength.unwrap_or(0.75).clamp(0.0, 1.0)
+            };
             a.push("--strength".into());
             a.push(format!("{strength:.4}"));
+        }
+    }
+    if let Some(p) = &opts.mask_image_path {
+        if p.exists() {
+            if !a.iter().any(|arg| arg == "-M") {
+                a.push("-M".into());
+                a.push("img2img".into());
+            }
+            a.push("--mask".into());
+            a.push(p.to_string_lossy().into_owned());
         }
     }
     a
@@ -966,6 +983,32 @@ mod tests {
         assert!(args.iter().any(|a| a.ends_with("base.png")));
         assert!(args.contains(&"--strength".into()));
         assert!(args.contains(&"0.4200".into()));
+    }
+
+    #[test]
+    fn image_gen_inpaint_mask_argv() {
+        let dir = std::env::temp_dir().join("aos-sd-inpaint");
+        let _ = std::fs::create_dir_all(&dir);
+        let init = dir.join("base.png");
+        let mask = dir.join("mask.png");
+        std::fs::write(&init, b"fake").unwrap();
+        std::fs::write(&mask, b"fake").unwrap();
+        let mut opts = ImageGenOpts::default();
+        opts.init_image_path = Some(init);
+        opts.mask_image_path = Some(mask.clone());
+        let args = collect_image_args(
+            Path::new("model.safetensors"),
+            "cat",
+            Path::new("out.png"),
+            &opts,
+            None,
+        );
+        assert!(args.contains(&"-M".into()));
+        assert!(args.contains(&"img2img".into()));
+        assert!(args.contains(&"--mask".into()));
+        assert!(args.iter().any(|a| a.ends_with("mask.png")));
+        assert!(args.contains(&"--strength".into()));
+        assert!(args.contains(&"1.0000".into()));
     }
 
     #[test]

@@ -70,6 +70,12 @@ pub struct ImageStudioState {
     pub img2img_enabled: bool,
     pub img2img_strength: f32,
     pub img2img_path: String,
+    /// Paint an inpaint mask on the result overlay (slice 2).
+    pub inpaint_mode: bool,
+    pub inpaint_brush: f32,
+    pub inpaint_mask: Option<crate::image_composition::InpaintMask>,
+    /// Last saved logical mask path for the current generate click.
+    inpaint_mask_path: Option<String>,
     pub offload_to_cpu: bool,
     pub diffusion_fa: bool,
     pub auto_fit: bool,
@@ -135,6 +141,10 @@ impl Default for ImageStudioState {
             img2img_enabled: false,
             img2img_strength: 0.75,
             img2img_path: String::new(),
+            inpaint_mode: false,
+            inpaint_brush: 24.0,
+            inpaint_mask: None,
+            inpaint_mask_path: None,
             offload_to_cpu: false,
             diffusion_fa: false,
             auto_fit: false,
@@ -874,6 +884,8 @@ impl ImageStudioState {
             self.model_id = meta.model_id.clone();
         }
         self.preview = Some(meta.path.clone());
+        self.inpaint_mask = None;
+        self.inpaint_mask_path = None;
         self.refresh_catalog();
     }
 
@@ -940,7 +952,49 @@ impl ImageStudioState {
         }
     }
 
+    fn inpaint_generation_options(&self) -> Option<(String, String)> {
+        if !self.inpaint_mode {
+            return None;
+        }
+        let preview = self.preview.clone()?;
+        let mask = self.inpaint_mask.as_ref()?;
+        if !mask.has_paint() {
+            return None;
+        }
+        let mask_path = self.inpaint_mask_path.clone()?;
+        Some((preview, mask_path))
+    }
+
+    fn save_inpaint_mask_if_needed(&mut self) -> Result<(), String> {
+        if !self.inpaint_mode {
+            self.inpaint_mask_path = None;
+            return Ok(());
+        }
+        let Some(mask) = self.inpaint_mask.as_ref() else {
+            self.inpaint_mask_path = None;
+            return Ok(());
+        };
+        if !mask.has_paint() {
+            self.inpaint_mask_path = None;
+            return Ok(());
+        }
+        let logical = crate::image_composition::new_inpaint_mask_path();
+        mask.save_logical_png(&logical)?;
+        self.inpaint_mask_path = Some(logical);
+        Ok(())
+    }
+
     pub fn to_options(&self) -> MediaImageOptions {
+        let (init_image, strength, mask_image) =
+            if let Some((preview, mask_path)) = self.inpaint_generation_options() {
+                (Some(preview), Some(1.0), Some(mask_path))
+            } else {
+                (
+                    self.reference_init_image_path(),
+                    self.reference_strength_value(),
+                    None,
+                )
+            };
         MediaImageOptions {
             width: Some(self.width),
             height: Some(self.height),
@@ -1019,8 +1073,9 @@ impl ImageStudioState {
             } else {
                 None
             },
-            init_image: self.reference_init_image_path(),
-            strength: self.reference_strength_value(),
+            init_image,
+            strength,
+            mask_image,
             ..MediaImageOptions::default()
         }
     }
@@ -1086,6 +1141,9 @@ impl ImageStudioState {
                                     &mut self.composition_next_id,
                                     self.preview.as_deref(),
                                     &mut self.preview_overlay_opacity,
+                                    &mut self.inpaint_mode,
+                                    &mut self.inpaint_mask,
+                                    &mut self.inpaint_brush,
                                 );
                                 if let Some(path) = self.preview.clone() {
                                     let busy = generating.is_some();
@@ -1215,6 +1273,9 @@ impl ImageStudioState {
             ui.colored_label(egui::Color32::LIGHT_RED, t.studio_empty_prompt_hint);
         }
         if generate_clicked && !self.prompt.trim().is_empty() && model_ready {
+            if let Err(err) = self.save_inpaint_mask_if_needed() {
+                eprintln!("inpaint mask save failed: {err}");
+            }
             let use_edited = self.use_edited_enriched && !self.enriched_prompt.trim().is_empty();
             let wants_json_enrich = self.enrich_prompt
                 && crate::image_prompt::supports_json_prompt_enrichment(Some(&self.model_id))
@@ -2271,5 +2332,35 @@ mod tests {
         let opts = studio.to_options();
         assert_eq!(opts.init_image.as_deref(), Some("/downloads/expert.png"));
         assert_eq!(opts.strength, Some(0.42));
+    }
+
+    #[test]
+    fn inpaint_mask_sets_init_image_mask_and_strength() {
+        let mut studio = ImageStudioState::default();
+        studio.preview = Some("/downloads/result.png".into());
+        studio.inpaint_mode = true;
+        let mut mask = crate::image_composition::InpaintMask::new(64, 64);
+        mask.paint_brush(0.5, 0.5, 0.1);
+        studio.inpaint_mask = Some(mask);
+        studio.inpaint_mask_path = Some("/downloads/inpaint-mask-test.png".into());
+        let opts = studio.to_options();
+        assert_eq!(opts.init_image.as_deref(), Some("/downloads/result.png"));
+        assert_eq!(opts.mask_image.as_deref(), Some("/downloads/inpaint-mask-test.png"));
+        assert_eq!(opts.strength, Some(1.0));
+    }
+
+    #[test]
+    fn inpaint_overrides_pending_reference() {
+        let mut studio = ImageStudioState::default();
+        studio.queue_reference_image("/downloads/ref.png".into());
+        studio.preview = Some("/downloads/result.png".into());
+        studio.inpaint_mode = true;
+        let mut mask = crate::image_composition::InpaintMask::new(64, 64);
+        mask.paint_brush(0.5, 0.5, 0.1);
+        studio.inpaint_mask = Some(mask);
+        studio.inpaint_mask_path = Some("/downloads/inpaint-mask-test.png".into());
+        let opts = studio.to_options();
+        assert_eq!(opts.init_image.as_deref(), Some("/downloads/result.png"));
+        assert_eq!(opts.mask_image.as_deref(), Some("/downloads/inpaint-mask-test.png"));
     }
 }
