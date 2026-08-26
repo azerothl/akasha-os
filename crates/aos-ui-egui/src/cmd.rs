@@ -21,6 +21,8 @@ pub(crate) enum Cmd {
         model_id: Option<String>,
         /// Chemins locaux PNG/JPEG pour le tour user (vision / mtmd).
         images: Vec<String>,
+        /// Documents locaux (PDF/txt/md) — texte extrait côté runtime, pas vision.
+        documents: Vec<DocumentRef>,
         /// E14 : déclencher mem.extract après le tour (Settings, défaut ON).
         auto_remember: bool,
         max_steps: u32,

@@ -477,6 +477,7 @@ fn chat_composer_reserve_height(
     chat_w: f32,
     ask_queue_len: usize,
     pending_images_len: usize,
+    pending_documents_len: usize,
     show_vision_banner: bool,
 ) -> f32 {
     const INPUT_ROW_H: f32 = 44.0;
@@ -484,18 +485,28 @@ fn chat_composer_reserve_height(
     const VISION_BANNER_H: f32 = 28.0;
     const CHIP_W: f32 = 48.0;
     const CHIP_ROW_H: f32 = 36.0;
+    const DOC_CHIP_W: f32 = 120.0;
+    const DOC_CHIP_ROW_H: f32 = 28.0;
 
     let mut h = INPUT_ROW_H;
     if ask_queue_len > 1 {
         h += ASK_QUEUE_H;
     }
-    if pending_images_len > 0 {
+    let pending_chips = pending_images_len + pending_documents_len;
+    if pending_chips > 0 {
         if show_vision_banner {
             h += VISION_BANNER_H;
         }
-        let chips_per_row = (chat_w / CHIP_W).floor().max(1.0) as usize;
-        let rows = pending_images_len.div_ceil(chips_per_row);
-        h += (rows as f32) * CHIP_ROW_H;
+        if pending_images_len > 0 {
+            let chips_per_row = (chat_w / CHIP_W).floor().max(1.0) as usize;
+            let rows = pending_images_len.div_ceil(chips_per_row);
+            h += (rows as f32) * CHIP_ROW_H;
+        }
+        if pending_documents_len > 0 {
+            let chips_per_row = (chat_w / DOC_CHIP_W).floor().max(1.0) as usize;
+            let rows = pending_documents_len.div_ceil(chips_per_row);
+            h += (rows as f32) * DOC_CHIP_ROW_H;
+        }
     }
     h
 }
@@ -1441,6 +1452,8 @@ struct UiApp {
     chat_inference_id: Option<u64>,
     /// PNG/JPEG paths queued for the next chat turn (vision).
     chat_pending_images: Vec<String>,
+    /// PDF/txt/md paths queued for the next chat turn (text extraction at send).
+    chat_pending_documents: Vec<DocumentRef>,
     /// Last Create / canvas export image path in this session.
     last_session_image: Option<String>,
     catalogue: Option<ModuleCatalogue>,
@@ -1721,6 +1734,7 @@ impl UiApp {
             chat_pending: false,
             chat_inference_id: None,
             chat_pending_images: Vec::new(),
+            chat_pending_documents: Vec::new(),
             last_session_image: None,
             catalogue: None,
             installed_modules: Vec::new(),
@@ -2035,18 +2049,25 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
     fn send_chat(&mut self) {
         let text = self.input.trim().to_string();
         let pending_images = self.chat_pending_images.clone();
-        if text.is_empty() && pending_images.is_empty() {
+        let pending_documents = self.chat_pending_documents.clone();
+        if text.is_empty() && pending_images.is_empty() && pending_documents.is_empty() {
             return;
         }
         let t = i18n::strings(&self.prefs.language);
-        let text = if text.is_empty() {
+        let text = if text.is_empty() && pending_images.is_empty() && !pending_documents.is_empty()
+        {
+            t.chat_empty_document_prompt.to_string()
+        } else if text.is_empty() && !pending_images.is_empty() {
             t.chat_empty_image_prompt.to_string()
         } else {
             text
         };
         self.input.clear();
         self.chat_refocus = true;
-        if text.starts_with('/') && pending_images.is_empty() {
+        if text.starts_with('/')
+            && pending_images.is_empty()
+            && pending_documents.is_empty()
+        {
             self.handle_slash(&text);
             return;
         }
@@ -2120,13 +2141,27 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 prompt: String::new(),
             })
             .collect();
+        let doc_atts: Vec<ChatAttachment> = pending_documents
+            .iter()
+            .map(|doc| ChatAttachment::Document {
+                path: doc.path.clone(),
+                label: doc.label.clone(),
+            })
+            .collect();
+        let mut attachments = image_atts;
+        attachments.extend(doc_atts);
         self.chat.push(ChatLine {
             role: "user".into(),
             text: text.clone(),
-            attachments: image_atts,
+            attachments,
             speaker_id: None,
         });
         self.chat_pending_images.clear();
+        self.chat_pending_documents.clear();
+        let room_content = aos_proto::chat_document::merge_documents_into_user_content(
+            &text,
+            &pending_documents,
+        );
         if chat_room::session_is_room(chat_room::active_session_meta(
             &self.sessions,
             self.active_session.as_deref(),
@@ -2140,7 +2175,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             self.room_turn_pending_text = Some(text.clone());
             let _ = self.cmd_tx.send(Cmd::RoomTurn {
                 session_id,
-                content: text,
+                content: room_content,
                 images: pending_images,
             });
             self.mark_onboarding_chat_sent();
@@ -2191,6 +2226,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             user_text: text,
             model_id,
             images: pending_images,
+            documents: pending_documents,
             auto_remember: self.prefs.auto_remember_chat,
             max_steps: chat_agent_max_steps(self.prefs.default_max_steps),
             routing: self.prefs.routing.clone(),
@@ -2200,6 +2236,29 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         });
         self.mark_onboarding_chat_sent();
         self.scen_chat = true;
+    }
+
+    fn queue_chat_document(&mut self, path: String) {
+        if path.is_empty() || !aos_proto::chat_document::is_chat_document_path(&path) {
+            return;
+        }
+        let label = aos_proto::chat_document::document_label_from_path(&path);
+        let doc = DocumentRef { path, label };
+        if !self
+            .chat_pending_documents
+            .iter()
+            .any(|d| d.path == doc.path)
+        {
+            if self.chat_pending_documents.len()
+                >= aos_proto::chat_document::CHAT_MAX_PENDING_DOCUMENTS
+            {
+                self.chat_pending_documents.remove(0);
+            }
+            self.chat_pending_documents.push(doc);
+        }
+        self.status = i18n::strings(&self.prefs.language)
+            .chat_attach_document
+            .to_string();
     }
 
     fn queue_chat_image(&mut self, path: String) {
@@ -4406,6 +4465,9 @@ impl UiApp {
                                 ChatAttachment::Audio { path } => {
                                     chat_media::render_audio(ui, path.as_str());
                                 }
+                                ChatAttachment::Document { path, label } => {
+                                    chat_media::render_document(ui, label.as_str(), path.as_str());
+                                }
                                 ChatAttachment::TtsDraft { .. } => {
                                     let piper: Vec<String> = self
                                         .model_infos
@@ -4774,6 +4836,7 @@ impl UiApp {
                         chat_w,
                         ask_queue.len(),
                         self.chat_pending_images.len(),
+                        self.chat_pending_documents.len(),
                         show_vision_banner,
                     );
                     let content_h = (ui.available_height() - composer_reserve).max(120.0);
@@ -4860,6 +4923,7 @@ impl UiApp {
                                         }
                                     };
                                     let mut attach_from_menu = false;
+                                    let mut attach_document_from_menu = false;
                                     let mut reuse_last_image = false;
                                     ui.menu_button("📎", |ui| {
                                         if self.last_session_image.is_some()
@@ -4872,6 +4936,10 @@ impl UiApp {
                                             attach_from_menu = true;
                                             ui.close_menu();
                                         }
+                                        if ui.button(t.chat_attach_document).clicked() {
+                                            attach_document_from_menu = true;
+                                            ui.close_menu();
+                                        }
                                     })
                                     .response
                                     .on_hover_text(t.chat_attach_image);
@@ -4882,6 +4950,19 @@ impl UiApp {
                                             os_open::user_downloads_dir().as_deref(),
                                         ) {
                                             self.queue_chat_image(path.to_string_lossy().into_owned());
+                                        }
+                                    } else if attach_document_from_menu {
+                                        if let Some(path) = os_open::pick_os_file(
+                                            t.chat_attach_document,
+                                            &[(
+                                                "Documents",
+                                                aos_proto::chat_document::CHAT_DOCUMENT_EXTENSIONS,
+                                            )],
+                                            os_open::user_downloads_dir().as_deref(),
+                                        ) {
+                                            self.queue_chat_document(
+                                                path.to_string_lossy().into_owned(),
+                                            );
                                         }
                                     } else if reuse_last_image {
                                         if let Some(last) = self.last_session_image.clone() {
@@ -4932,6 +5013,12 @@ impl UiApp {
                                     ui,
                                     &ctx,
                                     &mut self.chat_pending_images,
+                                );
+                            }
+                            if !self.chat_pending_documents.is_empty() {
+                                chat_media::render_pending_document_chips(
+                                    ui,
+                                    &mut self.chat_pending_documents,
                                 );
                             }
                             if show_vision_banner {

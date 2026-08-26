@@ -485,6 +485,9 @@ impl ChatSessionStore {
                     ChatAttachment::TtsDraft { text, .. } => {
                         out.push_str(&format!("_tts draft: {text}_\n\n"));
                     }
+                    ChatAttachment::Document { path, label } => {
+                        out.push_str(&format!("_document: {label} ({path})_\n\n"));
+                    }
                 }
             }
         }

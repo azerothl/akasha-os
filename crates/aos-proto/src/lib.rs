@@ -8,6 +8,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 pub mod bridge;
+pub mod chat_document;
 pub mod decl_ui;
 
 // ---------------------------------------------------------------------------
@@ -2956,6 +2957,12 @@ pub enum ChatAttachment {
         #[serde(default)]
         options: MediaAudioOptions,
     },
+    /// Local document attached in chat (text extracted at send — not vision).
+    Document {
+        path: String,
+        #[serde(default)]
+        label: String,
+    },
 }
 
 impl ChatAttachment {
@@ -2966,7 +2973,10 @@ impl ChatAttachment {
                 title,
                 origin,
             } => Some((agent_id.as_str(), title.as_str(), origin.as_str())),
-            Self::Image { .. } | Self::Audio { .. } | Self::TtsDraft { .. } => None,
+            Self::Image { .. }
+            | Self::Audio { .. }
+            | Self::TtsDraft { .. }
+            | Self::Document { .. } => None,
         }
     }
 }
