@@ -742,6 +742,7 @@ pub(crate) async fn spawn_chat_delegate_agent(
         req.caps.push("tool.invoke:canvas".into());
         req.caps.push("fs.write:/downloads/**".into());
     }
+    req.gate_mode = crate::prefs::load_preferences().agent_gate_mode.clone();
     match bus
         .call::<AgentCreateRequest, aos_proto::AgentCreateResponse>(
             aos_agent::intents::CREATE,
@@ -2740,6 +2741,24 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 self.on_tab_open(Tab::Caps);
             }
             ui.separator();
+            let gate_ask = !self.prefs.agent_gate_mode.eq_ignore_ascii_case("autonomous");
+            let gate_label = if gate_ask {
+                t.status_gate_ask
+            } else {
+                t.status_gate_autonomous
+            };
+            if ui
+                .small_button(format!("{}: {}", t.status_gate_label, gate_label))
+                .clicked()
+            {
+                self.prefs.agent_gate_mode = if gate_ask {
+                    "autonomous".into()
+                } else {
+                    "ask".into()
+                };
+                save_preferences(&self.prefs);
+            }
+            ui.separator();
             if let Some(pending_ver) = load_pending_update_version() {
                 ui.label(t.status_update_pending.replace("{version}", &pending_ver));
             } else if let Some(offer) = &self.update_offer {
@@ -4324,6 +4343,7 @@ impl UiApp {
                 let mut open_agent: Option<String> = None;
                 let mut target_reply: Option<String> = None;
                 let mut open_studio: Option<(String, String)> = None;
+                let mut act_decision: Option<(String, String, bool)> = None;
                 let reply_id = self.blocked_ask_agent().map(|a| a.agent_id.clone());
                 let n = self.chat.len();
                 for i in 0..n {
@@ -4478,8 +4498,40 @@ impl UiApp {
                                         self.status = "audio : génération…".into();
                                     }
                                 }
+                                ChatAttachment::AgentAct {
+                                    agent_id,
+                                    act_id,
+                                    phrase: _,
+                                    state,
+                                } => {
+                                    if state == "pending" {
+                                        ui.horizontal(|ui| {
+                                            if ui.button(t.agent_act_allow_once).clicked() {
+                                                act_decision = Some((
+                                                    agent_id.clone(),
+                                                    act_id.clone(),
+                                                    true,
+                                                ));
+                                            }
+                                            if ui.button(t.agent_act_deny).clicked() {
+                                                act_decision = Some((
+                                                    agent_id.clone(),
+                                                    act_id.clone(),
+                                                    false,
+                                                ));
+                                            }
+                                        });
+                                    }
+                                }
                             }
                         }
+                    });
+                }
+                if let Some((agent_id, act_id, approved)) = act_decision {
+                    let _ = self.cmd_tx.send(Cmd::AgentActDecision {
+                        agent_id,
+                        act_id,
+                        approved,
                     });
                 }
                 if let Some(id) = open_agent {

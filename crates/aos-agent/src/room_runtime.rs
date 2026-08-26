@@ -683,6 +683,7 @@ mod tests {
             session_id: None,
             budget: Default::default(),
             optimize_prompt: false,
+            gate_mode: "ask".into(),
         };
         let prompt = build_room_system_prompt(&spec, "Critic", &members, true, &[], "sess-1", None);
         assert!(prompt.contains("Critic (@persona-critic"));
@@ -715,6 +716,7 @@ mod tests {
             session_id: None,
             budget: Default::default(),
             optimize_prompt: false,
+            gate_mode: "ask".into(),
         };
         let tools = select_tools(&spec.tools, &[]);
         let digest = "next_seq=2 aspect=square 1:1 ops=1\ncounts: stroke=1\nseq=1 stroke (0.1,0.1)-(0.2,0.2)";
@@ -750,6 +752,7 @@ mod tests {
             session_id: None,
             budget: Default::default(),
             optimize_prompt: false,
+            gate_mode: "ask".into(),
         };
         let (ids, caps) = room_member_kit(&spec, true);
         assert!(ids.iter().any(|x| x == "canvas.set_style"));
@@ -780,6 +783,7 @@ mod tests {
             session_id: None,
             budget: Default::default(),
             optimize_prompt: false,
+            gate_mode: "ask".into(),
         };
         let (ids, caps) = room_member_kit(&spec, false);
         assert!(!ids.iter().any(|x| x.starts_with("canvas.")));

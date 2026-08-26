@@ -9,6 +9,7 @@ use crate::{
     session_has_running_canvas_agent, spawn_chat_delegate_agent, CHAT_AGENT_MAX_SUBAGENTS,
 };
 use aos_agent::intents as agent_intents;
+use aos_agent::{ControlCmd, ControlResp};
 use aos_agent::schedule::{
     ScheduleCreateRequest, ScheduleEntry, ScheduleIdRequest, ScheduleListResponse,
 };
@@ -1250,6 +1251,7 @@ async fn handle_cmd(
                 });
             }
             req.model_id = model_id;
+            req.gate_mode = crate::prefs::load_preferences().agent_gate_mode.clone();
             if req.skills.iter().any(|s| s.contains("notes"))
                 || req.tools.iter().any(|t| t.starts_with("notes."))
             {
@@ -1485,6 +1487,35 @@ async fn handle_cmd(
             {
                 Ok(_) => {
                     let _ = evt_tx.send(Evt::Status("steer envoyé".into()));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::AgentActDecision {
+            agent_id,
+            act_id,
+            approved,
+        } => {
+            let intent = format!("agent.{agent_id}.control");
+            match bus
+                .call::<ControlCmd, ControlResp>(
+                    &intent,
+                    &ControlCmd::ActDecision { act_id, approved },
+                    vec![],
+                )
+                .await
+            {
+                Ok(ControlResp::Ack) => {
+                    let _ = evt_tx.send(Evt::Status(if approved {
+                        "action autorisée une fois".into()
+                    } else {
+                        "action refusée".into()
+                    }));
+                }
+                Ok(other) => {
+                    let _ = evt_tx.send(Evt::Error("act decision: réponse inattendue".into()));
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));

@@ -46,6 +46,7 @@ use tokio::sync::{mpsc, Mutex};
 enum WorkerCmd {
     Resume,
     Steer(String),
+    ActDecision { act_id: String, approved: bool },
 }
 
 /// Attente max d'une réponse `user.ask` (bornée aussi par le timeout du goal).
@@ -232,6 +233,13 @@ async fn main() {
                         }
                         ControlResp::Ack
                     }
+                    ControlCmd::ActDecision { act_id, approved } => {
+                        let _ = shared
+                            .cmd_tx
+                            .send(WorkerCmd::ActDecision { act_id, approved })
+                            .await;
+                        ControlResp::Ack
+                    }
                 };
                 let _ = ctx.respond(aos_ipc::msg::Status::Ok, &resp).await;
             }
@@ -373,6 +381,7 @@ async fn main() {
                     pending_steer = Some(d);
                     shared.paused.store(false, Ordering::SeqCst);
                 }
+                Some(WorkerCmd::ActDecision { .. }) => {}
                 None => {
                     terminal = Some(AgentState::Killed);
                     break;
@@ -434,7 +443,7 @@ async fn main() {
                 WorkerCmd::Steer(d) => {
                     shared.state.lock().await.push_user(&format!("[steer] {d}"));
                 }
-                WorkerCmd::Resume => {}
+                WorkerCmd::Resume | WorkerCmd::ActDecision { .. } => {}
             }
         }
 
@@ -670,16 +679,42 @@ async fn main() {
         .await;
 
         let tool_t0 = Instant::now();
-        let act_result = execute_action(
-            &bus,
-            &shared,
-            &mut spec,
-            &tools,
-            &skill_docs,
-            &mut mcp_sessions,
-            &action,
-        )
-        .await;
+        let act_result = if should_gate_action(&spec, &action.action) {
+            match gate_action(&bus, &shared, &mut cmd_rx, &spec, &action, &agent_id, timeout, started)
+                .await
+            {
+                GateWait::Proceed => {
+                    execute_action(
+                        &bus,
+                        &shared,
+                        &mut spec,
+                        &tools,
+                        &skill_docs,
+                        &mut mcp_sessions,
+                        &action,
+                    )
+                    .await
+                }
+                GateWait::Denied => {
+                    ActResult::Continue("action refusée par l'utilisateur".into())
+                }
+                GateWait::Killed => {
+                    terminal = Some(AgentState::Killed);
+                    ActResult::Continue("interrompu pendant l'attente d'autorisation".into())
+                }
+            }
+        } else {
+            execute_action(
+                &bus,
+                &shared,
+                &mut spec,
+                &tools,
+                &skill_docs,
+                &mut mcp_sessions,
+                &action,
+            )
+            .await
+        };
         let tool_ms = tool_t0.elapsed().as_millis() as u64;
         let mut tool_result;
         let mut step_fail_reason: Option<String> = None;
@@ -1131,6 +1166,7 @@ async fn infer_turn(
                     match cmd_rx.recv().await {
                         Some(WorkerCmd::Resume) => return InferOutcome::Aborted,
                         Some(WorkerCmd::Steer(d)) => return InferOutcome::Steer(d),
+                        Some(WorkerCmd::ActDecision { .. }) => return InferOutcome::Aborted,
                         None => return InferOutcome::Fatal("control fermé".into()),
                     }
                 }
@@ -1700,6 +1736,7 @@ async fn wait_user_answer(
                         .into(),
                 );
             }
+            Ok(Some(WorkerCmd::ActDecision { .. })) => {}
             Ok(None) => return AskWait::Killed,
             Err(_) => {
                 shared.paused.store(false, Ordering::SeqCst);
@@ -1708,6 +1745,160 @@ async fn wait_user_answer(
         }
     }
     AskWait::Answer(String::new())
+}
+
+fn should_gate_action(spec: &AgentSpec, action: &str) -> bool {
+    spec.session_id.is_some()
+        && aos_agent::agent_act::AgentGateMode::parse(&spec.gate_mode)
+            == aos_agent::agent_act::AgentGateMode::Ask
+        && aos_agent::agent_act::requires_act_gate(action)
+}
+
+enum GateWait {
+    Proceed,
+    Denied,
+    Killed,
+}
+
+fn next_act_id(agent_id: &str) -> String {
+    format!(
+        "act-{}-{}",
+        agent_id,
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+    )
+}
+
+async fn post_agent_act(bus: &BusClient, spec: &AgentSpec, act_id: &str, phrase: &str) {
+    let Some(session_id) = spec.session_id.clone() else {
+        return;
+    };
+    let _ = bus
+        .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
+            "chat.session.append",
+            &ChatSessionAppendRequest {
+                session_id,
+                role: "assistant".into(),
+                content: phrase.to_string(),
+                attachments: vec![ChatAttachment::AgentAct {
+                    agent_id: spec.agent_id.clone(),
+                    act_id: act_id.to_string(),
+                    phrase: phrase.to_string(),
+                    state: "pending".into(),
+                }],
+                speaker_id: None,
+                speaker_name: None,
+            },
+            vec![],
+        )
+        .await;
+}
+
+async fn post_act_resolved(bus: &BusClient, spec: &AgentSpec, act_id: &str, phrase: &str, approved: bool) {
+    let Some(session_id) = spec.session_id.clone() else {
+        return;
+    };
+    let state = if approved { "approved" } else { "denied" };
+    let content = if approved {
+        format!("Autorisé une fois — {phrase}")
+    } else {
+        format!("Refusé — {phrase}")
+    };
+    let _ = bus
+        .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
+            "chat.session.append",
+            &ChatSessionAppendRequest {
+                session_id,
+                role: "assistant".into(),
+                content,
+                attachments: vec![ChatAttachment::AgentAct {
+                    agent_id: spec.agent_id.clone(),
+                    act_id: act_id.to_string(),
+                    phrase: phrase.to_string(),
+                    state: state.into(),
+                }],
+                speaker_id: None,
+                speaker_name: None,
+            },
+            vec![],
+        )
+        .await;
+}
+
+async fn wait_act_decision(
+    shared: &Shared,
+    cmd_rx: &mut mpsc::Receiver<WorkerCmd>,
+    act_id: &str,
+    limit: Duration,
+) -> GateWait {
+    let deadline = tokio::time::Instant::now() + limit;
+    loop {
+        match tokio::time::timeout_at(deadline, cmd_rx.recv()).await {
+            Ok(Some(WorkerCmd::ActDecision {
+                act_id: id,
+                approved,
+            })) if id == act_id => {
+                shared.paused.store(false, Ordering::SeqCst);
+                return if approved {
+                    GateWait::Proceed
+                } else {
+                    GateWait::Denied
+                };
+            }
+            Ok(Some(WorkerCmd::ActDecision { .. })) => {}
+            Ok(Some(WorkerCmd::Resume)) => {
+                shared.paused.store(false, Ordering::SeqCst);
+                return GateWait::Denied;
+            }
+            Ok(Some(WorkerCmd::Steer(_))) => {}
+            Ok(None) => return GateWait::Killed,
+            Err(_) => {
+                shared.paused.store(false, Ordering::SeqCst);
+                return GateWait::Denied;
+            }
+        }
+    }
+}
+
+async fn gate_action(
+    bus: &BusClient,
+    shared: &Shared,
+    cmd_rx: &mut mpsc::Receiver<WorkerCmd>,
+    spec: &AgentSpec,
+    action: &AgentAction,
+    agent_id: &str,
+    timeout: Duration,
+    started: Instant,
+) -> GateWait {
+    let act_id = next_act_id(agent_id);
+    let phrase = aos_agent::agent_act::phrase_fr(&action.action, &action.args);
+    post_agent_act(bus, spec, &act_id, &phrase).await;
+    shared.paused.store(true, Ordering::SeqCst);
+    report(
+        bus,
+        agent_id,
+        AgentOutputEvent::StateChanged {
+            state: AgentState::Blocked,
+        },
+    )
+    .await;
+    let remaining = timeout.saturating_sub(started.elapsed());
+    let wait_limit = Duration::from_secs(300).min(remaining.max(Duration::from_secs(30)));
+    let outcome = wait_act_decision(shared, cmd_rx, &act_id, wait_limit).await;
+    post_act_resolved(bus, spec, &act_id, &phrase, matches!(outcome, GateWait::Proceed)).await;
+    if matches!(outcome, GateWait::Proceed | GateWait::Denied) {
+        report(
+            bus,
+            agent_id,
+            AgentOutputEvent::StateChanged {
+                state: AgentState::Running,
+            },
+        )
+        .await;
+    }
+    outcome
 }
 
 /// Canvas delegates keep the user's subject as the child goal, not designer examples.
@@ -1765,6 +1956,7 @@ async fn spawn_child(
         session_id: parent.session_id.clone(),
         budget: parent.budget.clone(),
         optimize_prompt: false,
+        gate_mode: parent.gate_mode.clone(),
     };
     match bus
         .call::<AgentCreateRequest, AgentCreateResponse>("agent.create", &req, vec![])
@@ -3313,6 +3505,7 @@ mod tests {
             session_id: None,
             budget: Default::default(),
             optimize_prompt: false,
+            gate_mode: "ask".into(),
         };
         let child_goal = canvas_child_goal_statement(
             &parent,
@@ -3343,6 +3536,7 @@ mod tests {
             session_id: None,
             budget: Default::default(),
             optimize_prompt: false,
+            gate_mode: "ask".into(),
         };
         let child_goal = canvas_child_goal_statement(&parent, "résumer les sources A et B");
         assert_eq!(child_goal, "résumer les sources A et B");

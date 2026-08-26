@@ -232,6 +232,7 @@ mod tests {
             session_id: None,
             budget: AgentBudget::default(),
             optimize_prompt: false,
+            gate_mode: "ask".into(),
         };
         let tools = vec![ToolDesc {
             name: "notes.create".into(),
@@ -277,6 +278,7 @@ mod tests {
             session_id: Some("sess-real".into()),
             budget: AgentBudget::default(),
             optimize_prompt: false,
+            gate_mode: "ask".into(),
         };
         let tools = vec![ToolDesc {
             name: "canvas.stroke".into(),

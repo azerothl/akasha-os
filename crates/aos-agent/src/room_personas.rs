@@ -91,6 +91,7 @@ pub fn roster_spec_from_request(agent_id: &str, req: &AgentCreateRequest) -> Age
         session_id: req.session_id.clone(),
         budget: req.budget.clone(),
         optimize_prompt: req.optimize_prompt,
+        gate_mode: req.gate_mode.clone(),
     }
 }
 

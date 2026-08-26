@@ -53,6 +53,9 @@ pub struct Preferences {
     /// Interface scale as a percentage (90, 100, 110, 125). Applied via egui `zoom_factor`.
     #[serde(default = "default_ui_scale_percent")]
     pub ui_scale_percent: u32,
+    /// `ask` (default) | `autonomous` — inline Allow Once gate for chat agents.
+    #[serde(default = "default_agent_gate_mode")]
+    pub agent_gate_mode: String,
 }
 
 /// Preset scale steps exposed in Settings → Me.
@@ -117,6 +120,10 @@ fn default_ui_scale_percent() -> u32 {
     100
 }
 
+fn default_agent_gate_mode() -> String {
+    "ask".into()
+}
+
 /// Clamp persisted or deserialized scale to supported Preview presets.
 pub fn clamp_ui_scale_percent(percent: u32) -> u32 {
     UI_SCALE_PRESETS
@@ -154,6 +161,7 @@ impl Default for Preferences {
             image_height: default_image_size(),
             image_steps: default_image_steps(),
             ui_scale_percent: default_ui_scale_percent(),
+            agent_gate_mode: default_agent_gate_mode(),
         }
     }
 }
