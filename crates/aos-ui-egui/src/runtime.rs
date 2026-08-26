@@ -2228,6 +2228,7 @@ async fn handle_cmd(
             prompt,
             model_id,
             options,
+            output_path,
             enrich_prompt,
             enhance_prompt_chat,
             generation_prompt,
@@ -2298,6 +2299,7 @@ async fn handle_cmd(
                     total_steps: steps,
                 },
             );
+            let is_video = crate::image_studio::is_video_options(&options);
             let gen_bus = bus.clone();
             let gen_future = tokio::spawn(async move {
                 gen_bus
@@ -2305,7 +2307,7 @@ async fn handle_cmd(
                         "media.image.generate",
                         &MediaImageGenerateRequest {
                             prompt: final_prompt,
-                            path: None,
+                            path: output_path,
                             model_id,
                             options,
                             actor: "human:ui".into(),
@@ -2348,6 +2350,7 @@ async fn handle_cmd(
             match result {
                 Ok(Ok(r)) => {
                     let gen_prompt = generation_prompt_sent.clone();
+                    let media_kind = if is_video { "video" } else { "image" };
                     let meta = crate::image_history::ImageGenMeta::new(
                         r.path.clone(),
                         original_prompt.clone(),
@@ -2363,7 +2366,7 @@ async fn handle_cmd(
                         &evt_tx,
                         &egui_ctx,
                         Evt::MediaOk {
-                            kind: "image".into(),
+                            kind: media_kind.into(),
                             path: r.path,
                             bytes: r.bytes,
                             engine: r.engine,

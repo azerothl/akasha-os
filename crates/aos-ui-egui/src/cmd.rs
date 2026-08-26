@@ -173,6 +173,8 @@ pub(crate) enum Cmd {
         prompt: String,
         model_id: Option<String>,
         options: aos_proto::MediaImageOptions,
+        /// Logical `/downloads/...` path when not using the default image dest.
+        output_path: Option<String>,
         enrich_prompt: bool,
         /// Prose rewrite via chat LLM before generation.
         enhance_prompt_chat: bool,
