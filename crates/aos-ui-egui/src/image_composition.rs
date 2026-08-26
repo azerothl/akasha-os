@@ -4,8 +4,11 @@ use crate::decl_ui;
 use crate::i18n::UiStrings;
 use crate::image_prompt::{prompt_enrichment_kind, PromptEnrichmentKind};
 use eframe::egui;
+use image::{GrayImage, Luma};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::io::Cursor;
+use std::path::PathBuf;
 
 /// Placement block in normalized frame coords (0..1). Vec order = z-order (back → front).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -281,6 +284,96 @@ enum DragMode {
 /// Block drag/resize is disabled above this overlay opacity when a preview is shown.
 pub const OVERLAY_BLOCK_EDIT_THRESHOLD: f32 = 0.20;
 
+/// In-memory inpaint mask aligned to the generation frame (255 = regenerate region).
+#[derive(Debug, Clone)]
+pub struct InpaintMask {
+    pub width: u32,
+    pub height: u32,
+    pixels: Vec<u8>,
+}
+
+impl InpaintMask {
+    pub fn new(width: u32, height: u32) -> Self {
+        let n = (width as usize).saturating_mul(height as usize);
+        Self {
+            width,
+            height,
+            pixels: vec![0; n],
+        }
+    }
+
+    pub fn ensure_size(&mut self, width: u32, height: u32) {
+        if self.width != width || self.height != height {
+            *self = Self::new(width, height);
+        }
+    }
+
+    pub fn has_paint(&self) -> bool {
+        self.pixels.iter().any(|&v| v > 0)
+    }
+
+    pub fn clear(&mut self) {
+        self.pixels.fill(0);
+    }
+
+    pub fn paint_brush(&mut self, nx: f32, ny: f32, radius_norm: f32) {
+        let cx = (nx.clamp(0.0, 1.0) * self.width as f32) as i32;
+        let cy = (ny.clamp(0.0, 1.0) * self.height as f32) as i32;
+        let r = (radius_norm * self.width.min(self.height) as f32).max(2.0) as i32;
+        let r2 = r * r;
+        for dy in -r..=r {
+            for dx in -r..=r {
+                if dx * dx + dy * dy > r2 {
+                    continue;
+                }
+                let x = cx + dx;
+                let y = cy + dy;
+                if x < 0 || y < 0 || x >= self.width as i32 || y >= self.height as i32 {
+                    continue;
+                }
+                let idx = (y as u32 * self.width + x as u32) as usize;
+                self.pixels[idx] = 255;
+            }
+        }
+    }
+
+    pub fn save_logical_png(&self, logical_path: &str) -> Result<(), String> {
+        let host = logical_host_path(logical_path);
+        if let Some(parent) = host.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        let mut img = GrayImage::new(self.width, self.height);
+        for (i, &v) in self.pixels.iter().enumerate() {
+            let x = (i as u32) % self.width;
+            let y = (i as u32) / self.width;
+            img.put_pixel(x, y, Luma([v]));
+        }
+        let mut buf = Vec::new();
+        img.write_to(&mut Cursor::new(&mut buf), image::ImageFormat::Png)
+            .map_err(|e| e.to_string())?;
+        std::fs::write(&host, buf).map_err(|e| e.to_string())
+    }
+}
+
+pub fn new_inpaint_mask_path() -> String {
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    format!("/downloads/inpaint-mask-{ts}.png")
+}
+
+fn logical_host_path(logical: &str) -> PathBuf {
+    let trimmed = logical.trim();
+    if trimmed.starts_with('/') {
+        crate::os_open::aos_home()
+            .join("var/storage/data")
+            .join(trimmed.trim_start_matches('/'))
+    } else {
+        PathBuf::from(trimmed)
+    }
+}
+
 pub fn overlay_allows_block_editing(preview_path: Option<&str>, overlay_opacity: f32) -> bool {
     preview_path.is_none() || overlay_opacity <= OVERLAY_BLOCK_EDIT_THRESHOLD
 }
@@ -296,6 +389,9 @@ pub fn ui_composition_canvas(
     next_id: &mut u64,
     preview_path: Option<&str>,
     overlay_opacity: &mut f32,
+    inpaint_mode: &mut bool,
+    inpaint_mask: &mut Option<InpaintMask>,
+    inpaint_brush: &mut f32,
 ) {
     ui.heading(t.studio_composition_heading);
     ui.weak(t.studio_composition_blurb);
@@ -350,6 +446,29 @@ pub fn ui_composition_canvas(
                 *overlay_opacity = (pct / 100.0).clamp(0.0, 1.0);
             }
         });
+        ui.horizontal(|ui| {
+            if ui.checkbox(inpaint_mode, t.studio_inpaint_mode).changed() && !*inpaint_mode {
+                if let Some(mask) = inpaint_mask.as_mut() {
+                    mask.clear();
+                }
+            }
+            if *inpaint_mode {
+                ui.label(t.studio_inpaint_brush);
+                ui.add(
+                    egui::Slider::new(inpaint_brush, 4.0..=80.0)
+                        .suffix("px")
+                        .logarithmic(true),
+                );
+                if ui.button(t.studio_inpaint_clear).clicked() {
+                    if let Some(mask) = inpaint_mask.as_mut() {
+                        mask.clear();
+                    }
+                }
+            }
+        });
+        if *inpaint_mode {
+            ui.weak(t.studio_inpaint_help);
+        }
         if !overlay_allows_block_editing(preview_path, *overlay_opacity) {
             ui.weak(t.studio_preview_drag_locked);
         }
@@ -359,7 +478,12 @@ pub fn ui_composition_canvas(
         ui.weak(t.studio_composition_empty_desc_hint);
     }
 
-    let allow_block_edit = overlay_allows_block_editing(preview_path, *overlay_opacity);
+    let inpaint_active = preview_path.is_some() && *inpaint_mode;
+    if inpaint_active {
+        *overlay_opacity = 1.0;
+    }
+    let allow_block_edit =
+        overlay_allows_block_editing(preview_path, *overlay_opacity) && !inpaint_active;
     let avail = ui.available_width().min(520.0);
     let aspect = frame_w.max(1) as f32 / frame_h.max(1) as f32;
     let (canvas_w, canvas_h) = if aspect >= 1.0 {
@@ -480,6 +604,19 @@ pub fn ui_composition_canvas(
         }
     }
 
+    if inpaint_active && response.dragged() {
+        if let Some(pos) = response.interact_pointer_pos() {
+            if rect.contains(pos) {
+                let nx = (pos.x - rect.left()) / rect.width().max(1.0);
+                let ny = (pos.y - rect.top()) / rect.height().max(1.0);
+                let mask = inpaint_mask.get_or_insert_with(|| InpaintMask::new(frame_w, frame_h));
+                mask.ensure_size(frame_w, frame_h);
+                let brush_norm = *inpaint_brush / rect.width().max(1.0);
+                mask.paint_brush(nx, ny, brush_norm);
+            }
+        }
+    }
+
     if allow_block_edit && response.drag_stopped() {
         drag = None;
     }
@@ -543,6 +680,12 @@ pub fn ui_composition_canvas(
         }
     }
 
+    if inpaint_active {
+        if let Some(mask) = inpaint_mask.as_ref() {
+            paint_mask_overlay(&painter, rect, mask);
+        }
+    }
+
     if let Some(id) = *selected {
         if let Some(idx) = blocks.iter().position(|b| b.id == id) {
             ui.add_space(6.0);
@@ -564,6 +707,31 @@ fn help_row(ui: &mut egui::Ui, text: &str) {
         ui.weak("?");
         ui.weak(text);
     });
+}
+
+fn paint_mask_overlay(painter: &egui::Painter, rect: egui::Rect, mask: &InpaintMask) {
+    if !mask.has_paint() {
+        return;
+    }
+    let w = mask.width.max(1) as f32;
+    let h = mask.height.max(1) as f32;
+    for y in (0..mask.height).step_by(2) {
+        for x in (0..mask.width).step_by(2) {
+            let idx = (y * mask.width + x) as usize;
+            if mask.pixels[idx] == 0 {
+                continue;
+            }
+            let px = rect.left() + (x as f32 / w) * rect.width();
+            let py = rect.top() + (y as f32 / h) * rect.height();
+            let cell_w = rect.width() / w * 2.0;
+            let cell_h = rect.height() / h * 2.0;
+            painter.rect_filled(
+                egui::Rect::from_min_size(egui::pos2(px, py), egui::vec2(cell_w, cell_h)),
+                0.0,
+                egui::Color32::from_rgba_unmultiplied(255, 60, 60, 120),
+            );
+        }
+    }
 }
 
 fn resize_handle_rect(r: egui::Rect) -> egui::Rect {
@@ -609,6 +777,19 @@ mod tests {
             Some("/downloads/x.png"),
             OVERLAY_BLOCK_EDIT_THRESHOLD + 0.01
         ));
+    }
+
+    #[test]
+    fn inpaint_mask_paint_and_save() {
+        let mut mask = InpaintMask::new(8, 8);
+        assert!(!mask.has_paint());
+        mask.paint_brush(0.5, 0.5, 0.25);
+        assert!(mask.has_paint());
+        let logical = format!("/downloads/test-mask-{}.png", std::process::id());
+        mask.save_logical_png(&logical).expect("save mask");
+        let host = logical_host_path(&logical);
+        assert!(host.is_file());
+        let _ = std::fs::remove_file(host);
     }
 
     #[test]
