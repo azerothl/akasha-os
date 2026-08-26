@@ -2461,6 +2461,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                         self.prefs.default_image_model.as_deref(),
                         Some("balanced"),
                     ),
+                    output_path: None,
                     enrich_prompt: enrich,
                     enhance_prompt_chat: false,
                     generation_prompt: None,
@@ -3394,23 +3395,26 @@ impl eframe::App for UiApp {
                             prompt: prompt.clone(),
                         }
                     };
-                    if kind != "audio" {
-                        self.last_session_image = Some(path.clone());
-                        if prompt.is_empty() {
-                            self.image_studio.preview = Some(path.clone());
-                            // Upscale: try restore prompts/composition from sidecar.
-                            self.image_studio.apply_history_for_path(&path);
-                        } else {
-                            self.image_studio.open_from_chat(
-                                &prompt,
-                                &path,
-                                generation_prompt.as_deref(),
-                            );
-                            if !composition_blocks.is_empty() {
-                                self.image_studio
-                                    .set_composition_blocks(composition_blocks);
-                            } else {
+                    if kind == "image" || kind == "video" {
+                        if kind == "image" {
+                            self.last_session_image = Some(path.clone());
+                        }
+                        if kind == "image" {
+                            if prompt.is_empty() {
+                                self.image_studio.preview = Some(path.clone());
                                 self.image_studio.apply_history_for_path(&path);
+                            } else {
+                                self.image_studio.open_from_chat(
+                                    &prompt,
+                                    &path,
+                                    generation_prompt.as_deref(),
+                                );
+                                if !composition_blocks.is_empty() {
+                                    self.image_studio
+                                        .set_composition_blocks(composition_blocks);
+                                } else {
+                                    self.image_studio.apply_history_for_path(&path);
+                                }
                             }
                         }
                         self.tab = Tab::Image;

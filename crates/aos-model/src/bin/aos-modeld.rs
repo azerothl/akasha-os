@@ -570,7 +570,7 @@ async fn main() {
                             .path
                             .clone()
                             .filter(|p| !p.is_empty())
-                            .unwrap_or_else(aos_model::media::default_image_path);
+                            .unwrap_or_else(|| aos_model::media::default_media_image_dest(&req.options));
                         match media::run_image(&sub, &bus, &req, &dest).await {
                             Ok(resp) => {
                                 let _ = ctx.respond(aos_ipc::msg::Status::Ok, &resp).await;

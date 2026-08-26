@@ -13,6 +13,12 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
 use std::time::Duration;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CreateMode {
+    Image,
+    Video,
+}
+
 #[derive(Debug, Clone)]
 pub struct ImageGenUiState {
     pub enriching: bool,
@@ -36,6 +42,10 @@ pub struct ImageStudioState {
     pub vae: String,
     pub model_id: String,
     pub profile: String,
+    /// Image stills vs short video clip generation.
+    pub create_mode: CreateMode,
+    /// Target clip length when `create_mode` is video (seconds).
+    pub video_duration_secs: u32,
     pub preview: Option<String>,
     /// 0..1 opacity for painting `preview` over the composition canvas.
     pub preview_overlay_opacity: f32,
@@ -90,6 +100,8 @@ pub struct ImageStudioState {
     pub threads: u32,
     /// Full image catalog (installed + available for download).
     catalog_packs: Vec<(String, String)>,
+    video_packs: Vec<(String, String)>,
+    catalog_video_packs: Vec<(String, String)>,
     /// Install confirmation after picking a non-installed pack in the combo.
     install_prompt: Option<(String, String)>,
     /// Visual composition blocks (z-order = vec order, overlaps allowed).
@@ -114,6 +126,8 @@ impl Default for ImageStudioState {
             vae: String::new(),
             model_id: String::new(),
             profile: "balanced".to_string(),
+            create_mode: CreateMode::Image,
+            video_duration_secs: 3,
             preview: None,
             preview_overlay_opacity: 0.5,
             show_empty_prompt_hint: false,
@@ -158,6 +172,8 @@ impl Default for ImageStudioState {
             params_backend: String::new(),
             threads: 0,
             catalog_packs: Vec::new(),
+            video_packs: Vec::new(),
+            catalog_video_packs: Vec::new(),
             install_prompt: None,
             composition_blocks: Vec::new(),
             composition_selected: None,
@@ -534,6 +550,29 @@ fn pick_preset(model_id: &str, profile: &str) -> ImageModelPreset {
     }
 }
 
+fn video_frames_for_duration(seconds: u32) -> u32 {
+    // ~16 fps, 4n+1 frame counts for Wan/LTX vid_gen.
+    match seconds {
+        2 => 33,
+        4 => 65,
+        _ => 49,
+    }
+}
+
+pub fn default_video_download_path() -> String {
+    format!(
+        "/downloads/video-{}.mp4",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0)
+    )
+}
+
+pub fn is_video_options(opts: &MediaImageOptions) -> bool {
+    opts.sd_mode.as_deref() == Some("vid_gen") || opts.video_frames.unwrap_or(0) > 1
+}
+
 pub fn image_options_for_model(model_id: Option<&str>, profile: Option<&str>) -> MediaImageOptions {
     let id = model_id.unwrap_or_default();
     let preset = pick_preset(id, profile.unwrap_or("balanced"));
@@ -557,6 +596,20 @@ pub fn image_options_for_model(model_id: Option<&str>, profile: Option<&str>) ->
 }
 
 impl ImageStudioState {
+    fn ensure_pack_for_mode(&mut self) {
+        let packs = match self.create_mode {
+            CreateMode::Image => &self.packs,
+            CreateMode::Video => &self.video_packs,
+        };
+        let current_ok = packs.iter().any(|(id, _)| id == &self.model_id);
+        if !current_ok {
+            if let Some((id, _)) = packs.first() {
+                self.model_id = id.clone();
+                self.last_preset_key.clear();
+            }
+        }
+    }
+
     fn apply_preset_for_current_model(&mut self) {
         if self.model_id.is_empty() {
             return;
@@ -612,6 +665,8 @@ impl ImageStudioState {
         ensure_image_asset_dirs();
         self.packs.clear();
         self.catalog_packs.clear();
+        self.video_packs.clear();
+        self.catalog_video_packs.clear();
         self.styles.clear();
         self.loras.clear();
         self.vaes.clear();
@@ -637,11 +692,24 @@ impl ImageStudioState {
                 .map(|a| a.iter().any(|x| x.as_str() == Some("image")))
                 .unwrap_or(false)
                 || m.get("modality").and_then(|x| x.as_str()) == Some("image");
+            let video = m
+                .get("profiles")
+                .and_then(|p| p.as_array())
+                .map(|a| a.iter().any(|x| x.as_str() == Some("video")))
+                .unwrap_or(false)
+                || m.get("modality").and_then(|x| x.as_str()) == Some("video");
             if image && !id.is_empty() {
                 self.catalog_packs
                     .push((id.to_string(), name.to_string()));
                 if models_page::is_model_installed(id) {
                     self.packs.push((id.to_string(), name.to_string()));
+                }
+            }
+            if video && !id.is_empty() {
+                self.catalog_video_packs
+                    .push((id.to_string(), name.to_string()));
+                if models_page::is_model_installed(id) {
+                    self.video_packs.push((id.to_string(), name.to_string()));
                 }
             }
             let upscale = m
@@ -675,13 +743,19 @@ impl ImageStudioState {
             }
         }
         if self.model_id.is_empty()
-            || (!self.packs.is_empty()
-                && !models_page::is_model_installed(&self.model_id))
-        {
-            if let Some((id, _)) = self.packs.first() {
-                self.model_id = id.clone();
-                self.last_preset_key.clear();
+            || !match self.create_mode {
+                CreateMode::Image => self
+                    .packs
+                    .iter()
+                    .any(|(id, _)| id == &self.model_id),
+                CreateMode::Video => self
+                    .video_packs
+                    .iter()
+                    .any(|(id, _)| id == &self.model_id),
             }
+            || !models_page::is_model_installed(&self.model_id)
+        {
+            self.ensure_pack_for_mode();
         }
         scan_asset_filenames(&asset_subdir("lora"), &mut self.loras);
         scan_asset_filenames(&asset_subdir("vae"), &mut self.vaes);
@@ -1038,15 +1112,17 @@ impl ImageStudioState {
             } else {
                 None
             },
-            sd_mode: if self.expert_mode && !self.sd_mode.trim().is_empty() {
-                Some(self.sd_mode.trim().to_string())
-            } else {
-                None
+            sd_mode: match self.create_mode {
+                CreateMode::Video => Some("vid_gen".into()),
+                CreateMode::Image if self.expert_mode && !self.sd_mode.trim().is_empty() => {
+                    Some(self.sd_mode.trim().to_string())
+                }
+                CreateMode::Image => None,
             },
-            video_frames: if self.expert_mode {
-                parse_opt_u32(&self.video_frames)
-            } else {
-                None
+            video_frames: match self.create_mode {
+                CreateMode::Video => Some(video_frames_for_duration(self.video_duration_secs)),
+                CreateMode::Image if self.expert_mode => parse_opt_u32(&self.video_frames),
+                CreateMode::Image => None,
             },
             backend: if self.expert_mode && !self.backend.trim().is_empty() {
                 Some(self.backend.trim().to_string())
@@ -1094,10 +1170,14 @@ impl ImageStudioState {
         }
         self.ui_install_prompt(ui.ctx(), t, cmd, download_busy);
         ui.heading(t.tab_create);
-        ui.label(t.tab_hint_image);
+        ui.label(if self.create_mode == CreateMode::Video {
+            t.tab_hint_video
+        } else {
+            t.tab_hint_image
+        });
         ui.add_space(8.0);
         if let Some(gen) = generating {
-            ui_image_progress(ui, t, gen);
+            ui_image_progress(ui, t, gen, self.create_mode == CreateMode::Video);
             ui.add_space(6.0);
         }
         let avail = ui.available_width();
@@ -1183,25 +1263,29 @@ impl ImageStudioState {
             ui.label(t.studio_prompt);
             help_icon(ui, t.studio_prompt_help);
         });
-        if !self.pending_reference.is_empty() {
+        if !self.pending_reference.is_empty() && self.create_mode == CreateMode::Image {
             let ctx = ui.ctx().clone();
             chat_media::render_pending_image_chips(ui, &ctx, &mut self.pending_reference);
         }
         ui.horizontal_top(|ui| {
             let mut attach_from_menu = false;
             let mut reuse_last_image = false;
-            ui.menu_button("📎", |ui| {
-                if last_session_image.is_some() && ui.button(t.chat_last_session_image).clicked() {
-                    reuse_last_image = true;
-                    ui.close_menu();
-                }
-                if ui.button(t.chat_attach_image).clicked() {
-                    attach_from_menu = true;
-                    ui.close_menu();
-                }
-            })
-            .response
-            .on_hover_text(t.chat_attach_image);
+            if self.create_mode == CreateMode::Image {
+                ui.menu_button("📎", |ui| {
+                    if last_session_image.is_some()
+                        && ui.button(t.chat_last_session_image).clicked()
+                    {
+                        reuse_last_image = true;
+                        ui.close_menu();
+                    }
+                    if ui.button(t.chat_attach_image).clicked() {
+                        attach_from_menu = true;
+                        ui.close_menu();
+                    }
+                })
+                .response
+                .on_hover_text(t.chat_attach_image);
+            }
             if attach_from_menu {
                 if let Some(path) = pick_os_file(
                     t.chat_attach_image,
@@ -1226,19 +1310,53 @@ impl ImageStudioState {
                 self.show_empty_prompt_hint = false;
             }
         });
+        ui.horizontal(|ui| {
+            ui.selectable_value(
+                &mut self.create_mode,
+                CreateMode::Image,
+                t.studio_create_mode_image,
+            );
+            ui.selectable_value(
+                &mut self.create_mode,
+                CreateMode::Video,
+                t.studio_create_mode_video,
+            );
+        });
+        self.ensure_pack_for_mode();
+        let (active_packs, active_catalog, pack_label, pack_help, no_models) = match self.create_mode
+        {
+            CreateMode::Image => (
+                &self.packs,
+                &self.catalog_packs,
+                t.settings_image_pack,
+                t.studio_image_pack_help,
+                t.studio_no_models_installed,
+            ),
+            CreateMode::Video => (
+                &self.video_packs,
+                &self.catalog_video_packs,
+                t.studio_video_pack,
+                t.studio_video_pack_help,
+                t.studio_no_video_models_installed,
+            ),
+        };
         combo_image_pack(
             ui,
-            "pack",
-            t.settings_image_pack,
+            if self.create_mode == CreateMode::Video {
+                "video_pack"
+            } else {
+                "pack"
+            },
+            pack_label,
             &mut self.model_id,
-            &self.packs,
-            &self.catalog_packs,
+            active_packs,
+            active_catalog,
             t.studio_not_installed_suffix,
             &mut self.install_prompt,
-            Some(t.studio_image_pack_help),
+            Some(pack_help),
         );
-        if self.packs.is_empty() {
-            ui.colored_label(egui::Color32::YELLOW, t.studio_no_models_installed);
+        if active_packs.is_empty() {
+            ui.colored_label(egui::Color32::YELLOW, no_models);
         } else if !models_page::is_model_installed(&self.model_id) {
             ui.colored_label(egui::Color32::YELLOW, t.studio_model_not_installed);
         }
@@ -1259,6 +1377,19 @@ impl ImageStudioState {
                     ui.selectable_value(&mut self.profile, "quality".to_string(), "quality");
                 });
         });
+        if self.create_mode == CreateMode::Video {
+            ui.horizontal(|ui| {
+                ui.label(t.studio_video_duration);
+                help_icon(ui, t.studio_video_duration_help);
+                egui::ComboBox::from_id_source("studio_video_duration")
+                    .selected_text(format!("{}s", self.video_duration_secs))
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut self.video_duration_secs, 2, "2s");
+                        ui.selectable_value(&mut self.video_duration_secs, 3, "3s");
+                        ui.selectable_value(&mut self.video_duration_secs, 4, "4s");
+                    });
+            });
+        }
         self.apply_preset_for_current_model();
 
         let busy = generating.is_some();
@@ -1281,6 +1412,11 @@ impl ImageStudioState {
                 && crate::image_prompt::supports_json_prompt_enrichment(Some(&self.model_id))
                 && !use_edited;
             let wants_chat_enhance = self.enhance_prompt_chat && !use_edited && !wants_json_enrich;
+            let output_path = if self.create_mode == CreateMode::Video {
+                Some(default_video_download_path())
+            } else {
+                None
+            };
             let _ = cmd.send(Cmd::MediaImage {
                 prompt: self.prompt.clone(),
                 model_id: if self.model_id.is_empty() {
@@ -1289,6 +1425,7 @@ impl ImageStudioState {
                     Some(self.model_id.clone())
                 },
                 options: self.to_options(),
+                output_path,
                 enrich_prompt: wants_json_enrich,
                 enhance_prompt_chat: wants_chat_enhance,
                 generation_prompt: if use_edited {
@@ -2238,7 +2375,7 @@ fn read_file_with_retry(path: &Path, attempts: u32) -> Result<Vec<u8>, String> {
     ))
 }
 
-fn ui_image_progress(ui: &mut egui::Ui, t: &UiStrings, gen: &ImageGenUiState) {
+fn ui_image_progress(ui: &mut egui::Ui, t: &UiStrings, gen: &ImageGenUiState, video: bool) {
     let (frac, label) = if gen.enriching {
         let pulse = ((gen.elapsed_secs % 4) as f32 / 4.0).max(0.05);
         (
@@ -2253,18 +2390,28 @@ fn ui_image_progress(ui: &mut egui::Ui, t: &UiStrings, gen: &ImageGenUiState) {
                 .replace("{elapsed}", &gen.elapsed_secs.to_string()),
         )
     } else if gen.step > 0 && gen.total_steps > 0 {
+        let template = if video {
+            t.studio_generating_video_step
+        } else {
+            t.studio_generating_step
+        };
         (
             (gen.step as f32 / gen.total_steps as f32).clamp(0.02, 1.0),
-            t.studio_generating_step
+            template
                 .replace("{step}", &gen.step.to_string())
                 .replace("{total}", &gen.total_steps.to_string())
                 .replace("{elapsed}", &gen.elapsed_secs.to_string()),
         )
     } else {
         let est = gen.total_steps.max(1) as f32 * 2.5;
+        let template = if video {
+            t.studio_generating_video_indeterminate
+        } else {
+            t.studio_generating_indeterminate
+        };
         (
             (gen.elapsed_secs as f32 / est).clamp(0.02, 0.92),
-            t.studio_generating_indeterminate
+            template
                 .replace("{steps}", &gen.total_steps.to_string())
                 .replace("{elapsed}", &gen.elapsed_secs.to_string()),
         )
@@ -2362,5 +2509,23 @@ mod tests {
         let opts = studio.to_options();
         assert_eq!(opts.init_image.as_deref(), Some("/downloads/result.png"));
         assert_eq!(opts.mask_image.as_deref(), Some("/downloads/inpaint-mask-test.png"));
+    }
+
+    #[test]
+    fn video_mode_sets_vid_gen_and_frames() {
+        let mut studio = ImageStudioState::default();
+        studio.create_mode = CreateMode::Video;
+        studio.video_duration_secs = 3;
+        let opts = studio.to_options();
+        assert_eq!(opts.sd_mode.as_deref(), Some("vid_gen"));
+        assert_eq!(opts.video_frames, Some(49));
+    }
+
+    #[test]
+    fn image_mode_does_not_force_vid_gen() {
+        let studio = ImageStudioState::default();
+        let opts = studio.to_options();
+        assert!(opts.sd_mode.is_none());
+        assert!(opts.video_frames.is_none());
     }
 }

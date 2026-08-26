@@ -55,11 +55,33 @@ pub fn actor_may_generate(actor: &str, caps: &[String]) -> bool {
 pub fn default_image_path() -> String {
     format!(
         "/downloads/image-{}.png",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0)
+        media_dest_timestamp()
     )
+}
+
+pub fn default_video_path() -> String {
+    format!("/downloads/video-{}.mp4", media_dest_timestamp())
+}
+
+fn media_dest_timestamp() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// True when the request should run sd.cpp `vid_gen` (short clip, not a single still).
+pub fn is_video_request(options: &aos_proto::MediaImageOptions) -> bool {
+    options.sd_mode.as_deref() == Some("vid_gen")
+        || options.video_frames.unwrap_or(0) > 1
+}
+
+pub fn default_media_image_dest(options: &aos_proto::MediaImageOptions) -> String {
+    if is_video_request(options) {
+        default_video_path()
+    } else {
+        default_image_path()
+    }
 }
 
 pub fn default_audio_path() -> String {
@@ -234,7 +256,12 @@ pub async fn run_image(
     sub.media_gen_begin(&model_id, total_steps);
     let sub_progress = sub.clone();
     let model_id_progress = model_id.clone();
-    let tmp = unique_media_temp("aos-img", "png");
+    let tmp_ext = if is_video_request(&req.options) {
+        "mp4"
+    } else {
+        "png"
+    };
+    let tmp = unique_media_temp("aos-img", tmp_ext);
     let engine_result = tokio::task::spawn_blocking(move || {
         let result = aos_sd::generate_image_opts_progress(&weights, &prompt, &tmp, &opts, move |step, total| {
             write_image_gen_progress(step, total);
@@ -428,6 +455,51 @@ mod tests {
             .unwrap();
         assert_eq!(o.width, 512);
         assert_eq!(o.steps, 20);
+    }
+
+    #[test]
+    fn is_video_request_detects_vid_gen_and_multi_frame() {
+        assert!(!is_video_request(&aos_proto::MediaImageOptions::default()));
+        assert!(is_video_request(&aos_proto::MediaImageOptions {
+            sd_mode: Some("vid_gen".into()),
+            ..Default::default()
+        }));
+        assert!(is_video_request(&aos_proto::MediaImageOptions {
+            video_frames: Some(33),
+            ..Default::default()
+        }));
+        assert!(!is_video_request(&aos_proto::MediaImageOptions {
+            video_frames: Some(1),
+            ..Default::default()
+        }));
+    }
+
+    #[test]
+    fn default_media_dest_picks_mp4_for_video() {
+        let image = default_media_image_dest(&aos_proto::MediaImageOptions::default());
+        assert!(image.ends_with(".png"));
+        let video = default_media_image_dest(&aos_proto::MediaImageOptions {
+            sd_mode: Some("vid_gen".into()),
+            video_frames: Some(33),
+            ..Default::default()
+        });
+        assert!(video.ends_with(".mp4"));
+    }
+
+    #[test]
+    fn wan_catalog_vid_gen_sidecars_apply() {
+        let opts = build_image_gen_opts(
+            "local:wan2.2-t2i",
+            &aos_proto::MediaImageOptions {
+                sd_mode: Some("vid_gen".into()),
+                video_frames: Some(33),
+                ..Default::default()
+            },
+            "auto",
+        )
+        .unwrap();
+        assert_eq!(opts.sd_mode.as_deref(), Some("vid_gen"));
+        assert_eq!(opts.video_frames, Some(33));
     }
 
     #[test]

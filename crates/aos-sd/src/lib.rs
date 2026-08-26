@@ -986,6 +986,28 @@ mod tests {
     }
 
     #[test]
+    fn image_gen_vid_gen_argv() {
+        let mut opts = ImageGenOpts::default();
+        opts.sd_mode = Some("vid_gen".into());
+        opts.video_frames = Some(33);
+        opts.flow_shift = Some(3.0);
+        let args = collect_image_args(
+            Path::new("wan.gguf"),
+            "a cat walking",
+            Path::new("out.mp4"),
+            &opts,
+            None,
+        );
+        assert!(args.contains(&"-M".into()));
+        assert!(args.contains(&"vid_gen".into()));
+        assert!(args.contains(&"--video-frames".into()));
+        assert!(args.contains(&"33".into()));
+        assert!(args.contains(&"--flow-shift".into()));
+        assert!(args.contains(&"3".into()));
+        assert!(args.iter().any(|a| a.ends_with("out.mp4")));
+    }
+
+    #[test]
     fn image_gen_inpaint_mask_argv() {
         let dir = std::env::temp_dir().join("aos-sd-inpaint");
         let _ = std::fs::create_dir_all(&dir);
