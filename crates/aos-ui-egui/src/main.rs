@@ -485,8 +485,6 @@ fn chat_composer_reserve_height(
     const VISION_BANNER_H: f32 = 28.0;
     const CHIP_W: f32 = 48.0;
     const CHIP_ROW_H: f32 = 36.0;
-    const DOC_CHIP_W: f32 = 120.0;
-    const DOC_CHIP_ROW_H: f32 = 28.0;
 
     let mut h = INPUT_ROW_H;
     if ask_queue_len > 1 {
@@ -497,16 +495,9 @@ fn chat_composer_reserve_height(
         if show_vision_banner {
             h += VISION_BANNER_H;
         }
-        if pending_images_len > 0 {
-            let chips_per_row = (chat_w / CHIP_W).floor().max(1.0) as usize;
-            let rows = pending_images_len.div_ceil(chips_per_row);
-            h += (rows as f32) * CHIP_ROW_H;
-        }
-        if pending_documents_len > 0 {
-            let chips_per_row = (chat_w / DOC_CHIP_W).floor().max(1.0) as usize;
-            let rows = pending_documents_len.div_ceil(chips_per_row);
-            h += (rows as f32) * DOC_CHIP_ROW_H;
-        }
+        let chips_per_row = (chat_w / CHIP_W).floor().max(1.0) as usize;
+        let rows = pending_chips.div_ceil(chips_per_row);
+        h += (rows as f32) * CHIP_ROW_H;
     }
     h
 }
@@ -5007,17 +4998,14 @@ impl UiApp {
                                     r
                                 },
                             );
-                            if !self.chat_pending_images.is_empty() {
+                            if !self.chat_pending_images.is_empty()
+                                || !self.chat_pending_documents.is_empty()
+                            {
                                 let ctx = ui.ctx().clone();
-                                chat_media::render_pending_image_chips(
+                                chat_media::render_pending_attachment_chips(
                                     ui,
                                     &ctx,
                                     &mut self.chat_pending_images,
-                                );
-                            }
-                            if !self.chat_pending_documents.is_empty() {
-                                chat_media::render_pending_document_chips(
-                                    ui,
                                     &mut self.chat_pending_documents,
                                 );
                             }

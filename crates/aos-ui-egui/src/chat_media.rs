@@ -78,14 +78,21 @@ pub fn render_pending_image_chips(
     }
 }
 
-pub fn render_pending_document_chips(
+/// Pending image + document chips in one wrapped row (composer chrome).
+pub fn render_pending_attachment_chips(
     ui: &mut egui::Ui,
-    docs: &mut Vec<aos_proto::DocumentRef>,
+    ctx: &egui::Context,
+    image_paths: &mut Vec<String>,
+    documents: &mut Vec<aos_proto::DocumentRef>,
 ) {
-    let mut remove_idx = None;
+    if image_paths.is_empty() && documents.is_empty() {
+        return;
+    }
+    let mut remove_image = None;
+    let mut remove_doc = None;
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing = egui::vec2(6.0, 4.0);
-        for (i, doc) in docs.iter().enumerate() {
+        for (i, path) in image_paths.iter().enumerate() {
             egui::Frame::new()
                 .fill(ui.visuals().widgets.inactive.bg_fill)
                 .corner_radius(0.0)
@@ -93,12 +100,15 @@ pub fn render_pending_document_chips(
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing.x = 4.0;
-                        ui.label(egui::RichText::new("📄").size(14.0));
-                        ui.label(
-                            egui::RichText::new(doc.label.as_str())
-                                .size(12.0)
-                                .weak(),
-                        );
+                        if let Some(tex) = try_load_chat_image(ctx, path) {
+                            ui.add(
+                                egui::Image::new(&tex)
+                                    .max_size(egui::vec2(28.0, 28.0))
+                                    .corner_radius(0.0),
+                            );
+                        } else {
+                            ui.label(egui::RichText::new("🖼").size(14.0));
+                        }
                         if ui
                             .add(
                                 egui::Label::new(egui::RichText::new("×").weak())
@@ -106,14 +116,38 @@ pub fn render_pending_document_chips(
                             )
                             .clicked()
                         {
-                            remove_idx = Some(i);
+                            remove_image = Some(i);
+                        }
+                    });
+                });
+        }
+        for (i, doc) in documents.iter().enumerate() {
+            egui::Frame::new()
+                .fill(ui.visuals().widgets.inactive.bg_fill)
+                .corner_radius(0.0)
+                .inner_margin(egui::Margin::symmetric(4, 2))
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 4.0;
+                        ui.label(egui::RichText::new(doc.label.as_str()).size(12.0));
+                        if ui
+                            .add(
+                                egui::Label::new(egui::RichText::new("×").weak())
+                                    .sense(egui::Sense::click()),
+                            )
+                            .clicked()
+                        {
+                            remove_doc = Some(i);
                         }
                     });
                 });
         }
     });
-    if let Some(i) = remove_idx {
-        docs.remove(i);
+    if let Some(i) = remove_image {
+        image_paths.remove(i);
+    }
+    if let Some(i) = remove_doc {
+        documents.remove(i);
     }
 }
 

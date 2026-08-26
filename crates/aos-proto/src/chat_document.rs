@@ -18,12 +18,13 @@ pub const CHAT_DOCUMENT_MAX_CHARS_TOTAL: usize = 24_000;
 /// File extensions accepted for chat document attach.
 pub const CHAT_DOCUMENT_EXTENSIONS: &[&str] = &["pdf", "txt", "md", "markdown", "text"];
 
-/// Label for UI chips and prompt blocks (basename of path).
+/// Label for UI chips and prompt blocks (basename only — never the full path).
 pub fn document_label_from_path(path: &str) -> String {
     Path::new(path)
         .file_name()
         .and_then(|n| n.to_str())
-        .unwrap_or(path)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("document")
         .to_string()
 }
 
@@ -205,6 +206,17 @@ mod tests {
         assert!(content.contains("SECRET_PHRASE_FOR_INFER_TEST"));
         assert!(content.contains("What does the file say?"));
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn document_label_is_basename_only() {
+        assert_eq!(
+            document_label_from_path("/home/user/Downloads/quarterly.pdf"),
+            "quarterly.pdf"
+        );
+        assert_eq!(document_label_from_path("notes.md"), "notes.md");
+        assert!(!document_label_from_path("/home/user/Downloads/quarterly.pdf")
+            .contains("/home/"));
     }
 
     #[test]
