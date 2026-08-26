@@ -478,7 +478,7 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
         ),
         (
             "canvas.stroke",
-            "Polyline sur le canvas de session (coords 0..1) — couleur/épaisseur optionnelles (héritent du crayon via canvas.set_style)",
+            "Polyline sur le canvas de session (coords 0..1, max 1.0 — pas de pixels) — couleur/épaisseur optionnelles (héritent du crayon via canvas.set_style)",
             serde_json::json!({
                 "type":"object",
                 "properties":{
@@ -492,7 +492,7 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
         ),
         (
             "canvas.line",
-            "Segment droit (2 points) sur le canvas de session",
+            "Segment droit (2 points) sur le canvas de session (coords 0..1, max 1.0)",
             serde_json::json!({
                 "type":"object",
                 "properties":{
@@ -507,7 +507,7 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
         ),
         (
             "canvas.spline",
-            "Courbe lisse (points de contrôle) sur le canvas de session",
+            "Courbe lisse (points de contrôle) sur le canvas de session (coords 0..1, max 1.0)",
             serde_json::json!({
                 "type":"object",
                 "properties":{
@@ -521,7 +521,7 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
         ),
         (
             "canvas.rect",
-            "Dessiner un rectangle sur le canvas de session",
+            "Dessiner un rectangle sur le canvas de session (x,y,w,h en 0..1 — pas de pixels)",
             serde_json::json!({
                 "type":"object",
                 "properties":{
@@ -537,7 +537,7 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
         ),
         (
             "canvas.ellipse",
-            "Dessiner une ellipse sur le canvas de session",
+            "Dessiner une ellipse sur le canvas de session (x,y,w,h en 0..1 — pas de pixels)",
             serde_json::json!({
                 "type":"object",
                 "properties":{

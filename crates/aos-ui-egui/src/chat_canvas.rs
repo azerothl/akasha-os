@@ -897,7 +897,8 @@ fn fit_board_rect_letterboxes_wide_in_tall_pane() {
         assert!(brief.contains("canvas.get"));
         assert!(brief.contains("canvas.stroke"));
         assert!(brief.contains("canvas.set_style"));
-        assert!(brief.contains("200px"));
+        assert!(brief.contains("export PNG"));
+        assert!(brief.contains("scene_bbox"));
         assert!(brief.contains("rectangle+triangle"));
         assert!(brief.contains("Exemple si le sujet est une maison"));
         assert!(brief.contains("toit + murs + porte"));
@@ -1035,9 +1036,11 @@ fn canvas_aspect_chip_labels(t: &UiStrings) -> [(&'static str, CanvasAspect); 5]
 
 /// Frozen designer copy for delegated canvas agents (system prompt — not the user goal).
 pub const CANVAS_AGENT_DESIGNER_GUIDE: &str = "\
-Cible visuelle : lisible à 200px — pas un rectangle+triangle.\n\
-Espace : coords normalisées 0..1 sur le cadre visible (origine coin supérieur gauche) — pas des pixels.\n\
-Règles : margin 0.08–0.12 ; sujet centré ; couches sol → volumes → détails → 2–3 ombres. \
+Cible visuelle : lisible à l'export PNG (canvas.export ~512px) — pas un rectangle+triangle.\n\
+Espace : coords normalisées 0..1 uniquement (max 1.0) sur le cadre visible (origine coin supérieur gauche) — jamais des pixels.\n\
+« 200px » = taille d'export pour la lisibilité humaine, pas l'unité des coords (ne pas dessiner à x=200).\n\
+Règles : margin 0.08–0.12 ; sujet centré dans usable ; couches sol → volumes → détails → 2–3 ombres. \
+Lis `scene_bbox` dans le digest : ne superpose pas les nouvelles formes au même centre. \
 Nombreux canvas.stroke courts, 2–3 teintes, épaisseurs variées. Commence par canvas.get. \
 Couleur : canvas.set_style {color:\"#RRGGBB\"} ou color= sur chaque op — le teal signal n'est pas la seule teinte ; \
 après critique, change de teinte pour ombres/détails.\n\

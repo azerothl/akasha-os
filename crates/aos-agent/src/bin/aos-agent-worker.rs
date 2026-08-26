@@ -14,7 +14,8 @@ use aos_agent::context_budget::{
 use aos_agent::persist;
 use aos_agent::canvas_scene::{
     agent_has_canvas_tools, canvas_critic_system_prompt, canvas_reflect_user_content,
-    canvas_scene_prompt_block, fetch_canvas_scene_digest,
+    canvas_scene_prompt_block, canvas_tool_mutates_scene, canvas_tool_outcome_with_digest,
+    fetch_canvas_scene_digest,
 };
 use aos_agent::prompt::{compile_system_prompt, optimize_prompt_request, PromptCompileInput};
 use aos_agent::skills::{load_skills, match_skill_by_action, merge_skill_tools, skill_misuse_hint, SkillDoc};
@@ -789,6 +790,12 @@ async fn main() {
                         "\n[hint] Essayez : TOOL: cap.request {{\"cap\":\"{hint}\",\"reason\":\"besoin pour {}\"}}",
                         action.action
                     ));
+                }
+                if canvas_tool_mutates_scene(&action.action) {
+                    if let Some(sid) = spec.session_id.as_deref().filter(|s| !s.is_empty()) {
+                        let digest = fetch_canvas_scene_digest(bus, sid).await;
+                        outcome = canvas_tool_outcome_with_digest(&outcome, digest.as_deref());
+                    }
                 }
                 tool_result = outcome.clone();
                 step_child_id = extract_child_id(&action.action, &outcome, &action.args);
