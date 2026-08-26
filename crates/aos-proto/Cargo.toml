@@ -9,3 +9,4 @@ license.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 schemars = { version = "0.8", features = ["derive"] }
+pdf-extract = "0.7"

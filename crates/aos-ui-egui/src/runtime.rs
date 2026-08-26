@@ -318,6 +318,7 @@ async fn handle_cmd(
             user_text,
             model_id,
             images,
+            documents,
             auto_remember,
             max_steps,
             routing,
@@ -328,21 +329,27 @@ async fn handle_cmd(
             let _ = evt_tx.send(Evt::Status(
                 "assistant : génération en cours…".into(),
             ));
-            let image_atts: Vec<ChatAttachment> = images
+            let user_content =
+                aos_proto::chat_document::merge_documents_into_user_content(&user_text, &documents);
+            let mut attachments: Vec<ChatAttachment> = images
                 .iter()
                 .map(|path| ChatAttachment::Image {
                     path: path.clone(),
                     prompt: String::new(),
                 })
                 .collect();
+            attachments.extend(documents.iter().map(|doc| ChatAttachment::Document {
+                path: doc.path.clone(),
+                label: doc.label.clone(),
+            }));
             let _ = bus
                 .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
                     "chat.session.append",
                     &ChatSessionAppendRequest {
                         session_id: session_id.clone(),
                         role: "user".into(),
-                        content: user_text.clone(),
-                        attachments: image_atts,
+                        content: user_content.clone(),
+                        attachments,
                         speaker_id: None,
                         speaker_name: None,
                     },
@@ -355,7 +362,7 @@ async fn handle_cmd(
                     "mem.context",
                     &MemContextRequest {
                         session_id: Some(session_id.clone()),
-                        query: user_text.clone(),
+                        query: user_content.clone(),
                         k: 5,
                         product_k: 4,
                     },
@@ -386,6 +393,7 @@ async fn handle_cmd(
                 role: r,
                 content: c,
             }));
+            aos_proto::chat_document::apply_documents_to_infer_messages(&mut messages, &documents);
             let req = InferRequest {
                 model_id: model_id.clone(),
                 messages,

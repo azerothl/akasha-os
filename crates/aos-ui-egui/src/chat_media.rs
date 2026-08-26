@@ -58,7 +58,7 @@ pub fn render_pending_image_chips(
                                     .corner_radius(0.0),
                             );
                         } else {
-                            ui.label(egui::RichText::new("🖼").size(14.0));
+                            ui.allocate_space(egui::vec2(28.0, 28.0));
                         }
                         if ui
                             .add(
@@ -76,6 +76,88 @@ pub fn render_pending_image_chips(
     if let Some(i) = remove_idx {
         paths.remove(i);
     }
+}
+
+/// Pending image + document chips in one wrapped row (composer chrome).
+pub fn render_pending_attachment_chips(
+    ui: &mut egui::Ui,
+    ctx: &egui::Context,
+    image_paths: &mut Vec<String>,
+    documents: &mut Vec<aos_proto::DocumentRef>,
+) {
+    if image_paths.is_empty() && documents.is_empty() {
+        return;
+    }
+    let mut remove_image = None;
+    let mut remove_doc = None;
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing = egui::vec2(6.0, 4.0);
+        for (i, path) in image_paths.iter().enumerate() {
+            egui::Frame::new()
+                .fill(ui.visuals().widgets.inactive.bg_fill)
+                .corner_radius(0.0)
+                .inner_margin(egui::Margin::symmetric(4, 2))
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 4.0;
+                        if let Some(tex) = try_load_chat_image(ctx, path) {
+                            ui.add(
+                                egui::Image::new(&tex)
+                                    .max_size(egui::vec2(28.0, 28.0))
+                                    .corner_radius(0.0),
+                            );
+                        } else {
+                            ui.allocate_space(egui::vec2(28.0, 28.0));
+                        }
+                        if ui
+                            .add(
+                                egui::Label::new(egui::RichText::new("×").weak())
+                                    .sense(egui::Sense::click()),
+                            )
+                            .clicked()
+                        {
+                            remove_image = Some(i);
+                        }
+                    });
+                });
+        }
+        for (i, doc) in documents.iter().enumerate() {
+            egui::Frame::new()
+                .fill(ui.visuals().widgets.inactive.bg_fill)
+                .corner_radius(0.0)
+                .inner_margin(egui::Margin::symmetric(4, 2))
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 4.0;
+                        ui.label(egui::RichText::new(doc.label.as_str()).size(12.0));
+                        if ui
+                            .add(
+                                egui::Label::new(egui::RichText::new("×").weak())
+                                    .sense(egui::Sense::click()),
+                            )
+                            .clicked()
+                        {
+                            remove_doc = Some(i);
+                        }
+                    });
+                });
+        }
+    });
+    if let Some(i) = remove_image {
+        image_paths.remove(i);
+    }
+    if let Some(i) = remove_doc {
+        documents.remove(i);
+    }
+}
+
+pub fn render_document(ui: &mut egui::Ui, t: &UiStrings, label: &str, path: &str) {
+    ui.horizontal(|ui| {
+        ui.label(label);
+        if ui.button(t.studio_open_file).clicked() {
+            let _ = decl_ui::open_host_path(path);
+        }
+    });
 }
 
 fn try_load_chat_image(ctx: &egui::Context, logical: &str) -> Option<egui::TextureHandle> {
