@@ -209,6 +209,20 @@ mod tests {
     }
 
     #[test]
+    fn merge_document_only_uses_extracted_text() {
+        let path = write_temp("txt", "Standalone document body.");
+        let docs = vec![DocumentRef {
+            path: path.clone(),
+            label: "note.txt".into(),
+        }];
+        let merged = merge_documents_into_user_content("", &docs);
+        assert!(!merged.contains("What does this document say?"));
+        assert!(!merged.contains("Que dit ce document"));
+        assert!(merged.contains("Standalone document body."));
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
     fn document_label_is_basename_only() {
         assert_eq!(
             document_label_from_path("/home/user/Downloads/quarterly.pdf"),

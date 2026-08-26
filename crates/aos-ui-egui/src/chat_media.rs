@@ -58,7 +58,7 @@ pub fn render_pending_image_chips(
                                     .corner_radius(0.0),
                             );
                         } else {
-                            ui.label(egui::RichText::new("🖼").size(14.0));
+                            ui.allocate_space(egui::vec2(28.0, 28.0));
                         }
                         if ui
                             .add(
@@ -107,7 +107,7 @@ pub fn render_pending_attachment_chips(
                                     .corner_radius(0.0),
                             );
                         } else {
-                            ui.label(egui::RichText::new("🖼").size(14.0));
+                            ui.allocate_space(egui::vec2(28.0, 28.0));
                         }
                         if ui
                             .add(
@@ -153,7 +153,7 @@ pub fn render_pending_attachment_chips(
 
 pub fn render_document(ui: &mut egui::Ui, t: &UiStrings, label: &str, path: &str) {
     ui.horizontal(|ui| {
-        ui.label(format!("document: {label}"));
+        ui.label(label);
         if ui.button(t.studio_open_file).clicked() {
             let _ = decl_ui::open_host_path(path);
         }

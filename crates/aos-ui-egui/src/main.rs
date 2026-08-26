@@ -2045,10 +2045,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             return;
         }
         let t = i18n::strings(&self.prefs.language);
-        let text = if text.is_empty() && pending_images.is_empty() && !pending_documents.is_empty()
-        {
-            t.chat_empty_document_prompt.to_string()
-        } else if text.is_empty() && !pending_images.is_empty() {
+        let text = if text.is_empty() && !pending_images.is_empty() {
             t.chat_empty_image_prompt.to_string()
         } else {
             text
