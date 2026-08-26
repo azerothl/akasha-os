@@ -1,6 +1,7 @@
 //! First-class Image studio page (P09.8) — closed sd.cpp options, no webview.
 
 use crate::cmd::Cmd;
+use crate::chat_media;
 use crate::decl_ui;
 use crate::i18n::UiStrings;
 use crate::models_page;
@@ -61,6 +62,10 @@ pub struct ImageStudioState {
     pub upscale_repeats: u32,
     pub upscale_tile_size: u32,
     pub upscalers: Vec<String>,
+    /// Reference image queued from the prompt paperclip (slice 1 img2img).
+    pub pending_reference: Vec<String>,
+    /// Denoise strength when `pending_reference` is set (sd.cpp `--strength`).
+    pub reference_strength: f32,
     /// img2img: use current preview (or path) as `--init-img`.
     pub img2img_enabled: bool,
     pub img2img_strength: f32,
@@ -125,6 +130,8 @@ impl Default for ImageStudioState {
             upscale_repeats: 1,
             upscale_tile_size: 128,
             upscalers: Vec::new(),
+            pending_reference: Vec::new(),
+            reference_strength: 0.75,
             img2img_enabled: false,
             img2img_strength: 0.75,
             img2img_path: String::new(),
@@ -890,6 +897,49 @@ impl ImageStudioState {
         self.show_enriched_prompt = true;
     }
 
+    pub fn queue_reference_image(&mut self, path: String) {
+        if path.is_empty() {
+            return;
+        }
+        self.pending_reference.clear();
+        self.pending_reference.push(path);
+    }
+
+    fn reference_init_image_path(&self) -> Option<String> {
+        if let Some(path) = self
+            .pending_reference
+            .first()
+            .map(|p| p.trim())
+            .filter(|p| !p.is_empty())
+        {
+            return Some(path.to_string());
+        }
+        if self.img2img_enabled {
+            let path = if !self.img2img_path.trim().is_empty() {
+                self.img2img_path.trim().to_string()
+            } else {
+                self.preview.clone().unwrap_or_default()
+            };
+            if path.is_empty() {
+                None
+            } else {
+                Some(path)
+            }
+        } else {
+            None
+        }
+    }
+
+    fn reference_strength_value(&self) -> Option<f32> {
+        if self.pending_reference.first().is_some() {
+            Some(self.reference_strength.clamp(0.0, 1.0))
+        } else if self.img2img_enabled {
+            Some(self.img2img_strength.clamp(0.0, 1.0))
+        } else {
+            None
+        }
+    }
+
     pub fn to_options(&self) -> MediaImageOptions {
         MediaImageOptions {
             width: Some(self.width),
@@ -969,25 +1019,8 @@ impl ImageStudioState {
             } else {
                 None
             },
-            init_image: if self.img2img_enabled {
-                let path = if !self.img2img_path.trim().is_empty() {
-                    self.img2img_path.trim().to_string()
-                } else {
-                    self.preview.clone().unwrap_or_default()
-                };
-                if path.is_empty() {
-                    None
-                } else {
-                    Some(path)
-                }
-            } else {
-                None
-            },
-            strength: if self.img2img_enabled {
-                Some(self.img2img_strength.clamp(0.0, 1.0))
-            } else {
-                None
-            },
+            init_image: self.reference_init_image_path(),
+            strength: self.reference_strength_value(),
             ..MediaImageOptions::default()
         }
     }
@@ -999,6 +1032,7 @@ impl ImageStudioState {
         cmd: &Sender<Cmd>,
         generating: Option<&ImageGenUiState>,
         download_busy: bool,
+        last_session_image: &mut Option<String>,
     ) {
         if self.catalog_packs.is_empty() {
             self.refresh_catalog();
@@ -1026,7 +1060,7 @@ impl ImageStudioState {
                         .show(ui, |ui| {
                             ui.set_min_width(left_w - 8.0);
                             ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
-                                self.ui_form_column(ui, t, cmd, generating);
+                                self.ui_form_column(ui, t, cmd, generating, last_session_image);
                             });
                         });
                 },
@@ -1085,19 +1119,55 @@ impl ImageStudioState {
         t: &UiStrings,
         cmd: &Sender<Cmd>,
         generating: Option<&ImageGenUiState>,
+        last_session_image: &mut Option<String>,
     ) {
         ui.horizontal(|ui| {
             ui.label(t.studio_prompt);
             help_icon(ui, t.studio_prompt_help);
         });
-        let prompt_response = ui.add(
-            egui::TextEdit::multiline(&mut self.prompt)
-                .desired_rows(3)
-                .desired_width(f32::INFINITY),
-        );
-        if prompt_response.changed() && !self.prompt.trim().is_empty() {
-            self.show_empty_prompt_hint = false;
+        if !self.pending_reference.is_empty() {
+            let ctx = ui.ctx().clone();
+            chat_media::render_pending_image_chips(ui, &ctx, &mut self.pending_reference);
         }
+        ui.horizontal_top(|ui| {
+            let mut attach_from_menu = false;
+            let mut reuse_last_image = false;
+            ui.menu_button("📎", |ui| {
+                if last_session_image.is_some() && ui.button(t.chat_last_session_image).clicked() {
+                    reuse_last_image = true;
+                    ui.close_menu();
+                }
+                if ui.button(t.chat_attach_image).clicked() {
+                    attach_from_menu = true;
+                    ui.close_menu();
+                }
+            })
+            .response
+            .on_hover_text(t.chat_attach_image);
+            if attach_from_menu {
+                if let Some(path) = pick_os_file(
+                    t.chat_attach_image,
+                    &[("Images", &["png", "jpg", "jpeg", "webp"])],
+                    user_downloads_dir().as_deref(),
+                ) {
+                    let path = path.to_string_lossy().into_owned();
+                    self.queue_reference_image(path.clone());
+                    *last_session_image = Some(path);
+                }
+            } else if reuse_last_image {
+                if let Some(last) = last_session_image.clone() {
+                    self.queue_reference_image(last);
+                }
+            }
+            let prompt_response = ui.add(
+                egui::TextEdit::multiline(&mut self.prompt)
+                    .desired_rows(3)
+                    .desired_width(f32::INFINITY),
+            );
+            if prompt_response.changed() && !self.prompt.trim().is_empty() {
+                self.show_empty_prompt_hint = false;
+            }
+        });
         combo_image_pack(
             ui,
             "pack",
@@ -2167,4 +2237,39 @@ fn custom_list_row(
             });
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pending_reference_sets_init_image_in_options() {
+        let mut studio = ImageStudioState::default();
+        studio.queue_reference_image("/downloads/ref.png".into());
+        let opts = studio.to_options();
+        assert_eq!(opts.init_image.as_deref(), Some("/downloads/ref.png"));
+        assert_eq!(opts.strength, Some(0.75));
+    }
+
+    #[test]
+    fn pending_reference_overrides_expert_img2img_path() {
+        let mut studio = ImageStudioState::default();
+        studio.img2img_enabled = true;
+        studio.img2img_path = "/downloads/other.png".into();
+        studio.queue_reference_image("/downloads/ref.png".into());
+        let opts = studio.to_options();
+        assert_eq!(opts.init_image.as_deref(), Some("/downloads/ref.png"));
+    }
+
+    #[test]
+    fn expert_img2img_without_pending_reference() {
+        let mut studio = ImageStudioState::default();
+        studio.img2img_enabled = true;
+        studio.img2img_path = "/downloads/expert.png".into();
+        studio.img2img_strength = 0.42;
+        let opts = studio.to_options();
+        assert_eq!(opts.init_image.as_deref(), Some("/downloads/expert.png"));
+        assert_eq!(opts.strength, Some(0.42));
+    }
 }
