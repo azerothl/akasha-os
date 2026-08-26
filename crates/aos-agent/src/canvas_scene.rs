@@ -96,7 +96,11 @@ pub fn canvas_scene_prompt_block(digest: &str) -> String {
         "## Canvas actuel (canvas.get — ne pas deviner)\n\
          Digest compact (compteurs + bbox par seq, pas le JSON brut). \
          Commence par `canvas.get` si tu dessines ; état au début du tour :\n\
-         ```\n{digest}\n```"
+         ```\n{digest}\n```\n\
+         Placement : coords 0..1 max=1.0 (pas de pixels). \
+         Lis le `scene_bbox` et les bbox par seq ; place chaque nouvelle op dans `usable` \
+         avec marge ≥0.08 — ne superpose pas au même centre. \
+         Chaque outil mutateur renvoie un digest rafraîchi dans `[canvas digest]`."
     )
 }
 
@@ -146,6 +150,8 @@ mod tests {
         let block = canvas_scene_prompt_block("seq=1 author=human kind=stroke");
         assert!(block.contains("seq=1"));
         assert!(block.contains("canvas.get"));
+        assert!(block.contains("scene_bbox"));
+        assert!(block.contains("[canvas digest]"));
     }
 
     #[test]
