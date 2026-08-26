@@ -151,10 +151,10 @@ pub fn render_pending_attachment_chips(
     }
 }
 
-pub fn render_document(ui: &mut egui::Ui, label: &str, path: &str) {
+pub fn render_document(ui: &mut egui::Ui, t: &UiStrings, label: &str, path: &str) {
     ui.horizontal(|ui| {
         ui.label(format!("document: {label}"));
-        if ui.button("Open").clicked() {
+        if ui.button(t.studio_open_file).clicked() {
             let _ = decl_ui::open_host_path(path);
         }
     });

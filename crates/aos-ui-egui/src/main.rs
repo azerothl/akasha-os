@@ -4457,7 +4457,12 @@ impl UiApp {
                                     chat_media::render_audio(ui, path.as_str());
                                 }
                                 ChatAttachment::Document { path, label } => {
-                                    chat_media::render_document(ui, label.as_str(), path.as_str());
+                                    chat_media::render_document(
+                                        ui,
+                                        t,
+                                        label.as_str(),
+                                        path.as_str(),
+                                    );
                                 }
                                 ChatAttachment::TtsDraft { .. } => {
                                     let piper: Vec<String> = self
