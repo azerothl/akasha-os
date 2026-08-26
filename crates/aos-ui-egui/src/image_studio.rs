@@ -46,6 +46,8 @@ pub struct ImageStudioState {
     pub create_mode: CreateMode,
     /// Target clip length when `create_mode` is video (seconds).
     pub video_duration_secs: u32,
+    /// Last successful short-video logical path (`/downloads/video-*.mp4`).
+    pub video_result: Option<String>,
     pub preview: Option<String>,
     /// 0..1 opacity for painting `preview` over the composition canvas.
     pub preview_overlay_opacity: f32,
@@ -128,6 +130,7 @@ impl Default for ImageStudioState {
             profile: "balanced".to_string(),
             create_mode: CreateMode::Image,
             video_duration_secs: 3,
+            video_result: None,
             preview: None,
             preview_overlay_opacity: 0.5,
             show_empty_prompt_hint: false,
@@ -1156,6 +1159,10 @@ impl ImageStudioState {
         }
     }
 
+    pub fn on_video_generated(&mut self, path: String) {
+        self.video_result = Some(path);
+    }
+
     pub fn ui(
         &mut self,
         ui: &mut egui::Ui,
@@ -1181,6 +1188,16 @@ impl ImageStudioState {
             ui.add_space(6.0);
         }
         let avail = ui.available_width();
+        if self.create_mode == CreateMode::Video {
+            egui::ScrollArea::vertical()
+                .id_source("image_studio_video_form")
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    ui.set_min_width(avail.max(280.0));
+                    self.ui_form_column_video(ui, t, cmd, generating);
+                });
+            return;
+        }
         let left_w = (avail * 0.48).clamp(280.0, 620.0);
         let right_w = (avail - left_w - 12.0).max(260.0);
         // horizontal_top inherits LTR into children — force top-down inside each column.
@@ -1251,6 +1268,103 @@ impl ImageStudioState {
         });
     }
 
+    fn ui_form_column_video(
+        &mut self,
+        ui: &mut egui::Ui,
+        t: &UiStrings,
+        cmd: &Sender<Cmd>,
+        generating: Option<&ImageGenUiState>,
+    ) {
+        ui.horizontal(|ui| {
+            let prev = self.create_mode;
+            ui.selectable_value(
+                &mut self.create_mode,
+                CreateMode::Image,
+                t.studio_create_mode_image,
+            );
+            ui.selectable_value(
+                &mut self.create_mode,
+                CreateMode::Video,
+                t.studio_create_mode_video,
+            );
+            if prev != self.create_mode {
+                self.video_result = None;
+            }
+        });
+        self.ensure_pack_for_mode();
+        combo_image_pack(
+            ui,
+            "video_pack",
+            t.studio_video_pack,
+            &mut self.model_id,
+            &self.video_packs,
+            &self.catalog_video_packs,
+            t.studio_not_installed_suffix,
+            &mut self.install_prompt,
+            Some(t.studio_video_pack_help),
+        );
+        if self.video_packs.is_empty() {
+            ui.colored_label(egui::Color32::YELLOW, t.studio_no_video_models_installed);
+        } else if !models_page::is_model_installed(&self.model_id) {
+            ui.colored_label(egui::Color32::YELLOW, t.studio_model_not_installed);
+        }
+        ui.horizontal(|ui| {
+            ui.label(t.studio_video_duration);
+            help_icon(ui, t.studio_video_duration_help);
+            egui::ComboBox::from_id_source("studio_video_duration")
+                .selected_text(format!("{}s", self.video_duration_secs))
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut self.video_duration_secs, 2, "2s");
+                    ui.selectable_value(&mut self.video_duration_secs, 3, "3s");
+                    ui.selectable_value(&mut self.video_duration_secs, 4, "4s");
+                });
+        });
+        self.apply_preset_for_current_model();
+        ui.horizontal(|ui| {
+            ui.label(t.studio_prompt);
+            help_icon(ui, t.studio_prompt_help);
+        });
+        let prompt_response = ui.add(
+            egui::TextEdit::multiline(&mut self.prompt)
+                .desired_rows(3)
+                .desired_width(f32::INFINITY),
+        );
+        if prompt_response.changed() && !self.prompt.trim().is_empty() {
+            self.show_empty_prompt_hint = false;
+        }
+        let busy = generating.is_some();
+        let model_ready = models_page::is_model_installed(&self.model_id);
+        let generate_clicked = ui
+            .add_enabled(!busy && model_ready, egui::Button::new(t.studio_generate))
+            .clicked();
+        if generate_clicked && self.prompt.trim().is_empty() {
+            self.show_empty_prompt_hint = true;
+        }
+        if self.show_empty_prompt_hint && self.prompt.trim().is_empty() {
+            ui.colored_label(egui::Color32::LIGHT_RED, t.studio_empty_prompt_hint);
+        }
+        if generate_clicked && !self.prompt.trim().is_empty() && model_ready {
+            self.video_result = None;
+            let _ = cmd.send(Cmd::MediaImage {
+                prompt: self.prompt.clone(),
+                model_id: if self.model_id.is_empty() {
+                    None
+                } else {
+                    Some(self.model_id.clone())
+                },
+                options: self.to_options(),
+                output_path: Some(default_video_download_path()),
+                enrich_prompt: false,
+                enhance_prompt_chat: false,
+                generation_prompt: None,
+                composition_blocks: Vec::new(),
+            });
+        }
+        if let Some(path) = self.video_result.as_deref() {
+            ui_video_result_row(ui, t, path);
+        }
+    }
+
     fn ui_form_column(
         &mut self,
         ui: &mut egui::Ui,
@@ -1263,15 +1377,14 @@ impl ImageStudioState {
             ui.label(t.studio_prompt);
             help_icon(ui, t.studio_prompt_help);
         });
-        if !self.pending_reference.is_empty() && self.create_mode == CreateMode::Image {
+        if !self.pending_reference.is_empty() {
             let ctx = ui.ctx().clone();
             chat_media::render_pending_image_chips(ui, &ctx, &mut self.pending_reference);
         }
         ui.horizontal_top(|ui| {
             let mut attach_from_menu = false;
             let mut reuse_last_image = false;
-            if self.create_mode == CreateMode::Image {
-                ui.menu_button("📎", |ui| {
+            ui.menu_button("📎", |ui| {
                     if last_session_image.is_some()
                         && ui.button(t.chat_last_session_image).clicked()
                     {
@@ -1285,7 +1398,6 @@ impl ImageStudioState {
                 })
                 .response
                 .on_hover_text(t.chat_attach_image);
-            }
             if attach_from_menu {
                 if let Some(path) = pick_os_file(
                     t.chat_attach_image,
@@ -1311,6 +1423,7 @@ impl ImageStudioState {
             }
         });
         ui.horizontal(|ui| {
+            let prev = self.create_mode;
             ui.selectable_value(
                 &mut self.create_mode,
                 CreateMode::Image,
@@ -1321,42 +1434,24 @@ impl ImageStudioState {
                 CreateMode::Video,
                 t.studio_create_mode_video,
             );
+            if prev != self.create_mode {
+                self.video_result = None;
+            }
         });
         self.ensure_pack_for_mode();
-        let (active_packs, active_catalog, pack_label, pack_help, no_models) = match self.create_mode
-        {
-            CreateMode::Image => (
-                &self.packs,
-                &self.catalog_packs,
-                t.settings_image_pack,
-                t.studio_image_pack_help,
-                t.studio_no_models_installed,
-            ),
-            CreateMode::Video => (
-                &self.video_packs,
-                &self.catalog_video_packs,
-                t.studio_video_pack,
-                t.studio_video_pack_help,
-                t.studio_no_video_models_installed,
-            ),
-        };
         combo_image_pack(
             ui,
-            if self.create_mode == CreateMode::Video {
-                "video_pack"
-            } else {
-                "pack"
-            },
-            pack_label,
+            "pack",
+            t.settings_image_pack,
             &mut self.model_id,
-            active_packs,
-            active_catalog,
+            &self.packs,
+            &self.catalog_packs,
             t.studio_not_installed_suffix,
             &mut self.install_prompt,
-            Some(pack_help),
+            Some(t.studio_image_pack_help),
         );
-        if active_packs.is_empty() {
-            ui.colored_label(egui::Color32::YELLOW, no_models);
+        if self.packs.is_empty() {
+            ui.colored_label(egui::Color32::YELLOW, t.studio_no_models_installed);
         } else if !models_page::is_model_installed(&self.model_id) {
             ui.colored_label(egui::Color32::YELLOW, t.studio_model_not_installed);
         }
@@ -1377,19 +1472,6 @@ impl ImageStudioState {
                     ui.selectable_value(&mut self.profile, "quality".to_string(), "quality");
                 });
         });
-        if self.create_mode == CreateMode::Video {
-            ui.horizontal(|ui| {
-                ui.label(t.studio_video_duration);
-                help_icon(ui, t.studio_video_duration_help);
-                egui::ComboBox::from_id_source("studio_video_duration")
-                    .selected_text(format!("{}s", self.video_duration_secs))
-                    .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut self.video_duration_secs, 2, "2s");
-                        ui.selectable_value(&mut self.video_duration_secs, 3, "3s");
-                        ui.selectable_value(&mut self.video_duration_secs, 4, "4s");
-                    });
-            });
-        }
         self.apply_preset_for_current_model();
 
         let busy = generating.is_some();
@@ -1412,11 +1494,6 @@ impl ImageStudioState {
                 && crate::image_prompt::supports_json_prompt_enrichment(Some(&self.model_id))
                 && !use_edited;
             let wants_chat_enhance = self.enhance_prompt_chat && !use_edited && !wants_json_enrich;
-            let output_path = if self.create_mode == CreateMode::Video {
-                Some(default_video_download_path())
-            } else {
-                None
-            };
             let _ = cmd.send(Cmd::MediaImage {
                 prompt: self.prompt.clone(),
                 model_id: if self.model_id.is_empty() {
@@ -1425,7 +1502,7 @@ impl ImageStudioState {
                     Some(self.model_id.clone())
                 },
                 options: self.to_options(),
-                output_path,
+                output_path: None,
                 enrich_prompt: wants_json_enrich,
                 enhance_prompt_chat: wants_chat_enhance,
                 generation_prompt: if use_edited {
@@ -1957,6 +2034,18 @@ fn ui_enriched_prompt_panel(
             .desired_rows(8)
             .desired_width(f32::INFINITY),
     );
+}
+
+fn ui_video_result_row(ui: &mut egui::Ui, t: &UiStrings, path: &str) {
+    ui.add_space(6.0);
+    ui.horizontal(|ui| {
+        ui.weak(path);
+    });
+    ui.horizontal(|ui| {
+        if ui.button(t.studio_open_file).clicked() {
+            let _ = decl_ui::open_host_path(path);
+        }
+    });
 }
 
 fn ui_image_preview_actions(

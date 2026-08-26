@@ -3398,8 +3398,6 @@ impl eframe::App for UiApp {
                     if kind == "image" || kind == "video" {
                         if kind == "image" {
                             self.last_session_image = Some(path.clone());
-                        }
-                        if kind == "image" {
                             if prompt.is_empty() {
                                 self.image_studio.preview = Some(path.clone());
                                 self.image_studio.apply_history_for_path(&path);
@@ -3416,6 +3414,8 @@ impl eframe::App for UiApp {
                                     self.image_studio.apply_history_for_path(&path);
                                 }
                             }
+                        } else {
+                            self.image_studio.on_video_generated(path.clone());
                         }
                         self.tab = Tab::Image;
                     }
