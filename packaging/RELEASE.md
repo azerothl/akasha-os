@@ -7,8 +7,8 @@
 Tag then push:
 
 ```bash
-git tag v0.12.1
-git push origin v0.12.1
+git tag v0.13.0
+git push origin v0.13.0
 ```
 
 The workflow [`.github/workflows/preview-release.yml`](../.github/workflows/preview-release.yml)
@@ -24,7 +24,7 @@ CPU-linked `aos-modeld-cpu` in the same zip; no GGUF) and publishes:
 
 Manual trigger: Actions → **preview-release** → Run workflow.
 
-- **macOS only on existing Release** (no retag): `macos_only` = true, `release_version` = `0.12.1`, `upload_release` = true — attaches the Apple Silicon zip and refreshes `latest.json` on that Release.
+- **macOS only on existing Release** (no retag): `macos_only` = true, `release_version` = `0.13.0`, `upload_release` = true — attaches the Apple Silicon zip and refreshes `latest.json` on that Release.
 - **Full rebuild**: `create_release` = true, `macos_only` = false.
 
 ### Internal seL4 gate (not a tester release)
@@ -49,11 +49,13 @@ GGUFs are downloaded on **first run** via `share/models/manifest.json`.
 ## Release notes (draft)
 
 ```
-Akasha OS Preview 0.12.1 — Gemma 4 chat-template fix
+Akasha OS Preview 0.13.0 — Create + chat documents
 
-- Chat template: Jinja fallback (hf-chat-template/minijinja) when llama native apply fails on Gemma 4 embedded templates
-- Gate: aos-gate-gemma4-vision coordinator (G1 text, G2 PNG/mtmd)
-- Same Win/Linux/macOS mill bands as 0.12.0
+- Create: pass a reference image into generation
+- Create: Fix a region on the result
+- Create: short video (2–4 s, Wan/LTX packs)
+- Chat: attach a document (PDF/txt/md) from the paperclip
+- Same Win/Linux/Mac mill bands as 0.12.x
 
 Not a bootable OS. See FIRST-RUN.md / INSTALL.md / TESTER.md
 ```

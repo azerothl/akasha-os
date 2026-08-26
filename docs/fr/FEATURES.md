@@ -1,4 +1,4 @@
-# Fonctionnalités Preview — Akasha OS 0.12.1
+# Fonctionnalités Preview — Akasha OS 0.13.0
 
 **Langue :** [English](../FEATURES.md) | Français
 
@@ -7,7 +7,14 @@ Ce n'est **pas** l'OS bootable. Les exigences v1 sont dans
 [specs-fonctionnelles.md](specs-fonctionnelles.md) ; les gates dans
 [STATUS.md](STATUS.md).
 
-> Date : 25/08/2026 · Preview **0.12.1**
+> Date : 26/08/2026 · Preview **0.13.0**
+
+### Nouveautés 0.13.0
+
+- **Image de référence** : passer une image de référence lors d'une génération dans Créer — guide le style et la composition
+- **Corriger une zone** : peindre un masque sur une image générée et régénérer uniquement cette zone (Créer → Corriger une zone)
+- **Courte vidéo** : générer des clips de 2 à 4 secondes depuis Créer quand un pack Wan ou LTX est installé
+- **Documents chat** : joindre un PDF, txt ou md depuis le même trombone que les images ; le modèle lit le texte en contexte
 
 ### Nouveautés 0.12.1
 
@@ -357,12 +364,10 @@ Piste VM seL4 (PV.1–PV.3) séparée : [phases/phase-vm-sel4.md](phases/phase-v
 
 ---
 
-## 11. Hors Preview 0.11 (toujours hors scope après E20)
+## 11. Hors Preview 0.13.0
 
 - Image bootable / fer nu
-- macOS
-- UI vidéo produit / STT / voix permanente (Wan/LTX = expérimental catalogue seulement)
-- Inpaint / mask en intent de première classe (img2img via `init_image`/`strength` en 0.10.1)
+- STT / voix permanente
 - APIs natives Messages/Gemini/Bedrock (Providers OpenAI-compat seulement)
 - Marketplace public de modules (catalogue local signé seulement)
 - Canaux de messagerie (Slack/Discord/etc.) dans le noyau OS

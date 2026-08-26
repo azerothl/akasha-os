@@ -7,9 +7,19 @@ Summary of delivered phases. Detail: [development-plan.md](development-plan.md),
 
 **Headline:** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview:** 0.12.1 (25/08/2026) — Gemma 4 chat-template fix (#49). Not a bootable OS. Cohort gate
+**Preview:** 0.13.0 (26/08/2026) — reference image, inpaint, short video, chat documents (#52–#55). Not a bootable OS. Cohort gate
 still open. **Next:** PC cohort close; Horizon C / PV.4+ when scheduled; E9
 hard-green after a documented 2-GPU run.
+
+## P13 — Preview 0.13.0 (create + chat documents) — done
+
+| # | Item | Status |
+|---|------|--------|
+| P13.1 | Reference image in generation (#52) | done |
+| P13.2 | Inpaint / Fix a region (#53) | done |
+| P13.3 | Short video (#54) | done |
+| P13.4 | Chat document attach (#55) | done |
+| P13.5 | Docs EN+FR + website 0.13.0 | done |
 
 ## P12 — Preview 0.12.0 (vision + macOS ship) — done
 
