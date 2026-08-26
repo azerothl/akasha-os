@@ -2461,6 +2461,144 @@ pub fn normalize_canvas_color(s: &str) -> Option<String> {
     }
 }
 
+/// Marge recommandée pour le placement agent (coords normalisées 0..1).
+pub const CANVAS_LAYOUT_MARGIN: f32 = 0.10;
+
+fn clamp_canvas_unit(v: f32) -> f32 {
+    if v.is_finite() {
+        v.clamp(0.0, 1.0)
+    } else {
+        0.0
+    }
+}
+
+fn canvas_op_collect_coords(body: &CanvasOpBody) -> Vec<f32> {
+    let mut values = Vec::new();
+    match body {
+        CanvasOpBody::Stroke { points, .. } | CanvasOpBody::Erase { points, .. } => {
+            for p in points {
+                values.push(p.x);
+                values.push(p.y);
+            }
+        }
+        CanvasOpBody::Line { p0, p1, .. } => {
+            values.extend([p0.x, p0.y, p1.x, p1.y]);
+        }
+        CanvasOpBody::Spline { points, .. } => {
+            for p in points {
+                values.push(p.x);
+                values.push(p.y);
+            }
+        }
+        CanvasOpBody::Rect { x, y, w, h, .. } | CanvasOpBody::Ellipse { x, y, w, h, .. } => {
+            values.extend([*x, *y, *x + *w, *y + *h]);
+        }
+        CanvasOpBody::Fill { x, y, .. } => {
+            values.extend([*x, *y]);
+        }
+        CanvasOpBody::Clear | CanvasOpBody::Undo => {}
+    }
+    values
+}
+
+fn canvas_coord_scale(values: &[f32]) -> f32 {
+    let max_val = values
+        .iter()
+        .copied()
+        .filter(|v| v.is_finite() && *v > 0.0)
+        .fold(0.0f32, f32::max);
+    if max_val <= 1.5 {
+        return 1.0;
+    }
+    for candidate in [200.0_f32, 256.0, 512.0, 1024.0] {
+        if max_val <= candidate {
+            return candidate;
+        }
+    }
+    max_val
+}
+
+fn norm_point_scaled(p: &mut CanvasPoint, scale: f32) {
+    p.x = clamp_canvas_unit(p.x / scale);
+    p.y = clamp_canvas_unit(p.y / scale);
+}
+
+/// Normalise les coords d'une op canvas : clamp 0..1 ; si valeurs >1.5 (pixels), rescale.
+/// Retourne `true` quand un rescale pixel→normalisé a été appliqué.
+pub fn normalize_canvas_op_coords(body: &mut CanvasOpBody) -> bool {
+    let values = canvas_op_collect_coords(body);
+    if values.is_empty() {
+        return false;
+    }
+    let scale = canvas_coord_scale(&values);
+    let rescaled = scale > 1.0;
+    match body {
+        CanvasOpBody::Stroke { points, .. } | CanvasOpBody::Erase { points, .. } => {
+            for p in points {
+                if rescaled {
+                    norm_point_scaled(p, scale);
+                } else {
+                    p.x = clamp_canvas_unit(p.x);
+                    p.y = clamp_canvas_unit(p.y);
+                }
+            }
+        }
+        CanvasOpBody::Line { p0, p1, .. } => {
+            if rescaled {
+                norm_point_scaled(p0, scale);
+                norm_point_scaled(p1, scale);
+            } else {
+                p0.x = clamp_canvas_unit(p0.x);
+                p0.y = clamp_canvas_unit(p0.y);
+                p1.x = clamp_canvas_unit(p1.x);
+                p1.y = clamp_canvas_unit(p1.y);
+            }
+        }
+        CanvasOpBody::Spline { points, .. } => {
+            for p in points {
+                if rescaled {
+                    norm_point_scaled(p, scale);
+                } else {
+                    p.x = clamp_canvas_unit(p.x);
+                    p.y = clamp_canvas_unit(p.y);
+                }
+            }
+        }
+        CanvasOpBody::Rect { x, y, w, h, .. } | CanvasOpBody::Ellipse { x, y, w, h, .. } => {
+            if rescaled {
+                *x = clamp_canvas_unit(*x / scale);
+                *y = clamp_canvas_unit(*y / scale);
+                *w = clamp_canvas_unit(*w / scale);
+                *h = clamp_canvas_unit(*h / scale);
+            } else {
+                *x = clamp_canvas_unit(*x);
+                *y = clamp_canvas_unit(*y);
+                *w = clamp_canvas_unit(*w);
+                *h = clamp_canvas_unit(*h);
+            }
+        }
+        CanvasOpBody::Fill { x, y, .. } => {
+            if rescaled {
+                *x = clamp_canvas_unit(*x / scale);
+                *y = clamp_canvas_unit(*y / scale);
+            } else {
+                *x = clamp_canvas_unit(*x);
+                *y = clamp_canvas_unit(*y);
+            }
+        }
+        CanvasOpBody::Clear | CanvasOpBody::Undo => {}
+    }
+    rescaled
+}
+
+/// True when two bboxes overlap (optionally requiring at least `min_gap` separation).
+pub fn canvas_bbox_overlaps(a: CanvasBBox, b: CanvasBBox, min_gap: f32) -> bool {
+    !(a.x1 + min_gap <= b.x0
+        || b.x1 + min_gap <= a.x0
+        || a.y1 + min_gap <= b.y0
+        || b.y1 + min_gap <= a.y0)
+}
+
 /// Remplit couleur / épaisseur manquantes depuis le crayon de session.
 pub fn resolve_canvas_op_style(body: &mut CanvasOpBody, pen: &CanvasPenStyle) {
     match body {
@@ -2627,7 +2765,17 @@ pub fn canvas_scene_digest(doc: &CanvasDoc, aspect: CanvasAspect) -> String {
             doc.pen.color,
             doc.pen.width
         ),
-        "coords=normalized 0..1 (origin top-left; x→ right, y↓ down; letterboxed board face — not pixels)"
+        "coords=normalized 0..1 (origin top-left; x→ right, y↓ down; letterboxed board face — not pixels; max=1.0)"
+            .into(),
+        format!(
+            "margin={:.2} usable=({:.2},{:.2})-({:.2},{:.2})",
+            CANVAS_LAYOUT_MARGIN,
+            CANVAS_LAYOUT_MARGIN,
+            CANVAS_LAYOUT_MARGIN,
+            1.0 - CANVAS_LAYOUT_MARGIN,
+            1.0 - CANVAS_LAYOUT_MARGIN,
+        ),
+        "placement=read scene_bbox + per-seq bbox; place new ops inside usable; avoid stacking on the same center"
             .into(),
     ];
 
@@ -3671,6 +3819,77 @@ mod chat_session_room_tests {
         assert!(digest.contains("fill=1"));
         assert!(digest.contains("scene_bbox="));
         assert!(digest.contains("pen=#"));
+        assert!(digest.contains("margin=0.10"));
+        assert!(digest.contains("usable=(0.10,0.10)-(0.90,0.90)"));
+        assert!(digest.contains("placement="));
+    }
+
+    #[test]
+    fn normalize_pixel_rect_spreads_on_board() {
+        use super::{
+            canvas_op_bbox, normalize_canvas_op_coords, CanvasOpBody,
+        };
+        let mut body = CanvasOpBody::Rect {
+            x: 100.0,
+            y: 50.0,
+            w: 200.0,
+            h: 150.0,
+            color: "#3ee0c4".into(),
+            fill: true,
+            width: 0.01,
+        };
+        assert!(normalize_canvas_op_coords(&mut body));
+        let bbox = canvas_op_bbox(&body).expect("bbox");
+        assert!(bbox.x1 <= 1.0 && bbox.y1 <= 1.0);
+        assert!(bbox.x1 - bbox.x0 > 0.05);
+        assert!(bbox.x0 < 0.9 && bbox.y0 < 0.9);
+    }
+
+    #[test]
+    fn pixel_coords_do_not_pile_at_same_corner() {
+        use super::{canvas_bbox_overlaps, canvas_op_bbox, normalize_canvas_op_coords, CanvasOpBody};
+        let mut r1 = CanvasOpBody::Rect {
+            x: 400.0,
+            y: 300.0,
+            w: 100.0,
+            h: 80.0,
+            color: "#3ee0c4".into(),
+            fill: true,
+            width: 0.01,
+        };
+        let mut r2 = CanvasOpBody::Rect {
+            x: 200.0,
+            y: 150.0,
+            w: 100.0,
+            h: 80.0,
+            color: "#ff4400".into(),
+            fill: true,
+            width: 0.01,
+        };
+        normalize_canvas_op_coords(&mut r1);
+        normalize_canvas_op_coords(&mut r2);
+        let b1 = canvas_op_bbox(&r1).unwrap();
+        let b2 = canvas_op_bbox(&r2).unwrap();
+        assert!(!canvas_bbox_overlaps(b1, b2, 0.02));
+    }
+
+    #[test]
+    fn normalize_clamps_slight_overflow_without_rescale() {
+        use super::{normalize_canvas_op_coords, CanvasOpBody, CanvasPoint};
+        let mut body = CanvasOpBody::Line {
+            p0: CanvasPoint { x: -0.05, y: 0.2 },
+            p1: CanvasPoint { x: 1.2, y: 0.8 },
+            color: "#3ee0c4".into(),
+            width: 0.01,
+        };
+        assert!(!normalize_canvas_op_coords(&mut body));
+        match body {
+            CanvasOpBody::Line { p0, p1, .. } => {
+                assert_eq!(p0.x, 0.0);
+                assert_eq!(p1.x, 1.0);
+            }
+            other => panic!("expected line, got {other:?}"),
+        }
     }
 
     #[test]

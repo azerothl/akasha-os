@@ -1,8 +1,8 @@
 //! Sessions de conversation persistées (Preview PC.6).
 
 use aos_proto::{
-    normalize_canvas_color, resolve_canvas_op_style, CanvasAspect, CanvasDoc, CanvasOp, CanvasOpBody,
-    CanvasPenStyle, ChatAttachment, ChatRoomConductorPolicy,
+    normalize_canvas_color, normalize_canvas_op_coords, resolve_canvas_op_style, CanvasAspect,
+    CanvasDoc, CanvasOp, CanvasOpBody, CanvasPenStyle, ChatAttachment, ChatRoomConductorPolicy,
     ChatRoomMember, ChatSessionMessage, ChatSessionMeta, ChatSessionMode,
 };
 use serde::{Deserialize, Serialize};
@@ -182,6 +182,7 @@ impl ChatSessionStore {
                 None
             }
             _ => {
+                normalize_canvas_op_coords(&mut body);
                 resolve_canvas_op_style(&mut body, &doc.pen);
                 let op = CanvasOp {
                     seq: doc.next_seq,
@@ -725,6 +726,40 @@ archived: false
                 assert!((width - 0.025).abs() < 0.0001);
             }
             other => panic!("expected stroke, got {other:?}"),
+        }
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn canvas_apply_normalizes_pixel_coords() {
+        let dir = std::env::temp_dir().join(format!("aos-sess-canvas-px-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let s = ChatSessionStore::open(&dir).unwrap();
+        let m = s.create(Some("Pixel".into()), None).unwrap();
+        let (_, doc, _) = s
+            .canvas_apply(
+                &m.id,
+                "agent-a",
+                CanvasOpBody::Rect {
+                    x: 256.0,
+                    y: 128.0,
+                    w: 128.0,
+                    h: 128.0,
+                    color: "#3ee0c4".into(),
+                    fill: true,
+                    width: 0.01,
+                },
+            )
+            .unwrap();
+        let op = doc.ops.last().expect("op");
+        match &op.body {
+            CanvasOpBody::Rect { x, y, w, h, .. } => {
+                assert!(*x > 0.4 && *x < 0.6);
+                assert!(*y > 0.2 && *y < 0.4);
+                assert!(*w > 0.2 && *w < 0.3);
+                assert!(*h > 0.2 && *h < 0.3);
+            }
+            other => panic!("expected rect, got {other:?}"),
         }
         let _ = fs::remove_dir_all(&dir);
     }
