@@ -3912,8 +3912,9 @@ impl eframe::App for UiApp {
             Tab::Image => overflow_scroll(ui, "image", |ui| {
                 let gen = self.image_generating.as_ref();
                 let dl_busy = self.model_download.is_some();
+                let last_session = &mut self.last_session_image;
                 self.image_studio
-                    .ui(ui, &i18n::strings(&self.prefs.language), &self.cmd_tx, gen, dl_busy);
+                    .ui(ui, &i18n::strings(&self.prefs.language), &self.cmd_tx, gen, dl_busy, last_session);
             }),
             Tab::Providers => overflow_scroll(ui, "providers", |ui| self.ui_providers(ui)),
             Tab::Audit => self.ui_audit(ui),
