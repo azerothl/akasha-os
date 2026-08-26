@@ -446,6 +446,13 @@ pub struct AgentSpec {
     /// Optimiser le prompt système avant le premier step.
     #[serde(default)]
     pub optimize_prompt: bool,
+    /// `ask` (défaut) : phrase FR + Allow Once dans le fil ; `autonomous` : pas de gate inline.
+    #[serde(default = "default_agent_gate_mode")]
+    pub gate_mode: String,
+}
+
+fn default_agent_gate_mode() -> String {
+    "ask".into()
 }
 
 impl AgentSpec {
@@ -504,6 +511,9 @@ pub struct AgentCreateRequest {
     pub budget: AgentBudget,
     #[serde(default)]
     pub optimize_prompt: bool,
+    /// `ask` | `autonomous` — gate inline des actions mutantes dans le fil chat.
+    #[serde(default = "default_agent_gate_mode")]
+    pub gate_mode: String,
 }
 
 impl AgentCreateRequest {
@@ -538,6 +548,7 @@ impl AgentCreateRequest {
             session_id: None,
             budget: AgentBudget::default(),
             optimize_prompt: false,
+            gate_mode: default_agent_gate_mode(),
         }
     }
 
@@ -2963,6 +2974,21 @@ pub enum ChatAttachment {
         #[serde(default)]
         label: String,
     },
+    /// Action agent en attente d'Allow Once dans le fil (tester-cohort slice 1).
+    AgentAct {
+        agent_id: String,
+        act_id: String,
+        /// Phrase humaine FR (redondante avec content pour rechargement).
+        #[serde(default)]
+        phrase: String,
+        /// `pending` | `approved` | `denied` | `done`
+        #[serde(default = "default_agent_act_state")]
+        state: String,
+    },
+}
+
+fn default_agent_act_state() -> String {
+    "pending".into()
 }
 
 impl ChatAttachment {
@@ -2976,7 +3002,20 @@ impl ChatAttachment {
             Self::Image { .. }
             | Self::Audio { .. }
             | Self::TtsDraft { .. }
-            | Self::Document { .. } => None,
+            | Self::Document { .. }
+            | Self::AgentAct { .. } => None,
+        }
+    }
+
+    pub fn as_agent_act(&self) -> Option<(&str, &str, &str)> {
+        match self {
+            Self::AgentAct {
+                agent_id,
+                act_id,
+                state,
+                ..
+            } => Some((agent_id.as_str(), act_id.as_str(), state.as_str())),
+            _ => None,
         }
     }
 }

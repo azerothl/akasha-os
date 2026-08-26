@@ -103,6 +103,11 @@ pub(crate) enum Cmd {
     AgentResume { id: String },
     AgentRetry { id: String },
     AgentSteer { id: String, text: String },
+    AgentActDecision {
+        agent_id: String,
+        act_id: String,
+        approved: bool,
+    },
     AgentTrace { id: String },
     AgentPromptOptimize {
         goal: String,

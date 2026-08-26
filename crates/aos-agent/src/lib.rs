@@ -4,6 +4,7 @@
 //! - `aos-agent-worker` : boucle goal Observe/Think/Act/Reflect/Checkpoint
 
 pub mod actions;
+pub mod agent_act;
 pub mod assess;
 pub mod canvas_scene;
 pub mod context_budget;
@@ -61,6 +62,8 @@ pub enum ControlCmd {
     Snapshot,
     /// Hot-grant d'une capacité (mise à jour caps du worker).
     GrantCap { cap: String },
+    /// Réponse inline Allow Once / Refuser pour une action agent (slice 1).
+    ActDecision { act_id: String, approved: bool },
 }
 
 /// Réponse d'un contrôle worker.
