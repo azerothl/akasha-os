@@ -8,7 +8,7 @@
 first-class GPU, offline-first. Preview builds run on a Windows/Linux host
 (NVIDIA); a seL4 bare-metal track is separate.
 
-> This is **not** a bootable OS image yet. Preview 0.12.1 is an installable host
+> This is **not** a bootable OS image yet. Preview 0.13.0 is an installable host
 > app for testers (Windows/Linux/Mac Apple Silicon; NVIDIA optional on Win/Linux
 > via CPU path in the same zip).
 

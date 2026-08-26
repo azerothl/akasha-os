@@ -7,9 +7,19 @@ Résumé des phases livrées. Détail : [plan-developpement-phases.md](plan-deve
 
 **En-tête :** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview :** 0.12.1 (25/08/2026) — correctif chat template Gemma 4 (#49). Pas un OS bootable. Gate cohorte encore
+**Preview :** 0.13.0 (26/08/2026) — image de référence, inpaint, courte vidéo, documents chat (#52–#55). Pas un OS bootable. Gate cohorte encore
 ouverte. **Suite :** fermeture cohorte PC ; Horizon C / PV.4+ quand planifié ;
 E9 hard-green après un run 2 GPU documenté.
+
+## P13 — Preview 0.13.0 (créer + documents chat) — fait
+
+| # | Item | Statut |
+|---|------|--------|
+| P13.1 | Image de référence dans la génération (#52) | fait |
+| P13.2 | Inpaint / Corriger une zone (#53) | fait |
+| P13.3 | Courte vidéo (#54) | fait |
+| P13.4 | Document joint au chat (#55) | fait |
+| P13.5 | Docs EN+FR + site 0.13.0 | fait |
 
 ## P12 — Preview 0.12.0 (vision + ship macOS) — fait
 

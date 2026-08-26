@@ -7,8 +7,8 @@
 Tag puis push :
 
 ```bash
-git tag v0.12.1
-git push origin v0.12.1
+git tag v0.13.0
+git push origin v0.13.0
 ```
 
 Le workflow [`.github/workflows/preview-release.yml`](../../.github/workflows/preview-release.yml)
@@ -24,7 +24,7 @@ dans le même zip ; sans GGUF), publie :
 
 Déclenchement manuel : Actions → **preview-release** → Run workflow.
 
-- **macOS seul sur une Release existante** (sans retag) : `macos_only` = true, `release_version` = `0.12.1`, `upload_release` = true — attache le zip Apple Silicon et met à jour `latest.json` sur cette Release.
+- **macOS seul sur une Release existante** (sans retag) : `macos_only` = true, `release_version` = `0.13.0`, `upload_release` = true — attache le zip Apple Silicon et met à jour `latest.json` sur cette Release.
 - **Rebuild complet** : `create_release` = true, `macos_only` = false.
 
 ## Manuel
@@ -42,11 +42,13 @@ Les GGUF sont téléchargés au **premier run** via `share/models/manifest.json`
 ## Notes de version (brouillon)
 
 ```
-Akasha OS Preview 0.12.1 — correctif chat template Gemma 4
+Akasha OS Preview 0.13.0 — Créer + documents chat
 
-- Chat template : repli Jinja (hf-chat-template/minijinja) quand l’application native llama échoue sur les templates Gemma 4 intégrés
-- Gate : coordinateur aos-gate-gemma4-vision (G1 texte, G2 PNG/mtmd)
-- Mêmes bandes mill Win/Linux/macOS que 0.12.0
+- Créer : passer une image de référence dans la génération
+- Créer : Corriger une zone sur le résultat
+- Créer : courte vidéo (2–4 s, packs Wan/LTX)
+- Chat : joindre un document (PDF/txt/md) depuis le trombone
+- Mêmes bandes mill Win/Linux/Mac qu'en 0.12.x
 
 Pas un OS bootable. Voir FIRST-RUN.md / INSTALL.md / TESTER.md
 ```

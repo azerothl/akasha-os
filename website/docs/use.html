@@ -6,7 +6,7 @@
     <title>Using Preview — Akasha OS</title>
     <meta
       name="description"
-      content="User manual for Akasha OS Preview 0.12.1: Chat, Models, Memory, Notes, Tasks, Modules, Agents, Caps, Audit, Providers, Settings, Network, Image Studio, TTS, and extending Preview."
+      content="User manual for Akasha OS Preview 0.13.0: Chat, Models, Memory, Notes, Tasks, Modules, Agents, Caps, Audit, Providers, Settings, Network, Image Studio, TTS, and extending Preview."
     />
     <link rel="stylesheet" href="../styles.css" />
     <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
@@ -48,10 +48,10 @@
 
         <h1>
           <span data-lang="en">
-            Using Preview <span data-aos-version="0.12.1">0.12.1</span>
+            Using Preview <span data-aos-version="0.13.0">0.13.0</span>
           </span>
           <span data-lang="fr">
-            Utiliser la Preview <span data-aos-version="0.12.1">0.12.1</span>
+            Utiliser la Preview <span data-aos-version="0.13.0">0.13.0</span>
           </span>
         </h1>
 
@@ -113,7 +113,8 @@
             chunks from FEATURES / STATUS / TESTER). User and assistant messages
             use distinct bubbles. Background agents attached via
             <code>/agent</code> or assistant delegation show as cards in the
-            thread.
+            thread. Attach images or documents (PDF, txt, md) from the
+            paperclip — documents are read into context for the model.
           </p>
           <p class="hist" data-lang="fr">
             Les conversations parallèles survivent au redémarrage. Chaque
@@ -129,6 +130,8 @@
             depuis FEATURES / STATUS / TESTER). Les messages user et assistant
             ont des bulles distinctes. Les agents de fond via
             <code>/agent</code> ou délégation apparaissent en cartes dans le fil.
+            Joignez images ou documents (PDF, txt, md) depuis le trombone — les
+            documents sont lus en contexte pour le modèle.
           </p>
           <p class="hist" data-lang="en">
             Slash commands (popup above the input with <code>/</code>):
@@ -598,7 +601,11 @@
             shows the PNG in the thread. Slash <code>/speak</code> opens an
             in-chat <strong>TTS card</strong> (voice + knobs) then Generate;
             agents may still call the audio intent directly. Download media
-            packs from Models first (engine arrives with the pack).
+            packs from Models first (engine arrives with the pack). In Create you
+            can pass a <strong>reference image</strong>, use <strong>Fix a
+            region</strong> to repaint part of a result, and generate
+            <strong>short video</strong> clips (2–4 s) when a Wan or LTX pack
+            is installed.
           </p>
           <p class="hist" data-lang="fr">
             Onglet <strong>studio Image</strong> : prompt, taille, steps, CFG,
@@ -611,16 +618,18 @@
             <code>/speak</code> ouvre une <strong>carte TTS</strong> (voix +
             knobs) puis Generate ; les agents peuvent encore appeler l’intent
             audio directement. Téléchargez d’abord les packs média dans Models
-            (le moteur arrive avec le pack).
+            (le moteur arrive avec le pack). Dans Créer vous pouvez passer une
+            <strong>image de référence</strong>, utiliser <strong>Corriger une
+            zone</strong> pour repeindre une partie du résultat, et générer des
+            <strong>courts clips vidéo</strong> (2–4 s) quand un pack Wan ou LTX
+            est installé.
           </p>
           <aside class="callout callout-limit">
             <p data-lang="en">
-              Not in Preview 0.12.1: video generation, STT / always-on voice,
-              img2img / inpaint as first-class intents.
+              Not in Preview 0.13.0: STT / always-on voice.
             </p>
             <p data-lang="fr">
-              Hors Preview 0.12.1 : génération vidéo, STT / voix always-on,
-              img2img / inpaint comme intents de premier plan.
+              Hors Preview 0.13.0 : STT / voix always-on.
             </p>
           </aside>
         </article>
