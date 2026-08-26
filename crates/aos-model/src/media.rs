@@ -559,11 +559,25 @@ fn apply_user_image_opts(opts: &mut aos_sd::ImageGenOpts, o: &aos_proto::MediaIm
     if let Some(v) = o.video_frames.filter(|n| *n > 0) {
         opts.video_frames = Some(v);
     }
+    if let Some(raw) = o.mask_image.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        let host = logical_media_path(raw);
+        if host.is_file() {
+            opts.mask_image_path = Some(host);
+            if opts.sd_mode.is_none() {
+                opts.sd_mode = Some("img2img".into());
+            }
+        }
+    }
     if let Some(raw) = o.init_image.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
         let host = logical_media_path(raw);
         if host.is_file() {
             opts.init_image_path = Some(host);
-            opts.strength = Some(o.strength.unwrap_or(0.75).clamp(0.0, 1.0));
+            let default_strength = if opts.mask_image_path.is_some() {
+                1.0
+            } else {
+                0.75
+            };
+            opts.strength = Some(o.strength.unwrap_or(default_strength).clamp(0.0, 1.0));
         }
     } else if let Some(s) = o.strength {
         // Strength without init image is ignored (txt2img).

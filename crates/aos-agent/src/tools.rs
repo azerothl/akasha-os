@@ -111,7 +111,7 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
         },
         ToolDesc {
             name: "media.image.generate".into(),
-            description: "Générer une image PNG locale (diffusion) sous /downloads ; options.init_image+/strength = img2img".into(),
+            description: "Générer une image PNG locale (diffusion) sous /downloads ; options.init_image+/strength = img2img ; options.mask_image = inpaint (--mask)".into(),
             input_schema: serde_json::json!({
                 "type":"object",
                 "properties":{
@@ -120,7 +120,7 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
                     "model_id":{"type":"string"},
                     "options":{
                         "type":"object",
-                        "description":"closed sd.cpp options; init_image (logical /downloads path) + strength 0..1 for img2img; unknown keys refused"
+                        "description":"closed sd.cpp options; init_image (logical /downloads path) + strength 0..1 for img2img; mask_image (logical /downloads path) for inpaint; unknown keys refused"
                     }
                 },
                 "required":["prompt"]
