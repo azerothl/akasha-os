@@ -385,6 +385,22 @@ fn fit_board_rect(outer: eframe::egui::Rect, aspect: CanvasAspect) -> eframe::eg
     eframe::egui::Rect::from_center_size(outer.center(), Vec2::new(board_w, board_h))
 }
 
+/// SIGNAL pastille shown while a vision model reads the live canvas board.
+fn ui_canvas_seeing_pill(ui: &mut Ui, label: &str) {
+    eframe::egui::Frame::new()
+        .fill(Color32::from_rgba_unmultiplied(SIGNAL.r(), SIGNAL.g(), SIGNAL.b(), 28))
+        .stroke(Stroke::new(1.0, SIGNAL))
+        .corner_radius(0.0)
+        .inner_margin(eframe::egui::Margin::symmetric(6, 3))
+        .show(ui, |ui| {
+            ui.label(
+                eframe::egui::RichText::new(label)
+                    .color(SIGNAL)
+                    .size(11.0),
+            );
+        });
+}
+
 /// Drawing tools for the unified session bar (pen, eraser, shapes, tint, thickness).
 pub fn ui_canvas_toolbar(
     ui: &mut Ui,
@@ -396,12 +412,7 @@ pub fn ui_canvas_toolbar(
     ui.spacing_mut().item_spacing = eframe::egui::vec2(4.0, compact.y);
 
     if state.seeing {
-        ui.label(
-            eframe::egui::RichText::new(t.canvas_seeing_now)
-                .color(SIGNAL)
-                .small(),
-        );
-        ui.separator();
+        ui_canvas_seeing_pill(ui, t.canvas_seeing_now);
     }
 
     ui.selectable_value(&mut state.tool, CanvasTool::Pen, t.canvas_tool_pen);
@@ -527,7 +538,7 @@ pub fn ui_canvas_surface(
         let outline = rect.expand(4.0);
         painter.rect_stroke(
             outline,
-            6.0,
+            0.0,
             Stroke::new(2.5, contour),
             StrokeKind::Outside,
         );

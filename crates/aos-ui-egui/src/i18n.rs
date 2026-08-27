@@ -1386,7 +1386,7 @@ const FR: UiStrings = UiStrings {
     canvas_empty_hint: "Dessinez ici — surface vectorielle partagée humain et agents.",
     canvas_clear: "Tout effacer",
     canvas_export: "Exporter PNG",
-    canvas_seeing_now: "Regarde maintenant",
+    canvas_seeing_now: "En train de voir",
     canvas_thinking: "Dessin sur le canvas…",
     canvas_aspect_square: "Carré",
     canvas_aspect_16_9: "16:9",
