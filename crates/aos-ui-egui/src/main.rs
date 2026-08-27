@@ -19,6 +19,7 @@ mod cmd;
 mod image_composition;
 mod image_history;
 mod image_prompt;
+mod icons;
 mod image_studio;
 mod nav;
 mod onboarding;
@@ -134,15 +135,31 @@ impl Default for OnboardingState {
     }
 }
 
-/// Vertical scroll that takes the remaining panel and appears only on overflow.
+/// Vertical scroll that fills the remaining panel height.
 fn overflow_scroll(
     ui: &mut egui::Ui,
     id: impl std::hash::Hash,
     add_contents: impl FnOnce(&mut egui::Ui),
 ) {
+    let h = ui.available_height().max(1.0);
     egui::ScrollArea::vertical()
         .id_salt(id)
         .auto_shrink([false, false])
+        .max_height(h)
+        .show(ui, add_contents);
+}
+
+/// Vertical scroll with an explicit height budget (nested regions).
+fn overflow_scroll_h(
+    ui: &mut egui::Ui,
+    id: impl std::hash::Hash,
+    height: f32,
+    add_contents: impl FnOnce(&mut egui::Ui),
+) {
+    egui::ScrollArea::vertical()
+        .id_salt(id)
+        .auto_shrink([false, false])
+        .max_height(height.max(1.0))
         .show(ui, add_contents);
 }
 
@@ -3770,7 +3787,7 @@ impl eframe::App for UiApp {
                             open_sess = Some(n.session_id.clone());
                             dismiss.push(n.agent_id.clone());
                         }
-                        if ui.small_button("×").clicked() {
+                        if icons::close_button(ui).clicked() {
                             dismiss.push(n.agent_id.clone());
                         }
                     });
@@ -3877,47 +3894,49 @@ impl eframe::App for UiApp {
                     egui::Color32::LIGHT_RED,
                     t.confirm_pending.replace("{n}", &self.confirms.len().to_string()),
                 );
-                for c in self.confirms.clone() {
-                    ui.vertical(|ui| {
-                        let rich = matches!(
-                            c.action.as_str(),
-                            "module.install"
-                                | "module.uninstall"
-                                | "module.compile"
-                                | "skill.create"
-                                | "cap.request"
-                                | "media.generate"
-                                | "media.image.generate"
-                                | "media.audio.generate"
-                        );
-                        ui.label(
-                            t.confirm_wants_action.replace("{action}", &c.action),
-                        );
-                        ui.monospace(format!("{} → {}", c.target, c.reason));
-                        if rich {
-                            ui.colored_label(
-                                egui::Color32::from_rgb(220, 180, 80),
-                                "Extension OS : revue des caps / manifeste requise",
+                overflow_scroll_h(ui, "pending_confirms", 180.0, |ui| {
+                    for c in self.confirms.clone() {
+                        ui.group(|ui| {
+                            let rich = matches!(
+                                c.action.as_str(),
+                                "module.install"
+                                    | "module.uninstall"
+                                    | "module.compile"
+                                    | "skill.create"
+                                    | "cap.request"
+                                    | "media.generate"
+                                    | "media.image.generate"
+                                    | "media.audio.generate"
                             );
-                        }
-                        ui.horizontal(|ui| {
-                            if ui.button(t.confirm_grant).clicked() {
-                                let _ = self.cmd_tx.send(Cmd::Confirm {
-                                    id: c.id.clone(),
-                                    approved: true,
-                                });
-                                self.scen_confirm = true;
+                            ui.label(
+                                t.confirm_wants_action.replace("{action}", &c.action),
+                            );
+                            ui.monospace(format!("{} → {}", c.target, c.reason));
+                            if rich {
+                                ui.colored_label(
+                                    egui::Color32::from_rgb(220, 180, 80),
+                                    "Extension OS : revue des caps / manifeste requise",
+                                );
                             }
-                            if ui.button(t.confirm_deny).clicked() {
-                                let _ = self.cmd_tx.send(Cmd::Confirm {
-                                    id: c.id.clone(),
-                                    approved: false,
-                                });
-                                self.scen_confirm = true;
-                            }
+                            ui.horizontal(|ui| {
+                                if ui.button(t.confirm_grant).clicked() {
+                                    let _ = self.cmd_tx.send(Cmd::Confirm {
+                                        id: c.id.clone(),
+                                        approved: true,
+                                    });
+                                    self.scen_confirm = true;
+                                }
+                                if ui.button(t.confirm_deny).clicked() {
+                                    let _ = self.cmd_tx.send(Cmd::Confirm {
+                                        id: c.id.clone(),
+                                        approved: false,
+                                    });
+                                    self.scen_confirm = true;
+                                }
+                            });
                         });
-                    });
-                }
+                    }
+                });
             }
         });
 
@@ -3978,8 +3997,8 @@ impl eframe::App for UiApp {
         let current_tab = self.tab.clone();
         egui::CentralPanel::default().show(ctx, |ui| match current_tab {
             Tab::Chat => self.ui_chat(ui),
-            Tab::Memory => self.ui_memory(ui),
-            Tab::Notes => self.ui_notes(ui),
+            Tab::Memory => overflow_scroll(ui, "memory", |ui| self.ui_memory(ui)),
+            Tab::Notes => overflow_scroll(ui, "notes", |ui| self.ui_notes(ui)),
             Tab::Tasks => overflow_scroll(ui, "tasks", |ui| self.ui_tasks(ui)),
             Tab::Agents => overflow_scroll(ui, "agents", |ui| self.ui_agents(ui)),
             Tab::Models => overflow_scroll(ui, "models", |ui| self.ui_models(ui, ctx)),
@@ -3991,7 +4010,7 @@ impl eframe::App for UiApp {
                     .ui(ui, &i18n::strings(&self.prefs.language), &self.cmd_tx, gen, dl_busy, last_session);
             }),
             Tab::Providers => overflow_scroll(ui, "providers", |ui| self.ui_providers(ui)),
-            Tab::Audit => self.ui_audit(ui),
+            Tab::Audit => overflow_scroll(ui, "audit", |ui| self.ui_audit(ui)),
             Tab::Caps => overflow_scroll(ui, "caps", |ui| self.ui_caps(ui)),
             Tab::Scenarios => overflow_scroll(ui, "scenarios", |ui| self.ui_scenarios(ui)),
             Tab::Feedback => overflow_scroll(ui, "feedback", |ui| self.ui_feedback(ui)),
@@ -4042,11 +4061,7 @@ impl UiApp {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
             ui.strong(&name);
-            if ui
-                .add(
-                    egui::Label::new(egui::RichText::new("×").weak())
-                        .sense(egui::Sense::click()),
-                )
+            if icons::close_button(ui)
                 .on_hover_text(t.room_member_remove)
                 .clicked()
             {
@@ -4243,50 +4258,47 @@ impl UiApp {
                 if !members.is_empty() {
                     ui.weak(format!("· {count_line}"));
                 }
-                if self.room_members_pane_open {
-                    ui.weak("▾");
-                } else {
-                    ui.weak("▸");
+                icons::caret(ui, self.room_members_pane_open);
+            }
+
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui
+                    .selectable_label(canvas_open, t.session_toggle_canvas)
+                    .clicked()
+                {
+                    let new_open = !canvas_open;
+                    self.set_canvas_open_local(&sid, new_open);
+                    let _ = self.cmd_tx.send(Cmd::CanvasSetOpen {
+                        session_id: sid.clone(),
+                        open: new_open,
+                    });
                 }
-            }
+                if ui.selectable_label(room, t.session_toggle_salon).clicked() {
+                    let mode = if room {
+                        ChatSessionMode::Direct
+                    } else {
+                        ChatSessionMode::Room
+                    };
+                    let _ = self.cmd_tx.send(Cmd::SessionSetMode {
+                        session_id: sid.clone(),
+                        mode,
+                    });
+                }
+            });
+        });
 
+        if canvas_open {
             let mut toolbar_action: Option<chat_canvas::CanvasUiAction> = None;
-            if canvas_open {
-                ui.separator();
-                toolbar_action = chat_canvas::ui_canvas_toolbar(ui, t, &mut self.canvas_panel);
-            }
-
-            let toggle_reserve = 150.0_f32;
-            let spare = ui.available_width() - toggle_reserve;
-            if spare > 0.0 {
-                ui.add_space(spare);
-            }
-            if ui.selectable_label(room, t.session_toggle_salon).clicked() {
-                let mode = if room {
-                    ChatSessionMode::Direct
-                } else {
-                    ChatSessionMode::Room
-                };
-                let _ = self.cmd_tx.send(Cmd::SessionSetMode {
-                    session_id: sid.clone(),
-                    mode,
+            egui::ScrollArea::horizontal()
+                .id_salt("canvas_toolbar_scroll")
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    toolbar_action = chat_canvas::ui_canvas_toolbar(ui, t, &mut self.canvas_panel);
                 });
-            }
-            if ui
-                .selectable_label(canvas_open, t.session_toggle_canvas)
-                .clicked()
-            {
-                let new_open = !canvas_open;
-                self.set_canvas_open_local(&sid, new_open);
-                let _ = self.cmd_tx.send(Cmd::CanvasSetOpen {
-                    session_id: sid.clone(),
-                    open: new_open,
-                });
-            }
             if let Some(action) = toolbar_action {
                 self.dispatch_canvas_ui_action(Some(action), &sid);
             }
-        });
+        }
 
         if room && self.room_members_pane_open {
             egui::Frame::group(ui.style())
@@ -4596,9 +4608,15 @@ impl UiApp {
     fn ui_chat(&mut self, ui: &mut egui::Ui) {
         let t = i18n::strings(&self.prefs.language);
         let full = ui.available_size();
-        let side_w = 220.0_f32;
         let gap = 8.0_f32;
-        let chat_w = (full.x - side_w - gap).max(320.0);
+        let min_main = 200.0_f32;
+        let max_side = 220.0_f32;
+        let min_side = 120.0_f32;
+        let mut side_w = max_side.min((full.x * 0.30).max(min_side));
+        if full.x - side_w - gap < min_main {
+            side_w = (full.x - gap - min_main).clamp(80.0, max_side);
+        }
+        let chat_w = (full.x - side_w - gap).max(80.0);
 
         ui.horizontal(|ui| {
             ui.set_min_height(full.y);
@@ -4711,27 +4729,20 @@ impl UiApp {
                             title: Some(format!("Session {n}")),
                         });
                     }
-                    egui::ScrollArea::vertical()
-                        .id_salt("sessions_list")
-                        .max_height(160.0)
-                        .auto_shrink([false, true])
-                        .show(ui, |ui| {
-                            ui.set_min_width(side_w - 16.0);
-                            for s in self.sessions.clone() {
-                                let selected =
-                                    self.active_session.as_deref() == Some(s.id.as_str());
-                                if ui
-                                    .selectable_label(
-                                        selected,
-                                        format!("{} ({})", s.title, s.message_count),
-                                    )
-                                    .clicked()
-                                {
-                                    let _ =
-                                        self.cmd_tx.send(Cmd::SessionSelect { id: s.id.clone() });
-                                }
-                            }
-                        });
+                    for s in self.sessions.clone() {
+                        let selected =
+                            self.active_session.as_deref() == Some(s.id.as_str());
+                        if ui
+                            .selectable_label(
+                                selected,
+                                format!("{} ({})", s.title, s.message_count),
+                            )
+                            .clicked()
+                        {
+                            let _ =
+                                self.cmd_tx.send(Cmd::SessionSelect { id: s.id.clone() });
+                        }
+                    }
                     ui.horizontal(|ui| {
                         ui.add(
                             egui::TextEdit::singleline(&mut self.rename_buf)
@@ -4974,24 +4985,19 @@ impl UiApp {
                                     let mut attach_from_menu = false;
                                     let mut attach_document_from_menu = false;
                                     let mut reuse_last_image = false;
-                                    ui.menu_button("📎", |ui| {
+                                    icons::attach_menu(ui, "chat_attach", t.chat_attach_image, |ui| {
                                         if self.last_session_image.is_some()
                                             && ui.button(t.chat_last_session_image).clicked()
                                         {
                                             reuse_last_image = true;
-                                            ui.close_menu();
                                         }
                                         if ui.button(t.chat_attach_image).clicked() {
                                             attach_from_menu = true;
-                                            ui.close_menu();
                                         }
                                         if ui.button(t.chat_attach_document).clicked() {
                                             attach_document_from_menu = true;
-                                            ui.close_menu();
                                         }
-                                    })
-                                    .response
-                                    .on_hover_text(t.chat_attach_image);
+                                    });
                                     if attach_from_menu {
                                         if let Some(path) = os_open::pick_os_file(
                                             t.chat_attach_image,
@@ -5261,14 +5267,15 @@ impl UiApp {
                     && (self.mem_show_superseded || !h.superseded)
             })
             .collect();
-        egui::ScrollArea::vertical().show(ui, |ui| {
+        let list_h = ui.available_height().max(120.0);
+        overflow_scroll_h(ui, "memory_hits", list_h, |ui| {
             if visible_hits.is_empty() {
                 ui.weak(t.memory_empty);
             }
             for h in visible_hits {
                 ui.horizontal_wrapped(|ui| {
                     if h.pinned {
-                        ui.label(egui::RichText::new("★").weak());
+                        icons::pin_indicator(ui);
                     }
                     let mut fact = egui::RichText::new(h.text.trim());
                     if h.superseded {
@@ -5575,45 +5582,43 @@ impl UiApp {
             .filter(|a| agent_shown_in_tab(a, history))
             .cloned()
             .collect();
-        egui::ScrollArea::vertical()
-            .id_salt("agents_list")
-            .max_height(280.0)
-            .show(ui, |ui| {
-                if visible.is_empty() {
-                    ui.weak(if history {
-                        t.agents_history_empty
-                    } else {
-                        t.agents_active_empty
-                    });
-                    return;
-                }
-                let roots: Vec<_> = visible
-                    .iter()
-                    .filter(|a| a.parent_id.is_none())
-                    .cloned()
-                    .collect();
-                let orphans: Vec<_> = visible
-                    .iter()
-                    .filter(|a| {
-                        a.parent_id.as_ref().is_some_and(|p| {
-                            !visible.iter().any(|x| x.agent_id == *p)
-                        })
+        let list_h = ui.available_height().max(120.0);
+        overflow_scroll_h(ui, "agents_list", list_h, |ui| {
+            if visible.is_empty() {
+                ui.weak(if history {
+                    t.agents_history_empty
+                } else {
+                    t.agents_active_empty
+                });
+                return;
+            }
+            let roots: Vec<_> = visible
+                .iter()
+                .filter(|a| a.parent_id.is_none())
+                .cloned()
+                .collect();
+            let orphans: Vec<_> = visible
+                .iter()
+                .filter(|a| {
+                    a.parent_id.as_ref().is_some_and(|p| {
+                        !visible.iter().any(|x| x.agent_id == *p)
                     })
+                })
+                .cloned()
+                .collect();
+
+            for a in roots.into_iter().chain(orphans) {
+                self.draw_agent_row(ui, &a, 0, t);
+                let children: Vec<_> = visible
+                    .iter()
+                    .filter(|c| c.parent_id.as_deref() == Some(a.agent_id.as_str()))
                     .cloned()
                     .collect();
-
-                for a in roots.into_iter().chain(orphans) {
-                    self.draw_agent_row(ui, &a, 0, t);
-                    let children: Vec<_> = visible
-                        .iter()
-                        .filter(|c| c.parent_id.as_deref() == Some(a.agent_id.as_str()))
-                        .cloned()
-                        .collect();
-                    for child in children {
-                        self.draw_agent_row(ui, &child, 1, t);
-                    }
+                for child in children {
+                    self.draw_agent_row(ui, &child, 1, t);
                 }
-            });
+            }
+        });
         ui.weak(t.agent_click_for_detail);
 
         ui.separator();
@@ -5643,7 +5648,7 @@ impl UiApp {
         ui.horizontal(|ui| {
             if indent > 0 {
                 ui.add_space(16.0 * indent as f32);
-                ui.small("↳");
+                icons::child_branch(ui);
             }
             let selected = self.agent_active_tab.as_deref() == Some(a.agent_id.as_str());
             let label = if let Some(pid) = a.persona_id.as_deref() {
@@ -5896,7 +5901,7 @@ impl UiApp {
                                             });
                                         }
                                     }
-                                    if ui.small_button("×").clicked() {
+                                    if icons::close_button(ui).clicked() {
                                         self.close_agent_tab(&id);
                                     }
                                 });
@@ -5905,6 +5910,7 @@ impl UiApp {
                 });
                 ui.separator();
 
+                overflow_scroll(ui, "agent_detail_body", |ui| {
                 let active = self.agent_active_tab.clone();
                 if let Some(id) = active {
                     let holder = agent_cap_holder(&id);
@@ -6010,6 +6016,7 @@ impl UiApp {
                 } else {
                     ui.weak(t.agents_select_tab);
                 }
+                });
             });
     }
 
@@ -6794,7 +6801,7 @@ impl UiApp {
                 request_preview_restart(ctx);
                 self.model_download_restart = None;
             }
-            if ui.small_button("×").clicked() {
+            if icons::close_button(ui).clicked() {
                 self.model_download_restart = None;
                 self.download_status.clear();
             }
@@ -6980,7 +6987,8 @@ impl UiApp {
                 let _ = self.cmd_tx.send(Cmd::KillAuditd);
             }
         });
-        egui::ScrollArea::vertical().show(ui, |ui| {
+        let list_h = ui.available_height().max(120.0);
+        overflow_scroll_h(ui, "audit_list", list_h, |ui| {
             for e in &self.audit {
                 ui.monospace(format!(
                     "#{} {} {} {} → {}",
@@ -7043,31 +7051,29 @@ impl UiApp {
             ui.weak(t.caps_empty);
             return;
         }
-        egui::ScrollArea::vertical()
-            .id_salt(format!("caps_list_{holder}"))
-            .max_height(360.0)
-            .show(ui, |ui| {
-                for c in matching {
-                    ui.group(|ui| {
-                        ui.horizontal(|ui| {
-                            ui.monospace(format!("#{}", c.cap_id));
-                            ui.label(&c.object);
-                            ui.weak(c.rights.join(", "));
-                            if ui
-                                .small_button(t.caps_revoke)
-                                .on_hover_text(t.tip_caps_revoke)
-                                .clicked()
-                            {
-                                let _ = self.cmd_tx.send(Cmd::CapRevoke {
-                                    holder: c.holder.clone(),
-                                    cap_id: c.cap_id,
-                                    tree: false,
-                                });
-                            }
-                        });
+        let list_h = ui.available_height().max(120.0);
+        overflow_scroll_h(ui, format!("caps_list_{holder}"), list_h, |ui| {
+            for c in matching {
+                ui.group(|ui| {
+                    ui.horizontal(|ui| {
+                        ui.monospace(format!("#{}", c.cap_id));
+                        ui.label(&c.object);
+                        ui.weak(c.rights.join(", "));
+                        if ui
+                            .small_button(t.caps_revoke)
+                            .on_hover_text(t.tip_caps_revoke)
+                            .clicked()
+                        {
+                            let _ = self.cmd_tx.send(Cmd::CapRevoke {
+                                holder: c.holder.clone(),
+                                cap_id: c.cap_id,
+                                tree: false,
+                            });
+                        }
                     });
-                }
-            });
+                });
+            }
+        });
     }
 
     fn ui_scenarios(&mut self, ui: &mut egui::Ui) {

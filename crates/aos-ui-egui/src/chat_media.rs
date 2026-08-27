@@ -3,6 +3,7 @@
 use crate::cmd::Cmd;
 use crate::decl_ui;
 use crate::i18n::UiStrings;
+use crate::icons;
 use aos_proto::{ChatAttachment, MediaAudioOptions};
 use eframe::egui;
 use std::sync::mpsc::Sender;
@@ -60,13 +61,7 @@ pub fn render_pending_image_chips(
                         } else {
                             ui.allocate_space(egui::vec2(28.0, 28.0));
                         }
-                        if ui
-                            .add(
-                                egui::Label::new(egui::RichText::new("×").weak())
-                                    .sense(egui::Sense::click()),
-                            )
-                            .clicked()
-                        {
+                        if icons::close_button(ui).clicked() {
                             remove_idx = Some(i);
                         }
                     });
@@ -109,13 +104,7 @@ pub fn render_pending_attachment_chips(
                         } else {
                             ui.allocate_space(egui::vec2(28.0, 28.0));
                         }
-                        if ui
-                            .add(
-                                egui::Label::new(egui::RichText::new("×").weak())
-                                    .sense(egui::Sense::click()),
-                            )
-                            .clicked()
-                        {
+                        if icons::close_button(ui).clicked() {
                             remove_image = Some(i);
                         }
                     });
@@ -130,13 +119,7 @@ pub fn render_pending_attachment_chips(
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing.x = 4.0;
                         ui.label(egui::RichText::new(doc.label.as_str()).size(12.0));
-                        if ui
-                            .add(
-                                egui::Label::new(egui::RichText::new("×").weak())
-                                    .sense(egui::Sense::click()),
-                            )
-                            .clicked()
-                        {
+                        if icons::close_button(ui).clicked() {
                             remove_doc = Some(i);
                         }
                     });

@@ -122,15 +122,22 @@ impl DeclUiPanelState {
     ) {
         match w.kind.as_str() {
             "column" => {
-                ui.vertical(|ui| {
-                    if let Some(children) = &w.children {
-                        for c in children {
-                            Self::render_widget(
-                                ui, md_cache, c, cache, form_fields, tool_schemas, actions,
-                            );
-                        }
-                    }
-                });
+                let h = ui.available_height();
+                egui::ScrollArea::vertical()
+                    .id_salt("decl_ui_column")
+                    .max_height(h.max(120.0))
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        ui.vertical(|ui| {
+                            if let Some(children) = &w.children {
+                                for c in children {
+                                    Self::render_widget(
+                                        ui, md_cache, c, cache, form_fields, tool_schemas, actions,
+                                    );
+                                }
+                            }
+                        });
+                    });
             }
             "row" => {
                 ui.horizontal(|ui| {

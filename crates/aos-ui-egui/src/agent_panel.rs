@@ -4,6 +4,8 @@ use aos_proto::{AgentInfo, AgentSource, AgentState, AgentStepRecord, AgentTrace}
 use eframe::egui::{self, Color32, RichText, Ui};
 use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
 
+use crate::icons;
+
 pub struct PanelActions {
     pub pause: bool,
     pub kill: bool,
@@ -360,7 +362,8 @@ pub fn chat_agent_card(
         .corner_radius(4.0)
         .show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.colored_label(color, RichText::new(format!("● {state_label}")).strong());
+                icons::status_dot(ui, color);
+                ui.colored_label(color, RichText::new(state_label).strong());
                 let shown = if title.is_empty() {
                     agent_id
                 } else {
@@ -606,16 +609,19 @@ pub fn draw_agent_detail(
             ui.horizontal_wrapped(|ui| {
                 for child in &a.children {
                     let child_info_label = child.clone();
-                    if ui
-                        .add(
-                            egui::Button::new(RichText::new(format!("↗ {child_info_label}"))
-                                .color(Color32::from_rgb(160, 200, 255)))
-                            .frame(true),
-                        )
-                        .clicked()
-                    {
-                        actions.open_child = Some(child.clone());
-                    }
+                    ui.horizontal(|ui| {
+                        icons::external_arrow(ui);
+                        if ui
+                            .add(
+                                egui::Button::new(RichText::new(&child_info_label)
+                                    .color(Color32::from_rgb(160, 200, 255)))
+                                .frame(true),
+                            )
+                            .clicked()
+                        {
+                            actions.open_child = Some(child.clone());
+                        }
+                    });
                 }
             });
         }

@@ -1384,20 +1384,16 @@ impl ImageStudioState {
         ui.horizontal_top(|ui| {
             let mut attach_from_menu = false;
             let mut reuse_last_image = false;
-            ui.menu_button("📎", |ui| {
+            crate::icons::attach_menu(ui, "studio_attach", t.chat_attach_image, |ui| {
                     if last_session_image.is_some()
                         && ui.button(t.chat_last_session_image).clicked()
                     {
                         reuse_last_image = true;
-                        ui.close_menu();
                     }
                     if ui.button(t.chat_attach_image).clicked() {
                         attach_from_menu = true;
-                        ui.close_menu();
                     }
-                })
-                .response
-                .on_hover_text(t.chat_attach_image);
+                });
             if attach_from_menu {
                 if let Some(path) = pick_os_file(
                     t.chat_attach_image,
