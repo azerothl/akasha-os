@@ -5253,42 +5253,29 @@ impl UiApp {
         let mut edit_req: Option<(u64, String)> = None;
         let mut delete_id: Option<u64> = None;
         let mut supersede_req: Option<(u64, String)> = None;
+        let visible_hits: Vec<_> = self
+            .mem_hits
+            .iter()
+            .filter(|h| {
+                aos_proto::mem_extract::is_human_memory_fact(&h.text)
+                    && (self.mem_show_superseded || !h.superseded)
+            })
+            .collect();
         egui::ScrollArea::vertical().show(ui, |ui| {
-            if self.mem_hits.is_empty() {
+            if visible_hits.is_empty() {
                 ui.weak(t.memory_empty);
             }
-            for h in &self.mem_hits {
-                if h.superseded && !self.mem_show_superseded {
-                    continue;
-                }
-                let star = if h.pinned { "★" } else { "·" };
-                let status = if h.superseded {
-                    " [superseded]"
-                } else {
-                    ""
-                };
-                let chat_badge = h
-                    .metadata
-                    .get("source")
-                    .and_then(|v| v.as_str())
-                    .filter(|s| *s == "chat")
-                    .map(|_| format!(" [{}]", t.memory_badge_chat))
-                    .unwrap_or_default();
-                let rels: String = h
-                    .relations
-                    .iter()
-                    .map(|r| format!("{}→{}", r.rel.as_str(), r.to))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                ui.horizontal(|ui| {
-                    ui.label(format!(
-                        "[{star}] #{} {}{status}{chat_badge} (score {:.2})",
-                        h.id, h.text, h.score
-                    ));
+            for h in visible_hits {
+                ui.horizontal_wrapped(|ui| {
+                    if h.pinned {
+                        ui.label(egui::RichText::new("★").weak());
+                    }
+                    let mut fact = egui::RichText::new(h.text.trim());
+                    if h.superseded {
+                        fact = fact.weak().strikethrough();
+                    }
+                    ui.label(fact);
                 });
-                if !rels.is_empty() {
-                    ui.weak(format!("  {}", rels));
-                }
                 ui.horizontal(|ui| {
                     if ui.small_button(t.memory_btn_edit).clicked() {
                         edit_req = Some((h.id, h.text.clone()));
@@ -5300,7 +5287,7 @@ impl UiApp {
                         delete_id = Some(h.id);
                     }
                 });
-                ui.separator();
+                ui.add_space(6.0);
             }
         });
         if let Some((id, text)) = edit_req {

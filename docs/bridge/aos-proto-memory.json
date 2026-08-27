@@ -269,13 +269,31 @@
       "definitions": {
         "MemExtractOutcomeKind": {
           "description": "Issue pour un candidat (stocké, skip dédup, ou filtré secret).",
-          "enum": [
-            "stored",
-            "skipped_duplicate",
-            "filtered_secret",
-            "skipped_empty"
-          ],
-          "type": "string"
+          "oneOf": [
+            {
+              "enum": [
+                "stored",
+                "skipped_duplicate",
+                "filtered_secret",
+                "skipped_empty"
+              ],
+              "type": "string"
+            },
+            {
+              "description": "One-shot canvas / draw / completion task — not a durable user fact.",
+              "enum": [
+                "filtered_ephemeral"
+              ],
+              "type": "string"
+            },
+            {
+              "description": "Tool trace, agent action log, or delegation prose — not a human fact.",
+              "enum": [
+                "filtered_trace"
+              ],
+              "type": "string"
+            }
+          ]
         },
         "MemRelation": {
           "properties": {
@@ -342,14 +360,32 @@
     "MemExtractOutcomeKind": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "description": "Issue pour un candidat (stocké, skip dédup, ou filtré secret).",
-      "enum": [
-        "stored",
-        "skipped_duplicate",
-        "filtered_secret",
-        "skipped_empty"
+      "oneOf": [
+        {
+          "enum": [
+            "stored",
+            "skipped_duplicate",
+            "filtered_secret",
+            "skipped_empty"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "One-shot canvas / draw / completion task — not a durable user fact.",
+          "enum": [
+            "filtered_ephemeral"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Tool trace, agent action log, or delegation prose — not a human fact.",
+          "enum": [
+            "filtered_trace"
+          ],
+          "type": "string"
+        }
       ],
-      "title": "MemExtractOutcomeKind",
-      "type": "string"
+      "title": "MemExtractOutcomeKind"
     },
     "MemExtractRequest": {
       "$schema": "http://json-schema.org/draft-07/schema#",
@@ -423,13 +459,31 @@
         },
         "MemExtractOutcomeKind": {
           "description": "Issue pour un candidat (stocké, skip dédup, ou filtré secret).",
-          "enum": [
-            "stored",
-            "skipped_duplicate",
-            "filtered_secret",
-            "skipped_empty"
-          ],
-          "type": "string"
+          "oneOf": [
+            {
+              "enum": [
+                "stored",
+                "skipped_duplicate",
+                "filtered_secret",
+                "skipped_empty"
+              ],
+              "type": "string"
+            },
+            {
+              "description": "One-shot canvas / draw / completion task — not a durable user fact.",
+              "enum": [
+                "filtered_ephemeral"
+              ],
+              "type": "string"
+            },
+            {
+              "description": "Tool trace, agent action log, or delegation prose — not a human fact.",
+              "enum": [
+                "filtered_trace"
+              ],
+              "type": "string"
+            }
+          ]
         },
         "MemExtractedFact": {
           "description": "Un fait proposé par l'extracteur (avant filtre / persist).",

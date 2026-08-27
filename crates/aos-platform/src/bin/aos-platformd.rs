@@ -3398,6 +3398,13 @@ async fn run_mem_extract(
 
     let user = req.user_text.trim();
     let assistant = req.assistant_text.trim();
+    if aos_platform::extract::should_skip_mem_extract_turn(user) {
+        return Ok(MemExtractResponse {
+            facts_proposed: vec![],
+            outcomes: vec![],
+            stored: 0,
+        });
+    }
     if user.is_empty() && assistant.is_empty() {
         return Ok(MemExtractResponse {
             facts_proposed: vec![],
@@ -3426,34 +3433,62 @@ async fn run_mem_extract(
     let session_meta = req.session_id.clone().unwrap_or_default();
 
     for fact in &facts_proposed {
-        let text = fact.text.trim().to_string();
-        if text.is_empty() {
-            outcomes.push(MemExtractOutcome {
-                kind: MemExtractOutcomeKind::SkippedEmpty,
-                text,
-                id: None,
-                auto_relations: vec![],
-            });
-            continue;
-        }
-        if aos_platform::extract::looks_like_secret(&text) {
-            s.audit(AuditAppendRequest {
-                trace_id: format!("mem-extract-{}", session_meta),
-                actor: "service:platformd".into(),
-                action: "mem.extract".into(),
-                target: "filtered".into(),
-                detail: serde_json::json!({
-                    "kind": "filtered_secret",
-                    "text_preview": text.chars().take(40).collect::<String>(),
-                }),
-            });
-            outcomes.push(MemExtractOutcome {
-                kind: MemExtractOutcomeKind::FilteredSecret,
-                text,
-                id: None,
-                auto_relations: vec![],
-            });
-            continue;
+        let classified = aos_platform::extract::classify_candidates(std::slice::from_ref(fact));
+        let candidate = classified.into_iter().next().unwrap_or(MemExtractOutcome {
+            kind: MemExtractOutcomeKind::SkippedEmpty,
+            text: String::new(),
+            id: None,
+            auto_relations: vec![],
+        });
+        let text = candidate.text;
+        match candidate.kind {
+            MemExtractOutcomeKind::SkippedEmpty => {
+                outcomes.push(candidate);
+                continue;
+            }
+            MemExtractOutcomeKind::FilteredSecret => {
+                s.audit(AuditAppendRequest {
+                    trace_id: format!("mem-extract-{}", session_meta),
+                    actor: "service:platformd".into(),
+                    action: "mem.extract".into(),
+                    target: "filtered".into(),
+                    detail: serde_json::json!({
+                        "kind": "filtered_secret",
+                        "text_preview": text.chars().take(40).collect::<String>(),
+                    }),
+                });
+                outcomes.push(candidate);
+                continue;
+            }
+            MemExtractOutcomeKind::FilteredEphemeral => {
+                s.audit(AuditAppendRequest {
+                    trace_id: format!("mem-extract-{}", session_meta),
+                    actor: "service:platformd".into(),
+                    action: "mem.extract".into(),
+                    target: "filtered".into(),
+                    detail: serde_json::json!({
+                        "kind": "filtered_ephemeral",
+                        "text_preview": text.chars().take(40).collect::<String>(),
+                    }),
+                });
+                outcomes.push(candidate);
+                continue;
+            }
+            MemExtractOutcomeKind::FilteredTrace => {
+                s.audit(AuditAppendRequest {
+                    trace_id: format!("mem-extract-{}", session_meta),
+                    actor: "service:platformd".into(),
+                    action: "mem.extract".into(),
+                    target: "filtered".into(),
+                    detail: serde_json::json!({
+                        "kind": "filtered_trace",
+                        "text_preview": text.chars().take(40).collect::<String>(),
+                    }),
+                });
+                outcomes.push(candidate);
+                continue;
+            }
+            MemExtractOutcomeKind::Stored | MemExtractOutcomeKind::SkippedDuplicate => {}
         }
 
         if !req.persist {

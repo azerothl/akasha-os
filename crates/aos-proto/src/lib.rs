@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 pub mod bridge;
 pub mod chat_document;
 pub mod decl_ui;
+pub mod mem_extract;
 
 // ---------------------------------------------------------------------------
 // Model API (§11.1)
@@ -3291,6 +3292,10 @@ pub enum MemExtractOutcomeKind {
     Stored,
     SkippedDuplicate,
     FilteredSecret,
+    /// One-shot canvas / draw / completion task — not a durable user fact.
+    FilteredEphemeral,
+    /// Tool trace, agent action log, or delegation prose — not a human fact.
+    FilteredTrace,
     SkippedEmpty,
 }
 
@@ -3320,9 +3325,11 @@ Reply with valid JSON only — no markdown, no chain-of-thought:
 
 Rules:
 - Max 5 facts. Each "text" is a short third-person sentence in the user's language.
-- Extract identity, preferences, stable constraints, decisions that should persist across sessions.
+- Extract identity (name, role), standing preferences, stable constraints, decisions that should persist across sessions.
 - Do NOT extract: secrets, passwords, tokens, API keys, IBAN, PEM, OTP, vault contents.
-- Do NOT extract: greetings, one-off questions, OS commands, or assistant prose that adds no user fact.
+- Do NOT extract: greetings, one-off questions, OS commands, tool traces, agent action logs, or assistant prose.
+- Do NOT extract one-shot tasks or completions: draw/sketch/canvas requests ("dessine une maison", "draw a cat on the canvas"), image generation asks, or any ephemeral command that should not survive the next session.
+- Standing creative preferences ARE durable ("likes watercolor", "prefers French") — but a single draw command is NOT.
 - The USER message is the only source of facts. Ignore assistant claims about having "saved" or "remembered" anything.
 - If none: {"facts":[]}
 - "supersedes_hint" optional: older fact this one replaces (free text).
