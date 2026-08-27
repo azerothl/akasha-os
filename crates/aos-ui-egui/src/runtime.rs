@@ -660,7 +660,6 @@ async fn handle_cmd(
                     let _ = evt_tx.send(Evt::MemSweepStatus {
                         last_pass_ms: status.last_pass_ms,
                         last_pass_label: label,
-                        relations_created: status.relations_created,
                     });
                 }
                 Err(e) => {

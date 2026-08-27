@@ -43,7 +43,7 @@ use aos_proto::{
     ChatSessionIdRequest, ChatSessionMeta, ChatSessionMode, DocumentRef,
     FeedbackSubmitRequest, FeedbackSubmitResponse, McpServerInfo, MemHit, ModelInfo,
     ModuleCatalogue, ModuleIdRequest, ModuleInfo, ModuleInvokeRequest, ModuleInvokeResponse,
-    PendingConfirmation, ProviderRecord,
+    PendingConfirmation, ProviderRecord, MemRelationKind,
     SkillInfo, SystemMetrics, WebSearchHit,
     chat_tts_request, chat_user_wants_module_authoring, ModelMetrics,
 };
@@ -346,6 +346,41 @@ pub(crate) fn format_local_time_hm(ts_ms: u64, offset_minutes: i32) -> String {
     let mins = (secs / 60) % 60;
     let hours = (secs / 3600) % 24;
     format!("{hours:02}:{mins:02}")
+}
+
+fn memory_relation_snippet(text: &str) -> String {
+    let t = text.trim();
+    if t.chars().count() <= 80 {
+        t.to_string()
+    } else {
+        let end = t.char_indices().nth(80).map(|(i, _)| i).unwrap_or(t.len());
+        format!("{}…", &t[..end])
+    }
+}
+
+fn memory_relation_lines(
+    hit: &MemHit,
+    texts: &HashMap<u64, String>,
+    t: &i18n::UiStrings,
+) -> Vec<String> {
+    let mut lines = Vec::new();
+    for rel in &hit.relations {
+        let Some(target) = texts.get(&rel.to) else {
+            continue;
+        };
+        if !aos_proto::mem_extract::is_human_memory_fact(target) {
+            continue;
+        }
+        let snippet = memory_relation_snippet(target);
+        let line = match rel.rel {
+            MemRelationKind::Supersedes => t.memory_rel_replaces.replace("{}", &snippet),
+            MemRelationKind::Similar | MemRelationKind::Updates => {
+                t.memory_rel_related_to.replace("{}", &snippet)
+            }
+        };
+        lines.push(line);
+    }
+    lines
 }
 
 fn human_bytes(v: u64) -> String {
@@ -1497,7 +1532,6 @@ struct UiApp {
     mem_show_superseded: bool,
     mem_sweep_last_pass_ms: u64,
     mem_sweep_last_pass_label: String,
-    mem_sweep_relations: u64,
     mem_edit_id: Option<u64>,
     mem_edit_text: String,
     secret_brave: String,
@@ -1780,7 +1814,6 @@ impl UiApp {
             mem_show_superseded: true,
             mem_sweep_last_pass_ms: 0,
             mem_sweep_last_pass_label: String::new(),
-            mem_sweep_relations: 0,
             mem_edit_id: None,
             mem_edit_text: String::new(),
             secret_brave: String::new(),
@@ -2995,11 +3028,9 @@ impl eframe::App for UiApp {
                 Evt::MemSweepStatus {
                     last_pass_ms,
                     last_pass_label,
-                    relations_created,
                 } => {
                     self.mem_sweep_last_pass_ms = last_pass_ms;
                     self.mem_sweep_last_pass_label = last_pass_label;
-                    self.mem_sweep_relations = relations_created;
                 }
                 Evt::ChatSystem(m) => self.chat.push(ChatLine::plain("système", m)),
                 Evt::Metrics(m) => self.metrics = Some(m),
@@ -5239,17 +5270,11 @@ impl UiApp {
         let t = i18n::strings(&self.prefs.language);
         ui.heading(t.tab_memory);
         ui.weak(t.memory_blurb);
-        if self.mem_sweep_last_pass_ms > 0 {
+        if self.mem_sweep_last_pass_ms > 0 && !self.mem_sweep_last_pass_label.is_empty() {
             ui.weak(
-                t.memory_sweep_last_pass
+                t.memory_updated_at
                     .replace("{}", &self.mem_sweep_last_pass_label),
             );
-            if self.mem_sweep_relations > 0 {
-                ui.weak(
-                    t.memory_sweep_relations
-                        .replace("{}", &self.mem_sweep_relations.to_string()),
-                );
-            }
         }
         ui.separator();
         ui.horizontal(|ui| {
@@ -5327,6 +5352,11 @@ impl UiApp {
                     && (self.mem_show_superseded || !h.superseded)
             })
             .collect();
+        let fact_texts: HashMap<u64, String> = self
+            .mem_hits
+            .iter()
+            .map(|h| (h.id, h.text.clone()))
+            .collect();
         let list_h = ui.available_height().max(120.0);
         overflow_scroll_h(ui, "memory_hits", list_h, |ui| {
             if visible_hits.is_empty() {
@@ -5343,6 +5373,9 @@ impl UiApp {
                     }
                     ui.label(fact);
                 });
+                for line in memory_relation_lines(h, &fact_texts, &t) {
+                    ui.weak(line);
+                }
                 ui.horizontal(|ui| {
                     if ui.small_button(t.memory_btn_edit).clicked() {
                         edit_req = Some((h.id, h.text.clone()));

@@ -369,7 +369,6 @@ pub(crate) enum Evt {
     MemSweepStatus {
         last_pass_ms: u64,
         last_pass_label: String,
-        relations_created: u64,
     },
     SecretList {
         names: Vec<String>,
