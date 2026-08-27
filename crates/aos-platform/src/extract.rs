@@ -1,9 +1,15 @@
 //! Extraction de faits chat → mémoire long terme (E14 / Preview 0.5).
 //!
-//! Filtre déterministe des secrets + parse JSON du modèle. La persistance
-//! passe par [`crate::memory::MemoryStore::episodic_write_auto_link`].
+//! Filtre déterministe des secrets, tâches éphémères (canvas / dessin) et traces
+//! outil + parse JSON du modèle. La persistance passe par
+//! [`crate::memory::MemoryStore::episodic_write_auto_link`].
 
 use aos_proto::{MemExtractedFact, MemExtractOutcome, MemExtractOutcomeKind};
+
+pub use aos_proto::mem_extract::{
+    is_draw_or_canvas_request, is_human_memory_fact, looks_like_ephemeral_fact,
+    looks_like_tool_trace, should_skip_mem_extract_turn,
+};
 
 /// Seuil cosinus au-delà duquel un fait est considéré comme doublon exact
 /// (skip write ; l'auto-link `updates`/`supersedes` utilise 0.82).
@@ -228,34 +234,28 @@ fn iban_like(text: &str) -> bool {
     false
 }
 
-/// Classe chaque candidat : secret / vide / ok (à persist côté handler).
+/// Classe chaque candidat : secret / éphémère / trace / vide / ok (à persist côté handler).
 pub fn classify_candidates(facts: &[MemExtractedFact]) -> Vec<MemExtractOutcome> {
     facts
         .iter()
         .map(|f| {
             let text = f.text.trim().to_string();
-            if text.is_empty() {
-                MemExtractOutcome {
-                    kind: MemExtractOutcomeKind::SkippedEmpty,
-                    text,
-                    id: None,
-                    auto_relations: vec![],
-                }
+            let kind = if text.is_empty() {
+                MemExtractOutcomeKind::SkippedEmpty
             } else if looks_like_secret(&text) {
-                MemExtractOutcome {
-                    kind: MemExtractOutcomeKind::FilteredSecret,
-                    text,
-                    id: None,
-                    auto_relations: vec![],
-                }
+                MemExtractOutcomeKind::FilteredSecret
+            } else if looks_like_tool_trace(&text) {
+                MemExtractOutcomeKind::FilteredTrace
+            } else if looks_like_ephemeral_fact(&text) {
+                MemExtractOutcomeKind::FilteredEphemeral
             } else {
-                // Placeholder — le handler remplace par Stored / SkippedDuplicate.
-                MemExtractOutcome {
-                    kind: MemExtractOutcomeKind::Stored,
-                    text,
-                    id: None,
-                    auto_relations: vec![],
-                }
+                MemExtractOutcomeKind::Stored
+            };
+            MemExtractOutcome {
+                kind,
+                text,
+                id: None,
+                auto_relations: vec![],
             }
         })
         .collect()
@@ -335,5 +335,55 @@ mod tests {
         let out = classify_candidates(&facts);
         assert_eq!(out[0].kind, MemExtractOutcomeKind::Stored);
         assert_eq!(out[1].kind, MemExtractOutcomeKind::FilteredSecret);
+    }
+
+    #[test]
+    fn classify_filters_ephemeral_canvas_facts() {
+        let facts = vec![
+            MemExtractedFact {
+                text: "L'utilisateur veut dessiner une maison sur le canvas".into(),
+                supersedes_hint: None,
+            },
+            MemExtractedFact {
+                text: "L'utilisateur s'appelle Alice".into(),
+                supersedes_hint: None,
+            },
+            MemExtractedFact {
+                text: "L'utilisateur aime dessiner à l'aquarelle".into(),
+                supersedes_hint: None,
+            },
+        ];
+        let out = classify_candidates(&facts);
+        assert_eq!(out[0].kind, MemExtractOutcomeKind::FilteredEphemeral);
+        assert_eq!(out[1].kind, MemExtractOutcomeKind::Stored);
+        assert_eq!(out[2].kind, MemExtractOutcomeKind::Stored);
+    }
+
+    #[test]
+    fn classify_filters_tool_traces() {
+        let facts = vec![MemExtractedFact {
+            text: "✓ `canvas.stroke` → session".into(),
+            supersedes_hint: None,
+        }];
+        let out = classify_candidates(&facts);
+        assert_eq!(out[0].kind, MemExtractOutcomeKind::FilteredTrace);
+    }
+
+    #[test]
+    fn skip_pure_draw_turn() {
+        assert!(should_skip_mem_extract_turn("dessine moi une maison"));
+        assert!(should_skip_mem_extract_turn("draw a cat on the canvas"));
+        assert!(!should_skip_mem_extract_turn(
+            "Je m'appelle Alice et dessine une maison"
+        ));
+        assert!(!should_skip_mem_extract_turn("Je préfère le français"));
+    }
+
+    #[test]
+    fn human_memory_fact_gate() {
+        assert!(is_human_memory_fact("L'utilisateur s'appelle Alice"));
+        assert!(is_human_memory_fact("L'utilisateur préfère le français"));
+        assert!(!is_human_memory_fact("L'utilisateur veut dessiner une maison"));
+        assert!(!is_human_memory_fact("✓ `notes.create` → `todo.md`"));
     }
 }

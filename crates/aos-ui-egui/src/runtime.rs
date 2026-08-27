@@ -120,6 +120,14 @@ pub(crate) fn maybe_spawn_mem_extract(
     if !enabled {
         return;
     }
+    if aos_proto::mem_extract::should_skip_mem_extract_turn(&user_text) {
+        return;
+    }
+    let assistant_text = if aos_proto::mem_extract::looks_like_tool_trace(&assistant_text) {
+        String::new()
+    } else {
+        assistant_text
+    };
     if user_text.trim().is_empty() && assistant_text.trim().is_empty() {
         return;
     }
