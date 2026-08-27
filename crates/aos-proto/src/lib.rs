@@ -2989,9 +2989,15 @@ pub enum ChatAttachment {
     AgentAct {
         agent_id: String,
         act_id: String,
-        /// Phrase humaine FR (redondante avec content pour rechargement).
+        /// Legacy human phrase (pre-i18n sessions); UI prefers `action` + `args`.
         #[serde(default)]
         phrase: String,
+        /// Tool action id (e.g. `notes.create`); formatted in UI i18n.
+        #[serde(default)]
+        action: String,
+        /// Tool args for phrase interpolation.
+        #[serde(default)]
+        args: serde_json::Value,
         /// `pending` | `approved` | `denied` | `done`
         #[serde(default = "default_agent_act_state")]
         state: String,

@@ -1807,7 +1807,7 @@ fn next_act_id(agent_id: &str) -> String {
     )
 }
 
-async fn post_agent_act(bus: &BusClient, spec: &AgentSpec, act_id: &str, phrase: &str) {
+async fn post_agent_act(bus: &BusClient, spec: &AgentSpec, act_id: &str, action: &AgentAction) {
     let Some(session_id) = spec.session_id.clone() else {
         return;
     };
@@ -1817,11 +1817,13 @@ async fn post_agent_act(bus: &BusClient, spec: &AgentSpec, act_id: &str, phrase:
             &ChatSessionAppendRequest {
                 session_id,
                 role: "assistant".into(),
-                content: phrase.to_string(),
+                content: String::new(),
                 attachments: vec![ChatAttachment::AgentAct {
                     agent_id: spec.agent_id.clone(),
                     act_id: act_id.to_string(),
-                    phrase: phrase.to_string(),
+                    phrase: String::new(),
+                    action: action.action.clone(),
+                    args: action.args.clone(),
                     state: "pending".into(),
                 }],
                 speaker_id: None,
@@ -1832,27 +1834,30 @@ async fn post_agent_act(bus: &BusClient, spec: &AgentSpec, act_id: &str, phrase:
         .await;
 }
 
-async fn post_act_resolved(bus: &BusClient, spec: &AgentSpec, act_id: &str, phrase: &str, approved: bool) {
+async fn post_act_resolved(
+    bus: &BusClient,
+    spec: &AgentSpec,
+    act_id: &str,
+    action: &AgentAction,
+    approved: bool,
+) {
     let Some(session_id) = spec.session_id.clone() else {
         return;
     };
     let state = if approved { "approved" } else { "denied" };
-    let content = if approved {
-        format!("Autorisé une fois — {phrase}")
-    } else {
-        format!("Refusé — {phrase}")
-    };
     let _ = bus
         .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
             "chat.session.append",
             &ChatSessionAppendRequest {
                 session_id,
                 role: "assistant".into(),
-                content,
+                content: String::new(),
                 attachments: vec![ChatAttachment::AgentAct {
                     agent_id: spec.agent_id.clone(),
                     act_id: act_id.to_string(),
-                    phrase: phrase.to_string(),
+                    phrase: String::new(),
+                    action: action.action.clone(),
+                    args: action.args.clone(),
                     state: state.into(),
                 }],
                 speaker_id: None,
@@ -1909,8 +1914,7 @@ async fn gate_action(
     started: Instant,
 ) -> GateWait {
     let act_id = next_act_id(agent_id);
-    let phrase = aos_agent::agent_act::phrase_fr(&action.action, &action.args);
-    post_agent_act(bus, spec, &act_id, &phrase).await;
+    post_agent_act(bus, spec, &act_id, action).await;
     shared.paused.store(true, Ordering::SeqCst);
     report(
         bus,
@@ -1923,7 +1927,14 @@ async fn gate_action(
     let remaining = timeout.saturating_sub(started.elapsed());
     let wait_limit = Duration::from_secs(300).min(remaining.max(Duration::from_secs(30)));
     let outcome = wait_act_decision(shared, cmd_rx, &act_id, wait_limit).await;
-    post_act_resolved(bus, spec, &act_id, &phrase, matches!(outcome, GateWait::Proceed)).await;
+    post_act_resolved(
+        bus,
+        spec,
+        &act_id,
+        action,
+        matches!(outcome, GateWait::Proceed),
+    )
+    .await;
     if matches!(outcome, GateWait::Proceed | GateWait::Denied) {
         report(
             bus,
