@@ -1329,7 +1329,7 @@ const FR: UiStrings = UiStrings {
     memory_btn_save: "Enregistrer",
     memory_btn_supersede: "Superséder",
     memory_btn_cancel: "Annuler",
-    memory_show_superseded: "Afficher supersédés",
+    memory_show_superseded: "Afficher les faits remplacés",
     memory_editing: "Édition",
     memory_empty: "Aucun fait pour l’instant — dites votre nom ou vos préférences dans le chat, ou ajoutez-en un ci-dessous.",
     tip_send: "Envoyer (Entrée). Tapez / pour les commandes.",
