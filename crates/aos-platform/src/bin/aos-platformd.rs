@@ -3440,7 +3440,6 @@ async fn run_mem_extract(
             id: None,
             auto_relations: vec![],
         });
-        let text = candidate.text;
         match candidate.kind {
             MemExtractOutcomeKind::SkippedEmpty => {
                 outcomes.push(candidate);
@@ -3454,7 +3453,7 @@ async fn run_mem_extract(
                     target: "filtered".into(),
                     detail: serde_json::json!({
                         "kind": "filtered_secret",
-                        "text_preview": text.chars().take(40).collect::<String>(),
+                        "text_preview": candidate.text.chars().take(40).collect::<String>(),
                     }),
                 });
                 outcomes.push(candidate);
@@ -3468,7 +3467,7 @@ async fn run_mem_extract(
                     target: "filtered".into(),
                     detail: serde_json::json!({
                         "kind": "filtered_ephemeral",
-                        "text_preview": text.chars().take(40).collect::<String>(),
+                        "text_preview": candidate.text.chars().take(40).collect::<String>(),
                     }),
                 });
                 outcomes.push(candidate);
@@ -3482,7 +3481,7 @@ async fn run_mem_extract(
                     target: "filtered".into(),
                     detail: serde_json::json!({
                         "kind": "filtered_trace",
-                        "text_preview": text.chars().take(40).collect::<String>(),
+                        "text_preview": candidate.text.chars().take(40).collect::<String>(),
                     }),
                 });
                 outcomes.push(candidate);
@@ -3491,6 +3490,7 @@ async fn run_mem_extract(
             MemExtractOutcomeKind::Stored | MemExtractOutcomeKind::SkippedDuplicate => {}
         }
 
+        let text = candidate.text.trim().to_string();
         if !req.persist {
             outcomes.push(MemExtractOutcome {
                 kind: MemExtractOutcomeKind::Stored,
