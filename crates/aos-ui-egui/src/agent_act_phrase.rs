@@ -19,267 +19,122 @@ fn truncate(s: &str, max: usize) -> String {
     format!("{}…", s.chars().take(max).collect::<String>())
 }
 
-/// Format a pending agent act as a human sentence (EN or FR).
-pub fn format_agent_act_phrase(lang: &str, action: &str, args: &Value) -> String {
-    let en = lang.eq_ignore_ascii_case("en");
+fn subst(template: &str, key: &str, value: &str) -> String {
+    template.replace(&format!("{{{key}}}"), value)
+}
+
+/// Format a pending agent act as a human sentence from UI i18n keys.
+pub fn format_agent_act_phrase(t: &UiStrings, action: &str, args: &Value) -> String {
     let name = action.trim();
     match name {
         "notes.create" => {
             if let Some(title) = arg_str(args, "title") {
-                if en {
-                    format!("The agent wants to create a note titled « {title} ».")
-                } else {
-                    format!("L'agent veut créer une note intitulée « {title} ».")
-                }
-            } else if en {
-                "The agent wants to create a note.".into()
+                subst(t.agent_act_notes_create_title, "title", &title)
             } else {
-                "L'agent veut créer une note.".into()
+                t.agent_act_notes_create.into()
             }
         }
         "notes.update" => {
             if let Some(title) = arg_str(args, "title").or_else(|| arg_str(args, "slug")) {
-                if en {
-                    format!("The agent wants to edit the note « {title} ».")
-                } else {
-                    format!("L'agent veut modifier la note « {title} ».")
-                }
-            } else if en {
-                "The agent wants to edit a note.".into()
+                subst(t.agent_act_notes_update_title, "title", &title)
             } else {
-                "L'agent veut modifier une note.".into()
+                t.agent_act_notes_update.into()
             }
         }
         "tasks.create" => {
             if let Some(title) = arg_str(args, "title") {
-                if en {
-                    format!("The agent wants to create the task « {title} ».")
-                } else {
-                    format!("L'agent veut créer la tâche « {title} ».")
-                }
-            } else if en {
-                "The agent wants to create a task.".into()
+                subst(t.agent_act_tasks_create_title, "title", &title)
             } else {
-                "L'agent veut créer une tâche.".into()
+                t.agent_act_tasks_create.into()
             }
         }
         "tasks.update" | "tasks.complete" => {
             if let Some(id) = arg_str(args, "id").or_else(|| arg_str(args, "task_id")) {
-                if en {
-                    format!("The agent wants to update task {id}.")
-                } else {
-                    format!("L'agent veut mettre à jour la tâche {id}.")
-                }
-            } else if en {
-                "The agent wants to update a task.".into()
+                subst(t.agent_act_tasks_update_id, "id", &id)
             } else {
-                "L'agent veut mettre à jour une tâche.".into()
+                t.agent_act_tasks_update.into()
             }
         }
-        "canvas.set_style" => {
-            if en {
-                "The agent wants to change the pen style on the canvas.".into()
-            } else {
-                "L'agent veut changer le style du crayon sur le canvas.".into()
-            }
-        }
-        "canvas.stroke" | "canvas.line" | "canvas.spline" => {
-            if en {
-                "The agent wants to draw on the canvas.".into()
-            } else {
-                "L'agent veut tracer sur le canvas.".into()
-            }
-        }
-        "canvas.rect" => {
-            if en {
-                "The agent wants to draw a rectangle on the canvas.".into()
-            } else {
-                "L'agent veut dessiner un rectangle sur le canvas.".into()
-            }
-        }
-        "canvas.ellipse" => {
-            if en {
-                "The agent wants to draw an ellipse on the canvas.".into()
-            } else {
-                "L'agent veut dessiner une ellipse sur le canvas.".into()
-            }
-        }
-        "canvas.erase" => {
-            if en {
-                "The agent wants to erase an area on the canvas.".into()
-            } else {
-                "L'agent veut effacer une zone du canvas.".into()
-            }
-        }
-        "canvas.clear" => {
-            if en {
-                "The agent wants to clear the canvas.".into()
-            } else {
-                "L'agent veut effacer le canvas.".into()
-            }
-        }
-        "canvas.undo" => {
-            if en {
-                "The agent wants to undo the last stroke on the canvas.".into()
-            } else {
-                "L'agent veut annuler le dernier trait sur le canvas.".into()
-            }
-        }
+        "canvas.set_style" => t.agent_act_canvas_set_style.into(),
+        "canvas.stroke" | "canvas.line" | "canvas.spline" => t.agent_act_canvas_stroke.into(),
+        "canvas.rect" => t.agent_act_canvas_rect.into(),
+        "canvas.ellipse" => t.agent_act_canvas_ellipse.into(),
+        "canvas.erase" => t.agent_act_canvas_erase.into(),
+        "canvas.clear" => t.agent_act_canvas_clear.into(),
+        "canvas.undo" => t.agent_act_canvas_undo.into(),
         "fs.write" => {
             if let Some(path) = arg_str(args, "path") {
-                if en {
-                    format!("The agent wants to write the file {path}.")
-                } else {
-                    format!("L'agent veut écrire le fichier {path}.")
-                }
-            } else if en {
-                "The agent wants to write a file.".into()
+                subst(t.agent_act_fs_write_path, "path", &path)
             } else {
-                "L'agent veut écrire un fichier.".into()
+                t.agent_act_fs_write.into()
             }
         }
         "fs.delete" => {
             if let Some(path) = arg_str(args, "path") {
-                if en {
-                    format!("The agent wants to delete the file {path}.")
-                } else {
-                    format!("L'agent veut supprimer le fichier {path}.")
-                }
-            } else if en {
-                "The agent wants to delete a file.".into()
+                subst(t.agent_act_fs_delete_path, "path", &path)
             } else {
-                "L'agent veut supprimer un fichier.".into()
+                t.agent_act_fs_delete.into()
             }
         }
         "fs.mkdir" => {
             if let Some(path) = arg_str(args, "path") {
-                if en {
-                    format!("The agent wants to create the folder {path}.")
-                } else {
-                    format!("L'agent veut créer le dossier {path}.")
-                }
-            } else if en {
-                "The agent wants to create a folder.".into()
+                subst(t.agent_act_fs_mkdir_path, "path", &path)
             } else {
-                "L'agent veut créer un dossier.".into()
+                t.agent_act_fs_mkdir.into()
             }
         }
         "media.image.generate" | "media.generate" => {
             if let Some(prompt) = arg_str(args, "prompt") {
-                let p = truncate(&prompt, 80);
-                if en {
-                    format!("The agent wants to generate an image: « {p} ».")
-                } else {
-                    format!("L'agent veut générer une image : « {p} ».")
-                }
-            } else if en {
-                "The agent wants to generate an image.".into()
+                subst(
+                    t.agent_act_media_image_prompt,
+                    "prompt",
+                    &truncate(&prompt, 80),
+                )
             } else {
-                "L'agent veut générer une image.".into()
+                t.agent_act_media_image.into()
             }
         }
-        "media.audio.generate" => {
-            if en {
-                "The agent wants to generate an audio file.".into()
-            } else {
-                "L'agent veut générer un fichier audio.".into()
-            }
-        }
+        "media.audio.generate" => t.agent_act_media_audio.into(),
         "web.search" => {
             if let Some(q) = arg_str(args, "query") {
-                let q = truncate(&q, 80);
-                if en {
-                    format!("The agent wants to search the web: « {q} ».")
-                } else {
-                    format!("L'agent veut rechercher sur le web : « {q} ».")
-                }
-            } else if en {
-                "The agent wants to search the web.".into()
+                subst(t.agent_act_web_search_query, "query", &truncate(&q, 80))
             } else {
-                "L'agent veut faire une recherche web.".into()
+                t.agent_act_web_search.into()
             }
         }
         "web.browse" => {
             if let Some(url) = arg_str(args, "url") {
-                if en {
-                    format!("The agent wants to browse {url}.")
-                } else {
-                    format!("L'agent veut parcourir la page {url}.")
-                }
-            } else if en {
-                "The agent wants to browse a web page.".into()
+                subst(t.agent_act_web_browse_url, "url", &url)
             } else {
-                "L'agent veut parcourir une page web.".into()
+                t.agent_act_web_browse.into()
             }
         }
         "net.fetch" => {
             if let Some(url) = arg_str(args, "url") {
-                if en {
-                    format!("The agent wants to download {url}.")
-                } else {
-                    format!("L'agent veut télécharger {url}.")
-                }
-            } else if en {
-                "The agent wants to download a URL.".into()
+                subst(t.agent_act_net_fetch_url, "url", &url)
             } else {
-                "L'agent veut télécharger une URL.".into()
+                t.agent_act_net_fetch.into()
             }
         }
-        "mem.episodic_write" => {
-            if en {
-                "The agent wants to save a memory.".into()
-            } else {
-                "L'agent veut enregistrer un souvenir.".into()
-            }
-        }
+        "mem.episodic_write" => t.agent_act_mem_episodic_write.into(),
         other if other.contains('.') => {
             let verb = other.split('.').last().unwrap_or("agir");
             let surface = other.split('.').next().unwrap_or("l'outil");
-            match surface {
-                "notes" => {
-                    if en {
-                        format!("The agent wants to act on notes ({verb}).")
-                    } else {
-                        format!("L'agent veut agir sur les notes ({verb}).")
-                    }
-                }
-                "tasks" => {
-                    if en {
-                        format!("The agent wants to act on tasks ({verb}).")
-                    } else {
-                        format!("L'agent veut agir sur les tâches ({verb}).")
-                    }
-                }
-                "canvas" => {
-                    if en {
-                        format!("The agent wants to modify the canvas ({verb}).")
-                    } else {
-                        format!("L'agent veut modifier le canvas ({verb}).")
-                    }
-                }
-                _ => {
-                    if en {
-                        format!("The agent wants to perform an action ({verb}).")
-                    } else {
-                        format!("L'agent veut effectuer une action ({verb}).")
-                    }
-                }
-            }
+            let template = match surface {
+                "notes" => t.agent_act_notes_generic_verb,
+                "tasks" => t.agent_act_tasks_generic_verb,
+                "canvas" => t.agent_act_canvas_generic_verb,
+                _ => t.agent_act_action_generic_verb,
+            };
+            subst(template, "verb", verb)
         }
-        _ => {
-            if en {
-                "The agent wants to perform an action.".into()
-            } else {
-                "L'agent veut effectuer une action.".into()
-            }
-        }
+        _ => t.agent_act_generic.into(),
     }
 }
 
 /// Thread bubble text for an agent-act attachment (pending, approved, or denied).
 pub fn thread_display_text(
     t: &UiStrings,
-    lang: &str,
     action: &str,
     args: &Value,
     state: &str,
@@ -288,7 +143,7 @@ pub fn thread_display_text(
     let detail = if action.is_empty() {
         legacy_phrase.to_string()
     } else {
-        format_agent_act_phrase(lang, action, args)
+        format_agent_act_phrase(t, action, args)
     };
     match state {
         "approved" => format!("{} — {detail}", t.agent_act_resolved_approved),
@@ -300,7 +155,6 @@ pub fn thread_display_text(
 /// Thread bubble text from a chat attachment, if this message carries an agent act.
 pub fn thread_display_from_attachment(
     t: &UiStrings,
-    lang: &str,
     att: &ChatAttachment,
 ) -> Option<String> {
     match att {
@@ -310,14 +164,9 @@ pub fn thread_display_from_attachment(
             state,
             phrase,
             ..
-        } if !action.is_empty() || !phrase.is_empty() => Some(thread_display_text(
-            t,
-            lang,
-            action,
-            args,
-            state,
-            phrase,
-        )),
+        } if !action.is_empty() || !phrase.is_empty() => {
+            Some(thread_display_text(t, action, args, state, phrase))
+        }
         _ => None,
     }
 }
@@ -330,8 +179,10 @@ mod tests {
     #[test]
     fn en_fr_differ_for_same_action() {
         let args = json!({"title": "cohort"});
-        let en = format_agent_act_phrase("en", "notes.create", &args);
-        let fr = format_agent_act_phrase("fr", "notes.create", &args);
+        let t_en = crate::i18n::strings("en");
+        let t_fr = crate::i18n::strings("fr");
+        let en = format_agent_act_phrase(&t_en, "notes.create", &args);
+        let fr = format_agent_act_phrase(&t_fr, "notes.create", &args);
         assert_ne!(en, fr);
         assert!(en.contains("cohort"));
         assert!(fr.contains("cohort"));
@@ -341,7 +192,8 @@ mod tests {
 
     #[test]
     fn canvas_stroke_avoids_raw_action_id() {
-        let en = format_agent_act_phrase("en", "canvas.stroke", &json!({}));
+        let t = crate::i18n::strings("en");
+        let en = format_agent_act_phrase(&t, "canvas.stroke", &json!({}));
         assert!(!en.contains("canvas.stroke"));
         assert!(en.contains("draw"));
     }
@@ -351,8 +203,8 @@ mod tests {
         let t_en = crate::i18n::strings("en");
         let t_fr = crate::i18n::strings("fr");
         let args = json!({});
-        let en = thread_display_text(&t_en, "en", "canvas.stroke", &args, "approved", "");
-        let fr = thread_display_text(&t_fr, "fr", "canvas.stroke", &args, "approved", "");
+        let en = thread_display_text(&t_en, "canvas.stroke", &args, "approved", "");
+        let fr = thread_display_text(&t_fr, "canvas.stroke", &args, "approved", "");
         assert!(en.starts_with("Allowed once"));
         assert!(fr.starts_with("Autorisé une fois"));
         assert_ne!(en, fr);

@@ -4383,11 +4383,7 @@ impl UiApp {
                         )
                     });
                     if let Some(act_text) = attachments.iter().find_map(|a| {
-                        agent_act_phrase::thread_display_from_attachment(
-                            t,
-                            &self.prefs.language,
-                            a,
-                        )
+                        agent_act_phrase::thread_display_from_attachment(t, a)
                     }) {
                         text = act_text;
                     }
