@@ -408,85 +408,87 @@ pub fn ui_canvas_toolbar(
     state: &mut CanvasPanelState,
 ) -> Option<CanvasUiAction> {
     let mut action: Option<CanvasUiAction> = None;
-    let compact = ui.spacing().item_spacing;
-    ui.spacing_mut().item_spacing = eframe::egui::vec2(4.0, compact.y);
+    ui.horizontal(|ui| {
+        let compact = ui.spacing().item_spacing;
+        ui.spacing_mut().item_spacing = eframe::egui::vec2(4.0, compact.y);
 
-    if state.seeing {
-        ui_canvas_seeing_pill(ui, t.canvas_seeing_now);
-    }
+        if state.seeing {
+            ui_canvas_seeing_pill(ui, t.canvas_seeing_now);
+        }
 
-    ui.selectable_value(&mut state.tool, CanvasTool::Pen, t.canvas_tool_pen);
-    ui.selectable_value(&mut state.tool, CanvasTool::Eraser, t.canvas_tool_eraser);
-    ui.selectable_value(&mut state.tool, CanvasTool::Line, t.canvas_tool_line);
-    ui.selectable_value(&mut state.tool, CanvasTool::Spline, t.canvas_tool_spline);
-    ui.selectable_value(&mut state.tool, CanvasTool::Rect, t.canvas_tool_rect);
-    ui.selectable_value(&mut state.tool, CanvasTool::Ellipse, t.canvas_tool_ellipse);
-    ui.selectable_value(&mut state.tool, CanvasTool::Fill, t.canvas_tool_fill);
+        ui.selectable_value(&mut state.tool, CanvasTool::Pen, t.canvas_tool_pen);
+        ui.selectable_value(&mut state.tool, CanvasTool::Eraser, t.canvas_tool_eraser);
+        ui.selectable_value(&mut state.tool, CanvasTool::Line, t.canvas_tool_line);
+        ui.selectable_value(&mut state.tool, CanvasTool::Spline, t.canvas_tool_spline);
+        ui.selectable_value(&mut state.tool, CanvasTool::Rect, t.canvas_tool_rect);
+        ui.selectable_value(&mut state.tool, CanvasTool::Ellipse, t.canvas_tool_ellipse);
+        ui.selectable_value(&mut state.tool, CanvasTool::Fill, t.canvas_tool_fill);
 
-    if matches!(state.tool, CanvasTool::Rect | CanvasTool::Ellipse) {
-        let fill_label = eframe::egui::RichText::new(t.canvas_fill_toggle).weak();
-        ui.toggle_value(&mut state.shape_fill, fill_label);
-    }
+        if matches!(state.tool, CanvasTool::Rect | CanvasTool::Ellipse) {
+            let fill_label = eframe::egui::RichText::new(t.canvas_fill_toggle).weak();
+            ui.toggle_value(&mut state.shape_fill, fill_label);
+        }
 
-    ui.label(t.canvas_tint);
-    let mut rgba = [
-        state.color.r() as f32 / 255.0,
-        state.color.g() as f32 / 255.0,
-        state.color.b() as f32 / 255.0,
-        1.0,
-    ];
-    if ui.color_edit_button_rgba_unmultiplied(&mut rgba).changed() {
-        state.color = Color32::from_rgb(
-            (rgba[0] * 255.0) as u8,
-            (rgba[1] * 255.0) as u8,
-            (rgba[2] * 255.0) as u8,
+        ui.label(t.canvas_tint);
+        let mut rgba = [
+            state.color.r() as f32 / 255.0,
+            state.color.g() as f32 / 255.0,
+            state.color.b() as f32 / 255.0,
+            1.0,
+        ];
+        if ui.color_edit_button_rgba_unmultiplied(&mut rgba).changed() {
+            state.color = Color32::from_rgb(
+                (rgba[0] * 255.0) as u8,
+                (rgba[1] * 255.0) as u8,
+                (rgba[2] * 255.0) as u8,
+            );
+            action = Some(CanvasUiAction::SetStyle {
+                color: Some(color_to_hex(state.color)),
+                width: None,
+            });
+        }
+        let width_resp = ui.add(
+            eframe::egui::Slider::new(&mut state.width, 0.005..=0.06).text(t.canvas_width),
         );
-        action = Some(CanvasUiAction::SetStyle {
-            color: Some(color_to_hex(state.color)),
-            width: None,
-        });
-    }
-    let width_resp = ui.add(
-        eframe::egui::Slider::new(&mut state.width, 0.005..=0.06).text(t.canvas_width),
-    );
-    if width_resp.changed() {
-        action = Some(CanvasUiAction::SetStyle {
-            color: None,
-            width: Some(state.width),
-        });
-    }
+        if width_resp.changed() {
+            action = Some(CanvasUiAction::SetStyle {
+                color: None,
+                width: Some(state.width),
+            });
+        }
 
-    if ui
-        .button(eframe::egui::RichText::new(t.canvas_undo).weak())
-        .clicked()
-    {
-        action = Some(CanvasUiAction::Apply(CanvasOpBody::Undo));
-    }
-    if ui
-        .button(eframe::egui::RichText::new(t.canvas_export).weak())
-        .clicked()
-    {
-        action = Some(CanvasUiAction::Export);
-    }
-
-    if state.clear_confirm_open {
-        ui.label(eframe::egui::RichText::new(t.canvas_clear_confirm).small());
         if ui
-            .button(eframe::egui::RichText::new(t.canvas_clear_confirm_yes).color(crate::theme::HYDROGEN))
+            .button(eframe::egui::RichText::new(t.canvas_undo).weak())
             .clicked()
         {
-            state.clear_confirm_open = false;
-            action = Some(CanvasUiAction::Apply(CanvasOpBody::Clear));
+            action = Some(CanvasUiAction::Apply(CanvasOpBody::Undo));
         }
-        if ui.button(t.canvas_clear_confirm_no).clicked() {
-            state.clear_confirm_open = false;
+        if ui
+            .button(eframe::egui::RichText::new(t.canvas_export).weak())
+            .clicked()
+        {
+            action = Some(CanvasUiAction::Export);
         }
-    } else if ui
-        .button(eframe::egui::RichText::new(t.canvas_clear).color(crate::theme::HYDROGEN))
-        .clicked()
-    {
-        state.clear_confirm_open = true;
-    }
+
+        if state.clear_confirm_open {
+            ui.label(eframe::egui::RichText::new(t.canvas_clear_confirm).small());
+            if ui
+                .button(eframe::egui::RichText::new(t.canvas_clear_confirm_yes).color(crate::theme::HYDROGEN))
+                .clicked()
+            {
+                state.clear_confirm_open = false;
+                action = Some(CanvasUiAction::Apply(CanvasOpBody::Clear));
+            }
+            if ui.button(t.canvas_clear_confirm_no).clicked() {
+                state.clear_confirm_open = false;
+            }
+        } else if ui
+            .button(eframe::egui::RichText::new(t.canvas_clear).color(crate::theme::HYDROGEN))
+            .clicked()
+        {
+            state.clear_confirm_open = true;
+        }
+    });
 
     action
 }
