@@ -497,6 +497,49 @@ async fn main() {
         });
     }
 
+    // --- mem.sweep — daily replay of today's sessions (Preview) ---
+    {
+        let s = sub.clone();
+        svc.on("mem.sweep", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<MemSweepRequest>() {
+                    Ok(req) => match run_mem_sweep(&s, req).await {
+                        Ok(resp) => {
+                            let _ = ctx.respond(aos_ipc::msg::Status::Ok, &resp).await;
+                        }
+                        Err(e) => {
+                            let _ = ctx
+                                .respond_error(aos_ipc::msg::Status::InternalError, &e)
+                                .await;
+                        }
+                    },
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("mem.sweep.status", move |ctx| {
+            let s = s.clone();
+            async move {
+                let mem_dir = s.mem.lock().unwrap().dir().to_path_buf();
+                let state = aos_platform::mem_sweep::SweepState::load(&mem_dir);
+                let status = MemSweepStatus {
+                    last_pass_ms: state.last_pass_ms,
+                    last_local_day_key: state.last_local_day_key,
+                    relations_created: state.relations_created,
+                };
+                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &status).await;
+            }
+        });
+    }
+
     // --- mem.relate / neighbors / list / update (E6 / Preview 0.4) ---
     {
         let s = sub.clone();
@@ -3342,6 +3385,40 @@ async fn main() {
     }
 
     eprintln!("[aos-platformd] prêt");
+    // Daily memory sweep ticker (in-app scheduled pass).
+    {
+        let s = sub.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(300));
+            interval.tick().await; // skip immediate fire on boot
+            loop {
+                interval.tick().await;
+                let offset = aos_platform::mem_sweep::system_tz_offset_minutes();
+                let now = sweep_now_ms();
+                let day_key = aos_platform::mem_sweep::local_day_key(now, offset);
+                let mem_dir = s.mem.lock().unwrap().dir().to_path_buf();
+                let state = aos_platform::mem_sweep::SweepState::load(&mem_dir);
+                if state.last_local_day_key == day_key {
+                    continue;
+                }
+                eprintln!("[aos-platformd] mem sweep : démarrage jour {day_key}");
+                let req = MemSweepRequest {
+                    tz_offset_minutes: Some(offset),
+                    model_id: None,
+                    persist: true,
+                    force: false,
+                };
+                match run_mem_sweep(&s, req).await {
+                    Ok(resp) => eprintln!(
+                        "[aos-platformd] mem sweep : {} sessions, {} stockés, {} relations",
+                        resp.sessions_scanned, resp.stored, resp.relations_created
+                    ),
+                    Err(e) => eprintln!("[aos-platformd] mem sweep erreur : {e}"),
+                }
+            }
+        });
+    }
+
     let _ = svc.serve(&config.bus).await;
 }
 
@@ -3502,12 +3579,26 @@ async fn run_mem_extract(
         }
 
         let emb = s.embed_text(&text).unwrap_or_default();
-        let near = {
-            let mem = s.mem.lock().unwrap();
-            mem.episodic_query(&emb, 1, Some("user:default"))
+        let metadata = serde_json::json!({
+            "source": "chat",
+            "session_id": req.session_id,
+            "extracted": true,
+            "supersedes_hint": fact.supersedes_hint,
+        });
+        let persisted = {
+            let mut mem = s.mem.lock().unwrap();
+            aos_platform::mem_sweep::persist_classified_fact(&mut mem, &text, metadata, emb)
         };
-        if let Some(hit) = near.first() {
-            if hit.score >= aos_platform::extract::DEDUP_THRESHOLD {
+        let (outcome_kind, id, auto) = match persisted.kind {
+            aos_platform::mem_sweep::PersistFactKind::Stored => {
+                stored += 1;
+                (
+                    MemExtractOutcomeKind::Stored,
+                    persisted.id,
+                    persisted.relations,
+                )
+            }
+            aos_platform::mem_sweep::PersistFactKind::SkippedDuplicate => {
                 s.audit(AuditAppendRequest {
                     trace_id: format!("mem-extract-{}", session_meta),
                     actor: "service:platformd".into(),
@@ -3515,55 +3606,34 @@ async fn run_mem_extract(
                     target: "skipped".into(),
                     detail: serde_json::json!({
                         "kind": "skipped_duplicate",
-                        "existing_id": hit.id,
-                        "score": hit.score,
+                        "existing_id": persisted.id,
                     }),
                 });
-                outcomes.push(MemExtractOutcome {
-                    kind: MemExtractOutcomeKind::SkippedDuplicate,
-                    text,
-                    id: Some(hit.id),
-                    auto_relations: vec![],
-                });
-                continue;
+                (
+                    MemExtractOutcomeKind::SkippedDuplicate,
+                    persisted.id,
+                    persisted.relations,
+                )
             }
-        }
-
-        let metadata = serde_json::json!({
-            "source": "chat",
-            "session_id": req.session_id,
-            "extracted": true,
-            "supersedes_hint": fact.supersedes_hint,
-        });
-        let (id, auto) = {
-            let mut mem = s.mem.lock().unwrap();
-            mem.episodic_write_auto_link(
-                "user:default",
-                &text,
-                metadata,
-                emb,
-                false,
-                aos_platform::memory::MemoryKind::Fact,
-                0.82,
-            )
         };
-        stored += 1;
-        s.audit(AuditAppendRequest {
-            trace_id: format!("mem-extract-{}", session_meta),
-            actor: "service:platformd".into(),
-            action: "mem.extract".into(),
-            target: format!("stored:{id}"),
-            detail: serde_json::json!({
-                "kind": "stored",
-                "id": id,
-                "text": text,
-                "auto_relations": auto.len(),
-            }),
-        });
+        if outcome_kind == MemExtractOutcomeKind::Stored {
+            s.audit(AuditAppendRequest {
+                trace_id: format!("mem-extract-{}", session_meta),
+                actor: "service:platformd".into(),
+                action: "mem.extract".into(),
+                target: format!("stored:{}", id.unwrap_or(0)),
+                detail: serde_json::json!({
+                    "kind": "stored",
+                    "id": id,
+                    "text": text,
+                    "auto_relations": auto.len(),
+                }),
+            });
+        }
         outcomes.push(MemExtractOutcome {
-            kind: MemExtractOutcomeKind::Stored,
+            kind: outcome_kind,
             text,
-            id: Some(id),
+            id,
             auto_relations: auto,
         });
     }
@@ -3632,5 +3702,133 @@ async fn infer_extract_completion(
         }
     }
     Ok(full)
+}
+
+fn sweep_now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64
+}
+
+/// Repasse quotidienne : sessions du jour local → mem.extract par tour.
+async fn run_mem_sweep(
+    s: &PlatformSubsystem,
+    req: MemSweepRequest,
+) -> Result<MemSweepResponse, String> {
+    let offset = req
+        .tz_offset_minutes
+        .unwrap_or_else(aos_platform::mem_sweep::system_tz_offset_minutes);
+    let now = sweep_now_ms();
+    let day_key = aos_platform::mem_sweep::local_day_key(now, offset);
+    let mem_dir = s.mem.lock().unwrap().dir().to_path_buf();
+    let state = aos_platform::mem_sweep::SweepState::load(&mem_dir);
+    if !req.force && state.last_local_day_key == day_key {
+        return Ok(MemSweepResponse {
+            local_day_key: day_key,
+            sessions_scanned: 0,
+            turns_replayed: 0,
+            facts_proposed: 0,
+            stored: 0,
+            skipped_duplicate: 0,
+            filtered: 0,
+            relations_created: 0,
+            last_pass_ms: state.last_pass_ms,
+        });
+    }
+
+    let (day_start, day_end) = aos_platform::mem_sweep::local_day_bounds_ms(now, offset);
+    let sessions = s
+        .sessions
+        .lock()
+        .unwrap()
+        .list(true)
+        .map_err(|e| e.to_string())?;
+
+    let mut sessions_scanned = 0usize;
+    let mut turns_replayed = 0usize;
+    let mut facts_proposed = 0usize;
+    let mut stored = 0usize;
+    let mut skipped_duplicate = 0usize;
+    let mut filtered = 0usize;
+    let mut relations_created = 0usize;
+
+    for meta in sessions {
+        let (_, messages) = match s.sessions.lock().unwrap().get(&meta.id) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        if !aos_platform::mem_sweep::session_active_on_day(&meta, &messages, day_start, day_end) {
+            continue;
+        }
+        sessions_scanned += 1;
+        let pairs = aos_platform::mem_sweep::pair_turns(&messages);
+        for (user_text, assistant_text) in pairs {
+            if aos_platform::mem_sweep::should_skip_sweep_turn(&user_text, &assistant_text) {
+                continue;
+            }
+            turns_replayed += 1;
+            if !req.persist {
+                continue;
+            }
+            let extract_req = MemExtractRequest {
+                user_text,
+                assistant_text,
+                session_id: Some(meta.id.clone()),
+                model_id: req.model_id.clone(),
+                persist: true,
+            };
+            let resp = run_mem_extract(s, extract_req).await?;
+            facts_proposed += resp.facts_proposed.len();
+            stored += resp.stored;
+            for outcome in &resp.outcomes {
+                match outcome.kind {
+                    MemExtractOutcomeKind::SkippedDuplicate => skipped_duplicate += 1,
+                    MemExtractOutcomeKind::FilteredSecret
+                    | MemExtractOutcomeKind::FilteredEphemeral
+                    | MemExtractOutcomeKind::FilteredTrace
+                    | MemExtractOutcomeKind::SkippedEmpty => filtered += 1,
+                    MemExtractOutcomeKind::Stored => {}
+                }
+                relations_created += outcome.auto_relations.len();
+            }
+        }
+    }
+
+    let last_pass_ms = sweep_now_ms();
+    let new_state = aos_platform::mem_sweep::SweepState {
+        last_pass_ms,
+        last_local_day_key: day_key.clone(),
+        relations_created: state.relations_created + relations_created as u64,
+    };
+    new_state.save(&mem_dir)?;
+
+    s.audit(AuditAppendRequest {
+        trace_id: format!("mem-sweep-{day_key}"),
+        actor: "service:platformd".into(),
+        action: "mem.sweep".into(),
+        target: "summary".into(),
+        detail: serde_json::json!({
+            "local_day_key": day_key,
+            "sessions_scanned": sessions_scanned,
+            "turns_replayed": turns_replayed,
+            "stored": stored,
+            "skipped_duplicate": skipped_duplicate,
+            "filtered": filtered,
+            "relations_created": relations_created,
+        }),
+    });
+
+    Ok(MemSweepResponse {
+        local_day_key: day_key,
+        sessions_scanned,
+        turns_replayed,
+        facts_proposed,
+        stored,
+        skipped_duplicate,
+        filtered,
+        relations_created,
+        last_pass_ms,
+    })
 }
 

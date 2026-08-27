@@ -4,7 +4,8 @@ use crate::cmd::{Cmd, Evt};
 use crate::chat_room;
 use crate::os_open::{aos_home, bin_aos_session};
 use crate::{
-    agent_id_cmd, agent_panel, chat_delegate_agent_spec, chrono_like_stamp, invoke_module_bind,
+    agent_id_cmd, agent_panel, chat_delegate_agent_spec, chrono_like_stamp, format_local_time_hm,
+    invoke_module_bind,
     invoke_module_tool, invoke_notes, invoke_tasks, load_module_ui, load_session, run_troubleshoot,
     session_has_running_canvas_agent, spawn_chat_delegate_agent, CHAT_AGENT_MAX_SUBAGENTS,
 };
@@ -27,7 +28,7 @@ use aos_proto::{
     FeedbackSubmitRequest, FeedbackSubmitResponse, FilesGenerateRequest, FilesGenerateResponse,
     InferParams, InferRequest, McpServerInfo, MemContextRequest, MemContextResponse,
     MemEpisodicDeleteRequest, MemExtractRequest, MemExtractResponse, MemHit, MemListRequest,
-    MemRememberResponse, MemUpdateRequest, MemUserRecallRequest, MemUserRememberRequest,
+    MemRememberResponse, MemSweepStatus, MemUpdateRequest, MemUserRecallRequest, MemUserRememberRequest,
     MemWorkingRequest, LoadRequest, ModelInfo, ModelState, ModuleCatalogue,
     ModuleInfo, ModuleInstallRequest,
     ModuleUninstallRequest, CancelRequest, MediaAudioGenerateRequest, MediaGenerateResponse,
@@ -638,6 +639,29 @@ async fn handle_cmd(
             {
                 Ok(hits) => {
                     let _ = evt_tx.send(Evt::MemHits(hits));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::MemSweepStatus => {
+            match bus
+                .call::<(), MemSweepStatus>("mem.sweep.status", &(), vec![])
+                .await
+            {
+                Ok(status) => {
+                    let offset = sweep_tz_offset_minutes();
+                    let label = if status.last_pass_ms > 0 {
+                        format_local_time_hm(status.last_pass_ms, offset)
+                    } else {
+                        String::new()
+                    };
+                    let _ = evt_tx.send(Evt::MemSweepStatus {
+                        last_pass_ms: status.last_pass_ms,
+                        last_pass_label: label,
+                        relations_created: status.relations_created,
+                    });
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));
@@ -3015,6 +3039,40 @@ async fn handle_cmd(
             }
         }
     }
+}
+
+fn sweep_tz_offset_minutes() -> i32 {
+    if let Ok(out) = std::process::Command::new("date").args(["+%z"]).output() {
+        if out.status.success() {
+            if let Ok(s) = String::from_utf8(out.stdout) {
+                return parse_tz_offset_minutes(s.trim()).unwrap_or(0);
+            }
+        }
+    }
+    0
+}
+
+fn parse_tz_offset_minutes(raw: &str) -> Option<i32> {
+    let s = raw.trim();
+    if s.len() < 3 {
+        return None;
+    }
+    let sign = match s.as_bytes().first()? {
+        b'+' => 1,
+        b'-' => -1,
+        _ => return None,
+    };
+    let digits: String = s.chars().skip(1).filter(|c| c.is_ascii_digit()).collect();
+    if digits.len() < 3 {
+        return None;
+    }
+    let hours: i32 = digits[..digits.len().saturating_sub(2)]
+        .parse()
+        .ok()?;
+    let mins: i32 = digits[digits.len().saturating_sub(2)..]
+        .parse()
+        .ok()?;
+    Some(sign * (hours * 60 + mins))
 }
 
 fn room_joined_ms() -> u64 {

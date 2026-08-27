@@ -12,6 +12,7 @@ pub mod catalogue;
 pub mod chat_session;
 pub mod confirm;
 pub mod extract;
+pub mod mem_sweep;
 pub mod feedback;
 pub mod files_gen;
 pub mod intents;
