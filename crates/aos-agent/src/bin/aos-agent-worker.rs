@@ -13,9 +13,10 @@ use aos_agent::context_budget::{
 };
 use aos_agent::persist;
 use aos_agent::canvas_scene::{
-    agent_has_canvas_tools, canvas_critic_system_prompt, canvas_reflect_user_content,
-    canvas_scene_prompt_block, canvas_tool_mutates_scene, canvas_tool_outcome_with_digest,
-    fetch_canvas_scene_digest,
+    agent_has_canvas_tools, begin_canvas_vision, canvas_critic_system_prompt,
+    canvas_reflect_user_content, canvas_scene_prompt_block, canvas_tool_mutates_scene,
+    canvas_tool_outcome_with_digest, end_canvas_vision, fetch_canvas_aspect,
+    fetch_canvas_scene_digest, merge_canvas_vision_refs,
 };
 use aos_agent::prompt::{compile_system_prompt, optimize_prompt_request, PromptCompileInput};
 use aos_agent::skills::{load_skills, match_skill_by_action, merge_skill_tools, skill_misuse_hint, SkillDoc};
@@ -564,12 +565,28 @@ async fn main() {
         // Think (+ retry PromptTooLong : trim + réduction max_tokens)
         let mut prompt_retries = 0u32;
         let mut gen_tokens = gen_tokens;
+        let canvas_agent = agent_has_canvas_tools(&spec.tools);
+        let mut step_refs = data_refs.clone();
+        let canvas_sid = spec.session_id.clone();
+        let canvas_png = if canvas_agent {
+            if let Some(sid) = canvas_sid.as_deref() {
+                let aspect = fetch_canvas_aspect(&bus, sid).await;
+                begin_canvas_vision(&bus, sid, spec.model_id.as_deref(), aspect).await
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        if let Some(ref png) = canvas_png {
+            step_refs = merge_canvas_vision_refs(&step_refs, png);
+        }
         let infer = loop {
             match infer_turn(
                 &bus,
                 &shared,
                 &spec,
-                &data_refs,
+                &step_refs,
                 &mut cmd_rx,
                 gen_tokens,
             )
@@ -637,9 +654,28 @@ async fn main() {
         };
         let infer = match infer {
             Ok(t) => t,
-            Err(InferControl::Continue) => continue,
-            Err(InferControl::Fail) => break,
+            Err(InferControl::Continue) => {
+                if canvas_png.is_some() {
+                    if let Some(sid) = canvas_sid.as_deref() {
+                        end_canvas_vision(&bus, sid).await;
+                    }
+                }
+                continue;
+            }
+            Err(InferControl::Fail) => {
+                if canvas_png.is_some() {
+                    if let Some(sid) = canvas_sid.as_deref() {
+                        end_canvas_vision(&bus, sid).await;
+                    }
+                }
+                break;
+            }
         };
+        if canvas_png.is_some() {
+            if let Some(sid) = canvas_sid.as_deref() {
+                end_canvas_vision(&bus, sid).await;
+            }
+        }
         let infer_ms = infer_t0.elapsed().as_millis() as u64;
         let (reasoning, clean_text) = aos_agent::actions::split_reasoning(&infer.text);
         let full_text = if clean_text.is_empty() && !reasoning.is_empty() {

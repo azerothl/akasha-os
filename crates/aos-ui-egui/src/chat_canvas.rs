@@ -50,6 +50,8 @@ pub struct CanvasPanelState {
     pub poll_due: f64,
     /// Awaiting one-step confirmation before clear.
     pub clear_confirm_open: bool,
+    /// True while a vision model is reading this canvas (tester-cohort slice 2).
+    pub seeing: bool,
 }
 
 impl Default for CanvasPanelState {
@@ -68,6 +70,7 @@ impl Default for CanvasPanelState {
             animating: Vec::new(),
             poll_due: 0.0,
             clear_confirm_open: false,
+            seeing: false,
         }
     }
 }
@@ -382,6 +385,22 @@ fn fit_board_rect(outer: eframe::egui::Rect, aspect: CanvasAspect) -> eframe::eg
     eframe::egui::Rect::from_center_size(outer.center(), Vec2::new(board_w, board_h))
 }
 
+/// SIGNAL pastille shown while a vision model reads the live canvas board.
+fn ui_canvas_seeing_pill(ui: &mut Ui, label: &str) {
+    eframe::egui::Frame::new()
+        .fill(Color32::from_rgba_unmultiplied(SIGNAL.r(), SIGNAL.g(), SIGNAL.b(), 28))
+        .stroke(Stroke::new(1.0, SIGNAL))
+        .corner_radius(0.0)
+        .inner_margin(eframe::egui::Margin::symmetric(6, 3))
+        .show(ui, |ui| {
+            ui.label(
+                eframe::egui::RichText::new(label)
+                    .color(SIGNAL)
+                    .size(11.0),
+            );
+        });
+}
+
 /// Drawing tools for the unified session bar (pen, eraser, shapes, tint, thickness).
 pub fn ui_canvas_toolbar(
     ui: &mut Ui,
@@ -391,6 +410,10 @@ pub fn ui_canvas_toolbar(
     let mut action: Option<CanvasUiAction> = None;
     let compact = ui.spacing().item_spacing;
     ui.spacing_mut().item_spacing = eframe::egui::vec2(4.0, compact.y);
+
+    if state.seeing {
+        ui_canvas_seeing_pill(ui, t.canvas_seeing_now);
+    }
 
     ui.selectable_value(&mut state.tool, CanvasTool::Pen, t.canvas_tool_pen);
     ui.selectable_value(&mut state.tool, CanvasTool::Eraser, t.canvas_tool_eraser);
@@ -508,6 +531,19 @@ pub fn ui_canvas_surface(
     painter.rect_stroke(rect, 0.0, Stroke::new(1.5, SIGNAL), StrokeKind::Inside);
 
     let now = ui.ctx().input(|i| i.time);
+    if state.seeing {
+        let pulse = ((now * 2.4).sin() * 0.12 + 0.88) as f32;
+        let alpha = (200.0 * pulse) as u8;
+        let contour = Color32::from_rgba_unmultiplied(SIGNAL.r(), SIGNAL.g(), SIGNAL.b(), alpha);
+        let outline = rect.expand(4.0);
+        painter.rect_stroke(
+            outline,
+            0.0,
+            Stroke::new(2.5, contour),
+            StrokeKind::Outside,
+        );
+    }
+
     for op in &state.ops {
         let p = anim_progress(state, op.seq, now);
         paint_op(&painter, rect, op, dark, p);

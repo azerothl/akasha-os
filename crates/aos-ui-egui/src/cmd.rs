@@ -356,6 +356,8 @@ pub(crate) enum Evt {
         pen: CanvasPenStyle,
         /// True when this is a delta poll (merge); false = full replace.
         delta: bool,
+        /// When set, updates live-vision outline state from `canvas.get` poll.
+        canvas_seeing: Option<bool>,
     },
     CanvasExported {
         path: String,

@@ -395,6 +395,23 @@ async fn handle_cmd(
                 content: c,
             }));
             aos_proto::chat_document::apply_documents_to_infer_messages(&mut messages, &documents);
+            let mut infer_images = images.clone();
+            let canvas_png = if canvas_open {
+                aos_agent::canvas_scene::begin_canvas_vision(
+                    &bus,
+                    &session_id,
+                    model_id.as_deref(),
+                    canvas_aspect,
+                )
+                .await
+            } else {
+                None
+            };
+            if let Some(ref png) = canvas_png {
+                infer_images =
+                    aos_agent::canvas_scene::merge_canvas_vision_refs(&infer_images, png);
+            }
+            let canvas_active = canvas_png.is_some();
             let req = InferRequest {
                 model_id: model_id.clone(),
                 messages,
@@ -403,11 +420,12 @@ async fn handle_cmd(
                     ..Default::default()
                 },
                 priority: 8,
-                data_refs: images.clone(),
-                images,
+                data_refs: infer_images.clone(),
+                images: infer_images,
                 routing: Some(routing),
             };
             let sid = session_id.clone();
+            let sid_canvas = session_id.clone();
             let infer = async {
                 match bus
                     .call_stream::<InferRequest, TokenEvent>("model.infer", &req, vec![])
@@ -532,6 +550,9 @@ async fn handle_cmd(
                         "timeout chat (180 s) — modeld a peut-être planté (voir var/run/aos-modeld.stderr.log) ; relancez aos-session".into(),
                     ));
                 }
+            }
+            if canvas_active {
+                aos_agent::canvas_scene::end_canvas_vision(&bus, &sid_canvas).await;
             }
         }
         Cmd::MemRecall { query } => {
@@ -2806,6 +2827,7 @@ async fn handle_cmd(
                                 ops: resp.ops,
                                 pen: resp.pen,
                                 delta: false,
+                                canvas_seeing: Some(resp.canvas_seeing),
                             });
                         }
                     }
@@ -2841,6 +2863,7 @@ async fn handle_cmd(
                         ops: resp.doc.ops,
                         pen: resp.doc.pen,
                         delta: false,
+                        canvas_seeing: None,
                     });
                     if resp.canvas_open {
                         refresh_sessions(&bus, &evt_tx).await;
@@ -2876,6 +2899,7 @@ async fn handle_cmd(
                         ops: resp.doc.ops,
                         pen: resp.pen,
                         delta: false,
+                        canvas_seeing: None,
                     });
                 }
                 Err(e) => {
@@ -2907,6 +2931,7 @@ async fn handle_cmd(
                         ops: resp.ops,
                         pen: resp.pen,
                         delta,
+                        canvas_seeing: Some(resp.canvas_seeing),
                     });
                 }
                 Err(_) => {}

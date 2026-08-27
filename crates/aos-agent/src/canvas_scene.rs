@@ -1,7 +1,11 @@
 //! Canvas scene digest — runtime fetch + prompt injection for agents.
 
 use aos_ipc::BusClient;
-use aos_proto::{canvas_scene_digest, AgentStepRecord, CanvasGetRequest, CanvasGetResponse};
+use aos_proto::{
+    canvas_scene_digest, AgentStepRecord, CanvasAspect, CanvasExportRequest, CanvasGetRequest,
+    CanvasGetResponse, CanvasSeeingRequest,
+};
+use std::path::PathBuf;
 
 /// True when the agent kit includes session canvas drawing tools.
 pub fn agent_has_canvas_tools(tool_ids: &[String]) -> bool {
@@ -97,6 +101,8 @@ pub fn canvas_scene_prompt_block(digest: &str) -> String {
          Digest compact (compteurs + bbox par seq, pas le JSON brut). \
          Commence par `canvas.get` si tu dessines ; état au début du tour :\n\
          ```\n{digest}\n```\n\
+         Avec un modèle vision : une capture PNG live du canvas est jointe à chaque inférence \
+         (pas le bureau, pas un digest différé). \
          Placement : coords 0..1 max=1.0 (pas de pixels). \
          Lis le `scene_bbox` et les bbox par seq ; place chaque nouvelle op dans `usable` \
          avec marge ≥0.08 — ne superpose pas au même centre. \
@@ -134,6 +140,146 @@ pub fn canvas_tool_is_get(tool: &str) -> bool {
     tool == "canvas.get" || tool == "canvas.export"
 }
 
+fn aos_home() -> PathBuf {
+    std::env::var("AOS_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
+}
+
+/// True when the catalog lists `vision` for this model id.
+pub fn catalog_model_supports_vision(model_id: Option<&str>) -> bool {
+    let Some(id) = model_id.filter(|s| !s.is_empty()) else {
+        return false;
+    };
+    let catalog = aos_home().join("share/models/catalog-offerings.json");
+    let Ok(raw) = std::fs::read_to_string(catalog) else {
+        return false;
+    };
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) else {
+        return false;
+    };
+    v.get("models")
+        .and_then(|m| m.as_array())
+        .into_iter()
+        .flatten()
+        .any(|m| {
+            m.get("id").and_then(|x| x.as_str()) == Some(id)
+                && m
+                    .get("profiles")
+                    .and_then(|p| p.as_array())
+                    .into_iter()
+                    .flatten()
+                    .any(|p| p.as_str() == Some("vision"))
+        })
+}
+
+/// Signal that a vision pass is reading the live canvas (Preview outline).
+pub async fn set_canvas_seeing(bus: &BusClient, session_id: &str, active: bool) {
+    let _ = bus
+        .call::<CanvasSeeingRequest, serde_json::Value>(
+            "canvas.seeing",
+            &CanvasSeeingRequest {
+                session_id: session_id.to_string(),
+                active,
+            },
+            vec![],
+        )
+        .await;
+}
+
+/// Export the current canvas document to a PNG path (live raster, not desktop capture).
+pub async fn fetch_canvas_live_png(
+    bus: &BusClient,
+    session_id: &str,
+    aspect: CanvasAspect,
+) -> Option<String> {
+    let (width, height) = aspect.export_dimensions(1024);
+    let v: serde_json::Value = bus
+        .call(
+            "canvas.export",
+            &CanvasExportRequest {
+                session_id: session_id.to_string(),
+                path: None,
+                width: Some(width),
+                height: Some(height),
+            },
+            vec![],
+        )
+        .await
+        .ok()?;
+    let path = v.get("path")?.as_str()?.trim();
+    if path.is_empty() {
+        None
+    } else {
+        Some(path.to_string())
+    }
+}
+
+/// Merge a live canvas PNG into infer data refs (deduped, vision paths only).
+pub fn merge_canvas_vision_refs(base: &[String], canvas_png: &str) -> Vec<String> {
+    let mut out: Vec<String> = base
+        .iter()
+        .filter(|p| !is_vision_image_path(p))
+        .cloned()
+        .collect();
+    if !canvas_png.is_empty() && !out.iter().any(|p| p == canvas_png) {
+        out.push(canvas_png.to_string());
+    }
+    out
+}
+
+fn is_vision_image_path(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    lower.ends_with(".png")
+        || lower.ends_with(".jpg")
+        || lower.ends_with(".jpeg")
+        || lower.ends_with(".webp")
+}
+
+/// Live canvas vision attach: export PNG + enable seeing chrome. Returns PNG path.
+pub async fn begin_canvas_vision(
+    bus: &BusClient,
+    session_id: &str,
+    model_id: Option<&str>,
+    aspect: CanvasAspect,
+) -> Option<String> {
+    if !catalog_model_supports_vision(model_id) {
+        return None;
+    }
+    let png = fetch_canvas_live_png(bus, session_id, aspect).await?;
+    set_canvas_seeing(bus, session_id, true).await;
+    Some(png)
+}
+
+/// End live canvas vision chrome after infer completes.
+pub async fn end_canvas_vision(bus: &BusClient, session_id: &str) {
+    set_canvas_seeing(bus, session_id, false).await;
+}
+
+/// Fetch canvas aspect for a session (for export dimensions).
+pub async fn fetch_canvas_aspect(bus: &BusClient, session_id: &str) -> CanvasAspect {
+    let resp: CanvasGetResponse = bus
+        .call(
+            "canvas.get",
+            &CanvasGetRequest {
+                session_id: session_id.to_string(),
+                after_seq: None,
+            },
+            vec![],
+        )
+        .await
+        .unwrap_or(CanvasGetResponse {
+            session_id: session_id.to_string(),
+            canvas_open: false,
+            canvas_aspect: CanvasAspect::default(),
+            next_seq: 0,
+            ops: vec![],
+            pen: Default::default(),
+            canvas_seeing: false,
+        });
+    resp.canvas_aspect
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -152,6 +298,20 @@ mod tests {
         assert!(block.contains("canvas.get"));
         assert!(block.contains("scene_bbox"));
         assert!(block.contains("[canvas digest]"));
+        assert!(block.contains("PNG live"));
+    }
+
+    #[test]
+    fn merge_canvas_vision_refs_replaces_images() {
+        let base = vec![
+            "/downloads/old.png".into(),
+            "/documents/note.md".into(),
+        ];
+        let merged = merge_canvas_vision_refs(&base, "/downloads/canvas-live.png");
+        assert_eq!(merged.len(), 2);
+        assert!(merged.contains(&"/documents/note.md".into()));
+        assert!(merged.contains(&"/downloads/canvas-live.png".into()));
+        assert!(!merged.contains(&"/downloads/old.png".into()));
     }
 
     #[test]

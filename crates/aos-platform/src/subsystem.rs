@@ -136,6 +136,8 @@ pub struct PlatformSubsystem {
     bus: Mutex<Option<Arc<aos_ipc::BusClient>>>,
     /// Mutex par session pour sérialiser `canvas.apply` (évite interleaving JSON).
     canvas_apply_locks: Mutex<HashMap<String, Arc<Mutex<()>>>>,
+    /// Sessions où un modèle vision lit le canvas en direct (refcount).
+    canvas_seeing: Mutex<HashMap<String, u32>>,
 }
 
 impl PlatformSubsystem {
@@ -214,6 +216,7 @@ impl PlatformSubsystem {
             supervisor: crate::supervisor::Supervisor::new(),
             bus: Mutex::new(None),
             canvas_apply_locks: Mutex::new(HashMap::new()),
+            canvas_seeing: Mutex::new(HashMap::new()),
         });
         let _ = late.0.set(sub.clone());
         sub.audit(AuditAppendRequest {
@@ -242,6 +245,32 @@ impl PlatformSubsystem {
             .entry(session_id.to_string())
             .or_insert_with(|| Arc::new(Mutex::new(())))
             .clone()
+    }
+
+    /// Incrémente le compteur « vision lit le canvas » pour une session.
+    pub fn canvas_seeing_set(&self, session_id: &str, active: bool) {
+        let mut map = self.canvas_seeing.lock().unwrap();
+        if active {
+            *map.entry(session_id.to_string()).or_insert(0) += 1;
+        } else {
+            if let Some(n) = map.get_mut(session_id) {
+                *n = n.saturating_sub(1);
+                if *n == 0 {
+                    map.remove(session_id);
+                }
+            }
+        }
+    }
+
+    /// True si au moins un lecteur vision actif sur cette session.
+    pub fn canvas_seeing_active(&self, session_id: &str) -> bool {
+        self.canvas_seeing
+            .lock()
+            .unwrap()
+            .get(session_id)
+            .copied()
+            .unwrap_or(0)
+            > 0
     }
 
     /// Autorise via le noyau de capacités si l'enveloppe porte des
@@ -954,5 +983,57 @@ impl HostServices for PlatformSubsystem {
             )),
             other => Err(format!("service inconnu: {other}")),
         }
+    }
+}
+
+#[cfg(test)]
+mod canvas_seeing_tests {
+    use super::PlatformSubsystem;
+    use crate::subsystem::PlatformConfig;
+    use std::path::PathBuf;
+
+    fn temp_path(label: &str) -> String {
+        let mut p = std::env::temp_dir();
+        p.push(format!(
+            "aos-canvas-seeing-{label}-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::create_dir_all(&p);
+        p.display().to_string()
+    }
+
+    fn test_config() -> PlatformConfig {
+        PlatformConfig {
+            bus: "ipc://test".into(),
+            audit_dir: temp_path("audit"),
+            storage_dir: temp_path("storage"),
+            memory_dir: temp_path("memory"),
+            modules_dir: temp_path("modules"),
+            catalogue_file: "/dev/null".into(),
+            skills_dir: temp_path("skills"),
+            sessions_dir: temp_path("sessions"),
+            embed_model: None,
+            policies_file: None,
+            confirm_timeout_sec: 60,
+            secrets_file: PathBuf::from(temp_path("secrets"))
+                .join("secrets")
+                .display()
+                .to_string(),
+            net_mode: "online".into(),
+        }
+    }
+
+    #[tokio::test]
+    async fn canvas_seeing_refcount_tracks_active_readers() {
+        let sub = PlatformSubsystem::open(&test_config()).expect("platform open");
+        let sid = "sess-1";
+        assert!(!sub.canvas_seeing_active(sid));
+        sub.canvas_seeing_set(sid, true);
+        assert!(sub.canvas_seeing_active(sid));
+        sub.canvas_seeing_set(sid, true);
+        sub.canvas_seeing_set(sid, false);
+        assert!(sub.canvas_seeing_active(sid));
+        sub.canvas_seeing_set(sid, false);
+        assert!(!sub.canvas_seeing_active(sid));
     }
 }

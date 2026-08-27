@@ -2882,6 +2882,16 @@ pub struct CanvasGetResponse {
     pub ops: Vec<CanvasOp>,
     #[serde(default)]
     pub pen: CanvasPenStyle,
+    /// True while a vision model is actively reading this canvas (tester-cohort slice 2).
+    #[serde(default)]
+    pub canvas_seeing: bool,
+}
+
+/// `canvas.seeing` — signal that a vision pass is reading the live canvas (not a mutation).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CanvasSeeingRequest {
+    pub session_id: String,
+    pub active: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
