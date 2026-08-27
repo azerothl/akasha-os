@@ -1318,7 +1318,7 @@ const FR: UiStrings = UiStrings {
     notes_blurb: "Notes humaines et agents partagent les mêmes fichiers sous /documents/notes/.",
     memory_blurb: "Qui vous êtes et ce que vous préférez — de courts faits rappelés à la prochaine session.",
     memory_hint_remember: "fait à mémoriser",
-    memory_hint_recall: "requête de rappel",
+    memory_hint_recall: "chercher un fait",
     memory_btn_remember: "Mémoriser",
     memory_btn_recall: "Rappeler",
     memory_btn_list: "Lister",
