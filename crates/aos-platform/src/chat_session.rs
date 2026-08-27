@@ -488,6 +488,9 @@ impl ChatSessionStore {
                     ChatAttachment::Document { path, label } => {
                         out.push_str(&format!("_document: {label} ({path})_\n\n"));
                     }
+                    ChatAttachment::AgentAct { phrase, .. } => {
+                        out.push_str(&format!("_agent act: {phrase}_\n\n"));
+                    }
                 }
             }
         }

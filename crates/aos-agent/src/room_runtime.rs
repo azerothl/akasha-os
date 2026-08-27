@@ -2,8 +2,9 @@
 
 use crate::actions::{parse_action, AgentAction};
 use crate::canvas_scene::{
-    canvas_scene_prompt_block, canvas_tool_mutates_scene, canvas_tool_outcome_with_digest,
-    fetch_canvas_scene_digest,
+    begin_canvas_vision, canvas_scene_prompt_block, canvas_tool_mutates_scene,
+    canvas_tool_outcome_with_digest, end_canvas_vision, fetch_canvas_aspect,
+    fetch_canvas_scene_digest, merge_canvas_vision_refs,
 };
 use crate::mcp::open_mcp_tools_with_secrets;
 use crate::persist;
@@ -346,17 +347,34 @@ async fn run_room_tool_loop(
     );
 
     for step in 0..MAX_ROOM_TOOL_STEPS {
-        // Vision only on the first model call of the turn.
-        let step_images: &[String] = if step == 0 { images } else { &[] };
-        let raw = run_infer(
+        let has_canvas = tool_descs.iter().any(|t| t.name.starts_with("canvas."));
+        let mut step_refs: Vec<String> = if step == 0 {
+            images.to_vec()
+        } else {
+            vec![]
+        };
+        let canvas_png = if has_canvas {
+            let aspect = fetch_canvas_aspect(bus, session_id).await;
+            begin_canvas_vision(bus, session_id, model_id.as_deref(), aspect).await
+        } else {
+            None
+        };
+        if let Some(ref png) = canvas_png {
+            step_refs = merge_canvas_vision_refs(&step_refs, png);
+        }
+        let raw_result = run_infer(
             bus,
             round,
             model_id.clone(),
             messages.clone(),
             caps,
-            step_images,
+            &step_refs,
         )
-        .await?;
+        .await;
+        if canvas_png.is_some() {
+            end_canvas_vision(bus, session_id).await;
+        }
+        let raw = raw_result?;
         if raw.is_empty() {
             return Err("réponse vide".into());
         }
@@ -465,15 +483,34 @@ pub async fn execute_room_turn(
     let model_id = spec.model_id.clone().or(session.meta.model_id.clone());
     let images = room_images_from_session(&session);
     let content = if tool_descs.is_empty() {
-        run_infer(
+        let mut refs = images.clone();
+        let canvas_png = if session.meta.canvas_open {
+            begin_canvas_vision(
+                bus,
+                &req.session_id,
+                model_id.as_deref(),
+                session.meta.canvas_aspect,
+            )
+            .await
+        } else {
+            None
+        };
+        if let Some(ref png) = canvas_png {
+            refs = merge_canvas_vision_refs(&refs, png);
+        }
+        let out = run_infer(
             bus,
             round,
             model_id,
             messages,
             &room_turn_infer_caps(),
-            &images,
+            &refs,
         )
-        .await?
+        .await;
+        if canvas_png.is_some() {
+            end_canvas_vision(bus, &req.session_id).await;
+        }
+        out?
     } else {
         run_room_tool_loop(
             bus,

@@ -1288,6 +1288,7 @@ async fn main() {
                             .canvas_get(&req.session_id, req.after_seq);
                         match result {
                             Ok((meta, doc, ops)) => {
+                                let seeing = s.canvas_seeing_active(&meta.id);
                                 let _ = ctx
                                     .respond(
                                         aos_ipc::msg::Status::Ok,
@@ -1298,6 +1299,7 @@ async fn main() {
                                             next_seq: doc.next_seq,
                                             ops,
                                             pen: doc.pen.clone(),
+                                            canvas_seeing: seeing,
                                         },
                                     )
                                     .await;
@@ -1311,6 +1313,33 @@ async fn main() {
                                     .await;
                             }
                         }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("canvas.seeing", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<CanvasSeeingRequest>() {
+                    Ok(req) => {
+                        s.canvas_seeing_set(&req.session_id, req.active);
+                        let _ = ctx
+                            .respond(
+                                aos_ipc::msg::Status::Ok,
+                                &serde_json::json!({
+                                    "session_id": req.session_id,
+                                    "canvas_seeing": s.canvas_seeing_active(&req.session_id),
+                                }),
+                            )
+                            .await;
                     }
                     Err(_) => {
                         let _ = ctx

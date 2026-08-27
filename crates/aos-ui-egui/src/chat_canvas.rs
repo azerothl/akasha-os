@@ -50,6 +50,8 @@ pub struct CanvasPanelState {
     pub poll_due: f64,
     /// Awaiting one-step confirmation before clear.
     pub clear_confirm_open: bool,
+    /// True while a vision model is reading this canvas (tester-cohort slice 2).
+    pub seeing: bool,
 }
 
 impl Default for CanvasPanelState {
@@ -68,6 +70,7 @@ impl Default for CanvasPanelState {
             animating: Vec::new(),
             poll_due: 0.0,
             clear_confirm_open: false,
+            seeing: false,
         }
     }
 }
@@ -392,6 +395,15 @@ pub fn ui_canvas_toolbar(
     let compact = ui.spacing().item_spacing;
     ui.spacing_mut().item_spacing = eframe::egui::vec2(4.0, compact.y);
 
+    if state.seeing {
+        ui.label(
+            eframe::egui::RichText::new(t.canvas_seeing_now)
+                .color(SIGNAL)
+                .small(),
+        );
+        ui.separator();
+    }
+
     ui.selectable_value(&mut state.tool, CanvasTool::Pen, t.canvas_tool_pen);
     ui.selectable_value(&mut state.tool, CanvasTool::Eraser, t.canvas_tool_eraser);
     ui.selectable_value(&mut state.tool, CanvasTool::Line, t.canvas_tool_line);
@@ -508,6 +520,19 @@ pub fn ui_canvas_surface(
     painter.rect_stroke(rect, 0.0, Stroke::new(1.5, SIGNAL), StrokeKind::Inside);
 
     let now = ui.ctx().input(|i| i.time);
+    if state.seeing {
+        let pulse = ((now * 2.4).sin() * 0.12 + 0.88) as f32;
+        let alpha = (200.0 * pulse) as u8;
+        let contour = Color32::from_rgba_unmultiplied(SIGNAL.r(), SIGNAL.g(), SIGNAL.b(), alpha);
+        let outline = rect.expand(4.0);
+        painter.rect_stroke(
+            outline,
+            6.0,
+            Stroke::new(2.5, contour),
+            StrokeKind::Outside,
+        );
+    }
+
     for op in &state.ops {
         let p = anim_progress(state, op.seq, now);
         paint_op(&painter, rect, op, dark, p);

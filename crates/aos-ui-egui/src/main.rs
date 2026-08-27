@@ -3342,6 +3342,7 @@ impl eframe::App for UiApp {
                     ops,
                     pen,
                     delta,
+                    canvas_seeing,
                 } => {
                     if self.active_session.as_deref() != Some(session_id.as_str()) {
                         // still update meta open flag
@@ -3357,6 +3358,9 @@ impl eframe::App for UiApp {
                             self.canvas_panel.apply_snapshot(ops, next_seq, now);
                         }
                         self.canvas_panel.sync_pen(&pen);
+                        if let Some(seeing) = canvas_seeing {
+                            self.canvas_panel.seeing = seeing;
+                        }
                     }
                 }
                 Evt::CanvasExported { path, session_id } => {
