@@ -489,6 +489,9 @@ fn session_model_supports_vision(model_id: Option<&str>) -> bool {
         .any(|m| m.id == id && m.profiles.iter().any(|p| p == "vision"))
 }
 
+/// One-row height for the canvas tool strip (session bar row 2).
+const CANVAS_TOOLBAR_ROW_H: f32 = 36.0;
+
 /// Vertical space for the fixed send row plus optional stacks that grow upward.
 fn chat_composer_reserve_height(
     chat_w: f32,
@@ -4292,8 +4295,13 @@ impl UiApp {
             egui::ScrollArea::horizontal()
                 .id_salt("canvas_toolbar_scroll")
                 .auto_shrink([false, false])
+                .max_height(CANVAS_TOOLBAR_ROW_H)
                 .show(ui, |ui| {
-                    toolbar_action = chat_canvas::ui_canvas_toolbar(ui, t, &mut self.canvas_panel);
+                    ui.horizontal(|ui| {
+                        ui.set_min_height(CANVAS_TOOLBAR_ROW_H - 4.0);
+                        toolbar_action =
+                            chat_canvas::ui_canvas_toolbar(ui, t, &mut self.canvas_panel);
+                    });
                 });
             if let Some(action) = toolbar_action {
                 self.dispatch_canvas_ui_action(Some(action), &sid);
@@ -4862,8 +4870,6 @@ impl UiApp {
                         &self.sessions,
                         self.active_session.as_deref(),
                     ));
-                    self.ui_session_bar(ui, &t);
-
                     let room_members: Vec<ChatRoomMember> = chat_room::active_session_meta(
                         &self.sessions,
                         self.active_session.as_deref(),
@@ -4892,69 +4898,86 @@ impl UiApp {
                         .and_then(|s| s.model_id.clone());
                     let show_vision_banner = !self.chat_pending_images.is_empty()
                         && !session_model_supports_vision(session_model.as_deref());
-                    let composer_reserve = chat_composer_reserve_height(
+                    let composer_h = chat_composer_reserve_height(
                         chat_w,
                         ask_queue.len(),
                         self.chat_pending_images.len(),
                         self.chat_pending_documents.len(),
                         show_vision_banner,
                     );
-                    let content_h = (ui.available_height() - composer_reserve).max(120.0);
+                    let pane_h = ui.available_height();
+                    let body_h = (pane_h - composer_h).max(120.0);
 
-                    if canvas_open {
-                        let split_gap = 8.0_f32;
-                        let canvas_min = 180.0_f32;
-                        ui.horizontal(|ui| {
-                            ui.set_min_height(content_h);
-                            let total_w = ui.available_width();
-                            let canvas_w = ((total_w - split_gap) * 0.42)
-                                .max(canvas_min)
-                                .min(total_w - 220.0);
-                            let transcript_w = (total_w - canvas_w - split_gap).max(200.0);
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(ui.available_width(), body_h),
+                        egui::Layout::top_down(egui::Align::Min).with_cross_justify(true),
+                        |ui| {
+                            self.ui_session_bar(ui, &t);
+                            let content_h = ui.available_height().max(80.0);
 
-                            ui.allocate_ui_with_layout(
-                                egui::vec2(transcript_w, content_h),
-                                egui::Layout::top_down(egui::Align::Min).with_cross_justify(true),
-                                |ui| {
-                                    self.ui_chat_transcript(
-                                        ui,
-                                        &t,
-                                        room_mode,
-                                        &room_members,
-                                        content_h,
+                            if canvas_open {
+                                let split_gap = 8.0_f32;
+                                let canvas_min = 180.0_f32;
+                                ui.horizontal(|ui| {
+                                    ui.set_min_height(content_h);
+                                    let total_w = ui.available_width();
+                                    let canvas_w = ((total_w - split_gap) * 0.42)
+                                        .max(canvas_min)
+                                        .min(total_w - 220.0);
+                                    let transcript_w =
+                                        (total_w - canvas_w - split_gap).max(200.0);
+
+                                    ui.allocate_ui_with_layout(
+                                        egui::vec2(transcript_w, content_h),
+                                        egui::Layout::top_down(egui::Align::Min)
+                                            .with_cross_justify(true),
+                                        |ui| {
+                                            self.ui_chat_transcript(
+                                                ui,
+                                                &t,
+                                                room_mode,
+                                                &room_members,
+                                                content_h,
+                                            );
+                                        },
                                     );
-                                },
-                            );
-                            ui.add_space(split_gap);
-                            ui.allocate_ui_with_layout(
-                                egui::vec2(canvas_w, content_h),
-                                egui::Layout::top_down(egui::Align::Min).with_cross_justify(true),
-                                |ui| {
-                                    if let Some(ref sid) = active_sid {
-                                        let aspect_action =
-                                            chat_canvas::ui_canvas_aspect_row(ui, &t, canvas_aspect);
-                                        self.dispatch_canvas_ui_action(aspect_action, sid);
-                                        let action = chat_canvas::ui_canvas_surface(
-                                            ui,
-                                            &mut self.canvas_panel,
-                                            canvas_aspect,
-                                            t.canvas_empty_hint,
-                                        );
-                                        self.dispatch_canvas_ui_action(action, sid);
-                                        self.canvas_poll_if_due(ui, sid);
-                                    }
-                                },
-                            );
-                        });
-                    } else {
-                        self.ui_chat_transcript(
-                            ui,
-                            &t,
-                            room_mode,
-                            &room_members,
-                            content_h,
-                        );
-                    }
+                                    ui.add_space(split_gap);
+                                    ui.allocate_ui_with_layout(
+                                        egui::vec2(canvas_w, content_h),
+                                        egui::Layout::top_down(egui::Align::Min)
+                                            .with_cross_justify(true),
+                                        |ui| {
+                                            if let Some(ref sid) = active_sid {
+                                                let aspect_action =
+                                                    chat_canvas::ui_canvas_aspect_row(
+                                                        ui, &t, canvas_aspect,
+                                                    );
+                                                self.dispatch_canvas_ui_action(
+                                                    aspect_action, sid,
+                                                );
+                                                let action = chat_canvas::ui_canvas_surface(
+                                                    ui,
+                                                    &mut self.canvas_panel,
+                                                    canvas_aspect,
+                                                    t.canvas_empty_hint,
+                                                );
+                                                self.dispatch_canvas_ui_action(action, sid);
+                                                self.canvas_poll_if_due(ui, sid);
+                                            }
+                                        },
+                                    );
+                                });
+                            } else {
+                                self.ui_chat_transcript(
+                                    ui,
+                                    &t,
+                                    room_mode,
+                                    &room_members,
+                                    content_h,
+                                );
+                            }
+                        },
+                    );
 
                     let completions = slash_completions(&self.input);
                     let mention_hits = if room_mode {
@@ -4962,7 +4985,8 @@ impl UiApp {
                     } else {
                         Vec::new()
                     };
-                    let input_row = ui.with_layout(
+                    let input_row = ui.allocate_ui_with_layout(
+                        egui::vec2(ui.available_width(), composer_h),
                         egui::Layout::bottom_up(egui::Align::Min),
                         |ui| {
                             let input_row = ui.with_layout(
@@ -5098,7 +5122,7 @@ impl UiApp {
                             input_row
                         },
                     );
-                    let input_rect = input_row.inner.inner.rect;
+                    let input_rect = input_row.response.rect;
 
                     // Popup au-dessus de l'input, en overlay sur le chat (pas sous le cadre)
                     if !mention_hits.is_empty() {
