@@ -242,7 +242,7 @@ pub fn link_backlink(ui: &mut Ui) {
     paint_link_arrow(ui, false);
 }
 
-/// Broken / unresolved note link — cut stroke, not a question mark.
+/// Broken / unresolved note link — straight cut stroke with a clean gap.
 pub fn link_broken(ui: &mut Ui) {
     let size = Vec2::new(12.0, 12.0);
     let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
@@ -253,30 +253,14 @@ pub fn link_broken(ui: &mut Ui) {
     let stroke = Stroke::new(1.3_f32, color);
     let painter = ui.painter();
     let y = rect.center().y;
-    let gap = rect.width() * 0.22;
+    let gap_half = rect.width() * 0.14;
     let cx = rect.center().x;
     painter.line_segment(
-        [Pos2::new(rect.left() + 1.0, y), Pos2::new(cx - gap, y)],
+        [Pos2::new(rect.left() + 1.0, y), Pos2::new(cx - gap_half, y)],
         stroke,
     );
     painter.line_segment(
-        [Pos2::new(cx + gap, y), Pos2::new(rect.right() - 1.0, y)],
-        stroke,
-    );
-    // Small diagonal ticks at the break to read as a severed link.
-    let tick = 2.5_f32;
-    painter.line_segment(
-        [
-            Pos2::new(cx - gap, y - tick),
-            Pos2::new(cx - gap + tick, y),
-        ],
-        stroke,
-    );
-    painter.line_segment(
-        [
-            Pos2::new(cx + gap, y + tick),
-            Pos2::new(cx + gap - tick, y),
-        ],
+        [Pos2::new(cx + gap_half, y), Pos2::new(rect.right() - 1.0, y)],
         stroke,
     );
 }
