@@ -232,6 +232,81 @@ pub fn done_check(ui: &mut Ui) {
     );
 }
 
+/// Outgoing note link (replaces `->`).
+pub fn link_outgoing(ui: &mut Ui) {
+    paint_link_arrow(ui, true);
+}
+
+/// Backlink / incoming note link (replaces `<-`).
+pub fn link_backlink(ui: &mut Ui) {
+    paint_link_arrow(ui, false);
+}
+
+/// Broken / unresolved note link — cut stroke, not a question mark.
+pub fn link_broken(ui: &mut Ui) {
+    let size = Vec2::new(12.0, 12.0);
+    let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
+    if !ui.is_rect_visible(rect) {
+        return;
+    }
+    let color = ui.visuals().weak_text_color();
+    let stroke = Stroke::new(1.3_f32, color);
+    let painter = ui.painter();
+    let y = rect.center().y;
+    let gap = rect.width() * 0.22;
+    let cx = rect.center().x;
+    painter.line_segment(
+        [Pos2::new(rect.left() + 1.0, y), Pos2::new(cx - gap, y)],
+        stroke,
+    );
+    painter.line_segment(
+        [Pos2::new(cx + gap, y), Pos2::new(rect.right() - 1.0, y)],
+        stroke,
+    );
+    // Small diagonal ticks at the break to read as a severed link.
+    let tick = 2.5_f32;
+    painter.line_segment(
+        [
+            Pos2::new(cx - gap, y - tick),
+            Pos2::new(cx - gap + tick, y),
+        ],
+        stroke,
+    );
+    painter.line_segment(
+        [
+            Pos2::new(cx + gap, y + tick),
+            Pos2::new(cx + gap - tick, y),
+        ],
+        stroke,
+    );
+}
+
+fn paint_link_arrow(ui: &mut Ui, outgoing: bool) {
+    let size = Vec2::new(12.0, 12.0);
+    let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
+    if !ui.is_rect_visible(rect) {
+        return;
+    }
+    let color = ui.visuals().weak_text_color();
+    let stroke = Stroke::new(1.3_f32, color);
+    let painter = ui.painter();
+    let y = rect.center().y;
+    let head = rect.width() * 0.28;
+    if outgoing {
+        let tail = Pos2::new(rect.left() + 1.0, y);
+        let tip = Pos2::new(rect.right() - 1.0, y);
+        painter.line_segment([tail, tip], stroke);
+        painter.line_segment([tip, Pos2::new(tip.x - head, y - head * 0.75)], stroke);
+        painter.line_segment([tip, Pos2::new(tip.x - head, y + head * 0.75)], stroke);
+    } else {
+        let tail = Pos2::new(rect.right() - 1.0, y);
+        let tip = Pos2::new(rect.left() + 1.0, y);
+        painter.line_segment([tail, tip], stroke);
+        painter.line_segment([tip, Pos2::new(tip.x + head, y - head * 0.75)], stroke);
+        painter.line_segment([tip, Pos2::new(tip.x + head, y + head * 0.75)], stroke);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

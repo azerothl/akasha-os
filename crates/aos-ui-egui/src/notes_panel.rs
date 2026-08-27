@@ -5,6 +5,7 @@ use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
 use serde::{Deserialize, Serialize};
 
 use crate::i18n::UiStrings;
+use crate::icons;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NoteListItem {
@@ -449,18 +450,27 @@ pub fn show_notes_panel(
                 if !state.outgoing.is_empty() {
                     ui.label("Sortants");
                     for l in state.outgoing.clone() {
-                        let mark = if l.exists { "->" } else { "?" };
-                        if ui.button(format!("{mark} {}", l.title)).clicked() && l.exists {
-                            actions.read_path = Some(l.path);
-                        }
+                        ui.horizontal(|ui| {
+                            if l.exists {
+                                icons::link_outgoing(ui);
+                            } else {
+                                icons::link_broken(ui);
+                            }
+                            if ui.button(&l.title).clicked() && l.exists {
+                                actions.read_path = Some(l.path);
+                            }
+                        });
                     }
                 }
                 if !state.incoming.is_empty() {
                     ui.label("Backlinks");
                     for l in state.incoming.clone() {
-                        if ui.button(format!("<- {}", l.title)).clicked() {
-                            actions.read_path = Some(l.path);
-                        }
+                        ui.horizontal(|ui| {
+                            icons::link_backlink(ui);
+                            if ui.button(&l.title).clicked() {
+                                actions.read_path = Some(l.path);
+                            }
+                        });
                     }
                 }
             }
