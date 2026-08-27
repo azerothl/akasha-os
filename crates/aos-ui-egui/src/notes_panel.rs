@@ -5,6 +5,7 @@ use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
 use serde::{Deserialize, Serialize};
 
 use crate::i18n::UiStrings;
+use crate::icons;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NoteListItem {
@@ -237,6 +238,9 @@ pub fn show_notes_panel(
     ui.separator();
 
     ui.columns(2, |cols| {
+        let list_h = cols[0].available_height() * 0.55;
+        let search_h = cols[0].available_height() * 0.25;
+        let editor_h = cols[1].available_height();
         // --- Liste ---
         cols[0].vertical(|ui| {
             ui.label(RichText::new(t.notes_list).strong());
@@ -246,7 +250,8 @@ pub fn show_notes_panel(
             });
             egui::ScrollArea::vertical()
                 .id_salt("notes_list")
-                .max_height(420.0)
+                .max_height(list_h.max(120.0))
+                .auto_shrink([false, false])
                 .show(ui, |ui| {
                     let filter = state.filter.to_lowercase();
                     let items: Vec<_> = state
@@ -285,7 +290,8 @@ pub fn show_notes_panel(
                 ui.label(RichText::new(t.notes_search).strong());
                 egui::ScrollArea::vertical()
                     .id_salt("notes_search")
-                    .max_height(160.0)
+                    .max_height(search_h.max(80.0))
+                    .auto_shrink([false, false])
                     .show(ui, |ui| {
                         for h in state.search_hits.clone() {
                             let title = if h.title.is_empty() {
@@ -311,6 +317,7 @@ pub fn show_notes_panel(
 
         // --- Éditeur ---
         cols[1].vertical(|ui| {
+            let preview_h = (editor_h * 0.35).max(100.0);
             ui.label(RichText::new(if state.is_new {
                 "Nouvelle note"
             } else {
@@ -393,7 +400,8 @@ pub fn show_notes_panel(
                 };
                 egui::ScrollArea::vertical()
                     .id_salt("notes_preview")
-                    .max_height(180.0)
+                    .max_height(preview_h)
+                    .auto_shrink([false, false])
                     .show(ui, |ui| {
                         CommonMarkViewer::new().show(ui, &mut state.md_cache, &preview);
                     });
@@ -442,18 +450,27 @@ pub fn show_notes_panel(
                 if !state.outgoing.is_empty() {
                     ui.label("Sortants");
                     for l in state.outgoing.clone() {
-                        let mark = if l.exists { "→" } else { "↛" };
-                        if ui.button(format!("{mark} {}", l.title)).clicked() && l.exists {
-                            actions.read_path = Some(l.path);
-                        }
+                        ui.horizontal(|ui| {
+                            if l.exists {
+                                icons::link_outgoing(ui);
+                            } else {
+                                icons::link_broken(ui);
+                            }
+                            if ui.button(&l.title).clicked() && l.exists {
+                                actions.read_path = Some(l.path);
+                            }
+                        });
                     }
                 }
                 if !state.incoming.is_empty() {
                     ui.label("Backlinks");
                     for l in state.incoming.clone() {
-                        if ui.button(format!("← {}", l.title)).clicked() {
-                            actions.read_path = Some(l.path);
-                        }
+                        ui.horizontal(|ui| {
+                            icons::link_backlink(ui);
+                            if ui.button(&l.title).clicked() {
+                                actions.read_path = Some(l.path);
+                            }
+                        });
                     }
                 }
             }
@@ -461,18 +478,25 @@ pub fn show_notes_panel(
             if !state.related_hits.is_empty() {
                 ui.separator();
                 ui.label(RichText::new("Liées (pertinence)").strong());
-                for h in state.related_hits.clone() {
-                    if ui
-                        .button(format!(
-                            "{} [{}] hop{} score {:.2}",
-                            h.title, h.relation, h.hops, h.score
-                        ))
-                        .on_hover_text(&h.excerpt)
-                        .clicked()
-                    {
-                        actions.read_path = Some(h.path);
-                    }
-                }
+                let related_h = ui.available_height().max(80.0);
+                egui::ScrollArea::vertical()
+                    .id_salt("notes_related")
+                    .max_height(related_h)
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        for h in state.related_hits.clone() {
+                            if ui
+                                .button(format!(
+                                    "{} [{}] hop{} score {:.2}",
+                                    h.title, h.relation, h.hops, h.score
+                                ))
+                                .on_hover_text(&h.excerpt)
+                                .clicked()
+                            {
+                                actions.read_path = Some(h.path);
+                            }
+                        }
+                    });
             }
         });
     });

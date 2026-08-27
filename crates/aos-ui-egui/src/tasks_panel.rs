@@ -67,14 +67,19 @@ impl TasksPanelState {
         if self.tasks.is_empty() {
             ui.weak(t.tasks_empty);
         } else {
+            let list_h = ui.available_height().max(120.0);
             egui::ScrollArea::vertical()
                 .id_salt("tasks_list")
-                .max_height(420.0)
+                .max_height(list_h)
+                .auto_shrink([false, false])
                 .show(ui, |ui| {
                     for item in &self.tasks {
                         ui.horizontal(|ui| {
+                            if item.done {
+                                crate::icons::done_check(ui);
+                            }
                             let label = if item.done {
-                                format!("✓ {}", item.title)
+                                format!("{}", item.title)
                             } else {
                                 item.title.clone()
                             };
