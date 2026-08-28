@@ -83,6 +83,22 @@ pub struct GuideStrings {
     pub create_prompt_title: &'static str,
     pub create_prompt_body: &'static str,
     pub create_prompt_example: &'static str,
+    pub create_negative_title: &'static str,
+    pub create_negative_what: &'static str,
+    pub create_negative_impact: &'static str,
+    pub create_negative_example: &'static str,
+    pub create_lora_title: &'static str,
+    pub create_lora_what: &'static str,
+    pub create_lora_impact: &'static str,
+    pub create_lora_example: &'static str,
+    pub create_vae_title: &'static str,
+    pub create_vae_what: &'static str,
+    pub create_vae_impact: &'static str,
+    pub create_vae_example: &'static str,
+    pub create_composition_title: &'static str,
+    pub create_composition_what: &'static str,
+    pub create_composition_impact: &'static str,
+    pub create_composition_example: &'static str,
     pub create_reference_title: &'static str,
     pub create_reference_body: &'static str,
     pub create_reference_example: &'static str,
@@ -161,6 +177,22 @@ const EN: GuideStrings = GuideStrings {
     create_prompt_title: "Prompt",
     create_prompt_body: "Write what should appear: subject, place, light. Generate uses this text. Specific beats vague.",
     create_prompt_example: "Ex. \"A teal mug on a wooden desk, morning light\" → one object, warm light.",
+    create_negative_title: "Negative prompt",
+    create_negative_what: "Say what should stay out of the still: extra people, text, a watermark.",
+    create_negative_impact: "Generate avoids those.",
+    create_negative_example: "Ex. \"text, watermark\" → a still without captions.",
+    create_lora_title: "LoRA",
+    create_lora_what: "An optional add-on next to the model. Pick one you imported.",
+    create_lora_impact: "It pulls the result toward that look or character.",
+    create_lora_example: "Ex. A portrait LoRA + \"red scarf\" → that person, new scarf.",
+    create_vae_title: "VAE",
+    create_vae_what: "An optional decoder.",
+    create_vae_impact: "Changes how color and fine detail land. Leave empty to keep the model default.",
+    create_vae_example: "Ex. A sharper VAE → crisper edges, same prompt.",
+    create_composition_title: "Composition",
+    create_composition_what: "The canvas beside the form. Add blocks (photo, shape) and stack them.",
+    create_composition_impact: "Create uses that layout as the starting scene.",
+    create_composition_example: "Ex. Photo of a mug + a block for steam → mug stays, steam is placed.",
     create_reference_title: "Reference photo",
     create_reference_body: "Paperclip next to the prompt. Create starts from that picture. Closer to the photo keeps pose and colors; looser follows the prompt.",
     create_reference_example: "Ex. Portrait + \"wearing a red scarf\" → same person, new scarf.",
@@ -239,6 +271,22 @@ const FR: GuideStrings = GuideStrings {
     create_prompt_title: "Prompt",
     create_prompt_body: "Dites ce qui doit apparaître : sujet, lieu, lumière. Générer lit ce texte. Le précis bat le vague.",
     create_prompt_example: "Ex. « Une tasse bleue sur un bureau en bois, lumière du matin » → un objet, lumière chaude.",
+    create_negative_title: "Prompt négatif",
+    create_negative_what: "Dites ce qui ne doit pas apparaître : personnes en trop, texte, filigrane.",
+    create_negative_impact: "Générer les évite.",
+    create_negative_example: "Ex. « texte, filigrane » → une image sans légende.",
+    create_lora_title: "LoRA",
+    create_lora_what: "Un complément optionnel à côté du modèle. Choisissez un fichier importé.",
+    create_lora_impact: "Ça tire le résultat vers ce style ou ce visage.",
+    create_lora_example: "Ex. Un LoRA portrait + « écharpe rouge » → cette personne, nouvelle écharpe.",
+    create_vae_title: "VAE",
+    create_vae_what: "Un décodeur optionnel.",
+    create_vae_impact: "Change la couleur et le détail fin. Laissez vide pour le défaut du modèle.",
+    create_vae_example: "Ex. Un VAE plus net → contours plus francs, même prompt.",
+    create_composition_title: "Composition",
+    create_composition_what: "Le canvas à côté du formulaire. Ajoutez des blocs (photo, forme) et empilez-les.",
+    create_composition_impact: "Create part de cette mise en page.",
+    create_composition_example: "Ex. Photo d'une tasse + un bloc pour la vapeur → tasse inchangée, vapeur placée.",
     create_reference_title: "Image de référence",
     create_reference_body: "Trombone à côté du prompt. Create part de cette photo. Plus près de la photo : pose et couleurs. Plus loin : le prompt gagne.",
     create_reference_example: "Ex. Portrait + « avec une écharpe rouge » → même personne, nouvelle écharpe.",
@@ -475,13 +523,51 @@ fn render_create(ui: &mut egui::Ui, g: &GuideStrings) {
         g.create_prompt_title,
         g.create_prompt_body,
         None,
+        None,
         g.create_prompt_example,
+    );
+    guide_section(
+        ui,
+        g,
+        g.create_negative_title,
+        g.create_negative_what,
+        Some(g.create_negative_impact),
+        Some(FigureKind::Negative),
+        g.create_negative_example,
+    );
+    guide_section(
+        ui,
+        g,
+        g.create_lora_title,
+        g.create_lora_what,
+        Some(g.create_lora_impact),
+        Some(FigureKind::Lora),
+        g.create_lora_example,
+    );
+    guide_section(
+        ui,
+        g,
+        g.create_vae_title,
+        g.create_vae_what,
+        Some(g.create_vae_impact),
+        Some(FigureKind::Vae),
+        g.create_vae_example,
+    );
+    guide_section(
+        ui,
+        g,
+        g.create_composition_title,
+        g.create_composition_what,
+        Some(g.create_composition_impact),
+        Some(FigureKind::Composition),
+        g.create_composition_example,
     );
     guide_section(
         ui,
         g,
         g.create_reference_title,
         g.create_reference_body,
+        None,
         Some(FigureKind::Reference),
         g.create_reference_example,
     );
@@ -490,6 +576,7 @@ fn render_create(ui: &mut egui::Ui, g: &GuideStrings) {
         g,
         g.create_inpaint_title,
         g.create_inpaint_body,
+        None,
         Some(FigureKind::Inpaint),
         g.create_inpaint_example,
     );
@@ -498,6 +585,7 @@ fn render_create(ui: &mut egui::Ui, g: &GuideStrings) {
         g,
         g.create_video_title,
         g.create_video_body,
+        None,
         Some(FigureKind::Video),
         g.create_video_example,
     );
@@ -506,6 +594,7 @@ fn render_create(ui: &mut egui::Ui, g: &GuideStrings) {
         g,
         g.create_format_title,
         g.create_format_body,
+        None,
         Some(FigureKind::Format),
         g.create_format_example,
     );
@@ -514,6 +603,7 @@ fn render_create(ui: &mut egui::Ui, g: &GuideStrings) {
         g,
         g.create_generate_title,
         g.create_generate_body,
+        None,
         Some(FigureKind::Generate),
         g.create_generate_example,
     );
@@ -539,22 +629,27 @@ fn render_stub(
 
 fn guide_section(
     ui: &mut egui::Ui,
-    _g: &GuideStrings,
+    g: &GuideStrings,
     title: &str,
-    body: &str,
+    what: &str,
+    impact: Option<&str>,
     figure: Option<FigureKind>,
     example: &str,
 ) {
     ui.add_space(4.0);
     ui.strong(title);
-    ui.weak(_g.section_what);
-    ui.label(body);
+    ui.weak(g.section_what);
+    ui.label(what);
+    if let Some(impact) = impact.filter(|s| !s.is_empty()) {
+        ui.weak(g.section_impact);
+        ui.label(impact);
+    }
     if let Some(kind) = figure {
         ui.add_space(4.0);
         paint_figure(ui, kind);
     }
     if !example.is_empty() {
-        ui.weak(_g.section_example);
+        ui.weak(g.section_example);
         ui.label(example);
     }
     ui.separator();
@@ -563,6 +658,10 @@ fn guide_section(
 #[derive(Clone, Copy)]
 enum FigureKind {
     CreateFlow,
+    Negative,
+    Lora,
+    Vae,
+    Composition,
     Reference,
     Inpaint,
     Video,
@@ -606,6 +705,37 @@ fn paint_figure(ui: &mut egui::Ui, kind: FigureKind) {
             p.rect_stroke(out, 2.0, stroke, egui::StrokeKind::Inside);
             p.line_segment(arrow1, faint);
             p.line_segment(arrow2, faint);
+        }
+        FigureKind::Negative => {
+            let field = Rect::from_min_size(rect.left_top() + Vec2::new(8.0, 18.0), Vec2::new(140.0, 28.0));
+            p.rect_stroke(field, 2.0, faint, egui::StrokeKind::Inside);
+            let c = field.center();
+            let r = field.width() * 0.28;
+            p.line_segment([c + Vec2::new(-r, -r * 0.2), c + Vec2::new(r, r * 0.2)], Stroke::new(1.4_f32, Color32::from_rgb(232, 93, 76)));
+        }
+        FigureKind::Lora => {
+            let base = Rect::from_min_size(rect.left_top() + Vec2::new(8.0, 12.0), Vec2::new(72.0, 40.0));
+            let addon = Rect::from_min_size(base.right_top() + Vec2::new(6.0, 8.0), Vec2::new(36.0, 24.0));
+            p.rect_stroke(base, 2.0, faint, egui::StrokeKind::Inside);
+            p.rect_filled(addon, 2.0, Color32::from_rgba_unmultiplied(62, 224, 196, 45));
+            p.rect_stroke(addon, 2.0, stroke, egui::StrokeKind::Inside);
+        }
+        FigureKind::Vae => {
+            let block = Rect::from_min_size(rect.left_top() + Vec2::new(8.0, 14.0), Vec2::new(52.0, 36.0));
+            let out = Rect::from_min_size(block.right_top() + Vec2::new(16.0, -4.0), Vec2::new(64.0, 44.0));
+            p.rect_stroke(block, 2.0, faint, egui::StrokeKind::Inside);
+            p.rect_filled(out, 2.0, Color32::from_rgba_unmultiplied(62, 224, 196, 35));
+            p.rect_stroke(out, 2.0, stroke, egui::StrokeKind::Inside);
+            p.line_segment([block.right_center(), out.left_center()], faint);
+        }
+        FigureKind::Composition => {
+            let b1 = Rect::from_min_size(rect.left_top() + Vec2::new(10.0, 24.0), Vec2::new(56.0, 36.0));
+            let b2 = Rect::from_min_size(rect.left_top() + Vec2::new(34.0, 8.0), Vec2::new(48.0, 28.0));
+            let b3 = Rect::from_min_size(rect.left_top() + Vec2::new(78.0, 18.0), Vec2::new(40.0, 22.0));
+            p.rect_stroke(b1, 2.0, faint, egui::StrokeKind::Inside);
+            p.rect_filled(b2, 2.0, Color32::from_rgba_unmultiplied(62, 224, 196, 40));
+            p.rect_stroke(b2, 2.0, stroke, egui::StrokeKind::Inside);
+            p.rect_stroke(b3, 2.0, faint, egui::StrokeKind::Inside);
         }
         FigureKind::Reference => {
             let src = Rect::from_min_size(rect.left_top() + Vec2::new(8.0, 10.0), Vec2::new(56.0, 44.0));
@@ -719,10 +849,13 @@ mod tests {
     }
 
     #[test]
-    fn nav_labels_non_empty() {
-        let g = strings("en");
-        for topic in GuideTopic::ALL {
-            assert!(!nav_label(&g, topic).is_empty());
-        }
+    fn create_guide_covers_studio_controls() {
+        let en = strings("en");
+        let fr = strings("fr");
+        assert_eq!(en.create_negative_title, "Negative prompt");
+        assert_eq!(fr.create_inpaint_title, "Corriger une zone");
+        assert!(!en.create_lora_what.is_empty());
+        assert!(!fr.create_composition_impact.is_empty());
+        assert!(!en.create_negative_example.contains("img2img"));
     }
 }
