@@ -672,7 +672,7 @@ fn render_pie(ui: &mut Ui, val: &Value) {
         painter.add(egui::Shape::convex_polygon(
             points,
             color,
-            egui::Stroke::new(1.0, egui::Color32::from_gray(30)),
+            egui::Stroke::new(1.0_f32, egui::Color32::from_gray(30)),
         ));
         let mid = angle + sweep * 0.5;
         let tip = center + egui::vec2(mid.cos() * (radius * 0.62), mid.sin() * (radius * 0.62));
@@ -774,7 +774,7 @@ fn render_scatter(ui: &mut Ui, val: &Value, series_key: Option<&str>) {
         .show(ui, |plot_ui| {
             plot_ui.points(
                 Points::new(PlotPoints::from_iter(points.into_iter()))
-                    .radius(3.0)
+                    .radius(3.0_f32)
                     .name(series_key.unwrap_or("points")),
             );
         });

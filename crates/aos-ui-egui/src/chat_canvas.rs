@@ -389,7 +389,7 @@ fn fit_board_rect(outer: eframe::egui::Rect, aspect: CanvasAspect) -> eframe::eg
 fn ui_canvas_seeing_pill(ui: &mut Ui, label: &str) {
     eframe::egui::Frame::new()
         .fill(Color32::from_rgba_unmultiplied(SIGNAL.r(), SIGNAL.g(), SIGNAL.b(), 28))
-        .stroke(Stroke::new(1.0, SIGNAL))
+        .stroke(Stroke::new(1.0_f32, SIGNAL))
         .corner_radius(0.0)
         .inner_margin(eframe::egui::Margin::symmetric(6, 3))
         .show(ui, |ui| {
@@ -530,7 +530,7 @@ pub fn ui_canvas_surface(
     let rect = fit_board_rect(outer, aspect);
     let bg = canvas_bg(dark);
     painter.rect_filled(rect, 0.0, bg);
-    painter.rect_stroke(rect, 0.0, Stroke::new(1.5, SIGNAL), StrokeKind::Inside);
+    painter.rect_stroke(rect, 0.0, Stroke::new(1.5_f32, SIGNAL), StrokeKind::Inside);
 
     let now = ui.ctx().input(|i| i.time);
     if state.seeing {
@@ -541,7 +541,7 @@ pub fn ui_canvas_surface(
         painter.rect_stroke(
             outline,
             0.0,
-            Stroke::new(2.5, contour),
+            Stroke::new(2.5_f32, contour),
             StrokeKind::Outside,
         );
     }
@@ -583,7 +583,7 @@ pub fn ui_canvas_surface(
                 if state.shape_fill {
                     painter.rect_filled(r, 0.0, state.color);
                 } else {
-                    painter.rect_stroke(r, 0.0, Stroke::new(2.0, state.color), StrokeKind::Inside);
+                    painter.rect_stroke(r, 0.0, Stroke::new(2.0_f32, state.color), StrokeKind::Inside);
                 }
             }
             CanvasTool::Ellipse => {
@@ -598,7 +598,7 @@ pub fn ui_canvas_surface(
                     stroke: if state.shape_fill {
                         PathStroke::NONE
                     } else {
-                        PathStroke::new(2.0, state.color)
+                        PathStroke::new(2.0_f32, state.color)
                     },
                 }));
             }
