@@ -1336,6 +1336,12 @@ async fn handle_cmd(
                         }
                     }
                     if library {
+                        if let Ok(list) = bus
+                            .call::<(), Vec<AgentInfo>>(aos_agent::intents::LIST, &(), vec![])
+                            .await
+                        {
+                            let _ = evt_tx.send(Evt::Agents(list));
+                        }
                         let _ = evt_tx.send(Evt::Status(format!(
                             "« {name} » ajouté à la bibliothèque ({})",
                             r.agent_id

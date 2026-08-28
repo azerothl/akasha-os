@@ -4099,11 +4099,16 @@ impl UiApp {
                             model_id: model_id.clone(),
                         });
                     } else {
+                        let stored_name = agent
+                            .display_name
+                            .clone()
+                            .filter(|n| !n.trim().is_empty())
+                            .unwrap_or(label.clone());
                         let _ = self.cmd_tx.send(Cmd::SessionMembersAdd {
                             session_id: session_id.to_string(),
                             member: ChatRoomMember {
                                 agent_id: agent.agent_id.clone(),
-                                display_name: label,
+                                display_name: stored_name,
                                 persona_id: None,
                                 joined_ms: chat_room::joined_ms_now(),
                             },
@@ -5419,7 +5424,7 @@ impl UiApp {
         if ui.button(t.agents_refresh_catalogs).clicked() {
             let _ = self.cmd_tx.send(Cmd::AgentCatalogRefresh);
         }
-        ui.label(t.agents_display_name);
+        ui.label(t.agents_label);
         ui.text_edit_singleline(&mut self.agent_display_name);
         ui.label(t.agents_role);
         ui.weak(t.agents_role_optional);
@@ -5675,11 +5680,8 @@ impl UiApp {
                 icons::child_branch(ui);
             }
             let selected = self.agent_active_tab.as_deref() == Some(a.agent_id.as_str());
-            let label = if let Some(pid) = a.persona_id.as_deref() {
-                chat_room::persona_label(&t, pid).to_string()
-            } else {
-                agent_panel::truncate(a.display_title(), 48)
-            };
+            let label = chat_room::roster_agent_label(&t, a);
+            let label = agent_panel::truncate(&label, 48);
             if ui.selectable_label(selected, &label).on_hover_text(&a.agent_id).clicked()
             {
                 self.open_agent_tab(&a.agent_id);

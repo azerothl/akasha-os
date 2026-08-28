@@ -113,6 +113,25 @@ pub fn roster_agent_label(t: &UiStrings, agent: &AgentInfo) -> String {
     }
 }
 
+/// User-created library entries and built-in personas; excludes active task workers.
+pub fn is_salon_library_candidate(agent: &AgentInfo) -> bool {
+    if agent.persona_id.is_some() {
+        return agent.is_roster();
+    }
+    if agent.is_roster() {
+        return true;
+    }
+    let Some(name) = agent.display_name.as_deref().filter(|n| !n.trim().is_empty()) else {
+        return false;
+    };
+    let _ = name;
+    agent.max_steps == 0
+        && !matches!(
+            agent.state,
+            AgentState::Running | AgentState::Created | AgentState::Paused | AgentState::Blocked
+        )
+}
+
 /// Roster library entries not yet in this session.
 pub fn library_add_candidates(
     agents: &[AgentInfo],
@@ -122,7 +141,7 @@ pub fn library_add_candidates(
     let present = member_ids(members);
     agents_with_library_placeholders(agents, t)
         .into_iter()
-        .filter(|a| a.is_roster())
+        .filter(|a| is_salon_library_candidate(a))
         .filter(|a| !present.contains(a.agent_id.as_str()))
         .collect()
 }
@@ -132,11 +151,11 @@ pub fn member_ids(members: &[ChatRoomMember]) -> std::collections::HashSet<&str>
 }
 
 /// Display name from roster (`speaker_id`); never trust a free-text spoof field on the message.
-pub fn roster_display_name(members: &[ChatRoomMember], speaker_id: &str) -> String {
+pub fn roster_display_name(t: &UiStrings, members: &[ChatRoomMember], speaker_id: &str) -> String {
     members
         .iter()
         .find(|m| m.agent_id == speaker_id)
-        .map(|m| m.display_name.clone())
+        .map(|m| member_display_label(t, m))
         .unwrap_or_else(|| speaker_id.to_string())
 }
 
@@ -189,15 +208,17 @@ pub fn mention_completions(
     let needle = tail.to_ascii_lowercase();
     let mut out = Vec::new();
     for m in members {
-        let name_match = !needle.is_empty()
+        let label = member_display_label(t, m);
+        let name_match =
+            !needle.is_empty() && label.to_ascii_lowercase().starts_with(&needle);
+        let stored_name_match = !needle.is_empty()
             && m.display_name.to_ascii_lowercase().starts_with(&needle);
         let id_match = !needle.is_empty() && m.agent_id.to_ascii_lowercase().starts_with(&needle);
         let persona_match = m
             .persona_id
             .as_deref()
             .is_some_and(|p| !needle.is_empty() && p.to_ascii_lowercase().starts_with(&needle));
-        if needle.is_empty() || name_match || id_match || persona_match {
-            let label = member_display_label(t, m);
+        if needle.is_empty() || name_match || stored_name_match || id_match || persona_match {
             out.push((insert_mention(input, at, &label), label));
         }
     }
@@ -240,12 +261,13 @@ mod tests {
 
     #[test]
     fn roster_lookup_beats_spoof_name() {
+        let t = i18n::strings("en");
         let members = vec![member("agent-a", "Researcher")];
         assert_eq!(
-            roster_display_name(&members, "agent-a"),
+            roster_display_name(&t, &members, "agent-a"),
             "Researcher"
         );
-        assert_eq!(roster_display_name(&members, "agent-b"), "agent-b");
+        assert_eq!(roster_display_name(&t, &members, "agent-b"), "agent-b");
     }
 
     #[test]
@@ -349,5 +371,104 @@ mod tests {
         assert!(q.contains(t.room_queue_joiner));
         assert!(q.contains(t.persona_researcher));
         assert!(q.contains(t.persona_coder));
+    }
+
+    fn custom_library_agent(id: &str, label: &str) -> AgentInfo {
+        AgentInfo {
+            agent_id: id.into(),
+            state: AgentState::Roster,
+            directive: String::new(),
+            pid: None,
+            caps: vec![],
+            last_output: String::new(),
+            step: 0,
+            max_steps: 0,
+            current_task: None,
+            parent_id: None,
+            children: vec![],
+            tokens_used: 0,
+            skills: vec![],
+            tools: vec![],
+            mcp_servers: vec![],
+            fail_reason: None,
+            session_id: None,
+            title: label.into(),
+            kind: AgentKind::Roster,
+            display_name: Some(label.into()),
+            persona_id: None,
+        }
+    }
+
+    fn task_worker_agent(id: &str, label: &str) -> AgentInfo {
+        AgentInfo {
+            agent_id: id.into(),
+            state: AgentState::Running,
+            directive: "Analyze the skills registry".into(),
+            pid: Some(42),
+            caps: vec![],
+            last_output: String::new(),
+            step: 1,
+            max_steps: 32,
+            current_task: None,
+            parent_id: None,
+            children: vec![],
+            tokens_used: 0,
+            skills: vec![],
+            tools: vec![],
+            mcp_servers: vec![],
+            fail_reason: None,
+            session_id: Some("session-1".into()),
+            title: label.into(),
+            kind: AgentKind::Task,
+            display_name: Some(label.into()),
+            persona_id: None,
+        }
+    }
+
+    #[test]
+    fn typed_display_name_round_trips_to_labels() {
+        let t = i18n::strings("en");
+        let agent = custom_library_agent("agent-7", "Skills Auditor");
+        assert_eq!(agent.display_title(), "Skills Auditor");
+        assert_eq!(roster_agent_label(&t, &agent), "Skills Auditor");
+        let member = ChatRoomMember {
+            agent_id: agent.agent_id.clone(),
+            display_name: "Skills Auditor".into(),
+            persona_id: None,
+            joined_ms: 0,
+        };
+        assert_eq!(member_display_label(&t, &member), "Skills Auditor");
+    }
+
+    #[test]
+    fn page_created_roster_agent_in_library_add_candidates() {
+        let t = i18n::strings("en");
+        let agents = vec![custom_library_agent("agent-7", "Skills Auditor")];
+        let candidates = library_add_candidates(&agents, &[], &t);
+        assert!(candidates.iter().any(|a| a.agent_id == "agent-7"));
+        assert_eq!(
+            roster_agent_label(&t, candidates.iter().find(|a| a.agent_id == "agent-7").unwrap()),
+            "Skills Auditor"
+        );
+    }
+
+    #[test]
+    fn task_worker_excluded_from_library_add_candidates() {
+        let t = i18n::strings("en");
+        let agents = vec![task_worker_agent("agent-8", "Analyze skills")];
+        let candidates = library_add_candidates(&agents, &[], &t);
+        assert!(!candidates.iter().any(|a| a.agent_id == "agent-8"));
+        assert!(!is_salon_library_candidate(&agents[0]));
+    }
+
+    #[test]
+    fn library_candidate_with_idle_task_kind_and_label() {
+        let mut agent = custom_library_agent("agent-9", "Reviewer");
+        agent.kind = AgentKind::Task;
+        agent.state = AgentState::Done;
+        assert!(is_salon_library_candidate(&agent));
+        let t = i18n::strings("en");
+        let candidates = library_add_candidates(&[agent], &[], &t);
+        assert!(candidates.iter().any(|a| a.agent_id == "agent-9"));
     }
 }
