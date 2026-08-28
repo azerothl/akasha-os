@@ -849,6 +849,14 @@ mod tests {
     }
 
     #[test]
+    fn nav_labels_non_empty() {
+        let g = strings("en");
+        for topic in GuideTopic::ALL {
+            assert!(!nav_label(&g, topic).is_empty());
+        }
+    }
+
+    #[test]
     fn create_guide_covers_studio_controls() {
         let en = strings("en");
         let fr = strings("fr");
