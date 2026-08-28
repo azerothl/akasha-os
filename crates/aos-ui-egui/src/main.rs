@@ -728,6 +728,7 @@ pub(crate) async fn spawn_chat_delegate_agent(
     };
     let mut req = AgentCreateRequest::simple(goal_statement.clone());
     req.display_name = Some(aos_agent::persist::agent_title(&goal_statement));
+    req.origin = Some("assistant".into());
     req.skills = skills;
     req.tools = tools;
     req.session_id = Some(sid.clone());

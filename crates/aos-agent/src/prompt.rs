@@ -233,6 +233,7 @@ mod tests {
             budget: AgentBudget::default(),
             optimize_prompt: false,
             gate_mode: "ask".into(),
+            origin: None,
         };
         let tools = vec![ToolDesc {
             name: "notes.create".into(),
@@ -279,6 +280,7 @@ mod tests {
             budget: AgentBudget::default(),
             optimize_prompt: false,
             gate_mode: "ask".into(),
+            origin: None,
         };
         let tools = vec![ToolDesc {
             name: "canvas.stroke".into(),

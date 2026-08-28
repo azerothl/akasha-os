@@ -1993,6 +1993,7 @@ async fn spawn_child(
         budget: parent.budget.clone(),
         optimize_prompt: false,
         gate_mode: parent.gate_mode.clone(),
+        origin: None,
     };
     match bus
         .call::<AgentCreateRequest, AgentCreateResponse>("agent.create", &req, vec![])
@@ -3542,6 +3543,7 @@ mod tests {
             budget: Default::default(),
             optimize_prompt: false,
             gate_mode: "ask".into(),
+            origin: None,
         };
         let child_goal = canvas_child_goal_statement(
             &parent,
@@ -3573,6 +3575,7 @@ mod tests {
             budget: Default::default(),
             optimize_prompt: false,
             gate_mode: "ask".into(),
+            origin: None,
         };
         let child_goal = canvas_child_goal_statement(&parent, "résumer les sources A et B");
         assert_eq!(child_goal, "résumer les sources A et B");
