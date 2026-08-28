@@ -18,6 +18,7 @@ parallel with the Windows+CUDA host.
 | `capkd` | mint / check / revoke via `CapStore` | passive domain, prio 200 |
 | `bus` | lookup + `cap.*` proxy | passive domain, prio 150 |
 | `gate` | PV gate client | prio 100, parent of `auditd` |
+| `dev` | framebuffer + virtio smoke (blk/net/input) | prio 125 (callee above gate) |
 | `auditd` | minimal journal | child; `pd_stop` from the gate |
 
 Transport: `microkit_ppcall`. The gate does **not** call capkd directly —
@@ -36,9 +37,25 @@ aarch64-unknown-none`. Microkit SDK 2.3.0 is downloaded into
 `vm/sel4/sdk/` (gitignored). `run-sel4-vm.ps1` builds the Rust staticlib
 first, then the Microkit image.
 
-Success: QEMU serial contains `AOS_GATE_VM_PASS`.
+QEMU attaches a **single void cut-face surface** (guest RAM, not virtio-gpu),
+`virtio-blk` + `virtio-net` + `virtio-keyboard`, and injects a key via the
+QEMU monitor while the `dev` PD polls.
+
+Success: QEMU serial contains **`AOS_GATE_VM_PASS`** (P4 caps replay) and
+**`AOS_GATE_VM_HW_PASS`** (fb + blk + net + input). Per-device markers:
+`AOS_GATE_VM_FB`, `AOS_GATE_VM_BLK`, `AOS_GATE_VM_NET`, `AOS_GATE_VM_KBD`.
 
 ## Honest gaps
+
+**Now exercised in CI (same `loader.img`):**
+
+- Void cut-face framebuffer surface (`AOS_GATE_VM_FB`) — solid `#070b14` fill in guest RAM.
+- Virtio-blk read/write against a raw `gate.disk` image (`AOS_GATE_VM_BLK`).
+- Virtio-net MAC visibility (`AOS_GATE_VM_NET`).
+- Virtio-keyboard event via QEMU monitor `sendkey` (`AOS_GATE_VM_KBD`).
+- Combined marker `AOS_GATE_VM_HW_PASS` after the existing `AOS_GATE_VM_PASS`.
+
+**Still missing:**
 
 - Microkit glue (`init` / `protected`) still in C; the cap store is the Rust
   `CapStore`. 100% Rust PDs (`sel4-microkit`) = next.
@@ -46,3 +63,8 @@ Success: QEMU serial contains `AOS_GATE_VM_PASS`.
 - No Model / llama.cpp (CPU-only, ADR 0001).
 - Microkit is static: “kill” = `microkit_pd_stop` of the child PD, not
   `SIGKILL` of a host process.
+- Framebuffer is a **smoke surface** (solid void fill), not the Preview
+  compositor (E13) or a desktop shell.
+- Virtio drivers are **minimal legacy-MMIO poll smoke** only — no full net
+  stack, no block FS, no input routing to UI.
+- PV.4 bare-metal USB boot is later; this track is QEMU/CI only.
