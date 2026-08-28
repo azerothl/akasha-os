@@ -165,7 +165,7 @@ fn overflow_scroll_h(
         .show(ui, add_contents);
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ChatBubbleKind {
     User,
     Assistant,
@@ -255,12 +255,8 @@ fn chat_message_frame(
         let (f, s, _) = chat_bubble_colors(kind, dark);
         (f, s)
     });
-    let max_w = (ui.available_width() * match kind {
-        ChatBubbleKind::User => 0.88,
-        ChatBubbleKind::Assistant | ChatBubbleKind::RoomSpeaker => 0.96,
-        ChatBubbleKind::System => 0.92,
-    })
-    .clamp(200.0, ui.available_width());
+    let avail = ui.available_width();
+    let max_w = chat_bubble_max_width(avail, kind);
 
     let layout = match kind {
         ChatBubbleKind::User => egui::Layout::right_to_left(egui::Align::Min),
@@ -269,6 +265,7 @@ fn chat_message_frame(
 
     ui.with_layout(layout, |ui| {
         ui.set_max_width(max_w);
+        ui.set_width(max_w);
         egui::Frame::NONE
             .fill(fill)
             .stroke(egui::Stroke::new(1.0_f32, stroke))
@@ -297,6 +294,7 @@ fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1280.0, 800.0])
+            .with_min_inner_size(preview_min_inner_size())
             .with_title(format!("Akasha OS Preview {version}"))
             .with_icon(app_icon()),
         ..Default::default()
@@ -542,6 +540,111 @@ fn session_model_supports_vision(model_id: Option<&str>) -> bool {
 /// One-row height for the canvas tool strip (session bar row 2).
 const CANVAS_TOOLBAR_ROW_H: f32 = 36.0;
 
+/// Minimum inner window size (width × height) for a usable Preview layout.
+fn preview_min_inner_size() -> [f32; 2] {
+    let fr = i18n::strings("fr");
+    [preview_min_inner_width(&fr), 600.0]
+}
+
+const LEFT_NAV_W: f32 = 148.0;
+const CHAT_SIDE_MIN_W: f32 = 120.0;
+const CHAT_SPLIT_GAP: f32 = 8.0;
+const CHAT_MAIN_MARGIN: f32 = 16.0;
+
+fn estimate_label_chip_w(label: &str) -> f32 {
+    const CHAR_W: f32 = 7.5;
+    const PAD: f32 = 12.0;
+    label.len() as f32 * CHAR_W + PAD
+}
+
+fn session_toggle_reserve_width(t: &i18n::UiStrings) -> f32 {
+    estimate_label_chip_w(t.session_toggle_salon) + 4.0 + estimate_label_chip_w(t.session_toggle_canvas)
+}
+
+fn composer_row_reserved_width(t: &i18n::UiStrings, show_stop: bool) -> f32 {
+    icons::ATTACH_BTN_W
+        + 4.0
+        + estimate_composer_buttons_w(t.agent_send, show_stop, t.chat_stop)
+}
+
+/// Minimum central chat pane width so composer + session toggles fit (FR labels).
+fn preview_min_inner_width(t: &i18n::UiStrings) -> f32 {
+    let composer = composer_row_reserved_width(t, true) + COMPOSER_MIN_INPUT_W;
+    let session_bar = session_toggle_reserve_width(t) + 160.0;
+    let canvas_split_min = 180.0 + CHAT_SPLIT_GAP + 200.0;
+    let main_min = composer.max(session_bar).max(canvas_split_min);
+    LEFT_NAV_W + CHAT_SIDE_MIN_W + CHAT_SPLIT_GAP + main_min + CHAT_MAIN_MARGIN
+}
+
+const COMPOSER_MIN_INPUT_W: f32 = 140.0;
+const COMPOSER_INPUT_ROW_H: f32 = 44.0;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct ChatSessionsSplit {
+    side_w: f32,
+    chat_w: f32,
+}
+
+/// Sidebar + main chat widths that never exceed `full_w`.
+fn chat_sessions_split(full_w: f32, gap: f32) -> ChatSessionsSplit {
+    let min_main = 200.0_f32;
+    let max_side = 220.0_f32;
+    let min_side = 120.0_f32;
+    let mut side_w = max_side.min((full_w * 0.30).max(min_side));
+    if full_w - side_w - gap < min_main {
+        side_w = (full_w - gap - min_main).clamp(80.0, max_side);
+    }
+    side_w = side_w.min((full_w - gap).max(0.0));
+    let chat_w = (full_w - side_w - gap).max(0.0);
+    ChatSessionsSplit { side_w, chat_w }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum ChatCanvasLayout {
+    SideBySide { transcript_w: f32, canvas_w: f32 },
+    Stacked { transcript_h: f32, canvas_h: f32 },
+}
+
+/// Transcript + canvas layout that fits in `total_w` (side-by-side or stacked).
+fn chat_canvas_layout(total_w: f32, content_h: f32, split_gap: f32) -> ChatCanvasLayout {
+    const CANVAS_MIN: f32 = 180.0;
+    const TRANSCRIPT_MIN: f32 = 200.0;
+    let min_horiz = CANVAS_MIN + split_gap + TRANSCRIPT_MIN;
+    if total_w < min_horiz {
+        let transcript_h = (content_h * 0.58).max(80.0);
+        let canvas_h = (content_h - transcript_h - split_gap).max(80.0);
+        ChatCanvasLayout::Stacked {
+            transcript_h,
+            canvas_h,
+        }
+    } else {
+        let max_canvas = (total_w - TRANSCRIPT_MIN - split_gap).max(0.0);
+        let canvas_w = ((total_w - split_gap) * 0.42)
+            .clamp(CANVAS_MIN.min(max_canvas), max_canvas);
+        let transcript_w = (total_w - canvas_w - split_gap).max(0.0);
+        ChatCanvasLayout::SideBySide {
+            transcript_w,
+            canvas_w,
+        }
+    }
+}
+
+/// Conservative button-row width for composer wrap prediction (before egui measure).
+fn estimate_composer_buttons_w(send: &str, show_stop: bool, stop: &str) -> f32 {
+    const CHAR_W: f32 = 7.5;
+    const BTN_PAD: f32 = 16.0;
+    const ITEM_GAP: f32 = 4.0;
+    let mut w = send.len() as f32 * CHAR_W + BTN_PAD;
+    if show_stop {
+        w += ITEM_GAP + stop.len() as f32 * CHAR_W + BTN_PAD;
+    }
+    w
+}
+
+fn chat_composer_wraps(available_w: f32, attach_w: f32, buttons_w: f32) -> bool {
+    available_w - attach_w - buttons_w < COMPOSER_MIN_INPUT_W
+}
+
 /// Vertical space for the fixed send row plus optional stacks that grow upward.
 fn chat_composer_reserve_height(
     chat_w: f32,
@@ -550,13 +653,12 @@ fn chat_composer_reserve_height(
     pending_documents_len: usize,
     show_vision_banner: bool,
 ) -> f32 {
-    const INPUT_ROW_H: f32 = 44.0;
     const ASK_QUEUE_H: f32 = 22.0;
     const VISION_BANNER_H: f32 = 28.0;
     const CHIP_W: f32 = 48.0;
     const CHIP_ROW_H: f32 = 36.0;
 
-    let mut h = INPUT_ROW_H;
+    let mut h = COMPOSER_INPUT_ROW_H;
     if ask_queue_len > 1 {
         h += ASK_QUEUE_H;
     }
@@ -570,6 +672,37 @@ fn chat_composer_reserve_height(
         h += (rows as f32) * CHIP_ROW_H;
     }
     h
+}
+
+fn ui_text_button_width(ui: &egui::Ui, label: &str) -> f32 {
+    let padding = ui.style().spacing.button_padding;
+    let font_id = ui.style().text_styles[&egui::TextStyle::Button].clone();
+    let galley = ui.fonts(|f| {
+        f.layout_no_wrap(
+            label.to_owned(),
+            font_id,
+            egui::Color32::PLACEHOLDER,
+        )
+    });
+    galley.size().x + padding.x * 2.0
+}
+
+fn chat_markdown_viewer(ui: &egui::Ui) -> CommonMarkViewer<'static> {
+    let w = ui.available_width().max(1.0) as usize;
+    CommonMarkViewer::new().default_width(Some(w))
+}
+
+fn chat_bubble_max_width(available_w: f32, kind: ChatBubbleKind) -> f32 {
+    if available_w <= 0.0 {
+        return 0.0;
+    }
+    let fraction = match kind {
+        ChatBubbleKind::User => 0.88,
+        ChatBubbleKind::Assistant | ChatBubbleKind::RoomSpeaker => 0.96,
+        ChatBubbleKind::System => 0.92,
+    };
+    let w = (available_w * fraction).min(available_w);
+    w.max(available_w.min(48.0))
 }
 
 fn chat_action_is_self_tool(action: &str) -> bool {
@@ -4336,69 +4469,98 @@ impl UiApp {
             .replace("{n}", &members.len().to_string());
 
         ui.horizontal(|ui| {
-            let header = egui::RichText::new(&session_title).strong();
-            let title_resp = ui.add(
-                egui::Label::new(header).sense(if room {
-                    egui::Sense::click()
-                } else {
-                    egui::Sense::hover()
-                }),
+            let full_w = ui.available_width();
+            let toggle_w = session_toggle_reserve_width(t);
+            let left_w = (full_w - toggle_w).max(0.0);
+
+            ui.allocate_ui_with_layout(
+                egui::vec2(left_w, ui.available_height()),
+                egui::Layout::left_to_right(egui::Align::Center),
+                |ui| {
+                    let header = egui::RichText::new(&session_title).strong();
+                    let title_resp = ui.add(
+                        egui::Label::new(header).sense(if room {
+                            egui::Sense::click()
+                        } else {
+                            egui::Sense::hover()
+                        }),
+                    );
+                    if room && title_resp.clicked() {
+                        self.room_members_pane_open = !self.room_members_pane_open;
+                    }
+                    if room {
+                        title_resp.on_hover_text(t.room_header_open_members);
+                        if !members.is_empty() {
+                            ui.weak(format!("· {count_line}"));
+                        }
+                        icons::caret(ui, self.room_members_pane_open);
+                    }
+
+                    let g = guide::strings(&self.prefs.language);
+                    if guide::tab_help_button(ui, g.help_tooltip) {
+                        self.guide.open_topic(if room {
+                            guide::GuideTopic::Salon
+                        } else if canvas_open {
+                            guide::GuideTopic::Canvas
+                        } else {
+                            guide::GuideTopic::Chat
+                        });
+                    }
+                },
             );
-            if room && title_resp.clicked() {
-                self.room_members_pane_open = !self.room_members_pane_open;
-            }
-            if room {
-                title_resp.on_hover_text(t.room_header_open_members);
-                if !members.is_empty() {
-                    ui.weak(format!("· {count_line}"));
-                }
-                icons::caret(ui, self.room_members_pane_open);
-            }
 
-            let g = guide::strings(&self.prefs.language);
-            if guide::tab_help_button(ui, g.help_tooltip) {
-                self.guide.open_topic(if room {
-                    guide::GuideTopic::Salon
-                } else if canvas_open {
-                    guide::GuideTopic::Canvas
-                } else {
-                    guide::GuideTopic::Chat
-                });
-            }
-
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui
-                    .selectable_label(canvas_open, t.session_toggle_canvas)
-                    .clicked()
-                {
-                    let new_open = !canvas_open;
-                    self.set_canvas_open_local(&sid, new_open);
-                    let _ = self.cmd_tx.send(Cmd::CanvasSetOpen {
-                        session_id: sid.clone(),
-                        open: new_open,
-                    });
-                }
-                if ui.selectable_label(room, t.session_toggle_salon).clicked() {
-                    let mode = if room {
-                        ChatSessionMode::Direct
-                    } else {
-                        ChatSessionMode::Room
-                    };
-                    let _ = self.cmd_tx.send(Cmd::SessionSetMode {
-                        session_id: sid.clone(),
-                        mode,
-                    });
-                }
-            });
+            ui.allocate_ui_with_layout(
+                egui::vec2(toggle_w.min(full_w), ui.available_height()),
+                egui::Layout::right_to_left(egui::Align::Center),
+                |ui| {
+                    if ui
+                        .add(egui::SelectableLabel::new(
+                            canvas_open,
+                            egui::RichText::new(t.session_toggle_canvas),
+                        ))
+                        .clicked()
+                    {
+                        let new_open = !canvas_open;
+                        self.set_canvas_open_local(&sid, new_open);
+                        let _ = self.cmd_tx.send(Cmd::CanvasSetOpen {
+                            session_id: sid.clone(),
+                            open: new_open,
+                        });
+                    }
+                    if ui
+                        .add(egui::SelectableLabel::new(
+                            room,
+                            egui::RichText::new(t.session_toggle_salon),
+                        ))
+                        .clicked()
+                    {
+                        let mode = if room {
+                            ChatSessionMode::Direct
+                        } else {
+                            ChatSessionMode::Room
+                        };
+                        let _ = self.cmd_tx.send(Cmd::SessionSetMode {
+                            session_id: sid.clone(),
+                            mode,
+                        });
+                    }
+                },
+            );
         });
 
         if canvas_open {
             let mut toolbar_action: Option<chat_canvas::CanvasUiAction> = None;
+            let toolbar_min_w = chat_canvas::toolbar_content_min_width(
+                t,
+                self.canvas_panel.seeing,
+                self.canvas_panel.clear_confirm_open,
+            );
             egui::ScrollArea::horizontal()
                 .id_salt("canvas_toolbar_scroll")
                 .auto_shrink([false, false])
                 .max_height(CANVAS_TOOLBAR_ROW_H)
                 .show(ui, |ui| {
+                    ui.set_min_width(toolbar_min_w);
                     ui.horizontal(|ui| {
                         ui.set_min_height(CANVAS_TOOLBAR_ROW_H - 4.0);
                         toolbar_action =
@@ -4538,7 +4700,7 @@ impl UiApp {
                         if !text.is_empty() {
                             if role == "assistant" {
                                 ui.push_id(("chat_md", i), |ui| {
-                                    CommonMarkViewer::new().show(
+                                    chat_markdown_viewer(ui).show(
                                         ui,
                                         &mut self.chat_md_cache,
                                         &text,
@@ -4689,7 +4851,7 @@ impl UiApp {
                         let streaming =
                             agent_panel::format_streaming_preview(&self.streaming);
                         ui.push_id("chat_md_stream", |ui| {
-                            CommonMarkViewer::new().show(
+                            chat_markdown_viewer(ui).show(
                                 ui,
                                 &mut self.chat_md_cache,
                                 &streaming,
@@ -4724,14 +4886,7 @@ impl UiApp {
         let t = i18n::strings(&self.prefs.language);
         let full = ui.available_size();
         let gap = 8.0_f32;
-        let min_main = 200.0_f32;
-        let max_side = 220.0_f32;
-        let min_side = 120.0_f32;
-        let mut side_w = max_side.min((full.x * 0.30).max(min_side));
-        if full.x - side_w - gap < min_main {
-            side_w = (full.x - gap - min_main).clamp(80.0, max_side);
-        }
-        let chat_w = (full.x - side_w - gap).max(80.0);
+        let ChatSessionsSplit { side_w, chat_w } = chat_sessions_split(full.x, gap);
 
         ui.horizontal(|ui| {
             ui.set_min_height(full.y);
@@ -5024,56 +5179,103 @@ impl UiApp {
 
                             if canvas_open {
                                 let split_gap = 8.0_f32;
-                                let canvas_min = 180.0_f32;
-                                ui.horizontal(|ui| {
-                                    ui.set_min_height(content_h);
-                                    let total_w = ui.available_width();
-                                    let canvas_w = ((total_w - split_gap) * 0.42)
-                                        .max(canvas_min)
-                                        .min(total_w - 220.0);
-                                    let transcript_w =
-                                        (total_w - canvas_w - split_gap).max(200.0);
-
-                                    ui.allocate_ui_with_layout(
-                                        egui::vec2(transcript_w, content_h),
-                                        egui::Layout::top_down(egui::Align::Min)
-                                            .with_cross_justify(true),
-                                        |ui| {
-                                            self.ui_chat_transcript(
-                                                ui,
-                                                &t,
-                                                room_mode,
-                                                &room_members,
-                                                content_h,
-                                            );
-                                        },
-                                    );
-                                    ui.add_space(split_gap);
-                                    ui.allocate_ui_with_layout(
-                                        egui::vec2(canvas_w, content_h),
-                                        egui::Layout::top_down(egui::Align::Min)
-                                            .with_cross_justify(true),
-                                        |ui| {
-                                            if let Some(ref sid) = active_sid {
-                                                let aspect_action =
-                                                    chat_canvas::ui_canvas_aspect_row(
-                                                        ui, &t, canvas_aspect,
+                                let total_w = ui.available_width();
+                                match chat_canvas_layout(total_w, content_h, split_gap) {
+                                    ChatCanvasLayout::SideBySide {
+                                        transcript_w,
+                                        canvas_w,
+                                    } => {
+                                        ui.horizontal(|ui| {
+                                            ui.set_min_height(content_h);
+                                            ui.allocate_ui_with_layout(
+                                                egui::vec2(transcript_w, content_h),
+                                                egui::Layout::top_down(egui::Align::Min)
+                                                    .with_cross_justify(true),
+                                                |ui| {
+                                                    self.ui_chat_transcript(
+                                                        ui,
+                                                        &t,
+                                                        room_mode,
+                                                        &room_members,
+                                                        content_h,
                                                     );
-                                                self.dispatch_canvas_ui_action(
-                                                    aspect_action, sid,
-                                                );
-                                                let action = chat_canvas::ui_canvas_surface(
+                                                },
+                                            );
+                                            ui.add_space(split_gap);
+                                            ui.allocate_ui_with_layout(
+                                                egui::vec2(canvas_w, content_h),
+                                                egui::Layout::top_down(egui::Align::Min)
+                                                    .with_cross_justify(true),
+                                                |ui| {
+                                                    if let Some(ref sid) = active_sid {
+                                                        let aspect_action =
+                                                            chat_canvas::ui_canvas_aspect_row(
+                                                                ui, &t, canvas_aspect,
+                                                            );
+                                                        self.dispatch_canvas_ui_action(
+                                                            aspect_action, sid,
+                                                        );
+                                                        let action =
+                                                            chat_canvas::ui_canvas_surface(
+                                                                ui,
+                                                                &mut self.canvas_panel,
+                                                                canvas_aspect,
+                                                                t.canvas_empty_hint,
+                                                            );
+                                                        self.dispatch_canvas_ui_action(
+                                                            action, sid,
+                                                        );
+                                                        self.canvas_poll_if_due(ui, sid);
+                                                    }
+                                                },
+                                            );
+                                        });
+                                    }
+                                    ChatCanvasLayout::Stacked {
+                                        transcript_h,
+                                        canvas_h,
+                                    } => {
+                                        ui.allocate_ui_with_layout(
+                                            egui::vec2(total_w, transcript_h),
+                                            egui::Layout::top_down(egui::Align::Min)
+                                                .with_cross_justify(true),
+                                            |ui| {
+                                                self.ui_chat_transcript(
                                                     ui,
-                                                    &mut self.canvas_panel,
-                                                    canvas_aspect,
-                                                    t.canvas_empty_hint,
+                                                    &t,
+                                                    room_mode,
+                                                    &room_members,
+                                                    transcript_h,
                                                 );
-                                                self.dispatch_canvas_ui_action(action, sid);
-                                                self.canvas_poll_if_due(ui, sid);
-                                            }
-                                        },
-                                    );
-                                });
+                                            },
+                                        );
+                                        ui.add_space(split_gap);
+                                        ui.allocate_ui_with_layout(
+                                            egui::vec2(total_w, canvas_h),
+                                            egui::Layout::top_down(egui::Align::Min)
+                                                .with_cross_justify(true),
+                                            |ui| {
+                                                if let Some(ref sid) = active_sid {
+                                                    let aspect_action =
+                                                        chat_canvas::ui_canvas_aspect_row(
+                                                            ui, &t, canvas_aspect,
+                                                        );
+                                                    self.dispatch_canvas_ui_action(
+                                                        aspect_action, sid,
+                                                    );
+                                                    let action = chat_canvas::ui_canvas_surface(
+                                                        ui,
+                                                        &mut self.canvas_panel,
+                                                        canvas_aspect,
+                                                        t.canvas_empty_hint,
+                                                    );
+                                                    self.dispatch_canvas_ui_action(action, sid);
+                                                    self.canvas_poll_if_due(ui, sid);
+                                                }
+                                            },
+                                        );
+                                    }
+                                }
                             } else {
                                 self.ui_chat_transcript(
                                     ui,
@@ -5096,103 +5298,131 @@ impl UiApp {
                         egui::vec2(ui.available_width(), composer_h),
                         egui::Layout::bottom_up(egui::Align::Min),
                         |ui| {
-                            let input_row = ui.with_layout(
-                                egui::Layout::left_to_right(egui::Align::Center),
-                                |ui| {
-                                    let t = i18n::strings(&self.prefs.language);
-                                    let hint = match ask_queue.len() {
-                                        0 => t.chat_hint.to_string(),
-                                        1 => t.chat_hint_agent_ask.to_string(),
-                                        n => {
-                                            let title = self
-                                                .blocked_ask_agent()
-                                                .map(agent_display_title)
-                                                .unwrap_or_default();
-                                            t.chat_hint_agent_ask_many
-                                                .replace("{agent}", &title)
-                                                .replace("{n}", &n.to_string())
-                                        }
-                                    };
-                                    let mut attach_from_menu = false;
-                                    let mut attach_document_from_menu = false;
-                                    let mut reuse_last_image = false;
-                                    icons::attach_menu(ui, "chat_attach", t.chat_attach_image, |ui| {
-                                        if self.last_session_image.is_some()
-                                            && ui.button(t.chat_last_session_image).clicked()
-                                        {
-                                            reuse_last_image = true;
-                                        }
-                                        if ui.button(t.chat_attach_image).clicked() {
-                                            attach_from_menu = true;
-                                        }
-                                        if ui.button(t.chat_attach_document).clicked() {
-                                            attach_document_from_menu = true;
-                                        }
-                                    });
-                                    if attach_from_menu {
-                                        if let Some(path) = os_open::pick_os_file(
-                                            t.chat_attach_image,
-                                            &[("Images", &["png", "jpg", "jpeg", "webp"])],
-                                            os_open::user_downloads_dir().as_deref(),
-                                        ) {
-                                            self.queue_chat_image(path.to_string_lossy().into_owned());
-                                        }
-                                    } else if attach_document_from_menu {
-                                        if let Some(path) = os_open::pick_os_file(
-                                            t.chat_attach_document,
-                                            &[(
-                                                "Documents",
-                                                aos_proto::chat_document::CHAT_DOCUMENT_EXTENSIONS,
-                                            )],
-                                            os_open::user_downloads_dir().as_deref(),
-                                        ) {
-                                            self.queue_chat_document(
-                                                path.to_string_lossy().into_owned(),
-                                            );
-                                        }
-                                    } else if reuse_last_image {
-                                        if let Some(last) = self.last_session_image.clone() {
-                                            self.queue_chat_image(last);
-                                        }
+                            let t = i18n::strings(&self.prefs.language);
+                            let hint = match ask_queue.len() {
+                                0 => t.chat_hint.to_string(),
+                                1 => t.chat_hint_agent_ask.to_string(),
+                                n => {
+                                    let title = self
+                                        .blocked_ask_agent()
+                                        .map(agent_display_title)
+                                        .unwrap_or_default();
+                                    t.chat_hint_agent_ask_many
+                                        .replace("{agent}", &title)
+                                        .replace("{n}", &n.to_string())
+                                }
+                            };
+                            let show_stop = self.chat_pending
+                                && (room_mode || self.chat_inference_id.is_some());
+                            let send_w = ui_text_button_width(ui, t.agent_send);
+                            let stop_w = if show_stop {
+                                ui_text_button_width(ui, t.chat_stop)
+                            } else {
+                                0.0
+                            };
+                            let item_gap = ui.spacing().item_spacing.x;
+                            let buttons_w =
+                                send_w + if show_stop { item_gap + stop_w } else { 0.0 };
+
+                            let mut attach_from_menu = false;
+                            let mut attach_document_from_menu = false;
+                            let mut reuse_last_image = false;
+                            let mut send_clicked = false;
+                            let mut input_response: Option<egui::Response> = None;
+
+                            let mut run_attach_menu = |ui: &mut egui::Ui| {
+                                icons::attach_menu(ui, "chat_attach", t.chat_attach_image, |ui| {
+                                    if self.last_session_image.is_some()
+                                        && ui.button(t.chat_last_session_image).clicked()
+                                    {
+                                        reuse_last_image = true;
                                     }
-                                    let r = ui.add(
-                                        egui::TextEdit::singleline(&mut self.input)
-                                            .id_salt("chat_input")
-                                            .desired_width(ui.available_width() - 90.0)
-                                            .hint_text(hint),
-                                    );
-                                    if self.chat_refocus {
-                                        r.request_focus();
-                                        self.chat_refocus = false;
+                                    if ui.button(t.chat_attach_image).clicked() {
+                                        attach_from_menu = true;
                                     }
-                                    let send_btn = ui.button("Envoyer").on_hover_text(t.tip_send);
-                                    if self.chat_pending {
-                                        if room_mode {
-                                            if ui.button(t.chat_stop).clicked() {
-                                                if let Some(sid) = self.active_session.clone() {
-                                                    let _ = self.cmd_tx.send(Cmd::RoomTurnCancel {
-                                                        session_id: sid,
-                                                    });
-                                                }
-                                            }
-                                        } else if let Some(id) = self.chat_inference_id {
-                                            if ui.button(t.chat_stop).clicked() {
-                                                let _ = self.cmd_tx.send(Cmd::ChatCancel {
-                                                    inference_id: id,
+                                    if ui.button(t.chat_attach_document).clicked() {
+                                        attach_document_from_menu = true;
+                                    }
+                                });
+                            };
+                            let mut place_send_stop = |ui: &mut egui::Ui| {
+                                let send_btn =
+                                    ui.button(t.agent_send).on_hover_text(t.tip_send);
+                                if show_stop {
+                                    if room_mode {
+                                        if ui.button(t.chat_stop).clicked() {
+                                            if let Some(sid) = self.active_session.clone() {
+                                                let _ = self.cmd_tx.send(Cmd::RoomTurnCancel {
+                                                    session_id: sid,
                                                 });
                                             }
                                         }
+                                    } else if let Some(id) = self.chat_inference_id {
+                                        if ui.button(t.chat_stop).clicked() {
+                                            let _ = self.cmd_tx.send(Cmd::ChatCancel {
+                                                inference_id: id,
+                                            });
+                                        }
                                     }
-                                    let send = send_btn.clicked()
-                                        || (r.lost_focus()
-                                            && ui.input(|i| i.key_pressed(egui::Key::Enter)));
-                                    if send {
-                                        self.send_chat();
-                                        self.chat_refocus = true;
-                                    }
-                                    r
-                                },
-                            );
+                                }
+                                send_clicked |= send_btn.clicked();
+                            };
+
+                            ui.horizontal(|ui| {
+                                run_attach_menu(ui);
+                                let input_w = (ui.available_width() - buttons_w).max(0.0);
+                                let r = ui.add(
+                                    egui::TextEdit::singleline(&mut self.input)
+                                        .id_salt("chat_input")
+                                        .desired_width(input_w)
+                                        .hint_text(&hint),
+                                );
+                                input_response = Some(r);
+                                place_send_stop(ui);
+                            });
+
+                            if attach_from_menu {
+                                if let Some(path) = os_open::pick_os_file(
+                                    t.chat_attach_image,
+                                    &[("Images", &["png", "jpg", "jpeg", "webp"])],
+                                    os_open::user_downloads_dir().as_deref(),
+                                ) {
+                                    self.queue_chat_image(path.to_string_lossy().into_owned());
+                                }
+                            } else if attach_document_from_menu {
+                                if let Some(path) = os_open::pick_os_file(
+                                    t.chat_attach_document,
+                                    &[(
+                                        "Documents",
+                                        aos_proto::chat_document::CHAT_DOCUMENT_EXTENSIONS,
+                                    )],
+                                    os_open::user_downloads_dir().as_deref(),
+                                ) {
+                                    self.queue_chat_document(
+                                        path.to_string_lossy().into_owned(),
+                                    );
+                                }
+                            } else if reuse_last_image {
+                                if let Some(last) = self.last_session_image.clone() {
+                                    self.queue_chat_image(last);
+                                }
+                            }
+
+                            if let Some(r) = input_response {
+                                if self.chat_refocus {
+                                    r.request_focus();
+                                    self.chat_refocus = false;
+                                }
+                                let send = send_clicked
+                                    || (r.lost_focus()
+                                        && ui.input(|i| i.key_pressed(egui::Key::Enter)));
+                                if send {
+                                    self.send_chat();
+                                    self.chat_refocus = true;
+                                }
+                            }
+
+                            let composer_input_rect = ui.min_rect();
                             if !self.chat_pending_images.is_empty()
                                 || !self.chat_pending_documents.is_empty()
                             {
@@ -5226,10 +5456,10 @@ impl UiApp {
                                         .replace("{agent}", &title),
                                 );
                             }
-                            input_row
+                            composer_input_rect
                         },
                     );
-                    let input_rect = input_row.response.rect;
+                    let input_rect = input_row.inner;
 
                     // Popup au-dessus de l'input, en overlay sur le chat (pas sous le cadre)
                     if !mention_hits.is_empty() {
@@ -7578,5 +7808,89 @@ mod delegate_tests {
             ASPECT,
         )
         .is_none());
+    }
+}
+
+#[cfg(test)]
+mod layout_tests {
+    use super::*;
+
+    #[test]
+    fn chat_sessions_split_never_exceeds_total() {
+        for full_w in [250.0, 400.0, 900.0, 1280.0] {
+            let gap = 8.0;
+            let split = chat_sessions_split(full_w, gap);
+            assert!(
+                split.side_w + gap + split.chat_w <= full_w + 0.01,
+                "full_w={full_w} side={} chat={}",
+                split.side_w,
+                split.chat_w
+            );
+        }
+    }
+
+    #[test]
+    fn chat_canvas_side_by_side_widths_fit() {
+        let gap = 8.0;
+        let layout = chat_canvas_layout(500.0, 400.0, gap);
+        match layout {
+            ChatCanvasLayout::SideBySide {
+                transcript_w,
+                canvas_w,
+            } => {
+                assert!(transcript_w + gap + canvas_w <= 500.0 + 0.01);
+            }
+            ChatCanvasLayout::Stacked { .. } => panic!("expected side-by-side at 500px"),
+        }
+    }
+
+    #[test]
+    fn chat_canvas_stacks_when_too_narrow() {
+        let gap = 8.0;
+        let layout = chat_canvas_layout(300.0, 400.0, gap);
+        assert!(matches!(layout, ChatCanvasLayout::Stacked { .. }));
+    }
+
+    #[test]
+    fn composer_reserve_height_is_single_row() {
+        let h = chat_composer_reserve_height(400.0, 0, 0, 0, false);
+        assert!((h - COMPOSER_INPUT_ROW_H).abs() < 0.01);
+    }
+
+    #[test]
+    fn composer_row_reserved_fits_fr_labels() {
+        let fr = i18n::strings("fr");
+        let reserved = composer_row_reserved_width(&fr, true);
+        assert!(reserved > icons::ATTACH_BTN_W + 80.0);
+    }
+
+    #[test]
+    fn composer_wraps_when_too_narrow() {
+        let buttons = estimate_composer_buttons_w("Envoyer", true, "Stop");
+        assert!(chat_composer_wraps(280.0, icons::ATTACH_BTN_W, buttons));
+        assert!(!chat_composer_wraps(900.0, icons::ATTACH_BTN_W, buttons));
+    }
+
+    #[test]
+    fn preview_min_width_fits_fr_composer_and_toggles() {
+        let fr = i18n::strings("fr");
+        let min_w = preview_min_inner_width(&fr);
+        let composer = composer_row_reserved_width(&fr, true) + COMPOSER_MIN_INPUT_W;
+        assert!(min_w >= LEFT_NAV_W + CHAT_SIDE_MIN_W + composer);
+        assert!(min_w >= LEFT_NAV_W + session_toggle_reserve_width(&fr) + 200.0);
+    }
+
+    #[test]
+    fn bubble_max_width_never_exceeds_available() {
+        for w in [80.0, 150.0, 400.0] {
+            for kind in [
+                ChatBubbleKind::User,
+                ChatBubbleKind::Assistant,
+                ChatBubbleKind::System,
+            ] {
+                let max_w = chat_bubble_max_width(w, kind);
+                assert!(max_w <= w + 0.01, "kind={kind:?} avail={w} max={max_w}");
+            }
+        }
     }
 }
