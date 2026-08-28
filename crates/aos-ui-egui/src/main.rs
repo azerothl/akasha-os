@@ -2708,7 +2708,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
 
     fn handle_schedule_phrase(&mut self, session_id: &str, user_phrase: &str, parsed: ParsedSchedule) {
         let t = i18n::strings(&self.prefs.language);
-        let act_text = schedule_act_phrase::act_phrase_from_parsed(&t, &parsed);
+        let act_text = schedule_act_phrase::act_phrase_from_parsed(&t, &parsed, &self.prefs.language);
         self.chat.push(ChatLine {
             role: "user".into(),
             text: user_phrase.to_string(),
@@ -2755,6 +2755,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                     &parsed.goal,
                     &parsed.when_label,
                     true,
+                    &self.prefs.language,
                 ),
                 attachments: vec![],
                 speaker_id: None,
@@ -2791,8 +2792,13 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             return;
         };
         let t = i18n::strings(&self.prefs.language);
-        self.chat[msg_idx].text =
-            schedule_act_phrase::format_resolved_act(&t, &goal, &when_label, true);
+        self.chat[msg_idx].text = schedule_act_phrase::format_resolved_act(
+            &t,
+            &goal,
+            &when_label,
+            true,
+            &self.prefs.language,
+        );
         if let ChatAttachment::ScheduleAct { state, .. } =
             &mut self.chat[msg_idx].attachments[att_idx]
         {
@@ -2825,8 +2831,13 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             return;
         };
         let t = i18n::strings(&self.prefs.language);
-        self.chat[msg_idx].text =
-            schedule_act_phrase::format_resolved_act(&t, &goal, &when_label, false);
+        self.chat[msg_idx].text = schedule_act_phrase::format_resolved_act(
+            &t,
+            &goal,
+            &when_label,
+            false,
+            &self.prefs.language,
+        );
         if let ChatAttachment::ScheduleAct { state, .. } =
             &mut self.chat[msg_idx].attachments[att_idx]
         {

@@ -74,9 +74,7 @@ pub fn render_schedule_card(
                 }
             }),
             "paused" => ui.horizontal(|ui| {
-                if ui.button(t.schedule_resume).clicked() {
-                    ScheduleCardAction::Resume(schedule_id.to_string())
-                } else if ui.button(t.schedule_stop).clicked() {
+                if ui.button(t.schedule_stop).clicked() {
                     ScheduleCardAction::Stop(schedule_id.to_string())
                 } else {
                     ScheduleCardAction::None
@@ -166,5 +164,15 @@ mod tests {
         assert_eq!(t_fr.schedule_heading, "Planifications");
         assert_eq!(t_en.schedule_interval, "Interval (seconds)");
         assert_eq!(t_fr.schedule_interval, "Intervalle (secondes)");
+    }
+
+    #[test]
+    fn locked_button_labels() {
+        let t_en = crate::i18n::strings("en");
+        let t_fr = crate::i18n::strings("fr");
+        assert_eq!(t_en.schedule_pause, "Pause");
+        assert_eq!(t_fr.schedule_pause, "Pause");
+        assert_eq!(t_en.schedule_stop, "Stop");
+        assert_eq!(t_fr.schedule_stop, "Arrêter");
     }
 }
