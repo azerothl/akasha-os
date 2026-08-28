@@ -1,6 +1,9 @@
-//! Parsing des actions agent (JSON structuré + fallback TOOL:).
+//! Parsing des actions agent (JSON structuré, DSML/XML tool_call, fallback TOOL:).
 
 use serde::{Deserialize, Serialize};
+
+/// Sentinel `fail_reason` / thread content key — UI maps to localized copy.
+pub const THREAD_FAIL_COULD_NOT_ACT: &str = "agent_could_not_act";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentAction {
@@ -67,14 +70,231 @@ fn find_ignore_ascii_case(hay: &str, needle: &str) -> Option<usize> {
     })
 }
 
-/// Extrait une action depuis la sortie modèle.
-pub fn parse_action(text: &str) -> Option<AgentAction> {
+/// Extrait une ou plusieurs actions depuis la sortie modèle (ordre conservé).
+pub fn parse_actions(text: &str) -> Vec<AgentAction> {
     let (reasoning, clean) = split_reasoning(text);
-    let mut action = parse_action_clean(&clean)?;
-    if action.thought.is_empty() && !reasoning.is_empty() {
-        action.thought = truncate_chars(&reasoning, 400);
+    let mut actions = parse_tool_markup_actions(&clean);
+    if actions.is_empty() {
+        if let Some(a) = parse_action_clean(&clean) {
+            actions.push(a);
+        }
     }
-    Some(action)
+    if let Some(first) = actions.first_mut() {
+        if first.thought.is_empty() && !reasoning.is_empty() {
+            first.thought = truncate_chars(&reasoning, 400);
+        }
+    }
+    actions
+}
+
+/// Extrait la première action depuis la sortie modèle.
+pub fn parse_action(text: &str) -> Option<AgentAction> {
+    parse_actions(text).into_iter().next()
+}
+
+/// Retire balises DSML / `<tool_call>` sans compacter les sauts de ligne (prose).
+pub fn strip_tool_markup_tags(text: &str) -> String {
+    let mut out = text.to_string();
+    for (open, close) in TOOL_MARKUP_WRAPPERS {
+        out = remove_empty_wrapper_tags(&out, open, close);
+        out = remove_all_wrapper_tags(&out, open, close);
+    }
+    out = remove_tag_blocks(&out, "tool_call");
+    out = remove_tag_blocks(&out, "function_call");
+    out.trim().to_string()
+}
+
+/// Retire balises DSML / `<tool_call>` pour mémoire ou affichage utilisateur.
+pub fn strip_tool_markup(text: &str) -> String {
+    collapse_blank_lines(&strip_tool_markup_tags(text))
+}
+
+/// Sortie modèle avec marqueurs d'appel d'outil (DSML, XML tool_call).
+pub fn looks_like_tool_markup(text: &str) -> bool {
+    let lower = text.to_ascii_lowercase();
+    lower.contains("tool_call")
+        || lower.contains("function_call")
+        || lower.contains("dsml")
+        || lower.contains("｜dsml｜")
+        || lower.contains("<|dsml|")
+        || lower.contains("<function_calls>")
+}
+
+const TOOL_MARKUP_WRAPPERS: &[(&str, &str)] = &[
+    ("<｜dsml｜tool_call>", "</｜dsml｜tool_call>"),
+    ("<|dsml|tool_call>", "</|dsml|tool_call>"),
+    ("<｜dsml｜function_calls>", "</｜dsml｜function_calls>"),
+    ("<|dsml|function_calls>", "</|dsml|function_calls>"),
+    ("<function_calls>", "</function_calls>"),
+];
+
+fn parse_tool_markup_actions(text: &str) -> Vec<AgentAction> {
+    let stripped = strip_tool_markup(text);
+    let payloads = extract_tag_block_payloads(text, "tool_call");
+    let mut actions: Vec<AgentAction> = payloads
+        .iter()
+        .filter_map(|p| action_from_openai_tool_json(p))
+        .collect();
+    if actions.is_empty() {
+        actions = extract_tag_block_payloads(text, "function_call")
+            .iter()
+            .filter_map(|p| action_from_openai_tool_json(p))
+            .collect();
+    }
+    if actions.is_empty() && !stripped.trim().is_empty() {
+        if let Some(a) = parse_action_clean(&stripped) {
+            actions.push(a);
+        }
+    }
+    actions
+}
+
+fn action_from_openai_tool_json(json: &str) -> Option<AgentAction> {
+    let value: serde_json::Value = serde_json::from_str(json.trim()).ok()?;
+    if let Some(obj) = value.get("function").and_then(|v| v.as_object()) {
+        let action = obj.get("name")?.as_str()?.trim().to_string();
+        if action.is_empty() {
+            return None;
+        }
+        let args = obj
+            .get("arguments")
+            .cloned()
+            .unwrap_or(serde_json::json!({}));
+        let args = if args.is_object() {
+            args
+        } else if args.is_null() {
+            serde_json::json!({})
+        } else {
+            serde_json::json!({ "value": args })
+        };
+        return Some(AgentAction {
+            thought: String::new(),
+            action,
+            args,
+        });
+    }
+    let action = value.get("name")?.as_str()?.trim().to_string();
+    if action.is_empty() {
+        return None;
+    }
+    let args = value
+        .get("arguments")
+        .or_else(|| value.get("args"))
+        .cloned()
+        .unwrap_or(serde_json::json!({}));
+    let args = if args.is_object() {
+        args
+    } else if args.is_null() {
+        serde_json::json!({})
+    } else {
+        serde_json::json!({ "value": args })
+    };
+    Some(AgentAction {
+        thought: String::new(),
+        action,
+        args,
+    })
+}
+
+fn extract_tag_block_payloads(text: &str, tag: &str) -> Vec<String> {
+    let open = format!("<{tag}>");
+    let close = format!("</{tag}>");
+    let mut out = Vec::new();
+    let mut rest = text;
+    loop {
+        let Some(start_rel) = find_ignore_ascii_case(rest, &open) else {
+            break;
+        };
+        let start = start_rel + open.len();
+        let tail = &rest[start..];
+        let Some(end_rel) = find_ignore_ascii_case(tail, &close) else {
+            break;
+        };
+        let payload = tail[..end_rel].trim();
+        if !payload.is_empty() {
+            out.push(payload.to_string());
+        }
+        rest = &tail[end_rel + close.len()..];
+    }
+    out
+}
+
+fn remove_empty_wrapper_tags(text: &str, open: &str, close: &str) -> String {
+    let mut out = text.to_string();
+    loop {
+        let lower = out.to_ascii_lowercase();
+        let open_l = open.to_ascii_lowercase();
+        let close_l = close.to_ascii_lowercase();
+        let Some(start) = lower.find(&open_l) else {
+            break;
+        };
+        let after = start + open.len();
+        let tail_lower = out[after..].to_ascii_lowercase();
+        let Some(end_rel) = tail_lower.find(&close_l) else {
+            break;
+        };
+        let inner = out[after..after + end_rel].trim();
+        if !inner.is_empty() {
+            break;
+        }
+        let end = after + end_rel + close.len();
+        out = format!("{}{}", &out[..start], &out[end..]);
+    }
+    out
+}
+
+fn remove_all_wrapper_tags(text: &str, open: &str, close: &str) -> String {
+    let mut out = text.to_string();
+    loop {
+        let lower = out.to_ascii_lowercase();
+        let open_l = open.to_ascii_lowercase();
+        let close_l = close.to_ascii_lowercase();
+        let Some(start) = lower.find(&open_l) else {
+            break;
+        };
+        let after = start + open.len();
+        let tail_lower = out[after..].to_ascii_lowercase();
+        let Some(end_rel) = tail_lower.find(&close_l) else {
+            out = format!("{}{}", &out[..start], &out[after..]);
+            break;
+        };
+        let end = after + end_rel + close.len();
+        out = format!("{}{}", &out[..start], &out[end..]);
+    }
+    out
+}
+
+fn remove_tag_blocks(text: &str, tag: &str) -> String {
+    let open = format!("<{tag}>");
+    let close = format!("</{tag}>");
+    let mut out = text.to_string();
+    loop {
+        let lower = out.to_ascii_lowercase();
+        let open_l = open.to_ascii_lowercase();
+        let close_l = close.to_ascii_lowercase();
+        let Some(start) = lower.find(&open_l) else {
+            break;
+        };
+        let after = start + open.len();
+        let tail_lower = out[after..].to_ascii_lowercase();
+        let Some(end_rel) = tail_lower.find(&close_l) else {
+            out = format!("{}{}", &out[..start], &out[after..]);
+            break;
+        };
+        let end = after + end_rel + close.len();
+        out = format!("{}{}", &out[..start], &out[end..]);
+    }
+    out
+}
+
+fn collapse_blank_lines(text: &str) -> String {
+    text.lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim()
+        .to_string()
 }
 
 fn parse_action_clean(text: &str) -> Option<AgentAction> {
@@ -294,5 +514,43 @@ Thinking Process:
         assert!(clean.is_empty());
         assert!(r.contains("Analyze"));
         assert!(parse_action(text).is_none());
+    }
+
+    #[test]
+    fn parse_dsml_xml_canvas_rect_and_line() {
+        let text = concat!(
+            "<｜DSML｜tool_call>\n\n",
+            "<tool_call> {\"name\": \"canvas.rect\", \"arguments\":{\"x\": 0.2, \"y\": 0.3, \"width\": 0.5, \"height\": 0.4, \"color\": \"#2E8B57\"}} </tool_call>\n",
+            "<tool_call> {\"name\": \"canvas.line\", \"arguments\":{\"x1\": 0.1, \"y1\": 0.2, \"x2\": 0.5, \"y2\": 0.6}} </tool_call>"
+        );
+        let actions = parse_actions(text);
+        assert_eq!(actions.len(), 2);
+        assert_eq!(actions[0].action, "canvas.rect");
+        assert_eq!(actions[0].args["x"], 0.2);
+        assert_eq!(actions[0].args["color"], "#2E8B57");
+        assert_eq!(actions[1].action, "canvas.line");
+        assert_eq!(actions[1].args["x1"], 0.1);
+    }
+
+    #[test]
+    fn empty_dsml_wrapper_is_not_an_action() {
+        let text = "<｜DSML｜tool_call>\n\n</｜DSML｜tool_call>";
+        assert!(parse_actions(text).is_empty());
+        let lone = "<｜DSML｜tool_call>";
+        assert!(parse_actions(lone).is_empty());
+    }
+
+    #[test]
+    fn strip_tool_markup_removes_dsml_and_tool_call() {
+        let raw = r#"<｜DSML｜tool_call><tool_call>{"name":"canvas.rect","arguments":{}}</tool_call></｜DSML｜tool_call>"#;
+        let stripped = strip_tool_markup(raw);
+        assert!(!stripped.contains("tool_call"));
+        assert!(!stripped.contains("DSML"));
+        assert!(!stripped.contains("canvas.rect"));
+    }
+
+    #[test]
+    fn thread_fail_sentinel_is_stable() {
+        assert_eq!(THREAD_FAIL_COULD_NOT_ACT, "agent_could_not_act");
     }
 }

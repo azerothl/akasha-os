@@ -138,15 +138,27 @@ pub fn looks_like_truncated_action_json(text: &str) -> bool {
         || t.contains("\"args\"")
 }
 
-/// Texte à stocker en working_memory (évite d'empiler des JSON géants tronqués).
+/// Texte à stocker en working_memory (évite d'empiler des JSON géants tronqués / DSML).
 pub fn sanitize_assistant_for_memory(raw: &str, parsed_ok: bool) -> String {
     if raw.trim().is_empty() {
         return "[output sans action JSON — éviter <think>, répondre en JSON]".into();
     }
-    if !parsed_ok && looks_like_truncated_action_json(raw) {
+    if parsed_ok {
+        let stripped = crate::actions::strip_tool_markup(raw);
+        if stripped.trim().is_empty() {
+            return "[action outil exécutée — pas de prose utilisateur]".into();
+        }
+        return truncate_chars(&stripped, 3500);
+    }
+    if looks_like_truncated_action_json(raw) {
         return "[output JSON incomplet/tronqué — pour une note longue : \
                 notes.create (titre + outline court) puis notes.update section par section \
                 (≤ ~1200 car. de content par appel)]"
+            .into();
+    }
+    if crate::actions::looks_like_tool_markup(raw) {
+        return "[output tool markup sans action — répondre en JSON structuré \
+                {\"thought\":\"…\",\"action\":\"<outil>\",\"args\":{…}}]"
             .into();
     }
     truncate_chars(raw, 3500)
@@ -445,6 +457,24 @@ mod tests {
         assert!(matches!(g.observe("notes.read", body), LoopVerdict::Ok));
         assert!(matches!(g.observe("notes.update", body), LoopVerdict::Ok));
         assert!(!looks_like_tool_failure(body));
+    }
+
+    #[test]
+    fn loop_guard_abort_reason_is_runtime_only() {
+        let mut g = LoopGuard::default();
+        let verdict = g.observe("noop", "aucune action JSON");
+        assert!(matches!(verdict, LoopVerdict::Ok));
+        let _ = g.observe("noop", "aucune action JSON");
+        let verdict = g.observe("noop", "aucune action JSON");
+        match verdict {
+            LoopVerdict::Abort(msg) => {
+                assert!(msg.contains("JSON") || msg.contains("notes.create"));
+            }
+            other => panic!("expected Abort, got {other:?}"),
+        }
+        let user_visible = crate::actions::THREAD_FAIL_COULD_NOT_ACT;
+        assert!(!user_visible.contains("JSON"));
+        assert!(!user_visible.contains("notes.create"));
     }
 
     #[test]

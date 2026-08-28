@@ -3,7 +3,9 @@
 //! Usage : `aos-agent-worker --agent-id <id> --bus <addr> --spec-path <path>
 //!          [--restore]`
 
-use aos_agent::actions::{parse_action, strip_reasoning, AgentAction};
+use aos_agent::actions::{
+    parse_actions, strip_reasoning, strip_tool_markup, AgentAction, THREAD_FAIL_COULD_NOT_ACT,
+};
 use aos_agent::assess::{parse_assess_response, AssessResult};
 use aos_agent::mcp::{open_mcp_tools_with_secrets, McpSession};
 use aos_agent::context_budget::{
@@ -684,78 +686,188 @@ async fn main() {
             clean_text
         };
 
-        let parsed = parse_action(&infer.text);
-        let parsed_ok = parsed.is_some();
-        let action = parsed.unwrap_or(AgentAction {
-            thought: if reasoning.is_empty() {
-                String::new()
-            } else {
-                reasoning.chars().take(400).collect()
-            },
-            action: "noop".into(),
-            args: serde_json::json!({}),
-        });
+        let mut batch_actions = parse_actions(&infer.text);
+        let parsed_ok = !batch_actions.is_empty();
+        if batch_actions.is_empty() {
+            batch_actions.push(AgentAction {
+                thought: if reasoning.is_empty() {
+                    String::new()
+                } else {
+                    reasoning.chars().take(400).collect()
+                },
+                action: "noop".into(),
+                args: serde_json::json!({}),
+            });
+        }
+        let memory_text = if parsed_ok {
+            strip_tool_markup(&full_text)
+        } else {
+            full_text.clone()
+        };
         shared
             .state
             .lock()
             .await
-            .push_assistant(&sanitize_assistant_for_memory(&full_text, parsed_ok));
+            .push_assistant(&sanitize_assistant_for_memory(&memory_text, parsed_ok));
 
+        let action_log = if batch_actions.len() == 1 {
+            batch_actions[0].action.clone()
+        } else {
+            batch_actions
+                .iter()
+                .map(|a| a.action.as_str())
+                .collect::<Vec<_>>()
+                .join("+")
+        };
         report(
             &bus,
             &agent_id,
             AgentOutputEvent::Log {
                 line: format!(
-                    "step {step} action={} thought={}",
-                    action.action,
-                    truncate(&action.thought, 80)
+                    "step {step} action={action_log} thought={}",
+                    truncate(&batch_actions[0].thought, 80)
                 ),
             },
         )
         .await;
 
         let tool_t0 = Instant::now();
-        let act_result = if should_gate_action(&spec, &action.action) {
-            match gate_action(&bus, &shared, &mut cmd_rx, &spec, &action, &agent_id, timeout, started)
-                .await
-            {
-                GateWait::Proceed => {
-                    execute_action(
-                        &bus,
-                        &shared,
-                        &mut spec,
-                        &tools,
-                        &skill_docs,
-                        &mut mcp_sessions,
-                        &action,
-                    )
-                    .await
-                }
-                GateWait::Denied => {
-                    ActResult::Continue("action refusée par l'utilisateur".into())
-                }
-                GateWait::Killed => {
-                    terminal = Some(AgentState::Killed);
-                    ActResult::Continue("interrompu pendant l'attente d'autorisation".into())
-                }
-            }
-        } else {
-            execute_action(
-                &bus,
-                &shared,
-                &mut spec,
-                &tools,
-                &skill_docs,
-                &mut mcp_sessions,
-                &action,
-            )
-            .await
-        };
-        let tool_ms = tool_t0.elapsed().as_millis() as u64;
-        let mut tool_result;
+        let mut action = batch_actions[0].clone();
+        let mut act_result = ActResult::Continue(String::new());
+        let mut tool_result = String::new();
         let mut step_fail_reason: Option<String> = None;
         let mut step_child_id: Option<String> = None;
         let mut step_sources: Vec<AgentSource> = Vec::new();
+        let mut multi_continue = false;
+
+        'run_actions: for (action_idx, step_action) in batch_actions.iter().enumerate() {
+            if terminal.is_some() {
+                break;
+            }
+            action = step_action.clone();
+            let one = if should_gate_action(&spec, &action.action) {
+                match gate_action(
+                    &bus, &shared, &mut cmd_rx, &spec, &action, &agent_id, timeout, started,
+                )
+                .await
+                {
+                    GateWait::Proceed => {
+                        execute_action(
+                            &bus,
+                            &shared,
+                            &mut spec,
+                            &tools,
+                            &skill_docs,
+                            &mut mcp_sessions,
+                            &action,
+                        )
+                        .await
+                    }
+                    GateWait::Denied => {
+                        ActResult::Continue("action refusée par l'utilisateur".into())
+                    }
+                    GateWait::Killed => {
+                        terminal = Some(AgentState::Killed);
+                        ActResult::Continue("interrompu pendant l'attente d'autorisation".into())
+                    }
+                }
+            } else {
+                execute_action(
+                    &bus,
+                    &shared,
+                    &mut spec,
+                    &tools,
+                    &skill_docs,
+                    &mut mcp_sessions,
+                    &action,
+                )
+                .await
+            };
+
+            match one {
+                ActResult::Continue(outcome) => {
+                    let mut outcome = outcome;
+                    if outcome.contains("permission")
+                        || outcome.contains("PermissionDenied")
+                        || outcome.contains("ActorDenied")
+                        || outcome.contains("capacité requise")
+                        || outcome.contains("capacité manquante")
+                    {
+                        let canonical = canonicalize_tool_name(&action.action);
+                        let hint = if canonical.starts_with("module.install") {
+                            "module.install".to_string()
+                        } else if canonical.starts_with("module.compile") {
+                            "module.compile".to_string()
+                        } else if canonical.starts_with("web.") || canonical.starts_with("net.")
+                        {
+                            "net.connect:*".to_string()
+                        } else if canonical.starts_with("media.") {
+                            "media.generate".to_string()
+                        } else if canonical.starts_with("fs.") {
+                            "fs.write:**".to_string()
+                        } else if canonical.contains('.') {
+                            let mod_name = canonical.split('.').next().unwrap_or("?");
+                            format!("tool.invoke:{mod_name}")
+                        } else {
+                            "tool.invoke:*".to_string()
+                        };
+                        outcome.push_str(&format!(
+                            "\n[hint] Essayez : TOOL: cap.request {{\"cap\":\"{hint}\",\"reason\":\"besoin pour {}\"}}",
+                            action.action
+                        ));
+                    }
+                    if canvas_tool_mutates_scene(&action.action) {
+                        if let Some(sid) = spec.session_id.as_deref().filter(|s| !s.is_empty()) {
+                            let digest = fetch_canvas_scene_digest(&bus, sid).await;
+                            outcome = canvas_tool_outcome_with_digest(&outcome, digest.as_deref());
+                        }
+                    }
+                    let mut one_tool_result = outcome.clone();
+                    if let Some(child) =
+                        extract_child_id(&action.action, &outcome, &action.args)
+                    {
+                        step_child_id = Some(child);
+                    }
+                    let sources = collect_sources(&action.action, &action.args, &outcome);
+                    if !sources.is_empty() {
+                        step_sources.extend(sources);
+                    }
+                    if action.action == "web.search" && !step_sources.is_empty() {
+                        one_tool_result = format!(
+                            "{} résultat(s) : {}",
+                            step_sources.len(),
+                            step_sources
+                                .iter()
+                                .take(3)
+                                .map(|s| s.title.as_str())
+                                .collect::<Vec<_>>()
+                                .join(" · ")
+                        );
+                    }
+                    if !outcome.is_empty() {
+                        shared
+                            .state
+                            .lock()
+                            .await
+                            .push_tool(&action.action, &outcome);
+                    }
+                    if !tool_result.is_empty() && !one_tool_result.is_empty() {
+                        tool_result.push('\n');
+                    }
+                    tool_result.push_str(&one_tool_result);
+                    act_result = ActResult::Continue(tool_result.clone());
+                    multi_continue = true;
+                    if action_idx + 1 < batch_actions.len() && terminal.is_none() {
+                        continue 'run_actions;
+                    }
+                }
+                other => {
+                    act_result = other;
+                    break 'run_actions;
+                }
+            }
+        }
+        let tool_ms = tool_t0.elapsed().as_millis() as u64;
 
         match act_result {
             ActResult::AskUser { question, choices } => {
@@ -831,7 +943,7 @@ async fn main() {
                     }
                 }
             }
-            ActResult::Continue(outcome) => {
+            ActResult::Continue(outcome) if !multi_continue => {
                 let mut outcome = outcome;
                 if outcome.contains("permission")
                     || outcome.contains("PermissionDenied")
@@ -891,6 +1003,7 @@ async fn main() {
                         .push_tool(&action.action, &outcome);
                 }
             }
+            ActResult::Continue(_) => {}
             ActResult::Complete(summary) => {
                 tool_result = summary.clone();
                 // Verifier pass
@@ -985,12 +1098,12 @@ async fn main() {
                     .push_user(&format!("[runtime] {msg}"));
             }
             LoopVerdict::Abort(reason) => {
-                step_fail_reason = Some(reason.clone());
+                step_fail_reason = Some(THREAD_FAIL_COULD_NOT_ACT.into());
                 report(
                     &bus,
                     &agent_id,
                     AgentOutputEvent::Error {
-                        message: reason.clone(),
+                        message: THREAD_FAIL_COULD_NOT_ACT.into(),
                     },
                 )
                 .await;
@@ -1002,6 +1115,11 @@ async fn main() {
                     },
                 )
                 .await;
+                shared
+                    .state
+                    .lock()
+                    .await
+                    .push_user(&format!("[runtime] {reason}"));
                 terminal = Some(AgentState::Failed);
             }
         }
@@ -1023,7 +1141,7 @@ async fn main() {
             step,
             thought: action.thought.clone(),
             response: full_text,
-            action: action.action.clone(),
+            action: action_log,
             args: action.args.clone(),
             tool_kind,
             mcp_server,

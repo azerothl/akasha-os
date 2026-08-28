@@ -454,7 +454,7 @@ fn agent_shown_in_tab(a: &AgentInfo, history: bool) -> bool {
     agent_is_live(&a.state) != history
 }
 
-fn agent_completion_chat_text(ag: &AgentInfo) -> String {
+fn agent_completion_chat_text(ag: &AgentInfo, t: &i18n::UiStrings) -> String {
     let title = ag.display_title();
     match ag.state {
         AgentState::Done => {
@@ -466,10 +466,15 @@ fn agent_completion_chat_text(ag: &AgentInfo) -> String {
                 format!("**Résultat — {title}**\n\n{body}")
             }
         }
-        AgentState::Failed => format!(
-            "Agent « {title} » a échoué : {}",
-            ag.fail_reason.as_deref().unwrap_or("échec")
-        ),
+        AgentState::Failed => {
+            if ag.fail_reason.as_deref() == Some(aos_agent::actions::THREAD_FAIL_COULD_NOT_ACT) {
+                return i18n::agent_could_not_act_message(t);
+            }
+            format!(
+                "Agent « {title} » a échoué : {}",
+                i18n::resolve_agent_fail_reason(t, ag.fail_reason.as_deref())
+            )
+        }
         AgentState::Killed => format!("Agent « {title} » arrêté."),
         _ => format!("Agent « {title} » terminé."),
     }
@@ -3059,6 +3064,7 @@ impl eframe::App for UiApp {
                     }
                 }
                 Evt::Agents(a) => {
+                    let t = i18n::strings(&self.prefs.language);
                     if self.pending_note_agent
                         && a.iter().any(|ag| {
                             matches!(
@@ -3113,7 +3119,7 @@ impl eframe::App for UiApp {
                                     })
                                 });
                                 if on_this_session {
-                                    let content = agent_completion_chat_text(ag);
+                                    let content = agent_completion_chat_text(ag, &t);
                                     if already {
                                         if !ag.last_output.trim().is_empty() {
                                             if let Some(line) =
@@ -3155,11 +3161,22 @@ impl eframe::App for UiApp {
                                 {
                                     let summary = match ag.state {
                                         AgentState::Done => format!("{} terminé", ag.display_title()),
-                                        AgentState::Failed => format!(
-                                            "{} échoué — {}",
-                                            ag.display_title(),
-                                            ag.fail_reason.as_deref().unwrap_or("échec")
-                                        ),
+                                        AgentState::Failed => {
+                                            if ag.fail_reason.as_deref()
+                                                == Some(aos_agent::actions::THREAD_FAIL_COULD_NOT_ACT)
+                                            {
+                                                i18n::agent_could_not_act_message(&t)
+                                            } else {
+                                                format!(
+                                                    "{} échoué — {}",
+                                                    ag.display_title(),
+                                                    i18n::resolve_agent_fail_reason(
+                                                        &t,
+                                                        ag.fail_reason.as_deref(),
+                                                    )
+                                                )
+                                            }
+                                        }
                                         AgentState::Killed => format!("{} arrêté", ag.display_title()),
                                         _ => format!("{} terminé", ag.display_title()),
                                     };
@@ -4441,6 +4458,10 @@ impl UiApp {
                         agent_act_phrase::thread_display_from_attachment(t, a)
                     }) {
                         text = act_text;
+                    } else if role == "assistant"
+                        && text.trim() == aos_agent::actions::THREAD_FAIL_COULD_NOT_ACT
+                    {
+                        text = i18n::agent_could_not_act_message(t);
                     }
                     let text = if role == "assistant"
                         && !is_completion

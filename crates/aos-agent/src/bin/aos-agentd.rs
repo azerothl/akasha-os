@@ -1116,16 +1116,25 @@ async fn main() {
                                                         &entry.info.last_output,
                                                     ),
                                                     AgentState::Failed => {
-                                                        let reason = entry
-                                                            .info
-                                                            .fail_reason
-                                                            .clone()
-                                                            .unwrap_or_else(|| "échec".into());
-                                                        format!(
-                                                            "Agent « {} » a échoué : {}",
-                                                            entry.info.display_title(),
-                                                            reason
-                                                        )
+                                                        if entry.info.fail_reason.as_deref()
+                                                            == Some(
+                                                                aos_agent::actions::THREAD_FAIL_COULD_NOT_ACT,
+                                                            )
+                                                        {
+                                                            aos_agent::actions::THREAD_FAIL_COULD_NOT_ACT
+                                                                .to_string()
+                                                        } else {
+                                                            let reason = entry
+                                                                .info
+                                                                .fail_reason
+                                                                .clone()
+                                                                .unwrap_or_else(|| "échec".into());
+                                                            format!(
+                                                                "Agent « {} » a échoué : {}",
+                                                                entry.info.display_title(),
+                                                                reason
+                                                            )
+                                                        }
                                                     }
                                                     AgentState::Killed => format!(
                                                         "Agent « {} » arrêté.",
