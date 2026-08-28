@@ -2797,9 +2797,9 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 self.update_download_child = Some(child);
                 self.update_status.clear();
             }
-            Err(e) => {
+            Err(_) => {
                 let t = i18n::strings(&self.prefs.language);
-                self.update_status = t.update_fail.replace("{}", &e.to_string());
+                self.update_status = t.status_update_download_failed.into();
             }
         }
     }
@@ -2815,13 +2815,13 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 if status.success() && load_pending_update_version().is_some() {
                     self.update_status.clear();
                 } else if !status.success() {
-                    self.update_status = t.update_fail_exit.replace("{}", &status.to_string());
+                    self.update_status = t.status_update_download_failed.into();
                 }
             }
             Ok(None) => {}
-            Err(e) => {
+            Err(_) => {
                 self.update_download_child = None;
-                self.update_status = t.update_fail.replace("{}", &e.to_string());
+                self.update_status = t.status_update_download_failed.into();
             }
         }
     }
