@@ -864,8 +864,8 @@ mod tests {
         assert_eq!(fr.create_inpaint_title, "Corriger une zone");
         assert!(!en.create_lora_what.is_empty());
         assert!(!fr.create_composition_impact.is_empty());
-        assert!(!en.create_lora_what.contains("file path"));
         assert!(en.create_lora_what.contains("model's list"));
-        assert!(!fr.create_composition_impact.contains("inpaint"));
+        assert!(!en.create_lora_what.contains("share/models"));
+        assert!(!fr.create_composition_impact.to_lowercase().contains("inpaint"));
     }
 }
