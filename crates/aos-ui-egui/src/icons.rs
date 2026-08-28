@@ -29,6 +29,34 @@ pub fn close_button(ui: &mut Ui) -> Response {
     response
 }
 
+/// Painted help control (circle + question mark) for tab/session headers.
+pub fn help_button(ui: &mut Ui) -> Response {
+    let size = Vec2::splat(BTN);
+    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+    if ui.is_rect_visible(rect) {
+        paint_help(ui, rect, hover_color(ui, &response));
+    }
+    response
+}
+
+fn paint_help(ui: &mut Ui, rect: Rect, color: Color32) {
+    let stroke = Stroke::new(1.4_f32, color);
+    let painter = ui.painter();
+    let c = rect.center();
+    let r = rect.width() * 0.38;
+    painter.circle_stroke(c, r, stroke);
+    // Hook of the question mark
+    let hook_c = c + Vec2::new(0.0, -r * 0.22);
+    painter.circle_stroke(hook_c, r * 0.28, stroke);
+    // Stem
+    painter.line_segment(
+        [c + Vec2::new(0.0, r * 0.02), c + Vec2::new(0.0, r * 0.42)],
+        stroke,
+    );
+    // Dot
+    painter.circle_filled(c + Vec2::new(0.0, r * 0.62), r * 0.11, color);
+}
+
 /// Paperclip attach control for composer / studio menus.
 pub struct AttachIcon;
 

@@ -6,6 +6,7 @@
 mod agent_act_phrase;
 mod agent_panel;
 mod decl_ui;
+mod guide;
 mod i18n;
 mod model_setup;
 mod models_page;
@@ -1644,6 +1645,7 @@ struct UiApp {
     room_members_pane_open: bool,
     canvas_panel: chat_canvas::CanvasPanelState,
     roster_edit_drafts: HashMap<String, RosterEditDraft>,
+    guide: guide::GuideState,
 }
 
 #[derive(Clone, Default)]
@@ -1931,6 +1933,7 @@ impl UiApp {
             room_members_pane_open: false,
             canvas_panel: chat_canvas::CanvasPanelState::default(),
             roster_edit_drafts: HashMap::new(),
+            guide: guide::GuideState::default(),
         }
     }
 
@@ -3886,12 +3889,7 @@ impl eframe::App for UiApp {
                         self.on_tab_open(Tab::Feedback);
                     }
                     if ui.small_button(t.tutorial).clicked() {
-                        self.onboarding.tutorial_step = 0;
-                        self.onboarding.chat_sent = false;
-                        self.onboarding.first_chat_done = false;
-                        self.onboarding.completed = false;
-                        self.show_onboarding = true;
-                        save_onboarding(&self.onboarding);
+                        self.guide.open_topic(guide::GuideTopic::Overview);
                     }
                     if ui.small_button(t.troubleshooting).clicked() {
                         let _ = self.cmd_tx.send(Cmd::Troubleshoot);
@@ -4066,6 +4064,17 @@ impl eframe::App for UiApp {
 
         self.ui_go_to_palette(ctx, &t);
 
+        let mut restart_onboarding = false;
+        guide::show_window(ctx, &mut self.guide, &self.prefs.language, &mut restart_onboarding);
+        if restart_onboarding {
+            self.onboarding.tutorial_step = 0;
+            self.onboarding.chat_sent = false;
+            self.onboarding.first_chat_done = false;
+            self.onboarding.completed = false;
+            self.show_onboarding = true;
+            save_onboarding(&self.onboarding);
+        }
+
         self.poll_agent_trace(ctx);
         if !self.agent_open_tabs.is_empty() {
             self.ui_agent_detail_panel(ctx);
@@ -4080,11 +4089,25 @@ impl eframe::App for UiApp {
             Tab::Agents => overflow_scroll(ui, "agents", |ui| self.ui_agents(ui)),
             Tab::Models => overflow_scroll(ui, "models", |ui| self.ui_models(ui, ctx)),
             Tab::Image => overflow_scroll(ui, "image", |ui| {
+                let t = i18n::strings(&self.prefs.language);
+                let g = guide::strings(&self.prefs.language);
+                let mut open_create_guide = false;
                 let gen = self.image_generating.as_ref();
                 let dl_busy = self.model_download.is_some();
                 let last_session = &mut self.last_session_image;
-                self.image_studio
-                    .ui(ui, &i18n::strings(&self.prefs.language), &self.cmd_tx, gen, dl_busy, last_session);
+                self.image_studio.ui(
+                    ui,
+                    &t,
+                    &self.cmd_tx,
+                    gen,
+                    dl_busy,
+                    last_session,
+                    Some(g.help_tooltip),
+                    &mut open_create_guide,
+                );
+                if open_create_guide {
+                    self.guide.open_topic(guide::GuideTopic::Create);
+                }
             }),
             Tab::Providers => overflow_scroll(ui, "providers", |ui| self.ui_providers(ui)),
             Tab::Audit => overflow_scroll(ui, "audit", |ui| self.ui_audit(ui)),
@@ -4315,6 +4338,17 @@ impl UiApp {
                     ui.weak(format!("· {count_line}"));
                 }
                 icons::caret(ui, self.room_members_pane_open);
+            }
+
+            let g = guide::strings(&self.prefs.language);
+            if guide::tab_help_button(ui, g.help_tooltip) {
+                self.guide.open_topic(if room {
+                    guide::GuideTopic::Salon
+                } else if canvas_open {
+                    guide::GuideTopic::Canvas
+                } else {
+                    guide::GuideTopic::Chat
+                });
             }
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -5271,7 +5305,13 @@ impl UiApp {
 
     fn ui_memory(&mut self, ui: &mut egui::Ui) {
         let t = i18n::strings(&self.prefs.language);
-        ui.heading(t.tab_memory);
+        let g = guide::strings(&self.prefs.language);
+        ui.horizontal(|ui| {
+            ui.heading(t.tab_memory);
+            if guide::tab_help_button(ui, g.help_tooltip) {
+                self.guide.open_topic(guide::GuideTopic::Memory);
+            }
+        });
         ui.weak(t.memory_blurb);
         if self.mem_sweep_last_pass_ms > 0 && !self.mem_sweep_last_pass_label.is_empty() {
             ui.weak(
@@ -5529,7 +5569,13 @@ impl UiApp {
 
     fn ui_agents(&mut self, ui: &mut egui::Ui) {
         let t = i18n::strings(&self.prefs.language);
-        ui.heading(t.tab_agents);
+        let g = guide::strings(&self.prefs.language);
+        ui.horizontal(|ui| {
+            ui.heading(t.tab_agents);
+            if guide::tab_help_button(ui, g.help_tooltip) {
+                self.guide.open_topic(guide::GuideTopic::Agents);
+            }
+        });
         ui.weak(t.agents_blurb);
         ui.separator();
         if ui.button(t.agents_refresh_catalogs).clicked() {
