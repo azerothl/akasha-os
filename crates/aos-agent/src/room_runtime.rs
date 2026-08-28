@@ -1,6 +1,6 @@
 //! Runtime bus pour tours de salon (`agent.room_turn` / `agent.room_conduct`).
 
-use crate::actions::{parse_action, AgentAction};
+use crate::actions::{parse_actions, strip_tool_markup, AgentAction};
 use crate::canvas_scene::{
     begin_canvas_vision, canvas_scene_prompt_block, canvas_tool_mutates_scene,
     canvas_tool_outcome_with_digest, end_canvas_vision, fetch_canvas_aspect,
@@ -379,18 +379,12 @@ async fn run_room_tool_loop(
             return Err("réponse vide".into());
         }
 
-        let parsed = parse_action(&raw);
-        if let Some(reply) = room_reply_from_model(&raw, parsed.as_ref()) {
+        let parsed_actions = parse_actions(&raw);
+        if let Some(reply) = room_reply_from_model(&raw, parsed_actions.first()) {
             return Ok(reply);
         }
 
-        let action = parsed.unwrap_or(AgentAction {
-            thought: String::new(),
-            action: "noop".into(),
-            args: serde_json::json!({}),
-        });
-
-        if action.action == "noop" {
+        if parsed_actions.is_empty() {
             if step + 1 >= MAX_ROOM_TOOL_STEPS {
                 return Err("trop d'étapes sans réponse texte".into());
             }
@@ -406,35 +400,43 @@ async fn run_room_tool_loop(
             continue;
         }
 
-        let trace_id = format!("{trace_base}-{step}");
-        let outcome = execute_room_tool(
-            bus,
-            agent_id,
-            caps,
-            tool_descs,
-            &action.action,
-            &action.args,
-            &trace_id,
-            Some(session_id),
-            &mut mcp_sessions,
-        )
-        .await;
-
-        let outcome = if canvas_tool_mutates_scene(&action.action) {
-            let digest = fetch_canvas_scene_digest(bus, session_id).await;
-            canvas_tool_outcome_with_digest(&outcome, digest.as_deref())
-        } else {
-            outcome
-        };
-
+        let assistant_content = strip_tool_markup(&raw);
         messages.push(ChatMessage {
             role: "assistant".into(),
-            content: raw,
+            content: if assistant_content.is_empty() {
+                "[outil]".into()
+            } else {
+                assistant_content
+            },
         });
-        messages.push(ChatMessage {
-            role: "user".into(),
-            content: format!("[outil {}] {outcome}", action.action),
-        });
+
+        for action in parsed_actions {
+            let trace_id = format!("{trace_base}-{step}");
+            let outcome = execute_room_tool(
+                bus,
+                agent_id,
+                caps,
+                tool_descs,
+                &action.action,
+                &action.args,
+                &trace_id,
+                Some(session_id),
+                &mut mcp_sessions,
+            )
+            .await;
+
+            let outcome = if canvas_tool_mutates_scene(&action.action) {
+                let digest = fetch_canvas_scene_digest(bus, session_id).await;
+                canvas_tool_outcome_with_digest(&outcome, digest.as_deref())
+            } else {
+                outcome
+            };
+
+            messages.push(ChatMessage {
+                role: "user".into(),
+                content: format!("[outil {}] {outcome}", action.action),
+            });
+        }
     }
 
     Err("limite d'outils salon atteinte".into())

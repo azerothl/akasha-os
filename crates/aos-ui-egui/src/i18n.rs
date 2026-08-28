@@ -354,6 +354,7 @@ pub struct UiStrings {
     pub agent_reply_here: &'static str,
     pub agent_failure: &'static str,
     pub agent_fail_unknown: &'static str,
+    pub agent_could_not_act: &'static str,
     pub agent_steer_hint: &'static str,
     pub agent_reply_hint: &'static str,
     pub providers_refresh: &'static str,
@@ -957,6 +958,7 @@ const EN: UiStrings = UiStrings {
     agent_reply_here: "reply here",
     agent_failure: "Failed",
     agent_fail_unknown: "reason not recorded",
+    agent_could_not_act: "The agent could not act.",
     agent_steer_hint: "directive…",
     agent_reply_hint: "answer…",
     providers_refresh: "Refresh",
@@ -1560,6 +1562,7 @@ const FR: UiStrings = UiStrings {
     agent_reply_here: "répondre ici",
     agent_failure: "Échec",
     agent_fail_unknown: "motif non renseigné",
+    agent_could_not_act: "L'agent n'a pas pu agir.",
     agent_steer_hint: "directive…",
     agent_reply_hint: "réponse…",
     providers_refresh: "Rafraîchir",
@@ -1818,6 +1821,22 @@ pub fn strings(lang: &str) -> UiStrings {
     }
 }
 
+/// Map agent `fail_reason` sentinels to localized thread copy.
+pub fn resolve_agent_fail_reason(t: &UiStrings, reason: Option<&str>) -> String {
+    match reason {
+        Some(r) if r == aos_agent::actions::THREAD_FAIL_COULD_NOT_ACT => {
+            t.agent_could_not_act.to_string()
+        }
+        Some(other) if !other.trim().is_empty() => other.to_string(),
+        _ => t.agent_fail_unknown.to_string(),
+    }
+}
+
+/// Thread bubble when an agent could not act (parse/loop failure).
+pub fn agent_could_not_act_message(t: &UiStrings) -> String {
+    t.agent_could_not_act.to_string()
+}
+
 /// Human-readable roster tool label (technical id in tooltip).
 pub fn roster_tool_label<'a>(t: &'a UiStrings, tool_id: &str) -> &'a str {
     match tool_id {
@@ -1915,6 +1934,22 @@ mod tests {
         let t_fr = strings("fr");
         assert_eq!(roster_tool_label(&t_fr, "notes.create"), "Créer une note");
         assert_eq!(t_fr.agents_skills, "Compétences");
+    }
+
+    #[test]
+    fn agent_could_not_act_i18n_keys() {
+        let en = strings("en");
+        let fr = strings("fr");
+        assert_eq!(en.agent_could_not_act, "The agent could not act.");
+        assert_eq!(fr.agent_could_not_act, "L'agent n'a pas pu agir.");
+        assert_ne!(en.agent_could_not_act, fr.agent_could_not_act);
+        let resolved = resolve_agent_fail_reason(
+            &en,
+            Some(aos_agent::actions::THREAD_FAIL_COULD_NOT_ACT),
+        );
+        assert_eq!(resolved, en.agent_could_not_act);
+        assert!(!resolved.contains("JSON"));
+        assert!(!resolved.contains("notes.create"));
     }
 
     #[test]

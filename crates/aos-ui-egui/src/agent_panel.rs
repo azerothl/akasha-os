@@ -108,9 +108,10 @@ fn strip_think_tags(text: &str) -> String {
     rest.trim().to_string()
 }
 
-/// Extrait la prose hors blocs JSON / TOOL:.
+/// Extrait la prose hors blocs JSON / TOOL: / DSML tool_call.
 pub fn prose_without_json(response: &str) -> String {
     let mut out = strip_think_tags(response);
+    out = aos_agent::actions::strip_tool_markup_tags(&out);
     if let Some(start) = out.find("```json") {
         if let Some(end_rel) = out[start + 7..].find("```") {
             let end = start + 7 + end_rel + 3;
@@ -143,6 +144,9 @@ const CONTENT_ARG_KEYS: &[&str] = &[
 ];
 
 fn looks_like_action_json(s: &str) -> bool {
+    if aos_agent::actions::looks_like_tool_markup(s) {
+        return true;
+    }
     let t = s.trim_start();
     t.starts_with('{')
         && (t.contains("\"action\"") || t.contains("\"thought\""))
@@ -231,6 +235,9 @@ fn format_action_as_markdown(action: &aos_agent::actions::AgentAction, outer_pro
 
 /// Pendant le stream : évite d'afficher l'objet JSON brut incomplet.
 pub fn format_streaming_preview(raw: &str) -> String {
+    if aos_agent::actions::looks_like_tool_markup(raw) {
+        return "…".into();
+    }
     if !looks_like_action_json(raw) {
         return raw.to_string();
     }
@@ -534,7 +541,7 @@ pub fn draw_agent_detail(
                         .color(Color32::from_rgb(240, 140, 120))
                         .strong(),
                 );
-                ui.label(fail.unwrap_or_else(|| t.agent_fail_unknown.into()));
+                ui.label(fail.map(|r| crate::i18n::resolve_agent_fail_reason(t, Some(r.as_str()))).unwrap_or_else(|| t.agent_fail_unknown.into()));
             });
             ui.add_space(4.0);
         }
@@ -986,6 +993,15 @@ mod tests {
         assert!(out.contains("**INT4**"), "{out}");
         assert!(!out.contains("\"action\""), "{out}");
         assert!(out.contains("Je complète"), "{out}");
+    }
+
+    #[test]
+    fn streaming_hides_dsml_tool_call_markup() {
+        let raw = r#"<｜DSML｜tool_call><tool_call>{"name":"canvas.rect","arguments":{"x":0.2}}</tool_call>"#;
+        let prev = format_streaming_preview(raw);
+        assert!(!prev.contains("DSML"), "{prev}");
+        assert!(!prev.contains("tool_call"), "{prev}");
+        assert!(!prev.contains("canvas.rect"), "{prev}");
     }
 
     #[test]
