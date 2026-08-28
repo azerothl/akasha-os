@@ -385,6 +385,36 @@ impl MemoryStore {
         hits
     }
 
+    /// Top-k par cosinus brut (sans boost pin/récence) — pour dedup / auto-link.
+    pub fn episodic_nearest_cosine(
+        &self,
+        query_vector: &[f32],
+        k: usize,
+        namespace: Option<&str>,
+    ) -> Vec<(u64, f32)> {
+        let superseded = self.superseded_ids();
+        let mut scored: Vec<(u64, f32)> = self
+            .index
+            .search(query_vector, k * 8)
+            .into_iter()
+            .filter_map(|(id, score)| {
+                let e = self.episodic.get(&id)?;
+                if let Some(ns) = namespace {
+                    if e.namespace != ns {
+                        return None;
+                    }
+                }
+                if superseded.contains(&id) {
+                    return None;
+                }
+                Some((id, score))
+            })
+            .collect();
+        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        scored.truncate(k);
+        scored
+    }
+
     fn to_hit(&self, e: &EpisodicEntry, score: f32, superseded: bool) -> MemHit {
         MemHit {
             id: e.id,

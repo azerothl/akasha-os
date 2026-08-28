@@ -43,7 +43,7 @@ use aos_proto::{
     ChatSessionIdRequest, ChatSessionMeta, ChatSessionMode, DocumentRef,
     FeedbackSubmitRequest, FeedbackSubmitResponse, McpServerInfo, MemHit, ModelInfo,
     ModuleCatalogue, ModuleIdRequest, ModuleInfo, ModuleInvokeRequest, ModuleInvokeResponse,
-    PendingConfirmation, ProviderRecord,
+    PendingConfirmation, ProviderRecord, MemRelationKind,
     SkillInfo, SystemMetrics, WebSearchHit,
     chat_tts_request, chat_user_wants_module_authoring, ModelMetrics,
 };
@@ -338,6 +338,49 @@ pub(crate) fn chrono_like_stamp() -> String {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs().to_string())
         .unwrap_or_else(|_| "0".into())
+}
+
+pub(crate) fn format_local_time_hm(ts_ms: u64, offset_minutes: i32) -> String {
+    let local_ms = ts_ms as i64 + (offset_minutes as i64) * 60_000;
+    let secs = local_ms.div_euclid(1000);
+    let mins = (secs / 60) % 60;
+    let hours = (secs / 3600) % 24;
+    format!("{hours:02}:{mins:02}")
+}
+
+fn memory_relation_snippet(text: &str) -> String {
+    let t = text.trim();
+    if t.chars().count() <= 80 {
+        t.to_string()
+    } else {
+        let end = t.char_indices().nth(80).map(|(i, _)| i).unwrap_or(t.len());
+        format!("{}…", &t[..end])
+    }
+}
+
+fn memory_relation_lines(
+    hit: &MemHit,
+    texts: &HashMap<u64, String>,
+    t: &i18n::UiStrings,
+) -> Vec<String> {
+    let mut lines = Vec::new();
+    for rel in &hit.relations {
+        let Some(target) = texts.get(&rel.to) else {
+            continue;
+        };
+        if !aos_proto::mem_extract::is_human_memory_fact(target) {
+            continue;
+        }
+        let snippet = memory_relation_snippet(target);
+        let line = match rel.rel {
+            MemRelationKind::Supersedes => t.memory_rel_replaces.replace("{}", &snippet),
+            MemRelationKind::Similar | MemRelationKind::Updates => {
+                t.memory_rel_related_to.replace("{}", &snippet)
+            }
+        };
+        lines.push(line);
+    }
+    lines
 }
 
 fn human_bytes(v: u64) -> String {
@@ -1487,6 +1530,8 @@ struct UiApp {
     mem_note: String,
     mem_hits: Vec<MemHit>,
     mem_show_superseded: bool,
+    mem_sweep_last_pass_ms: u64,
+    mem_sweep_last_pass_label: String,
     mem_edit_id: Option<u64>,
     mem_edit_text: String,
     secret_brave: String,
@@ -1767,6 +1812,8 @@ impl UiApp {
             mem_note: String::new(),
             mem_hits: Vec::new(),
             mem_show_superseded: true,
+            mem_sweep_last_pass_ms: 0,
+            mem_sweep_last_pass_label: String::new(),
             mem_edit_id: None,
             mem_edit_text: String::new(),
             secret_brave: String::new(),
@@ -2616,6 +2663,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 let _ = self.cmd_tx.send(Cmd::MemList {
                     include_superseded: self.mem_show_superseded,
                 });
+                let _ = self.cmd_tx.send(Cmd::MemSweepStatus);
             }
             Tab::Tasks => {
                 let _ = self.cmd_tx.send(Cmd::TasksList);
@@ -2976,6 +3024,13 @@ impl eframe::App for UiApp {
                     let _ = self.cmd_tx.send(Cmd::MemList {
                         include_superseded: self.mem_show_superseded,
                     });
+                }
+                Evt::MemSweepStatus {
+                    last_pass_ms,
+                    last_pass_label,
+                } => {
+                    self.mem_sweep_last_pass_ms = last_pass_ms;
+                    self.mem_sweep_last_pass_label = last_pass_label;
                 }
                 Evt::ChatSystem(m) => self.chat.push(ChatLine::plain("système", m)),
                 Evt::Metrics(m) => self.metrics = Some(m),
@@ -5215,6 +5270,12 @@ impl UiApp {
         let t = i18n::strings(&self.prefs.language);
         ui.heading(t.tab_memory);
         ui.weak(t.memory_blurb);
+        if self.mem_sweep_last_pass_ms > 0 && !self.mem_sweep_last_pass_label.is_empty() {
+            ui.weak(
+                t.memory_updated_at
+                    .replace("{}", &self.mem_sweep_last_pass_label),
+            );
+        }
         ui.separator();
         ui.horizontal(|ui| {
             ui.add(
@@ -5291,6 +5352,11 @@ impl UiApp {
                     && (self.mem_show_superseded || !h.superseded)
             })
             .collect();
+        let fact_texts: HashMap<u64, String> = self
+            .mem_hits
+            .iter()
+            .map(|h| (h.id, h.text.clone()))
+            .collect();
         let list_h = ui.available_height().max(120.0);
         overflow_scroll_h(ui, "memory_hits", list_h, |ui| {
             if visible_hits.is_empty() {
@@ -5307,6 +5373,9 @@ impl UiApp {
                     }
                     ui.label(fact);
                 });
+                for line in memory_relation_lines(h, &fact_texts, &t) {
+                    ui.weak(line);
+                }
                 ui.horizontal(|ui| {
                     if ui.small_button(t.memory_btn_edit).clicked() {
                         edit_req = Some((h.id, h.text.clone()));

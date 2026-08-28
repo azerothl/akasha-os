@@ -42,6 +42,7 @@ pub(crate) enum Cmd {
     MemRecall { query: String },
     MemRemember { text: String, pinned: bool },
     MemList { include_superseded: bool },
+    MemSweepStatus,
     MemDelete { id: u64 },
     MemWipeUser,
     MemSupersede { id: u64, text: String },
@@ -365,6 +366,10 @@ pub(crate) enum Evt {
     },
     MemHits(Vec<MemHit>),
     MemExtracted { n: usize },
+    MemSweepStatus {
+        last_pass_ms: u64,
+        last_pass_label: String,
+    },
     SecretList {
         names: Vec<String>,
         encrypted: bool,

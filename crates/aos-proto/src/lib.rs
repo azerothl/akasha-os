@@ -3317,6 +3317,59 @@ pub struct MemExtractResponse {
     pub stored: usize,
 }
 
+/// `mem.sweep` — repasse quotidienne : re-extract des sessions du jour local.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MemSweepRequest {
+    /// Décalage fuseau local en minutes (ex. Paris été = 120). Défaut = OS / UTC.
+    #[serde(default)]
+    pub tz_offset_minutes: Option<i32>,
+    /// Id modèle instruct (défaut = modèle système).
+    #[serde(default)]
+    pub model_id: Option<String>,
+    /// Si false, parcourt sans infer ni écriture (dry-run / tests).
+    #[serde(default = "default_true")]
+    pub persist: bool,
+    /// Force la passe même si déjà exécutée pour le jour local courant.
+    #[serde(default)]
+    pub force: bool,
+}
+
+impl Default for MemSweepRequest {
+    fn default() -> Self {
+        Self {
+            tz_offset_minutes: None,
+            model_id: None,
+            persist: true,
+            force: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MemSweepResponse {
+    /// Clé jour local (`day-<n>`) couverte par cette passe.
+    pub local_day_key: String,
+    pub sessions_scanned: usize,
+    pub turns_replayed: usize,
+    pub facts_proposed: usize,
+    pub stored: usize,
+    pub skipped_duplicate: usize,
+    pub filtered: usize,
+    pub relations_created: usize,
+    pub last_pass_ms: u64,
+}
+
+/// `mem.sweep.status` — dernière passe quotidienne (pour l'onglet Mémoire).
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
+pub struct MemSweepStatus {
+    #[serde(default)]
+    pub last_pass_ms: u64,
+    #[serde(default)]
+    pub last_local_day_key: String,
+    #[serde(default)]
+    pub relations_created: u64,
+}
+
 /// Prompt système pour l'extraction post-tour (local_only, JSON strict).
 pub const MEM_EXTRACT_SYSTEM_PROMPT: &str = r#"Extract DURABLE facts about the USER from one chat turn.
 The user may write in any language, any grammatical person, or short fragments.

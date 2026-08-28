@@ -939,6 +939,127 @@
       "title": "MemStats",
       "type": "object"
     },
+    "MemSweepRequest": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "description": "`mem.sweep` — repasse quotidienne : re-extract des sessions du jour local.",
+      "properties": {
+        "force": {
+          "default": false,
+          "description": "Force la passe même si déjà exécutée pour le jour local courant.",
+          "type": "boolean"
+        },
+        "model_id": {
+          "default": null,
+          "description": "Id modèle instruct (défaut = modèle système).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "persist": {
+          "default": true,
+          "description": "Si false, parcourt sans infer ni écriture (dry-run / tests).",
+          "type": "boolean"
+        },
+        "tz_offset_minutes": {
+          "default": null,
+          "description": "Décalage fuseau local en minutes (ex. Paris été = 120). Défaut = OS / UTC.",
+          "format": "int32",
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "title": "MemSweepRequest",
+      "type": "object"
+    },
+    "MemSweepResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "facts_proposed": {
+          "format": "uint",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "filtered": {
+          "format": "uint",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "last_pass_ms": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "local_day_key": {
+          "description": "Clé jour local (`day-<n>`) couverte par cette passe.",
+          "type": "string"
+        },
+        "relations_created": {
+          "format": "uint",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "sessions_scanned": {
+          "format": "uint",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "skipped_duplicate": {
+          "format": "uint",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "stored": {
+          "format": "uint",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "turns_replayed": {
+          "format": "uint",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "facts_proposed",
+        "filtered",
+        "last_pass_ms",
+        "local_day_key",
+        "relations_created",
+        "sessions_scanned",
+        "skipped_duplicate",
+        "stored",
+        "turns_replayed"
+      ],
+      "title": "MemSweepResponse",
+      "type": "object"
+    },
+    "MemSweepStatus": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "description": "`mem.sweep.status` — dernière passe quotidienne (pour l'onglet Mémoire).",
+      "properties": {
+        "last_local_day_key": {
+          "default": "",
+          "type": "string"
+        },
+        "last_pass_ms": {
+          "default": 0,
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "relations_created": {
+          "default": 0,
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "title": "MemSweepStatus",
+      "type": "object"
+    },
     "MemUnrelateRequest": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "definitions": {
