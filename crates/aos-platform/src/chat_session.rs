@@ -488,8 +488,21 @@ impl ChatSessionStore {
                     ChatAttachment::Document { path, label } => {
                         out.push_str(&format!("_document: {label} ({path})_\n\n"));
                     }
-                    ChatAttachment::AgentAct { phrase, .. } => {
-                        out.push_str(&format!("_agent act: {phrase}_\n\n"));
+                    ChatAttachment::AgentAct {
+                        action,
+                        args,
+                        phrase,
+                        ..
+                    } => {
+                        let label = if action.is_empty() {
+                            phrase.as_str()
+                        } else {
+                            action.as_str()
+                        };
+                        out.push_str(&format!("_agent act: {label}_\n\n"));
+                        if !args.is_null() && args != &serde_json::json!({}) {
+                            out.push_str(&format!("_{args}_\n\n"));
+                        }
                     }
                 }
             }

@@ -3,6 +3,7 @@
 //! Surface testeur : chat, dashboard, onboarding, notes, confirm, agents,
 //! audit, scénarios guidés, retours (`feedback.submit`).
 
+mod agent_act_phrase;
 mod agent_panel;
 mod decl_ui;
 mod i18n;
@@ -4427,7 +4428,7 @@ impl UiApp {
                 let n = self.chat.len();
                 for i in 0..n {
                     let role = self.chat[i].role.clone();
-                    let text = self.chat[i].text.clone();
+                    let mut text = self.chat[i].text.clone();
                     let attachments = self.chat[i].attachments.clone();
                     let speaker_id = self.chat[i].speaker_id.clone();
                     let is_completion = attachments.iter().any(|a| {
@@ -4436,6 +4437,11 @@ impl UiApp {
                             ChatAttachment::AgentRef { origin, .. } if origin == "completion"
                         )
                     });
+                    if let Some(act_text) = attachments.iter().find_map(|a| {
+                        agent_act_phrase::thread_display_from_attachment(t, a)
+                    }) {
+                        text = act_text;
+                    }
                     let text = if role == "assistant"
                         && !is_completion
                         && speaker_id.is_none()
@@ -4580,8 +4586,8 @@ impl UiApp {
                                 ChatAttachment::AgentAct {
                                     agent_id,
                                     act_id,
-                                    phrase: _,
                                     state,
+                                    ..
                                 } => {
                                     if state == "pending" {
                                         ui.horizontal(|ui| {
