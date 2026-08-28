@@ -6,7 +6,7 @@
     <title>Using Preview — Akasha OS</title>
     <meta
       name="description"
-      content="User manual for Akasha OS Preview 0.13.0: Chat, Models, Memory, Notes, Tasks, Modules, Agents, Caps, Audit, Providers, Settings, Network, Image Studio, TTS, and extending Preview."
+      content="User manual for Akasha OS Preview 0.14.0: Chat, Models, Memory, Notes, Tasks, Modules, Agents, Caps, Audit, Providers, Settings, Network, Image Studio, TTS, and extending Preview."
     />
     <link rel="stylesheet" href="../styles.css" />
     <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
@@ -48,10 +48,10 @@
 
         <h1>
           <span data-lang="en">
-            Using Preview <span data-aos-version="0.13.0">0.13.0</span>
+            Using Preview <span data-aos-version="0.14.0">0.14.0</span>
           </span>
           <span data-lang="fr">
-            Utiliser la Preview <span data-aos-version="0.13.0">0.13.0</span>
+            Utiliser la Preview <span data-aos-version="0.14.0">0.14.0</span>
           </span>
         </h1>
 
@@ -206,7 +206,7 @@
             Les packs image et TTS optionnels (par ex. <code>local:sd-v1-5</code>,
             Piper <code>en_US</code> / <code>fr_FR</code>, plus Flux2-class,
             Ideogram4-class, Piper <code>en_GB</code> en 0.9.0) ne sont
-            <strong>pas</strong> dans le zip ; le first-run ne les tire pas.
+            <strong>pas</strong> dans le zip ; le premier lancement ne les télécharge pas.
             Download installe aussi <code>bin/sd</code> / <code>bin/piper</code>
             (et les sidecars via <code>extra_files</code>) s’ils manquent.
             Settings / Models choisissent le pack image et la voix Piper par
@@ -432,6 +432,20 @@
             (<code>schedule.create</code> / list / cancel) sont dans Settings ;
             intervalle min 30 s ; persistance dans <code>var/schedules/</code>.
           </p>
+          <p class="hist" data-lang="en">
+            On the Agents tab, <strong>Name</strong> is required and becomes the
+            label on the agent thread and linked chat cards. In <strong>Room</strong>
+            sessions, the salon member picker lists built-in roster personas and
+            your library Task agents — one row each (ephemeral
+            <code>/agent</code> spawns are excluded).
+          </p>
+          <p class="hist" data-lang="fr">
+            Dans l’onglet Agents, le champ <strong>Nom</strong> est obligatoire et
+            devient l’étiquette du fil agent et des cartes chat liées. En session
+            <strong>Salon</strong>, le sélecteur de membres liste les personas du
+            roster intégré et vos agents Task de la bibliothèque — une ligne
+            chacun (les spawns éphémères <code>/agent</code> sont exclus).
+          </p>
         </article>
 
         <article class="grant" id="caps">
@@ -624,12 +638,26 @@
             <strong>courts clips vidéo</strong> (2–4 s) quand un pack Wan ou LTX
             est installé.
           </p>
+          <p class="hist" data-lang="en">
+            Tap the painted <strong>?</strong> in the Create header for the
+            in-app guide: prompt, reference photo, <strong>Fix a region</strong>,
+            video mode, size and quality, <strong>Generate</strong>, negative
+            prompt, LoRA from the model list, pack-default VAE, and
+            <strong>Composition</strong>.
+          </p>
+          <p class="hist" data-lang="fr">
+            Touchez le <strong>?</strong> peint dans l’en-tête Créer pour le guide
+            intégré : prompt, photo de référence, <strong>Corriger une zone</strong>,
+            mode vidéo, taille et qualité, <strong>Générer</strong>, prompt
+            négatif, LoRA depuis la liste du modèle, VAE par défaut du pack, et
+            <strong>Composition</strong>.
+          </p>
           <aside class="callout callout-limit">
             <p data-lang="en">
-              Not in Preview 0.13.0: STT / always-on voice.
+              Not in Preview 0.14.0: STT / always-on voice.
             </p>
             <p data-lang="fr">
-              Hors Preview 0.13.0 : STT / voix always-on.
+              Hors Preview 0.14.0 : STT / voix en continu.
             </p>
           </aside>
         </article>
