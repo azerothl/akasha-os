@@ -117,17 +117,6 @@ pub fn format_agent_act_phrase(t: &UiStrings, action: &str, args: &Value) -> Str
             }
         }
         "mem.episodic_write" => t.agent_act_mem_episodic_write.into(),
-        other if other.contains('.') => {
-            let verb = other.split('.').last().unwrap_or("agir");
-            let surface = other.split('.').next().unwrap_or("l'outil");
-            let template = match surface {
-                "notes" => t.agent_act_notes_generic_verb,
-                "tasks" => t.agent_act_tasks_generic_verb,
-                "canvas" => t.agent_act_canvas_generic_verb,
-                _ => t.agent_act_action_generic_verb,
-            };
-            subst(template, "verb", verb)
-        }
         _ => t.agent_act_generic.into(),
     }
 }
@@ -208,5 +197,22 @@ mod tests {
         assert!(en.starts_with("Allowed once"));
         assert!(fr.starts_with("Autorisé une fois"));
         assert_ne!(en, fr);
+    }
+
+    #[test]
+    fn unknown_action_uses_generic_without_tool_leak() {
+        let t_en = crate::i18n::strings("en");
+        let t_fr = crate::i18n::strings("fr");
+        for action in ["notes.archive", "canvas.rotate", "module.invoke", "noop"] {
+            let en = format_agent_act_phrase(&t_en, action, &json!({}));
+            let fr = format_agent_act_phrase(&t_fr, action, &json!({}));
+            assert_eq!(en, t_en.agent_act_generic);
+            assert_eq!(fr, t_fr.agent_act_generic);
+            assert!(!en.contains(action));
+            assert!(!fr.contains(action));
+            assert!(!en.contains("archive"));
+            assert!(!en.contains("rotate"));
+            assert!(!en.contains("invoke"));
+        }
     }
 }
