@@ -674,19 +674,6 @@ fn chat_composer_reserve_height(
     h
 }
 
-fn ui_text_button_width(ui: &egui::Ui, label: &str) -> f32 {
-    let padding = ui.style().spacing.button_padding;
-    let font_id = ui.style().text_styles[&egui::TextStyle::Button].clone();
-    let galley = ui.fonts(|f| {
-        f.layout_no_wrap(
-            label.to_owned(),
-            font_id,
-            egui::Color32::PLACEHOLDER,
-        )
-    });
-    galley.size().x + padding.x * 2.0
-}
-
 fn chat_markdown_viewer(ui: &egui::Ui) -> CommonMarkViewer<'static> {
     let w = ui.available_width().max(1.0) as usize;
     CommonMarkViewer::new().default_width(Some(w))
@@ -5314,15 +5301,6 @@ impl UiApp {
                             };
                             let show_stop = self.chat_pending
                                 && (room_mode || self.chat_inference_id.is_some());
-                            let send_w = ui_text_button_width(ui, t.agent_send);
-                            let stop_w = if show_stop {
-                                ui_text_button_width(ui, t.chat_stop)
-                            } else {
-                                0.0
-                            };
-                            let item_gap = ui.spacing().item_spacing.x;
-                            let buttons_w =
-                                send_w + if show_stop { item_gap + stop_w } else { 0.0 };
 
                             let mut attach_from_menu = false;
                             let mut attach_document_from_menu = false;
@@ -5346,8 +5324,6 @@ impl UiApp {
                                 });
                             };
                             let mut place_send_stop = |ui: &mut egui::Ui| {
-                                let send_btn =
-                                    ui.button(t.agent_send).on_hover_text(t.tip_send);
                                 if show_stop {
                                     if room_mode {
                                         if ui.button(t.chat_stop).clicked() {
@@ -5365,20 +5341,33 @@ impl UiApp {
                                         }
                                     }
                                 }
+                                let send_btn =
+                                    ui.button(t.agent_send).on_hover_text(t.tip_send);
                                 send_clicked |= send_btn.clicked();
                             };
 
                             ui.horizontal(|ui| {
                                 run_attach_menu(ui);
-                                let input_w = (ui.available_width() - buttons_w).max(0.0);
-                                let r = ui.add(
-                                    egui::TextEdit::singleline(&mut self.input)
-                                        .id_salt("chat_input")
-                                        .desired_width(input_w)
-                                        .hint_text(&hint),
-                                );
+                                let rest_w = ui.available_width();
+                                let input_h = ui.spacing().interact_size.y;
+                                let r = ui
+                                    .allocate_ui_with_layout(
+                                        egui::vec2(rest_w, input_h),
+                                        egui::Layout::right_to_left(egui::Align::Center),
+                                        |ui| {
+                                            place_send_stop(ui);
+                                            let input_w = ui.available_width().max(0.0);
+                                            ui.set_width(input_w);
+                                            ui.add(
+                                                egui::TextEdit::singleline(&mut self.input)
+                                                    .id_salt("chat_input")
+                                                    .desired_width(input_w)
+                                                    .hint_text(&hint),
+                                            )
+                                        },
+                                    )
+                                    .inner;
                                 input_response = Some(r);
-                                place_send_stop(ui);
                             });
 
                             if attach_from_menu {
