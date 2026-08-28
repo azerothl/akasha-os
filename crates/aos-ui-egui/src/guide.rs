@@ -234,7 +234,7 @@ const EN: GuideStrings = GuideStrings {
     chat_opt_attach_body: "Attach image (vision models) or Attach document (PDF, txt, md). Chips go with the next message.",
     chat_opt_attach_example: "Ex. PDF of a menu + \"what's vegetarian?\" → an answer from that file.",
     chat_opt_allow_once_title: "Allow once",
-    chat_opt_allow_once_body: "When an agent wants to act, the thread asks. Allow once does it this time; Always allow (Demander vs Toujours autoriser in the bar) remembers.",
+    chat_opt_allow_once_body: "When an agent wants to act, the thread asks. Allow once does it this time; Always allow remembers.",
     chat_opt_allow_once_example: "Ex. The agent wants to draw → Allow once → one stroke, then it asks again.",
     chat_opt_slash_title: "Slash",
     chat_opt_slash_body: "Type / above the input for shortcuts without leaving Chat (/help, /notes, /agent, /canvas).",
@@ -271,7 +271,7 @@ const EN: GuideStrings = GuideStrings {
     memory_opt_list_example: "Ex. Two \"name\" facts → the newer one updates the older.",
     salon_intro: "Several agents in the same Chat session, taking turns. Not an outside messenger.",
     salon_opt_enable_title: "Enable room",
-    salon_opt_enable_body: "Session bar → Salon (Activer le salon). The thread becomes multi-speaker.",
+    salon_opt_enable_body: "Session bar → Salon. The thread becomes multi-speaker.",
     salon_opt_enable_example: "Ex. Salon on → Members strip appears; 1:1 chat becomes a room.",
     salon_opt_members_title: "Members",
     salon_opt_members_body: "One list: built-in personas and your library agents, each Name once. Add from library. @ only real members.",
@@ -369,8 +369,8 @@ const FR: GuideStrings = GuideStrings {
     agents_opt_tools_body: "Accordez seulement ce qu'il faut. Les gestes sensibles demandent dans le fil (Autoriser une fois).",
     agents_opt_tools_example: "Ex. Outils Canvas + Salon → Maya peut tracer après votre OK.",
     agents_opt_history_title: "Historique",
-    agents_opt_history_body: "Ouvrir un run : étapes, Pause / Reprendre / Réessayer / Arrêter / Orienter.",
-    agents_opt_history_example: "Ex. Arrêter coupe une boucle ; Orienter ajoute une note en cours.",
+    agents_opt_history_body: "Ouvrir un run : étapes, Pause / Débloquer / Relancer / Kill / Orienter.",
+    agents_opt_history_example: "Ex. Kill coupe une boucle ; Orienter ajoute une note en cours.",
     memory_intro: "De courts faits sur vous, réutilisés plus tard. Pas le transcript, pas un croquis one-shot.",
     memory_opt_remember_title: "Mémoriser",
     memory_opt_remember_body: "Enregistrer un fait (ou Mémorisation auto depuis le chat, activée par défaut). Pas de secrets.",
@@ -1053,6 +1053,8 @@ mod tests {
         assert!(!en.chat_opt_slash_body.contains("platform tools"));
         assert!(!en.chat_opt_attach_example.is_empty());
         assert!(!fr.chat_opt_allow_once_example.is_empty());
+        assert!(!en.chat_opt_allow_once_body.contains("Toujours autoriser"));
+        assert!(!en.salon_opt_enable_body.contains("Activer le salon"));
     }
 
     #[test]
@@ -1065,6 +1067,9 @@ mod tests {
         assert!(!fr.agents_intro.contains("n'lance"));
         assert!(!en.agents_opt_tools_body.contains("MCP"));
         assert!(!en.agents_intro.contains("goal"));
+        assert!(fr.agents_opt_history_body.contains("Débloquer"));
+        assert!(!fr.agents_opt_history_body.contains("Reprendre"));
+        assert!(!fr.agents_opt_history_body.contains("Arrêter"));
     }
 
     #[test]

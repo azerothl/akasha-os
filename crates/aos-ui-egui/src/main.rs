@@ -4335,6 +4335,8 @@ impl UiApp {
             .room_header_member_count
             .replace("{n}", &members.len().to_string());
 
+        let g = guide::strings(&self.prefs.language);
+
         ui.horizontal(|ui| {
             let header = egui::RichText::new(&session_title).strong();
             let title_resp = ui.add(
@@ -4355,15 +4357,11 @@ impl UiApp {
                 icons::caret(ui, self.room_members_pane_open);
             }
 
-            let g = guide::strings(&self.prefs.language);
             if guide::tab_help_button(ui, g.help_tooltip) {
                 self.guide.open_topic(guide::GuideTopic::Chat);
             }
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if guide::tab_help_button(ui, g.help_tooltip) {
-                    self.guide.open_topic(guide::GuideTopic::Canvas);
-                }
                 if ui
                     .selectable_label(canvas_open, t.session_toggle_canvas)
                     .clicked()
@@ -4374,9 +4372,6 @@ impl UiApp {
                         session_id: sid.clone(),
                         open: new_open,
                     });
-                }
-                if guide::tab_help_button(ui, g.help_tooltip) {
-                    self.guide.open_topic(guide::GuideTopic::Salon);
                 }
                 if ui.selectable_label(room, t.session_toggle_salon).clicked() {
                     let mode = if room {
@@ -4403,6 +4398,9 @@ impl UiApp {
                         ui.set_min_height(CANVAS_TOOLBAR_ROW_H - 4.0);
                         toolbar_action =
                             chat_canvas::ui_canvas_toolbar(ui, t, &mut self.canvas_panel);
+                        if guide::tab_help_button(ui, g.help_tooltip) {
+                            self.guide.open_topic(guide::GuideTopic::Canvas);
+                        }
                     });
                 });
             if let Some(action) = toolbar_action {
@@ -4414,7 +4412,12 @@ impl UiApp {
             egui::Frame::group(ui.style())
                 .inner_margin(egui::Margin::symmetric(8, 6))
                 .show(ui, |ui| {
-                    ui.strong(t.room_members_heading);
+                    ui.horizontal(|ui| {
+                        ui.strong(t.room_members_heading);
+                        if guide::tab_help_button(ui, g.help_tooltip) {
+                            self.guide.open_topic(guide::GuideTopic::Salon);
+                        }
+                    });
                     if members.is_empty() {
                         ui.weak(t.room_members_empty);
                     } else {
