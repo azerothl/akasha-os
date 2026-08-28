@@ -4357,16 +4357,13 @@ impl UiApp {
 
             let g = guide::strings(&self.prefs.language);
             if guide::tab_help_button(ui, g.help_tooltip) {
-                self.guide.open_topic(if room {
-                    guide::GuideTopic::Salon
-                } else if canvas_open {
-                    guide::GuideTopic::Canvas
-                } else {
-                    guide::GuideTopic::Chat
-                });
+                self.guide.open_topic(guide::GuideTopic::Chat);
             }
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if guide::tab_help_button(ui, g.help_tooltip) {
+                    self.guide.open_topic(guide::GuideTopic::Canvas);
+                }
                 if ui
                     .selectable_label(canvas_open, t.session_toggle_canvas)
                     .clicked()
@@ -4377,6 +4374,9 @@ impl UiApp {
                         session_id: sid.clone(),
                         open: new_open,
                     });
+                }
+                if guide::tab_help_button(ui, g.help_tooltip) {
+                    self.guide.open_topic(guide::GuideTopic::Salon);
                 }
                 if ui.selectable_label(room, t.session_toggle_salon).clicked() {
                     let mode = if room {

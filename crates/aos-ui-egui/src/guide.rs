@@ -117,38 +117,56 @@ pub struct GuideStrings {
     pub chat_intro: &'static str,
     pub chat_opt_sessions_title: &'static str,
     pub chat_opt_sessions_body: &'static str,
+    pub chat_opt_sessions_example: &'static str,
     pub chat_opt_attach_title: &'static str,
     pub chat_opt_attach_body: &'static str,
+    pub chat_opt_attach_example: &'static str,
+    pub chat_opt_allow_once_title: &'static str,
+    pub chat_opt_allow_once_body: &'static str,
+    pub chat_opt_allow_once_example: &'static str,
     pub chat_opt_slash_title: &'static str,
     pub chat_opt_slash_body: &'static str,
+    pub chat_opt_slash_example: &'static str,
     pub canvas_intro: &'static str,
     pub canvas_opt_toggle_title: &'static str,
     pub canvas_opt_toggle_body: &'static str,
+    pub canvas_opt_toggle_example: &'static str,
     pub canvas_opt_tools_title: &'static str,
     pub canvas_opt_tools_body: &'static str,
+    pub canvas_opt_tools_example: &'static str,
     pub canvas_opt_export_title: &'static str,
     pub canvas_opt_export_body: &'static str,
+    pub canvas_opt_export_example: &'static str,
     pub agents_intro: &'static str,
-    pub agents_opt_goal_title: &'static str,
-    pub agents_opt_goal_body: &'static str,
+    pub agents_opt_name_role_title: &'static str,
+    pub agents_opt_name_role_body: &'static str,
+    pub agents_opt_name_role_example: &'static str,
     pub agents_opt_tools_title: &'static str,
     pub agents_opt_tools_body: &'static str,
+    pub agents_opt_tools_example: &'static str,
     pub agents_opt_history_title: &'static str,
     pub agents_opt_history_body: &'static str,
+    pub agents_opt_history_example: &'static str,
     pub memory_intro: &'static str,
     pub memory_opt_remember_title: &'static str,
     pub memory_opt_remember_body: &'static str,
+    pub memory_opt_remember_example: &'static str,
     pub memory_opt_recall_title: &'static str,
     pub memory_opt_recall_body: &'static str,
+    pub memory_opt_recall_example: &'static str,
     pub memory_opt_list_title: &'static str,
     pub memory_opt_list_body: &'static str,
+    pub memory_opt_list_example: &'static str,
     pub salon_intro: &'static str,
     pub salon_opt_enable_title: &'static str,
     pub salon_opt_enable_body: &'static str,
+    pub salon_opt_enable_example: &'static str,
     pub salon_opt_members_title: &'static str,
     pub salon_opt_members_body: &'static str,
+    pub salon_opt_members_example: &'static str,
     pub salon_opt_turn_title: &'static str,
     pub salon_opt_turn_body: &'static str,
+    pub salon_opt_turn_example: &'static str,
 }
 
 const EN: GuideStrings = GuideStrings {
@@ -208,41 +226,59 @@ const EN: GuideStrings = GuideStrings {
     create_generate_title: "Generate",
     create_generate_body: "Runs Create with the current prompt and options. You need an image or video model installed. The result appears on the right; earlier results stay in history.",
     create_generate_example: "",
-    chat_intro: "Default home: one conversation per session, offline-first. Messages persist; slash commands reach other surfaces without leaving chat.",
-    chat_opt_sessions_title: "Sessions sidebar",
-    chat_opt_sessions_body: "Create or switch sessions. Each keeps its own history, model choice, and salon/canvas toggles.",
-    chat_opt_attach_title: "Attachments",
-    chat_opt_attach_body: "Paperclip: images for vision models, documents for grounded Q&A. Pending chips show what ships with the next message.",
-    chat_opt_slash_title: "Slash commands",
-    chat_opt_slash_body: "Type / for completions — /help, /notes, /memory, and more route to platform tools.",
-    canvas_intro: "Vector drawing layer on the active chat session — pen, shapes, eraser. Not the Create diffusion tab.",
+    chat_intro: "A place for one conversation at a time. Each session keeps its own thread, model, Canvas and Salon toggles.",
+    chat_opt_sessions_title: "Sessions",
+    chat_opt_sessions_body: "Switch or start a session in the sidebar. History survives a restart.",
+    chat_opt_sessions_example: "Ex. Two sessions: one for a trip, one for a recipe — they don't mix.",
+    chat_opt_attach_title: "Paperclip",
+    chat_opt_attach_body: "Attach image (vision models) or Attach document (PDF, txt, md). Chips go with the next message.",
+    chat_opt_attach_example: "Ex. PDF of a menu + \"what's vegetarian?\" → an answer from that file.",
+    chat_opt_allow_once_title: "Allow once",
+    chat_opt_allow_once_body: "When an agent wants to act, the thread asks. Allow once does it this time; Always allow (Demander vs Toujours autoriser in the bar) remembers.",
+    chat_opt_allow_once_example: "Ex. The agent wants to draw → Allow once → one stroke, then it asks again.",
+    chat_opt_slash_title: "Slash",
+    chat_opt_slash_body: "Type / above the input for shortcuts without leaving Chat (/help, /notes, /agent, /canvas).",
+    chat_opt_slash_example: "Ex. `/agent summarize this thread` starts a worker; a card appears in the session.",
+    canvas_intro: "A shared drawing board on this chat session. Strokes, not a Create still.",
     canvas_opt_toggle_title: "Canvas toggle",
-    canvas_opt_toggle_body: "Enable Canvas in the session bar. Agents may draw only while Canvas is open; humans can always paint.",
-    canvas_opt_tools_title: "Tools & layers",
-    canvas_opt_tools_body: "Toolbar: pen, eraser, line, rect, ellipse, fill. Undo clears the last stroke; clear wipes the board (with confirm).",
-    canvas_opt_export_title: "Export",
-    canvas_opt_export_body: "Snapshot exports PNG under /downloads — a raster of the vector scene, not media.image.generate.",
-    agents_intro: "Spawn background workers with a goal, model, and tool allow-list. Active runs show live traces; history keeps completed loops.",
-    agents_opt_goal_title: "Goal & role",
-    agents_opt_goal_body: "The task text and optional role steer planning. Max steps and timeout cap autonomy (Settings defaults apply).",
-    agents_opt_tools_title: "Tools & capabilities",
-    agents_opt_tools_body: "Pick skills, MCP servers, and caps. Sensitive actions still pass through the confirmation banner.",
-    agents_opt_history_title: "History tab",
-    agents_opt_history_body: "Review prior agent threads, open detail, or re-run with the same configuration.",
-    memory_intro: "Long-term facts stored locally and injected before replies. Distinct from chat transcript — use for preferences and stable user context.",
+    canvas_opt_toggle_body: "Session bar → Canvas. Humans can always draw. Agents draw only while it's open (otherwise \"draw\" goes to Create).",
+    canvas_opt_toggle_example: "Ex. Canvas on + \"draw a mug\" → strokes on the board. Canvas off + \"draw a mug\" → a generated picture.",
+    canvas_opt_tools_title: "Tools",
+    canvas_opt_tools_body: "Pen, Eraser, Line, Spline, Rect, Ellipse, Bucket; Tint, Width, Fill. Undo my stroke; Clear asks first. Format: Square, 16:9, 16:10, Vertical, Horizontal.",
+    canvas_opt_tools_example: "Ex. Ellipse + Fill + a teal Tint → a solid mug body.",
+    canvas_opt_export_title: "Export PNG",
+    canvas_opt_export_body: "Snapshot of the board into Downloads. Same scene, pixels you can share. Not Generate.",
+    canvas_opt_export_example: "Ex. Export PNG after a sketch → a file, the board stays.",
+    agents_intro: "A library of people you can reuse. Creating one does not start a run. The Name is what shows in the thread and the Salon picker (one row each).",
+    agents_opt_name_role_title: "Name & role",
+    agents_opt_name_role_body: "Name is required. Role is optional: how they behave in a Salon. Launch a run with /agent in Chat, or Add to session.",
+    agents_opt_name_role_example: "Ex. Name \"Maya\", role \"be brief\" → the thread says Maya, not a generic id.",
+    agents_opt_tools_title: "Tools",
+    agents_opt_tools_body: "Grant only what they need. Sensitive steps still ask in the thread (Allow once).",
+    agents_opt_tools_example: "Ex. Canvas tools on + Salon → Maya can draw after you allow it.",
+    agents_opt_history_title: "History",
+    agents_opt_history_body: "Open a past run: steps, Pause / Resume / Retry / Kill / Steer.",
+    agents_opt_history_example: "Ex. Kill stops a loop; Steer adds a note mid-run.",
+    memory_intro: "Short facts about you, reused next time. Not the transcript, not a one-shot sketch.",
     memory_opt_remember_title: "Remember",
-    memory_opt_remember_body: "Save a fact explicitly (pinned by default). Auto-remember in Settings can extract facts after chat turns.",
+    memory_opt_remember_body: "Save a fact (or let Auto-remember from chat, on by default). Secrets are not stored.",
+    memory_opt_remember_example: "Ex. \"I take tea, not coffee\" → it stops offering coffee.",
     memory_opt_recall_title: "Recall",
-    memory_opt_recall_body: "Semantic search over stored facts; hits show relevance and can be edited or superseded.",
-    memory_opt_list_title: "List & sweep",
-    memory_opt_list_body: "List all facts; toggle superseded. Daily sweep re-extracts and relates facts in the background.",
-    salon_intro: "Room mode inside Chat: multiple personas reply in turn on the same session. Not external messaging — everything stays in-app.",
-    salon_opt_enable_title: "Enable salon",
-    salon_opt_enable_body: "Session bar → Enable room / Activer le salon. Switches from 1:1 assistant to multi-speaker transcript.",
+    memory_opt_recall_body: "Recall, hint \"recall query\". Finds a stored fact.",
+    memory_opt_recall_example: "Ex. Recall \"tea\" → that preference, not last week's canvas doodle.",
+    memory_opt_list_title: "List",
+    memory_opt_list_body: "Edit or drop facts. A quiet daily pass re-reads the day's chats and links related facts.",
+    memory_opt_list_example: "Ex. Two \"name\" facts → the newer one updates the older.",
+    salon_intro: "Several agents in the same Chat session, taking turns. Not an outside messenger.",
+    salon_opt_enable_title: "Enable room",
+    salon_opt_enable_body: "Session bar → Salon (Activer le salon). The thread becomes multi-speaker.",
+    salon_opt_enable_example: "Ex. Salon on → Members strip appears; 1:1 chat becomes a room.",
     salon_opt_members_title: "Members",
-    salon_opt_members_body: "Add built-in personas (Researcher, Critic, …) or agents from your library. Header strip shows roster; colors follow speaker id.",
+    salon_opt_members_body: "One list: built-in personas and your library agents, each Name once. Add from library. @ only real members.",
+    salon_opt_members_example: "Ex. Add Maya + Critic → two names in the strip, no duplicate row.",
     salon_opt_turn_title: "Room turn",
-    salon_opt_turn_body: "Each user message queues a conductor turn; speakers answer in order. Cancel stops an in-flight turn.",
+    salon_opt_turn_body: "Your message runs a turn; they answer in order. Cancel stops it.",
+    salon_opt_turn_example: "Ex. \"Review this sketch\" → Maya then Critic, in the same thread.",
 };
 
 const FR: GuideStrings = GuideStrings {
@@ -302,41 +338,59 @@ const FR: GuideStrings = GuideStrings {
     create_generate_title: "Générer",
     create_generate_body: "Lance Créer avec le prompt et les options du moment. Il faut un modèle image ou vidéo installé. Le résultat s'affiche à droite ; l'historique garde les précédents.",
     create_generate_example: "",
-    chat_intro: "Accueil par défaut : une conversation par session, hors ligne d'abord. Les messages persistent ; les commandes / ouvrent d'autres surfaces sans quitter le chat.",
-    chat_opt_sessions_title: "Barre latérale Sessions",
-    chat_opt_sessions_body: "Créez ou changez de session. Chacune garde son historique, modèle et bascules salon/canvas.",
-    chat_opt_attach_title: "Pièces jointes",
-    chat_opt_attach_body: "Trombone : images pour les modèles vision, documents pour des réponses ancrées. Les pastilles montrent ce qui part avec le prochain message.",
-    chat_opt_slash_title: "Commandes /",
-    chat_opt_slash_body: "Tapez / pour l'auto-complétion — /help, /notes, /memory, etc. routent vers les outils plateforme.",
-    canvas_intro: "Couche de dessin vectoriel sur la session de chat active — stylo, formes, gomme. Pas l'onglet diffusion Créer.",
-    canvas_opt_toggle_title: "Bascule Canvas",
-    canvas_opt_toggle_body: "Activez Canvas dans la barre de session. Les agents dessinent seulement quand Canvas est ouvert ; l'humain peut toujours peindre.",
+    chat_intro: "Une conversation à la fois. Chaque session garde son fil, son modèle, Canvas et Salon.",
+    chat_opt_sessions_title: "Sessions",
+    chat_opt_sessions_body: "Créez ou changez de session dans la barre. L'historique survit au redémarrage.",
+    chat_opt_sessions_example: "Ex. Deux sessions : un voyage, une recette — ça ne se mélange pas.",
+    chat_opt_attach_title: "Trombone",
+    chat_opt_attach_body: "Joindre une image (modèles vision) ou Joindre un document (PDF, txt, md). Les puces partent avec le prochain message.",
+    chat_opt_attach_example: "Ex. PDF d'un menu + « c'est quoi le végétarien ? » → une réponse à partir du fichier.",
+    chat_opt_allow_once_title: "Autoriser une fois",
+    chat_opt_allow_once_body: "Quand un agent veut agir, le fil demande. Autoriser une fois = cette fois ; Toujours autoriser (Demander dans la barre) = il s'en souvient.",
+    chat_opt_allow_once_example: "Ex. L'agent veut tracer → Autoriser une fois → un trait, puis il redemande.",
+    chat_opt_slash_title: "Slash",
+    chat_opt_slash_body: "Tapez / au-dessus de l'input (/help, /notes, /agent, /canvas).",
+    chat_opt_slash_example: "Ex. `/agent résume ce fil` lance un worker ; une carte apparaît.",
+    canvas_intro: "Un tableau partagé sur cette session. Des traits, pas une image Créer.",
+    canvas_opt_toggle_title: "Canvas",
+    canvas_opt_toggle_body: "Barre de session → Canvas. Vous dessinez toujours. Les agents, seulement s'il est ouvert (sinon « dessine » va vers Créer).",
+    canvas_opt_toggle_example: "Ex. Canvas ouvert + « dessine une tasse » → des traits. Fermé + « dessine une tasse » → une image générée.",
     canvas_opt_tools_title: "Outils",
-    canvas_opt_tools_body: "Barre : stylo, gomme, ligne, rectangle, ellipse, remplissage. Annuler efface le dernier trait ; effacer vide le tableau (avec confirmation).",
-    canvas_opt_export_title: "Export",
-    canvas_opt_export_body: "L'instantané exporte un PNG sous /downloads — raster de la scène vectorielle, pas media.image.generate.",
-    agents_intro: "Lancez des workers en arrière-plan avec un objectif, un modèle et une liste d'outils. Les runs actifs montrent le flux ; l'historique garde les boucles terminées.",
-    agents_opt_goal_title: "Objectif et rôle",
-    agents_opt_goal_body: "Le texte de tâche et le rôle optionnel orientent la planification. Étapes max et délai limitent l'autonomie (défauts dans Réglages).",
-    agents_opt_tools_title: "Outils et capacités",
-    agents_opt_tools_body: "Choisissez skills, serveurs MCP et caps. Les actions sensibles passent encore par la bannière de confirmation.",
-    agents_opt_history_title: "Onglet Historique",
-    agents_opt_history_body: "Consultez les fils passés, ouvrez le détail ou relancez avec la même configuration.",
-    memory_intro: "Faits long terme stockés localement et injectés avant les réponses. Distinct du transcript — pour préférences et contexte stable.",
-    memory_opt_remember_title: "Remember",
-    memory_opt_remember_body: "Enregistre un fait explicitement (épinglé par défaut). L'auto-souvenir dans Réglages peut extraire des faits après les tours de chat.",
-    memory_opt_recall_title: "Recall",
-    memory_opt_recall_body: "Recherche sémantique dans les faits ; les résultats montrent la pertinence et peuvent être modifiés ou remplacés.",
-    memory_opt_list_title: "Liste et balayage",
-    memory_opt_list_body: "Liste tous les faits ; basculez les remplacés. Le balayage quotidien ré-extrait et relie les faits en arrière-plan.",
-    salon_intro: "Mode salon dans Chat : plusieurs personas répondent à tour de rôle sur la même session. Pas de messagerie externe — tout reste dans l'app.",
+    canvas_opt_tools_body: "Crayon, Gomme, Ligne, Courbe, Rectangle, Ellipse, Seau ; Teinte, Épaisseur, Plein. Annuler mon trait ; Tout effacer demande confirmation. Format : Carré, 16:9, 16:10, Vertical, Horizontal.",
+    canvas_opt_tools_example: "Ex. Ellipse + Plein + teinte bleu-vert → le corps de la tasse.",
+    canvas_opt_export_title: "Exporter PNG",
+    canvas_opt_export_body: "Instantané du tableau dans Téléchargements. La même scène, en pixels. Pas Générer.",
+    canvas_opt_export_example: "Ex. Exporter PNG après un croquis → un fichier, le tableau reste.",
+    agents_intro: "Une bibliothèque. Créer ne lance pas de run. Le Nom s'affiche dans le fil et dans le sélecteur Salon (une ligne chacun).",
+    agents_opt_name_role_title: "Nom et rôle",
+    agents_opt_name_role_body: "Nom obligatoire. Rôle optionnel : comportement en salon. Lancer un run : `/agent` dans le Chat, ou Ajouter à la session.",
+    agents_opt_name_role_example: "Ex. Nom « Maya », rôle « sois brève » → le fil dit Maya.",
+    agents_opt_tools_title: "Outils",
+    agents_opt_tools_body: "Accordez seulement ce qu'il faut. Les gestes sensibles demandent dans le fil (Autoriser une fois).",
+    agents_opt_tools_example: "Ex. Outils Canvas + Salon → Maya peut tracer après votre OK.",
+    agents_opt_history_title: "Historique",
+    agents_opt_history_body: "Ouvrir un run : étapes, Pause / Reprendre / Réessayer / Arrêter / Orienter.",
+    agents_opt_history_example: "Ex. Arrêter coupe une boucle ; Orienter ajoute une note en cours.",
+    memory_intro: "De courts faits sur vous, réutilisés plus tard. Pas le transcript, pas un croquis one-shot.",
+    memory_opt_remember_title: "Mémoriser",
+    memory_opt_remember_body: "Enregistrer un fait (ou Mémorisation auto depuis le chat, activée par défaut). Pas de secrets.",
+    memory_opt_remember_example: "Ex. « Je prends du thé, pas de café » → plus de café proposé.",
+    memory_opt_recall_title: "Rappeler",
+    memory_opt_recall_body: "Bouton Rappeler, hint « chercher un fait ». Retrouve un fait stocké.",
+    memory_opt_recall_example: "Ex. Rappeler « thé » → cette préférence, pas le doodle du canvas.",
+    memory_opt_list_title: "Liste",
+    memory_opt_list_body: "Modifier ou retirer. Une passe silencieuse relit les chats du jour et relie les faits.",
+    memory_opt_list_example: "Ex. Deux faits « prénom » → le plus récent met à jour l'ancien.",
+    salon_intro: "Plusieurs agents dans la même session Chat, à tour de rôle. Pas une messagerie externe.",
     salon_opt_enable_title: "Activer le salon",
-    salon_opt_enable_body: "Barre de session → Activer le salon / Enable room. Passe de l'assistant 1:1 au transcript multi-locuteurs.",
+    salon_opt_enable_body: "Barre de session → Salon. Le fil devient multi-voix.",
+    salon_opt_enable_example: "Ex. Salon on → bande Membres ; le 1:1 devient une salle.",
     salon_opt_members_title: "Membres",
-    salon_opt_members_body: "Ajoutez des personas intégrés (Researcher, Critic, …) ou des agents de la bibliothèque. La bande d'en-tête montre le roster ; les couleurs suivent l'id locuteur.",
+    salon_opt_members_body: "Une seule liste : personas intégrés et agents de la bibliothèque, chaque Nom une fois. Ajouter depuis la bibliothèque. @ seulement les vrais membres.",
+    salon_opt_members_example: "Ex. Maya + Critique → deux noms dans la bande, pas de doublon.",
     salon_opt_turn_title: "Tour de salon",
-    salon_opt_turn_body: "Chaque message utilisateur lance un tour conducteur ; les locuteurs répondent dans l'ordre. Annuler stoppe un tour en cours.",
+    salon_opt_turn_body: "Votre message lance un tour ; ils répondent dans l'ordre. Annuler stoppe.",
+    salon_opt_turn_example: "Ex. « Critique ce croquis » → Maya puis Critique, dans le même fil.",
 };
 
 pub fn strings(lang: &str) -> GuideStrings {
@@ -437,61 +491,11 @@ fn render_topic(ui: &mut egui::Ui, topic: GuideTopic, g: &GuideStrings) {
     match topic {
         GuideTopic::Overview => render_overview(ui, g),
         GuideTopic::Create => render_create(ui, g),
-        GuideTopic::Chat => render_stub(
-            ui,
-            g,
-            g.chat_intro,
-            &[
-                (g.chat_opt_sessions_title, g.chat_opt_sessions_body),
-                (g.chat_opt_attach_title, g.chat_opt_attach_body),
-                (g.chat_opt_slash_title, g.chat_opt_slash_body),
-            ],
-            FigureKind::Chat,
-        ),
-        GuideTopic::Canvas => render_stub(
-            ui,
-            g,
-            g.canvas_intro,
-            &[
-                (g.canvas_opt_toggle_title, g.canvas_opt_toggle_body),
-                (g.canvas_opt_tools_title, g.canvas_opt_tools_body),
-                (g.canvas_opt_export_title, g.canvas_opt_export_body),
-            ],
-            FigureKind::Canvas,
-        ),
-        GuideTopic::Agents => render_stub(
-            ui,
-            g,
-            g.agents_intro,
-            &[
-                (g.agents_opt_goal_title, g.agents_opt_goal_body),
-                (g.agents_opt_tools_title, g.agents_opt_tools_body),
-                (g.agents_opt_history_title, g.agents_opt_history_body),
-            ],
-            FigureKind::Agents,
-        ),
-        GuideTopic::Memory => render_stub(
-            ui,
-            g,
-            g.memory_intro,
-            &[
-                (g.memory_opt_remember_title, g.memory_opt_remember_body),
-                (g.memory_opt_recall_title, g.memory_opt_recall_body),
-                (g.memory_opt_list_title, g.memory_opt_list_body),
-            ],
-            FigureKind::Memory,
-        ),
-        GuideTopic::Salon => render_stub(
-            ui,
-            g,
-            g.salon_intro,
-            &[
-                (g.salon_opt_enable_title, g.salon_opt_enable_body),
-                (g.salon_opt_members_title, g.salon_opt_members_body),
-                (g.salon_opt_turn_title, g.salon_opt_turn_body),
-            ],
-            FigureKind::Salon,
-        ),
+        GuideTopic::Chat => render_chat(ui, g),
+        GuideTopic::Canvas => render_canvas(ui, g),
+        GuideTopic::Agents => render_agents(ui, g),
+        GuideTopic::Memory => render_memory(ui, g),
+        GuideTopic::Salon => render_salon(ui, g),
     }
 }
 
@@ -509,6 +513,190 @@ fn render_overview(ui: &mut egui::Ui, g: &GuideStrings) {
     ] {
         ui.label(line);
     }
+}
+
+fn render_chat(ui: &mut egui::Ui, g: &GuideStrings) {
+    ui.heading(g.nav_chat);
+    ui.label(g.chat_intro);
+    ui.add_space(8.0);
+    paint_figure(ui, FigureKind::Chat);
+    ui.add_space(8.0);
+    guide_section(
+        ui,
+        g,
+        g.chat_opt_sessions_title,
+        g.chat_opt_sessions_body,
+        None,
+        None,
+        g.chat_opt_sessions_example,
+    );
+    guide_section(
+        ui,
+        g,
+        g.chat_opt_attach_title,
+        g.chat_opt_attach_body,
+        None,
+        None,
+        g.chat_opt_attach_example,
+    );
+    guide_section(
+        ui,
+        g,
+        g.chat_opt_allow_once_title,
+        g.chat_opt_allow_once_body,
+        None,
+        None,
+        g.chat_opt_allow_once_example,
+    );
+    guide_section(
+        ui,
+        g,
+        g.chat_opt_slash_title,
+        g.chat_opt_slash_body,
+        None,
+        None,
+        g.chat_opt_slash_example,
+    );
+}
+
+fn render_canvas(ui: &mut egui::Ui, g: &GuideStrings) {
+    ui.heading(g.nav_canvas);
+    ui.label(g.canvas_intro);
+    ui.add_space(8.0);
+    paint_figure(ui, FigureKind::Canvas);
+    ui.add_space(8.0);
+    guide_section(
+        ui,
+        g,
+        g.canvas_opt_toggle_title,
+        g.canvas_opt_toggle_body,
+        None,
+        None,
+        g.canvas_opt_toggle_example,
+    );
+    guide_section(
+        ui,
+        g,
+        g.canvas_opt_tools_title,
+        g.canvas_opt_tools_body,
+        None,
+        None,
+        g.canvas_opt_tools_example,
+    );
+    guide_section(
+        ui,
+        g,
+        g.canvas_opt_export_title,
+        g.canvas_opt_export_body,
+        None,
+        None,
+        g.canvas_opt_export_example,
+    );
+}
+
+fn render_agents(ui: &mut egui::Ui, g: &GuideStrings) {
+    ui.heading(g.nav_agents);
+    ui.label(g.agents_intro);
+    ui.add_space(8.0);
+    paint_figure(ui, FigureKind::Agents);
+    ui.add_space(8.0);
+    guide_section(
+        ui,
+        g,
+        g.agents_opt_name_role_title,
+        g.agents_opt_name_role_body,
+        None,
+        None,
+        g.agents_opt_name_role_example,
+    );
+    guide_section(
+        ui,
+        g,
+        g.agents_opt_tools_title,
+        g.agents_opt_tools_body,
+        None,
+        None,
+        g.agents_opt_tools_example,
+    );
+    guide_section(
+        ui,
+        g,
+        g.agents_opt_history_title,
+        g.agents_opt_history_body,
+        None,
+        None,
+        g.agents_opt_history_example,
+    );
+}
+
+fn render_memory(ui: &mut egui::Ui, g: &GuideStrings) {
+    ui.heading(g.nav_memory);
+    ui.label(g.memory_intro);
+    ui.add_space(8.0);
+    paint_figure(ui, FigureKind::Memory);
+    ui.add_space(8.0);
+    guide_section(
+        ui,
+        g,
+        g.memory_opt_remember_title,
+        g.memory_opt_remember_body,
+        None,
+        None,
+        g.memory_opt_remember_example,
+    );
+    guide_section(
+        ui,
+        g,
+        g.memory_opt_recall_title,
+        g.memory_opt_recall_body,
+        None,
+        None,
+        g.memory_opt_recall_example,
+    );
+    guide_section(
+        ui,
+        g,
+        g.memory_opt_list_title,
+        g.memory_opt_list_body,
+        None,
+        None,
+        g.memory_opt_list_example,
+    );
+}
+
+fn render_salon(ui: &mut egui::Ui, g: &GuideStrings) {
+    ui.heading(g.nav_salon);
+    ui.label(g.salon_intro);
+    ui.add_space(8.0);
+    paint_figure(ui, FigureKind::Salon);
+    ui.add_space(8.0);
+    guide_section(
+        ui,
+        g,
+        g.salon_opt_enable_title,
+        g.salon_opt_enable_body,
+        None,
+        None,
+        g.salon_opt_enable_example,
+    );
+    guide_section(
+        ui,
+        g,
+        g.salon_opt_members_title,
+        g.salon_opt_members_body,
+        None,
+        None,
+        g.salon_opt_members_example,
+    );
+    guide_section(
+        ui,
+        g,
+        g.salon_opt_turn_title,
+        g.salon_opt_turn_body,
+        None,
+        None,
+        g.salon_opt_turn_example,
+    );
 }
 
 fn render_create(ui: &mut egui::Ui, g: &GuideStrings) {
@@ -607,24 +795,6 @@ fn render_create(ui: &mut egui::Ui, g: &GuideStrings) {
         Some(FigureKind::Generate),
         g.create_generate_example,
     );
-}
-
-fn render_stub(
-    ui: &mut egui::Ui,
-    _g: &GuideStrings,
-    intro: &str,
-    options: &[(&str, &str)],
-    figure: FigureKind,
-) {
-    ui.label(intro);
-    ui.add_space(6.0);
-    paint_figure(ui, figure);
-    ui.add_space(8.0);
-    for (title, body) in options {
-        ui.strong(*title);
-        ui.label(*body);
-        ui.add_space(6.0);
-    }
 }
 
 fn guide_section(
@@ -871,5 +1041,42 @@ mod tests {
         assert!(en.create_lora_what.contains("model's list"));
         assert!(!en.create_lora_what.contains("share/models"));
         assert!(!fr.create_composition_impact.to_lowercase().contains("inpaint"));
+    }
+
+    #[test]
+    fn chat_guide_has_four_sections_including_allow_once() {
+        let en = strings("en");
+        let fr = strings("fr");
+        assert_eq!(en.chat_opt_allow_once_title, "Allow once");
+        assert_eq!(fr.chat_opt_allow_once_title, "Autoriser une fois");
+        assert!(en.chat_intro.contains("one conversation at a time"));
+        assert!(!en.chat_opt_slash_body.contains("platform tools"));
+        assert!(!en.chat_opt_attach_example.is_empty());
+        assert!(!fr.chat_opt_allow_once_example.is_empty());
+    }
+
+    #[test]
+    fn agents_guide_name_role_not_goal() {
+        let en = strings("en");
+        let fr = strings("fr");
+        assert_eq!(en.agents_opt_name_role_title, "Name & role");
+        assert_eq!(fr.agents_opt_name_role_title, "Nom et rôle");
+        assert!(fr.agents_intro.contains("Créer ne lance pas de run"));
+        assert!(!fr.agents_intro.contains("n'lance"));
+        assert!(!en.agents_opt_tools_body.contains("MCP"));
+        assert!(!en.agents_intro.contains("goal"));
+    }
+
+    #[test]
+    fn surface_guides_use_examples_not_stub_jargon() {
+        let en = strings("en");
+        let fr = strings("fr");
+        assert!(!en.canvas_opt_export_body.contains("/downloads"));
+        assert!(!fr.canvas_opt_export_body.contains("/downloads"));
+        assert!(!en.canvas_opt_export_body.contains("media.image.generate"));
+        assert!(!en.memory_opt_recall_body.to_lowercase().contains("semantic"));
+        assert!(!en.salon_opt_turn_body.contains("conductor"));
+        assert!(!en.canvas_opt_export_example.is_empty());
+        assert!(!fr.salon_opt_turn_example.is_empty());
     }
 }
