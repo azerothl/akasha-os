@@ -4120,32 +4120,6 @@ impl UiApp {
         });
     }
 
-    fn ui_room_persona_shortcuts(
-        &mut self,
-        ui: &mut egui::Ui,
-        t: &i18n::UiStrings,
-        session_id: &str,
-        members: &[ChatRoomMember],
-        model_id: Option<String>,
-    ) {
-        ui.horizontal_wrapped(|ui| {
-            for persona in chat_room::ROOM_PERSONAS {
-                let agent_id = chat_room::persona_agent_id(persona.id);
-                if members.iter().any(|m| m.agent_id == agent_id) {
-                    continue;
-                }
-                let label = chat_room::persona_label(t, persona.id);
-                if ui.small_button(label).clicked() {
-                    let _ = self.cmd_tx.send(Cmd::RoomAddPersona {
-                        session_id: session_id.to_string(),
-                        persona_id: persona.id.to_string(),
-                        model_id: model_id.clone(),
-                    });
-                }
-            }
-        });
-    }
-
     fn dispatch_canvas_ui_action(
         &mut self,
         action: Option<chat_canvas::CanvasUiAction>,
@@ -4344,10 +4318,6 @@ impl UiApp {
                     self.ui_room_member_chip(ui, t, &sid, mem);
                 }
             });
-        }
-
-        if room {
-            self.ui_room_persona_shortcuts(ui, t, &sid, members, model_id);
         }
 
         ui.add_space(4.0);
