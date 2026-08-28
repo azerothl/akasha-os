@@ -277,8 +277,8 @@ const EN: GuideStrings = GuideStrings {
     salon_opt_members_body: "One list: built-in personas and your library agents, each Name once. Add from library. @ only real members.",
     salon_opt_members_example: "Ex. Add Maya + Critic → two names in the strip, no duplicate row.",
     salon_opt_turn_title: "Room turn",
-    salon_opt_turn_body: "Your message runs a turn; they answer in order. Cancel stops it.",
-    salon_opt_turn_example: "Ex. \"Review this sketch\" → Maya then Critic, in the same thread.",
+    salon_opt_turn_body: "Without @, everyone in the strip answers in order (up to 4). @ still picks who speaks. Cancel stops the turn.",
+    salon_opt_turn_example: "Ex. \"Review this sketch\" → Maya then Critic, same thread.",
 };
 
 const FR: GuideStrings = GuideStrings {
@@ -389,7 +389,7 @@ const FR: GuideStrings = GuideStrings {
     salon_opt_members_body: "Une seule liste : personas intégrés et agents de la bibliothèque, chaque Nom une fois. Ajouter depuis la bibliothèque. @ seulement les vrais membres.",
     salon_opt_members_example: "Ex. Maya + Critique → deux noms dans la bande, pas de doublon.",
     salon_opt_turn_title: "Tour de salon",
-    salon_opt_turn_body: "Votre message lance un tour ; ils répondent dans l'ordre. Annuler stoppe.",
+    salon_opt_turn_body: "Sans `@`, tous les membres de la bande répondent dans l'ordre (plafond 4). `@` choisit qui parle. Annuler stoppe le tour.",
     salon_opt_turn_example: "Ex. « Critique ce croquis » → Maya puis Critique, dans le même fil.",
 };
 
@@ -1081,6 +1081,10 @@ mod tests {
         assert!(!en.canvas_opt_export_body.contains("media.image.generate"));
         assert!(!en.memory_opt_recall_body.to_lowercase().contains("semantic"));
         assert!(!en.salon_opt_turn_body.contains("conductor"));
+        assert!(!en.salon_opt_turn_body.contains("Your message runs a turn"));
+        assert!(en.salon_opt_turn_body.contains("up to 4"));
+        assert!(!fr.salon_opt_turn_body.contains("Votre message lance un tour"));
+        assert!(fr.salon_opt_turn_body.contains("plafond 4"));
         assert!(!en.canvas_opt_export_example.is_empty());
         assert!(!fr.salon_opt_turn_example.is_empty());
     }
