@@ -74,7 +74,9 @@ pub fn render_schedule_card(
                 }
             }),
             "paused" => ui.horizontal(|ui| {
-                if ui.button(t.schedule_stop).clicked() {
+                if ui.button(t.schedule_resume).clicked() {
+                    ScheduleCardAction::Resume(schedule_id.to_string())
+                } else if ui.button(t.schedule_stop).clicked() {
                     ScheduleCardAction::Stop(schedule_id.to_string())
                 } else {
                     ScheduleCardAction::None
@@ -114,6 +116,15 @@ pub fn send_schedule_action(cmd_tx: &std::sync::mpsc::Sender<Cmd>, action: Sched
             let _ = cmd_tx.send(Cmd::ScheduleCancel { id });
         }
         ScheduleCardAction::None => {}
+    }
+}
+
+/// Primary/secondary action labels per card state (for UI + tests).
+pub fn action_labels_for_state<'a>(t: &'a UiStrings, state: &str) -> Option<(&'a str, &'a str)> {
+    match state {
+        "live" => Some((t.schedule_pause, t.schedule_stop)),
+        "paused" => Some((t.schedule_resume, t.schedule_stop)),
+        _ => None,
     }
 }
 
@@ -174,5 +185,46 @@ mod tests {
         assert_eq!(t_fr.schedule_pause, "Pause");
         assert_eq!(t_en.schedule_stop, "Stop");
         assert_eq!(t_fr.schedule_stop, "Arrêter");
+        assert_eq!(t_en.schedule_resume, "Resume");
+        assert_eq!(t_fr.schedule_resume, "Reprendre");
+    }
+
+    #[test]
+    fn paused_card_exposes_resume_and_stop_not_pause() {
+        let t_en = crate::i18n::strings("en");
+        let t_fr = crate::i18n::strings("fr");
+        let live = action_labels_for_state(&t_en, "live").unwrap();
+        let paused = action_labels_for_state(&t_en, "paused").unwrap();
+        assert_eq!(live.0, "Pause");
+        assert_eq!(paused.0, "Resume");
+        assert_ne!(paused.0, live.0);
+        assert_eq!(paused.1, "Stop");
+        let paused_fr = action_labels_for_state(&t_fr, "paused").unwrap();
+        assert_eq!(paused_fr.0, "Reprendre");
+        assert_eq!(paused_fr.1, "Arrêter");
+        assert!(action_labels_for_state(&t_en, "stopped").is_none());
+    }
+
+    #[test]
+    fn date_fallback_contains_time_once() {
+        let t_en = crate::i18n::strings("en");
+        let tz = 0;
+        let now_ms = 1_705_315_200_000u64; // 2024-01-15 10:00 UTC
+        let next_ms = now_ms + 3 * 86_400_000; // three local days later
+        let label = crate::format_schedule_next_label(&t_en, next_ms, now_ms, tz);
+        let time = crate::format_local_time_hm(next_ms, tz);
+        assert!(
+            label.contains(&time),
+            "expected time {time} in {label}"
+        );
+        assert_eq!(
+            label.matches(&time).count(),
+            1,
+            "time must appear once in {label}"
+        );
+        assert!(
+            !label.starts_with("Next: today"),
+            "three-day offset must not use today template"
+        );
     }
 }

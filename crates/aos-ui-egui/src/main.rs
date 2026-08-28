@@ -392,6 +392,26 @@ fn local_day_index(ts_ms: u64, offset_minutes: i32) -> i64 {
     local_ms.div_euclid(86_400_000)
 }
 
+fn civil_from_day_index(days: i64) -> (i32, u32, u32) {
+    let z = days + 719468;
+    let era = if z >= 0 { z / 146097 } else { (z - 146096) / 146097 };
+    let doe = z - era * 146097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = (yoe + era * 400) as i32;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    let y = if mp < 10 { y } else { y + 1 };
+    (y, m, d)
+}
+
+pub(crate) fn format_local_date_short(ts_ms: u64, tz_offset_min: i32) -> String {
+    let days = local_day_index(ts_ms, tz_offset_min);
+    let (y, m, d) = civil_from_day_index(days);
+    format!("{d:02}/{m:02}/{y}")
+}
+
 pub(crate) fn format_schedule_next_label(
     t: &i18n::UiStrings,
     next_fire_ms: u64,
@@ -406,7 +426,7 @@ pub(crate) fn format_schedule_next_label(
     } else if day_next == day_now + 1 {
         t.schedule_card_next_tomorrow.replace("{time}", &time)
     } else {
-        let date = format_local_time_hm(next_fire_ms, tz_offset_min);
+        let date = format_local_date_short(next_fire_ms, tz_offset_min);
         t.schedule_card_next_date
             .replace("{date}", &date)
             .replace("{time}", &time)
