@@ -2459,10 +2459,6 @@ pub enum CanvasOpBody {
     Undo,
 }
 
-fn default_canvas_stroke_width() -> f32 {
-    0.01
-}
-
 fn default_canvas_color() -> String {
     "#3ee0c4".into()
 }
