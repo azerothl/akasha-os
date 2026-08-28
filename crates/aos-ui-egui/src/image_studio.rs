@@ -1171,12 +1171,24 @@ impl ImageStudioState {
         generating: Option<&ImageGenUiState>,
         download_busy: bool,
         last_session_image: &mut Option<String>,
+        help_tooltip: Option<&str>,
+        help_clicked: &mut bool,
     ) {
         if self.catalog_packs.is_empty() {
             self.refresh_catalog();
         }
         self.ui_install_prompt(ui.ctx(), t, cmd, download_busy);
-        ui.heading(t.tab_create);
+        ui.horizontal(|ui| {
+            ui.heading(t.tab_create);
+            if let Some(tip) = help_tooltip {
+                if crate::icons::help_button(ui)
+                    .on_hover_text(tip)
+                    .clicked()
+                {
+                    *help_clicked = true;
+                }
+            }
+        });
         ui.label(if self.create_mode == CreateMode::Video {
             t.tab_hint_video
         } else {

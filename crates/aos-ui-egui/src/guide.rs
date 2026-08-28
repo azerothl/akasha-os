@@ -50,9 +50,9 @@ pub fn topic_for_tab(tab: &Tab) -> Option<GuideTopic> {
     }
 }
 
-/// Small help affordance for tab headings (opens guide at `topic`).
+/// Small help affordance for tab/session headers (opens guide at `topic`).
 pub fn tab_help_button(ui: &mut egui::Ui, tooltip: &str) -> bool {
-    ui.small_button("?")
+    crate::icons::help_button(ui)
         .on_hover_text(tooltip)
         .clicked()
 }
@@ -267,7 +267,7 @@ const FR: GuideStrings = GuideStrings {
     section_what: "À quoi ça sert",
     section_impact: "Ce que ça change",
     section_example: "Exemple",
-    create_intro: "Create transforme une description en image, ou en court clip. Vous pouvez partir d'une photo déjà là, ou peindre une zone du résultat.",
+    create_intro: "Créer transforme une description en image, ou en court clip. Vous pouvez partir d'une photo déjà là, ou peindre une zone du résultat.",
     create_prompt_title: "Prompt",
     create_prompt_body: "Dites ce qui doit apparaître : sujet, lieu, lumière. Générer lit ce texte. Le précis bat le vague.",
     create_prompt_example: "Ex. « Une tasse bleue sur un bureau en bois, lumière du matin » → un objet, lumière chaude.",
@@ -288,7 +288,7 @@ const FR: GuideStrings = GuideStrings {
     create_composition_impact: "Générer s'en sert pour placer les objets. Corriger une zone se peint sur la même vue.",
     create_composition_example: "Ex. Bloc gauche = tasse, bloc droit = fenêtre → deux sujets, cet arrangement.",
     create_reference_title: "Image de référence",
-    create_reference_body: "Trombone à côté du prompt. Create part de cette photo. Plus près de la photo : pose et couleurs. Plus loin : le prompt gagne.",
+    create_reference_body: "Trombone à côté du prompt. Créer part de cette photo. Plus près de la photo : pose et couleurs. Plus loin : le prompt gagne.",
     create_reference_example: "Ex. Portrait + « avec une écharpe rouge » → même personne, nouvelle écharpe.",
     create_inpaint_title: "Corriger une zone",
     create_inpaint_body: "Après un résultat, peignez la partie à changer, puis Générer. Seule cette zone est redessinée.",
@@ -300,7 +300,7 @@ const FR: GuideStrings = GuideStrings {
     create_format_body: "Largeur et hauteur = taille de l'image. Fast / Balanced / Quality = le temps passé : Quality plus lent, souvent plus net.",
     create_format_example: "Ex. 512×512 Fast pour un brouillon ; plus grand + Quality pour un final.",
     create_generate_title: "Générer",
-    create_generate_body: "Lance Create avec le prompt et les options du moment. Il faut un modèle image ou vidéo installé. Le résultat s'affiche à droite ; l'historique garde les précédents.",
+    create_generate_body: "Lance Créer avec le prompt et les options du moment. Il faut un modèle image ou vidéo installé. Le résultat s'affiche à droite ; l'historique garde les précédents.",
     create_generate_example: "",
     chat_intro: "Accueil par défaut : une conversation par session, hors ligne d'abord. Les messages persistent ; les commandes / ouvrent d'autres surfaces sans quitter le chat.",
     chat_opt_sessions_title: "Barre latérale Sessions",
@@ -862,6 +862,10 @@ mod tests {
         let fr = strings("fr");
         assert_eq!(en.create_negative_title, "Negative prompt");
         assert_eq!(fr.create_inpaint_title, "Corriger une zone");
+        assert!(fr.create_intro.starts_with("Créer transforme"));
+        assert!(!fr.create_intro.contains("Create"));
+        assert!(!fr.create_reference_body.contains("Create"));
+        assert!(!fr.create_generate_body.contains("Create"));
         assert!(!en.create_lora_what.is_empty());
         assert!(!fr.create_composition_impact.is_empty());
         assert!(en.create_lora_what.contains("model's list"));

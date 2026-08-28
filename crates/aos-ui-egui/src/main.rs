@@ -4090,18 +4090,23 @@ impl eframe::App for UiApp {
             Tab::Image => overflow_scroll(ui, "image", |ui| {
                 let t = i18n::strings(&self.prefs.language);
                 let g = guide::strings(&self.prefs.language);
-                ui.horizontal(|ui| {
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if guide::tab_help_button(ui, g.help_tooltip) {
-                            self.guide.open_topic(guide::GuideTopic::Create);
-                        }
-                    });
-                });
+                let mut open_create_guide = false;
                 let gen = self.image_generating.as_ref();
                 let dl_busy = self.model_download.is_some();
                 let last_session = &mut self.last_session_image;
-                self.image_studio
-                    .ui(ui, &t, &self.cmd_tx, gen, dl_busy, last_session);
+                self.image_studio.ui(
+                    ui,
+                    &t,
+                    &self.cmd_tx,
+                    gen,
+                    dl_busy,
+                    last_session,
+                    Some(g.help_tooltip),
+                    &mut open_create_guide,
+                );
+                if open_create_guide {
+                    self.guide.open_topic(guide::GuideTopic::Create);
+                }
             }),
             Tab::Providers => overflow_scroll(ui, "providers", |ui| self.ui_providers(ui)),
             Tab::Audit => overflow_scroll(ui, "audit", |ui| self.ui_audit(ui)),
@@ -4355,17 +4360,18 @@ impl UiApp {
                 icons::caret(ui, self.room_members_pane_open);
             }
 
+            let g = guide::strings(&self.prefs.language);
+            if guide::tab_help_button(ui, g.help_tooltip) {
+                self.guide.open_topic(if room {
+                    guide::GuideTopic::Salon
+                } else if canvas_open {
+                    guide::GuideTopic::Canvas
+                } else {
+                    guide::GuideTopic::Chat
+                });
+            }
+
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let g = guide::strings(&self.prefs.language);
-                if guide::tab_help_button(ui, g.help_tooltip) {
-                    self.guide.open_topic(if room {
-                        guide::GuideTopic::Salon
-                    } else if canvas_open {
-                        guide::GuideTopic::Canvas
-                    } else {
-                        guide::GuideTopic::Chat
-                    });
-                }
                 if ui
                     .selectable_label(canvas_open, t.session_toggle_canvas)
                     .clicked()
@@ -5326,11 +5332,9 @@ impl UiApp {
         let g = guide::strings(&self.prefs.language);
         ui.horizontal(|ui| {
             ui.heading(t.tab_memory);
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if guide::tab_help_button(ui, g.help_tooltip) {
-                    self.guide.open_topic(guide::GuideTopic::Memory);
-                }
-            });
+            if guide::tab_help_button(ui, g.help_tooltip) {
+                self.guide.open_topic(guide::GuideTopic::Memory);
+            }
         });
         ui.weak(t.memory_blurb);
         if self.mem_sweep_last_pass_ms > 0 && !self.mem_sweep_last_pass_label.is_empty() {
@@ -5548,11 +5552,9 @@ impl UiApp {
         let g = guide::strings(&self.prefs.language);
         ui.horizontal(|ui| {
             ui.heading(t.tab_agents);
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if guide::tab_help_button(ui, g.help_tooltip) {
-                    self.guide.open_topic(guide::GuideTopic::Agents);
-                }
-            });
+            if guide::tab_help_button(ui, g.help_tooltip) {
+                self.guide.open_topic(guide::GuideTopic::Agents);
+            }
         });
         ui.weak(t.agents_blurb);
         ui.separator();
