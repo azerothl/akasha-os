@@ -7,7 +7,7 @@ Summary of delivered phases. Detail: [development-plan.md](development-plan.md),
 
 **Headline:** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview:** 0.13.0 (26/08/2026) — reference image, inpaint, short video, chat documents (#52–#55). Not a bootable OS. Cohort gate
+**Preview:** 0.14.0 (28/08/2026) — custom agent labels, salon picker, in-app Create guide. Not a bootable OS. Cohort gate
 still open. **Next:** PC cohort close; Horizon C / PV.4+ when scheduled; E9
 hard-green after a documented 2-GPU run.
 

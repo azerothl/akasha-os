@@ -1,4 +1,4 @@
-# Preview features — Akasha OS 0.13.0
+# Preview features — Akasha OS 0.14.0
 
 **Language:** English | [Français](fr/FEATURES.md)
 
@@ -7,7 +7,12 @@ This is **not** the bootable OS. Target v1 requirements live in
 [functional-specs.md](functional-specs.md); phase gates in
 [STATUS.md](STATUS.md).
 
-> Date: 26/08/2026 · Preview **0.13.0**
+> Date: 28/08/2026 · Preview **0.14.0**
+
+### What's new in 0.14.0
+
+- **Custom agents**: conversation / thread label is the Agents-page Name; salon picker lists roster personas and Task/custom agents without duplicate persona rows
+- **Create guide**: in-app EN+FR guide from the ? in the Créer / Create header — prompt, reference photo, Fix a region, video, size/quality, Generate, negative prompt, LoRA (model list), VAE (pack default), Composition on the result canvas
 
 ### What's new in 0.13.0
 

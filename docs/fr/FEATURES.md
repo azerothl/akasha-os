@@ -1,4 +1,4 @@
-# Fonctionnalités Preview — Akasha OS 0.13.0
+# Fonctionnalités Preview — Akasha OS 0.14.0
 
 **Langue :** [English](../FEATURES.md) | Français
 
@@ -7,7 +7,12 @@ Ce n'est **pas** l'OS bootable. Les exigences v1 sont dans
 [specs-fonctionnelles.md](specs-fonctionnelles.md) ; les gates dans
 [STATUS.md](STATUS.md).
 
-> Date : 26/08/2026 · Preview **0.13.0**
+> Date : 28/08/2026 · Preview **0.14.0**
+
+### Nouveautés 0.14.0
+
+- **Agents personnalisés** : le libellé conversation / thread est le Nom de la page Agents ; le sélecteur salon liste les personas du roster et les agents Task/personnalisés sans lignes persona en double
+- **Guide Créer** : guide in-app EN+FR depuis le ? dans l’en-tête Créer — prompt, photo de référence, Corriger une zone, vidéo, taille/qualité, Générer, prompt négatif, LoRA (liste du modèle), VAE (défaut du pack), Composition sur le canevas de résultat
 
 ### Nouveautés 0.13.0
 
