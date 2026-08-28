@@ -12,6 +12,8 @@ mod model_setup;
 mod models_page;
 mod notes_panel;
 mod prefs;
+mod schedule_act_phrase;
+mod schedule_card;
 mod tasks_panel;
 mod chat_ask;
 mod chat_canvas;
@@ -38,6 +40,7 @@ use os_open::{aos_home, app_icon, bin_aos_session, native_path, open_in_browser,
 use runtime::runtime_main;
 use slash::{slash_completions, slash_insert_text, SLASH_COMMANDS};
 use aos_agent::schedule::ScheduleEntry;
+use aos_agent::schedule_parse::{self, ParsedSchedule};
 use aos_ipc::BusClient;
 use aos_proto::{
     AgentCreateRequest, AgentGoal, AgentIdRequest, AgentInfo, AgentState, AgentTrace, AuditEvent,
@@ -348,6 +351,73 @@ pub(crate) fn format_local_time_hm(ts_ms: u64, offset_minutes: i32) -> String {
     let mins = (secs / 60) % 60;
     let hours = (secs / 3600) % 24;
     format!("{hours:02}:{mins:02}")
+}
+
+fn local_tz_offset_minutes() -> i32 {
+    if let Ok(out) = std::process::Command::new("date").args(["+%z"]).output() {
+        if out.status.success() {
+            if let Ok(s) = String::from_utf8(out.stdout) {
+                return parse_tz_offset_minutes(s.trim()).unwrap_or(0);
+            }
+        }
+    }
+    0
+}
+
+fn parse_tz_offset_minutes(raw: &str) -> Option<i32> {
+    let s = raw.trim();
+    if s.len() < 3 {
+        return None;
+    }
+    let sign = match s.as_bytes().first()? {
+        b'+' => 1,
+        b'-' => -1,
+        _ => return None,
+    };
+    let digits: String = s.chars().skip(1).filter(|c| c.is_ascii_digit()).collect();
+    if digits.len() < 3 {
+        return None;
+    }
+    let hours: i32 = digits[..digits.len().saturating_sub(2)]
+        .parse()
+        .ok()?;
+    let mins: i32 = digits[digits.len().saturating_sub(2)..]
+        .parse()
+        .ok()?;
+    Some(sign * (hours * 60 + mins))
+}
+
+fn local_day_index(ts_ms: u64, offset_minutes: i32) -> i64 {
+    let local_ms = ts_ms as i64 + (offset_minutes as i64) * 60_000;
+    local_ms.div_euclid(86_400_000)
+}
+
+pub(crate) fn format_schedule_next_label(
+    t: &i18n::UiStrings,
+    next_fire_ms: u64,
+    now_ms: u64,
+    tz_offset_min: i32,
+) -> String {
+    let time = format_local_time_hm(next_fire_ms, tz_offset_min);
+    let day_now = local_day_index(now_ms, tz_offset_min);
+    let day_next = local_day_index(next_fire_ms, tz_offset_min);
+    if day_next == day_now {
+        t.schedule_card_next_today.replace("{time}", &time)
+    } else if day_next == day_now + 1 {
+        t.schedule_card_next_tomorrow.replace("{time}", &time)
+    } else {
+        let date = format_local_time_hm(next_fire_ms, tz_offset_min);
+        t.schedule_card_next_date
+            .replace("{date}", &date)
+            .replace("{time}", &time)
+    }
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 fn memory_relation_snippet(text: &str) -> String {
@@ -1563,6 +1633,8 @@ struct UiApp {
     schedules: Vec<ScheduleEntry>,
     schedule_goal: String,
     schedule_interval_secs: u64,
+    /// Act id waiting for `Evt::ScheduleCreated` to attach a thread card.
+    schedule_pending_card_act: Option<String>,
     agent_display_name: String,
     agent_task: String,
     agent_system_prompt: String,
@@ -1842,6 +1914,7 @@ impl UiApp {
             schedules: Vec::new(),
             schedule_goal: String::new(),
             schedule_interval_secs: 60,
+            schedule_pending_card_act: None,
             agent_display_name: String::new(),
             agent_task: String::new(),
             agent_system_prompt: String::new(),
@@ -2144,6 +2217,13 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             ));
             return;
         };
+        if pending_images.is_empty() && pending_documents.is_empty() {
+            let tz = local_tz_offset_minutes();
+            if let Some(parsed) = schedule_parse::try_parse_phrase(&text, now_ms(), tz) {
+                self.handle_schedule_phrase(&session_id, &text, parsed);
+                return;
+            }
+        }
         let explicit_canvas = chat_canvas::chat_should_open_canvas_face(&text);
         if explicit_canvas {
             self.break_stuck_session_agents(&session_id);
@@ -2622,6 +2702,191 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                     "système",
                     format!("commande inconnue : {cmd} — tapez /commands"),
                 ));
+            }
+        }
+    }
+
+    fn handle_schedule_phrase(&mut self, session_id: &str, user_phrase: &str, parsed: ParsedSchedule) {
+        let t = i18n::strings(&self.prefs.language);
+        let act_text = schedule_act_phrase::act_phrase_from_parsed(&t, &parsed);
+        self.chat.push(ChatLine {
+            role: "user".into(),
+            text: user_phrase.to_string(),
+            attachments: vec![],
+            speaker_id: None,
+        });
+        let _ = self.cmd_tx.send(Cmd::SessionAppend {
+            session_id: session_id.to_string(),
+            role: "user".into(),
+            content: user_phrase.to_string(),
+            attachments: vec![],
+        });
+        let gate_ask = !self.prefs.agent_gate_mode.eq_ignore_ascii_case("autonomous");
+        if gate_ask {
+            let act_id = format!("sched-act-{}", chrono_like_stamp());
+            let att = ChatAttachment::ScheduleAct {
+                act_id: act_id.clone(),
+                display_phrase: user_phrase.to_string(),
+                goal: parsed.goal.clone(),
+                when_label: parsed.when_label.clone(),
+                interval_secs: parsed.interval_secs,
+                next_fire_ms: parsed.next_fire_ms,
+                state: "pending".into(),
+                schedule_id: String::new(),
+            };
+            self.chat.push(ChatLine {
+                role: "assistant".into(),
+                text: act_text.clone(),
+                attachments: vec![att.clone()],
+                speaker_id: None,
+            });
+            let _ = self.cmd_tx.send(Cmd::SessionAppend {
+                session_id: session_id.to_string(),
+                role: "assistant".into(),
+                content: act_text,
+                attachments: vec![att],
+            });
+        } else {
+            self.schedule_pending_card_act = Some(format!("sched-auto-{}", chrono_like_stamp()));
+            self.chat.push(ChatLine {
+                role: "assistant".into(),
+                text: schedule_act_phrase::format_resolved_act(
+                    &t,
+                    &parsed.goal,
+                    &parsed.when_label,
+                    true,
+                ),
+                attachments: vec![],
+                speaker_id: None,
+            });
+            let _ = self.cmd_tx.send(Cmd::ScheduleCreate {
+                goal: parsed.goal,
+                interval_secs: parsed.interval_secs,
+                next_fire_ms: Some(parsed.next_fire_ms),
+                display_title: Some(user_phrase.to_string()),
+            });
+        }
+        self.mark_onboarding_chat_sent();
+        self.scen_chat = true;
+    }
+
+    fn approve_schedule_act(&mut self, act_id: &str, msg_idx: usize) {
+        let Some(att_idx) = self.chat[msg_idx].attachments.iter().position(|a| {
+            matches!(
+                a,
+                ChatAttachment::ScheduleAct { act_id: id, .. } if id == act_id
+            )
+        }) else {
+            return;
+        };
+        let ChatAttachment::ScheduleAct {
+            goal,
+            when_label,
+            interval_secs,
+            next_fire_ms,
+            display_phrase,
+            ..
+        } = self.chat[msg_idx].attachments[att_idx].clone()
+        else {
+            return;
+        };
+        let t = i18n::strings(&self.prefs.language);
+        self.chat[msg_idx].text =
+            schedule_act_phrase::format_resolved_act(&t, &goal, &when_label, true);
+        if let ChatAttachment::ScheduleAct { state, .. } =
+            &mut self.chat[msg_idx].attachments[att_idx]
+        {
+            *state = "approved".into();
+        }
+        self.schedule_pending_card_act = Some(act_id.to_string());
+        let _ = self.cmd_tx.send(Cmd::ScheduleCreate {
+            goal,
+            interval_secs,
+            next_fire_ms: Some(next_fire_ms),
+            display_title: Some(display_phrase),
+        });
+    }
+
+    fn deny_schedule_act(&mut self, act_id: &str, msg_idx: usize) {
+        let Some(att_idx) = self.chat[msg_idx].attachments.iter().position(|a| {
+            matches!(
+                a,
+                ChatAttachment::ScheduleAct { act_id: id, .. } if id == act_id
+            )
+        }) else {
+            return;
+        };
+        let ChatAttachment::ScheduleAct {
+            goal,
+            when_label,
+            ..
+        } = self.chat[msg_idx].attachments[att_idx].clone()
+        else {
+            return;
+        };
+        let t = i18n::strings(&self.prefs.language);
+        self.chat[msg_idx].text =
+            schedule_act_phrase::format_resolved_act(&t, &goal, &when_label, false);
+        if let ChatAttachment::ScheduleAct { state, .. } =
+            &mut self.chat[msg_idx].attachments[att_idx]
+        {
+            *state = "denied".into();
+        }
+    }
+
+    fn attach_schedule_card(&mut self, entry: &ScheduleEntry) {
+        let act_id = match self.schedule_pending_card_act.take() {
+            Some(id) => id,
+            None => return,
+        };
+        let title = entry
+            .display_title
+            .clone()
+            .unwrap_or_else(|| entry.goal.clone());
+        let next_fire = schedule_card::next_fire_ms_for_entry(entry, now_ms());
+        let state = schedule_card::card_state_from_entry(entry).to_string();
+        let card = ChatAttachment::ScheduleCard {
+            schedule_id: entry.id.clone(),
+            title,
+            goal: entry.goal.clone(),
+            interval_secs: entry.interval_secs,
+            next_fire_ms: next_fire,
+            state,
+        };
+        for line in &mut self.chat {
+            for att in &mut line.attachments {
+                if let ChatAttachment::ScheduleAct {
+                    act_id: id,
+                    state,
+                    schedule_id,
+                    ..
+                } = att
+                {
+                    if *id == act_id && state == "approved" {
+                        *schedule_id = entry.id.clone();
+                        line.attachments.push(card.clone());
+                        return;
+                    }
+                }
+            }
+        }
+        self.chat.push(ChatLine {
+            role: "assistant".into(),
+            text: String::new(),
+            attachments: vec![card],
+            speaker_id: None,
+        });
+    }
+
+    fn sync_schedule_cards(&mut self) {
+        let now = now_ms();
+        for line in &mut self.chat {
+            for att in &mut line.attachments {
+                if let ChatAttachment::ScheduleCard { schedule_id, .. } = att {
+                    if let Some(entry) = self.schedules.iter().find(|s| s.id == *schedule_id) {
+                        schedule_card::sync_card_attachment(att, entry, now);
+                    }
+                }
             }
         }
     }
@@ -3369,7 +3634,17 @@ impl eframe::App for UiApp {
                     self.caps_holder = holder;
                     self.caps = caps;
                 }
-                Evt::Schedules(s) => self.schedules = s,
+                Evt::Schedules(s) => {
+                    self.schedules = s;
+                    self.sync_schedule_cards();
+                }
+                Evt::ScheduleCreated(entry) => {
+                    self.attach_schedule_card(&entry);
+                    self.sync_schedule_cards();
+                }
+                Evt::ScheduleUpdated(_) => {
+                    self.sync_schedule_cards();
+                }
                 Evt::TasksListed(tasks) => {
                     let t = i18n::strings(&self.prefs.language);
                     self.tasks.apply_listed(tasks, t.tasks_count);
@@ -4466,6 +4741,9 @@ impl UiApp {
                 let mut target_reply: Option<String> = None;
                 let mut open_studio: Option<(String, String)> = None;
                 let mut act_decision: Option<(String, String, bool)> = None;
+                let mut schedule_act: Option<(String, usize, bool)> = None;
+                let tz_offset = local_tz_offset_minutes();
+                let chat_now = now_ms();
                 let reply_id = self.blocked_ask_agent().map(|a| a.agent_id.clone());
                 let n = self.chat.len();
                 for i in 0..n {
@@ -4654,6 +4932,53 @@ impl UiApp {
                                         });
                                     }
                                 }
+                                ChatAttachment::ScheduleAct {
+                                    act_id,
+                                    state,
+                                    ..
+                                } => {
+                                    if state == "pending" {
+                                        ui.horizontal(|ui| {
+                                            if ui.button(t.agent_act_allow_once).clicked() {
+                                                schedule_act =
+                                                    Some((act_id.clone(), i, true));
+                                            }
+                                            if ui.button(t.agent_act_deny).clicked() {
+                                                schedule_act =
+                                                    Some((act_id.clone(), i, false));
+                                            }
+                                        });
+                                    }
+                                }
+                                ChatAttachment::ScheduleCard {
+                                    schedule_id,
+                                    title,
+                                    state,
+                                    next_fire_ms,
+                                    ..
+                                } => {
+                                    let action = ui
+                                        .push_id(
+                                            ("chat_schedule_card", i, j, schedule_id.as_str()),
+                                            |ui| {
+                                                schedule_card::render_schedule_card(
+                                                    ui,
+                                                    t,
+                                                    title,
+                                                    state,
+                                                    *next_fire_ms,
+                                                    schedule_id,
+                                                    chat_now,
+                                                    tz_offset,
+                                                )
+                                            },
+                                        )
+                                        .inner;
+                                    schedule_card::send_schedule_action(
+                                        &self.cmd_tx,
+                                        action,
+                                    );
+                                }
                             }
                         }
                     });
@@ -4664,6 +4989,13 @@ impl UiApp {
                         act_id,
                         approved,
                     });
+                }
+                if let Some((act_id, msg_idx, approved)) = schedule_act {
+                    if approved {
+                        self.approve_schedule_act(&act_id, msg_idx);
+                    } else {
+                        self.deny_schedule_act(&act_id, msg_idx);
+                    }
                 }
                 if let Some(id) = open_agent {
                     self.open_agent_tab(&id);
@@ -6808,6 +7140,8 @@ impl UiApp {
                                 let _ = self.cmd_tx.send(Cmd::ScheduleCreate {
                                     goal: self.schedule_goal.trim().to_string(),
                                     interval_secs: self.schedule_interval_secs.max(30),
+                                    next_fire_ms: None,
+                                    display_title: None,
                                 });
                                 self.schedule_goal.clear();
                             }

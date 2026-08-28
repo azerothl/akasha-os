@@ -1724,6 +1724,8 @@ async fn handle_cmd(
         Cmd::ScheduleCreate {
             goal,
             interval_secs,
+            next_fire_ms,
+            display_title,
         } => {
             match bus
                 .call::<ScheduleCreateRequest, ScheduleEntry>(
@@ -1732,6 +1734,8 @@ async fn handle_cmd(
                         goal,
                         interval_secs,
                         model_id: None,
+                        next_fire_ms,
+                        display_title,
                     },
                     vec![],
                 )
@@ -1742,6 +1746,7 @@ async fn handle_cmd(
                         "schedule créé {} ({}s)",
                         e.id, e.interval_secs
                     )));
+                    let _ = evt_tx.send(Evt::ScheduleCreated(e));
                     if let Ok(r) = bus
                         .call::<(), ScheduleListResponse>(agent_intents::SCHEDULE_LIST, &(), vec![])
                         .await
@@ -1763,8 +1768,9 @@ async fn handle_cmd(
                 )
                 .await
             {
-                Ok(_) => {
+                Ok(e) => {
                     let _ = evt_tx.send(Evt::Status(format!("schedule annulé {id}")));
+                    let _ = evt_tx.send(Evt::ScheduleUpdated(e));
                     if let Ok(r) = bus
                         .call::<(), ScheduleListResponse>(agent_intents::SCHEDULE_LIST, &(), vec![])
                         .await
@@ -1774,6 +1780,52 @@ async fn handle_cmd(
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(format!("schedule.cancel: {e}")));
+                }
+            }
+        }
+        Cmd::SchedulePause { id } => {
+            match bus
+                .call::<ScheduleIdRequest, ScheduleEntry>(
+                    agent_intents::SCHEDULE_PAUSE,
+                    &ScheduleIdRequest { id: id.clone() },
+                    vec![],
+                )
+                .await
+            {
+                Ok(e) => {
+                    let _ = evt_tx.send(Evt::ScheduleUpdated(e));
+                    if let Ok(r) = bus
+                        .call::<(), ScheduleListResponse>(agent_intents::SCHEDULE_LIST, &(), vec![])
+                        .await
+                    {
+                        let _ = evt_tx.send(Evt::Schedules(r.schedules));
+                    }
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(format!("schedule.pause: {e}")));
+                }
+            }
+        }
+        Cmd::ScheduleResume { id } => {
+            match bus
+                .call::<ScheduleIdRequest, ScheduleEntry>(
+                    agent_intents::SCHEDULE_RESUME,
+                    &ScheduleIdRequest { id: id.clone() },
+                    vec![],
+                )
+                .await
+            {
+                Ok(e) => {
+                    let _ = evt_tx.send(Evt::ScheduleUpdated(e));
+                    if let Ok(r) = bus
+                        .call::<(), ScheduleListResponse>(agent_intents::SCHEDULE_LIST, &(), vec![])
+                        .await
+                    {
+                        let _ = evt_tx.send(Evt::Schedules(r.schedules));
+                    }
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(format!("schedule.resume: {e}")));
                 }
             }
         }

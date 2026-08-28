@@ -142,8 +142,16 @@ pub(crate) enum Cmd {
     ScheduleCreate {
         goal: String,
         interval_secs: u64,
+        next_fire_ms: Option<u64>,
+        display_title: Option<String>,
     },
     ScheduleCancel {
+        id: String,
+    },
+    SchedulePause {
+        id: String,
+    },
+    ScheduleResume {
         id: String,
     },
     TasksList,
@@ -332,6 +340,8 @@ pub(crate) enum Evt {
         caps: Vec<CapInfo>,
     },
     Schedules(Vec<ScheduleEntry>),
+    ScheduleCreated(ScheduleEntry),
+    ScheduleUpdated(ScheduleEntry),
     TasksListed(Vec<tasks_panel::TaskItem>),
     Confirms(Vec<PendingConfirmation>),
     FeedbackOk(FeedbackSubmitResponse),
