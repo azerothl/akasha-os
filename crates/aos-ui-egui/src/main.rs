@@ -552,13 +552,22 @@ const CHAT_SPLIT_GAP: f32 = 8.0;
 const CHAT_MAIN_MARGIN: f32 = 16.0;
 
 fn estimate_label_chip_w(label: &str) -> f32 {
-    const CHAR_W: f32 = 7.5;
-    const PAD: f32 = 12.0;
+    const CHAR_W: f32 = 8.5;
+    const PAD: f32 = 22.0;
     label.len() as f32 * CHAR_W + PAD
 }
 
 fn session_toggle_reserve_width(t: &i18n::UiStrings) -> f32 {
-    estimate_label_chip_w(t.session_toggle_salon) + 4.0 + estimate_label_chip_w(t.session_toggle_canvas)
+    estimate_label_chip_w(t.session_toggle_salon) + 6.0 + estimate_label_chip_w(t.session_toggle_canvas)
+}
+
+fn session_toggle_chip(ui: &mut egui::Ui, selected: bool, label: &str) -> bool {
+    let w = estimate_label_chip_w(label);
+    ui.add_sized(
+        egui::vec2(w, ui.spacing().interact_size.y),
+        egui::SelectableLabel::new(selected, egui::RichText::new(label)),
+    )
+    .clicked()
 }
 
 fn composer_row_reserved_width(t: &i18n::UiStrings, show_stop: bool) -> f32 {
@@ -586,10 +595,10 @@ struct ChatSessionsSplit {
 }
 
 /// Sidebar + main chat widths that never exceed `full_w`.
-fn chat_sessions_split(full_w: f32, gap: f32) -> ChatSessionsSplit {
-    let min_main = 200.0_f32;
-    let max_side = 220.0_f32;
-    let min_side = 120.0_f32;
+fn chat_sessions_split(full_w: f32, gap: f32, canvas_open: bool) -> ChatSessionsSplit {
+    let min_main = if canvas_open { 240.0_f32 } else { 200.0_f32 };
+    let max_side = if canvas_open { 160.0_f32 } else { 220.0_f32 };
+    let min_side = if canvas_open { 80.0_f32 } else { 120.0_f32 };
     let mut side_w = max_side.min((full_w * 0.30).max(min_side));
     if full_w - side_w - gap < min_main {
         side_w = (full_w - gap - min_main).clamp(80.0, max_side);
@@ -607,19 +616,19 @@ enum ChatCanvasLayout {
 
 /// Transcript + canvas layout that fits in `total_w` (side-by-side or stacked).
 fn chat_canvas_layout(total_w: f32, content_h: f32, split_gap: f32) -> ChatCanvasLayout {
-    const CANVAS_MIN: f32 = 180.0;
-    const TRANSCRIPT_MIN: f32 = 200.0;
-    let min_horiz = CANVAS_MIN + split_gap + TRANSCRIPT_MIN;
-    if total_w < min_horiz {
-        let transcript_h = (content_h * 0.58).max(80.0);
-        let canvas_h = (content_h - transcript_h - split_gap).max(80.0);
+    const CANVAS_MIN: f32 = 96.0;
+    const TRANSCRIPT_MIN: f32 = 140.0;
+    const STACK_BELOW: f32 = 360.0;
+    if total_w < STACK_BELOW {
+        let transcript_h = (content_h * 0.55).max(72.0);
+        let canvas_h = (content_h - transcript_h - split_gap).max(72.0);
         ChatCanvasLayout::Stacked {
             transcript_h,
             canvas_h,
         }
     } else {
         let max_canvas = (total_w - TRANSCRIPT_MIN - split_gap).max(0.0);
-        let canvas_w = ((total_w - split_gap) * 0.42)
+        let canvas_w = ((total_w - split_gap) * 0.40)
             .clamp(CANVAS_MIN.min(max_canvas), max_canvas);
         let transcript_w = (total_w - canvas_w - split_gap).max(0.0);
         ChatCanvasLayout::SideBySide {
@@ -4500,13 +4509,7 @@ impl UiApp {
                 egui::vec2(toggle_w.min(full_w), ui.available_height()),
                 egui::Layout::right_to_left(egui::Align::Center),
                 |ui| {
-                    if ui
-                        .add(egui::SelectableLabel::new(
-                            canvas_open,
-                            egui::RichText::new(t.session_toggle_canvas),
-                        ))
-                        .clicked()
-                    {
+                    if session_toggle_chip(ui, canvas_open, t.session_toggle_canvas) {
                         let new_open = !canvas_open;
                         self.set_canvas_open_local(&sid, new_open);
                         let _ = self.cmd_tx.send(Cmd::CanvasSetOpen {
@@ -4514,13 +4517,7 @@ impl UiApp {
                             open: new_open,
                         });
                     }
-                    if ui
-                        .add(egui::SelectableLabel::new(
-                            room,
-                            egui::RichText::new(t.session_toggle_salon),
-                        ))
-                        .clicked()
-                    {
+                    if session_toggle_chip(ui, room, t.session_toggle_salon) {
                         let mode = if room {
                             ChatSessionMode::Direct
                         } else {
@@ -4542,18 +4539,26 @@ impl UiApp {
                 self.canvas_panel.seeing,
                 self.canvas_panel.clear_confirm_open,
             );
-            egui::ScrollArea::horizontal()
-                .id_salt("canvas_toolbar_scroll")
-                .auto_shrink([false, false])
-                .max_height(CANVAS_TOOLBAR_ROW_H)
-                .show(ui, |ui| {
-                    ui.set_min_width(toolbar_min_w);
-                    ui.horizontal(|ui| {
-                        ui.set_min_height(CANVAS_TOOLBAR_ROW_H - 4.0);
-                        toolbar_action =
-                            chat_canvas::ui_canvas_toolbar(ui, t, &mut self.canvas_panel);
-                    });
-                });
+            let track_w = ui.available_width();
+            ui.allocate_ui_with_layout(
+                egui::vec2(track_w, CANVAS_TOOLBAR_ROW_H),
+                egui::Layout::top_down(egui::Align::Min),
+                |ui| {
+                    ui.set_width(track_w);
+                    egui::ScrollArea::horizontal()
+                        .id_salt("canvas_toolbar_scroll")
+                        .auto_shrink([false, false])
+                        .max_height(CANVAS_TOOLBAR_ROW_H)
+                        .show(ui, |ui| {
+                            ui.set_min_width(toolbar_min_w);
+                            ui.horizontal(|ui| {
+                                ui.set_min_height(CANVAS_TOOLBAR_ROW_H - 4.0);
+                                toolbar_action =
+                                    chat_canvas::ui_canvas_toolbar(ui, t, &mut self.canvas_panel);
+                            });
+                        });
+                },
+            );
             if let Some(action) = toolbar_action {
                 self.dispatch_canvas_ui_action(Some(action), &sid);
             }
@@ -4873,7 +4878,13 @@ impl UiApp {
         let t = i18n::strings(&self.prefs.language);
         let full = ui.available_size();
         let gap = 8.0_f32;
-        let ChatSessionsSplit { side_w, chat_w } = chat_sessions_split(full.x, gap);
+        let canvas_open = chat_room::active_session_meta(
+            &self.sessions,
+            self.active_session.as_deref(),
+        )
+        .map(|m| m.canvas_open)
+        .unwrap_or(false);
+        let ChatSessionsSplit { side_w, chat_w } = chat_sessions_split(full.x, gap, canvas_open);
 
         ui.horizontal(|ui| {
             ui.set_min_height(full.y);
@@ -7808,7 +7819,7 @@ mod layout_tests {
     fn chat_sessions_split_never_exceeds_total() {
         for full_w in [250.0, 400.0, 900.0, 1280.0] {
             let gap = 8.0;
-            let split = chat_sessions_split(full_w, gap);
+            let split = chat_sessions_split(full_w, gap, false);
             assert!(
                 split.side_w + gap + split.chat_w <= full_w + 0.01,
                 "full_w={full_w} side={} chat={}",
@@ -7834,7 +7845,17 @@ mod layout_tests {
     }
 
     #[test]
-    fn chat_canvas_stacks_when_too_narrow() {
+    fn session_toggle_reserve_fits_fr_canvas_label() {
+        let fr = i18n::strings("fr");
+        let w = session_toggle_reserve_width(&fr);
+        assert!(
+            w >= estimate_label_chip_w(fr.session_toggle_canvas) + 40.0,
+            "reserve {w} should fit full Canvas label"
+        );
+    }
+
+    #[test]
+    fn chat_canvas_stacks_before_side_by_side_threshold() {
         let gap = 8.0;
         let layout = chat_canvas_layout(300.0, 400.0, gap);
         assert!(matches!(layout, ChatCanvasLayout::Stacked { .. }));

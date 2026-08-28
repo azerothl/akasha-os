@@ -403,8 +403,8 @@ fn ui_canvas_seeing_pill(ui: &mut Ui, label: &str) {
 
 /// Drawing tools for the unified session bar (pen, eraser, shapes, tint, thickness).
 pub fn toolbar_content_min_width(t: &UiStrings, seeing: bool, clear_confirm: bool) -> f32 {
-    const CHAR_W: f32 = 7.5;
-    const BTN_PAD: f32 = 16.0;
+    const CHAR_W: f32 = 8.5;
+    const BTN_PAD: f32 = 18.0;
     const GAP: f32 = 4.0;
     let mut w = 0.0;
     if seeing {
