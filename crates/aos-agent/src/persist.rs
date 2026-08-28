@@ -211,6 +211,7 @@ pub fn info_from_spec(agent_id: &str) -> Option<AgentInfo> {
         kind: spec.kind,
         display_name: spec.display_name.clone(),
         persona_id: spec.persona_id.clone(),
+        origin: spec.origin.clone(),
     })
 }
 

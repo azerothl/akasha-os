@@ -186,6 +186,7 @@ fn roster_info_from_spec(spec: &AgentSpec) -> AgentInfo {
         kind: AgentKind::Roster,
         display_name: spec.display_name.clone(),
         persona_id: spec.persona_id.clone(),
+        origin: spec.origin.clone(),
     }
 }
 
@@ -378,6 +379,7 @@ async fn spawn_worker(
                     kind: spec.kind,
                     display_name: spec.display_name.clone(),
                     persona_id: spec.persona_id.clone(),
+                    origin: spec.origin.clone(),
                 },
                 subscribers: Vec::new(),
                 trace: restored_trace,

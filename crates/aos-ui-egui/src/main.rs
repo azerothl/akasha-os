@@ -777,6 +777,7 @@ pub(crate) async fn spawn_chat_delegate_agent(
     };
     let mut req = AgentCreateRequest::simple(goal_statement.clone());
     req.display_name = Some(aos_agent::persist::agent_title(&goal_statement));
+    req.origin = Some("assistant".into());
     req.skills = skills;
     req.tools = tools;
     req.session_id = Some(sid.clone());
@@ -4172,42 +4173,21 @@ impl UiApp {
                             model_id: model_id.clone(),
                         });
                     } else {
+                        let stored_name = agent
+                            .display_name
+                            .clone()
+                            .filter(|n| !n.trim().is_empty())
+                            .unwrap_or(label.clone());
                         let _ = self.cmd_tx.send(Cmd::SessionMembersAdd {
                             session_id: session_id.to_string(),
                             member: ChatRoomMember {
                                 agent_id: agent.agent_id.clone(),
-                                display_name: label,
+                                display_name: stored_name,
                                 persona_id: None,
                                 joined_ms: chat_room::joined_ms_now(),
                             },
                         });
                     }
-                }
-            }
-        });
-    }
-
-    fn ui_room_persona_shortcuts(
-        &mut self,
-        ui: &mut egui::Ui,
-        t: &i18n::UiStrings,
-        session_id: &str,
-        members: &[ChatRoomMember],
-        model_id: Option<String>,
-    ) {
-        ui.horizontal_wrapped(|ui| {
-            for persona in chat_room::ROOM_PERSONAS {
-                let agent_id = chat_room::persona_agent_id(persona.id);
-                if members.iter().any(|m| m.agent_id == agent_id) {
-                    continue;
-                }
-                let label = chat_room::persona_label(t, persona.id);
-                if ui.small_button(label).clicked() {
-                    let _ = self.cmd_tx.send(Cmd::RoomAddPersona {
-                        session_id: session_id.to_string(),
-                        persona_id: persona.id.to_string(),
-                        model_id: model_id.clone(),
-                    });
                 }
             }
         });
@@ -4411,10 +4391,6 @@ impl UiApp {
                     self.ui_room_member_chip(ui, t, &sid, mem);
                 }
             });
-        }
-
-        if room {
-            self.ui_room_persona_shortcuts(ui, t, &sid, members, model_id);
         }
 
         ui.add_space(4.0);
@@ -5507,6 +5483,50 @@ impl UiApp {
         }
     }
 
+    fn send_agents_page_create(&mut self, room_active: bool, library: bool) {
+        let join_active_room = room_active && self.agent_join_room_on_create;
+        let documents: Vec<DocumentRef> = self
+            .agent_docs
+            .split(',')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(|p| DocumentRef {
+                path: p.to_string(),
+                label: p.to_string(),
+            })
+            .collect();
+        let session_id = if library || join_active_room {
+            self.active_session.clone()
+        } else {
+            None
+        };
+        let _ = self.cmd_tx.send(Cmd::AgentCreate {
+            display_name: self.agent_display_name.clone(),
+            task: self.agent_task.clone(),
+            system_prompt: if self.agent_system_prompt.is_empty() {
+                None
+            } else {
+                Some(self.agent_system_prompt.clone())
+            },
+            skills: self.skill_selected.clone(),
+            tools: self.tool_selected.clone(),
+            mcp_servers: self.mcp_selected.clone(),
+            documents,
+            optimize_prompt: false,
+            max_steps: self.agent_max_steps,
+            timeout_secs: self.agent_timeout_secs,
+            model_id: if self.agent_model_id.is_empty() {
+                None
+            } else {
+                Some(self.agent_model_id.clone())
+            },
+            session_id,
+            origin: "library".into(),
+            join_active_room,
+            library,
+        });
+    }
+
     fn ui_agents(&mut self, ui: &mut egui::Ui) {
         let t = i18n::strings(&self.prefs.language);
         ui.heading(t.tab_agents);
@@ -5515,7 +5535,7 @@ impl UiApp {
         if ui.button(t.agents_refresh_catalogs).clicked() {
             let _ = self.cmd_tx.send(Cmd::AgentCatalogRefresh);
         }
-        ui.label(t.agents_display_name);
+        ui.label(t.agents_label);
         ui.text_edit_singleline(&mut self.agent_display_name);
         ui.label(t.agents_role);
         ui.weak(t.agents_role_optional);
@@ -5652,43 +5672,24 @@ impl UiApp {
             );
         }
 
-        if ui.button(t.agents_create).clicked() && !self.agent_display_name.trim().is_empty() {
-            let documents: Vec<DocumentRef> = self
-                .agent_docs
-                .split(',')
-                .map(|s| s.trim())
-                .filter(|s| !s.is_empty())
-                .map(|p| DocumentRef {
-                    path: p.to_string(),
-                    label: p.to_string(),
-                })
-                .collect();
-            let _ = self.cmd_tx.send(Cmd::AgentCreate {
-                display_name: self.agent_display_name.clone(),
-                task: self.agent_task.clone(),
-                system_prompt: if self.agent_system_prompt.is_empty() {
-                    None
+        ui.horizontal(|ui| {
+            let can_create = !self.agent_display_name.trim().is_empty();
+            if ui
+                .add_enabled(can_create, egui::Button::new(t.agents_create))
+                .clicked()
+            {
+                self.send_agents_page_create(room_active, true);
+            }
+            if ui.button(t.agents_create_task).clicked() {
+                if !can_create {
+                    self.status = t.agents_label_required.into();
+                } else if self.agent_task.trim().is_empty() {
+                    self.status = t.agents_task_goal_required.into();
                 } else {
-                    Some(self.agent_system_prompt.clone())
-                },
-                skills: self.skill_selected.clone(),
-                tools: self.tool_selected.clone(),
-                mcp_servers: self.mcp_selected.clone(),
-                documents,
-                optimize_prompt: false,
-                max_steps: self.agent_max_steps,
-                timeout_secs: self.agent_timeout_secs,
-                model_id: if self.agent_model_id.is_empty() {
-                    None
-                } else {
-                    Some(self.agent_model_id.clone())
-                },
-                session_id: self.active_session.clone(),
-                origin: "library".into(),
-                join_active_room: room_active && self.agent_join_room_on_create,
-                library: true,
-            });
-        }
+                    self.send_agents_page_create(room_active, false);
+                }
+            }
+        });
 
         ui.separator();
         ui.horizontal(|ui| {
@@ -5771,11 +5772,8 @@ impl UiApp {
                 icons::child_branch(ui);
             }
             let selected = self.agent_active_tab.as_deref() == Some(a.agent_id.as_str());
-            let label = if let Some(pid) = a.persona_id.as_deref() {
-                chat_room::persona_label(&t, pid).to_string()
-            } else {
-                agent_panel::truncate(a.display_title(), 48)
-            };
+            let label = chat_room::roster_agent_label(&t, a);
+            let label = agent_panel::truncate(&label, 48);
             if ui.selectable_label(selected, &label).on_hover_text(&a.agent_id).clicked()
             {
                 self.open_agent_tab(&a.agent_id);

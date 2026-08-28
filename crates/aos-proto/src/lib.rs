@@ -450,6 +450,9 @@ pub struct AgentSpec {
     /// `ask` (défaut) : phrase FR + Allow Once dans le fil ; `autonomous` : pas de gate inline.
     #[serde(default = "default_agent_gate_mode")]
     pub gate_mode: String,
+    /// `library` | `form` | `slash` | `assistant` | `room` — provenance de création.
+    #[serde(default)]
+    pub origin: Option<String>,
 }
 
 fn default_agent_gate_mode() -> String {
@@ -515,6 +518,9 @@ pub struct AgentCreateRequest {
     /// `ask` | `autonomous` — gate inline des actions mutantes dans le fil chat.
     #[serde(default = "default_agent_gate_mode")]
     pub gate_mode: String,
+    /// `library` | `form` | `slash` | `assistant` | `room` — provenance de création.
+    #[serde(default)]
+    pub origin: Option<String>,
 }
 
 impl AgentCreateRequest {
@@ -550,6 +556,7 @@ impl AgentCreateRequest {
             budget: AgentBudget::default(),
             optimize_prompt: false,
             gate_mode: default_agent_gate_mode(),
+            origin: None,
         }
     }
 
@@ -784,9 +791,27 @@ pub struct AgentInfo {
     pub display_name: Option<String>,
     #[serde(default)]
     pub persona_id: Option<String>,
+    /// `library` | `form` | `slash` | `assistant` | `room` — provenance de création.
+    #[serde(default)]
+    pub origin: Option<String>,
 }
 
 impl AgentInfo {
+    /// User-typed Agents tab label (`display_name`), not a built-in persona i18n key.
+    pub fn uses_typed_display_name(&self) -> bool {
+        self.display_name.as_deref().is_some_and(|n| !n.trim().is_empty())
+            && self.persona_id.is_none()
+            && matches!(self.origin.as_deref(), Some("library") | Some("form"))
+    }
+
+    /// Ephemeral chat spawn (`/agent`, delegate) — excluded from salon picker.
+    pub fn is_ephemeral_chat_spawn(&self) -> bool {
+        matches!(
+            self.origin.as_deref(),
+            Some("assistant") | Some("slash")
+        )
+    }
+
     pub fn display_title(&self) -> &str {
         if let Some(n) = self.display_name.as_deref() {
             let t = n.trim();
@@ -4093,6 +4118,7 @@ mod chat_session_room_tests {
             kind: AgentKind::Roster,
             display_name: Some("Coder".into()),
             persona_id: Some("coder".into()),
+            origin: None,
         };
         assert_eq!(info.display_title(), "Coder");
         assert!(info.is_roster());
@@ -4110,5 +4136,45 @@ mod chat_session_room_tests {
             ..Default::default()
         });
         assert!(req.spawns_worker());
+    }
+
+    #[test]
+    fn typed_display_name_and_ephemeral_origin() {
+        let custom = AgentInfo {
+            agent_id: "agent-1".into(),
+            state: AgentState::Roster,
+            directive: String::new(),
+            pid: None,
+            caps: vec![],
+            last_output: String::new(),
+            step: 0,
+            max_steps: 0,
+            current_task: None,
+            parent_id: None,
+            children: vec![],
+            tokens_used: 0,
+            skills: vec![],
+            tools: vec![],
+            mcp_servers: vec![],
+            fail_reason: None,
+            session_id: None,
+            title: String::new(),
+            kind: AgentKind::Roster,
+            display_name: Some("Skills Auditor".into()),
+            persona_id: None,
+            origin: Some("library".into()),
+        };
+        assert!(custom.uses_typed_display_name());
+        assert!(!custom.is_ephemeral_chat_spawn());
+
+        let delegate = AgentInfo {
+            origin: Some("assistant".into()),
+            kind: AgentKind::Task,
+            display_name: Some("Summarize".into()),
+            persona_id: None,
+            ..custom.clone()
+        };
+        assert!(!delegate.uses_typed_display_name());
+        assert!(delegate.is_ephemeral_chat_spawn());
     }
 }

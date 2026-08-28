@@ -2,6 +2,7 @@
 
 use crate::cmd::{Cmd, Evt};
 use crate::chat_room;
+use crate::i18n;
 use crate::os_open::{aos_home, bin_aos_session};
 use crate::{
     agent_id_cmd, agent_panel, chat_delegate_agent_spec, chrono_like_stamp, format_local_time_hm,
@@ -1260,7 +1261,8 @@ async fn handle_cmd(
         } => {
             let name = display_name.trim().to_string();
             if name.is_empty() {
-                let _ = evt_tx.send(Evt::Error("display_name requis".into()));
+                let t = i18n::strings(&crate::prefs::load_preferences().language);
+                let _ = evt_tx.send(Evt::Error(t.agents_label_required.into()));
                 return;
             }
             let has_goal = !library && !task.trim().is_empty();
@@ -1275,6 +1277,7 @@ async fn handle_cmd(
                 AgentKind::Task
             };
             req.display_name = Some(name.clone());
+            req.origin = Some(origin.clone());
             if library {
                 let role = task.trim();
                 req.system_prompt = if system_prompt.is_some() {
@@ -1359,18 +1362,41 @@ async fn handle_cmd(
                         }
                     }
                     if library {
-                        let _ = evt_tx.send(Evt::Status(format!(
-                            "« {name} » ajouté à la bibliothèque ({})",
-                            r.agent_id
-                        )));
-                    } else if let Some(sid) = session_id {
-                        let ack = if has_goal {
-                            format!("Agent {} lancé en fond.", r.agent_id)
+                        if let Ok(list) = bus
+                            .call::<(), Vec<AgentInfo>>(aos_agent::intents::LIST, &(), vec![])
+                            .await
+                        {
+                            let _ = evt_tx.send(Evt::Agents(list));
+                        }
+                        let t = i18n::strings(&crate::prefs::load_preferences().language);
+                        let _ = evt_tx.send(Evt::Status(
+                            t.agents_library_added
+                                .replace("{name}", &name)
+                                .replace("{id}", &r.agent_id),
+                        ));
+                    } else if origin == "library" {
+                        if let Ok(list) = bus
+                            .call::<(), Vec<AgentInfo>>(aos_agent::intents::LIST, &(), vec![])
+                            .await
+                        {
+                            let _ = evt_tx.send(Evt::Agents(list));
+                        }
+                        let t = i18n::strings(&crate::prefs::load_preferences().language);
+                        let msg = if has_goal {
+                            t.agents_task_launched.replace("{id}", &r.agent_id)
                         } else {
-                            format!("Agent roster {} enregistré.", r.agent_id)
+                            t.agents_roster_registered.replace("{id}", &r.agent_id)
+                        };
+                        let _ = evt_tx.send(Evt::Status(msg));
+                    } else if let Some(sid) = session_id {
+                        let t = i18n::strings(&crate::prefs::load_preferences().language);
+                        let ack = if has_goal {
+                            t.agents_task_launched.replace("{id}", &r.agent_id)
+                        } else {
+                            t.agents_roster_registered.replace("{id}", &r.agent_id)
                         };
                         let card_title = if has_goal {
-                            task.clone()
+                            name.clone()
                         } else {
                             name.clone()
                         };
@@ -1401,11 +1427,17 @@ async fn handle_cmd(
                             ack,
                         });
                     } else {
-                        let _ = evt_tx.send(Evt::Status(format!(
-                            "agent {} : {}",
-                            r.agent_id,
-                            if has_goal { "créé" } else { "roster enregistré" }
-                        )));
+                        let t = i18n::strings(&crate::prefs::load_preferences().language);
+                        let kind = if has_goal {
+                            t.agents_status_created
+                        } else {
+                            t.agents_status_roster
+                        };
+                        let _ = evt_tx.send(Evt::Status(
+                            t.agents_created_status
+                                .replace("{id}", &r.agent_id)
+                                .replace("{kind}", kind),
+                        ));
                     }
                 }
                 Err(e) => {

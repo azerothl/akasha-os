@@ -92,6 +92,7 @@ pub fn roster_spec_from_request(agent_id: &str, req: &AgentCreateRequest) -> Age
         budget: req.budget.clone(),
         optimize_prompt: req.optimize_prompt,
         gate_mode: req.gate_mode.clone(),
+        origin: req.origin.clone(),
     }
 }
 
@@ -110,5 +111,20 @@ mod tests {
         let req = persona_create_request(p, None);
         assert!(!req.spawns_worker());
         assert_eq!(req.display_name.as_deref(), Some("Coder"));
+    }
+
+    #[test]
+    fn roster_spec_preserves_user_display_name() {
+        let mut req = AgentCreateRequest::simple(String::new());
+        req.kind = AgentKind::Roster;
+        req.display_name = Some("Skills Auditor".into());
+        req.origin = Some("library".into());
+        req.system_prompt = Some("You review skill manifests.".into());
+        let spec = roster_spec_from_request("agent-42", &req);
+        assert_eq!(spec.display_name.as_deref(), Some("Skills Auditor"));
+        assert_eq!(spec.kind, AgentKind::Roster);
+        assert_eq!(spec.goal.max_steps, 0);
+        assert!(spec.goal.statement.is_empty());
+        assert_eq!(spec.origin.as_deref(), Some("library"));
     }
 }
