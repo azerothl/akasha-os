@@ -565,6 +565,7 @@ pub async fn execute_room_conduct(
     let max = effective_max_turns(&session.meta.conductor_policy) as usize;
     let mut queue =
         sanitize_member_queue(build_initial_queue(&req.content, &session.meta.members), &session.meta.members);
+    queue.truncate(max);
     if queue.is_empty() {
         return Ok(AgentRoomConductResponse {
             agent_turns: 0,

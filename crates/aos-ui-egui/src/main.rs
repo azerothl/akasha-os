@@ -4451,6 +4451,7 @@ impl UiApp {
         t: &i18n::UiStrings,
         room_mode: bool,
         room_members: &[ChatRoomMember],
+        room_conductor_policy: Option<&aos_proto::ChatRoomConductorPolicy>,
         scroll_h: f32,
     ) {
         egui::ScrollArea::vertical()
@@ -4703,7 +4704,12 @@ impl UiApp {
                         self.room_turn_pending_text
                             .as_deref()
                             .and_then(|msg| {
-                                chat_room::format_turn_speaker_queue(t, msg, room_members)
+                                chat_room::format_turn_speaker_queue(
+                                    t,
+                                    msg,
+                                    room_members,
+                                    room_conductor_policy,
+                                )
                             })
                             .unwrap_or_else(|| t.chat_assistant.to_string())
                     } else {
@@ -4977,12 +4983,14 @@ impl UiApp {
                         &self.sessions,
                         self.active_session.as_deref(),
                     ));
-                    let room_members: Vec<ChatRoomMember> = chat_room::active_session_meta(
+                    let room_session_meta = chat_room::active_session_meta(
                         &self.sessions,
                         self.active_session.as_deref(),
-                    )
-                    .map(|m| m.members.clone())
-                    .unwrap_or_default();
+                    );
+                    let room_members: Vec<ChatRoomMember> = room_session_meta
+                        .map(|m| m.members.clone())
+                        .unwrap_or_default();
+                    let room_conductor_policy = room_session_meta.map(|m| m.conductor_policy.clone());
                     let canvas_open = chat_room::active_session_meta(
                         &self.sessions,
                         self.active_session.as_deref(),
@@ -5044,6 +5052,7 @@ impl UiApp {
                                                 &t,
                                                 room_mode,
                                                 &room_members,
+                                                room_conductor_policy.as_ref(),
                                                 content_h,
                                             );
                                         },
@@ -5080,6 +5089,7 @@ impl UiApp {
                                     &t,
                                     room_mode,
                                     &room_members,
+                                    room_conductor_policy.as_ref(),
                                     content_h,
                                 );
                             }

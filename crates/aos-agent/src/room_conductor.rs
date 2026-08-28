@@ -134,15 +134,13 @@ pub fn pick_first_speaker(content: &str, members: &[ChatRoomMember]) -> Option<S
     Some(members[0].agent_id.clone())
 }
 
-/// File initiale : `@` roster uniquement ; `@` invalide → rien ; sans `@` → heuristique membre strip.
+/// File initiale : `@` roster uniquement ; `@` invalide → rien ; sans `@` → tous les membres (ordre strip).
 pub fn build_initial_queue(content: &str, members: &[ChatRoomMember]) -> Vec<String> {
     if content_has_mention_tokens(content) {
         return sanitize_member_queue(parse_mentions(content, members), members);
     }
     sanitize_member_queue(
-        pick_first_speaker(content, members)
-            .into_iter()
-            .collect(),
+        members.iter().map(|m| m.agent_id.clone()).collect(),
         members,
     )
 }
@@ -252,7 +250,42 @@ mod tests {
         )
         .is_none());
         let queue = build_initial_queue("Hello everyone", &m);
-        assert_eq!(queue.len(), 1);
+        assert_eq!(
+            queue,
+            vec![
+                String::from("agent-alpha"),
+                String::from("agent-beta"),
+                String::from("agent-gamma"),
+            ]
+        );
+    }
+
+    #[test]
+    fn no_mention_queues_all_members_in_strip_order() {
+        let m = members();
+        let queue = build_initial_queue("Review this sketch", &m);
+        assert_eq!(
+            queue,
+            vec![
+                String::from("agent-alpha"),
+                String::from("agent-beta"),
+                String::from("agent-gamma"),
+            ]
+        );
+    }
+
+    #[test]
+    fn no_mention_initial_queue_capped_by_effective_max_turns() {
+        let policy = ChatRoomConductorPolicy {
+            max_agent_turns_per_user: 1,
+            allow_peer_debate: false,
+        };
+        let max = effective_max_turns(&policy) as usize;
+        let m = members();
+        let queue = build_initial_queue("Hello everyone", &m);
+        let capped: Vec<_> = queue.into_iter().take(max).collect();
+        assert_eq!(capped.len(), 1);
+        assert_eq!(capped[0], "agent-alpha");
     }
 
     #[test]
