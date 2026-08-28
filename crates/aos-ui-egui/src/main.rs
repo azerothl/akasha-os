@@ -1609,7 +1609,7 @@ struct UiApp {
     /// Méta du rapport de dépannage (préservée pour la remontée d'issue).
     fb_diag_meta: Option<serde_json::Value>,
     chat_md_cache: CommonMarkCache,
-    update_offer: Option<UpdateOffer>,
+    update_download_child: Option<std::process::Child>,
     update_status: String,
     model_infos: Vec<ModelInfo>,
     providers: Vec<ProviderRecord>,
@@ -1901,7 +1901,7 @@ impl UiApp {
             fb_dir: None,
             fb_diag_meta: None,
             chat_md_cache: CommonMarkCache::default(),
-            update_offer: load_update_offer(),
+            update_download_child: None,
             update_status: String::new(),
             model_infos: Vec::new(),
             providers: Vec::new(),
@@ -2783,6 +2783,49 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             });
     }
 
+    fn start_update_download(&mut self) {
+        if self.update_download_child.is_some() {
+            return;
+        }
+        let session = bin_aos_session();
+        match std::process::Command::new(&session)
+            .arg("--download-update")
+            .env("AOS_HOME", aos_home())
+            .spawn()
+        {
+            Ok(child) => {
+                self.update_download_child = Some(child);
+                self.update_status.clear();
+            }
+            Err(_) => {
+                let t = i18n::strings(&self.prefs.language);
+                self.update_status = t.status_update_download_failed.into();
+            }
+        }
+    }
+
+    fn poll_update_download(&mut self) {
+        let Some(ref mut child) = self.update_download_child else {
+            return;
+        };
+        let t = i18n::strings(&self.prefs.language);
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                self.update_download_child = None;
+                if status.success() && load_pending_update_version().is_some() {
+                    self.update_status.clear();
+                } else if !status.success() {
+                    self.update_status = t.status_update_download_failed.into();
+                }
+            }
+            Ok(None) => {}
+            Err(_) => {
+                self.update_download_child = None;
+                self.update_status = t.status_update_download_failed.into();
+            }
+        }
+    }
+
     fn ui_status_bar(&mut self, ui: &mut egui::Ui, t: &i18n::UiStrings) {
         ui.horizontal(|ui| {
             let net_label = if self.network_online {
@@ -2839,8 +2882,26 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             ui.separator();
             if let Some(pending_ver) = load_pending_update_version() {
                 ui.label(t.status_update_pending.replace("{version}", &pending_ver));
-            } else if let Some(offer) = &self.update_offer {
+                if let Some(offer) = load_update_offer() {
+                    if ui.small_button(t.update_notes).clicked() {
+                        open_in_browser(&offer.html_url);
+                    }
+                }
+            } else if self.update_download_child.is_some() {
+                let ver = load_update_offer()
+                    .map(|o| o.version)
+                    .unwrap_or_else(|| "…".into());
+                ui.label(t.status_update_downloading.replace("{version}", &ver));
+            } else if let Some(offer) = load_update_offer() {
                 ui.label(t.update_available.replace("{}", &offer.version));
+                if ui.small_button(t.status_update_download).clicked() {
+                    self.start_update_download();
+                }
+                if ui.small_button(t.update_notes).clicked() {
+                    open_in_browser(&offer.html_url);
+                }
+            } else if !self.update_status.is_empty() {
+                ui.label(&self.update_status);
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let lang_btn = if self.prefs.language.eq_ignore_ascii_case("en") {
@@ -2934,6 +2995,7 @@ impl eframe::App for UiApp {
         theme::apply_theme(ctx, &self.prefs.theme);
         theme::apply_ui_scale(ctx, self.prefs.ui_scale_percent);
         self.handle_keyboard_shortcuts(ctx);
+        self.poll_update_download();
         while let Ok(ev) = self.evt_rx.try_recv() {
             match ev {
                 Evt::Delta(t) => self.streaming.push_str(&t),
@@ -3898,50 +3960,6 @@ impl eframe::App for UiApp {
                     }
                 });
             });
-            if let Some(pending_ver) = load_pending_update_version() {
-                ui.horizontal(|ui| {
-                    ui.colored_label(
-                        egui::Color32::from_rgb(120, 200, 140),
-                        t.update_pending_restart.replace("{}", &pending_ver),
-                    );
-                    if let Some(offer) = self.update_offer.clone() {
-                        if ui.button(t.update_notes).clicked() {
-                            open_in_browser(&offer.html_url);
-                        }
-                    }
-                });
-            } else if let Some(offer) = self.update_offer.clone() {
-                ui.horizontal(|ui| {
-                    ui.colored_label(
-                        egui::Color32::from_rgb(100, 180, 255),
-                        t.update_available.replace("{}", &offer.version),
-                    );
-                    if ui.button(t.update_notes).clicked() {
-                        open_in_browser(&offer.html_url);
-                    }
-                    if ui.button(t.update_download).clicked() {
-                        let session = bin_aos_session();
-                        match std::process::Command::new(&session)
-                            .arg("--download-update")
-                            .env("AOS_HOME", aos_home())
-                            .status()
-                        {
-                            Ok(st) if st.success() => {
-                                self.update_status =
-                                    t.update_downloaded.replace("{}", &offer.version);
-                            }
-                            Ok(st) => {
-                                self.update_status =
-                                    t.update_fail_exit.replace("{}", &st.to_string());
-                            }
-                            Err(e) => {
-                                self.update_status =
-                                    t.update_fail.replace("{}", &e.to_string());
-                            }
-                        }
-                    }
-                });
-            }
             if !self.model_updates_msg.is_empty() {
                 ui.horizontal(|ui| {
                     ui.colored_label(
@@ -3955,9 +3973,6 @@ impl eframe::App for UiApp {
             }
             if self.model_download_restart.is_some() {
                 self.ui_model_download_restart(ui, ctx);
-            }
-            if !self.update_status.is_empty() {
-                ui.label(&self.update_status);
             }
             if !self.status.is_empty() {
                 ui.label(&self.status);
