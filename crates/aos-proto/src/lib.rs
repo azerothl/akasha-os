@@ -3023,10 +3023,43 @@ pub enum ChatAttachment {
         #[serde(default = "default_agent_act_state")]
         state: String,
     },
+    /// Pending schedule act in chat (Allow once / Deny before creating).
+    ScheduleAct {
+        act_id: String,
+        /// User's original phrase (card title after approval).
+        #[serde(default)]
+        display_phrase: String,
+        goal: String,
+        when_label: String,
+        interval_secs: u64,
+        next_fire_ms: u64,
+        /// `pending` | `approved` | `denied`
+        #[serde(default = "default_agent_act_state")]
+        state: String,
+        /// Set after approval when schedule is created.
+        #[serde(default)]
+        schedule_id: String,
+    },
+    /// Live schedule card in the chat thread.
+    ScheduleCard {
+        schedule_id: String,
+        /// Human phrase the user typed.
+        title: String,
+        goal: String,
+        interval_secs: u64,
+        next_fire_ms: u64,
+        /// `live` | `paused` | `stopped`
+        #[serde(default = "default_schedule_card_state")]
+        state: String,
+    },
 }
 
 fn default_agent_act_state() -> String {
     "pending".into()
+}
+
+fn default_schedule_card_state() -> String {
+    "live".into()
 }
 
 impl ChatAttachment {
@@ -3041,7 +3074,9 @@ impl ChatAttachment {
             | Self::Audio { .. }
             | Self::TtsDraft { .. }
             | Self::Document { .. }
-            | Self::AgentAct { .. } => None,
+            | Self::AgentAct { .. }
+            | Self::ScheduleAct { .. }
+            | Self::ScheduleCard { .. } => None,
         }
     }
 
