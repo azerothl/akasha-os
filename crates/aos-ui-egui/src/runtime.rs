@@ -1351,6 +1351,20 @@ async fn handle_cmd(
                                 .replace("{name}", &name)
                                 .replace("{id}", &r.agent_id),
                         ));
+                    } else if origin == "library" {
+                        if let Ok(list) = bus
+                            .call::<(), Vec<AgentInfo>>(aos_agent::intents::LIST, &(), vec![])
+                            .await
+                        {
+                            let _ = evt_tx.send(Evt::Agents(list));
+                        }
+                        let t = i18n::strings(&crate::prefs::load_preferences().language);
+                        let msg = if has_goal {
+                            t.agents_task_launched.replace("{id}", &r.agent_id)
+                        } else {
+                            t.agents_roster_registered.replace("{id}", &r.agent_id)
+                        };
+                        let _ = evt_tx.send(Evt::Status(msg));
                     } else if let Some(sid) = session_id {
                         let t = i18n::strings(&crate::prefs::load_preferences().language);
                         let ack = if has_goal {

@@ -5417,6 +5417,50 @@ impl UiApp {
         }
     }
 
+    fn send_agents_page_create(&mut self, room_active: bool, library: bool) {
+        let join_active_room = room_active && self.agent_join_room_on_create;
+        let documents: Vec<DocumentRef> = self
+            .agent_docs
+            .split(',')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(|p| DocumentRef {
+                path: p.to_string(),
+                label: p.to_string(),
+            })
+            .collect();
+        let session_id = if library || join_active_room {
+            self.active_session.clone()
+        } else {
+            None
+        };
+        let _ = self.cmd_tx.send(Cmd::AgentCreate {
+            display_name: self.agent_display_name.clone(),
+            task: self.agent_task.clone(),
+            system_prompt: if self.agent_system_prompt.is_empty() {
+                None
+            } else {
+                Some(self.agent_system_prompt.clone())
+            },
+            skills: self.skill_selected.clone(),
+            tools: self.tool_selected.clone(),
+            mcp_servers: self.mcp_selected.clone(),
+            documents,
+            optimize_prompt: false,
+            max_steps: self.agent_max_steps,
+            timeout_secs: self.agent_timeout_secs,
+            model_id: if self.agent_model_id.is_empty() {
+                None
+            } else {
+                Some(self.agent_model_id.clone())
+            },
+            session_id,
+            origin: "library".into(),
+            join_active_room,
+            library,
+        });
+    }
+
     fn ui_agents(&mut self, ui: &mut egui::Ui) {
         let t = i18n::strings(&self.prefs.language);
         ui.heading(t.tab_agents);
@@ -5562,43 +5606,24 @@ impl UiApp {
             );
         }
 
-        if ui.button(t.agents_create).clicked() && !self.agent_display_name.trim().is_empty() {
-            let documents: Vec<DocumentRef> = self
-                .agent_docs
-                .split(',')
-                .map(|s| s.trim())
-                .filter(|s| !s.is_empty())
-                .map(|p| DocumentRef {
-                    path: p.to_string(),
-                    label: p.to_string(),
-                })
-                .collect();
-            let _ = self.cmd_tx.send(Cmd::AgentCreate {
-                display_name: self.agent_display_name.clone(),
-                task: self.agent_task.clone(),
-                system_prompt: if self.agent_system_prompt.is_empty() {
-                    None
+        ui.horizontal(|ui| {
+            let can_create = !self.agent_display_name.trim().is_empty();
+            if ui
+                .add_enabled(can_create, egui::Button::new(t.agents_create))
+                .clicked()
+            {
+                self.send_agents_page_create(room_active, true);
+            }
+            if ui.button(t.agents_create_task).clicked() {
+                if !can_create {
+                    self.status = t.agents_label_required.into();
+                } else if self.agent_task.trim().is_empty() {
+                    self.status = t.agents_task_goal_required.into();
                 } else {
-                    Some(self.agent_system_prompt.clone())
-                },
-                skills: self.skill_selected.clone(),
-                tools: self.tool_selected.clone(),
-                mcp_servers: self.mcp_selected.clone(),
-                documents,
-                optimize_prompt: false,
-                max_steps: self.agent_max_steps,
-                timeout_secs: self.agent_timeout_secs,
-                model_id: if self.agent_model_id.is_empty() {
-                    None
-                } else {
-                    Some(self.agent_model_id.clone())
-                },
-                session_id: self.active_session.clone(),
-                origin: "library".into(),
-                join_active_room: room_active && self.agent_join_room_on_create,
-                library: true,
-            });
-        }
+                    self.send_agents_page_create(room_active, false);
+                }
+            }
+        });
 
         ui.separator();
         ui.horizontal(|ui| {

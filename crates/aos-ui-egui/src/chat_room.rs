@@ -137,7 +137,8 @@ pub fn is_salon_picker_candidate(agent: &AgentInfo) -> bool {
     if agent.is_roster() {
         return true;
     }
-    matches!(agent.origin.as_deref(), Some("library") | Some("form"))
+    agent.kind == AgentKind::Task
+        && matches!(agent.origin.as_deref(), Some("library") | Some("form"))
 }
 
 /// Roster library entries not yet in this session.
@@ -515,6 +516,18 @@ mod tests {
             ),
             "Module Author"
         );
+    }
+
+    #[test]
+    fn active_page_task_agent_with_library_origin_in_picker() {
+        let t = i18n::strings("en");
+        let mut agent = page_task_agent("agent-11", "Skills Runner");
+        agent.origin = Some("library".into());
+        agent.state = AgentState::Running;
+        agent.pid = Some(4242);
+        assert!(is_salon_picker_candidate(&agent));
+        let candidates = library_add_candidates(&[agent], &[], &t);
+        assert!(candidates.iter().any(|a| a.agent_id == "agent-11"));
     }
 
     #[test]
