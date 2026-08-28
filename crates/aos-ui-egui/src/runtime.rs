@@ -1598,7 +1598,7 @@ async fn handle_cmd(
                         "action refusée".into()
                     }));
                 }
-                Ok(other) => {
+                Ok(_other) => {
                     let _ = evt_tx.send(Evt::Error("act decision: réponse inattendue".into()));
                 }
                 Err(e) => {

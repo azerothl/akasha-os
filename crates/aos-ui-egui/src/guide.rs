@@ -1,7 +1,7 @@
 //! In-app feature guides (EN/FR) — scrollable help surface, not a website or mill.
 
 use crate::Tab;
-use eframe::egui::{self, Color32, Pos2, Rect, Shape, Stroke, Vec2};
+use eframe::egui::{self, Color32, Pos2, Rect, Stroke, Vec2};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum GuideTopic {
@@ -611,7 +611,7 @@ fn render_create(ui: &mut egui::Ui, g: &GuideStrings) {
 
 fn render_stub(
     ui: &mut egui::Ui,
-    g: &GuideStrings,
+    _g: &GuideStrings,
     intro: &str,
     options: &[(&str, &str)],
     figure: FigureKind,
@@ -687,8 +687,8 @@ fn paint_figure(ui: &mut egui::Ui, kind: FigureKind) {
     }
     let signal = Color32::from_rgb(62, 224, 196);
     let mute = ui.visuals().weak_text_color();
-    let stroke = Stroke::new(1.2, signal);
-    let faint = Stroke::new(1.0, mute);
+    let stroke = Stroke::new(1.2_f32, signal);
+    let faint = Stroke::new(1.0_f32, mute);
     let p = ui.painter_at(rect);
     match kind {
         FigureKind::CreateFlow => {
@@ -750,7 +750,7 @@ fn paint_figure(ui: &mut egui::Ui, kind: FigureKind) {
             p.rect_stroke(img, 2.0, faint, egui::StrokeKind::Inside);
             let mask = Rect::from_min_size(img.left_top() + Vec2::new(70.0, 4.0), Vec2::new(44.0, 22.0));
             p.rect_filled(mask, 2.0, Color32::from_rgba_unmultiplied(232, 93, 76, 90));
-            p.rect_stroke(mask, 2.0, Stroke::new(1.5, Color32::from_rgb(232, 93, 76)), egui::StrokeKind::Inside);
+            p.rect_stroke(mask, 2.0, Stroke::new(1.5_f32, Color32::from_rgb(232, 93, 76)), egui::StrokeKind::Inside);
         }
         FigureKind::Video => {
             let mut x = rect.left() + 12.0;
@@ -798,7 +798,7 @@ fn paint_figure(ui: &mut egui::Ui, kind: FigureKind) {
             for (i, dx) in [(0.0_f32), (28.0), (56.0)].iter().enumerate() {
                 let c = board_center(rect) + Vec2::new(dx - 28.0, 0.0);
                 let col = if i == 1 { signal } else { mute };
-                p.circle_stroke(c, 14.0, Stroke::new(1.2, col));
+                p.circle_stroke(c, 14.0, Stroke::new(1.2_f32, col));
             }
         }
         FigureKind::Memory => {

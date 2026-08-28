@@ -21,7 +21,7 @@ pub fn close_button(ui: &mut Ui) -> Response {
     if ui.is_rect_visible(rect) {
         let c = rect.center();
         let r = rect.width() * 0.22;
-        let stroke = Stroke::new(1.5, hover_color(ui, &response));
+        let stroke = Stroke::new(1.5_f32, hover_color(ui, &response));
         let painter = ui.painter();
         painter.line_segment([c + Vec2::new(-r, -r), c + Vec2::new(r, r)], stroke);
         painter.line_segment([c + Vec2::new(-r, r), c + Vec2::new(r, -r)], stroke);
