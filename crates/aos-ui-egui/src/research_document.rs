@@ -43,6 +43,11 @@ pub fn read_logical_markdown(path: &str) -> Option<String> {
     std::fs::read_to_string(host).ok()
 }
 
+/// Square window chrome for document overlay + list (not rounded slide/card).
+pub(crate) fn square_document_window_frame(style: &egui::Style) -> egui::Frame {
+    egui::Frame::window(style).corner_radius(egui::CornerRadius::ZERO)
+}
+
 pub fn show_document_overlay(
     ctx: &egui::Context,
     overlay: &mut DocumentOverlayState,
@@ -64,6 +69,7 @@ pub fn show_document_overlay(
     egui::Window::new(&title)
         .collapsible(false)
         .resizable(true)
+        .frame(square_document_window_frame(&ctx.style()))
         .default_size(default_size)
         .min_size(min_size)
         .max_size(max_size)
@@ -78,6 +84,7 @@ pub fn show_document_overlay(
                 .max_height(body_h)
                 .show(ui, |ui| {
                     ui.set_min_width(ui.available_width() - 8.0_f32);
+                    // Prepared research output is a markdown document (CommonMark), not a slide deck.
                     CommonMarkViewer::new().show(ui, md_cache, &body);
                 });
             ui.separator();
@@ -114,6 +121,7 @@ pub fn show_documents_list(
     egui::Window::new(t.documents_list_title)
         .collapsible(false)
         .resizable(true)
+        .frame(square_document_window_frame(&ctx.style()))
         .default_size([default_size[0], default_size[1].min(420.0_f32)])
         .min_size(min_size)
         .max_size(max_size)
@@ -212,6 +220,25 @@ pub fn progress_attachment(question: &str, agent_id: &str) -> ChatAttachment {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn document_window_frame_is_square() {
+        let style = egui::Style::default();
+        let frame = square_document_window_frame(&style);
+        assert_eq!(frame.corner_radius, egui::CornerRadius::ZERO);
+    }
+
+    #[test]
+    fn open_document_title_is_question_not_path() {
+        let mut overlay = DocumentOverlayState::default();
+        open_document(
+            &mut overlay,
+            "What is agentic?",
+            "/downloads/research-agentic.md",
+        );
+        assert_eq!(overlay.title, "What is agentic?");
+        assert!(!overlay.title.contains(".md"));
+    }
 
     #[test]
     fn overlay_sizes_respect_viewport() {
