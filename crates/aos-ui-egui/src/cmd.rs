@@ -78,6 +78,9 @@ pub(crate) enum Cmd {
         path: String,
         topic: String,
     },
+    UserLibraryList,
+    UserLibraryAdd { path: String },
+    UserLibraryRemove { id: String },
     Confirm { id: String, approved: bool },
     AgentCreate {
         display_name: String,
@@ -319,6 +322,7 @@ pub(crate) enum Evt {
     NoteLoaded(notes_panel::NoteDetail),
     NotesSearchHits(Vec<notes_panel::NoteSearchHit>),
     NotesRelated(Vec<notes_panel::NoteRelatedHit>),
+    UserLibraryListed(Vec<aos_proto::UserLibraryDoc>),
     NotesSaved {
         path: String,
         slug: String,

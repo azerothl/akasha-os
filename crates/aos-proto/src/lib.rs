@@ -3265,6 +3265,9 @@ pub struct MemContextRequest {
     /// Top-k product-doc RAG hits (`product:docs`). 0 = default (4).
     #[serde(default)]
     pub product_k: usize,
+    /// Top-k user-library hits (`user:docs`). 0 = default (3).
+    #[serde(default)]
+    pub user_doc_k: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -3274,7 +3277,52 @@ pub struct MemContextResponse {
     /// Extraíts docs Preview (FEATURES / STATUS / TESTER).
     #[serde(default)]
     pub product_hits: Vec<MemHit>,
+    /// Extraits bibliothèque personnelle (`user:docs`).
+    #[serde(default)]
+    pub user_doc_hits: Vec<MemHit>,
     pub prompt_block: String,
+}
+
+/// User document library — list manifest entries.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct UserLibraryListResponse {
+    #[serde(default)]
+    pub docs: Vec<UserLibraryDoc>,
+}
+
+/// User document library — entry metadata.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+pub struct UserLibraryDoc {
+    pub id: String,
+    pub label: String,
+    #[serde(default)]
+    pub added_ms: u64,
+    #[serde(default)]
+    pub size_bytes: u64,
+}
+
+/// Add a local file (pdf/txt/md) to the user library.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct UserLibraryAddRequest {
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct UserLibraryAddResponse {
+    pub doc: UserLibraryDoc,
+    #[serde(default)]
+    pub chunks: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct UserLibraryRemoveRequest {
+    pub id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct UserLibraryRemoveResponse {
+    #[serde(default = "default_true")]
+    pub ok: bool,
 }
 
 /// `mem.extract` — extraction LLM de faits durables depuis un tour de chat (E14).
