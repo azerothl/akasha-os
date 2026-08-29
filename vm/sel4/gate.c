@@ -73,6 +73,12 @@ static int revoke(uint64_t cap)
     return microkit_mr_get(0) == AOS_OK;
 }
 
+static int run_hw_smoke(void)
+{
+    (void)microkit_ppcall(CH_DEV, microkit_msginfo_new(AOS_OP_HW_SMOKE, 0));
+    return microkit_mr_get(0) == AOS_OK;
+}
+
 void init(void)
 {
     uint64_t cap;
@@ -124,6 +130,12 @@ void init(void)
         microkit_dbg_puts("AOS_GATE_VM_FAIL\n");
     } else {
         microkit_dbg_puts("AOS_GATE_VM_PASS\n");
+    }
+
+    if (!run_hw_smoke()) {
+        microkit_dbg_puts("gate: FAIL hw smoke (fb/kbd/blk/net)\n");
+    } else {
+        microkit_dbg_puts("gate: hw smoke OK\n");
     }
 }
 

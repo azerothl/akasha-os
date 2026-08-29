@@ -48,7 +48,7 @@ jobs:
           cargo rustc -p aos-sel4-capkd --release --target aarch64-unknown-none \
             --crate-type staticlib -- -C panic=abort
 
-      - name: QEMU gate (AOS_GATE_VM_PASS)
+      - name: QEMU gate (AOS_GATE_VM_PASS + AOS_GATE_VM_HW_PASS)
         run: |
           # run.sh may try --offline rebuild; lib already present
           ./vm/sel4/run.sh

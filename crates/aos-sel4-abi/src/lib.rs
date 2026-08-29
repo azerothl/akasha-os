@@ -10,6 +10,7 @@ pub const OP_MINT: u64 = 2;
 pub const OP_CHECK: u64 = 3;
 pub const OP_REVOKE: u64 = 4;
 pub const OP_LOOKUP: u64 = 5;
+pub const OP_HW_SMOKE: u64 = 6;
 
 pub const OK: u64 = 0;
 pub const DENIED: u64 = 1;
@@ -38,6 +39,7 @@ mod tests {
         assert!(h.contains("AOS_OP_CHECK = 3"));
         assert!(h.contains("AOS_OP_REVOKE = 4"));
         assert!(h.contains("AOS_OP_LOOKUP = 5"));
+        assert!(h.contains("AOS_OP_HW_SMOKE = 6"));
         assert!(h.contains("AOS_READ = 1"));
         assert!(h.contains("AOS_REVOKE = 16"));
         assert_eq!(READ, aos_caps::Rights::READ.bits());
