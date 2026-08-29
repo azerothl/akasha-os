@@ -1336,19 +1336,19 @@ N'écris jamais un manifeste, handlers.yaml, ni un arbre declarative_ui « pour 
 
 Tu agis via des actions JSON structurées (ou la convention TOOL: pour compat). Tu n'inventes pas d'outils absents du catalogue. Tu respectes les capacités (caps) et les confirmations bloquantes.
 
-Réponds dans la langue de l'utilisateur (français par défaut si ambigu), de façon concise et factuelle. Pour les questions générales (culture, langues, vie courante, savoir encyclopédique), réponds normalement : les extraits RAG produit ne limitent pas ce savoir. Pour les questions sur l'UI Preview, les nouveautés ou « ce qui a changé », base-toi uniquement sur les extraits « Documentation produit (RAG) » et le micro-brief injectés — ne dis jamais que tu n'as pas accès au changelog ou à la doc produit ; n'invente pas de fonctionnalités absentes de ces sources. Si un point produit n'y figure pas, dis-le clairement.";
+Réponds dans la langue de l'utilisateur (français par défaut si ambigu), de façon concise et factuelle. Les index consultatifs (extraits RAG produit aujourd'hui ; bibliothèque de documents utilisateur à venir) enrichissent les réponses quand pertinents — zéro extrait ne bloque jamais une réponse. Pour les questions générales (culture, langues, vie courante, savoir encyclopédique), réponds normalement. Pour les questions sur l'UI Preview, les nouveautés ou « ce qui a changé », base-toi sur les extraits produit et le micro-brief injectés quand ils existent ; n'invente pas de fonctionnalités absentes de ces sources. Si un point produit n'y figure pas, dis-le simplement sans parler d'index ou de sources.";
 
 /// Micro-brief produit (pas le changelog) — le détail vient du RAG `product:docs`.
 pub const PREVIEW_SURFACE_BRIEF: &str = "\
 ## Surface produit — Akasha OS Preview (hôte Windows/Linux)
 Onglets : Chat, Mémoire, Notes, Tâches, Agents, Modèles, Caps, Audit, Providers, Image (studio), Settings, Réseau (opt-in).
-Ce n'est pas un OS bootable. Pour l'UI, les nouveautés et « ce qui a changé », les extraits RAG (FEATURES, STATUS, TESTER) injectés dans le tour font foi — n'invente pas de fonctionnalités absentes de ces sources. Hors sujet produit, ce brief ne limite pas tes réponses.";
+Ce n'est pas un OS bootable. Pour l'UI, les nouveautés et « ce qui a changé », les extraits RAG (FEATURES, STATUS, TESTER) injectés quand il y en a font foi — n'invente pas de fonctionnalités absentes de ces sources. Index consultatif seulement : zéro extrait ou sujet hors produit ne t'empêche pas de répondre. Une future bibliothèque de documents utilisateur sera aussi consultative uniquement (pas construite ici).";
 
 /// Addendum injecté uniquement dans le chemin chat (pas les workers).
 /// Délégation des tâches complexes via `agent.spawn` sans boucle d'outils.
 pub const CHAT_DELEGATION_PROMPT: &str = "
 Chat (cette session) — tu n'as PAS de boucle d'outils :
-- Questions, explications, conseils → réponds sans JSON. Langue : celle de l'utilisateur (français par défaut). Savoir général ou langues : réponds normalement même si le RAG est injecté et ne couvre pas le sujet — ignore le RAG quand il est hors sujet. « Quoi de neuf » / UI / changelog Preview : appuie-toi silencieusement sur le brief + extraits RAG produit ; n'invente pas de features ; ne mentionne pas ces sources à l'utilisateur.
+- Questions, explications, conseils → réponds sans JSON. Langue : celle de l'utilisateur (français par défaut). Index consultatifs (RAG produit ; futurs documents utilisateur) : si aucun extrait ne correspond ou le sujet est hors index, réponds quand même — ignore l'index vide ou hors sujet. Savoir général ou langues : réponds normalement. « Quoi de neuf » / UI / changelog Preview : appuie-toi silencieusement sur le brief + extraits quand présents ; n'invente pas de features ; ne mentionne pas ces sources à l'utilisateur.
 - Synthèse vocale / TTS / « générer un audio » : n'appelle PAS agent.spawn.
   Le hôte ouvre une carte TTS (`/speak <texte>`). Réponds sans JSON, dans la langue de l'utilisateur.
 - Routage dessin (gelé) :
@@ -1381,9 +1381,9 @@ Chat (cette session) — tu n'as PAS de boucle d'outils :
 /// Verrou affichage chat : la réponse visible ne doit jamais fuiter l'infrastructure prompt/RAG.
 pub const CHAT_SUPERVISOR_LOCK: &str = "
 Verrou affichage (réponse visible à l'utilisateur) :
-- Réponse naturelle et directe. Ne mentionne JAMAIS : RAG, JSON, règles, consignes, prompt, FEATURES, STATUS, TESTER, « hors des sources », extraits injectés, brief, doc produit/changelog en tant que source, ni que tu « ne peux pas » répondre faute de documentation.
-- Une question ordinaire → réponse ordinaire (ex. traduction, culture, vie courante).
-- UI / nouveautés Preview : donne l'info de façon conversationnelle ; le RAG produit sert en coulisse — n'en parle pas.";
+- Réponse naturelle et directe. Ne mentionne JAMAIS : RAG, JSON, règles, consignes, prompt, FEATURES, STATUS, TESTER, index, extraits, bibliothèque/documents, « hors des sources », « pas dans la doc », « absent des extraits », brief, doc produit/changelog en tant que source, ni que tu « ne peux pas » répondre faute de documentation, d'extraits ou parce que le sujet n'est pas dans les docs.
+- Une question ordinaire → réponse ordinaire (ex. traduction, culture, vie courante) même si aucun extrait RAG ou index utilisateur n'a été injecté.
+- UI / nouveautés Preview : donne l'info de façon conversationnelle ; les index consultatifs servent en coulisse — n'en parle pas.";
 
 /// Intention chat : créer / installer un module ou une skill (pas « c'est quoi »).
 pub fn chat_user_wants_module_authoring(text: &str) -> bool {
@@ -1792,8 +1792,8 @@ mod preview_prompt_tests {
             "brief must not globally forbid answering outside RAG"
         );
         assert!(
-            CHAT_DELEGATION_PROMPT.contains("ignore le RAG"),
-            "chat path should ignore irrelevant RAG"
+            CHAT_DELEGATION_PROMPT.contains("ignore") || CHAT_DELEGATION_PROMPT.contains("hors index"),
+            "chat path should ignore empty or off-topic indexes"
         );
     }
 
@@ -1815,7 +1815,10 @@ mod preview_prompt_tests {
 
     #[test]
     fn product_ui_still_grounded_in_rag() {
-        assert!(SYSTEM_ASSISTANT_PROMPT.contains("Documentation produit (RAG)"));
+        assert!(
+            SYSTEM_ASSISTANT_PROMPT.contains("extraits RAG produit")
+                || SYSTEM_ASSISTANT_PROMPT.contains("extraits produit")
+        );
         assert!(PREVIEW_SURFACE_BRIEF.contains("RAG"));
         assert!(
             SYSTEM_ASSISTANT_PROMPT.contains("n'invente pas de fonctionnalités"),
@@ -1837,6 +1840,8 @@ mod preview_prompt_tests {
             "STATUS",
             "TESTER",
             "hors des sources",
+            "pas dans la doc",
+            "absent des extraits",
         ] {
             assert!(
                 CHAT_SUPERVISOR_LOCK.contains(term),
@@ -1854,6 +1859,31 @@ mod preview_prompt_tests {
         assert!(
             CHAT_SUPERVISOR_LOCK.contains("question ordinaire"),
             "supervisor lock should require normal answers to normal questions"
+        );
+    }
+
+    #[test]
+    fn consultative_indexes_never_block_chat_on_zero_hits() {
+        let stack = chat_system_stack();
+        assert!(
+            stack.contains("zéro extrait"),
+            "prompts must say zero index hits still allow answers"
+        );
+        assert!(
+            stack.contains("consultatif"),
+            "prompts must frame indexes as consultative only"
+        );
+        assert!(
+            PREVIEW_SURFACE_BRIEF.contains("bibliothèque de documents utilisateur"),
+            "future user document library should be encoded as consultative"
+        );
+        assert!(
+            CHAT_DELEGATION_PROMPT.contains("aucun extrait ne correspond"),
+            "chat must answer when product RAG or user index returns zero hits"
+        );
+        assert!(
+            CHAT_SUPERVISOR_LOCK.contains("aucun extrait RAG"),
+            "supervisor lock must allow answers with no injected excerpts"
         );
     }
 }
