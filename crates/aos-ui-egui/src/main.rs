@@ -3706,7 +3706,7 @@ impl eframe::App for UiApp {
                     self.caps = caps;
                 }
                 Evt::Schedules(s) => {
-                    self.schedules = s;
+                    schedule_card::merge_schedule_list(&mut self.schedules, s);
                     self.sync_schedule_cards();
                 }
                 Evt::ScheduleCreated(entry) => {

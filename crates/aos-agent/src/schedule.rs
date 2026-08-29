@@ -311,6 +311,25 @@ mod tests {
     }
 
     #[test]
+    fn pause_persists_on_disk_and_list_roundtrips() {
+        with_temp_home(|| {
+            let e = sample("daily", 3600);
+            let paused = pause(&e.id).expect("pause");
+            assert!(paused.paused);
+            let disk = load(&e.id).expect("load");
+            assert!(disk.paused);
+            let raw = fs::read_to_string(path_for(&e.id)).expect("read json");
+            assert!(
+                raw.contains("\"paused\": true") || raw.contains("\"paused\":true"),
+                "paused must be serialized on disk: {raw}"
+            );
+            let listed = list().expect("list");
+            let found = listed.iter().find(|s| s.id == e.id).expect("listed");
+            assert!(found.paused);
+        });
+    }
+
+    #[test]
     fn due_does_not_consume_interval_until_mark_fired() {
         with_temp_home(|| {
             let e = sample("ping", 30);

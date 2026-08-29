@@ -1789,12 +1789,6 @@ async fn handle_cmd(
             {
                 Ok(e) => {
                     let _ = evt_tx.send(Evt::ScheduleUpdated(e));
-                    if let Ok(r) = bus
-                        .call::<(), ScheduleListResponse>(agent_intents::SCHEDULE_LIST, &(), vec![])
-                        .await
-                    {
-                        let _ = evt_tx.send(Evt::Schedules(r.schedules));
-                    }
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(format!("schedule.pause: {e}")));
@@ -1812,12 +1806,6 @@ async fn handle_cmd(
             {
                 Ok(e) => {
                     let _ = evt_tx.send(Evt::ScheduleUpdated(e));
-                    if let Ok(r) = bus
-                        .call::<(), ScheduleListResponse>(agent_intents::SCHEDULE_LIST, &(), vec![])
-                        .await
-                    {
-                        let _ = evt_tx.send(Evt::Schedules(r.schedules));
-                    }
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(format!("schedule.resume: {e}")));

@@ -123,6 +123,29 @@ pub fn upsert_schedule_entry(schedules: &mut Vec<ScheduleEntry>, entry: Schedule
     }
 }
 
+/// Merge a schedule list from the backend without letting a stale pre-pause/pre-stop
+/// list response overwrite a newer paused/stopped state already in memory.
+pub fn merge_schedule_list(local: &mut Vec<ScheduleEntry>, incoming: Vec<ScheduleEntry>) {
+    use std::collections::HashSet;
+    let incoming_ids: HashSet<_> = incoming.iter().map(|e| e.id.clone()).collect();
+    for inc in incoming {
+        if let Some(loc) = local.iter().find(|s| s.id == inc.id) {
+            let mut merged = inc;
+            if loc.paused && !merged.paused {
+                merged.paused = true;
+            }
+            if !loc.enabled && merged.enabled {
+                merged.enabled = false;
+                merged.paused = false;
+            }
+            upsert_schedule_entry(local, merged);
+        } else {
+            upsert_schedule_entry(local, inc);
+        }
+    }
+    local.retain(|e| incoming_ids.contains(&e.id));
+}
+
 pub fn apply_local_pause(schedules: &mut Vec<ScheduleEntry>, id: &str) {
     if let Some(entry) = schedules.iter_mut().find(|s| s.id == id) {
         entry.paused = true;
@@ -275,6 +298,49 @@ mod tests {
             !label.starts_with("Next: today"),
             "three-day offset must not use today template"
         );
+    }
+
+    #[test]
+    fn stale_list_after_pause_does_not_revert_card_state() {
+        let live = ScheduleEntry {
+            id: "sch-1".into(),
+            goal: "g".into(),
+            interval_secs: 86_400,
+            enabled: true,
+            paused: false,
+            next_fire_ms: Some(1_000),
+            display_title: Some("every morning, g".into()),
+            last_fired_ms: 0,
+            fire_count: 0,
+            active_agent_id: None,
+            model_id: None,
+            created_ms: 0,
+        };
+        let paused = ScheduleEntry {
+            paused: true,
+            ..live.clone()
+        };
+        let mut schedules = vec![live.clone()];
+        upsert_schedule_entry(&mut schedules, paused.clone());
+        assert_eq!(card_state_from_entry(&schedules[0]), "paused");
+
+        // Delayed stale list (pre-pause snapshot) must not clobber paused.
+        merge_schedule_list(&mut schedules, vec![live]);
+        assert_eq!(card_state_from_entry(&schedules[0]), "paused");
+
+        let mut att = ChatAttachment::ScheduleCard {
+            schedule_id: "sch-1".into(),
+            title: "every morning, g".into(),
+            goal: "g".into(),
+            interval_secs: 86_400,
+            next_fire_ms: 1_000,
+            state: "live".into(),
+        };
+        sync_card_attachment(&mut att, &schedules[0], 500);
+        let ChatAttachment::ScheduleCard { state, .. } = att else {
+            panic!("expected card");
+        };
+        assert_eq!(state, "paused");
     }
 
     #[test]
