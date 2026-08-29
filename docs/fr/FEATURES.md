@@ -1,4 +1,4 @@
-# Fonctionnalités Preview — Akasha OS 0.14.0
+# Fonctionnalités Preview — Akasha OS 0.15.0
 
 **Langue :** [English](../FEATURES.md) | Français
 
@@ -7,7 +7,15 @@ Ce n'est **pas** l'OS bootable. Les exigences v1 sont dans
 [specs-fonctionnelles.md](specs-fonctionnelles.md) ; les gates dans
 [STATUS.md](STATUS.md).
 
-> Date : 28/08/2026 · Preview **0.14.0**
+> Date : 29/08/2026 · Preview **0.15.0**
+
+### Nouveautés 0.15.0
+
+- **Guides in-app** : ? Chat à côté du nom de session ; ? Canvas après Tout effacer — Créer avait déjà un guide
+- **Planifications Chat** : en cours / pause (Reprendre | Arrêter) / arrêt sans quitter la session
+- **Document recherche** : dans le fil Répondre | Préparer un document — progression, Prêt, listé sous Plus → Documents
+- **Bibliothèque utilisateur** : pdf/txt/md consultatifs (état vide + ligne)
+- **Offre skill du matin** : le titre nomme le besoin ; invite atténuée ; Créer | Plus tard — jamais de création auto
 
 ### Nouveautés 0.14.0
 
