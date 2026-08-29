@@ -33,7 +33,6 @@ pub fn render_skill_offer_card(
 
     let label = label_for_lang(label_en, label_fr, lang);
     let title = label.trim().to_string();
-    let mute = t.skill_offer_mute.replace("{label}", &label);
 
     egui::Frame::new()
         .fill(ui.visuals().widgets.inactive.bg_fill)
@@ -41,7 +40,7 @@ pub fn render_skill_offer_card(
         .show(ui, |ui| {
             ui.label(egui::RichText::new(title).strong());
             ui.add_space(4.0);
-            ui.label(egui::RichText::new(mute).weak());
+            ui.label(egui::RichText::new(t.skill_offer_mute).weak());
             ui.add_space(8.0);
             match state.as_str() {
                 "pending" => {
@@ -79,17 +78,19 @@ mod tests {
     use crate::i18n;
 
     #[test]
-    fn card_copy_uses_label_not_internals() {
+    fn card_copy_mute_fixed_en_fr() {
         let t_en = i18n::strings("en");
         let t_fr = i18n::strings("fr");
-        let en = t_en.skill_offer_mute.replace("{label}", "weather");
-        let fr = t_fr.skill_offer_mute.replace("{label}", "météo");
-        assert!(en.contains("weather"));
-        assert!(fr.contains("météo"));
-        assert!(!en.contains("pat-"));
-        assert!(!en.contains("body"));
-        assert!(!en.contains("workflow"));
-        assert!(!en.contains('{'));
+        assert_eq!(
+            t_en.skill_offer_mute,
+            "You ask for this often. I can turn it into a skill."
+        );
+        assert_eq!(
+            t_fr.skill_offer_mute,
+            "Tu demandes souvent ça. Je peux en faire une skill."
+        );
+        assert!(!t_en.skill_offer_mute.contains('{'));
+        assert!(!t_fr.skill_offer_mute.contains('{'));
     }
 
     #[test]

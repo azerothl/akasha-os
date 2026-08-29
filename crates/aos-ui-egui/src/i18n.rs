@@ -1226,7 +1226,7 @@ const EN: UiStrings = UiStrings {
     skill_offer_later: "Later",
     skill_offer_created: "Skill created.",
     skill_offer_dismissed: "Dismissed for today.",
-    skill_offer_mute: "You often ask about {label}. I can turn this into a skill.",
+    skill_offer_mute: "You ask for this often. I can turn it into a skill.",
     chat_you: "you",
     chat_assistant: "assistant",
     chat_system: "system",
@@ -1848,7 +1848,7 @@ const FR: UiStrings = UiStrings {
     skill_offer_later: "Plus tard",
     skill_offer_created: "Skill créée.",
     skill_offer_dismissed: "Reporté pour aujourd'hui.",
-    skill_offer_mute: "Tu demandes souvent {label}. Je peux en faire une skill.",
+    skill_offer_mute: "Tu demandes souvent ça. Je peux en faire une skill.",
     chat_you: "vous",
     chat_assistant: "assistant",
     chat_system: "système",
@@ -2023,8 +2023,14 @@ mod tests {
     fn skill_offer_mute_en_fr() {
         let en = strings("en");
         let fr = strings("fr");
-        assert!(en.skill_offer_mute.contains("{label}"));
-        assert!(fr.skill_offer_mute.contains("{label}"));
+        assert_eq!(
+            en.skill_offer_mute,
+            "You ask for this often. I can turn it into a skill."
+        );
+        assert_eq!(
+            fr.skill_offer_mute,
+            "Tu demandes souvent ça. Je peux en faire une skill."
+        );
         assert_ne!(en.skill_offer_mute, fr.skill_offer_mute);
         assert_ne!(en.skill_offer_create, fr.skill_offer_create);
     }

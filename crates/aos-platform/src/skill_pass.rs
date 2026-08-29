@@ -462,12 +462,11 @@ pub fn surface_card_title(label: &str) -> String {
     label.trim().to_string()
 }
 
-pub fn surface_card_mute_line(label: &str, lang: &str) -> String {
-    let l = label.trim();
+pub fn surface_card_mute_line(lang: &str) -> String {
     if lang.starts_with("fr") {
-        format!("Tu demandes souvent {l}. Je peux en faire une skill.")
+        "Tu demandes souvent ça. Je peux en faire une skill.".to_string()
     } else {
-        format!("You often ask about {l}. I can turn this into a skill.")
+        "You ask for this often. I can turn it into a skill.".to_string()
     }
 }
 
@@ -571,12 +570,10 @@ mod tests {
 
     #[test]
     fn card_copy_en_fr_no_json() {
-        let en = surface_card_mute_line("calculations", "en");
-        let fr = surface_card_mute_line("calculs", "fr");
-        assert!(en.contains("calculations"));
-        assert!(en.contains("skill"));
-        assert!(fr.contains("calculs"));
-        assert!(fr.contains("skill"));
+        let en = surface_card_mute_line("en");
+        let fr = surface_card_mute_line("fr");
+        assert_eq!(en, "You ask for this often. I can turn it into a skill.");
+        assert_eq!(fr, "Tu demandes souvent ça. Je peux en faire une skill.");
         assert!(!en.contains('{'));
         assert!(!fr.contains('{'));
         assert!(!en.contains("pat-"));
