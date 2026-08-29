@@ -514,6 +514,7 @@ pub(crate) async fn load_session(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>, id:
                         text: m.content,
                         attachments: m.attachments,
                         speaker_id: m.speaker_id,
+                        speaker_name: m.speaker_name,
                     }
                 })
                 .collect();
@@ -2019,6 +2020,7 @@ impl UiApp {
                     origin: "ask-reply".into(),
                 }],
                 speaker_id: None,
+                speaker_name: None,
             });
             let _ = self.cmd_tx.send(Cmd::AgentKill { id: agent_id });
         }
@@ -2104,6 +2106,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 origin: "ask-reply".into(),
             }],
             speaker_id: None,
+            speaker_name: None,
         });
         let _ = self.cmd_tx.send(Cmd::SessionAppend {
             session_id,
@@ -2235,6 +2238,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             text: text.clone(),
             attachments,
             speaker_id: None,
+            speaker_name: None,
         });
         self.chat_pending_images.clear();
         self.chat_pending_documents.clear();
@@ -2653,6 +2657,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             text: spoken.to_string(),
             attachments: vec![att.clone()],
             speaker_id: None,
+            speaker_name: None,
         });
         if let Some(sid) = self.active_session.clone() {
             let _ = self.cmd_tx.send(Cmd::SessionAppend {
@@ -3147,6 +3152,7 @@ impl eframe::App for UiApp {
                                 origin,
                             }],
                             speaker_id: None,
+                            speaker_name: None,
                         });
                     } else {
                         self.status = format!("agent lancé : {agent_id}");
@@ -3241,6 +3247,7 @@ impl eframe::App for UiApp {
                                                 origin: "completion".into(),
                                             }],
                                             speaker_id: None,
+                                            speaker_name: None,
                                         });
                                     }
                                 } else if !seeding
@@ -3305,6 +3312,7 @@ impl eframe::App for UiApp {
                                             origin: "ask-timeout".into(),
                                         }],
                                         speaker_id: None,
+                                        speaker_name: None,
                                     });
                                 }
                             }
@@ -3334,6 +3342,7 @@ impl eframe::App for UiApp {
                                             origin: "ask".into(),
                                         }],
                                         speaker_id: None,
+                                        speaker_name: None,
                                     });
                                 } else if !on_this_session
                                     && !self.agent_notified.contains(&ag.agent_id)
@@ -3511,13 +3520,13 @@ impl eframe::App for UiApp {
                         self.chat_pending = false;
                         self.chat_inference_id = None;
                         self.room_turn_pending_text = None;
-                        let t = i18n::strings(&self.prefs.language);
-                        self.status = if cancelled {
-                            t.room_turn_cancelled.into()
-                        } else {
-                            t.room_turn_done
-                                .replace("{n}", &agent_turns.to_string())
-                        };
+                        if let Some(status) =
+                            chat_room::room_turn_done_status(agent_turns, cancelled)
+                        {
+                            self.status = status;
+                        } else if self.status.starts_with("salon :") {
+                            self.status.clear();
+                        }
                     } else if !cancelled && agent_turns > 0 {
                         self.session_chat.mark_unread(&session_id);
                     }
@@ -3567,6 +3576,7 @@ impl eframe::App for UiApp {
                                 prompt: "canvas export".into(),
                             }],
                             speaker_id: None,
+                            speaker_name: None,
                         });
                     }
                 }
@@ -3693,6 +3703,7 @@ impl eframe::App for UiApp {
                         text: note.clone(),
                         attachments: vec![att.clone()],
                         speaker_id: None,
+                        speaker_name: None,
                     });
                     if let Some(sid) = self.active_session.clone() {
                         let _ = self.cmd_tx.send(Cmd::SessionAppend {
@@ -4521,6 +4532,7 @@ impl UiApp {
                     let mut text = self.chat[i].text.clone();
                     let attachments = self.chat[i].attachments.clone();
                     let speaker_id = self.chat[i].speaker_id.clone();
+                    let speaker_name = self.chat[i].speaker_name.clone();
                     let is_completion = attachments.iter().any(|a| {
                         matches!(
                             a,
@@ -4536,7 +4548,10 @@ impl UiApp {
                     {
                         text = i18n::agent_could_not_act_message(t);
                     }
-                    let text = if role == "assistant"
+                    let kind = chat_bubble_kind(&role, speaker_id.as_deref(), room_mode);
+                    let text = if kind == ChatBubbleKind::RoomSpeaker {
+                        chat_room::strip_roster_agent_id_mentions(t, &text, room_members)
+                    } else if role == "assistant"
                         && !is_completion
                         && speaker_id.is_none()
                     {
@@ -4544,15 +4559,15 @@ impl UiApp {
                     } else {
                         text
                     };
-                    let kind = chat_bubble_kind(&role, speaker_id.as_deref(), room_mode);
                     let mut shown_role = chat_role_label(kind, t, &role);
                     if kind == ChatBubbleKind::RoomSpeaker {
                         if let Some(sid) = speaker_id.as_deref() {
-                            shown_role = room_members
-                                .iter()
-                                .find(|m| m.agent_id == sid)
-                                .map(|m| chat_room::member_display_label(t, m))
-                                .unwrap_or_else(|| sid.to_string());
+                            shown_role = chat_room::roster_display_name(
+                                t,
+                                room_members,
+                                sid,
+                                speaker_name.as_deref(),
+                            );
                         }
                     }
                     let (fill, stroke, role_color) = if kind == ChatBubbleKind::RoomSpeaker {
@@ -5156,6 +5171,7 @@ impl UiApp {
                     } else {
                         Vec::new()
                     };
+                    let mut chat_sent_this_frame = false;
                     let input_row = ui.allocate_ui_with_layout(
                         egui::vec2(ui.available_width(), composer_h),
                         egui::Layout::bottom_up(egui::Align::Min),
@@ -5255,6 +5271,7 @@ impl UiApp {
                                             && ui.input(|i| i.key_pressed(egui::Key::Enter)));
                                     if send {
                                         self.send_chat();
+                                        chat_sent_this_frame = true;
                                         self.chat_refocus = true;
                                     }
                                     r
@@ -5334,8 +5351,10 @@ impl UiApp {
                                     });
                             });
                         if let Some(text) = picked {
-                            self.input = text;
-                            self.chat_refocus = true;
+                            if !chat_sent_this_frame {
+                                self.input = text;
+                                self.chat_refocus = true;
+                            }
                         }
                     } else if !completions.is_empty() {
                         let t = i18n::strings(&self.prefs.language);
@@ -5376,8 +5395,10 @@ impl UiApp {
                                     });
                             });
                         if let Some(text) = picked {
-                            self.input = text;
-                            self.chat_refocus = true;
+                            if !chat_sent_this_frame {
+                                self.input = text;
+                                self.chat_refocus = true;
+                            }
                         }
                     }
                 },
@@ -6218,6 +6239,7 @@ impl UiApp {
                                             origin: "ask-reply".into(),
                                         }],
                                         speaker_id: None,
+                                        speaker_name: None,
                                     });
                                 }
                             }

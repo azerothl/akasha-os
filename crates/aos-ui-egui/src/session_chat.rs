@@ -129,6 +129,7 @@ pub(crate) fn on_done(
                 text: text.to_string(),
                 attachments,
                 speaker_id: None,
+                speaker_name: None,
             });
         }
         streaming.clear();

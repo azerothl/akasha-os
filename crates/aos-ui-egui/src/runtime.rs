@@ -2826,7 +2826,6 @@ async fn handle_cmd(
             content,
             images,
         } => {
-            let _ = evt_tx.send(Evt::Status("salon : tour en cours…".into()));
             match bus
                 .call::<ChatSessionRoomTurnRequest, ChatSessionRoomTurnResponse>(
                     "chat.session.room.turn",
