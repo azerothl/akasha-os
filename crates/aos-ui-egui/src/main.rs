@@ -5509,8 +5509,7 @@ impl UiApp {
                 self.guide.open_topic(guide::GuideTopic::Library);
             }
         });
-        let offset = runtime::sweep_tz_offset_minutes();
-        let actions = library_panel::render(ui, &t, &self.library, offset);
+        let actions = library_panel::render(ui, &t, &self.library);
         if actions.add_clicked {
             let filters = [(
                 t.tab_library,

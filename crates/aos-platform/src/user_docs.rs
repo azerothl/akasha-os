@@ -87,9 +87,23 @@ fn sanitize_filename(label: &str) -> String {
     }
 }
 
-/// List documents in the user library (manifest only).
+/// List documents in the user library (manifest only). Backfills `added_date` once.
 pub fn list_docs(memory_dir: &Path) -> Vec<UserLibraryDoc> {
-    let mut docs = load_manifest(memory_dir).docs;
+    let mut manifest = load_manifest(memory_dir);
+    let offset = local_tz_offset_minutes();
+    let mut dirty = false;
+    for doc in &mut manifest.docs {
+        if doc.added_date.is_empty() && doc.added_ms > 0 {
+            if let Some(d) = format_local_date(doc.added_ms, offset) {
+                doc.added_date = d;
+                dirty = true;
+            }
+        }
+    }
+    if dirty {
+        let _ = save_manifest(memory_dir, &manifest);
+    }
+    let mut docs = manifest.docs;
     docs.sort_by(|a, b| b.added_ms.cmp(&a.added_ms));
     docs
 }
@@ -118,11 +132,15 @@ pub fn add_document(
     let text = chat_document::extract_document_text(source_path)?;
     let chunks = index_document(sub, memory_dir, &id, &label, &text)?;
 
+    let added_ms = now_ms();
+    let added_date = format_local_date(added_ms, local_tz_offset_minutes()).unwrap_or_default();
+
     let doc = UserLibraryDoc {
         id: id.clone(),
         label,
-        added_ms: now_ms(),
+        added_ms,
         size_bytes: bytes.len() as u64,
+        added_date,
     };
     let mut manifest = load_manifest(memory_dir);
     manifest.docs.retain(|d| d.id != id);
@@ -370,6 +388,68 @@ pub fn format_prompt_block(hits: &[aos_proto::MemHit]) -> String {
     out
 }
 
+/// Local calendar date (`YYYY-MM-DD`) from epoch ms + fixed offset (computed once at add/list).
+pub fn format_local_date(added_ms: u64, offset_minutes: i32) -> Option<String> {
+    if added_ms == 0 {
+        return None;
+    }
+    let local_secs = (added_ms as i64 / 1000) + (offset_minutes as i64 * 60);
+    let days = local_secs.div_euclid(86_400);
+    let (y, m, d) = civil_from_days(days);
+    Some(format!("{y:04}-{m:02}-{d:02}"))
+}
+
+fn civil_from_days(z: i64) -> (i32, u32, u32) {
+    let z = z + 719_468;
+    let era = if z >= 0 { z } else { z - 146_097 } / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let mut y = (yoe + era * 400) as i32;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = (mp + if mp < 10 { 3 } else { -9 }) as u32;
+    if m <= 2 {
+        y += 1;
+    }
+    (y, m, d)
+}
+
+/// Host local TZ offset in minutes (called at add/list only — not per UI paint).
+fn local_tz_offset_minutes() -> i32 {
+    if let Ok(out) = std::process::Command::new("date").args(["+%z"]).output() {
+        if out.status.success() {
+            if let Ok(s) = String::from_utf8(out.stdout) {
+                return parse_tz_offset_minutes(s.trim()).unwrap_or(0);
+            }
+        }
+    }
+    0
+}
+
+fn parse_tz_offset_minutes(raw: &str) -> Option<i32> {
+    let s = raw.trim();
+    if s.len() < 3 {
+        return None;
+    }
+    let sign = match s.as_bytes().first()? {
+        b'+' => 1,
+        b'-' => -1,
+        _ => return None,
+    };
+    let digits: String = s.chars().skip(1).filter(|c| c.is_ascii_digit()).collect();
+    if digits.len() < 3 {
+        return None;
+    }
+    let hours: i32 = digits[..digits.len().saturating_sub(2)]
+        .parse()
+        .ok()?;
+    let mins: i32 = digits[digits.len().saturating_sub(2)..]
+        .parse()
+        .ok()?;
+    Some(sign * (hours * 60 + mins))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -404,13 +484,39 @@ mod tests {
         let doc = UserLibraryDoc {
             id: "abc".into(),
             label: "note.txt".into(),
-            added_ms: 1,
+            added_ms: 1_787_961_600_000,
             size_bytes: 42,
+            added_date: "2026-08-29".into(),
         };
         save_manifest(&dir, &Manifest { docs: vec![doc.clone()] }).unwrap();
         let listed = list_docs(&dir);
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0], doc);
+    }
+
+    #[test]
+    fn aug_29_2026_not_september() {
+        let ms = 1_787_961_600_000;
+        assert_eq!(format_local_date(ms, 0).as_deref(), Some("2026-08-29"));
+        let ms_paris = 1_787_954_400_000;
+        assert_eq!(format_local_date(ms_paris, 120).as_deref(), Some("2026-08-29"));
+    }
+
+    #[test]
+    fn list_backfills_added_date_once() {
+        let dir = temp_memory_dir();
+        let doc = UserLibraryDoc {
+            id: "abc".into(),
+            label: "note.txt".into(),
+            added_ms: 1_787_961_600_000,
+            size_bytes: 42,
+            added_date: String::new(),
+        };
+        save_manifest(&dir, &Manifest { docs: vec![doc] }).unwrap();
+        let listed = list_docs(&dir);
+        assert_eq!(listed[0].added_date, "2026-08-29");
+        let listed2 = list_docs(&dir);
+        assert_eq!(listed2[0].added_date, "2026-08-29");
     }
 
     #[test]
