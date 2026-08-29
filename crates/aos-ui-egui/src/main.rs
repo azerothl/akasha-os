@@ -4899,10 +4899,13 @@ impl UiApp {
                                     .small();
                                 ui.label(dot).on_hover_text(t.session_unread_reply);
                             }
-                            ui.selectable_label(selected, &s.title);
-                            ui.weak(format!("({})", s.message_count));
+                            let title = ui.selectable_label(selected, &s.title);
+                            ui.label(
+                                egui::RichText::new(format!("({})", s.message_count)).weak(),
+                            );
+                            title
                         });
-                        if row.response.clicked() {
+                        if row.inner.clicked() || row.response.clicked() {
                             let _ =
                                 self.cmd_tx.send(Cmd::SessionSelect { id: s.id.clone() });
                         }
