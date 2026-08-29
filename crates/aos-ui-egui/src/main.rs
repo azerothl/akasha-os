@@ -26,6 +26,7 @@ mod image_history;
 mod image_prompt;
 mod icons;
 mod image_studio;
+mod library_panel;
 mod nav;
 mod onboarding;
 mod os_open;
@@ -95,6 +96,7 @@ enum Tab {
     Memory,
     Notes,
     Tasks,
+    Library,
     Agents,
     Models,
     Image,
@@ -1850,6 +1852,7 @@ struct UiApp {
     /// Dernier payload notes brut (scénarios / debug).
     notes_out: String,
     tasks: tasks_panel::TasksPanelState,
+    library: library_panel::LibraryPanelState,
     schedules: Vec<ScheduleEntry>,
     schedule_goal: String,
     schedule_interval_secs: u64,
@@ -2136,6 +2139,7 @@ impl UiApp {
             notes: notes_panel::NotesPanelState::default(),
             notes_out: String::new(),
             tasks: tasks_panel::TasksPanelState::default(),
+            library: library_panel::LibraryPanelState::default(),
             schedules: Vec::new(),
             schedule_goal: String::new(),
             schedule_interval_secs: 60,
@@ -3292,6 +3296,9 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             Tab::Tasks => {
                 let _ = self.cmd_tx.send(Cmd::TasksList);
             }
+            Tab::Library => {
+                let _ = self.cmd_tx.send(Cmd::UserLibraryList);
+            }
             Tab::Settings => {
                 let _ = self.cmd_tx.send(Cmd::ScheduleList);
                 let _ = self.cmd_tx.send(Cmd::CatalogueRefresh);
@@ -3337,6 +3344,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             .show(ui, |ui| {
                 for (tab, label, hint) in [
                     (Tab::Notes, t.tab_notes, t.tab_hint_notes),
+                    (Tab::Library, t.tab_library, t.tab_hint_library),
                     (Tab::Tasks, t.tab_tasks, t.tab_hint_tasks),
                     (Tab::Models, t.tab_models, t.tab_hint_models),
                     (Tab::Settings, t.tab_settings, t.tab_hint_settings),
@@ -3573,12 +3581,13 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             .show(ctx, |ui| {
                 ui.weak(t.go_to_hint);
                 ui.separator();
-                let destinations: [(&str, Tab); 13] = [
+                let destinations: [(&str, Tab); 14] = [
                     (t.tab_chat, Tab::Chat),
                     (t.tab_agents, Tab::Agents),
                     (t.tab_create, Tab::Image),
                     (t.tab_memory, Tab::Memory),
                     (t.tab_notes, Tab::Notes),
+                    (t.tab_library, Tab::Library),
                     (t.tab_tasks, Tab::Tasks),
                     (t.tab_models, Tab::Models),
                     (t.tab_settings, Tab::Settings),
@@ -3981,6 +3990,9 @@ impl eframe::App for UiApp {
                 }
                 Evt::NotesRelated(hits) => {
                     self.notes.apply_related(hits);
+                }
+                Evt::UserLibraryListed(docs) => {
+                    self.library.docs = docs;
                 }
                 Evt::NotesSaved { path, slug, title } => {
                     self.notes.mark_saved(path, slug, title);
@@ -4791,6 +4803,7 @@ impl eframe::App for UiApp {
             Tab::Chat => self.ui_chat(ui),
             Tab::Memory => overflow_scroll(ui, "memory", |ui| self.ui_memory(ui)),
             Tab::Notes => overflow_scroll(ui, "notes", |ui| self.ui_notes(ui)),
+            Tab::Library => overflow_scroll(ui, "library", |ui| self.ui_library(ui)),
             Tab::Tasks => overflow_scroll(ui, "tasks", |ui| self.ui_tasks(ui)),
             Tab::Agents => overflow_scroll(ui, "agents", |ui| self.ui_agents(ui)),
             Tab::Models => overflow_scroll(ui, "models", |ui| self.ui_models(ui, ctx)),
@@ -6402,6 +6415,36 @@ impl UiApp {
         }
         if let Some((id, done)) = actions.complete {
             let _ = self.cmd_tx.send(Cmd::TasksComplete { id, done });
+        }
+    }
+
+    fn ui_library(&mut self, ui: &mut egui::Ui) {
+        let t = i18n::strings(&self.prefs.language);
+        let g = guide::strings(&self.prefs.language);
+        ui.horizontal(|ui| {
+            ui.strong(t.tab_library);
+            if guide::tab_help_button(ui, g.help_tooltip) {
+                self.guide.open_topic(guide::GuideTopic::Library);
+            }
+        });
+        let actions = library_panel::render(ui, &t, &self.library);
+        if actions.add_clicked {
+            let filters = [(
+                t.tab_library,
+                aos_proto::chat_document::CHAT_DOCUMENT_EXTENSIONS,
+            )];
+            if let Some(path) = os_open::pick_os_file(
+                t.tab_library,
+                &filters,
+                os_open::user_downloads_dir().as_deref(),
+            ) {
+                let _ = self.cmd_tx.send(Cmd::UserLibraryAdd {
+                    path: path.to_string_lossy().into_owned(),
+                });
+            }
+        }
+        if let Some(id) = actions.remove_id {
+            let _ = self.cmd_tx.send(Cmd::UserLibraryRemove { id });
         }
     }
 

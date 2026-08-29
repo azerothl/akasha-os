@@ -668,14 +668,23 @@ impl HostServices for PlatformSubsystem {
                 let query = args["query"].as_str().unwrap_or("");
                 let k = args["k"].as_u64().unwrap_or(5) as usize;
                 let product_k = args["product_k"].as_u64().unwrap_or(4) as usize;
+                let user_doc_k = args["user_doc_k"].as_u64().unwrap_or(3) as usize;
                 let emb = self.embed_text(query).unwrap_or_default();
-                let (hits, product_hits) = {
+                let (hits, product_hits, user_doc_hits) = {
                     let mem = self.mem.lock().unwrap();
                     let hits = mem.episodic_query(&emb, k, None);
                     let product_hits = crate::product_rag::recall(&mem, &emb, product_k);
-                    (hits, product_hits)
+                    let user_doc_hits = crate::user_docs::recall(&mem, &emb, user_doc_k);
+                    (hits, product_hits, user_doc_hits)
                 };
                 let mut prompt_block = crate::product_rag::format_prompt_block(&product_hits);
+                let user_doc_block = crate::user_docs::format_prompt_block(&user_doc_hits);
+                if !user_doc_block.is_empty() {
+                    if !prompt_block.is_empty() {
+                        prompt_block.push('\n');
+                    }
+                    prompt_block.push_str(&user_doc_block);
+                }
                 if prompt_block.is_empty() {
                     prompt_block.push_str("Contexte mémoire:\n");
                 } else {
@@ -688,6 +697,7 @@ impl HostServices for PlatformSubsystem {
                     "prompt_block": prompt_block,
                     "hits": hits,
                     "product_hits": product_hits,
+                    "user_doc_hits": user_doc_hits,
                 }))
             }
             "web.search" => {

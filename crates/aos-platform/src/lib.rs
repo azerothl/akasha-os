@@ -23,6 +23,7 @@ pub mod net;
 pub mod net_services;
 pub mod policy;
 pub mod product_rag;
+pub mod user_docs;
 pub mod secrets;
 pub mod skill;
 pub mod storage;

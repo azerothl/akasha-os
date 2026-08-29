@@ -30,6 +30,8 @@ use aos_proto::{
     FeedbackSubmitRequest, FeedbackSubmitResponse, FilesGenerateRequest, FilesGenerateResponse,
     InferParams, InferRequest, McpServerInfo, MemContextRequest, MemContextResponse,
     MemEpisodicDeleteRequest, MemExtractRequest, MemExtractResponse, MemHit, MemListRequest,
+    UserLibraryAddRequest, UserLibraryAddResponse, UserLibraryListResponse, UserLibraryRemoveRequest,
+    UserLibraryRemoveResponse,
     MemRememberResponse, MemSweepStatus, MemUpdateRequest, MemUserRecallRequest, MemUserRememberRequest,
     MemWorkingRequest, LoadRequest, ModelInfo, ModelState, ModuleCatalogue,
     ModuleInfo, ModuleInstallRequest,
@@ -377,6 +379,7 @@ async fn handle_cmd(
                         query: user_content.clone(),
                         k: 5,
                         product_k: 4,
+                        user_doc_k: 0,
                     },
                     vec![],
                 )
@@ -1233,6 +1236,63 @@ async fn handle_cmd(
                 args["topic"] = serde_json::json!(topic);
             }
             invoke_notes(&bus, &evt_tx, "notes.related", args).await;
+        }
+        Cmd::UserLibraryList => {
+            match bus
+                .call::<(), UserLibraryListResponse>("user.library.list", &(), vec![])
+                .await
+            {
+                Ok(resp) => {
+                    let _ = evt_tx.send(Evt::UserLibraryListed(resp.docs));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::UserLibraryAdd { path } => {
+            match bus
+                .call::<UserLibraryAddRequest, UserLibraryAddResponse>(
+                    "user.library.add",
+                    &UserLibraryAddRequest { path },
+                    vec![],
+                )
+                .await
+            {
+                Ok(_resp) => {
+                    if let Ok(list) = bus
+                        .call::<(), UserLibraryListResponse>("user.library.list", &(), vec![])
+                        .await
+                    {
+                        let _ = evt_tx.send(Evt::UserLibraryListed(list.docs));
+                    }
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::UserLibraryRemove { id } => {
+            match bus
+                .call::<UserLibraryRemoveRequest, UserLibraryRemoveResponse>(
+                    "user.library.remove",
+                    &UserLibraryRemoveRequest { id },
+                    vec![],
+                )
+                .await
+            {
+                Ok(_) => {
+                    if let Ok(list) = bus
+                        .call::<(), UserLibraryListResponse>("user.library.list", &(), vec![])
+                        .await
+                    {
+                        let _ = evt_tx.send(Evt::UserLibraryListed(list.docs));
+                    }
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
         }
         Cmd::Confirm { id, approved } => {
             match bus
@@ -3123,7 +3183,7 @@ async fn handle_cmd(
     }
 }
 
-fn sweep_tz_offset_minutes() -> i32 {
+pub(crate) fn sweep_tz_offset_minutes() -> i32 {
     if let Ok(out) = std::process::Command::new("date").args(["+%z"]).output() {
         if out.status.success() {
             if let Ok(s) = String::from_utf8(out.stdout) {
