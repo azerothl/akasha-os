@@ -1,7 +1,30 @@
 //! Heuristics for research-shaped chat questions (document choice card).
 
+/// User already asked for a prepared document — skip the choice card.
+pub fn user_requested_document(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    const MARKERS: &[&str] = &[
+        "prepare a document",
+        "prepare document",
+        "write a document",
+        "write me a document",
+        "document about",
+        "research document",
+        "préparer un document",
+        "prépare un document",
+        "preparer un document",
+        "rédiger un document",
+        "rediger un document",
+        "document sur",
+        "fais un document",
+        "fais-moi un document",
+        "make a document",
+    ];
+    MARKERS.iter().any(|m| lower.contains(m))
+}
+
 /// True when the user message looks like an open research question worth offering
-/// Answer vs Prepare a document — not slash commands, canvas, or short chit-chat.
+/// Reply vs Prepare a document — not slash commands, canvas, or short chit-chat.
 pub fn is_research_shaped_ask(text: &str) -> bool {
     let trimmed = text.trim();
     if trimmed.is_empty() || trimmed.starts_with('/') {
@@ -164,5 +187,16 @@ mod tests {
     #[test]
     fn plain_question_without_research_markers() {
         assert!(!is_research_shaped_ask("what time is it?"));
+    }
+
+    #[test]
+    fn user_requested_document_skips_choice() {
+        assert!(user_requested_document(
+            "Please prepare a document about agentic apps"
+        ));
+        assert!(user_requested_document(
+            "Peux-tu préparer un document sur l'état de l'art ?"
+        ));
+        assert!(!user_requested_document("what is the state of the art?"));
     }
 }

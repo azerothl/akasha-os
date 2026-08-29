@@ -121,6 +121,9 @@ pub struct GuideStrings {
     pub chat_opt_attach_body: &'static str,
     pub chat_opt_slash_title: &'static str,
     pub chat_opt_slash_body: &'static str,
+    pub chat_opt_documents_title: &'static str,
+    pub chat_opt_documents_body: &'static str,
+    pub chat_opt_documents_example: &'static str,
     pub canvas_intro: &'static str,
     pub canvas_opt_toggle_title: &'static str,
     pub canvas_opt_toggle_body: &'static str,
@@ -215,6 +218,9 @@ const EN: GuideStrings = GuideStrings {
     chat_opt_attach_body: "Paperclip: images for vision models, documents for grounded Q&A. Pending chips show what ships with the next message.",
     chat_opt_slash_title: "Slash commands",
     chat_opt_slash_body: "Type / for completions — /help, /notes, /memory, and more route to platform tools.",
+    chat_opt_documents_title: "Prepared documents",
+    chat_opt_documents_body: "On a research-style question, choose Reply for a short answer in chat, or Prepare a document for a structured file under /downloads/. While it runs you see Researching… with Stop; when ready, Open shows the document in a clamped overlay. Find prepared files anytime under More → Documents.",
+    chat_opt_documents_example: "\"What's the state of agentic apps?\" → Prepare a document → Researching… → Ready → Open, sources at the bottom.",
     canvas_intro: "Vector drawing layer on the active chat session — pen, shapes, eraser. Not the Create diffusion tab.",
     canvas_opt_toggle_title: "Canvas toggle",
     canvas_opt_toggle_body: "Enable Canvas in the session bar. Agents may draw only while Canvas is open; humans can always paint.",
@@ -309,6 +315,9 @@ const FR: GuideStrings = GuideStrings {
     chat_opt_attach_body: "Trombone : images pour les modèles vision, documents pour des réponses ancrées. Les pastilles montrent ce qui part avec le prochain message.",
     chat_opt_slash_title: "Commandes /",
     chat_opt_slash_body: "Tapez / pour l'auto-complétion — /help, /notes, /memory, etc. routent vers les outils plateforme.",
+    chat_opt_documents_title: "Documents préparés",
+    chat_opt_documents_body: "Sur une question de recherche, choisissez Répondre pour une courte réponse dans le chat, ou Préparer un document pour un fichier structuré sous /downloads/. Pendant la préparation : Recherche en cours… avec Arrêter ; une fois prêt, Ouvrir affiche le document dans une fenêtre calée au viewport. Retrouvez les fichiers via Plus → Documents.",
+    chat_opt_documents_example: "« Quel est l'état de l'art des apps agentic ? » → Préparer un document → Recherche en cours… → Prêt → Ouvrir, sources en bas.",
     canvas_intro: "Couche de dessin vectoriel sur la session de chat active — stylo, formes, gomme. Pas l'onglet diffusion Créer.",
     canvas_opt_toggle_title: "Bascule Canvas",
     canvas_opt_toggle_body: "Activez Canvas dans la barre de session. Les agents dessinent seulement quand Canvas est ouvert ; l'humain peut toujours peindre.",
@@ -437,17 +446,22 @@ fn render_topic(ui: &mut egui::Ui, topic: GuideTopic, g: &GuideStrings) {
     match topic {
         GuideTopic::Overview => render_overview(ui, g),
         GuideTopic::Create => render_create(ui, g),
-        GuideTopic::Chat => render_stub(
-            ui,
-            g,
-            g.chat_intro,
-            &[
-                (g.chat_opt_sessions_title, g.chat_opt_sessions_body),
-                (g.chat_opt_attach_title, g.chat_opt_attach_body),
-                (g.chat_opt_slash_title, g.chat_opt_slash_body),
-            ],
-            FigureKind::Chat,
-        ),
+        GuideTopic::Chat => {
+            render_stub(
+                ui,
+                g,
+                g.chat_intro,
+                &[
+                    (g.chat_opt_sessions_title, g.chat_opt_sessions_body),
+                    (g.chat_opt_attach_title, g.chat_opt_attach_body),
+                    (g.chat_opt_slash_title, g.chat_opt_slash_body),
+                    (g.chat_opt_documents_title, g.chat_opt_documents_body),
+                ],
+                FigureKind::Chat,
+            );
+            ui.weak(g.section_example);
+            ui.label(g.chat_opt_documents_example);
+        }
         GuideTopic::Canvas => render_stub(
             ui,
             g,

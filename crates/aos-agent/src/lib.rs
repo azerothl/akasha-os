@@ -8,6 +8,7 @@ pub mod agent_act;
 pub mod assess;
 pub mod canvas_scene;
 pub mod context_budget;
+pub mod document_index;
 pub mod document_prep;
 pub mod mcp;
 pub mod persist;

@@ -3038,6 +3038,14 @@ pub enum ChatAttachment {
         #[serde(default)]
         label: String,
     },
+    /// In-progress document preparation (Researching… + Stop).
+    DocumentProgress {
+        question: String,
+        agent_id: String,
+        /// `researching` | `stopped`
+        #[serde(default = "default_document_progress_state")]
+        state: String,
+    },
 }
 
 fn default_agent_act_state() -> String {
@@ -3046,6 +3054,10 @@ fn default_agent_act_state() -> String {
 
 fn default_research_choice_state() -> String {
     "pending".into()
+}
+
+fn default_document_progress_state() -> String {
+    "researching".into()
 }
 
 impl ChatAttachment {
@@ -3062,7 +3074,8 @@ impl ChatAttachment {
             | Self::Document { .. }
             | Self::AgentAct { .. }
             | Self::ResearchChoice { .. }
-            | Self::DocumentResult { .. } => None,
+            | Self::DocumentResult { .. }
+            | Self::DocumentProgress { .. } => None,
         }
     }
 

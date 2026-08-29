@@ -1,9 +1,8 @@
-//! Research choice + document result cards in the chat thread.
+//! Research choice + document result/progress cards in the chat thread.
 
 use aos_proto::ChatAttachment;
 use eframe::egui;
 
-use crate::decl_ui;
 use crate::i18n::UiStrings;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -13,6 +12,18 @@ pub enum ResearchChoiceAction {
     Document,
 }
 
+#[derive(PartialEq, Eq)]
+pub enum DocumentProgressAction {
+    None,
+    Stop(String),
+}
+
+#[derive(PartialEq, Eq)]
+pub enum DocumentResultAction {
+    None,
+    Open,
+}
+
 pub fn choice_actions_enabled(state: &str) -> bool {
     state == "pending"
 }
@@ -20,7 +31,6 @@ pub fn choice_actions_enabled(state: &str) -> bool {
 pub fn render_research_choice(
     ui: &mut egui::Ui,
     t: &UiStrings,
-    question: &str,
     state: &str,
 ) -> ResearchChoiceAction {
     if !choice_actions_enabled(state) {
@@ -33,7 +43,6 @@ pub fn render_research_choice(
         .inner_margin(10.0_f32)
         .corner_radius(4.0_f32)
         .show(ui, |ui| {
-            ui.label(egui::RichText::new(question.trim()).strong());
             ui.weak(t.research_choice_prompt);
             ui.horizontal(|ui| {
                 if ui.button(t.research_choice_answer).clicked() {
@@ -47,18 +56,42 @@ pub fn render_research_choice(
     action
 }
 
+pub fn render_document_progress(
+    ui: &mut egui::Ui,
+    t: &UiStrings,
+    question: &str,
+    agent_id: &str,
+    state: &str,
+) -> DocumentProgressAction {
+    if state == "stopped" {
+        return DocumentProgressAction::None;
+    }
+    let mut action = DocumentProgressAction::None;
+    egui::Frame::NONE
+        .fill(egui::Color32::from_rgb(36, 34, 30))
+        .stroke(egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(120, 100, 70)))
+        .inner_margin(10.0_f32)
+        .corner_radius(4.0_f32)
+        .show(ui, |ui| {
+            ui.label(egui::RichText::new(question.trim()).strong());
+            ui.horizontal(|ui| {
+                ui.weak(t.document_progress_label);
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button(t.document_progress_stop).clicked() {
+                        action = DocumentProgressAction::Stop(agent_id.to_string());
+                    }
+                });
+            });
+        });
+    action
+}
+
 pub fn render_document_result(
     ui: &mut egui::Ui,
     t: &UiStrings,
     question: &str,
-    path: &str,
-    label: &str,
-) {
-    let shown = if label.trim().is_empty() {
-        path
-    } else {
-        label
-    };
+) -> DocumentResultAction {
+    let mut action = DocumentResultAction::None;
     egui::Frame::NONE
         .fill(egui::Color32::from_rgb(30, 38, 34))
         .stroke(egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(90, 140, 110)))
@@ -68,12 +101,12 @@ pub fn render_document_result(
             ui.label(egui::RichText::new(question.trim()).strong());
             ui.weak(t.document_result_ready);
             ui.horizontal(|ui| {
-                ui.weak(shown);
                 if ui.button(t.document_result_open).clicked() {
-                    let _ = decl_ui::open_host_path(path);
+                    action = DocumentResultAction::Open;
                 }
             });
         });
+    action
 }
 
 pub fn choice_attachment(question: &str, choice_id: &str) -> ChatAttachment {
@@ -104,11 +137,26 @@ mod tests {
     fn locked_labels_en_fr() {
         let t_en = crate::i18n::strings("en");
         let t_fr = crate::i18n::strings("fr");
-        assert_eq!(t_en.research_choice_answer, "Answer");
+        assert_eq!(
+            t_en.research_choice_prompt,
+            "I can answer here, or prepare a document."
+        );
+        assert_eq!(
+            t_fr.research_choice_prompt,
+            "Je peux répondre ici, ou préparer un document."
+        );
+        assert_eq!(t_en.research_choice_answer, "Reply");
         assert_eq!(t_fr.research_choice_answer, "Répondre");
         assert_eq!(t_en.research_choice_document, "Prepare a document");
         assert_eq!(t_fr.research_choice_document, "Préparer un document");
-        assert_ne!(t_en.research_choice_document, t_fr.research_choice_document);
+        assert_eq!(t_en.document_result_ready, "Ready");
+        assert_eq!(t_fr.document_result_ready, "Prêt");
+        assert_eq!(t_en.document_result_open, "Open");
+        assert_eq!(t_fr.document_result_open, "Ouvrir");
+        assert_eq!(t_en.document_progress_label, "Researching…");
+        assert_eq!(t_fr.document_progress_label, "Recherche en cours…");
+        assert_eq!(t_en.document_progress_stop, "Stop");
+        assert_eq!(t_fr.document_progress_stop, "Arrêter");
     }
 
     #[test]
