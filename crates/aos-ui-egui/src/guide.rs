@@ -126,6 +126,9 @@ pub struct GuideStrings {
     pub chat_opt_attach_body: &'static str,
     pub chat_opt_slash_title: &'static str,
     pub chat_opt_slash_body: &'static str,
+    pub chat_opt_documents_title: &'static str,
+    pub chat_opt_documents_body: &'static str,
+    pub chat_opt_documents_example: &'static str,
     pub chat_schedule_heading: &'static str,
     pub chat_schedule_intro: &'static str,
     pub chat_schedule_card_title: &'static str,
@@ -235,6 +238,9 @@ const EN: GuideStrings = GuideStrings {
     chat_opt_attach_body: "Paperclip: images for vision models, documents for grounded Q&A. Pending chips show what ships with the next message.",
     chat_opt_slash_title: "Slash commands",
     chat_opt_slash_body: "Type / for completions — /help, /notes, /memory, and more route to platform tools.",
+    chat_opt_documents_title: "Prepared documents",
+    chat_opt_documents_body: "On a research-style question, choose Reply for a short answer in chat, or Prepare a document for a structured file under /downloads/. While it runs you see Researching… with Stop; when ready, Open shows the document in a clamped overlay. Find prepared files anytime under More → Documents.",
+    chat_opt_documents_example: "\"What's the state of agentic apps?\" → Prepare a document → Researching… → Ready → Open, sources at the bottom.",
     chat_schedule_heading: "Schedule",
     chat_schedule_intro: "You give a goal and a when. After Allow once, it comes back without you reopening the session. Settings still holds the list.",
     chat_schedule_card_title: "Card",
@@ -344,6 +350,9 @@ const FR: GuideStrings = GuideStrings {
     chat_opt_attach_body: "Trombone : images pour les modèles vision, documents pour des réponses ancrées. Les pastilles montrent ce qui part avec le prochain message.",
     chat_opt_slash_title: "Commandes /",
     chat_opt_slash_body: "Tapez / pour l'auto-complétion — /help, /notes, /memory, etc. routent vers les outils plateforme.",
+    chat_opt_documents_title: "Documents préparés",
+    chat_opt_documents_body: "Sur une question de recherche, choisissez Répondre pour une courte réponse dans le chat, ou Préparer un document pour un fichier structuré sous /downloads/. Pendant la préparation : Recherche en cours… avec Arrêter ; une fois prêt, Ouvrir affiche le document dans une fenêtre calée au viewport. Retrouvez les fichiers via Plus → Documents.",
+    chat_opt_documents_example: "« Quel est l'état de l'art des apps agentic ? » → Préparer un document → Recherche en cours… → Prêt → Ouvrir, sources en bas.",
     chat_schedule_heading: "Planifier",
     chat_schedule_intro: "Vous donnez un but et un quand. Après Autoriser une fois, ça revient sans rouvrir la session. La liste reste dans Réglages.",
     chat_schedule_card_title: "Carte",
@@ -702,9 +711,12 @@ fn render_chat(ui: &mut egui::Ui, g: &GuideStrings) {
             (g.chat_opt_sessions_title, g.chat_opt_sessions_body),
             (g.chat_opt_attach_title, g.chat_opt_attach_body),
             (g.chat_opt_slash_title, g.chat_opt_slash_body),
+            (g.chat_opt_documents_title, g.chat_opt_documents_body),
         ],
         FigureKind::Chat,
     );
+    ui.weak(g.section_example);
+    ui.label(g.chat_opt_documents_example);
     ui.separator();
     ui.strong(g.chat_schedule_heading);
     ui.label(g.chat_schedule_intro);

@@ -307,6 +307,14 @@ pub(crate) enum Cmd {
         tool: String,
         args: serde_json::Value,
     },
+    /// Spawn a document-prep agent (research + file-author) from a choice card.
+    DocumentPrepSpawn {
+        session_id: String,
+        question: String,
+        language: String,
+        model_id: Option<String>,
+        max_steps: u32,
+    },
 }
 
 pub(crate) enum Evt {
