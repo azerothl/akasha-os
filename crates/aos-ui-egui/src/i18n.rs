@@ -616,6 +616,11 @@ pub struct UiStrings {
     pub studio_inpaint_help: &'static str,
     pub tts_generate: &'static str,
     pub tts_card_blurb: &'static str,
+    pub skill_offer_create: &'static str,
+    pub skill_offer_later: &'static str,
+    pub skill_offer_created: &'static str,
+    pub skill_offer_dismissed: &'static str,
+    pub skill_offer_mute: &'static str,
     pub research_choice_prompt: &'static str,
     pub research_choice_answer: &'static str,
     pub research_choice_document: &'static str,
@@ -1262,6 +1267,11 @@ const EN: UiStrings = UiStrings {
     studio_inpaint_help: "Paint the area you want to change on the result, then Generate.",
     tts_generate: "Generate speech",
     tts_card_blurb: "Choose a Piper voice and knobs, then generate.",
+    skill_offer_create: "Create",
+    skill_offer_later: "Later",
+    skill_offer_created: "Created",
+    skill_offer_dismissed: "Later",
+    skill_offer_mute: "You ask for this often. I can turn it into a skill.",
     research_choice_prompt: "I can answer here, or prepare a document.",
     research_choice_answer: "Reply",
     research_choice_document: "Prepare a document",
@@ -1908,6 +1918,11 @@ const FR: UiStrings = UiStrings {
     studio_inpaint_help: "Peignez la zone à modifier sur le résultat, puis Générer.",
     tts_generate: "Générer la voix",
     tts_card_blurb: "Choisissez une voix Piper et les réglages, puis générez.",
+    skill_offer_create: "Créer",
+    skill_offer_later: "Plus tard",
+    skill_offer_created: "Créée",
+    skill_offer_dismissed: "Plus tard",
+    skill_offer_mute: "Tu demandes souvent ça. Je peux en faire une skill.",
     research_choice_prompt: "Je peux répondre ici, ou préparer un document.",
     research_choice_answer: "Répondre",
     research_choice_document: "Préparer un document",
@@ -2089,5 +2104,25 @@ mod tests {
         let en = strings("en");
         let fr = strings("fr");
         assert_ne!(en.agent_act_canvas_stroke, fr.agent_act_canvas_stroke);
+    }
+
+    #[test]
+    fn skill_offer_mute_en_fr() {
+        let en = strings("en");
+        let fr = strings("fr");
+        assert_eq!(
+            en.skill_offer_mute,
+            "You ask for this often. I can turn it into a skill."
+        );
+        assert_eq!(
+            fr.skill_offer_mute,
+            "Tu demandes souvent ça. Je peux en faire une skill."
+        );
+        assert_ne!(en.skill_offer_mute, fr.skill_offer_mute);
+        assert_ne!(en.skill_offer_create, fr.skill_offer_create);
+        assert_eq!(en.skill_offer_created, "Created");
+        assert_eq!(fr.skill_offer_created, "Créée");
+        assert_eq!(en.skill_offer_dismissed, "Later");
+        assert_eq!(fr.skill_offer_dismissed, "Plus tard");
     }
 }

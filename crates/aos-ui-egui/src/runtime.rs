@@ -40,7 +40,8 @@ use aos_proto::{
     MediaImageGenerateRequest, MediaImageUpscaleRequest, NetFetchRequest, NetFetchResponse, NetModeRequest,
     PendingConfirmation, ProviderIdRequest, ProviderListResponse, ProviderRecord,
     ProviderTestResponse, ProviderUpsertRequest, SecretListRequest, SecretListResponse,
-    SecretSetRequest, SetRoutingRequest, SkillInfo, SystemMetrics, TokenEvent, WebBrowseRequest,
+    SecretSetRequest, SetRoutingRequest, SkillInfo, SkillPassPendingOffer, SkillPassRequest,
+    SystemMetrics, TokenEvent, WebBrowseRequest,
     WebBrowseResponse, WebSearchRequest, WebSearchResponse,
     CHAT_DELEGATION_PROMPT, CHAT_SUPERVISOR_LOCK, SYSTEM_ASSISTANT_PROMPT, MigrateRequest, MigrateResponse,
 };
@@ -677,6 +678,68 @@ async fn handle_cmd(
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::SkillPassPending => {
+            let offset = sweep_tz_offset_minutes();
+            match bus
+                .call::<SkillPassRequest, Option<SkillPassPendingOffer>>(
+                    "skill.pass.pending",
+                    &SkillPassRequest {
+                        tz_offset_minutes: Some(offset),
+                        force: false,
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(offer) => {
+                    let _ = evt_tx.send(Evt::SkillPassPending(offer));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::SkillPassDismiss { pattern_id } => {
+            let offset = sweep_tz_offset_minutes();
+            let _ = bus
+                .call::<aos_proto::SkillPassDismissRequest, ()>(
+                    "skill.pass.dismiss",
+                    &aos_proto::SkillPassDismissRequest {
+                        pattern_id,
+                        tz_offset_minutes: Some(offset),
+                    },
+                    vec![],
+                )
+                .await;
+            let _ = evt_tx.send(Evt::SkillPassPending(None));
+        }
+        Cmd::SkillPassCreate { pattern_id } => {
+            match bus
+                .call::<aos_proto::SkillPassCreateRequest, SkillInfo>(
+                    "skill.pass.create",
+                    &aos_proto::SkillPassCreateRequest {
+                        pattern_id: pattern_id.clone(),
+                        actor: "human:ui".into(),
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(info) => {
+                    let _ = evt_tx.send(Evt::SkillPassCreated {
+                        pattern_id,
+                        skill_name: info.name,
+                    });
+                    if let Ok(list) = bus.call::<(), Vec<SkillInfo>>("skill.list", &(), vec![]).await
+                    {
+                        let _ = evt_tx.send(Evt::Skills(list));
+                    }
+                }
+                Err(_) => {
+                    // Silent — no status line, no système bubble (skill slugs stay out of chat).
                 }
             }
         }

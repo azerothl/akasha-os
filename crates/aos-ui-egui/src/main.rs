@@ -36,6 +36,7 @@ mod research_document;
 mod runtime;
 mod scenarios_panel;
 mod session_chat;
+mod skill_offer;
 mod slash;
 mod theme;
 
@@ -2154,6 +2155,7 @@ impl UiApp {
         let show_onboarding = !onboarding.completed;
         let t = i18n::strings(&prefs.language);
         let _ = cmd_tx.send(Cmd::SessionBootstrap);
+        let _ = cmd_tx.send(Cmd::SkillPassPending);
         let _ = cmd_tx.send(Cmd::CatalogueRefresh);
         let _ = cmd_tx.send(Cmd::ModuleList);
         let _ = cmd_tx.send(Cmd::SetRouting {
@@ -3345,6 +3347,61 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         }
     }
 
+    fn chat_has_skill_offer(&self, pattern_id: &str) -> bool {
+        self.chat.iter().any(|line| {
+            line.attachments.iter().any(|att| {
+                matches!(
+                    att,
+                    ChatAttachment::SkillOffer { pattern_id: pid, .. } if pid == pattern_id
+                )
+            })
+        })
+    }
+
+    fn offer_skill_card(&mut self, offer: &aos_proto::SkillPassPendingOffer) {
+        if self.chat_has_skill_offer(&offer.pattern_id) {
+            return;
+        }
+        let att = ChatAttachment::SkillOffer {
+            pattern_id: offer.pattern_id.clone(),
+            label_en: offer.label_en.clone(),
+            label_fr: offer.label_fr.clone(),
+            state: "pending".into(),
+        };
+        self.chat.push(ChatLine {
+            role: "assistant".into(),
+            text: String::new(),
+            attachments: vec![att.clone()],
+            speaker_id: None,
+            speaker_name: None,
+        });
+        if let Some(sid) = self.active_session.clone() {
+            let _ = self.cmd_tx.send(Cmd::SessionAppend {
+                session_id: sid,
+                role: "assistant".into(),
+                content: String::new(),
+                attachments: vec![att],
+            });
+        }
+    }
+
+    fn update_skill_offer_state(&mut self, pattern_id: &str, state: &str) {
+        for line in &mut self.chat {
+            for att in &mut line.attachments {
+                if let ChatAttachment::SkillOffer {
+                    pattern_id: pid,
+                    state: st,
+                    ..
+                } = att
+                {
+                    if pid == pattern_id {
+                        *st = state.to_string();
+                    }
+                }
+            }
+        }
+    }
+
     fn handle_schedule_phrase(&mut self, session_id: &str, user_phrase: &str, parsed: ParsedSchedule) {
         let t = i18n::strings(&self.prefs.language);
         let act_text = schedule_act_phrase::act_phrase_from_parsed(&t, &parsed, &self.prefs.language);
@@ -3672,6 +3729,9 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         }
         self.tab = tab.clone();
         match tab {
+            Tab::Chat => {
+                let _ = self.cmd_tx.send(Cmd::SkillPassPending);
+            }
             Tab::Providers => {
                 let _ = self.cmd_tx.send(Cmd::ProviderList);
             }
@@ -4157,6 +4217,14 @@ impl eframe::App for UiApp {
                     self.mem_sweep_last_pass_ms = last_pass_ms;
                     self.mem_sweep_last_pass_label = last_pass_label;
                 }
+                Evt::SkillPassPending(offer) => {
+                    if let Some(o) = offer {
+                        self.offer_skill_card(&o);
+                    }
+                }
+                Evt::SkillPassCreated { pattern_id, .. } => {
+                    self.update_skill_offer_state(&pattern_id, "created");
+                }
                 Evt::ChatSystem(m) => self.chat.push(ChatLine::plain("système", m)),
                 Evt::Metrics(m) => self.metrics = Some(m),
                 Evt::AgentSpawned {
@@ -4580,6 +4648,7 @@ impl eframe::App for UiApp {
                             self.chat = messages;
                         }
                         self.sync_schedule_cards();
+                        let _ = self.cmd_tx.send(Cmd::SkillPassPending);
                         self.session_chat.clear_unread(&id);
                         self.session_chat.sync_active_view(
                             self.active_session.as_deref(),
@@ -5856,6 +5925,15 @@ impl UiApp {
                                             }
                                         });
                                     }
+                                }
+                                ChatAttachment::SkillOffer { .. } => {
+                                    skill_offer::render_skill_offer_card(
+                                        ui,
+                                        t,
+                                        &self.prefs.language,
+                                        &self.cmd_tx,
+                                        &mut self.chat[i].attachments[j],
+                                    );
                                 }
                                 ChatAttachment::ResearchChoice {
                                     choice_id,

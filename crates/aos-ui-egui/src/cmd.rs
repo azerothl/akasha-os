@@ -5,7 +5,7 @@ use aos_proto::{
     AgentInfo, AgentTrace, AuditEvent, CapInfo, ChatAttachment, ChatRoomMember, ChatSessionMeta,
     ChatSessionMode, CanvasOp, CanvasOpBody, CanvasPenStyle, DocumentRef, FeedbackSubmitRequest,
     FeedbackSubmitResponse, MemHit, ModelInfo, ModuleCatalogue, ModuleInfo, PendingConfirmation,
-    ProviderRecord, SkillInfo, SystemMetrics, WebSearchHit,
+    ProviderRecord, SkillInfo, SkillPassPendingOffer, SystemMetrics, WebSearchHit,
 };
 use aos_proto::decl_ui::ModuleUiResponse;
 use aos_proto::{McpServerInfo};
@@ -47,6 +47,9 @@ pub(crate) enum Cmd {
     MemWipeUser,
     MemSupersede { id: u64, text: String },
     MemEdit { id: u64, text: String },
+    SkillPassPending,
+    SkillPassCreate { pattern_id: String },
+    SkillPassDismiss { pattern_id: String },
     SecretSet { name: String, value: String },
     SecretList,
     NetSetMode { online: bool },
@@ -399,6 +402,11 @@ pub(crate) enum Evt {
     MemSweepStatus {
         last_pass_ms: u64,
         last_pass_label: String,
+    },
+    SkillPassPending(Option<SkillPassPendingOffer>),
+    SkillPassCreated {
+        pattern_id: String,
+        skill_name: String,
     },
     SecretList {
         names: Vec<String>,

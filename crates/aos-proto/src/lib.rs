@@ -3174,6 +3174,15 @@ pub enum ChatAttachment {
         #[serde(default = "default_agent_act_state")]
         state: String,
     },
+    /// Morning skill suggestion (Preview 0.15) — human label only in thread.
+    SkillOffer {
+        pattern_id: String,
+        label_en: String,
+        label_fr: String,
+        /// `pending` | `created` | `dismissed`
+        #[serde(default = "default_skill_offer_state")]
+        state: String,
+    },
     /// Research question: Answer vs Prepare a document (Preview chat thread).
     ResearchChoice {
         choice_id: String,
@@ -3228,6 +3237,10 @@ pub enum ChatAttachment {
     },
 }
 
+fn default_skill_offer_state() -> String {
+    "pending".into()
+}
+
 fn default_agent_act_state() -> String {
     "pending".into()
 }
@@ -3257,6 +3270,7 @@ impl ChatAttachment {
             | Self::TtsDraft { .. }
             | Self::Document { .. }
             | Self::AgentAct { .. }
+            | Self::SkillOffer { .. }
             | Self::ResearchChoice { .. }
             | Self::DocumentResult { .. }
             | Self::DocumentProgress { .. }
@@ -3666,6 +3680,48 @@ pub struct MemSweepStatus {
     pub last_local_day_key: String,
     #[serde(default)]
     pub relations_created: u64,
+}
+
+/// `skill.pass` — nightly scan of recent chats for repeatable skill patterns (Preview 0.15).
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
+pub struct SkillPassRequest {
+    #[serde(default)]
+    pub tz_offset_minutes: Option<i32>,
+    /// Force the pass even if already run for this local day.
+    #[serde(default)]
+    pub force: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
+pub struct SkillPassResponse {
+    pub local_day_key: String,
+    pub candidates_found: usize,
+    pub pending_pattern_id: Option<String>,
+    pub last_pass_ms: u64,
+}
+
+/// `skill.pass.pending` — morning card offer (human labels only).
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
+pub struct SkillPassPendingOffer {
+    pub pattern_id: String,
+    pub label_en: String,
+    pub label_fr: String,
+}
+
+/// `skill.pass.dismiss` — Later on the morning card.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct SkillPassDismissRequest {
+    pub pattern_id: String,
+    #[serde(default)]
+    pub tz_offset_minutes: Option<i32>,
+}
+
+/// `skill.pass.create` — explicit Create from the morning card.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct SkillPassCreateRequest {
+    pub pattern_id: String,
+    #[serde(default)]
+    pub actor: String,
 }
 
 /// Prompt système pour l'extraction post-tour (local_only, JSON strict).
