@@ -41,13 +41,13 @@ CFLAGS := -nostdlib -ffreestanding -g -O2 -Wall -Wno-unused-function -Werror -I$
 LDFLAGS := -L$(BOARD_DIR)/lib --gc-sections
 LIBS := -lmicrokit -Tmicrokit.ld
 
-IMAGES := capkd.elf bus.elf gate.elf auditd.elf
+IMAGES := capkd.elf bus.elf gate.elf auditd.elf dev.elf
 IMAGE_FILE = $(BUILD_DIR)/loader.img
 REPORT_FILE = $(BUILD_DIR)/report.txt
 
 all: $(IMAGE_FILE)
 
-$(BUILD_DIR)/%.o: %.c abi.h aos_cap.h Makefile
+$(BUILD_DIR)/%.o: %.c abi.h aos_cap.h hw.h virtio.h Makefile
 	$(CC) -c $(CFLAGS) $< -o $@
 
 $(BUILD_DIR)/capkd.elf: $(BUILD_DIR)/capkd.o $(RUST_LIB)
@@ -60,6 +60,9 @@ $(BUILD_DIR)/gate.elf: $(BUILD_DIR)/gate.o
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 $(BUILD_DIR)/auditd.elf: $(BUILD_DIR)/auditd.o
+	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
+
+$(BUILD_DIR)/dev.elf: $(BUILD_DIR)/dev.o $(BUILD_DIR)/virtio.o
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 $(IMAGE_FILE) $(REPORT_FILE): $(addprefix $(BUILD_DIR)/, $(IMAGES)) aos.system

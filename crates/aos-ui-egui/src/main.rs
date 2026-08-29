@@ -29,6 +29,7 @@ mod os_open;
 mod product_context;
 mod runtime;
 mod scenarios_panel;
+mod session_chat;
 mod slash;
 mod theme;
 
@@ -281,6 +282,13 @@ fn chat_message_frame(
     ui.add_space(6.0);
 }
 
+fn designer_shot_mode() -> bool {
+    matches!(
+        std::env::var("AOS_DESIGNER_SHOT").ok().as_deref(),
+        Some("1") | Some("true") | Some("yes")
+    )
+}
+
 fn main() -> eframe::Result<()> {
     if std::env::var_os("AOS_MODEL_SETUP").is_some() {
         return model_setup::run();
@@ -504,6 +512,7 @@ pub(crate) async fn load_session(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>, id:
                         text: m.content,
                         attachments: m.attachments,
                         speaker_id: m.speaker_id,
+                        speaker_name: m.speaker_name,
                     }
                 })
                 .collect();
@@ -1701,6 +1710,7 @@ struct UiApp {
     installed_modules: Vec<ModuleInfo>,
     sessions: Vec<ChatSessionMeta>,
     active_session: Option<String>,
+    session_chat: session_chat::SessionChatState,
     rename_buf: String,
     network_online: bool,
     web_query: String,
@@ -1984,6 +1994,7 @@ impl UiApp {
             installed_modules: Vec::new(),
             sessions: Vec::new(),
             active_session: None,
+            session_chat: session_chat::SessionChatState::default(),
             rename_buf: String::new(),
             network_online,
             web_query: String::new(),
@@ -2187,6 +2198,7 @@ impl UiApp {
                     origin: "ask-reply".into(),
                 }],
                 speaker_id: None,
+                speaker_name: None,
             });
             let _ = self.cmd_tx.send(Cmd::AgentKill { id: agent_id });
         }
@@ -2272,6 +2284,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 origin: "ask-reply".into(),
             }],
             speaker_id: None,
+            speaker_name: None,
         });
         let _ = self.cmd_tx.send(Cmd::SessionAppend {
             session_id,
@@ -2336,7 +2349,11 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 return;
             }
         }
-        if self.chat_pending {
+        if self
+            .active_session
+            .as_deref()
+            .is_some_and(|sid| self.session_chat.is_pending(sid))
+        {
             self.chat.push(ChatLine::plain("user", text));
             self.chat.push(ChatLine::plain(
                 "système",
@@ -2399,6 +2416,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             text: text.clone(),
             attachments,
             speaker_id: None,
+            speaker_name: None,
         });
         self.chat_pending_images.clear();
         self.chat_pending_documents.clear();
@@ -2413,6 +2431,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             let Some(session_id) = self.active_session.clone() else {
                 return;
             };
+            self.session_chat.begin_turn(&session_id);
             self.streaming.clear();
             self.chat_pending = true;
             self.chat_inference_id = None;
@@ -2441,6 +2460,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 )
             })
             .collect();
+        self.session_chat.begin_turn(&session_id);
         self.streaming.clear();
         self.chat_pending = true;
         self.chat_inference_id = None;
@@ -2815,6 +2835,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             text: spoken.to_string(),
             attachments: vec![att.clone()],
             speaker_id: None,
+            speaker_name: None,
         });
         if let Some(sid) = self.active_session.clone() {
             let _ = self.cmd_tx.send(Cmd::SessionAppend {
@@ -3176,24 +3197,31 @@ impl eframe::App for UiApp {
         self.poll_update_download();
         while let Ok(ev) = self.evt_rx.try_recv() {
             match ev {
-                Evt::Delta(t) => self.streaming.push_str(&t),
+                Evt::Delta { session_id, text } => {
+                    session_chat::on_delta(
+                        &mut self.session_chat,
+                        self.active_session.as_deref(),
+                        &session_id,
+                        &text,
+                        &mut self.streaming,
+                    );
+                }
                 Evt::Done {
                     text,
                     session_id,
                     attachments,
                 } => {
-                    if self.active_session.as_deref() == Some(session_id.as_str()) && !text.is_empty()
-                    {
-                        self.chat.push(ChatLine {
-                            role: "assistant".into(),
-                            text,
-                            attachments,
-                            speaker_id: None,
-                        });
-                    }
-                    self.streaming.clear();
-                    self.chat_pending = false;
-                    self.chat_inference_id = None;
+                    session_chat::on_done(
+                        &mut self.session_chat,
+                        self.active_session.as_deref(),
+                        &session_id,
+                        &text,
+                        attachments,
+                        &mut self.chat,
+                        &mut self.streaming,
+                        &mut self.chat_pending,
+                        &mut self.chat_inference_id,
+                    );
                     if self.status.starts_with("assistant :") {
                         self.status.clear();
                     }
@@ -3302,6 +3330,7 @@ impl eframe::App for UiApp {
                                 origin,
                             }],
                             speaker_id: None,
+                            speaker_name: None,
                         });
                     } else {
                         self.status = format!("agent lancé : {agent_id}");
@@ -3396,6 +3425,7 @@ impl eframe::App for UiApp {
                                                 origin: "completion".into(),
                                             }],
                                             speaker_id: None,
+                                            speaker_name: None,
                                         });
                                     }
                                 } else if !seeding
@@ -3460,6 +3490,7 @@ impl eframe::App for UiApp {
                                             origin: "ask-timeout".into(),
                                         }],
                                         speaker_id: None,
+                                        speaker_name: None,
                                     });
                                 }
                             }
@@ -3489,6 +3520,7 @@ impl eframe::App for UiApp {
                                             origin: "ask".into(),
                                         }],
                                         speaker_id: None,
+                                        speaker_name: None,
                                     });
                                 } else if !on_this_session
                                     && !self.agent_notified.contains(&ag.agent_id)
@@ -3627,18 +3659,25 @@ impl eframe::App for UiApp {
                     }
                     if session_changed {
                         self.room_members_pane_open = false;
-                        let mut chat = vec![ChatLine::plain(
-                            "système",
-                            format!("Session {id} — historique rechargé."),
-                        )];
+                        let mut chat = Vec::new();
+                        if !designer_shot_mode() {
+                            chat.push(ChatLine::plain(
+                                "système",
+                                format!("Session {id} — historique rechargé."),
+                            ));
+                        }
                         chat.extend(messages);
                         self.chat = chat;
                     } else {
                         self.chat = messages;
                     }
-                    self.streaming.clear();
-                    self.chat_pending = false;
-                    self.chat_inference_id = None;
+                    self.session_chat.clear_unread(&id);
+                    self.session_chat.sync_active_view(
+                        self.active_session.as_deref(),
+                        &mut self.streaming,
+                        &mut self.chat_pending,
+                        &mut self.chat_inference_id,
+                    );
                     self.room_turn_pending_text = None;
                     if meta.canvas_open {
                         let _ = self.cmd_tx.send(Cmd::CanvasPoll {
@@ -3654,17 +3693,20 @@ impl eframe::App for UiApp {
                     agent_turns,
                     cancelled,
                 } => {
+                    self.session_chat.finish_turn(&session_id);
                     if self.active_session.as_deref() == Some(session_id.as_str()) {
                         self.chat_pending = false;
                         self.chat_inference_id = None;
                         self.room_turn_pending_text = None;
-                        let t = i18n::strings(&self.prefs.language);
-                        self.status = if cancelled {
-                            t.room_turn_cancelled.into()
-                        } else {
-                            t.room_turn_done
-                                .replace("{n}", &agent_turns.to_string())
-                        };
+                        if let Some(status) =
+                            chat_room::room_turn_done_status(agent_turns, cancelled)
+                        {
+                            self.status = status;
+                        } else if self.status.starts_with("salon :") {
+                            self.status.clear();
+                        }
+                    } else if !cancelled && agent_turns > 0 {
+                        self.session_chat.mark_unread(&session_id);
                     }
                 }
                 Evt::CanvasMeta(meta) => {
@@ -3712,6 +3754,7 @@ impl eframe::App for UiApp {
                                 prompt: "canvas export".into(),
                             }],
                             speaker_id: None,
+                            speaker_name: None,
                         });
                     }
                 }
@@ -3838,6 +3881,7 @@ impl eframe::App for UiApp {
                         text: note.clone(),
                         attachments: vec![att.clone()],
                         speaker_id: None,
+                        speaker_name: None,
                     });
                     if let Some(sid) = self.active_session.clone() {
                         let _ = self.cmd_tx.send(Cmd::SessionAppend {
@@ -3895,19 +3939,33 @@ impl eframe::App for UiApp {
                 Evt::AgentTrace(t) => {
                     self.agent_traces.insert(t.agent_id.clone(), t);
                 }
-                Evt::InferStarted { inference_id } => {
-                    self.chat_inference_id = Some(inference_id);
+                Evt::InferStarted {
+                    session_id,
+                    inference_id,
+                } => {
+                    session_chat::on_infer_started(
+                        &mut self.session_chat,
+                        self.active_session.as_deref(),
+                        &session_id,
+                        inference_id,
+                        &mut self.chat_inference_id,
+                    );
                 }
-                Evt::ChatCancelled => {
-                    self.chat_pending = false;
-                    self.chat_inference_id = None;
-                    self.room_turn_pending_text = None;
-                    if !self.streaming.is_empty() {
-                        let partial = std::mem::take(&mut self.streaming);
-                        self.chat.push(ChatLine::plain("assistant", partial));
+                Evt::ChatCancelled { session_id } => {
+                    let on_active = session_chat::on_chat_cancelled(
+                        &mut self.session_chat,
+                        self.active_session.as_deref(),
+                        &session_id,
+                        &mut self.streaming,
+                        &mut self.chat_pending,
+                        &mut self.chat_inference_id,
+                        &mut self.chat,
+                    );
+                    if on_active {
+                        self.room_turn_pending_text = None;
+                        let t = i18n::strings(&self.prefs.language);
+                        self.status = t.chat_stopped.into();
                     }
-                    let t = i18n::strings(&self.prefs.language);
-                    self.status = t.chat_stopped.into();
                 }
                 Evt::Catalogue(c) => self.catalogue = Some(c),
                 Evt::InstalledModules(list) => {
@@ -4654,6 +4712,7 @@ impl UiApp {
         t: &i18n::UiStrings,
         room_mode: bool,
         room_members: &[ChatRoomMember],
+        room_conductor_policy: Option<&aos_proto::ChatRoomConductorPolicy>,
         scroll_h: f32,
     ) {
         egui::ScrollArea::vertical()
@@ -4676,6 +4735,7 @@ impl UiApp {
                     let mut text = self.chat[i].text.clone();
                     let attachments = self.chat[i].attachments.clone();
                     let speaker_id = self.chat[i].speaker_id.clone();
+                    let speaker_name = self.chat[i].speaker_name.clone();
                     let is_completion = attachments.iter().any(|a| {
                         matches!(
                             a,
@@ -4691,23 +4751,26 @@ impl UiApp {
                     {
                         text = i18n::agent_could_not_act_message(t);
                     }
-                    let text = if role == "assistant"
+                    let kind = chat_bubble_kind(&role, speaker_id.as_deref(), room_mode);
+                    let text = if kind == ChatBubbleKind::RoomSpeaker {
+                        chat_room::strip_roster_agent_id_mentions(t, &text, room_members)
+                    } else if role == "assistant"
                         && !is_completion
                         && speaker_id.is_none()
                     {
-                        agent_panel::format_assistant_display(&text)
+                        agent_panel::format_chat_assistant_display(&text)
                     } else {
                         text
                     };
-                    let kind = chat_bubble_kind(&role, speaker_id.as_deref(), room_mode);
                     let mut shown_role = chat_role_label(kind, t, &role);
                     if kind == ChatBubbleKind::RoomSpeaker {
                         if let Some(sid) = speaker_id.as_deref() {
-                            shown_role = room_members
-                                .iter()
-                                .find(|m| m.agent_id == sid)
-                                .map(|m| chat_room::member_display_label(t, m))
-                                .unwrap_or_else(|| sid.to_string());
+                            shown_role = chat_room::roster_display_name(
+                                t,
+                                room_members,
+                                sid,
+                                speaker_name.as_deref(),
+                            );
                         }
                     }
                     let (fill, stroke, role_color) = if kind == ChatBubbleKind::RoomSpeaker {
@@ -4890,7 +4953,7 @@ impl UiApp {
                             egui::RichText::new(t.chat_assistant).strong().small(),
                         );
                         let streaming =
-                            agent_panel::format_streaming_preview(&self.streaming);
+                            agent_panel::format_chat_streaming_preview(&self.streaming);
                         ui.push_id("chat_md_stream", |ui| {
                             chat_markdown_viewer(ui).show(
                                 ui,
@@ -4906,7 +4969,12 @@ impl UiApp {
                         self.room_turn_pending_text
                             .as_deref()
                             .and_then(|msg| {
-                                chat_room::format_turn_speaker_queue(t, msg, room_members)
+                                chat_room::format_turn_speaker_queue(
+                                    t,
+                                    msg,
+                                    room_members,
+                                    room_conductor_policy,
+                                )
                             })
                             .unwrap_or_else(|| t.chat_assistant.to_string())
                     } else {
@@ -5049,13 +5117,20 @@ impl UiApp {
                     for s in self.sessions.clone() {
                         let selected =
                             self.active_session.as_deref() == Some(s.id.as_str());
-                        if ui
-                            .selectable_label(
-                                selected,
-                                format!("{} ({})", s.title, s.message_count),
-                            )
-                            .clicked()
-                        {
+                        let unread = self.session_chat.is_unread(&s.id);
+                        let row = ui.horizontal(|ui| {
+                            if unread {
+                                let t = i18n::strings(&self.prefs.language);
+                                icons::status_dot(ui, theme::SIGNAL)
+                                    .on_hover_text(t.session_unread_reply);
+                            }
+                            let title = ui.selectable_label(selected, &s.title);
+                            ui.label(
+                                egui::RichText::new(format!("({})", s.message_count)).weak(),
+                            );
+                            title
+                        });
+                        if row.inner.clicked() || row.response.clicked() {
                             let _ =
                                 self.cmd_tx.send(Cmd::SessionSelect { id: s.id.clone() });
                         }
@@ -5179,12 +5254,14 @@ impl UiApp {
                         &self.sessions,
                         self.active_session.as_deref(),
                     ));
-                    let room_members: Vec<ChatRoomMember> = chat_room::active_session_meta(
+                    let room_session_meta = chat_room::active_session_meta(
                         &self.sessions,
                         self.active_session.as_deref(),
-                    )
-                    .map(|m| m.members.clone())
-                    .unwrap_or_default();
+                    );
+                    let room_members: Vec<ChatRoomMember> = room_session_meta
+                        .map(|m| m.members.clone())
+                        .unwrap_or_default();
+                    let room_conductor_policy = room_session_meta.map(|m| m.conductor_policy.clone());
                     let canvas_open = chat_room::active_session_meta(
                         &self.sessions,
                         self.active_session.as_deref(),
@@ -5244,6 +5321,7 @@ impl UiApp {
                                                         &t,
                                                         room_mode,
                                                         &room_members,
+                                                        room_conductor_policy.as_ref(),
                                                         content_h,
                                                     );
                                                 },
@@ -5292,6 +5370,7 @@ impl UiApp {
                                                     &t,
                                                     room_mode,
                                                     &room_members,
+                                                    room_conductor_policy.as_ref(),
                                                     transcript_h,
                                                 );
                                             },
@@ -5329,6 +5408,7 @@ impl UiApp {
                                     &t,
                                     room_mode,
                                     &room_members,
+                                    room_conductor_policy.as_ref(),
                                     content_h,
                                 );
                             }
@@ -5341,6 +5421,7 @@ impl UiApp {
                     } else {
                         Vec::new()
                     };
+                    let mut chat_sent_this_frame = false;
                     let input_row = ui.allocate_ui_with_layout(
                         egui::vec2(ui.available_width(), composer_h),
                         egui::Layout::bottom_up(egui::Align::Min),
@@ -5431,9 +5512,12 @@ impl UiApp {
                                                 )
                                                 .clicked()
                                             {
-                                                let _ = self.cmd_tx.send(Cmd::ChatCancel {
-                                                    inference_id: id,
-                                                });
+                                                if let Some(sid) = self.active_session.clone() {
+                                                    let _ = self.cmd_tx.send(Cmd::ChatCancel {
+                                                        inference_id: id,
+                                                        session_id: sid,
+                                                    });
+                                                }
                                             }
                                         }
                                     }
@@ -5501,6 +5585,7 @@ impl UiApp {
                                         && ui.input(|i| i.key_pressed(egui::Key::Enter)));
                                 if send {
                                     self.send_chat();
+                                    chat_sent_this_frame = true;
                                     self.chat_refocus = true;
                                 }
                             }
@@ -5580,8 +5665,10 @@ impl UiApp {
                                     });
                             });
                         if let Some(text) = picked {
-                            self.input = text;
-                            self.chat_refocus = true;
+                            if !chat_sent_this_frame {
+                                self.input = text;
+                                self.chat_refocus = true;
+                            }
                         }
                     } else if !completions.is_empty() {
                         let t = i18n::strings(&self.prefs.language);
@@ -5622,8 +5709,10 @@ impl UiApp {
                                     });
                             });
                         if let Some(text) = picked {
-                            self.input = text;
-                            self.chat_refocus = true;
+                            if !chat_sent_this_frame {
+                                self.input = text;
+                                self.chat_refocus = true;
+                            }
                         }
                     }
                 },
@@ -6464,6 +6553,7 @@ impl UiApp {
                                             origin: "ask-reply".into(),
                                         }],
                                         speaker_id: None,
+                                        speaker_name: None,
                                     });
                                 }
                             }
