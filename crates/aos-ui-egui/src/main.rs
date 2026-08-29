@@ -5569,6 +5569,8 @@ impl UiApp {
             .room_header_member_count
             .replace("{n}", &members.len().to_string());
 
+        let g = guide::strings(&self.prefs.language);
+
         ui.horizontal(|ui| {
             let full_w = ui.available_width();
             let toggle_w = session_toggle_reserve_width(t);
@@ -5597,15 +5599,8 @@ impl UiApp {
                         icons::caret(ui, self.room_members_pane_open);
                     }
 
-                    let g = guide::strings(&self.prefs.language);
                     if guide::tab_help_button(ui, g.help_tooltip) {
-                        self.guide.open_topic(if room {
-                            guide::GuideTopic::Salon
-                        } else if canvas_open {
-                            guide::GuideTopic::Canvas
-                        } else {
-                            guide::GuideTopic::Chat
-                        });
+                        self.guide.open_topic(guide::GuideTopic::Chat);
                     }
                 },
             );
@@ -5639,6 +5634,7 @@ impl UiApp {
 
         if canvas_open {
             let mut toolbar_action: Option<chat_canvas::CanvasUiAction> = None;
+            let mut open_canvas_guide = false;
             let toolbar_min_w = chat_canvas::toolbar_content_min_width(
                 t,
                 self.canvas_panel.seeing,
@@ -5658,12 +5654,20 @@ impl UiApp {
                             ui.set_min_width(toolbar_min_w);
                             ui.horizontal(|ui| {
                                 ui.set_min_height(CANVAS_TOOLBAR_ROW_H - 4.0);
-                                toolbar_action =
-                                    chat_canvas::ui_canvas_toolbar(ui, t, &mut self.canvas_panel);
+                                toolbar_action = chat_canvas::ui_canvas_toolbar(
+                                    ui,
+                                    t,
+                                    &mut self.canvas_panel,
+                                    Some(g.help_tooltip),
+                                    &mut open_canvas_guide,
+                                );
                             });
                         });
                 },
             );
+            if open_canvas_guide {
+                self.guide.open_topic(guide::GuideTopic::Canvas);
+            }
             if let Some(action) = toolbar_action {
                 self.dispatch_canvas_ui_action(Some(action), &sid);
             }
@@ -5673,7 +5677,12 @@ impl UiApp {
             egui::Frame::group(ui.style())
                 .inner_margin(egui::Margin::symmetric(8, 6))
                 .show(ui, |ui| {
-                    ui.strong(t.room_members_heading);
+                    ui.horizontal(|ui| {
+                        ui.strong(t.room_members_heading);
+                        if guide::tab_help_button(ui, g.help_tooltip) {
+                            self.guide.open_topic(guide::GuideTopic::Salon);
+                        }
+                    });
                     if members.is_empty() {
                         ui.weak(t.room_members_empty);
                     } else {

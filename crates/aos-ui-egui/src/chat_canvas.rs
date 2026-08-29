@@ -443,6 +443,8 @@ pub fn ui_canvas_toolbar(
     ui: &mut Ui,
     t: &UiStrings,
     state: &mut CanvasPanelState,
+    help_tooltip: Option<&str>,
+    help_clicked: &mut bool,
 ) -> Option<CanvasUiAction> {
     let mut action: Option<CanvasUiAction> = None;
     ui.horizontal(|ui| {
@@ -524,6 +526,12 @@ pub fn ui_canvas_toolbar(
             .clicked()
         {
             state.clear_confirm_open = true;
+        }
+
+        if let Some(tip) = help_tooltip {
+            if crate::guide::tab_help_button(ui, tip) {
+                *help_clicked = true;
+            }
         }
     });
 
