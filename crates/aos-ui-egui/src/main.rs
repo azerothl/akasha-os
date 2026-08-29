@@ -27,6 +27,7 @@ mod nav;
 mod onboarding;
 mod os_open;
 mod product_context;
+mod research_choice;
 mod runtime;
 mod scenarios_panel;
 mod slash;
@@ -870,6 +871,93 @@ pub(crate) async fn spawn_chat_delegate_agent(
     }
 }
 
+pub(crate) async fn spawn_document_prep_agent(
+    bus: Arc<BusClient>,
+    evt_tx: Sender<Evt>,
+    sid: String,
+    question: String,
+    language: String,
+    _model_id: Option<String>,
+    max_steps: u32,
+) {
+    let goal = question.trim().to_string();
+    let mut req = AgentCreateRequest::simple(goal.clone());
+    req.display_name = Some(aos_agent::persist::agent_title(&goal));
+    req.origin = Some("document".into());
+    req.skills = vec!["research".into(), "file-author".into()];
+    req.tools = vec![
+        "memory.recall".into(),
+        "web.search".into(),
+        "web.browse".into(),
+        "files.generate".into(),
+        "fs.read".into(),
+        "fs.list".into(),
+        "goal.complete".into(),
+    ];
+    req.session_id = Some(sid.clone());
+    req.system_prompt = Some(aos_agent::research_detect::document_prep_system_prompt(
+        &language,
+    ));
+    req.goal = Some(AgentGoal {
+        statement: goal.clone(),
+        success_criteria: vec!["Structured markdown under /downloads/ with footnoted sources"
+            .into()],
+        max_steps,
+        max_subagents: 0,
+        timeout_secs: 3600,
+    });
+    req.caps.push("tool.invoke:research".into());
+    req.caps.push("net.connect:*".into());
+    req.caps.push("fs.write:/downloads/**".into());
+    req.caps.push("fs.read:/downloads/**".into());
+    req.gate_mode = crate::prefs::load_preferences().agent_gate_mode.clone();
+    let prose: String = if language.eq_ignore_ascii_case("fr") {
+        "Je prépare un document de recherche.".into()
+    } else {
+        "Preparing a research document.".into()
+    };
+    match bus
+        .call::<AgentCreateRequest, aos_proto::AgentCreateResponse>(
+            aos_agent::intents::CREATE,
+            &req,
+            vec![],
+        )
+        .await
+    {
+        Ok(r) => {
+            let att = ChatAttachment::AgentRef {
+                agent_id: r.agent_id.clone(),
+                title: goal.clone(),
+                origin: "document".into(),
+            };
+            let _ = bus
+                .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
+                    "chat.session.append",
+                    &ChatSessionAppendRequest {
+                        session_id: sid.clone(),
+                        role: "assistant".into(),
+                        content: prose.clone(),
+                        attachments: vec![att.clone()],
+                        speaker_id: None,
+                        speaker_name: None,
+                    },
+                    vec![],
+                )
+                .await;
+            let _ = evt_tx.send(Evt::AgentSpawned {
+                session_id: sid,
+                agent_id: r.agent_id,
+                title: goal,
+                origin: "document".into(),
+                ack: prose,
+            });
+        }
+        Err(e) => {
+            let _ = evt_tx.send(Evt::Error(e.to_string()));
+        }
+    }
+}
+
 fn chat_agent_kit(task: &str) -> (Vec<String>, Vec<String>) {
     chat_agent_kit_ex(task, false)
 }
@@ -1646,6 +1734,27 @@ struct UiApp {
     canvas_panel: chat_canvas::CanvasPanelState,
     roster_edit_drafts: HashMap<String, RosterEditDraft>,
     guide: guide::GuideState,
+    /// Deferred normal chat after user picks Answer on a research choice card.
+    research_pending_chat: Option<ResearchPendingChat>,
+    /// Document-prep agent_id → original question (result card title).
+    document_prep_agents: HashMap<String, String>,
+}
+
+#[derive(Clone)]
+struct ResearchPendingChat {
+    session_id: String,
+    history: Vec<(String, String)>,
+    user_text: String,
+    model_id: Option<String>,
+    images: Vec<String>,
+    documents: Vec<DocumentRef>,
+    auto_remember: bool,
+    max_steps: u32,
+    routing: String,
+    language: String,
+    canvas_open: bool,
+    canvas_aspect: aos_proto::CanvasAspect,
+    choice_id: String,
 }
 
 #[derive(Clone, Default)]
@@ -1934,6 +2043,8 @@ impl UiApp {
             canvas_panel: chat_canvas::CanvasPanelState::default(),
             roster_edit_drafts: HashMap::new(),
             guide: guide::GuideState::default(),
+            research_pending_chat: None,
+            document_prep_agents: HashMap::new(),
         }
     }
 
@@ -2082,6 +2193,156 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         });
         self.tab = Tab::Agents;
         self.status = t.scen_module_agent_launched.into();
+    }
+
+    fn dispatch_pending_chat(&mut self, pending: ResearchPendingChat) {
+        self.streaming.clear();
+        self.chat_pending = true;
+        self.chat_inference_id = None;
+        self.status = "assistant : génération…".into();
+        let _ = self.cmd_tx.send(Cmd::Chat {
+            session_id: pending.session_id,
+            history: pending.history,
+            user_text: pending.user_text,
+            model_id: pending.model_id,
+            images: pending.images,
+            documents: pending.documents,
+            auto_remember: pending.auto_remember,
+            max_steps: pending.max_steps,
+            routing: pending.routing,
+            language: pending.language,
+            canvas_open: pending.canvas_open,
+            canvas_aspect: pending.canvas_aspect,
+        });
+        self.mark_onboarding_chat_sent();
+        self.scen_chat = true;
+    }
+
+    fn offer_research_choice(
+        &mut self,
+        session_id: &str,
+        user_text: &str,
+        pending: ResearchPendingChat,
+    ) {
+        let t = i18n::strings(&self.prefs.language);
+        let att = research_choice::choice_attachment(user_text, &pending.choice_id);
+        self.chat.push(ChatLine {
+            role: "assistant".into(),
+            text: t.research_choice_prompt.to_string(),
+            attachments: vec![att.clone()],
+            speaker_id: None,
+        });
+        let _ = self.cmd_tx.send(Cmd::SessionAppend {
+            session_id: session_id.to_string(),
+            role: "assistant".into(),
+            content: t.research_choice_prompt.to_string(),
+            attachments: vec![att],
+        });
+        self.research_pending_chat = Some(pending);
+        self.mark_onboarding_chat_sent();
+        self.scen_chat = true;
+    }
+
+    fn resolve_research_choice_answer(&mut self, choice_id: &str, msg_idx: usize) {
+        let Some(pending) = self.research_pending_chat.take() else {
+            return;
+        };
+        if pending.choice_id != choice_id {
+            self.research_pending_chat = Some(pending);
+            return;
+        }
+        if let Some(att) = self.chat[msg_idx].attachments.iter_mut().find_map(|a| {
+            if let ChatAttachment::ResearchChoice {
+                choice_id: id,
+                state,
+                ..
+            } = a
+            {
+                if id == choice_id {
+                    Some(state)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        }) {
+            *att = "answer".into();
+        }
+        self.dispatch_pending_chat(pending);
+    }
+
+    fn resolve_research_choice_document(
+        &mut self,
+        choice_id: &str,
+        msg_idx: usize,
+        session_id: &str,
+    ) {
+        let pending = match self.research_pending_chat.take() {
+            Some(p) if p.choice_id == choice_id => p,
+            other => {
+                self.research_pending_chat = other;
+                return;
+            }
+        };
+        if let Some(att) = self.chat[msg_idx].attachments.iter_mut().find_map(|a| {
+            if let ChatAttachment::ResearchChoice {
+                choice_id: id,
+                state,
+                ..
+            } = a
+            {
+                if id == choice_id {
+                    Some(state)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        }) {
+            *att = "document".into();
+        }
+        let user_line = self
+            .chat
+            .iter()
+            .rev()
+            .find(|l| l.role == "user" || l.role == "vous")
+            .cloned();
+        if let Some(line) = user_line {
+            let _ = self.cmd_tx.send(Cmd::SessionAppend {
+                session_id: session_id.to_string(),
+                role: "user".into(),
+                content: line.text,
+                attachments: line.attachments,
+            });
+        }
+        let _ = self.cmd_tx.send(Cmd::DocumentPrepSpawn {
+            session_id: session_id.to_string(),
+            question: pending.user_text,
+            language: pending.language,
+            model_id: pending.model_id,
+            max_steps: pending.max_steps,
+        });
+    }
+
+    fn attach_document_result_card(&mut self, question: &str, path: &str) {
+        let label = research_choice::label_from_path(path);
+        let att = research_choice::document_result_attachment(question, path, &label);
+        self.chat.push(ChatLine {
+            role: "assistant".into(),
+            text: String::new(),
+            attachments: vec![att.clone()],
+            speaker_id: None,
+        });
+        if let Some(sid) = self.active_session.clone() {
+            let _ = self.cmd_tx.send(Cmd::SessionAppend {
+                session_id: sid,
+                role: "assistant".into(),
+                content: String::new(),
+                attachments: vec![att],
+            });
+        }
     }
 
     fn send_ask_reply(&mut self, session_id: String, agent_id: String, title: String, text: String) {
@@ -2248,25 +2509,6 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             self.scen_chat = true;
             return;
         }
-        let history: Vec<(String, String)> = self
-            .chat
-            .iter()
-            .filter(|l| l.role == "user" || l.role == "vous" || l.role == "assistant")
-            .map(|l| {
-                (
-                    if l.role == "vous" || l.role == "user" {
-                        "user".into()
-                    } else {
-                        "assistant".into()
-                    },
-                    l.text.clone(),
-                )
-            })
-            .collect();
-        self.streaming.clear();
-        self.chat_pending = true;
-        self.chat_inference_id = None;
-        self.status = "assistant : génération…".into();
         let model_id = self
             .sessions
             .iter()
@@ -2286,6 +2528,63 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             .find(|s| s.id == session_id)
             .map(|s| s.canvas_aspect)
             .unwrap_or_default();
+        if pending_images.is_empty()
+            && pending_documents.is_empty()
+            && aos_agent::research_detect::is_research_shaped_ask(&text)
+        {
+            let history: Vec<(String, String)> = self
+                .chat
+                .iter()
+                .filter(|l| l.role == "user" || l.role == "vous" || l.role == "assistant")
+                .map(|l| {
+                    (
+                        if l.role == "vous" || l.role == "user" {
+                            "user".into()
+                        } else {
+                            "assistant".into()
+                        },
+                        l.text.clone(),
+                    )
+                })
+                .collect();
+            let choice_id = format!("research-choice-{}", chrono_like_stamp());
+            let pending = ResearchPendingChat {
+                session_id: session_id.clone(),
+                history,
+                user_text: text.clone(),
+                model_id: model_id.clone(),
+                images: pending_images,
+                documents: pending_documents,
+                auto_remember: self.prefs.auto_remember_chat,
+                max_steps: chat_agent_max_steps(self.prefs.default_max_steps),
+                routing: self.prefs.routing.clone(),
+                language: self.prefs.language.clone(),
+                canvas_open,
+                canvas_aspect,
+                choice_id,
+            };
+            self.offer_research_choice(&session_id, &text, pending);
+            return;
+        }
+        let history: Vec<(String, String)> = self
+            .chat
+            .iter()
+            .filter(|l| l.role == "user" || l.role == "vous" || l.role == "assistant")
+            .map(|l| {
+                (
+                    if l.role == "vous" || l.role == "user" {
+                        "user".into()
+                    } else {
+                        "assistant".into()
+                    },
+                    l.text.clone(),
+                )
+            })
+            .collect();
+        self.streaming.clear();
+        self.chat_pending = true;
+        self.chat_inference_id = None;
+        self.status = "assistant : génération…".into();
         let _ = self.cmd_tx.send(Cmd::Chat {
             session_id,
             history,
@@ -3113,6 +3412,10 @@ impl eframe::App for UiApp {
                     origin,
                     ack,
                 } => {
+                    if origin == "document" {
+                        self.document_prep_agents
+                            .insert(agent_id.clone(), title.clone());
+                    }
                     self.arm_pending_module_agent(&title);
                     if self.active_session.as_deref() == Some(session_id.as_str()) {
                         self.chat.push(ChatLine {
@@ -3126,7 +3429,7 @@ impl eframe::App for UiApp {
                             speaker_id: None,
                         });
                     } else {
-                        self.status = format!("agent lancé : {agent_id}");
+                        self.status = format!("agent lancé : {}", agent_id);
                     }
                 }
                 Evt::Agents(a) => {
@@ -3168,7 +3471,16 @@ impl eframe::App for UiApp {
                             })
                             .unwrap_or(false);
                         if terminal {
-                            if let Some(sid) = &ag.session_id {
+                            if self.document_prep_agents.contains_key(&ag.agent_id) && was_active && !seeding
+                            {
+                                if ag.state == AgentState::Done {
+                                    let _ = self.cmd_tx.send(Cmd::AgentTrace {
+                                        id: ag.agent_id.clone(),
+                                    });
+                                } else {
+                                    self.document_prep_agents.remove(&ag.agent_id);
+                                }
+                            } else if let Some(sid) = &ag.session_id {
                                 let on_this_session =
                                     self.active_session.as_deref() == Some(sid.as_str());
                                 let already = self.chat.iter().any(|l| {
@@ -3208,7 +3520,9 @@ impl eframe::App for UiApp {
                                                 }
                                             }
                                         }
-                                    } else if !seeding {
+                                    } else if !seeding
+                                        && !self.document_prep_agents.contains_key(&ag.agent_id)
+                                    {
                                         self.chat.push(ChatLine {
                                             role: "assistant".into(),
                                             text: content,
@@ -3715,6 +4029,11 @@ impl eframe::App for UiApp {
                     self.status = t.agents_edit_saved.into();
                 }
                 Evt::AgentTrace(t) => {
+                    if let Some(question) = self.document_prep_agents.remove(&t.agent_id) {
+                        if let Some(path) = aos_agent::document_prep::path_from_trace(&t) {
+                            self.attach_document_result_card(&question, &path);
+                        }
+                    }
                     self.agent_traces.insert(t.agent_id.clone(), t);
                 }
                 Evt::InferStarted { inference_id } => {
@@ -4467,6 +4786,8 @@ impl UiApp {
                 let mut target_reply: Option<String> = None;
                 let mut open_studio: Option<(String, String)> = None;
                 let mut act_decision: Option<(String, String, bool)> = None;
+                let mut research_choice_pick: Option<(String, usize, research_choice::ResearchChoiceAction)> =
+                    None;
                 let reply_id = self.blocked_ask_agent().map(|a| a.agent_id.clone());
                 let n = self.chat.len();
                 for i in 0..n {
@@ -4655,6 +4976,35 @@ impl UiApp {
                                         });
                                     }
                                 }
+                                ChatAttachment::ResearchChoice {
+                                    choice_id,
+                                    question,
+                                    state,
+                                } => {
+                                    let action = research_choice::render_research_choice(
+                                        ui,
+                                        t,
+                                        question,
+                                        state,
+                                    );
+                                    if action != research_choice::ResearchChoiceAction::None {
+                                        research_choice_pick =
+                                            Some((choice_id.clone(), i, action));
+                                    }
+                                }
+                                ChatAttachment::DocumentResult {
+                                    question,
+                                    path,
+                                    label,
+                                } => {
+                                    research_choice::render_document_result(
+                                        ui,
+                                        t,
+                                        question,
+                                        path,
+                                        label,
+                                    );
+                                }
                             }
                         }
                     });
@@ -4665,6 +5015,23 @@ impl UiApp {
                         act_id,
                         approved,
                     });
+                }
+                if let Some((choice_id, msg_idx, action)) = research_choice_pick {
+                    match action {
+                        research_choice::ResearchChoiceAction::Answer => {
+                            self.resolve_research_choice_answer(&choice_id, msg_idx);
+                        }
+                        research_choice::ResearchChoiceAction::Document => {
+                            if let Some(sid) = self.active_session.clone() {
+                                self.resolve_research_choice_document(
+                                    &choice_id,
+                                    msg_idx,
+                                    &sid,
+                                );
+                            }
+                        }
+                        research_choice::ResearchChoiceAction::None => {}
+                    }
                 }
                 if let Some(id) = open_agent {
                     self.open_agent_tab(&id);
@@ -7588,5 +7955,41 @@ mod delegate_tests {
             ASPECT,
         )
         .is_none());
+    }
+}
+
+#[cfg(test)]
+mod research_document_tests {
+    use aos_agent::document_prep::{compose_document, BrowsePage};
+    use aos_proto::WebSearchHit;
+
+    #[test]
+    fn research_shaped_ask_triggers_choice_path() {
+        assert!(aos_agent::research_detect::is_research_shaped_ask(
+            "what is the state of the art of agentic apps?"
+        ));
+    }
+
+    #[test]
+    fn answer_choice_does_not_require_document_footnotes() {
+        assert!(!crate::research_choice::choice_actions_enabled("answer"));
+    }
+
+    #[test]
+    fn prepare_document_mock_has_verified_footnote() {
+        let hits = vec![WebSearchHit {
+            title: "Agentic apps overview".into(),
+            url: "https://example.org/agentic".into(),
+            snippet: "Tool-using agents are maturing.".into(),
+        }];
+        let pages = vec![BrowsePage {
+            url: "https://example.org/agentic".into(),
+            title: "Agentic apps overview".into(),
+            text: "Full page body.".into(),
+            fetch_error: None,
+        }];
+        let md = compose_document("Agentic apps?", &hits, &pages);
+        assert!(md.contains("[^1]: Agentic apps overview — https://example.org/agentic"));
+        assert!(!md.contains("https://invented.example"));
     }
 }

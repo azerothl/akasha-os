@@ -3023,9 +3023,28 @@ pub enum ChatAttachment {
         #[serde(default = "default_agent_act_state")]
         state: String,
     },
+    /// Research question: Answer vs Prepare a document (Preview chat thread).
+    ResearchChoice {
+        choice_id: String,
+        question: String,
+        /// `pending` | `answer` | `document`
+        #[serde(default = "default_research_choice_state")]
+        state: String,
+    },
+    /// Completed research document in thread (title = question).
+    DocumentResult {
+        question: String,
+        path: String,
+        #[serde(default)]
+        label: String,
+    },
 }
 
 fn default_agent_act_state() -> String {
+    "pending".into()
+}
+
+fn default_research_choice_state() -> String {
     "pending".into()
 }
 
@@ -3041,7 +3060,9 @@ impl ChatAttachment {
             | Self::Audio { .. }
             | Self::TtsDraft { .. }
             | Self::Document { .. }
-            | Self::AgentAct { .. } => None,
+            | Self::AgentAct { .. }
+            | Self::ResearchChoice { .. }
+            | Self::DocumentResult { .. } => None,
         }
     }
 
