@@ -273,7 +273,10 @@ pub(crate) enum Cmd {
         content: String,
         attachments: Vec<ChatAttachment>,
     },
-    ChatCancel { inference_id: u64 },
+    ChatCancel {
+        inference_id: u64,
+        session_id: String,
+    },
     CatalogueRefresh,
     ModuleList,
     ModuleInstall {
@@ -301,7 +304,10 @@ pub(crate) enum Cmd {
 }
 
 pub(crate) enum Evt {
-    Delta(String),
+    Delta {
+        session_id: String,
+        text: String,
+    },
     Done {
         text: String,
         session_id: String,
@@ -440,8 +446,11 @@ pub(crate) enum Evt {
         models: Vec<String>,
     },
     AgentTrace(AgentTrace),
-    InferStarted { inference_id: u64 },
-    ChatCancelled,
+    InferStarted {
+        session_id: String,
+        inference_id: u64,
+    },
+    ChatCancelled { session_id: String },
     Catalogue(ModuleCatalogue),
     InstalledModules(Vec<ModuleInfo>),
     ModuleInstalled(String),
@@ -472,6 +481,7 @@ pub(crate) struct ChatLine {
     pub(crate) text: String,
     pub(crate) attachments: Vec<ChatAttachment>,
     pub(crate) speaker_id: Option<String>,
+    pub(crate) speaker_name: Option<String>,
 }
 
 impl ChatLine {
@@ -481,6 +491,7 @@ impl ChatLine {
             text: text.into(),
             attachments: Vec::new(),
             speaker_id: None,
+            speaker_name: None,
         }
     }
 
@@ -494,6 +505,7 @@ impl ChatLine {
             text: text.into(),
             attachments: Vec::new(),
             speaker_id,
+            speaker_name: None,
         }
     }
 }

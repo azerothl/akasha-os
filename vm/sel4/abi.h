@@ -15,6 +15,7 @@ enum {
     AOS_OP_CHECK = 3,
     AOS_OP_REVOKE = 4,
     AOS_OP_LOOKUP = 5,
+    AOS_OP_HW_SMOKE = 6,
 };
 
 enum {
@@ -37,8 +38,10 @@ enum {
 #define AOS_OBJ_BYTES (AOS_OBJ_WORDS * 8)
 #define AOS_MAX_CAPS 32
 
-/* Côté gate : ch 0 = bus (PPC), ch 1 = auditd (notify).
- * Côté bus  : ch 0 = capkd (PPC). */
+/* Côté gate : ch 0 = bus (PPC), ch 1 = auditd (notify), ch 2 = dev (PPC).
+ * Côté bus  : ch 0 = capkd (PPC).
+ * Côté dev  : ch 0 = gate (PPC). */
 #define CH_BUS 0
 #define CH_CAPKD 0
 #define CH_AUDIT 1
+#define CH_DEV 2

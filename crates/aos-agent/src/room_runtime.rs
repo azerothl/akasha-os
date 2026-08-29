@@ -145,11 +145,11 @@ pub fn build_room_system_prompt(
     let mut out = format!(
         "Tu es {display_name}, membre d'un salon multi-agent in-app. \
          Réponds en une seule prise, de façon concise.\n\
-         Membres du salon (tu ne peux @ que ces noms ou ids roster) : {roster}.\n\
+         Membres du salon (tu ne peux @ que ces noms) : {roster}.\n\
          Ne jamais inventer des collègues fictifs (pas de Dessinateur, Moteur de rendu, \
          @agent_id_123, etc.). Ne propose pas agent.spawn pour ajouter des membres.\n\
          Si tu es seul membre, agis toi-même — ne @ personne d'absent.\n\
-         Pour interpeller un autre membre présent, utilise @Nom ou @agent_id du roster.\n"
+         Pour interpeller un autre membre présent, utilise @Nom du roster.\n"
     );
     if canvas_open {
         out.push_str(
@@ -565,6 +565,7 @@ pub async fn execute_room_conduct(
     let max = effective_max_turns(&session.meta.conductor_policy) as usize;
     let mut queue =
         sanitize_member_queue(build_initial_queue(&req.content, &session.meta.members), &session.meta.members);
+    queue.truncate(max);
     if queue.is_empty() {
         return Ok(AgentRoomConductResponse {
             agent_turns: 0,
@@ -574,6 +575,7 @@ pub async fn execute_room_conduct(
 
     let mut agent_turns = 0u32;
     let mut peer_followup_used = false;
+    let mut spoken = std::collections::HashSet::<String>::new();
 
     while (agent_turns as usize) < max {
         if round.is_cancelled() {
@@ -583,11 +585,19 @@ pub async fn execute_room_conduct(
             });
         }
 
-        if queue.is_empty() {
+        let agent_id = loop {
+            if queue.is_empty() {
+                break None;
+            }
+            let id = queue.remove(0);
+            if spoken.contains(&id) {
+                continue;
+            }
+            break Some(id);
+        };
+        let Some(agent_id) = agent_id else {
             break;
-        }
-
-        let agent_id = queue.remove(0);
+        };
         let member = session
             .meta
             .members
@@ -612,6 +622,7 @@ pub async fn execute_room_conduct(
             }
             Err(e) => return Err(e),
         };
+        spoken.insert(agent_id);
         agent_turns += 1;
 
         if (agent_turns as usize) >= max {
@@ -622,7 +633,7 @@ pub async fn execute_room_conduct(
             if let Some(peer_id) =
                 detect_peer_address(&reply.content, &session.meta.members, &member.agent_id)
             {
-                if !queue.iter().any(|id| id == &peer_id) {
+                if !spoken.contains(&peer_id) && !queue.iter().any(|id| id == &peer_id) {
                     queue.push(peer_id);
                     peer_followup_used = true;
                 }
@@ -726,7 +737,8 @@ mod tests {
             origin: None,
         };
         let prompt = build_room_system_prompt(&spec, "Critic", &members, true, &[], "sess-1", None);
-        assert!(prompt.contains("Critic (@persona-critic"));
+        assert!(prompt.contains("Critic"));
+        assert!(!prompt.contains("@persona-critic"));
         assert!(prompt.contains("canvas.*"));
         assert!(prompt.contains("Dessinateur"));
     }
