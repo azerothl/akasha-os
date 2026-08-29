@@ -4389,6 +4389,7 @@ impl UiApp {
 
         if canvas_open {
             let mut toolbar_action: Option<chat_canvas::CanvasUiAction> = None;
+            let mut open_canvas_guide = false;
             egui::ScrollArea::horizontal()
                 .id_salt("canvas_toolbar_scroll")
                 .auto_shrink([false, false])
@@ -4396,13 +4397,18 @@ impl UiApp {
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.set_min_height(CANVAS_TOOLBAR_ROW_H - 4.0);
-                        toolbar_action =
-                            chat_canvas::ui_canvas_toolbar(ui, t, &mut self.canvas_panel);
-                        if guide::tab_help_button(ui, g.help_tooltip) {
-                            self.guide.open_topic(guide::GuideTopic::Canvas);
-                        }
+                        toolbar_action = chat_canvas::ui_canvas_toolbar(
+                            ui,
+                            t,
+                            &mut self.canvas_panel,
+                            Some(g.help_tooltip),
+                            &mut open_canvas_guide,
+                        );
                     });
                 });
+            if open_canvas_guide {
+                self.guide.open_topic(guide::GuideTopic::Canvas);
+            }
             if let Some(action) = toolbar_action {
                 self.dispatch_canvas_ui_action(Some(action), &sid);
             }
