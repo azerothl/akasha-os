@@ -368,6 +368,16 @@ pub fn nav_label(g: &GuideStrings, topic: GuideTopic) -> &'static str {
     }
 }
 
+pub(crate) fn guide_window_sizes(avail_w: f32, avail_h: f32) -> ([f32; 2], [f32; 2], [f32; 2]) {
+    let margin = 16.0;
+    let max_w = (avail_w - margin * 2.0).max(280.0);
+    let max_h = (avail_h - margin * 2.0).max(200.0);
+    let default_size = [820.0_f32.min(max_w), 560.0_f32.min(max_h)];
+    let max_size = [max_w, max_h];
+    let min_size = [280.0_f32.min(max_w), 200.0_f32.min(max_h)];
+    (default_size, max_size, min_size)
+}
+
 pub fn show_window(
     ctx: &egui::Context,
     state: &mut GuideState,
@@ -379,63 +389,81 @@ pub fn show_window(
     }
     let g = strings(lang);
     let mut close = false;
+    let avail = ctx.available_rect();
+    let (default_size, max_size, min_size) =
+        guide_window_sizes(avail.width(), avail.height());
+    const NAV_W: f32 = 148.0;
+    const FOOTER_H: f32 = 34.0;
+
     egui::Window::new(g.title)
         .collapsible(false)
         .resizable(true)
-        .default_size([820.0, 560.0])
+        .default_size(default_size)
+        .min_size(min_size)
+        .max_size(max_size)
+        .constrain(true)
+        .constrain_to(avail)
         .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
         .show(ctx, |ui| {
-            ui.horizontal_top(|ui| {
-                let nav_w = 148.0;
-                ui.allocate_ui_with_layout(
-                    egui::vec2(nav_w, ui.available_height().max(320.0)),
-                    egui::Layout::top_down(egui::Align::Min),
-                    |ui| {
-                        ui.set_width(nav_w);
-                        for topic in GuideTopic::ALL {
-                            let label = nav_label(&g, topic);
-                            if ui
-                                .selectable_label(state.topic == topic, label)
-                                .clicked()
-                            {
-                                state.topic = topic;
-                            }
-                        }
-                        ui.add_space(12.0);
+            let body_h = (ui.available_height() - FOOTER_H).max(80.0);
+            ui.allocate_ui_with_layout(
+                egui::vec2(ui.available_width(), body_h),
+                egui::Layout::top_down(egui::Align::Min),
+                |ui| {
+                    ui.horizontal_top(|ui| {
+                        let nav_h = ui.available_height().max(80.0);
+                        ui.allocate_ui_with_layout(
+                            egui::vec2(NAV_W, nav_h),
+                            egui::Layout::top_down(egui::Align::Min),
+                            |ui| {
+                                ui.set_width(NAV_W);
+                                for topic in GuideTopic::ALL {
+                                    let label = nav_label(&g, topic);
+                                    if ui
+                                        .selectable_label(state.topic == topic, label)
+                                        .clicked()
+                                    {
+                                        state.topic = topic;
+                                    }
+                                }
+                                ui.add_space(12.0);
+                                ui.separator();
+                                if ui.small_button(g.restart_onboarding).clicked() {
+                                    *restart_onboarding = true;
+                                    close = true;
+                                }
+                            },
+                        );
                         ui.separator();
-                        if ui.small_button(g.restart_onboarding).clicked() {
-                            *restart_onboarding = true;
-                            close = true;
-                        }
-                    },
-                );
-                ui.separator();
-                let content_w = ui.available_width().max(200.0);
-                let content_h = ui.available_height().max(280.0);
-                ui.allocate_ui_with_layout(
-                    egui::vec2(content_w, content_h),
-                    egui::Layout::top_down(egui::Align::Min),
-                    |ui| {
-                        ui.set_width(content_w);
-                        egui::ScrollArea::vertical()
-                            .id_salt("guide_content")
-                            .auto_shrink([false, false])
-                            .max_height(content_h)
-                            .show(ui, |ui| {
-                                ui.set_min_width(content_w - 8.0);
-                                render_topic(ui, state.topic, &g);
-                            });
-                    },
-                );
-            });
-            ui.separator();
-            ui.horizontal(|ui| {
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let content_w = ui.available_width().max(120.0);
+                        let content_h = ui.available_height().max(80.0);
+                        ui.allocate_ui_with_layout(
+                            egui::vec2(content_w, content_h),
+                            egui::Layout::top_down(egui::Align::Min),
+                            |ui| {
+                                ui.set_width(content_w);
+                                egui::ScrollArea::vertical()
+                                    .id_salt("guide_content")
+                                    .auto_shrink([false, false])
+                                    .max_height(content_h)
+                                    .show(ui, |ui| {
+                                        ui.set_min_width((content_w - 8.0).max(100.0));
+                                        render_topic(ui, state.topic, &g);
+                                    });
+                            },
+                        );
+                    });
+                },
+            );
+            ui.allocate_ui_with_layout(
+                egui::vec2(ui.available_width(), FOOTER_H),
+                egui::Layout::right_to_left(egui::Align::Center),
+                |ui| {
                     if ui.button(g.close).clicked() {
                         close = true;
                     }
-                });
-            });
+                },
+            );
         });
     if close {
         state.open = false;
@@ -843,6 +871,17 @@ fn board_center(rect: Rect) -> Pos2 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn guide_window_sizes_fit_inside_viewport() {
+        let (default_size, max_size, min_size) = guide_window_sizes(640.0, 480.0);
+        assert!(default_size[0] <= max_size[0]);
+        assert!(default_size[1] <= max_size[1]);
+        assert!(min_size[0] <= max_size[0]);
+        assert!(min_size[1] <= max_size[1]);
+        assert!(default_size[0] <= 640.0);
+        assert!(default_size[1] <= 480.0);
+    }
 
     #[test]
     fn guide_topics_cover_primary_surfaces() {
