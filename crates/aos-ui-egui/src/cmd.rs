@@ -348,6 +348,8 @@ pub(crate) enum Evt {
     /// Préremplit le formulaire Retour (dépannage) sans publier tout de suite.
     FeedbackDraft(FeedbackSubmitRequest),
     Sessions(Vec<ChatSessionMeta>),
+    /// Runtime names the session about to be loaded (create/delete/bootstrap).
+    SessionLoadIntent { id: String },
     SessionLoaded {
         id: String,
         messages: Vec<ChatLine>,

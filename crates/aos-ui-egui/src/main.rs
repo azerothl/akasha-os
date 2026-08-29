@@ -613,6 +613,17 @@ pub(crate) async fn load_session(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>, id:
     }
 }
 
+pub(crate) async fn announce_and_load_session(
+    bus: &Arc<BusClient>,
+    evt_tx: &Sender<Evt>,
+    id: &str,
+) {
+    let _ = evt_tx.send(Evt::SessionLoadIntent {
+        id: id.to_string(),
+    });
+    load_session(bus, evt_tx, id).await;
+}
+
 /// Kit des agents lancés depuis le chat : plan, notes, sous-agents — toujours.
 const CHAT_AGENT_MIN_STEPS: u32 = 64;
 pub(crate) const CHAT_AGENT_MAX_SUBAGENTS: u32 = 8;
@@ -1656,10 +1667,8 @@ struct UiApp {
     schedule_interval_secs: u64,
     /// Act id waiting for `Evt::ScheduleCreated` to attach a thread card.
     schedule_pending_card_act: Option<String>,
-    /// Expected session id for the next user-initiated `SessionLoaded`.
-    pending_session_load: Option<String>,
-    /// Allow the next cross-session load (create/delete/bootstrap fallback).
-    allow_session_load: bool,
+    /// User-initiated session navigation intent for the next cross-session load.
+    pending_session_nav: session_nav::PendingSessionNav,
     /// In-memory schedule act/card edits not yet safe to clobber from disk.
     schedule_transcript_dirty: bool,
     agent_display_name: String,
@@ -1942,8 +1951,7 @@ impl UiApp {
             schedule_goal: String::new(),
             schedule_interval_secs: 60,
             schedule_pending_card_act: None,
-            pending_session_load: None,
-            allow_session_load: false,
+            pending_session_nav: session_nav::PendingSessionNav::None,
             schedule_transcript_dirty: false,
             agent_display_name: String::new(),
             agent_task: String::new(),
@@ -2958,22 +2966,19 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
     }
 
     fn request_session_select(&mut self, id: String) {
-        self.pending_session_load = Some(id.clone());
-        self.allow_session_load = false;
+        self.pending_session_nav = session_nav::PendingSessionNav::Explicit(id.clone());
         self.schedule_transcript_dirty = false;
         let _ = self.cmd_tx.send(Cmd::SessionSelect { id });
     }
 
     fn request_session_create(&mut self, title: Option<String>) {
-        self.pending_session_load = None;
-        self.allow_session_load = true;
+        self.pending_session_nav = session_nav::PendingSessionNav::AwaitingCreate;
         self.schedule_transcript_dirty = false;
         let _ = self.cmd_tx.send(Cmd::SessionCreate { title });
     }
 
     fn request_session_delete(&mut self, id: String) {
-        self.pending_session_load = None;
-        self.allow_session_load = true;
+        self.pending_session_nav = session_nav::PendingSessionNav::AwaitingDelete;
         self.schedule_transcript_dirty = false;
         let _ = self.cmd_tx.send(Cmd::SessionDelete { id });
     }
@@ -3858,21 +3863,21 @@ impl eframe::App for UiApp {
                     self.tab = Tab::Feedback;
                 }
                 Evt::Sessions(list) => self.sessions = list,
+                Evt::SessionLoadIntent { id } => {
+                    session_nav::apply_session_load_intent(&mut self.pending_session_nav, &id);
+                }
                 Evt::SessionLoaded { id, messages, meta } => {
                     let session_changed = self.active_session.as_deref() != Some(id.as_str());
                     if session_changed
                         && !session_nav::should_switch_session_view(
                             self.active_session.as_deref(),
-                            self.pending_session_load.as_deref(),
-                            self.allow_session_load,
+                            &self.pending_session_nav,
                             id.as_str(),
                         )
                     {
                         if let Some(s) = self.sessions.iter_mut().find(|s| s.id == meta.id) {
                             *s = meta.clone();
                         }
-                        self.pending_session_load = None;
-                        self.allow_session_load = false;
                     } else if !session_changed
                         && !session_nav::should_replace_chat_on_same_session_reload(
                             self.schedule_transcript_dirty,
@@ -3883,11 +3888,9 @@ impl eframe::App for UiApp {
                             *s = meta.clone();
                         }
                         self.sync_schedule_cards();
-                        self.pending_session_load = None;
-                        self.allow_session_load = false;
+                        self.pending_session_nav = session_nav::PendingSessionNav::None;
                     } else {
-                        self.pending_session_load = None;
-                        self.allow_session_load = false;
+                        self.pending_session_nav = session_nav::PendingSessionNav::None;
                         self.active_session = Some(id.clone());
                         self.rename_buf = meta.title.clone();
                         if let Some(s) = self.sessions.iter_mut().find(|s| s.id == meta.id) {
