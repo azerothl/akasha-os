@@ -1336,21 +1336,21 @@ N'écris jamais un manifeste, handlers.yaml, ni un arbre declarative_ui « pour 
 
 Tu agis via des actions JSON structurées (ou la convention TOOL: pour compat). Tu n'inventes pas d'outils absents du catalogue. Tu respectes les capacités (caps) et les confirmations bloquantes.
 
-Tu réponds en français, de façon concise et factuelle. Pour les questions sur l'UI, les nouveautés ou « ce qui a changé », utilise les extraits « Documentation produit (RAG) » et le micro-brief injectés — ne dis jamais que tu n'as pas accès au changelog ou à la doc produit. Si un point n'y figure pas, dis-le clairement.";
+Réponds dans la langue de l'utilisateur (français par défaut si ambigu), de façon concise et factuelle. Pour les questions générales (culture, langues, vie courante, savoir encyclopédique), réponds normalement : les extraits RAG produit ne limitent pas ce savoir. Pour les questions sur l'UI Preview, les nouveautés ou « ce qui a changé », base-toi uniquement sur les extraits « Documentation produit (RAG) » et le micro-brief injectés — ne dis jamais que tu n'as pas accès au changelog ou à la doc produit ; n'invente pas de fonctionnalités absentes de ces sources. Si un point produit n'y figure pas, dis-le clairement.";
 
 /// Micro-brief produit (pas le changelog) — le détail vient du RAG `product:docs`.
 pub const PREVIEW_SURFACE_BRIEF: &str = "\
 ## Surface produit — Akasha OS Preview (hôte Windows/Linux)
 Onglets : Chat, Mémoire, Notes, Tâches, Agents, Modèles, Caps, Audit, Providers, Image (studio), Settings, Réseau (opt-in).
-Ce n'est pas un OS bootable. Les détails / nouveautés viennent des extraits RAG (FEATURES, STATUS, TESTER) injectés dans le tour — pas d'invention hors de ces sources.";
+Ce n'est pas un OS bootable. Pour l'UI, les nouveautés et « ce qui a changé », les extraits RAG (FEATURES, STATUS, TESTER) injectés dans le tour font foi — n'invente pas de fonctionnalités absentes de ces sources. Hors sujet produit, ce brief ne limite pas tes réponses.";
 
 /// Addendum injecté uniquement dans le chemin chat (pas les workers).
 /// Délégation des tâches complexes via `agent.spawn` sans boucle d'outils.
 pub const CHAT_DELEGATION_PROMPT: &str = "
 Chat (cette session) — tu n'as PAS de boucle d'outils :
-- Questions, explications, conseils (y compris « quoi de neuf » / UI) → réponds en français, sans JSON, en t'appuyant sur le brief + extraits RAG produit s'ils sont présents.
+- Questions, explications, conseils → réponds sans JSON. Langue : celle de l'utilisateur (français par défaut). Savoir général ou langues : réponds normalement même si le RAG est injecté et ne couvre pas le sujet — ignore le RAG quand il est hors sujet. « Quoi de neuf » / UI / changelog Preview : appuie-toi sur le brief + extraits RAG produit ; n'invente pas de features.
 - Synthèse vocale / TTS / « générer un audio » : n'appelle PAS agent.spawn.
-  Le hôte ouvre une carte TTS (`/speak <texte>`). Réponds en français, sans JSON.
+  Le hôte ouvre une carte TTS (`/speak <texte>`). Réponds sans JSON, dans la langue de l'utilisateur.
 - Routage dessin (gelé) :
   • Panneau canvas OUVERT + « dessine » / « draw » / « sketch » → canvas vectoriel (canvas.stroke…).
   • Panneau canvas FERMÉ + « dessine » / « draw » / « sketch » sans marqueur → agent image (media.image.generate).
@@ -1758,6 +1758,60 @@ mod chat_delegation_tests {
         assert!(chat_tts_request("comment générer un audio").is_none());
         assert!(chat_tts_request("crée un module ping").is_none());
         assert!(chat_tts_request("génère une image d'un chat").is_none());
+    }
+}
+
+#[cfg(test)]
+mod preview_prompt_tests {
+    use super::{CHAT_DELEGATION_PROMPT, PREVIEW_SURFACE_BRIEF, SYSTEM_ASSISTANT_PROMPT};
+
+    #[test]
+    fn product_rag_does_not_jail_general_knowledge() {
+        let chat_stack = format!(
+            "{SYSTEM_ASSISTANT_PROMPT}\n{PREVIEW_SURFACE_BRIEF}\n{CHAT_DELEGATION_PROMPT}"
+        );
+        assert!(
+            chat_stack.contains("savoir général") || chat_stack.contains("savoir encyclopédique"),
+            "prompts should tell the model general knowledge is allowed"
+        );
+        assert!(
+            !PREVIEW_SURFACE_BRIEF.contains("pas d'invention hors de ces sources"),
+            "brief must not globally forbid answering outside RAG"
+        );
+        assert!(
+            CHAT_DELEGATION_PROMPT.contains("ignore le RAG"),
+            "chat path should ignore irrelevant RAG"
+        );
+    }
+
+    #[test]
+    fn chat_follows_user_language_not_french_only() {
+        assert!(
+            !CHAT_DELEGATION_PROMPT.contains("→ réponds en français, sans JSON, en t'appuyant"),
+            "must not require French for every Q&A turn"
+        );
+        assert!(
+            CHAT_DELEGATION_PROMPT.contains("Langue : celle de l'utilisateur"),
+            "chat should follow user language"
+        );
+        assert!(
+            SYSTEM_ASSISTANT_PROMPT.contains("langue de l'utilisateur"),
+            "system prompt should follow user language"
+        );
+    }
+
+    #[test]
+    fn product_ui_still_grounded_in_rag() {
+        assert!(SYSTEM_ASSISTANT_PROMPT.contains("Documentation produit (RAG)"));
+        assert!(PREVIEW_SURFACE_BRIEF.contains("RAG"));
+        assert!(
+            SYSTEM_ASSISTANT_PROMPT.contains("n'invente pas de fonctionnalités"),
+            "product claims must stay grounded in RAG"
+        );
+        assert!(
+            CHAT_DELEGATION_PROMPT.contains("n'invente pas de features"),
+            "chat UI answers must stay grounded in RAG"
+        );
     }
 }
 
