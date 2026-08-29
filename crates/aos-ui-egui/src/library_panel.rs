@@ -23,9 +23,6 @@ pub fn render(
     timezone_offset_minutes: i32,
 ) -> LibraryPanelActions {
     let mut actions = LibraryPanelActions::default();
-    ui.heading(t.tab_library);
-    ui.label(t.library_hint);
-    ui.add_space(6.0);
     if ui.button(t.library_add).clicked() {
         actions.add_clicked = true;
     }

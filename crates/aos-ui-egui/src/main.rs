@@ -5502,16 +5502,25 @@ impl UiApp {
 
     fn ui_library(&mut self, ui: &mut egui::Ui) {
         let t = i18n::strings(&self.prefs.language);
+        let g = guide::strings(&self.prefs.language);
+        ui.horizontal(|ui| {
+            ui.strong(t.tab_library);
+            if guide::tab_help_button(ui, g.help_tooltip) {
+                self.guide.open_topic(guide::GuideTopic::Library);
+            }
+        });
         let offset = runtime::sweep_tz_offset_minutes();
         let actions = library_panel::render(ui, &t, &self.library, offset);
         if actions.add_clicked {
             let filters = [(
-                "Documents",
+                t.tab_library,
                 aos_proto::chat_document::CHAT_DOCUMENT_EXTENSIONS,
             )];
-            if let Some(path) =
-                os_open::pick_os_file(t.library_add, &filters, os_open::user_downloads_dir().as_deref())
-            {
+            if let Some(path) = os_open::pick_os_file(
+                t.tab_library,
+                &filters,
+                os_open::user_downloads_dir().as_deref(),
+            ) {
                 let _ = self.cmd_tx.send(Cmd::UserLibraryAdd {
                     path: path.to_string_lossy().into_owned(),
                 });
