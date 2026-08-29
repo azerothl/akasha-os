@@ -1246,11 +1246,7 @@ async fn handle_cmd(
                 )
                 .await
             {
-                Ok(resp) => {
-                    let _ = evt_tx.send(Evt::Status(format!(
-                        "library: {} ({} chunks)",
-                        resp.doc.label, resp.chunks
-                    )));
+                Ok(_resp) => {
                     if let Ok(list) = bus
                         .call::<(), UserLibraryListResponse>("user.library.list", &(), vec![])
                         .await
@@ -1273,7 +1269,6 @@ async fn handle_cmd(
                 .await
             {
                 Ok(_) => {
-                    let _ = evt_tx.send(Evt::Status("library: removed".into()));
                     if let Ok(list) = bus
                         .call::<(), UserLibraryListResponse>("user.library.list", &(), vec![])
                         .await
@@ -3137,7 +3132,7 @@ async fn handle_cmd(
     }
 }
 
-fn sweep_tz_offset_minutes() -> i32 {
+pub(crate) fn sweep_tz_offset_minutes() -> i32 {
     if let Ok(out) = std::process::Command::new("date").args(["+%z"]).output() {
         if out.status.success() {
             if let Ok(s) = String::from_utf8(out.stdout) {

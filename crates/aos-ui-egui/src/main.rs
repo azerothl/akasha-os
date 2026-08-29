@@ -5502,7 +5502,8 @@ impl UiApp {
 
     fn ui_library(&mut self, ui: &mut egui::Ui) {
         let t = i18n::strings(&self.prefs.language);
-        let actions = library_panel::render(ui, &t, &self.library);
+        let offset = runtime::sweep_tz_offset_minutes();
+        let actions = library_panel::render(ui, &t, &self.library, offset);
         if actions.add_clicked {
             let filters = [(
                 "Documents",
