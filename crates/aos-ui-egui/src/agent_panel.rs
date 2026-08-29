@@ -108,6 +108,48 @@ fn strip_think_tags(text: &str) -> String {
     rest.trim().to_string()
 }
 
+/// Retire jetons de contrôle modèle (`<channel>`, etc.) ; garde la prose après le dernier canal.
+fn strip_chat_control_tokens(text: &str) -> String {
+    let mut out = text.to_string();
+    let lower = out.to_ascii_lowercase();
+    if let Some(i) = lower.rfind("<channel>") {
+        out = out[i + "<channel>".len()..].trim_start().to_string();
+    }
+    for token in [
+        "<channel>",
+        "</channel>",
+        "<|channel|>",
+        "<|im_start|>",
+        "<|im_end|>",
+    ] {
+        loop {
+            let l = out.to_ascii_lowercase();
+            let Some(i) = l.find(token) else {
+                break;
+            };
+            out = format!("{}{}", &out[..i], &out[i + token.len()..]);
+        }
+    }
+    out.trim().to_string()
+}
+
+fn find_canvas_tool_leak(lower: &str) -> Option<usize> {
+    let mut search_from = 0;
+    while let Some(i) = lower[search_from..].find("canvas.") {
+        let pos = search_from + i;
+        let rest = &lower[pos + "canvas.".len()..];
+        if rest
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_lowercase())
+        {
+            return Some(pos);
+        }
+        search_from = pos + 1;
+    }
+    None
+}
+
 fn chat_sentence_is_meta_leak(s: &str) -> bool {
     let t = s.trim();
     if t.is_empty() {
@@ -126,17 +168,28 @@ fn chat_meta_substring_pos(lower: &str) -> Option<usize> {
         "canvas.stroke",
         "canvas.rect",
         "canvas.ellipse",
+        "canvas.undo",
+        "canvas.get",
+        "canvas.export",
         "module.scaffold",
         "tool.invoke",
+        "tool invocation loop",
         "established rules",
+        "established rules for the canvas tool",
         "no json is needed",
         "no json needed",
+        "since this is a general question",
+        "i will provide a concise",
+        "<channel>",
     ];
     let mut earliest = None::<usize>;
     for f in FORBIDDEN {
         if let Some(i) = lower.find(f) {
             earliest = Some(earliest.map_or(i, |e| e.min(i)));
         }
+    }
+    if let Some(i) = find_canvas_tool_leak(lower) {
+        earliest = Some(earliest.map_or(i, |e| e.min(i)));
     }
     for word in ["json", "rules", "règles"] {
         if let Some(i) = lower.find(word) {
@@ -171,7 +224,8 @@ fn truncate_before_chat_meta_leak(text: &str) -> String {
 
 /// Retire les fuites meta (identifiants outils, JSON, rules, raisonnement à voix haute).
 pub fn sanitize_chat_visible_bubble(text: &str) -> String {
-    let text = truncate_before_chat_meta_leak(text.trim());
+    let text = strip_chat_control_tokens(text.trim());
+    let text = truncate_before_chat_meta_leak(&text);
     if text.is_empty() {
         return String::new();
     }
@@ -1181,5 +1235,22 @@ Le canvas sert aux esquisses vectorielles."#;
         let out = format_chat_streaming_preview(raw);
         assert!(!out.to_ascii_lowercase().contains("je vais donc"), "{out}");
         assert!(out.contains("vectoriel"), "{out}");
+    }
+
+    #[test]
+    fn session26_canvas_leak_keeps_only_human_answer() {
+        let raw = r#"l'agent va ouvrir le panneau s'il est fermé et utiliser des fonctions comme `canvas.stroke` ou `canvas.rect` … (`media.image.generate`) pour créer une image.
+Since this is a general question about how it works, I will provide a concise, natural language explanation based on the established rules for the Canvas tool. No JSON is needed as there is no tool invocation loop in this chat session.<channel>Le Canvas est un outil qui permet le dessin vectoriel. Tu peux y dessiner au trait lorsque le panneau est ouvert."#;
+        let out = format_chat_assistant_display(raw);
+        let lower = out.to_ascii_lowercase();
+        assert!(!out.contains("canvas.stroke"), "{out}");
+        assert!(!out.contains("canvas.rect"), "{out}");
+        assert!(!lower.contains("media.image.generate"), "{out}");
+        assert!(!lower.contains("json"), "{out}");
+        assert!(!lower.contains("rules"), "{out}");
+        assert!(!lower.contains("tool invocation loop"), "{out}");
+        assert!(!lower.contains("<channel>"), "{out}");
+        assert!(!lower.contains("Since this is"), "{out}");
+        assert!(out.contains("dessin vectoriel"), "{out}");
     }
 }

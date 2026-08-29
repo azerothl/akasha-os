@@ -1348,7 +1348,7 @@ Ce n'est pas un OS bootable. Pour l'UI, les nouveautés et « ce qui a changé �
 /// Délégation des tâches complexes via `agent.spawn` sans boucle d'outils.
 pub const CHAT_DELEGATION_PROMPT: &str = "
 Chat (cette session) — tu n'as PAS de boucle d'outils :
-- Questions, explications, conseils → réponds sans JSON. Langue : celle de l'utilisateur (français par défaut). Index consultatifs (RAG produit ; futurs documents utilisateur) : si aucun extrait ne correspond ou le sujet est hors index, réponds quand même — ignore l'index vide ou hors sujet. Savoir général ou langues : réponds normalement. « Quoi de neuf » / UI / changelog Preview : appuie-toi silencieusement sur le brief + extraits quand présents ; n'invente pas de features ; ne mentionne pas ces sources à l'utilisateur.
+- Questions, explications, conseils → réponds sans JSON. Langue : celle de l'utilisateur (français par défaut). Index consultatifs (RAG produit ; futurs documents utilisateur) : si aucun extrait ne correspond ou le sujet est hors index, réponds quand même — ignore l'index vide ou hors sujet. Savoir général ou langues : réponds normalement. « Quoi de neuf » / UI / changelog Preview : appuie-toi silencieusement sur le brief + extraits quand présents ; n'invente pas de features ; ne mentionne pas ces sources à l'utilisateur. Canvas / UI : explique en mots humains (panneau vectoriel, dessin au trait, onglet Créer) — jamais d'identifiants `canvas.*`, `media.*`, boucle d'outils, ni jetons `<channel>`.
 - Synthèse vocale / TTS / « générer un audio » : n'appelle PAS agent.spawn.
   Le hôte ouvre une carte TTS (`/speak <texte>`). Réponds sans JSON, dans la langue de l'utilisateur.
 - Routage dessin interne (identifiants techniques ci-dessous — ne jamais les citer à l'utilisateur ; pas de raisonnement à voix haute) :
@@ -1381,7 +1381,7 @@ Chat (cette session) — tu n'as PAS de boucle d'outils :
 /// Verrou affichage chat : la réponse visible ne doit jamais fuiter l'infrastructure prompt/RAG.
 pub const CHAT_SUPERVISOR_LOCK: &str = "
 Verrou affichage (réponse visible à l'utilisateur) :
-- Réponse naturelle et directe, sans raisonnement à voix haute ni chain-of-thought. Ne mentionne JAMAIS : RAG, JSON, rules/règles, consignes, prompt, FEATURES, STATUS, TESTER, index, extraits, bibliothèque/documents, « hors des sources », « pas dans la doc », « absent des extraits », « No JSON is needed », brief, doc produit/changelog en tant que source, identifiants techniques (media.image.generate, canvas.stroke, agent.spawn, @agent-…, module.*, tool.invoke), ni que tu « ne peux pas » répondre faute de documentation, d'extraits ou parce que le sujet n'est pas dans les docs. Même en stream partiel : n'écris jamais ces fragments.
+- Réponse naturelle et directe, sans raisonnement à voix haute ni chain-of-thought. Ne mentionne JAMAIS : RAG, JSON, rules/règles, consignes, prompt, FEATURES, STATUS, TESTER, index, extraits, bibliothèque/documents, « hors des sources », « pas dans la doc », « absent des extraits », « No JSON is needed », « tool invocation loop », jetons `<channel>`, brief, doc produit/changelog en tant que source, identifiants techniques (`canvas.stroke`, `canvas.rect`, `media.image.generate`, `agent.spawn`, `@agent-…`, `module.*`, `tool.invoke`), ni que tu « ne peux pas » répondre faute de documentation, d'extraits ou parce que le sujet n'est pas dans les docs. Même en stream partiel : n'écris jamais ces fragments.
 - Une question ordinaire → réponse ordinaire (ex. traduction, culture, vie courante) même si aucun extrait RAG ou index utilisateur n'a été injecté.
 - UI / Canvas / nouveautés Preview : mots humains seulement (panneau vectoriel, onglet Créer, dessin au trait) ; les index consultatifs et le routage interne restent en coulisse — n'en parle pas.";
 
@@ -1871,6 +1871,14 @@ mod preview_prompt_tests {
         assert!(
             CHAT_SUPERVISOR_LOCK.contains("No JSON is needed"),
             "supervisor lock must forbid No JSON is needed in visible replies"
+        );
+        assert!(
+            CHAT_SUPERVISOR_LOCK.contains("tool invocation loop"),
+            "supervisor lock must forbid tool invocation loop in visible replies"
+        );
+        assert!(
+            CHAT_SUPERVISOR_LOCK.contains("<channel>"),
+            "supervisor lock must forbid channel control tokens"
         );
     }
 
