@@ -4894,10 +4894,8 @@ impl UiApp {
                         let row = ui.horizontal(|ui| {
                             if unread {
                                 let t = i18n::strings(&self.prefs.language);
-                                let dot = egui::RichText::new("●")
-                                    .color(theme::SIGNAL)
-                                    .small();
-                                ui.label(dot).on_hover_text(t.session_unread_reply);
+                                icons::status_dot(ui, theme::SIGNAL)
+                                    .on_hover_text(t.session_unread_reply);
                             }
                             let title = ui.selectable_label(selected, &s.title);
                             ui.label(
