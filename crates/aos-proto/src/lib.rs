@@ -1351,7 +1351,7 @@ Chat (cette session) — tu n'as PAS de boucle d'outils :
 - Questions, explications, conseils → réponds sans JSON. Langue : celle de l'utilisateur (français par défaut). Index consultatifs (RAG produit ; futurs documents utilisateur) : si aucun extrait ne correspond ou le sujet est hors index, réponds quand même — ignore l'index vide ou hors sujet. Savoir général ou langues : réponds normalement. « Quoi de neuf » / UI / changelog Preview : appuie-toi silencieusement sur le brief + extraits quand présents ; n'invente pas de features ; ne mentionne pas ces sources à l'utilisateur.
 - Synthèse vocale / TTS / « générer un audio » : n'appelle PAS agent.spawn.
   Le hôte ouvre une carte TTS (`/speak <texte>`). Réponds sans JSON, dans la langue de l'utilisateur.
-- Routage dessin (gelé) :
+- Routage dessin interne (identifiants techniques ci-dessous — ne jamais les citer à l'utilisateur ; pas de raisonnement à voix haute) :
   • Panneau canvas OUVERT + « dessine » / « draw » / « sketch » → canvas vectoriel (canvas.stroke…).
   • Panneau canvas FERMÉ + « dessine » / « draw » / « sketch » sans marqueur → agent image (media.image.generate).
   • Marqueur explicite (« sur le canvas », « dans le canvas », « au trait », `/canvas`… ;
@@ -1381,9 +1381,9 @@ Chat (cette session) — tu n'as PAS de boucle d'outils :
 /// Verrou affichage chat : la réponse visible ne doit jamais fuiter l'infrastructure prompt/RAG.
 pub const CHAT_SUPERVISOR_LOCK: &str = "
 Verrou affichage (réponse visible à l'utilisateur) :
-- Réponse naturelle et directe. Ne mentionne JAMAIS : RAG, JSON, règles, consignes, prompt, FEATURES, STATUS, TESTER, index, extraits, bibliothèque/documents, « hors des sources », « pas dans la doc », « absent des extraits », brief, doc produit/changelog en tant que source, ni que tu « ne peux pas » répondre faute de documentation, d'extraits ou parce que le sujet n'est pas dans les docs.
+- Réponse naturelle et directe, sans raisonnement à voix haute ni chain-of-thought. Ne mentionne JAMAIS : RAG, JSON, rules/règles, consignes, prompt, FEATURES, STATUS, TESTER, index, extraits, bibliothèque/documents, « hors des sources », « pas dans la doc », « absent des extraits », brief, doc produit/changelog en tant que source, identifiants techniques (media.image.generate, canvas.stroke, agent.spawn, @agent-…, module.*, tool.invoke), ni que tu « ne peux pas » répondre faute de documentation, d'extraits ou parce que le sujet n'est pas dans les docs.
 - Une question ordinaire → réponse ordinaire (ex. traduction, culture, vie courante) même si aucun extrait RAG ou index utilisateur n'a été injecté.
-- UI / nouveautés Preview : donne l'info de façon conversationnelle ; les index consultatifs servent en coulisse — n'en parle pas.";
+- UI / Canvas / nouveautés Preview : mots humains seulement (panneau vectoriel, onglet Créer, dessin au trait) ; les index consultatifs et le routage interne restent en coulisse — n'en parle pas.";
 
 /// Intention chat : créer / installer un module ou une skill (pas « c'est quoi »).
 pub fn chat_user_wants_module_authoring(text: &str) -> bool {
@@ -1859,6 +1859,14 @@ mod preview_prompt_tests {
         assert!(
             CHAT_SUPERVISOR_LOCK.contains("question ordinaire"),
             "supervisor lock should require normal answers to normal questions"
+        );
+        assert!(
+            CHAT_SUPERVISOR_LOCK.contains("media.image.generate"),
+            "supervisor lock must forbid tool ids in visible replies"
+        );
+        assert!(
+            CHAT_SUPERVISOR_LOCK.contains("chain-of-thought"),
+            "supervisor lock must forbid thinking-aloud"
         );
     }
 

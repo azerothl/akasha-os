@@ -108,6 +108,86 @@ fn strip_think_tags(text: &str) -> String {
     rest.trim().to_string()
 }
 
+fn chat_sentence_is_meta_leak(s: &str) -> bool {
+    let t = s.trim();
+    if t.is_empty() {
+        return true;
+    }
+    let lower = t.to_ascii_lowercase();
+    const FORBIDDEN: &[&str] = &[
+        "media.image.generate",
+        "@agent-",
+        "agent.spawn",
+        "canvas.stroke",
+        "canvas.rect",
+        "canvas.ellipse",
+        "module.scaffold",
+        "tool.invoke",
+        "established rules",
+        "no json is needed",
+        "no json needed",
+    ];
+    for f in FORBIDDEN {
+        if lower.contains(f) {
+            return true;
+        }
+    }
+    if lower.contains("json") || lower.contains("rules") {
+        return true;
+    }
+    const CHAIN_OF_THOUGHT: &[&str] = &[
+        "je vais donc",
+        "i will therefore",
+        "orientant l'utilisateur",
+        "orienting the user",
+        "chain-of-thought",
+        "thinking process",
+        "selon les règles",
+        "conformément aux règles",
+        "conformément aux consignes",
+    ];
+    CHAIN_OF_THOUGHT.iter().any(|p| lower.contains(p))
+}
+
+/// Retire les fuites meta (identifiants outils, JSON, rules, raisonnement à voix haute).
+pub fn sanitize_chat_visible_bubble(text: &str) -> String {
+    let text = text.trim();
+    if text.is_empty() {
+        return String::new();
+    }
+    let mut kept_paras = Vec::new();
+    for para in text.split("\n\n") {
+        let para = para.trim();
+        if para.is_empty() {
+            continue;
+        }
+        let mut kept_sentences = Vec::new();
+        for line in para.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            let mut buf = String::new();
+            for ch in line.chars() {
+                buf.push(ch);
+                if matches!(ch, '.' | '!' | '?') {
+                    if !chat_sentence_is_meta_leak(&buf) {
+                        kept_sentences.push(buf.trim().to_string());
+                    }
+                    buf.clear();
+                }
+            }
+            if !buf.trim().is_empty() && !chat_sentence_is_meta_leak(&buf) {
+                kept_sentences.push(buf.trim().to_string());
+            }
+        }
+        if !kept_sentences.is_empty() {
+            kept_paras.push(kept_sentences.join(" "));
+        }
+    }
+    kept_paras.join("\n\n").trim().to_string()
+}
+
 /// Extrait la prose hors blocs JSON / TOOL: / DSML tool_call.
 pub fn prose_without_json(response: &str) -> String {
     let mut out = strip_think_tags(response);
@@ -231,6 +311,16 @@ fn format_action_as_markdown(action: &aos_agent::actions::AgentAction, outer_pro
     } else {
         joined
     }
+}
+
+/// Affichage chat final : prose lisible sans fuites meta internes.
+pub fn format_chat_assistant_display(raw: &str) -> String {
+    sanitize_chat_visible_bubble(&format_assistant_display(raw))
+}
+
+/// Pendant le stream chat : évite JSON/outils bruts et fuites meta.
+pub fn format_chat_streaming_preview(raw: &str) -> String {
+    sanitize_chat_visible_bubble(&format_streaming_preview(raw))
 }
 
 /// Pendant le stream : évite d'afficher l'objet JSON brut incomplet.
@@ -1017,5 +1107,32 @@ mod tests {
     fn plain_markdown_passthrough() {
         let md = "## Hello\n\nWorld";
         assert_eq!(format_assistant_display(md), md);
+    }
+
+    #[test]
+    fn canvas_ui_answer_strips_tool_ids_and_meta() {
+        let raw = r#"Le Canvas est un panneau vectoriel pour dessiner au trait.
+
+Selon les established rules for the Canvas tool, media.image.generate is used when closed. No JSON is needed as there is no spawn.
+
+Le canvas sert aux esquisses vectorielles."#;
+        let out = format_chat_assistant_display(raw);
+        let lower = out.to_ascii_lowercase();
+        assert!(!lower.contains("media.image.generate"), "{out}");
+        assert!(!out.contains("@agent-"), "{out}");
+        assert!(!lower.contains("json"), "{out}");
+        assert!(!lower.contains("rules"), "{out}");
+        assert!(out.contains("vectoriel"), "{out}");
+    }
+
+    #[test]
+    fn chat_streaming_preview_strips_trailing_meta() {
+        let raw = r#"Le Canvas permet des esquisses vectorielles. Je vais donc répondre en orientant l'utilisateur vers media.image.generate. No JSON is needed."#;
+        let out = format_chat_streaming_preview(raw);
+        let lower = out.to_ascii_lowercase();
+        assert!(!lower.contains("media.image.generate"), "{out}");
+        assert!(!lower.contains("json"), "{out}");
+        assert!(!lower.contains("rules"), "{out}");
+        assert!(out.contains("vectoriel"), "{out}");
     }
 }

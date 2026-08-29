@@ -519,7 +519,7 @@ async fn handle_cmd(
                             return;
                         }
 
-                        let display = agent_panel::format_assistant_display(&full);
+                        let display = agent_panel::format_chat_assistant_display(&full);
                         let _ = bus
                             .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
                                 "chat.session.append",

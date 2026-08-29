@@ -3726,7 +3726,11 @@ impl eframe::App for UiApp {
                     self.room_turn_pending_text = None;
                     if !self.streaming.is_empty() {
                         let partial = std::mem::take(&mut self.streaming);
-                        self.chat.push(ChatLine::plain("assistant", partial));
+                        let display =
+                            agent_panel::format_chat_assistant_display(&partial);
+                        if !display.is_empty() {
+                            self.chat.push(ChatLine::plain("assistant", display));
+                        }
                     }
                     let t = i18n::strings(&self.prefs.language);
                     self.status = t.chat_stopped.into();
@@ -4493,7 +4497,7 @@ impl UiApp {
                         && !is_completion
                         && speaker_id.is_none()
                     {
-                        agent_panel::format_assistant_display(&text)
+                        agent_panel::format_chat_assistant_display(&text)
                     } else {
                         text
                     };
@@ -4688,7 +4692,7 @@ impl UiApp {
                             egui::RichText::new(t.chat_assistant).strong().small(),
                         );
                         let streaming =
-                            agent_panel::format_streaming_preview(&self.streaming);
+                            agent_panel::format_chat_streaming_preview(&self.streaming);
                         ui.push_id("chat_md_stream", |ui| {
                             CommonMarkViewer::new().show(
                                 ui,
