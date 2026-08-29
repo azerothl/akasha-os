@@ -7,7 +7,7 @@ Summary of delivered phases. Detail: [development-plan.md](development-plan.md),
 
 **Headline:** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview:** 0.14.0 (28/08/2026) — custom agent labels, salon picker, in-app Create guide. Not a bootable OS. Cohort gate
+**Preview:** 0.15.0 (29/08/2026) — in-app guides, chat schedules, research documents, user library, morning skill offer. Not a bootable OS. Cohort gate
 still open. **Next:** PC cohort close; Horizon C / PV.4+ when scheduled; E9
 hard-green after a documented 2-GPU run.
 

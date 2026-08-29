@@ -1,4 +1,4 @@
-# Preview features — Akasha OS 0.14.0
+# Preview features — Akasha OS 0.15.0
 
 **Language:** English | [Français](fr/FEATURES.md)
 
@@ -7,7 +7,15 @@ This is **not** the bootable OS. Target v1 requirements live in
 [functional-specs.md](functional-specs.md); phase gates in
 [STATUS.md](STATUS.md).
 
-> Date: 28/08/2026 · Preview **0.14.0**
+> Date: 29/08/2026 · Preview **0.15.0**
+
+### What's new in 0.15.0
+
+- **In-app guides**: Chat ? beside the session name; Canvas ? after Clear all — Create already had a guide
+- **Chat schedules**: live / pause (Resume | Stop) / stop without leaving the session
+- **Research document**: in-thread Reply | Prepare a document — progress, Ready, listed under More → Documents
+- **User library**: consultative pdf/txt/md (empty state + row)
+- **Morning skill offer**: title names the need; muted prompt; Create | Later — never auto-creates
 
 ### What's new in 0.14.0
 
