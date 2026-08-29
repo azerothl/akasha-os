@@ -2350,6 +2350,7 @@ async fn invoke_native(
                         query,
                         k: 5,
                         product_k: 4,
+                        user_doc_k: 0,
                     },
                     vec![],
                 )
@@ -3213,6 +3214,7 @@ async fn recall_memory_bundle(
                 query: query.to_string(),
                 k,
                 product_k: 4,
+                user_doc_k: 0,
             },
             vec![],
         )

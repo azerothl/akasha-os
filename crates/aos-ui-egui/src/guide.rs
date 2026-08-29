@@ -12,17 +12,19 @@ pub enum GuideTopic {
     Canvas,
     Agents,
     Memory,
+    Library,
     Salon,
 }
 
 impl GuideTopic {
-    pub const ALL: [GuideTopic; 7] = [
+    pub const ALL: [GuideTopic; 8] = [
         GuideTopic::Overview,
         GuideTopic::Create,
         GuideTopic::Chat,
         GuideTopic::Canvas,
         GuideTopic::Agents,
         GuideTopic::Memory,
+        GuideTopic::Library,
         GuideTopic::Salon,
     ];
 }
@@ -46,6 +48,7 @@ pub fn topic_for_tab(tab: &Tab) -> Option<GuideTopic> {
         Tab::Image => Some(GuideTopic::Create),
         Tab::Agents => Some(GuideTopic::Agents),
         Tab::Memory => Some(GuideTopic::Memory),
+        Tab::Library => Some(GuideTopic::Library),
         _ => None,
     }
 }
@@ -68,11 +71,13 @@ pub struct GuideStrings {
     pub nav_canvas: &'static str,
     pub nav_agents: &'static str,
     pub nav_memory: &'static str,
+    pub nav_library: &'static str,
     pub nav_salon: &'static str,
     pub overview_intro: &'static str,
     pub overview_tour_chat: &'static str,
     pub overview_tour_create: &'static str,
     pub overview_tour_memory: &'static str,
+    pub overview_tour_library: &'static str,
     pub overview_tour_agents: &'static str,
     pub overview_tour_canvas: &'static str,
     pub overview_tour_salon: &'static str,
@@ -127,6 +132,18 @@ pub struct GuideStrings {
     pub chat_opt_slash_title: &'static str,
     pub chat_opt_slash_body: &'static str,
     pub chat_opt_slash_example: &'static str,
+    pub chat_opt_documents_title: &'static str,
+    pub chat_opt_documents_body: &'static str,
+    pub chat_opt_documents_example: &'static str,
+    pub chat_schedule_heading: &'static str,
+    pub chat_schedule_intro: &'static str,
+    pub chat_schedule_card_title: &'static str,
+    pub chat_schedule_card_body: &'static str,
+    pub chat_schedule_paused_title: &'static str,
+    pub chat_schedule_paused_body: &'static str,
+    pub chat_schedule_stopped_title: &'static str,
+    pub chat_schedule_stopped_body: &'static str,
+    pub chat_schedule_example: &'static str,
     pub canvas_intro: &'static str,
     pub canvas_opt_toggle_title: &'static str,
     pub canvas_opt_toggle_body: &'static str,
@@ -157,6 +174,10 @@ pub struct GuideStrings {
     pub memory_opt_list_title: &'static str,
     pub memory_opt_list_body: &'static str,
     pub memory_opt_list_example: &'static str,
+    pub library_intro: &'static str,
+    pub library_opt_add_title: &'static str,
+    pub library_opt_add_body: &'static str,
+    pub library_example: &'static str,
     pub salon_intro: &'static str,
     pub salon_opt_enable_title: &'static str,
     pub salon_opt_enable_body: &'static str,
@@ -180,11 +201,13 @@ const EN: GuideStrings = GuideStrings {
     nav_canvas: "Canvas",
     nav_agents: "Agents",
     nav_memory: "Memory",
+    nav_library: "Library",
     nav_salon: "Salon",
     overview_intro: "Short map of Preview surfaces. Pick a topic on the left for step-by-step help with examples.",
     overview_tour_chat: "Chat — parallel persisted conversations with the local model.",
     overview_tour_create: "Create — diffusion image and short video studio (prompt, reference, inpaint).",
     overview_tour_memory: "Memory — durable facts injected before each reply (remember / recall).",
+    overview_tour_library: "Library — files you add; chat consults them when they match (More → Library).",
     overview_tour_agents: "Agents — autonomous goal loops with tools, skills, and capabilities.",
     overview_tour_canvas: "Canvas — shared vector drawing on the active chat session (not Create pixels).",
     overview_tour_salon: "Salon — multi-agent room inside a chat session (built-in personas + library agents).",
@@ -239,6 +262,18 @@ const EN: GuideStrings = GuideStrings {
     chat_opt_slash_title: "Slash",
     chat_opt_slash_body: "Type / above the input for shortcuts without leaving Chat (/help, /notes, /agent, /canvas).",
     chat_opt_slash_example: "Ex. `/agent summarize this thread` starts a worker; a card appears in the session.",
+    chat_opt_documents_title: "Prepared documents",
+    chat_opt_documents_body: "On a research-style question, choose Reply for a short answer in chat, or Prepare a document for a structured file under /downloads/. While it runs you see Researching… with Stop; when ready, Open shows the document in a clamped overlay. Find prepared files anytime under More → Documents.",
+    chat_opt_documents_example: "\"What's the state of agentic apps?\" → Prepare a document → Researching… → Ready → Open, sources at the bottom.",
+    chat_schedule_heading: "Schedule",
+    chat_schedule_intro: "You give a goal and a when. After Allow once, it comes back without you reopening the session. Settings still holds the list.",
+    chat_schedule_card_title: "Card",
+    chat_schedule_card_body: "Title is your phrase. One mute line: Next: tomorrow 8:00. Pause | Stop.",
+    chat_schedule_paused_title: "Paused",
+    chat_schedule_paused_body: "Line becomes Paused. Resume | Stop.",
+    chat_schedule_stopped_title: "Stopped",
+    chat_schedule_stopped_body: "Card stays in the thread. No more actions.",
+    chat_schedule_example: "Ex. \"every morning, summarize my notes\" → Allow once → card in the thread, next fire tomorrow.",
     canvas_intro: "A shared drawing board on this chat session. Strokes, not a Create still.",
     canvas_opt_toggle_title: "Canvas toggle",
     canvas_opt_toggle_body: "Session bar → Canvas. Humans can always draw. Agents draw only while it's open (otherwise \"draw\" goes to Create).",
@@ -269,6 +304,10 @@ const EN: GuideStrings = GuideStrings {
     memory_opt_list_title: "List",
     memory_opt_list_body: "Edit or drop facts. A quiet daily pass re-reads the day's chats and links related facts.",
     memory_opt_list_example: "Ex. Two \"name\" facts → the newer one updates the older.",
+    library_intro: "Files you add. Chat uses them when they match. If they don't, it still answers — nothing about a miss in the thread.",
+    library_opt_add_title: "Add",
+    library_opt_add_body: "From More → Library, pick pdf, txt, or md. Each file is listed by title and date — never a full path.",
+    library_example: "Ex. House-rules PDF + \"what's the quiet hour?\" → an answer from that file. \"What's a bubble wand?\" → an answer anyway.",
     salon_intro: "Several agents in the same Chat session, taking turns. Not an outside messenger.",
     salon_opt_enable_title: "Enable room",
     salon_opt_enable_body: "Session bar → Salon. The thread becomes multi-speaker.",
@@ -292,11 +331,13 @@ const FR: GuideStrings = GuideStrings {
     nav_canvas: "Canvas",
     nav_agents: "Agents",
     nav_memory: "Mémoire",
+    nav_library: "Bibliothèque",
     nav_salon: "Salon",
     overview_intro: "Carte rapide des surfaces Preview. Choisissez un sujet à gauche pour une aide pas à pas avec exemples.",
     overview_tour_chat: "Chat — conversations parallèles persistées avec le modèle local.",
     overview_tour_create: "Créer — studio diffusion images et courtes vidéos (prompt, référence, inpaint).",
     overview_tour_memory: "Mémoire — faits durables injectés avant chaque réponse (remember / recall).",
+    overview_tour_library: "Bibliothèque — fichiers que vous ajoutez ; le chat s'en sert s'ils collent (Plus → Bibliothèque).",
     overview_tour_agents: "Agents — boucles autonomes avec outils, skills et capacités.",
     overview_tour_canvas: "Canvas — dessin vectoriel partagé sur la session de chat active (pas les pixels Créer).",
     overview_tour_salon: "Salon — salle multi-agents dans une session de chat (personas intégrés + agents bibliothèque).",
@@ -351,6 +392,18 @@ const FR: GuideStrings = GuideStrings {
     chat_opt_slash_title: "Slash",
     chat_opt_slash_body: "Tapez / au-dessus de l'input (/help, /notes, /agent, /canvas).",
     chat_opt_slash_example: "Ex. `/agent résume ce fil` lance un worker ; une carte apparaît.",
+    chat_opt_documents_title: "Documents préparés",
+    chat_opt_documents_body: "Sur une question de recherche, choisissez Répondre pour une courte réponse dans le chat, ou Préparer un document pour un fichier structuré sous /downloads/. Pendant la préparation : Recherche en cours… avec Arrêter ; une fois prêt, Ouvrir affiche le document dans une fenêtre calée au viewport. Retrouvez les fichiers via Plus → Documents.",
+    chat_opt_documents_example: "« Quel est l'état de l'art des apps agentic ? » → Préparer un document → Recherche en cours… → Prêt → Ouvrir, sources en bas.",
+    chat_schedule_heading: "Planifier",
+    chat_schedule_intro: "Vous donnez un but et un quand. Après Autoriser une fois, ça revient sans rouvrir la session. La liste reste dans Réglages.",
+    chat_schedule_card_title: "Carte",
+    chat_schedule_card_body: "Le titre est votre phrase. Une ligne mute : Prochain : demain 8:00. Pause | Arrêter.",
+    chat_schedule_paused_title: "En pause",
+    chat_schedule_paused_body: "La ligne devient En pause. Reprendre | Arrêter.",
+    chat_schedule_stopped_title: "Arrêté",
+    chat_schedule_stopped_body: "La carte reste dans le fil. Plus d'actions.",
+    chat_schedule_example: "Ex. « chaque matin, résume mes notes » → Autoriser une fois → carte dans le fil, prochain feu demain.",
     canvas_intro: "Un tableau partagé sur cette session. Des traits, pas une image Créer.",
     canvas_opt_toggle_title: "Canvas",
     canvas_opt_toggle_body: "Barre de session → Canvas. Vous dessinez toujours. Les agents, seulement s'il est ouvert (sinon « dessine » va vers Créer).",
@@ -381,6 +434,10 @@ const FR: GuideStrings = GuideStrings {
     memory_opt_list_title: "Liste",
     memory_opt_list_body: "Modifier ou retirer. Une passe silencieuse relit les chats du jour et relie les faits.",
     memory_opt_list_example: "Ex. Deux faits « prénom » → le plus récent met à jour l'ancien.",
+    library_intro: "Des fichiers que vous ajoutez. Le chat s'en sert s'ils collent. Sinon il répond quand même — rien sur un miss dans le fil.",
+    library_opt_add_title: "Ajouter",
+    library_opt_add_body: "Depuis Plus → Bibliothèque, choisissez pdf, txt ou md. Chaque fichier est listé par titre et date — jamais un chemin complet.",
+    library_example: "Ex. PDF du règlement + « c'est quoi l'heure calme ? » → une réponse à partir du fichier. « C'est quoi un bubble wand ? » → une réponse quand même.",
     salon_intro: "Plusieurs agents dans la même session Chat, à tour de rôle. Pas une messagerie externe.",
     salon_opt_enable_title: "Activer le salon",
     salon_opt_enable_body: "Barre de session → Salon. Le fil devient multi-voix.",
@@ -409,8 +466,19 @@ pub fn nav_label(g: &GuideStrings, topic: GuideTopic) -> &'static str {
         GuideTopic::Canvas => g.nav_canvas,
         GuideTopic::Agents => g.nav_agents,
         GuideTopic::Memory => g.nav_memory,
+        GuideTopic::Library => g.nav_library,
         GuideTopic::Salon => g.nav_salon,
     }
+}
+
+pub(crate) fn guide_window_sizes(avail_w: f32, avail_h: f32) -> ([f32; 2], [f32; 2], [f32; 2]) {
+    let margin = 16.0;
+    let max_w = (avail_w - margin * 2.0).max(280.0);
+    let max_h = (avail_h - margin * 2.0).max(200.0);
+    let default_size = [820.0_f32.min(max_w), 560.0_f32.min(max_h)];
+    let max_size = [max_w, max_h];
+    let min_size = [280.0_f32.min(max_w), 200.0_f32.min(max_h)];
+    (default_size, max_size, min_size)
 }
 
 pub fn show_window(
@@ -424,63 +492,81 @@ pub fn show_window(
     }
     let g = strings(lang);
     let mut close = false;
+    let avail = ctx.available_rect();
+    let (default_size, max_size, min_size) =
+        guide_window_sizes(avail.width(), avail.height());
+    const NAV_W: f32 = 148.0;
+    const FOOTER_H: f32 = 34.0;
+
     egui::Window::new(g.title)
         .collapsible(false)
         .resizable(true)
-        .default_size([820.0, 560.0])
+        .default_size(default_size)
+        .min_size(min_size)
+        .max_size(max_size)
+        .constrain(true)
+        .constrain_to(avail)
         .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
         .show(ctx, |ui| {
-            ui.horizontal_top(|ui| {
-                let nav_w = 148.0;
-                ui.allocate_ui_with_layout(
-                    egui::vec2(nav_w, ui.available_height().max(320.0)),
-                    egui::Layout::top_down(egui::Align::Min),
-                    |ui| {
-                        ui.set_width(nav_w);
-                        for topic in GuideTopic::ALL {
-                            let label = nav_label(&g, topic);
-                            if ui
-                                .selectable_label(state.topic == topic, label)
-                                .clicked()
-                            {
-                                state.topic = topic;
-                            }
-                        }
-                        ui.add_space(12.0);
+            let body_h = (ui.available_height() - FOOTER_H).max(80.0);
+            ui.allocate_ui_with_layout(
+                egui::vec2(ui.available_width(), body_h),
+                egui::Layout::top_down(egui::Align::Min),
+                |ui| {
+                    ui.horizontal_top(|ui| {
+                        let nav_h = ui.available_height().max(80.0);
+                        ui.allocate_ui_with_layout(
+                            egui::vec2(NAV_W, nav_h),
+                            egui::Layout::top_down(egui::Align::Min),
+                            |ui| {
+                                ui.set_width(NAV_W);
+                                for topic in GuideTopic::ALL {
+                                    let label = nav_label(&g, topic);
+                                    if ui
+                                        .selectable_label(state.topic == topic, label)
+                                        .clicked()
+                                    {
+                                        state.topic = topic;
+                                    }
+                                }
+                                ui.add_space(12.0);
+                                ui.separator();
+                                if ui.small_button(g.restart_onboarding).clicked() {
+                                    *restart_onboarding = true;
+                                    close = true;
+                                }
+                            },
+                        );
                         ui.separator();
-                        if ui.small_button(g.restart_onboarding).clicked() {
-                            *restart_onboarding = true;
-                            close = true;
-                        }
-                    },
-                );
-                ui.separator();
-                let content_w = ui.available_width().max(200.0);
-                let content_h = ui.available_height().max(280.0);
-                ui.allocate_ui_with_layout(
-                    egui::vec2(content_w, content_h),
-                    egui::Layout::top_down(egui::Align::Min),
-                    |ui| {
-                        ui.set_width(content_w);
-                        egui::ScrollArea::vertical()
-                            .id_salt("guide_content")
-                            .auto_shrink([false, false])
-                            .max_height(content_h)
-                            .show(ui, |ui| {
-                                ui.set_min_width(content_w - 8.0);
-                                render_topic(ui, state.topic, &g);
-                            });
-                    },
-                );
-            });
-            ui.separator();
-            ui.horizontal(|ui| {
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let content_w = ui.available_width().max(120.0);
+                        let content_h = ui.available_height().max(80.0);
+                        ui.allocate_ui_with_layout(
+                            egui::vec2(content_w, content_h),
+                            egui::Layout::top_down(egui::Align::Min),
+                            |ui| {
+                                ui.set_width(content_w);
+                                egui::ScrollArea::vertical()
+                                    .id_salt("guide_content")
+                                    .auto_shrink([false, false])
+                                    .max_height(content_h)
+                                    .show(ui, |ui| {
+                                        ui.set_min_width((content_w - 8.0).max(100.0));
+                                        render_topic(ui, state.topic, &g);
+                                    });
+                            },
+                        );
+                    });
+                },
+            );
+            ui.allocate_ui_with_layout(
+                egui::vec2(ui.available_width(), FOOTER_H),
+                egui::Layout::right_to_left(egui::Align::Center),
+                |ui| {
                     if ui.button(g.close).clicked() {
                         close = true;
                     }
-                });
-            });
+                },
+            );
         });
     if close {
         state.open = false;
@@ -495,8 +581,24 @@ fn render_topic(ui: &mut egui::Ui, topic: GuideTopic, g: &GuideStrings) {
         GuideTopic::Canvas => render_canvas(ui, g),
         GuideTopic::Agents => render_agents(ui, g),
         GuideTopic::Memory => render_memory(ui, g),
+        GuideTopic::Library => render_library(ui, g),
         GuideTopic::Salon => render_salon(ui, g),
     }
+}
+
+fn render_library(ui: &mut egui::Ui, g: &GuideStrings) {
+    ui.heading(g.nav_library);
+    ui.label(g.library_intro);
+    ui.add_space(8.0);
+    guide_section(
+        ui,
+        g,
+        g.library_opt_add_title,
+        g.library_opt_add_body,
+        None,
+        None,
+        g.library_example,
+    );
 }
 
 fn render_overview(ui: &mut egui::Ui, g: &GuideStrings) {
@@ -510,6 +612,7 @@ fn render_overview(ui: &mut egui::Ui, g: &GuideStrings) {
         g.overview_tour_salon,
         g.overview_tour_agents,
         g.overview_tour_memory,
+        g.overview_tour_library,
     ] {
         ui.label(line);
     }
@@ -557,6 +660,31 @@ fn render_chat(ui: &mut egui::Ui, g: &GuideStrings) {
         None,
         g.chat_opt_slash_example,
     );
+    guide_section(
+        ui,
+        g,
+        g.chat_opt_documents_title,
+        g.chat_opt_documents_body,
+        None,
+        None,
+        g.chat_opt_documents_example,
+    );
+    ui.add_space(4.0);
+    ui.strong(g.chat_schedule_heading);
+    ui.label(g.chat_schedule_intro);
+    ui.add_space(6.0);
+    for (title, body) in [
+        (g.chat_schedule_card_title, g.chat_schedule_card_body),
+        (g.chat_schedule_paused_title, g.chat_schedule_paused_body),
+        (g.chat_schedule_stopped_title, g.chat_schedule_stopped_body),
+    ] {
+        ui.strong(title);
+        ui.label(body);
+        ui.add_space(6.0);
+    }
+    ui.weak(g.section_example);
+    ui.label(g.chat_schedule_example);
+    ui.separator();
 }
 
 fn render_canvas(ui: &mut egui::Ui, g: &GuideStrings) {
@@ -1001,10 +1129,22 @@ mod tests {
     use super::*;
 
     #[test]
+    fn guide_window_sizes_fit_inside_viewport() {
+        let (default_size, max_size, min_size) = guide_window_sizes(640.0, 480.0);
+        assert!(default_size[0] <= max_size[0]);
+        assert!(default_size[1] <= max_size[1]);
+        assert!(min_size[0] <= max_size[0]);
+        assert!(min_size[1] <= max_size[1]);
+        assert!(default_size[0] <= 640.0);
+        assert!(default_size[1] <= 480.0);
+    }
+
+    #[test]
     fn guide_topics_cover_primary_surfaces() {
-        assert_eq!(GuideTopic::ALL.len(), 7);
+        assert_eq!(GuideTopic::ALL.len(), 8);
         assert_eq!(topic_for_tab(&Tab::Image), Some(GuideTopic::Create));
         assert_eq!(topic_for_tab(&Tab::Chat), Some(GuideTopic::Chat));
+        assert_eq!(topic_for_tab(&Tab::Library), Some(GuideTopic::Library));
         assert!(topic_for_tab(&Tab::Settings).is_none());
     }
 

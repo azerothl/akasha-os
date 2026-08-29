@@ -7,8 +7,10 @@ use crate::os_open::{aos_home, bin_aos_session};
 use crate::{
     agent_id_cmd, agent_panel, chat_delegate_agent_spec, chrono_like_stamp, format_local_time_hm,
     invoke_module_bind,
-    invoke_module_tool, invoke_notes, invoke_tasks, load_module_ui, load_session, run_troubleshoot,
-    session_has_running_canvas_agent, spawn_chat_delegate_agent, CHAT_AGENT_MAX_SUBAGENTS,
+    invoke_module_tool, invoke_notes, invoke_tasks, load_module_ui, load_session,
+    announce_and_load_session, run_troubleshoot,
+    session_has_running_canvas_agent, spawn_chat_delegate_agent, spawn_document_prep_agent,
+    CHAT_AGENT_MAX_SUBAGENTS,
 };
 use aos_agent::intents as agent_intents;
 use aos_agent::{ControlCmd, ControlResp};
@@ -29,6 +31,8 @@ use aos_proto::{
     FeedbackSubmitRequest, FeedbackSubmitResponse, FilesGenerateRequest, FilesGenerateResponse,
     InferParams, InferRequest, McpServerInfo, MemContextRequest, MemContextResponse,
     MemEpisodicDeleteRequest, MemExtractRequest, MemExtractResponse, MemHit, MemListRequest,
+    UserLibraryAddRequest, UserLibraryAddResponse, UserLibraryListResponse, UserLibraryRemoveRequest,
+    UserLibraryRemoveResponse,
     MemRememberResponse, MemSweepStatus, MemUpdateRequest, MemUserRecallRequest, MemUserRememberRequest,
     MemWorkingRequest, LoadRequest, ModelInfo, ModelState, ModuleCatalogue,
     ModuleInfo, ModuleInstallRequest,
@@ -36,9 +40,10 @@ use aos_proto::{
     MediaImageGenerateRequest, MediaImageUpscaleRequest, NetFetchRequest, NetFetchResponse, NetModeRequest,
     PendingConfirmation, ProviderIdRequest, ProviderListResponse, ProviderRecord,
     ProviderTestResponse, ProviderUpsertRequest, SecretListRequest, SecretListResponse,
-    SecretSetRequest, SetRoutingRequest, SkillInfo, SystemMetrics, TokenEvent, WebBrowseRequest,
+    SecretSetRequest, SetRoutingRequest, SkillInfo, SkillPassPendingOffer, SkillPassRequest,
+    SystemMetrics, TokenEvent, WebBrowseRequest,
     WebBrowseResponse, WebSearchRequest, WebSearchResponse,
-    CHAT_DELEGATION_PROMPT, SYSTEM_ASSISTANT_PROMPT, MigrateRequest, MigrateResponse,
+    CHAT_DELEGATION_PROMPT, CHAT_SUPERVISOR_LOCK, SYSTEM_ASSISTANT_PROMPT, MigrateRequest, MigrateResponse,
 };
 use eframe::egui;
 use std::process::Stdio;
@@ -194,7 +199,7 @@ async fn handle_cmd(
                 {
                     Ok(m) => {
                         let _ = evt_tx.send(Evt::Sessions(vec![m.clone()]));
-                        load_session(&bus, &evt_tx, &m.id).await;
+                        announce_and_load_session(&bus, &evt_tx, &m.id).await;
                     }
                     Err(e) => {
                         let _ = evt_tx.send(Evt::Error(format!("session create: {e}")));
@@ -203,7 +208,7 @@ async fn handle_cmd(
             } else {
                 let id = list[0].id.clone();
                 let _ = evt_tx.send(Evt::Sessions(list));
-                load_session(&bus, &evt_tx, &id).await;
+                announce_and_load_session(&bus, &evt_tx, &id).await;
             }
         }
         Cmd::SessionCreate { title } => {
@@ -224,7 +229,7 @@ async fn handle_cmd(
                         .await
                         .unwrap_or_default();
                     let _ = evt_tx.send(Evt::Sessions(list));
-                    load_session(&bus, &evt_tx, &m.id).await;
+                    announce_and_load_session(&bus, &evt_tx, &m.id).await;
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));
@@ -282,7 +287,7 @@ async fn handle_cmd(
                             .await
                             .unwrap_or_default();
                         let _ = evt_tx.send(Evt::Sessions(list2));
-                        load_session(&bus, &evt_tx, &m.id).await;
+                        announce_and_load_session(&bus, &evt_tx, &m.id).await;
                     }
                     Err(e) => {
                         let _ = evt_tx.send(Evt::Error(e.to_string()));
@@ -291,7 +296,7 @@ async fn handle_cmd(
             } else {
                 let id = list[0].id.clone();
                 let _ = evt_tx.send(Evt::Sessions(list));
-                load_session(&bus, &evt_tx, &id).await;
+                announce_and_load_session(&bus, &evt_tx, &id).await;
             }
         }
         Cmd::SessionExport { id } => {
@@ -376,6 +381,7 @@ async fn handle_cmd(
                         query: user_content.clone(),
                         k: 5,
                         product_k: 4,
+                        user_doc_k: 0,
                     },
                     vec![],
                 )
@@ -390,6 +396,7 @@ async fn handle_cmd(
 
             let mut system = SYSTEM_ASSISTANT_PROMPT.to_string();
             system.push_str(CHAT_DELEGATION_PROMPT);
+            system.push_str(CHAT_SUPERVISOR_LOCK);
             system.push_str("\n\n");
             system.push_str(&product);
             if !mem_block.trim().is_empty() {
@@ -446,11 +453,17 @@ async fn handle_cmd(
                         while let Some(ev) = rx.recv().await {
                             match ev {
                                 Ok(TokenEvent::Started { inference_id }) => {
-                                    let _ = evt_tx.send(Evt::InferStarted { inference_id });
+                                    let _ = evt_tx.send(Evt::InferStarted {
+                                        session_id: sid.clone(),
+                                        inference_id,
+                                    });
                                 }
                                 Ok(TokenEvent::Delta { text }) => {
                                     full.push_str(&text);
-                                    let _ = evt_tx.send(Evt::Delta(text));
+                                    let _ = evt_tx.send(Evt::Delta {
+                                        session_id: sid.clone(),
+                                        text,
+                                    });
                                 }
                                 Ok(TokenEvent::Done { .. }) => break,
                                 Ok(TokenEvent::Error { message }) => {
@@ -518,7 +531,7 @@ async fn handle_cmd(
                             return;
                         }
 
-                        let display = agent_panel::format_assistant_display(&full);
+                        let display = agent_panel::format_chat_assistant_display(&full);
                         let _ = bus
                             .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
                                 "chat.session.append",
@@ -665,6 +678,68 @@ async fn handle_cmd(
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::SkillPassPending => {
+            let offset = sweep_tz_offset_minutes();
+            match bus
+                .call::<SkillPassRequest, Option<SkillPassPendingOffer>>(
+                    "skill.pass.pending",
+                    &SkillPassRequest {
+                        tz_offset_minutes: Some(offset),
+                        force: false,
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(offer) => {
+                    let _ = evt_tx.send(Evt::SkillPassPending(offer));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::SkillPassDismiss { pattern_id } => {
+            let offset = sweep_tz_offset_minutes();
+            let _ = bus
+                .call::<aos_proto::SkillPassDismissRequest, ()>(
+                    "skill.pass.dismiss",
+                    &aos_proto::SkillPassDismissRequest {
+                        pattern_id,
+                        tz_offset_minutes: Some(offset),
+                    },
+                    vec![],
+                )
+                .await;
+            let _ = evt_tx.send(Evt::SkillPassPending(None));
+        }
+        Cmd::SkillPassCreate { pattern_id } => {
+            match bus
+                .call::<aos_proto::SkillPassCreateRequest, SkillInfo>(
+                    "skill.pass.create",
+                    &aos_proto::SkillPassCreateRequest {
+                        pattern_id: pattern_id.clone(),
+                        actor: "human:ui".into(),
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(info) => {
+                    let _ = evt_tx.send(Evt::SkillPassCreated {
+                        pattern_id,
+                        skill_name: info.name,
+                    });
+                    if let Ok(list) = bus.call::<(), Vec<SkillInfo>>("skill.list", &(), vec![]).await
+                    {
+                        let _ = evt_tx.send(Evt::Skills(list));
+                    }
+                }
+                Err(_) => {
+                    // Silent — no status line, no système bubble (skill slugs stay out of chat).
                 }
             }
         }
@@ -816,7 +891,10 @@ async fn handle_cmd(
                 }
             }
         }
-        Cmd::ChatCancel { inference_id } => {
+        Cmd::ChatCancel {
+            inference_id,
+            session_id,
+        } => {
             match bus
                 .call::<CancelRequest, bool>(
                     "model.cancel",
@@ -826,7 +904,9 @@ async fn handle_cmd(
                 .await
             {
                 Ok(_) => {
-                    let _ = evt_tx.send(Evt::ChatCancelled);
+                    let _ = evt_tx.send(Evt::ChatCancelled {
+                        session_id,
+                    });
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));
@@ -938,6 +1018,24 @@ async fn handle_cmd(
             args,
         } => {
             invoke_module_tool(&bus, &evt_tx, &module, &tool, args).await;
+        }
+        Cmd::DocumentPrepSpawn {
+            session_id,
+            question,
+            language,
+            model_id,
+            max_steps,
+        } => {
+            spawn_document_prep_agent(
+                bus.clone(),
+                evt_tx.clone(),
+                session_id,
+                question,
+                language,
+                model_id,
+                max_steps,
+            )
+            .await;
         }
         Cmd::SecretList => {
             match bus
@@ -1220,6 +1318,63 @@ async fn handle_cmd(
                 args["topic"] = serde_json::json!(topic);
             }
             invoke_notes(&bus, &evt_tx, "notes.related", args).await;
+        }
+        Cmd::UserLibraryList => {
+            match bus
+                .call::<(), UserLibraryListResponse>("user.library.list", &(), vec![])
+                .await
+            {
+                Ok(resp) => {
+                    let _ = evt_tx.send(Evt::UserLibraryListed(resp.docs));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::UserLibraryAdd { path } => {
+            match bus
+                .call::<UserLibraryAddRequest, UserLibraryAddResponse>(
+                    "user.library.add",
+                    &UserLibraryAddRequest { path },
+                    vec![],
+                )
+                .await
+            {
+                Ok(_resp) => {
+                    if let Ok(list) = bus
+                        .call::<(), UserLibraryListResponse>("user.library.list", &(), vec![])
+                        .await
+                    {
+                        let _ = evt_tx.send(Evt::UserLibraryListed(list.docs));
+                    }
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::UserLibraryRemove { id } => {
+            match bus
+                .call::<UserLibraryRemoveRequest, UserLibraryRemoveResponse>(
+                    "user.library.remove",
+                    &UserLibraryRemoveRequest { id },
+                    vec![],
+                )
+                .await
+            {
+                Ok(_) => {
+                    if let Ok(list) = bus
+                        .call::<(), UserLibraryListResponse>("user.library.list", &(), vec![])
+                        .await
+                    {
+                        let _ = evt_tx.send(Evt::UserLibraryListed(list.docs));
+                    }
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
         }
         Cmd::Confirm { id, approved } => {
             match bus
@@ -1724,6 +1879,8 @@ async fn handle_cmd(
         Cmd::ScheduleCreate {
             goal,
             interval_secs,
+            next_fire_ms,
+            display_title,
         } => {
             match bus
                 .call::<ScheduleCreateRequest, ScheduleEntry>(
@@ -1732,16 +1889,15 @@ async fn handle_cmd(
                         goal,
                         interval_secs,
                         model_id: None,
+                        next_fire_ms,
+                        display_title,
                     },
                     vec![],
                 )
                 .await
             {
                 Ok(e) => {
-                    let _ = evt_tx.send(Evt::Status(format!(
-                        "schedule créé {} ({}s)",
-                        e.id, e.interval_secs
-                    )));
+                    let _ = evt_tx.send(Evt::ScheduleCreated(e));
                     if let Ok(r) = bus
                         .call::<(), ScheduleListResponse>(agent_intents::SCHEDULE_LIST, &(), vec![])
                         .await
@@ -1763,8 +1919,8 @@ async fn handle_cmd(
                 )
                 .await
             {
-                Ok(_) => {
-                    let _ = evt_tx.send(Evt::Status(format!("schedule annulé {id}")));
+                Ok(e) => {
+                    let _ = evt_tx.send(Evt::ScheduleUpdated(e));
                     if let Ok(r) = bus
                         .call::<(), ScheduleListResponse>(agent_intents::SCHEDULE_LIST, &(), vec![])
                         .await
@@ -1774,6 +1930,40 @@ async fn handle_cmd(
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(format!("schedule.cancel: {e}")));
+                }
+            }
+        }
+        Cmd::SchedulePause { id } => {
+            match bus
+                .call::<ScheduleIdRequest, ScheduleEntry>(
+                    agent_intents::SCHEDULE_PAUSE,
+                    &ScheduleIdRequest { id: id.clone() },
+                    vec![],
+                )
+                .await
+            {
+                Ok(e) => {
+                    let _ = evt_tx.send(Evt::ScheduleUpdated(e));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(format!("schedule.pause: {e}")));
+                }
+            }
+        }
+        Cmd::ScheduleResume { id } => {
+            match bus
+                .call::<ScheduleIdRequest, ScheduleEntry>(
+                    agent_intents::SCHEDULE_RESUME,
+                    &ScheduleIdRequest { id: id.clone() },
+                    vec![],
+                )
+                .await
+            {
+                Ok(e) => {
+                    let _ = evt_tx.send(Evt::ScheduleUpdated(e));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(format!("schedule.resume: {e}")));
                 }
             }
         }
@@ -2814,7 +3004,6 @@ async fn handle_cmd(
             content,
             images,
         } => {
-            let _ = evt_tx.send(Evt::Status("salon : tour en cours…".into()));
             match bus
                 .call::<ChatSessionRoomTurnRequest, ChatSessionRoomTurnResponse>(
                     "chat.session.room.turn",
@@ -2844,13 +3033,17 @@ async fn handle_cmd(
             match bus
                 .call::<ChatSessionRoomTurnCancelRequest, bool>(
                     "chat.session.room.turn.cancel",
-                    &ChatSessionRoomTurnCancelRequest { session_id },
+                    &ChatSessionRoomTurnCancelRequest {
+                        session_id: session_id.clone(),
+                    },
                     vec![],
                 )
                 .await
             {
                 Ok(_) => {
-                    let _ = evt_tx.send(Evt::ChatCancelled);
+                    let _ = evt_tx.send(Evt::ChatCancelled {
+                        session_id,
+                    });
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));
@@ -3072,7 +3265,7 @@ async fn handle_cmd(
     }
 }
 
-fn sweep_tz_offset_minutes() -> i32 {
+pub(crate) fn sweep_tz_offset_minutes() -> i32 {
     if let Ok(out) = std::process::Command::new("date").args(["+%z"]).output() {
         if out.status.success() {
             if let Ok(s) = String::from_utf8(out.stdout) {

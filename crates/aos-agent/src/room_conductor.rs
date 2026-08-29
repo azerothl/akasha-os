@@ -49,9 +49,9 @@ pub fn format_roster_for_prompt(members: &[ChatRoomMember]) -> String {
     members
         .iter()
         .map(|m| {
-            let mut line = format!("{} (@{})", m.display_name, m.agent_id);
+            let mut line = m.display_name.clone();
             if let Some(p) = m.persona_id.as_deref() {
-                line.push_str(&format!(" persona={p}"));
+                line.push_str(&format!(" (persona={p})"));
             }
             line
         })
@@ -134,15 +134,13 @@ pub fn pick_first_speaker(content: &str, members: &[ChatRoomMember]) -> Option<S
     Some(members[0].agent_id.clone())
 }
 
-/// File initiale : `@` roster uniquement ; `@` invalide → rien ; sans `@` → heuristique membre strip.
+/// File initiale : `@` roster uniquement ; `@` invalide → rien ; sans `@` → tous les membres (ordre strip).
 pub fn build_initial_queue(content: &str, members: &[ChatRoomMember]) -> Vec<String> {
     if content_has_mention_tokens(content) {
         return sanitize_member_queue(parse_mentions(content, members), members);
     }
     sanitize_member_queue(
-        pick_first_speaker(content, members)
-            .into_iter()
-            .collect(),
+        members.iter().map(|m| m.agent_id.clone()).collect(),
         members,
     )
 }
@@ -252,7 +250,42 @@ mod tests {
         )
         .is_none());
         let queue = build_initial_queue("Hello everyone", &m);
-        assert_eq!(queue.len(), 1);
+        assert_eq!(
+            queue,
+            vec![
+                String::from("agent-alpha"),
+                String::from("agent-beta"),
+                String::from("agent-gamma"),
+            ]
+        );
+    }
+
+    #[test]
+    fn no_mention_queues_all_members_in_strip_order() {
+        let m = members();
+        let queue = build_initial_queue("Review this sketch", &m);
+        assert_eq!(
+            queue,
+            vec![
+                String::from("agent-alpha"),
+                String::from("agent-beta"),
+                String::from("agent-gamma"),
+            ]
+        );
+    }
+
+    #[test]
+    fn no_mention_initial_queue_capped_by_effective_max_turns() {
+        let policy = ChatRoomConductorPolicy {
+            max_agent_turns_per_user: 1,
+            allow_peer_debate: false,
+        };
+        let max = effective_max_turns(&policy) as usize;
+        let m = members();
+        let queue = build_initial_queue("Hello everyone", &m);
+        let capped: Vec<_> = queue.into_iter().take(max).collect();
+        assert_eq!(capped.len(), 1);
+        assert_eq!(capped[0], "agent-alpha");
     }
 
     #[test]
@@ -354,14 +387,65 @@ mod tests {
         }];
         let roster = format_roster_for_prompt(&m);
         assert!(roster.contains("Critic"));
-        assert!(roster.contains("persona-critic"));
+        assert!(!roster.contains("@persona-critic"));
         assert!(roster.contains("persona=critic"));
     }
 
     #[test]
-    fn heuristic_picks_display_name_in_text() {
+    fn peer_followup_skips_member_who_already_spoke() {
+        use std::collections::HashSet;
+
         let m = members();
-        let speaker = pick_first_speaker("What does Beta think?", &m).unwrap();
-        assert_eq!(speaker, "agent-beta");
+        let peer = detect_peer_address("@Beta can you confirm?", &m, "agent-alpha").unwrap();
+        let spoken: HashSet<String> = HashSet::from([peer.clone()]);
+        let allowed = (!spoken.contains(&peer)).then_some(peer);
+        assert!(allowed.is_none());
+    }
+
+    #[test]
+    fn conduct_queue_skips_members_who_already_spoke() {
+        use std::collections::HashSet;
+
+        let mut queue = vec![
+            String::from("agent-alpha"),
+            String::from("agent-beta"),
+            String::from("agent-alpha"),
+        ];
+        let mut spoken = HashSet::<String>::new();
+        let mut turns = Vec::new();
+        while let Some(id) = queue.first().cloned() {
+            queue.remove(0);
+            if spoken.contains(&id) {
+                continue;
+            }
+            spoken.insert(id.clone());
+            turns.push(id);
+        }
+        assert_eq!(
+            turns,
+            vec![String::from("agent-alpha"), String::from("agent-beta")]
+        );
+    }
+
+    #[test]
+    fn two_member_strip_turn_yields_two_distinct_speakers() {
+        let m = vec![
+            ChatRoomMember {
+                agent_id: "agent-2".into(),
+                display_name: "Maya".into(),
+                persona_id: None,
+                joined_ms: 1,
+            },
+            ChatRoomMember {
+                agent_id: "agent-3".into(),
+                display_name: "Leo".into(),
+                persona_id: None,
+                joined_ms: 2,
+            },
+        ];
+        let queue = build_initial_queue("bonjour, qui est là", &m);
+        assert_eq!(queue.len(), 2);
+        assert_eq!(queue[0], "agent-2");
+        assert_eq!(queue[1], "agent-3");
     }
 }

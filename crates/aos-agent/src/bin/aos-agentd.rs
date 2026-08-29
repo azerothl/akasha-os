@@ -1743,6 +1743,52 @@ async fn main() {
             }
         });
     }
+    {
+        svc.on(intents::SCHEDULE_PAUSE, move |ctx| async move {
+            let req: ScheduleIdRequest = match ctx.payload() {
+                Ok(r) => r,
+                Err(_) => {
+                    let _ = ctx
+                        .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                        .await;
+                    return;
+                }
+            };
+            match schedule::pause(&req.id) {
+                Ok(e) => {
+                    let _ = ctx.respond(aos_ipc::msg::Status::Ok, &e).await;
+                }
+                Err(err) => {
+                    let _ = ctx
+                        .respond_error(aos_ipc::msg::Status::InternalError, &err)
+                        .await;
+                }
+            }
+        });
+    }
+    {
+        svc.on(intents::SCHEDULE_RESUME, move |ctx| async move {
+            let req: ScheduleIdRequest = match ctx.payload() {
+                Ok(r) => r,
+                Err(_) => {
+                    let _ = ctx
+                        .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                        .await;
+                    return;
+                }
+            };
+            match schedule::resume(&req.id) {
+                Ok(e) => {
+                    let _ = ctx.respond(aos_ipc::msg::Status::Ok, &e).await;
+                }
+                Err(err) => {
+                    let _ = ctx
+                        .respond_error(aos_ipc::msg::Status::InternalError, &err)
+                        .await;
+                }
+            }
+        });
+    }
 
     let _ = svc.serve(&bus_addr).await;
 }

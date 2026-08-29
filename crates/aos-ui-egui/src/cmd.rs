@@ -5,7 +5,7 @@ use aos_proto::{
     AgentInfo, AgentTrace, AuditEvent, CapInfo, ChatAttachment, ChatRoomMember, ChatSessionMeta,
     ChatSessionMode, CanvasOp, CanvasOpBody, CanvasPenStyle, DocumentRef, FeedbackSubmitRequest,
     FeedbackSubmitResponse, MemHit, ModelInfo, ModuleCatalogue, ModuleInfo, PendingConfirmation,
-    ProviderRecord, SkillInfo, SystemMetrics, WebSearchHit,
+    ProviderRecord, SkillInfo, SkillPassPendingOffer, SystemMetrics, WebSearchHit,
 };
 use aos_proto::decl_ui::ModuleUiResponse;
 use aos_proto::{McpServerInfo};
@@ -47,6 +47,9 @@ pub(crate) enum Cmd {
     MemWipeUser,
     MemSupersede { id: u64, text: String },
     MemEdit { id: u64, text: String },
+    SkillPassPending,
+    SkillPassCreate { pattern_id: String },
+    SkillPassDismiss { pattern_id: String },
     SecretSet { name: String, value: String },
     SecretList,
     NetSetMode { online: bool },
@@ -78,6 +81,9 @@ pub(crate) enum Cmd {
         path: String,
         topic: String,
     },
+    UserLibraryList,
+    UserLibraryAdd { path: String },
+    UserLibraryRemove { id: String },
     Confirm { id: String, approved: bool },
     AgentCreate {
         display_name: String,
@@ -142,8 +148,16 @@ pub(crate) enum Cmd {
     ScheduleCreate {
         goal: String,
         interval_secs: u64,
+        next_fire_ms: Option<u64>,
+        display_title: Option<String>,
     },
     ScheduleCancel {
+        id: String,
+    },
+    SchedulePause {
+        id: String,
+    },
+    ScheduleResume {
         id: String,
     },
     TasksList,
@@ -265,7 +279,10 @@ pub(crate) enum Cmd {
         content: String,
         attachments: Vec<ChatAttachment>,
     },
-    ChatCancel { inference_id: u64 },
+    ChatCancel {
+        inference_id: u64,
+        session_id: String,
+    },
     CatalogueRefresh,
     ModuleList,
     ModuleInstall {
@@ -290,10 +307,21 @@ pub(crate) enum Cmd {
         tool: String,
         args: serde_json::Value,
     },
+    /// Spawn a document-prep agent (research + file-author) from a choice card.
+    DocumentPrepSpawn {
+        session_id: String,
+        question: String,
+        language: String,
+        model_id: Option<String>,
+        max_steps: u32,
+    },
 }
 
 pub(crate) enum Evt {
-    Delta(String),
+    Delta {
+        session_id: String,
+        text: String,
+    },
     Done {
         text: String,
         session_id: String,
@@ -319,6 +347,7 @@ pub(crate) enum Evt {
     NoteLoaded(notes_panel::NoteDetail),
     NotesSearchHits(Vec<notes_panel::NoteSearchHit>),
     NotesRelated(Vec<notes_panel::NoteRelatedHit>),
+    UserLibraryListed(Vec<aos_proto::UserLibraryDoc>),
     NotesSaved {
         path: String,
         slug: String,
@@ -332,12 +361,16 @@ pub(crate) enum Evt {
         caps: Vec<CapInfo>,
     },
     Schedules(Vec<ScheduleEntry>),
+    ScheduleCreated(ScheduleEntry),
+    ScheduleUpdated(ScheduleEntry),
     TasksListed(Vec<tasks_panel::TaskItem>),
     Confirms(Vec<PendingConfirmation>),
     FeedbackOk(FeedbackSubmitResponse),
     /// Préremplit le formulaire Retour (dépannage) sans publier tout de suite.
     FeedbackDraft(FeedbackSubmitRequest),
     Sessions(Vec<ChatSessionMeta>),
+    /// Runtime names the session about to be loaded (create/delete/bootstrap).
+    SessionLoadIntent { id: String },
     SessionLoaded {
         id: String,
         messages: Vec<ChatLine>,
@@ -369,6 +402,11 @@ pub(crate) enum Evt {
     MemSweepStatus {
         last_pass_ms: u64,
         last_pass_label: String,
+    },
+    SkillPassPending(Option<SkillPassPendingOffer>),
+    SkillPassCreated {
+        pattern_id: String,
+        skill_name: String,
     },
     SecretList {
         names: Vec<String>,
@@ -428,8 +466,11 @@ pub(crate) enum Evt {
         models: Vec<String>,
     },
     AgentTrace(AgentTrace),
-    InferStarted { inference_id: u64 },
-    ChatCancelled,
+    InferStarted {
+        session_id: String,
+        inference_id: u64,
+    },
+    ChatCancelled { session_id: String },
     Catalogue(ModuleCatalogue),
     InstalledModules(Vec<ModuleInfo>),
     ModuleInstalled(String),
@@ -460,6 +501,7 @@ pub(crate) struct ChatLine {
     pub(crate) text: String,
     pub(crate) attachments: Vec<ChatAttachment>,
     pub(crate) speaker_id: Option<String>,
+    pub(crate) speaker_name: Option<String>,
 }
 
 impl ChatLine {
@@ -469,6 +511,7 @@ impl ChatLine {
             text: text.into(),
             attachments: Vec::new(),
             speaker_id: None,
+            speaker_name: None,
         }
     }
 
@@ -482,6 +525,7 @@ impl ChatLine {
             text: text.into(),
             attachments: Vec::new(),
             speaker_id,
+            speaker_name: None,
         }
     }
 }

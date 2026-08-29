@@ -402,6 +402,43 @@ fn ui_canvas_seeing_pill(ui: &mut Ui, label: &str) {
 }
 
 /// Drawing tools for the unified session bar (pen, eraser, shapes, tint, thickness).
+pub fn toolbar_content_min_width(t: &UiStrings, seeing: bool, clear_confirm: bool) -> f32 {
+    const CHAR_W: f32 = 8.5;
+    const BTN_PAD: f32 = 18.0;
+    const GAP: f32 = 4.0;
+    let mut w = 0.0;
+    if seeing {
+        w += t.canvas_seeing_now.len() as f32 * CHAR_W + 24.0 + GAP;
+    }
+    for label in [
+        t.canvas_tool_pen,
+        t.canvas_tool_eraser,
+        t.canvas_tool_line,
+        t.canvas_tool_spline,
+        t.canvas_tool_rect,
+        t.canvas_tool_ellipse,
+        t.canvas_tool_fill,
+    ] {
+        w += label.len() as f32 * CHAR_W + BTN_PAD + GAP;
+    }
+    w += t.canvas_fill_toggle.len() as f32 * CHAR_W + BTN_PAD + GAP;
+    w += t.canvas_tint.len() as f32 * CHAR_W + 28.0 + GAP;
+    w += 88.0; // color picker + width slider
+    w += t.canvas_undo.len() as f32 * CHAR_W + BTN_PAD + GAP;
+    w += t.canvas_export.len() as f32 * CHAR_W + BTN_PAD + GAP;
+    if clear_confirm {
+        w += t.canvas_clear_confirm.len() as f32 * CHAR_W
+            + t.canvas_clear_confirm_yes.len() as f32 * CHAR_W
+            + t.canvas_clear_confirm_no.len() as f32 * CHAR_W
+            + BTN_PAD * 2.0
+            + GAP * 2.0;
+    } else {
+        w += t.canvas_clear.len() as f32 * CHAR_W + BTN_PAD;
+    }
+    w
+}
+
+/// Drawing tools for the unified session bar (pen, eraser, shapes, tint, thickness).
 pub fn ui_canvas_toolbar(
     ui: &mut Ui,
     t: &UiStrings,
@@ -530,8 +567,8 @@ pub fn ui_canvas_surface(
     let mut action: Option<CanvasUiAction> = None;
     let dark = ui.visuals().dark_mode;
     let avail = ui.available_size();
-    let pane_h = avail.y.max(120.0);
-    let pane_w = avail.x.max(180.0);
+    let pane_h = avail.y.max(1.0);
+    let pane_w = avail.x.max(1.0);
     let (response, painter) =
         ui.allocate_painter(Vec2::new(pane_w, pane_h), Sense::click_and_drag());
     let outer = response.rect;
@@ -765,10 +802,22 @@ pub fn ui_canvas_surface(
         && !empty_hint.is_empty()
     {
         let font = eframe::egui::FontId::proportional(13.0);
-        let galley = ui
-            .painter()
-            .layout_no_wrap(empty_hint.to_string(), font, ui.visuals().weak_text_color());
-        let pos = rect.center() - galley.size() * 0.5;
+        let wrap_w = (rect.width() - 20.0).max(40.0);
+        let galley = ui.fonts(|f| {
+            f.layout(
+                empty_hint.to_owned(),
+                font,
+                ui.visuals().weak_text_color(),
+                wrap_w,
+            )
+        });
+        let mut pos = rect.center() - galley.size() * 0.5;
+        pos.x = pos
+            .x
+            .clamp(rect.left() + 8.0, rect.right() - galley.size().x - 8.0);
+        pos.y = pos
+            .y
+            .clamp(rect.top() + 8.0, rect.bottom() - galley.size().y - 8.0);
         ui.painter().galley(pos, galley, Color32::TRANSPARENT);
     }
 
@@ -778,6 +827,14 @@ pub fn ui_canvas_surface(
 #[cfg(test)]
 mod routing_tests {
     use super::*;
+    use crate::i18n;
+
+    #[test]
+    fn toolbar_min_width_covers_fr_clear_label() {
+        let fr = i18n::strings("fr");
+        let w = toolbar_content_min_width(&fr, false, false);
+        assert!(w > 700.0, "toolbar scroll extent should cover FR labels, got {w}");
+    }
 
     #[test]
     fn bare_draw_is_pixel_not_canvas_when_closed() {

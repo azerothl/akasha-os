@@ -6,6 +6,9 @@ use eframe::egui::{
 
 const BTN: f32 = 18.0;
 
+/// Width reserved for the chat attach control (icon + spacing).
+pub const ATTACH_BTN_W: f32 = BTN + 4.0;
+
 fn hover_color(ui: &Ui, response: &Response) -> Color32 {
     if response.hovered() {
         ui.visuals().strong_text_color()
@@ -179,13 +182,14 @@ pub fn caret(ui: &mut Ui, expanded: bool) -> Response {
 }
 
 /// Status dot prefix (replaces `●`).
-pub fn status_dot(ui: &mut Ui, color: Color32) {
+pub fn status_dot(ui: &mut Ui, color: Color32) -> Response {
     let size = Vec2::splat(10.0);
-    let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
+    let (rect, response) = ui.allocate_exact_size(size, Sense::hover());
     if ui.is_rect_visible(rect) {
         ui.painter()
             .circle_filled(rect.center(), rect.width() * 0.32, color);
     }
+    response
 }
 
 /// Child-agent tree branch marker (replaces `↳`).

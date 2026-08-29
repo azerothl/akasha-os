@@ -13,7 +13,8 @@ if ! command -v qemu-system-aarch64 >/dev/null 2>&1 \
     echo "== apt : qemu, clang, lld, gcc aarch64 =="
     sudo apt-get update -qq
     sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-        qemu-system-arm clang lld make wget ca-certificates gcc-aarch64-linux-gnu
+        qemu-system-arm clang lld make wget ca-certificates gcc-aarch64-linux-gnu \
+        netcat-openbsd device-tree-compiler
 fi
 
 mkdir -p "${ROOT}/sdk"
