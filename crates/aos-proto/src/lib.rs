@@ -1336,22 +1336,22 @@ N'écris jamais un manifeste, handlers.yaml, ni un arbre declarative_ui « pour 
 
 Tu agis via des actions JSON structurées (ou la convention TOOL: pour compat). Tu n'inventes pas d'outils absents du catalogue. Tu respectes les capacités (caps) et les confirmations bloquantes.
 
-Tu réponds en français, de façon concise et factuelle. Pour les questions sur l'UI, les nouveautés ou « ce qui a changé », utilise les extraits « Documentation produit (RAG) » et le micro-brief injectés — ne dis jamais que tu n'as pas accès au changelog ou à la doc produit. Si un point n'y figure pas, dis-le clairement.";
+Réponds dans la langue de l'utilisateur (français par défaut si ambigu), de façon concise et factuelle. Les index consultatifs (extraits RAG produit aujourd'hui ; bibliothèque de documents utilisateur à venir) enrichissent les réponses quand pertinents — zéro extrait ne bloque jamais une réponse. Pour les questions générales (culture, langues, vie courante, savoir encyclopédique), réponds normalement. Pour les questions sur l'UI Preview, les nouveautés ou « ce qui a changé », base-toi sur les extraits produit et le micro-brief injectés quand ils existent ; n'invente pas de fonctionnalités absentes de ces sources. Si un point produit n'y figure pas, dis-le simplement sans parler d'index ou de sources.";
 
 /// Micro-brief produit (pas le changelog) — le détail vient du RAG `product:docs`.
 pub const PREVIEW_SURFACE_BRIEF: &str = "\
 ## Surface produit — Akasha OS Preview (hôte Windows/Linux)
 Onglets : Chat, Mémoire, Notes, Tâches, Agents, Modèles, Caps, Audit, Providers, Image (studio), Settings, Réseau (opt-in).
-Ce n'est pas un OS bootable. Les détails / nouveautés viennent des extraits RAG (FEATURES, STATUS, TESTER) injectés dans le tour — pas d'invention hors de ces sources.";
+Ce n'est pas un OS bootable. Pour l'UI, les nouveautés et « ce qui a changé », les extraits RAG (FEATURES, STATUS, TESTER) injectés quand il y en a font foi — n'invente pas de fonctionnalités absentes de ces sources. Index consultatif seulement : zéro extrait ou sujet hors produit ne t'empêche pas de répondre. Une future bibliothèque de documents utilisateur sera aussi consultative uniquement (pas construite ici).";
 
 /// Addendum injecté uniquement dans le chemin chat (pas les workers).
 /// Délégation des tâches complexes via `agent.spawn` sans boucle d'outils.
 pub const CHAT_DELEGATION_PROMPT: &str = "
 Chat (cette session) — tu n'as PAS de boucle d'outils :
-- Questions, explications, conseils (y compris « quoi de neuf » / UI) → réponds en français, sans JSON, en t'appuyant sur le brief + extraits RAG produit s'ils sont présents.
+- Questions, explications, conseils → réponds sans JSON. Langue : celle de l'utilisateur (français par défaut). Index consultatifs (RAG produit ; futurs documents utilisateur) : si aucun extrait ne correspond ou le sujet est hors index, réponds quand même — ignore l'index vide ou hors sujet. Savoir général ou langues : réponds normalement. « Quoi de neuf » / UI / changelog Preview : appuie-toi silencieusement sur le brief + extraits quand présents ; n'invente pas de features ; ne mentionne pas ces sources à l'utilisateur. Canvas / UI : explique en mots humains (panneau vectoriel, dessin au trait, onglet Créer) — jamais d'identifiants `canvas.*`, `media.*`, boucle d'outils, ni jetons `<channel>`.
 - Synthèse vocale / TTS / « générer un audio » : n'appelle PAS agent.spawn.
-  Le hôte ouvre une carte TTS (`/speak <texte>`). Réponds en français, sans JSON.
-- Routage dessin (gelé) :
+  Le hôte ouvre une carte TTS (`/speak <texte>`). Réponds sans JSON, dans la langue de l'utilisateur.
+- Routage dessin interne (identifiants techniques ci-dessous — ne jamais les citer à l'utilisateur ; pas de raisonnement à voix haute) :
   • Panneau canvas OUVERT + « dessine » / « draw » / « sketch » → canvas vectoriel (canvas.stroke…).
   • Panneau canvas FERMÉ + « dessine » / « draw » / « sketch » sans marqueur → agent image (media.image.generate).
   • Marqueur explicite (« sur le canvas », « dans le canvas », « au trait », `/canvas`… ;
@@ -1377,6 +1377,13 @@ Chat (cette session) — tu n'as PAS de boucle d'outils :
   « noté », « enregistré » ou mis en « mémoire épisodique ». Si un bloc
   « Mémoire long terme utilisateur » est présent ci-dessous, utilise-le.
   Si l'utilisateur demande d'oublier, oriente-le vers l'onglet Mémoire.";
+
+/// Verrou affichage chat : la réponse visible ne doit jamais fuiter l'infrastructure prompt/RAG.
+pub const CHAT_SUPERVISOR_LOCK: &str = "
+Verrou affichage (réponse visible à l'utilisateur) :
+- Réponse naturelle et directe, sans raisonnement à voix haute ni chain-of-thought. Pas de planification visible (« Je vais répondre… », « Let me explain… », « I'm going to answer… ») avant ni après la réponse. Ne mentionne JAMAIS : RAG, JSON, rules/règles, consignes, prompt, FEATURES, STATUS, TESTER, index, extraits, bibliothèque/documents, « hors des sources », « pas dans la doc », « absent des extraits », « No JSON is needed », « tool invocation loop », jetons `<channel>`, brief, doc produit/changelog en tant que source, identifiants techniques (`canvas.stroke`, `canvas.rect`, `media.image.generate`, `agent.spawn`, `@agent-…`, `module.*`, `tool.invoke`), ni que tu « ne peux pas » répondre faute de documentation, d'extraits ou parce que le sujet n'est pas dans les docs. Même en stream partiel : n'écris jamais ces fragments.
+- Une question ordinaire → réponse ordinaire (ex. traduction, culture, vie courante) même si aucun extrait RAG ou index utilisateur n'a été injecté.
+- UI / Canvas / nouveautés Preview : mots humains seulement (panneau vectoriel, onglet Créer, dessin au trait) ; les index consultatifs et le routage interne restent en coulisse — n'en parle pas.";
 
 /// Intention chat : créer / installer un module ou une skill (pas « c'est quoi »).
 pub fn chat_user_wants_module_authoring(text: &str) -> bool {
@@ -1758,6 +1765,150 @@ mod chat_delegation_tests {
         assert!(chat_tts_request("comment générer un audio").is_none());
         assert!(chat_tts_request("crée un module ping").is_none());
         assert!(chat_tts_request("génère une image d'un chat").is_none());
+    }
+}
+
+#[cfg(test)]
+mod preview_prompt_tests {
+    use super::{
+        CHAT_DELEGATION_PROMPT, CHAT_SUPERVISOR_LOCK, PREVIEW_SURFACE_BRIEF, SYSTEM_ASSISTANT_PROMPT,
+    };
+
+    fn chat_system_stack() -> String {
+        format!(
+            "{SYSTEM_ASSISTANT_PROMPT}\n{PREVIEW_SURFACE_BRIEF}\n{CHAT_DELEGATION_PROMPT}\n{CHAT_SUPERVISOR_LOCK}"
+        )
+    }
+
+    #[test]
+    fn product_rag_does_not_jail_general_knowledge() {
+        let chat_stack = chat_system_stack();
+        assert!(
+            chat_stack.contains("savoir général") || chat_stack.contains("savoir encyclopédique"),
+            "prompts should tell the model general knowledge is allowed"
+        );
+        assert!(
+            !PREVIEW_SURFACE_BRIEF.contains("pas d'invention hors de ces sources"),
+            "brief must not globally forbid answering outside RAG"
+        );
+        assert!(
+            CHAT_DELEGATION_PROMPT.contains("ignore") || CHAT_DELEGATION_PROMPT.contains("hors index"),
+            "chat path should ignore empty or off-topic indexes"
+        );
+    }
+
+    #[test]
+    fn chat_follows_user_language_not_french_only() {
+        assert!(
+            !CHAT_DELEGATION_PROMPT.contains("→ réponds en français, sans JSON, en t'appuyant"),
+            "must not require French for every Q&A turn"
+        );
+        assert!(
+            CHAT_DELEGATION_PROMPT.contains("Langue : celle de l'utilisateur"),
+            "chat should follow user language"
+        );
+        assert!(
+            SYSTEM_ASSISTANT_PROMPT.contains("langue de l'utilisateur"),
+            "system prompt should follow user language"
+        );
+    }
+
+    #[test]
+    fn product_ui_still_grounded_in_rag() {
+        assert!(
+            SYSTEM_ASSISTANT_PROMPT.contains("extraits RAG produit")
+                || SYSTEM_ASSISTANT_PROMPT.contains("extraits produit")
+        );
+        assert!(PREVIEW_SURFACE_BRIEF.contains("RAG"));
+        assert!(
+            SYSTEM_ASSISTANT_PROMPT.contains("n'invente pas de fonctionnalités"),
+            "product claims must stay grounded in RAG"
+        );
+        assert!(
+            CHAT_DELEGATION_PROMPT.contains("n'invente pas de features"),
+            "chat UI answers must stay grounded in RAG"
+        );
+    }
+
+    #[test]
+    fn chat_supervisor_lock_bans_meta_in_visible_reply() {
+        for term in [
+            "RAG",
+            "JSON",
+            "règles",
+            "FEATURES",
+            "STATUS",
+            "TESTER",
+            "hors des sources",
+            "pas dans la doc",
+            "absent des extraits",
+        ] {
+            assert!(
+                CHAT_SUPERVISOR_LOCK.contains(term),
+                "supervisor lock must explicitly forbid visible mention of {term}"
+            );
+        }
+        assert!(
+            CHAT_SUPERVISOR_LOCK.contains("Ne mentionne JAMAIS"),
+            "supervisor lock must forbid meta leakage in visible replies"
+        );
+        assert!(
+            CHAT_DELEGATION_PROMPT.contains("silencieusement"),
+            "product RAG should be used silently on chat path"
+        );
+        assert!(
+            CHAT_SUPERVISOR_LOCK.contains("question ordinaire"),
+            "supervisor lock should require normal answers to normal questions"
+        );
+        assert!(
+            CHAT_SUPERVISOR_LOCK.contains("media.image.generate"),
+            "supervisor lock must forbid tool ids in visible replies"
+        );
+        assert!(
+            CHAT_SUPERVISOR_LOCK.contains("chain-of-thought"),
+            "supervisor lock must forbid thinking-aloud"
+        );
+        assert!(
+            CHAT_SUPERVISOR_LOCK.contains("No JSON is needed"),
+            "supervisor lock must forbid No JSON is needed in visible replies"
+        );
+        assert!(
+            CHAT_SUPERVISOR_LOCK.contains("tool invocation loop"),
+            "supervisor lock must forbid tool invocation loop in visible replies"
+        );
+        assert!(
+            CHAT_SUPERVISOR_LOCK.contains("<channel>"),
+            "supervisor lock must forbid channel control tokens"
+        );
+        assert!(
+            CHAT_SUPERVISOR_LOCK.contains("Je vais répondre"),
+            "supervisor lock must forbid visible planning narration"
+        );
+    }
+
+    #[test]
+    fn consultative_indexes_never_block_chat_on_zero_hits() {
+        let stack = chat_system_stack();
+        assert!(
+            stack.contains("zéro extrait"),
+            "prompts must say zero index hits still allow answers"
+        );
+        assert!(
+            stack.contains("consultatif"),
+            "prompts must frame indexes as consultative only"
+        );
+        assert!(
+            PREVIEW_SURFACE_BRIEF.contains("bibliothèque de documents utilisateur"),
+            "future user document library should be encoded as consultative"
+        );
+        assert!(
+            CHAT_DELEGATION_PROMPT.contains("aucun extrait ne correspond"),
+            "chat must answer when product RAG or user index returns zero hits"
+        );
+        assert!(
+            CHAT_SUPERVISOR_LOCK.contains("aucun extrait RAG"),
+            "supervisor lock must allow answers with no injected excerpts"
+        );
     }
 }
 

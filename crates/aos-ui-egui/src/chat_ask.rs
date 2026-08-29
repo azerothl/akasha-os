@@ -74,6 +74,7 @@ mod ask_queue_tests {
                 origin: origin.into(),
             }],
             speaker_id: None,
+            speaker_name: None,
         }
     }
 
