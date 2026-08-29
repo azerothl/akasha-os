@@ -284,6 +284,13 @@ fn chat_message_frame(
     ui.add_space(6.0);
 }
 
+fn designer_shot_mode() -> bool {
+    matches!(
+        std::env::var("AOS_DESIGNER_SHOT").ok().as_deref(),
+        Some("1") | Some("true") | Some("yes")
+    )
+}
+
 fn main() -> eframe::Result<()> {
     if std::env::var_os("AOS_MODEL_SETUP").is_some() {
         return model_setup::run();
@@ -3449,10 +3456,13 @@ impl eframe::App for UiApp {
                     }
                     if session_changed {
                         self.room_members_pane_open = false;
-                        let mut chat = vec![ChatLine::plain(
-                            "système",
-                            format!("Session {id} — historique rechargé."),
-                        )];
+                        let mut chat = Vec::new();
+                        if !designer_shot_mode() {
+                            chat.push(ChatLine::plain(
+                                "système",
+                                format!("Session {id} — historique rechargé."),
+                            ));
+                        }
                         chat.extend(messages);
                         self.chat = chat;
                     } else {

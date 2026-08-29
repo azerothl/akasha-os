@@ -114,8 +114,13 @@ fn chat_sentence_is_meta_leak(s: &str) -> bool {
         return true;
     }
     let lower = t.to_ascii_lowercase();
+    chat_meta_substring_pos(&lower).is_some()
+}
+
+fn chat_meta_substring_pos(lower: &str) -> Option<usize> {
     const FORBIDDEN: &[&str] = &[
         "media.image.generate",
+        "media.image.",
         "@agent-",
         "agent.spawn",
         "canvas.stroke",
@@ -127,13 +132,16 @@ fn chat_sentence_is_meta_leak(s: &str) -> bool {
         "no json is needed",
         "no json needed",
     ];
+    let mut earliest = None::<usize>;
     for f in FORBIDDEN {
-        if lower.contains(f) {
-            return true;
+        if let Some(i) = lower.find(f) {
+            earliest = Some(earliest.map_or(i, |e| e.min(i)));
         }
     }
-    if lower.contains("json") || lower.contains("rules") {
-        return true;
+    for word in ["json", "rules", "règles"] {
+        if let Some(i) = lower.find(word) {
+            earliest = Some(earliest.map_or(i, |e| e.min(i)));
+        }
     }
     const CHAIN_OF_THOUGHT: &[&str] = &[
         "je vais donc",
@@ -146,12 +154,24 @@ fn chat_sentence_is_meta_leak(s: &str) -> bool {
         "conformément aux règles",
         "conformément aux consignes",
     ];
-    CHAIN_OF_THOUGHT.iter().any(|p| lower.contains(p))
+    for p in CHAIN_OF_THOUGHT {
+        if let Some(i) = lower.find(p) {
+            earliest = Some(earliest.map_or(i, |e| e.min(i)));
+        }
+    }
+    earliest
+}
+
+/// Truncate before the first forbidden meta substring (including mid-stream tokens).
+fn truncate_before_chat_meta_leak(text: &str) -> String {
+    let lower = text.to_ascii_lowercase();
+    let cut = chat_meta_substring_pos(&lower).unwrap_or(text.len());
+    text[..cut].trim_end().to_string()
 }
 
 /// Retire les fuites meta (identifiants outils, JSON, rules, raisonnement à voix haute).
 pub fn sanitize_chat_visible_bubble(text: &str) -> String {
-    let text = text.trim();
+    let text = truncate_before_chat_meta_leak(text.trim());
     if text.is_empty() {
         return String::new();
     }
@@ -1133,6 +1153,33 @@ Le canvas sert aux esquisses vectorielles."#;
         assert!(!lower.contains("media.image.generate"), "{out}");
         assert!(!lower.contains("json"), "{out}");
         assert!(!lower.contains("rules"), "{out}");
+        assert!(out.contains("vectoriel"), "{out}");
+    }
+
+    #[test]
+    fn streaming_truncates_mid_token_before_tool_id() {
+        let raw = "Le Canvas est un panneau vectoriel. Selon media.image.generate";
+        let out = format_chat_streaming_preview(raw);
+        assert!(!out.to_ascii_lowercase().contains("media.image"), "{out}");
+        assert!(out.contains("vectoriel"), "{out}");
+    }
+
+    #[test]
+    fn streaming_truncates_before_rules_and_no_json() {
+        let raw =
+            "Bonne réponse. established rules for the Canvas tool. No JSON is needed as there";
+        let out = format_chat_streaming_preview(raw);
+        let lower = out.to_ascii_lowercase();
+        assert!(!lower.contains("rules"), "{out}");
+        assert!(!lower.contains("json"), "{out}");
+        assert!(out.contains("Bonne réponse"), "{out}");
+    }
+
+    #[test]
+    fn streaming_truncates_chain_of_thought_before_it_streams() {
+        let raw = "Le Canvas sert au trait vectoriel. Je vais donc répondre en orientant";
+        let out = format_chat_streaming_preview(raw);
+        assert!(!out.to_ascii_lowercase().contains("je vais donc"), "{out}");
         assert!(out.contains("vectoriel"), "{out}");
     }
 }

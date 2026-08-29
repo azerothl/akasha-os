@@ -1381,7 +1381,7 @@ Chat (cette session) — tu n'as PAS de boucle d'outils :
 /// Verrou affichage chat : la réponse visible ne doit jamais fuiter l'infrastructure prompt/RAG.
 pub const CHAT_SUPERVISOR_LOCK: &str = "
 Verrou affichage (réponse visible à l'utilisateur) :
-- Réponse naturelle et directe, sans raisonnement à voix haute ni chain-of-thought. Ne mentionne JAMAIS : RAG, JSON, rules/règles, consignes, prompt, FEATURES, STATUS, TESTER, index, extraits, bibliothèque/documents, « hors des sources », « pas dans la doc », « absent des extraits », brief, doc produit/changelog en tant que source, identifiants techniques (media.image.generate, canvas.stroke, agent.spawn, @agent-…, module.*, tool.invoke), ni que tu « ne peux pas » répondre faute de documentation, d'extraits ou parce que le sujet n'est pas dans les docs.
+- Réponse naturelle et directe, sans raisonnement à voix haute ni chain-of-thought. Ne mentionne JAMAIS : RAG, JSON, rules/règles, consignes, prompt, FEATURES, STATUS, TESTER, index, extraits, bibliothèque/documents, « hors des sources », « pas dans la doc », « absent des extraits », « No JSON is needed », brief, doc produit/changelog en tant que source, identifiants techniques (media.image.generate, canvas.stroke, agent.spawn, @agent-…, module.*, tool.invoke), ni que tu « ne peux pas » répondre faute de documentation, d'extraits ou parce que le sujet n'est pas dans les docs. Même en stream partiel : n'écris jamais ces fragments.
 - Une question ordinaire → réponse ordinaire (ex. traduction, culture, vie courante) même si aucun extrait RAG ou index utilisateur n'a été injecté.
 - UI / Canvas / nouveautés Preview : mots humains seulement (panneau vectoriel, onglet Créer, dessin au trait) ; les index consultatifs et le routage interne restent en coulisse — n'en parle pas.";
 
@@ -1867,6 +1867,10 @@ mod preview_prompt_tests {
         assert!(
             CHAT_SUPERVISOR_LOCK.contains("chain-of-thought"),
             "supervisor lock must forbid thinking-aloud"
+        );
+        assert!(
+            CHAT_SUPERVISOR_LOCK.contains("No JSON is needed"),
+            "supervisor lock must forbid No JSON is needed in visible replies"
         );
     }
 
