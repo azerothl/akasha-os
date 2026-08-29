@@ -8,6 +8,7 @@ use crate::cmd::Cmd;
 use crate::i18n::UiStrings;
 use crate::format_schedule_next_label;
 
+#[derive(Clone)]
 pub enum ScheduleCardAction {
     None,
     Pause(String),
@@ -101,6 +102,54 @@ pub fn sync_card_attachment(att: &mut ChatAttachment, entry: &ScheduleEntry, now
     {
         *state = card_state_from_entry(entry).to_string();
         *next_fire_ms = next_fire_ms_for_entry(entry, now_ms);
+    }
+}
+
+/// Prefer persisted schedule state over a stale attachment snapshot.
+pub fn resolved_card_state<'a>(
+    entry: Option<&'a ScheduleEntry>,
+    attachment_state: &'a str,
+) -> &'a str {
+    entry
+        .map(card_state_from_entry)
+        .unwrap_or(attachment_state)
+}
+
+pub fn upsert_schedule_entry(schedules: &mut Vec<ScheduleEntry>, entry: ScheduleEntry) {
+    if let Some(slot) = schedules.iter_mut().find(|s| s.id == entry.id) {
+        *slot = entry;
+    } else {
+        schedules.push(entry);
+    }
+}
+
+pub fn apply_local_pause(schedules: &mut Vec<ScheduleEntry>, id: &str) {
+    if let Some(entry) = schedules.iter_mut().find(|s| s.id == id) {
+        entry.paused = true;
+    }
+}
+
+pub fn apply_local_resume(schedules: &mut Vec<ScheduleEntry>, id: &str) {
+    if let Some(entry) = schedules.iter_mut().find(|s| s.id == id) {
+        entry.paused = false;
+    }
+}
+
+pub fn apply_local_stop(schedules: &mut Vec<ScheduleEntry>, id: &str) {
+    if let Some(entry) = schedules.iter_mut().find(|s| s.id == id) {
+        entry.enabled = false;
+        entry.paused = false;
+    }
+}
+
+pub fn apply_local_action_to_attachment(
+    att: &mut ChatAttachment,
+    schedules: &[ScheduleEntry],
+    id: &str,
+    now_ms: u64,
+) {
+    if let Some(entry) = schedules.iter().find(|s| s.id == id) {
+        sync_card_attachment(att, entry, now_ms);
     }
 }
 
@@ -226,5 +275,71 @@ mod tests {
             !label.starts_with("Next: today"),
             "three-day offset must not use today template"
         );
+    }
+
+    #[test]
+    fn sync_after_pause_keeps_paused_without_stale_attachment() {
+        let entry = ScheduleEntry {
+            id: "sch-1".into(),
+            goal: "g".into(),
+            interval_secs: 86_400,
+            enabled: true,
+            paused: true,
+            next_fire_ms: Some(1_000),
+            display_title: Some("every morning, g".into()),
+            last_fired_ms: 0,
+            fire_count: 0,
+            active_agent_id: None,
+            model_id: None,
+            created_ms: 0,
+        };
+        let mut att = ChatAttachment::ScheduleCard {
+            schedule_id: "sch-1".into(),
+            title: "every morning, g".into(),
+            goal: "g".into(),
+            interval_secs: 86_400,
+            next_fire_ms: 1_000,
+            state: "live".into(),
+        };
+        sync_card_attachment(&mut att, &entry, 500);
+        let ChatAttachment::ScheduleCard { state, .. } = att else {
+            panic!("expected schedule card");
+        };
+        assert_eq!(state, "paused");
+        assert_eq!(card_state_from_entry(&entry), "paused");
+        assert_eq!(resolved_card_state(Some(&entry), "live"), "paused");
+    }
+
+    #[test]
+    fn apply_local_pause_updates_entry_and_attachment() {
+        let mut schedules = vec![ScheduleEntry {
+            id: "sch-9".into(),
+            goal: "g".into(),
+            interval_secs: 3600,
+            enabled: true,
+            paused: false,
+            next_fire_ms: Some(9_000),
+            display_title: None,
+            last_fired_ms: 0,
+            fire_count: 0,
+            active_agent_id: None,
+            model_id: None,
+            created_ms: 0,
+        }];
+        let mut att = ChatAttachment::ScheduleCard {
+            schedule_id: "sch-9".into(),
+            title: "hourly, g".into(),
+            goal: "g".into(),
+            interval_secs: 3600,
+            next_fire_ms: 9_000,
+            state: "live".into(),
+        };
+        apply_local_pause(&mut schedules, "sch-9");
+        apply_local_action_to_attachment(&mut att, &schedules, "sch-9", 100);
+        assert_eq!(card_state_from_entry(&schedules[0]), "paused");
+        let ChatAttachment::ScheduleCard { state, .. } = att else {
+            panic!("expected card");
+        };
+        assert_eq!(state, "paused");
     }
 }

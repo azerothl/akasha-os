@@ -1742,10 +1742,6 @@ async fn handle_cmd(
                 .await
             {
                 Ok(e) => {
-                    let _ = evt_tx.send(Evt::Status(format!(
-                        "schedule créé {} ({}s)",
-                        e.id, e.interval_secs
-                    )));
                     let _ = evt_tx.send(Evt::ScheduleCreated(e));
                     if let Ok(r) = bus
                         .call::<(), ScheduleListResponse>(agent_intents::SCHEDULE_LIST, &(), vec![])
@@ -1769,7 +1765,6 @@ async fn handle_cmd(
                 .await
             {
                 Ok(e) => {
-                    let _ = evt_tx.send(Evt::Status(format!("schedule annulé {id}")));
                     let _ = evt_tx.send(Evt::ScheduleUpdated(e));
                     if let Ok(r) = bus
                         .call::<(), ScheduleListResponse>(agent_intents::SCHEDULE_LIST, &(), vec![])

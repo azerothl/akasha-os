@@ -2922,6 +2922,46 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         }
     }
 
+    fn upsert_schedule_entry(&mut self, entry: ScheduleEntry) {
+        schedule_card::upsert_schedule_entry(&mut self.schedules, entry);
+    }
+
+    fn apply_schedule_card_action_local(&mut self, action: schedule_card::ScheduleCardAction) {
+        let now = now_ms();
+        match &action {
+            schedule_card::ScheduleCardAction::Pause(id) => {
+                schedule_card::apply_local_pause(&mut self.schedules, id);
+            }
+            schedule_card::ScheduleCardAction::Resume(id) => {
+                schedule_card::apply_local_resume(&mut self.schedules, id);
+            }
+            schedule_card::ScheduleCardAction::Stop(id) => {
+                schedule_card::apply_local_stop(&mut self.schedules, id);
+            }
+            schedule_card::ScheduleCardAction::None => return,
+        }
+        let id = match action {
+            schedule_card::ScheduleCardAction::Pause(id)
+            | schedule_card::ScheduleCardAction::Resume(id)
+            | schedule_card::ScheduleCardAction::Stop(id) => id,
+            schedule_card::ScheduleCardAction::None => return,
+        };
+        for line in &mut self.chat {
+            for att in &mut line.attachments {
+                if let ChatAttachment::ScheduleCard { schedule_id, .. } = att {
+                    if schedule_id == &id {
+                        schedule_card::apply_local_action_to_attachment(
+                            att,
+                            &self.schedules,
+                            &id,
+                            now,
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     fn open_tts_card(&mut self, spoken: &str) {
         let att = ChatAttachment::TtsDraft {
             text: spoken.to_string(),
@@ -3670,10 +3710,12 @@ impl eframe::App for UiApp {
                     self.sync_schedule_cards();
                 }
                 Evt::ScheduleCreated(entry) => {
+                    self.upsert_schedule_entry(entry.clone());
                     self.attach_schedule_card(&entry);
                     self.sync_schedule_cards();
                 }
-                Evt::ScheduleUpdated(_) => {
+                Evt::ScheduleUpdated(entry) => {
+                    self.upsert_schedule_entry(entry);
                     self.sync_schedule_cards();
                 }
                 Evt::TasksListed(tasks) => {
@@ -3764,6 +3806,7 @@ impl eframe::App for UiApp {
                     } else {
                         self.chat = messages;
                     }
+                    self.sync_schedule_cards();
                     self.streaming.clear();
                     self.chat_pending = false;
                     self.chat_inference_id = None;
@@ -4988,6 +5031,19 @@ impl UiApp {
                                     next_fire_ms,
                                     ..
                                 } => {
+                                    let entry = self
+                                        .schedules
+                                        .iter()
+                                        .find(|s| s.id == *schedule_id);
+                                    let display_state = schedule_card::resolved_card_state(
+                                        entry,
+                                        state,
+                                    );
+                                    let display_next = entry
+                                        .map(|e| {
+                                            schedule_card::next_fire_ms_for_entry(e, chat_now)
+                                        })
+                                        .unwrap_or(*next_fire_ms);
                                     let action = ui
                                         .push_id(
                                             ("chat_schedule_card", i, j, schedule_id.as_str()),
@@ -4996,8 +5052,8 @@ impl UiApp {
                                                     ui,
                                                     t,
                                                     title,
-                                                    state,
-                                                    *next_fire_ms,
+                                                    display_state,
+                                                    display_next,
                                                     schedule_id,
                                                     chat_now,
                                                     tz_offset,
@@ -5005,6 +5061,10 @@ impl UiApp {
                                             },
                                         )
                                         .inner;
+                                    if !matches!(action, schedule_card::ScheduleCardAction::None)
+                                    {
+                                        self.apply_schedule_card_action_local(action.clone());
+                                    }
                                     schedule_card::send_schedule_action(
                                         &self.cmd_tx,
                                         action,
