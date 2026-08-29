@@ -284,6 +284,13 @@ fn chat_message_frame(
     ui.add_space(6.0);
 }
 
+fn designer_shot_mode() -> bool {
+    matches!(
+        std::env::var("AOS_DESIGNER_SHOT").ok().as_deref(),
+        Some("1") | Some("true") | Some("yes")
+    )
+}
+
 fn main() -> eframe::Result<()> {
     if std::env::var_os("AOS_MODEL_SETUP").is_some() {
         return model_setup::run();
@@ -3449,10 +3456,13 @@ impl eframe::App for UiApp {
                     }
                     if session_changed {
                         self.room_members_pane_open = false;
-                        let mut chat = vec![ChatLine::plain(
-                            "système",
-                            format!("Session {id} — historique rechargé."),
-                        )];
+                        let mut chat = Vec::new();
+                        if !designer_shot_mode() {
+                            chat.push(ChatLine::plain(
+                                "système",
+                                format!("Session {id} — historique rechargé."),
+                            ));
+                        }
                         chat.extend(messages);
                         self.chat = chat;
                     } else {
@@ -3726,7 +3736,11 @@ impl eframe::App for UiApp {
                     self.room_turn_pending_text = None;
                     if !self.streaming.is_empty() {
                         let partial = std::mem::take(&mut self.streaming);
-                        self.chat.push(ChatLine::plain("assistant", partial));
+                        let display =
+                            agent_panel::format_chat_assistant_display(&partial);
+                        if !display.is_empty() {
+                            self.chat.push(ChatLine::plain("assistant", display));
+                        }
                     }
                     let t = i18n::strings(&self.prefs.language);
                     self.status = t.chat_stopped.into();
@@ -4493,7 +4507,7 @@ impl UiApp {
                         && !is_completion
                         && speaker_id.is_none()
                     {
-                        agent_panel::format_assistant_display(&text)
+                        agent_panel::format_chat_assistant_display(&text)
                     } else {
                         text
                     };
@@ -4688,7 +4702,7 @@ impl UiApp {
                             egui::RichText::new(t.chat_assistant).strong().small(),
                         );
                         let streaming =
-                            agent_panel::format_streaming_preview(&self.streaming);
+                            agent_panel::format_chat_streaming_preview(&self.streaming);
                         ui.push_id("chat_md_stream", |ui| {
                             CommonMarkViewer::new().show(
                                 ui,
