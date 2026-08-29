@@ -29,6 +29,7 @@ mod os_open;
 mod product_context;
 mod runtime;
 mod scenarios_panel;
+mod session_chat;
 mod slash;
 mod theme;
 
@@ -1523,6 +1524,7 @@ struct UiApp {
     installed_modules: Vec<ModuleInfo>,
     sessions: Vec<ChatSessionMeta>,
     active_session: Option<String>,
+    session_chat: session_chat::SessionChatState,
     rename_buf: String,
     network_online: bool,
     web_query: String,
@@ -1806,6 +1808,7 @@ impl UiApp {
             installed_modules: Vec::new(),
             sessions: Vec::new(),
             active_session: None,
+            session_chat: session_chat::SessionChatState::default(),
             rename_buf: String::new(),
             network_online,
             web_query: String::new(),
@@ -2158,7 +2161,11 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 return;
             }
         }
-        if self.chat_pending {
+        if self
+            .active_session
+            .as_deref()
+            .is_some_and(|sid| self.session_chat.is_pending(sid))
+        {
             self.chat.push(ChatLine::plain("user", text));
             self.chat.push(ChatLine::plain(
                 "système",
@@ -2235,6 +2242,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             let Some(session_id) = self.active_session.clone() else {
                 return;
             };
+            self.session_chat.begin_turn(&session_id);
             self.streaming.clear();
             self.chat_pending = true;
             self.chat_inference_id = None;
@@ -2263,6 +2271,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 )
             })
             .collect();
+        self.session_chat.begin_turn(&session_id);
         self.streaming.clear();
         self.chat_pending = true;
         self.chat_inference_id = None;
@@ -2998,24 +3007,31 @@ impl eframe::App for UiApp {
         self.poll_update_download();
         while let Ok(ev) = self.evt_rx.try_recv() {
             match ev {
-                Evt::Delta(t) => self.streaming.push_str(&t),
+                Evt::Delta { session_id, text } => {
+                    session_chat::on_delta(
+                        &mut self.session_chat,
+                        self.active_session.as_deref(),
+                        &session_id,
+                        &text,
+                        &mut self.streaming,
+                    );
+                }
                 Evt::Done {
                     text,
                     session_id,
                     attachments,
                 } => {
-                    if self.active_session.as_deref() == Some(session_id.as_str()) && !text.is_empty()
-                    {
-                        self.chat.push(ChatLine {
-                            role: "assistant".into(),
-                            text,
-                            attachments,
-                            speaker_id: None,
-                        });
-                    }
-                    self.streaming.clear();
-                    self.chat_pending = false;
-                    self.chat_inference_id = None;
+                    session_chat::on_done(
+                        &mut self.session_chat,
+                        self.active_session.as_deref(),
+                        &session_id,
+                        &text,
+                        attachments,
+                        &mut self.chat,
+                        &mut self.streaming,
+                        &mut self.chat_pending,
+                        &mut self.chat_inference_id,
+                    );
                     if self.status.starts_with("assistant :") {
                         self.status.clear();
                     }
@@ -3458,9 +3474,13 @@ impl eframe::App for UiApp {
                     } else {
                         self.chat = messages;
                     }
-                    self.streaming.clear();
-                    self.chat_pending = false;
-                    self.chat_inference_id = None;
+                    self.session_chat.clear_unread(&id);
+                    self.session_chat.sync_active_view(
+                        self.active_session.as_deref(),
+                        &mut self.streaming,
+                        &mut self.chat_pending,
+                        &mut self.chat_inference_id,
+                    );
                     self.room_turn_pending_text = None;
                     if meta.canvas_open {
                         let _ = self.cmd_tx.send(Cmd::CanvasPoll {
@@ -3476,6 +3496,7 @@ impl eframe::App for UiApp {
                     agent_turns,
                     cancelled,
                 } => {
+                    self.session_chat.finish_turn(&session_id);
                     if self.active_session.as_deref() == Some(session_id.as_str()) {
                         self.chat_pending = false;
                         self.chat_inference_id = None;
@@ -3487,6 +3508,8 @@ impl eframe::App for UiApp {
                             t.room_turn_done
                                 .replace("{n}", &agent_turns.to_string())
                         };
+                    } else if !cancelled && agent_turns > 0 {
+                        self.session_chat.mark_unread(&session_id);
                     }
                 }
                 Evt::CanvasMeta(meta) => {
@@ -3717,19 +3740,33 @@ impl eframe::App for UiApp {
                 Evt::AgentTrace(t) => {
                     self.agent_traces.insert(t.agent_id.clone(), t);
                 }
-                Evt::InferStarted { inference_id } => {
-                    self.chat_inference_id = Some(inference_id);
+                Evt::InferStarted {
+                    session_id,
+                    inference_id,
+                } => {
+                    session_chat::on_infer_started(
+                        &mut self.session_chat,
+                        self.active_session.as_deref(),
+                        &session_id,
+                        inference_id,
+                        &mut self.chat_inference_id,
+                    );
                 }
-                Evt::ChatCancelled => {
-                    self.chat_pending = false;
-                    self.chat_inference_id = None;
-                    self.room_turn_pending_text = None;
-                    if !self.streaming.is_empty() {
-                        let partial = std::mem::take(&mut self.streaming);
-                        self.chat.push(ChatLine::plain("assistant", partial));
+                Evt::ChatCancelled { session_id } => {
+                    let on_active = session_chat::on_chat_cancelled(
+                        &mut self.session_chat,
+                        self.active_session.as_deref(),
+                        &session_id,
+                        &mut self.streaming,
+                        &mut self.chat_pending,
+                        &mut self.chat_inference_id,
+                        &mut self.chat,
+                    );
+                    if on_active {
+                        self.room_turn_pending_text = None;
+                        let t = i18n::strings(&self.prefs.language);
+                        self.status = t.chat_stopped.into();
                     }
-                    let t = i18n::strings(&self.prefs.language);
-                    self.status = t.chat_stopped.into();
                 }
                 Evt::Catalogue(c) => self.catalogue = Some(c),
                 Evt::InstalledModules(list) => {
@@ -4853,13 +4890,23 @@ impl UiApp {
                     for s in self.sessions.clone() {
                         let selected =
                             self.active_session.as_deref() == Some(s.id.as_str());
-                        if ui
-                            .selectable_label(
+                        let unread = self.session_chat.is_unread(&s.id);
+                        let clicked = ui.horizontal(|ui| {
+                            if unread {
+                                let t = i18n::strings(&self.prefs.language);
+                                let dot = egui::RichText::new("●")
+                                    .color(egui::Color32::from_rgb(0x4a, 0x9e, 0xff))
+                                    .small();
+                                ui.label(dot).on_hover_text(t.session_unread_reply);
+                            }
+                            ui.selectable_label(
                                 selected,
                                 format!("{} ({})", s.title, s.message_count),
                             )
-                            .clicked()
-                        {
+                        })
+                        .inner
+                        .clicked();
+                        if clicked {
                             let _ =
                                 self.cmd_tx.send(Cmd::SessionSelect { id: s.id.clone() });
                         }
@@ -5187,9 +5234,12 @@ impl UiApp {
                                             }
                                         } else if let Some(id) = self.chat_inference_id {
                                             if ui.button(t.chat_stop).clicked() {
-                                                let _ = self.cmd_tx.send(Cmd::ChatCancel {
-                                                    inference_id: id,
-                                                });
+                                                if let Some(sid) = self.active_session.clone() {
+                                                    let _ = self.cmd_tx.send(Cmd::ChatCancel {
+                                                        inference_id: id,
+                                                        session_id: sid,
+                                                    });
+                                                }
                                             }
                                         }
                                     }

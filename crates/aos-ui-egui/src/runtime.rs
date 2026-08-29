@@ -446,11 +446,17 @@ async fn handle_cmd(
                         while let Some(ev) = rx.recv().await {
                             match ev {
                                 Ok(TokenEvent::Started { inference_id }) => {
-                                    let _ = evt_tx.send(Evt::InferStarted { inference_id });
+                                    let _ = evt_tx.send(Evt::InferStarted {
+                                        session_id: sid.clone(),
+                                        inference_id,
+                                    });
                                 }
                                 Ok(TokenEvent::Delta { text }) => {
                                     full.push_str(&text);
-                                    let _ = evt_tx.send(Evt::Delta(text));
+                                    let _ = evt_tx.send(Evt::Delta {
+                                        session_id: sid.clone(),
+                                        text,
+                                    });
                                 }
                                 Ok(TokenEvent::Done { .. }) => break,
                                 Ok(TokenEvent::Error { message }) => {
@@ -816,7 +822,10 @@ async fn handle_cmd(
                 }
             }
         }
-        Cmd::ChatCancel { inference_id } => {
+        Cmd::ChatCancel {
+            inference_id,
+            session_id,
+        } => {
             match bus
                 .call::<CancelRequest, bool>(
                     "model.cancel",
@@ -826,7 +835,9 @@ async fn handle_cmd(
                 .await
             {
                 Ok(_) => {
-                    let _ = evt_tx.send(Evt::ChatCancelled);
+                    let _ = evt_tx.send(Evt::ChatCancelled {
+                        session_id,
+                    });
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));
@@ -2844,13 +2855,17 @@ async fn handle_cmd(
             match bus
                 .call::<ChatSessionRoomTurnCancelRequest, bool>(
                     "chat.session.room.turn.cancel",
-                    &ChatSessionRoomTurnCancelRequest { session_id },
+                    &ChatSessionRoomTurnCancelRequest {
+                        session_id: session_id.clone(),
+                    },
                     vec![],
                 )
                 .await
             {
                 Ok(_) => {
-                    let _ = evt_tx.send(Evt::ChatCancelled);
+                    let _ = evt_tx.send(Evt::ChatCancelled {
+                        session_id,
+                    });
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));
