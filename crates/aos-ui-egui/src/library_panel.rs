@@ -68,7 +68,7 @@ fn civil_from_days(z: i64) -> (i32, u32, u32) {
     let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
     let mp = (5 * doy + 2) / 153;
     let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
-    let m = ((mp + if mp < 10 { 3 } else { -9 }) % 12 + 1) as u32;
+    let m = (mp + if mp < 10 { 3 } else { -9 }) as u32;
     if m <= 2 {
         y += 1;
     }
@@ -86,6 +86,16 @@ mod tests {
         assert!(!date.contains('/'));
         assert!(!date.contains('\\'));
         assert!(!date.contains(".pdf"));
+    }
+
+    #[test]
+    fn aug_29_2026_not_september() {
+        // 2026-08-29 00:00:00 UTC
+        let ms = 1_787_961_600_000;
+        assert_eq!(format_added_date(ms, 0).as_deref(), Some("2026-08-29"));
+        // 2026-08-28 22:00 UTC → 2026-08-29 in UTC+2 (Europe/Paris summer)
+        let ms_paris = 1_787_954_400_000;
+        assert_eq!(format_added_date(ms_paris, 120).as_deref(), Some("2026-08-29"));
     }
 
     #[test]
