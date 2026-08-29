@@ -7,6 +7,7 @@ use std::collections::{HashMap, HashSet};
 
 use aos_proto::ChatAttachment;
 
+use crate::agent_panel;
 use crate::cmd::ChatLine;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -170,7 +171,10 @@ pub(crate) fn on_chat_cancelled(
         *chat_pending = false;
         *chat_inference_id = None;
         if !partial.is_empty() {
-            chat.push(ChatLine::plain("assistant", partial));
+            let display = agent_panel::format_chat_assistant_display(&partial);
+            if !display.is_empty() {
+                chat.push(ChatLine::plain("assistant", display));
+            }
         }
         streaming.clear();
     }
