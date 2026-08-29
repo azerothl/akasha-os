@@ -4,6 +4,8 @@
 # (GitHub does not evaluate paths for tag pushes). Omitting `branches` made the
 # job tag-only and skipped main commits that touch seL4 paths.
 name: sel4-vm-gate
+permissions:
+  contents: read
 
 on:
   workflow_dispatch:
