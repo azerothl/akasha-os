@@ -59,6 +59,9 @@ pub fn render_document_progress(
     state: &str,
 ) -> DocumentProgressAction {
     if state == "stopped" {
+        ui.group(|ui| {
+            ui.label(egui::RichText::new(question.trim()).strong());
+        });
         return DocumentProgressAction::None;
     }
     let mut action = DocumentProgressAction::None;
@@ -142,6 +145,8 @@ mod tests {
         assert_eq!(t_fr.document_progress_label, "Recherche en cours…");
         assert_eq!(t_en.document_progress_stop, "Stop");
         assert_eq!(t_fr.document_progress_stop, "Arrêter");
+        assert_eq!(t_en.document_prep_ack, "I'm preparing a document.");
+        assert_eq!(t_fr.document_prep_ack, "Je prépare un document.");
         assert_eq!(t_en.document_open_failed, "Couldn't open this document.");
         assert_eq!(
             t_fr.document_open_failed,

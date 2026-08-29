@@ -913,11 +913,6 @@ pub(crate) async fn spawn_document_prep_agent(
     req.caps.push("fs.read:/downloads/**".into());
     req.model_id = _model_id;
     req.gate_mode = crate::prefs::load_preferences().agent_gate_mode.clone();
-    let prose: String = if language.eq_ignore_ascii_case("fr") {
-        "Je prépare un document de recherche.".into()
-    } else {
-        "Preparing a research document.".into()
-    };
     match bus
         .call::<AgentCreateRequest, aos_proto::AgentCreateResponse>(
             aos_agent::intents::CREATE,
@@ -927,31 +922,12 @@ pub(crate) async fn spawn_document_prep_agent(
         .await
     {
         Ok(r) => {
-            let att = ChatAttachment::AgentRef {
-                agent_id: r.agent_id.clone(),
-                title: goal.clone(),
-                origin: "document".into(),
-            };
-            let _ = bus
-                .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
-                    "chat.session.append",
-                    &ChatSessionAppendRequest {
-                        session_id: sid.clone(),
-                        role: "assistant".into(),
-                        content: prose.clone(),
-                        attachments: vec![att.clone()],
-                        speaker_id: None,
-                        speaker_name: None,
-                    },
-                    vec![],
-                )
-                .await;
             let _ = evt_tx.send(Evt::AgentSpawned {
                 session_id: sid,
                 agent_id: r.agent_id,
                 title: goal,
                 origin: "document".into(),
-                ack: prose,
+                ack: String::new(),
             });
         }
         Err(e) => {
@@ -1740,6 +1716,8 @@ struct UiApp {
     research_pending_chat: Option<ResearchPendingChat>,
     /// Document-prep agent_id → original question (result card title).
     document_prep_agents: HashMap<String, String>,
+    /// Suppress agent.kill ok status banners after document prep stop.
+    document_prep_kill_pending: u32,
     /// Recoverable prepared documents (var/documents index).
     research_documents: Vec<aos_agent::document_index::ResearchDocumentEntry>,
     document_overlay: research_document::DocumentOverlayState,
@@ -2051,6 +2029,7 @@ impl UiApp {
             guide: guide::GuideState::default(),
             research_pending_chat: None,
             document_prep_agents: HashMap::new(),
+            document_prep_kill_pending: 0,
             research_documents: research_document::load_index_entries(),
             document_overlay: research_document::DocumentOverlayState::default(),
             documents_list: research_document::DocumentsListState::default(),
@@ -2253,17 +2232,19 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
 
     fn start_document_prep(&mut self, session_id: &str, pending: ResearchPendingChat) {
         let question = pending.user_text.clone();
+        let t = i18n::strings(&pending.language);
+        let ack = t.document_prep_ack;
         let att = research_document::progress_attachment(&question, "pending");
         self.chat.push(ChatLine {
             role: "assistant".into(),
-            text: String::new(),
+            text: ack.into(),
             attachments: vec![att.clone()],
             speaker_id: None,
         });
         let _ = self.cmd_tx.send(Cmd::SessionAppend {
             session_id: session_id.to_string(),
             role: "assistant".into(),
-            content: String::new(),
+            content: ack.into(),
             attachments: vec![att],
         });
         let _ = self.cmd_tx.send(Cmd::DocumentPrepSpawn {
@@ -3471,7 +3452,13 @@ impl eframe::App for UiApp {
                         let t = i18n::strings(&self.prefs.language);
                         self.download_status = t.models_removed.to_string();
                     }
-                    self.status = m;
+                    if m == format!("{} ok", aos_agent::intents::KILL)
+                        && self.document_prep_kill_pending > 0
+                    {
+                        self.document_prep_kill_pending -= 1;
+                    } else {
+                        self.status = m;
+                    }
                 }
                 Evt::ModelDownloadStarted { model_id } => {
                     self.model_download_restart = None;
@@ -3616,6 +3603,7 @@ impl eframe::App for UiApp {
                                     });
                                 } else {
                                     self.document_prep_agents.remove(&ag.agent_id);
+                                    self.agent_notified.insert(ag.agent_id.clone());
                                 }
                             } else if let Some(sid) = &ag.session_id {
                                 let on_this_session =
@@ -5030,7 +5018,7 @@ impl UiApp {
                                     title,
                                     origin,
                                 } => {
-                                    if origin == "room" {
+                                    if origin == "room" || origin == "document" {
                                         continue;
                                     }
                                     let info = self
@@ -5207,6 +5195,7 @@ impl UiApp {
                                 *state = "stopped".into();
                             }
                         }
+                        self.document_prep_kill_pending += 1;
                         let _ = self.cmd_tx.send(Cmd::AgentKill { id: agent_id });
                     }
                 }
