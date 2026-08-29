@@ -272,6 +272,32 @@ fn truncate_before_chat_meta_leak(text: &str) -> String {
     text[..cut].trim_end().to_string()
 }
 
+fn normalize_para_key(s: &str) -> String {
+    s.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_ascii_lowercase()
+}
+
+/// Collapse consecutive duplicate paragraphs (model often repeats the same block verbatim).
+fn collapse_consecutive_duplicate_paragraphs(text: &str) -> String {
+    let mut out: Vec<String> = Vec::new();
+    let mut prev_key: Option<String> = None;
+    for para in text.split("\n\n") {
+        let para = para.trim();
+        if para.is_empty() {
+            continue;
+        }
+        let key = normalize_para_key(para);
+        if prev_key.as_deref() == Some(key.as_str()) {
+            continue;
+        }
+        out.push(para.to_string());
+        prev_key = Some(key);
+    }
+    out.join("\n\n")
+}
+
 /// Retire les fuites meta (identifiants outils, JSON, rules, raisonnement à voix haute).
 pub fn sanitize_chat_visible_bubble(text: &str) -> String {
     let text = strip_chat_control_tokens(text.trim());
@@ -309,7 +335,7 @@ pub fn sanitize_chat_visible_bubble(text: &str) -> String {
             kept_paras.push(kept_sentences.join(" "));
         }
     }
-    kept_paras.join("\n\n").trim().to_string()
+    collapse_consecutive_duplicate_paragraphs(&kept_paras.join("\n\n")).trim().to_string()
 }
 
 /// Extrait la prose hors blocs JSON / TOOL: / DSML tool_call.
@@ -1325,5 +1351,23 @@ Je vais répondre de manière naturelle"#;
         let out = format_chat_streaming_preview(raw);
         assert!(out.contains("panneau vectoriel"), "{out}");
         assert!(!out.to_ascii_lowercase().contains("je vais répondre"), "{out}");
+    }
+
+    #[test]
+    fn session33_collapses_verbatim_duplicate_paragraph() {
+        let para = "Le Canvas est un panneau vectoriel où vous pouvez dessiner ou esquisser. Si vous le dessinez en utilisant un marqueur spécifique, les traits apparaissent sur ce panneau. Si vous le dessinez sans marqueur et que le panneau est fermé, l'agent utilisera un outil de génération d'images pour créer le dessin.";
+        let raw = format!("{para}\n\n{para}");
+        let out = format_chat_assistant_display(&raw);
+        assert_eq!(out, para, "{out}");
+        assert!(out.contains("outil de génération d'images"), "{out}");
+        assert_eq!(out.matches("panneau vectoriel").count(), 1, "{out}");
+    }
+
+    #[test]
+    fn collapse_keeps_distinct_consecutive_paragraphs() {
+        let raw = "Premier paragraphe.\n\nDeuxième paragraphe différent.";
+        let out = sanitize_chat_visible_bubble(raw);
+        assert!(out.contains("Premier"), "{out}");
+        assert!(out.contains("Deuxième"), "{out}");
     }
 }
