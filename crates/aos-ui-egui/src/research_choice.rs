@@ -37,22 +37,17 @@ pub fn render_research_choice(
         return ResearchChoiceAction::None;
     }
     let mut action = ResearchChoiceAction::None;
-    egui::Frame::NONE
-        .fill(egui::Color32::from_rgb(32, 36, 44))
-        .stroke(egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(70, 90, 120)))
-        .inner_margin(10.0_f32)
-        .corner_radius(4.0_f32)
-        .show(ui, |ui| {
-            ui.weak(t.research_choice_prompt);
-            ui.horizontal(|ui| {
-                if ui.button(t.research_choice_answer).clicked() {
-                    action = ResearchChoiceAction::Answer;
-                }
-                if ui.button(t.research_choice_document).clicked() {
-                    action = ResearchChoiceAction::Document;
-                }
-            });
+    ui.group(|ui| {
+        ui.weak(t.research_choice_prompt);
+        ui.horizontal(|ui| {
+            if ui.button(t.research_choice_answer).clicked() {
+                action = ResearchChoiceAction::Answer;
+            }
+            if ui.button(t.research_choice_document).clicked() {
+                action = ResearchChoiceAction::Document;
+            }
         });
+    });
     action
 }
 
@@ -67,22 +62,17 @@ pub fn render_document_progress(
         return DocumentProgressAction::None;
     }
     let mut action = DocumentProgressAction::None;
-    egui::Frame::NONE
-        .fill(egui::Color32::from_rgb(36, 34, 30))
-        .stroke(egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(120, 100, 70)))
-        .inner_margin(10.0_f32)
-        .corner_radius(4.0_f32)
-        .show(ui, |ui| {
-            ui.label(egui::RichText::new(question.trim()).strong());
-            ui.horizontal(|ui| {
-                ui.weak(t.document_progress_label);
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button(t.document_progress_stop).clicked() {
-                        action = DocumentProgressAction::Stop(agent_id.to_string());
-                    }
-                });
+    ui.group(|ui| {
+        ui.label(egui::RichText::new(question.trim()).strong());
+        ui.horizontal(|ui| {
+            ui.weak(t.document_progress_label);
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.button(t.document_progress_stop).clicked() {
+                    action = DocumentProgressAction::Stop(agent_id.to_string());
+                }
             });
         });
+    });
     action
 }
 
@@ -92,20 +82,15 @@ pub fn render_document_result(
     question: &str,
 ) -> DocumentResultAction {
     let mut action = DocumentResultAction::None;
-    egui::Frame::NONE
-        .fill(egui::Color32::from_rgb(30, 38, 34))
-        .stroke(egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(90, 140, 110)))
-        .inner_margin(10.0_f32)
-        .corner_radius(4.0_f32)
-        .show(ui, |ui| {
-            ui.label(egui::RichText::new(question.trim()).strong());
-            ui.weak(t.document_result_ready);
-            ui.horizontal(|ui| {
-                if ui.button(t.document_result_open).clicked() {
-                    action = DocumentResultAction::Open;
-                }
-            });
+    ui.group(|ui| {
+        ui.label(egui::RichText::new(question.trim()).strong());
+        ui.weak(t.document_result_ready);
+        ui.horizontal(|ui| {
+            if ui.button(t.document_result_open).clicked() {
+                action = DocumentResultAction::Open;
+            }
         });
+    });
     action
 }
 
@@ -157,6 +142,11 @@ mod tests {
         assert_eq!(t_fr.document_progress_label, "Recherche en cours…");
         assert_eq!(t_en.document_progress_stop, "Stop");
         assert_eq!(t_fr.document_progress_stop, "Arrêter");
+        assert_eq!(t_en.document_open_failed, "Couldn't open this document.");
+        assert_eq!(
+            t_fr.document_open_failed,
+            "Impossible d'ouvrir ce document."
+        );
     }
 
     #[test]

@@ -54,9 +54,7 @@ pub fn show_document_overlay(
     }
     let path = overlay.path.clone();
     let title = overlay.title.clone();
-    let body = read_logical_markdown(&path).unwrap_or_else(|| {
-        format!("_(could not read {path})_")
-    });
+    let body = read_logical_markdown(&path).unwrap_or_else(|| t.document_open_failed.to_string());
     let mut close = false;
     let avail = ctx.available_rect();
     let (default_size, max_size, min_size) =
@@ -136,7 +134,9 @@ pub fn show_documents_list(
                             ui.horizontal(|ui| {
                                 ui.vertical(|ui| {
                                     ui.strong(entry.question.trim());
-                                    ui.weak(&entry.label);
+                                    if let Some(date) = format_entry_date(entry.created_ms) {
+                                        ui.weak(date);
+                                    }
                                 });
                                 ui.with_layout(
                                     egui::Layout::right_to_left(egui::Align::Center),
@@ -177,6 +177,30 @@ pub fn load_index_entries() -> Vec<ResearchDocumentEntry> {
     aos_agent::document_index::load_research_documents(&home)
 }
 
+fn format_entry_date(ts_ms: u64) -> Option<String> {
+    if ts_ms == 0 {
+        return None;
+    }
+    let secs = (ts_ms / 1000) as i64;
+    let days = secs.div_euclid(86_400);
+    let (year, month, day) = civil_from_days(days);
+    Some(format!("{year:04}-{month:02}-{day:02}"))
+}
+
+fn civil_from_days(days: i64) -> (i32, u32, u32) {
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = mp + if mp < 10 { 3 } else { -9 };
+    let y = y + if m <= 2 { 1 } else { 0 };
+    (y as i32, m as u32, d as u32)
+}
+
 pub fn progress_attachment(question: &str, agent_id: &str) -> ChatAttachment {
     ChatAttachment::DocumentProgress {
         question: question.to_string(),
@@ -195,5 +219,26 @@ mod tests {
         assert!(def[0] <= max[0]);
         assert!(def[1] <= max[1]);
         assert!(min[0] <= max[0]);
+    }
+
+    #[test]
+    fn locked_open_failure_copy() {
+        let t_en = crate::i18n::strings("en");
+        let t_fr = crate::i18n::strings("fr");
+        assert_eq!(t_en.document_open_failed, "Couldn't open this document.");
+        assert_eq!(
+            t_fr.document_open_failed,
+            "Impossible d'ouvrir ce document."
+        );
+        assert!(!t_en.document_open_failed.contains('/'));
+        assert!(!t_fr.document_open_failed.contains('/'));
+    }
+
+    #[test]
+    fn entry_date_never_uses_filename() {
+        let date = format_entry_date(1_725_000_000_000).expect("date");
+        assert!(date.contains('-'));
+        assert!(!date.contains(".md"));
+        assert!(!date.contains('/'));
     }
 }
