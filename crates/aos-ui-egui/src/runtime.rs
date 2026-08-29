@@ -7,7 +7,8 @@ use crate::os_open::{aos_home, bin_aos_session};
 use crate::{
     agent_id_cmd, agent_panel, chat_delegate_agent_spec, chrono_like_stamp, format_local_time_hm,
     invoke_module_bind,
-    invoke_module_tool, invoke_notes, invoke_tasks, load_module_ui, load_session, run_troubleshoot,
+    invoke_module_tool, invoke_notes, invoke_tasks, load_module_ui, load_session,
+    announce_and_load_session, run_troubleshoot,
     session_has_running_canvas_agent, spawn_chat_delegate_agent, CHAT_AGENT_MAX_SUBAGENTS,
 };
 use aos_agent::intents as agent_intents;
@@ -29,6 +30,8 @@ use aos_proto::{
     FeedbackSubmitRequest, FeedbackSubmitResponse, FilesGenerateRequest, FilesGenerateResponse,
     InferParams, InferRequest, McpServerInfo, MemContextRequest, MemContextResponse,
     MemEpisodicDeleteRequest, MemExtractRequest, MemExtractResponse, MemHit, MemListRequest,
+    UserLibraryAddRequest, UserLibraryAddResponse, UserLibraryListResponse, UserLibraryRemoveRequest,
+    UserLibraryRemoveResponse,
     MemRememberResponse, MemSweepStatus, MemUpdateRequest, MemUserRecallRequest, MemUserRememberRequest,
     MemWorkingRequest, LoadRequest, ModelInfo, ModelState, ModuleCatalogue,
     ModuleInfo, ModuleInstallRequest,
@@ -195,7 +198,7 @@ async fn handle_cmd(
                 {
                     Ok(m) => {
                         let _ = evt_tx.send(Evt::Sessions(vec![m.clone()]));
-                        load_session(&bus, &evt_tx, &m.id).await;
+                        announce_and_load_session(&bus, &evt_tx, &m.id).await;
                     }
                     Err(e) => {
                         let _ = evt_tx.send(Evt::Error(format!("session create: {e}")));
@@ -204,7 +207,7 @@ async fn handle_cmd(
             } else {
                 let id = list[0].id.clone();
                 let _ = evt_tx.send(Evt::Sessions(list));
-                load_session(&bus, &evt_tx, &id).await;
+                announce_and_load_session(&bus, &evt_tx, &id).await;
             }
         }
         Cmd::SessionCreate { title } => {
@@ -225,7 +228,7 @@ async fn handle_cmd(
                         .await
                         .unwrap_or_default();
                     let _ = evt_tx.send(Evt::Sessions(list));
-                    load_session(&bus, &evt_tx, &m.id).await;
+                    announce_and_load_session(&bus, &evt_tx, &m.id).await;
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));
@@ -283,7 +286,7 @@ async fn handle_cmd(
                             .await
                             .unwrap_or_default();
                         let _ = evt_tx.send(Evt::Sessions(list2));
-                        load_session(&bus, &evt_tx, &m.id).await;
+                        announce_and_load_session(&bus, &evt_tx, &m.id).await;
                     }
                     Err(e) => {
                         let _ = evt_tx.send(Evt::Error(e.to_string()));
@@ -292,7 +295,7 @@ async fn handle_cmd(
             } else {
                 let id = list[0].id.clone();
                 let _ = evt_tx.send(Evt::Sessions(list));
-                load_session(&bus, &evt_tx, &id).await;
+                announce_and_load_session(&bus, &evt_tx, &id).await;
             }
         }
         Cmd::SessionExport { id } => {
@@ -377,6 +380,7 @@ async fn handle_cmd(
                         query: user_content.clone(),
                         k: 5,
                         product_k: 4,
+                        user_doc_k: 0,
                     },
                     vec![],
                 )
@@ -1296,6 +1300,63 @@ async fn handle_cmd(
             }
             invoke_notes(&bus, &evt_tx, "notes.related", args).await;
         }
+        Cmd::UserLibraryList => {
+            match bus
+                .call::<(), UserLibraryListResponse>("user.library.list", &(), vec![])
+                .await
+            {
+                Ok(resp) => {
+                    let _ = evt_tx.send(Evt::UserLibraryListed(resp.docs));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::UserLibraryAdd { path } => {
+            match bus
+                .call::<UserLibraryAddRequest, UserLibraryAddResponse>(
+                    "user.library.add",
+                    &UserLibraryAddRequest { path },
+                    vec![],
+                )
+                .await
+            {
+                Ok(_resp) => {
+                    if let Ok(list) = bus
+                        .call::<(), UserLibraryListResponse>("user.library.list", &(), vec![])
+                        .await
+                    {
+                        let _ = evt_tx.send(Evt::UserLibraryListed(list.docs));
+                    }
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::UserLibraryRemove { id } => {
+            match bus
+                .call::<UserLibraryRemoveRequest, UserLibraryRemoveResponse>(
+                    "user.library.remove",
+                    &UserLibraryRemoveRequest { id },
+                    vec![],
+                )
+                .await
+            {
+                Ok(_) => {
+                    if let Ok(list) = bus
+                        .call::<(), UserLibraryListResponse>("user.library.list", &(), vec![])
+                        .await
+                    {
+                        let _ = evt_tx.send(Evt::UserLibraryListed(list.docs));
+                    }
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
         Cmd::Confirm { id, approved } => {
             match bus
                 .call::<ConfirmResponseRequest, bool>(
@@ -1799,6 +1860,8 @@ async fn handle_cmd(
         Cmd::ScheduleCreate {
             goal,
             interval_secs,
+            next_fire_ms,
+            display_title,
         } => {
             match bus
                 .call::<ScheduleCreateRequest, ScheduleEntry>(
@@ -1807,16 +1870,15 @@ async fn handle_cmd(
                         goal,
                         interval_secs,
                         model_id: None,
+                        next_fire_ms,
+                        display_title,
                     },
                     vec![],
                 )
                 .await
             {
                 Ok(e) => {
-                    let _ = evt_tx.send(Evt::Status(format!(
-                        "schedule créé {} ({}s)",
-                        e.id, e.interval_secs
-                    )));
+                    let _ = evt_tx.send(Evt::ScheduleCreated(e));
                     if let Ok(r) = bus
                         .call::<(), ScheduleListResponse>(agent_intents::SCHEDULE_LIST, &(), vec![])
                         .await
@@ -1838,8 +1900,8 @@ async fn handle_cmd(
                 )
                 .await
             {
-                Ok(_) => {
-                    let _ = evt_tx.send(Evt::Status(format!("schedule annulé {id}")));
+                Ok(e) => {
+                    let _ = evt_tx.send(Evt::ScheduleUpdated(e));
                     if let Ok(r) = bus
                         .call::<(), ScheduleListResponse>(agent_intents::SCHEDULE_LIST, &(), vec![])
                         .await
@@ -1849,6 +1911,40 @@ async fn handle_cmd(
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(format!("schedule.cancel: {e}")));
+                }
+            }
+        }
+        Cmd::SchedulePause { id } => {
+            match bus
+                .call::<ScheduleIdRequest, ScheduleEntry>(
+                    agent_intents::SCHEDULE_PAUSE,
+                    &ScheduleIdRequest { id: id.clone() },
+                    vec![],
+                )
+                .await
+            {
+                Ok(e) => {
+                    let _ = evt_tx.send(Evt::ScheduleUpdated(e));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(format!("schedule.pause: {e}")));
+                }
+            }
+        }
+        Cmd::ScheduleResume { id } => {
+            match bus
+                .call::<ScheduleIdRequest, ScheduleEntry>(
+                    agent_intents::SCHEDULE_RESUME,
+                    &ScheduleIdRequest { id: id.clone() },
+                    vec![],
+                )
+                .await
+            {
+                Ok(e) => {
+                    let _ = evt_tx.send(Evt::ScheduleUpdated(e));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(format!("schedule.resume: {e}")));
                 }
             }
         }
@@ -2889,7 +2985,6 @@ async fn handle_cmd(
             content,
             images,
         } => {
-            let _ = evt_tx.send(Evt::Status("salon : tour en cours…".into()));
             match bus
                 .call::<ChatSessionRoomTurnRequest, ChatSessionRoomTurnResponse>(
                     "chat.session.room.turn",
@@ -3151,7 +3246,7 @@ async fn handle_cmd(
     }
 }
 
-fn sweep_tz_offset_minutes() -> i32 {
+pub(crate) fn sweep_tz_offset_minutes() -> i32 {
     if let Ok(out) = std::process::Command::new("date").args(["+%z"]).output() {
         if out.status.success() {
             if let Ok(s) = String::from_utf8(out.stdout) {

@@ -81,6 +81,9 @@ pub(crate) enum Cmd {
         path: String,
         topic: String,
     },
+    UserLibraryList,
+    UserLibraryAdd { path: String },
+    UserLibraryRemove { id: String },
     Confirm { id: String, approved: bool },
     AgentCreate {
         display_name: String,
@@ -145,8 +148,16 @@ pub(crate) enum Cmd {
     ScheduleCreate {
         goal: String,
         interval_secs: u64,
+        next_fire_ms: Option<u64>,
+        display_title: Option<String>,
     },
     ScheduleCancel {
+        id: String,
+    },
+    SchedulePause {
+        id: String,
+    },
+    ScheduleResume {
         id: String,
     },
     TasksList,
@@ -328,6 +339,7 @@ pub(crate) enum Evt {
     NoteLoaded(notes_panel::NoteDetail),
     NotesSearchHits(Vec<notes_panel::NoteSearchHit>),
     NotesRelated(Vec<notes_panel::NoteRelatedHit>),
+    UserLibraryListed(Vec<aos_proto::UserLibraryDoc>),
     NotesSaved {
         path: String,
         slug: String,
@@ -341,12 +353,16 @@ pub(crate) enum Evt {
         caps: Vec<CapInfo>,
     },
     Schedules(Vec<ScheduleEntry>),
+    ScheduleCreated(ScheduleEntry),
+    ScheduleUpdated(ScheduleEntry),
     TasksListed(Vec<tasks_panel::TaskItem>),
     Confirms(Vec<PendingConfirmation>),
     FeedbackOk(FeedbackSubmitResponse),
     /// Préremplit le formulaire Retour (dépannage) sans publier tout de suite.
     FeedbackDraft(FeedbackSubmitRequest),
     Sessions(Vec<ChatSessionMeta>),
+    /// Runtime names the session about to be loaded (create/delete/bootstrap).
+    SessionLoadIntent { id: String },
     SessionLoaded {
         id: String,
         messages: Vec<ChatLine>,
@@ -477,6 +493,7 @@ pub(crate) struct ChatLine {
     pub(crate) text: String,
     pub(crate) attachments: Vec<ChatAttachment>,
     pub(crate) speaker_id: Option<String>,
+    pub(crate) speaker_name: Option<String>,
 }
 
 impl ChatLine {
@@ -486,6 +503,7 @@ impl ChatLine {
             text: text.into(),
             attachments: Vec::new(),
             speaker_id: None,
+            speaker_name: None,
         }
     }
 
@@ -499,6 +517,7 @@ impl ChatLine {
             text: text.into(),
             attachments: Vec::new(),
             speaker_id,
+            speaker_name: None,
         }
     }
 }

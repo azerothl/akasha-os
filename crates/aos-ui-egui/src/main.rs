@@ -12,6 +12,9 @@ mod model_setup;
 mod models_page;
 mod notes_panel;
 mod prefs;
+mod schedule_act_phrase;
+mod schedule_card;
+mod session_nav;
 mod tasks_panel;
 mod chat_ask;
 mod chat_canvas;
@@ -23,6 +26,7 @@ mod image_history;
 mod image_prompt;
 mod icons;
 mod image_studio;
+mod library_panel;
 mod nav;
 mod onboarding;
 mod os_open;
@@ -40,6 +44,7 @@ use os_open::{aos_home, app_icon, bin_aos_session, native_path, open_in_browser,
 use runtime::runtime_main;
 use slash::{slash_completions, slash_insert_text, SLASH_COMMANDS};
 use aos_agent::schedule::ScheduleEntry;
+use aos_agent::schedule_parse::{self, ParsedSchedule};
 use aos_ipc::BusClient;
 use aos_proto::{
     AgentCreateRequest, AgentGoal, AgentIdRequest, AgentInfo, AgentState, AgentTrace, AuditEvent,
@@ -92,6 +97,7 @@ enum Tab {
     Memory,
     Notes,
     Tasks,
+    Library,
     Agents,
     Models,
     Image,
@@ -167,7 +173,7 @@ fn overflow_scroll_h(
         .show(ui, add_contents);
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ChatBubbleKind {
     User,
     Assistant,
@@ -257,12 +263,8 @@ fn chat_message_frame(
         let (f, s, _) = chat_bubble_colors(kind, dark);
         (f, s)
     });
-    let max_w = (ui.available_width() * match kind {
-        ChatBubbleKind::User => 0.88,
-        ChatBubbleKind::Assistant | ChatBubbleKind::RoomSpeaker => 0.96,
-        ChatBubbleKind::System => 0.92,
-    })
-    .clamp(200.0, ui.available_width());
+    let avail = ui.available_width();
+    let max_w = chat_bubble_max_width(avail, kind);
 
     let layout = match kind {
         ChatBubbleKind::User => egui::Layout::right_to_left(egui::Align::Min),
@@ -271,6 +273,7 @@ fn chat_message_frame(
 
     ui.with_layout(layout, |ui| {
         ui.set_max_width(max_w);
+        ui.set_width(max_w);
         egui::Frame::NONE
             .fill(fill)
             .stroke(egui::Stroke::new(1.0_f32, stroke))
@@ -306,6 +309,7 @@ fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1280.0, 800.0])
+            .with_min_inner_size(preview_min_inner_size())
             .with_title(format!("Akasha OS Preview {version}"))
             .with_icon(app_icon()),
         ..Default::default()
@@ -357,6 +361,93 @@ pub(crate) fn format_local_time_hm(ts_ms: u64, offset_minutes: i32) -> String {
     let mins = (secs / 60) % 60;
     let hours = (secs / 3600) % 24;
     format!("{hours:02}:{mins:02}")
+}
+
+fn local_tz_offset_minutes() -> i32 {
+    if let Ok(out) = std::process::Command::new("date").args(["+%z"]).output() {
+        if out.status.success() {
+            if let Ok(s) = String::from_utf8(out.stdout) {
+                return parse_tz_offset_minutes(s.trim()).unwrap_or(0);
+            }
+        }
+    }
+    0
+}
+
+fn parse_tz_offset_minutes(raw: &str) -> Option<i32> {
+    let s = raw.trim();
+    if s.len() < 3 {
+        return None;
+    }
+    let sign = match s.as_bytes().first()? {
+        b'+' => 1,
+        b'-' => -1,
+        _ => return None,
+    };
+    let digits: String = s.chars().skip(1).filter(|c| c.is_ascii_digit()).collect();
+    if digits.len() < 3 {
+        return None;
+    }
+    let hours: i32 = digits[..digits.len().saturating_sub(2)]
+        .parse()
+        .ok()?;
+    let mins: i32 = digits[digits.len().saturating_sub(2)..]
+        .parse()
+        .ok()?;
+    Some(sign * (hours * 60 + mins))
+}
+
+fn local_day_index(ts_ms: u64, offset_minutes: i32) -> i64 {
+    let local_ms = ts_ms as i64 + (offset_minutes as i64) * 60_000;
+    local_ms.div_euclid(86_400_000)
+}
+
+fn civil_from_day_index(days: i64) -> (i32, u32, u32) {
+    let z = days + 719468;
+    let era = if z >= 0 { z / 146097 } else { (z - 146096) / 146097 };
+    let doe = z - era * 146097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = (yoe + era * 400) as i32;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    let y = if mp < 10 { y } else { y + 1 };
+    (y, m, d)
+}
+
+pub(crate) fn format_local_date_short(ts_ms: u64, tz_offset_min: i32) -> String {
+    let days = local_day_index(ts_ms, tz_offset_min);
+    let (y, m, d) = civil_from_day_index(days);
+    format!("{d:02}/{m:02}/{y}")
+}
+
+pub(crate) fn format_schedule_next_label(
+    t: &i18n::UiStrings,
+    next_fire_ms: u64,
+    now_ms: u64,
+    tz_offset_min: i32,
+) -> String {
+    let time = format_local_time_hm(next_fire_ms, tz_offset_min);
+    let day_now = local_day_index(now_ms, tz_offset_min);
+    let day_next = local_day_index(next_fire_ms, tz_offset_min);
+    if day_next == day_now {
+        t.schedule_card_next_today.replace("{time}", &time)
+    } else if day_next == day_now + 1 {
+        t.schedule_card_next_tomorrow.replace("{time}", &time)
+    } else {
+        let date = format_local_date_short(next_fire_ms, tz_offset_min);
+        t.schedule_card_next_date
+            .replace("{date}", &date)
+            .replace("{time}", &time)
+    }
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 fn memory_relation_snippet(text: &str) -> String {
@@ -515,6 +606,7 @@ pub(crate) async fn load_session(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>, id:
                         text: m.content,
                         attachments: m.attachments,
                         speaker_id: m.speaker_id,
+                        speaker_name: m.speaker_name,
                     }
                 })
                 .collect();
@@ -529,6 +621,17 @@ pub(crate) async fn load_session(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>, id:
             let _ = evt_tx.send(Evt::Error(e.to_string()));
         }
     }
+}
+
+pub(crate) async fn announce_and_load_session(
+    bus: &Arc<BusClient>,
+    evt_tx: &Sender<Evt>,
+    id: &str,
+) {
+    let _ = evt_tx.send(Evt::SessionLoadIntent {
+        id: id.to_string(),
+    });
+    load_session(bus, evt_tx, id).await;
 }
 
 /// Kit des agents lancés depuis le chat : plan, notes, sous-agents — toujours.
@@ -551,6 +654,169 @@ fn session_model_supports_vision(model_id: Option<&str>) -> bool {
 /// One-row height for the canvas tool strip (session bar row 2).
 const CANVAS_TOOLBAR_ROW_H: f32 = 36.0;
 
+/// Minimum inner window size (width × height) for a usable Preview layout.
+fn preview_min_inner_size() -> [f32; 2] {
+    let fr = i18n::strings("fr");
+    [preview_min_inner_width(&fr), 600.0]
+}
+
+const LEFT_NAV_W: f32 = 148.0;
+const CHAT_SIDE_MIN_W: f32 = 120.0;
+const CHAT_SPLIT_GAP: f32 = 8.0;
+const CHAT_MAIN_MARGIN: f32 = 16.0;
+
+fn estimate_label_chip_w(label: &str) -> f32 {
+    const CHAR_W: f32 = 8.5;
+    const PAD: f32 = 22.0;
+    label.len() as f32 * CHAR_W + PAD
+}
+
+fn session_toggle_reserve_width(t: &i18n::UiStrings) -> f32 {
+    estimate_label_chip_w(t.session_toggle_salon) + 6.0 + estimate_label_chip_w(t.session_toggle_canvas)
+}
+
+fn session_toggle_chip(ui: &mut egui::Ui, selected: bool, label: &str) -> bool {
+    let w = estimate_label_chip_w(label);
+    ui.add_sized(
+        egui::vec2(w, ui.spacing().interact_size.y),
+        egui::SelectableLabel::new(selected, egui::RichText::new(label)),
+    )
+    .clicked()
+}
+
+fn composer_row_reserved_width(t: &i18n::UiStrings, show_stop: bool) -> f32 {
+    icons::ATTACH_BTN_W
+        + 4.0
+        + estimate_composer_buttons_w(t.agent_send, show_stop, t.chat_stop)
+}
+
+/// Minimum central chat pane width so composer + session toggles fit (FR labels).
+fn preview_min_inner_width(t: &i18n::UiStrings) -> f32 {
+    let composer = composer_row_reserved_width(t, true) + COMPOSER_MIN_INPUT_W;
+    let session_bar = session_toggle_reserve_width(t) + 160.0;
+    let canvas_split_min = 180.0 + CHAT_SPLIT_GAP + 200.0;
+    let main_min = composer.max(session_bar).max(canvas_split_min);
+    LEFT_NAV_W + CHAT_SIDE_MIN_W + CHAT_SPLIT_GAP + main_min + CHAT_MAIN_MARGIN
+}
+
+const COMPOSER_MIN_INPUT_W: f32 = 140.0;
+const COMPOSER_INPUT_ROW_H: f32 = 44.0;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct ChatSessionsSplit {
+    side_w: f32,
+    chat_w: f32,
+}
+
+/// Sidebar + main chat widths that never exceed `full_w`.
+fn chat_sessions_split(full_w: f32, gap: f32, canvas_open: bool) -> ChatSessionsSplit {
+    let min_main = if canvas_open { 240.0_f32 } else { 200.0_f32 };
+    let max_side = if canvas_open { 160.0_f32 } else { 220.0_f32 };
+    let min_side = if canvas_open { 80.0_f32 } else { 120.0_f32 };
+    let mut side_w = max_side.min((full_w * 0.30).max(min_side));
+    if full_w - side_w - gap < min_main {
+        side_w = (full_w - gap - min_main).clamp(80.0, max_side);
+    }
+    side_w = side_w.min((full_w - gap).max(0.0));
+    let chat_w = (full_w - side_w - gap).max(0.0);
+    ChatSessionsSplit { side_w, chat_w }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum ChatCanvasLayout {
+    SideBySide { transcript_w: f32, canvas_w: f32 },
+    Stacked { transcript_h: f32, canvas_h: f32 },
+}
+
+/// Transcript + canvas layout that fits in `total_w` (side-by-side or stacked).
+fn chat_canvas_layout(total_w: f32, content_h: f32, split_gap: f32) -> ChatCanvasLayout {
+    const CANVAS_MIN: f32 = 96.0;
+    const TRANSCRIPT_MIN: f32 = 140.0;
+    const STACK_BELOW: f32 = 360.0;
+    if total_w < STACK_BELOW {
+        let transcript_h = (content_h * 0.55).max(72.0);
+        let canvas_h = (content_h - transcript_h - split_gap).max(72.0);
+        ChatCanvasLayout::Stacked {
+            transcript_h,
+            canvas_h,
+        }
+    } else {
+        let max_canvas = (total_w - TRANSCRIPT_MIN - split_gap).max(0.0);
+        let canvas_w = ((total_w - split_gap) * 0.40)
+            .clamp(CANVAS_MIN.min(max_canvas), max_canvas);
+        let transcript_w = (total_w - canvas_w - split_gap).max(0.0);
+        ChatCanvasLayout::SideBySide {
+            transcript_w,
+            canvas_w,
+        }
+    }
+}
+
+/// Conservative button-row width for composer wrap prediction (before egui measure).
+fn estimate_composer_buttons_w(send: &str, show_stop: bool, stop: &str) -> f32 {
+    const CHAR_W: f32 = 8.5;
+    const BTN_PAD: f32 = 20.0;
+    const ITEM_GAP: f32 = 4.0;
+    let mut w = send.len() as f32 * CHAR_W + BTN_PAD;
+    if show_stop {
+        w += ITEM_GAP + stop.len() as f32 * CHAR_W + BTN_PAD;
+    }
+    w
+}
+
+fn ui_button_width(ui: &egui::Ui, label: &str) -> f32 {
+    let padding = ui.style().spacing.button_padding;
+    let font_id = ui.style().text_styles[&egui::TextStyle::Button].clone();
+    let galley = ui.fonts(|f| {
+        f.layout_no_wrap(
+            label.to_owned(),
+            font_id,
+            egui::Color32::PLACEHOLDER,
+        )
+    });
+    galley.size().x + padding.x * 2.0
+}
+
+fn send_button_reserved_width(ui: &egui::Ui, t: &i18n::UiStrings) -> f32 {
+    let measured = ui_button_width(ui, t.agent_send);
+    let fr_floor = estimate_composer_buttons_w("Envoyer", false, "");
+    measured.max(fr_floor)
+}
+
+fn stop_button_reserved_width(ui: &egui::Ui, t: &i18n::UiStrings) -> f32 {
+    let measured = ui_button_width(ui, t.chat_stop);
+    let fr_floor = estimate_composer_buttons_w("Stop", false, "");
+    measured.max(fr_floor)
+}
+
+fn composer_measured_buttons_w(ui: &egui::Ui, t: &i18n::UiStrings, show_stop: bool) -> f32 {
+    let gap = ui.spacing().item_spacing.x;
+    let send_w = send_button_reserved_width(ui, t);
+    if show_stop {
+        send_w + gap + stop_button_reserved_width(ui, t)
+    } else {
+        send_w
+    }
+}
+
+/// Field width after reserving fixed Envoyer (+ Stop) and paperclip chrome (RTL allocation).
+fn composer_field_width(
+    row_w: f32,
+    send_w: f32,
+    attach_w: f32,
+    stop_w: f32,
+    gap: f32,
+    show_stop: bool,
+) -> f32 {
+    let gaps = if show_stop { gap * 3.0 } else { gap * 2.0 };
+    let chrome = send_w + attach_w + gaps + if show_stop { stop_w } else { 0.0 };
+    (row_w - chrome).max(0.0)
+}
+
+fn chat_composer_wraps(available_w: f32, attach_w: f32, buttons_w: f32) -> bool {
+    available_w - attach_w - buttons_w < COMPOSER_MIN_INPUT_W
+}
+
 /// Vertical space for the fixed send row plus optional stacks that grow upward.
 fn chat_composer_reserve_height(
     chat_w: f32,
@@ -559,13 +825,12 @@ fn chat_composer_reserve_height(
     pending_documents_len: usize,
     show_vision_banner: bool,
 ) -> f32 {
-    const INPUT_ROW_H: f32 = 44.0;
     const ASK_QUEUE_H: f32 = 22.0;
     const VISION_BANNER_H: f32 = 28.0;
     const CHIP_W: f32 = 48.0;
     const CHIP_ROW_H: f32 = 36.0;
 
-    let mut h = INPUT_ROW_H;
+    let mut h = COMPOSER_INPUT_ROW_H;
     if ask_queue_len > 1 {
         h += ASK_QUEUE_H;
     }
@@ -579,6 +844,24 @@ fn chat_composer_reserve_height(
         h += (rows as f32) * CHIP_ROW_H;
     }
     h
+}
+
+fn chat_markdown_viewer(ui: &egui::Ui) -> CommonMarkViewer<'static> {
+    let w = ui.available_width().max(1.0) as usize;
+    CommonMarkViewer::new().default_width(Some(w))
+}
+
+fn chat_bubble_max_width(available_w: f32, kind: ChatBubbleKind) -> f32 {
+    if available_w <= 0.0 {
+        return 0.0;
+    }
+    let fraction = match kind {
+        ChatBubbleKind::User => 0.88,
+        ChatBubbleKind::Assistant | ChatBubbleKind::RoomSpeaker => 0.96,
+        ChatBubbleKind::System => 0.92,
+    };
+    let w = (available_w * fraction).min(available_w);
+    w.max(available_w.min(48.0))
 }
 
 fn chat_action_is_self_tool(action: &str) -> bool {
@@ -1570,9 +1853,16 @@ struct UiApp {
     /// Dernier payload notes brut (scénarios / debug).
     notes_out: String,
     tasks: tasks_panel::TasksPanelState,
+    library: library_panel::LibraryPanelState,
     schedules: Vec<ScheduleEntry>,
     schedule_goal: String,
     schedule_interval_secs: u64,
+    /// Act id waiting for `Evt::ScheduleCreated` to attach a thread card.
+    schedule_pending_card_act: Option<String>,
+    /// User-initiated session navigation intent for the next cross-session load.
+    pending_session_nav: session_nav::PendingSessionNav,
+    /// In-memory schedule act/card edits not yet safe to clobber from disk.
+    schedule_transcript_dirty: bool,
     agent_display_name: String,
     agent_task: String,
     agent_system_prompt: String,
@@ -1851,9 +2141,13 @@ impl UiApp {
             notes: notes_panel::NotesPanelState::default(),
             notes_out: String::new(),
             tasks: tasks_panel::TasksPanelState::default(),
+            library: library_panel::LibraryPanelState::default(),
             schedules: Vec::new(),
             schedule_goal: String::new(),
             schedule_interval_secs: 60,
+            schedule_pending_card_act: None,
+            pending_session_nav: session_nav::PendingSessionNav::None,
+            schedule_transcript_dirty: false,
             agent_display_name: String::new(),
             agent_task: String::new(),
             agent_system_prompt: String::new(),
@@ -2021,6 +2315,7 @@ impl UiApp {
                     origin: "ask-reply".into(),
                 }],
                 speaker_id: None,
+                speaker_name: None,
             });
             let _ = self.cmd_tx.send(Cmd::AgentKill { id: agent_id });
         }
@@ -2106,6 +2401,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 origin: "ask-reply".into(),
             }],
             speaker_id: None,
+            speaker_name: None,
         });
         let _ = self.cmd_tx.send(Cmd::SessionAppend {
             session_id,
@@ -2156,6 +2452,13 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             ));
             return;
         };
+        if pending_images.is_empty() && pending_documents.is_empty() {
+            let tz = local_tz_offset_minutes();
+            if let Some(parsed) = schedule_parse::try_parse_phrase(&text, now_ms(), tz) {
+                self.handle_schedule_phrase(&session_id, &text, parsed);
+                return;
+            }
+        }
         let explicit_canvas = chat_canvas::chat_should_open_canvas_face(&text);
         if explicit_canvas {
             self.break_stuck_session_agents(&session_id);
@@ -2237,6 +2540,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             text: text.clone(),
             attachments,
             speaker_id: None,
+            speaker_name: None,
         });
         self.chat_pending_images.clear();
         self.chat_pending_documents.clear();
@@ -2670,6 +2974,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             text: String::new(),
             attachments: vec![att.clone()],
             speaker_id: None,
+            speaker_name: None,
         });
         if let Some(sid) = self.active_session.clone() {
             let _ = self.cmd_tx.send(Cmd::SessionAppend {
@@ -2698,6 +3003,303 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         }
     }
 
+    fn handle_schedule_phrase(&mut self, session_id: &str, user_phrase: &str, parsed: ParsedSchedule) {
+        let t = i18n::strings(&self.prefs.language);
+        let act_text = schedule_act_phrase::act_phrase_from_parsed(&t, &parsed, &self.prefs.language);
+        self.chat.push(ChatLine {
+            role: "user".into(),
+            text: user_phrase.to_string(),
+            attachments: vec![],
+            speaker_id: None,
+            speaker_name: None,
+        });
+        let _ = self.cmd_tx.send(Cmd::SessionAppend {
+            session_id: session_id.to_string(),
+            role: "user".into(),
+            content: user_phrase.to_string(),
+            attachments: vec![],
+        });
+        let gate_ask = !self.prefs.agent_gate_mode.eq_ignore_ascii_case("autonomous");
+        if gate_ask {
+            let act_id = format!("sched-act-{}", chrono_like_stamp());
+            let att = ChatAttachment::ScheduleAct {
+                act_id: act_id.clone(),
+                display_phrase: user_phrase.to_string(),
+                goal: parsed.goal.clone(),
+                when_label: parsed.when_label.clone(),
+                interval_secs: parsed.interval_secs,
+                next_fire_ms: parsed.next_fire_ms,
+                state: "pending".into(),
+                schedule_id: String::new(),
+            };
+            self.chat.push(ChatLine {
+                role: "assistant".into(),
+                text: act_text.clone(),
+                attachments: vec![att.clone()],
+                speaker_id: None,
+                speaker_name: None,
+            });
+            let _ = self.cmd_tx.send(Cmd::SessionAppend {
+                session_id: session_id.to_string(),
+                role: "assistant".into(),
+                content: act_text,
+                attachments: vec![att],
+            });
+        } else {
+            self.schedule_pending_card_act = Some(format!("sched-auto-{}", chrono_like_stamp()));
+            self.chat.push(ChatLine {
+                role: "assistant".into(),
+                text: schedule_act_phrase::format_resolved_act(
+                    &t,
+                    &parsed.goal,
+                    &parsed.when_label,
+                    true,
+                    &self.prefs.language,
+                ),
+                attachments: vec![],
+                speaker_id: None,
+                speaker_name: None,
+            });
+            let _ = self.cmd_tx.send(Cmd::ScheduleCreate {
+                goal: parsed.goal,
+                interval_secs: parsed.interval_secs,
+                next_fire_ms: Some(parsed.next_fire_ms),
+                display_title: Some(user_phrase.to_string()),
+            });
+        }
+        self.mark_onboarding_chat_sent();
+        self.scen_chat = true;
+    }
+
+    fn approve_schedule_act(&mut self, act_id: &str, msg_idx: usize) {
+        let Some(att_idx) = self.chat[msg_idx].attachments.iter().position(|a| {
+            matches!(
+                a,
+                ChatAttachment::ScheduleAct { act_id: id, .. } if id == act_id
+            )
+        }) else {
+            return;
+        };
+        let ChatAttachment::ScheduleAct {
+            goal,
+            when_label,
+            interval_secs,
+            next_fire_ms,
+            display_phrase,
+            ..
+        } = self.chat[msg_idx].attachments[att_idx].clone()
+        else {
+            return;
+        };
+        let t = i18n::strings(&self.prefs.language);
+        self.chat[msg_idx].text = schedule_act_phrase::format_resolved_act(
+            &t,
+            &goal,
+            &when_label,
+            true,
+            &self.prefs.language,
+        );
+        if let ChatAttachment::ScheduleAct { state, .. } =
+            &mut self.chat[msg_idx].attachments[att_idx]
+        {
+            *state = "approved".into();
+        }
+        self.schedule_transcript_dirty = true;
+        if let Some(session_id) = self.active_session.clone() {
+            let att = self.chat[msg_idx].attachments[att_idx].clone();
+            let _ = self.cmd_tx.send(Cmd::SessionAppend {
+                session_id,
+                role: "assistant".into(),
+                content: self.chat[msg_idx].text.clone(),
+                attachments: vec![att],
+            });
+        }
+        self.schedule_pending_card_act = Some(act_id.to_string());
+        let _ = self.cmd_tx.send(Cmd::ScheduleCreate {
+            goal,
+            interval_secs,
+            next_fire_ms: Some(next_fire_ms),
+            display_title: Some(display_phrase),
+        });
+    }
+
+    fn deny_schedule_act(&mut self, act_id: &str, msg_idx: usize) {
+        let Some(att_idx) = self.chat[msg_idx].attachments.iter().position(|a| {
+            matches!(
+                a,
+                ChatAttachment::ScheduleAct { act_id: id, .. } if id == act_id
+            )
+        }) else {
+            return;
+        };
+        let ChatAttachment::ScheduleAct {
+            goal,
+            when_label,
+            ..
+        } = self.chat[msg_idx].attachments[att_idx].clone()
+        else {
+            return;
+        };
+        let t = i18n::strings(&self.prefs.language);
+        self.chat[msg_idx].text = schedule_act_phrase::format_resolved_act(
+            &t,
+            &goal,
+            &when_label,
+            false,
+            &self.prefs.language,
+        );
+        if let ChatAttachment::ScheduleAct { state, .. } =
+            &mut self.chat[msg_idx].attachments[att_idx]
+        {
+            *state = "denied".into();
+        }
+        self.schedule_transcript_dirty = true;
+        if let Some(session_id) = self.active_session.clone() {
+            let att = self.chat[msg_idx].attachments[att_idx].clone();
+            let _ = self.cmd_tx.send(Cmd::SessionAppend {
+                session_id,
+                role: "assistant".into(),
+                content: self.chat[msg_idx].text.clone(),
+                attachments: vec![att],
+            });
+        }
+    }
+
+    fn attach_schedule_card(&mut self, entry: &ScheduleEntry) {
+        let act_id = match self.schedule_pending_card_act.take() {
+            Some(id) => id,
+            None => return,
+        };
+        let title = entry
+            .display_title
+            .clone()
+            .unwrap_or_else(|| entry.goal.clone());
+        let next_fire = schedule_card::next_fire_ms_for_entry(entry, now_ms());
+        let state = schedule_card::card_state_from_entry(entry).to_string();
+        let card = ChatAttachment::ScheduleCard {
+            schedule_id: entry.id.clone(),
+            title,
+            goal: entry.goal.clone(),
+            interval_secs: entry.interval_secs,
+            next_fire_ms: next_fire,
+            state,
+        };
+        for line in &mut self.chat {
+            for att in &mut line.attachments {
+                if let ChatAttachment::ScheduleAct {
+                    act_id: id,
+                    state,
+                    schedule_id,
+                    ..
+                } = att
+                {
+                    if *id == act_id && state == "approved" {
+                        *schedule_id = entry.id.clone();
+                        line.attachments.push(card.clone());
+                        self.schedule_transcript_dirty = true;
+                        if let Some(session_id) = self.active_session.clone() {
+                            let _ = self.cmd_tx.send(Cmd::SessionAppend {
+                                session_id,
+                                role: "assistant".into(),
+                                content: String::new(),
+                                attachments: vec![card],
+                            });
+                        }
+                        return;
+                    }
+                }
+            }
+        }
+        self.schedule_transcript_dirty = true;
+        self.chat.push(ChatLine {
+            role: "assistant".into(),
+            text: String::new(),
+            attachments: vec![card.clone()],
+            speaker_id: None,
+            speaker_name: None,
+        });
+        if let Some(session_id) = self.active_session.clone() {
+            let _ = self.cmd_tx.send(Cmd::SessionAppend {
+                session_id,
+                role: "assistant".into(),
+                content: String::new(),
+                attachments: vec![card],
+            });
+        }
+    }
+
+    fn request_session_select(&mut self, id: String) {
+        self.pending_session_nav = session_nav::PendingSessionNav::Explicit(id.clone());
+        self.schedule_transcript_dirty = false;
+        let _ = self.cmd_tx.send(Cmd::SessionSelect { id });
+    }
+
+    fn request_session_create(&mut self, title: Option<String>) {
+        self.pending_session_nav = session_nav::PendingSessionNav::AwaitingCreate;
+        self.schedule_transcript_dirty = false;
+        let _ = self.cmd_tx.send(Cmd::SessionCreate { title });
+    }
+
+    fn request_session_delete(&mut self, id: String) {
+        self.pending_session_nav = session_nav::PendingSessionNav::AwaitingDelete;
+        self.schedule_transcript_dirty = false;
+        let _ = self.cmd_tx.send(Cmd::SessionDelete { id });
+    }
+
+    fn sync_schedule_cards(&mut self) {
+        let now = now_ms();
+        for line in &mut self.chat {
+            for att in &mut line.attachments {
+                if let ChatAttachment::ScheduleCard { schedule_id, .. } = att {
+                    if let Some(entry) = self.schedules.iter().find(|s| s.id == *schedule_id) {
+                        schedule_card::sync_card_attachment(att, entry, now);
+                    }
+                }
+            }
+        }
+    }
+
+    fn upsert_schedule_entry(&mut self, entry: ScheduleEntry) {
+        schedule_card::upsert_schedule_entry(&mut self.schedules, entry);
+    }
+
+    fn apply_schedule_card_action_local(&mut self, action: schedule_card::ScheduleCardAction) {
+        let now = now_ms();
+        match &action {
+            schedule_card::ScheduleCardAction::Pause(id) => {
+                schedule_card::apply_local_pause(&mut self.schedules, id);
+            }
+            schedule_card::ScheduleCardAction::Resume(id) => {
+                schedule_card::apply_local_resume(&mut self.schedules, id);
+            }
+            schedule_card::ScheduleCardAction::Stop(id) => {
+                schedule_card::apply_local_stop(&mut self.schedules, id);
+            }
+            schedule_card::ScheduleCardAction::None => return,
+        }
+        self.schedule_transcript_dirty = true;
+        let id = match action {
+            schedule_card::ScheduleCardAction::Pause(id)
+            | schedule_card::ScheduleCardAction::Resume(id)
+            | schedule_card::ScheduleCardAction::Stop(id) => id,
+            schedule_card::ScheduleCardAction::None => return,
+        };
+        for line in &mut self.chat {
+            for att in &mut line.attachments {
+                if let ChatAttachment::ScheduleCard { schedule_id, .. } = att {
+                    if schedule_id == &id {
+                        schedule_card::apply_local_action_to_attachment(
+                            att,
+                            &self.schedules,
+                            &id,
+                            now,
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     fn open_tts_card(&mut self, spoken: &str) {
         let att = ChatAttachment::TtsDraft {
             text: spoken.to_string(),
@@ -2709,6 +3311,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             text: spoken.to_string(),
             attachments: vec![att.clone()],
             speaker_id: None,
+            speaker_name: None,
         });
         if let Some(sid) = self.active_session.clone() {
             let _ = self.cmd_tx.send(Cmd::SessionAppend {
@@ -2752,6 +3355,9 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             }
             Tab::Tasks => {
                 let _ = self.cmd_tx.send(Cmd::TasksList);
+            }
+            Tab::Library => {
+                let _ = self.cmd_tx.send(Cmd::UserLibraryList);
             }
             Tab::Settings => {
                 let _ = self.cmd_tx.send(Cmd::ScheduleList);
@@ -2798,6 +3404,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             .show(ui, |ui| {
                 for (tab, label, hint) in [
                     (Tab::Notes, t.tab_notes, t.tab_hint_notes),
+                    (Tab::Library, t.tab_library, t.tab_hint_library),
                     (Tab::Tasks, t.tab_tasks, t.tab_hint_tasks),
                     (Tab::Models, t.tab_models, t.tab_hint_models),
                     (Tab::Settings, t.tab_settings, t.tab_hint_settings),
@@ -3034,12 +3641,13 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             .show(ctx, |ui| {
                 ui.weak(t.go_to_hint);
                 ui.separator();
-                let destinations: [(&str, Tab); 13] = [
+                let destinations: [(&str, Tab); 14] = [
                     (t.tab_chat, Tab::Chat),
                     (t.tab_agents, Tab::Agents),
                     (t.tab_create, Tab::Image),
                     (t.tab_memory, Tab::Memory),
                     (t.tab_notes, Tab::Notes),
+                    (t.tab_library, Tab::Library),
                     (t.tab_tasks, Tab::Tasks),
                     (t.tab_models, Tab::Models),
                     (t.tab_settings, Tab::Settings),
@@ -3191,13 +3799,8 @@ impl eframe::App for UiApp {
                         self.offer_skill_card(&o);
                     }
                 }
-                Evt::SkillPassCreated {
-                    pattern_id,
-                    skill_name,
-                } => {
+                Evt::SkillPassCreated { pattern_id, .. } => {
                     self.update_skill_offer_state(&pattern_id, "created");
-                    let t = i18n::strings(&self.prefs.language);
-                    self.status = format!("{} ({skill_name})", t.skill_offer_created);
                 }
                 Evt::ChatSystem(m) => self.chat.push(ChatLine::plain("système", m)),
                 Evt::Metrics(m) => self.metrics = Some(m),
@@ -3219,6 +3822,7 @@ impl eframe::App for UiApp {
                                 origin,
                             }],
                             speaker_id: None,
+                            speaker_name: None,
                         });
                     } else {
                         self.status = format!("agent lancé : {agent_id}");
@@ -3313,6 +3917,7 @@ impl eframe::App for UiApp {
                                                 origin: "completion".into(),
                                             }],
                                             speaker_id: None,
+                                            speaker_name: None,
                                         });
                                     }
                                 } else if !seeding
@@ -3377,6 +3982,7 @@ impl eframe::App for UiApp {
                                             origin: "ask-timeout".into(),
                                         }],
                                         speaker_id: None,
+                                        speaker_name: None,
                                     });
                                 }
                             }
@@ -3406,6 +4012,7 @@ impl eframe::App for UiApp {
                                             origin: "ask".into(),
                                         }],
                                         speaker_id: None,
+                                        speaker_name: None,
                                     });
                                 } else if !on_this_session
                                     && !self.agent_notified.contains(&ag.agent_id)
@@ -3452,6 +4059,9 @@ impl eframe::App for UiApp {
                 Evt::NotesRelated(hits) => {
                     self.notes.apply_related(hits);
                 }
+                Evt::UserLibraryListed(docs) => {
+                    self.library.docs = docs;
+                }
                 Evt::NotesSaved { path, slug, title } => {
                     self.notes.mark_saved(path, slug, title);
                     self.scen_note_human = true;
@@ -3464,7 +4074,19 @@ impl eframe::App for UiApp {
                     self.caps_holder = holder;
                     self.caps = caps;
                 }
-                Evt::Schedules(s) => self.schedules = s,
+                Evt::Schedules(s) => {
+                    schedule_card::merge_schedule_list(&mut self.schedules, s);
+                    self.sync_schedule_cards();
+                }
+                Evt::ScheduleCreated(entry) => {
+                    self.upsert_schedule_entry(entry.clone());
+                    self.attach_schedule_card(&entry);
+                    self.sync_schedule_cards();
+                }
+                Evt::ScheduleUpdated(entry) => {
+                    self.upsert_schedule_entry(entry);
+                    self.sync_schedule_cards();
+                }
                 Evt::TasksListed(tasks) => {
                     let t = i18n::strings(&self.prefs.language);
                     self.tasks.apply_listed(tasks, t.tasks_count);
@@ -3535,43 +4157,71 @@ impl eframe::App for UiApp {
                     self.tab = Tab::Feedback;
                 }
                 Evt::Sessions(list) => self.sessions = list,
+                Evt::SessionLoadIntent { id } => {
+                    session_nav::apply_session_load_intent(&mut self.pending_session_nav, &id);
+                }
                 Evt::SessionLoaded { id, messages, meta } => {
                     let session_changed = self.active_session.as_deref() != Some(id.as_str());
-                    self.active_session = Some(id.clone());
-                    self.rename_buf = meta.title.clone();
-                    if let Some(s) = self.sessions.iter_mut().find(|s| s.id == meta.id) {
-                        *s = meta.clone();
-                    }
-                    if session_changed {
-                        self.room_members_pane_open = false;
-                        let mut chat = Vec::new();
-                        if !designer_shot_mode() {
-                            chat.push(ChatLine::plain(
-                                "système",
-                                format!("Session {id} — historique rechargé."),
-                            ));
+                    if session_changed
+                        && !session_nav::should_switch_session_view(
+                            self.active_session.as_deref(),
+                            &self.pending_session_nav,
+                            id.as_str(),
+                        )
+                    {
+                        if let Some(s) = self.sessions.iter_mut().find(|s| s.id == meta.id) {
+                            *s = meta.clone();
                         }
-                        chat.extend(messages);
-                        self.chat = chat;
+                    } else if !session_changed
+                        && !session_nav::should_replace_chat_on_same_session_reload(
+                            self.schedule_transcript_dirty,
+                        )
+                    {
+                        self.rename_buf = meta.title.clone();
+                        if let Some(s) = self.sessions.iter_mut().find(|s| s.id == meta.id) {
+                            *s = meta.clone();
+                        }
+                        self.sync_schedule_cards();
+                        self.pending_session_nav = session_nav::PendingSessionNav::None;
                     } else {
-                        self.chat = messages;
-                    }
-                    let _ = self.cmd_tx.send(Cmd::SkillPassPending);
-                    self.session_chat.clear_unread(&id);
-                    self.session_chat.sync_active_view(
-                        self.active_session.as_deref(),
-                        &mut self.streaming,
-                        &mut self.chat_pending,
-                        &mut self.chat_inference_id,
-                    );
-                    self.room_turn_pending_text = None;
-                    if meta.canvas_open {
-                        let _ = self.cmd_tx.send(Cmd::CanvasPoll {
-                            session_id: id.clone(),
-                            after_seq: None,
-                        });
-                    } else {
-                        self.canvas_panel = chat_canvas::CanvasPanelState::default();
+                        self.pending_session_nav = session_nav::PendingSessionNav::None;
+                        self.active_session = Some(id.clone());
+                        self.rename_buf = meta.title.clone();
+                        if let Some(s) = self.sessions.iter_mut().find(|s| s.id == meta.id) {
+                            *s = meta.clone();
+                        }
+                        if session_changed {
+                            self.room_members_pane_open = false;
+                            let mut chat = Vec::new();
+                            if !designer_shot_mode() {
+                                chat.push(ChatLine::plain(
+                                    "système",
+                                    format!("Session {id} — historique rechargé."),
+                                ));
+                            }
+                            chat.extend(messages);
+                            self.chat = chat;
+                        } else {
+                            self.chat = messages;
+                        }
+                        self.sync_schedule_cards();
+                        let _ = self.cmd_tx.send(Cmd::SkillPassPending);
+                        self.session_chat.clear_unread(&id);
+                        self.session_chat.sync_active_view(
+                            self.active_session.as_deref(),
+                            &mut self.streaming,
+                            &mut self.chat_pending,
+                            &mut self.chat_inference_id,
+                        );
+                        self.room_turn_pending_text = None;
+                        if meta.canvas_open {
+                            let _ = self.cmd_tx.send(Cmd::CanvasPoll {
+                                session_id: id.clone(),
+                                after_seq: None,
+                            });
+                        } else {
+                            self.canvas_panel = chat_canvas::CanvasPanelState::default();
+                        }
                     }
                 }
                 Evt::RoomTurnDone {
@@ -3584,13 +4234,13 @@ impl eframe::App for UiApp {
                         self.chat_pending = false;
                         self.chat_inference_id = None;
                         self.room_turn_pending_text = None;
-                        let t = i18n::strings(&self.prefs.language);
-                        self.status = if cancelled {
-                            t.room_turn_cancelled.into()
-                        } else {
-                            t.room_turn_done
-                                .replace("{n}", &agent_turns.to_string())
-                        };
+                        if let Some(status) =
+                            chat_room::room_turn_done_status(agent_turns, cancelled)
+                        {
+                            self.status = status;
+                        } else if self.status.starts_with("salon :") {
+                            self.status.clear();
+                        }
                     } else if !cancelled && agent_turns > 0 {
                         self.session_chat.mark_unread(&session_id);
                     }
@@ -3640,6 +4290,7 @@ impl eframe::App for UiApp {
                                 prompt: "canvas export".into(),
                             }],
                             speaker_id: None,
+                            speaker_name: None,
                         });
                     }
                 }
@@ -3766,6 +4417,7 @@ impl eframe::App for UiApp {
                         text: note.clone(),
                         attachments: vec![att.clone()],
                         speaker_id: None,
+                        speaker_name: None,
                     });
                     if let Some(sid) = self.active_session.clone() {
                         let _ = self.cmd_tx.send(Cmd::SessionAppend {
@@ -4058,7 +4710,7 @@ impl eframe::App for UiApp {
                     .retain(|x| !dismiss.contains(&x.agent_id));
                 if let Some(id) = open_sess {
                     self.tab = Tab::Chat;
-                    let _ = self.cmd_tx.send(Cmd::SessionSelect { id });
+                    self.request_session_select(id);
                 }
             }
             ui.horizontal(|ui| {
@@ -4220,6 +4872,7 @@ impl eframe::App for UiApp {
             Tab::Chat => self.ui_chat(ui),
             Tab::Memory => overflow_scroll(ui, "memory", |ui| self.ui_memory(ui)),
             Tab::Notes => overflow_scroll(ui, "notes", |ui| self.ui_notes(ui)),
+            Tab::Library => overflow_scroll(ui, "library", |ui| self.ui_library(ui)),
             Tab::Tasks => overflow_scroll(ui, "tasks", |ui| self.ui_tasks(ui)),
             Tab::Agents => overflow_scroll(ui, "agents", |ui| self.ui_agents(ui)),
             Tab::Models => overflow_scroll(ui, "models", |ui| self.ui_models(ui, ctx)),
@@ -4456,75 +5109,100 @@ impl UiApp {
             .replace("{n}", &members.len().to_string());
 
         ui.horizontal(|ui| {
-            let header = egui::RichText::new(&session_title).strong();
-            let title_resp = ui.add(
-                egui::Label::new(header).sense(if room {
-                    egui::Sense::click()
-                } else {
-                    egui::Sense::hover()
-                }),
+            let full_w = ui.available_width();
+            let toggle_w = session_toggle_reserve_width(t);
+            let left_w = (full_w - toggle_w).max(0.0);
+
+            ui.allocate_ui_with_layout(
+                egui::vec2(left_w, ui.available_height()),
+                egui::Layout::left_to_right(egui::Align::Center),
+                |ui| {
+                    let header = egui::RichText::new(&session_title).strong();
+                    let title_resp = ui.add(
+                        egui::Label::new(header).sense(if room {
+                            egui::Sense::click()
+                        } else {
+                            egui::Sense::hover()
+                        }),
+                    );
+                    if room && title_resp.clicked() {
+                        self.room_members_pane_open = !self.room_members_pane_open;
+                    }
+                    if room {
+                        title_resp.on_hover_text(t.room_header_open_members);
+                        if !members.is_empty() {
+                            ui.weak(format!("· {count_line}"));
+                        }
+                        icons::caret(ui, self.room_members_pane_open);
+                    }
+
+                    let g = guide::strings(&self.prefs.language);
+                    if guide::tab_help_button(ui, g.help_tooltip) {
+                        self.guide.open_topic(if room {
+                            guide::GuideTopic::Salon
+                        } else if canvas_open {
+                            guide::GuideTopic::Canvas
+                        } else {
+                            guide::GuideTopic::Chat
+                        });
+                    }
+                },
             );
-            if room && title_resp.clicked() {
-                self.room_members_pane_open = !self.room_members_pane_open;
-            }
-            if room {
-                title_resp.on_hover_text(t.room_header_open_members);
-                if !members.is_empty() {
-                    ui.weak(format!("· {count_line}"));
-                }
-                icons::caret(ui, self.room_members_pane_open);
-            }
 
-            let g = guide::strings(&self.prefs.language);
-            if guide::tab_help_button(ui, g.help_tooltip) {
-                self.guide.open_topic(if room {
-                    guide::GuideTopic::Salon
-                } else if canvas_open {
-                    guide::GuideTopic::Canvas
-                } else {
-                    guide::GuideTopic::Chat
-                });
-            }
-
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui
-                    .selectable_label(canvas_open, t.session_toggle_canvas)
-                    .clicked()
-                {
-                    let new_open = !canvas_open;
-                    self.set_canvas_open_local(&sid, new_open);
-                    let _ = self.cmd_tx.send(Cmd::CanvasSetOpen {
-                        session_id: sid.clone(),
-                        open: new_open,
-                    });
-                }
-                if ui.selectable_label(room, t.session_toggle_salon).clicked() {
-                    let mode = if room {
-                        ChatSessionMode::Direct
-                    } else {
-                        ChatSessionMode::Room
-                    };
-                    let _ = self.cmd_tx.send(Cmd::SessionSetMode {
-                        session_id: sid.clone(),
-                        mode,
-                    });
-                }
-            });
+            ui.allocate_ui_with_layout(
+                egui::vec2(toggle_w.min(full_w), ui.available_height()),
+                egui::Layout::right_to_left(egui::Align::Center),
+                |ui| {
+                    if session_toggle_chip(ui, canvas_open, t.session_toggle_canvas) {
+                        let new_open = !canvas_open;
+                        self.set_canvas_open_local(&sid, new_open);
+                        let _ = self.cmd_tx.send(Cmd::CanvasSetOpen {
+                            session_id: sid.clone(),
+                            open: new_open,
+                        });
+                    }
+                    if session_toggle_chip(ui, room, t.session_toggle_salon) {
+                        let mode = if room {
+                            ChatSessionMode::Direct
+                        } else {
+                            ChatSessionMode::Room
+                        };
+                        let _ = self.cmd_tx.send(Cmd::SessionSetMode {
+                            session_id: sid.clone(),
+                            mode,
+                        });
+                    }
+                },
+            );
         });
 
         if canvas_open {
             let mut toolbar_action: Option<chat_canvas::CanvasUiAction> = None;
-            egui::ScrollArea::horizontal()
-                .id_salt("canvas_toolbar_scroll")
-                .auto_shrink([false, false])
-                .max_height(CANVAS_TOOLBAR_ROW_H)
-                .show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.set_min_height(CANVAS_TOOLBAR_ROW_H - 4.0);
-                        toolbar_action =
-                            chat_canvas::ui_canvas_toolbar(ui, t, &mut self.canvas_panel);
-                    });
-                });
+            let toolbar_min_w = chat_canvas::toolbar_content_min_width(
+                t,
+                self.canvas_panel.seeing,
+                self.canvas_panel.clear_confirm_open,
+            );
+            let track_w = ui.available_width();
+            ui.allocate_ui_with_layout(
+                egui::vec2(track_w, CANVAS_TOOLBAR_ROW_H),
+                egui::Layout::top_down(egui::Align::Min),
+                |ui| {
+                    ui.set_width(track_w);
+                    egui::ScrollArea::horizontal()
+                        .id_salt("canvas_toolbar_scroll")
+                        .auto_shrink([false, false])
+                        .max_height(CANVAS_TOOLBAR_ROW_H)
+                        .show(ui, |ui| {
+                            ui.set_min_width(toolbar_min_w);
+                            ui.horizontal(|ui| {
+                                ui.set_min_height(CANVAS_TOOLBAR_ROW_H - 4.0);
+                                toolbar_action =
+                                    chat_canvas::ui_canvas_toolbar(ui, t, &mut self.canvas_panel);
+                            });
+                        });
+                },
+            );
             if let Some(action) = toolbar_action {
                 self.dispatch_canvas_ui_action(Some(action), &sid);
             }
@@ -4587,6 +5265,9 @@ impl UiApp {
                 let mut target_reply: Option<String> = None;
                 let mut open_studio: Option<(String, String)> = None;
                 let mut act_decision: Option<(String, String, bool)> = None;
+                let mut schedule_act: Option<(String, usize, bool)> = None;
+                let tz_offset = local_tz_offset_minutes();
+                let chat_now = now_ms();
                 let reply_id = self.blocked_ask_agent().map(|a| a.agent_id.clone());
                 let n = self.chat.len();
                 for i in 0..n {
@@ -4594,6 +5275,7 @@ impl UiApp {
                     let mut text = self.chat[i].text.clone();
                     let attachments = self.chat[i].attachments.clone();
                     let speaker_id = self.chat[i].speaker_id.clone();
+                    let speaker_name = self.chat[i].speaker_name.clone();
                     let is_completion = attachments.iter().any(|a| {
                         matches!(
                             a,
@@ -4609,7 +5291,10 @@ impl UiApp {
                     {
                         text = i18n::agent_could_not_act_message(t);
                     }
-                    let text = if role == "assistant"
+                    let kind = chat_bubble_kind(&role, speaker_id.as_deref(), room_mode);
+                    let text = if kind == ChatBubbleKind::RoomSpeaker {
+                        chat_room::strip_roster_agent_id_mentions(t, &text, room_members)
+                    } else if role == "assistant"
                         && !is_completion
                         && speaker_id.is_none()
                     {
@@ -4617,15 +5302,15 @@ impl UiApp {
                     } else {
                         text
                     };
-                    let kind = chat_bubble_kind(&role, speaker_id.as_deref(), room_mode);
                     let mut shown_role = chat_role_label(kind, t, &role);
                     if kind == ChatBubbleKind::RoomSpeaker {
                         if let Some(sid) = speaker_id.as_deref() {
-                            shown_role = room_members
-                                .iter()
-                                .find(|m| m.agent_id == sid)
-                                .map(|m| chat_room::member_display_label(t, m))
-                                .unwrap_or_else(|| sid.to_string());
+                            shown_role = chat_room::roster_display_name(
+                                t,
+                                room_members,
+                                sid,
+                                speaker_name.as_deref(),
+                            );
                         }
                     }
                     let (fill, stroke, role_color) = if kind == ChatBubbleKind::RoomSpeaker {
@@ -4659,7 +5344,7 @@ impl UiApp {
                         if !text.is_empty() {
                             if role == "assistant" {
                                 ui.push_id(("chat_md", i), |ui| {
-                                    CommonMarkViewer::new().show(
+                                    chat_markdown_viewer(ui).show(
                                         ui,
                                         &mut self.chat_md_cache,
                                         &text,
@@ -4784,6 +5469,70 @@ impl UiApp {
                                         &mut self.chat[i].attachments[j],
                                     );
                                 }
+                                ChatAttachment::ScheduleAct {
+                                    act_id,
+                                    state,
+                                    ..
+                                } => {
+                                    if state == "pending" {
+                                        ui.horizontal(|ui| {
+                                            if ui.button(t.agent_act_allow_once).clicked() {
+                                                schedule_act =
+                                                    Some((act_id.clone(), i, true));
+                                            }
+                                            if ui.button(t.agent_act_deny).clicked() {
+                                                schedule_act =
+                                                    Some((act_id.clone(), i, false));
+                                            }
+                                        });
+                                    }
+                                }
+                                ChatAttachment::ScheduleCard {
+                                    schedule_id,
+                                    title,
+                                    state,
+                                    next_fire_ms,
+                                    ..
+                                } => {
+                                    let entry = self
+                                        .schedules
+                                        .iter()
+                                        .find(|s| s.id == *schedule_id);
+                                    let display_state = schedule_card::resolved_card_state(
+                                        entry,
+                                        state,
+                                    );
+                                    let display_next = entry
+                                        .map(|e| {
+                                            schedule_card::next_fire_ms_for_entry(e, chat_now)
+                                        })
+                                        .unwrap_or(*next_fire_ms);
+                                    let action = ui
+                                        .push_id(
+                                            ("chat_schedule_card", i, j, schedule_id.as_str()),
+                                            |ui| {
+                                                schedule_card::render_schedule_card(
+                                                    ui,
+                                                    t,
+                                                    title,
+                                                    display_state,
+                                                    display_next,
+                                                    schedule_id,
+                                                    chat_now,
+                                                    tz_offset,
+                                                )
+                                            },
+                                        )
+                                        .inner;
+                                    if !matches!(action, schedule_card::ScheduleCardAction::None)
+                                    {
+                                        self.apply_schedule_card_action_local(action.clone());
+                                    }
+                                    schedule_card::send_schedule_action(
+                                        &self.cmd_tx,
+                                        action,
+                                    );
+                                }
                             }
                         }
                     });
@@ -4794,6 +5543,13 @@ impl UiApp {
                         act_id,
                         approved,
                     });
+                }
+                if let Some((act_id, msg_idx, approved)) = schedule_act {
+                    if approved {
+                        self.approve_schedule_act(&act_id, msg_idx);
+                    } else {
+                        self.deny_schedule_act(&act_id, msg_idx);
+                    }
                 }
                 if let Some(id) = open_agent {
                     self.open_agent_tab(&id);
@@ -4819,7 +5575,7 @@ impl UiApp {
                         let streaming =
                             agent_panel::format_chat_streaming_preview(&self.streaming);
                         ui.push_id("chat_md_stream", |ui| {
-                            CommonMarkViewer::new().show(
+                            chat_markdown_viewer(ui).show(
                                 ui,
                                 &mut self.chat_md_cache,
                                 &streaming,
@@ -4859,14 +5615,13 @@ impl UiApp {
         let t = i18n::strings(&self.prefs.language);
         let full = ui.available_size();
         let gap = 8.0_f32;
-        let min_main = 200.0_f32;
-        let max_side = 220.0_f32;
-        let min_side = 120.0_f32;
-        let mut side_w = max_side.min((full.x * 0.30).max(min_side));
-        if full.x - side_w - gap < min_main {
-            side_w = (full.x - gap - min_main).clamp(80.0, max_side);
-        }
-        let chat_w = (full.x - side_w - gap).max(80.0);
+        let canvas_open = chat_room::active_session_meta(
+            &self.sessions,
+            self.active_session.as_deref(),
+        )
+        .map(|m| m.canvas_open)
+        .unwrap_or(false);
+        let ChatSessionsSplit { side_w, chat_w } = chat_sessions_split(full.x, gap, canvas_open);
 
         ui.horizontal(|ui| {
             ui.set_min_height(full.y);
@@ -4975,9 +5730,7 @@ impl UiApp {
                     }
                     if ui.button("+ Nouvelle").clicked() {
                         let n = self.sessions.len() + 1;
-                        let _ = self.cmd_tx.send(Cmd::SessionCreate {
-                            title: Some(format!("Session {n}")),
-                        });
+                        self.request_session_create(Some(format!("Session {n}")));
                     }
                     for s in self.sessions.clone() {
                         let selected =
@@ -4996,8 +5749,7 @@ impl UiApp {
                             title
                         });
                         if row.inner.clicked() || row.response.clicked() {
-                            let _ =
-                                self.cmd_tx.send(Cmd::SessionSelect { id: s.id.clone() });
+                            self.request_session_select(s.id.clone());
                         }
                     }
                     ui.horizontal(|ui| {
@@ -5022,7 +5774,7 @@ impl UiApp {
                     }
                     if ui.button("Supprimer").clicked() {
                         if let Some(id) = self.active_session.clone() {
-                            let _ = self.cmd_tx.send(Cmd::SessionDelete { id });
+                            self.request_session_delete(id);
                         }
                     }
                     ui.separator();
@@ -5168,57 +5920,105 @@ impl UiApp {
 
                             if canvas_open {
                                 let split_gap = 8.0_f32;
-                                let canvas_min = 180.0_f32;
-                                ui.horizontal(|ui| {
-                                    ui.set_min_height(content_h);
-                                    let total_w = ui.available_width();
-                                    let canvas_w = ((total_w - split_gap) * 0.42)
-                                        .max(canvas_min)
-                                        .min(total_w - 220.0);
-                                    let transcript_w =
-                                        (total_w - canvas_w - split_gap).max(200.0);
-
-                                    ui.allocate_ui_with_layout(
-                                        egui::vec2(transcript_w, content_h),
-                                        egui::Layout::top_down(egui::Align::Min)
-                                            .with_cross_justify(true),
-                                        |ui| {
-                                            self.ui_chat_transcript(
-                                                ui,
-                                                &t,
-                                                room_mode,
-                                                &room_members,
-                                                room_conductor_policy.as_ref(),
-                                                content_h,
-                                            );
-                                        },
-                                    );
-                                    ui.add_space(split_gap);
-                                    ui.allocate_ui_with_layout(
-                                        egui::vec2(canvas_w, content_h),
-                                        egui::Layout::top_down(egui::Align::Min)
-                                            .with_cross_justify(true),
-                                        |ui| {
-                                            if let Some(ref sid) = active_sid {
-                                                let aspect_action =
-                                                    chat_canvas::ui_canvas_aspect_row(
-                                                        ui, &t, canvas_aspect,
+                                let total_w = ui.available_width();
+                                match chat_canvas_layout(total_w, content_h, split_gap) {
+                                    ChatCanvasLayout::SideBySide {
+                                        transcript_w,
+                                        canvas_w,
+                                    } => {
+                                        ui.horizontal(|ui| {
+                                            ui.set_min_height(content_h);
+                                            ui.allocate_ui_with_layout(
+                                                egui::vec2(transcript_w, content_h),
+                                                egui::Layout::top_down(egui::Align::Min)
+                                                    .with_cross_justify(true),
+                                                |ui| {
+                                                    self.ui_chat_transcript(
+                                                        ui,
+                                                        &t,
+                                                        room_mode,
+                                                        &room_members,
+                                                        room_conductor_policy.as_ref(),
+                                                        content_h,
                                                     );
-                                                self.dispatch_canvas_ui_action(
-                                                    aspect_action, sid,
-                                                );
-                                                let action = chat_canvas::ui_canvas_surface(
+                                                },
+                                            );
+                                            ui.add_space(split_gap);
+                                            ui.allocate_ui_with_layout(
+                                                egui::vec2(canvas_w, content_h),
+                                                egui::Layout::top_down(egui::Align::Min)
+                                                    .with_cross_justify(true),
+                                                |ui| {
+                                                    if let Some(ref sid) = active_sid {
+                                                        let aspect_action =
+                                                            chat_canvas::ui_canvas_aspect_row(
+                                                                ui, &t, canvas_aspect,
+                                                            );
+                                                        self.dispatch_canvas_ui_action(
+                                                            aspect_action, sid,
+                                                        );
+                                                        let action =
+                                                            chat_canvas::ui_canvas_surface(
+                                                                ui,
+                                                                &mut self.canvas_panel,
+                                                                canvas_aspect,
+                                                                t.canvas_empty_hint,
+                                                            );
+                                                        self.dispatch_canvas_ui_action(
+                                                            action, sid,
+                                                        );
+                                                        self.canvas_poll_if_due(ui, sid);
+                                                    }
+                                                },
+                                            );
+                                        });
+                                    }
+                                    ChatCanvasLayout::Stacked {
+                                        transcript_h,
+                                        canvas_h,
+                                    } => {
+                                        ui.allocate_ui_with_layout(
+                                            egui::vec2(total_w, transcript_h),
+                                            egui::Layout::top_down(egui::Align::Min)
+                                                .with_cross_justify(true),
+                                            |ui| {
+                                                self.ui_chat_transcript(
                                                     ui,
-                                                    &mut self.canvas_panel,
-                                                    canvas_aspect,
-                                                    t.canvas_empty_hint,
+                                                    &t,
+                                                    room_mode,
+                                                    &room_members,
+                                                    room_conductor_policy.as_ref(),
+                                                    transcript_h,
                                                 );
-                                                self.dispatch_canvas_ui_action(action, sid);
-                                                self.canvas_poll_if_due(ui, sid);
-                                            }
-                                        },
-                                    );
-                                });
+                                            },
+                                        );
+                                        ui.add_space(split_gap);
+                                        ui.allocate_ui_with_layout(
+                                            egui::vec2(total_w, canvas_h),
+                                            egui::Layout::top_down(egui::Align::Min)
+                                                .with_cross_justify(true),
+                                            |ui| {
+                                                if let Some(ref sid) = active_sid {
+                                                    let aspect_action =
+                                                        chat_canvas::ui_canvas_aspect_row(
+                                                            ui, &t, canvas_aspect,
+                                                        );
+                                                    self.dispatch_canvas_ui_action(
+                                                        aspect_action, sid,
+                                                    );
+                                                    let action = chat_canvas::ui_canvas_surface(
+                                                        ui,
+                                                        &mut self.canvas_panel,
+                                                        canvas_aspect,
+                                                        t.canvas_empty_hint,
+                                                    );
+                                                    self.dispatch_canvas_ui_action(action, sid);
+                                                    self.canvas_poll_if_due(ui, sid);
+                                                }
+                                            },
+                                        );
+                                    }
+                                }
                             } else {
                                 self.ui_chat_transcript(
                                     ui,
@@ -5238,91 +6038,97 @@ impl UiApp {
                     } else {
                         Vec::new()
                     };
+                    let mut chat_sent_this_frame = false;
                     let input_row = ui.allocate_ui_with_layout(
                         egui::vec2(ui.available_width(), composer_h),
                         egui::Layout::bottom_up(egui::Align::Min),
                         |ui| {
-                            let input_row = ui.with_layout(
-                                egui::Layout::left_to_right(egui::Align::Center),
+                            let t = i18n::strings(&self.prefs.language);
+                            let hint = match ask_queue.len() {
+                                0 => t.chat_hint.to_string(),
+                                1 => t.chat_hint_agent_ask.to_string(),
+                                n => {
+                                    let title = self
+                                        .blocked_ask_agent()
+                                        .map(agent_display_title)
+                                        .unwrap_or_default();
+                                    t.chat_hint_agent_ask_many
+                                        .replace("{agent}", &title)
+                                        .replace("{n}", &n.to_string())
+                                }
+                            };
+                            let show_stop = self.chat_pending
+                                && (room_mode || self.chat_inference_id.is_some());
+                            let item_gap = ui.spacing().item_spacing.x;
+                            let send_w = send_button_reserved_width(ui, &t);
+                            let stop_w = if show_stop {
+                                stop_button_reserved_width(ui, &t)
+                            } else {
+                                0.0
+                            };
+
+                            let mut attach_from_menu = false;
+                            let mut attach_document_from_menu = false;
+                            let mut reuse_last_image = false;
+                            let mut send_clicked = false;
+                            let mut input_response: Option<egui::Response> = None;
+
+                            let mut run_attach_menu = |ui: &mut egui::Ui| {
+                                icons::attach_menu(ui, "chat_attach", t.chat_attach_image, |ui| {
+                                    if self.last_session_image.is_some()
+                                        && ui.button(t.chat_last_session_image).clicked()
+                                    {
+                                        reuse_last_image = true;
+                                    }
+                                    if ui.button(t.chat_attach_image).clicked() {
+                                        attach_from_menu = true;
+                                    }
+                                    if ui.button(t.chat_attach_document).clicked() {
+                                        attach_document_from_menu = true;
+                                    }
+                                });
+                            };
+
+                            let row_w = ui.available_width();
+                            let input_h = ui.spacing().interact_size.y;
+                            let field_w = composer_field_width(
+                                row_w,
+                                send_w,
+                                icons::ATTACH_BTN_W,
+                                stop_w,
+                                item_gap,
+                                show_stop,
+                            );
+
+                            ui.allocate_ui_with_layout(
+                                egui::vec2(row_w, input_h),
+                                egui::Layout::right_to_left(egui::Align::Center),
                                 |ui| {
-                                    let t = i18n::strings(&self.prefs.language);
-                                    let hint = match ask_queue.len() {
-                                        0 => t.chat_hint.to_string(),
-                                        1 => t.chat_hint_agent_ask.to_string(),
-                                        n => {
-                                            let title = self
-                                                .blocked_ask_agent()
-                                                .map(agent_display_title)
-                                                .unwrap_or_default();
-                                            t.chat_hint_agent_ask_many
-                                                .replace("{agent}", &title)
-                                                .replace("{n}", &n.to_string())
-                                        }
-                                    };
-                                    let mut attach_from_menu = false;
-                                    let mut attach_document_from_menu = false;
-                                    let mut reuse_last_image = false;
-                                    icons::attach_menu(ui, "chat_attach", t.chat_attach_image, |ui| {
-                                        if self.last_session_image.is_some()
-                                            && ui.button(t.chat_last_session_image).clicked()
-                                        {
-                                            reuse_last_image = true;
-                                        }
-                                        if ui.button(t.chat_attach_image).clicked() {
-                                            attach_from_menu = true;
-                                        }
-                                        if ui.button(t.chat_attach_document).clicked() {
-                                            attach_document_from_menu = true;
-                                        }
-                                    });
-                                    if attach_from_menu {
-                                        if let Some(path) = os_open::pick_os_file(
-                                            t.chat_attach_image,
-                                            &[("Images", &["png", "jpg", "jpeg", "webp"])],
-                                            os_open::user_downloads_dir().as_deref(),
-                                        ) {
-                                            self.queue_chat_image(path.to_string_lossy().into_owned());
-                                        }
-                                    } else if attach_document_from_menu {
-                                        if let Some(path) = os_open::pick_os_file(
-                                            t.chat_attach_document,
-                                            &[(
-                                                "Documents",
-                                                aos_proto::chat_document::CHAT_DOCUMENT_EXTENSIONS,
-                                            )],
-                                            os_open::user_downloads_dir().as_deref(),
-                                        ) {
-                                            self.queue_chat_document(
-                                                path.to_string_lossy().into_owned(),
-                                            );
-                                        }
-                                    } else if reuse_last_image {
-                                        if let Some(last) = self.last_session_image.clone() {
-                                            self.queue_chat_image(last);
-                                        }
-                                    }
-                                    let r = ui.add(
-                                        egui::TextEdit::singleline(&mut self.input)
-                                            .id_salt("chat_input")
-                                            .desired_width(ui.available_width() - 90.0)
-                                            .hint_text(hint),
-                                    );
-                                    if self.chat_refocus {
-                                        r.request_focus();
-                                        self.chat_refocus = false;
-                                    }
-                                    let send_btn = ui.button("Envoyer").on_hover_text(t.tip_send);
-                                    if self.chat_pending {
+                                    if show_stop {
                                         if room_mode {
-                                            if ui.button(t.chat_stop).clicked() {
+                                            if ui
+                                                .add_sized(
+                                                    egui::vec2(stop_w, input_h),
+                                                    egui::Button::new(t.chat_stop),
+                                                )
+                                                .clicked()
+                                            {
                                                 if let Some(sid) = self.active_session.clone() {
-                                                    let _ = self.cmd_tx.send(Cmd::RoomTurnCancel {
-                                                        session_id: sid,
-                                                    });
+                                                    let _ = self.cmd_tx.send(
+                                                        Cmd::RoomTurnCancel {
+                                                            session_id: sid,
+                                                        },
+                                                    );
                                                 }
                                             }
                                         } else if let Some(id) = self.chat_inference_id {
-                                            if ui.button(t.chat_stop).clicked() {
+                                            if ui
+                                                .add_sized(
+                                                    egui::vec2(stop_w, input_h),
+                                                    egui::Button::new(t.chat_stop),
+                                                )
+                                                .clicked()
+                                            {
                                                 if let Some(sid) = self.active_session.clone() {
                                                     let _ = self.cmd_tx.send(Cmd::ChatCancel {
                                                         inference_id: id,
@@ -5332,16 +6138,76 @@ impl UiApp {
                                             }
                                         }
                                     }
-                                    let send = send_btn.clicked()
-                                        || (r.lost_focus()
-                                            && ui.input(|i| i.key_pressed(egui::Key::Enter)));
-                                    if send {
-                                        self.send_chat();
-                                        self.chat_refocus = true;
-                                    }
-                                    r
+                                    let send_btn = ui
+                                        .add_sized(
+                                            egui::vec2(send_w, input_h),
+                                            egui::Button::new(t.agent_send),
+                                        )
+                                        .on_hover_text(t.tip_send);
+                                    send_clicked |= send_btn.clicked();
+
+                                    ui.allocate_ui_with_layout(
+                                        egui::vec2(icons::ATTACH_BTN_W, input_h),
+                                        egui::Layout::left_to_right(egui::Align::Center),
+                                        |ui| {
+                                            run_attach_menu(ui);
+                                        },
+                                    );
+
+                                    ui.set_width(field_w);
+                                    let r = ui.add(
+                                        egui::TextEdit::singleline(&mut self.input)
+                                            .id_salt("chat_input")
+                                            .desired_width(field_w)
+                                            .hint_text(&hint),
+                                    );
+                                    input_response = Some(r);
                                 },
                             );
+
+                            if attach_from_menu {
+                                if let Some(path) = os_open::pick_os_file(
+                                    t.chat_attach_image,
+                                    &[("Images", &["png", "jpg", "jpeg", "webp"])],
+                                    os_open::user_downloads_dir().as_deref(),
+                                ) {
+                                    self.queue_chat_image(path.to_string_lossy().into_owned());
+                                }
+                            } else if attach_document_from_menu {
+                                if let Some(path) = os_open::pick_os_file(
+                                    t.chat_attach_document,
+                                    &[(
+                                        "Documents",
+                                        aos_proto::chat_document::CHAT_DOCUMENT_EXTENSIONS,
+                                    )],
+                                    os_open::user_downloads_dir().as_deref(),
+                                ) {
+                                    self.queue_chat_document(
+                                        path.to_string_lossy().into_owned(),
+                                    );
+                                }
+                            } else if reuse_last_image {
+                                if let Some(last) = self.last_session_image.clone() {
+                                    self.queue_chat_image(last);
+                                }
+                            }
+
+                            if let Some(r) = input_response {
+                                if self.chat_refocus {
+                                    r.request_focus();
+                                    self.chat_refocus = false;
+                                }
+                                let send = send_clicked
+                                    || (r.lost_focus()
+                                        && ui.input(|i| i.key_pressed(egui::Key::Enter)));
+                                if send {
+                                    self.send_chat();
+                                    chat_sent_this_frame = true;
+                                    self.chat_refocus = true;
+                                }
+                            }
+
+                            let composer_input_rect = ui.min_rect();
                             if !self.chat_pending_images.is_empty()
                                 || !self.chat_pending_documents.is_empty()
                             {
@@ -5375,10 +6241,10 @@ impl UiApp {
                                         .replace("{agent}", &title),
                                 );
                             }
-                            input_row
+                            composer_input_rect
                         },
                     );
-                    let input_rect = input_row.response.rect;
+                    let input_rect = input_row.inner;
 
                     // Popup au-dessus de l'input, en overlay sur le chat (pas sous le cadre)
                     if !mention_hits.is_empty() {
@@ -5416,8 +6282,10 @@ impl UiApp {
                                     });
                             });
                         if let Some(text) = picked {
-                            self.input = text;
-                            self.chat_refocus = true;
+                            if !chat_sent_this_frame {
+                                self.input = text;
+                                self.chat_refocus = true;
+                            }
                         }
                     } else if !completions.is_empty() {
                         let t = i18n::strings(&self.prefs.language);
@@ -5458,8 +6326,10 @@ impl UiApp {
                                     });
                             });
                         if let Some(text) = picked {
-                            self.input = text;
-                            self.chat_refocus = true;
+                            if !chat_sent_this_frame {
+                                self.input = text;
+                                self.chat_refocus = true;
+                            }
                         }
                     }
                 },
@@ -5623,6 +6493,36 @@ impl UiApp {
         }
         if let Some((id, done)) = actions.complete {
             let _ = self.cmd_tx.send(Cmd::TasksComplete { id, done });
+        }
+    }
+
+    fn ui_library(&mut self, ui: &mut egui::Ui) {
+        let t = i18n::strings(&self.prefs.language);
+        let g = guide::strings(&self.prefs.language);
+        ui.horizontal(|ui| {
+            ui.strong(t.tab_library);
+            if guide::tab_help_button(ui, g.help_tooltip) {
+                self.guide.open_topic(guide::GuideTopic::Library);
+            }
+        });
+        let actions = library_panel::render(ui, &t, &self.library);
+        if actions.add_clicked {
+            let filters = [(
+                t.tab_library,
+                aos_proto::chat_document::CHAT_DOCUMENT_EXTENSIONS,
+            )];
+            if let Some(path) = os_open::pick_os_file(
+                t.tab_library,
+                &filters,
+                os_open::user_downloads_dir().as_deref(),
+            ) {
+                let _ = self.cmd_tx.send(Cmd::UserLibraryAdd {
+                    path: path.to_string_lossy().into_owned(),
+                });
+            }
+        }
+        if let Some(id) = actions.remove_id {
+            let _ = self.cmd_tx.send(Cmd::UserLibraryRemove { id });
         }
     }
 
@@ -6300,6 +7200,7 @@ impl UiApp {
                                             origin: "ask-reply".into(),
                                         }],
                                         speaker_id: None,
+                                        speaker_name: None,
                                     });
                                 }
                             }
@@ -6957,6 +7858,8 @@ impl UiApp {
                                 let _ = self.cmd_tx.send(Cmd::ScheduleCreate {
                                     goal: self.schedule_goal.trim().to_string(),
                                     interval_secs: self.schedule_interval_secs.max(30),
+                                    next_fire_ms: None,
+                                    display_title: None,
                                 });
                                 self.schedule_goal.clear();
                             }
@@ -7727,5 +8630,121 @@ mod delegate_tests {
             ASPECT,
         )
         .is_none());
+    }
+}
+
+#[cfg(test)]
+mod layout_tests {
+    use super::*;
+
+    #[test]
+    fn chat_sessions_split_never_exceeds_total() {
+        for full_w in [250.0, 400.0, 900.0, 1280.0] {
+            let gap = 8.0;
+            let split = chat_sessions_split(full_w, gap, false);
+            assert!(
+                split.side_w + gap + split.chat_w <= full_w + 0.01,
+                "full_w={full_w} side={} chat={}",
+                split.side_w,
+                split.chat_w
+            );
+        }
+    }
+
+    #[test]
+    fn chat_canvas_side_by_side_widths_fit() {
+        let gap = 8.0;
+        let layout = chat_canvas_layout(500.0, 400.0, gap);
+        match layout {
+            ChatCanvasLayout::SideBySide {
+                transcript_w,
+                canvas_w,
+            } => {
+                assert!(transcript_w + gap + canvas_w <= 500.0 + 0.01);
+            }
+            ChatCanvasLayout::Stacked { .. } => panic!("expected side-by-side at 500px"),
+        }
+    }
+
+    #[test]
+    fn session_toggle_reserve_fits_fr_canvas_label() {
+        let fr = i18n::strings("fr");
+        let w = session_toggle_reserve_width(&fr);
+        assert!(
+            w >= estimate_label_chip_w(fr.session_toggle_canvas) + 40.0,
+            "reserve {w} should fit full Canvas label"
+        );
+    }
+
+    #[test]
+    fn chat_canvas_stacks_before_side_by_side_threshold() {
+        let gap = 8.0;
+        let layout = chat_canvas_layout(300.0, 400.0, gap);
+        assert!(matches!(layout, ChatCanvasLayout::Stacked { .. }));
+    }
+
+    #[test]
+    fn composer_field_width_reserves_fr_envoyer() {
+        let fr = i18n::strings("fr");
+        let send_w = estimate_composer_buttons_w(fr.agent_send, false, "");
+        let field = composer_field_width(420.0, send_w, icons::ATTACH_BTN_W, 0.0, 4.0, false);
+        assert!(field > 80.0);
+        assert!(send_w >= estimate_composer_buttons_w("Envoyer", false, ""));
+    }
+
+    #[test]
+    fn composer_field_width_at_900_central_pane() {
+        let fr = i18n::strings("fr");
+        let send_w = estimate_composer_buttons_w(fr.agent_send, false, "");
+        let stop_w = estimate_composer_buttons_w("Stop", false, "");
+        let field =
+            composer_field_width(580.0, send_w, icons::ATTACH_BTN_W, stop_w, 4.0, true);
+        assert!(field > 200.0);
+        assert!(
+            field + send_w + stop_w + icons::ATTACH_BTN_W + 12.0 <= 580.0 + 0.01
+        );
+    }
+
+    #[test]
+    fn composer_reserve_height_is_single_row() {
+        let h = chat_composer_reserve_height(400.0, 0, 0, 0, false);
+        assert!((h - COMPOSER_INPUT_ROW_H).abs() < 0.01);
+    }
+
+    #[test]
+    fn composer_row_reserved_fits_fr_labels() {
+        let fr = i18n::strings("fr");
+        let reserved = composer_row_reserved_width(&fr, true);
+        assert!(reserved > icons::ATTACH_BTN_W + 80.0);
+    }
+
+    #[test]
+    fn composer_wraps_when_too_narrow() {
+        let buttons = estimate_composer_buttons_w("Envoyer", true, "Stop");
+        assert!(chat_composer_wraps(280.0, icons::ATTACH_BTN_W, buttons));
+        assert!(!chat_composer_wraps(900.0, icons::ATTACH_BTN_W, buttons));
+    }
+
+    #[test]
+    fn preview_min_width_fits_fr_composer_and_toggles() {
+        let fr = i18n::strings("fr");
+        let min_w = preview_min_inner_width(&fr);
+        let composer = composer_row_reserved_width(&fr, true) + COMPOSER_MIN_INPUT_W;
+        assert!(min_w >= LEFT_NAV_W + CHAT_SIDE_MIN_W + composer);
+        assert!(min_w >= LEFT_NAV_W + session_toggle_reserve_width(&fr) + 200.0);
+    }
+
+    #[test]
+    fn bubble_max_width_never_exceeds_available() {
+        for w in [80.0, 150.0, 400.0] {
+            for kind in [
+                ChatBubbleKind::User,
+                ChatBubbleKind::Assistant,
+                ChatBubbleKind::System,
+            ] {
+                let max_w = chat_bubble_max_width(w, kind);
+                assert!(max_w <= w + 0.01, "kind={kind:?} avail={w} max={max_w}");
+            }
+        }
     }
 }

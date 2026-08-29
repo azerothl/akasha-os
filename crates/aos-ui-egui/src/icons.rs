@@ -6,6 +6,9 @@ use eframe::egui::{
 
 const BTN: f32 = 18.0;
 
+/// Width reserved for the chat attach control (icon + spacing).
+pub const ATTACH_BTN_W: f32 = BTN + 4.0;
+
 fn hover_color(ui: &Ui, response: &Response) -> Color32 {
     if response.hovered() {
         ui.visuals().strong_text_color()

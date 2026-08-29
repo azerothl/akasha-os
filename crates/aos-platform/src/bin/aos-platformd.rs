@@ -37,6 +37,20 @@ async fn main() {
         }
     }
 
+    // User document library — re-index manifest on boot.
+    {
+        let s = sub.clone();
+        let memory_dir = config.memory_dir.clone();
+        match tokio::task::spawn_blocking(move || {
+            aos_platform::user_docs::ensure_indexed(&s, std::path::Path::new(&memory_dir))
+        })
+        .await
+        {
+            Ok(n) => eprintln!("[aos-platformd] user library : {n} chunks indexés"),
+            Err(e) => eprintln!("[aos-platformd] user library panic : {e}"),
+        }
+    }
+
     let mut svc = BusService::new("platformd");
 
     // Note P4.4 : `audit.append` is served by `aos-auditd`.
@@ -408,7 +422,8 @@ async fn main() {
                             .as_ref()
                             .map(|id| format!("session:{id}"));
                         let product_k = if req.product_k == 0 { 4 } else { req.product_k };
-                        let (session_hits, user_hits, product_hits) = {
+                        let user_doc_k = if req.user_doc_k == 0 { 3 } else { req.user_doc_k };
+                        let (session_hits, user_hits, product_hits, user_doc_hits) = {
                             let mem = s.mem.lock().unwrap();
                             let session_hits = if let Some(ref ns) = sess_ns {
                                 mem.episodic_query(&emb, req.k, Some(ns))
@@ -419,13 +434,23 @@ async fn main() {
                                 mem.context_user_hits(&emb, req.k);
                             let product_hits =
                                 aos_platform::product_rag::recall(&mem, &emb, product_k);
-                            (session_hits, user_hits, product_hits)
+                            let user_doc_hits =
+                                aos_platform::user_docs::recall(&mem, &emb, user_doc_k);
+                            (session_hits, user_hits, product_hits, user_doc_hits)
                         };
                         let mut prompt_block = String::new();
                         let product_block =
                             aos_platform::product_rag::format_prompt_block(&product_hits);
                         if !product_block.is_empty() {
                             prompt_block.push_str(&product_block);
+                        }
+                        let user_doc_block =
+                            aos_platform::user_docs::format_prompt_block(&user_doc_hits);
+                        if !user_doc_block.is_empty() {
+                            if !prompt_block.is_empty() {
+                                prompt_block.push('\n');
+                            }
+                            prompt_block.push_str(&user_doc_block);
                         }
                         if !session_hits.is_empty() {
                             prompt_block.push_str("Mémoire session:\n");
@@ -455,10 +480,132 @@ async fn main() {
                                     session_hits,
                                     user_hits,
                                     product_hits,
+                                    user_doc_hits,
                                     prompt_block,
                                 },
                             )
                             .await;
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+
+    // --- user.library.* (personal document library) ---
+    {
+        let memory_dir = config.memory_dir.clone();
+        svc.on("user.library.list", move |ctx| {
+            let memory_dir = memory_dir.clone();
+            async move {
+                let docs = aos_platform::user_docs::list_docs(std::path::Path::new(&memory_dir));
+                let _ = ctx
+                    .respond(
+                        aos_ipc::msg::Status::Ok,
+                        &UserLibraryListResponse { docs },
+                    )
+                    .await;
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        let memory_dir = config.memory_dir.clone();
+        svc.on("user.library.add", move |ctx| {
+            let s = s.clone();
+            let memory_dir = memory_dir.clone();
+            async move {
+                match ctx.payload::<UserLibraryAddRequest>() {
+                    Ok(req) => {
+                        let path = req.path.clone();
+                        let mem_dir = memory_dir.clone();
+                        let result = tokio::task::spawn_blocking(move || {
+                            aos_platform::user_docs::add_document(
+                                &s,
+                                std::path::Path::new(&mem_dir),
+                                &path,
+                            )
+                        })
+                        .await;
+                        match result {
+                            Ok(Ok((doc, chunks))) => {
+                                let _ = ctx
+                                    .respond(
+                                        aos_ipc::msg::Status::Ok,
+                                        &UserLibraryAddResponse { doc, chunks },
+                                    )
+                                    .await;
+                            }
+                            Ok(Err(e)) => {
+                                let _ = ctx
+                                    .respond_error(aos_ipc::msg::Status::BadRequest, &e)
+                                    .await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::InternalError,
+                                        &format!("user.library.add: {e}"),
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        let memory_dir = config.memory_dir.clone();
+        svc.on("user.library.remove", move |ctx| {
+            let s = s.clone();
+            let memory_dir = memory_dir.clone();
+            async move {
+                match ctx.payload::<UserLibraryRemoveRequest>() {
+                    Ok(req) => {
+                        let id = req.id.clone();
+                        let mem_dir = memory_dir.clone();
+                        let result = tokio::task::spawn_blocking(move || {
+                            aos_platform::user_docs::remove_document(
+                                &s,
+                                std::path::Path::new(&mem_dir),
+                                &id,
+                            )
+                        })
+                        .await;
+                        match result {
+                            Ok(Ok(())) => {
+                                let _ = ctx
+                                    .respond(
+                                        aos_ipc::msg::Status::Ok,
+                                        &UserLibraryRemoveResponse { ok: true },
+                                    )
+                                    .await;
+                            }
+                            Ok(Err(e)) => {
+                                let _ = ctx
+                                    .respond_error(aos_ipc::msg::Status::BadRequest, &e)
+                                    .await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::InternalError,
+                                        &format!("user.library.remove: {e}"),
+                                    )
+                                    .await;
+                            }
+                        }
                     }
                     Err(_) => {
                         let _ = ctx

@@ -40,33 +40,28 @@ pub fn render_skill_offer_card(
         .show(ui, |ui| {
             ui.label(egui::RichText::new(title).strong());
             ui.add_space(4.0);
-            ui.label(egui::RichText::new(t.skill_offer_mute).weak());
-            ui.add_space(8.0);
-            match state.as_str() {
-                "pending" => {
-                    ui.horizontal(|ui| {
-                        if ui.button(t.skill_offer_create).clicked() {
-                            let _ = cmd_tx.send(Cmd::SkillPassCreate {
-                                pattern_id: pattern_id.clone(),
-                            });
-                        }
-                        if ui.button(t.skill_offer_later).clicked() {
-                            *state = "dismissed".into();
-                            let _ = cmd_tx.send(Cmd::SkillPassDismiss {
-                                pattern_id: pattern_id.clone(),
-                            });
-                        }
-                    });
-                }
-                "created" => {
-                    ui.label(egui::RichText::new(t.skill_offer_created).weak());
-                }
-                "dismissed" => {
-                    ui.label(egui::RichText::new(t.skill_offer_dismissed).weak());
-                }
-                other => {
-                    ui.label(format!("{other}"));
-                }
+            let mute = match state.as_str() {
+                "pending" => t.skill_offer_mute,
+                "created" => t.skill_offer_created,
+                "dismissed" => t.skill_offer_dismissed,
+                other => other,
+            };
+            ui.label(egui::RichText::new(mute).weak());
+            if state == "pending" {
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    if ui.button(t.skill_offer_create).clicked() {
+                        let _ = cmd_tx.send(Cmd::SkillPassCreate {
+                            pattern_id: pattern_id.clone(),
+                        });
+                    }
+                    if ui.button(t.skill_offer_later).clicked() {
+                        *state = "dismissed".into();
+                        let _ = cmd_tx.send(Cmd::SkillPassDismiss {
+                            pattern_id: pattern_id.clone(),
+                        });
+                    }
+                });
             }
         });
     true
@@ -97,6 +92,16 @@ mod tests {
     fn label_for_lang_respects_pref() {
         assert_eq!(label_for_lang("weather", "météo", "en"), "weather");
         assert_eq!(label_for_lang("weather", "météo", "fr"), "météo");
+    }
+
+    #[test]
+    fn resolved_state_copy_en_fr() {
+        let en = i18n::strings("en");
+        let fr = i18n::strings("fr");
+        assert_eq!(en.skill_offer_created, "Created");
+        assert_eq!(fr.skill_offer_created, "Créée");
+        assert_eq!(en.skill_offer_dismissed, "Later");
+        assert_eq!(fr.skill_offer_dismissed, "Plus tard");
     }
 
     #[test]
