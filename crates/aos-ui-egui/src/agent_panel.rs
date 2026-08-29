@@ -108,6 +108,236 @@ fn strip_think_tags(text: &str) -> String {
     rest.trim().to_string()
 }
 
+/// Retire jetons de contrôle modèle (`<channel>`, etc.) ; garde la prose après le dernier canal.
+fn strip_chat_control_tokens(text: &str) -> String {
+    let mut out = text.to_string();
+    let lower = out.to_ascii_lowercase();
+    if let Some(i) = lower.rfind("<channel>") {
+        out = out[i + "<channel>".len()..].trim_start().to_string();
+    }
+    for token in [
+        "<channel>",
+        "</channel>",
+        "<|channel|>",
+        "<|im_start|>",
+        "<|im_end|>",
+    ] {
+        loop {
+            let l = out.to_ascii_lowercase();
+            let Some(i) = l.find(token) else {
+                break;
+            };
+            out = format!("{}{}", &out[..i], &out[i + token.len()..]);
+        }
+    }
+    out.trim().to_string()
+}
+
+fn find_canvas_tool_leak(lower: &str) -> Option<usize> {
+    let mut search_from = 0;
+    while let Some(i) = lower[search_from..].find("canvas.") {
+        let pos = search_from + i;
+        let rest = &lower[pos + "canvas.".len()..];
+        if rest
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_lowercase())
+        {
+            return Some(pos);
+        }
+        search_from = pos + 1;
+    }
+    None
+}
+
+const SELF_NARRATION: &[&str] = &[
+    "je vais répondre",
+    "je vais expliquer",
+    "je vais décrire",
+    "je vais présenter",
+    "je vais donc",
+    "i'm going to answer",
+    "i am going to answer",
+    "i will answer",
+    "i will respond",
+    "i will explain",
+    "i'll answer",
+    "i'll explain",
+    "let me explain",
+    "allow me to explain",
+];
+
+fn self_narration_boundary(lower: &str, pos: usize) -> bool {
+    if pos == 0 {
+        return true;
+    }
+    let before = lower[..pos].trim_end();
+    before.is_empty()
+        || before.ends_with('\n')
+        || before.ends_with('.')
+        || before.ends_with('!')
+        || before.ends_with('?')
+}
+
+fn find_self_narration_cut(lower: &str) -> Option<usize> {
+    let mut earliest = None::<usize>;
+    for pat in SELF_NARRATION {
+        let mut search = 0;
+        while let Some(rel) = lower[search..].find(pat) {
+            let pos = search + rel;
+            if self_narration_boundary(lower, pos) {
+                earliest = Some(earliest.map_or(pos, |e| e.min(pos)));
+            }
+            search = pos + 1;
+        }
+    }
+    earliest
+}
+
+fn chat_self_narration_leak(s: &str) -> bool {
+    let lower = s.to_ascii_lowercase();
+    SELF_NARRATION.iter().any(|p| lower.contains(p))
+}
+
+fn chat_sentence_is_meta_leak(s: &str) -> bool {
+    let t = s.trim();
+    if t.is_empty() {
+        return true;
+    }
+    let lower = t.to_ascii_lowercase();
+    chat_self_narration_leak(t) || chat_meta_substring_pos(&lower).is_some()
+}
+
+fn chat_meta_substring_pos(lower: &str) -> Option<usize> {
+    const FORBIDDEN: &[&str] = &[
+        "media.image.generate",
+        "media.image.",
+        "@agent-",
+        "agent.spawn",
+        "canvas.stroke",
+        "canvas.rect",
+        "canvas.ellipse",
+        "canvas.undo",
+        "canvas.get",
+        "canvas.export",
+        "module.scaffold",
+        "tool.invoke",
+        "tool invocation loop",
+        "established rules",
+        "established rules for the canvas tool",
+        "no json is needed",
+        "no json needed",
+        "since this is a general question",
+        "i will provide a concise",
+        "<channel>",
+    ];
+    let mut earliest = None::<usize>;
+    for f in FORBIDDEN {
+        if let Some(i) = lower.find(f) {
+            earliest = Some(earliest.map_or(i, |e| e.min(i)));
+        }
+    }
+    if let Some(i) = find_canvas_tool_leak(lower) {
+        earliest = Some(earliest.map_or(i, |e| e.min(i)));
+    }
+    for word in ["json", "rules", "règles"] {
+        if let Some(i) = lower.find(word) {
+            earliest = Some(earliest.map_or(i, |e| e.min(i)));
+        }
+    }
+    const CHAIN_OF_THOUGHT: &[&str] = &[
+        "orientant l'utilisateur",
+        "orienting the user",
+        "chain-of-thought",
+        "thinking process",
+        "selon les règles",
+        "conformément aux règles",
+        "conformément aux consignes",
+    ];
+    for p in CHAIN_OF_THOUGHT {
+        if let Some(i) = lower.find(p) {
+            earliest = Some(earliest.map_or(i, |e| e.min(i)));
+        }
+    }
+    earliest
+}
+
+/// Truncate before the first forbidden meta substring (including mid-stream tokens).
+fn truncate_before_chat_meta_leak(text: &str) -> String {
+    let lower = text.to_ascii_lowercase();
+    let mut cut = chat_meta_substring_pos(&lower).unwrap_or(text.len());
+    if let Some(i) = find_self_narration_cut(&lower) {
+        cut = cut.min(i);
+    }
+    text[..cut].trim_end().to_string()
+}
+
+fn normalize_para_key(s: &str) -> String {
+    s.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_ascii_lowercase()
+}
+
+/// Collapse consecutive duplicate paragraphs (model often repeats the same block verbatim).
+fn collapse_consecutive_duplicate_paragraphs(text: &str) -> String {
+    let mut out: Vec<String> = Vec::new();
+    let mut prev_key: Option<String> = None;
+    for para in text.split("\n\n") {
+        let para = para.trim();
+        if para.is_empty() {
+            continue;
+        }
+        let key = normalize_para_key(para);
+        if prev_key.as_deref() == Some(key.as_str()) {
+            continue;
+        }
+        out.push(para.to_string());
+        prev_key = Some(key);
+    }
+    out.join("\n\n")
+}
+
+/// Retire les fuites meta (identifiants outils, JSON, rules, raisonnement à voix haute).
+pub fn sanitize_chat_visible_bubble(text: &str) -> String {
+    let text = strip_chat_control_tokens(text.trim());
+    let text = truncate_before_chat_meta_leak(&text);
+    if text.is_empty() {
+        return String::new();
+    }
+    let mut kept_paras = Vec::new();
+    for para in text.split("\n\n") {
+        let para = para.trim();
+        if para.is_empty() {
+            continue;
+        }
+        let mut kept_sentences = Vec::new();
+        for line in para.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            let mut buf = String::new();
+            for ch in line.chars() {
+                buf.push(ch);
+                if matches!(ch, '.' | '!' | '?') {
+                    if !chat_sentence_is_meta_leak(&buf) {
+                        kept_sentences.push(buf.trim().to_string());
+                    }
+                    buf.clear();
+                }
+            }
+            if !buf.trim().is_empty() && !chat_sentence_is_meta_leak(&buf) {
+                kept_sentences.push(buf.trim().to_string());
+            }
+        }
+        if !kept_sentences.is_empty() {
+            kept_paras.push(kept_sentences.join(" "));
+        }
+    }
+    collapse_consecutive_duplicate_paragraphs(&kept_paras.join("\n\n")).trim().to_string()
+}
+
 /// Extrait la prose hors blocs JSON / TOOL: / DSML tool_call.
 pub fn prose_without_json(response: &str) -> String {
     let mut out = strip_think_tags(response);
@@ -231,6 +461,16 @@ fn format_action_as_markdown(action: &aos_agent::actions::AgentAction, outer_pro
     } else {
         joined
     }
+}
+
+/// Affichage chat final : prose lisible sans fuites meta internes.
+pub fn format_chat_assistant_display(raw: &str) -> String {
+    sanitize_chat_visible_bubble(&format_assistant_display(raw))
+}
+
+/// Pendant le stream chat : évite JSON/outils bruts et fuites meta.
+pub fn format_chat_streaming_preview(raw: &str) -> String {
+    sanitize_chat_visible_bubble(&format_streaming_preview(raw))
 }
 
 /// Pendant le stream : évite d'afficher l'objet JSON brut incomplet.
@@ -1017,5 +1257,117 @@ mod tests {
     fn plain_markdown_passthrough() {
         let md = "## Hello\n\nWorld";
         assert_eq!(format_assistant_display(md), md);
+    }
+
+    #[test]
+    fn canvas_ui_answer_strips_tool_ids_and_meta() {
+        let raw = r#"Le Canvas est un panneau vectoriel pour dessiner au trait.
+
+Selon les established rules for the Canvas tool, media.image.generate is used when closed. No JSON is needed as there is no spawn.
+
+Le canvas sert aux esquisses vectorielles."#;
+        let out = format_chat_assistant_display(raw);
+        let lower = out.to_ascii_lowercase();
+        assert!(!lower.contains("media.image.generate"), "{out}");
+        assert!(!out.contains("@agent-"), "{out}");
+        assert!(!lower.contains("json"), "{out}");
+        assert!(!lower.contains("rules"), "{out}");
+        assert!(out.contains("vectoriel"), "{out}");
+    }
+
+    #[test]
+    fn chat_streaming_preview_strips_trailing_meta() {
+        let raw = r#"Le Canvas permet des esquisses vectorielles. Je vais donc répondre en orientant l'utilisateur vers media.image.generate. No JSON is needed."#;
+        let out = format_chat_streaming_preview(raw);
+        let lower = out.to_ascii_lowercase();
+        assert!(!lower.contains("media.image.generate"), "{out}");
+        assert!(!lower.contains("json"), "{out}");
+        assert!(!lower.contains("rules"), "{out}");
+        assert!(out.contains("vectoriel"), "{out}");
+    }
+
+    #[test]
+    fn streaming_truncates_mid_token_before_tool_id() {
+        let raw = "Le Canvas est un panneau vectoriel. Selon media.image.generate";
+        let out = format_chat_streaming_preview(raw);
+        assert!(!out.to_ascii_lowercase().contains("media.image"), "{out}");
+        assert!(out.contains("vectoriel"), "{out}");
+    }
+
+    #[test]
+    fn streaming_truncates_before_rules_and_no_json() {
+        let raw =
+            "Bonne réponse. established rules for the Canvas tool. No JSON is needed as there";
+        let out = format_chat_streaming_preview(raw);
+        let lower = out.to_ascii_lowercase();
+        assert!(!lower.contains("rules"), "{out}");
+        assert!(!lower.contains("json"), "{out}");
+        assert!(out.contains("Bonne réponse"), "{out}");
+    }
+
+    #[test]
+    fn streaming_truncates_chain_of_thought_before_it_streams() {
+        let raw = "Le Canvas sert au trait vectoriel. Je vais donc répondre en orientant";
+        let out = format_chat_streaming_preview(raw);
+        assert!(!out.to_ascii_lowercase().contains("je vais donc"), "{out}");
+        assert!(out.contains("vectoriel"), "{out}");
+    }
+
+    #[test]
+    fn session26_canvas_leak_keeps_only_human_answer() {
+        let raw = r#"l'agent va ouvrir le panneau s'il est fermé et utiliser des fonctions comme `canvas.stroke` ou `canvas.rect` … (`media.image.generate`) pour créer une image.
+Since this is a general question about how it works, I will provide a concise, natural language explanation based on the established rules for the Canvas tool. No JSON is needed as there is no tool invocation loop in this chat session.<channel>Le Canvas est un outil qui permet le dessin vectoriel. Tu peux y dessiner au trait lorsque le panneau est ouvert."#;
+        let out = format_chat_assistant_display(raw);
+        let lower = out.to_ascii_lowercase();
+        assert!(!out.contains("canvas.stroke"), "{out}");
+        assert!(!out.contains("canvas.rect"), "{out}");
+        assert!(!lower.contains("media.image.generate"), "{out}");
+        assert!(!lower.contains("json"), "{out}");
+        assert!(!lower.contains("rules"), "{out}");
+        assert!(!lower.contains("tool invocation loop"), "{out}");
+        assert!(!lower.contains("<channel>"), "{out}");
+        assert!(!lower.contains("Since this is"), "{out}");
+        assert!(out.contains("dessin vectoriel"), "{out}");
+    }
+
+    #[test]
+    fn session32_canvas_strips_trailing_french_planning() {
+        let raw = r#"Le Canvas est un panneau vectoriel où vous pouvez dessiner. Si vous voulez dessiner avec un marqueur spécifique, vous devez explicitement le mentionner (par exemple, "sur le canvas"). Si vous ne le mentionnez pas, le dessin sera généré comme une image.
+
+Je vais répondre de manière naturelle et concise, en expliquant le concept humain du Canvas."#;
+        let out = format_chat_assistant_display(raw);
+        let lower = out.to_ascii_lowercase();
+        assert!(out.contains("panneau vectoriel"), "{out}");
+        assert!(!lower.contains("je vais répondre"), "{out}");
+        assert!(!lower.contains("concept humain"), "{out}");
+        assert!(!lower.contains("let me explain"), "{out}");
+    }
+
+    #[test]
+    fn session32_streaming_truncates_before_planning_sentence() {
+        let raw = r#"Le Canvas est un panneau vectoriel où vous pouvez dessiner.
+
+Je vais répondre de manière naturelle"#;
+        let out = format_chat_streaming_preview(raw);
+        assert!(out.contains("panneau vectoriel"), "{out}");
+        assert!(!out.to_ascii_lowercase().contains("je vais répondre"), "{out}");
+    }
+
+    #[test]
+    fn session33_collapses_verbatim_duplicate_paragraph() {
+        let para = "Le Canvas est un panneau vectoriel où vous pouvez dessiner ou esquisser. Si vous le dessinez en utilisant un marqueur spécifique, les traits apparaissent sur ce panneau. Si vous le dessinez sans marqueur et que le panneau est fermé, l'agent utilisera un outil de génération d'images pour créer le dessin.";
+        let raw = format!("{para}\n\n{para}");
+        let out = format_chat_assistant_display(&raw);
+        assert_eq!(out, para, "{out}");
+        assert!(out.contains("outil de génération d'images"), "{out}");
+        assert_eq!(out.matches("panneau vectoriel").count(), 1, "{out}");
+    }
+
+    #[test]
+    fn collapse_keeps_distinct_consecutive_paragraphs() {
+        let raw = "Premier paragraphe.\n\nDeuxième paragraphe différent.";
+        let out = sanitize_chat_visible_bubble(raw);
+        assert!(out.contains("Premier"), "{out}");
+        assert!(out.contains("Deuxième"), "{out}");
     }
 }

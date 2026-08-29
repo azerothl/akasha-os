@@ -268,7 +268,10 @@ pub(crate) enum Cmd {
         content: String,
         attachments: Vec<ChatAttachment>,
     },
-    ChatCancel { inference_id: u64 },
+    ChatCancel {
+        inference_id: u64,
+        session_id: String,
+    },
     CatalogueRefresh,
     ModuleList,
     ModuleInstall {
@@ -296,7 +299,10 @@ pub(crate) enum Cmd {
 }
 
 pub(crate) enum Evt {
-    Delta(String),
+    Delta {
+        session_id: String,
+        text: String,
+    },
     Done {
         text: String,
         session_id: String,
@@ -436,8 +442,11 @@ pub(crate) enum Evt {
         models: Vec<String>,
     },
     AgentTrace(AgentTrace),
-    InferStarted { inference_id: u64 },
-    ChatCancelled,
+    InferStarted {
+        session_id: String,
+        inference_id: u64,
+    },
+    ChatCancelled { session_id: String },
     Catalogue(ModuleCatalogue),
     InstalledModules(Vec<ModuleInfo>),
     ModuleInstalled(String),
