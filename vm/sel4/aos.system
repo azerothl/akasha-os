@@ -1,6 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <system>
     <!-- Priorités : callee PPC strictement au-dessus du caller. -->
+    <memory_region name="fb_surface" size="0x200_000" page_size="0x200_000" />
+
+    <memory_region name="virtio_mmio" size="0x1000" phys_addr="0xa003000" />
+
+    <memory_region name="virtio_dma" size="0x1000" page_size="0x1000" />
+
+    <memory_region name="virtio_net_queue" size="0x2000" page_size="0x1000" />
+    <memory_region name="virtio_blk_queue" size="0x2000" page_size="0x1000" />
+    <memory_region name="virtio_in_queue" size="0x2000" page_size="0x1000" />
+
     <protection_domain name="capkd" priority="200" passive="true">
         <program_image path="capkd.elf" />
     </protection_domain>
@@ -16,6 +26,32 @@
         </protection_domain>
     </protection_domain>
 
+    <protection_domain name="dev" priority="125" stack_size="0x10000">
+        <program_image path="dev.elf" />
+        <map mr="fb_surface" vaddr="0x1000000" perms="rw" cached="true"
+             setvar_vaddr="fb_surface_vaddr" />
+        <setvar symbol="fb_surface_paddr" region_paddr="fb_surface" />
+
+        <map mr="virtio_mmio" vaddr="0x2000000" perms="rw" cached="false"
+             setvar_vaddr="virtio_mmio_vaddr" />
+
+        <map mr="virtio_dma" vaddr="0x4000000" perms="rw" cached="false"
+             setvar_vaddr="virtio_dma_vaddr" />
+        <setvar symbol="virtio_dma_paddr" region_paddr="virtio_dma" />
+
+        <map mr="virtio_net_queue" vaddr="0x3000000" perms="rw" cached="false"
+             setvar_vaddr="virtio_net_queue_vaddr" />
+        <setvar symbol="virtio_net_queue_paddr" region_paddr="virtio_net_queue" />
+
+        <map mr="virtio_blk_queue" vaddr="0x3002000" perms="rw" cached="false"
+             setvar_vaddr="virtio_blk_queue_vaddr" />
+        <setvar symbol="virtio_blk_queue_paddr" region_paddr="virtio_blk_queue" />
+
+        <map mr="virtio_in_queue" vaddr="0x3004000" perms="rw" cached="false"
+             setvar_vaddr="virtio_in_queue_vaddr" />
+        <setvar symbol="virtio_in_queue_paddr" region_paddr="virtio_in_queue" />
+    </protection_domain>
+
     <!-- gate → bus (intents), bus → capkd (proxy cap.*). Pas d'appel direct gate→capkd. -->
     <channel>
         <end pd="gate" id="0" pp="true" />
@@ -29,5 +65,10 @@
     <channel>
         <end pd="gate" id="1" />
         <end pd="auditd" id="0" />
+    </channel>
+
+    <channel>
+        <end pd="gate" id="2" pp="true" />
+        <end pd="dev" id="0" />
     </channel>
 </system>

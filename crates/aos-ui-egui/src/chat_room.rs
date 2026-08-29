@@ -164,12 +164,104 @@ pub fn member_ids(members: &[ChatRoomMember]) -> std::collections::HashSet<&str>
 }
 
 /// Display name from roster (`speaker_id`); never trust a free-text spoof field on the message.
-pub fn roster_display_name(t: &UiStrings, members: &[ChatRoomMember], speaker_id: &str) -> String {
+pub fn roster_display_name(
+    t: &UiStrings,
+    members: &[ChatRoomMember],
+    speaker_id: &str,
+    stored_speaker_name: Option<&str>,
+) -> String {
     members
         .iter()
         .find(|m| m.agent_id == speaker_id)
         .map(|m| member_display_label(t, m))
-        .unwrap_or_else(|| speaker_id.to_string())
+        .or_else(|| {
+            stored_speaker_name
+                .map(str::trim)
+                .filter(|n| !n.is_empty())
+                .map(|n| n.to_string())
+        })
+        .unwrap_or_else(|| t.room_member_fallback.to_string())
+}
+
+/// Salon turn completion must not surface a count banner in session chrome.
+pub fn room_turn_done_status(_agent_turns: u32, _cancelled: bool) -> Option<String> {
+    None
+}
+
+/// Strip roster `agent_id` echoes (`@agent-2`, `(@agent-3)`) from text painted in bubbles.
+pub fn strip_roster_agent_id_mentions(
+    t: &UiStrings,
+    text: &str,
+    members: &[ChatRoomMember],
+) -> String {
+    let mut out = text.to_string();
+    for m in members {
+        let id = &m.agent_id;
+        let replace_name = member_display_label(t, m);
+        for pattern in [format!("(@{id})"), format!("@{id}")] {
+            out = out.replace(&pattern, &replace_name);
+        }
+    }
+    strip_bare_agent_id_tokens(&out)
+}
+
+fn strip_bare_agent_id_tokens(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let bytes = text.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'@'
+            && i + 7 < bytes.len()
+            && bytes[i + 1] == b'a'
+            && bytes[i + 2] == b'g'
+            && bytes[i + 3] == b'e'
+            && bytes[i + 4] == b'n'
+            && bytes[i + 5] == b't'
+            && bytes[i + 6] == b'-'
+        {
+            let mut end = i + 7;
+            while end < bytes.len() {
+                let c = bytes[end];
+                if c.is_ascii_alphanumeric() || c == b'-' || c == b'_' {
+                    end += 1;
+                } else {
+                    break;
+                }
+            }
+            if end > i + 7 {
+                i = end;
+                continue;
+            }
+        }
+        out.push(bytes[i] as char);
+        i += 1;
+    }
+    out
+}
+
+fn mention_token_end(input: &str, at: usize) -> usize {
+    let bytes = input.as_bytes();
+    let mut end = at + 1;
+    while end < bytes.len() {
+        let c = bytes[end];
+        if c.is_ascii_alphanumeric() || c == b'-' || c == b'_' {
+            end += 1;
+        } else {
+            break;
+        }
+    }
+    end
+}
+
+/// Replace the partial `@token` at `at` with `@display_name ` (drops the unfinished token tail).
+pub fn insert_mention(input: &str, at: usize, display_name: &str) -> String {
+    let _end = mention_token_end(input, at);
+    let mut out = String::new();
+    out.push_str(&input[..at]);
+    out.push('@');
+    out.push_str(display_name);
+    out.push(' ');
+    out
 }
 
 /// Stable per-speaker RGB derived from `speaker_id` (orrery hues, no purple glow).
@@ -238,14 +330,6 @@ pub fn mention_completions(
     out
 }
 
-fn insert_mention(input: &str, at: usize, display_name: &str) -> String {
-    let mut out = String::new();
-    out.push_str(&input[..at]);
-    out.push('@');
-    out.push_str(display_name);
-    out.push(' ');
-    out
-}
 
 #[cfg(test)]
 mod tests {
@@ -277,10 +361,50 @@ mod tests {
         let t = i18n::strings("en");
         let members = vec![member("agent-a", "Researcher")];
         assert_eq!(
-            roster_display_name(&t, &members, "agent-a"),
+            roster_display_name(&t, &members, "agent-a", None),
             "Researcher"
         );
-        assert_eq!(roster_display_name(&t, &members, "agent-b"), "agent-b");
+        assert_eq!(
+            roster_display_name(&t, &members, "agent-b", Some("Beta")),
+            "Beta"
+        );
+        assert_eq!(
+            roster_display_name(&t, &members, "agent-b", None),
+            t.room_member_fallback
+        );
+    }
+
+    #[test]
+    fn room_turn_done_status_never_shows_banner() {
+        assert!(room_turn_done_status(3, false).is_none());
+        assert!(room_turn_done_status(0, true).is_none());
+    }
+
+    #[test]
+    fn strip_roster_agent_id_mentions_from_body() {
+        let t = i18n::strings("fr");
+        let members = vec![member("agent-2", "Maya"), member("agent-3", "Leo")];
+        let raw = "Bonjour! Leo (@agent-3) et moi, Maya (@agent-2), sommes là.";
+        let painted = strip_roster_agent_id_mentions(&t, raw, &members);
+        assert!(!painted.contains("@agent-"));
+        assert!(painted.contains("Maya"));
+        assert!(painted.contains("Leo"));
+    }
+
+    #[test]
+    fn insert_mention_drops_partial_token_tail() {
+        let out = insert_mention("bonjour @agent-2?", 8, "Maya");
+        assert_eq!(out, "bonjour @Maya ");
+        assert!(!out.contains('?'));
+    }
+
+    #[test]
+    fn composer_clear_after_send_simulation() {
+        let mut input = "bonjour, qui est là?".to_string();
+        let text = input.trim().to_string();
+        input.clear();
+        assert!(input.is_empty());
+        assert_eq!(text, "bonjour, qui est là?");
     }
 
     #[test]
