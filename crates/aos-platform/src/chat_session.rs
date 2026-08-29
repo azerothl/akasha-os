@@ -511,6 +511,7 @@ impl ChatSessionStore {
                     } => {
                         out.push_str(&format!("_skill offer: {label_en} / {label_fr}_\n\n"));
                     }
+                    _ => {}
                 }
             }
         }

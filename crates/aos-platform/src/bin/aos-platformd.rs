@@ -806,11 +806,14 @@ async fn main() {
                         } else {
                             req.actor.clone()
                         };
-                        let create_req =
-                            aos_platform::skill_pass::candidate_to_create_request(
-                                &candidate, &actor,
-                            );
-                        let create_result = s.skills.lock().unwrap().create(&create_req);
+                        let create_result = {
+                            let skills = s.skills.lock().unwrap();
+                            aos_platform::skill_pass::create_skill_from_candidate(
+                                &skills,
+                                &candidate,
+                                &actor,
+                            )
+                        };
                         match create_result {
                             Ok(info) => {
                                 aos_platform::skill_pass::mark_created(

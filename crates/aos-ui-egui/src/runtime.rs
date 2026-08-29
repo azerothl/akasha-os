@@ -738,8 +738,8 @@ async fn handle_cmd(
                         let _ = evt_tx.send(Evt::Skills(list));
                     }
                 }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                Err(_) => {
+                    // Silent — no status line, no système bubble (skill slugs stay out of chat).
                 }
             }
         }

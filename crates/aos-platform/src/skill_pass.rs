@@ -2,7 +2,7 @@
 //! surface at most one human card in the Chat thread the next morning.
 
 use crate::extract::should_skip_mem_extract_turn;
-use crate::skill::SkillStore;
+use crate::skill::{SkillError, SkillStore};
 use aos_proto::{ChatSessionMessage, ChatSessionMeta, SkillCreateRequest};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -535,6 +535,20 @@ pub fn candidate_to_create_request(candidate: &SkillPassCandidate, actor: &str) 
     }
 }
 
+/// Create from a pass candidate, or return the existing skill when already installed.
+pub fn create_skill_from_candidate(
+    store: &SkillStore,
+    candidate: &SkillPassCandidate,
+    actor: &str,
+) -> Result<aos_proto::SkillInfo, SkillError> {
+    let req = candidate_to_create_request(candidate, actor);
+    match store.create(&req) {
+        Ok(info) => Ok(info),
+        Err(SkillError::Exists(name)) => store.describe(&name),
+        Err(e) => Err(e),
+    }
+}
+
 pub fn existing_skill_names(store: &SkillStore) -> HashSet<String> {
     store.list().into_iter().map(|s| s.name).collect()
 }
@@ -594,6 +608,26 @@ mod tests {
         assert!(pending_surface_offer(&state, now, offset).is_some());
         dismiss_for_today(&mut state, &candidate.pattern_id, now, offset);
         assert!(pending_surface_offer(&state, now, offset).is_none());
+    }
+
+    #[test]
+    fn create_skill_from_candidate_idempotent_when_exists() {
+        let dir = std::env::temp_dir().join(format!("aos-skill-pass-idem-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let store = SkillStore::open(&dir).unwrap();
+        let candidates = find_pattern_candidates(&msgs_weather_fr(), MIN_PATTERN_HITS);
+        let best = pick_best_candidate(
+            &candidates,
+            &existing_skill_names(&store),
+            &HashSet::new(),
+        )
+        .unwrap();
+        let first = create_skill_from_candidate(&store, &best, "human:ui").unwrap();
+        assert_eq!(first.name, best.skill_name);
+        let again = create_skill_from_candidate(&store, &best, "human:ui").unwrap();
+        assert_eq!(again.name, best.skill_name);
+        assert_eq!(store.list().len(), 1);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
