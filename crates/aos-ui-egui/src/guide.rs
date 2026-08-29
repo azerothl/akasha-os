@@ -121,6 +121,15 @@ pub struct GuideStrings {
     pub chat_opt_attach_body: &'static str,
     pub chat_opt_slash_title: &'static str,
     pub chat_opt_slash_body: &'static str,
+    pub chat_schedule_heading: &'static str,
+    pub chat_schedule_intro: &'static str,
+    pub chat_schedule_card_title: &'static str,
+    pub chat_schedule_card_body: &'static str,
+    pub chat_schedule_paused_title: &'static str,
+    pub chat_schedule_paused_body: &'static str,
+    pub chat_schedule_stopped_title: &'static str,
+    pub chat_schedule_stopped_body: &'static str,
+    pub chat_schedule_example: &'static str,
     pub canvas_intro: &'static str,
     pub canvas_opt_toggle_title: &'static str,
     pub canvas_opt_toggle_body: &'static str,
@@ -215,6 +224,15 @@ const EN: GuideStrings = GuideStrings {
     chat_opt_attach_body: "Paperclip: images for vision models, documents for grounded Q&A. Pending chips show what ships with the next message.",
     chat_opt_slash_title: "Slash commands",
     chat_opt_slash_body: "Type / for completions — /help, /notes, /memory, and more route to platform tools.",
+    chat_schedule_heading: "Schedule",
+    chat_schedule_intro: "You give a goal and a when. After Allow once, it comes back without you reopening the session. Settings still holds the list.",
+    chat_schedule_card_title: "Card",
+    chat_schedule_card_body: "Title is your phrase. One mute line: Next: tomorrow 8:00. Pause | Stop.",
+    chat_schedule_paused_title: "Paused",
+    chat_schedule_paused_body: "Line becomes Paused. Resume | Stop.",
+    chat_schedule_stopped_title: "Stopped",
+    chat_schedule_stopped_body: "Card stays in the thread. No more actions.",
+    chat_schedule_example: "Ex. \"every morning, summarize my notes\" → Allow once → card in the thread, next fire tomorrow.",
     canvas_intro: "Vector drawing layer on the active chat session — pen, shapes, eraser. Not the Create diffusion tab.",
     canvas_opt_toggle_title: "Canvas toggle",
     canvas_opt_toggle_body: "Enable Canvas in the session bar. Agents may draw only while Canvas is open; humans can always paint.",
@@ -309,6 +327,15 @@ const FR: GuideStrings = GuideStrings {
     chat_opt_attach_body: "Trombone : images pour les modèles vision, documents pour des réponses ancrées. Les pastilles montrent ce qui part avec le prochain message.",
     chat_opt_slash_title: "Commandes /",
     chat_opt_slash_body: "Tapez / pour l'auto-complétion — /help, /notes, /memory, etc. routent vers les outils plateforme.",
+    chat_schedule_heading: "Planifier",
+    chat_schedule_intro: "Vous donnez un but et un quand. Après Autoriser une fois, ça revient sans rouvrir la session. La liste reste dans Réglages.",
+    chat_schedule_card_title: "Carte",
+    chat_schedule_card_body: "Le titre est votre phrase. Une ligne mute : Prochain : demain 8:00. Pause | Arrêter.",
+    chat_schedule_paused_title: "En pause",
+    chat_schedule_paused_body: "La ligne devient En pause. Reprendre | Arrêter.",
+    chat_schedule_stopped_title: "Arrêté",
+    chat_schedule_stopped_body: "La carte reste dans le fil. Plus d'actions.",
+    chat_schedule_example: "Ex. « chaque matin, résume mes notes » → Autoriser une fois → carte dans le fil, prochain feu demain.",
     canvas_intro: "Couche de dessin vectoriel sur la session de chat active — stylo, formes, gomme. Pas l'onglet diffusion Créer.",
     canvas_opt_toggle_title: "Bascule Canvas",
     canvas_opt_toggle_body: "Activez Canvas dans la barre de session. Les agents dessinent seulement quand Canvas est ouvert ; l'humain peut toujours peindre.",
@@ -465,17 +492,7 @@ fn render_topic(ui: &mut egui::Ui, topic: GuideTopic, g: &GuideStrings) {
     match topic {
         GuideTopic::Overview => render_overview(ui, g),
         GuideTopic::Create => render_create(ui, g),
-        GuideTopic::Chat => render_stub(
-            ui,
-            g,
-            g.chat_intro,
-            &[
-                (g.chat_opt_sessions_title, g.chat_opt_sessions_body),
-                (g.chat_opt_attach_title, g.chat_opt_attach_body),
-                (g.chat_opt_slash_title, g.chat_opt_slash_body),
-            ],
-            FigureKind::Chat,
-        ),
+        GuideTopic::Chat => render_chat(ui, g),
         GuideTopic::Canvas => render_stub(
             ui,
             g,
@@ -635,6 +652,35 @@ fn render_create(ui: &mut egui::Ui, g: &GuideStrings) {
         Some(FigureKind::Generate),
         g.create_generate_example,
     );
+}
+
+fn render_chat(ui: &mut egui::Ui, g: &GuideStrings) {
+    render_stub(
+        ui,
+        g,
+        g.chat_intro,
+        &[
+            (g.chat_opt_sessions_title, g.chat_opt_sessions_body),
+            (g.chat_opt_attach_title, g.chat_opt_attach_body),
+            (g.chat_opt_slash_title, g.chat_opt_slash_body),
+        ],
+        FigureKind::Chat,
+    );
+    ui.separator();
+    ui.strong(g.chat_schedule_heading);
+    ui.label(g.chat_schedule_intro);
+    ui.add_space(6.0);
+    for (title, body) in [
+        (g.chat_schedule_card_title, g.chat_schedule_card_body),
+        (g.chat_schedule_paused_title, g.chat_schedule_paused_body),
+        (g.chat_schedule_stopped_title, g.chat_schedule_stopped_body),
+    ] {
+        ui.strong(title);
+        ui.label(body);
+        ui.add_space(6.0);
+    }
+    ui.weak(g.section_example);
+    ui.label(g.chat_schedule_example);
 }
 
 fn render_stub(

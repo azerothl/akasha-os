@@ -7,7 +7,8 @@ use crate::os_open::{aos_home, bin_aos_session};
 use crate::{
     agent_id_cmd, agent_panel, chat_delegate_agent_spec, chrono_like_stamp, format_local_time_hm,
     invoke_module_bind,
-    invoke_module_tool, invoke_notes, invoke_tasks, load_module_ui, load_session, run_troubleshoot,
+    invoke_module_tool, invoke_notes, invoke_tasks, load_module_ui, load_session,
+    announce_and_load_session, run_troubleshoot,
     session_has_running_canvas_agent, spawn_chat_delegate_agent, CHAT_AGENT_MAX_SUBAGENTS,
 };
 use aos_agent::intents as agent_intents;
@@ -194,7 +195,7 @@ async fn handle_cmd(
                 {
                     Ok(m) => {
                         let _ = evt_tx.send(Evt::Sessions(vec![m.clone()]));
-                        load_session(&bus, &evt_tx, &m.id).await;
+                        announce_and_load_session(&bus, &evt_tx, &m.id).await;
                     }
                     Err(e) => {
                         let _ = evt_tx.send(Evt::Error(format!("session create: {e}")));
@@ -203,7 +204,7 @@ async fn handle_cmd(
             } else {
                 let id = list[0].id.clone();
                 let _ = evt_tx.send(Evt::Sessions(list));
-                load_session(&bus, &evt_tx, &id).await;
+                announce_and_load_session(&bus, &evt_tx, &id).await;
             }
         }
         Cmd::SessionCreate { title } => {
@@ -224,7 +225,7 @@ async fn handle_cmd(
                         .await
                         .unwrap_or_default();
                     let _ = evt_tx.send(Evt::Sessions(list));
-                    load_session(&bus, &evt_tx, &m.id).await;
+                    announce_and_load_session(&bus, &evt_tx, &m.id).await;
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));
@@ -282,7 +283,7 @@ async fn handle_cmd(
                             .await
                             .unwrap_or_default();
                         let _ = evt_tx.send(Evt::Sessions(list2));
-                        load_session(&bus, &evt_tx, &m.id).await;
+                        announce_and_load_session(&bus, &evt_tx, &m.id).await;
                     }
                     Err(e) => {
                         let _ = evt_tx.send(Evt::Error(e.to_string()));
@@ -291,7 +292,7 @@ async fn handle_cmd(
             } else {
                 let id = list[0].id.clone();
                 let _ = evt_tx.send(Evt::Sessions(list));
-                load_session(&bus, &evt_tx, &id).await;
+                announce_and_load_session(&bus, &evt_tx, &id).await;
             }
         }
         Cmd::SessionExport { id } => {
@@ -1736,6 +1737,8 @@ async fn handle_cmd(
         Cmd::ScheduleCreate {
             goal,
             interval_secs,
+            next_fire_ms,
+            display_title,
         } => {
             match bus
                 .call::<ScheduleCreateRequest, ScheduleEntry>(
@@ -1744,16 +1747,15 @@ async fn handle_cmd(
                         goal,
                         interval_secs,
                         model_id: None,
+                        next_fire_ms,
+                        display_title,
                     },
                     vec![],
                 )
                 .await
             {
                 Ok(e) => {
-                    let _ = evt_tx.send(Evt::Status(format!(
-                        "schedule créé {} ({}s)",
-                        e.id, e.interval_secs
-                    )));
+                    let _ = evt_tx.send(Evt::ScheduleCreated(e));
                     if let Ok(r) = bus
                         .call::<(), ScheduleListResponse>(agent_intents::SCHEDULE_LIST, &(), vec![])
                         .await
@@ -1775,8 +1777,8 @@ async fn handle_cmd(
                 )
                 .await
             {
-                Ok(_) => {
-                    let _ = evt_tx.send(Evt::Status(format!("schedule annulé {id}")));
+                Ok(e) => {
+                    let _ = evt_tx.send(Evt::ScheduleUpdated(e));
                     if let Ok(r) = bus
                         .call::<(), ScheduleListResponse>(agent_intents::SCHEDULE_LIST, &(), vec![])
                         .await
@@ -1786,6 +1788,40 @@ async fn handle_cmd(
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(format!("schedule.cancel: {e}")));
+                }
+            }
+        }
+        Cmd::SchedulePause { id } => {
+            match bus
+                .call::<ScheduleIdRequest, ScheduleEntry>(
+                    agent_intents::SCHEDULE_PAUSE,
+                    &ScheduleIdRequest { id: id.clone() },
+                    vec![],
+                )
+                .await
+            {
+                Ok(e) => {
+                    let _ = evt_tx.send(Evt::ScheduleUpdated(e));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(format!("schedule.pause: {e}")));
+                }
+            }
+        }
+        Cmd::ScheduleResume { id } => {
+            match bus
+                .call::<ScheduleIdRequest, ScheduleEntry>(
+                    agent_intents::SCHEDULE_RESUME,
+                    &ScheduleIdRequest { id: id.clone() },
+                    vec![],
+                )
+                .await
+            {
+                Ok(e) => {
+                    let _ = evt_tx.send(Evt::ScheduleUpdated(e));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(format!("schedule.resume: {e}")));
                 }
             }
         }
