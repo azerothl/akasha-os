@@ -640,14 +640,63 @@ fn chat_canvas_layout(total_w: f32, content_h: f32, split_gap: f32) -> ChatCanva
 
 /// Conservative button-row width for composer wrap prediction (before egui measure).
 fn estimate_composer_buttons_w(send: &str, show_stop: bool, stop: &str) -> f32 {
-    const CHAR_W: f32 = 7.5;
-    const BTN_PAD: f32 = 16.0;
+    const CHAR_W: f32 = 8.5;
+    const BTN_PAD: f32 = 20.0;
     const ITEM_GAP: f32 = 4.0;
     let mut w = send.len() as f32 * CHAR_W + BTN_PAD;
     if show_stop {
         w += ITEM_GAP + stop.len() as f32 * CHAR_W + BTN_PAD;
     }
     w
+}
+
+fn ui_button_width(ui: &egui::Ui, label: &str) -> f32 {
+    let padding = ui.style().spacing.button_padding;
+    let font_id = ui.style().text_styles[&egui::TextStyle::Button].clone();
+    let galley = ui.fonts(|f| {
+        f.layout_no_wrap(
+            label.to_owned(),
+            font_id,
+            egui::Color32::PLACEHOLDER,
+        )
+    });
+    galley.size().x + padding.x * 2.0
+}
+
+fn send_button_reserved_width(ui: &egui::Ui, t: &i18n::UiStrings) -> f32 {
+    let measured = ui_button_width(ui, t.agent_send);
+    let fr_floor = estimate_composer_buttons_w("Envoyer", false, "");
+    measured.max(fr_floor)
+}
+
+fn stop_button_reserved_width(ui: &egui::Ui, t: &i18n::UiStrings) -> f32 {
+    let measured = ui_button_width(ui, t.chat_stop);
+    let fr_floor = estimate_composer_buttons_w("Stop", false, "");
+    measured.max(fr_floor)
+}
+
+fn composer_measured_buttons_w(ui: &egui::Ui, t: &i18n::UiStrings, show_stop: bool) -> f32 {
+    let gap = ui.spacing().item_spacing.x;
+    let send_w = send_button_reserved_width(ui, t);
+    if show_stop {
+        send_w + gap + stop_button_reserved_width(ui, t)
+    } else {
+        send_w
+    }
+}
+
+/// Field width after reserving fixed Envoyer (+ Stop) and paperclip chrome (RTL allocation).
+fn composer_field_width(
+    row_w: f32,
+    send_w: f32,
+    attach_w: f32,
+    stop_w: f32,
+    gap: f32,
+    show_stop: bool,
+) -> f32 {
+    let gaps = if show_stop { gap * 3.0 } else { gap * 2.0 };
+    let chrome = send_w + attach_w + gaps + if show_stop { stop_w } else { 0.0 };
+    (row_w - chrome).max(0.0)
 }
 
 fn chat_composer_wraps(available_w: f32, attach_w: f32, buttons_w: f32) -> bool {
@@ -5312,6 +5361,13 @@ impl UiApp {
                             };
                             let show_stop = self.chat_pending
                                 && (room_mode || self.chat_inference_id.is_some());
+                            let item_gap = ui.spacing().item_spacing.x;
+                            let send_w = send_button_reserved_width(ui, &t);
+                            let stop_w = if show_stop {
+                                stop_button_reserved_width(ui, &t)
+                            } else {
+                                0.0
+                            };
 
                             let mut attach_from_menu = false;
                             let mut attach_document_from_menu = false;
@@ -5334,52 +5390,79 @@ impl UiApp {
                                     }
                                 });
                             };
-                            let mut place_send_stop = |ui: &mut egui::Ui| {
-                                if show_stop {
-                                    if room_mode {
-                                        if ui.button(t.chat_stop).clicked() {
-                                            if let Some(sid) = self.active_session.clone() {
-                                                let _ = self.cmd_tx.send(Cmd::RoomTurnCancel {
-                                                    session_id: sid,
+
+                            let row_w = ui.available_width();
+                            let input_h = ui.spacing().interact_size.y;
+                            let field_w = composer_field_width(
+                                row_w,
+                                send_w,
+                                icons::ATTACH_BTN_W,
+                                stop_w,
+                                item_gap,
+                                show_stop,
+                            );
+
+                            ui.allocate_ui_with_layout(
+                                egui::vec2(row_w, input_h),
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    if show_stop {
+                                        if room_mode {
+                                            if ui
+                                                .add_sized(
+                                                    egui::vec2(stop_w, input_h),
+                                                    egui::Button::new(t.chat_stop),
+                                                )
+                                                .clicked()
+                                            {
+                                                if let Some(sid) = self.active_session.clone() {
+                                                    let _ = self.cmd_tx.send(
+                                                        Cmd::RoomTurnCancel {
+                                                            session_id: sid,
+                                                        },
+                                                    );
+                                                }
+                                            }
+                                        } else if let Some(id) = self.chat_inference_id {
+                                            if ui
+                                                .add_sized(
+                                                    egui::vec2(stop_w, input_h),
+                                                    egui::Button::new(t.chat_stop),
+                                                )
+                                                .clicked()
+                                            {
+                                                let _ = self.cmd_tx.send(Cmd::ChatCancel {
+                                                    inference_id: id,
                                                 });
                                             }
                                         }
-                                    } else if let Some(id) = self.chat_inference_id {
-                                        if ui.button(t.chat_stop).clicked() {
-                                            let _ = self.cmd_tx.send(Cmd::ChatCancel {
-                                                inference_id: id,
-                                            });
-                                        }
                                     }
-                                }
-                                let send_btn =
-                                    ui.button(t.agent_send).on_hover_text(t.tip_send);
-                                send_clicked |= send_btn.clicked();
-                            };
+                                    let send_btn = ui
+                                        .add_sized(
+                                            egui::vec2(send_w, input_h),
+                                            egui::Button::new(t.agent_send),
+                                        )
+                                        .on_hover_text(t.tip_send);
+                                    send_clicked |= send_btn.clicked();
 
-                            ui.horizontal(|ui| {
-                                run_attach_menu(ui);
-                                let rest_w = ui.available_width();
-                                let input_h = ui.spacing().interact_size.y;
-                                let r = ui
-                                    .allocate_ui_with_layout(
-                                        egui::vec2(rest_w, input_h),
-                                        egui::Layout::right_to_left(egui::Align::Center),
+                                    ui.allocate_ui_with_layout(
+                                        egui::vec2(icons::ATTACH_BTN_W, input_h),
+                                        egui::Layout::left_to_right(egui::Align::Center),
                                         |ui| {
-                                            place_send_stop(ui);
-                                            let input_w = ui.available_width().max(0.0);
-                                            ui.set_width(input_w);
-                                            ui.add(
-                                                egui::TextEdit::singleline(&mut self.input)
-                                                    .id_salt("chat_input")
-                                                    .desired_width(input_w)
-                                                    .hint_text(&hint),
-                                            )
+                                            run_attach_menu(ui);
                                         },
-                                    )
-                                    .inner;
-                                input_response = Some(r);
-                            });
+                                    );
+
+                                    ui.set_width(field_w);
+                                    let r = ui.add(
+                                        egui::TextEdit::singleline(&mut self.input)
+                                            .id_salt("chat_input")
+                                            .desired_width(field_w)
+                                            .hint_text(&hint),
+                                    );
+                                    input_response = Some(r);
+                                },
+                            );
 
                             if attach_from_menu {
                                 if let Some(path) = os_open::pick_os_file(
@@ -7859,6 +7942,28 @@ mod layout_tests {
         let gap = 8.0;
         let layout = chat_canvas_layout(300.0, 400.0, gap);
         assert!(matches!(layout, ChatCanvasLayout::Stacked { .. }));
+    }
+
+    #[test]
+    fn composer_field_width_reserves_fr_envoyer() {
+        let fr = i18n::strings("fr");
+        let send_w = estimate_composer_buttons_w(fr.agent_send, false, "");
+        let field = composer_field_width(420.0, send_w, icons::ATTACH_BTN_W, 0.0, 4.0, false);
+        assert!(field > 80.0);
+        assert!(send_w >= estimate_composer_buttons_w("Envoyer", false, ""));
+    }
+
+    #[test]
+    fn composer_field_width_at_900_central_pane() {
+        let fr = i18n::strings("fr");
+        let send_w = estimate_composer_buttons_w(fr.agent_send, false, "");
+        let stop_w = estimate_composer_buttons_w("Stop", false, "");
+        let field =
+            composer_field_width(580.0, send_w, icons::ATTACH_BTN_W, stop_w, 4.0, true);
+        assert!(field > 200.0);
+        assert!(
+            field + send_w + stop_w + icons::ATTACH_BTN_W + 12.0 <= 580.0 + 0.01
+        );
     }
 
     #[test]
