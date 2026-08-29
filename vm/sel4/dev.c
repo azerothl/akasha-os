@@ -181,8 +181,9 @@ smoke_kbd(void)
         return 0;
     }
 
-    for (unsigned attempt = 0; attempt < 40u; attempt++) {
-        if (virtio_input_event(&in_dev, &type, &code, &value, 10000u, ev, ev_paddr)) {
+    microkit_dbg_puts("AOS_GATE_VM_KBD_POLL\n");
+    for (unsigned attempt = 0; attempt < 200u; attempt++) {
+        if (virtio_input_event(&in_dev, &type, &code, &value, 50000u, ev, ev_paddr)) {
             microkit_dbg_puts("dev: virtio-input event OK\n");
             microkit_dbg_puts("AOS_GATE_VM_KBD\n");
             return 1;

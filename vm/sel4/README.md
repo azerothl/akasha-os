@@ -52,7 +52,8 @@ Success: QEMU serial contains **`AOS_GATE_VM_PASS`** (P4 caps replay) and
 - Void cut-face framebuffer surface (`AOS_GATE_VM_FB`) — solid `#070b14` fill in guest RAM.
 - Virtio-blk read/write against a raw `gate.disk` image (`AOS_GATE_VM_BLK`).
 - Virtio-net MAC visibility (`AOS_GATE_VM_NET`).
-- Virtio-keyboard event via QEMU monitor `sendkey` (`AOS_GATE_VM_KBD`).
+- Virtio-keyboard event via QEMU monitor `sendkey` after guest prints
+  `AOS_GATE_VM_KBD_POLL` (`AOS_GATE_VM_KBD`).
 - Combined marker `AOS_GATE_VM_HW_PASS` after the existing `AOS_GATE_VM_PASS`.
 
 **Still missing:**
