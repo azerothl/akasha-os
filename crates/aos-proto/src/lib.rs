@@ -3299,7 +3299,7 @@ pub struct UserLibraryDoc {
     pub added_ms: u64,
     #[serde(default)]
     pub size_bytes: u64,
-    /// Local calendar day at add time (`YYYY-MM-DD`), stable for list rows.
+    /// UTC calendar day at add time (`YYYY-MM-DD`), stable for list rows.
     #[serde(default)]
     pub added_date: String,
 }
