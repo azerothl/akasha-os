@@ -14,6 +14,7 @@ mod notes_panel;
 mod prefs;
 mod schedule_act_phrase;
 mod schedule_card;
+mod session_nav;
 mod tasks_panel;
 mod chat_ask;
 mod chat_canvas;
@@ -1655,6 +1656,12 @@ struct UiApp {
     schedule_interval_secs: u64,
     /// Act id waiting for `Evt::ScheduleCreated` to attach a thread card.
     schedule_pending_card_act: Option<String>,
+    /// Expected session id for the next user-initiated `SessionLoaded`.
+    pending_session_load: Option<String>,
+    /// Allow the next cross-session load (create/delete/bootstrap fallback).
+    allow_session_load: bool,
+    /// In-memory schedule act/card edits not yet safe to clobber from disk.
+    schedule_transcript_dirty: bool,
     agent_display_name: String,
     agent_task: String,
     agent_system_prompt: String,
@@ -1935,6 +1942,9 @@ impl UiApp {
             schedule_goal: String::new(),
             schedule_interval_secs: 60,
             schedule_pending_card_act: None,
+            pending_session_load: None,
+            allow_session_load: false,
+            schedule_transcript_dirty: false,
             agent_display_name: String::new(),
             agent_task: String::new(),
             agent_system_prompt: String::new(),
@@ -2824,6 +2834,16 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         {
             *state = "approved".into();
         }
+        self.schedule_transcript_dirty = true;
+        if let Some(session_id) = self.active_session.clone() {
+            let att = self.chat[msg_idx].attachments[att_idx].clone();
+            let _ = self.cmd_tx.send(Cmd::SessionAppend {
+                session_id,
+                role: "assistant".into(),
+                content: self.chat[msg_idx].text.clone(),
+                attachments: vec![att],
+            });
+        }
         self.schedule_pending_card_act = Some(act_id.to_string());
         let _ = self.cmd_tx.send(Cmd::ScheduleCreate {
             goal,
@@ -2863,6 +2883,16 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         {
             *state = "denied".into();
         }
+        self.schedule_transcript_dirty = true;
+        if let Some(session_id) = self.active_session.clone() {
+            let att = self.chat[msg_idx].attachments[att_idx].clone();
+            let _ = self.cmd_tx.send(Cmd::SessionAppend {
+                session_id,
+                role: "assistant".into(),
+                content: self.chat[msg_idx].text.clone(),
+                attachments: vec![att],
+            });
+        }
     }
 
     fn attach_schedule_card(&mut self, entry: &ScheduleEntry) {
@@ -2896,17 +2926,56 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                     if *id == act_id && state == "approved" {
                         *schedule_id = entry.id.clone();
                         line.attachments.push(card.clone());
+                        self.schedule_transcript_dirty = true;
+                        if let Some(session_id) = self.active_session.clone() {
+                            let _ = self.cmd_tx.send(Cmd::SessionAppend {
+                                session_id,
+                                role: "assistant".into(),
+                                content: String::new(),
+                                attachments: vec![card],
+                            });
+                        }
                         return;
                     }
                 }
             }
         }
+        self.schedule_transcript_dirty = true;
         self.chat.push(ChatLine {
             role: "assistant".into(),
             text: String::new(),
-            attachments: vec![card],
+            attachments: vec![card.clone()],
             speaker_id: None,
         });
+        if let Some(session_id) = self.active_session.clone() {
+            let _ = self.cmd_tx.send(Cmd::SessionAppend {
+                session_id,
+                role: "assistant".into(),
+                content: String::new(),
+                attachments: vec![card],
+            });
+        }
+    }
+
+    fn request_session_select(&mut self, id: String) {
+        self.pending_session_load = Some(id.clone());
+        self.allow_session_load = false;
+        self.schedule_transcript_dirty = false;
+        let _ = self.cmd_tx.send(Cmd::SessionSelect { id });
+    }
+
+    fn request_session_create(&mut self, title: Option<String>) {
+        self.pending_session_load = None;
+        self.allow_session_load = true;
+        self.schedule_transcript_dirty = false;
+        let _ = self.cmd_tx.send(Cmd::SessionCreate { title });
+    }
+
+    fn request_session_delete(&mut self, id: String) {
+        self.pending_session_load = None;
+        self.allow_session_load = true;
+        self.schedule_transcript_dirty = false;
+        let _ = self.cmd_tx.send(Cmd::SessionDelete { id });
     }
 
     fn sync_schedule_cards(&mut self) {
@@ -2940,6 +3009,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             }
             schedule_card::ScheduleCardAction::None => return,
         }
+        self.schedule_transcript_dirty = true;
         let id = match action {
             schedule_card::ScheduleCardAction::Pause(id)
             | schedule_card::ScheduleCardAction::Resume(id)
@@ -3790,34 +3860,63 @@ impl eframe::App for UiApp {
                 Evt::Sessions(list) => self.sessions = list,
                 Evt::SessionLoaded { id, messages, meta } => {
                     let session_changed = self.active_session.as_deref() != Some(id.as_str());
-                    self.active_session = Some(id.clone());
-                    self.rename_buf = meta.title.clone();
-                    if let Some(s) = self.sessions.iter_mut().find(|s| s.id == meta.id) {
-                        *s = meta.clone();
-                    }
-                    if session_changed {
-                        self.room_members_pane_open = false;
-                        let mut chat = vec![ChatLine::plain(
-                            "système",
-                            format!("Session {id} — historique rechargé."),
-                        )];
-                        chat.extend(messages);
-                        self.chat = chat;
+                    if session_changed
+                        && !session_nav::should_switch_session_view(
+                            self.active_session.as_deref(),
+                            self.pending_session_load.as_deref(),
+                            self.allow_session_load,
+                            id.as_str(),
+                        )
+                    {
+                        if let Some(s) = self.sessions.iter_mut().find(|s| s.id == meta.id) {
+                            *s = meta.clone();
+                        }
+                        self.pending_session_load = None;
+                        self.allow_session_load = false;
+                    } else if !session_changed
+                        && !session_nav::should_replace_chat_on_same_session_reload(
+                            self.schedule_transcript_dirty,
+                        )
+                    {
+                        self.rename_buf = meta.title.clone();
+                        if let Some(s) = self.sessions.iter_mut().find(|s| s.id == meta.id) {
+                            *s = meta.clone();
+                        }
+                        self.sync_schedule_cards();
+                        self.pending_session_load = None;
+                        self.allow_session_load = false;
                     } else {
-                        self.chat = messages;
-                    }
-                    self.sync_schedule_cards();
-                    self.streaming.clear();
-                    self.chat_pending = false;
-                    self.chat_inference_id = None;
-                    self.room_turn_pending_text = None;
-                    if meta.canvas_open {
-                        let _ = self.cmd_tx.send(Cmd::CanvasPoll {
-                            session_id: id.clone(),
-                            after_seq: None,
-                        });
-                    } else {
-                        self.canvas_panel = chat_canvas::CanvasPanelState::default();
+                        self.pending_session_load = None;
+                        self.allow_session_load = false;
+                        self.active_session = Some(id.clone());
+                        self.rename_buf = meta.title.clone();
+                        if let Some(s) = self.sessions.iter_mut().find(|s| s.id == meta.id) {
+                            *s = meta.clone();
+                        }
+                        if session_changed {
+                            self.room_members_pane_open = false;
+                            let mut chat = vec![ChatLine::plain(
+                                "système",
+                                format!("Session {id} — historique rechargé."),
+                            )];
+                            chat.extend(messages);
+                            self.chat = chat;
+                        } else {
+                            self.chat = messages;
+                        }
+                        self.sync_schedule_cards();
+                        self.streaming.clear();
+                        self.chat_pending = false;
+                        self.chat_inference_id = None;
+                        self.room_turn_pending_text = None;
+                        if meta.canvas_open {
+                            let _ = self.cmd_tx.send(Cmd::CanvasPoll {
+                                session_id: id.clone(),
+                                after_seq: None,
+                            });
+                        } else {
+                            self.canvas_panel = chat_canvas::CanvasPanelState::default();
+                        }
                     }
                 }
                 Evt::RoomTurnDone {
@@ -4287,7 +4386,7 @@ impl eframe::App for UiApp {
                     .retain(|x| !dismiss.contains(&x.agent_id));
                 if let Some(id) = open_sess {
                     self.tab = Tab::Chat;
-                    let _ = self.cmd_tx.send(Cmd::SessionSelect { id });
+                    self.request_session_select(id);
                 }
             }
             ui.horizontal(|ui| {
@@ -5263,9 +5362,7 @@ impl UiApp {
                     }
                     if ui.button("+ Nouvelle").clicked() {
                         let n = self.sessions.len() + 1;
-                        let _ = self.cmd_tx.send(Cmd::SessionCreate {
-                            title: Some(format!("Session {n}")),
-                        });
+                        self.request_session_create(Some(format!("Session {n}")));
                     }
                     for s in self.sessions.clone() {
                         let selected =
@@ -5277,8 +5374,7 @@ impl UiApp {
                             )
                             .clicked()
                         {
-                            let _ =
-                                self.cmd_tx.send(Cmd::SessionSelect { id: s.id.clone() });
+                            self.request_session_select(s.id.clone());
                         }
                     }
                     ui.horizontal(|ui| {
@@ -5303,7 +5399,7 @@ impl UiApp {
                     }
                     if ui.button("Supprimer").clicked() {
                         if let Some(id) = self.active_session.clone() {
-                            let _ = self.cmd_tx.send(Cmd::SessionDelete { id });
+                            self.request_session_delete(id);
                         }
                     }
                     ui.separator();
