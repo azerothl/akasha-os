@@ -150,13 +150,62 @@ fn find_canvas_tool_leak(lower: &str) -> Option<usize> {
     None
 }
 
+const SELF_NARRATION: &[&str] = &[
+    "je vais répondre",
+    "je vais expliquer",
+    "je vais décrire",
+    "je vais présenter",
+    "je vais donc",
+    "i'm going to answer",
+    "i am going to answer",
+    "i will answer",
+    "i will respond",
+    "i will explain",
+    "i'll answer",
+    "i'll explain",
+    "let me explain",
+    "allow me to explain",
+];
+
+fn self_narration_boundary(lower: &str, pos: usize) -> bool {
+    if pos == 0 {
+        return true;
+    }
+    let before = lower[..pos].trim_end();
+    before.is_empty()
+        || before.ends_with('\n')
+        || before.ends_with('.')
+        || before.ends_with('!')
+        || before.ends_with('?')
+}
+
+fn find_self_narration_cut(lower: &str) -> Option<usize> {
+    let mut earliest = None::<usize>;
+    for pat in SELF_NARRATION {
+        let mut search = 0;
+        while let Some(rel) = lower[search..].find(pat) {
+            let pos = search + rel;
+            if self_narration_boundary(lower, pos) {
+                earliest = Some(earliest.map_or(pos, |e| e.min(pos)));
+            }
+            search = pos + 1;
+        }
+    }
+    earliest
+}
+
+fn chat_self_narration_leak(s: &str) -> bool {
+    let lower = s.to_ascii_lowercase();
+    SELF_NARRATION.iter().any(|p| lower.contains(p))
+}
+
 fn chat_sentence_is_meta_leak(s: &str) -> bool {
     let t = s.trim();
     if t.is_empty() {
         return true;
     }
     let lower = t.to_ascii_lowercase();
-    chat_meta_substring_pos(&lower).is_some()
+    chat_self_narration_leak(t) || chat_meta_substring_pos(&lower).is_some()
 }
 
 fn chat_meta_substring_pos(lower: &str) -> Option<usize> {
@@ -197,8 +246,6 @@ fn chat_meta_substring_pos(lower: &str) -> Option<usize> {
         }
     }
     const CHAIN_OF_THOUGHT: &[&str] = &[
-        "je vais donc",
-        "i will therefore",
         "orientant l'utilisateur",
         "orienting the user",
         "chain-of-thought",
@@ -218,7 +265,10 @@ fn chat_meta_substring_pos(lower: &str) -> Option<usize> {
 /// Truncate before the first forbidden meta substring (including mid-stream tokens).
 fn truncate_before_chat_meta_leak(text: &str) -> String {
     let lower = text.to_ascii_lowercase();
-    let cut = chat_meta_substring_pos(&lower).unwrap_or(text.len());
+    let mut cut = chat_meta_substring_pos(&lower).unwrap_or(text.len());
+    if let Some(i) = find_self_narration_cut(&lower) {
+        cut = cut.min(i);
+    }
     text[..cut].trim_end().to_string()
 }
 
@@ -1252,5 +1302,28 @@ Since this is a general question about how it works, I will provide a concise, n
         assert!(!lower.contains("<channel>"), "{out}");
         assert!(!lower.contains("Since this is"), "{out}");
         assert!(out.contains("dessin vectoriel"), "{out}");
+    }
+
+    #[test]
+    fn session32_canvas_strips_trailing_french_planning() {
+        let raw = r#"Le Canvas est un panneau vectoriel où vous pouvez dessiner. Si vous voulez dessiner avec un marqueur spécifique, vous devez explicitement le mentionner (par exemple, "sur le canvas"). Si vous ne le mentionnez pas, le dessin sera généré comme une image.
+
+Je vais répondre de manière naturelle et concise, en expliquant le concept humain du Canvas."#;
+        let out = format_chat_assistant_display(raw);
+        let lower = out.to_ascii_lowercase();
+        assert!(out.contains("panneau vectoriel"), "{out}");
+        assert!(!lower.contains("je vais répondre"), "{out}");
+        assert!(!lower.contains("concept humain"), "{out}");
+        assert!(!lower.contains("let me explain"), "{out}");
+    }
+
+    #[test]
+    fn session32_streaming_truncates_before_planning_sentence() {
+        let raw = r#"Le Canvas est un panneau vectoriel où vous pouvez dessiner.
+
+Je vais répondre de manière naturelle"#;
+        let out = format_chat_streaming_preview(raw);
+        assert!(out.contains("panneau vectoriel"), "{out}");
+        assert!(!out.to_ascii_lowercase().contains("je vais répondre"), "{out}");
     }
 }

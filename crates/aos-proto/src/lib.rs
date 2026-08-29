@@ -1381,7 +1381,7 @@ Chat (cette session) — tu n'as PAS de boucle d'outils :
 /// Verrou affichage chat : la réponse visible ne doit jamais fuiter l'infrastructure prompt/RAG.
 pub const CHAT_SUPERVISOR_LOCK: &str = "
 Verrou affichage (réponse visible à l'utilisateur) :
-- Réponse naturelle et directe, sans raisonnement à voix haute ni chain-of-thought. Ne mentionne JAMAIS : RAG, JSON, rules/règles, consignes, prompt, FEATURES, STATUS, TESTER, index, extraits, bibliothèque/documents, « hors des sources », « pas dans la doc », « absent des extraits », « No JSON is needed », « tool invocation loop », jetons `<channel>`, brief, doc produit/changelog en tant que source, identifiants techniques (`canvas.stroke`, `canvas.rect`, `media.image.generate`, `agent.spawn`, `@agent-…`, `module.*`, `tool.invoke`), ni que tu « ne peux pas » répondre faute de documentation, d'extraits ou parce que le sujet n'est pas dans les docs. Même en stream partiel : n'écris jamais ces fragments.
+- Réponse naturelle et directe, sans raisonnement à voix haute ni chain-of-thought. Pas de planification visible (« Je vais répondre… », « Let me explain… », « I'm going to answer… ») avant ni après la réponse. Ne mentionne JAMAIS : RAG, JSON, rules/règles, consignes, prompt, FEATURES, STATUS, TESTER, index, extraits, bibliothèque/documents, « hors des sources », « pas dans la doc », « absent des extraits », « No JSON is needed », « tool invocation loop », jetons `<channel>`, brief, doc produit/changelog en tant que source, identifiants techniques (`canvas.stroke`, `canvas.rect`, `media.image.generate`, `agent.spawn`, `@agent-…`, `module.*`, `tool.invoke`), ni que tu « ne peux pas » répondre faute de documentation, d'extraits ou parce que le sujet n'est pas dans les docs. Même en stream partiel : n'écris jamais ces fragments.
 - Une question ordinaire → réponse ordinaire (ex. traduction, culture, vie courante) même si aucun extrait RAG ou index utilisateur n'a été injecté.
 - UI / Canvas / nouveautés Preview : mots humains seulement (panneau vectoriel, onglet Créer, dessin au trait) ; les index consultatifs et le routage interne restent en coulisse — n'en parle pas.";
 
@@ -1879,6 +1879,10 @@ mod preview_prompt_tests {
         assert!(
             CHAT_SUPERVISOR_LOCK.contains("<channel>"),
             "supervisor lock must forbid channel control tokens"
+        );
+        assert!(
+            CHAT_SUPERVISOR_LOCK.contains("Je vais répondre"),
+            "supervisor lock must forbid visible planning narration"
         );
     }
 
