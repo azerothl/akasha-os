@@ -12,6 +12,9 @@ mod model_setup;
 mod models_page;
 mod notes_panel;
 mod prefs;
+mod schedule_act_phrase;
+mod schedule_card;
+mod session_nav;
 mod tasks_panel;
 mod chat_ask;
 mod chat_canvas;
@@ -23,6 +26,7 @@ mod image_history;
 mod image_prompt;
 mod icons;
 mod image_studio;
+mod library_panel;
 mod nav;
 mod onboarding;
 mod os_open;
@@ -41,6 +45,7 @@ use os_open::{aos_home, app_icon, bin_aos_session, native_path, open_in_browser,
 use runtime::runtime_main;
 use slash::{slash_completions, slash_insert_text, SLASH_COMMANDS};
 use aos_agent::schedule::ScheduleEntry;
+use aos_agent::schedule_parse::{self, ParsedSchedule};
 use aos_ipc::BusClient;
 use aos_proto::{
     AgentCreateRequest, AgentGoal, AgentIdRequest, AgentInfo, AgentState, AgentTrace, AuditEvent,
@@ -93,6 +98,7 @@ enum Tab {
     Memory,
     Notes,
     Tasks,
+    Library,
     Agents,
     Models,
     Image,
@@ -358,6 +364,93 @@ pub(crate) fn format_local_time_hm(ts_ms: u64, offset_minutes: i32) -> String {
     format!("{hours:02}:{mins:02}")
 }
 
+fn local_tz_offset_minutes() -> i32 {
+    if let Ok(out) = std::process::Command::new("date").args(["+%z"]).output() {
+        if out.status.success() {
+            if let Ok(s) = String::from_utf8(out.stdout) {
+                return parse_tz_offset_minutes(s.trim()).unwrap_or(0);
+            }
+        }
+    }
+    0
+}
+
+fn parse_tz_offset_minutes(raw: &str) -> Option<i32> {
+    let s = raw.trim();
+    if s.len() < 3 {
+        return None;
+    }
+    let sign = match s.as_bytes().first()? {
+        b'+' => 1,
+        b'-' => -1,
+        _ => return None,
+    };
+    let digits: String = s.chars().skip(1).filter(|c| c.is_ascii_digit()).collect();
+    if digits.len() < 3 {
+        return None;
+    }
+    let hours: i32 = digits[..digits.len().saturating_sub(2)]
+        .parse()
+        .ok()?;
+    let mins: i32 = digits[digits.len().saturating_sub(2)..]
+        .parse()
+        .ok()?;
+    Some(sign * (hours * 60 + mins))
+}
+
+fn local_day_index(ts_ms: u64, offset_minutes: i32) -> i64 {
+    let local_ms = ts_ms as i64 + (offset_minutes as i64) * 60_000;
+    local_ms.div_euclid(86_400_000)
+}
+
+fn civil_from_day_index(days: i64) -> (i32, u32, u32) {
+    let z = days + 719468;
+    let era = if z >= 0 { z / 146097 } else { (z - 146096) / 146097 };
+    let doe = z - era * 146097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = (yoe + era * 400) as i32;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    let y = if mp < 10 { y } else { y + 1 };
+    (y, m, d)
+}
+
+pub(crate) fn format_local_date_short(ts_ms: u64, tz_offset_min: i32) -> String {
+    let days = local_day_index(ts_ms, tz_offset_min);
+    let (y, m, d) = civil_from_day_index(days);
+    format!("{d:02}/{m:02}/{y}")
+}
+
+pub(crate) fn format_schedule_next_label(
+    t: &i18n::UiStrings,
+    next_fire_ms: u64,
+    now_ms: u64,
+    tz_offset_min: i32,
+) -> String {
+    let time = format_local_time_hm(next_fire_ms, tz_offset_min);
+    let day_now = local_day_index(now_ms, tz_offset_min);
+    let day_next = local_day_index(next_fire_ms, tz_offset_min);
+    if day_next == day_now {
+        t.schedule_card_next_today.replace("{time}", &time)
+    } else if day_next == day_now + 1 {
+        t.schedule_card_next_tomorrow.replace("{time}", &time)
+    } else {
+        let date = format_local_date_short(next_fire_ms, tz_offset_min);
+        t.schedule_card_next_date
+            .replace("{date}", &date)
+            .replace("{time}", &time)
+    }
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
 fn memory_relation_snippet(text: &str) -> String {
     let t = text.trim();
     if t.chars().count() <= 80 {
@@ -529,6 +622,17 @@ pub(crate) async fn load_session(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>, id:
             let _ = evt_tx.send(Evt::Error(e.to_string()));
         }
     }
+}
+
+pub(crate) async fn announce_and_load_session(
+    bus: &Arc<BusClient>,
+    evt_tx: &Sender<Evt>,
+    id: &str,
+) {
+    let _ = evt_tx.send(Evt::SessionLoadIntent {
+        id: id.to_string(),
+    });
+    load_session(bus, evt_tx, id).await;
 }
 
 /// Kit des agents lancés depuis le chat : plan, notes, sous-agents — toujours.
@@ -1814,9 +1918,16 @@ struct UiApp {
     /// Dernier payload notes brut (scénarios / debug).
     notes_out: String,
     tasks: tasks_panel::TasksPanelState,
+    library: library_panel::LibraryPanelState,
     schedules: Vec<ScheduleEntry>,
     schedule_goal: String,
     schedule_interval_secs: u64,
+    /// Act id waiting for `Evt::ScheduleCreated` to attach a thread card.
+    schedule_pending_card_act: Option<String>,
+    /// User-initiated session navigation intent for the next cross-session load.
+    pending_session_nav: session_nav::PendingSessionNav,
+    /// In-memory schedule act/card edits not yet safe to clobber from disk.
+    schedule_transcript_dirty: bool,
     agent_display_name: String,
     agent_task: String,
     agent_system_prompt: String,
@@ -2121,9 +2232,13 @@ impl UiApp {
             notes: notes_panel::NotesPanelState::default(),
             notes_out: String::new(),
             tasks: tasks_panel::TasksPanelState::default(),
+            library: library_panel::LibraryPanelState::default(),
             schedules: Vec::new(),
             schedule_goal: String::new(),
             schedule_interval_secs: 60,
+            schedule_pending_card_act: None,
+            pending_session_nav: session_nav::PendingSessionNav::None,
+            schedule_transcript_dirty: false,
             agent_display_name: String::new(),
             agent_task: String::new(),
             agent_system_prompt: String::new(),
@@ -2670,6 +2785,13 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             ));
             return;
         };
+        if pending_images.is_empty() && pending_documents.is_empty() {
+            let tz = local_tz_offset_minutes();
+            if let Some(parsed) = schedule_parse::try_parse_phrase(&text, now_ms(), tz) {
+                self.handle_schedule_phrase(&session_id, &text, parsed);
+                return;
+            }
+        }
         let explicit_canvas = chat_canvas::chat_should_open_canvas_face(&text);
         if explicit_canvas {
             self.break_stuck_session_agents(&session_id);
@@ -3223,6 +3345,303 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         }
     }
 
+    fn handle_schedule_phrase(&mut self, session_id: &str, user_phrase: &str, parsed: ParsedSchedule) {
+        let t = i18n::strings(&self.prefs.language);
+        let act_text = schedule_act_phrase::act_phrase_from_parsed(&t, &parsed, &self.prefs.language);
+        self.chat.push(ChatLine {
+            role: "user".into(),
+            text: user_phrase.to_string(),
+            attachments: vec![],
+            speaker_id: None,
+            speaker_name: None,
+        });
+        let _ = self.cmd_tx.send(Cmd::SessionAppend {
+            session_id: session_id.to_string(),
+            role: "user".into(),
+            content: user_phrase.to_string(),
+            attachments: vec![],
+        });
+        let gate_ask = !self.prefs.agent_gate_mode.eq_ignore_ascii_case("autonomous");
+        if gate_ask {
+            let act_id = format!("sched-act-{}", chrono_like_stamp());
+            let att = ChatAttachment::ScheduleAct {
+                act_id: act_id.clone(),
+                display_phrase: user_phrase.to_string(),
+                goal: parsed.goal.clone(),
+                when_label: parsed.when_label.clone(),
+                interval_secs: parsed.interval_secs,
+                next_fire_ms: parsed.next_fire_ms,
+                state: "pending".into(),
+                schedule_id: String::new(),
+            };
+            self.chat.push(ChatLine {
+                role: "assistant".into(),
+                text: act_text.clone(),
+                attachments: vec![att.clone()],
+                speaker_id: None,
+                speaker_name: None,
+            });
+            let _ = self.cmd_tx.send(Cmd::SessionAppend {
+                session_id: session_id.to_string(),
+                role: "assistant".into(),
+                content: act_text,
+                attachments: vec![att],
+            });
+        } else {
+            self.schedule_pending_card_act = Some(format!("sched-auto-{}", chrono_like_stamp()));
+            self.chat.push(ChatLine {
+                role: "assistant".into(),
+                text: schedule_act_phrase::format_resolved_act(
+                    &t,
+                    &parsed.goal,
+                    &parsed.when_label,
+                    true,
+                    &self.prefs.language,
+                ),
+                attachments: vec![],
+                speaker_id: None,
+                speaker_name: None,
+            });
+            let _ = self.cmd_tx.send(Cmd::ScheduleCreate {
+                goal: parsed.goal,
+                interval_secs: parsed.interval_secs,
+                next_fire_ms: Some(parsed.next_fire_ms),
+                display_title: Some(user_phrase.to_string()),
+            });
+        }
+        self.mark_onboarding_chat_sent();
+        self.scen_chat = true;
+    }
+
+    fn approve_schedule_act(&mut self, act_id: &str, msg_idx: usize) {
+        let Some(att_idx) = self.chat[msg_idx].attachments.iter().position(|a| {
+            matches!(
+                a,
+                ChatAttachment::ScheduleAct { act_id: id, .. } if id == act_id
+            )
+        }) else {
+            return;
+        };
+        let ChatAttachment::ScheduleAct {
+            goal,
+            when_label,
+            interval_secs,
+            next_fire_ms,
+            display_phrase,
+            ..
+        } = self.chat[msg_idx].attachments[att_idx].clone()
+        else {
+            return;
+        };
+        let t = i18n::strings(&self.prefs.language);
+        self.chat[msg_idx].text = schedule_act_phrase::format_resolved_act(
+            &t,
+            &goal,
+            &when_label,
+            true,
+            &self.prefs.language,
+        );
+        if let ChatAttachment::ScheduleAct { state, .. } =
+            &mut self.chat[msg_idx].attachments[att_idx]
+        {
+            *state = "approved".into();
+        }
+        self.schedule_transcript_dirty = true;
+        if let Some(session_id) = self.active_session.clone() {
+            let att = self.chat[msg_idx].attachments[att_idx].clone();
+            let _ = self.cmd_tx.send(Cmd::SessionAppend {
+                session_id,
+                role: "assistant".into(),
+                content: self.chat[msg_idx].text.clone(),
+                attachments: vec![att],
+            });
+        }
+        self.schedule_pending_card_act = Some(act_id.to_string());
+        let _ = self.cmd_tx.send(Cmd::ScheduleCreate {
+            goal,
+            interval_secs,
+            next_fire_ms: Some(next_fire_ms),
+            display_title: Some(display_phrase),
+        });
+    }
+
+    fn deny_schedule_act(&mut self, act_id: &str, msg_idx: usize) {
+        let Some(att_idx) = self.chat[msg_idx].attachments.iter().position(|a| {
+            matches!(
+                a,
+                ChatAttachment::ScheduleAct { act_id: id, .. } if id == act_id
+            )
+        }) else {
+            return;
+        };
+        let ChatAttachment::ScheduleAct {
+            goal,
+            when_label,
+            ..
+        } = self.chat[msg_idx].attachments[att_idx].clone()
+        else {
+            return;
+        };
+        let t = i18n::strings(&self.prefs.language);
+        self.chat[msg_idx].text = schedule_act_phrase::format_resolved_act(
+            &t,
+            &goal,
+            &when_label,
+            false,
+            &self.prefs.language,
+        );
+        if let ChatAttachment::ScheduleAct { state, .. } =
+            &mut self.chat[msg_idx].attachments[att_idx]
+        {
+            *state = "denied".into();
+        }
+        self.schedule_transcript_dirty = true;
+        if let Some(session_id) = self.active_session.clone() {
+            let att = self.chat[msg_idx].attachments[att_idx].clone();
+            let _ = self.cmd_tx.send(Cmd::SessionAppend {
+                session_id,
+                role: "assistant".into(),
+                content: self.chat[msg_idx].text.clone(),
+                attachments: vec![att],
+            });
+        }
+    }
+
+    fn attach_schedule_card(&mut self, entry: &ScheduleEntry) {
+        let act_id = match self.schedule_pending_card_act.take() {
+            Some(id) => id,
+            None => return,
+        };
+        let title = entry
+            .display_title
+            .clone()
+            .unwrap_or_else(|| entry.goal.clone());
+        let next_fire = schedule_card::next_fire_ms_for_entry(entry, now_ms());
+        let state = schedule_card::card_state_from_entry(entry).to_string();
+        let card = ChatAttachment::ScheduleCard {
+            schedule_id: entry.id.clone(),
+            title,
+            goal: entry.goal.clone(),
+            interval_secs: entry.interval_secs,
+            next_fire_ms: next_fire,
+            state,
+        };
+        for line in &mut self.chat {
+            for att in &mut line.attachments {
+                if let ChatAttachment::ScheduleAct {
+                    act_id: id,
+                    state,
+                    schedule_id,
+                    ..
+                } = att
+                {
+                    if *id == act_id && state == "approved" {
+                        *schedule_id = entry.id.clone();
+                        line.attachments.push(card.clone());
+                        self.schedule_transcript_dirty = true;
+                        if let Some(session_id) = self.active_session.clone() {
+                            let _ = self.cmd_tx.send(Cmd::SessionAppend {
+                                session_id,
+                                role: "assistant".into(),
+                                content: String::new(),
+                                attachments: vec![card],
+                            });
+                        }
+                        return;
+                    }
+                }
+            }
+        }
+        self.schedule_transcript_dirty = true;
+        self.chat.push(ChatLine {
+            role: "assistant".into(),
+            text: String::new(),
+            attachments: vec![card.clone()],
+            speaker_id: None,
+            speaker_name: None,
+        });
+        if let Some(session_id) = self.active_session.clone() {
+            let _ = self.cmd_tx.send(Cmd::SessionAppend {
+                session_id,
+                role: "assistant".into(),
+                content: String::new(),
+                attachments: vec![card],
+            });
+        }
+    }
+
+    fn request_session_select(&mut self, id: String) {
+        self.pending_session_nav = session_nav::PendingSessionNav::Explicit(id.clone());
+        self.schedule_transcript_dirty = false;
+        let _ = self.cmd_tx.send(Cmd::SessionSelect { id });
+    }
+
+    fn request_session_create(&mut self, title: Option<String>) {
+        self.pending_session_nav = session_nav::PendingSessionNav::AwaitingCreate;
+        self.schedule_transcript_dirty = false;
+        let _ = self.cmd_tx.send(Cmd::SessionCreate { title });
+    }
+
+    fn request_session_delete(&mut self, id: String) {
+        self.pending_session_nav = session_nav::PendingSessionNav::AwaitingDelete;
+        self.schedule_transcript_dirty = false;
+        let _ = self.cmd_tx.send(Cmd::SessionDelete { id });
+    }
+
+    fn sync_schedule_cards(&mut self) {
+        let now = now_ms();
+        for line in &mut self.chat {
+            for att in &mut line.attachments {
+                if let ChatAttachment::ScheduleCard { schedule_id, .. } = att {
+                    if let Some(entry) = self.schedules.iter().find(|s| s.id == *schedule_id) {
+                        schedule_card::sync_card_attachment(att, entry, now);
+                    }
+                }
+            }
+        }
+    }
+
+    fn upsert_schedule_entry(&mut self, entry: ScheduleEntry) {
+        schedule_card::upsert_schedule_entry(&mut self.schedules, entry);
+    }
+
+    fn apply_schedule_card_action_local(&mut self, action: schedule_card::ScheduleCardAction) {
+        let now = now_ms();
+        match &action {
+            schedule_card::ScheduleCardAction::Pause(id) => {
+                schedule_card::apply_local_pause(&mut self.schedules, id);
+            }
+            schedule_card::ScheduleCardAction::Resume(id) => {
+                schedule_card::apply_local_resume(&mut self.schedules, id);
+            }
+            schedule_card::ScheduleCardAction::Stop(id) => {
+                schedule_card::apply_local_stop(&mut self.schedules, id);
+            }
+            schedule_card::ScheduleCardAction::None => return,
+        }
+        self.schedule_transcript_dirty = true;
+        let id = match action {
+            schedule_card::ScheduleCardAction::Pause(id)
+            | schedule_card::ScheduleCardAction::Resume(id)
+            | schedule_card::ScheduleCardAction::Stop(id) => id,
+            schedule_card::ScheduleCardAction::None => return,
+        };
+        for line in &mut self.chat {
+            for att in &mut line.attachments {
+                if let ChatAttachment::ScheduleCard { schedule_id, .. } = att {
+                    if schedule_id == &id {
+                        schedule_card::apply_local_action_to_attachment(
+                            att,
+                            &self.schedules,
+                            &id,
+                            now,
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     fn open_tts_card(&mut self, spoken: &str) {
         let att = ChatAttachment::TtsDraft {
             text: spoken.to_string(),
@@ -3276,6 +3695,9 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             Tab::Tasks => {
                 let _ = self.cmd_tx.send(Cmd::TasksList);
             }
+            Tab::Library => {
+                let _ = self.cmd_tx.send(Cmd::UserLibraryList);
+            }
             Tab::Settings => {
                 let _ = self.cmd_tx.send(Cmd::ScheduleList);
                 let _ = self.cmd_tx.send(Cmd::CatalogueRefresh);
@@ -3321,6 +3743,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             .show(ui, |ui| {
                 for (tab, label, hint) in [
                     (Tab::Notes, t.tab_notes, t.tab_hint_notes),
+                    (Tab::Library, t.tab_library, t.tab_hint_library),
                     (Tab::Tasks, t.tab_tasks, t.tab_hint_tasks),
                     (Tab::Models, t.tab_models, t.tab_hint_models),
                     (Tab::Settings, t.tab_settings, t.tab_hint_settings),
@@ -3575,12 +3998,13 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             .show(ctx, |ui| {
                 ui.weak(t.go_to_hint);
                 ui.separator();
-                let destinations: [(&str, Tab); 13] = [
+                let destinations: [(&str, Tab); 14] = [
                     (t.tab_chat, Tab::Chat),
                     (t.tab_agents, Tab::Agents),
                     (t.tab_create, Tab::Image),
                     (t.tab_memory, Tab::Memory),
                     (t.tab_notes, Tab::Notes),
+                    (t.tab_library, Tab::Library),
                     (t.tab_tasks, Tab::Tasks),
                     (t.tab_models, Tab::Models),
                     (t.tab_settings, Tab::Settings),
@@ -4010,6 +4434,9 @@ impl eframe::App for UiApp {
                 Evt::NotesRelated(hits) => {
                     self.notes.apply_related(hits);
                 }
+                Evt::UserLibraryListed(docs) => {
+                    self.library.docs = docs;
+                }
                 Evt::NotesSaved { path, slug, title } => {
                     self.notes.mark_saved(path, slug, title);
                     self.scen_note_human = true;
@@ -4022,7 +4449,19 @@ impl eframe::App for UiApp {
                     self.caps_holder = holder;
                     self.caps = caps;
                 }
-                Evt::Schedules(s) => self.schedules = s,
+                Evt::Schedules(s) => {
+                    schedule_card::merge_schedule_list(&mut self.schedules, s);
+                    self.sync_schedule_cards();
+                }
+                Evt::ScheduleCreated(entry) => {
+                    self.upsert_schedule_entry(entry.clone());
+                    self.attach_schedule_card(&entry);
+                    self.sync_schedule_cards();
+                }
+                Evt::ScheduleUpdated(entry) => {
+                    self.upsert_schedule_entry(entry);
+                    self.sync_schedule_cards();
+                }
                 Evt::TasksListed(tasks) => {
                     let t = i18n::strings(&self.prefs.language);
                     self.tasks.apply_listed(tasks, t.tasks_count);
@@ -4093,42 +4532,70 @@ impl eframe::App for UiApp {
                     self.tab = Tab::Feedback;
                 }
                 Evt::Sessions(list) => self.sessions = list,
+                Evt::SessionLoadIntent { id } => {
+                    session_nav::apply_session_load_intent(&mut self.pending_session_nav, &id);
+                }
                 Evt::SessionLoaded { id, messages, meta } => {
                     let session_changed = self.active_session.as_deref() != Some(id.as_str());
-                    self.active_session = Some(id.clone());
-                    self.rename_buf = meta.title.clone();
-                    if let Some(s) = self.sessions.iter_mut().find(|s| s.id == meta.id) {
-                        *s = meta.clone();
-                    }
-                    if session_changed {
-                        self.room_members_pane_open = false;
-                        let mut chat = Vec::new();
-                        if !designer_shot_mode() {
-                            chat.push(ChatLine::plain(
-                                "système",
-                                format!("Session {id} — historique rechargé."),
-                            ));
+                    if session_changed
+                        && !session_nav::should_switch_session_view(
+                            self.active_session.as_deref(),
+                            &self.pending_session_nav,
+                            id.as_str(),
+                        )
+                    {
+                        if let Some(s) = self.sessions.iter_mut().find(|s| s.id == meta.id) {
+                            *s = meta.clone();
                         }
-                        chat.extend(messages);
-                        self.chat = chat;
+                    } else if !session_changed
+                        && !session_nav::should_replace_chat_on_same_session_reload(
+                            self.schedule_transcript_dirty,
+                        )
+                    {
+                        self.rename_buf = meta.title.clone();
+                        if let Some(s) = self.sessions.iter_mut().find(|s| s.id == meta.id) {
+                            *s = meta.clone();
+                        }
+                        self.sync_schedule_cards();
+                        self.pending_session_nav = session_nav::PendingSessionNav::None;
                     } else {
-                        self.chat = messages;
-                    }
-                    self.session_chat.clear_unread(&id);
-                    self.session_chat.sync_active_view(
-                        self.active_session.as_deref(),
-                        &mut self.streaming,
-                        &mut self.chat_pending,
-                        &mut self.chat_inference_id,
-                    );
-                    self.room_turn_pending_text = None;
-                    if meta.canvas_open {
-                        let _ = self.cmd_tx.send(Cmd::CanvasPoll {
-                            session_id: id.clone(),
-                            after_seq: None,
-                        });
-                    } else {
-                        self.canvas_panel = chat_canvas::CanvasPanelState::default();
+                        self.pending_session_nav = session_nav::PendingSessionNav::None;
+                        self.active_session = Some(id.clone());
+                        self.rename_buf = meta.title.clone();
+                        if let Some(s) = self.sessions.iter_mut().find(|s| s.id == meta.id) {
+                            *s = meta.clone();
+                        }
+                        if session_changed {
+                            self.room_members_pane_open = false;
+                            let mut chat = Vec::new();
+                            if !designer_shot_mode() {
+                                chat.push(ChatLine::plain(
+                                    "système",
+                                    format!("Session {id} — historique rechargé."),
+                                ));
+                            }
+                            chat.extend(messages);
+                            self.chat = chat;
+                        } else {
+                            self.chat = messages;
+                        }
+                        self.sync_schedule_cards();
+                        self.session_chat.clear_unread(&id);
+                        self.session_chat.sync_active_view(
+                            self.active_session.as_deref(),
+                            &mut self.streaming,
+                            &mut self.chat_pending,
+                            &mut self.chat_inference_id,
+                        );
+                        self.room_turn_pending_text = None;
+                        if meta.canvas_open {
+                            let _ = self.cmd_tx.send(Cmd::CanvasPoll {
+                                session_id: id.clone(),
+                                after_seq: None,
+                            });
+                        } else {
+                            self.canvas_panel = chat_canvas::CanvasPanelState::default();
+                        }
                     }
                 }
                 Evt::RoomTurnDone {
@@ -4622,7 +5089,7 @@ impl eframe::App for UiApp {
                     .retain(|x| !dismiss.contains(&x.agent_id));
                 if let Some(id) = open_sess {
                     self.tab = Tab::Chat;
-                    let _ = self.cmd_tx.send(Cmd::SessionSelect { id });
+                    self.request_session_select(id);
                 }
             }
             ui.horizontal(|ui| {
@@ -4797,6 +5264,7 @@ impl eframe::App for UiApp {
             Tab::Chat => self.ui_chat(ui),
             Tab::Memory => overflow_scroll(ui, "memory", |ui| self.ui_memory(ui)),
             Tab::Notes => overflow_scroll(ui, "notes", |ui| self.ui_notes(ui)),
+            Tab::Library => overflow_scroll(ui, "library", |ui| self.ui_library(ui)),
             Tab::Tasks => overflow_scroll(ui, "tasks", |ui| self.ui_tasks(ui)),
             Tab::Agents => overflow_scroll(ui, "agents", |ui| self.ui_agents(ui)),
             Tab::Models => overflow_scroll(ui, "models", |ui| self.ui_models(ui, ctx)),
@@ -5194,6 +5662,9 @@ impl UiApp {
                 let mut document_progress_action: Option<(usize, research_choice::DocumentProgressAction)> =
                     None;
                 let mut document_result_open: Option<(String, String)> = None;
+                let mut schedule_act: Option<(String, usize, bool)> = None;
+                let tz_offset = local_tz_offset_minutes();
+                let chat_now = now_ms();
                 let reply_id = self.blocked_ask_agent().map(|a| a.agent_id.clone());
                 let n = self.chat.len();
                 for i in 0..n {
@@ -5429,6 +5900,70 @@ impl UiApp {
                                             Some((question.clone(), path.clone()));
                                     }
                                 }
+                                ChatAttachment::ScheduleAct {
+                                    act_id,
+                                    state,
+                                    ..
+                                } => {
+                                    if state == "pending" {
+                                        ui.horizontal(|ui| {
+                                            if ui.button(t.agent_act_allow_once).clicked() {
+                                                schedule_act =
+                                                    Some((act_id.clone(), i, true));
+                                            }
+                                            if ui.button(t.agent_act_deny).clicked() {
+                                                schedule_act =
+                                                    Some((act_id.clone(), i, false));
+                                            }
+                                        });
+                                    }
+                                }
+                                ChatAttachment::ScheduleCard {
+                                    schedule_id,
+                                    title,
+                                    state,
+                                    next_fire_ms,
+                                    ..
+                                } => {
+                                    let entry = self
+                                        .schedules
+                                        .iter()
+                                        .find(|s| s.id == *schedule_id);
+                                    let display_state = schedule_card::resolved_card_state(
+                                        entry,
+                                        state,
+                                    );
+                                    let display_next = entry
+                                        .map(|e| {
+                                            schedule_card::next_fire_ms_for_entry(e, chat_now)
+                                        })
+                                        .unwrap_or(*next_fire_ms);
+                                    let action = ui
+                                        .push_id(
+                                            ("chat_schedule_card", i, j, schedule_id.as_str()),
+                                            |ui| {
+                                                schedule_card::render_schedule_card(
+                                                    ui,
+                                                    t,
+                                                    title,
+                                                    display_state,
+                                                    display_next,
+                                                    schedule_id,
+                                                    chat_now,
+                                                    tz_offset,
+                                                )
+                                            },
+                                        )
+                                        .inner;
+                                    if !matches!(action, schedule_card::ScheduleCardAction::None)
+                                    {
+                                        self.apply_schedule_card_action_local(action.clone());
+                                    }
+                                    schedule_card::send_schedule_action(
+                                        &self.cmd_tx,
+                                        action,
+                                    );
+                                }
                             }
                         }
                     });
@@ -5474,6 +6009,13 @@ impl UiApp {
                         &question,
                         &path,
                     );
+                }
+                if let Some((act_id, msg_idx, approved)) = schedule_act {
+                    if approved {
+                        self.approve_schedule_act(&act_id, msg_idx);
+                    } else {
+                        self.deny_schedule_act(&act_id, msg_idx);
+                    }
                 }
                 if let Some(id) = open_agent {
                     self.open_agent_tab(&id);
@@ -5654,9 +6196,7 @@ impl UiApp {
                     }
                     if ui.button("+ Nouvelle").clicked() {
                         let n = self.sessions.len() + 1;
-                        let _ = self.cmd_tx.send(Cmd::SessionCreate {
-                            title: Some(format!("Session {n}")),
-                        });
+                        self.request_session_create(Some(format!("Session {n}")));
                     }
                     for s in self.sessions.clone() {
                         let selected =
@@ -5675,8 +6215,7 @@ impl UiApp {
                             title
                         });
                         if row.inner.clicked() || row.response.clicked() {
-                            let _ =
-                                self.cmd_tx.send(Cmd::SessionSelect { id: s.id.clone() });
+                            self.request_session_select(s.id.clone());
                         }
                     }
                     ui.horizontal(|ui| {
@@ -5701,7 +6240,7 @@ impl UiApp {
                     }
                     if ui.button("Supprimer").clicked() {
                         if let Some(id) = self.active_session.clone() {
-                            let _ = self.cmd_tx.send(Cmd::SessionDelete { id });
+                            self.request_session_delete(id);
                         }
                     }
                     ui.separator();
@@ -6420,6 +6959,36 @@ impl UiApp {
         }
         if let Some((id, done)) = actions.complete {
             let _ = self.cmd_tx.send(Cmd::TasksComplete { id, done });
+        }
+    }
+
+    fn ui_library(&mut self, ui: &mut egui::Ui) {
+        let t = i18n::strings(&self.prefs.language);
+        let g = guide::strings(&self.prefs.language);
+        ui.horizontal(|ui| {
+            ui.strong(t.tab_library);
+            if guide::tab_help_button(ui, g.help_tooltip) {
+                self.guide.open_topic(guide::GuideTopic::Library);
+            }
+        });
+        let actions = library_panel::render(ui, &t, &self.library);
+        if actions.add_clicked {
+            let filters = [(
+                t.tab_library,
+                aos_proto::chat_document::CHAT_DOCUMENT_EXTENSIONS,
+            )];
+            if let Some(path) = os_open::pick_os_file(
+                t.tab_library,
+                &filters,
+                os_open::user_downloads_dir().as_deref(),
+            ) {
+                let _ = self.cmd_tx.send(Cmd::UserLibraryAdd {
+                    path: path.to_string_lossy().into_owned(),
+                });
+            }
+        }
+        if let Some(id) = actions.remove_id {
+            let _ = self.cmd_tx.send(Cmd::UserLibraryRemove { id });
         }
     }
 
@@ -7755,6 +8324,8 @@ impl UiApp {
                                 let _ = self.cmd_tx.send(Cmd::ScheduleCreate {
                                     goal: self.schedule_goal.trim().to_string(),
                                     interval_secs: self.schedule_interval_secs.max(30),
+                                    next_fire_ms: None,
+                                    display_title: None,
                                 });
                                 self.schedule_goal.clear();
                             }

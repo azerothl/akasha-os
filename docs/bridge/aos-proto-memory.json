@@ -26,6 +26,13 @@
             "string",
             "null"
           ]
+        },
+        "user_doc_k": {
+          "default": 0,
+          "description": "Top-k user-library hits (`user:docs`). 0 = default (3).",
+          "format": "uint",
+          "minimum": 0.0,
+          "type": "integer"
         }
       },
       "required": [
@@ -134,6 +141,14 @@
           "type": "string"
         },
         "session_hits": {
+          "items": {
+            "$ref": "#/definitions/MemHit"
+          },
+          "type": "array"
+        },
+        "user_doc_hits": {
+          "default": [],
+          "description": "Extraits bibliothèque personnelle (`user:docs`).",
           "items": {
             "$ref": "#/definitions/MemHit"
           },

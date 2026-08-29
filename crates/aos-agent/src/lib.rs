@@ -18,6 +18,7 @@ pub mod room_personas;
 pub mod room_runtime;
 pub mod research_detect;
 pub mod schedule;
+pub mod schedule_parse;
 pub mod skills;
 pub mod state;
 pub mod tool_exec;
@@ -49,6 +50,8 @@ pub mod intents {
     pub const SCHEDULE_CREATE: &str = "schedule.create";
     pub const SCHEDULE_LIST: &str = "schedule.list";
     pub const SCHEDULE_CANCEL: &str = "schedule.cancel";
+    pub const SCHEDULE_PAUSE: &str = "schedule.pause";
+    pub const SCHEDULE_RESUME: &str = "schedule.resume";
     pub const ROOM_TURN: &str = "agent.room_turn";
     pub const ROOM_CONDUCT: &str = "agent.room_conduct";
     pub const ROOM_CONDUCT_CANCEL: &str = "agent.room_conduct.cancel";

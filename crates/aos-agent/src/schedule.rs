@@ -16,6 +16,15 @@ pub struct ScheduleEntry {
     pub interval_secs: u64,
     #[serde(default)]
     pub enabled: bool,
+    /// When true, schedule is paused (no fires until resumed).
+    #[serde(default)]
+    pub paused: bool,
+    /// First-fire alignment (epoch ms). Used when `last_fired_ms == 0`.
+    #[serde(default)]
+    pub next_fire_ms: Option<u64>,
+    /// Human title from chat (not the technical id).
+    #[serde(default)]
+    pub display_title: Option<String>,
     #[serde(default)]
     pub last_fired_ms: u64,
     #[serde(default)]
@@ -34,6 +43,10 @@ pub struct ScheduleCreateRequest {
     pub interval_secs: u64,
     #[serde(default)]
     pub model_id: Option<String>,
+    #[serde(default)]
+    pub next_fire_ms: Option<u64>,
+    #[serde(default)]
+    pub display_title: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -98,6 +111,13 @@ pub fn create(req: &ScheduleCreateRequest) -> Result<ScheduleEntry, String> {
         goal: req.goal.trim().to_string(),
         interval_secs: interval,
         enabled: true,
+        paused: false,
+        next_fire_ms: req.next_fire_ms,
+        display_title: req
+            .display_title
+            .as_ref()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty()),
         last_fired_ms: 0,
         fire_count: 0,
         active_agent_id: None,
@@ -111,6 +131,27 @@ pub fn create(req: &ScheduleCreateRequest) -> Result<ScheduleEntry, String> {
 pub fn cancel(id: &str) -> Result<ScheduleEntry, String> {
     let mut e = load(id)?;
     e.enabled = false;
+    e.paused = false;
+    save(&e)?;
+    Ok(e)
+}
+
+pub fn pause(id: &str) -> Result<ScheduleEntry, String> {
+    let mut e = load(id)?;
+    if !e.enabled {
+        return Err("schedule arrêté".into());
+    }
+    e.paused = true;
+    save(&e)?;
+    Ok(e)
+}
+
+pub fn resume(id: &str) -> Result<ScheduleEntry, String> {
+    let mut e = load(id)?;
+    if !e.enabled {
+        return Err("schedule arrêté".into());
+    }
+    e.paused = false;
     save(&e)?;
     Ok(e)
 }
@@ -137,7 +178,7 @@ pub fn save(entry: &ScheduleEntry) -> Result<(), String> {
 pub fn due(now: u64, running_agent_ids: &[String]) -> Result<Vec<ScheduleEntry>, String> {
     let mut out = Vec::new();
     for e in list()? {
-        if !e.enabled {
+        if !e.enabled || e.paused {
             continue;
         }
         if let Some(aid) = e.active_agent_id.as_deref() {
@@ -146,7 +187,14 @@ pub fn due(now: u64, running_agent_ids: &[String]) -> Result<Vec<ScheduleEntry>,
             }
         }
         let interval_ms = e.interval_secs.saturating_mul(1000);
-        if e.last_fired_ms == 0 || now.saturating_sub(e.last_fired_ms) >= interval_ms {
+        if e.last_fired_ms == 0 {
+            if let Some(nf) = e.next_fire_ms {
+                if now < nf {
+                    continue;
+                }
+            }
+            out.push(e);
+        } else if now.saturating_sub(e.last_fired_ms) >= interval_ms {
             out.push(e);
         }
     }
@@ -210,8 +258,75 @@ mod tests {
             goal: goal.into(),
             interval_secs,
             model_id: None,
+            next_fire_ms: None,
+            display_title: None,
         })
         .expect("create")
+    }
+
+    #[test]
+    fn pause_blocks_due() {
+        with_temp_home(|| {
+            let e = sample("ping", 30);
+            pause(&e.id).expect("pause");
+            let now = e.created_ms.saturating_add(60_000);
+            let due_list = due(now, &[]).expect("due");
+            assert!(due_list.is_empty());
+            resume(&e.id).expect("resume");
+            let due_list = due(now, &[]).expect("due after resume");
+            assert_eq!(due_list.len(), 1);
+        });
+    }
+
+    #[test]
+    fn next_fire_ms_delays_first_fire() {
+        with_temp_home(|| {
+            let now = now_ms().max(1);
+            let future = now.saturating_add(3600_000);
+            let e = create(&ScheduleCreateRequest {
+                goal: "later".into(),
+                interval_secs: 3600,
+                model_id: None,
+                next_fire_ms: Some(future),
+                display_title: Some("every hour, later".into()),
+            })
+            .expect("create");
+            let early = due(now, &[]).expect("due early");
+            assert!(early.is_empty());
+            let late = due(future, &[]).expect("due at next_fire");
+            assert_eq!(late.len(), 1);
+            assert_eq!(late[0].id, e.id);
+        });
+    }
+
+    #[test]
+    fn cancel_sets_stopped() {
+        with_temp_home(|| {
+            let e = sample("stop", 30);
+            cancel(&e.id).expect("cancel");
+            let disk = load(&e.id).expect("load");
+            assert!(!disk.enabled);
+            assert!(!disk.paused);
+        });
+    }
+
+    #[test]
+    fn pause_persists_on_disk_and_list_roundtrips() {
+        with_temp_home(|| {
+            let e = sample("daily", 3600);
+            let paused = pause(&e.id).expect("pause");
+            assert!(paused.paused);
+            let disk = load(&e.id).expect("load");
+            assert!(disk.paused);
+            let raw = fs::read_to_string(path_for(&e.id)).expect("read json");
+            assert!(
+                raw.contains("\"paused\": true") || raw.contains("\"paused\":true"),
+                "paused must be serialized on disk: {raw}"
+            );
+            let listed = list().expect("list");
+            let found = listed.iter().find(|s| s.id == e.id).expect("listed");
+            assert!(found.paused);
+        });
     }
 
     #[test]
