@@ -4891,22 +4891,18 @@ impl UiApp {
                         let selected =
                             self.active_session.as_deref() == Some(s.id.as_str());
                         let unread = self.session_chat.is_unread(&s.id);
-                        let clicked = ui.horizontal(|ui| {
+                        let row = ui.horizontal(|ui| {
                             if unread {
                                 let t = i18n::strings(&self.prefs.language);
                                 let dot = egui::RichText::new("●")
-                                    .color(egui::Color32::from_rgb(0x4a, 0x9e, 0xff))
+                                    .color(theme::SIGNAL)
                                     .small();
                                 ui.label(dot).on_hover_text(t.session_unread_reply);
                             }
-                            ui.selectable_label(
-                                selected,
-                                format!("{} ({})", s.title, s.message_count),
-                            )
-                        })
-                        .inner
-                        .clicked();
-                        if clicked {
+                            ui.selectable_label(selected, &s.title);
+                            ui.weak(format!("({})", s.message_count));
+                        });
+                        if row.response.clicked() {
                             let _ =
                                 self.cmd_tx.send(Cmd::SessionSelect { id: s.id.clone() });
                         }
