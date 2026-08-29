@@ -9,7 +9,8 @@ use crate::{
     invoke_module_bind,
     invoke_module_tool, invoke_notes, invoke_tasks, load_module_ui, load_session,
     announce_and_load_session, run_troubleshoot,
-    session_has_running_canvas_agent, spawn_chat_delegate_agent, CHAT_AGENT_MAX_SUBAGENTS,
+    session_has_running_canvas_agent, spawn_chat_delegate_agent, spawn_document_prep_agent,
+    CHAT_AGENT_MAX_SUBAGENTS,
 };
 use aos_agent::intents as agent_intents;
 use aos_agent::{ControlCmd, ControlResp};
@@ -954,6 +955,24 @@ async fn handle_cmd(
             args,
         } => {
             invoke_module_tool(&bus, &evt_tx, &module, &tool, args).await;
+        }
+        Cmd::DocumentPrepSpawn {
+            session_id,
+            question,
+            language,
+            model_id,
+            max_steps,
+        } => {
+            spawn_document_prep_agent(
+                bus.clone(),
+                evt_tx.clone(),
+                session_id,
+                question,
+                language,
+                model_id,
+                max_steps,
+            )
+            .await;
         }
         Cmd::SecretList => {
             match bus

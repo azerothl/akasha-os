@@ -3174,6 +3174,29 @@ pub enum ChatAttachment {
         #[serde(default = "default_agent_act_state")]
         state: String,
     },
+    /// Research question: Answer vs Prepare a document (Preview chat thread).
+    ResearchChoice {
+        choice_id: String,
+        question: String,
+        /// `pending` | `answer` | `document`
+        #[serde(default = "default_research_choice_state")]
+        state: String,
+    },
+    /// Completed research document in thread (title = question).
+    DocumentResult {
+        question: String,
+        path: String,
+        #[serde(default)]
+        label: String,
+    },
+    /// In-progress document preparation (Researching… + Stop).
+    DocumentProgress {
+        question: String,
+        agent_id: String,
+        /// `researching` | `stopped`
+        #[serde(default = "default_document_progress_state")]
+        state: String,
+    },
     /// Pending schedule act in chat (Allow once / Deny before creating).
     ScheduleAct {
         act_id: String,
@@ -3209,6 +3232,14 @@ fn default_agent_act_state() -> String {
     "pending".into()
 }
 
+fn default_research_choice_state() -> String {
+    "pending".into()
+}
+
+fn default_document_progress_state() -> String {
+    "researching".into()
+}
+
 fn default_schedule_card_state() -> String {
     "live".into()
 }
@@ -3226,6 +3257,9 @@ impl ChatAttachment {
             | Self::TtsDraft { .. }
             | Self::Document { .. }
             | Self::AgentAct { .. }
+            | Self::ResearchChoice { .. }
+            | Self::DocumentResult { .. }
+            | Self::DocumentProgress { .. }
             | Self::ScheduleAct { .. }
             | Self::ScheduleCard { .. } => None,
         }
