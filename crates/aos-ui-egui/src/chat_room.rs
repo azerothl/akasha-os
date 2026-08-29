@@ -1,7 +1,7 @@
 //! In-app chat room helpers (slice 3): personas, roster labels, speaker colors, @ mentions.
 
 use crate::i18n::{self, UiStrings};
-use aos_agent::room_conductor::build_initial_queue;
+use aos_agent::room_conductor::{build_initial_queue, effective_max_turns};
 use aos_proto::{AgentInfo, AgentKind, AgentState, ChatRoomMember, ChatSessionMode, ChatSessionMeta};
 
 pub use aos_agent::room_personas::{persona_agent_id, persona_by_id, ROOM_PERSONAS};
@@ -32,11 +32,15 @@ pub fn format_turn_speaker_queue(
     t: &UiStrings,
     user_message: &str,
     members: &[ChatRoomMember],
+    conductor_policy: Option<&aos_proto::ChatRoomConductorPolicy>,
 ) -> Option<String> {
     if user_message.trim().is_empty() || members.is_empty() {
         return None;
     }
-    let queue = build_initial_queue(user_message, members);
+    let mut queue = build_initial_queue(user_message, members);
+    if let Some(policy) = conductor_policy {
+        queue.truncate(effective_max_turns(policy) as usize);
+    }
     if queue.is_empty() {
         return None;
     }
@@ -354,8 +358,8 @@ mod tests {
         let mut m1 = member("persona-critic", "Critic");
         m1.persona_id = Some("critic".into());
         let members = vec![m1];
-        assert!(format_turn_speaker_queue(&t, "@Dessinateur", &members).is_none());
-        assert!(format_turn_speaker_queue(&t, "@agent_id_123", &members).is_none());
+        assert!(format_turn_speaker_queue(&t, "@Dessinateur", &members, None).is_none());
+        assert!(format_turn_speaker_queue(&t, "@agent_id_123", &members, None).is_none());
     }
 
     #[test]
@@ -364,7 +368,22 @@ mod tests {
         let mut m1 = member("persona-critic", "Critic");
         m1.persona_id = Some("critic".into());
         let members = vec![m1];
-        let q = format_turn_speaker_queue(&t, "Mets à jour le dessin", &members).expect("queue");
+        let q = format_turn_speaker_queue(&t, "Mets à jour le dessin", &members, None).expect("queue");
+        assert!(q.contains(t.persona_critic));
+    }
+
+    #[test]
+    fn turn_queue_joins_all_strip_members_without_at() {
+        let t = i18n::strings("en");
+        let mut m1 = member("a1", "Researcher");
+        m1.persona_id = Some("researcher".into());
+        let mut m2 = member("a2", "Critic");
+        m2.persona_id = Some("critic".into());
+        let members = vec![m1, m2];
+        let q =
+            format_turn_speaker_queue(&t, "Review this sketch", &members, None).expect("queue");
+        assert!(q.contains(t.room_queue_joiner));
+        assert!(q.contains(t.persona_researcher));
         assert!(q.contains(t.persona_critic));
     }
 
@@ -376,7 +395,7 @@ mod tests {
         let mut m2 = member("a2", "Coder");
         m2.persona_id = Some("coder".into());
         let members = vec![m1, m2];
-        let q = format_turn_speaker_queue(&t, "@Researcher @Coder", &members).expect("queue");
+        let q = format_turn_speaker_queue(&t, "@Researcher @Coder", &members, None).expect("queue");
         assert!(q.contains(t.room_queue_joiner));
         assert!(q.contains(t.persona_researcher));
         assert!(q.contains(t.persona_coder));
