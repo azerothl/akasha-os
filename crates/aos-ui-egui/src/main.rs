@@ -910,6 +910,7 @@ pub(crate) async fn spawn_document_prep_agent(
     req.caps.push("net.connect:*".into());
     req.caps.push("fs.write:/downloads/**".into());
     req.caps.push("fs.read:/downloads/**".into());
+    req.model_id = _model_id;
     req.gate_mode = crate::prefs::load_preferences().agent_gate_mode.clone();
     let prose: String = if language.eq_ignore_ascii_case("fr") {
         "Je prépare un document de recherche.".into()
