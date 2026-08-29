@@ -38,7 +38,7 @@ use aos_proto::{
     ProviderTestResponse, ProviderUpsertRequest, SecretListRequest, SecretListResponse,
     SecretSetRequest, SetRoutingRequest, SkillInfo, SystemMetrics, TokenEvent, WebBrowseRequest,
     WebBrowseResponse, WebSearchRequest, WebSearchResponse,
-    CHAT_DELEGATION_PROMPT, SYSTEM_ASSISTANT_PROMPT, MigrateRequest, MigrateResponse,
+    CHAT_DELEGATION_PROMPT, CHAT_SUPERVISOR_LOCK, SYSTEM_ASSISTANT_PROMPT, MigrateRequest, MigrateResponse,
 };
 use eframe::egui;
 use std::process::Stdio;
@@ -390,6 +390,7 @@ async fn handle_cmd(
 
             let mut system = SYSTEM_ASSISTANT_PROMPT.to_string();
             system.push_str(CHAT_DELEGATION_PROMPT);
+            system.push_str(CHAT_SUPERVISOR_LOCK);
             system.push_str("\n\n");
             system.push_str(&product);
             if !mem_block.trim().is_empty() {

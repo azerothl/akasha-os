@@ -1348,7 +1348,7 @@ Ce n'est pas un OS bootable. Pour l'UI, les nouveautés et « ce qui a changé �
 /// Délégation des tâches complexes via `agent.spawn` sans boucle d'outils.
 pub const CHAT_DELEGATION_PROMPT: &str = "
 Chat (cette session) — tu n'as PAS de boucle d'outils :
-- Questions, explications, conseils → réponds sans JSON. Langue : celle de l'utilisateur (français par défaut). Savoir général ou langues : réponds normalement même si le RAG est injecté et ne couvre pas le sujet — ignore le RAG quand il est hors sujet. « Quoi de neuf » / UI / changelog Preview : appuie-toi sur le brief + extraits RAG produit ; n'invente pas de features.
+- Questions, explications, conseils → réponds sans JSON. Langue : celle de l'utilisateur (français par défaut). Savoir général ou langues : réponds normalement même si le RAG est injecté et ne couvre pas le sujet — ignore le RAG quand il est hors sujet. « Quoi de neuf » / UI / changelog Preview : appuie-toi silencieusement sur le brief + extraits RAG produit ; n'invente pas de features ; ne mentionne pas ces sources à l'utilisateur.
 - Synthèse vocale / TTS / « générer un audio » : n'appelle PAS agent.spawn.
   Le hôte ouvre une carte TTS (`/speak <texte>`). Réponds sans JSON, dans la langue de l'utilisateur.
 - Routage dessin (gelé) :
@@ -1377,6 +1377,13 @@ Chat (cette session) — tu n'as PAS de boucle d'outils :
   « noté », « enregistré » ou mis en « mémoire épisodique ». Si un bloc
   « Mémoire long terme utilisateur » est présent ci-dessous, utilise-le.
   Si l'utilisateur demande d'oublier, oriente-le vers l'onglet Mémoire.";
+
+/// Verrou affichage chat : la réponse visible ne doit jamais fuiter l'infrastructure prompt/RAG.
+pub const CHAT_SUPERVISOR_LOCK: &str = "
+Verrou affichage (réponse visible à l'utilisateur) :
+- Réponse naturelle et directe. Ne mentionne JAMAIS : RAG, JSON, règles, consignes, prompt, FEATURES, STATUS, TESTER, « hors des sources », extraits injectés, brief, doc produit/changelog en tant que source, ni que tu « ne peux pas » répondre faute de documentation.
+- Une question ordinaire → réponse ordinaire (ex. traduction, culture, vie courante).
+- UI / nouveautés Preview : donne l'info de façon conversationnelle ; le RAG produit sert en coulisse — n'en parle pas.";
 
 /// Intention chat : créer / installer un module ou une skill (pas « c'est quoi »).
 pub fn chat_user_wants_module_authoring(text: &str) -> bool {
@@ -1763,13 +1770,19 @@ mod chat_delegation_tests {
 
 #[cfg(test)]
 mod preview_prompt_tests {
-    use super::{CHAT_DELEGATION_PROMPT, PREVIEW_SURFACE_BRIEF, SYSTEM_ASSISTANT_PROMPT};
+    use super::{
+        CHAT_DELEGATION_PROMPT, CHAT_SUPERVISOR_LOCK, PREVIEW_SURFACE_BRIEF, SYSTEM_ASSISTANT_PROMPT,
+    };
+
+    fn chat_system_stack() -> String {
+        format!(
+            "{SYSTEM_ASSISTANT_PROMPT}\n{PREVIEW_SURFACE_BRIEF}\n{CHAT_DELEGATION_PROMPT}\n{CHAT_SUPERVISOR_LOCK}"
+        )
+    }
 
     #[test]
     fn product_rag_does_not_jail_general_knowledge() {
-        let chat_stack = format!(
-            "{SYSTEM_ASSISTANT_PROMPT}\n{PREVIEW_SURFACE_BRIEF}\n{CHAT_DELEGATION_PROMPT}"
-        );
+        let chat_stack = chat_system_stack();
         assert!(
             chat_stack.contains("savoir général") || chat_stack.contains("savoir encyclopédique"),
             "prompts should tell the model general knowledge is allowed"
@@ -1811,6 +1824,36 @@ mod preview_prompt_tests {
         assert!(
             CHAT_DELEGATION_PROMPT.contains("n'invente pas de features"),
             "chat UI answers must stay grounded in RAG"
+        );
+    }
+
+    #[test]
+    fn chat_supervisor_lock_bans_meta_in_visible_reply() {
+        for term in [
+            "RAG",
+            "JSON",
+            "règles",
+            "FEATURES",
+            "STATUS",
+            "TESTER",
+            "hors des sources",
+        ] {
+            assert!(
+                CHAT_SUPERVISOR_LOCK.contains(term),
+                "supervisor lock must explicitly forbid visible mention of {term}"
+            );
+        }
+        assert!(
+            CHAT_SUPERVISOR_LOCK.contains("Ne mentionne JAMAIS"),
+            "supervisor lock must forbid meta leakage in visible replies"
+        );
+        assert!(
+            CHAT_DELEGATION_PROMPT.contains("silencieusement"),
+            "product RAG should be used silently on chat path"
+        );
+        assert!(
+            CHAT_SUPERVISOR_LOCK.contains("question ordinaire"),
+            "supervisor lock should require normal answers to normal questions"
         );
     }
 }
