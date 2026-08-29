@@ -540,6 +540,169 @@ async fn main() {
         });
     }
 
+    // --- skill.pass — nightly pattern scan → morning skill card (Preview 0.15) ---
+    {
+        let s = sub.clone();
+        svc.on("skill.pass", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<SkillPassRequest>() {
+                    Ok(req) => match run_skill_pass(&s, req).await {
+                        Ok(resp) => {
+                            let _ = ctx.respond(aos_ipc::msg::Status::Ok, &resp).await;
+                        }
+                        Err(e) => {
+                            let _ = ctx
+                                .respond_error(aos_ipc::msg::Status::InternalError, &e)
+                                .await;
+                        }
+                    },
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("skill.pass.pending", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<SkillPassRequest>() {
+                    Ok(req) => {
+                        let offset = req
+                            .tz_offset_minutes
+                            .unwrap_or_else(aos_platform::mem_sweep::system_tz_offset_minutes);
+                        let now = sweep_now_ms();
+                        let skills_dir = s.skills.lock().unwrap().dir().to_path_buf();
+                        let state = aos_platform::skill_pass::SkillPassState::load(&skills_dir);
+                        let offer = aos_platform::skill_pass::pending_surface_offer(
+                            &state, now, offset,
+                        )
+                        .map(|c| SkillPassPendingOffer {
+                            pattern_id: c.pattern_id.clone(),
+                            label_en: c.label_en.clone(),
+                            label_fr: c.label_fr.clone(),
+                        });
+                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &offer).await;
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("skill.pass.dismiss", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<SkillPassDismissRequest>() {
+                    Ok(req) => {
+                        let offset = req
+                            .tz_offset_minutes
+                            .unwrap_or_else(aos_platform::mem_sweep::system_tz_offset_minutes);
+                        let now = sweep_now_ms();
+                        let skills_dir = s.skills.lock().unwrap().dir().to_path_buf();
+                        let mut state =
+                            aos_platform::skill_pass::SkillPassState::load(&skills_dir);
+                        aos_platform::skill_pass::dismiss_for_today(
+                            &mut state,
+                            &req.pattern_id,
+                            now,
+                            offset,
+                        );
+                        let _ = state.save(&skills_dir);
+                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &()).await;
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("skill.pass.create", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<SkillPassCreateRequest>() {
+                    Ok(req) => {
+                        let skills_dir = s.skills.lock().unwrap().dir().to_path_buf();
+                        let mut state =
+                            aos_platform::skill_pass::SkillPassState::load(&skills_dir);
+                        let candidate = state
+                            .pending
+                            .as_ref()
+                            .filter(|c| c.pattern_id == req.pattern_id)
+                            .cloned();
+                        let Some(candidate) = candidate else {
+                            let _ = ctx
+                                .respond_error(
+                                    aos_ipc::msg::Status::BadRequest,
+                                    "skill.pass: candidat introuvable",
+                                )
+                                .await;
+                            return;
+                        };
+                        let actor = if req.actor.is_empty() {
+                            "human:ui".into()
+                        } else {
+                            req.actor.clone()
+                        };
+                        let create_req =
+                            aos_platform::skill_pass::candidate_to_create_request(
+                                &candidate, &actor,
+                            );
+                        let create_result = s.skills.lock().unwrap().create(&create_req);
+                        match create_result {
+                            Ok(info) => {
+                                aos_platform::skill_pass::mark_created(
+                                    &mut state,
+                                    &req.pattern_id,
+                                );
+                                let _ = state.save(&skills_dir);
+                                s.audit(AuditAppendRequest {
+                                    trace_id: String::new(),
+                                    actor,
+                                    action: "skill.pass.create".into(),
+                                    target: info.name.clone(),
+                                    detail: serde_json::json!({
+                                        "pattern_id": req.pattern_id,
+                                        "label_en": candidate.label_en,
+                                    }),
+                                });
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &info).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::BadRequest,
+                                        &e.to_string(),
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+
     // --- mem.relate / neighbors / list / update (E6 / Preview 0.4) ---
     {
         let s = sub.clone();
@@ -3419,6 +3582,41 @@ async fn main() {
         });
     }
 
+    // Nightly skill-pattern pass (Preview 0.15) — once per local night, no LLM spam.
+    {
+        let s = sub.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(300));
+            interval.tick().await;
+            loop {
+                interval.tick().await;
+                let offset = aos_platform::mem_sweep::system_tz_offset_minutes();
+                let now = sweep_now_ms();
+                if !aos_platform::skill_pass::in_night_pass_window(now, offset) {
+                    continue;
+                }
+                let day_key = aos_platform::skill_pass::local_day_key(now, offset);
+                let skills_dir = s.skills.lock().unwrap().dir().to_path_buf();
+                let state = aos_platform::skill_pass::SkillPassState::load(&skills_dir);
+                if state.last_pass_local_day_key == day_key {
+                    continue;
+                }
+                eprintln!("[aos-platformd] skill pass : démarrage nuit {day_key}");
+                let req = SkillPassRequest {
+                    tz_offset_minutes: Some(offset),
+                    force: false,
+                };
+                match run_skill_pass(&s, req).await {
+                    Ok(resp) => eprintln!(
+                        "[aos-platformd] skill pass : {} candidats, pending={:?}",
+                        resp.candidates_found, resp.pending_pattern_id
+                    ),
+                    Err(e) => eprintln!("[aos-platformd] skill pass erreur : {e}"),
+                }
+            }
+        });
+    }
+
     let _ = svc.serve(&config.bus).await;
 }
 
@@ -3829,6 +4027,79 @@ async fn run_mem_sweep(
         filtered,
         relations_created,
         last_pass_ms,
+    })
+}
+
+/// Nightly scan of recent chats for repeatable skill patterns (heuristic; no chat output).
+async fn run_skill_pass(
+    s: &PlatformSubsystem,
+    req: SkillPassRequest,
+) -> Result<SkillPassResponse, String> {
+    let offset = req
+        .tz_offset_minutes
+        .unwrap_or_else(aos_platform::mem_sweep::system_tz_offset_minutes);
+    let now = sweep_now_ms();
+    let day_key = aos_platform::skill_pass::local_day_key(now, offset);
+    let skills_dir = s.skills.lock().unwrap().dir().to_path_buf();
+    let mut state = aos_platform::skill_pass::SkillPassState::load(&skills_dir);
+    if !req.force && state.last_pass_local_day_key == day_key {
+        return Ok(SkillPassResponse {
+            local_day_key: day_key,
+            candidates_found: 0,
+            pending_pattern_id: state.pending.as_ref().map(|c| c.pattern_id.clone()),
+            last_pass_ms: state.last_pass_ms,
+        });
+    }
+
+    let lookback_ms = 14u64 * 86_400_000;
+    let since_ms = now.saturating_sub(lookback_ms);
+    let sessions = s
+        .sessions
+        .lock()
+        .unwrap()
+        .list(true)
+        .map_err(|e| e.to_string())?;
+    let mut loaded = Vec::new();
+    for meta in sessions {
+        if let Ok(pair) = s.sessions.lock().unwrap().get(&meta.id) {
+            loaded.push(pair);
+        }
+    }
+    let messages =
+        aos_platform::skill_pass::collect_user_messages(&loaded, since_ms, now);
+    let candidates =
+        aos_platform::skill_pass::find_pattern_candidates(&messages, aos_platform::skill_pass::MIN_PATTERN_HITS);
+    let existing = aos_platform::skill_pass::existing_skill_names(&s.skills.lock().unwrap());
+    let created: std::collections::HashSet<String> =
+        state.created_pattern_ids.iter().cloned().collect();
+    let best = aos_platform::skill_pass::pick_best_candidate(&candidates, &existing, &created);
+
+    // Internal only — never posted to chat.
+    let _analysis = aos_platform::skill_pass::analysis_summary(&candidates);
+
+    state.pending = best.clone();
+    state.last_pass_ms = now;
+    state.last_pass_local_day_key = day_key.clone();
+    state.save(&skills_dir)?;
+
+    s.audit(AuditAppendRequest {
+        trace_id: format!("skill-pass-{day_key}"),
+        actor: "service:platformd".into(),
+        action: "skill.pass".into(),
+        target: "summary".into(),
+        detail: serde_json::json!({
+            "local_day_key": day_key,
+            "candidates_found": candidates.len(),
+            "pending_pattern_id": best.as_ref().map(|c| &c.pattern_id),
+            "messages_scanned": messages.len(),
+        }),
+    });
+
+    Ok(SkillPassResponse {
+        local_day_key: day_key,
+        candidates_found: candidates.len(),
+        pending_pattern_id: best.map(|c| c.pattern_id),
+        last_pass_ms: now,
     })
 }
 
