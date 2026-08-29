@@ -32,7 +32,7 @@ pub fn render(
     } else {
         for doc in &state.docs {
             ui.horizontal(|ui| {
-                ui.label(&doc.label);
+                ui.strong(&doc.label);
                 if let Some(date) = format_added_date(doc.added_ms, timezone_offset_minutes) {
                     ui.weak(date);
                 }
