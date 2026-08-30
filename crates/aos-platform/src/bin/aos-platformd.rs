@@ -21,36 +21,6 @@ async fn main() {
         Err(e) => eprintln!("[aos-platformd] bus injoignable ({e}) — audit local uniquement"),
     }
 
-    // Product-doc RAG (FEATURES / STATUS / TESTER) — sync so first chat sees it.
-    {
-        let version = std::env::var("AOS_PREVIEW_VERSION")
-            .unwrap_or_else(|_| env!("CARGO_PKG_VERSION").to_string());
-        let s = sub.clone();
-        match tokio::task::spawn_blocking(move || {
-            aos_platform::product_rag::ensure_indexed(&s, &version)
-        })
-        .await
-        {
-            Ok(Ok(n)) => eprintln!("[aos-platformd] product RAG : {n} chunks indexés"),
-            Ok(Err(e)) => eprintln!("[aos-platformd] product RAG skip : {e}"),
-            Err(e) => eprintln!("[aos-platformd] product RAG panic : {e}"),
-        }
-    }
-
-    // User document library — re-index manifest on boot.
-    {
-        let s = sub.clone();
-        let memory_dir = config.memory_dir.clone();
-        match tokio::task::spawn_blocking(move || {
-            aos_platform::user_docs::ensure_indexed(&s, std::path::Path::new(&memory_dir))
-        })
-        .await
-        {
-            Ok(n) => eprintln!("[aos-platformd] user library : {n} chunks indexés"),
-            Err(e) => eprintln!("[aos-platformd] user library panic : {e}"),
-        }
-    }
-
     let mut svc = BusService::new("platformd");
 
     // Note P4.4 : `audit.append` is served by `aos-auditd`.
@@ -3765,6 +3735,17 @@ async fn main() {
                 }
             }
         });
+    }
+
+    // Product-doc RAG + user library — background; must not block `serve` / healthcheck.
+    {
+        let version = std::env::var("AOS_PREVIEW_VERSION")
+            .unwrap_or_else(|_| env!("CARGO_PKG_VERSION").to_string());
+        aos_platform::boot_index::spawn_background_indexing(
+            sub.clone(),
+            config.memory_dir.clone(),
+            version,
+        );
     }
 
     let _ = svc.serve(&config.bus).await;

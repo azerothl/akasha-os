@@ -20,6 +20,7 @@ use std::thread;
 use std::time::Duration;
 
 const BUS_ADDR: &str = "127.0.0.1:24701";
+const BOOTSTRAP_DIALOG_TITLE: &str = "Akasha OS Preview";
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct OnboardingState {
@@ -40,6 +41,46 @@ struct Session {
     home: PathBuf,
     daemons: Mutex<Vec<Daemon>>,
     stop: AtomicBool,
+}
+
+/// Language from onboarding prefs (`var/run/onboarding.json`), default French.
+pub(crate) fn session_language(home: &Path) -> String {
+    fs::read_to_string(home.join("var/run/onboarding.json"))
+        .ok()
+        .and_then(|raw| serde_json::from_str::<OnboardingState>(&raw).ok())
+        .map(|s| s.language)
+        .filter(|l| !l.is_empty())
+        .unwrap_or_else(|| "fr".into())
+}
+
+/// User-facing body when daemon startup or healthcheck fails (no technical jargon).
+pub(crate) fn bootstrap_failed_body(lang: &str) -> &'static str {
+    if lang.eq_ignore_ascii_case("en") {
+        "Couldn't finish starting."
+    } else {
+        "Impossible de terminer le démarrage."
+    }
+}
+
+/// Localized Retry button for the bootstrap failure dialog.
+pub(crate) fn bootstrap_retry_label(lang: &str) -> &'static str {
+    if lang.eq_ignore_ascii_case("en") {
+        "Try again"
+    } else {
+        "Réessayer"
+    }
+}
+
+/// Log failure details, show retry dialog. Returns `true` when the user wants another boot attempt.
+fn offer_bootstrap_retry(home: &Path, detail: &str) -> bool {
+    eprintln!("[aos-session] {detail}");
+    eprintln!("[aos-session] Astuce : consultez var/run/*.stderr.log (GPU, modèles, bus).");
+    let lang = session_language(home);
+    bootstrap::show_bootstrap_retry_dialog(
+        BOOTSTRAP_DIALOG_TITLE,
+        bootstrap_failed_body(&lang),
+        bootstrap_retry_label(&lang),
+    )
 }
 
 fn main() {
@@ -412,20 +453,19 @@ fn main() {
         session.stop.store(false, Ordering::SeqCst);
 
         if let Err(e) = start_daemons(&session) {
-            eprintln!("[aos-session] démarrage échoué : {e}");
-            eprintln!("[aos-session] Astuce : consultez var/run/*.stderr.log (GPU, modèles, bus).");
             stop_all(&session);
-            std::process::exit(1);
+            if !offer_bootstrap_retry(&home, &format!("démarrage échoué : {e}")) {
+                std::process::exit(1);
+            }
+            continue;
         }
 
         if let Err(e) = healthcheck() {
-            eprintln!("[aos-session] healthcheck échoué : {e}");
-            eprintln!(
-                "[aos-session] Causes fréquentes : modèle GGUF manquant, CUDA DLL absente, bus occupé.\n\
-                 Logs : var/run/*.stderr.log"
-            );
             stop_all(&session);
-            std::process::exit(1);
+            if !offer_bootstrap_retry(&home, &format!("healthcheck échoué : {e}")) {
+                std::process::exit(1);
+            }
+            continue;
         }
         eprintln!("[aos-session] services OK");
         if first_ui {
@@ -1492,4 +1532,74 @@ fn ctrlc_guard(session: Arc<Session>) {
         stop_all(&session);
         std::process::exit(130);
     });
+}
+
+#[cfg(test)]
+mod bootstrap_i18n_tests {
+    use super::{
+        bootstrap_failed_body, bootstrap_retry_label, session_language, OnboardingState,
+    };
+    use std::fs;
+    use std::path::PathBuf;
+
+    fn temp_home(label: &str) -> PathBuf {
+        let mut p = std::env::temp_dir();
+        p.push(format!(
+            "aos-session-i18n-{label}-{}",
+            std::process::id()
+        ));
+        let _ = fs::create_dir_all(p.join("var/run"));
+        p
+    }
+
+    #[test]
+    fn bootstrap_failed_body_fr_en() {
+        assert_eq!(
+            bootstrap_failed_body("fr"),
+            "Impossible de terminer le démarrage."
+        );
+        assert_eq!(
+            bootstrap_failed_body("en"),
+            "Couldn't finish starting."
+        );
+        assert_eq!(
+            bootstrap_failed_body("EN"),
+            "Couldn't finish starting."
+        );
+        assert!(!bootstrap_failed_body("fr").contains("RAG"));
+        assert!(!bootstrap_failed_body("en").to_lowercase().contains("index"));
+        assert!(!bootstrap_failed_body("fr").contains("Réessayer"));
+        assert!(!bootstrap_failed_body("en").contains("Try again"));
+    }
+
+    #[test]
+    fn bootstrap_retry_label_fr_en() {
+        assert_eq!(bootstrap_retry_label("fr"), "Réessayer");
+        assert_eq!(bootstrap_retry_label("en"), "Try again");
+        assert_eq!(bootstrap_retry_label("EN"), "Try again");
+    }
+
+    #[test]
+    fn session_language_reads_onboarding() {
+        let home = temp_home("lang");
+        let state = OnboardingState {
+            completed: true,
+            language: "en".into(),
+            routing: "local_only".into(),
+            trust_default: "medium".into(),
+            tutorial_step: 0,
+        };
+        fs::write(
+            home.join("var/run/onboarding.json"),
+            serde_json::to_string_pretty(&state).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(session_language(&home), "en");
+    }
+
+    #[test]
+    fn session_language_defaults_fr() {
+        let home = temp_home("default");
+        assert_eq!(session_language(&home), "fr");
+    }
 }

@@ -88,6 +88,80 @@ pub fn show_fatal_dialog(title: &str, body: &str) {
     }
 }
 
+/// Boot-failure dialog: one-line body + localized Retry button. Returns `true` to retry.
+pub fn show_bootstrap_retry_dialog(title: &str, body: &str, retry_label: &str) -> bool {
+    eprintln!("[aos-session] {title}\n{body}");
+    #[cfg(windows)]
+    {
+        let safe_title = ps_escape_single_quoted(title);
+        let safe_body = ps_escape_single_quoted(body);
+        let safe_retry = ps_escape_single_quoted(retry_label);
+        let ps = format!(
+            r#"Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+$form = New-Object System.Windows.Forms.Form
+$form.Text = '{safe_title}'
+$form.FormBorderStyle = 'FixedDialog'
+$form.MaximizeBox = $false
+$form.MinimizeBox = $false
+$form.StartPosition = 'CenterScreen'
+$form.ClientSize = New-Object System.Drawing.Size(420, 140)
+$label = New-Object System.Windows.Forms.Label
+$label.Text = '{safe_body}'
+$label.AutoSize = $false
+$label.Size = New-Object System.Drawing.Size(380, 50)
+$label.Location = New-Object System.Drawing.Point(20, 20)
+$form.Controls.Add($label)
+$btn = New-Object System.Windows.Forms.Button
+$btn.Text = '{safe_retry}'
+$btn.Size = New-Object System.Drawing.Size(120, 30)
+$btn.Location = New-Object System.Drawing.Point(150, 80)
+$btn.DialogResult = [System.Windows.Forms.DialogResult]::OK
+$form.AcceptButton = $btn
+$form.Controls.Add($btn)
+$form.Add_Shown({{ $form.Activate(); $btn.Focus() }})
+if ($form.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{ exit 0 }} else {{ exit 1 }}"#
+        );
+        return Command::new("powershell")
+            .args(["-NoProfile", "-Command", &ps])
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let out = Command::new("osascript")
+            .args([
+                "-e",
+                "on run argv",
+                "-e",
+                "set dlg to display dialog (item 2 of argv) with title (item 1 of argv) buttons {item 3 of argv} default button 1 with icon caution",
+                "-e",
+                "return button returned of dlg",
+                "-e",
+                "end run",
+            ])
+            .arg(title)
+            .arg(body)
+            .arg(retry_label)
+            .output();
+        return out
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim() == retry_label)
+            .unwrap_or(false);
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        eprintln!("[aos-session] {retry_label} (headless — auto-retry)");
+        let _ = (title, body);
+        true
+    }
+}
+
+#[cfg(windows)]
+fn ps_escape_single_quoted(s: &str) -> String {
+    s.replace('\'', "''")
+}
+
 pub fn check_disk_space(home: &Path) -> Result<(), String> {
     let target = if home.exists() {
         home.to_path_buf()
@@ -671,6 +745,15 @@ mod tests {
         assert!(!installed_dir.join("stale.txt").exists());
 
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn headless_bootstrap_retry_dialog_auto_retries() {
+        assert!(super::show_bootstrap_retry_dialog(
+            "Akasha OS Preview",
+            "Couldn't finish starting.",
+            "Try again"
+        ));
     }
 
     #[test]
