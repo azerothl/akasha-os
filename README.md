@@ -1,5 +1,9 @@
 # Akasha OS
 
+<p align="center">
+  <img src="branding/logo/logo.svg" width="96" height="96" alt="Akasha OS">
+</p>
+
 **Language:** English | [Français](docs/fr/README.md)
 
 **Site:** [azerothl.github.io/akasha-os](https://azerothl.github.io/akasha-os/)
@@ -7,6 +11,10 @@
 **Agent-native operating system** — capability-based security, semantic IPC,
 first-class GPU, offline-first. Preview builds run on a Windows/Linux host
 (NVIDIA); a seL4 bare-metal track is separate.
+
+<p align="center">
+  <img src="branding/logo/tracks.svg" width="480" alt="MEMORY, CAPS, GPU, AGENTS">
+</p>
 
 > This is **not** a bootable OS image yet. Preview 0.13.0 is an installable host
 > app for testers (Windows/Linux/Mac Apple Silicon; NVIDIA optional on Win/Linux

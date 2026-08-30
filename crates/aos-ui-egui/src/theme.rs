@@ -1,10 +1,11 @@
-//! Orrery design tokens mapped to egui Visuals (see docs/UI.md, docs/DESIGN.md).
+//! Cloud-chamber design tokens mapped to egui Visuals (see docs/UI.md).
 
 use eframe::egui;
 
 pub const VOID: egui::Color32 = egui::Color32::from_rgb(7, 11, 20);
-pub const SIGNAL: egui::Color32 = egui::Color32::from_rgb(62, 224, 196);
-pub const HYDROGEN: egui::Color32 = egui::Color32::from_rgb(232, 93, 76);
+pub const ICE_TRACK: egui::Color32 = egui::Color32::from_rgb(94, 231, 255);
+pub const SIGNAL: egui::Color32 = egui::Color32::from_rgb(46, 240, 200);
+pub const HYDROGEN: egui::Color32 = egui::Color32::from_rgb(255, 90, 72);
 pub const PAPER: egui::Color32 = egui::Color32::from_rgb(232, 238, 246);
 
 const FOCUS_STROKE_WIDTH: f32 = 2.0;
@@ -67,10 +68,10 @@ fn base_widgets(v: &mut egui::Visuals, fg: egui::Color32, accent: egui::Color32)
 
 pub fn apply_theme(ctx: &egui::Context, theme: &str) {
     let visuals = match theme {
-        "light" => orrery_light(),
-        "soft" => orrery_soft(),
-        "high_contrast" => orrery_high_contrast(),
-        _ => orrery_dark(),
+        "light" => chamber_light(),
+        "soft" => chamber_soft(),
+        "high_contrast" => chamber_high_contrast(),
+        _ => chamber_dark(),
     };
     ctx.set_visuals(visuals);
 }
@@ -84,14 +85,14 @@ pub fn apply_ui_scale(ctx: &egui::Context, scale_percent: u32) {
     }
 }
 
-fn orrery_dark() -> egui::Visuals {
+fn chamber_dark() -> egui::Visuals {
     let mut v = egui::Visuals::dark();
     v.dark_mode = true;
     v.extreme_bg_color = VOID;
     v.panel_fill = VOID;
     v.window_fill = mix(VOID, PAPER, 0.04);
-    v.faint_bg_color = mix(VOID, SIGNAL, 0.08);
-    v.widgets.noninteractive.bg_fill = mix(VOID, SIGNAL, 0.06);
+    v.faint_bg_color = mix(VOID, ICE_TRACK, 0.08);
+    v.widgets.noninteractive.bg_fill = mix(VOID, ICE_TRACK, 0.05);
     v.widgets.inactive.bg_fill = mix(VOID, SIGNAL, 0.10);
     v.widgets.hovered.bg_fill = mix(VOID, SIGNAL, 0.18);
     v.widgets.active.bg_fill = mix(VOID, SIGNAL, 0.28);
@@ -99,7 +100,7 @@ fn orrery_dark() -> egui::Visuals {
     v
 }
 
-fn orrery_light() -> egui::Visuals {
+fn chamber_light() -> egui::Visuals {
     let mut v = egui::Visuals::light();
     v.dark_mode = false;
     v.extreme_bg_color = mix(PAPER, VOID, 0.06);
@@ -114,8 +115,8 @@ fn orrery_light() -> egui::Visuals {
     v
 }
 
-fn orrery_soft() -> egui::Visuals {
-    let mut v = orrery_light();
+fn chamber_soft() -> egui::Visuals {
+    let mut v = chamber_light();
     let soft_paper = mix(PAPER, VOID, 0.03);
     let soft_fg = mix(VOID, PAPER, 0.10);
     let soft_signal = mix(SIGNAL, VOID, 0.15);
@@ -127,8 +128,8 @@ fn orrery_soft() -> egui::Visuals {
     v
 }
 
-fn orrery_high_contrast() -> egui::Visuals {
-    let mut v = orrery_dark();
+fn chamber_high_contrast() -> egui::Visuals {
+    let mut v = chamber_dark();
     v.extreme_bg_color = VOID;
     v.panel_fill = VOID;
     v.window_fill = VOID;
@@ -153,10 +154,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn orrery_tokens_are_canonical() {
+    fn chamber_tokens_are_canonical() {
         assert_eq!(VOID, egui::Color32::from_rgb(7, 11, 20));
-        assert_eq!(SIGNAL, egui::Color32::from_rgb(62, 224, 196));
-        assert_eq!(HYDROGEN, egui::Color32::from_rgb(232, 93, 76));
+        assert_eq!(ICE_TRACK, egui::Color32::from_rgb(94, 231, 255));
+        assert_eq!(SIGNAL, egui::Color32::from_rgb(46, 240, 200));
+        assert_eq!(HYDROGEN, egui::Color32::from_rgb(255, 90, 72));
         assert_eq!(PAPER, egui::Color32::from_rgb(232, 238, 246));
     }
 

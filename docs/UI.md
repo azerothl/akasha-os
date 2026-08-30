@@ -2,7 +2,7 @@
 
 **Language:** English | [Français](fr/UI.md)
 
-Durable product spec for the **Preview host app** (`crates/aos-ui-egui`). The public marketing site (`website/`) keeps its own orrery design system in [DESIGN.md](DESIGN.md); this document governs in-app chrome, navigation, and copy on Windows/Linux Preview.
+Durable product spec for the **Preview host app** (`crates/aos-ui-egui`). The public marketing site (`website/`) keeps the cloud-chamber design system in [DESIGN.md](DESIGN.md); this document governs in-app chrome, navigation, and copy on Windows/Linux Preview.
 
 > Scope: Preview 0.11.x host shell. Not the bootable seL4 image.
 
@@ -12,7 +12,7 @@ Durable product spec for the **Preview host app** (`crates/aos-ui-egui`). The pu
 2. **Progressive disclosure** — everyday tasks on the primary rail; power tools and cohort protocol under **More**.
 3. **Honesty without noise** — Preview limits stay visible but do not dominate chrome.
 4. **Human language first** — confirmations and primary labels explain intent; technical ids stay in tooltips or expert folds.
-5. **Orrery palette everywhere** — reuse void / signal / hydrogen / paper from the public site; no new brand colors.
+5. **Chamber palette everywhere** — reuse void / ice-track / signal / hydrogen / paper from the public site; no new brand colors.
 
 ## Information architecture
 
@@ -39,15 +39,16 @@ Before this spec, ~13 peer sidebar tabs treated Chat, Scenarios, Feedback, Caps,
 - **More** = workspace admin, trust, and extensions.
 - **Scenarios + Feedback** = cohort / tester protocol ([TESTER.md](TESTER.md)); reachable from More, not the default post-tutorial destination.
 
-## Design tokens (orrery)
+## Design tokens (chamber)
 
 Canonical palette (same as [DESIGN.md](DESIGN.md) and `website/styles.css`):
 
 | Token | Hex | Role |
 |-------|-----|------|
 | `void` | `#070b14` | Night ground, primary text on light themes |
-| `signal` | `#3ee0c4` | Live chrome: selection, focus ring, active rail, links |
-| `hydrogen` | `#e85d4c` | Warnings, destructive emphasis, update CTA accent |
+| `ice-track` | `#5ee7ff` | Identity / event traces (mark, audit hairlines, named tracks) |
+| `signal` | `#2ef0c8` | Live chrome: selection, focus ring, active rail, links |
+| `hydrogen` | `#ff5a48` | Spark, warnings, destructive emphasis, update CTA |
 | `paper` | `#e8eef6` | Body type on void; light theme ground |
 | `mute` | ~42% signal in void | Idle labels, secondary chrome |
 
@@ -57,7 +58,7 @@ Canonical palette (same as [DESIGN.md](DESIGN.md) and `website/styles.css`):
 |-------|--------|------|--------|-------|
 | **dark** (default) | void | paper | signal | Matches public site night ether. |
 | **light** | paper | void | signal | Inverted plates; void type on paper meets AA for body copy. |
-| **soft** | paper + 3% void mix | void @ 90% | signal @ 85% | Reduced contrast for long sessions; still orrery hues. |
+| **soft** | paper + 3% void mix | void @ 90% | signal @ 85% | Reduced contrast for long sessions; still chamber hues. |
 | **high_contrast** | void | paper | signal + 2px focus | Paper on void ≥ 12:1; signal used for focus/selection, not sole state indicator. |
 
 Do not introduce purple glow, card radii, or a separate “app brand” — square bezels, instrument density.
@@ -148,7 +149,7 @@ Tester jargon is fine inside Scenarios, Feedback, and audit export — not on th
 ## Related docs
 
 - [PRODUCT.md](PRODUCT.md) — positioning and brand commitments
-- [DESIGN.md](DESIGN.md) — public-site orrery system
+- [DESIGN.md](DESIGN.md) — public-site cloud-chamber system
 - [I18N.md](I18N.md) — EN/FR doc and UI language rules
 - [FIRST-RUN.md](FIRST-RUN.md) — install and first launch
 - [TESTER.md](TESTER.md) — cohort protocol (Scenarios / Feedback)
@@ -160,7 +161,7 @@ Tester jargon is fine inside Scenarios, Feedback, and audit export — not on th
 | Spec (this doc) | done |
 | Primary rail + More overflow | in progress |
 | Status bar (network, model, caps, update, language) | in progress |
-| Orrery token mapping for four themes | in progress |
+| Chamber token mapping for four themes | in progress |
 | First-run → chat + allowance recap | done |
 | Settings Me/Models/Trust grouping | done |
 | Interface scale preference | done |

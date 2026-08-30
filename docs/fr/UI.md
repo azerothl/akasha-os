@@ -2,7 +2,7 @@
 
 **Langue :** [English](../UI.md) | Français
 
-Spécification produit durable pour l’**application hôte Preview** (`crates/aos-ui-egui`). Le site public (`website/`) conserve son design system orrery dans [DESIGN.md](../DESIGN.md) ; ce document régit le chrome in-app, la navigation et les libellés sur Preview Windows/Linux.
+Spécification produit durable pour l’**application hôte Preview** (`crates/aos-ui-egui`). Le site public (`website/`) conserve le design system chambre à brouillard dans [DESIGN.md](../DESIGN.md) ; ce document régit le chrome in-app, la navigation et les libellés sur Preview Windows/Linux.
 
 > Périmètre : shell hôte Preview 0.11.x. Pas l’image seL4 bootable.
 
@@ -12,7 +12,7 @@ Spécification produit durable pour l’**application hôte Preview** (`crates/a
 2. **Divulgation progressive** — tâches courantes sur le rail principal ; outils avancés et protocole cohorte sous **Plus**.
 3. **Honnêteté sans bruit** — les limites Preview restent visibles sans dominer le chrome.
 4. **Langage humain d’abord** — confirmations et libellés primaires expliquent l’intention ; les identifiants techniques restent en infobulles ou replis expert.
-5. **Palette orrery partout** — réutiliser void / signal / hydrogen / paper du site public ; pas de nouvelle marque couleur.
+5. **Palette chambre partout** — réutiliser void / ice-track / signal / hydrogen / paper du site public ; pas de nouvelle marque couleur.
 
 ## Architecture de l’information
 
@@ -39,15 +39,16 @@ Avant cette spec, ~13 onglets latéraux traitaient Chat, Scénarios, Retour, Cap
 - **Plus** = administration, confiance, extensions.
 - **Scénarios + Retour** = protocole cohorte / testeur ([TESTER.md](TESTER.md)) ; accessibles via Plus, pas la destination post-tutoriel par défaut.
 
-## Jetons de design (orrery)
+## Jetons de design (chambre)
 
 Palette canonique (identique à [DESIGN.md](../DESIGN.md) et `website/styles.css`) :
 
 | Jeton | Hex | Rôle |
 |-------|-----|------|
 | `void` | `#070b14` | Fond nuit, texte principal sur thèmes clairs |
-| `signal` | `#3ee0c4` | Chrome actif : sélection, focus, rail actif, liens |
-| `hydrogen` | `#e85d4c` | Avertissements, emphase destructive, CTA mise à jour |
+| `ice-track` | `#5ee7ff` | Identité / traces d’événement (mark, filets d’audit, pistes nommées) |
+| `signal` | `#2ef0c8` | Chrome actif : sélection, focus, rail actif, liens |
+| `hydrogen` | `#ff5a48` | Étincelle, avertissements, emphase destructive, CTA mise à jour |
 | `paper` | `#e8eef6` | Corps sur void ; fond thème clair |
 | `mute` | ~42 % signal dans void | Libellés inactifs, chrome secondaire |
 
@@ -57,7 +58,7 @@ Palette canonique (identique à [DESIGN.md](../DESIGN.md) et `website/styles.css
 |-------|------|-------|--------|-------|
 | **dark** (défaut) | void | paper | signal | Aligné sur l’éther nuit du site. |
 | **light** | paper | void | signal | Plaques inversées ; texte void sur paper ≥ AA corps. |
-| **soft** | paper + 3 % void | void @ 90 % | signal @ 85 % | Contraste adouci ; teintes orrery conservées. |
+| **soft** | paper + 3 % void | void @ 90 % | signal @ 85 % | Contraste adouci ; teintes chambre conservées. |
 | **high_contrast** | void | paper | signal + focus 2px | Paper sur void ≥ 12:1 ; signal pour focus/sélection, pas seul indicateur d’état. |
 
 Pas de glow violet, coins arrondis carte, ni « marque app » séparée — biseaux carrés, densité instrument.
@@ -148,7 +149,7 @@ Le jargon testeur reste acceptable dans Scénarios, Retour et export audit — p
 ## Documents liés
 
 - [PRODUCT.md](../PRODUCT.md) — positionnement et engagements marque
-- [DESIGN.md](../DESIGN.md) — système orrery site public
+- [DESIGN.md](../DESIGN.md) — système chambre à brouillard du site public
 - [I18N.md](I18N.md) — règles langue EN/FR
 - [FIRST-RUN.md](FIRST-RUN.md) — installation et premier lancement
 - [TESTER.md](TESTER.md) — protocole cohorte (Scénarios / Retour)
@@ -160,7 +161,7 @@ Le jargon testeur reste acceptable dans Scénarios, Retour et export audit — p
 | Spec (ce doc) | fait |
 | Rail principal + overflow Plus | en cours |
 | Barre d’état (réseau, modèle, caps, update, langue) | en cours |
-| Mapping jetons orrery sur quatre thèmes | en cours |
+| Mapping jetons chambre sur quatre thèmes | en cours |
 | Premier lancement → chat + récap autorisations | fait |
 | Regroupement Paramètres Moi/Modèles/Confiance | fait |
 | Préférence échelle interface | fait |

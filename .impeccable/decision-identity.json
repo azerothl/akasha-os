@@ -1,0 +1,197 @@
+{
+  "title": "Identité Akasha OS — le kit",
+  "question": "Le kit de marque gouverne l’app, le site, la doc et le README — même si ça corrige le site actuel. Le dé a donné l’Orrery, complété. Garde-le, prends une autre carte, ou relance.",
+  "options": [
+    {
+      "id": "assigned",
+      "label": "L’Orrery",
+      "kicker": "THE ROLL",
+      "lineage": "Planétarium mécanique dans l’éther nocturne — le site public, abouti en kit.",
+      "thesis": "Le mark, le lockup et chaque surface sont la même machine : des agents en orbite, des capacités comme tiges, un seul hydrogène pour remonter.",
+      "palette": ["#070b14", "#3ee0c4", "#e85d4c", "#e8eef6"],
+      "materials": ["laiton et cyan", "plaques fraisées", "éther nocturne", "clé de remontage"],
+      "viewport": "Planche de marque : A inscrit dans des anneaux à gauche, lockup Akasha OS, trois densités (mark / lockup / orrery), bandeau app et en-tête README dessous — zéro carte levée.",
+      "risk": "Rester le costume du site : cyan partout, A jaune à côté, README GitHub nu.",
+      "raised": [
+        { "from": "tdr-info-noise-sleeve", "raise": "Échelle de densité — trois densités officielles seulement : mark, lockup, orrery complet. Les explorations or / bindu / aether / records sortent du canon." },
+        { "from": "graphic-worlds-publishing-busytown-cross-section", "raise": "Discipline de la coupe — un seul schéma de machine légendé (MEMORY / CAPS / GPU / AGENTS) réutilisé README, doc et app. Aucun orbe anonyme." },
+        { "from": "cinema-cinematography-editing-multiplane-cel-dawn", "raise": "Règle des plans — le void recule en couches (éther, plaque, papier) ; l’hydrogène est la seule lampe, jamais un second accent." },
+        { "from": "operate-c-cracktro-scroller-queue", "raise": "Champ sans boîte — interdit d’élever des cartes, y compris sur GitHub. Le rang est la couche, pas le cadre." }
+      ],
+      "comp": ".impeccable/mocks/decision/assigned.webp",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "mark A", "x": 0, "y": 0, "w": 3, "h": 4, "accent": true },
+          { "label": "lockup Akasha OS", "x": 3, "y": 0, "w": 5, "h": 2 },
+          { "label": "void · signal · H · paper", "x": 8, "y": 0, "w": 4, "h": 2 },
+          { "label": "densité 1 · 2 · 3", "x": 3, "y": 2, "w": 9, "h": 2 },
+          { "label": "chrome app · rail + statut", "x": 0, "y": 4, "w": 12, "h": 3 },
+          { "label": "README · machine légendée", "x": 0, "y": 7, "w": 12, "h": 3 }
+        ]
+      }
+    },
+    {
+      "id": "model-pick",
+      "label": "Chambre à brouillard",
+      "kicker": "IMPECCABLE’S PICK",
+      "lineage": "Chambre de Wilson — l’éther comme milieu physique où les événements laissent une trace.",
+      "thesis": "Ākāśa n’est pas un mythe : c’est le milieu. Chaque action d’agent ionise une trace ; le mark est une trace qui forme un A.",
+      "palette": ["#070b14", "#9fd6ff", "#3ee0c4", "#e85d4c", "#e8eef6"],
+      "materials": ["vapeur sursaturée", "cloche de verre", "traces ionisées", "une étincelle"],
+      "viewport": "Planche de marque comme cloche : fond void, une trace cyan qui inscrit le A, lockup en brouillard papier, README en traces d’audit pas en captures d’écran.",
+      "risk": "C’est aussi la destination la plus prévisible pour « éther » : musée des sciences, pas OS. La familiarité est le vrai risque.",
+      "comp": ".impeccable/mocks/decision/model-pick.webp",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "cloche / mark-trace", "x": 1, "y": 0, "w": 4, "h": 6, "accent": true },
+          { "label": "lockup dans le brouillard", "x": 5, "y": 1, "w": 6, "h": 2 },
+          { "label": "traces MEMORY CAPS GPU AGENTS", "x": 5, "y": 3, "w": 6, "h": 3 },
+          { "label": "app · traces d’audit", "x": 0, "y": 6, "w": 12, "h": 2 },
+          { "label": "README · journal de traces", "x": 0, "y": 8, "w": 12, "h": 2 }
+        ]
+      }
+    },
+    {
+      "id": "challenger-glazier-colorfield-partition",
+      "label": "Paroi de verrier",
+      "verdict": "competitive",
+      "lineage": "Cloison d’atelier de verrier — barres noires, verres clairs, une vitre saturée comme une note.",
+      "thesis": "L’identité est une élévation de verres : une vitre signal, l’hydrogène en oxblood réservé à l’acte, le reste en void translucide.",
+      "palette": ["#0a0a0c", "#e8eef6", "#3ee0c4", "#9a2e24"],
+      "materials": ["barres de vitrage mates", "verre graineux", "un champ saturé"],
+      "viewport": "Planche comme mur : mark dans une vitre carrée, lockup dans la travée voisine, chrome app = une rangée de carreaux, README = travée de lecture.",
+      "case": "Les gens systèmes s’identifient au calme précis ; un mur de verre ne dit pas OS-pour-agents.",
+      "risk": "Beau et architectural, muet sur les capacités et l’éther.",
+      "comp": ".impeccable/mocks/decision/challenger-glazier.webp",
+      "hero": "https://impeccable.style/worlds/cards/craft-making-glazier-colorfield-partition-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/craft-making-glazier-colorfield-partition.webp",
+      "wireframe": {
+        "cols": 12,
+        "rows": 8,
+        "regions": [
+          { "label": "vitre mark", "x": 0, "y": 0, "w": 3, "h": 5, "accent": true },
+          { "label": "vitre lockup", "x": 3, "y": 0, "w": 5, "h": 2 },
+          { "label": "vitre hydrogène", "x": 8, "y": 0, "w": 4, "h": 2 },
+          { "label": "travée lecture", "x": 3, "y": 2, "w": 9, "h": 3 },
+          { "label": "rangée chrome app", "x": 0, "y": 5, "w": 12, "h": 3 }
+        ]
+      }
+    },
+    {
+      "id": "challenger-night-flight-six-pack",
+      "label": "Planche de vol",
+      "verdict": "competitive",
+      "lineage": "Six-pack d’instruments de nuit — six cadrans lumineux, rien hors du verre.",
+      "thesis": "Le kit est un panneau de nuit : six vérités (MEMORY, CAPS, GPU, AGENTS, réseau, modèle), cyan lumineux, hydrogène seulement en alarme.",
+      "palette": ["#05070a", "#dce6ef", "#3ee0c4", "#e85d4c"],
+      "materials": ["panneau mat", "cadrans lumineux", "plaques terse"],
+      "viewport": "Planche : mark en placard, six cadrans en deux rangs de trois, lockup sous le panneau, README en check-list de vol.",
+      "case": "Le chrome Operate (barre de statut) mappe 1:1 ; perd l’Akasha — ça lit avionique, pas éther.",
+      "risk": "Théâtre cockpit / un OS-instrument de plus.",
+      "comp": ".impeccable/mocks/decision/challenger-sixpack.webp",
+      "hero": "https://impeccable.style/worlds/cards/signals-instruments-night-flight-six-pack-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/signals-instruments-night-flight-six-pack.webp",
+      "wireframe": {
+        "cols": 12,
+        "rows": 8,
+        "regions": [
+          { "label": "placard mark", "x": 0, "y": 0, "w": 2, "h": 2 },
+          { "label": "cadran 1", "x": 2, "y": 0, "w": 3, "h": 3, "accent": true },
+          { "label": "cadran 2", "x": 5, "y": 0, "w": 3, "h": 3 },
+          { "label": "cadran 3", "x": 8, "y": 0, "w": 3, "h": 3 },
+          { "label": "cadran 4", "x": 2, "y": 3, "w": 3, "h": 3 },
+          { "label": "cadran 5", "x": 5, "y": 3, "w": 3, "h": 3 },
+          { "label": "cadran 6", "x": 8, "y": 3, "w": 3, "h": 3 },
+          { "label": "README check", "x": 0, "y": 6, "w": 12, "h": 2 }
+        ]
+      }
+    },
+    {
+      "id": "challenger-tdr-info-noise-sleeve",
+      "label": "Pochette TDR",
+      "verdict": "declined",
+      "lineage": "The Designers Republic — roundels pseudo-corporate, bruit d’information immaculé.",
+      "thesis": "Akasha comme code produit hostile : roundels, glyphes d’alerte, un mot condensé qui crie.",
+      "palette": ["#000000", "#ff2bd6", "#ff5a00", "#ffffff"],
+      "materials": ["roundels", "hazard grotesk", "marques d’enregistrement"],
+      "viewport": "Mark en cible magenta, lockup en code produit, README saturé de tampons.",
+      "case": "Le bruit d’information combat la voix honnête du produit ; les testeurs n’identifient pas une pochette de label.",
+      "kept": "La densité comme système déclaré, pas comme explorations qui coexistent.",
+      "risk": "Warez / label, pas OS.",
+      "hero": "https://impeccable.style/worlds/cards/tdr-info-noise-sleeve-hero.webp",
+      "comp": ".impeccable/mocks/decision/challenger-tdr.webp"
+    },
+    {
+      "id": "challenger-busytown-cross-section",
+      "label": "Coupe Busytown",
+      "verdict": "declined",
+      "lineage": "Planche en coupe où chaque objet porte une étiquette imprimée.",
+      "thesis": "L’OS ouvert comme une maison de poupée légendée : chaque service nommé, aucun mur.",
+      "palette": ["#fff8ee", "#c4452a", "#f0c000", "#3d7a3a"],
+      "materials": ["gouache", "contour brun", "étiquettes romaines"],
+      "viewport": "Machine en coupe légendée, pleine largeur.",
+      "case": "L’idée de coupe légendée est claire ; le registre enfantin rate l’audience et l’éther.",
+      "kept": "Tout ce qui existe est nommé — MEMORY / CAPS / GPU / AGENTS, jamais des orbes anonymes.",
+      "risk": "Livre pour enfants.",
+      "hero": "https://impeccable.style/worlds/cards/graphic-worlds-publishing-busytown-cross-section-hero.webp",
+      "comp": ".impeccable/mocks/decision/challenger-busytown.webp"
+    },
+    {
+      "id": "challenger-multiplane-cel-dawn",
+      "label": "Aube multiplan",
+      "verdict": "declined",
+      "lineage": "Aube d’animation multiplan — forêts peintes, une lampe ambre.",
+      "thesis": "L’éther en plans de gouache, l’hydrogène comme unique fenêtre allumée.",
+      "palette": ["#1a1410", "#3d5a4a", "#8aa4b0", "#e8a04a"],
+      "materials": ["celluloïd", "gouache", "brume"],
+      "viewport": "Titre sur le plan le plus proche, machine au loin comme cottage.",
+      "case": "Aube, cottage et brume lisent mysticisme — exactement ce qui rendrait le kit faux.",
+      "kept": "La profondeur en plans empilés, une seule lampe active.",
+      "risk": "Conte, pas OS.",
+      "hero": "https://impeccable.style/worlds/cards/cinema-cinematography-editing-multiplane-cel-dawn-hero.webp",
+      "comp": ".impeccable/mocks/decision/challenger-multiplane.webp"
+    },
+    {
+      "id": "challenger-cracktro-scroller-queue",
+      "label": "Cracktro",
+      "verdict": "declined",
+      "lineage": "Écran-titre cracktro — une face bitmap sur un void, poussière en profondeur.",
+      "thesis": "Le kit sans aucune boîte : une ligne ivoire, un caret hydrogène, le rang est la profondeur.",
+      "palette": ["#000000", "#e8e4d8", "#c4a574", "#e8a04a"],
+      "materials": ["bitmap", "poussière grise", "void émissif"],
+      "viewport": "Une ligne de mark sur le void, README sans filets.",
+      "case": "Esthétique warez contre licence commerciale ; le void nu n’explique pas les capacités.",
+      "kept": "Rien n’est enfermé dans une carte — le rang est la couche.",
+      "risk": "Demoscene, pas Preview.",
+      "hero": "https://impeccable.style/worlds/cards/operate-c-cracktro-scroller-queue-hero.webp",
+      "comp": ".impeccable/mocks/decision/challenger-cracktro.webp"
+    }
+  ],
+  "reroll": { "registers": ["safer", "bolder"] },
+  "buildPath": { "value": "code", "toggle": true },
+  "canon": true,
+  "canonCard": {
+    "label": "Le standard de catégorie",
+    "thesis": "AI desktop impeccable : fond sombre, Inter, cartes arrondies, glow cyan-violet, hero screenshot de chat.",
+    "palette": ["#0b0f19", "#7c5cff", "#22d3ee", "#f8fafc"],
+    "materials": ["cartes élevées", "glow", "screenshot produit"],
+    "viewport": "Hero chat à gauche, CTA Install à droite, grille de features en cards.",
+    "risk": "Indistinguable d’un wrapper de chat, par design.",
+    "comp": ".impeccable/mocks/decision/canon.webp",
+    "wireframe": {
+      "cols": 12,
+      "rows": 8,
+      "regions": [
+        { "label": "nav", "x": 0, "y": 0, "w": 12, "h": 1 },
+        { "label": "screenshot chat", "x": 0, "y": 1, "w": 7, "h": 5, "accent": true },
+        { "label": "headline + CTA", "x": 7, "y": 1, "w": 5, "h": 5 },
+        { "label": "feature cards", "x": 0, "y": 6, "w": 12, "h": 2 }
+      ]
+    }
+  },
+  "steer": true
+}

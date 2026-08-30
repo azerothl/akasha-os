@@ -51,7 +51,7 @@ Site routes: landing plus grant, why, install, about, an end-user docs hub (`web
 
 - Name: **Akasha OS**. Trademark reserved.
 - Voice: precise and technical, no hype. Prefer **full sentences and short paragraphs** over keyword stamps (`GRANT` / `DENY` as primary labels). Explain what the user can do in the UI and how Preview can be extended (modules, skills, MCP, Providers). State limits (host app, NVIDIA recommended, not bootable) in the same breath as the thesis, without sounding like a checklist of refusals.
-- Visual hierarchy on the public site: keep the orrery palette (void / cyan / hydrogen / paper); increase section contrast with plate backgrounds, cyan rails under titles, and paper callouts for critical facts — not a new theme.
+- Visual identity: **cloud chamber** — ākāśa as the medium; agent actions ionize tracks. Canonical mark is the trace-A (hydrogen spark at the origin), not rings, not bindu. Palette: void `#070b14`, ice-track `#5ee7ff` (event lines), signal `#2ef0c8` (live chrome), hydrogen `#ff5a48` (spark / alarm only), paper `#e8eef6`. Densities: mark / lockup / labeled tracks (MEMORY, CAPS, GPU, AGENTS). Explorations in gold, bindu, aether, and records are not canon.
 - Binding languages: English and French.
 - Identity constraint volunteered by the product itself: honesty about Preview vs the long-term seL4 track.
 

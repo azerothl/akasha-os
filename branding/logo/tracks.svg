@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 200" role="img" aria-label="MEMORY CAPS GPU AGENTS">
+  <title>Akasha OS — named tracks</title>
+  <rect width="640" height="200" fill="#070b14"/>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path stroke="#5ee7ff" stroke-width="2.4" d="M24 40 L 360 38 M360 38 L 410 22 M360 38 L 424 38 M360 38 L 410 54"/>
+    <path stroke="#2ef0c8" stroke-width="2.2" d="M24 80 L 400 80 M 140 80 L 140 68 M 220 80 L 220 92 M 300 80 L 300 68"/>
+    <path stroke="#5ee7ff" stroke-width="2.4" d="M24 120 L 300 118 C 340 118, 360 100, 372 120 C 384 140, 368 152, 352 140 C 340 130, 348 118, 362 118"/>
+    <path stroke="#2ef0c8" stroke-width="2.2" d="M24 160 L 180 160 M 180 160 C 200 140, 230 180, 250 152 C 270 124, 300 176, 320 160 L 400 160"/>
+  </g>
+  <circle cx="24" cy="40" r="4" fill="#ff5a48"/>
+  <g fill="#e8eef6" font-family="Georgia, Palatino, Times New Roman, serif" font-size="13" font-style="italic">
+    <text x="436" y="44">MEMORY</text>
+    <text x="416" y="84">CAPS</text>
+    <text x="400" y="124">GPU</text>
+    <text x="416" y="164">AGENTS</text>
+  </g>
+</svg>

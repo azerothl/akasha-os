@@ -5341,6 +5341,11 @@ impl eframe::App for UiApp {
         egui::TopBottomPanel::bottom("status_bar")
             .exact_height(28.0)
             .show(ctx, |ui| {
+                let r = ui.max_rect();
+                ui.painter().line_segment(
+                    [r.left_top(), r.right_top()],
+                    egui::Stroke::new(1.0, theme::ICE_TRACK),
+                );
                 self.ui_status_bar(ui, &t);
             });
 

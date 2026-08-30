@@ -1,6 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Akasha OS">
+  <title>Akasha OS</title>
   <rect width="32" height="32" fill="#070b14"/>
-  <circle cx="16" cy="16" r="13" fill="none" stroke="#3ee0c4" stroke-width="1.5"/>
-  <path d="M8.5 26 L16 6 L23.5 26" fill="none" stroke="#3ee0c4" stroke-width="2.2" stroke-linejoin="miter"/>
-  <circle cx="16" cy="16" r="1.6" fill="#3ee0c4"/>
+  <g fill="none" stroke="#5ee7ff" stroke-linecap="round" stroke-linejoin="round">
+    <path stroke-width="2.3" d="M7.5 26 C 11.5 17, 13.5 9.5, 16 5 C 18.5 9.5, 20.5 17, 24.5 26"/>
+    <path stroke-width="1.55" d="M11 18 C 14.5 16.2, 17.5 16.2, 20.2 18 C 23.2 16.2, 24.6 20.4, 21.4 21.4 C 19.2 22, 18.6 18.6, 20.6 18.2"/>
+  </g>
+  <circle cx="16" cy="17.6" r="1.7" fill="#ff5a48"/>
+  <circle cx="16" cy="17.6" r="0.7" fill="#5ee7ff"/>
 </svg>

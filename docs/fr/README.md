@@ -1,5 +1,9 @@
 # Akasha OS
 
+<p align="center">
+  <img src="../../branding/logo/logo.svg" width="96" height="96" alt="Akasha OS">
+</p>
+
 **Langue :** [English](../../README.md) | Français
 
 **Site :** [azerothl.github.io/akasha-os](https://azerothl.github.io/akasha-os/?lang=fr)
@@ -7,6 +11,10 @@
 **Système d'exploitation agent-natif** — capacités, IPC sémantique, GPU
 first-class, offline-first. La Preview tourne sur hôte Windows/Linux
 (NVIDIA) ; la piste seL4 est séparée.
+
+<p align="center">
+  <img src="../../branding/logo/tracks.svg" width="480" alt="MEMORY, CAPS, GPU, AGENTS">
+</p>
 
 > Ce n'est **pas** encore un OS bootable. La Preview 0.13.0 est une application
 > hôte installable pour testeurs (Windows/Linux ; NVIDIA optionnel via chemin CPU

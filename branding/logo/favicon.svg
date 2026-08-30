@@ -1,16 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Akasha OS">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Akasha OS">
   <title>Akasha OS</title>
-  <defs>
-    <clipPath id="akasha-inscribe-sm">
-      <circle cx="128" cy="128" r="100"/>
-    </clipPath>
-  </defs>
-  <rect width="256" height="256" fill="#0d0d0d"/>
-  <g fill="none" stroke="#f5e31a">
-    <circle cx="128" cy="128" r="104" stroke-width="8"/>
-    <circle cx="128" cy="128" r="78" stroke-width="5.5"/>
+  <rect width="32" height="32" fill="#070b14"/>
+  <g fill="none" stroke="#5ee7ff" stroke-linecap="round" stroke-linejoin="round">
+    <path stroke-width="2.3" d="M7.5 26 C 11.5 17, 13.5 9.5, 16 5 C 18.5 9.5, 20.5 17, 24.5 26"/>
+    <path stroke-width="1.55" d="M11 18 C 14.5 16.2, 17.5 16.2, 20.2 18 C 23.2 16.2, 24.6 20.4, 21.4 21.4 C 19.2 22, 18.6 18.6, 20.6 18.2"/>
   </g>
-  <path d="M68.4 213.2 L128 48 L187.6 213.2" fill="none" stroke="#f5e31a" stroke-width="22" stroke-linejoin="miter" stroke-miterlimit="6" stroke-linecap="butt" clip-path="url(#akasha-inscribe-sm)"/>
-  <line x1="108" y1="128" x2="148" y2="128" stroke="#f5e31a" stroke-width="4" stroke-linecap="butt"/>
-  <circle cx="128" cy="128" r="12" fill="#e23b16"/>
+  <circle cx="16" cy="17.6" r="1.7" fill="#ff5a48"/>
+  <circle cx="16" cy="17.6" r="0.7" fill="#5ee7ff"/>
 </svg>
