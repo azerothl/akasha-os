@@ -37,6 +37,10 @@ use tokio::sync::Mutex;
 const TRANSCRIPT_LIMIT: usize = 40;
 const MAX_ROOM_TOOL_STEPS: usize = 20;
 const ROOM_INFER_MAX_TOKENS: u32 = 768;
+/// Below `PREFIX_SPEC_PRIORITY` (2) in `aos-model` so each member turn clears KV and
+/// skips prompt-lookup drafting — otherwise prior assistant bubbles in the prompt
+/// get replayed verbatim across rebound speakers in the same round.
+const ROOM_INFER_PRIORITY: u8 = 1;
 
 const ROOM_ACTION_PROTOCOL: &str = r#"## Protocole d'actions (salon)
 
@@ -108,6 +112,18 @@ pub fn format_transcript_messages(
         }
     }
     messages
+}
+
+/// Synthetic user line so the chat template ends on a user turn and the model is
+/// nudged to answer as this roster member instead of continuing the last bubble.
+pub fn append_room_turn_nudge(messages: &mut Vec<ChatMessage>, display_name: &str) {
+    messages.push(ChatMessage {
+        role: "user".into(),
+        content: format!(
+            "[Salon — tour de {display_name}] Réponds avec ta propre voix et ton rôle. \
+             Ne recopie pas les messages précédents ; apporte une contribution distincte."
+        ),
+    });
 }
 
 fn member_display_name<'a>(
@@ -316,7 +332,7 @@ async fn run_infer_once(
             temperature: 0.3,
             ..InferParams::default()
         },
-        priority: 6,
+        priority: ROOM_INFER_PRIORITY,
         data_refs: images.to_vec(),
         images: images.to_vec(),
         routing: None,
@@ -571,6 +587,7 @@ pub async fn execute_room_turn(
         canvas_digest.as_deref(),
     );
     let mut messages = format_transcript_messages(&session, &system);
+    append_room_turn_nudge(&mut messages, display_name);
 
     let model_id = spec.model_id.clone().or(session.meta.model_id.clone());
     let images = room_images_from_session(&session);
@@ -795,6 +812,21 @@ mod tests {
             "must not append user_message again"
         );
         assert_eq!(msgs[1].content, "What do you think?");
+    }
+
+    #[test]
+    fn turn_nudge_appended_after_transcript() {
+        let session = room_session_with_user("Quels manques?");
+        let mut msgs = format_transcript_messages(&session, "system");
+        append_room_turn_nudge(&mut msgs, "Critic");
+        assert_eq!(msgs.last().unwrap().role, "user");
+        assert!(msgs.last().unwrap().content.contains("Critic"));
+        assert!(msgs.last().unwrap().content.contains("Ne recopie pas"));
+    }
+
+    #[test]
+    fn room_infer_priority_disables_prefix_spec_path() {
+        assert!(ROOM_INFER_PRIORITY < 2);
     }
 
     #[test]

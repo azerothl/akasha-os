@@ -30,18 +30,22 @@ pub fn split_room_reply(raw: &str) -> (String, Option<String>) {
 
 fn strip_speaker_label_prefix(text: &str) -> String {
     let trimmed = text.trim_start();
-    let Some(open) = trimmed.find('(') else {
+    if !trimmed.starts_with('(') {
         return text.to_string();
-    };
-    let Some(close_rel) = trimmed[open + 1..].find(')') else {
-        return text.to_string();
-    };
-    let close = open + 1 + close_rel;
-    let after = trimmed[close + 1..].trim_start();
-    if after.starts_with('{') || after.starts_with('<') {
-        return after.to_string();
     }
-    text.to_string()
+    let Some(close_rel) = trimmed[1..].find(')') else {
+        return text.to_string();
+    };
+    let label = trimmed[1..1 + close_rel].trim();
+    let after = trimmed[1 + close_rel + 1..].trim_start();
+    if label.is_empty() || after.is_empty() {
+        return text.to_string();
+    }
+    // Transcript labels from `format_transcript_messages` — not prose like "(Note: …)".
+    if label.contains(':') || label.len() > 48 {
+        return text.to_string();
+    }
+    after.to_string()
 }
 
 fn take_thought_json_object(text: &str) -> Option<(String, String)> {
@@ -163,6 +167,21 @@ Voici ce qu'il faut retenir sur Akasha OS."#;
         let (visible, thinking) = split_room_reply(raw);
         assert_eq!(visible, "Réponse courte.");
         assert_eq!(thinking.as_deref(), Some("plan long"));
+    }
+
+    #[test]
+    fn transcript_speaker_label_stripped_from_visible_prose() {
+        let raw = "(Researcher) @supervisor, voici mon analyse distincte.";
+        let (visible, thinking) = split_room_reply(raw);
+        assert_eq!(visible, "@supervisor, voici mon analyse distincte.");
+        assert!(thinking.is_none());
+    }
+
+    #[test]
+    fn prose_parenthetical_with_colon_not_stripped() {
+        let raw = "(Note: important) garde ce détail.";
+        let (visible, _) = split_room_reply(raw);
+        assert_eq!(visible, raw);
     }
 
     #[test]
