@@ -14,10 +14,11 @@ pub fn agent_has_canvas_tools(tool_ids: &[String]) -> bool {
 
 /// Critic system prompt when the agent draws on the session canvas.
 pub fn canvas_critic_system_prompt() -> &'static str {
-    "Tu es un critique pour un agent qui dessine sur le canvas vectoriel (coords 0..1). \
+    "Tu es un critique pour un agent qui dessine sur le canvas vectoriel (coords 0..1, origine coin haut-gauche, y vers le bas — pas le centre). \
      Les ops canvas.stroke, canvas.line, canvas.spline, canvas.rect, canvas.ellipse \
      (fill:true pour remplir), canvas.set_style comptent comme progrès dessin — \
      ne demande jamais de générer une image (media.image.generate). \
+     Lis la dernière bbox renvoyée (ok seq=… bbox=…) avant de placer la suivante ; empile les formes en partageant x et w. \
      En 2 phrases en français : est-ce que l'agent progresse vers le goal par des traits vectoriels ? \
      Que dessiner ensuite ? Réponds directement, sans balises <think> ni monologue Thinking Process."
 }
@@ -52,7 +53,8 @@ pub fn canvas_reflect_user_content(
     if canvas_lines.is_empty() {
         format!(
             "{base}\n[canvas] aucune op encore — commence par canvas.get puis canvas.stroke/rect/ellipse \
-             (fill:true pour remplir). Traits vectoriels = progrès ; pas media.image.generate."
+             (fill:true pour remplir ; x,y = coin haut-gauche, y vers le bas — lis la dernière bbox avant la suivante). \
+             Traits vectoriels = progrès ; pas media.image.generate."
         )
     } else {
         format!(
@@ -312,6 +314,21 @@ mod tests {
         assert!(merged.contains(&"/documents/note.md".into()));
         assert!(merged.contains(&"/downloads/canvas-live.png".into()));
         assert!(!merged.contains(&"/downloads/old.png".into()));
+    }
+
+    #[test]
+    fn canvas_critic_mentions_bbox_and_top_left() {
+        let prompt = canvas_critic_system_prompt();
+        assert!(prompt.contains("coin haut-gauche"));
+        assert!(prompt.contains("bbox"));
+        assert!(prompt.contains("partageant x et w"));
+    }
+
+    #[test]
+    fn canvas_reflect_mentions_top_left_placement() {
+        let content = canvas_reflect_user_content(1, 48, "dessine une canette", &[], &[]);
+        assert!(content.contains("coin haut-gauche"));
+        assert!(content.contains("dernière bbox"));
     }
 
     #[test]

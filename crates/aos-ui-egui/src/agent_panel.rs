@@ -223,6 +223,19 @@ fn chat_meta_substring_pos(lower: &str) -> Option<usize> {
         "module.scaffold",
         "tool.invoke",
         "tool invocation loop",
+        "erreur bus",
+        "internalerror",
+        "args invalides",
+        "missing field",
+        "[canvas digest]",
+        "canvas digest",
+        "statut internal",
+        "bbox=",
+        "ok seq=",
+        "next_seq=",
+        "scene_bbox",
+        "coords=normalized",
+        "coin haut-gauche",
         "established rules",
         "established rules for the canvas tool",
         "no json is needed",
@@ -260,6 +273,38 @@ fn chat_meta_substring_pos(lower: &str) -> Option<usize> {
         }
     }
     earliest
+}
+
+/// True when the agent kit includes session canvas drawing tools.
+pub fn agent_is_canvas_draw(info: &AgentInfo) -> bool {
+    info.tools.iter().any(|t| t.starts_with("canvas."))
+}
+
+/// True when the action is a mutating canvas tool (not get/export).
+pub fn is_canvas_draw_tool(action: &str) -> bool {
+    action.starts_with("canvas.")
+        && !matches!(action, "canvas.get" | "canvas.export")
+}
+
+/// True when a tool result looks like a runtime/parse failure.
+pub fn canvas_tool_failed(tool_result: &str) -> bool {
+    aos_agent::context_budget::looks_like_tool_failure(tool_result)
+}
+
+/// Human journal line for a canvas stroke: act label on success, hidden on per-stroke failure.
+pub fn human_canvas_journal_result(
+    action: &str,
+    tool_result: &str,
+    args: &serde_json::Value,
+    t: &crate::i18n::UiStrings,
+) -> Option<String> {
+    if !is_canvas_draw_tool(action) {
+        return None;
+    }
+    if canvas_tool_failed(tool_result) {
+        return None;
+    }
+    Some(crate::agent_act_phrase::format_agent_act_phrase(t, action, args))
 }
 
 /// Truncate before the first forbidden meta substring (including mid-stream tokens).
@@ -775,13 +820,23 @@ pub fn draw_agent_detail(
             });
             ui.add_space(4.0);
         } else if matches!(a.state, AgentState::Failed | AgentState::Killed) || fail.is_some() {
+            let canvas_draw = agent_is_canvas_draw(a);
             card_frame(Color32::from_rgb(60, 30, 30)).show(ui, |ui| {
                 ui.label(
-                    RichText::new(t.agent_failure)
-                        .color(Color32::from_rgb(240, 140, 120))
-                        .strong(),
+                    RichText::new(if canvas_draw {
+                        t.canvas_draw_failed
+                    } else {
+                        t.agent_failure
+                    })
+                    .color(Color32::from_rgb(240, 140, 120))
+                    .strong(),
                 );
-                ui.label(fail.map(|r| crate::i18n::resolve_agent_fail_reason(t, Some(r.as_str()))).unwrap_or_else(|| t.agent_fail_unknown.into()));
+                if !canvas_draw {
+                    ui.label(
+                        fail.map(|r| crate::i18n::resolve_agent_fail_reason(t, Some(r.as_str())))
+                            .unwrap_or_else(|| t.agent_fail_unknown.into()),
+                    );
+                }
             });
             ui.add_space(4.0);
         }
@@ -821,7 +876,12 @@ pub fn draw_agent_detail(
                     }
                 }
                 AgentState::Failed | AgentState::Killed => {
-                    if ui.button(t.agent_retry_step).clicked() {
+                    let retry_label = if agent_is_canvas_draw(a) {
+                        t.canvas_draw_retry
+                    } else {
+                        t.agent_retry_step
+                    };
+                    if ui.button(retry_label).clicked() {
                         actions.retry = true;
                     }
                 }
@@ -942,7 +1002,7 @@ pub fn draw_agent_detail(
                 } else {
                     let last = tr.steps.len().saturating_sub(1);
                     for (i, rec) in tr.steps.iter().enumerate() {
-                        draw_step(ui, id, rec, i == last, md_cache, &mut actions);
+                        draw_step(ui, id, rec, i == last, md_cache, t, &mut actions);
                     }
                 }
                 if let Some(a) = info {
@@ -967,6 +1027,7 @@ fn draw_step(
     rec: &AgentStepRecord,
     default_open: bool,
     md_cache: &mut CommonMarkCache,
+    t: &crate::i18n::UiStrings,
     actions: &mut PanelActions,
 ) {
     let header = format!(
@@ -1152,7 +1213,11 @@ fn draw_step(
                             ui.label(format!("MCP: {m}"));
                         }
                     });
-                    if !rec.tool_result.is_empty() {
+                    if let Some(display) =
+                        human_canvas_journal_result(&rec.action, &rec.tool_result, &rec.args, t)
+                    {
+                        ui.label(RichText::new(display).small());
+                    } else if !rec.tool_result.is_empty() && !is_canvas_draw_tool(&rec.action) {
                         let tr = truncate(&rec.tool_result, 1200);
                         if tr.contains('#') || tr.contains("**") || tr.contains('\n') {
                             ui.push_id(("step_tool", agent_id, rec.step), |ui| {
@@ -1369,5 +1434,53 @@ Je vais répondre de manière naturelle"#;
         let out = sanitize_chat_visible_bubble(raw);
         assert!(out.contains("Premier"), "{out}");
         assert!(out.contains("Deuxième"), "{out}");
+    }
+
+    #[test]
+    fn locked_canvas_draw_failure_copy_fr_en() {
+        let t_en = crate::i18n::strings("en");
+        let t_fr = crate::i18n::strings("fr");
+        assert_eq!(t_en.canvas_draw_failed, "Couldn't draw.");
+        assert_eq!(t_fr.canvas_draw_failed, "Impossible de dessiner.");
+        assert_eq!(t_en.canvas_draw_retry, "Try again");
+        assert_eq!(t_fr.canvas_draw_retry, "Réessayer");
+        assert!(!t_en.canvas_draw_failed.contains("InternalError"));
+        assert!(!t_fr.canvas_draw_failed.contains("digest"));
+        assert!(!t_en.canvas_draw_failed.contains('{'));
+    }
+
+    #[test]
+    fn human_canvas_journal_hides_per_stroke_failure() {
+        let t = crate::i18n::strings("en");
+        let raw = "ERREUR bus: statut InternalError: args invalides: missing field x";
+        let out = human_canvas_journal_result("canvas.ellipse", raw, &serde_json::json!({}), &t);
+        assert!(out.is_none());
+    }
+
+    #[test]
+    fn human_canvas_journal_success_is_act_label_not_bbox() {
+        let t = crate::i18n::strings("en");
+        let raw = "ok seq=2 ellipse bbox=(0.350,0.150)-(0.650,0.270)";
+        let out = human_canvas_journal_result("canvas.ellipse", raw, &serde_json::json!({}), &t)
+            .expect("act label");
+        assert_eq!(out, t.agent_act_canvas_ellipse);
+        assert!(!out.contains("bbox"));
+        assert!(!out.contains("seq="));
+    }
+
+    #[test]
+    fn chat_bubble_strips_bbox_echo_leak() {
+        let raw = "ok seq=12 ellipse bbox=(0.350,0.150)-(0.650,0.270)";
+        let out = sanitize_chat_visible_bubble(raw);
+        assert!(out.is_empty() || !out.contains("bbox="), "{out}");
+    }
+
+    #[test]
+    fn chat_bubble_strips_bus_error_leak() {
+        let raw = "Dessin en cours. ERREUR bus: statut InternalError: args invalides.";
+        let out = sanitize_chat_visible_bubble(raw);
+        assert!(!out.to_ascii_lowercase().contains("erreur bus"), "{out}");
+        assert!(!out.to_ascii_lowercase().contains("internalerror"), "{out}");
+        assert!(out.contains("Dessin en cours"), "{out}");
     }
 }

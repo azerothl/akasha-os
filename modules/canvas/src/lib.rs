@@ -205,21 +205,126 @@ fn fill(args: &Value) -> Result<Value, String> {
     )
 }
 
-#[derive(Deserialize)]
 struct ShapeArgs {
     session_id: String,
-    #[serde(default)]
     author_id: Option<String>,
     x: f32,
     y: f32,
     w: f32,
     h: f32,
-    #[serde(default)]
     color: Option<String>,
-    #[serde(default)]
     fill: bool,
-    #[serde(default)]
     width: Option<f32>,
+}
+
+fn parse_f32_field(args: &Value, key: &str) -> Option<f32> {
+    args.get(key)
+        .and_then(|v| v.as_f64())
+        .map(|v| v as f32)
+        .filter(|v| v.is_finite())
+}
+
+fn shape_bbox_contract(tool: &str) -> String {
+    format!(
+        "{tool} attend x,y,w,h (coin haut-gauche + taille, coords 0..1, y vers le bas) — \
+         pas le centre. Alias : cx,cy,w,h ; cx,cy,rx,ry ; x1,y1,x2,y2. \
+         Ex: {{\"x\":0.35,\"y\":0.15,\"w\":0.30,\"h\":0.12,\"fill\":true}}"
+    )
+}
+
+fn format_shape_bbox(x: f32, y: f32, w: f32, h: f32) -> String {
+    format!(
+        "({:.3},{:.3})-({:.3},{:.3})",
+        x,
+        y,
+        x + w,
+        y + h
+    )
+}
+
+fn shape_success_message(kind: &str, a: &ShapeArgs, resp: &Value) -> String {
+    let seq = resp
+        .get("next_seq")
+        .and_then(|v| v.as_u64())
+        .or_else(|| resp.pointer("/applied/seq").and_then(|v| v.as_u64()))
+        .unwrap_or(0);
+    format!(
+        "ok seq={seq} {kind} bbox={}",
+        format_shape_bbox(a.x, a.y, a.w, a.h)
+    )
+}
+
+/// Parse rect/ellipse args: canonical `x,y,w,h`, or aliases
+/// `cx,cy,w,h` / `cx,cy,rx,ry` / `x,y,rx,ry` / `x1,y1,x2,y2`.
+fn parse_shape_args(args: &Value, tool: &str) -> Result<ShapeArgs, String> {
+    let session_id = args
+        .get("session_id")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| format!("{tool}: session_id requis"))?;
+
+    let author_id = args
+        .get("author_id")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+
+    let (x, y, w, h) = if let (Some(x), Some(y), Some(w), Some(h)) = (
+        parse_f32_field(args, "x"),
+        parse_f32_field(args, "y"),
+        parse_f32_field(args, "w"),
+        parse_f32_field(args, "h"),
+    ) {
+        (x, y, w, h)
+    } else if let (Some(x1), Some(y1), Some(x2), Some(y2)) = (
+        parse_f32_field(args, "x1"),
+        parse_f32_field(args, "y1"),
+        parse_f32_field(args, "x2"),
+        parse_f32_field(args, "y2"),
+    ) {
+        let x = x1.min(x2);
+        let y = y1.min(y2);
+        let w = (x2 - x1).abs();
+        let h = (y2 - y1).abs();
+        (x, y, w, h)
+    } else if let (Some(cx), Some(cy), Some(w), Some(h)) = (
+        parse_f32_field(args, "cx"),
+        parse_f32_field(args, "cy"),
+        parse_f32_field(args, "w"),
+        parse_f32_field(args, "h"),
+    ) {
+        (cx - w / 2.0, cy - h / 2.0, w, h)
+    } else {
+        let cx = parse_f32_field(args, "cx").or_else(|| parse_f32_field(args, "x"));
+        let cy = parse_f32_field(args, "cy").or_else(|| parse_f32_field(args, "y"));
+        let rx = parse_f32_field(args, "rx");
+        let ry = parse_f32_field(args, "ry");
+        match (cx, cy, rx, ry) {
+            (Some(cx), Some(cy), Some(rx), Some(ry)) => (cx - rx, cy - ry, 2.0 * rx, 2.0 * ry),
+            _ => return Err(shape_bbox_contract(tool)),
+        }
+    };
+
+    let color = args
+        .get("color")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let fill = args.get("fill").and_then(|v| v.as_bool()).unwrap_or(false);
+    let width = parse_f32_field(args, "width");
+
+    Ok(ShapeArgs {
+        session_id,
+        author_id,
+        x,
+        y,
+        w,
+        h,
+        color,
+        fill,
+        width,
+    })
 }
 
 fn shape_op(kind: &str, a: &ShapeArgs) -> Value {
@@ -238,21 +343,23 @@ fn shape_op(kind: &str, a: &ShapeArgs) -> Value {
 }
 
 fn rect(args: &Value) -> Result<Value, String> {
-    let a: ShapeArgs = aos_module_sdk::parse_args(args)?;
-    apply(
+    let a = parse_shape_args(args, "canvas.rect")?;
+    let resp = apply(
         &a.session_id,
         a.author_id.as_deref().unwrap_or("agent"),
         shape_op("rect", &a),
-    )
+    )?;
+    Ok(json!(shape_success_message("rect", &a, &resp)))
 }
 
 fn ellipse(args: &Value) -> Result<Value, String> {
-    let a: ShapeArgs = aos_module_sdk::parse_args(args)?;
-    apply(
+    let a = parse_shape_args(args, "canvas.ellipse")?;
+    let resp = apply(
         &a.session_id,
         a.author_id.as_deref().unwrap_or("agent"),
         shape_op("ellipse", &a),
-    )
+    )?;
+    Ok(json!(shape_success_message("ellipse", &a, &resp)))
 }
 
 #[derive(Deserialize)]
@@ -318,4 +425,158 @@ fn export(args: &Value) -> Result<Value, String> {
         payload["height"] = h.clone();
     }
     aos_module_sdk::call("canvas.export", &payload)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn shape_args_canonical_bbox() {
+        let args = json!({
+            "session_id": "s1",
+            "x": 0.35,
+            "y": 0.15,
+            "w": 0.30,
+            "h": 0.12,
+            "fill": true
+        });
+        let a = parse_shape_args(&args, "canvas.ellipse").expect("canonical");
+        assert!((a.x - 0.35).abs() < 1e-6);
+        assert!((a.y - 0.15).abs() < 1e-6);
+        assert!((a.w - 0.30).abs() < 1e-6);
+        assert!((a.h - 0.12).abs() < 1e-6);
+        assert!(a.fill);
+    }
+
+    #[test]
+    fn shape_args_svg_center_radii_cx_cy() {
+        let args = json!({
+            "session_id": "s1",
+            "cx": 0.50,
+            "cy": 0.40,
+            "rx": 0.15,
+            "ry": 0.06
+        });
+        let a = parse_shape_args(&args, "canvas.ellipse").expect("cx,cy,rx,ry");
+        assert!((a.x - 0.35).abs() < 1e-6);
+        assert!((a.y - 0.34).abs() < 1e-6);
+        assert!((a.w - 0.30).abs() < 1e-6);
+        assert!((a.h - 0.12).abs() < 1e-6);
+    }
+
+    #[test]
+    fn shape_args_svg_center_radii_x_y() {
+        let args = json!({
+            "session_id": "s1",
+            "x": 0.50,
+            "y": 0.40,
+            "rx": 0.15,
+            "ry": 0.06
+        });
+        let a = parse_shape_args(&args, "canvas.ellipse").expect("x,y,rx,ry");
+        assert!((a.x - 0.35).abs() < 1e-6);
+        assert!((a.w - 0.30).abs() < 1e-6);
+    }
+
+    #[test]
+    fn shape_args_two_corners() {
+        let args = json!({
+            "session_id": "s1",
+            "x1": 0.60,
+            "y1": 0.20,
+            "x2": 0.30,
+            "y2": 0.35
+        });
+        let a = parse_shape_args(&args, "canvas.rect").expect("x1,y1,x2,y2");
+        assert!((a.x - 0.30).abs() < 1e-6);
+        assert!((a.y - 0.20).abs() < 1e-6);
+        assert!((a.w - 0.30).abs() < 1e-6);
+        assert!((a.h - 0.15).abs() < 1e-6);
+    }
+
+    #[test]
+    fn shape_args_prefers_canonical_over_radii() {
+        let args = json!({
+            "session_id": "s1",
+            "x": 0.10,
+            "y": 0.20,
+            "w": 0.40,
+            "h": 0.25,
+            "rx": 0.99,
+            "ry": 0.99
+        });
+        let a = parse_shape_args(&args, "canvas.ellipse").expect("canonical wins");
+        assert!((a.w - 0.40).abs() < 1e-6);
+        assert!((a.h - 0.25).abs() < 1e-6);
+    }
+
+    #[test]
+    fn shape_args_center_size_cx_cy_w_h() {
+        let args = json!({
+            "session_id": "s1",
+            "cx": 0.50,
+            "cy": 0.40,
+            "w": 0.30,
+            "h": 0.12
+        });
+        let a = parse_shape_args(&args, "canvas.ellipse").expect("cx,cy,w,h");
+        assert!((a.x - 0.35).abs() < 1e-6);
+        assert!((a.y - 0.34).abs() < 1e-6);
+        assert!((a.w - 0.30).abs() < 1e-6);
+        assert!((a.h - 0.12).abs() < 1e-6);
+    }
+
+    #[test]
+    fn shape_success_message_formats_bbox_echo() {
+        let a = ShapeArgs {
+            session_id: "s1".into(),
+            author_id: None,
+            x: 0.35,
+            y: 0.15,
+            w: 0.30,
+            h: 0.12,
+            color: None,
+            fill: true,
+            width: None,
+        };
+        let resp = json!({"next_seq": 12});
+        let msg = shape_success_message("ellipse", &a, &resp);
+        assert_eq!(msg, "ok seq=12 ellipse bbox=(0.350,0.150)-(0.650,0.270)");
+    }
+
+    #[test]
+    fn shape_args_error_names_contract_not_single_field() {
+        let args = json!({"session_id": "s1", "x1": 0.1, "y1": 0.2});
+        match parse_shape_args(&args, "canvas.ellipse") {
+            Err(err) => {
+                assert!(err.contains("canvas.ellipse attend x,y,w,h"));
+                assert!(err.contains("pas le centre"));
+                assert!(!err.contains("missing field"));
+            }
+            Ok(_) => panic!("expected error"),
+        }
+    }
+
+    #[test]
+    fn shape_op_emits_bbox_fields() {
+        let a = ShapeArgs {
+            session_id: "s1".into(),
+            author_id: None,
+            x: 0.35,
+            y: 0.15,
+            w: 0.30,
+            h: 0.12,
+            color: Some("#c0c0c0".into()),
+            fill: true,
+            width: None,
+        };
+        let op = shape_op("ellipse", &a);
+        assert_eq!(op["kind"], "ellipse");
+        assert!((op["x"].as_f64().unwrap() - 0.35).abs() < 1e-6);
+        assert!((op["w"].as_f64().unwrap() - 0.30).abs() < 1e-6);
+        assert_eq!(op["fill"], true);
+        assert_eq!(op["color"], "#c0c0c0");
+    }
 }
