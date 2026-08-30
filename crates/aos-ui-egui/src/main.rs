@@ -7763,6 +7763,22 @@ impl UiApp {
                     if actions.retry {
                         let _ = self.cmd_tx.send(Cmd::AgentRetry { id: id.clone() });
                     }
+                    if actions.canvas_retry {
+                        let running = info.as_ref().is_some_and(|a| {
+                            matches!(
+                                a.state,
+                                AgentState::Running | AgentState::Paused | AgentState::Blocked
+                            )
+                        });
+                        if running {
+                            let _ = self.cmd_tx.send(Cmd::AgentSteer {
+                                id: id.clone(),
+                                text: t.canvas_draw_retry_steer.into(),
+                            });
+                        } else {
+                            let _ = self.cmd_tx.send(Cmd::AgentRetry { id: id.clone() });
+                        }
+                    }
                     if let Some(text) = actions.steer {
                         let blocked = info
                             .as_ref()

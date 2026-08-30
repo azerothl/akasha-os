@@ -11,6 +11,8 @@ pub struct PanelActions {
     pub kill: bool,
     pub resume: bool,
     pub retry: bool,
+    /// User asked to retry a failed canvas tool step in the journal.
+    pub canvas_retry: bool,
     pub steer: Option<String>,
     pub open_child: Option<String>,
 }
@@ -22,6 +24,7 @@ impl Default for PanelActions {
             kill: false,
             resume: false,
             retry: false,
+            canvas_retry: false,
             steer: None,
             open_child: None,
         }
@@ -223,6 +226,13 @@ fn chat_meta_substring_pos(lower: &str) -> Option<usize> {
         "module.scaffold",
         "tool.invoke",
         "tool invocation loop",
+        "erreur bus",
+        "internalerror",
+        "args invalides",
+        "missing field",
+        "[canvas digest]",
+        "canvas digest",
+        "statut internal",
         "established rules",
         "established rules for the canvas tool",
         "no json is needed",
@@ -260,6 +270,26 @@ fn chat_meta_substring_pos(lower: &str) -> Option<usize> {
         }
     }
     earliest
+}
+
+/// True when the action is a mutating canvas tool (not get/export).
+pub fn is_canvas_draw_tool(action: &str) -> bool {
+    action.starts_with("canvas.")
+        && !matches!(action, "canvas.get" | "canvas.export")
+}
+
+/// True when a tool result looks like a runtime/parse failure.
+pub fn canvas_tool_failed(tool_result: &str) -> bool {
+    aos_agent::context_budget::looks_like_tool_failure(tool_result)
+}
+
+/// Human-visible tool result: locked phrase for failed canvas draws, else unchanged.
+pub fn human_tool_result_display(action: &str, tool_result: &str, t: &crate::i18n::UiStrings) -> String {
+    if is_canvas_draw_tool(action) && canvas_tool_failed(tool_result) {
+        t.canvas_draw_failed.to_string()
+    } else {
+        tool_result.to_string()
+    }
 }
 
 /// Truncate before the first forbidden meta substring (including mid-stream tokens).
@@ -942,7 +972,7 @@ pub fn draw_agent_detail(
                 } else {
                     let last = tr.steps.len().saturating_sub(1);
                     for (i, rec) in tr.steps.iter().enumerate() {
-                        draw_step(ui, id, rec, i == last, md_cache, &mut actions);
+                        draw_step(ui, id, rec, i == last, md_cache, t, &mut actions);
                     }
                 }
                 if let Some(a) = info {
@@ -967,6 +997,7 @@ fn draw_step(
     rec: &AgentStepRecord,
     default_open: bool,
     md_cache: &mut CommonMarkCache,
+    t: &crate::i18n::UiStrings,
     actions: &mut PanelActions,
 ) {
     let header = format!(
@@ -1153,13 +1184,27 @@ fn draw_step(
                         }
                     });
                     if !rec.tool_result.is_empty() {
-                        let tr = truncate(&rec.tool_result, 1200);
-                        if tr.contains('#') || tr.contains("**") || tr.contains('\n') {
-                            ui.push_id(("step_tool", agent_id, rec.step), |ui| {
-                                CommonMarkViewer::new().show(ui, md_cache, &tr);
-                            });
+                        let display = human_tool_result_display(&rec.action, &rec.tool_result, t);
+                        let failed_canvas =
+                            is_canvas_draw_tool(&rec.action) && canvas_tool_failed(&rec.tool_result);
+                        if failed_canvas {
+                            ui.label(
+                                RichText::new(&display)
+                                    .color(Color32::from_rgb(240, 140, 140))
+                                    .small(),
+                            );
+                            if ui.button(t.canvas_draw_retry).clicked() {
+                                actions.canvas_retry = true;
+                            }
                         } else {
-                            ui.label(RichText::new(tr).small());
+                            let tr = truncate(&display, 1200);
+                            if tr.contains('#') || tr.contains("**") || tr.contains('\n') {
+                                ui.push_id(("step_tool", agent_id, rec.step), |ui| {
+                                    CommonMarkViewer::new().show(ui, md_cache, &tr);
+                                });
+                            } else {
+                                ui.label(RichText::new(tr).small());
+                            }
                         }
                     }
                     let mut args = rec.args.clone();
@@ -1369,5 +1414,45 @@ Je vais répondre de manière naturelle"#;
         let out = sanitize_chat_visible_bubble(raw);
         assert!(out.contains("Premier"), "{out}");
         assert!(out.contains("Deuxième"), "{out}");
+    }
+
+    #[test]
+    fn locked_canvas_draw_failure_copy_fr_en() {
+        let t_en = crate::i18n::strings("en");
+        let t_fr = crate::i18n::strings("fr");
+        assert_eq!(t_en.canvas_draw_failed, "Couldn't draw.");
+        assert_eq!(t_fr.canvas_draw_failed, "Impossible de dessiner.");
+        assert_eq!(t_en.canvas_draw_retry, "Try again");
+        assert_eq!(t_fr.canvas_draw_retry, "Réessayer");
+        assert!(!t_en.canvas_draw_failed.contains("InternalError"));
+        assert!(!t_fr.canvas_draw_failed.contains("digest"));
+        assert!(!t_en.canvas_draw_failed.contains('{'));
+    }
+
+    #[test]
+    fn human_tool_result_hides_canvas_bus_error() {
+        let t = crate::i18n::strings("en");
+        let raw = "ERREUR bus: statut InternalError: args invalides: missing field x";
+        let out = human_tool_result_display("canvas.ellipse", raw, &t);
+        assert_eq!(out, "Couldn't draw.");
+        assert!(!out.contains("ERREUR"));
+        assert!(!out.contains("missing field"));
+    }
+
+    #[test]
+    fn human_tool_result_keeps_canvas_success() {
+        let t = crate::i18n::strings("en");
+        let raw = "ok seq=2\n\n[canvas digest]\nnext_seq=3";
+        let out = human_tool_result_display("canvas.ellipse", raw, &t);
+        assert!(out.contains("ok seq=2"));
+    }
+
+    #[test]
+    fn chat_bubble_strips_bus_error_leak() {
+        let raw = "Dessin en cours. ERREUR bus: statut InternalError: args invalides.";
+        let out = sanitize_chat_visible_bubble(raw);
+        assert!(!out.to_ascii_lowercase().contains("erreur bus"), "{out}");
+        assert!(!out.to_ascii_lowercase().contains("internalerror"), "{out}");
+        assert!(out.contains("Dessin en cours"), "{out}");
     }
 }

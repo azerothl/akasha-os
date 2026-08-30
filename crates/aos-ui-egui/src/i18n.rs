@@ -634,6 +634,12 @@ pub struct UiStrings {
     pub documents_list_empty: &'static str,
     pub document_overlay_close: &'static str,
     pub document_open_failed: &'static str,
+    /// Locked human copy when a canvas draw tool fails (no bus/JSON/digest).
+    pub canvas_draw_failed: &'static str,
+    /// Retry button for canvas draw failures (boot-dialog pattern).
+    pub canvas_draw_retry: &'static str,
+    /// Steer directive when the user retries a failed canvas step (agent-only).
+    pub canvas_draw_retry_steer: &'static str,
     pub chat_you: &'static str,
     pub chat_assistant: &'static str,
     pub chat_system: &'static str,
@@ -1285,6 +1291,10 @@ const EN: UiStrings = UiStrings {
     documents_list_empty: "No prepared documents yet.",
     document_overlay_close: "Close",
     document_open_failed: "Couldn't open this document.",
+    canvas_draw_failed: "Couldn't draw.",
+    canvas_draw_retry: "Try again",
+    canvas_draw_retry_steer:
+        "Retry the last failed canvas step (rect/ellipse: x,y,w,h top-left + size, coords 0..1).",
     chat_you: "you",
     chat_assistant: "assistant",
     chat_system: "system",
@@ -1936,6 +1946,10 @@ const FR: UiStrings = UiStrings {
     documents_list_empty: "Aucun document préparé pour l'instant.",
     document_overlay_close: "Fermer",
     document_open_failed: "Impossible d'ouvrir ce document.",
+    canvas_draw_failed: "Impossible de dessiner.",
+    canvas_draw_retry: "Réessayer",
+    canvas_draw_retry_steer:
+        "Réessaie le dernier appel canvas qui a échoué (rect/ellipse : x,y,w,h coin haut-gauche + taille, coords 0..1).",
     chat_you: "vous",
     chat_assistant: "assistant",
     chat_system: "système",
