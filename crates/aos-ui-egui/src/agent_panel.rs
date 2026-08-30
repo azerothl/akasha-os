@@ -820,22 +820,35 @@ pub fn draw_agent_detail(
             });
             ui.add_space(4.0);
         } else if matches!(a.state, AgentState::Failed | AgentState::Killed) || fail.is_some() {
-            let canvas_draw = agent_is_canvas_draw(a);
+            let overflow = fail
+                .as_deref()
+                .is_some_and(aos_agent::context_budget::is_overflow_fail_reason);
+            let canvas_draw = agent_is_canvas_draw(a) && !overflow;
             card_frame(Color32::from_rgb(60, 30, 30)).show(ui, |ui| {
-                ui.label(
-                    RichText::new(if canvas_draw {
-                        t.canvas_draw_failed
-                    } else {
-                        t.agent_failure
-                    })
-                    .color(Color32::from_rgb(240, 140, 120))
-                    .strong(),
-                );
-                if !canvas_draw {
+                if overflow {
                     ui.label(
-                        fail.map(|r| crate::i18n::resolve_agent_fail_reason(t, Some(r.as_str())))
-                            .unwrap_or_else(|| t.agent_fail_unknown.into()),
+                        RichText::new(t.agent_could_not_continue)
+                            .color(Color32::from_rgb(240, 140, 120))
+                            .strong(),
                     );
+                } else {
+                    ui.label(
+                        RichText::new(if canvas_draw {
+                            t.canvas_draw_failed
+                        } else {
+                            t.agent_failure
+                        })
+                        .color(Color32::from_rgb(240, 140, 120))
+                        .strong(),
+                    );
+                    if !canvas_draw {
+                        ui.label(
+                            fail.map(|r| {
+                                crate::i18n::resolve_agent_fail_reason(t, Some(r.as_str()))
+                            })
+                            .unwrap_or_else(|| t.agent_fail_unknown.into()),
+                        );
+                    }
                 }
             });
             ui.add_space(4.0);
@@ -876,7 +889,11 @@ pub fn draw_agent_detail(
                     }
                 }
                 AgentState::Failed | AgentState::Killed => {
-                    let retry_label = if agent_is_canvas_draw(a) {
+                    let overflow = a
+                        .fail_reason
+                        .as_deref()
+                        .is_some_and(aos_agent::context_budget::is_overflow_fail_reason);
+                    let retry_label = if overflow || agent_is_canvas_draw(a) {
                         t.canvas_draw_retry
                     } else {
                         t.agent_retry_step
@@ -1053,10 +1070,16 @@ fn draw_step(
             });
 
             if let Some(reason) = &rec.fail_reason {
+                let overflow = aos_agent::context_budget::is_overflow_fail_reason(reason);
+                let text = crate::i18n::resolve_agent_fail_reason(t, Some(reason.as_str()));
                 card_frame(Color32::from_rgb(55, 28, 28)).show(ui, |ui| {
                     ui.label(
-                        RichText::new(format!("Échec / blocage : {reason}"))
-                            .color(Color32::from_rgb(240, 140, 120)),
+                        RichText::new(if overflow {
+                            text
+                        } else {
+                            format!("{} {}", t.agent_failure, text)
+                        })
+                        .color(Color32::from_rgb(240, 140, 120)),
                     );
                 });
             }

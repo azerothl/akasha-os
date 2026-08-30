@@ -376,6 +376,7 @@ pub struct UiStrings {
     pub agent_failure: &'static str,
     pub agent_fail_unknown: &'static str,
     pub agent_could_not_act: &'static str,
+    pub agent_could_not_continue: &'static str,
     pub agent_steer_hint: &'static str,
     pub agent_reply_hint: &'static str,
     pub providers_refresh: &'static str,
@@ -1032,6 +1033,7 @@ const EN: UiStrings = UiStrings {
     agent_failure: "Failed",
     agent_fail_unknown: "reason not recorded",
     agent_could_not_act: "The agent could not act.",
+    agent_could_not_continue: "Couldn't keep going.",
     agent_steer_hint: "directive…",
     agent_reply_hint: "answer…",
     providers_refresh: "Refresh",
@@ -1686,6 +1688,7 @@ const FR: UiStrings = UiStrings {
     agent_failure: "Échec",
     agent_fail_unknown: "motif non renseigné",
     agent_could_not_act: "L'agent n'a pas pu agir.",
+    agent_could_not_continue: "Impossible de continuer.",
     agent_steer_hint: "directive…",
     agent_reply_hint: "réponse…",
     providers_refresh: "Rafraîchir",
@@ -1979,9 +1982,20 @@ pub fn resolve_agent_fail_reason(t: &UiStrings, reason: Option<&str>) -> String 
         Some(r) if r == aos_agent::actions::THREAD_FAIL_COULD_NOT_ACT => {
             t.agent_could_not_act.to_string()
         }
+        Some(r) if r == aos_agent::actions::THREAD_FAIL_COULD_NOT_CONTINUE => {
+            t.agent_could_not_continue.to_string()
+        }
+        Some(other) if aos_agent::context_budget::is_overflow_fail_reason(other) => {
+            t.agent_could_not_continue.to_string()
+        }
         Some(other) if !other.trim().is_empty() => other.to_string(),
         _ => t.agent_fail_unknown.to_string(),
     }
+}
+
+/// Thread bubble when context overflow stops the agent after compaction retries.
+pub fn agent_could_not_continue_message(t: &UiStrings) -> String {
+    t.agent_could_not_continue.to_string()
 }
 
 /// Thread bubble when an agent could not act (parse/loop failure).
@@ -2102,6 +2116,28 @@ mod tests {
         assert_eq!(resolved, en.agent_could_not_act);
         assert!(!resolved.contains("JSON"));
         assert!(!resolved.contains("notes.create"));
+    }
+
+    #[test]
+    fn agent_context_overflow_i18n_hides_token_math() {
+        let en = strings("en");
+        let fr = strings("fr");
+        assert_eq!(en.agent_could_not_continue, "Couldn't keep going.");
+        assert_eq!(fr.agent_could_not_continue, "Impossible de continuer.");
+        let raw = "le prompt ne tient pas dans le contexte (prompt=8749 + réserve_gen=520 = 9269 tokens > ctx=9216)";
+        let resolved_en = resolve_agent_fail_reason(&en, Some(raw));
+        let resolved_fr = resolve_agent_fail_reason(&fr, Some(raw));
+        assert!(!resolved_en.contains("ctx="));
+        assert!(!resolved_en.contains("réserve_gen"));
+        assert!(!resolved_fr.contains("ctx="));
+        assert!(!resolved_fr.contains("réserve_gen"));
+        assert_eq!(
+            resolve_agent_fail_reason(
+                &en,
+                Some(aos_agent::actions::THREAD_FAIL_COULD_NOT_CONTINUE),
+            ),
+            en.agent_could_not_continue
+        );
     }
 
     #[test]

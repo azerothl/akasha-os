@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 
 /// Sentinel `fail_reason` / thread content key — UI maps to localized copy.
 pub const THREAD_FAIL_COULD_NOT_ACT: &str = "agent_could_not_act";
+/// Prompt/context overflow after compaction retries — UI maps to localized copy.
+pub const THREAD_FAIL_COULD_NOT_CONTINUE: &str = "agent_could_not_continue";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentAction {

@@ -1,10 +1,14 @@
 //! Runtime bus pour tours de salon (`agent.room_turn` / `agent.room_conduct`).
 
-use crate::actions::{parse_actions, strip_tool_markup, AgentAction};
+use crate::actions::{parse_actions, strip_tool_markup, AgentAction, THREAD_FAIL_COULD_NOT_CONTINUE};
 use crate::canvas_scene::{
     begin_canvas_vision, canvas_scene_prompt_block, canvas_tool_mutates_scene,
     canvas_tool_outcome_with_digest, end_canvas_vision, fetch_canvas_aspect,
     fetch_canvas_scene_digest, merge_canvas_vision_refs,
+};
+use crate::context_budget::{
+    compact_after_prompt_overflow, enforce_prompt_budget, is_prompt_too_long_error,
+    prompt_budget, DEFAULT_N_CTX_HINT, MAX_OVERFLOW_INFER_RETRIES,
 };
 use crate::mcp::open_mcp_tools_with_secrets;
 use crate::persist;
@@ -32,6 +36,7 @@ use tokio::sync::Mutex;
 
 const TRANSCRIPT_LIMIT: usize = 40;
 const MAX_ROOM_TOOL_STEPS: usize = 20;
+const ROOM_INFER_MAX_TOKENS: u32 = 768;
 
 const ROOM_ACTION_PROTOCOL: &str = r#"## Protocole d'actions (salon)
 
@@ -259,19 +264,55 @@ fn room_images_from_session(session: &ChatSessionGetResponse) -> Vec<String> {
         .unwrap_or_default()
 }
 
-async fn run_infer(
+fn chat_messages_as_pairs(messages: &[ChatMessage]) -> Vec<(String, String)> {
+    messages
+        .iter()
+        .map(|m| (m.role.clone(), m.content.clone()))
+        .collect()
+}
+
+fn sync_pairs_to_chat_messages(pairs: &[(String, String)], messages: &mut Vec<ChatMessage>) {
+    messages.clear();
+    messages.extend(pairs.iter().map(|(role, content)| ChatMessage {
+        role: role.clone(),
+        content: content.clone(),
+    }));
+}
+
+fn enforce_room_prompt_budget(messages: &mut Vec<ChatMessage>, n_ctx: usize, max_gen: u32) -> Option<String> {
+    let mut pairs = chat_messages_as_pairs(messages);
+    let budget = prompt_budget(n_ctx, max_gen);
+    let note = enforce_prompt_budget(&mut pairs, budget, 6)?;
+    sync_pairs_to_chat_messages(&pairs, messages);
+    Some(note)
+}
+
+#[cfg(test)]
+fn compact_room_messages_for_overflow(
+    messages: &mut Vec<ChatMessage>,
+    n_ctx: usize,
+    max_gen: u32,
+) -> Option<String> {
+    let mut pairs = chat_messages_as_pairs(messages);
+    let note = crate::context_budget::aggressive_trim_for_overflow(&mut pairs, n_ctx, max_gen)?;
+    sync_pairs_to_chat_messages(&pairs, messages);
+    Some(note)
+}
+
+async fn run_infer_once(
     bus: &BusClient,
     round: &RoomRoundState,
     model_id: Option<String>,
-    messages: Vec<ChatMessage>,
+    messages: &[ChatMessage],
     infer_caps: &[String],
     images: &[String],
+    max_tokens: u32,
 ) -> Result<String, String> {
     let req = InferRequest {
         model_id,
-        messages,
+        messages: messages.to_vec(),
         params: InferParams {
-            max_tokens: 768,
+            max_tokens,
             temperature: 0.3,
             ..InferParams::default()
         },
@@ -313,6 +354,53 @@ async fn run_infer(
     }
     *round.current_inference.lock().await = None;
     Ok(full.trim().to_string())
+}
+
+async fn run_infer(
+    bus: &BusClient,
+    round: &RoomRoundState,
+    model_id: Option<String>,
+    messages: &mut Vec<ChatMessage>,
+    infer_caps: &[String],
+    images: &[String],
+) -> Result<String, String> {
+    let mut n_ctx_hint = DEFAULT_N_CTX_HINT;
+    let mut gen_tokens = ROOM_INFER_MAX_TOKENS;
+    let mut prompt_retries = 0u32;
+
+    if let Some(_note) = enforce_room_prompt_budget(messages, n_ctx_hint, gen_tokens) {
+        // compaction pré-infer (aligné worker)
+    }
+
+    loop {
+        match run_infer_once(
+            bus,
+            round,
+            model_id.clone(),
+            messages,
+            infer_caps,
+            images,
+            gen_tokens,
+        )
+        .await
+        {
+            Ok(text) => return Ok(text),
+            Err(e) if e == "tour annulé" => return Err(e),
+            Err(e) if is_prompt_too_long_error(&e) && prompt_retries < MAX_OVERFLOW_INFER_RETRIES => {
+                prompt_retries += 1;
+                let mut pairs = chat_messages_as_pairs(messages);
+                let _ = compact_after_prompt_overflow(&mut pairs, &mut n_ctx_hint, &mut gen_tokens, &e);
+                sync_pairs_to_chat_messages(&pairs, messages);
+            }
+            Err(e) if is_prompt_too_long_error(&e) => {
+                eprintln!(
+                    "room infer prompt overflow après {prompt_retries} retries : {e}"
+                );
+                return Err(THREAD_FAIL_COULD_NOT_CONTINUE.into());
+            }
+            Err(e) => return Err(e),
+        }
+    }
 }
 
 fn room_reply_from_model(text: &str, parsed: Option<&AgentAction>) -> Option<(String, Option<String>)> {
@@ -368,7 +456,7 @@ async fn run_room_tool_loop(
             bus,
             round,
             model_id.clone(),
-            messages.clone(),
+            &mut messages,
             caps,
             &step_refs,
         )
@@ -482,7 +570,7 @@ pub async fn execute_room_turn(
         &req.session_id,
         canvas_digest.as_deref(),
     );
-    let messages = format_transcript_messages(&session, &system);
+    let mut messages = format_transcript_messages(&session, &system);
 
     let model_id = spec.model_id.clone().or(session.meta.model_id.clone());
     let images = room_images_from_session(&session);
@@ -506,7 +594,7 @@ pub async fn execute_room_turn(
             bus,
             round,
             model_id,
-            messages,
+            &mut messages,
             &room_turn_infer_caps(),
             &refs,
         )
@@ -852,5 +940,36 @@ mod tests {
         let (ids, caps) = room_member_kit(&spec, false);
         assert!(!ids.iter().any(|x| x.starts_with("canvas.")));
         assert!(!caps.iter().any(|c| c == "tool.invoke:canvas"));
+    }
+
+    #[test]
+    fn room_messages_compact_on_overflow_signal() {
+        let mut msgs = vec![
+            ChatMessage {
+                role: "system".into(),
+                content: "system ".repeat(500),
+            },
+            ChatMessage {
+                role: "user".into(),
+                content: "draw a house".into(),
+            },
+        ];
+        for i in 0..20 {
+            msgs.push(ChatMessage {
+                role: "assistant".into(),
+                content: format!("(Alpha) step {i} {}", "y".repeat(800)),
+            });
+            msgs.push(ChatMessage {
+                role: "user".into(),
+                content: format!("tool {i} {}", "z".repeat(600)),
+            });
+        }
+        let err = "le prompt ne tient pas dans le contexte (prompt=8749 + réserve_gen=520 = 9269 tokens > ctx=9216)";
+        assert!(crate::context_budget::is_prompt_too_long_error(err));
+        let note = compact_room_messages_for_overflow(&mut msgs, 9216, 512);
+        assert!(note.is_some());
+        let pairs = chat_messages_as_pairs(&msgs);
+        let after = crate::context_budget::estimate_messages_tokens(&pairs);
+        assert!(after < 8749);
     }
 }

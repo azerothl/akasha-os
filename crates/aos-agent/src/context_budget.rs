@@ -12,6 +12,8 @@ pub const AGENT_GEN_TOKENS_WRITE: u32 = 2048;
 pub const GEN_SAFETY_TOKENS: usize = 64;
 /// Longueur max d'un brief de sous-agent (caractères).
 pub const MAX_SPAWN_BRIEF_CHARS: usize = 600;
+/// Retries inférence après PromptTooLong (trim + réduction max_tokens).
+pub const MAX_OVERFLOW_INFER_RETRIES: u32 = 2;
 /// noop / JSON invalide consécutifs avant fail.
 pub const MAX_NOOP_STREAK: u32 = 3;
 /// Même action en échec répété avant fail.
@@ -51,6 +53,33 @@ pub fn is_prompt_too_long_error(msg: &str) -> bool {
     m.contains("ne tient pas dans le contexte")
         || m.contains("prompttoolong")
         || m.contains("prompt too long")
+}
+
+/// Erreur runtime avec détails token (ne pas afficher tel quel à l'utilisateur).
+pub fn is_technical_prompt_overflow_message(msg: &str) -> bool {
+    is_prompt_too_long_error(msg) || msg.contains("ctx=") || msg.contains("réserve_gen=")
+}
+
+/// `fail_reason` / thread sentinel quand le prompt dépasse le contexte après compaction.
+pub fn user_visible_overflow_fail_reason() -> &'static str {
+    crate::actions::THREAD_FAIL_COULD_NOT_CONTINUE
+}
+
+pub fn is_overflow_fail_reason(reason: &str) -> bool {
+    reason == crate::actions::THREAD_FAIL_COULD_NOT_CONTINUE
+        || is_technical_prompt_overflow_message(reason)
+}
+
+/// Compacte silencieusement après PromptTooLong (journal interne via `log_line`).
+pub fn compact_after_prompt_overflow(
+    memory: &mut Vec<(String, String)>,
+    n_ctx: &mut usize,
+    max_gen: &mut u32,
+    error_msg: &str,
+) -> Option<String> {
+    *n_ctx = parse_ctx_from_error(error_msg);
+    *max_gen = (*max_gen / 2).max(256);
+    aggressive_trim_for_overflow(memory, *n_ctx, *max_gen)
 }
 
 /// Extrait `ctx=N` du message d'erreur clarifié (sinon hint défaut).
@@ -485,6 +514,52 @@ mod tests {
         assert!(matches!(g.observe("notes.create", err), LoopVerdict::Ok));
         assert!(matches!(g.observe("notes.create", err), LoopVerdict::Warn(_)));
         assert!(matches!(g.observe("notes.create", err), LoopVerdict::Abort(_)));
+    }
+
+    #[test]
+    fn overflow_53_tokens_over_compacts_under_retry_budget() {
+        let n_ctx = 9216u32;
+        let gen_reserve = 520u32;
+        let prompt_tokens = 8749usize;
+        let err = format!(
+            "le prompt ne tient pas dans le contexte (prompt={prompt_tokens} + réserve_gen={gen_reserve} = {} tokens > ctx={n_ctx})",
+            prompt_tokens + gen_reserve as usize
+        );
+        assert!(is_prompt_too_long_error(&err));
+        assert_eq!(parse_ctx_from_error(&err), n_ctx as usize);
+
+        let mut mem = vec![("system".into(), "base ".repeat(400))];
+        for i in 0..24 {
+            mem.push(("user".into(), format!("u{i} {}", "x".repeat(900))));
+            mem.push(("assistant".into(), format!("a{i} {}", "y".repeat(700))));
+            mem.push(("tool".into(), format!("[web] {}", "z".repeat(500))));
+        }
+        let before = estimate_messages_tokens(&mem);
+        assert!(
+            before >= prompt_tokens.saturating_sub(400),
+            "fixture should be near overflow: {before}"
+        );
+
+        let max_gen = (gen_reserve.saturating_sub(8)).max(256);
+        let retry_budget = retry_prompt_budget(n_ctx as usize, max_gen);
+        let note = aggressive_trim_for_overflow(&mut mem, n_ctx as usize, max_gen);
+        assert!(note.is_some(), "expected compaction note");
+        let after = estimate_messages_tokens(&mem);
+        assert!(
+            after <= retry_budget + 200,
+            "after={after} retry_budget={retry_budget}"
+        );
+    }
+
+    #[test]
+    fn technical_overflow_not_user_visible() {
+        let raw = "le prompt ne tient pas dans le contexte (prompt=8749 + réserve_gen=520 = 9269 tokens > ctx=9216)";
+        assert!(is_technical_prompt_overflow_message(raw));
+        let sentinel = user_visible_overflow_fail_reason();
+        assert!(!sentinel.contains("ctx="));
+        assert!(!sentinel.contains("réserve_gen"));
+        assert!(!sentinel.contains("prompt="));
+        assert_eq!(sentinel, "agent_could_not_continue");
     }
 
     #[test]

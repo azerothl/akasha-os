@@ -5,13 +5,15 @@
 
 use aos_agent::actions::{
     parse_actions, strip_reasoning, strip_tool_markup, AgentAction, THREAD_FAIL_COULD_NOT_ACT,
+    THREAD_FAIL_COULD_NOT_CONTINUE,
 };
 use aos_agent::assess::{parse_assess_response, AssessResult};
 use aos_agent::mcp::{open_mcp_tools_with_secrets, McpSession};
 use aos_agent::context_budget::{
-    aggressive_trim_for_overflow, choose_agent_max_tokens, clamp_spawn_brief,
-    enforce_prompt_budget, is_prompt_too_long_error, parse_ctx_from_error,
-    prompt_budget, sanitize_assistant_for_memory, LoopGuard, LoopVerdict, DEFAULT_N_CTX_HINT,
+    choose_agent_max_tokens, clamp_spawn_brief, compact_after_prompt_overflow,
+    enforce_prompt_budget, is_prompt_too_long_error, prompt_budget,
+    sanitize_assistant_for_memory, LoopGuard, LoopVerdict, DEFAULT_N_CTX_HINT,
+    MAX_OVERFLOW_INFER_RETRIES,
 };
 use aos_agent::persist;
 use aos_agent::canvas_scene::{
@@ -598,28 +600,21 @@ async fn main() {
                 InferOutcome::Text(t) => break Ok(t),
                 InferOutcome::Aborted => break Err(InferControl::Continue),
                 InferOutcome::Fatal(e)
-                    if is_prompt_too_long_error(&e) && prompt_retries < 2 =>
+                    if is_prompt_too_long_error(&e) && prompt_retries < MAX_OVERFLOW_INFER_RETRIES =>
                 {
                     prompt_retries += 1;
-                    n_ctx_hint = parse_ctx_from_error(&e);
-                    // Réduire la réserve gen pour laisser plus de place au prompt
-                    gen_tokens = (gen_tokens / 2).max(256);
-                    report(
-                        &bus,
-                        &agent_id,
-                        AgentOutputEvent::Log {
-                            line: format!(
-                                "prompt trop long — compaction agressive + max_tokens={gen_tokens} \
-                                 (retry {prompt_retries}/2 ; {e})"
-                            ),
-                        },
-                    )
-                    .await;
+                    eprintln!(
+                        "prompt overflow — compaction silencieuse max_tokens réduit \
+                         (retry {prompt_retries}/{MAX_OVERFLOW_INFER_RETRIES} ; {e})"
+                    );
                     {
                         let mut st = shared.state.lock().await;
-                        if let Some(sum) =
-                            aggressive_trim_for_overflow(&mut st.working_memory, n_ctx_hint, gen_tokens)
-                        {
+                        if let Some(sum) = compact_after_prompt_overflow(
+                            &mut st.working_memory,
+                            &mut n_ctx_hint,
+                            &mut gen_tokens,
+                            &e,
+                        ) {
                             let _ = bus
                                 .call::<MemEpisodicWriteRequest, MemRememberResponse>(
                                     "mem.episodic_write",
@@ -640,12 +635,26 @@ async fn main() {
                     }
                 }
                 InferOutcome::Fatal(e) => {
-                    report(
-                        &bus,
-                        &agent_id,
-                        AgentOutputEvent::Error { message: e },
-                    )
-                    .await;
+                    if is_prompt_too_long_error(&e) {
+                        eprintln!(
+                            "prompt overflow après {prompt_retries} retries : {e}"
+                        );
+                        report(
+                            &bus,
+                            &agent_id,
+                            AgentOutputEvent::Error {
+                                message: THREAD_FAIL_COULD_NOT_CONTINUE.into(),
+                            },
+                        )
+                        .await;
+                    } else {
+                        report(
+                            &bus,
+                            &agent_id,
+                            AgentOutputEvent::Error { message: e },
+                        )
+                        .await;
+                    }
                     terminal = Some(AgentState::Failed);
                     break Err(InferControl::Fail);
                 }

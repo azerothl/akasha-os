@@ -576,6 +576,15 @@ fn agent_completion_chat_text(ag: &AgentInfo, t: &i18n::UiStrings) -> String {
             if ag.fail_reason.as_deref() == Some(aos_agent::actions::THREAD_FAIL_COULD_NOT_ACT) {
                 return i18n::agent_could_not_act_message(t);
             }
+            if ag.fail_reason.as_deref()
+                == Some(aos_agent::actions::THREAD_FAIL_COULD_NOT_CONTINUE)
+                || ag
+                    .fail_reason
+                    .as_deref()
+                    .is_some_and(aos_agent::context_budget::is_overflow_fail_reason)
+            {
+                return i18n::agent_could_not_continue_message(t);
+            }
             format!(
                 "Agent « {title} » a échoué : {}",
                 i18n::resolve_agent_fail_reason(t, ag.fail_reason.as_deref())
@@ -4400,6 +4409,15 @@ impl eframe::App for UiApp {
                                                 == Some(aos_agent::actions::THREAD_FAIL_COULD_NOT_ACT)
                                             {
                                                 i18n::agent_could_not_act_message(&t)
+                                            } else if ag.fail_reason.as_deref()
+                                                == Some(
+                                                    aos_agent::actions::THREAD_FAIL_COULD_NOT_CONTINUE,
+                                                )
+                                                || ag.fail_reason.as_deref().is_some_and(
+                                                    aos_agent::context_budget::is_overflow_fail_reason,
+                                                )
+                                            {
+                                                i18n::agent_could_not_continue_message(&t)
                                             } else {
                                                 format!(
                                                     "{} échoué — {}",
@@ -5791,6 +5809,11 @@ impl UiApp {
                         && text.trim() == aos_agent::actions::THREAD_FAIL_COULD_NOT_ACT
                     {
                         text = i18n::agent_could_not_act_message(t);
+                    } else if role == "assistant"
+                        && (text.trim() == aos_agent::actions::THREAD_FAIL_COULD_NOT_CONTINUE
+                            || aos_agent::context_budget::is_overflow_fail_reason(text.trim()))
+                    {
+                        text = i18n::agent_could_not_continue_message(t);
                     }
                     let kind = chat_bubble_kind(&role, speaker_id.as_deref(), room_mode);
                     let text = if kind == ChatBubbleKind::RoomSpeaker {
@@ -7509,7 +7532,10 @@ impl UiApp {
             if let Some(reason) = &a.fail_reason {
                 ui.colored_label(
                     egui::Color32::from_rgb(220, 120, 100),
-                    agent_panel::truncate(reason, 40),
+                    agent_panel::truncate(
+                        &i18n::resolve_agent_fail_reason(&t, Some(reason.as_str())),
+                        40,
+                    ),
                 );
             }
             if !a.is_roster() {
