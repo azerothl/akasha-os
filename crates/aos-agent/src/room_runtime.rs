@@ -37,6 +37,10 @@ use tokio::sync::Mutex;
 const TRANSCRIPT_LIMIT: usize = 40;
 const MAX_ROOM_TOOL_STEPS: usize = 20;
 const ROOM_INFER_MAX_TOKENS: u32 = 768;
+/// Below `PREFIX_SPEC_PRIORITY` (2) in `aos-model` so each member turn clears KV and
+/// skips prompt-lookup drafting — otherwise prior assistant bubbles in the prompt
+/// get replayed verbatim across rebound speakers in the same round.
+const ROOM_INFER_PRIORITY: u8 = 1;
 
 const ROOM_ACTION_PROTOCOL: &str = r#"## Protocole d'actions (salon)
 
@@ -78,8 +82,14 @@ pub fn room_turn_infer_caps() -> Vec<String> {
     vec![]
 }
 
-/// Formate le transcript session pour l'inférence (labels user / assistant (Name)).
-/// Le transcript inclut déjà le dernier message utilisateur (append platform avant conduct).
+/// Formate le transcript session pour l'inférence.
+///
+/// Messages humains : `role: user`. Interventions salon précédentes : aussi `role: user`
+/// avec attribution `[Salon — Name] …` — pas `role: assistant` + `(Name)`, sinon le
+/// template ChatML se termine sur un tour assistant et le modèle continue/copie la
+/// dernière bulle. Le transcript inclut déjà le message utilisateur déclencheur
+/// (append platform avant conduct) ; `AgentRoomTurnRequest.user_message` ne doit pas
+/// être réinjecté (voir test `infer_messages_do_not_duplicate_user_line`).
 pub fn format_transcript_messages(
     session: &ChatSessionGetResponse,
     system_prompt: &str,
@@ -95,19 +105,36 @@ pub fn format_transcript_messages(
                 role: "user".into(),
                 content: msg.content.clone(),
             });
-        } else {
+        } else if msg.speaker_id.is_some() || msg.speaker_name.as_deref().is_some_and(|n| !n.is_empty()) {
             let label = msg
                 .speaker_name
                 .as_deref()
                 .filter(|n| !n.is_empty())
                 .unwrap_or("assistant");
             messages.push(ChatMessage {
+                role: "user".into(),
+                content: format!("[Salon — {label}] {}", msg.content),
+            });
+        } else {
+            messages.push(ChatMessage {
                 role: "assistant".into(),
-                content: format!("({label}) {}", msg.content),
+                content: msg.content.clone(),
             });
         }
     }
     messages
+}
+
+/// Synthetic user line so the chat template ends on a user turn and the model is
+/// nudged to answer as this roster member instead of continuing the last bubble.
+pub fn append_room_turn_nudge(messages: &mut Vec<ChatMessage>, display_name: &str) {
+    messages.push(ChatMessage {
+        role: "user".into(),
+        content: format!(
+            "[Salon — tour de {display_name}] Réponds avec ta propre voix et ton rôle. \
+             Ne recopie pas les messages précédents ; apporte une contribution distincte."
+        ),
+    });
 }
 
 fn member_display_name<'a>(
@@ -152,6 +179,8 @@ pub fn build_room_system_prompt(
         "Tu es {display_name}, membre d'un salon multi-agent in-app. \
          Réponds en une seule prise, de façon concise.\n\
          Membres du salon (tu ne peux @ que ces noms) : {roster}.\n\
+         Ne recopie pas les interventions précédentes du fil ; apporte ta propre perspective \
+         en tant que {display_name} (pas de copier-coller, pas de préfixe `(Autre)`).\n\
          Ne jamais inventer des collègues fictifs (pas de Dessinateur, Moteur de rendu, \
          @agent_id_123, etc.). Ne propose pas agent.spawn pour ajouter des membres.\n\
          Si tu es seul membre, agis toi-même — ne @ personne d'absent.\n\
@@ -316,7 +345,7 @@ async fn run_infer_once(
             temperature: 0.3,
             ..InferParams::default()
         },
-        priority: 6,
+        priority: ROOM_INFER_PRIORITY,
         data_refs: images.to_vec(),
         images: images.to_vec(),
         routing: None,
@@ -571,6 +600,7 @@ pub async fn execute_room_turn(
         canvas_digest.as_deref(),
     );
     let mut messages = format_transcript_messages(&session, &system);
+    append_room_turn_nudge(&mut messages, display_name);
 
     let model_id = spec.model_id.clone().or(session.meta.model_id.clone());
     let images = room_images_from_session(&session);
@@ -795,6 +825,102 @@ mod tests {
             "must not append user_message again"
         );
         assert_eq!(msgs[1].content, "What do you think?");
+    }
+
+    #[test]
+    fn turn_nudge_appended_after_transcript() {
+        let session = room_session_with_user("Quels manques?");
+        let mut msgs = format_transcript_messages(&session, "system");
+        append_room_turn_nudge(&mut msgs, "Critic");
+        assert_eq!(msgs.last().unwrap().role, "user");
+        assert!(msgs.last().unwrap().content.contains("Critic"));
+        assert!(msgs.last().unwrap().content.contains("Ne recopie pas"));
+    }
+
+    #[test]
+    fn prior_room_replies_are_user_attribution_not_assistant() {
+        let mut session = room_session_with_user("Quels manques?");
+        session.messages.push(ChatSessionMessage {
+            role: "assistant".into(),
+            content: "Phase 1 : audit".into(),
+            ts_ms: 4,
+            attachments: vec![],
+            speaker_id: Some("persona-planner".into()),
+            speaker_name: Some("Planner".into()),
+            thinking: None,
+        });
+        let msgs = format_transcript_messages(&session, "system");
+        assert_eq!(
+            msgs.iter().filter(|m| m.role == "assistant").count(),
+            0,
+            "room peers must not flatten to assistant turns"
+        );
+        let planner = msgs
+            .iter()
+            .find(|m| m.content.contains("Phase 1"))
+            .expect("planner line");
+        assert_eq!(planner.role, "user");
+        assert!(planner.content.starts_with("[Salon — Planner]"));
+    }
+
+    #[test]
+    fn infer_prompt_ends_on_user_turn_after_nudge() {
+        let mut session = room_session_with_user("Quels manques?");
+        session.messages.push(ChatSessionMessage {
+            role: "assistant".into(),
+            content: "Plan détaillé".into(),
+            ts_ms: 4,
+            attachments: vec![],
+            speaker_id: Some("persona-planner".into()),
+            speaker_name: Some("Planner".into()),
+            thinking: None,
+        });
+        let mut msgs = format_transcript_messages(&session, "system");
+        append_room_turn_nudge(&mut msgs, "Critic");
+        assert_eq!(msgs.last().unwrap().role, "user");
+        assert_eq!(
+            msgs.iter().filter(|m| m.role == "assistant").count(),
+            0,
+            "no assistant turns before generation"
+        );
+    }
+
+    #[test]
+    fn room_infer_priority_disables_prefix_spec_path() {
+        assert!(ROOM_INFER_PRIORITY < 2);
+    }
+
+    #[test]
+    fn room_system_prompt_anti_echo() {
+        let members = vec![ChatRoomMember {
+            agent_id: "persona-critic".into(),
+            display_name: "Critic".into(),
+            persona_id: Some("critic".into()),
+            joined_ms: 1,
+        }];
+        let spec = AgentSpec {
+            agent_id: "persona-critic".into(),
+            goal: AgentGoal::default(),
+            kind: Default::default(),
+            display_name: Some("Critic".into()),
+            persona_id: Some("critic".into()),
+            system_prompt: None,
+            skills: vec![],
+            tools: vec![],
+            mcp_servers: vec![],
+            documents: vec![],
+            caps: vec![],
+            model_id: None,
+            parent_id: None,
+            session_id: None,
+            budget: Default::default(),
+            optimize_prompt: false,
+            gate_mode: "ask".into(),
+            origin: None,
+        };
+        let prompt = build_room_system_prompt(&spec, "Critic", &members, false, &[], "sess-1", None);
+        assert!(prompt.contains("Ne recopie pas"));
+        assert!(prompt.contains("Critic"));
     }
 
     #[test]
