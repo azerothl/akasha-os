@@ -76,7 +76,22 @@ impl Default for CanvasPanelState {
 }
 
 impl CanvasPanelState {
+    /// `after_seq` for `canvas.get`. Full snapshot when the board is empty so a
+    /// wiped panel can recover ops already committed on the server.
+    pub fn poll_after_seq(&self) -> Option<u64> {
+        if self.ops.is_empty() || self.last_seen_seq == 0 {
+            None
+        } else {
+            Some(self.last_seen_seq)
+        }
+    }
+
     pub fn apply_snapshot(&mut self, ops: Vec<CanvasOp>, next_seq: u64, now: f64) {
+        // Overlapping `canvas.get` polls: a late empty snapshot (started before
+        // the agent drew) must not replace a newer document already on screen.
+        if next_seq < self.next_seq {
+            return;
+        }
         let pending_human: Vec<CanvasOp> = self
             .ops
             .iter()
@@ -920,6 +935,20 @@ mod routing_tests {
         assert!(!chat_user_wants_pixel_draw("withdraw funds", false));
     }
 
+    fn sample_agent_line(seq: u64) -> CanvasOp {
+        CanvasOp {
+            seq,
+            author_id: "agent-81".into(),
+            ts_ms: 0,
+            body: CanvasOpBody::Line {
+                p0: CanvasPoint { x: 0.2, y: 0.2 },
+                p1: CanvasPoint { x: 0.8, y: 0.2 },
+                color: "#f40009".into(),
+                width: 0.02,
+            },
+        }
+    }
+
     #[test]
     fn apply_snapshot_keeps_pending_human_stroke() {
         let mut state = CanvasPanelState::default();
@@ -936,6 +965,46 @@ mod routing_tests {
         state.apply_snapshot(vec![], 1, 0.0);
         assert_eq!(state.ops.len(), 1);
         assert_eq!(state.ops[0].author_id, "human");
+    }
+
+    #[test]
+    fn apply_snapshot_ignores_stale_empty_document() {
+        let mut state = CanvasPanelState::default();
+        let ops: Vec<CanvasOp> = (1..=8).map(sample_agent_line).collect();
+        state.apply_snapshot(ops, 9, 1.0);
+        assert_eq!(state.ops.len(), 8);
+        assert_eq!(state.next_seq, 9);
+        assert_eq!(state.last_seen_seq, 8);
+
+        state.apply_snapshot(vec![], 1, 2.0);
+        assert_eq!(state.ops.len(), 8, "late empty poll must not wipe agent strokes");
+        assert_eq!(state.next_seq, 9);
+        assert_eq!(state.last_seen_seq, 8);
+    }
+
+    #[test]
+    fn poll_after_seq_full_resync_when_board_empty() {
+        let mut state = CanvasPanelState::default();
+        assert_eq!(state.poll_after_seq(), None);
+
+        state.apply_snapshot((1..=8).map(sample_agent_line).collect(), 9, 1.0);
+        assert_eq!(state.poll_after_seq(), Some(8));
+
+        state.ops.clear();
+        assert_eq!(
+            state.poll_after_seq(),
+            None,
+            "wiped board must refetch the full document, not seq > last_seen"
+        );
+    }
+
+    #[test]
+    fn apply_snapshot_accepts_same_seq_clear() {
+        let mut state = CanvasPanelState::default();
+        state.apply_snapshot((1..=3).map(sample_agent_line).collect(), 4, 1.0);
+        state.apply_snapshot(vec![], 4, 2.0);
+        assert!(state.ops.is_empty());
+        assert_eq!(state.next_seq, 4);
     }
 
     #[test]

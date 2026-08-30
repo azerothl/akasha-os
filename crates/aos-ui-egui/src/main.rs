@@ -5537,11 +5537,7 @@ impl UiApp {
         let now = ui.ctx().input(|i| i.time);
         if now >= self.canvas_panel.poll_due {
             self.canvas_panel.poll_due = now + 0.20;
-            let after = if self.canvas_panel.last_seen_seq > 0 {
-                Some(self.canvas_panel.last_seen_seq)
-            } else {
-                None
-            };
+            let after = self.canvas_panel.poll_after_seq();
             let _ = self.cmd_tx.send(Cmd::CanvasPoll {
                 session_id: session_id.to_string(),
                 after_seq: after,
