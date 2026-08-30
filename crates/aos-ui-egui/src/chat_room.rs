@@ -203,19 +203,22 @@ pub fn room_thinking_toggle(
     open: &mut std::collections::HashSet<usize>,
 ) {
     let expanded = open.contains(&line_index);
-    let label = if expanded {
-        t.room_hide_thinking
-    } else {
-        t.room_show_thinking
-    };
-    if ui.small_button(label).clicked() {
+    let response = ui.add(
+        egui::Label::new(
+            egui::RichText::new(t.room_thinking_label)
+                .small()
+                .color(ui.visuals().weak_text_color()),
+        )
+        .sense(egui::Sense::click()),
+    );
+    if response.clicked() {
         if expanded {
             open.remove(&line_index);
         } else {
             open.insert(line_index);
         }
     }
-    if open.contains(&line_index) {
+    if expanded {
         ui.add_space(2.0);
         ui.label(
             egui::RichText::new(thinking)
@@ -440,6 +443,18 @@ mod tests {
         assert_eq!(visible, "Voici la réponse.");
         assert!(!visible.contains("thought"));
     }
+    #[test]
+    fn room_thinking_label_is_muted_noun_not_action() {
+        let en = i18n::strings("en");
+        let fr = i18n::strings("fr");
+        assert_eq!(en.room_thinking_label, "Reflection");
+        assert_eq!(fr.room_thinking_label, "Réflexion");
+        assert!(!en.room_thinking_label.to_ascii_lowercase().contains("show"));
+        assert!(!en.room_thinking_label.to_ascii_lowercase().contains("hide"));
+        assert!(!fr.room_thinking_label.contains("Afficher"));
+        assert!(!fr.room_thinking_label.contains("Masquer"));
+    }
+
     #[test]
     fn strip_roster_agent_id_mentions_from_body() {
         let t = i18n::strings("fr");
