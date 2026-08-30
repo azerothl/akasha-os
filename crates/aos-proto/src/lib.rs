@@ -3304,6 +3304,9 @@ pub struct ChatSessionMessage {
     pub speaker_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub speaker_name: Option<String>,
+    /// Raisonnement modèle masqué par défaut dans l'UI salon.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -3342,6 +3345,8 @@ pub struct ChatSessionAppendRequest {
     pub speaker_id: Option<String>,
     #[serde(default)]
     pub speaker_name: Option<String>,
+    #[serde(default)]
+    pub thinking: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -3427,6 +3432,8 @@ pub struct AgentRoomTurnResponse {
     pub content: String,
     pub speaker_id: String,
     pub speaker_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -4398,6 +4405,7 @@ mod chat_session_room_tests {
             serde_json::from_str(r#"{"role":"user","content":"hi","ts_ms":1}"#).unwrap();
         assert!(m.speaker_id.is_none());
         assert!(m.speaker_name.is_none());
+        assert!(m.thinking.is_none());
         assert!(m.attachments.is_empty());
     }
 
@@ -4410,11 +4418,13 @@ mod chat_session_room_tests {
             attachments: vec![],
             speaker_id: Some("agent-a".into()),
             speaker_name: Some("Alpha".into()),
+            thinking: Some("plan interne".into()),
         };
         let json = serde_json::to_string(&m).unwrap();
         let back: ChatSessionMessage = serde_json::from_str(&json).unwrap();
         assert_eq!(back.speaker_id.as_deref(), Some("agent-a"));
         assert_eq!(back.speaker_name.as_deref(), Some("Alpha"));
+        assert_eq!(back.thinking.as_deref(), Some("plan interne"));
     }
 
     #[test]

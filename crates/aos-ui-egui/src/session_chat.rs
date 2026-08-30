@@ -130,6 +130,7 @@ pub(crate) fn on_done(
                 attachments,
                 speaker_id: None,
                 speaker_name: None,
+                thinking: None,
             });
         }
         streaming.clear();

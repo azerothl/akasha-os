@@ -609,6 +609,7 @@ pub(crate) async fn load_session(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>, id:
                         attachments: m.attachments,
                         speaker_id: m.speaker_id,
                         speaker_name: m.speaker_name,
+                        thinking: m.thinking,
                     }
                 })
                 .collect();
@@ -1132,6 +1133,7 @@ pub(crate) async fn spawn_chat_delegate_agent(
                         attachments: vec![att.clone()],
                         speaker_id: None,
                         speaker_name: None,
+                        thinking: None,
                     },
                     vec![],
                 )
@@ -2005,6 +2007,8 @@ struct UiApp {
     hf_download_status: String,
     show_go_to_palette: bool,
     agent_join_room_on_create: bool,
+    /// Expanded salon thinking blocks keyed by chat line index.
+    room_thinking_open: std::collections::HashSet<usize>,
     /// Last user message for an in-flight room turn (speaker queue in thinking UI).
     room_turn_pending_text: Option<String>,
     /// Room: Members pane toggled from clickable session header.
@@ -2329,6 +2333,7 @@ impl UiApp {
             show_go_to_palette: false,
             agent_join_room_on_create: false,
             room_turn_pending_text: None,
+            room_thinking_open: std::collections::HashSet::new(),
             room_members_pane_open: false,
             canvas_panel: chat_canvas::CanvasPanelState::default(),
             roster_edit_drafts: HashMap::new(),
@@ -2415,6 +2420,7 @@ impl UiApp {
                 }],
                 speaker_id: None,
                 speaker_name: None,
+                thinking: None,
             });
             let _ = self.cmd_tx.send(Cmd::AgentKill { id: agent_id });
         }
@@ -2526,6 +2532,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             attachments: vec![att.clone()],
             speaker_id: None,
             speaker_name: None,
+            thinking: None,
         });
         let _ = self.cmd_tx.send(Cmd::SessionAppend {
             session_id: session_id.to_string(),
@@ -2549,6 +2556,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             attachments: vec![att.clone()],
             speaker_id: None,
             speaker_name: None,
+            thinking: None,
         });
         let _ = self.cmd_tx.send(Cmd::SessionAppend {
             session_id: session_id.to_string(),
@@ -2599,6 +2607,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             attachments: vec![att],
             speaker_id: None,
             speaker_name: None,
+            thinking: None,
         });
     }
 
@@ -2623,6 +2632,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 attachments: vec![result.clone()],
                 speaker_id: None,
                 speaker_name: None,
+                thinking: None,
             });
         }
         if let Some(sid) = self.active_session.clone() {
@@ -2737,6 +2747,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             }],
             speaker_id: None,
             speaker_name: None,
+            thinking: None,
         });
         let _ = self.cmd_tx.send(Cmd::SessionAppend {
             session_id,
@@ -2876,6 +2887,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             attachments,
             speaker_id: None,
             speaker_name: None,
+            thinking: None,
         });
         self.chat_pending_images.clear();
         self.chat_pending_documents.clear();
@@ -3374,6 +3386,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             attachments: vec![att.clone()],
             speaker_id: None,
             speaker_name: None,
+            thinking: None,
         });
         if let Some(sid) = self.active_session.clone() {
             let _ = self.cmd_tx.send(Cmd::SessionAppend {
@@ -3411,6 +3424,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             attachments: vec![],
             speaker_id: None,
             speaker_name: None,
+            thinking: None,
         });
         let _ = self.cmd_tx.send(Cmd::SessionAppend {
             session_id: session_id.to_string(),
@@ -3437,6 +3451,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 attachments: vec![att.clone()],
                 speaker_id: None,
                 speaker_name: None,
+                thinking: None,
             });
             let _ = self.cmd_tx.send(Cmd::SessionAppend {
                 session_id: session_id.to_string(),
@@ -3458,6 +3473,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 attachments: vec![],
                 speaker_id: None,
                 speaker_name: None,
+                thinking: None,
             });
             let _ = self.cmd_tx.send(Cmd::ScheduleCreate {
                 goal: parsed.goal,
@@ -3616,6 +3632,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             attachments: vec![card.clone()],
             speaker_id: None,
             speaker_name: None,
+            thinking: None,
         });
         if let Some(session_id) = self.active_session.clone() {
             let _ = self.cmd_tx.send(Cmd::SessionAppend {
@@ -3711,6 +3728,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             attachments: vec![att.clone()],
             speaker_id: None,
             speaker_name: None,
+            thinking: None,
         });
         if let Some(sid) = self.active_session.clone() {
             let _ = self.cmd_tx.send(Cmd::SessionAppend {
@@ -4253,6 +4271,7 @@ impl eframe::App for UiApp {
                                 }],
                                 speaker_id: None,
                                 speaker_name: None,
+                                thinking: None,
                             });
                         } else {
                             self.status = format!("agent lancé : {agent_id}");
@@ -4361,6 +4380,7 @@ impl eframe::App for UiApp {
                                             }],
                                             speaker_id: None,
                                             speaker_name: None,
+                                            thinking: None,
                                         });
                                     }
                                 } else if !seeding
@@ -4426,6 +4446,7 @@ impl eframe::App for UiApp {
                                         }],
                                         speaker_id: None,
                                         speaker_name: None,
+                                        thinking: None,
                                     });
                                 }
                             }
@@ -4456,6 +4477,7 @@ impl eframe::App for UiApp {
                                         }],
                                         speaker_id: None,
                                         speaker_name: None,
+                                        thinking: None,
                                     });
                                 } else if !on_this_session
                                     && !self.agent_notified.contains(&ag.agent_id)
@@ -4734,6 +4756,7 @@ impl eframe::App for UiApp {
                             }],
                             speaker_id: None,
                             speaker_name: None,
+                            thinking: None,
                         });
                     }
                 }
@@ -4861,6 +4884,7 @@ impl eframe::App for UiApp {
                         attachments: vec![att.clone()],
                         speaker_id: None,
                         speaker_name: None,
+                        thinking: None,
                     });
                     if let Some(sid) = self.active_session.clone() {
                         let _ = self.cmd_tx.send(Cmd::SessionAppend {
@@ -5751,6 +5775,7 @@ impl UiApp {
                     let attachments = self.chat[i].attachments.clone();
                     let speaker_id = self.chat[i].speaker_id.clone();
                     let speaker_name = self.chat[i].speaker_name.clone();
+                    let thinking = self.chat[i].thinking.clone();
                     let is_completion = attachments.iter().any(|a| {
                         matches!(
                             a,
@@ -5768,7 +5793,8 @@ impl UiApp {
                     }
                     let kind = chat_bubble_kind(&role, speaker_id.as_deref(), room_mode);
                     let text = if kind == ChatBubbleKind::RoomSpeaker {
-                        chat_room::strip_roster_agent_id_mentions(t, &text, room_members)
+                        let visible = chat_room::format_room_visible_bubble(&text);
+                        chat_room::strip_roster_agent_id_mentions(t, &visible, room_members)
                     } else if role == "assistant"
                         && !is_completion
                         && speaker_id.is_none()
@@ -5816,6 +5842,17 @@ impl UiApp {
                                 self.status = t.copied.into();
                             }
                         });
+                        if kind == ChatBubbleKind::RoomSpeaker {
+                            if let Some(th) = thinking.as_deref().filter(|s| !s.trim().is_empty()) {
+                                chat_room::room_thinking_toggle(
+                                    ui,
+                                    t,
+                                    i,
+                                    th,
+                                    &mut self.room_thinking_open,
+                                );
+                            }
+                        }
                         if !text.is_empty() {
                             if role == "assistant" {
                                 ui.push_id(("chat_md", i), |ui| {
@@ -7754,6 +7791,7 @@ impl UiApp {
                                         }],
                                         speaker_id: None,
                                         speaker_name: None,
+                                        thinking: None,
                                     });
                                 }
                             }

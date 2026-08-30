@@ -15,6 +15,7 @@ pub mod persist;
 pub mod prompt;
 pub mod room_conductor;
 pub mod room_personas;
+pub mod room_reply;
 pub mod room_runtime;
 pub mod research_detect;
 pub mod schedule;

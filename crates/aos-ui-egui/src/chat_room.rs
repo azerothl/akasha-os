@@ -3,6 +3,7 @@
 use crate::i18n::{self, UiStrings};
 use aos_agent::room_conductor::{build_initial_queue, effective_max_turns};
 use aos_proto::{AgentInfo, AgentKind, AgentState, ChatRoomMember, ChatSessionMode, ChatSessionMeta};
+use eframe::egui;
 
 pub use aos_agent::room_personas::{persona_agent_id, persona_by_id, ROOM_PERSONAS};
 
@@ -183,6 +184,48 @@ pub fn roster_display_name(
         .unwrap_or_else(|| t.room_member_fallback.to_string())
 }
 
+/// Visible salon bubble text (UTF-8 safe, no raw thought JSON).
+pub fn format_room_visible_bubble(text: &str) -> String {
+    let (visible, _) = aos_agent::room_reply::split_room_reply(text);
+    if !visible.is_empty() {
+        visible
+    } else {
+        text.trim().to_string()
+    }
+}
+
+/// Collapsible thinking block inside a salon speaker bubble.
+pub fn room_thinking_toggle(
+    ui: &mut egui::Ui,
+    t: &UiStrings,
+    line_index: usize,
+    thinking: &str,
+    open: &mut std::collections::HashSet<usize>,
+) {
+    let expanded = open.contains(&line_index);
+    let label = if expanded {
+        t.room_hide_thinking
+    } else {
+        t.room_show_thinking
+    };
+    if ui.small_button(label).clicked() {
+        if expanded {
+            open.remove(&line_index);
+        } else {
+            open.insert(line_index);
+        }
+    }
+    if open.contains(&line_index) {
+        ui.add_space(2.0);
+        ui.label(
+            egui::RichText::new(thinking)
+                .italics()
+                .small()
+                .color(ui.visuals().weak_text_color()),
+        );
+    }
+}
+
 /// Salon turn completion must not surface a count banner in session chrome.
 pub fn room_turn_done_status(_agent_turns: u32, _cancelled: bool) -> Option<String> {
     None
@@ -207,34 +250,31 @@ pub fn strip_roster_agent_id_mentions(
 
 fn strip_bare_agent_id_tokens(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
-    let bytes = text.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'@'
-            && i + 7 < bytes.len()
-            && bytes[i + 1] == b'a'
-            && bytes[i + 2] == b'g'
-            && bytes[i + 3] == b'e'
-            && bytes[i + 4] == b'n'
-            && bytes[i + 5] == b't'
-            && bytes[i + 6] == b'-'
-        {
-            let mut end = i + 7;
-            while end < bytes.len() {
-                let c = bytes[end];
-                if c.is_ascii_alphanumeric() || c == b'-' || c == b'_' {
-                    end += 1;
-                } else {
-                    break;
+    let mut rest = text;
+    while !rest.is_empty() {
+        if let Some(at) = rest.find('@') {
+            out.push_str(&rest[..at]);
+            let after_at = &rest[at + 1..];
+            if after_at.starts_with("agent-") {
+                let mut byte_end = 6;
+                for (i, c) in after_at[6..].char_indices() {
+                    if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                        byte_end = 6 + i + c.len_utf8();
+                    } else {
+                        break;
+                    }
+                }
+                if byte_end > 6 {
+                    rest = &after_at[byte_end..];
+                    continue;
                 }
             }
-            if end > i + 7 {
-                i = end;
-                continue;
-            }
+            out.push('@');
+            rest = &rest[at + 1..];
+        } else {
+            out.push_str(rest);
+            break;
         }
-        out.push(bytes[i] as char);
-        i += 1;
     }
     out
 }
@@ -380,6 +420,26 @@ mod tests {
         assert!(room_turn_done_status(0, true).is_none());
     }
 
+    #[test]
+    fn strip_roster_agent_id_preserves_utf8_accents() {
+        let t = i18n::strings("fr");
+        let members = vec![member("agent-2", "Maya")];
+        let raw = "La mémoire garde la réponse système déjà déployée.";
+        let painted = strip_roster_agent_id_mentions(&t, raw, &members);
+        assert!(painted.contains("mémoire"));
+        assert!(painted.contains("réponse"));
+        assert!(painted.contains("système"));
+        assert!(!painted.contains("mÃ"));
+        assert!(!painted.contains("rÃ"));
+    }
+
+    #[test]
+    fn format_room_visible_strips_thought_json() {
+        let raw = r#"{"thought":"plan interne"} Voici la réponse."#;
+        let visible = format_room_visible_bubble(raw);
+        assert_eq!(visible, "Voici la réponse.");
+        assert!(!visible.contains("thought"));
+    }
     #[test]
     fn strip_roster_agent_id_mentions_from_body() {
         let t = i18n::strings("fr");

@@ -368,6 +368,7 @@ async fn handle_cmd(
                         attachments,
                         speaker_id: None,
                         speaker_name: None,
+                        thinking: None,
                     },
                     vec![],
                 )
@@ -502,7 +503,8 @@ async fn handle_cmd(
                                             attachments: vec![],
                                             speaker_id: None,
                                             speaker_name: None,
-                                        },
+                        thinking: None,
+                    },
                                         vec![],
                                     )
                                     .await;
@@ -542,7 +544,8 @@ async fn handle_cmd(
                                     attachments: vec![],
                                     speaker_id: None,
                                     speaker_name: None,
-                                },
+                        thinking: None,
+                    },
                                 vec![],
                             )
                             .await;
@@ -1570,7 +1573,8 @@ async fn handle_cmd(
                                     attachments: vec![att],
                                     speaker_id: None,
                                     speaker_name: None,
-                                },
+                        thinking: None,
+                    },
                                 vec![],
                             )
                             .await;
@@ -2873,6 +2877,7 @@ async fn handle_cmd(
                         attachments,
                         speaker_id: None,
                         speaker_name: None,
+                        thinking: None,
                     },
                     vec![],
                 )
@@ -3250,6 +3255,8 @@ async fn handle_cmd(
                                     attachments: vec![att],
                                     speaker_id: None,
                                     speaker_name: None,
+                                thinking: None,
+
                                 },
                                 vec![],
                             )

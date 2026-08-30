@@ -1068,6 +1068,7 @@ async fn main() {
                             req.attachments.clone(),
                             req.speaker_id.clone(),
                             req.speaker_name.clone(),
+                            req.thinking.clone(),
                         );
                         match append_res {
                             Ok(msg) => {
@@ -1395,6 +1396,7 @@ async fn main() {
                             "user",
                             &req.content,
                             image_atts,
+                            None,
                             None,
                             None,
                         );

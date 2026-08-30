@@ -61,38 +61,64 @@ pub fn format_roster_for_prompt(members: &[ChatRoomMember]) -> String {
 
 /// Indique si le texte contient au moins un token `@mention` (même non roster).
 pub fn content_has_mention_tokens(content: &str) -> bool {
-    let bytes = content.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'@' {
-            let start = i + 1;
-            let mut end = start;
-            while end < bytes.len() {
-                let c = bytes[end];
-                if c.is_ascii_alphanumeric() || c == b'-' || c == b'_' {
-                    end += 1;
-                } else {
-                    break;
-                }
-            }
-            if end > start {
-                return true;
-            }
-            i = end;
-        } else {
-            i += 1;
+    content.contains('@')
+}
+
+/// Mentions roster triées par longueur de label décroissante (noms multi-mots en premier).
+fn mention_labels_longest_first(members: &[ChatRoomMember]) -> Vec<(String, String)> {
+    let mut labels: Vec<(String, String)> = Vec::new();
+    for m in members {
+        if !m.display_name.trim().is_empty() {
+            labels.push((m.display_name.clone(), m.agent_id.clone()));
         }
+        if let Some(p) = m.persona_id.as_deref().filter(|p| !p.is_empty()) {
+            labels.push((p.to_string(), m.agent_id.clone()));
+        }
+        labels.push((m.agent_id.clone(), m.agent_id.clone()));
     }
-    false
+    labels.sort_by_key(|(label, _)| std::cmp::Reverse(label.len()));
+    labels.dedup_by(|a, b| a.0.eq_ignore_ascii_case(&b.0) && a.1 == b.1);
+    labels
+}
+
+fn mention_boundary_ok(tail: &str, label_len: usize) -> bool {
+    tail.chars()
+        .nth(label_len)
+        .map(|c| !c.is_ascii_alphanumeric() && c != '-' && c != '_')
+        .unwrap_or(true)
 }
 
 /// Extrait les mentions `@Name` / `@agent_id` roster dans l'ordre d'apparition.
+/// Supporte les `display_name` multi-mots (`@devil's advocate`).
 pub fn parse_mentions(content: &str, members: &[ChatRoomMember]) -> Vec<String> {
+    let labels = mention_labels_longest_first(members);
     let mut out = Vec::new();
-    let mut i = 0;
     let bytes = content.as_bytes();
+    let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == b'@' {
+            let tail = &content[i + 1..];
+            let mut matched = false;
+            for (label, agent_id) in &labels {
+                if tail.len() < label.len() {
+                    continue;
+                }
+                if !tail[..label.len()].eq_ignore_ascii_case(label) {
+                    continue;
+                }
+                if !mention_boundary_ok(tail, label.len()) {
+                    continue;
+                }
+                if !out.iter().any(|x| x == agent_id) {
+                    out.push(agent_id.clone());
+                }
+                i += 1 + label.len();
+                matched = true;
+                break;
+            }
+            if matched {
+                continue;
+            }
             let start = i + 1;
             let mut end = start;
             while end < bytes.len() {
@@ -145,21 +171,28 @@ pub fn build_initial_queue(content: &str, members: &[ChatRoomMember]) -> Vec<Str
     )
 }
 
-/// Détecte une `@mention` roster vers un autre membre (pas de prose / ids inventés).
+/// Détecte les `@mention` roster vers d'autres membres (pas de prose / ids inventés).
+pub fn detect_peer_addresses(
+    reply: &str,
+    members: &[ChatRoomMember],
+    exclude_agent_id: &str,
+) -> Vec<String> {
+    if members.len() <= 1 {
+        return Vec::new();
+    }
+    parse_mentions(reply, members)
+        .into_iter()
+        .filter(|id| id != exclude_agent_id)
+        .collect()
+}
+
+/// Premier membre mentionné (compat tests / appels simples).
 pub fn detect_peer_address(
     reply: &str,
     members: &[ChatRoomMember],
     exclude_agent_id: &str,
 ) -> Option<String> {
-    if members.len() <= 1 {
-        return None;
-    }
-    for id in parse_mentions(reply, members) {
-        if id != exclude_agent_id && is_roster_member(&id, members) {
-            return Some(id);
-        }
-    }
-    None
+    detect_peer_addresses(reply, members, exclude_agent_id).into_iter().next()
 }
 
 /// Nombre effectif de tours agent autorisés (politique + plafond dur).
@@ -293,6 +326,65 @@ mod tests {
         let m = members();
         let peer = detect_peer_address("@Beta can you confirm?", &m, "agent-alpha");
         assert_eq!(peer, Some("agent-beta".into()));
+    }
+
+    #[test]
+    fn parse_mentions_multi_word_display_name() {
+        let m = vec![
+            ChatRoomMember {
+                agent_id: "agent-devil".into(),
+                display_name: "devil's advocate".into(),
+                persona_id: None,
+                joined_ms: 1,
+            },
+            ChatRoomMember {
+                agent_id: "agent-researcher".into(),
+                display_name: "Researcher".into(),
+                persona_id: Some("researcher".into()),
+                joined_ms: 2,
+            },
+        ];
+        let ids = parse_mentions(
+            "(Critic) @supervisor @devil's advocate @Researcher",
+            &m,
+        );
+        assert_eq!(
+            ids,
+            vec![
+                String::from("agent-devil"),
+                String::from("agent-researcher"),
+            ]
+        );
+    }
+
+    #[test]
+    fn detect_peer_addresses_returns_all_mentioned_peers() {
+        let m = members();
+        let peers = detect_peer_addresses("@Beta and @Gamma?", &m, "agent-alpha");
+        assert_eq!(
+            peers,
+            vec![String::from("agent-beta"), String::from("agent-gamma")]
+        );
+    }
+
+    #[test]
+    fn rebound_enqueue_prioritizes_mentioned_peer() {
+        let mut queue = vec![
+            String::from("agent-alpha"),
+            String::from("agent-beta"),
+            String::from("agent-gamma"),
+        ];
+        let spoken = std::collections::HashSet::<String>::new();
+        let peers = vec![String::from("agent-gamma")];
+        for peer_id in peers {
+            if spoken.contains(&peer_id) {
+                continue;
+            }
+            queue.retain(|id| id != &peer_id);
+            queue.insert(0, peer_id);
+        }
+        assert_eq!(queue[0], "agent-gamma");
+        assert_eq!(queue[1], "agent-alpha");
     }
 
     #[test]

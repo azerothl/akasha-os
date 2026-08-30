@@ -1837,6 +1837,7 @@ async fn post_user_question(bus: &BusClient, spec: &AgentSpec, body: &str) {
                 }],
                 speaker_id: None,
                 speaker_name: None,
+                thinking: None,
             },
             vec![],
         )
@@ -1864,6 +1865,7 @@ async fn post_ask_timeout(bus: &BusClient, spec: &AgentSpec, mins: u64) {
                 }],
                 speaker_id: None,
                 speaker_name: None,
+                thinking: None,
             },
             vec![],
         )
@@ -1946,6 +1948,7 @@ async fn post_agent_act(bus: &BusClient, spec: &AgentSpec, act_id: &str, action:
                 }],
                 speaker_id: None,
                 speaker_name: None,
+                thinking: None,
             },
             vec![],
         )
@@ -1980,6 +1983,7 @@ async fn post_act_resolved(
                 }],
                 speaker_id: None,
                 speaker_name: None,
+                thinking: None,
             },
             vec![],
         )

@@ -383,7 +383,8 @@ mod tests {
             attachments: vec![],
             speaker_id: None,
             speaker_name: None,
-        }];
+                        thinking: None,
+                    }];
         assert!(session_active_on_day(&meta, &msgs, 40_000, 60_000));
         assert!(!session_active_on_day(&meta, &msgs, 60_000, 80_000));
     }
@@ -398,7 +399,8 @@ mod tests {
                 attachments: vec![],
                 speaker_id: None,
                 speaker_name: None,
-            },
+                        thinking: None,
+                    },
             ChatSessionMessage {
                 role: "assistant".into(),
                 content: "Bonjour Alice".into(),
@@ -406,7 +408,8 @@ mod tests {
                 attachments: vec![],
                 speaker_id: None,
                 speaker_name: None,
-            },
+                        thinking: None,
+                    },
         ];
         let pairs = pair_turns(&msgs);
         assert_eq!(pairs.len(), 1);
