@@ -226,12 +226,36 @@ fn parse_f32_field(args: &Value, key: &str) -> Option<f32> {
 
 fn shape_bbox_contract(tool: &str) -> String {
     format!(
-        "{tool} attend x,y,w,h (coin haut-gauche + taille, coords 0..1) — pas rx/ry ni x1/y1. \
+        "{tool} attend x,y,w,h (coin haut-gauche + taille, coords 0..1, y vers le bas) — \
+         pas le centre. Alias : cx,cy,w,h ; cx,cy,rx,ry ; x1,y1,x2,y2. \
          Ex: {{\"x\":0.35,\"y\":0.15,\"w\":0.30,\"h\":0.12,\"fill\":true}}"
     )
 }
 
-/// Parse rect/ellipse args: canonical `x,y,w,h`, or aliases `cx,cy,rx,ry` / `x,y,rx,ry` / `x1,y1,x2,y2`.
+fn format_shape_bbox(x: f32, y: f32, w: f32, h: f32) -> String {
+    format!(
+        "({:.3},{:.3})-({:.3},{:.3})",
+        x,
+        y,
+        x + w,
+        y + h
+    )
+}
+
+fn shape_success_message(kind: &str, a: &ShapeArgs, resp: &Value) -> String {
+    let seq = resp
+        .get("next_seq")
+        .and_then(|v| v.as_u64())
+        .or_else(|| resp.pointer("/applied/seq").and_then(|v| v.as_u64()))
+        .unwrap_or(0);
+    format!(
+        "ok seq={seq} {kind} bbox={}",
+        format_shape_bbox(a.x, a.y, a.w, a.h)
+    )
+}
+
+/// Parse rect/ellipse args: canonical `x,y,w,h`, or aliases
+/// `cx,cy,w,h` / `cx,cy,rx,ry` / `x,y,rx,ry` / `x1,y1,x2,y2`.
 fn parse_shape_args(args: &Value, tool: &str) -> Result<ShapeArgs, String> {
     let session_id = args
         .get("session_id")
@@ -264,6 +288,13 @@ fn parse_shape_args(args: &Value, tool: &str) -> Result<ShapeArgs, String> {
         let w = (x2 - x1).abs();
         let h = (y2 - y1).abs();
         (x, y, w, h)
+    } else if let (Some(cx), Some(cy), Some(w), Some(h)) = (
+        parse_f32_field(args, "cx"),
+        parse_f32_field(args, "cy"),
+        parse_f32_field(args, "w"),
+        parse_f32_field(args, "h"),
+    ) {
+        (cx - w / 2.0, cy - h / 2.0, w, h)
     } else {
         let cx = parse_f32_field(args, "cx").or_else(|| parse_f32_field(args, "x"));
         let cy = parse_f32_field(args, "cy").or_else(|| parse_f32_field(args, "y"));
@@ -313,20 +344,22 @@ fn shape_op(kind: &str, a: &ShapeArgs) -> Value {
 
 fn rect(args: &Value) -> Result<Value, String> {
     let a = parse_shape_args(args, "canvas.rect")?;
-    apply(
+    let resp = apply(
         &a.session_id,
         a.author_id.as_deref().unwrap_or("agent"),
         shape_op("rect", &a),
-    )
+    )?;
+    Ok(json!(shape_success_message("rect", &a, &resp)))
 }
 
 fn ellipse(args: &Value) -> Result<Value, String> {
     let a = parse_shape_args(args, "canvas.ellipse")?;
-    apply(
+    let resp = apply(
         &a.session_id,
         a.author_id.as_deref().unwrap_or("agent"),
         shape_op("ellipse", &a),
-    )
+    )?;
+    Ok(json!(shape_success_message("ellipse", &a, &resp)))
 }
 
 #[derive(Deserialize)]
@@ -480,12 +513,46 @@ mod tests {
     }
 
     #[test]
+    fn shape_args_center_size_cx_cy_w_h() {
+        let args = json!({
+            "session_id": "s1",
+            "cx": 0.50,
+            "cy": 0.40,
+            "w": 0.30,
+            "h": 0.12
+        });
+        let a = parse_shape_args(&args, "canvas.ellipse").expect("cx,cy,w,h");
+        assert!((a.x - 0.35).abs() < 1e-6);
+        assert!((a.y - 0.34).abs() < 1e-6);
+        assert!((a.w - 0.30).abs() < 1e-6);
+        assert!((a.h - 0.12).abs() < 1e-6);
+    }
+
+    #[test]
+    fn shape_success_message_formats_bbox_echo() {
+        let a = ShapeArgs {
+            session_id: "s1".into(),
+            author_id: None,
+            x: 0.35,
+            y: 0.15,
+            w: 0.30,
+            h: 0.12,
+            color: None,
+            fill: true,
+            width: None,
+        };
+        let resp = json!({"next_seq": 12});
+        let msg = shape_success_message("ellipse", &a, &resp);
+        assert_eq!(msg, "ok seq=12 ellipse bbox=(0.350,0.150)-(0.650,0.270)");
+    }
+
+    #[test]
     fn shape_args_error_names_contract_not_single_field() {
         let args = json!({"session_id": "s1", "x1": 0.1, "y1": 0.2});
         match parse_shape_args(&args, "canvas.ellipse") {
             Err(err) => {
                 assert!(err.contains("canvas.ellipse attend x,y,w,h"));
-                assert!(err.contains("pas rx/ry ni x1/y1"));
+                assert!(err.contains("pas le centre"));
                 assert!(!err.contains("missing field"));
             }
             Ok(_) => panic!("expected error"),

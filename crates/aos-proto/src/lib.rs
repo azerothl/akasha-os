@@ -2952,7 +2952,9 @@ pub fn canvas_scene_digest(doc: &CanvasDoc, aspect: CanvasAspect) -> String {
         ),
         "coords=normalized 0..1 (origin top-left; x→ right, y↓ down; letterboxed board face — not pixels; max=1.0)"
             .into(),
-        "shapes=rect/ellipse x,y,w,h top-left+size (same bbox; fill:true fills; NOT center+radii)".into(),
+        "origin=top-left, y↓ (x,y = coin haut-gauche, pas le centre)".into(),
+        "shapes=rect/ellipse x,y,w,h top-left+size (same bbox; fill:true fills; cx,cy,rx,ry alias OK)".into(),
+        "align ex: top ellipse x=0.35 w=0.30; bottom ellipse same x,w; body rect same x,w, y between".into(),
         format!(
             "margin={:.2} usable=({:.2},{:.2})-({:.2},{:.2})",
             CANVAS_LAYOUT_MARGIN,
@@ -4307,8 +4309,9 @@ mod chat_session_room_tests {
         assert!(digest.contains("margin=0.10"));
         assert!(digest.contains("usable=(0.10,0.10)-(0.90,0.90)"));
         assert!(digest.contains("placement="));
-        assert!(digest.contains("shapes=rect/ellipse"));
-        assert!(digest.contains("NOT center+radii"));
+        assert!(digest.contains("origin=top-left"));
+        assert!(digest.contains("pas le centre"));
+        assert!(digest.contains("align ex:"));
     }
 
     #[test]

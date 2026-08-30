@@ -22,6 +22,7 @@ use aos_agent::canvas_scene::{
 };
 use aos_agent::prompt::{compile_system_prompt, optimize_prompt_request, PromptCompileInput};
 use aos_agent::skills::{load_skills, match_skill_by_action, merge_skill_tools, skill_misuse_hint, SkillDoc};
+use aos_agent::tool_exec::format_module_invoke_result;
 use aos_agent::tools::{
     canonicalize_tool_name, caps_for_tools, caps_subset, classify_action,
     is_module_fallback_candidate, normalize_tool_args, resolve_tool_backend, select_tools,
@@ -2230,7 +2231,7 @@ async fn invoke_module(
         .call::<ModuleInvokeRequest, ModuleInvokeResponse>("module.invoke", &req, vec![])
         .await
     {
-        Ok(resp) if resp.ok => resp.result.to_string(),
+        Ok(resp) if resp.ok => format_module_invoke_result(&resp.result),
         Ok(resp) => format!("ERREUR outil: {}", resp.error.unwrap_or_default()),
         Err(e) => format!("ERREUR bus: {e}"),
     }

@@ -11,8 +11,6 @@ pub struct PanelActions {
     pub kill: bool,
     pub resume: bool,
     pub retry: bool,
-    /// User asked to retry a failed canvas tool step in the journal.
-    pub canvas_retry: bool,
     pub steer: Option<String>,
     pub open_child: Option<String>,
 }
@@ -24,7 +22,6 @@ impl Default for PanelActions {
             kill: false,
             resume: false,
             retry: false,
-            canvas_retry: false,
             steer: None,
             open_child: None,
         }
@@ -233,6 +230,12 @@ fn chat_meta_substring_pos(lower: &str) -> Option<usize> {
         "[canvas digest]",
         "canvas digest",
         "statut internal",
+        "bbox=",
+        "ok seq=",
+        "next_seq=",
+        "scene_bbox",
+        "coords=normalized",
+        "coin haut-gauche",
         "established rules",
         "established rules for the canvas tool",
         "no json is needed",
@@ -272,6 +275,11 @@ fn chat_meta_substring_pos(lower: &str) -> Option<usize> {
     earliest
 }
 
+/// True when the agent kit includes session canvas drawing tools.
+pub fn agent_is_canvas_draw(info: &AgentInfo) -> bool {
+    info.tools.iter().any(|t| t.starts_with("canvas."))
+}
+
 /// True when the action is a mutating canvas tool (not get/export).
 pub fn is_canvas_draw_tool(action: &str) -> bool {
     action.starts_with("canvas.")
@@ -283,13 +291,20 @@ pub fn canvas_tool_failed(tool_result: &str) -> bool {
     aos_agent::context_budget::looks_like_tool_failure(tool_result)
 }
 
-/// Human-visible tool result: locked phrase for failed canvas draws, else unchanged.
-pub fn human_tool_result_display(action: &str, tool_result: &str, t: &crate::i18n::UiStrings) -> String {
-    if is_canvas_draw_tool(action) && canvas_tool_failed(tool_result) {
-        t.canvas_draw_failed.to_string()
-    } else {
-        tool_result.to_string()
+/// Human journal line for a canvas stroke: act label on success, hidden on per-stroke failure.
+pub fn human_canvas_journal_result(
+    action: &str,
+    tool_result: &str,
+    args: &serde_json::Value,
+    t: &crate::i18n::UiStrings,
+) -> Option<String> {
+    if !is_canvas_draw_tool(action) {
+        return None;
     }
+    if canvas_tool_failed(tool_result) {
+        return None;
+    }
+    Some(crate::agent_act_phrase::format_agent_act_phrase(t, action, args))
 }
 
 /// Truncate before the first forbidden meta substring (including mid-stream tokens).
@@ -805,13 +820,23 @@ pub fn draw_agent_detail(
             });
             ui.add_space(4.0);
         } else if matches!(a.state, AgentState::Failed | AgentState::Killed) || fail.is_some() {
+            let canvas_draw = agent_is_canvas_draw(a);
             card_frame(Color32::from_rgb(60, 30, 30)).show(ui, |ui| {
                 ui.label(
-                    RichText::new(t.agent_failure)
-                        .color(Color32::from_rgb(240, 140, 120))
-                        .strong(),
+                    RichText::new(if canvas_draw {
+                        t.canvas_draw_failed
+                    } else {
+                        t.agent_failure
+                    })
+                    .color(Color32::from_rgb(240, 140, 120))
+                    .strong(),
                 );
-                ui.label(fail.map(|r| crate::i18n::resolve_agent_fail_reason(t, Some(r.as_str()))).unwrap_or_else(|| t.agent_fail_unknown.into()));
+                if !canvas_draw {
+                    ui.label(
+                        fail.map(|r| crate::i18n::resolve_agent_fail_reason(t, Some(r.as_str())))
+                            .unwrap_or_else(|| t.agent_fail_unknown.into()),
+                    );
+                }
             });
             ui.add_space(4.0);
         }
@@ -851,7 +876,12 @@ pub fn draw_agent_detail(
                     }
                 }
                 AgentState::Failed | AgentState::Killed => {
-                    if ui.button(t.agent_retry_step).clicked() {
+                    let retry_label = if agent_is_canvas_draw(a) {
+                        t.canvas_draw_retry
+                    } else {
+                        t.agent_retry_step
+                    };
+                    if ui.button(retry_label).clicked() {
                         actions.retry = true;
                     }
                 }
@@ -1183,28 +1213,18 @@ fn draw_step(
                             ui.label(format!("MCP: {m}"));
                         }
                     });
-                    if !rec.tool_result.is_empty() {
-                        let display = human_tool_result_display(&rec.action, &rec.tool_result, t);
-                        let failed_canvas =
-                            is_canvas_draw_tool(&rec.action) && canvas_tool_failed(&rec.tool_result);
-                        if failed_canvas {
-                            ui.label(
-                                RichText::new(&display)
-                                    .color(Color32::from_rgb(240, 140, 140))
-                                    .small(),
-                            );
-                            if ui.button(t.canvas_draw_retry).clicked() {
-                                actions.canvas_retry = true;
-                            }
+                    if let Some(display) =
+                        human_canvas_journal_result(&rec.action, &rec.tool_result, &rec.args, t)
+                    {
+                        ui.label(RichText::new(display).small());
+                    } else if !rec.tool_result.is_empty() && !is_canvas_draw_tool(&rec.action) {
+                        let tr = truncate(&rec.tool_result, 1200);
+                        if tr.contains('#') || tr.contains("**") || tr.contains('\n') {
+                            ui.push_id(("step_tool", agent_id, rec.step), |ui| {
+                                CommonMarkViewer::new().show(ui, md_cache, &tr);
+                            });
                         } else {
-                            let tr = truncate(&display, 1200);
-                            if tr.contains('#') || tr.contains("**") || tr.contains('\n') {
-                                ui.push_id(("step_tool", agent_id, rec.step), |ui| {
-                                    CommonMarkViewer::new().show(ui, md_cache, &tr);
-                                });
-                            } else {
-                                ui.label(RichText::new(tr).small());
-                            }
+                            ui.label(RichText::new(tr).small());
                         }
                     }
                     let mut args = rec.args.clone();
@@ -1430,21 +1450,29 @@ Je vais répondre de manière naturelle"#;
     }
 
     #[test]
-    fn human_tool_result_hides_canvas_bus_error() {
+    fn human_canvas_journal_hides_per_stroke_failure() {
         let t = crate::i18n::strings("en");
         let raw = "ERREUR bus: statut InternalError: args invalides: missing field x";
-        let out = human_tool_result_display("canvas.ellipse", raw, &t);
-        assert_eq!(out, "Couldn't draw.");
-        assert!(!out.contains("ERREUR"));
-        assert!(!out.contains("missing field"));
+        let out = human_canvas_journal_result("canvas.ellipse", raw, &serde_json::json!({}), &t);
+        assert!(out.is_none());
     }
 
     #[test]
-    fn human_tool_result_keeps_canvas_success() {
+    fn human_canvas_journal_success_is_act_label_not_bbox() {
         let t = crate::i18n::strings("en");
-        let raw = "ok seq=2\n\n[canvas digest]\nnext_seq=3";
-        let out = human_tool_result_display("canvas.ellipse", raw, &t);
-        assert!(out.contains("ok seq=2"));
+        let raw = "ok seq=2 ellipse bbox=(0.350,0.150)-(0.650,0.270)";
+        let out = human_canvas_journal_result("canvas.ellipse", raw, &serde_json::json!({}), &t)
+            .expect("act label");
+        assert_eq!(out, t.agent_act_canvas_ellipse);
+        assert!(!out.contains("bbox"));
+        assert!(!out.contains("seq="));
+    }
+
+    #[test]
+    fn chat_bubble_strips_bbox_echo_leak() {
+        let raw = "ok seq=12 ellipse bbox=(0.350,0.150)-(0.650,0.270)";
+        let out = sanitize_chat_visible_bubble(raw);
+        assert!(out.is_empty() || !out.contains("bbox="), "{out}");
     }
 
     #[test]

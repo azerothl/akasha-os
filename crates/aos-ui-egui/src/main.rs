@@ -570,6 +570,9 @@ fn agent_completion_chat_text(ag: &AgentInfo, t: &i18n::UiStrings) -> String {
             }
         }
         AgentState::Failed => {
+            if ag.tools.iter().any(|t| t.starts_with("canvas.")) {
+                return t.canvas_draw_failed.to_string();
+            }
             if ag.fail_reason.as_deref() == Some(aos_agent::actions::THREAD_FAIL_COULD_NOT_ACT) {
                 return i18n::agent_could_not_act_message(t);
             }
@@ -4371,7 +4374,9 @@ impl eframe::App for UiApp {
                                     let summary = match ag.state {
                                         AgentState::Done => format!("{} terminé", ag.display_title()),
                                         AgentState::Failed => {
-                                            if ag.fail_reason.as_deref()
+                                            if ag.tools.iter().any(|t| t.starts_with("canvas.")) {
+                                                t.canvas_draw_failed.to_string()
+                                            } else if ag.fail_reason.as_deref()
                                                 == Some(aos_agent::actions::THREAD_FAIL_COULD_NOT_ACT)
                                             {
                                                 i18n::agent_could_not_act_message(&t)
@@ -7762,22 +7767,6 @@ impl UiApp {
                     }
                     if actions.retry {
                         let _ = self.cmd_tx.send(Cmd::AgentRetry { id: id.clone() });
-                    }
-                    if actions.canvas_retry {
-                        let running = info.as_ref().is_some_and(|a| {
-                            matches!(
-                                a.state,
-                                AgentState::Running | AgentState::Paused | AgentState::Blocked
-                            )
-                        });
-                        if running {
-                            let _ = self.cmd_tx.send(Cmd::AgentSteer {
-                                id: id.clone(),
-                                text: t.canvas_draw_retry_steer.into(),
-                            });
-                        } else {
-                            let _ = self.cmd_tx.send(Cmd::AgentRetry { id: id.clone() });
-                        }
                     }
                     if let Some(text) = actions.steer {
                         let blocked = info

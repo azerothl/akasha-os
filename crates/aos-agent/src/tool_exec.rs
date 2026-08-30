@@ -12,6 +12,14 @@ use crate::tools::{
 };
 use std::collections::HashMap;
 
+/// Format a module.invoke result for agent tool_result (unwrap JSON strings).
+pub fn format_module_invoke_result(result: &serde_json::Value) -> String {
+    match result {
+        serde_json::Value::String(s) => s.clone(),
+        _ => result.to_string(),
+    }
+}
+
 /// Invoke a WASM module tool (`notes.*`, `tasks.*`, `canvas.*`, …).
 pub async fn invoke_module_tool(
     bus: &BusClient,
@@ -53,7 +61,7 @@ pub async fn invoke_module_tool(
         .call::<ModuleInvokeRequest, ModuleInvokeResponse>("module.invoke", &req, vec![])
         .await
     {
-        Ok(resp) if resp.ok => resp.result.to_string(),
+        Ok(resp) if resp.ok => format_module_invoke_result(&resp.result),
         Ok(resp) => format!("ERREUR outil: {}", resp.error.unwrap_or_default()),
         Err(e) => format!("ERREUR bus: {e}"),
     }
@@ -250,5 +258,19 @@ pub async fn execute_room_tool(
             }
         }
         None => format!("outil inconnu en salon: {name}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::format_module_invoke_result;
+
+    #[test]
+    fn format_module_invoke_result_unwraps_json_string() {
+        let v = serde_json::json!("ok seq=12 ellipse bbox=(0.350,0.150)-(0.650,0.270)");
+        assert_eq!(
+            format_module_invoke_result(&v),
+            "ok seq=12 ellipse bbox=(0.350,0.150)-(0.650,0.270)"
+        );
     }
 }

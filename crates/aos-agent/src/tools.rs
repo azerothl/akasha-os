@@ -521,7 +521,7 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
         ),
         (
             "canvas.rect",
-            "Rectangle (x,y,w,h coin haut-gauche + taille, 0..1) — même bbox que ellipse ; fill:true remplit ; pas centre+rx/ry",
+            "Rectangle : x,y = coin haut-gauche, y vers le bas, w,h = taille (0..1). fill:true remplit. Alias cx,cy,w,h ou cx,cy,rx,ry.",
             serde_json::json!({
                 "type":"object",
                 "properties":{
@@ -537,7 +537,7 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
         ),
         (
             "canvas.ellipse",
-            "Ellipse (x,y,w,h coin haut-gauche + taille, 0..1) — même bbox que rect ; fill:true remplit ; pas centre+rx/ry",
+            "Ellipse : x,y = coin haut-gauche, y vers le bas, w,h = taille (0..1). fill:true remplit. Alias cx,cy,w,h ou cx,cy,rx,ry. Aligner : partager x et w.",
             serde_json::json!({
                 "type":"object",
                 "properties":{
@@ -1005,9 +1005,9 @@ mod tests {
         );
         let rect = tools.iter().find(|t| t.name == "canvas.rect").unwrap();
         let ellipse = tools.iter().find(|t| t.name == "canvas.ellipse").unwrap();
-        assert!(rect.description.contains("x,y,w,h"));
-        assert!(rect.description.contains("pas centre+rx/ry"));
-        assert!(ellipse.description.contains("même bbox que rect"));
+        assert!(rect.description.contains("coin haut-gauche"));
+        assert!(rect.description.contains("cx,cy,w,h"));
+        assert!(ellipse.description.contains("partager x et w"));
         assert!(ellipse.description.contains("fill:true"));
     }
 
