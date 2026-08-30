@@ -336,6 +336,7 @@ impl ChatSessionStore {
         attachments: Vec<ChatAttachment>,
         speaker_id: Option<String>,
         speaker_name: Option<String>,
+        thinking: Option<String>,
     ) -> Result<ChatSessionMessage, SessionError> {
         if role.is_empty() || content.is_empty() {
             return Err(SessionError::BadRequest("role/content requis".into()));
@@ -348,6 +349,7 @@ impl ChatSessionStore {
             attachments,
             speaker_id,
             speaker_name,
+            thinking,
         };
         let path = self.dir(id).join("messages.jsonl");
         use std::io::Write;
@@ -529,8 +531,8 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         let s = ChatSessionStore::open(&dir).unwrap();
         let m = s.create(Some("Test".into()), None).unwrap();
-        s.append(&m.id, "user", "bonjour", vec![], None, None).unwrap();
-        s.append(&m.id, "assistant", "salut", vec![], None, None).unwrap();
+        s.append(&m.id, "user", "bonjour", vec![], None, None, None).unwrap();
+        s.append(&m.id, "assistant", "salut", vec![], None, None, None).unwrap();
         let (meta, msgs) = s.get(&m.id).unwrap();
         assert_eq!(meta.message_count, 2);
         assert_eq!(msgs.len(), 2);
@@ -564,6 +566,7 @@ mod tests {
                 title: "tâche".into(),
                 origin: "slash".into(),
             }],
+            None,
             None,
             None,
         )
@@ -652,6 +655,7 @@ archived: false
             vec![],
             Some("agent-a".into()),
             Some("Alpha".into()),
+            None,
         )
         .unwrap();
         let (_, msgs) = s.get(&m.id).unwrap();

@@ -75,6 +75,7 @@ mod ask_queue_tests {
             }],
             speaker_id: None,
             speaker_name: None,
+            thinking: None,
         }
     }
 

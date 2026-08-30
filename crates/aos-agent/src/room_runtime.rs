@@ -9,9 +9,10 @@ use crate::canvas_scene::{
 use crate::mcp::open_mcp_tools_with_secrets;
 use crate::persist;
 use crate::room_conductor::{
-    build_initial_queue, detect_peer_address, effective_max_turns, format_roster_for_prompt,
+    build_initial_queue, detect_peer_addresses, effective_max_turns, format_roster_for_prompt,
     sanitize_member_queue,
 };
+use crate::room_reply::split_room_reply;
 use crate::skills::{load_skills, merge_skill_tools};
 use crate::tool_exec::execute_room_tool;
 use crate::tools::{
@@ -215,6 +216,7 @@ async fn append_room_reply(
     speaker_id: &str,
     speaker_name: &str,
     content: &str,
+    thinking: Option<&str>,
 ) -> Result<(), String> {
     bus.call::<ChatSessionAppendRequest, ChatSessionMessage>(
         "chat.session.append",
@@ -229,6 +231,7 @@ async fn append_room_reply(
             }],
             speaker_id: Some(speaker_id.to_string()),
             speaker_name: Some(speaker_name.to_string()),
+            thinking: thinking.map(str::to_string),
         },
         vec![],
     )
@@ -312,16 +315,15 @@ async fn run_infer(
     Ok(full.trim().to_string())
 }
 
-fn room_reply_from_model(text: &str, parsed: Option<&AgentAction>) -> Option<String> {
-    let (_, clean) = crate::actions::split_reasoning(text);
+fn room_reply_from_model(text: &str, parsed: Option<&AgentAction>) -> Option<(String, Option<String>)> {
     if parsed.is_some() {
         return None;
     }
-    let reply = clean.trim();
-    if reply.is_empty() {
+    let (visible, thinking) = split_room_reply(text);
+    if visible.trim().is_empty() {
         None
     } else {
-        Some(reply.to_string())
+        Some((visible, thinking))
     }
 }
 
@@ -380,7 +382,7 @@ async fn run_room_tool_loop(
         }
 
         let parsed_actions = parse_actions(&raw);
-        if let Some(reply) = room_reply_from_model(&raw, parsed_actions.first()) {
+        if let Some((reply, _thinking)) = room_reply_from_model(&raw, parsed_actions.first()) {
             return Ok(reply);
         }
 
@@ -484,7 +486,7 @@ pub async fn execute_room_turn(
 
     let model_id = spec.model_id.clone().or(session.meta.model_id.clone());
     let images = room_images_from_session(&session);
-    let content = if tool_descs.is_empty() {
+    let (content, thinking) = if tool_descs.is_empty() {
         let mut refs = images.clone();
         let canvas_png = if session.meta.canvas_open {
             begin_canvas_vision(
@@ -500,7 +502,7 @@ pub async fn execute_room_turn(
         if let Some(ref png) = canvas_png {
             refs = merge_canvas_vision_refs(&refs, png);
         }
-        let out = run_infer(
+        let raw = run_infer(
             bus,
             round,
             model_id,
@@ -512,9 +514,10 @@ pub async fn execute_room_turn(
         if canvas_png.is_some() {
             end_canvas_vision(bus, &req.session_id).await;
         }
-        out?
+        let raw = raw?;
+        split_room_reply(&raw)
     } else {
-        run_room_tool_loop(
+        let reply = run_room_tool_loop(
             bus,
             round,
             &req.agent_id,
@@ -526,7 +529,8 @@ pub async fn execute_room_turn(
             &spec.mcp_servers,
             &images,
         )
-        .await?
+        .await?;
+        (reply, None)
     };
     if content.is_empty() {
         return Err("réponse vide".into());
@@ -538,6 +542,7 @@ pub async fn execute_room_turn(
         &req.agent_id,
         display_name,
         &content,
+        thinking.as_deref(),
     )
     .await?;
 
@@ -545,6 +550,7 @@ pub async fn execute_room_turn(
         content,
         speaker_id: req.agent_id.clone(),
         speaker_name: display_name.to_string(),
+        thinking,
     })
 }
 
@@ -574,7 +580,6 @@ pub async fn execute_room_conduct(
     }
 
     let mut agent_turns = 0u32;
-    let mut peer_followup_used = false;
     let mut spoken = std::collections::HashSet::<String>::new();
 
     while (agent_turns as usize) < max {
@@ -629,14 +634,17 @@ pub async fn execute_room_conduct(
             break;
         }
 
-        if session.meta.conductor_policy.allow_peer_debate && !peer_followup_used {
-            if let Some(peer_id) =
-                detect_peer_address(&reply.content, &session.meta.members, &member.agent_id)
-            {
-                if !spoken.contains(&peer_id) && !queue.iter().any(|id| id == &peer_id) {
-                    queue.push(peer_id);
-                    peer_followup_used = true;
+        if session.meta.conductor_policy.allow_peer_debate {
+            for peer_id in detect_peer_addresses(
+                &reply.content,
+                &session.meta.members,
+                &member.agent_id,
+            ) {
+                if spoken.contains(&peer_id) {
+                    continue;
                 }
+                queue.retain(|id| id != &peer_id);
+                queue.insert(0, peer_id);
             }
         }
     }
@@ -683,7 +691,8 @@ mod tests {
                 attachments: vec![],
                 speaker_id: None,
                 speaker_name: None,
-            }],
+                        thinking: None,
+                    }],
         }
     }
 

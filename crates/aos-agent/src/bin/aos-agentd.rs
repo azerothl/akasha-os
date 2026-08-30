@@ -1259,6 +1259,7 @@ async fn main() {
                                         }],
                                         speaker_id: None,
                                         speaker_name: None,
+                                        thinking: None,
                                     },
                                     vec![],
                                 )

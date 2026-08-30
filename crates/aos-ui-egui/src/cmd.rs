@@ -502,6 +502,7 @@ pub(crate) struct ChatLine {
     pub(crate) attachments: Vec<ChatAttachment>,
     pub(crate) speaker_id: Option<String>,
     pub(crate) speaker_name: Option<String>,
+    pub(crate) thinking: Option<String>,
 }
 
 impl ChatLine {
@@ -512,6 +513,7 @@ impl ChatLine {
             attachments: Vec::new(),
             speaker_id: None,
             speaker_name: None,
+            thinking: None,
         }
     }
 
@@ -526,6 +528,7 @@ impl ChatLine {
             attachments: Vec::new(),
             speaker_id,
             speaker_name: None,
+            thinking: None,
         }
     }
 }
