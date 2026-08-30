@@ -807,7 +807,16 @@ async fn main() {
                                 let reason = fail_reason
                                     .clone()
                                     .unwrap_or_else(|| "échec inconnu".into());
-                                if reason.contains("max_steps") {
+                                if aos_agent::context_budget::is_overflow_fail_reason(&reason) {
+                                    if let Some(mut st) = persist::read_state(&req.agent_id) {
+                                        let _ = aos_agent::context_budget::aggressive_trim_for_overflow(
+                                            &mut st.working_memory,
+                                            aos_agent::context_budget::DEFAULT_N_CTX_HINT,
+                                            aos_agent::context_budget::AGENT_GEN_TOKENS,
+                                        );
+                                        let _ = persist::write_state(&st);
+                                    }
+                                } else if reason.contains("max_steps") {
                                     spec.goal.max_steps = spec.goal.max_steps.saturating_add(8);
                                     if let Some(ms) = spec.budget.max_steps.as_mut() {
                                         *ms = ms.saturating_add(8);
@@ -815,10 +824,14 @@ async fn main() {
                                     let _ = persist::write_spec(&spec);
                                 }
                                 if let Some(mut st) = persist::read_state(&req.agent_id) {
-                                    st.push_user(&format!(
-                                        "[retry] dernière action `{last_action}` a échoué : {reason}. Réessaie autrement."
-                                    ));
-                                    let _ = persist::write_state(&st);
+                                    if aos_agent::context_budget::is_overflow_fail_reason(&reason) {
+                                        let _ = persist::write_state(&st);
+                                    } else {
+                                        st.push_user(&format!(
+                                            "[retry] dernière action `{last_action}` a échoué : {reason}. Réessaie autrement."
+                                        ));
+                                        let _ = persist::write_state(&st);
+                                    }
                                 }
                                 match spawn_worker(
                                     &shared,
@@ -1125,6 +1138,13 @@ async fn main() {
                                                         {
                                                             aos_agent::actions::THREAD_FAIL_COULD_NOT_ACT
                                                                 .to_string()
+                                                        } else if entry.info.fail_reason.as_deref()
+                                                            == Some(
+                                                                aos_agent::actions::THREAD_FAIL_COULD_NOT_CONTINUE,
+                                                            )
+                                                        {
+                                                            aos_agent::actions::THREAD_FAIL_COULD_NOT_CONTINUE
+                                                                .to_string()
                                                         } else {
                                                             let reason = entry
                                                                 .info
@@ -1155,7 +1175,19 @@ async fn main() {
                                         }
                                     }
                                     AgentOutputEvent::Error { message } => {
-                                        entry.info.fail_reason = Some(message.clone());
+                                        let reason =
+                                            if aos_agent::context_budget::is_technical_prompt_overflow_message(
+                                                &message,
+                                            ) {
+                                                eprintln!(
+                                                    "agent prompt overflow (journal) : {message}"
+                                                );
+                                                aos_agent::actions::THREAD_FAIL_COULD_NOT_CONTINUE
+                                                    .to_string()
+                                            } else {
+                                                message.clone()
+                                            };
+                                        entry.info.fail_reason = Some(reason);
                                     }
                                     AgentOutputEvent::Log { line } => {
                                         if let Some(rest) = line.strip_prefix("goal.complete : ")
