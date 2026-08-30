@@ -521,7 +521,7 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
         ),
         (
             "canvas.rect",
-            "Dessiner un rectangle sur le canvas de session (x,y,w,h en 0..1 — pas de pixels)",
+            "Rectangle (x,y,w,h coin haut-gauche + taille, 0..1) — même bbox que ellipse ; fill:true remplit ; pas centre+rx/ry",
             serde_json::json!({
                 "type":"object",
                 "properties":{
@@ -537,7 +537,7 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
         ),
         (
             "canvas.ellipse",
-            "Dessiner une ellipse sur le canvas de session (x,y,w,h en 0..1 — pas de pixels)",
+            "Ellipse (x,y,w,h coin haut-gauche + taille, 0..1) — même bbox que rect ; fill:true remplit ; pas centre+rx/ry",
             serde_json::json!({
                 "type":"object",
                 "properties":{
@@ -995,6 +995,20 @@ mod tests {
         assert!(tools.iter().any(|t| t.name == "web.browse"));
         assert!(tools.iter().any(|t| t.name == "tasks.create"));
         assert!(!tools.iter().any(|t| t.name == "canvas.stroke"));
+    }
+
+    #[test]
+    fn canvas_shape_tool_descriptions_name_bbox_contract() {
+        let tools = select_tools(
+            &["canvas.rect".into(), "canvas.ellipse".into()],
+            &[],
+        );
+        let rect = tools.iter().find(|t| t.name == "canvas.rect").unwrap();
+        let ellipse = tools.iter().find(|t| t.name == "canvas.ellipse").unwrap();
+        assert!(rect.description.contains("x,y,w,h"));
+        assert!(rect.description.contains("pas centre+rx/ry"));
+        assert!(ellipse.description.contains("même bbox que rect"));
+        assert!(ellipse.description.contains("fill:true"));
     }
 
     #[test]
