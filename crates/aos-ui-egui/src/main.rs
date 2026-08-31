@@ -4783,6 +4783,18 @@ impl eframe::App for UiApp {
                         });
                     }
                 }
+                Evt::SessionExported { path, session_id } => {
+                    if self.active_session.as_deref() == Some(session_id.as_str()) {
+                        let t = i18n::strings(&self.prefs.language);
+                        self.status = t.session_export_toast.replace("{path}", &path);
+                    }
+                }
+                Evt::AgentExported { path, agent_id } => {
+                    if self.agent_active_tab.as_deref() == Some(agent_id.as_str()) {
+                        let t = i18n::strings(&self.prefs.language);
+                        self.status = t.agent_export_toast.replace("{path}", &path);
+                    }
+                }
                 Evt::MemHits(h) => self.mem_hits = h,
                 Evt::SecretList { names, encrypted } => {
                     self.secret_names = names;
@@ -5934,6 +5946,11 @@ impl UiApp {
                                         agent_panel::ChatCardAction::TargetReply => {
                                             target_reply = Some(agent_id.clone());
                                         }
+                                        agent_panel::ChatCardAction::Export => {
+                                            let _ = self.cmd_tx.send(Cmd::AgentExport {
+                                                id: agent_id.clone(),
+                                            });
+                                        }
                                         agent_panel::ChatCardAction::None => {}
                                     }
                                 }
@@ -6386,7 +6403,7 @@ impl UiApp {
                             }
                         }
                     });
-                    if ui.button("Exporter MD").clicked() {
+                    if ui.button(t.session_export).clicked() {
                         if let Some(id) = self.active_session.clone() {
                             let _ = self.cmd_tx.send(Cmd::SessionExport { id });
                         }
@@ -7832,6 +7849,9 @@ impl UiApp {
                     }
                     if actions.retry {
                         let _ = self.cmd_tx.send(Cmd::AgentRetry { id: id.clone() });
+                    }
+                    if actions.export {
+                        let _ = self.cmd_tx.send(Cmd::AgentExport { id: id.clone() });
                     }
                     if let Some(text) = actions.steer {
                         let blocked = info

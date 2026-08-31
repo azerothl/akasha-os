@@ -116,6 +116,7 @@ pub(crate) enum Cmd {
         approved: bool,
     },
     AgentTrace { id: String },
+    AgentExport { id: String },
     AgentPromptOptimize {
         goal: String,
         skills: Vec<String>,
@@ -415,6 +416,14 @@ pub(crate) enum Evt {
     WebResults(Vec<WebSearchHit>),
     BrowsePreview(String),
     NetMode(bool),
+    SessionExported {
+        path: String,
+        session_id: String,
+    },
+    AgentExported {
+        path: String,
+        agent_id: String,
+    },
     FileOk(String),
     MediaOk {
         kind: String,
