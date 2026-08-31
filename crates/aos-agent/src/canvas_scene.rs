@@ -192,7 +192,9 @@ pub async fn refresh_canvas_scene_after_op(
     CanvasSceneUpdate { text, png_path }
 }
 
+
 /// True when a canvas tool applies a visible trait (stroke/line/spline/path/rect/ellipse/fill/erase).
+
 /// Excludes read/style ops (`canvas.get`, `canvas.export`, `canvas.set_style`) and document resets.
 pub fn canvas_draw_tool_applies_trait(tool: &str) -> bool {
     matches!(
