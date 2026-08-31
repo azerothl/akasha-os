@@ -231,6 +231,8 @@ fn chat_meta_substring_pos(lower: &str) -> Option<usize> {
         "missing field",
         "[canvas digest]",
         "canvas digest",
+        "[canvas scene]",
+        "canvas scene",
         "statut internal",
         "bbox=",
         "ok seq=",
@@ -1505,6 +1507,15 @@ Je vais répondre de manière naturelle"#;
         let raw = "ok seq=12 ellipse bbox=(0.350,0.150)-(0.650,0.270)";
         let out = sanitize_chat_visible_bubble(raw);
         assert!(out.is_empty() || !out.contains("bbox="), "{out}");
+    }
+
+    #[test]
+    fn chat_bubble_strips_canvas_scene_caption() {
+        let raw = "Trait appliqué.\n\n[canvas scene] Capture PNG du canvas actuel jointe au prochain tour";
+        let out = sanitize_chat_visible_bubble(raw);
+        assert!(out.contains("Trait appliqué"), "{out}");
+        assert!(!out.to_ascii_lowercase().contains("canvas scene"), "{out}");
+        assert!(!out.contains("[canvas scene]"), "{out}");
     }
 
     #[test]
