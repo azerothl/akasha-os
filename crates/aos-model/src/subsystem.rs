@@ -263,6 +263,10 @@ impl ModelSubsystem {
     }
 
     fn info_of(rt: &ModelRuntime) -> ModelInfo {
+        let has_vision = rt
+            .ctx
+            .as_ref()
+            .is_some_and(|ctx| ctx.lock().unwrap().has_vision());
         ModelInfo {
             id: rt.desc.id.clone(),
             name: rt.desc.name.clone(),
@@ -270,6 +274,7 @@ impl ModelSubsystem {
             state: rt.state.clone(),
             placement: rt.plan.as_ref().map(|p| p.summary()),
             profile: Some(format!("{:?}", rt.profile).to_lowercase()),
+            has_vision,
         }
     }
 
@@ -707,19 +712,15 @@ impl ModelSubsystem {
                                     ) => false,
                                 }
                             };
-                            let res = if !job.images.is_empty() {
-                                if !guard.has_vision() {
-                                    Err(aos_llama::LlamaError::VisionUnavailable)
-                                } else {
-                                    let paths: Vec<PathBuf> =
-                                        job.images.iter().map(PathBuf::from).collect();
-                                    guard.generate_with_images(
-                                        &job.messages,
-                                        &job.params,
-                                        &paths,
-                                        on_delta,
-                                    )
-                                }
+                            let res = if should_use_vision_infer(guard.has_vision(), &job.images) {
+                                let paths: Vec<PathBuf> =
+                                    job.images.iter().map(PathBuf::from).collect();
+                                guard.generate_with_images(
+                                    &job.messages,
+                                    &job.params,
+                                    &paths,
+                                    on_delta,
+                                )
                             } else if use_prefix_spec {
                                 guard.generate_lookup(
                                     &job.messages,
@@ -1617,6 +1618,11 @@ fn preferred_media_id(kind: &str) -> Option<String> {
         .map(|s| s.to_string())
 }
 
+/// True when infer should call `generate_with_images` (mmproj loaded + paths present).
+fn should_use_vision_infer(has_vision: bool, images: &[String]) -> bool {
+    has_vision && !images.is_empty()
+}
+
 /// Résout le sidecar `mmproj` du catalogue à côté des poids GGUF.
 fn resolve_mmproj_for_model(model_id: &str, weights_path: &std::path::Path) -> Option<PathBuf> {
     let models_dir = weights_path.parent()?;
@@ -1651,7 +1657,7 @@ fn resolve_mmproj_for_model(model_id: &str, weights_path: &std::path::Path) -> O
 
 #[cfg(test)]
 mod tests {
-    use super::{resolve_mmproj_for_model, resume_messages};
+    use super::{resolve_mmproj_for_model, resume_messages, should_use_vision_infer};
     use aos_llama::StopReason;
     use std::path::PathBuf;
 
@@ -1702,6 +1708,13 @@ mod tests {
         .unwrap();
         assert!(resolve_mmproj_for_model("local:gemma-4-e4b", &weights).is_none());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn text_only_infer_when_images_without_mmproj() {
+        assert!(!should_use_vision_infer(false, &["/downloads/canvas.png".into()]));
+        assert!(should_use_vision_infer(true, &["/downloads/canvas.png".into()]));
+        assert!(!should_use_vision_infer(true, &[]));
     }
 
     #[test]

@@ -5,6 +5,7 @@ use crate::canvas_scene::{
     begin_canvas_vision, canvas_scene_prompt_block, canvas_tool_mutates_scene,
     end_canvas_vision, fetch_canvas_aspect,
     fetch_canvas_scene_digest, merge_canvas_vision_refs, refresh_canvas_scene_after_op,
+    session_model_has_vision,
 };
 use crate::context_budget::{
     compact_after_prompt_overflow, enforce_prompt_budget, is_prompt_too_long_error,
@@ -474,11 +475,13 @@ async fn run_room_tool_loop(
             vec![]
         };
         if let Some(ref png) = pending_canvas_png.take() {
-            step_refs = merge_canvas_vision_refs(&step_refs, png);
+            if session_model_has_vision(bus, model_id.as_deref()).await {
+                step_refs = merge_canvas_vision_refs(&step_refs, png);
+            }
         } else if has_canvas {
             let aspect = fetch_canvas_aspect(bus, session_id).await;
             if let Some(png) =
-                begin_canvas_vision(bus, session_id, aspect).await
+                begin_canvas_vision(bus, session_id, aspect, model_id.as_deref()).await
             {
                 step_refs = merge_canvas_vision_refs(&step_refs, &png);
             }
@@ -619,6 +622,7 @@ pub async fn execute_room_turn(
                 bus,
                 &req.session_id,
                 session.meta.canvas_aspect,
+                model_id.as_deref(),
             )
             .await
         } else {

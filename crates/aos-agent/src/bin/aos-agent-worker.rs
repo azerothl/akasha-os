@@ -11,8 +11,8 @@ use aos_agent::assess::{parse_assess_response, AssessResult};
 use aos_agent::mcp::{open_mcp_tools_with_secrets, McpSession};
 use aos_agent::context_budget::{
     choose_agent_max_tokens, clamp_spawn_brief, compact_after_prompt_overflow,
-    enforce_prompt_budget, is_prompt_too_long_error, prompt_budget,
-    sanitize_assistant_for_memory, LoopGuard, LoopVerdict, DEFAULT_N_CTX_HINT,
+    enforce_prompt_budget, is_prompt_too_long_error, is_technical_vision_infer_error,
+    prompt_budget, sanitize_assistant_for_memory, LoopGuard, LoopVerdict, DEFAULT_N_CTX_HINT,
     MAX_OVERFLOW_INFER_RETRIES,
 };
 use aos_agent::persist;
@@ -21,7 +21,8 @@ use aos_agent::canvas_scene::{
     canvas_reflect_user_content, canvas_repeat_stroke_verdict, canvas_scene_prompt_block,
     canvas_tool_mutates_scene, end_canvas_vision, fetch_canvas_aspect,
     fetch_canvas_scene_digest, merge_canvas_vision_refs, refresh_canvas_scene_after_op,
-    should_run_canvas_critic, CanvasRepeatVerdict,
+    session_model_has_vision, strip_vision_image_paths, should_run_canvas_critic,
+    CanvasRepeatVerdict,
 };
 use aos_agent::prompt::{compile_system_prompt, optimize_prompt_request, PromptCompileInput};
 use aos_agent::skills::{load_skills, match_skill_by_action, merge_skill_tools, skill_misuse_hint, SkillDoc};
@@ -576,12 +577,19 @@ async fn main() {
         let mut step_refs = data_refs.clone();
         let canvas_sid = spec.session_id.clone();
         if let Some(ref png) = last_canvas_scene_png.take() {
-            step_refs = merge_canvas_vision_refs(&step_refs, png);
+            if session_model_has_vision(&bus, spec.model_id.as_deref()).await {
+                step_refs = merge_canvas_vision_refs(&step_refs, png);
+            }
         } else if canvas_agent {
             if let Some(sid) = canvas_sid.as_deref() {
                 let aspect = fetch_canvas_aspect(&bus, sid).await;
-                if let Some(png) =
-                    begin_canvas_vision(&bus, sid, aspect).await
+                if let Some(png) = begin_canvas_vision(
+                    &bus,
+                    sid,
+                    aspect,
+                    spec.model_id.as_deref(),
+                )
+                .await
                 {
                     step_refs = merge_canvas_vision_refs(&step_refs, &png);
                 }
@@ -639,6 +647,16 @@ async fn main() {
                                 .await;
                         }
                     }
+                }
+                InferOutcome::Fatal(e) if is_technical_vision_infer_error(&e) => {
+                    eprintln!("vision refs ignorées (pas de mmproj) : {e}");
+                    step_refs = strip_vision_image_paths(&step_refs);
+                    if canvas_active {
+                        if let Some(sid) = canvas_sid.as_deref() {
+                            end_canvas_vision(&bus, sid).await;
+                        }
+                    }
+                    continue;
                 }
                 InferOutcome::Fatal(e) => {
                     if is_prompt_too_long_error(&e) {
@@ -3417,7 +3435,14 @@ async fn reflect(bus: &BusClient, shared: &Shared, spec: &AgentSpec) -> Option<S
     let mut data_refs: Vec<String> = Vec::new();
     let canvas_active = if let Some(sid) = canvas_sid.as_deref().filter(|s| !s.is_empty()) {
         let aspect = fetch_canvas_aspect(bus, sid).await;
-        if let Some(png) = begin_canvas_vision(bus, sid, aspect).await {
+        if let Some(png) = begin_canvas_vision(
+            bus,
+            sid,
+            aspect,
+            spec.model_id.as_deref(),
+        )
+        .await
+        {
             data_refs = merge_canvas_vision_refs(&[], &png);
             images = data_refs.clone();
             true
