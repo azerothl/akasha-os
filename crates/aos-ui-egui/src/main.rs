@@ -557,7 +557,25 @@ fn agent_shown_in_tab(a: &AgentInfo, history: bool) -> bool {
     agent_is_live(&a.state) != history
 }
 
-fn agent_completion_chat_text(ag: &AgentInfo, t: &i18n::UiStrings) -> String {
+fn agent_canvas_session_ops<'a>(
+    ag: &AgentInfo,
+    active_session: Option<&str>,
+    canvas_ops: &'a [aos_proto::CanvasOp],
+) -> Option<&'a [aos_proto::CanvasOp]> {
+    let sid = ag.session_id.as_deref()?;
+    if active_session == Some(sid) && !canvas_ops.is_empty() {
+        Some(canvas_ops)
+    } else {
+        None
+    }
+}
+
+fn agent_completion_chat_text(
+    ag: &AgentInfo,
+    t: &i18n::UiStrings,
+    session_ops: Option<&[aos_proto::CanvasOp]>,
+    trace: Option<&aos_proto::AgentTrace>,
+) -> String {
     let title = ag.display_title();
     match ag.state {
         AgentState::Done => {
@@ -570,8 +588,13 @@ fn agent_completion_chat_text(ag: &AgentInfo, t: &i18n::UiStrings) -> String {
             }
         }
         AgentState::Failed => {
-            if ag.tools.iter().any(|t| t.starts_with("canvas.")) {
+            if agent_panel::canvas_draw_fail_chrome(Some(ag), session_ops, trace) {
                 return t.canvas_draw_failed.to_string();
+            }
+            if ag.tools.iter().any(|t| t.starts_with("canvas."))
+                && aos_agent::canvas_scene::canvas_has_applied_traits(session_ops, trace)
+            {
+                return format!("Agent « {title} » terminé.");
             }
             if ag.fail_reason.as_deref() == Some(aos_agent::actions::THREAD_FAIL_COULD_NOT_ACT) {
                 return i18n::agent_could_not_act_message(t);
@@ -4366,7 +4389,18 @@ impl eframe::App for UiApp {
                                     })
                                 });
                                 if on_this_session {
-                                    let content = agent_completion_chat_text(ag, &t);
+                                    let session_ops = agent_canvas_session_ops(
+                                        ag,
+                                        self.active_session.as_deref(),
+                                        &self.canvas_panel.ops,
+                                    );
+                                    let trace = self.agent_traces.get(&ag.agent_id);
+                                    let content = agent_completion_chat_text(
+                                        ag,
+                                        &t,
+                                        session_ops,
+                                        trace,
+                                    );
                                     if already {
                                         if !ag.last_output.trim().is_empty() {
                                             if let Some(line) =
@@ -4410,11 +4444,28 @@ impl eframe::App for UiApp {
                                     && !self.agent_notified.contains(&ag.agent_id)
                                     && was_active
                                 {
+                                    let session_ops = agent_canvas_session_ops(
+                                        ag,
+                                        self.active_session.as_deref(),
+                                        &self.canvas_panel.ops,
+                                    );
+                                    let trace = self.agent_traces.get(&ag.agent_id);
                                     let summary = match ag.state {
                                         AgentState::Done => format!("{} terminé", ag.display_title()),
                                         AgentState::Failed => {
-                                            if ag.tools.iter().any(|t| t.starts_with("canvas.")) {
+                                            if agent_panel::canvas_draw_fail_chrome(
+                                                Some(ag),
+                                                session_ops,
+                                                trace,
+                                            ) {
                                                 t.canvas_draw_failed.to_string()
+                                            } else if ag.tools.iter().any(|t| t.starts_with("canvas."))
+                                                && aos_agent::canvas_scene::canvas_has_applied_traits(
+                                                    session_ops,
+                                                    trace,
+                                                )
+                                            {
+                                                format!("{} terminé", ag.display_title())
                                             } else if ag.fail_reason.as_deref()
                                                 == Some(aos_agent::actions::THREAD_FAIL_COULD_NOT_ACT)
                                             {
@@ -5933,6 +5984,14 @@ impl UiApp {
                                         .find(|a| a.agent_id == *agent_id);
                                     let selected =
                                         reply_id.as_deref() == Some(agent_id.as_str());
+                                    let session_ops = info.and_then(|ag| {
+                                        agent_canvas_session_ops(
+                                            ag,
+                                            self.active_session.as_deref(),
+                                            &self.canvas_panel.ops,
+                                        )
+                                    });
+                                    let trace = self.agent_traces.get(agent_id);
                                     let action = ui
                                         .push_id(
                                             ("chat_agent_card", i, j, agent_id.as_str()),
@@ -5944,6 +6003,8 @@ impl UiApp {
                                                     title.as_str(),
                                                     origin.as_str(),
                                                     selected && origin == "ask",
+                                                    session_ops,
+                                                    trace,
                                                     t,
                                                 )
                                             },
@@ -7567,13 +7628,25 @@ impl UiApp {
                 ui.small(t.agents_subagents.replace("{n}", &a.children.len().to_string()));
             }
             if let Some(reason) = &a.fail_reason {
-                ui.colored_label(
-                    egui::Color32::from_rgb(220, 120, 100),
-                    agent_panel::truncate(
-                        &agent_panel::resolve_visible_fail_reason(&t, Some(a), reason.as_str()),
-                        40,
-                    ),
+                let session_ops = agent_canvas_session_ops(
+                    a,
+                    self.active_session.as_deref(),
+                    &self.canvas_panel.ops,
                 );
+                let trace = self.agent_traces.get(&a.agent_id);
+                let visible = agent_panel::resolve_visible_fail_reason(
+                    &t,
+                    Some(a),
+                    reason.as_str(),
+                    session_ops,
+                    trace,
+                );
+                if !visible.is_empty() {
+                    ui.colored_label(
+                        egui::Color32::from_rgb(220, 120, 100),
+                        agent_panel::truncate(&visible, 40),
+                    );
+                }
             }
             if !a.is_roster() {
                 if ui.small_button(t.agent_pause).clicked() {
@@ -7815,10 +7888,18 @@ impl UiApp {
                     if info.as_ref().is_some_and(|a| a.is_roster()) {
                         self.ui_roster_detail_edits(ui, &id, t);
                     }
+                    let session_ops = info.as_ref().and_then(|a| {
+                        agent_canvas_session_ops(
+                            a,
+                            self.active_session.as_deref(),
+                            &self.canvas_panel.ops,
+                        )
+                    });
                     let actions = agent_panel::draw_agent_detail(
                         ui,
                         info.as_ref(),
                         trace.as_ref(),
+                        session_ops,
                         &mut self.agent_steer_txt,
                         &mut self.chat_md_cache,
                         &open_in_browser,
