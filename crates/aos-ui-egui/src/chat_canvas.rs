@@ -1311,7 +1311,7 @@ Lis `scene_bbox` dans le digest : ne superpose pas les nouvelles formes au même
 {silhouette}\
 Commence par canvas.get. Couleur : canvas.set_style {{color:\"#RRGGBB\"}} ou color= sur chaque op — \
 le teal signal n'est pas la seule teinte ; après critique, change de teinte pour ombres/détails.\n\
-Après critique : ajoute, jamais canvas.clear sauf si l'humain dit effacer.\n\
+Après critique : ajoute la pièce manquante seulement — jamais canvas.clear ni redessiner le sujet depuis zéro sauf si l'humain dit effacer.\n\
 {windmill}\
 {tools_line}"
     )
