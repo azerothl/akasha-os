@@ -14,13 +14,13 @@ pub fn agent_has_canvas_tools(tool_ids: &[String]) -> bool {
 
 /// Critic system prompt when the agent draws on the session canvas.
 pub fn canvas_critic_system_prompt() -> &'static str {
-    "Tu es un critique pour un agent qui dessine sur le canvas vectoriel (coords 0..1, origine coin haut-gauche, y vers le bas — pas le centre). \
-     Les ops canvas.stroke, canvas.line, canvas.spline, canvas.rect, canvas.ellipse \
-     (fill:true pour remplir), canvas.set_style comptent comme progrès dessin — \
-     ne demande jamais de générer une image (media.image.generate). \
-     Lis la dernière bbox renvoyée (ok seq=… bbox=…) avant de placer la suivante ; empile les formes en partageant x et w. \
-     En 2 phrases en français : est-ce que l'agent progresse vers le goal par des traits vectoriels ? \
-     Que dessiner ensuite ? Réponds directement, sans balises <think> ni monologue Thinking Process."
+    "Tu es un critique pour un agent qui dessine sur le canvas vectoriel (coords 0..1, origine coin haut-gauche, y vers le bas). \
+     Une capture PNG du canvas actuel est jointe — REGARDE l'image : le dessin ressemble-t-il au goal, \
+     ou seulement des arches / traits empilés au même endroit ? \
+     Un trait vectoriel ne compte comme progrès que s'il rapproche visuellement du goal ; \
+     ne valide pas des répétitions identiques. Ne demande jamais media.image.generate. \
+     En 2 phrases en français : ce que tu vois vs le goal, et quoi tracer ensuite (ou arrêter si c'est bon). \
+     Réponds directement, sans balises <think> ni monologue Thinking Process."
 }
 
 /// User content for reflect when canvas tools are available — includes recent canvas ops.
@@ -58,7 +58,7 @@ pub fn canvas_reflect_user_content(
         )
     } else {
         format!(
-            "{base}\n[canvas ops récentes — traits vectoriels = progrès dessin, PAS media.image.generate]\n{}",
+            "{base}\n[canvas ops récentes — capture PNG jointe : regarde si ça ressemble au goal, PAS media.image.generate]\n{}",
             canvas_lines.join("\n")
         )
     }
@@ -103,12 +103,13 @@ pub fn canvas_scene_prompt_block(digest: &str) -> String {
          Digest compact (compteurs + bbox par seq, pas le JSON brut). \
          Commence par `canvas.get` si tu dessines ; état au début du tour :\n\
          ```\n{digest}\n```\n\
-         Avec un modèle vision : une capture PNG live du canvas est jointe à chaque inférence \
-         (pas le bureau, pas un digest différé). \
+         Après chaque op canvas réussie : une capture PNG du canvas actuel est jointe \
+         au tour suivant (regarde l'image, pas seulement le digest). \
          Placement : coords 0..1 max=1.0 (pas de pixels). \
          Lis le `scene_bbox` et les bbox par seq ; place chaque nouvelle op dans `usable` \
          avec marge ≥0.08 — ne superpose pas au même centre. \
-         Chaque outil mutateur renvoie un digest rafraîchi dans `[canvas digest]`."
+         Chaque outil mutateur renvoie un digest rafraîchi dans `[canvas digest]` \
+         et une capture `[canvas scene]` (export canvas.export, toujours jointe)."
     )
 }
 
@@ -118,6 +119,57 @@ pub fn canvas_tool_outcome_with_digest(base: &str, digest: Option<&str>) -> Stri
         Some(d) => format!("{base}\n\n[canvas digest]\n{d}"),
         None => base.to_string(),
     }
+}
+
+/// Outcome text + optional PNG path after a canvas mutating tool succeeds.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CanvasSceneUpdate {
+    pub text: String,
+    pub png_path: Option<String>,
+}
+
+/// True when a canvas tool outcome looks like a successful apply (not bus/perm error).
+pub fn canvas_op_succeeded(outcome: &str) -> bool {
+    let trimmed = outcome.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    let lower = trimmed.to_ascii_lowercase();
+    if lower.contains("erreur outil:")
+        || lower.contains("erreur bus:")
+        || lower.starts_with("err:")
+        || lower.contains(" err:")
+        || lower.contains("permissiondenied")
+        || lower.contains("actordenied")
+    {
+        return false;
+    }
+    trimmed.starts_with("ok ") || trimmed.starts_with("ok\n")
+}
+
+/// Refresh digest + export PNG (via `canvas.export`) after a successful canvas op.
+pub async fn refresh_canvas_scene_after_op(
+    bus: &BusClient,
+    session_id: &str,
+    base_outcome: &str,
+) -> CanvasSceneUpdate {
+    if !canvas_op_succeeded(base_outcome) {
+        return CanvasSceneUpdate {
+            text: base_outcome.to_string(),
+            png_path: None,
+        };
+    }
+    let digest = fetch_canvas_scene_digest(bus, session_id).await;
+    let mut text = canvas_tool_outcome_with_digest(base_outcome, digest.as_deref());
+    let aspect = fetch_canvas_aspect(bus, session_id).await;
+    let png_path = fetch_canvas_live_png(bus, session_id, aspect).await;
+    if png_path.is_some() {
+        text.push_str(
+            "\n\n[canvas scene] Capture PNG du canvas actuel jointe au prochain tour — \
+             regarde l'image avant le prochain trait ; corrige si ça ne ressemble pas au goal.",
+        );
+    }
+    CanvasSceneUpdate { text, png_path }
 }
 
 /// True when the tool mutates the canvas document.
@@ -239,15 +291,12 @@ fn is_vision_image_path(path: &str) -> bool {
 }
 
 /// Live canvas vision attach: export PNG + enable seeing chrome. Returns PNG path.
+/// Canvas snapshots are always exported (no catalog vision-profile gate).
 pub async fn begin_canvas_vision(
     bus: &BusClient,
     session_id: &str,
-    model_id: Option<&str>,
     aspect: CanvasAspect,
 ) -> Option<String> {
-    if !catalog_model_supports_vision(model_id) {
-        return None;
-    }
     let png = fetch_canvas_live_png(bus, session_id, aspect).await?;
     set_canvas_seeing(bus, session_id, true).await;
     Some(png)
@@ -256,6 +305,88 @@ pub async fn begin_canvas_vision(
 /// End live canvas vision chrome after infer completes.
 pub async fn end_canvas_vision(bus: &BusClient, session_id: &str) {
     set_canvas_seeing(bus, session_id, false).await;
+}
+
+/// Warn when recent canvas strokes stack identical bboxes (blind repeat loop).
+pub fn canvas_repeat_stroke_warning(
+    trace: &[AgentStepRecord],
+    action: &str,
+) -> Option<&'static str> {
+    canvas_repeat_stroke_verdict(trace, action).and_then(|v| match v {
+        CanvasRepeatVerdict::Warn(msg) | CanvasRepeatVerdict::Abort(msg) => Some(msg),
+    })
+}
+
+/// Backstop when the model still stacks identical strokes despite scene snapshots.
+pub fn canvas_repeat_stroke_verdict(
+    trace: &[AgentStepRecord],
+    action: &str,
+) -> Option<CanvasRepeatVerdict> {
+    if !matches!(action, "canvas.stroke" | "canvas.line" | "canvas.spline") {
+        return None;
+    }
+    let bboxes: Vec<[f32; 4]> = trace
+        .iter()
+        .rev()
+        .filter(|r| {
+            matches!(
+                r.action.as_str(),
+                "canvas.stroke" | "canvas.line" | "canvas.spline"
+            ) && canvas_op_succeeded(&r.tool_result)
+        })
+        .filter_map(|r| parse_outcome_bbox(&r.tool_result))
+        .take(8)
+        .collect();
+    if bboxes.len() < 3 {
+        return None;
+    }
+    if !bboxes.windows(2).all(|w| bbox_near_duplicate(&w[0], &w[1])) {
+        return None;
+    }
+    if bboxes.len() >= 6 {
+        return Some(CanvasRepeatVerdict::Abort(
+            "Boucle canvas : traits quasi identiques répétés — regarde la capture, change \
+             d'approche ou termine (goal.complete / goal.fail).",
+        ));
+    }
+    Some(CanvasRepeatVerdict::Warn(
+        "Tu empiles des traits quasi identiques — regarde la capture canvas et change \
+         couleur, position ou forme avant de continuer.",
+    ))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CanvasRepeatVerdict {
+    Warn(&'static str),
+    Abort(&'static str),
+}
+
+fn parse_outcome_bbox(outcome: &str) -> Option<[f32; 4]> {
+    let marker = "bbox=(";
+    let rest = outcome.split_once(marker)?.1;
+    let (p0, tail) = rest.split_once(")-(")?;
+    let p1 = tail.split_once(')')?.0;
+    let (x0, y0) = parse_coord_pair(p0)?;
+    let (x1, y1) = parse_coord_pair(p1)?;
+    Some([x0, y0, x1, y1])
+}
+
+fn parse_coord_pair(s: &str) -> Option<(f32, f32)> {
+    let (x, y) = s.split_once(',')?;
+    Some((x.trim().parse().ok()?, y.trim().parse().ok()?))
+}
+
+fn bbox_near_duplicate(a: &[f32; 4], b: &[f32; 4]) -> bool {
+    const EPS: f32 = 0.04;
+    (a[0] - b[0]).abs() < EPS
+        && (a[1] - b[1]).abs() < EPS
+        && (a[2] - b[2]).abs() < EPS
+        && (a[3] - b[3]).abs() < EPS
+}
+
+/// When to run the canvas critic (`reflect`): after each scene change, or every 3 steps.
+pub fn should_run_canvas_critic(canvas_agent: bool, canvas_scene_changed: bool, step: u32) -> bool {
+    (canvas_agent && canvas_scene_changed) || step % 3 == 0
 }
 
 /// Fetch canvas aspect for a session (for export dimensions).
@@ -300,7 +431,7 @@ mod tests {
         assert!(block.contains("canvas.get"));
         assert!(block.contains("scene_bbox"));
         assert!(block.contains("[canvas digest]"));
-        assert!(block.contains("PNG live"));
+        assert!(block.contains("capture PNG"));
     }
 
     #[test]
@@ -317,11 +448,11 @@ mod tests {
     }
 
     #[test]
-    fn canvas_critic_mentions_bbox_and_top_left() {
+    fn canvas_critic_mentions_visual_goal_check() {
         let prompt = canvas_critic_system_prompt();
-        assert!(prompt.contains("coin haut-gauche"));
-        assert!(prompt.contains("bbox"));
-        assert!(prompt.contains("partageant x et w"));
+        assert!(prompt.contains("REGARDE l'image"));
+        assert!(prompt.contains("ressemble"));
+        assert!(!prompt.contains("comptent comme progrès dessin"));
     }
 
     #[test]
@@ -329,6 +460,91 @@ mod tests {
         let content = canvas_reflect_user_content(1, 48, "dessine une canette", &[], &[]);
         assert!(content.contains("coin haut-gauche"));
         assert!(content.contains("dernière bbox"));
+    }
+
+    #[test]
+    fn canvas_op_success_detected() {
+        assert!(canvas_op_succeeded("ok seq=3 stroke bbox=(0.1,0.2)-(0.3,0.4)"));
+        assert!(!canvas_op_succeeded("ERREUR outil: session"));
+        assert!(!canvas_op_succeeded("err: invalid"));
+    }
+
+    #[test]
+    fn canvas_scene_update_text_marks_snapshot() {
+        let update = CanvasSceneUpdate {
+            text: "ok seq=1\n\n[canvas scene] Capture PNG".into(),
+            png_path: Some("/downloads/canvas-s-1.png".into()),
+        };
+        assert!(update.text.contains("[canvas scene]"));
+        assert_eq!(
+            update.png_path.as_deref(),
+            Some("/downloads/canvas-s-1.png")
+        );
+    }
+
+    #[test]
+    fn parse_outcome_bbox_from_tool_result() {
+        let bbox = parse_outcome_bbox("ok seq=12 ellipse bbox=(0.350,0.150)-(0.650,0.270)")
+            .expect("bbox");
+        assert!((bbox[0] - 0.35).abs() < 0.001);
+        assert!((bbox[3] - 0.27).abs() < 0.001);
+    }
+
+    #[test]
+    fn should_run_canvas_critic_after_stroke_and_every_three_steps() {
+        assert!(should_run_canvas_critic(true, true, 1));
+        assert!(!should_run_canvas_critic(true, false, 1));
+        assert!(should_run_canvas_critic(true, false, 3));
+        assert!(should_run_canvas_critic(false, false, 3));
+        assert!(!should_run_canvas_critic(false, false, 2));
+    }
+
+    #[test]
+    fn canvas_repeat_stroke_verdict_aborts_after_six() {
+        let trace: Vec<AgentStepRecord> = (1..=7)
+            .map(|step| AgentStepRecord {
+                step,
+                action: "canvas.stroke".into(),
+                tool_result: format!(
+                    "ok seq={step} stroke bbox=(0.2,0.3)-(0.4,0.5)"
+                ),
+                ..Default::default()
+            })
+            .collect();
+        match canvas_repeat_stroke_verdict(&trace, "canvas.stroke") {
+            Some(CanvasRepeatVerdict::Abort(_)) => {}
+            other => panic!("expected abort, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn canvas_repeat_stroke_warning_on_identical_bboxes() {
+        let trace = vec![
+            AgentStepRecord {
+                step: 1,
+                action: "canvas.stroke".into(),
+                tool_result: "ok seq=1 stroke bbox=(0.2,0.3)-(0.4,0.5)".into(),
+                ..Default::default()
+            },
+            AgentStepRecord {
+                step: 2,
+                action: "canvas.stroke".into(),
+                tool_result: "ok seq=2 stroke bbox=(0.2,0.3)-(0.4,0.5)".into(),
+                ..Default::default()
+            },
+            AgentStepRecord {
+                step: 3,
+                action: "canvas.stroke".into(),
+                tool_result: "ok seq=3 stroke bbox=(0.21,0.31)-(0.41,0.51)".into(),
+                ..Default::default()
+            },
+        ];
+        assert!(canvas_repeat_stroke_warning(&trace, "canvas.stroke").is_some());
+        assert!(canvas_repeat_stroke_warning(&trace, "canvas.rect").is_none());
+        match canvas_repeat_stroke_verdict(&trace, "canvas.stroke") {
+            Some(CanvasRepeatVerdict::Warn(_)) => {}
+            other => panic!("expected warn at 3 strokes, got {other:?}"),
+        }
     }
 
     #[test]
@@ -349,7 +565,7 @@ mod tests {
         ];
         let content = canvas_reflect_user_content(2, 48, "dessine une canette", &[], &trace);
         assert!(content.contains("canvas.stroke"));
-        assert!(content.contains("traits vectoriels"));
+        assert!(content.contains("capture PNG jointe"));
         assert!(content.contains("PAS media.image.generate"));
     }
 }

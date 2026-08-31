@@ -93,16 +93,17 @@ impl CognitiveState {
     }
 
     pub fn push_tool(&mut self, tool: &str, outcome: &str) {
-        let clipped = if outcome.chars().count() > 1200 {
-            format!(
-                "{}…",
-                outcome.chars().take(1200).collect::<String>()
-            )
-        } else {
-            outcome.to_string()
-        };
+        let clipped = clip_working_memory_outcome(outcome);
         self.working_memory
             .push(("tool".to_string(), format!("[{tool}] {clipped}")));
+    }
+
+    /// Canvas tool outcomes must use the `user` role so vision PNG attaches to the
+    /// latest stroke (mtmd binds images to the last user turn, not `tool`).
+    pub fn push_canvas_tool(&mut self, tool: &str, outcome: &str) {
+        let clipped = clip_working_memory_outcome(outcome);
+        self.working_memory
+            .push(("user".to_string(), format!("[{tool}] {clipped}")));
     }
 
     pub fn set_plan(&mut self, nodes: Vec<TaskNode>) {
@@ -132,9 +133,29 @@ impl CognitiveState {
     }
 }
 
+fn clip_working_memory_outcome(outcome: &str) -> String {
+    if outcome.chars().count() > 1200 {
+        format!(
+            "{}…",
+            outcome.chars().take(1200).collect::<String>()
+        )
+    } else {
+        outcome.to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn push_canvas_tool_uses_user_role() {
+        let mut st = CognitiveState::new("agent-1", vec![]);
+        st.push_canvas_tool("canvas.stroke", "ok seq=1");
+        assert_eq!(st.working_memory.len(), 1);
+        assert_eq!(st.working_memory[0].0, "user");
+        assert!(st.working_memory[0].1.contains("canvas.stroke"));
+    }
 
     #[test]
     fn snapshot_roundtrip() {
