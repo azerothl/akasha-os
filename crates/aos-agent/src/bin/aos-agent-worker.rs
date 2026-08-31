@@ -28,9 +28,10 @@ use aos_agent::prompt::{compile_system_prompt, optimize_prompt_request, PromptCo
 use aos_agent::skills::{load_skills, match_skill_by_action, merge_skill_tools, skill_misuse_hint, SkillDoc};
 use aos_agent::tool_exec::format_module_invoke_result;
 use aos_agent::tools::{
-    canonicalize_tool_name, caps_for_tools, caps_subset, classify_action,
-    is_module_fallback_candidate, normalize_tool_args, resolve_tool_backend, select_tools,
-    ToolBackend, ToolDesc,
+    canonicalize_tool_name, canvas_tools_from_module_list, caps_for_tools, caps_subset,
+    classify_action, canvas_draw_strategy_hint, filter_canvas_tool_ids, is_module_fallback_candidate,
+    normalize_tool_args, resolve_tool_backend, restrict_canvas_tools, select_tools, ToolBackend,
+    ToolDesc,
 };
 use aos_agent::{intents, CognitiveState, ControlCmd, ControlResp, ReportPayload};
 use aos_ipc::{BusClient, BusService};
@@ -41,7 +42,7 @@ use aos_proto::{
     FilesGenerateRequest, FsListRequest, FsReadRequest, FsReadResponse, FsWriteRequest,
     InferParams, InferRequest, MemContextRequest, MemContextResponse, MemEpisodicQueryRequest,
     MemEpisodicWriteRequest, MemHit, MemRememberResponse, MemSharedReadRequest,
-    MemSharedWriteRequest, ModuleInvokeRequest, ModuleInvokeResponse, NetFetchRequest, TaskNode,
+    MemSharedWriteRequest, ModuleInfo, ModuleInvokeRequest, ModuleInvokeResponse, NetFetchRequest, TaskNode,
     TaskNodeStatus, TokenEvent, WebBrowseRequest, WebBrowseResponse, WebSearchHit,
     WebSearchRequest, WebSearchResponse,
 };
@@ -177,6 +178,14 @@ async fn main() {
         .expect("connexion au bus");
 
     inherit_session_model(&bus, &mut spec).await;
+
+    let canvas_exported: Vec<String> = bus
+        .call::<(), Vec<ModuleInfo>>("module.list", &(), vec![])
+        .await
+        .map(|list| canvas_tools_from_module_list(&list))
+        .unwrap_or_default();
+    restrict_canvas_tools(&mut spec.tools, &canvas_exported);
+    let _ = persist::write_spec(&spec);
 
     let (cmd_tx, mut cmd_rx) = mpsc::channel::<WorkerCmd>(16);
 
@@ -364,9 +373,12 @@ async fn main() {
                             "Goal à accomplir : {}\nCritères : {:?}\n\
                              Classification : complex — {}. \
                              Dessin canvas : un seul auteur (toi). Pas de agent.spawn — \
-                             canvas.get puis canvas.path (silhouettes) ou canvas.stroke/rect/ellipse (fill:true pour remplir) en traits séquentiels. \
+                             {} \
                              media.image.generate interdit.",
-                            spec.goal.statement, spec.goal.success_criteria, assess.reason
+                            spec.goal.statement,
+                            spec.goal.success_criteria,
+                            assess.reason,
+                            canvas_draw_strategy_hint(&canvas_exported)
                         )
                     } else {
                         format!(
@@ -1736,11 +1748,15 @@ async fn execute_action(
         }
         "agent.spawn" => {
             if agent_has_canvas_tools(&spec.tools) {
-                return ActResult::Continue(
-                    "canvas : dessine toi-même avec canvas.path/stroke/rect/ellipse/… — \
+                let hint = if aos_agent::canvas_scene::agent_has_canvas_path(&spec.tools) {
+                    "canvas.path/stroke/rect/ellipse/…"
+                } else {
+                    "canvas.stroke/spline/rect/ellipse/…"
+                };
+                return ActResult::Continue(format!(
+                    "canvas : dessine toi-même avec {hint} — \
                      ne spawn pas des sous-agents pour le même dessin (un seul auteur, traits séquentiels)."
-                        .into(),
-                );
+                ));
             }
             // Profondeur max 2 : un sous-agent ne spawn pas.
             if spec.parent_id.is_some() {
@@ -3482,6 +3498,7 @@ async fn reflect(bus: &BusClient, shared: &Shared, spec: &AgentSpec) -> Option<S
                 &spec.goal.statement,
                 &st.plan_stack,
                 &st.trace,
+                &spec.tools,
             )
         } else {
             format!(

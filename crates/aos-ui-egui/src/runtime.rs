@@ -520,10 +520,20 @@ async fn handle_cmd(
                             return;
                         }
 
+                        let canvas_exported: Vec<String> = bus
+                            .call::<(), Vec<aos_proto::ModuleInfo>>("module.list", &(), vec![])
+                            .await
+                            .map(|list| aos_agent::tools::canvas_tools_from_module_list(&list))
+                            .unwrap_or_default();
+
                         // Délégation : agent.spawn / filet module → worker en fond
-                        if let Some((brief, skills, tools, prose)) =
-                            chat_delegate_agent_spec(&user_text, &full, canvas_open, canvas_aspect)
-                        {
+                        if let Some((brief, skills, tools, prose)) = chat_delegate_agent_spec(
+                            &user_text,
+                            &full,
+                            canvas_open,
+                            canvas_aspect,
+                            &canvas_exported,
+                        ) {
                             let canvas_delegate = tools.iter().any(|t| t.starts_with("canvas."));
                             if canvas_delegate
                                 && session_has_running_canvas_agent(&bus, &sid).await

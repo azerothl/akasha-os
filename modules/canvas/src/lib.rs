@@ -327,9 +327,28 @@ fn shape_success_message(kind: &str, a: &ShapeArgs, resp: &Value) -> String {
     )
 }
 
+fn alias_shape_dimension_fields(args: &Value) -> Value {
+    let mut out = args.clone();
+    let Some(obj) = out.as_object_mut() else {
+        return out;
+    };
+    if !obj.contains_key("w") && !obj.contains_key("h") {
+        if obj.contains_key("width") && obj.contains_key("height") {
+            if let Some(v) = obj.get("width").cloned() {
+                obj.insert("w".into(), v);
+            }
+            if let Some(v) = obj.get("height").cloned() {
+                obj.insert("h".into(), v);
+            }
+        }
+    }
+    out
+}
+
 /// Parse rect/ellipse args: canonical `x,y,w,h`, or aliases
 /// `cx,cy,w,h` / `cx,cy,rx,ry` / `x,y,rx,ry` / `x1,y1,x2,y2`.
 fn parse_shape_args(args: &Value, tool: &str) -> Result<ShapeArgs, String> {
+    let args = alias_shape_dimension_fields(args);
     let session_id = args
         .get("session_id")
         .and_then(|v| v.as_str())
@@ -344,17 +363,17 @@ fn parse_shape_args(args: &Value, tool: &str) -> Result<ShapeArgs, String> {
         .map(str::to_string);
 
     let (x, y, w, h) = if let (Some(x), Some(y), Some(w), Some(h)) = (
-        parse_f32_field(args, "x"),
-        parse_f32_field(args, "y"),
-        parse_f32_field(args, "w"),
-        parse_f32_field(args, "h"),
+        parse_f32_field(&args, "x"),
+        parse_f32_field(&args, "y"),
+        parse_f32_field(&args, "w"),
+        parse_f32_field(&args, "h"),
     ) {
         (x, y, w, h)
     } else if let (Some(x1), Some(y1), Some(x2), Some(y2)) = (
-        parse_f32_field(args, "x1"),
-        parse_f32_field(args, "y1"),
-        parse_f32_field(args, "x2"),
-        parse_f32_field(args, "y2"),
+        parse_f32_field(&args, "x1"),
+        parse_f32_field(&args, "y1"),
+        parse_f32_field(&args, "x2"),
+        parse_f32_field(&args, "y2"),
     ) {
         let x = x1.min(x2);
         let y = y1.min(y2);
@@ -362,17 +381,17 @@ fn parse_shape_args(args: &Value, tool: &str) -> Result<ShapeArgs, String> {
         let h = (y2 - y1).abs();
         (x, y, w, h)
     } else if let (Some(cx), Some(cy), Some(w), Some(h)) = (
-        parse_f32_field(args, "cx"),
-        parse_f32_field(args, "cy"),
-        parse_f32_field(args, "w"),
-        parse_f32_field(args, "h"),
+        parse_f32_field(&args, "cx"),
+        parse_f32_field(&args, "cy"),
+        parse_f32_field(&args, "w"),
+        parse_f32_field(&args, "h"),
     ) {
         (cx - w / 2.0, cy - h / 2.0, w, h)
     } else {
-        let cx = parse_f32_field(args, "cx").or_else(|| parse_f32_field(args, "x"));
-        let cy = parse_f32_field(args, "cy").or_else(|| parse_f32_field(args, "y"));
-        let rx = parse_f32_field(args, "rx");
-        let ry = parse_f32_field(args, "ry");
+        let cx = parse_f32_field(&args, "cx").or_else(|| parse_f32_field(&args, "x"));
+        let cy = parse_f32_field(&args, "cy").or_else(|| parse_f32_field(&args, "y"));
+        let rx = parse_f32_field(&args, "rx");
+        let ry = parse_f32_field(&args, "ry");
         match (cx, cy, rx, ry) {
             (Some(cx), Some(cy), Some(rx), Some(ry)) => (cx - rx, cy - ry, 2.0 * rx, 2.0 * ry),
             _ => return Err(shape_bbox_contract(tool)),
@@ -385,7 +404,7 @@ fn parse_shape_args(args: &Value, tool: &str) -> Result<ShapeArgs, String> {
         .filter(|s| !s.is_empty())
         .map(str::to_string);
     let fill = args.get("fill").and_then(|v| v.as_bool()).unwrap_or(false);
-    let width = parse_f32_field(args, "width");
+    let width = parse_f32_field(&args, "width");
 
     Ok(ShapeArgs {
         session_id,
@@ -504,6 +523,36 @@ fn export(args: &Value) -> Result<Value, String> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn shape_args_width_height_aliases_to_w_h() {
+        let args = json!({
+            "session_id": "s1",
+            "x": 0.10,
+            "y": 0.20,
+            "width": 0.40,
+            "height": 0.25,
+            "fill": true
+        });
+        let a = parse_shape_args(&args, "canvas.rect").expect("width/height aliases");
+        assert!((a.w - 0.40).abs() < 1e-6);
+        assert!((a.h - 0.25).abs() < 1e-6);
+    }
+
+    #[test]
+    fn shape_args_width_stays_stroke_when_w_h_present() {
+        let args = json!({
+            "session_id": "s1",
+            "x": 0.10,
+            "y": 0.20,
+            "w": 0.40,
+            "h": 0.25,
+            "width": 0.01
+        });
+        let a = parse_shape_args(&args, "canvas.rect").expect("stroke width");
+        assert!((a.w - 0.40).abs() < 1e-6);
+        assert!((a.width.unwrap() - 0.01).abs() < 1e-6);
+    }
 
     #[test]
     fn shape_args_canonical_bbox() {

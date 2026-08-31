@@ -12,6 +12,18 @@ pub fn agent_has_canvas_tools(tool_ids: &[String]) -> bool {
     tool_ids.iter().any(|t| t.starts_with("canvas."))
 }
 
+pub fn agent_has_canvas_path(tool_ids: &[String]) -> bool {
+    tool_ids.iter().any(|t| t == "canvas.path")
+}
+
+fn canvas_empty_scene_hint(tool_ids: &[String]) -> String {
+    if agent_has_canvas_path(tool_ids) {
+        "commence par canvas.get puis canvas.path (silhouettes) ou canvas.stroke/rect/ellipse (fill:true pour remplir ; x,y = coin haut-gauche, y vers le bas — lis la dernière bbox avant la suivante)".into()
+    } else {
+        "commence par canvas.get puis canvas.stroke/spline/rect/ellipse (fill:true pour remplir ; x,y = coin haut-gauche, y vers le bas — lis la dernière bbox avant la suivante)".into()
+    }
+}
+
 /// Critic system prompt when the agent draws on the session canvas.
 pub fn canvas_critic_system_prompt() -> &'static str {
     "Tu es un critique pour un agent qui dessine sur le canvas vectoriel (coords 0..1, origine coin haut-gauche, y vers le bas). \
@@ -30,6 +42,7 @@ pub fn canvas_reflect_user_content(
     goal: &str,
     plan_stack: &[String],
     trace: &[AgentStepRecord],
+    canvas_tool_ids: &[String],
 ) -> String {
     let base = format!(
         "step {}/{} goal={} tasks={:?}",
@@ -52,10 +65,9 @@ pub fn canvas_reflect_user_content(
     }
     if canvas_lines.is_empty() {
         format!(
-            "{base}\n[canvas] aucune op encore — commence par canvas.get puis canvas.path (silhouettes) \
-             ou canvas.stroke/rect/ellipse (fill:true pour remplir ; x,y = coin haut-gauche, y vers le bas — \
-             lis la dernière bbox avant la suivante). \
-             Traits vectoriels = progrès ; pas media.image.generate."
+            "{base}\n[canvas] aucune op encore — {}. \
+             Traits vectoriels = progrès ; pas media.image.generate.",
+            canvas_empty_scene_hint(canvas_tool_ids)
         )
     } else {
         format!(
@@ -576,7 +588,7 @@ mod tests {
 
     #[test]
     fn canvas_reflect_mentions_top_left_placement() {
-        let content = canvas_reflect_user_content(1, 48, "dessine une canette", &[], &[]);
+        let content = canvas_reflect_user_content(1, 48, "dessine une canette", &[], &[], &["canvas.path".into()]);
         assert!(content.contains("coin haut-gauche"));
         assert!(content.contains("dernière bbox"));
     }
@@ -682,7 +694,7 @@ mod tests {
                 ..Default::default()
             },
         ];
-        let content = canvas_reflect_user_content(2, 48, "dessine une canette", &[], &trace);
+        let content = canvas_reflect_user_content(2, 48, "dessine une canette", &[], &trace, &["canvas.stroke".into()]);
         assert!(content.contains("canvas.stroke"));
         assert!(content.contains("capture PNG jointe"));
         assert!(content.contains("PAS media.image.generate"));

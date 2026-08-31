@@ -1101,7 +1101,15 @@ fn fit_board_rect_letterboxes_wide_in_tall_pane() {
 
     #[test]
     fn canvas_agent_brief_contains_drawing_guide() {
-        let brief = super::canvas_agent_brief("dessine sur le canvas une maison", CanvasAspect::Square);
+        let exported: Vec<String> = aos_agent::tools::CANVAS_TOOL_IDS
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect();
+        let brief = super::canvas_agent_brief(
+            "dessine sur le canvas une maison",
+            CanvasAspect::Square,
+            &exported,
+        );
         assert!(brief.starts_with("dessine sur le canvas une maison"));
         assert!(brief.contains("margin"));
         assert!(brief.contains("canvas.get"));
@@ -1110,29 +1118,48 @@ fn fit_board_rect_letterboxes_wide_in_tall_pane() {
         assert!(brief.contains("export PNG"));
         assert!(brief.contains("scene_bbox"));
         assert!(brief.contains("rectangle+triangle"));
-        assert!(brief.contains("Exemple si le sujet est une maison"));
-        assert!(brief.contains("toit + murs + porte"));
-        assert!(!brief.starts_with("Exemple si le sujet est une maison"));
         assert!(brief.contains("jamais canvas.clear"));
         assert!(brief.contains("carré 1:1"));
     }
 
     #[test]
     fn canvas_agent_brief_non_house_subject_keeps_user_goal_first() {
-        let brief =
-            super::canvas_agent_brief("dessine une canette Coca-Cola", CanvasAspect::Square);
+        let exported: Vec<String> = aos_agent::tools::CANVAS_TOOL_IDS
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect();
+        let brief = super::canvas_agent_brief(
+            "dessine une canette Coca-Cola",
+            CanvasAspect::Square,
+            &exported,
+        );
         assert!(brief.starts_with("dessine une canette Coca-Cola"));
-        assert!(brief.contains("Exemple si le sujet est une maison"));
     }
 
     #[test]
     fn canvas_agent_system_prompt_forbids_spawn_fanout() {
-        let prompt = super::canvas_agent_system_prompt(CanvasAspect::Square);
+        let exported: Vec<String> = aos_agent::tools::CANVAS_TOOL_IDS
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect();
+        let prompt = super::canvas_agent_system_prompt(CanvasAspect::Square, &exported);
         assert!(prompt.contains("canvas.set_style"));
-        assert!(prompt.contains("Exemple si le sujet est une maison"));
         assert!(prompt.contains("Pas agent.spawn"));
         assert!(prompt.contains("auteur unique"));
         assert!(!prompt.contains("agent.spawn : le brief"));
+    }
+
+    #[test]
+    fn canvas_agent_designer_guide_omits_path_when_not_exported() {
+        let exported = vec![
+            "canvas.stroke".into(),
+            "canvas.rect".into(),
+            "canvas.get".into(),
+        ];
+        let guide = super::canvas_agent_designer_guide(&exported);
+        assert!(!guide.contains("canvas.path"));
+        assert!(guide.contains("canvas.stroke"));
+        assert!(guide.contains("spline/rect"));
     }
 }
 
@@ -1244,45 +1271,74 @@ fn canvas_aspect_chip_labels(t: &UiStrings) -> [(&'static str, CanvasAspect); 5]
 }
 
 
-/// Frozen designer copy for delegated canvas agents (system prompt — not the user goal).
-pub const CANVAS_AGENT_DESIGNER_GUIDE: &str = "\
-Cible visuelle : lisible à l'export PNG (canvas.export ~512px) — pas un rectangle+triangle.\n\
+/// Designer copy for delegated canvas agents — only lists tools the loaded module exports.
+pub fn canvas_agent_designer_guide(exported: &[String]) -> String {
+    let has_path = exported.iter().any(|t| t == "canvas.path");
+    let silhouette = if has_path {
+        "Silhouettes (colline, corps, toit, voiles) : `canvas.path` avec 4–8 points et fill:true — \
+un path par forme lisible, pas 20 splines/rects empilés. Traits fins : canvas.stroke/line/spline. "
+    } else {
+        "Silhouettes : empile canvas.spline ou canvas.rect/ellipse (fill:true) — \
+un shape par forme lisible. Traits fins : canvas.stroke/line. "
+    };
+    let windmill = if has_path {
+        "Exemple moulin sur colline : path colline (#8B7355) → path corps (#C4A574) → path toit (#8B4513) → \
+2–4 paths pour les ailes (#E8DCC8) ; rect/ellipse seulement pour détails (fenêtre, porte).\n"
+    } else {
+        "Exemple moulin : spline/rect pour colline et corps, ellipse pour voiles — rect pour fenêtre/porte.\n"
+    };
+    let tools_line = if exported.is_empty() {
+        "Outils canvas : (module non chargé — commence par canvas.get si disponible).".to_string()
+    } else {
+        let mut names: Vec<&str> = exported
+            .iter()
+            .filter(|t| t.starts_with("canvas."))
+            .map(|s| s.as_str())
+            .collect();
+        names.sort_unstable();
+        format!(
+            "Outils : {} (coords 0..1 ; rect/ellipse : x,y,w,h — alias width/height acceptés). \
+Pas media.image.generate. Pas agent.spawn.",
+            names.join(", ")
+        )
+    };
+    format!(
+        "Cible visuelle : lisible à l'export PNG (canvas.export ~512px) — pas un rectangle+triangle.\n\
 Espace : coords normalisées 0..1 uniquement (max 1.0) sur le cadre visible (origine coin supérieur gauche) — jamais des pixels.\n\
 « 200px » = taille d'export pour la lisibilité humaine, pas l'unité des coords (ne pas dessiner à x=200).\n\
 Règles : margin 0.08–0.12 ; sujet centré dans usable ; couches sol → volumes → détails → 2–3 ombres. \
 Lis `scene_bbox` dans le digest : ne superpose pas les nouvelles formes au même centre. \
-Silhouettes (colline, corps, toit, voiles) : `canvas.path` avec 4–8 points et fill:true — \
-un path par forme lisible, pas 20 splines/rects empilés. Traits fins : canvas.stroke/line/spline. \
-Commence par canvas.get. Couleur : canvas.set_style {color:\"#RRGGBB\"} ou color= sur chaque op — \
+{silhouette}\
+Commence par canvas.get. Couleur : canvas.set_style {{color:\"#RRGGBB\"}} ou color= sur chaque op — \
 le teal signal n'est pas la seule teinte ; après critique, change de teinte pour ombres/détails.\n\
 Après critique : ajoute, jamais canvas.clear sauf si l'humain dit effacer.\n\
-Exemple moulin sur colline : path colline (#8B7355) → path corps (#C4A574) → path toit (#8B4513) → \
-2–4 paths pour les ailes (#E8DCC8) ; rect/ellipse seulement pour détails (fenêtre, porte).\n\
-Outils : canvas.set_style, canvas.path, canvas.stroke, canvas.line, canvas.spline, canvas.rect, canvas.ellipse \
-(fill:true sur rect/ellipse pour remplir), canvas.erase, canvas.clear, \
-canvas.undo, canvas.get, canvas.export (coords 0..1). Pas media.image.generate. Pas agent.spawn.";
+{windmill}\
+{tools_line}"
+    )
+}
 
 const CANVAS_AGENT_NO_FANOUT_GUIDE: &str = "\
-Tu es l'auteur unique de ce dessin : traits séquentiels canvas.* (path pour silhouettes, stroke/rect/ellipse pour détails). \
+Tu es l'auteur unique de ce dessin : traits séquentiels canvas.* (path pour silhouettes quand exporté, sinon spline/rect/ellipse). \
 Pas de agent.spawn ni agent.await — un seul agent, pas de sous-agents parallèles pour le même sujet.";
 
 /// System prompt addendum for delegated canvas agents (designer rules + frame aspect).
-pub fn canvas_agent_system_prompt(aspect: CanvasAspect) -> String {
+pub fn canvas_agent_system_prompt(aspect: CanvasAspect, exported: &[String]) -> String {
     format!(
-        "{CANVAS_AGENT_DESIGNER_GUIDE}\n\
-         Proportions actuelles du cadre : {aspect_fr} ({aspect_en}).\n\n\
+        "{}\n\
+         Proportions actuelles du cadre : {} ({}).\n\n\
          {CANVAS_AGENT_NO_FANOUT_GUIDE}",
-        aspect_fr = aspect.agent_label_fr(),
-        aspect_en = aspect.agent_label_en(),
+        canvas_agent_designer_guide(exported),
+        aspect.agent_label_fr(),
+        aspect.agent_label_en(),
     )
 }
 
 /// Full brief for display / logs: line 1 = user request verbatim, then designer guide.
-pub fn canvas_agent_brief(user_text: &str, aspect: CanvasAspect) -> String {
+pub fn canvas_agent_brief(user_text: &str, aspect: CanvasAspect, exported: &[String]) -> String {
     format!(
         "{}\n\n{}\nProportions actuelles du cadre : {} ({}).",
         user_text.trim(),
-        CANVAS_AGENT_DESIGNER_GUIDE,
+        canvas_agent_designer_guide(exported),
         aspect.agent_label_fr(),
         aspect.agent_label_en(),
     )
