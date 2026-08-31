@@ -455,7 +455,6 @@ async fn handle_cmd(
                 aos_agent::canvas_scene::begin_canvas_vision(
                     &bus,
                     &session_id,
-                    model_id.as_deref(),
                     canvas_aspect,
                 )
                 .await

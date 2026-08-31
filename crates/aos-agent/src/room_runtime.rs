@@ -3,8 +3,8 @@
 use crate::actions::{parse_actions, strip_tool_markup, AgentAction, THREAD_FAIL_COULD_NOT_CONTINUE};
 use crate::canvas_scene::{
     begin_canvas_vision, canvas_scene_prompt_block, canvas_tool_mutates_scene,
-    canvas_tool_outcome_with_digest, end_canvas_vision, fetch_canvas_aspect,
-    fetch_canvas_scene_digest, merge_canvas_vision_refs,
+    end_canvas_vision, fetch_canvas_aspect,
+    fetch_canvas_scene_digest, merge_canvas_vision_refs, refresh_canvas_scene_after_op,
 };
 use crate::context_budget::{
     compact_after_prompt_overflow, enforce_prompt_budget, is_prompt_too_long_error,
@@ -464,6 +464,7 @@ async fn run_room_tool_loop(
             .map(|d| d.as_millis())
             .unwrap_or(0)
     );
+    let mut pending_canvas_png: Option<String> = None;
 
     for step in 0..MAX_ROOM_TOOL_STEPS {
         let has_canvas = tool_descs.iter().any(|t| t.name.starts_with("canvas."));
@@ -472,15 +473,20 @@ async fn run_room_tool_loop(
         } else {
             vec![]
         };
-        let canvas_png = if has_canvas {
-            let aspect = fetch_canvas_aspect(bus, session_id).await;
-            begin_canvas_vision(bus, session_id, model_id.as_deref(), aspect).await
-        } else {
-            None
-        };
-        if let Some(ref png) = canvas_png {
+        if let Some(ref png) = pending_canvas_png.take() {
             step_refs = merge_canvas_vision_refs(&step_refs, png);
+        } else if has_canvas {
+            let aspect = fetch_canvas_aspect(bus, session_id).await;
+            if let Some(png) =
+                begin_canvas_vision(bus, session_id, aspect).await
+            {
+                step_refs = merge_canvas_vision_refs(&step_refs, &png);
+            }
         }
+        let canvas_active = has_canvas && step_refs.iter().any(|p| {
+            let lower = p.to_ascii_lowercase();
+            lower.ends_with(".png") || lower.ends_with(".jpg") || lower.ends_with(".jpeg")
+        });
         let raw_result = run_infer(
             bus,
             round,
@@ -490,7 +496,7 @@ async fn run_room_tool_loop(
             &step_refs,
         )
         .await;
-        if canvas_png.is_some() {
+        if canvas_active {
             end_canvas_vision(bus, session_id).await;
         }
         let raw = raw_result?;
@@ -531,7 +537,7 @@ async fn run_room_tool_loop(
 
         for action in parsed_actions {
             let trace_id = format!("{trace_base}-{step}");
-            let outcome = execute_room_tool(
+            let mut outcome = execute_room_tool(
                 bus,
                 agent_id,
                 caps,
@@ -544,12 +550,14 @@ async fn run_room_tool_loop(
             )
             .await;
 
-            let outcome = if canvas_tool_mutates_scene(&action.action) {
-                let digest = fetch_canvas_scene_digest(bus, session_id).await;
-                canvas_tool_outcome_with_digest(&outcome, digest.as_deref())
-            } else {
-                outcome
-            };
+            if canvas_tool_mutates_scene(&action.action) {
+                let scene =
+                    refresh_canvas_scene_after_op(bus, session_id, &outcome).await;
+                outcome = scene.text;
+                if let Some(png) = scene.png_path {
+                    pending_canvas_png = Some(png);
+                }
+            }
 
             messages.push(ChatMessage {
                 role: "user".into(),
@@ -610,7 +618,6 @@ pub async fn execute_room_turn(
             begin_canvas_vision(
                 bus,
                 &req.session_id,
-                model_id.as_deref(),
                 session.meta.canvas_aspect,
             )
             .await

@@ -18,9 +18,10 @@ use aos_agent::context_budget::{
 use aos_agent::persist;
 use aos_agent::canvas_scene::{
     agent_has_canvas_tools, begin_canvas_vision, canvas_critic_system_prompt,
-    canvas_reflect_user_content, canvas_scene_prompt_block, canvas_tool_mutates_scene,
-    canvas_tool_outcome_with_digest, end_canvas_vision, fetch_canvas_aspect,
-    fetch_canvas_scene_digest, merge_canvas_vision_refs,
+    canvas_reflect_user_content, canvas_repeat_stroke_verdict, canvas_scene_prompt_block,
+    canvas_tool_mutates_scene, end_canvas_vision, fetch_canvas_aspect,
+    fetch_canvas_scene_digest, merge_canvas_vision_refs, refresh_canvas_scene_after_op,
+    should_run_canvas_critic, CanvasRepeatVerdict,
 };
 use aos_agent::prompt::{compile_system_prompt, optimize_prompt_request, PromptCompileInput};
 use aos_agent::skills::{load_skills, match_skill_by_action, merge_skill_tools, skill_misuse_hint, SkillDoc};
@@ -366,6 +367,7 @@ async fn main() {
     let mut pending_steer: Option<String> = None;
     let mut terminal: Option<AgentState> = None;
     let mut loop_guard = LoopGuard::default();
+    let mut last_canvas_scene_png: Option<String> = None;
     let mut n_ctx_hint = DEFAULT_N_CTX_HINT;
 
     while terminal.is_none() {
@@ -573,19 +575,23 @@ async fn main() {
         let canvas_agent = agent_has_canvas_tools(&spec.tools);
         let mut step_refs = data_refs.clone();
         let canvas_sid = spec.session_id.clone();
-        let canvas_png = if canvas_agent {
+        if let Some(ref png) = last_canvas_scene_png.take() {
+            step_refs = merge_canvas_vision_refs(&step_refs, png);
+        } else if canvas_agent {
             if let Some(sid) = canvas_sid.as_deref() {
                 let aspect = fetch_canvas_aspect(&bus, sid).await;
-                begin_canvas_vision(&bus, sid, spec.model_id.as_deref(), aspect).await
-            } else {
-                None
+                if let Some(png) =
+                    begin_canvas_vision(&bus, sid, aspect).await
+                {
+                    step_refs = merge_canvas_vision_refs(&step_refs, &png);
+                }
             }
-        } else {
-            None
-        };
-        if let Some(ref png) = canvas_png {
-            step_refs = merge_canvas_vision_refs(&step_refs, png);
         }
+        let canvas_active = canvas_agent
+            && step_refs.iter().any(|p| {
+                let lower = p.to_ascii_lowercase();
+                lower.ends_with(".png") || lower.ends_with(".jpg") || lower.ends_with(".jpeg")
+            });
         let infer = loop {
             match infer_turn(
                 &bus,
@@ -667,7 +673,7 @@ async fn main() {
         let infer = match infer {
             Ok(t) => t,
             Err(InferControl::Continue) => {
-                if canvas_png.is_some() {
+                if canvas_active {
                     if let Some(sid) = canvas_sid.as_deref() {
                         end_canvas_vision(&bus, sid).await;
                     }
@@ -675,7 +681,7 @@ async fn main() {
                 continue;
             }
             Err(InferControl::Fail) => {
-                if canvas_png.is_some() {
+                if canvas_active {
                     if let Some(sid) = canvas_sid.as_deref() {
                         end_canvas_vision(&bus, sid).await;
                     }
@@ -683,7 +689,7 @@ async fn main() {
                 break;
             }
         };
-        if canvas_png.is_some() {
+        if canvas_active {
             if let Some(sid) = canvas_sid.as_deref() {
                 end_canvas_vision(&bus, sid).await;
             }
@@ -749,6 +755,7 @@ async fn main() {
         let mut step_child_id: Option<String> = None;
         let mut step_sources: Vec<AgentSource> = Vec::new();
         let mut multi_continue = false;
+        let mut canvas_scene_changed = false;
 
         'run_actions: for (action_idx, step_action) in batch_actions.iter().enumerate() {
             if terminal.is_some() {
@@ -828,8 +835,17 @@ async fn main() {
                     }
                     if canvas_tool_mutates_scene(&action.action) {
                         if let Some(sid) = spec.session_id.as_deref().filter(|s| !s.is_empty()) {
-                            let digest = fetch_canvas_scene_digest(&bus, sid).await;
-                            outcome = canvas_tool_outcome_with_digest(&outcome, digest.as_deref());
+                            let scene = refresh_canvas_scene_after_op(
+                                &bus,
+                                sid,
+                                &outcome,
+                            )
+                            .await;
+                            outcome = scene.text;
+                            if let Some(png) = scene.png_path {
+                                last_canvas_scene_png = Some(png);
+                                canvas_scene_changed = true;
+                            }
                         }
                     }
                     let mut one_tool_result = outcome.clone();
@@ -855,11 +871,12 @@ async fn main() {
                         );
                     }
                     if !outcome.is_empty() {
-                        shared
-                            .state
-                            .lock()
-                            .await
-                            .push_tool(&action.action, &outcome);
+                        let mut st = shared.state.lock().await;
+                        if canvas_tool_mutates_scene(&action.action) {
+                            st.push_canvas_tool(&action.action, &outcome);
+                        } else {
+                            st.push_tool(&action.action, &outcome);
+                        }
                     }
                     if !tool_result.is_empty() && !one_tool_result.is_empty() {
                         tool_result.push('\n');
@@ -986,8 +1003,17 @@ async fn main() {
                 }
                 if canvas_tool_mutates_scene(&action.action) {
                     if let Some(sid) = spec.session_id.as_deref().filter(|s| !s.is_empty()) {
-                        let digest = fetch_canvas_scene_digest(&bus, sid).await;
-                        outcome = canvas_tool_outcome_with_digest(&outcome, digest.as_deref());
+                        let scene = refresh_canvas_scene_after_op(
+                            &bus,
+                            sid,
+                            &outcome,
+                        )
+                        .await;
+                        outcome = scene.text;
+                        if let Some(png) = scene.png_path {
+                            last_canvas_scene_png = Some(png);
+                            canvas_scene_changed = true;
+                        }
                     }
                 }
                 tool_result = outcome.clone();
@@ -1006,11 +1032,12 @@ async fn main() {
                     );
                 }
                 if !outcome.is_empty() {
-                    shared
-                        .state
-                        .lock()
-                        .await
-                        .push_tool(&action.action, &outcome);
+                    let mut st = shared.state.lock().await;
+                    if canvas_tool_mutates_scene(&action.action) {
+                        st.push_canvas_tool(&action.action, &outcome);
+                    } else {
+                        st.push_tool(&action.action, &outcome);
+                    }
                 }
             }
             ActResult::Continue(_) => {}
@@ -1134,8 +1161,10 @@ async fn main() {
             }
         }
 
-        // Reflect every 3 steps or after error-looking outcomes
-        let reflection = if terminal.is_none() && step % 3 == 0 {
+        // Critic: after every canvas stroke (scene PNG) or every 3 steps otherwise.
+        let reflection = if terminal.is_none()
+            && should_run_canvas_critic(canvas_agent, canvas_scene_changed, step)
+        {
             reflect(&bus, &shared, &spec).await
         } else {
             None
@@ -1178,6 +1207,26 @@ async fn main() {
             let mut st = shared.state.lock().await;
             st.tokens_used += record.generated_tokens as u64;
             st.trace.push(record.clone());
+            if let Some(verdict) = canvas_repeat_stroke_verdict(&st.trace, &action.action) {
+                match verdict {
+                    CanvasRepeatVerdict::Warn(msg) => {
+                        st.push_user(&format!("[runtime] {msg}"));
+                    }
+                    CanvasRepeatVerdict::Abort(msg) => {
+                        st.push_user(&format!("[runtime] {msg}"));
+                        drop(st);
+                        report(
+                            &bus,
+                            &agent_id,
+                            AgentOutputEvent::Log {
+                                line: msg.to_string(),
+                            },
+                        )
+                        .await;
+                        terminal = Some(AgentState::Failed);
+                    }
+                }
+            }
         }
         report(&bus, &agent_id, AgentOutputEvent::Step(record)).await;
 
@@ -1186,6 +1235,9 @@ async fn main() {
             let st = shared.state.lock().await;
             let _ = persist::write_state(&st);
             let _ = persist::write_spec(&spec);
+        }
+        if terminal.is_some() {
+            break;
         }
     }
 
@@ -3327,24 +3379,32 @@ async fn bootstrap_memory_recall(
 }
 
 async fn reflect(bus: &BusClient, shared: &Shared, spec: &AgentSpec) -> Option<String> {
-    let st = shared.state.lock().await;
-    let canvas_draw = agent_has_canvas_tools(&spec.tools);
-    let progress = if canvas_draw {
-        canvas_reflect_user_content(
-            st.step,
-            spec.goal.max_steps,
-            &spec.goal.statement,
-            &st.plan_stack,
-            &st.trace,
-        )
-    } else {
-        format!(
-            "step {}/{} goal={} tasks={:?}",
-            st.step,
-            spec.goal.max_steps,
-            spec.goal.statement,
-            st.plan_stack
-        )
+    let (progress, canvas_sid, canvas_draw) = {
+        let st = shared.state.lock().await;
+        let canvas_draw = agent_has_canvas_tools(&spec.tools);
+        let progress = if canvas_draw {
+            canvas_reflect_user_content(
+                st.step,
+                spec.goal.max_steps,
+                &spec.goal.statement,
+                &st.plan_stack,
+                &st.trace,
+            )
+        } else {
+            format!(
+                "step {}/{} goal={} tasks={:?}",
+                st.step,
+                spec.goal.max_steps,
+                spec.goal.statement,
+                st.plan_stack
+            )
+        };
+        let canvas_sid = if canvas_draw {
+            spec.session_id.clone()
+        } else {
+            None
+        };
+        (progress, canvas_sid, canvas_draw)
     };
     let critic_system = if canvas_draw {
         canvas_critic_system_prompt()
@@ -3352,7 +3412,22 @@ async fn reflect(bus: &BusClient, shared: &Shared, spec: &AgentSpec) -> Option<S
         "Tu es un critique. En 2 phrases en français: est-ce que l'agent avance vers le goal ? Que faire ensuite ? \
          Réponds directement, sans balises <think> ni monologue Thinking Process."
     };
-    drop(st);
+
+    let mut images: Vec<String> = Vec::new();
+    let mut data_refs: Vec<String> = Vec::new();
+    let canvas_active = if let Some(sid) = canvas_sid.as_deref().filter(|s| !s.is_empty()) {
+        let aspect = fetch_canvas_aspect(bus, sid).await;
+        if let Some(png) = begin_canvas_vision(bus, sid, aspect).await {
+            data_refs = merge_canvas_vision_refs(&[], &png);
+            images = data_refs.clone();
+            true
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+
     let req = InferRequest {
         model_id: spec.model_id.clone(),
         messages: vec![
@@ -3371,11 +3446,11 @@ async fn reflect(bus: &BusClient, shared: &Shared, spec: &AgentSpec) -> Option<S
             ..InferParams::default()
         },
         priority: 1,
-        data_refs: vec![],
-        images: vec![],
+        data_refs,
+        images,
         routing: None,
     };
-    if let Ok(mut rx) = bus
+    let result = if let Ok(mut rx) = bus
         .call_stream::<InferRequest, TokenEvent>("model.infer", &req, vec![])
         .await
     {
@@ -3406,7 +3481,14 @@ async fn reflect(bus: &BusClient, shared: &Shared, spec: &AgentSpec) -> Option<S
         }
     } else {
         None
+    };
+
+    if canvas_active {
+        if let Some(sid) = canvas_sid.as_deref() {
+            end_canvas_vision(bus, sid).await;
+        }
     }
+    result
 }
 
 async fn verify_goal(
