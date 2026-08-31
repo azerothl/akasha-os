@@ -895,6 +895,14 @@ async fn main() {
                         } else {
                             st.push_tool(&action.action, &outcome);
                         }
+                        maybe_report_plan_advance_after_canvas_draw(
+                            &bus,
+                            &agent_id,
+                            &mut st,
+                            &action.action,
+                            &outcome,
+                        )
+                        .await;
                     }
                     if !tool_result.is_empty() && !one_tool_result.is_empty() {
                         tool_result.push('\n');
@@ -1056,6 +1064,14 @@ async fn main() {
                     } else {
                         st.push_tool(&action.action, &outcome);
                     }
+                    maybe_report_plan_advance_after_canvas_draw(
+                        &bus,
+                        &agent_id,
+                        &mut st,
+                        &action.action,
+                        &outcome,
+                    )
+                    .await;
                 }
             }
             ActResult::Continue(_) => {}
@@ -2234,6 +2250,25 @@ fn parse_mcp_name(name: &str) -> Option<(String, String)> {
     let rest = name.strip_prefix("mcp.")?;
     let (server, tool) = rest.split_once(':')?;
     Some((server.to_string(), tool.to_string()))
+}
+
+async fn maybe_report_plan_advance_after_canvas_draw(
+    bus: &BusClient,
+    agent_id: &str,
+    st: &mut aos_agent::CognitiveState,
+    action: &str,
+    outcome: &str,
+) {
+    if !st.maybe_advance_plan_after_canvas_draw(action, outcome) {
+        return;
+    }
+    let nodes = st.task_graph.clone();
+    report(
+        bus,
+        agent_id,
+        AgentOutputEvent::PlanUpdated { nodes },
+    )
+    .await;
 }
 
 fn parse_plan_nodes(args: &serde_json::Value) -> Vec<TaskNode> {
