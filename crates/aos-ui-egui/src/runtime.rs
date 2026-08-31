@@ -342,7 +342,9 @@ async fn handle_cmd(
                 Ok(trace) => {
                     let info = aos_agent::persist::read_info(&id)
                         .or_else(|| aos_agent::persist::info_from_spec(&id));
-                    let md = aos_agent::persist::export_trace_markdown(&trace, info.as_ref());
+                    let lang = crate::prefs::load_preferences().language;
+                    let md =
+                        aos_agent::persist::export_trace_markdown(&trace, info.as_ref(), &lang);
                     let filename = format!("agent-export-{id}-{}.md", chrono_like_stamp());
                     let path = aos_home().join("var/downloads").join(&filename);
                     let _ = std::fs::create_dir_all(path.parent().unwrap());

@@ -90,8 +90,52 @@ pub fn assemble_trace(
     }
 }
 
+/// True when `fail_reason` must not appear verbatim in shared markdown export.
+fn is_technical_export_fail_reason(reason: &str) -> bool {
+    crate::context_budget::is_overflow_fail_reason(reason)
+        || {
+            let lower = reason.to_ascii_lowercase();
+            lower.contains("internalerror")
+                || lower.contains("prompttoolong")
+                || lower.contains("prompt too long")
+                || reason.contains("ctx=")
+                || reason.contains("réserve_gen=")
+                || reason.contains("Échec")
+                || reason.contains("échec")
+        }
+}
+
+/// Localized `fail_reason` for shared markdown export (no sentinels or token math).
+pub fn export_fail_reason(lang: &str, reason: &str) -> String {
+    let en = lang.eq_ignore_ascii_case("en");
+    if reason == crate::actions::THREAD_FAIL_COULD_NOT_ACT {
+        return if en {
+            "The agent could not act.".into()
+        } else {
+            "L'agent n'a pas pu agir.".into()
+        };
+    }
+    if reason == crate::actions::THREAD_FAIL_COULD_NOT_CONTINUE
+        || is_technical_export_fail_reason(reason)
+    {
+        return if en {
+            "Couldn't keep going.".into()
+        } else {
+            "Impossible de continuer.".into()
+        };
+    }
+    if reason.trim().is_empty() {
+        return if en {
+            "reason not recorded".into()
+        } else {
+            "motif non renseigné".into()
+        };
+    }
+    reason.to_string()
+}
+
 /// Export lisible d'un journal agent (`agent.trace` / `state.json`) en markdown.
-pub fn export_trace_markdown(trace: &AgentTrace, info: Option<&AgentInfo>) -> String {
+pub fn export_trace_markdown(trace: &AgentTrace, info: Option<&AgentInfo>, lang: &str) -> String {
     let title = info
         .map(|a| a.title.as_str())
         .filter(|s| !s.trim().is_empty());
@@ -123,7 +167,8 @@ pub fn export_trace_markdown(trace: &AgentTrace, info: Option<&AgentInfo>) -> St
         .as_deref()
         .filter(|s| !s.trim().is_empty())
     {
-        out.push_str(&format!("**Fail reason:** {reason}\n\n"));
+        let visible = export_fail_reason(lang, reason);
+        out.push_str(&format!("**Fail reason:** {visible}\n\n"));
     }
 
     if trace.steps.is_empty() {
@@ -172,7 +217,8 @@ pub fn export_trace_markdown(trace: &AgentTrace, info: Option<&AgentInfo>) -> St
             out.push_str(&format!("### Child agent\n\n`{child}`\n\n"));
         }
         if let Some(reason) = rec.fail_reason.as_deref().filter(|s| !s.is_empty()) {
-            out.push_str(&format!("**Step fail reason:** {reason}\n\n"));
+            let visible = export_fail_reason(lang, reason);
+            out.push_str(&format!("**Step fail reason:** {visible}\n\n"));
         }
         if let Some(reflection) = rec.reflection.as_deref().filter(|s| !s.is_empty()) {
             out.push_str("### Reflection\n\n");
@@ -474,10 +520,11 @@ mod tests {
             persona_id: None,
             origin: None,
         };
-        let md = export_trace_markdown(&trace, Some(&info));
+        let md = export_trace_markdown(&trace, Some(&info), "en");
         assert!(md.contains("# Agent agent-7"));
         assert!(md.contains("_Display name: Alpha_"));
-        assert!(md.contains("**Fail reason:** agent_could_not_act"));
+        assert!(md.contains("**Fail reason:** The agent could not act."));
+        assert!(!md.contains("agent_could_not_act"));
         assert!(md.contains("### Thought"));
         assert!(md.contains("planifier"));
         assert!(md.contains("`notes.create`"));
@@ -485,6 +532,26 @@ mod tests {
         assert!(md.contains("### Tool result"));
         assert!(md.contains("### Child agent"));
         assert!(md.contains("`agent-8`"));
+
+        let overflow = "le prompt ne tient pas dans le contexte (prompt=8749 + réserve_gen=520 = 9269 tokens > ctx=9216)";
+        let trace_overflow = AgentTrace {
+            agent_id: "agent-9".into(),
+            fail_reason: Some(overflow.into()),
+            steps: vec![AgentStepRecord {
+                step: 2,
+                thought: "réfléchir".into(),
+                fail_reason: Some("PromptTooLong: ctx=8192".into()),
+                ..AgentStepRecord::default()
+            }],
+            ..AgentTrace::default()
+        };
+        let md_overflow = export_trace_markdown(&trace_overflow, None, "fr");
+        assert!(md_overflow.contains("**Fail reason:** Impossible de continuer."));
+        assert!(md_overflow.contains("**Step fail reason:** Impossible de continuer."));
+        assert!(!md_overflow.contains("ctx="));
+        assert!(!md_overflow.to_ascii_lowercase().contains("prompttoolong"));
+        assert!(!md_overflow.contains("réserve_gen"));
+        assert!(!md_overflow.contains("Échec"));
     }
 
     #[test]
