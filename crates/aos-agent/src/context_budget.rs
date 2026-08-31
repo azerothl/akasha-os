@@ -80,6 +80,14 @@ pub fn is_overflow_fail_reason(reason: &str) -> bool {
         || is_technical_prompt_overflow_message(reason)
 }
 
+/// Runtime `fail_reason` when the agent exhausts its step budget (never show verbatim).
+pub fn is_technical_max_steps_fail_reason(reason: &str) -> bool {
+    let lower = reason.to_ascii_lowercase();
+    lower.contains("max_steps")
+        || (lower.contains("max steps")
+            && (lower.contains("atteint") || lower.contains("reached")))
+}
+
 /// Compacte silencieusement après PromptTooLong (journal interne via `log_line`).
 pub fn compact_after_prompt_overflow(
     memory: &mut Vec<(String, String)>,
@@ -585,6 +593,15 @@ mod tests {
         assert!(is_technical_vision_infer_error("mtmd prefill failed"));
         assert!(is_technical_vision_infer_error("projecteur absent"));
         assert!(!is_technical_vision_infer_error("Impossible de continuer."));
+    }
+
+    #[test]
+    fn technical_max_steps_fail_reason_not_user_visible() {
+        let raw = "max_steps (64) atteint";
+        assert!(is_technical_max_steps_fail_reason(raw));
+        assert!(is_technical_max_steps_fail_reason("max steps (32) reached"));
+        assert!(!is_technical_max_steps_fail_reason("Impossible de continuer."));
+        assert!(!is_technical_max_steps_fail_reason("timeout goal atteint"));
     }
 
     #[test]

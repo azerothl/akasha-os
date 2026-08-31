@@ -1,6 +1,6 @@
 //! Panneau détail agent : timeline mise en forme, sources, sous-agents.
 
-use aos_proto::{AgentInfo, AgentSource, AgentState, AgentStepRecord, AgentTrace};
+use aos_proto::{AgentInfo, AgentKind, AgentSource, AgentState, AgentStepRecord, AgentTrace};
 use eframe::egui::{self, Color32, RichText, Ui};
 use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
 
@@ -282,6 +282,36 @@ fn chat_meta_substring_pos(lower: &str) -> Option<usize> {
 /// True when the agent kit includes session canvas drawing tools.
 pub fn agent_is_canvas_draw(info: &AgentInfo) -> bool {
     info.tools.iter().any(|t| t.starts_with("canvas."))
+}
+
+/// Canvas draw agent stopped without context overflow — use locked chrome, not runtime strings.
+pub fn canvas_draw_fail_chrome(info: Option<&AgentInfo>) -> bool {
+    let Some(a) = info else {
+        return false;
+    };
+    if a.state != AgentState::Failed {
+        return false;
+    }
+    let overflow = a
+        .fail_reason
+        .as_deref()
+        .is_some_and(aos_agent::context_budget::is_overflow_fail_reason);
+    agent_is_canvas_draw(a) && !overflow
+}
+
+/// Localized fail reason for agent cards and lists (canvas draw uses locked copy).
+pub fn resolve_visible_fail_reason(
+    t: &crate::i18n::UiStrings,
+    info: Option<&AgentInfo>,
+    reason: &str,
+) -> String {
+    let overflow = aos_agent::context_budget::is_overflow_fail_reason(reason);
+    if let Some(a) = info {
+        if agent_is_canvas_draw(a) && !overflow {
+            return t.canvas_draw_failed.to_string();
+        }
+    }
+    crate::i18n::resolve_agent_fail_reason(t, Some(reason))
 }
 
 /// True when the action is a mutating canvas tool (not get/export).
@@ -601,6 +631,7 @@ pub enum ChatCardAction {
     OpenDetail,
     TargetReply,
     Export,
+    Retry,
 }
 
 pub fn chat_agent_card(
@@ -613,9 +644,14 @@ pub fn chat_agent_card(
     t: &crate::i18n::UiStrings,
 ) -> ChatCardAction {
     let mut action = ChatCardAction::None;
+    let canvas_fail = canvas_draw_fail_chrome(info);
     let (state_label, color, step, max_steps, task, fail, is_blocked) = if let Some(a) = info {
         (
-            format!("{:?}", a.state),
+            if canvas_fail {
+                String::new()
+            } else {
+                format!("{:?}", a.state)
+            },
             state_color(&a.state),
             a.step,
             a.max_steps,
@@ -660,7 +696,9 @@ pub fn chat_agent_card(
         .show(ui, |ui| {
             ui.horizontal(|ui| {
                 icons::status_dot(ui, color);
-                ui.colored_label(color, RichText::new(state_label).strong());
+                if !state_label.is_empty() {
+                    ui.colored_label(color, RichText::new(state_label).strong());
+                }
                 let shown = if title.is_empty() {
                     agent_id
                 } else {
@@ -668,7 +706,7 @@ pub fn chat_agent_card(
                 };
                 ui.strong(truncate(shown, 64));
                 ui.weak(agent_id);
-                if max_steps > 0 {
+                if max_steps > 0 && !canvas_fail {
                     ui.label(format!("step {step}/{max_steps}"));
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -698,11 +736,20 @@ pub fn chat_agent_card(
             if !goal.is_empty() {
                 ui.label(RichText::new(truncate(goal, 120)).italics());
             }
-            if !task.is_empty() {
+            if !task.is_empty() && !canvas_fail {
                 ui.weak(format!("tâche : {}", truncate(&task, 80)));
             }
-            if let Some(reason) = fail {
-                ui.colored_label(Color32::from_rgb(220, 90, 90), truncate(&reason, 100));
+            if canvas_fail {
+                ui.colored_label(
+                    Color32::from_rgb(220, 90, 90),
+                    RichText::new(t.canvas_draw_failed).strong(),
+                );
+                if ui.add(egui::Button::new(t.canvas_draw_retry).small()).clicked() {
+                    action = ChatCardAction::Retry;
+                }
+            } else if let Some(reason) = fail {
+                let visible = resolve_visible_fail_reason(t, info, reason.as_str());
+                ui.colored_label(Color32::from_rgb(220, 90, 90), truncate(&visible, 100));
             }
         });
     action
@@ -1481,6 +1528,79 @@ Je vais répondre de manière naturelle"#;
         assert!(!t_en.canvas_draw_failed.contains("InternalError"));
         assert!(!t_fr.canvas_draw_failed.contains("digest"));
         assert!(!t_en.canvas_draw_failed.contains('{'));
+    }
+
+    #[test]
+    fn resolve_visible_fail_reason_hides_max_steps_for_canvas_draw() {
+        let t_en = crate::i18n::strings("en");
+        let t_fr = crate::i18n::strings("fr");
+        let info = AgentInfo {
+            agent_id: "agent-90".into(),
+            state: AgentState::Failed,
+            directive: "dessine un moulin".into(),
+            pid: None,
+            caps: vec![],
+            last_output: String::new(),
+            step: 64,
+            max_steps: 64,
+            current_task: None,
+            parent_id: None,
+            children: vec![],
+            tokens_used: 0,
+            skills: vec![],
+            tools: vec!["canvas.stroke".into(), "canvas.rect".into()],
+            mcp_servers: vec![],
+            fail_reason: Some("max_steps (64) atteint".into()),
+            session_id: None,
+            title: String::new(),
+            kind: AgentKind::Task,
+            display_name: None,
+            persona_id: None,
+            origin: None,
+        };
+        assert!(canvas_draw_fail_chrome(Some(&info)));
+        let raw = "max_steps (64) atteint";
+        let en = resolve_visible_fail_reason(&t_en, Some(&info), raw);
+        let fr = resolve_visible_fail_reason(&t_fr, Some(&info), raw);
+        assert_eq!(en, t_en.canvas_draw_failed);
+        assert_eq!(fr, t_fr.canvas_draw_failed);
+        assert!(!en.contains("max_steps"));
+        assert!(!fr.contains("atteint"));
+        assert!(!en.contains("Failed"));
+    }
+
+    #[test]
+    fn resolve_visible_fail_reason_hides_max_steps_for_other_agents() {
+        let t_en = crate::i18n::strings("en");
+        let info = AgentInfo {
+            agent_id: "agent-1".into(),
+            state: AgentState::Failed,
+            directive: "write a note".into(),
+            pid: None,
+            caps: vec![],
+            last_output: String::new(),
+            step: 64,
+            max_steps: 64,
+            current_task: None,
+            parent_id: None,
+            children: vec![],
+            tokens_used: 0,
+            skills: vec![],
+            tools: vec!["notes.create".into()],
+            mcp_servers: vec![],
+            fail_reason: Some("max_steps (64) atteint".into()),
+            session_id: None,
+            title: String::new(),
+            kind: AgentKind::Task,
+            display_name: None,
+            persona_id: None,
+            origin: None,
+        };
+        let raw = "max_steps (64) atteint";
+        let en = resolve_visible_fail_reason(&t_en, Some(&info), raw);
+        assert_eq!(en, t_en.agent_could_not_continue);
+        assert!(!en.contains("max_steps"));
+        assert!(!en.contains("atteint"));
     }
 
     #[test]
