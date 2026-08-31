@@ -112,11 +112,19 @@ fn agent_is_canvas_draw(info: &AgentInfo) -> bool {
 }
 
 /// Localized `fail_reason` for shared markdown export (no sentinels or token math).
-pub fn export_fail_reason(lang: &str, reason: &str, info: Option<&AgentInfo>) -> String {
+pub fn export_fail_reason(
+    lang: &str,
+    reason: &str,
+    info: Option<&AgentInfo>,
+    trace: Option<&AgentTrace>,
+) -> String {
     let en = lang.eq_ignore_ascii_case("en");
     let overflow = crate::context_budget::is_overflow_fail_reason(reason);
     let canvas_draw = info.is_some_and(|a| agent_is_canvas_draw(a) && !overflow);
     if canvas_draw {
+        if trace.is_some_and(crate::canvas_scene::trace_has_applied_canvas_traits) {
+            return String::new();
+        }
         return if en {
             "Couldn't draw.".into()
         } else {
@@ -182,8 +190,10 @@ pub fn export_trace_markdown(trace: &AgentTrace, info: Option<&AgentInfo>, lang:
         .as_deref()
         .filter(|s| !s.trim().is_empty())
     {
-        let visible = export_fail_reason(lang, reason, info);
-        out.push_str(&format!("**Fail reason:** {visible}\n\n"));
+        let visible = export_fail_reason(lang, reason, info, Some(trace));
+        if !visible.is_empty() {
+            out.push_str(&format!("**Fail reason:** {visible}\n\n"));
+        }
     }
 
     if trace.steps.is_empty() {
@@ -232,8 +242,10 @@ pub fn export_trace_markdown(trace: &AgentTrace, info: Option<&AgentInfo>, lang:
             out.push_str(&format!("### Child agent\n\n`{child}`\n\n"));
         }
         if let Some(reason) = rec.fail_reason.as_deref().filter(|s| !s.is_empty()) {
-            let visible = export_fail_reason(lang, reason, info);
-            out.push_str(&format!("**Step fail reason:** {visible}\n\n"));
+            let visible = export_fail_reason(lang, reason, info, Some(trace));
+            if !visible.is_empty() {
+                out.push_str(&format!("**Step fail reason:** {visible}\n\n"));
+            }
         }
         if let Some(reflection) = rec.reflection.as_deref().filter(|s| !s.is_empty()) {
             out.push_str("### Reflection\n\n");
@@ -628,6 +640,53 @@ mod tests {
         assert!(md_fr.contains("**Fail reason:** Impossible de dessiner."));
         assert!(!md_fr.contains("max_steps"));
         assert!(!md_fr.contains("atteint"));
+    }
+
+    #[test]
+    fn export_trace_markdown_canvas_draw_max_steps_muted_when_traits_applied() {
+        let raw = "max_steps (64) atteint";
+        let trace = AgentTrace {
+            agent_id: "agent-99".into(),
+            fail_reason: Some(raw.into()),
+            steps: vec![aos_proto::AgentStepRecord {
+                step: 1,
+                action: "canvas.spline".into(),
+                tool_result: "ok seq=1".into(),
+                ..Default::default()
+            }],
+            ..AgentTrace::default()
+        };
+        let info = AgentInfo {
+            agent_id: "agent-99".into(),
+            state: AgentState::Failed,
+            directive: "dessine un moulin sur une coline".into(),
+            pid: None,
+            caps: vec![],
+            last_output: String::new(),
+            step: 64,
+            max_steps: 64,
+            current_task: None,
+            parent_id: None,
+            children: vec![],
+            tokens_used: 0,
+            skills: vec![],
+            tools: vec!["canvas.spline".into(), "canvas.rect".into()],
+            mcp_servers: vec![],
+            fail_reason: Some(raw.into()),
+            session_id: None,
+            title: String::new(),
+            kind: AgentKind::Task,
+            display_name: None,
+            persona_id: None,
+            origin: None,
+        };
+        let md_en = export_trace_markdown(&trace, Some(&info), "en");
+        assert!(!md_en.contains("**Fail reason:**"));
+        assert!(!md_en.contains("Couldn't draw."));
+        assert!(!md_en.contains("max_steps"));
+        let md_fr = export_trace_markdown(&trace, Some(&info), "fr");
+        assert!(!md_fr.contains("**Fail reason:**"));
+        assert!(!md_fr.contains("Impossible de dessiner."));
     }
 
     #[test]

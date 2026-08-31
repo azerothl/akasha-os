@@ -2,8 +2,8 @@
 
 use aos_ipc::BusClient;
 use aos_proto::{
-    canvas_scene_digest, AgentStepRecord, CanvasAspect, CanvasExportRequest, CanvasGetRequest,
-    CanvasGetResponse, CanvasSeeingRequest, ModelInfo,
+    canvas_scene_digest, AgentStepRecord, AgentTrace, CanvasAspect, CanvasExportRequest,
+    CanvasGetRequest, CanvasGetResponse, CanvasOp, CanvasOpBody, CanvasSeeingRequest, ModelInfo,
 };
 use std::path::PathBuf;
 
@@ -170,6 +170,60 @@ pub async fn refresh_canvas_scene_after_op(
         );
     }
     CanvasSceneUpdate { text, png_path }
+}
+
+/// True when a canvas tool applies a visible trait (stroke/line/spline/rect/ellipse/fill/erase).
+/// Excludes read/style ops (`canvas.get`, `canvas.export`, `canvas.set_style`) and document resets.
+pub fn canvas_draw_tool_applies_trait(tool: &str) -> bool {
+    matches!(
+        tool,
+        "canvas.stroke"
+            | "canvas.line"
+            | "canvas.spline"
+            | "canvas.rect"
+            | "canvas.ellipse"
+            | "canvas.fill"
+            | "canvas.erase"
+    )
+}
+
+/// True when a committed canvas op body is a visible trait.
+pub fn canvas_op_body_applies_trait(body: &CanvasOpBody) -> bool {
+    matches!(
+        body,
+        CanvasOpBody::Stroke { .. }
+            | CanvasOpBody::Line { .. }
+            | CanvasOpBody::Spline { .. }
+            | CanvasOpBody::Rect { .. }
+            | CanvasOpBody::Ellipse { .. }
+            | CanvasOpBody::Fill { .. }
+            | CanvasOpBody::Erase { .. }
+    )
+}
+
+/// True when the session canvas document already has at least one trait op.
+pub fn session_canvas_has_traits(ops: &[CanvasOp]) -> bool {
+    ops.iter()
+        .any(|op| canvas_op_body_applies_trait(&op.body))
+}
+
+/// True when the agent trace records at least one successful trait apply.
+pub fn trace_has_applied_canvas_traits(trace: &AgentTrace) -> bool {
+    trace.steps.iter().any(|step| {
+        canvas_draw_tool_applies_trait(step.action.trim())
+            && canvas_op_succeeded(step.tool_result.trim())
+    })
+}
+
+/// True when canvas already has traits (session doc and/or agent trace).
+pub fn canvas_has_applied_traits(
+    session_ops: Option<&[CanvasOp]>,
+    trace: Option<&AgentTrace>,
+) -> bool {
+    if session_ops.is_some_and(session_canvas_has_traits) {
+        return true;
+    }
+    trace.is_some_and(trace_has_applied_canvas_traits)
 }
 
 /// True when the tool mutates the canvas document.
@@ -628,5 +682,46 @@ mod tests {
         assert!(content.contains("canvas.stroke"));
         assert!(content.contains("capture PNG jointe"));
         assert!(content.contains("PAS media.image.generate"));
+    }
+
+    #[test]
+    fn canvas_draw_tool_applies_trait_excludes_style_and_reads() {
+        assert!(canvas_draw_tool_applies_trait("canvas.spline"));
+        assert!(canvas_draw_tool_applies_trait("canvas.rect"));
+        assert!(!canvas_draw_tool_applies_trait("canvas.set_style"));
+        assert!(!canvas_draw_tool_applies_trait("canvas.get"));
+        assert!(!canvas_draw_tool_applies_trait("canvas.export"));
+    }
+
+    #[test]
+    fn trace_has_applied_canvas_traits_counts_successful_draw_ops() {
+        let trace = AgentTrace {
+            steps: vec![
+                AgentStepRecord {
+                    step: 1,
+                    action: "canvas.set_style".into(),
+                    tool_result: "ok pen=#000".into(),
+                    ..Default::default()
+                },
+                AgentStepRecord {
+                    step: 2,
+                    action: "canvas.rect".into(),
+                    tool_result: "ok seq=1".into(),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        assert!(trace_has_applied_canvas_traits(&trace));
+        let empty = AgentTrace {
+            steps: vec![AgentStepRecord {
+                step: 1,
+                action: "canvas.get".into(),
+                tool_result: "ok ops=0".into(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        assert!(!trace_has_applied_canvas_traits(&empty));
     }
 }
