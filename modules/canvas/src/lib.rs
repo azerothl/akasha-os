@@ -12,6 +12,7 @@ fn handle(tool: &str, args: &Value) -> Result<Value, String> {
         "canvas.stroke" => stroke(args),
         "canvas.line" => line(args),
         "canvas.spline" => spline(args),
+        "canvas.path" => path(args),
         "canvas.rect" => rect(args),
         "canvas.ellipse" => ellipse(args),
         "canvas.fill" => fill(args),
@@ -175,6 +176,78 @@ fn spline(args: &Value) -> Result<Value, String> {
         a.author_id.as_deref().unwrap_or("agent"),
         op,
     )
+}
+
+#[derive(Deserialize)]
+struct PathArgs {
+    session_id: String,
+    #[serde(default)]
+    author_id: Option<String>,
+    points: Vec<Point>,
+    #[serde(default)]
+    color: Option<String>,
+    #[serde(default)]
+    width: Option<f32>,
+    #[serde(default)]
+    fill: Option<bool>,
+    #[serde(default)]
+    closed: Option<bool>,
+}
+
+fn path_bbox(points: &[Point]) -> (f32, f32, f32, f32) {
+    let mut x0 = f32::INFINITY;
+    let mut y0 = f32::INFINITY;
+    let mut x1 = f32::NEG_INFINITY;
+    let mut y1 = f32::NEG_INFINITY;
+    for p in points {
+        x0 = x0.min(p.x);
+        y0 = y0.min(p.y);
+        x1 = x1.max(p.x);
+        y1 = y1.max(p.y);
+    }
+    (x0, y0, x1, y1)
+}
+
+fn path_success_message(points: &[Point], resp: &Value) -> String {
+    let seq = resp
+        .get("next_seq")
+        .and_then(|v| v.as_u64())
+        .or_else(|| resp.pointer("/applied/seq").and_then(|v| v.as_u64()))
+        .unwrap_or(0);
+    let (x0, y0, x1, y1) = path_bbox(points);
+    format!(
+        "ok seq={seq} path bbox=({x0:.3},{y0:.3})-({x1:.3},{y1:.3})"
+    )
+}
+
+fn path(args: &Value) -> Result<Value, String> {
+    let a: PathArgs = aos_module_sdk::parse_args(args)?;
+    if a.points.len() < 3 {
+        return Err("points: au moins 3 points requis pour path (silhouette)".into());
+    }
+    let points: Vec<Value> = a
+        .points
+        .iter()
+        .map(|p| json!({"x": p.x, "y": p.y}))
+        .collect();
+    let mut op = json!({
+        "kind": "path",
+        "points": points,
+        "fill": a.fill.unwrap_or(true),
+        "closed": a.closed.unwrap_or(true),
+    });
+    if let Some(c) = a.color {
+        op["color"] = json!(c);
+    }
+    if let Some(w) = a.width {
+        op["width"] = json!(w);
+    }
+    let resp = apply(
+        &a.session_id,
+        a.author_id.as_deref().unwrap_or("agent"),
+        op,
+    )?;
+    Ok(json!(path_success_message(&a.points, &resp)))
 }
 
 #[derive(Deserialize)]
@@ -557,6 +630,18 @@ mod tests {
             }
             Ok(_) => panic!("expected error"),
         }
+    }
+
+    #[test]
+    fn path_success_message_formats_bbox() {
+        let points = vec![
+            Point { x: 0.1, y: 0.7 },
+            Point { x: 0.5, y: 0.55 },
+            Point { x: 0.9, y: 0.7 },
+        ];
+        let resp = json!({"next_seq": 7});
+        let msg = path_success_message(&points, &resp);
+        assert_eq!(msg, "ok seq=7 path bbox=(0.100,0.550)-(0.900,0.700)");
     }
 
     #[test]

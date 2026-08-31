@@ -2666,6 +2666,18 @@ pub enum CanvasOpBody {
         #[serde(default)]
         width: f32,
     },
+    /// Contour lisse fermé ou ouvert — silhouette remplie (fill) ou trait lisse.
+    Path {
+        points: Vec<CanvasPoint>,
+        #[serde(default)]
+        color: String,
+        #[serde(default)]
+        width: f32,
+        #[serde(default = "default_canvas_path_fill")]
+        fill: bool,
+        #[serde(default = "default_canvas_path_closed")]
+        closed: bool,
+    },
     /// Remplissage par inondation à partir d'un point (coords 0..1).
     Fill {
         x: f32,
@@ -2692,6 +2704,14 @@ pub struct CanvasPenStyle {
 
 fn default_canvas_pen_width() -> f32 {
     0.015
+}
+
+fn default_canvas_path_fill() -> bool {
+    true
+}
+
+fn default_canvas_path_closed() -> bool {
+    true
 }
 
 impl Default for CanvasPenStyle {
@@ -2736,7 +2756,7 @@ fn canvas_op_collect_coords(body: &CanvasOpBody) -> Vec<f32> {
         CanvasOpBody::Line { p0, p1, .. } => {
             values.extend([p0.x, p0.y, p1.x, p1.y]);
         }
-        CanvasOpBody::Spline { points, .. } => {
+        CanvasOpBody::Spline { points, .. } | CanvasOpBody::Path { points, .. } => {
             for p in points {
                 values.push(p.x);
                 values.push(p.y);
@@ -2806,7 +2826,7 @@ pub fn normalize_canvas_op_coords(body: &mut CanvasOpBody) -> bool {
                 p1.y = clamp_canvas_unit(p1.y);
             }
         }
-        CanvasOpBody::Spline { points, .. } => {
+        CanvasOpBody::Spline { points, .. } | CanvasOpBody::Path { points, .. } => {
             for p in points {
                 if rescaled {
                     norm_point_scaled(p, scale);
@@ -2856,7 +2876,8 @@ pub fn resolve_canvas_op_style(body: &mut CanvasOpBody, pen: &CanvasPenStyle) {
     match body {
         CanvasOpBody::Stroke { color, width, .. }
         | CanvasOpBody::Line { color, width, .. }
-        | CanvasOpBody::Spline { color, width, .. } => {
+        | CanvasOpBody::Spline { color, width, .. }
+        | CanvasOpBody::Path { color, width, .. } => {
             if color.is_empty() {
                 *color = pen.color.clone();
             }
@@ -2944,7 +2965,7 @@ pub fn canvas_op_bbox(body: &CanvasOpBody) -> Option<CanvasBBox> {
             b.expand_point(p0.x, p0.y);
             b.expand_point(p1.x, p1.y);
         }
-        CanvasOpBody::Spline { points, .. } => {
+        CanvasOpBody::Spline { points, .. } | CanvasOpBody::Path { points, .. } => {
             if points.len() < 2 {
                 return None;
             }
@@ -2975,6 +2996,7 @@ fn canvas_op_kind_label(body: &CanvasOpBody) -> &'static str {
         CanvasOpBody::Erase { .. } => "erase",
         CanvasOpBody::Line { .. } => "line",
         CanvasOpBody::Spline { .. } => "spline",
+        CanvasOpBody::Path { .. } => "path",
         CanvasOpBody::Fill { .. } => "fill",
         CanvasOpBody::Clear => "clear",
         CanvasOpBody::Undo => "undo",
@@ -4302,6 +4324,24 @@ mod chat_session_room_tests {
         assert_eq!(
             serde_json::from_str::<CanvasOpBody>(&spline_json).unwrap(),
             spline
+        );
+
+        let path = CanvasOpBody::Path {
+            points: vec![
+                CanvasPoint { x: 0.1, y: 0.8 },
+                CanvasPoint { x: 0.5, y: 0.55 },
+                CanvasPoint { x: 0.9, y: 0.8 },
+            ],
+            color: "#8B7355".into(),
+            width: 0.0,
+            fill: true,
+            closed: true,
+        };
+        let path_json = serde_json::to_string(&path).unwrap();
+        assert!(path_json.contains("\"kind\":\"path\""));
+        assert_eq!(
+            serde_json::from_str::<CanvasOpBody>(&path_json).unwrap(),
+            path
         );
 
         let fill = CanvasOpBody::Fill {

@@ -1047,6 +1047,7 @@ mod tests {
         assert!(ids.iter().any(|x| x == "canvas.stroke"));
         assert!(ids.iter().any(|x| x == "canvas.line"));
         assert!(ids.iter().any(|x| x == "canvas.spline"));
+        assert!(ids.iter().any(|x| x == "canvas.path"));
         assert!(!ids.iter().any(|x| x == "canvas.fill"));
         assert!(ids.iter().any(|x| x == "canvas.get"));
         assert!(caps.iter().any(|c| c == "tool.invoke:canvas"));
