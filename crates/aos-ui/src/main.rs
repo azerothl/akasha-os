@@ -295,7 +295,7 @@ async fn refresh_models(bus: &BusClient, tx: &mpsc::Sender<UiEvent>) {
 async fn run_chat(bus: Arc<BusClient>, history: Vec<(String, String)>, tx: mpsc::Sender<UiEvent>) {
     let mut messages: Vec<ChatMessage> = vec![ChatMessage {
         role: "system".into(),
-        content: aos_proto::SYSTEM_ASSISTANT_PROMPT.into(),
+        content: aos_proto::format_system_assistant_prompt(&aos_proto::preview_version()),
     }];
     messages.extend(history.iter().map(|(r, c)| ChatMessage {
         role: r.clone(),

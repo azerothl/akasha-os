@@ -4,6 +4,8 @@
 pub struct UiStrings {
     pub preview_banner: &'static str,
     pub preview_tagline: &'static str,
+    /// First Chat thread system line — version only (chrome `VERSION`).
+    pub chat_thread_intro: &'static str,
     pub status_network_off: &'static str,
     pub status_network_on: &'static str,
     pub status_model_label: &'static str,
@@ -661,6 +663,7 @@ pub struct UiStrings {
 const EN: UiStrings = UiStrings {
     preview_banner: "Akasha OS Preview {} — running on Windows/Linux (scaffold). This is not the bootable seL4 OS yet.",
     preview_tagline: "Host app — not a bootable OS",
+    chat_thread_intro: "Akasha OS Preview {}.",
     status_network_off: "Offline",
     status_network_on: "Online",
     status_model_label: "Model",
@@ -1316,6 +1319,7 @@ const EN: UiStrings = UiStrings {
 const FR: UiStrings = UiStrings {
     preview_banner: "Akasha OS Preview {} — exécuté sur Windows/Linux (échafaudage). Ce n'est pas encore l'OS bootable seL4.",
     preview_tagline: "App hôte — pas un OS bootable",
+    chat_thread_intro: "Akasha OS Preview {}.",
     status_network_off: "Hors ligne",
     status_network_on: "En ligne",
     status_model_label: "Modèle",

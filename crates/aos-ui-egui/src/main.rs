@@ -2197,7 +2197,7 @@ impl UiApp {
             "{}\n\
              Sessions / Memory / Network opt-in.\n\
              Type /commands — use the side tabs.",
-            t.preview_banner.replace("{}", &version)
+            t.chat_thread_intro.replace("{}", &version)
         );
         Self {
             cmd_tx,

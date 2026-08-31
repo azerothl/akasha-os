@@ -43,7 +43,8 @@ use aos_proto::{
     SecretSetRequest, SetRoutingRequest, SkillInfo, SkillPassPendingOffer, SkillPassRequest,
     SystemMetrics, TokenEvent, WebBrowseRequest,
     WebBrowseResponse, WebSearchRequest, WebSearchResponse,
-    CHAT_DELEGATION_PROMPT, CHAT_SUPERVISOR_LOCK, SYSTEM_ASSISTANT_PROMPT, MigrateRequest, MigrateResponse,
+    CHAT_DELEGATION_PROMPT, CHAT_SUPERVISOR_LOCK, format_chat_supervisor_lock,
+    format_system_assistant_prompt, MigrateRequest, MigrateResponse,
 };
 use eframe::egui;
 use std::process::Stdio;
@@ -395,9 +396,9 @@ async fn handle_cmd(
                 .unwrap_or_else(|_| env!("CARGO_PKG_VERSION").to_string());
             let product = crate::product_context::chat_product_context(&version, &language);
 
-            let mut system = SYSTEM_ASSISTANT_PROMPT.to_string();
+            let mut system = format_system_assistant_prompt(&version);
             system.push_str(CHAT_DELEGATION_PROMPT);
-            system.push_str(CHAT_SUPERVISOR_LOCK);
+            system.push_str(&format_chat_supervisor_lock(&version));
             system.push_str("\n\n");
             system.push_str(&product);
             if !mem_block.trim().is_empty() {
@@ -1247,7 +1248,8 @@ async fn handle_cmd(
                 .filter(|a| matches!(a.state, AgentState::Running))
                 .count();
             let metrics: Option<SystemMetrics> = bus.call("model.metrics", &(), vec![]).await.ok();
-            let mut out = String::from("Akasha OS Preview — état\n");
+            let version = aos_proto::preview_version();
+            let mut out = format!("Akasha OS Preview {version} — état\n");
             out.push_str(&format!("services : {}\n", services.join(", ")));
             out.push_str(&format!(
                 "modèles : {loaded} chargés / {} au registry\n",
