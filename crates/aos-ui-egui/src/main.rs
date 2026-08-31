@@ -17,6 +17,7 @@ mod schedule_card;
 mod session_nav;
 mod tasks_panel;
 mod chat_ask;
+mod chat_bubble;
 mod chat_canvas;
 mod chat_media;
 mod chat_room;
@@ -42,6 +43,12 @@ mod slash;
 mod theme;
 
 use chat_ask::{agent_display_title, chat_has_open_ask, pending_ask_ids};
+use chat_bubble::{
+    chat_bubble_colors, chat_bubble_kind, chat_markdown_viewer, chat_message_frame,
+    chat_role_label, ChatBubbleKind,
+};
+#[cfg(test)]
+use chat_bubble::chat_bubble_max_width;
 use cmd::{AgentNotice, ChatLine, Cmd, Evt};
 use composer_layout::{
     chat_canvas_layout, chat_composer_reserve_height, chat_sessions_split, composer_field_width,
@@ -69,7 +76,7 @@ use aos_proto::{
 use aos_proto::decl_ui::ModuleUiResponse;
 use prefs::{load_preferences, save_preferences, Preferences, UI_SCALE_PRESETS};
 use eframe::egui;
-use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
+use egui_commonmark::CommonMarkCache;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -183,121 +190,6 @@ fn overflow_scroll_h(
         .show(ui, add_contents);
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ChatBubbleKind {
-    User,
-    Assistant,
-    RoomSpeaker,
-    System,
-}
-
-fn chat_bubble_kind(role: &str, speaker_id: Option<&str>, room_mode: bool) -> ChatBubbleKind {
-    match role {
-        "user" | "vous" => ChatBubbleKind::User,
-        "assistant" if room_mode && speaker_id.is_some() => ChatBubbleKind::RoomSpeaker,
-        "assistant" => ChatBubbleKind::Assistant,
-        _ => ChatBubbleKind::System,
-    }
-}
-
-fn chat_role_label(kind: ChatBubbleKind, t: &i18n::UiStrings, raw_role: &str) -> String {
-    match kind {
-        ChatBubbleKind::User => t.chat_you.to_string(),
-        ChatBubbleKind::Assistant => t.chat_assistant.to_string(),
-        ChatBubbleKind::RoomSpeaker => String::new(), // filled from roster
-        ChatBubbleKind::System => {
-            if raw_role == "système" || raw_role == "system" {
-                t.chat_system.to_string()
-            } else {
-                raw_role.to_string()
-            }
-        }
-    }
-}
-
-fn chat_bubble_colors(kind: ChatBubbleKind, dark: bool) -> (egui::Color32, egui::Color32, egui::Color32) {
-    // fill, stroke, role label — orrery-ish cyan / mute / paper without purple glow
-    match (kind, dark) {
-        (ChatBubbleKind::User, true) => (
-            egui::Color32::from_rgb(18, 42, 48),
-            egui::Color32::from_rgb(62, 224, 196),
-            egui::Color32::from_rgb(120, 230, 210),
-        ),
-        (ChatBubbleKind::User, false) => (
-            egui::Color32::from_rgb(220, 242, 238),
-            egui::Color32::from_rgb(20, 140, 120),
-            egui::Color32::from_rgb(10, 100, 90),
-        ),
-        (ChatBubbleKind::Assistant, true) => (
-            egui::Color32::from_rgb(28, 32, 40),
-            egui::Color32::from_rgb(90, 100, 120),
-            egui::Color32::from_rgb(180, 190, 210),
-        ),
-        (ChatBubbleKind::Assistant, false) => (
-            egui::Color32::from_rgb(236, 238, 244),
-            egui::Color32::from_rgb(120, 128, 148),
-            egui::Color32::from_rgb(50, 56, 72),
-        ),
-        (ChatBubbleKind::RoomSpeaker, true) => (
-            egui::Color32::from_rgb(28, 32, 40),
-            egui::Color32::from_rgb(90, 100, 120),
-            egui::Color32::from_rgb(180, 190, 210),
-        ),
-        (ChatBubbleKind::RoomSpeaker, false) => (
-            egui::Color32::from_rgb(236, 238, 244),
-            egui::Color32::from_rgb(120, 128, 148),
-            egui::Color32::from_rgb(50, 56, 72),
-        ),
-        (ChatBubbleKind::System, true) => (
-            egui::Color32::from_rgb(22, 22, 26),
-            egui::Color32::from_rgb(70, 70, 78),
-            egui::Color32::from_rgb(150, 150, 160),
-        ),
-        (ChatBubbleKind::System, false) => (
-            egui::Color32::from_rgb(242, 242, 244),
-            egui::Color32::from_rgb(170, 170, 178),
-            egui::Color32::from_rgb(100, 100, 110),
-        ),
-    }
-}
-
-/// Role-colored message frame. User sits on the right; assistant/system on the left.
-fn chat_message_frame(
-    ui: &mut egui::Ui,
-    kind: ChatBubbleKind,
-    color_override: Option<(egui::Color32, egui::Color32)>,
-    add_contents: impl FnOnce(&mut egui::Ui),
-) {
-    let dark = ui.visuals().dark_mode;
-    let (fill, stroke) = color_override.unwrap_or_else(|| {
-        let (f, s, _) = chat_bubble_colors(kind, dark);
-        (f, s)
-    });
-    let avail = ui.available_width();
-    let max_w = chat_bubble_max_width(avail, kind);
-
-    let layout = match kind {
-        ChatBubbleKind::User => egui::Layout::right_to_left(egui::Align::Min),
-        _ => egui::Layout::left_to_right(egui::Align::Min),
-    };
-
-    ui.with_layout(layout, |ui| {
-        ui.set_max_width(max_w);
-        ui.set_width(max_w);
-        egui::Frame::NONE
-            .fill(fill)
-            .stroke(egui::Stroke::new(1.0_f32, stroke))
-            .corner_radius(6.0)
-            .inner_margin(egui::Margin::symmetric(10, 8))
-            .show(ui, |ui| {
-                ui.set_max_width(max_w - 8.0);
-                ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
-                    add_contents(ui);
-                });
-            });
-    });
-    ui.add_space(6.0);
-}
 
 fn designer_shot_mode() -> bool {
     matches!(
@@ -741,24 +633,6 @@ fn preview_min_inner_width(t: &i18n::UiStrings) -> f32 {
     let canvas_split_min = 180.0 + CHAT_SPLIT_GAP + 200.0;
     let main_min = composer.max(session_bar).max(canvas_split_min);
     LEFT_NAV_W + CHAT_SIDE_MIN_W + CHAT_SPLIT_GAP + main_min + CHAT_MAIN_MARGIN
-}
-
-fn chat_markdown_viewer(ui: &egui::Ui) -> CommonMarkViewer<'static> {
-    let w = ui.available_width().max(1.0) as usize;
-    CommonMarkViewer::new().default_width(Some(w))
-}
-
-fn chat_bubble_max_width(available_w: f32, kind: ChatBubbleKind) -> f32 {
-    if available_w <= 0.0 {
-        return 0.0;
-    }
-    let fraction = match kind {
-        ChatBubbleKind::User => 0.88,
-        ChatBubbleKind::Assistant | ChatBubbleKind::RoomSpeaker => 0.96,
-        ChatBubbleKind::System => 0.92,
-    };
-    let w = (available_w * fraction).min(available_w);
-    w.max(available_w.min(48.0))
 }
 
 fn chat_action_is_self_tool(action: &str) -> bool {
