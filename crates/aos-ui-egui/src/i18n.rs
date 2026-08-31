@@ -4,6 +4,8 @@
 pub struct UiStrings {
     pub preview_banner: &'static str,
     pub preview_tagline: &'static str,
+    /// First Chat thread system line — version only (chrome `VERSION`).
+    pub chat_thread_intro: &'static str,
     pub status_network_off: &'static str,
     pub status_network_on: &'static str,
     pub status_model_label: &'static str,
@@ -659,8 +661,9 @@ pub struct UiStrings {
 }
 
 const EN: UiStrings = UiStrings {
-    preview_banner: "Akasha OS Preview {} — host app on Windows/Linux.",
-    preview_tagline: "host app",
+    preview_banner: "Akasha OS Preview {} — running on Windows/Linux (scaffold). This is not the bootable seL4 OS yet.",
+    preview_tagline: "Host app — not a bootable OS",
+    chat_thread_intro: "Akasha OS Preview {}.",
     status_network_off: "Offline",
     status_network_on: "Online",
     status_model_label: "Model",
@@ -720,7 +723,7 @@ const EN: UiStrings = UiStrings {
     tutorial_title: "Tutorial — Akasha OS Preview",
     step_of: "Step {} / 3",
     welcome: "Welcome",
-    welcome_body1: "You are testing an installable Preview (Win/Linux host + NVIDIA).",
+    welcome_body1: "You are testing an installable Preview (Win/Linux host + NVIDIA), not a bootable microkernel.",
     welcome_body2: "On first launch, GGUF models are downloaded into share/models/ if needed.",
     preferences: "Preferences",
     language: "Language",
@@ -1314,8 +1317,9 @@ const EN: UiStrings = UiStrings {
 };
 
 const FR: UiStrings = UiStrings {
-    preview_banner: "Akasha OS Preview {} — app hôte sur Windows/Linux.",
-    preview_tagline: "app hôte",
+    preview_banner: "Akasha OS Preview {} — exécuté sur Windows/Linux (échafaudage). Ce n'est pas encore l'OS bootable seL4.",
+    preview_tagline: "App hôte — pas un OS bootable",
+    chat_thread_intro: "Akasha OS Preview {}.",
     status_network_off: "Hors ligne",
     status_network_on: "En ligne",
     status_model_label: "Modèle",
@@ -1375,7 +1379,7 @@ const FR: UiStrings = UiStrings {
     tutorial_title: "Tutoriel — Akasha OS Preview",
     step_of: "Étape {} / 3",
     welcome: "Bienvenue",
-    welcome_body1: "Vous testez une Preview installable (hôte Win/Linux + NVIDIA).",
+    welcome_body1: "Vous testez une Preview installable (hôte Win/Linux + NVIDIA), pas un microkernel bootable.",
     welcome_body2: "Au premier lancement, les modèles GGUF sont téléchargés dans share/models/ si besoin.",
     preferences: "Préférences",
     language: "Langue",

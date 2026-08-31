@@ -1411,6 +1411,15 @@ Verrou affichage (réponse visible à l'utilisateur) :
 - Une question ordinaire → réponse ordinaire (ex. traduction, culture, vie courante) même si aucun extrait RAG ou index utilisateur n'a été injecté.
 - UI / Canvas / nouveautés Preview : mots humains seulement (panneau vectoriel, onglet Créer, dessin au trait) ; les index consultatifs et le routage interne restent en coulisse — n'en parle pas.";
 
+/// Chat-only supervisor lock with running Preview version (chrome `VERSION`).
+pub fn format_chat_supervisor_lock(running_version: &str) -> String {
+    format!(
+        "{CHAT_SUPERVISOR_LOCK}\n\
+         - Ne mentionne JAMAIS : bootable, OS bootable, microkernel bootable, seL4 bootable, image bootable, « pas encore bootable ».\n\
+         - Version Preview installée : cite UNIQUEMENT {running_version} — jamais un autre numéro x.y.z (ex. 0.2.0, 0.13.0, 0.15.0) même s'il figure dans les extraits RAG ou l'historique changelog."
+    )
+}
+
 /// Intention chat : créer / installer un module ou une skill (pas « c'est quoi »).
 pub fn chat_user_wants_module_authoring(text: &str) -> bool {
     let lower = text.to_lowercase();
@@ -1797,16 +1806,17 @@ mod chat_delegation_tests {
 #[cfg(test)]
 mod preview_prompt_tests {
     use super::{
-        format_preview_surface_brief, format_system_assistant_prompt, CHAT_DELEGATION_PROMPT,
-        CHAT_SUPERVISOR_LOCK, PREVIEW_SURFACE_BRIEF, SYSTEM_ASSISTANT_PROMPT,
+        format_chat_supervisor_lock, format_preview_surface_brief, format_system_assistant_prompt,
+        CHAT_DELEGATION_PROMPT, CHAT_SUPERVISOR_LOCK, PREVIEW_SURFACE_BRIEF, SYSTEM_ASSISTANT_PROMPT,
     };
 
     fn chat_system_stack() -> String {
         let version = "0.0.0";
         format!(
-            "{}\n{}\n{CHAT_DELEGATION_PROMPT}\n{CHAT_SUPERVISOR_LOCK}",
+            "{}\n{}\n{CHAT_DELEGATION_PROMPT}\n{}",
             format_system_assistant_prompt(version),
             format_preview_surface_brief(version),
+            format_chat_supervisor_lock(version),
         )
     }
 
@@ -1877,6 +1887,7 @@ mod preview_prompt_tests {
 
     #[test]
     fn chat_supervisor_lock_bans_meta_in_visible_reply() {
+        let lock = format_chat_supervisor_lock("0.15.1");
         for term in [
             "RAG",
             "JSON",
@@ -1887,12 +1898,20 @@ mod preview_prompt_tests {
             "hors des sources",
             "pas dans la doc",
             "absent des extraits",
+            "bootable",
+            "0.2.0",
+            "0.13.0",
+            "0.15.0",
         ] {
             assert!(
-                CHAT_SUPERVISOR_LOCK.contains(term),
+                lock.contains(term),
                 "supervisor lock must explicitly forbid visible mention of {term}"
             );
         }
+        assert!(
+            lock.contains("0.15.1"),
+            "supervisor lock must name the running chrome version"
+        );
         assert!(
             CHAT_SUPERVISOR_LOCK.contains("Ne mentionne JAMAIS"),
             "supervisor lock must forbid meta leakage in visible replies"
