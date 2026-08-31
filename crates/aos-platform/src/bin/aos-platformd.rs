@@ -2431,6 +2431,40 @@ async fn main() {
     }
     {
         let s = sub.clone();
+        svc.on("module.reload", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<ModuleIdRequest>() {
+                    Ok(req) => {
+                        let result = {
+                            let mut modules = s.modules.lock().unwrap();
+                            modules.reload_installed(&req.module)
+                        };
+                        match result {
+                            Ok(info) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &info).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::InternalError,
+                                        &e.to_string(),
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
         svc.on("module.catalogue", move |ctx| {
             let s = s.clone();
             async move {

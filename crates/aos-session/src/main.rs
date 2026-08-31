@@ -251,7 +251,7 @@ fn main() {
         }
     }
 
-    ensure_layout(&home);
+    let synced_modules = ensure_layout(&home);
     bootstrap::ensure_skills(&home);
     bootstrap::ensure_mcp_stub(&home);
 
@@ -467,6 +467,7 @@ fn main() {
             }
             continue;
         }
+        reload_synced_packaged_modules(&synced_modules);
         eprintln!("[aos-session] services OK");
         if first_ui {
             apply_trust_default(&home);
@@ -808,7 +809,8 @@ fn bin_path(home: &Path, name: &str) -> PathBuf {
     PathBuf::from(exe)
 }
 
-fn ensure_layout(home: &Path) {
+fn ensure_layout(home: &Path) -> Vec<String> {
+    let mut synced = Vec::new();
     for d in [
         "var/audit",
         "var/storage",
@@ -890,6 +892,7 @@ fn ensure_layout(home: &Path) {
     let notes_installed = home.join("var/modules/notes");
     if notes_share.exists() {
         if bootstrap::sync_packaged_module(&notes_share, &notes_installed) {
+            synced.push("notes".into());
             let reg = home.join("var/modules/registry.yaml");
             if !reg.exists() {
                 let _ = fs::write(
@@ -913,6 +916,7 @@ fn ensure_layout(home: &Path) {
     let tasks_installed = home.join("var/modules/tasks");
     if tasks_share.exists() {
         if bootstrap::sync_packaged_module(&tasks_share, &tasks_installed) {
+            synced.push("tasks".into());
             let reg = home.join("var/modules/registry.yaml");
             if let Ok(mut raw) = fs::read_to_string(&reg) {
                 if !raw.contains("name: tasks") {
@@ -947,6 +951,7 @@ fn ensure_layout(home: &Path) {
     let canvas_installed = home.join("var/modules/canvas");
     if canvas_share.exists() {
         if bootstrap::sync_packaged_module(&canvas_share, &canvas_installed) {
+            synced.push("canvas".into());
             let reg = home.join("var/modules/registry.yaml");
             if let Ok(mut raw) = fs::read_to_string(&reg) {
                 if !raw.contains("name: canvas") {
@@ -1003,6 +1008,44 @@ fn ensure_layout(home: &Path) {
         };
         let _ = fs::write(onboard, serde_json::to_string_pretty(&state).unwrap());
     }
+    synced
+}
+
+fn reload_synced_packaged_modules(synced: &[String]) {
+    if synced.is_empty() {
+        return;
+    }
+    let rt = match tokio::runtime::Runtime::new() {
+        Ok(r) => r,
+        Err(_) => return,
+    };
+    rt.block_on(async {
+        let Ok(bus) = BusClient::connect(BUS_ADDR, "session-module-reload").await else {
+            return;
+        };
+        for name in synced {
+            match bus
+                .call::<aos_proto::ModuleIdRequest, aos_proto::ModuleInfo>(
+                    "module.reload",
+                    &aos_proto::ModuleIdRequest {
+                        module: name.clone(),
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(info) => {
+                    eprintln!(
+                        "[aos-session] module.reload {name} OK (tools={})",
+                        info.tools.len()
+                    );
+                }
+                Err(e) => {
+                    eprintln!("[aos-session] module.reload {name} : {e}");
+                }
+            }
+        }
+    });
 }
 
 fn write_runtime_configs(home: &Path) {

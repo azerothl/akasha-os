@@ -386,6 +386,53 @@ impl ModuleRuntime {
             .collect()
     }
 
+    /// Re-read manifest + WASM from disk and refresh `verified_tools`.
+    /// Used after `share/modules/*.aospkg` is synced into `var/modules/<name>`.
+    pub fn reload_installed(&mut self, name: &str) -> Result<ModuleInfo, ModuleError> {
+        let (mdir, granted_caps, quarantined) = {
+            let m = self
+                .installed
+                .get(name)
+                .ok_or_else(|| ModuleError::NotFound(name.into()))?;
+            (m.dir.clone(), m.granted_caps.clone(), m.quarantined)
+        };
+        let manifest: ModuleManifest =
+            serde_yaml::from_str(&std::fs::read_to_string(mdir.join("manifest.yaml"))?)
+                .map_err(|e| ModuleError::BadManifest(e.to_string()))?;
+        let wasm = std::fs::read(mdir.join("module.wasm"))?;
+        let hash = sha256_hex(&wasm);
+        if manifest.hash != hash && manifest.hash != format!("sha256:{hash}") {
+            return Err(ModuleError::HashMismatch);
+        }
+        let compiled = self.compile(&mdir.join("module.wasm"))?;
+        let verified_tools = self.verify_manifest_tools(
+            &manifest,
+            name,
+            &mdir,
+            &granted_caps,
+            &compiled,
+        );
+        let info = module_info_from_installed(
+            &manifest,
+            &verified_tools,
+            granted_caps.clone(),
+            quarantined,
+            Some(&mdir),
+        );
+        self.installed.insert(
+            name.to_string(),
+            InstalledModule {
+                manifest,
+                granted_caps,
+                quarantined,
+                verified_tools,
+                dir: mdir,
+                compiled,
+            },
+        );
+        Ok(info)
+    }
+
     /// `module.ui` — charge et valide le document UI déclaratif (E15).
     pub fn load_ui(&self, name: &str) -> Result<ModuleUiResponse, ModuleError> {
         let m = self
@@ -521,7 +568,7 @@ impl ModuleRuntime {
         compiled: &wasmtime::Module,
         tool: &str,
     ) -> bool {
-        let probe_args = serde_json::json!({"session_id": "__probe__"});
+        let probe_args = probe_args_for_tool(tool);
         match self.guest_invoke_compiled(
             module_name,
             module_dir,
@@ -729,6 +776,42 @@ fn copy_dir(src: &Path, dst: &Path) -> std::io::Result<()> {
         }
     }
     Ok(())
+}
+
+/// Minimal args for WASM tool probes (`verify_manifest_tools`).
+pub fn probe_args_for_tool(tool: &str) -> serde_json::Value {
+    match tool {
+        "canvas.path" | "canvas.stroke" | "canvas.spline" => serde_json::json!({
+            "session_id": "__probe__",
+            "points": [
+                {"x": 0.1, "y": 0.1},
+                {"x": 0.2, "y": 0.1},
+                {"x": 0.15, "y": 0.2}
+            ]
+        }),
+        "canvas.line" => serde_json::json!({
+            "session_id": "__probe__",
+            "p0": {"x": 0.1, "y": 0.1},
+            "p1": {"x": 0.2, "y": 0.2}
+        }),
+        "canvas.rect" | "canvas.ellipse" => serde_json::json!({
+            "session_id": "__probe__",
+            "x": 0.1,
+            "y": 0.1,
+            "w": 0.1,
+            "h": 0.1
+        }),
+        "canvas.fill" => serde_json::json!({
+            "session_id": "__probe__",
+            "x": 0.5,
+            "y": 0.5
+        }),
+        "canvas.erase" => serde_json::json!({
+            "session_id": "__probe__",
+            "points": [{"x": 0.1, "y": 0.1}, {"x": 0.2, "y": 0.2}]
+        }),
+        _ => serde_json::json!({"session_id": "__probe__"}),
+    }
 }
 
 #[cfg(test)]
@@ -1312,6 +1395,89 @@ min_os_api: 1
         );
 
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn reload_installed_refreshes_verified_tools_after_wasm_swap() {
+        struct CanvasHost;
+        impl HostServices for CanvasHost {
+            fn call(
+                &self,
+                _ctx: &HostCallCtx,
+                _service: &str,
+                _args: serde_json::Value,
+            ) -> Result<serde_json::Value, String> {
+                Ok(serde_json::json!({}))
+            }
+        }
+
+        let share_pkg = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../share/modules/canvas.aospkg");
+        if !share_pkg.join("module.wasm").is_file() {
+            eprintln!("skip reload test: packaged canvas missing");
+            return;
+        }
+
+        let base = tmpbase("canvas-reload-path");
+        let mut rt = ModuleRuntime::open(base.join("modules"), Arc::new(CanvasHost)).unwrap();
+        let info = rt
+            .install(
+                &share_pkg,
+                Some(vec!["fs.write:/downloads/**".into()]),
+            )
+            .expect("install packaged canvas");
+        assert!(
+            info.tools.iter().any(|t| t == "canvas.path"),
+            "initial install must export canvas.path: {:?}",
+            info.tools
+        );
+
+        let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let output = std::process::Command::new("git")
+            .args([
+                "show",
+                "28e44cc:share/modules/canvas.aospkg/module.wasm",
+            ])
+            .current_dir(&repo)
+            .output()
+            .expect("git show legacy canvas.wasm");
+        if !output.status.success() {
+            eprintln!("skip reload test: legacy wasm unavailable");
+            let _ = std::fs::remove_dir_all(&base);
+            return;
+        }
+
+        let dest = base.join("modules/canvas");
+        std::fs::write(dest.join("module.wasm"), &output.stdout).unwrap();
+        let old_hash = sha256_hex(&output.stdout);
+        let manifest = format!(
+            "name: canvas\nversion: 1.0.0\nhash: {old_hash}\npermissions:\n  required_caps:\n    - fs.write:/downloads/**\ntools:\n  - name: canvas.path\n    description: path\n    input_schema:\n      type: object\n      properties:\n        session_id: {{ type: string }}\n        points: {{ type: array }}\n      required: [session_id, points]\nmin_os_api: 1\n"
+        );
+        std::fs::write(dest.join("manifest.yaml"), manifest).unwrap();
+
+        let reloaded = rt.reload_installed("canvas").expect("reload canvas");
+        assert!(
+            !reloaded.tools.iter().any(|t| t == "canvas.path"),
+            "legacy wasm on disk must drop canvas.path after reload: {:?}",
+            reloaded.tools
+        );
+
+        copy_dir_all(&share_pkg, &dest);
+        let reloaded = rt.reload_installed("canvas").expect("reload canvas again");
+        assert!(
+            reloaded.tools.iter().any(|t| t == "canvas.path"),
+            "packaged wasm on disk must restore canvas.path after reload: {:?}",
+            reloaded.tools
+        );
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn probe_args_for_path_includes_three_points() {
+        let args = probe_args_for_tool("canvas.path");
+        assert_eq!(args["session_id"], "__probe__");
+        assert!(args["points"].as_array().is_some_and(|p| p.len() >= 3));
     }
 }
 

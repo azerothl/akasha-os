@@ -31,7 +31,10 @@ pub fn canvas_critic_system_prompt() -> &'static str {
      ou seulement des arches / traits empilés au même endroit ? \
      Un trait vectoriel ne compte comme progrès que s'il rapproche visuellement du goal ; \
      ne valide pas des répétitions identiques. Ne demande jamais media.image.generate. \
-     En 2 phrases en français : ce que tu vois vs le goal, et quoi tracer ensuite (ou arrêter si c'est bon). \
+     Ne demande jamais de tout effacer ni de recommencer le dessin (pas canvas.clear, pas « refais le moulin ») : \
+     conserve ce qui est déjà sur le canvas et indique seulement la pièce manquante à ajouter \
+     (ex. colline, corps, toit, voiles) — une silhouette canvas.path remplie par partie, pas une pile de splines. \
+     En 2 phrases en français : ce que tu vois vs le goal, et quelle pièce unique tracer ensuite (ou arrêter si c'est bon). \
      Réponds directement, sans balises <think> ni monologue Thinking Process."
 }
 
@@ -71,7 +74,9 @@ pub fn canvas_reflect_user_content(
         )
     } else {
         format!(
-            "{base}\n[canvas ops récentes — capture PNG jointe : regarde si ça ressemble au goal, PAS media.image.generate]\n{}",
+            "{base}\n[canvas ops récentes — capture PNG jointe : regarde si ça ressemble au goal, PAS media.image.generate]\n\
+             Politique : conserve les ops déjà sur le canvas ; ajoute seulement la pièce manquante (colline, corps, toit, voiles…) — \
+             jamais canvas.clear ni redessiner la tour/moulin depuis zéro ; préfère un canvas.path rempli par partie.\n{}",
             canvas_lines.join("\n")
         )
     }
@@ -116,6 +121,8 @@ pub fn canvas_scene_prompt_block(digest: &str) -> String {
          Digest compact (compteurs + bbox par seq, pas le JSON brut). \
          Commence par `canvas.get` si tu dessines ; état au début du tour :\n\
          ```\n{digest}\n```\n\
+         Poursuis le dessin existant : ajoute la pièce manquante seulement — ne redémarre pas (pas canvas.clear). \
+         Silhouettes : un `canvas.path` rempli par partie lisible (colline, corps, toit, voiles), pas des dizaines de splines/rects empilés. \
          Après chaque op canvas réussie : une capture PNG du canvas actuel est jointe \
          au tour suivant (regarde l'image, pas seulement le digest). \
          Placement : coords 0..1 max=1.0 (pas de pixels). \
@@ -583,6 +590,8 @@ mod tests {
         let prompt = canvas_critic_system_prompt();
         assert!(prompt.contains("REGARDE l'image"));
         assert!(prompt.contains("ressemble"));
+        assert!(prompt.contains("canvas.clear"));
+        assert!(prompt.contains("pièce manquante"));
         assert!(!prompt.contains("comptent comme progrès dessin"));
     }
 
@@ -698,6 +707,8 @@ mod tests {
         assert!(content.contains("canvas.stroke"));
         assert!(content.contains("capture PNG jointe"));
         assert!(content.contains("PAS media.image.generate"));
+        assert!(content.contains("pièce manquante"));
+        assert!(content.contains("jamais canvas.clear"));
     }
 
     #[test]

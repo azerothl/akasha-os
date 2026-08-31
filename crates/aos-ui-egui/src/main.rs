@@ -9410,6 +9410,34 @@ mod delegate_tests {
         )
         .is_none());
     }
+
+    #[test]
+    fn delegate_kit_includes_canvas_path_when_module_exports_it() {
+        let exported = vec![
+            "canvas.path".into(),
+            "canvas.stroke".into(),
+            "canvas.get".into(),
+        ];
+        let (_, tools) = chat_delegate_kit("dessine un moulin", true, true, &exported);
+        assert!(tools.iter().any(|t| t == "canvas.path"));
+        let brief = chat_canvas::canvas_agent_brief("dessine un moulin", ASPECT, &exported);
+        assert!(brief.contains("canvas.path"));
+        assert!(brief.contains("pièce manquante"));
+    }
+
+    #[test]
+    fn delegate_kit_omits_canvas_path_when_module_does_not_export_it() {
+        let exported = vec![
+            "canvas.stroke".into(),
+            "canvas.spline".into(),
+            "canvas.rect".into(),
+            "canvas.get".into(),
+        ];
+        let (_, tools) = chat_delegate_kit("dessine un moulin", true, true, &exported);
+        assert!(!tools.iter().any(|t| t == "canvas.path"));
+        let brief = chat_canvas::canvas_agent_brief("dessine un moulin", ASPECT, &exported);
+        assert!(!brief.contains("canvas.path"));
+    }
 }
 
 #[cfg(test)]
