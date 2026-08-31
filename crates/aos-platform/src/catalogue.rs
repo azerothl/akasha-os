@@ -228,4 +228,28 @@ mod tests {
         let cat = SignedCatalogue::load(&yaml_path).unwrap();
         assert!(cat.inner.signature_ok);
     }
+
+    #[test]
+    fn catalogue_canvas_hash_matches_packaged_wasm() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let wasm = std::fs::read(root.join("share/modules/canvas.aospkg/module.wasm"))
+            .expect("canvas module.wasm");
+        let mut hasher = Sha256::new();
+        hasher.update(&wasm);
+        let got = format!("{:x}", hasher.finalize());
+        let yaml = std::fs::read_to_string(root.join("share/modules/catalogue.yaml")).unwrap();
+        let want = format!("sha256:{got}");
+        assert!(
+            yaml.contains(&want),
+            "catalogue.yaml canvas hash must match packaged wasm ({want})"
+        );
+        let manifest =
+            std::fs::read_to_string(root.join("share/modules/canvas.aospkg/manifest.yaml"))
+                .unwrap();
+        assert!(
+            manifest.contains(&format!("hash: {got}"))
+                || manifest.contains(&format!("hash: sha256:{got}")),
+            "manifest.yaml hash must match packaged wasm"
+        );
+    }
 }

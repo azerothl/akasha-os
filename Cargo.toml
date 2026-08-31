@@ -12,6 +12,7 @@ exclude = [
     # ne jamais lier `host_call` côté hôte).
     "modules/notes",
     "modules/tasks",
+    "modules/canvas",
     "modules/ext-rt",
     "modules/sdk",
 ]
