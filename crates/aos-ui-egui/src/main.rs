@@ -577,6 +577,9 @@ fn agent_completion_chat_text(
     trace: Option<&aos_proto::AgentTrace>,
 ) -> String {
     let title = ag.display_title();
+    if agent_panel::canvas_draw_failure_muted(Some(ag), session_ops, trace) {
+        return String::new();
+    }
     match ag.state {
         AgentState::Done => {
             let out = ag.last_output.trim();
@@ -590,11 +593,6 @@ fn agent_completion_chat_text(
         AgentState::Failed => {
             if agent_panel::canvas_draw_fail_chrome(Some(ag), session_ops, trace) {
                 return t.canvas_draw_failed.to_string();
-            }
-            if ag.tools.iter().any(|t| t.starts_with("canvas."))
-                && aos_agent::canvas_scene::canvas_has_applied_traits(session_ops, trace)
-            {
-                return format!("Agent « {title} » terminé.");
             }
             if ag.fail_reason.as_deref() == Some(aos_agent::actions::THREAD_FAIL_COULD_NOT_ACT) {
                 return i18n::agent_could_not_act_message(t);
@@ -4430,6 +4428,16 @@ impl eframe::App for UiApp {
                                     } else if !seeding
                                         && !self.document_prep_agents.contains_key(&ag.agent_id)
                                     {
+                                        if content.is_empty()
+                                            && !agent_panel::canvas_draw_step_cap_continue(
+                                                Some(ag),
+                                                session_ops,
+                                                trace,
+                                            )
+                                        {
+                                            self.agent_notified.insert(ag.agent_id.clone());
+                                            continue;
+                                        }
                                         self.chat.push(ChatLine {
                                             role: "assistant".into(),
                                             text: content,
@@ -4454,7 +4462,14 @@ impl eframe::App for UiApp {
                                         &self.canvas_panel.ops,
                                     );
                                     let trace = self.agent_traces.get(&ag.agent_id);
-                                    let summary = match ag.state {
+                                    let summary = if agent_panel::canvas_draw_failure_muted(
+                                        Some(ag),
+                                        session_ops,
+                                        trace,
+                                    ) {
+                                        String::new()
+                                    } else {
+                                        match ag.state {
                                         AgentState::Done => format!("{} terminé", ag.display_title()),
                                         AgentState::Failed => {
                                             if agent_panel::canvas_draw_fail_chrome(
@@ -4463,13 +4478,6 @@ impl eframe::App for UiApp {
                                                 trace,
                                             ) {
                                                 t.canvas_draw_failed.to_string()
-                                            } else if ag.tools.iter().any(|t| t.starts_with("canvas."))
-                                                && aos_agent::canvas_scene::canvas_has_applied_traits(
-                                                    session_ops,
-                                                    trace,
-                                                )
-                                            {
-                                                format!("{} terminé", ag.display_title())
                                             } else if ag.fail_reason.as_deref()
                                                 == Some(aos_agent::actions::THREAD_FAIL_COULD_NOT_ACT)
                                             {
@@ -4496,7 +4504,12 @@ impl eframe::App for UiApp {
                                         }
                                         AgentState::Killed => format!("{} arrêté", ag.display_title()),
                                         _ => format!("{} terminé", ag.display_title()),
+                                    }
                                     };
+                                    if summary.is_empty() {
+                                        self.agent_notified.insert(ag.agent_id.clone());
+                                        continue;
+                                    }
                                     self.agent_notified.insert(ag.agent_id.clone());
                                     self.agent_notices.push(AgentNotice {
                                         agent_id: ag.agent_id.clone(),
@@ -6027,6 +6040,11 @@ impl UiApp {
                                             });
                                         }
                                         agent_panel::ChatCardAction::Retry => {
+                                            let _ = self.cmd_tx.send(Cmd::AgentRetry {
+                                                id: agent_id.clone(),
+                                            });
+                                        }
+                                        agent_panel::ChatCardAction::Continue => {
                                             let _ = self.cmd_tx.send(Cmd::AgentRetry {
                                                 id: agent_id.clone(),
                                             });
@@ -7950,6 +7968,9 @@ impl UiApp {
                     if actions.retry {
                         let _ = self.cmd_tx.send(Cmd::AgentRetry { id: id.clone() });
                     }
+                    if actions.continue_canvas {
+                        let _ = self.cmd_tx.send(Cmd::AgentRetry { id: id.clone() });
+                    }
                     if actions.export {
                         let _ = self.cmd_tx.send(Cmd::AgentExport { id: id.clone() });
                     }
@@ -9431,6 +9452,87 @@ mod research_document_tests {
         let md = compose_document("Agentic apps?", &hits, &pages);
         assert!(md.contains("[^1]: Agentic apps overview — https://example.org/agentic"));
         assert!(!md.contains("https://invented.example"));
+    }
+}
+
+#[cfg(test)]
+mod canvas_completion_tests {
+    use super::*;
+    use aos_proto::{AgentInfo, AgentKind, AgentState, AgentTrace};
+
+    fn canvas_agent(agent_id: &str) -> AgentInfo {
+        AgentInfo {
+            agent_id: agent_id.into(),
+            state: AgentState::Failed,
+            directive: "dessine un moulin".into(),
+            pid: None,
+            caps: vec![],
+            last_output: String::new(),
+            step: 64,
+            max_steps: 64,
+            current_task: None,
+            parent_id: None,
+            children: vec![],
+            tokens_used: 0,
+            skills: vec![],
+            tools: vec!["canvas.stroke".into()],
+            mcp_servers: vec![],
+            fail_reason: Some("max_steps (64) atteint".into()),
+            session_id: Some("sess-1".into()),
+            title: String::new(),
+            kind: AgentKind::Task,
+            display_name: None,
+            persona_id: None,
+            origin: None,
+        }
+    }
+
+    #[test]
+    fn completion_chat_muted_when_canvas_has_traits() {
+        let t = i18n::strings("fr");
+        let ag = canvas_agent("agent-102");
+        let ops = vec![aos_proto::CanvasOp {
+            seq: 1,
+            author_id: "agent-102".into(),
+            ts_ms: 0,
+            body: aos_proto::CanvasOpBody::Stroke {
+                points: vec![aos_proto::CanvasPoint { x: 0.1, y: 0.2 }],
+                color: "#3ee0c4".into(),
+                width: 0.01,
+            },
+        }];
+        let text = agent_completion_chat_text(&ag, &t, Some(&ops), None);
+        assert!(text.is_empty(), "expected mute, got: {text}");
+        assert!(!text.contains("agent-102"));
+        assert!(!text.contains("terminé"));
+    }
+
+    #[test]
+    fn completion_chat_empty_canvas_shows_locked_fail_copy() {
+        let t = i18n::strings("fr");
+        let ag = canvas_agent("agent-90");
+        let text = agent_completion_chat_text(&ag, &t, None, None);
+        assert_eq!(text, t.canvas_draw_failed);
+        assert!(!text.contains("max_steps"));
+        assert!(!text.contains("agent-90"));
+    }
+
+    #[test]
+    fn completion_chat_muted_from_trace_traits_without_session_ops() {
+        let t = i18n::strings("en");
+        let ag = canvas_agent("agent-99");
+        let trace = AgentTrace {
+            agent_id: "agent-99".into(),
+            steps: vec![aos_proto::AgentStepRecord {
+                step: 1,
+                action: "canvas.spline".into(),
+                tool_result: "ok seq=1".into(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let text = agent_completion_chat_text(&ag, &t, None, Some(&trace));
+        assert!(text.is_empty());
     }
 }
 

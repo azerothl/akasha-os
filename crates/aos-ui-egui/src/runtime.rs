@@ -342,9 +342,33 @@ async fn handle_cmd(
                 Ok(trace) => {
                     let info = aos_agent::persist::read_info(&id)
                         .or_else(|| aos_agent::persist::info_from_spec(&id));
+                    let session_ops = if let Some(info) = info.as_ref() {
+                        if let Some(sid) = info.session_id.as_deref() {
+                            bus.call::<aos_proto::CanvasGetRequest, aos_proto::CanvasGetResponse>(
+                                "canvas.get",
+                                &aos_proto::CanvasGetRequest {
+                                    session_id: sid.to_string(),
+                                    after_seq: None,
+                                },
+                                vec![],
+                            )
+                            .await
+                            .ok()
+                            .filter(|r| !r.ops.is_empty())
+                            .map(|r| r.ops)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
                     let lang = crate::prefs::load_preferences().language;
-                    let md =
-                        aos_agent::persist::export_trace_markdown(&trace, info.as_ref(), &lang);
+                    let md = aos_agent::persist::export_trace_markdown(
+                        &trace,
+                        info.as_ref(),
+                        &lang,
+                        session_ops.as_deref(),
+                    );
                     let filename = format!("agent-export-{id}-{}.md", chrono_like_stamp());
                     let path = aos_home().join("var/downloads").join(&filename);
                     let _ = std::fs::create_dir_all(path.parent().unwrap());

@@ -117,12 +117,13 @@ pub fn export_fail_reason(
     reason: &str,
     info: Option<&AgentInfo>,
     trace: Option<&AgentTrace>,
+    session_ops: Option<&[aos_proto::CanvasOp]>,
 ) -> String {
     let en = lang.eq_ignore_ascii_case("en");
     let overflow = crate::context_budget::is_overflow_fail_reason(reason);
     let canvas_draw = info.is_some_and(|a| agent_is_canvas_draw(a) && !overflow);
     if canvas_draw {
-        if trace.is_some_and(crate::canvas_scene::trace_has_applied_canvas_traits) {
+        if crate::canvas_scene::canvas_has_applied_traits(session_ops, trace) {
             return String::new();
         }
         return if en {
@@ -158,7 +159,12 @@ pub fn export_fail_reason(
 }
 
 /// Export lisible d'un journal agent (`agent.trace` / `state.json`) en markdown.
-pub fn export_trace_markdown(trace: &AgentTrace, info: Option<&AgentInfo>, lang: &str) -> String {
+pub fn export_trace_markdown(
+    trace: &AgentTrace,
+    info: Option<&AgentInfo>,
+    lang: &str,
+    session_ops: Option<&[aos_proto::CanvasOp]>,
+) -> String {
     let title = info
         .map(|a| a.title.as_str())
         .filter(|s| !s.trim().is_empty());
@@ -190,7 +196,7 @@ pub fn export_trace_markdown(trace: &AgentTrace, info: Option<&AgentInfo>, lang:
         .as_deref()
         .filter(|s| !s.trim().is_empty())
     {
-        let visible = export_fail_reason(lang, reason, info, Some(trace));
+        let visible = export_fail_reason(lang, reason, info, Some(trace), session_ops);
         if !visible.is_empty() {
             out.push_str(&format!("**Fail reason:** {visible}\n\n"));
         }
@@ -242,7 +248,7 @@ pub fn export_trace_markdown(trace: &AgentTrace, info: Option<&AgentInfo>, lang:
             out.push_str(&format!("### Child agent\n\n`{child}`\n\n"));
         }
         if let Some(reason) = rec.fail_reason.as_deref().filter(|s| !s.is_empty()) {
-            let visible = export_fail_reason(lang, reason, info, Some(trace));
+            let visible = export_fail_reason(lang, reason, info, Some(trace), session_ops);
             if !visible.is_empty() {
                 out.push_str(&format!("**Step fail reason:** {visible}\n\n"));
             }
@@ -547,7 +553,7 @@ mod tests {
             persona_id: None,
             origin: None,
         };
-        let md = export_trace_markdown(&trace, Some(&info), "en");
+        let md = export_trace_markdown(&trace, Some(&info), "en", None);
         assert!(md.contains("# Agent agent-7"));
         assert!(md.contains("_Display name: Alpha_"));
         assert!(md.contains("**Fail reason:** The agent could not act."));
@@ -572,7 +578,7 @@ mod tests {
             }],
             ..AgentTrace::default()
         };
-        let md_overflow = export_trace_markdown(&trace_overflow, None, "fr");
+        let md_overflow = export_trace_markdown(&trace_overflow, None, "fr", None);
         assert!(md_overflow.contains("**Fail reason:** Impossible de continuer."));
         assert!(md_overflow.contains("**Step fail reason:** Impossible de continuer."));
         assert!(!md_overflow.contains("ctx="));
@@ -589,11 +595,11 @@ mod tests {
             fail_reason: Some(raw.into()),
             ..AgentTrace::default()
         };
-        let md_en = export_trace_markdown(&trace, None, "en");
+        let md_en = export_trace_markdown(&trace, None, "en", None);
         assert!(md_en.contains("**Fail reason:** Couldn't keep going."));
         assert!(!md_en.contains("max_steps"));
         assert!(!md_en.contains("atteint"));
-        let md_fr = export_trace_markdown(&trace, None, "fr");
+        let md_fr = export_trace_markdown(&trace, None, "fr", None);
         assert!(md_fr.contains("**Fail reason:** Impossible de continuer."));
         assert!(!md_fr.contains("max_steps"));
         assert!(!md_fr.contains("atteint"));
@@ -631,12 +637,12 @@ mod tests {
             persona_id: None,
             origin: None,
         };
-        let md_en = export_trace_markdown(&trace, Some(&info), "en");
+        let md_en = export_trace_markdown(&trace, Some(&info), "en", None);
         assert!(md_en.contains("**Fail reason:** Couldn't draw."));
         assert!(!md_en.contains("max_steps"));
         assert!(!md_en.contains("atteint"));
         assert!(!md_en.contains("Failed"));
-        let md_fr = export_trace_markdown(&trace, Some(&info), "fr");
+        let md_fr = export_trace_markdown(&trace, Some(&info), "fr", None);
         assert!(md_fr.contains("**Fail reason:** Impossible de dessiner."));
         assert!(!md_fr.contains("max_steps"));
         assert!(!md_fr.contains("atteint"));
@@ -680,12 +686,61 @@ mod tests {
             persona_id: None,
             origin: None,
         };
-        let md_en = export_trace_markdown(&trace, Some(&info), "en");
+        let md_en = export_trace_markdown(&trace, Some(&info), "en", None);
         assert!(!md_en.contains("**Fail reason:**"));
         assert!(!md_en.contains("Couldn't draw."));
         assert!(!md_en.contains("max_steps"));
-        let md_fr = export_trace_markdown(&trace, Some(&info), "fr");
+        let md_fr = export_trace_markdown(&trace, Some(&info), "fr", None);
         assert!(!md_fr.contains("**Fail reason:**"));
+        assert!(!md_fr.contains("Impossible de dessiner."));
+    }
+
+    #[test]
+    fn export_trace_markdown_canvas_draw_max_steps_muted_from_session_ops() {
+        let raw = "max_steps (64) atteint";
+        let trace = AgentTrace {
+            agent_id: "agent-99".into(),
+            fail_reason: Some(raw.into()),
+            ..AgentTrace::default()
+        };
+        let info = AgentInfo {
+            agent_id: "agent-99".into(),
+            state: AgentState::Failed,
+            directive: "dessine un moulin".into(),
+            pid: None,
+            caps: vec![],
+            last_output: String::new(),
+            step: 64,
+            max_steps: 64,
+            current_task: None,
+            parent_id: None,
+            children: vec![],
+            tokens_used: 0,
+            skills: vec![],
+            tools: vec!["canvas.spline".into()],
+            mcp_servers: vec![],
+            fail_reason: Some(raw.into()),
+            session_id: Some("sess-1".into()),
+            title: String::new(),
+            kind: AgentKind::Task,
+            display_name: None,
+            persona_id: None,
+            origin: None,
+        };
+        let ops = vec![aos_proto::CanvasOp {
+            seq: 1,
+            author_id: "agent-99".into(),
+            ts_ms: 0,
+            body: aos_proto::CanvasOpBody::Stroke {
+                points: vec![aos_proto::CanvasPoint { x: 0.1, y: 0.2 }],
+                color: "#3ee0c4".into(),
+                width: 0.01,
+            },
+        }];
+        let md_en = export_trace_markdown(&trace, Some(&info), "en", Some(&ops));
+        assert!(!md_en.contains("**Fail reason:**"));
+        assert!(!md_en.contains("Couldn't draw."));
+        let md_fr = export_trace_markdown(&trace, Some(&info), "fr", Some(&ops));
         assert!(!md_fr.contains("Impossible de dessiner."));
     }
 
