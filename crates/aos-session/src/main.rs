@@ -647,6 +647,24 @@ fn package_root_from_exe() -> Option<PathBuf> {
     }
 }
 
+/// Packaged Preview tree (zip extract or stable install), not a bare repo checkout.
+fn looks_like_package(home: &Path) -> bool {
+    if !home.join("VERSION").is_file() || !home.join("bin").is_dir() {
+        return false;
+    }
+    let session = if cfg!(windows) {
+        "aos-session.exe"
+    } else {
+        "aos-session"
+    };
+    let ui = if cfg!(windows) {
+        "aos-ui-egui.exe"
+    } else {
+        "aos-ui-egui"
+    };
+    home.join("bin").join(session).is_file() || home.join("bin").join(ui).is_file()
+}
+
 fn same_dir(a: &Path, b: &Path) -> bool {
     match (fs::canonicalize(a), fs::canonicalize(b)) {
         (Ok(x), Ok(y)) => x == y,
@@ -770,10 +788,45 @@ fn reexec_updated(home: &Path) {
 }
 
 fn resolve_home() -> PathBuf {
+    let pkg = package_root_from_exe();
     if let Ok(h) = std::env::var("AOS_HOME") {
-        return PathBuf::from(h);
+        let home = PathBuf::from(h);
+        if let Some(pkg) = pkg.as_ref() {
+            if !same_dir(&home, pkg) {
+                let stable = default_install_home();
+                // Sticky AOS_HOME on an older zip extract must not pin that tree:
+                // sync the launched package into the stable install instead.
+                if looks_like_package(&home) && !same_dir(&home, &stable) {
+                    eprintln!(
+                        "[aos-session] AOS_HOME pointe vers un autre paquet ({}) — \
+                         installation stable avec {}",
+                        home.display(),
+                        pkg.display()
+                    );
+                    match ensure_stable_install(pkg) {
+                        Ok(dest) => return dest,
+                        Err(e) => eprintln!(
+                            "[aos-session] sync stable échoué ({e}) — overlay sur AOS_HOME"
+                        ),
+                    }
+                }
+                match update::overlay_program(&home, pkg) {
+                    Ok(()) => eprintln!(
+                        "[aos-session] paquet {} synchronisé → {}",
+                        pkg.file_name()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("preview"),
+                        home.display()
+                    ),
+                    Err(e) => eprintln!(
+                        "[aos-session] overlay depuis le paquet lancé échoué ({e})"
+                    ),
+                }
+            }
+        }
+        return home;
     }
-    if let Some(pkg) = package_root_from_exe() {
+    if let Some(pkg) = pkg {
         match ensure_stable_install(&pkg) {
             Ok(home) => return home,
             Err(e) => {

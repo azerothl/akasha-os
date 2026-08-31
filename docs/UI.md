@@ -150,6 +150,7 @@ Tester jargon is fine inside Scenarios, Feedback, and audit export — not on th
 
 - [PRODUCT.md](PRODUCT.md) — positioning and brand commitments
 - [DESIGN.md](DESIGN.md) — public-site cloud-chamber system
+- [UI-UPDATE.md](UI-UPDATE.md) — chamber-hybrid visual update contract + per-page mocks
 - [I18N.md](I18N.md) — EN/FR doc and UI language rules
 - [FIRST-RUN.md](FIRST-RUN.md) — install and first launch
 - [TESTER.md](TESTER.md) — cohort protocol (Scenarios / Feedback)

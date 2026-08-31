@@ -150,6 +150,7 @@ Le jargon testeur reste acceptable dans Scénarios, Retour et export audit — p
 
 - [PRODUCT.md](../PRODUCT.md) — positionnement et engagements marque
 - [DESIGN.md](../DESIGN.md) — système chambre à brouillard du site public
+- [UI-UPDATE.md](UI-UPDATE.md) — contrat mise à jour visuelle hybride chambre + mocks par page
 - [I18N.md](I18N.md) — règles langue EN/FR
 - [FIRST-RUN.md](FIRST-RUN.md) — installation et premier lancement
 - [TESTER.md](TESTER.md) — protocole cohorte (Scénarios / Retour)
