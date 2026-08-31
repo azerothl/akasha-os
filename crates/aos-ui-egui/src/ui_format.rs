@@ -1,0 +1,198 @@
+//! Pure date, metric, byte-size, and memory-relation formatting helpers.
+
+use crate::i18n::UiStrings;
+use aos_proto::{MemHit, MemRelationKind, ModelMetrics};
+use std::collections::HashMap;
+
+pub(crate) fn chrono_like_stamp() -> String {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs().to_string())
+        .unwrap_or_else(|_| "0".into())
+}
+
+pub(crate) fn format_local_time_hm(ts_ms: u64, offset_minutes: i32) -> String {
+    let local_ms = ts_ms as i64 + (offset_minutes as i64) * 60_000;
+    let secs = local_ms.div_euclid(1000);
+    let mins = (secs / 60) % 60;
+    let hours = (secs / 3600) % 24;
+    format!("{hours:02}:{mins:02}")
+}
+
+pub(crate) fn local_tz_offset_minutes() -> i32 {
+    if let Ok(out) = std::process::Command::new("date").args(["+%z"]).output() {
+        if out.status.success() {
+            if let Ok(s) = String::from_utf8(out.stdout) {
+                return parse_tz_offset_minutes(s.trim()).unwrap_or(0);
+            }
+        }
+    }
+    0
+}
+
+pub(crate) fn parse_tz_offset_minutes(raw: &str) -> Option<i32> {
+    let s = raw.trim();
+    if s.len() < 3 {
+        return None;
+    }
+    let sign = match s.as_bytes().first()? {
+        b'+' => 1,
+        b'-' => -1,
+        _ => return None,
+    };
+    let digits: String = s.chars().skip(1).filter(|c| c.is_ascii_digit()).collect();
+    if digits.len() < 3 {
+        return None;
+    }
+    let hours: i32 = digits[..digits.len().saturating_sub(2)]
+        .parse()
+        .ok()?;
+    let mins: i32 = digits[digits.len().saturating_sub(2)..]
+        .parse()
+        .ok()?;
+    Some(sign * (hours * 60 + mins))
+}
+
+pub(crate) fn local_day_index(ts_ms: u64, offset_minutes: i32) -> i64 {
+    let local_ms = ts_ms as i64 + (offset_minutes as i64) * 60_000;
+    local_ms.div_euclid(86_400_000)
+}
+
+pub(crate) fn civil_from_day_index(days: i64) -> (i32, u32, u32) {
+    let z = days + 719468;
+    let era = if z >= 0 { z / 146097 } else { (z - 146096) / 146097 };
+    let doe = z - era * 146097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = (yoe + era * 400) as i32;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    let y = if mp < 10 { y } else { y + 1 };
+    (y, m, d)
+}
+
+pub(crate) fn format_local_date_short(ts_ms: u64, tz_offset_min: i32) -> String {
+    let days = local_day_index(ts_ms, tz_offset_min);
+    let (y, m, d) = civil_from_day_index(days);
+    format!("{d:02}/{m:02}/{y}")
+}
+
+pub(crate) fn format_schedule_next_label(
+    t: &UiStrings,
+    next_fire_ms: u64,
+    now_ms: u64,
+    tz_offset_min: i32,
+) -> String {
+    let time = format_local_time_hm(next_fire_ms, tz_offset_min);
+    let day_now = local_day_index(now_ms, tz_offset_min);
+    let day_next = local_day_index(next_fire_ms, tz_offset_min);
+    if day_next == day_now {
+        t.schedule_card_next_today.replace("{time}", &time)
+    } else if day_next == day_now + 1 {
+        t.schedule_card_next_tomorrow.replace("{time}", &time)
+    } else {
+        let date = format_local_date_short(next_fire_ms, tz_offset_min);
+        t.schedule_card_next_date
+            .replace("{date}", &date)
+            .replace("{time}", &time)
+    }
+}
+
+pub(crate) fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+pub(crate) fn memory_relation_snippet(text: &str) -> String {
+    let t = text.trim();
+    if t.chars().count() <= 80 {
+        t.to_string()
+    } else {
+        let end = t.char_indices().nth(80).map(|(i, _)| i).unwrap_or(t.len());
+        format!("{}…", &t[..end])
+    }
+}
+
+pub(crate) fn memory_relation_lines(
+    hit: &MemHit,
+    texts: &HashMap<u64, String>,
+    t: &UiStrings,
+) -> Vec<String> {
+    let mut lines = Vec::new();
+    for rel in &hit.relations {
+        let Some(target) = texts.get(&rel.to) else {
+            continue;
+        };
+        if !aos_proto::mem_extract::is_human_memory_fact(target) {
+            continue;
+        }
+        let snippet = memory_relation_snippet(target);
+        let line = match rel.rel {
+            MemRelationKind::Supersedes => t.memory_rel_replaces.replace("{}", &snippet),
+            MemRelationKind::Similar | MemRelationKind::Updates => {
+                t.memory_rel_related_to.replace("{}", &snippet)
+            }
+        };
+        lines.push(line);
+    }
+    lines
+}
+
+pub(crate) fn human_bytes(v: u64) -> String {
+    const GIB: f64 = (1u64 << 30) as f64;
+    const MIB: f64 = (1u64 << 20) as f64;
+    if v >= (1u64 << 30) {
+        format!("{:.2} GiB", v as f64 / GIB)
+    } else if v >= (1u64 << 20) {
+        format!("{:.1} MiB", v as f64 / MIB)
+    } else {
+        format!("{v} B")
+    }
+}
+
+pub(crate) fn format_model_infer_line(mm: &ModelMetrics, t: &UiStrings) -> String {
+    let vram = format!("{:.0} MiB", mm.vram_bytes as f64 / (1 << 20) as f64);
+    if mm.media_total_steps.is_some() || mm.media_step.is_some() {
+        let step = mm
+            .media_step
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "—".into());
+        let total = mm
+            .media_total_steps
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "—".into());
+        let step_s = mm
+            .last_step_s
+            .map(|v| format!("{v:.2}"))
+            .unwrap_or_else(|| "—".into());
+        format!(
+            "{} {}/{} · {} {} · {} {}",
+            t.metrics_step, step, total, t.metrics_step_s, step_s, t.metrics_vram, vram
+        )
+    } else {
+        let ttft = mm
+            .last_ttft_ms
+            .map(|v| format!("{v:.0} ms"))
+            .unwrap_or_else(|| "—".into());
+        let toks = mm
+            .last_tok_s
+            .map(|v| format!("{v:.1}"))
+            .unwrap_or_else(|| "—".into());
+        let mut line = format!(
+            "{} {} · {} {} · {} {}",
+            t.metrics_ttft, ttft, t.metrics_tok_s, toks, t.metrics_vram, vram
+        );
+        if let Some(d) = mm.draft_accept {
+            line.push_str(&format!(" · {} {d:.1}", t.metrics_draft));
+        }
+        if let Some(p) = mm.prefix_hit {
+            if p > 0 {
+                line.push_str(&format!(" · {} {p}", t.metrics_prefix));
+            }
+        }
+        line
+    }
+}
