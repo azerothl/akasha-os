@@ -1,6 +1,6 @@
 name: canvas
 version: 1.0.0
-hash: 3817c2ed17a53ac110de6007be8e47a0d959bd0bb5b076efa67ab5876e19e32e
+hash: 25d98ee6df241d1f33706076933219a8c2e3b96d00896120556bd30a11bc7bf6
 permissions:
   required_caps:
     - fs.write:/downloads/**
@@ -44,6 +44,18 @@ tools:
         points: { type: array, items: { type: object, properties: { x: { type: number }, y: { type: number } } } }
         color: { type: string }
         width: { type: number }
+      required: [session_id, points]
+  - name: canvas.path
+    description: Draw a smooth filled silhouette (closed path) through control points — prefer for hills, bodies, sails
+    input_schema:
+      type: object
+      properties:
+        session_id: { type: string }
+        points: { type: array, items: { type: object, properties: { x: { type: number }, y: { type: number } } } }
+        color: { type: string }
+        width: { type: number }
+        fill: { type: boolean }
+        closed: { type: boolean }
       required: [session_id, points]
   - name: canvas.rect
     description: Draw a rectangle on the session canvas

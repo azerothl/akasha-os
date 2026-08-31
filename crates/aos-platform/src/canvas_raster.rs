@@ -90,6 +90,34 @@ fn paint_op(img: &mut RgbImage, body: &CanvasOpBody) {
             let sampled = sample_spline(points, 24);
             stroke_polyline(img, &sampled, c, rad);
         }
+        CanvasOpBody::Path {
+            points,
+            color,
+            width,
+            fill,
+            closed,
+        } => {
+            if points.len() < 2 {
+                return;
+            }
+            let c = parse_color(color).unwrap_or(DEFAULT_FG);
+            let sampled = sample_spline(points, 24);
+            let mut pts: Vec<(i32, i32)> = sampled.iter().map(|p| to_px(img, p.x, p.y)).collect();
+            if *closed && pts.len() >= 3 {
+                if let (Some(first), Some(last)) = (pts.first().copied(), pts.last().copied()) {
+                    if first != last {
+                        pts.push(first);
+                    }
+                }
+            }
+            if *fill && pts.len() >= 3 {
+                fill_polygon(img, &pts, c);
+            }
+            if *width > 0.0 {
+                let rad = radius(img, *width);
+                stroke_polyline(img, &sampled, c, rad);
+            }
+        }
         CanvasOpBody::Fill { x, y, color } => {
             let c = parse_color(color).unwrap_or(DEFAULT_FG);
             let (px, py) = to_px(img, *x, *y);
@@ -249,6 +277,52 @@ fn catmull_rom(p0: CanvasPoint, p1: CanvasPoint, p2: CanvasPoint, p3: CanvasPoin
     }
 }
 
+/// Scanline fill for a closed polygon (pixel coords).
+fn fill_polygon(img: &mut RgbImage, pts: &[(i32, i32)], c: Rgb<u8>) {
+    if pts.len() < 3 {
+        return;
+    }
+    let mut min_y = i32::MAX;
+    let mut max_y = i32::MIN;
+    for &(_, y) in pts {
+        min_y = min_y.min(y);
+        max_y = max_y.max(y);
+    }
+    let w = img.width() as i32;
+    let h = img.height() as i32;
+    for y in min_y..=max_y {
+        if y < 0 || y >= h {
+            continue;
+        }
+        let mut crossings: Vec<i32> = Vec::new();
+        for i in 0..pts.len().saturating_sub(1) {
+            let (x0, y0) = pts[i];
+            let (x1, y1) = pts[i + 1];
+            if y0 == y1 {
+                continue;
+            }
+            let ya = y0.min(y1);
+            let yb = y0.max(y1);
+            if y < ya || y >= yb {
+                continue;
+            }
+            let t = (y - y0) as f32 / (y1 - y0) as f32;
+            let x = x0 as f32 + (x1 - x0) as f32 * t;
+            crossings.push(x.round() as i32);
+        }
+        crossings.sort_unstable();
+        let mut i = 0;
+        while i + 1 < crossings.len() {
+            let x_start = crossings[i].max(0);
+            let x_end = crossings[i + 1].min(w - 1);
+            for x in x_start..=x_end {
+                put(img, x, y, c);
+            }
+            i += 2;
+        }
+    }
+}
+
 fn flood_fill(img: &mut RgbImage, sx: i32, sy: i32, c: Rgb<u8>) {
     let w = img.width() as i32;
     let h = img.height() as i32;
@@ -304,5 +378,96 @@ mod tests {
         let png = export_png(&doc, 128, 128).unwrap();
         assert!(png.starts_with(&[0x89, b'P', b'N', b'G']));
         assert!(png.len() > 64);
+    }
+
+    #[test]
+    fn export_windmill_paths_png_nonempty() {
+        let hill = CanvasOpBody::Path {
+            points: vec![
+                CanvasPoint { x: 0.0, y: 0.92 },
+                CanvasPoint { x: 0.15, y: 0.72 },
+                CanvasPoint { x: 0.35, y: 0.68 },
+                CanvasPoint { x: 0.50, y: 0.70 },
+                CanvasPoint { x: 0.65, y: 0.68 },
+                CanvasPoint { x: 0.85, y: 0.72 },
+                CanvasPoint { x: 1.0, y: 0.92 },
+            ],
+            color: "#8B7355".into(),
+            width: 0.0,
+            fill: true,
+            closed: true,
+        };
+        let body = CanvasOpBody::Path {
+            points: vec![
+                CanvasPoint { x: 0.44, y: 0.70 },
+                CanvasPoint { x: 0.56, y: 0.70 },
+                CanvasPoint { x: 0.54, y: 0.42 },
+                CanvasPoint { x: 0.46, y: 0.42 },
+            ],
+            color: "#C4A574".into(),
+            width: 0.0,
+            fill: true,
+            closed: true,
+        };
+        let roof = CanvasOpBody::Path {
+            points: vec![
+                CanvasPoint { x: 0.38, y: 0.44 },
+                CanvasPoint { x: 0.50, y: 0.28 },
+                CanvasPoint { x: 0.62, y: 0.44 },
+            ],
+            color: "#8B4513".into(),
+            width: 0.0,
+            fill: true,
+            closed: true,
+        };
+        let sail_a = CanvasOpBody::Path {
+            points: vec![
+                CanvasPoint { x: 0.50, y: 0.36 },
+                CanvasPoint { x: 0.22, y: 0.18 },
+                CanvasPoint { x: 0.50, y: 0.30 },
+                CanvasPoint { x: 0.78, y: 0.18 },
+            ],
+            color: "#E8DCC8".into(),
+            width: 0.0,
+            fill: true,
+            closed: true,
+        };
+        let doc = CanvasDoc {
+            session_id: "windmill".into(),
+            next_seq: 5,
+            pen: CanvasPenStyle::default(),
+            ops: vec![
+                CanvasOp {
+                    seq: 1,
+                    author_id: "agent".into(),
+                    ts_ms: 1,
+                    body: hill,
+                },
+                CanvasOp {
+                    seq: 2,
+                    author_id: "agent".into(),
+                    ts_ms: 2,
+                    body,
+                },
+                CanvasOp {
+                    seq: 3,
+                    author_id: "agent".into(),
+                    ts_ms: 3,
+                    body: roof,
+                },
+                CanvasOp {
+                    seq: 4,
+                    author_id: "agent".into(),
+                    ts_ms: 4,
+                    body: sail_a,
+                },
+            ],
+        };
+        let png = export_png(&doc, 512, 512).unwrap();
+        assert!(png.starts_with(&[0x89, b'P', b'N', b'G']));
+        assert!(png.len() > 1024);
+        let out_dir = std::path::Path::new("/opt/cursor/artifacts");
+        let _ = std::fs::create_dir_all(out_dir);
+        let _ = std::fs::write(out_dir.join("windmill-path-demo.png"), &png);
     }
 }
