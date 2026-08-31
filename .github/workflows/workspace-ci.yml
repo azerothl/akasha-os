@@ -1,0 +1,47 @@
+name: workspace-ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: workspace-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  GGML_NATIVE: "OFF"
+
+jobs:
+  hygiene:
+    name: Release consistency
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check release version consistency
+        shell: pwsh
+        run: ./packaging/check-version.ps1
+
+  rust:
+    name: Clippy and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: workspace-ci-linux
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets
+      - name: Test workspace
+        run: cargo test --workspace

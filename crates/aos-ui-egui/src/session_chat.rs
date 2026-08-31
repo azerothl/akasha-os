@@ -387,7 +387,7 @@ mod tests {
 
         // Returning to A clears unread and restores inflight view (completed).
         state.clear_unread(session_a());
-        let mut chat_a = vec![
+        let chat_a = vec![
             ChatLine::plain("user", "question in A"),
             ChatLine::plain("assistant", "reply text"),
         ];

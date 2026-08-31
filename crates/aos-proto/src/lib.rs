@@ -4298,7 +4298,7 @@ mod chat_session_room_tests {
 
     #[test]
     fn canvas_op_line_spline_fill_roundtrip() {
-        use super::{CanvasOp, CanvasOpBody, CanvasPoint};
+        use super::{CanvasOpBody, CanvasPoint};
         let line = CanvasOpBody::Line {
             p0: CanvasPoint { x: 0.1, y: 0.2 },
             p1: CanvasPoint { x: 0.8, y: 0.7 },

@@ -16,7 +16,7 @@ first-class GPU, offline-first. Preview builds run on a Windows/Linux host
   <img src="branding/logo/tracks.svg" width="480" alt="MEMORY, CAPS, GPU, AGENTS">
 </p>
 
-> This is **not** a bootable OS image yet. Preview 0.13.0 is an installable host
+> This is **not** a bootable OS image yet. Preview 0.15.1 is an installable host
 > app for testers (Windows/Linux/Mac Apple Silicon; NVIDIA optional on Win/Linux
 > via CPU path in the same zip).
 

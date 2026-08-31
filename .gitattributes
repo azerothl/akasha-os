@@ -1,3 +1,6 @@
 # Shell scripts must stay LF on all platforms (CI Linux shebang / +x).
 *.sh text eol=lf
 packaging/*.sh text eol=lf
+
+# Generated schemas are compared byte-for-byte by aos-proto tests.
+docs/bridge/*.json text eol=lf

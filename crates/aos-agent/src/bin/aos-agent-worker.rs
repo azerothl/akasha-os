@@ -29,7 +29,7 @@ use aos_agent::skills::{load_skills, match_skill_by_action, merge_skill_tools, s
 use aos_agent::tool_exec::format_module_invoke_result;
 use aos_agent::tools::{
     canonicalize_tool_name, canvas_tools_from_module_list, caps_for_tools, caps_subset,
-    classify_action, canvas_draw_strategy_hint, filter_canvas_tool_ids, is_module_fallback_candidate,
+    classify_action, canvas_draw_strategy_hint, is_module_fallback_candidate,
     normalize_tool_args, resolve_tool_backend, restrict_canvas_tools, select_tools, ToolBackend,
     ToolDesc,
 };

@@ -377,7 +377,7 @@ Piste VM seL4 (PV.1–PV.3) séparée : [phases/phase-vm-sel4.md](phases/phase-v
 
 ---
 
-## 11. Hors Preview 0.13.0
+## 11. Hors Preview 0.15.1
 
 - Image bootable / fer nu
 - STT / voix permanente

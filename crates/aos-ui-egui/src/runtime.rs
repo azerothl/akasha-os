@@ -43,7 +43,7 @@ use aos_proto::{
     SecretSetRequest, SetRoutingRequest, SkillInfo, SkillPassPendingOffer, SkillPassRequest,
     SystemMetrics, TokenEvent, WebBrowseRequest,
     WebBrowseResponse, WebSearchRequest, WebSearchResponse,
-    CHAT_DELEGATION_PROMPT, CHAT_SUPERVISOR_LOCK, format_chat_supervisor_lock,
+    CHAT_DELEGATION_PROMPT, format_chat_supervisor_lock,
     format_system_assistant_prompt, MigrateRequest, MigrateResponse,
 };
 use eframe::egui;

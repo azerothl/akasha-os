@@ -1,4 +1,4 @@
-# Tester protocol — Akasha OS Preview 0.13.0
+# Tester protocol — Akasha OS Preview 0.15.1
 
 **Language:** English | [Français](fr/TESTER.md)
 
