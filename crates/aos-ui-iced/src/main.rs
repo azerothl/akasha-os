@@ -126,7 +126,9 @@ async fn runtime_main(cmd_rx: Receiver<Cmd>, evt_tx: Sender<Evt>) {
                 tokio::spawn(async move {
                     let mut messages = vec![ChatMessage {
                         role: "system".into(),
-                        content: aos_proto::SYSTEM_ASSISTANT_PROMPT.into(),
+                        content: aos_proto::format_system_assistant_prompt(
+                            &aos_proto::preview_version(),
+                        ),
                     }];
                     messages.extend(history.into_iter().map(|(r, c)| ChatMessage {
                         role: r,

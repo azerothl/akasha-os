@@ -1315,14 +1315,14 @@ pub struct MemRememberResponse {
 // System Assistant (§4.5) — prompt de connaissance système
 // ---------------------------------------------------------------------------
 
-/// Prompt système injecté dans la mémoire de travail de l'assistant et des
-/// agents : connaissance d'Akasha OS (architecture, état, capacités).
-///
-/// Base pour le PromptCompiler agentic ; les agents reçoivent en plus
-/// goal, skills, catalogue d'outils et protocole d'actions JSON.
-pub const SYSTEM_ASSISTANT_PROMPT: &str = "Tu es l'assistant système d'Akasha OS Preview — une application hôte Windows/Linux agent-native (pas encore un OS bootable).
+/// Running Preview semver — same source as window chrome (`AOS_PREVIEW_VERSION` or crate).
+pub fn preview_version() -> String {
+    std::env::var("AOS_PREVIEW_VERSION")
+        .unwrap_or_else(|_| env!("CARGO_PKG_VERSION").to_string())
+}
 
-Architecture (services userspace reliés par un bus IPC sémantique CBOR) :
+/// Corps du prompt système (architecture, capacités) — sans en-tête versionné.
+const SYSTEM_ASSISTANT_PROMPT_CORE: &str = "Architecture (services userspace reliés par un bus IPC sémantique CBOR) :
 - aos-busd : broker du bus (intents typés, streams, découverte de services) ;
 - aos-modeld : modèles IA locaux via llama.cpp (CUDA) — offload VRAM/RAM/disque, scheduler par priorité ;
 - aos-agentd : runtime agentic — boucle goal/plan/outils, skills, MCP, sous-agents isolés par capacités ;
@@ -1338,11 +1338,37 @@ Tu agis via des actions JSON structurées (ou la convention TOOL: pour compat). 
 
 Réponds dans la langue de l'utilisateur (français par défaut si ambigu), de façon concise et factuelle. Les index consultatifs (extraits RAG produit aujourd'hui ; bibliothèque de documents utilisateur à venir) enrichissent les réponses quand pertinents — zéro extrait ne bloque jamais une réponse. Pour les questions générales (culture, langues, vie courante, savoir encyclopédique), réponds normalement. Pour les questions sur l'UI Preview, les nouveautés ou « ce qui a changé », base-toi sur les extraits produit et le micro-brief injectés quand ils existent ; n'invente pas de fonctionnalités absentes de ces sources. Si un point produit n'y figure pas, dis-le simplement sans parler d'index ou de sources.";
 
-/// Micro-brief produit (pas le changelog) — le détail vient du RAG `product:docs`.
-pub const PREVIEW_SURFACE_BRIEF: &str = "\
-## Surface produit — Akasha OS Preview (hôte Windows/Linux)
+/// Prompt système versionné pour chat et agents — préférer à [`SYSTEM_ASSISTANT_PROMPT`].
+pub fn format_system_assistant_prompt(version: &str) -> String {
+    format!(
+        "Tu es l'assistant système d'Akasha OS Preview {version} — application hôte Windows/Linux agent-native.\n\
+         Version en cours : {version}. Si l'utilisateur demande la version installée, « about », ou l'état Preview, cite uniquement ce numéro — jamais les versions historiques des extraits RAG (FEATURES, STATUS, etc.).\n\n\
+         {SYSTEM_ASSISTANT_PROMPT_CORE}"
+    )
+}
+
+/// Prompt système injecté dans la mémoire de travail de l'assistant et des
+/// agents : connaissance d'Akasha OS (architecture, état, capacités).
+///
+/// Préférer [`format_system_assistant_prompt`] avec [`preview_version`] pour
+/// coller au chrome (`AOS_PREVIEW_VERSION` / crate).
+pub const SYSTEM_ASSISTANT_PROMPT: &str = SYSTEM_ASSISTANT_PROMPT_CORE;
+
+const PREVIEW_SURFACE_BRIEF_CORE: &str = "\
 Onglets : Chat, Mémoire, Notes, Tâches, Agents, Modèles, Caps, Audit, Providers, Image (studio), Settings, Réseau (opt-in).
-Ce n'est pas un OS bootable. Pour l'UI, les nouveautés et « ce qui a changé », les extraits RAG (FEATURES, STATUS, TESTER) injectés quand il y en a font foi — n'invente pas de fonctionnalités absentes de ces sources. Index consultatif seulement : zéro extrait ou sujet hors produit ne t'empêche pas de répondre. Une future bibliothèque de documents utilisateur sera aussi consultative uniquement (pas construite ici).";
+Pour l'UI, les nouveautés et « ce qui a changé », les extraits RAG (FEATURES, STATUS, TESTER) injectés quand il y en a font foi — n'invente pas de fonctionnalités absentes de ces sources. Index consultatif seulement : zéro extrait ou sujet hors produit ne t'empêche pas de répondre. Une future bibliothèque de documents utilisateur sera aussi consultative uniquement (pas construite ici).";
+
+/// Micro-brief produit versionné (pas le changelog) — le détail vient du RAG `product:docs`.
+pub fn format_preview_surface_brief(version: &str) -> String {
+    format!(
+        "## Surface produit — Akasha OS Preview {version} (hôte Windows/Linux)\n{PREVIEW_SURFACE_BRIEF_CORE}"
+    )
+}
+
+/// Micro-brief produit (pas le changelog) — le détail vient du RAG `product:docs`.
+///
+/// Préférer [`format_preview_surface_brief`] avec [`preview_version`].
+pub const PREVIEW_SURFACE_BRIEF: &str = PREVIEW_SURFACE_BRIEF_CORE;
 
 /// Addendum injecté uniquement dans le chemin chat (pas les workers).
 /// Délégation des tâches complexes via `agent.spawn` sans boucle d'outils.
@@ -1771,13 +1797,32 @@ mod chat_delegation_tests {
 #[cfg(test)]
 mod preview_prompt_tests {
     use super::{
-        CHAT_DELEGATION_PROMPT, CHAT_SUPERVISOR_LOCK, PREVIEW_SURFACE_BRIEF, SYSTEM_ASSISTANT_PROMPT,
+        format_preview_surface_brief, format_system_assistant_prompt, CHAT_DELEGATION_PROMPT,
+        CHAT_SUPERVISOR_LOCK, PREVIEW_SURFACE_BRIEF, SYSTEM_ASSISTANT_PROMPT,
     };
 
     fn chat_system_stack() -> String {
+        let version = "0.0.0";
         format!(
-            "{SYSTEM_ASSISTANT_PROMPT}\n{PREVIEW_SURFACE_BRIEF}\n{CHAT_DELEGATION_PROMPT}\n{CHAT_SUPERVISOR_LOCK}"
+            "{}\n{}\n{CHAT_DELEGATION_PROMPT}\n{CHAT_SUPERVISOR_LOCK}",
+            format_system_assistant_prompt(version),
+            format_preview_surface_brief(version),
         )
+    }
+
+    #[test]
+    fn chat_prompt_names_single_preview_version() {
+        let version = "9.8.7";
+        let system = format_system_assistant_prompt(version);
+        let brief = format_preview_surface_brief(version);
+        assert!(system.contains(version));
+        assert!(brief.contains(version));
+        assert!(!system.to_lowercase().contains("bootable"));
+        assert!(!brief.to_lowercase().contains("bootable"));
+        assert!(
+            system.contains("jamais les versions historiques"),
+            "system prompt must forbid stale RAG version numbers"
+        );
     }
 
     #[test]
