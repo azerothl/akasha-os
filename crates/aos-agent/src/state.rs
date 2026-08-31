@@ -1,7 +1,11 @@
 //! État cognitif d'un agent (§4.2) — sérialisable (snapshot/restore).
 
+use crate::canvas_scene::{canvas_op_succeeded, canvas_tool_completes_plan_node};
 use aos_proto::{AgentGoal, AgentStepRecord, TaskNode, TaskNodeStatus};
 use serde::{Deserialize, Serialize};
+
+/// Successful canvas draw ops on one plan node before force-advance (safety cap).
+pub const CANVAS_DRAW_TASK_OP_CAP: u32 = 3;
 
 /// État cognitif complet d'un agent.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,6 +46,9 @@ pub struct CognitiveState {
     /// Recall mémoire déjà fait après le premier `plan.update` (tâches complexes).
     #[serde(default)]
     pub plan_memory_recalled: bool,
+    /// Successful canvas draw ops on the current pending plan node (for cap-based advance).
+    #[serde(default)]
+    pub canvas_draw_ops_on_current_task: u32,
     /// Version de schéma (migration future).
     pub version: u32,
 }
@@ -65,6 +72,7 @@ impl CognitiveState {
             complexity: None,
             needs_plan: false,
             plan_memory_recalled: false,
+            canvas_draw_ops_on_current_task: 0,
             version: 2,
         }
     }
@@ -109,6 +117,35 @@ impl CognitiveState {
     pub fn set_plan(&mut self, nodes: Vec<TaskNode>) {
         self.plan_stack = nodes.iter().map(|n| n.title.clone()).collect();
         self.task_graph = nodes;
+        self.canvas_draw_ops_on_current_task = 0;
+    }
+
+    /// Mark the first Pending/Running plan node Done.
+    pub fn complete_current_plan_node(&mut self) -> bool {
+        let Some(idx) = self.task_graph.iter().position(|n| {
+            n.status == TaskNodeStatus::Running || n.status == TaskNodeStatus::Pending
+        }) else {
+            return false;
+        };
+        self.task_graph[idx].status = TaskNodeStatus::Done;
+        self.canvas_draw_ops_on_current_task = 0;
+        true
+    }
+
+    /// After a successful canvas draw, advance the plan (not `canvas.set_style`).
+    pub fn maybe_advance_plan_after_canvas_draw(&mut self, tool: &str, outcome: &str) -> bool {
+        if !canvas_tool_completes_plan_node(tool) || !canvas_op_succeeded(outcome) {
+            return false;
+        }
+        self.canvas_draw_ops_on_current_task = self
+            .canvas_draw_ops_on_current_task
+            .saturating_add(1);
+        if self.canvas_draw_ops_on_current_task == 1
+            || self.canvas_draw_ops_on_current_task >= CANVAS_DRAW_TASK_OP_CAP
+        {
+            return self.complete_current_plan_node();
+        }
+        false
     }
 
     pub fn current_task_title(&self) -> Option<String> {
@@ -209,5 +246,97 @@ mod tests {
         assert!(st.complexity.is_none());
         assert!(!st.needs_plan);
         assert!(!st.plan_memory_recalled);
+        assert_eq!(st.canvas_draw_ops_on_current_task, 0);
+    }
+
+    fn hill_mill_plan() -> Vec<TaskNode> {
+        vec![
+            TaskNode {
+                id: "1".into(),
+                title: "Dessiner la colline (sol)".into(),
+                status: TaskNodeStatus::Pending,
+                notes: String::new(),
+            },
+            TaskNode {
+                id: "2".into(),
+                title: "Dessiner le corps du moulin".into(),
+                status: TaskNodeStatus::Pending,
+                notes: String::new(),
+            },
+            TaskNode {
+                id: "3".into(),
+                title: "Dessiner le toit du moulin".into(),
+                status: TaskNodeStatus::Pending,
+                notes: String::new(),
+            },
+        ]
+    }
+
+    #[test]
+    fn canvas_spline_advances_to_next_pending_task() {
+        let mut st = CognitiveState::new("agent-98", vec![]);
+        st.set_plan(hill_mill_plan());
+        assert_eq!(
+            st.current_task_title().as_deref(),
+            Some("Dessiner la colline (sol)")
+        );
+        assert!(st.maybe_advance_plan_after_canvas_draw(
+            "canvas.spline",
+            "ok seq=1 spline bbox=(0.1,0.5)-(0.9,0.8)"
+        ));
+        assert_eq!(st.task_graph[0].status, TaskNodeStatus::Done);
+        assert_eq!(
+            st.current_task_title().as_deref(),
+            Some("Dessiner le corps du moulin")
+        );
+    }
+
+    #[test]
+    fn canvas_stroke_advances_pending_task() {
+        let mut st = CognitiveState::new("agent-98", vec![]);
+        st.set_plan(hill_mill_plan());
+        assert!(st.maybe_advance_plan_after_canvas_draw("canvas.stroke", "ok seq=2"));
+        assert_eq!(st.task_graph[0].status, TaskNodeStatus::Done);
+        assert_eq!(
+            st.current_task_title().as_deref(),
+            Some("Dessiner le corps du moulin")
+        );
+    }
+
+    #[test]
+    fn canvas_set_style_does_not_advance_plan() {
+        let mut st = CognitiveState::new("agent-98", vec![]);
+        st.set_plan(hill_mill_plan());
+        assert!(!st.maybe_advance_plan_after_canvas_draw("canvas.set_style", "ok pen=#8B4513"));
+        assert_eq!(st.task_graph[0].status, TaskNodeStatus::Pending);
+        assert_eq!(
+            st.current_task_title().as_deref(),
+            Some("Dessiner la colline (sol)")
+        );
+        assert_eq!(st.canvas_draw_ops_on_current_task, 0);
+    }
+
+    #[test]
+    fn failed_canvas_draw_does_not_advance_plan() {
+        let mut st = CognitiveState::new("agent-98", vec![]);
+        st.set_plan(hill_mill_plan());
+        assert!(!st.maybe_advance_plan_after_canvas_draw(
+            "canvas.spline",
+            "ERREUR outil: session"
+        ));
+        assert_eq!(st.task_graph[0].status, TaskNodeStatus::Pending);
+    }
+
+    #[test]
+    fn canvas_draw_cap_force_advances_if_still_pending() {
+        let mut st = CognitiveState::new("agent-98", vec![]);
+        st.set_plan(hill_mill_plan());
+        st.canvas_draw_ops_on_current_task = CANVAS_DRAW_TASK_OP_CAP - 1;
+        assert!(st.maybe_advance_plan_after_canvas_draw("canvas.rect", "ok seq=3"));
+        assert_eq!(st.task_graph[0].status, TaskNodeStatus::Done);
+        assert_eq!(
+            st.current_task_title().as_deref(),
+            Some("Dessiner le corps du moulin")
+        );
     }
 }

@@ -189,6 +189,20 @@ pub fn canvas_tool_mutates_scene(tool: &str) -> bool {
     )
 }
 
+/// True when a successful canvas op should auto-complete the current plan node.
+/// Style/read ops do not advance the task graph.
+pub fn canvas_tool_completes_plan_node(tool: &str) -> bool {
+    matches!(
+        tool,
+        "canvas.stroke"
+            | "canvas.line"
+            | "canvas.spline"
+            | "canvas.rect"
+            | "canvas.ellipse"
+            | "canvas.fill"
+    )
+}
+
 /// True when the tool is a canvas read (get/export).
 pub fn canvas_tool_is_get(tool: &str) -> bool {
     tool == "canvas.get" || tool == "canvas.export"
@@ -449,6 +463,15 @@ mod tests {
         assert!(canvas_tool_mutates_scene("canvas.line"));
         assert!(canvas_tool_mutates_scene("canvas.fill"));
         assert!(!canvas_tool_mutates_scene("canvas.get"));
+    }
+
+    #[test]
+    fn plan_completing_tools_exclude_set_style() {
+        assert!(canvas_tool_completes_plan_node("canvas.spline"));
+        assert!(canvas_tool_completes_plan_node("canvas.stroke"));
+        assert!(!canvas_tool_completes_plan_node("canvas.set_style"));
+        assert!(!canvas_tool_completes_plan_node("canvas.get"));
+        assert!(!canvas_tool_completes_plan_node("canvas.export"));
     }
 
     #[test]
