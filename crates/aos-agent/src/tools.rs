@@ -520,6 +520,22 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
             }),
         ),
         (
+            "canvas.path",
+            "Silhouette lisse : contour fermé rempli (fill:true par défaut) via points de contrôle — colline, corps, voiles. Préférer à empiler rect/spline.",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "points":{"type":"array","items":{"type":"object","properties":{"x":{"type":"number"},"y":{"type":"number"}},"required":["x","y"]}},
+                    "color":{"type":"string"},
+                    "width":{"type":"number","description":"épaisseur du contour ; 0 = remplissage seul"},
+                    "fill":{"type":"boolean","description":"remplir la silhouette (défaut true)"},
+                    "closed":{"type":"boolean","description":"fermer le contour (défaut true)"}
+                },
+                "required":["points"]
+            }),
+        ),
+        (
             "canvas.rect",
             "Rectangle : x,y = coin haut-gauche, y vers le bas, w,h = taille (0..1). fill:true remplit. Alias cx,cy,w,h ou cx,cy,rx,ry.",
             serde_json::json!({
@@ -623,6 +639,7 @@ pub const CANVAS_TOOL_IDS: &[&str] = &[
     "canvas.stroke",
     "canvas.line",
     "canvas.spline",
+    "canvas.path",
     "canvas.rect",
     "canvas.ellipse",
     "canvas.erase",

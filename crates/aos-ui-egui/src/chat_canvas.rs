@@ -324,6 +324,44 @@ fn paint_op(
             let screen: Vec<Pos2> = slice.iter().map(|p| to_screen(rect, *p)).collect();
             painter.add(Shape::line(screen, PathStroke::new(rad * 2.0, c)));
         }
+        CanvasOpBody::Path {
+            points,
+            color,
+            width,
+            fill,
+            closed,
+        } => {
+            if points.len() < 2 {
+                return;
+            }
+            let c = author_stroke_color(&op.author_id, color, dark);
+            let sampled = sample_spline_points(points, 24);
+            let n = ((sampled.len() as f32) * progress).ceil().max(2.0) as usize;
+            let slice = &sampled[..n.min(sampled.len())];
+            let mut screen: Vec<Pos2> = slice.iter().map(|p| to_screen(rect, *p)).collect();
+            if *closed && screen.len() >= 3 {
+                if let Some(first) = screen.first().copied() {
+                    screen.push(first);
+                }
+            }
+            if *fill && screen.len() >= 3 {
+                painter.add(Shape::Path(PathShape {
+                    points: screen.clone(),
+                    closed: *closed,
+                    fill: c,
+                    stroke: PathStroke::NONE,
+                }));
+            }
+            if *width > 0.0 {
+                let rad = radius_px(rect, *width);
+                let stroke_pts = if *closed {
+                    screen
+                } else {
+                    slice.iter().map(|p| to_screen(rect, *p)).collect()
+                };
+                painter.add(Shape::line(stroke_pts, PathStroke::new(rad * 2.0, c)));
+            }
+        }
         CanvasOpBody::Fill { x, y, color } => {
             let c = author_stroke_color(&op.author_id, color, dark);
             let center = to_screen(rect, CanvasPoint { x: *x, y: *y });
@@ -1213,17 +1251,19 @@ Espace : coords normalisées 0..1 uniquement (max 1.0) sur le cadre visible (ori
 « 200px » = taille d'export pour la lisibilité humaine, pas l'unité des coords (ne pas dessiner à x=200).\n\
 Règles : margin 0.08–0.12 ; sujet centré dans usable ; couches sol → volumes → détails → 2–3 ombres. \
 Lis `scene_bbox` dans le digest : ne superpose pas les nouvelles formes au même centre. \
-Nombreux canvas.stroke courts, 2–3 teintes, épaisseurs variées. Commence par canvas.get. \
-Couleur : canvas.set_style {color:\"#RRGGBB\"} ou color= sur chaque op — le teal signal n'est pas la seule teinte ; \
-après critique, change de teinte pour ombres/détails.\n\
+Silhouettes (colline, corps, toit, voiles) : `canvas.path` avec 4–8 points et fill:true — \
+un path par forme lisible, pas 20 splines/rects empilés. Traits fins : canvas.stroke/line/spline. \
+Commence par canvas.get. Couleur : canvas.set_style {color:\"#RRGGBB\"} ou color= sur chaque op — \
+le teal signal n'est pas la seule teinte ; après critique, change de teinte pour ombres/détails.\n\
 Après critique : ajoute, jamais canvas.clear sauf si l'humain dit effacer.\n\
-Exemple si le sujet est une maison : toit + murs + porte + fenêtre + sol + un élément d'environnement.\n\
-Outils : canvas.set_style, canvas.stroke, canvas.line, canvas.spline, canvas.rect, canvas.ellipse \
+Exemple moulin sur colline : path colline (#8B7355) → path corps (#C4A574) → path toit (#8B4513) → \
+2–4 paths pour les ailes (#E8DCC8) ; rect/ellipse seulement pour détails (fenêtre, porte).\n\
+Outils : canvas.set_style, canvas.path, canvas.stroke, canvas.line, canvas.spline, canvas.rect, canvas.ellipse \
 (fill:true sur rect/ellipse pour remplir), canvas.erase, canvas.clear, \
 canvas.undo, canvas.get, canvas.export (coords 0..1). Pas media.image.generate. Pas agent.spawn.";
 
 const CANVAS_AGENT_NO_FANOUT_GUIDE: &str = "\
-Tu es l'auteur unique de ce dessin : traits séquentiels canvas.* (stroke, rect, ellipse fill:true, set_style). \
+Tu es l'auteur unique de ce dessin : traits séquentiels canvas.* (path pour silhouettes, stroke/rect/ellipse pour détails). \
 Pas de agent.spawn ni agent.await — un seul agent, pas de sous-agents parallèles pour le même sujet.";
 
 /// System prompt addendum for delegated canvas agents (designer rules + frame aspect).

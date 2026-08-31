@@ -324,7 +324,7 @@ async fn main() {
                             "Goal à accomplir : {}\nCritères : {:?}\n\
                              Classification : complex — {}. \
                              Dessin canvas : un seul auteur (toi). Pas de agent.spawn — \
-                             canvas.get puis canvas.stroke/rect/ellipse (fill:true pour remplir) en traits séquentiels. \
+                             canvas.get puis canvas.path (silhouettes) ou canvas.stroke/rect/ellipse (fill:true pour remplir) en traits séquentiels. \
                              media.image.generate interdit.",
                             spec.goal.statement, spec.goal.success_criteria, assess.reason
                         )
@@ -1697,7 +1697,7 @@ async fn execute_action(
         "agent.spawn" => {
             if agent_has_canvas_tools(&spec.tools) {
                 return ActResult::Continue(
-                    "canvas : dessine toi-même avec canvas.stroke/rect/ellipse/… — \
+                    "canvas : dessine toi-même avec canvas.path/stroke/rect/ellipse/… — \
                      ne spawn pas des sous-agents pour le même dessin (un seul auteur, traits séquentiels)."
                         .into(),
                 );

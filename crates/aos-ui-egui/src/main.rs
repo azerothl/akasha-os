@@ -1332,6 +1332,7 @@ fn chat_agent_kit_ex(task: &str, canvas_open: bool) -> (Vec<String>, Vec<String>
             "canvas.stroke",
             "canvas.line",
             "canvas.spline",
+            "canvas.path",
             "canvas.rect",
             "canvas.ellipse",
             "canvas.erase",

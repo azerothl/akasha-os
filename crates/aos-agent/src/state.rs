@@ -317,6 +317,21 @@ mod tests {
     }
 
     #[test]
+    fn canvas_path_advances_to_next_pending_task() {
+        let mut st = CognitiveState::new("agent-98", vec![]);
+        st.set_plan(hill_mill_plan());
+        assert!(st.maybe_advance_plan_after_canvas_draw(
+            "canvas.path",
+            "ok seq=1 path bbox=(0.1,0.5)-(0.9,0.8)"
+        ));
+        assert_eq!(st.task_graph[0].status, TaskNodeStatus::Done);
+        assert_eq!(
+            st.current_task_title().as_deref(),
+            Some("Dessiner le corps du moulin")
+        );
+    }
+
+    #[test]
     fn failed_canvas_draw_does_not_advance_plan() {
         let mut st = CognitiveState::new("agent-98", vec![]);
         st.set_plan(hill_mill_plan());

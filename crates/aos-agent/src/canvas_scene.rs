@@ -52,8 +52,9 @@ pub fn canvas_reflect_user_content(
     }
     if canvas_lines.is_empty() {
         format!(
-            "{base}\n[canvas] aucune op encore — commence par canvas.get puis canvas.stroke/rect/ellipse \
-             (fill:true pour remplir ; x,y = coin haut-gauche, y vers le bas — lis la dernière bbox avant la suivante). \
+            "{base}\n[canvas] aucune op encore — commence par canvas.get puis canvas.path (silhouettes) \
+             ou canvas.stroke/rect/ellipse (fill:true pour remplir ; x,y = coin haut-gauche, y vers le bas — \
+             lis la dernière bbox avant la suivante). \
              Traits vectoriels = progrès ; pas media.image.generate."
         )
     } else {
@@ -180,6 +181,7 @@ pub fn canvas_tool_mutates_scene(tool: &str) -> bool {
             | "canvas.stroke"
             | "canvas.line"
             | "canvas.spline"
+            | "canvas.path"
             | "canvas.rect"
             | "canvas.ellipse"
             | "canvas.fill"
@@ -197,6 +199,7 @@ pub fn canvas_tool_completes_plan_node(tool: &str) -> bool {
         "canvas.stroke"
             | "canvas.line"
             | "canvas.spline"
+            | "canvas.path"
             | "canvas.rect"
             | "canvas.ellipse"
             | "canvas.fill"
@@ -468,6 +471,7 @@ mod tests {
     #[test]
     fn plan_completing_tools_exclude_set_style() {
         assert!(canvas_tool_completes_plan_node("canvas.spline"));
+        assert!(canvas_tool_completes_plan_node("canvas.path"));
         assert!(canvas_tool_completes_plan_node("canvas.stroke"));
         assert!(!canvas_tool_completes_plan_node("canvas.set_style"));
         assert!(!canvas_tool_completes_plan_node("canvas.get"));
