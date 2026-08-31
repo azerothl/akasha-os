@@ -11,6 +11,7 @@ pub struct PanelActions {
     pub kill: bool,
     pub resume: bool,
     pub retry: bool,
+    pub export: bool,
     pub steer: Option<String>,
     pub open_child: Option<String>,
 }
@@ -22,6 +23,7 @@ impl Default for PanelActions {
             kill: false,
             resume: false,
             retry: false,
+            export: false,
             steer: None,
             open_child: None,
         }
@@ -596,6 +598,7 @@ pub enum ChatCardAction {
     None,
     OpenDetail,
     TargetReply,
+    Export,
 }
 
 pub fn chat_agent_card(
@@ -667,6 +670,9 @@ pub fn chat_agent_card(
                     ui.label(format!("step {step}/{max_steps}"));
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.add(egui::Button::new(t.agent_export).small()).clicked() {
+                        action = ChatCardAction::Export;
+                    }
                     if ui.add(egui::Button::new(t.agent_detail).small()).clicked() {
                         action = ChatCardAction::OpenDetail;
                     }
@@ -913,6 +919,9 @@ pub fn draw_agent_detail(
                 if ui.button(t.agent_kill).clicked() {
                     actions.kill = true;
                 }
+            }
+            if ui.button(t.agent_export).clicked() {
+                actions.export = true;
             }
             if a.state != AgentState::Blocked {
                 ui.label(t.agent_steer);

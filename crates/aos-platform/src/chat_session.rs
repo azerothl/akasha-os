@@ -463,7 +463,17 @@ impl ChatSessionStore {
         let (meta, messages) = self.get(id)?;
         let mut out = format!("# {}\n\n", meta.title);
         for m in messages {
-            out.push_str(&format!("## {}\n\n{}\n\n", m.role, m.content));
+            let heading = match m.speaker_name.as_deref().filter(|s| !s.trim().is_empty()) {
+                Some(name) => format!("## {} — {}\n\n", m.role, name),
+                None => format!("## {}\n\n", m.role),
+            };
+            out.push_str(&heading);
+            out.push_str(&format!("{}\n\n", m.content));
+            if let Some(thinking) = m.thinking.as_deref().filter(|s| !s.trim().is_empty()) {
+                out.push_str("### Thinking\n\n");
+                out.push_str(thinking.trim());
+                out.push_str("\n\n");
+            }
             for att in &m.attachments {
                 match att {
                     ChatAttachment::AgentRef {
@@ -662,6 +672,30 @@ archived: false
         assert_eq!(msgs.len(), 1);
         assert_eq!(msgs[0].speaker_id.as_deref(), Some("agent-a"));
         assert_eq!(msgs[0].speaker_name.as_deref(), Some("Alpha"));
+        let md = s.export_markdown(&m.id).unwrap();
+        assert!(md.contains("## assistant — Alpha"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn export_markdown_includes_thinking() {
+        let dir = std::env::temp_dir().join(format!("aos-sess-think-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let s = ChatSessionStore::open(&dir).unwrap();
+        let m = s.create(Some("Think".into()), None).unwrap();
+        s.append(
+            &m.id,
+            "assistant",
+            "réponse",
+            vec![],
+            None,
+            None,
+            Some("raison interne".into()),
+        )
+        .unwrap();
+        let md = s.export_markdown(&m.id).unwrap();
+        assert!(md.contains("### Thinking"));
+        assert!(md.contains("raison interne"));
         let _ = fs::remove_dir_all(&dir);
     }
 

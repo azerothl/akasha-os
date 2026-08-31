@@ -304,20 +304,21 @@ async fn handle_cmd(
             match bus
                 .call::<ChatSessionIdRequest, String>(
                     "chat.session.export",
-                    &ChatSessionIdRequest { session_id: id },
+                    &ChatSessionIdRequest { session_id: id.clone() },
                     vec![],
                 )
                 .await
             {
                 Ok(md) => {
-                    let path = aos_home().join("var/downloads").join(format!(
-                        "session-export-{}.md",
-                        chrono_like_stamp()
-                    ));
+                    let filename = format!("session-export-{}.md", chrono_like_stamp());
+                    let path = aos_home().join("var/downloads").join(&filename);
                     let _ = std::fs::create_dir_all(path.parent().unwrap());
-                    match std::fs::write(&path, md) {
+                    match std::fs::write(&path, md.as_bytes()) {
                         Ok(()) => {
-                            let _ = evt_tx.send(Evt::FileOk(path.display().to_string()));
+                            let _ = evt_tx.send(Evt::SessionExported {
+                                path: format!("/downloads/{filename}"),
+                                session_id: id,
+                            });
                         }
                         Err(e) => {
                             let _ = evt_tx.send(Evt::Error(e.to_string()));
@@ -326,6 +327,39 @@ async fn handle_cmd(
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::AgentExport { id } => {
+            match bus
+                .call::<AgentIdRequest, AgentTrace>(
+                    aos_agent::intents::TRACE,
+                    &AgentIdRequest { agent_id: id.clone() },
+                    vec![],
+                )
+                .await
+            {
+                Ok(trace) => {
+                    let info = aos_agent::persist::read_info(&id)
+                        .or_else(|| aos_agent::persist::info_from_spec(&id));
+                    let md = aos_agent::persist::export_trace_markdown(&trace, info.as_ref());
+                    let filename = format!("agent-export-{id}-{}.md", chrono_like_stamp());
+                    let path = aos_home().join("var/downloads").join(&filename);
+                    let _ = std::fs::create_dir_all(path.parent().unwrap());
+                    match std::fs::write(&path, md.as_bytes()) {
+                        Ok(()) => {
+                            let _ = evt_tx.send(Evt::AgentExported {
+                                path: format!("/downloads/{filename}"),
+                                agent_id: id,
+                            });
+                        }
+                        Err(e) => {
+                            let _ = evt_tx.send(Evt::Error(e.to_string()));
+                        }
+                    }
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(format!("agent.export: {e}")));
                 }
             }
         }

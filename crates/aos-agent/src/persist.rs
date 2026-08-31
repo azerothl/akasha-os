@@ -90,6 +90,130 @@ pub fn assemble_trace(
     }
 }
 
+/// Export lisible d'un journal agent (`agent.trace` / `state.json`) en markdown.
+pub fn export_trace_markdown(trace: &AgentTrace, info: Option<&AgentInfo>) -> String {
+    let title = info
+        .map(|a| a.title.as_str())
+        .filter(|s| !s.trim().is_empty());
+    let display_name = info
+        .and_then(|a| a.display_name.as_deref())
+        .filter(|s| !s.trim().is_empty());
+    let session_id = info
+        .and_then(|a| a.session_id.as_deref())
+        .filter(|s| !s.trim().is_empty());
+    let directive = info
+        .map(|a| a.directive.as_str())
+        .filter(|s| !s.trim().is_empty());
+
+    let mut out = format!("# Agent {}\n\n", trace.agent_id);
+    if let Some(t) = title {
+        out.push_str(&format!("_Title: {t}_\n\n"));
+    }
+    if let Some(name) = display_name {
+        out.push_str(&format!("_Display name: {name}_\n\n"));
+    }
+    if let Some(sid) = session_id {
+        out.push_str(&format!("_Session: `{sid}`_\n\n"));
+    }
+    if let Some(goal) = directive {
+        out.push_str(&format!("_{goal}_\n\n"));
+    }
+    if let Some(reason) = trace
+        .fail_reason
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+    {
+        out.push_str(&format!("**Fail reason:** {reason}\n\n"));
+    }
+
+    if trace.steps.is_empty() {
+        if !trace.working_memory.is_empty() {
+            out.push_str("## Working memory\n\n");
+            for (role, content) in &trace.working_memory {
+                out.push_str(&format!("### {role}\n\n{content}\n\n"));
+            }
+        }
+        return out;
+    }
+
+    for rec in &trace.steps {
+        out.push_str(&format!("## Step {}\n\n", rec.step));
+        if let Some(task) = rec.current_task.as_deref().filter(|s| !s.is_empty()) {
+            out.push_str(&format!("_Task: {task}_\n\n"));
+        }
+        if !rec.thought.trim().is_empty() {
+            out.push_str("### Thought\n\n");
+            out.push_str(rec.thought.trim());
+            out.push_str("\n\n");
+        }
+        if !rec.response.trim().is_empty() {
+            out.push_str("### Response\n\n");
+            out.push_str(rec.response.trim());
+            out.push_str("\n\n");
+        }
+        if !rec.action.trim().is_empty() {
+            out.push_str("### Action\n\n");
+            out.push_str(&format!("`{}`\n\n", rec.action.trim()));
+        }
+        let arg_lines = export_step_args(&rec.args);
+        if !arg_lines.is_empty() {
+            out.push_str("### Args\n\n");
+            for line in arg_lines {
+                out.push_str(&format!("- {line}\n"));
+            }
+            out.push('\n');
+        }
+        if !rec.tool_result.trim().is_empty() {
+            out.push_str("### Tool result\n\n");
+            out.push_str(rec.tool_result.trim());
+            out.push_str("\n\n");
+        }
+        if let Some(child) = rec.child_id.as_deref().filter(|s| !s.is_empty()) {
+            out.push_str(&format!("### Child agent\n\n`{child}`\n\n"));
+        }
+        if let Some(reason) = rec.fail_reason.as_deref().filter(|s| !s.is_empty()) {
+            out.push_str(&format!("**Step fail reason:** {reason}\n\n"));
+        }
+        if let Some(reflection) = rec.reflection.as_deref().filter(|s| !s.is_empty()) {
+            out.push_str("### Reflection\n\n");
+            out.push_str(reflection.trim());
+            out.push_str("\n\n");
+        }
+    }
+    out
+}
+
+fn export_step_args(args: &serde_json::Value) -> Vec<String> {
+    let Some(obj) = args.as_object() else {
+        return Vec::new();
+    };
+    if obj.is_empty() {
+        return Vec::new();
+    }
+    let mut lines = Vec::new();
+    for (key, value) in obj {
+        let rendered = match value {
+            serde_json::Value::String(s) if !s.trim().is_empty() => s.trim().to_string(),
+            serde_json::Value::Number(n) => n.to_string(),
+            serde_json::Value::Bool(b) => b.to_string(),
+            serde_json::Value::Null => continue,
+            other if other.is_array() || other.is_object() => {
+                other.to_string()
+            }
+            other => other.to_string(),
+        };
+        if rendered.chars().count() > 240 {
+            lines.push(format!(
+                "{key}: {}…",
+                rendered.chars().take(240).collect::<String>()
+            ));
+        } else {
+            lines.push(format!("{key}: {rendered}"));
+        }
+    }
+    lines
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
 pub struct AgentRegistry {
     #[serde(default)]
@@ -306,6 +430,62 @@ pub fn exists_spec(path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use aos_proto::{AgentKind, AgentState};
+
+    #[test]
+    fn export_trace_markdown_includes_steps_and_fail_reason() {
+        use aos_proto::AgentStepRecord;
+        let trace = AgentTrace {
+            agent_id: "agent-7".into(),
+            fail_reason: Some("agent_could_not_act".into()),
+            steps: vec![AgentStepRecord {
+                step: 1,
+                thought: "planifier".into(),
+                action: "notes.create".into(),
+                args: serde_json::json!({"title": "cohort"}),
+                tool_result: "ok".into(),
+                child_id: Some("agent-8".into()),
+                fail_reason: None,
+                ..AgentStepRecord::default()
+            }],
+            ..AgentTrace::default()
+        };
+        let info = AgentInfo {
+            agent_id: "agent-7".into(),
+            state: AgentState::Failed,
+            directive: "Plan the cohort".into(),
+            pid: None,
+            caps: vec![],
+            last_output: String::new(),
+            step: 1,
+            max_steps: 8,
+            current_task: None,
+            parent_id: None,
+            children: vec![],
+            tokens_used: 0,
+            skills: vec![],
+            tools: vec![],
+            mcp_servers: vec![],
+            fail_reason: Some("agent_could_not_act".into()),
+            session_id: Some("session-1".into()),
+            title: "Planner".into(),
+            kind: AgentKind::Task,
+            display_name: Some("Alpha".into()),
+            persona_id: None,
+            origin: None,
+        };
+        let md = export_trace_markdown(&trace, Some(&info));
+        assert!(md.contains("# Agent agent-7"));
+        assert!(md.contains("_Display name: Alpha_"));
+        assert!(md.contains("**Fail reason:** agent_could_not_act"));
+        assert!(md.contains("### Thought"));
+        assert!(md.contains("planifier"));
+        assert!(md.contains("`notes.create`"));
+        assert!(md.contains("- title: cohort"));
+        assert!(md.contains("### Tool result"));
+        assert!(md.contains("### Child agent"));
+        assert!(md.contains("`agent-8`"));
+    }
 
     #[test]
     fn compaction_keeps_recent() {
