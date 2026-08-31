@@ -19,9 +19,9 @@ use aos_proto::{
     AgentOutputEvent, AgentPromptOptimizeRequest, AgentPromptOptimizeResponse,
     AgentRoomConductRequest, AgentRoomTurnRequest, AgentRosterUpdateRequest, AgentSpec,
     AgentSpecResponse, AgentStartRequest, AgentState, AgentSteerRequest, AgentStepRecord,
-    AgentTrace, ChatAttachment, ChatMessage, ChatSessionAppendRequest,
-    ChatSessionRoomTurnCancelRequest, CancelRequest, InferParams, InferRequest, McpServerInfo,
-    SecretGetRequest, SkillInfo, TokenEvent,
+    AgentTrace, ChatAttachment, ChatMessage, ChatSessionAppendRequest, ChatSessionGetResponse,
+    ChatSessionIdRequest, ChatSessionRoomTurnCancelRequest, CancelRequest, InferParams,
+    InferRequest, McpServerInfo, SecretGetRequest, SkillInfo, TokenEvent,
 };
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -491,7 +491,41 @@ async fn main() {
                 } else {
                     persist::alloc_agent_id()
                 };
-                let spec = build_spec(&agent_id, &req);
+                let mut spec = build_spec(&agent_id, &req);
+                // Inherit chat session model when caller left model_id empty so we do
+                // not fall through to modeld's default_chat (may differ from session).
+                if spec
+                    .model_id
+                    .as_ref()
+                    .map(|s| s.trim().is_empty())
+                    .unwrap_or(true)
+                {
+                    if let Some(sid) = spec
+                        .session_id
+                        .as_ref()
+                        .map(|s| s.trim())
+                        .filter(|s| !s.is_empty())
+                    {
+                        if let Ok(resp) = bus
+                            .call::<ChatSessionIdRequest, ChatSessionGetResponse>(
+                                "chat.session.get",
+                                &ChatSessionIdRequest {
+                                    session_id: sid.to_string(),
+                                },
+                                vec![],
+                            )
+                            .await
+                        {
+                            if let Some(mid) = resp
+                                .meta
+                                .model_id
+                                .filter(|s| !s.trim().is_empty())
+                            {
+                                spec.model_id = Some(mid);
+                            }
+                        }
+                    }
+                }
                 if !req.spawns_worker() {
                     if persist::read_spec(&agent_id).is_some() {
                         let mut rt = shared.lock().await;

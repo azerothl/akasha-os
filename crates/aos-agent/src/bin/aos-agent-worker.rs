@@ -37,12 +37,13 @@ use aos_ipc::{BusClient, BusService};
 use aos_proto::{
     AgentCreateRequest, AgentCreateResponse, AgentGoal, AgentInfo, AgentOutputEvent, AgentSpec,
     AgentSource, AgentState, AgentStepRecord, CancelRequest, ChatAttachment, ChatMessage,
-    ChatSessionAppendRequest, DocumentRef, FilesGenerateRequest, FsListRequest, FsReadRequest,
-    FsReadResponse, FsWriteRequest, InferParams, InferRequest, MemContextRequest,
-    MemContextResponse, MemEpisodicQueryRequest, MemEpisodicWriteRequest, MemHit,
-    MemRememberResponse, MemSharedReadRequest, MemSharedWriteRequest, ModuleInvokeRequest,
-    ModuleInvokeResponse, NetFetchRequest, TaskNode, TaskNodeStatus, TokenEvent, WebBrowseRequest,
-    WebBrowseResponse, WebSearchHit, WebSearchRequest, WebSearchResponse,
+    ChatSessionAppendRequest, ChatSessionGetResponse, ChatSessionIdRequest, DocumentRef,
+    FilesGenerateRequest, FsListRequest, FsReadRequest, FsReadResponse, FsWriteRequest,
+    InferParams, InferRequest, MemContextRequest, MemContextResponse, MemEpisodicQueryRequest,
+    MemEpisodicWriteRequest, MemHit, MemRememberResponse, MemSharedReadRequest,
+    MemSharedWriteRequest, ModuleInvokeRequest, ModuleInvokeResponse, NetFetchRequest, TaskNode,
+    TaskNodeStatus, TokenEvent, WebBrowseRequest, WebBrowseResponse, WebSearchHit,
+    WebSearchRequest, WebSearchResponse,
 };
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -125,6 +126,43 @@ fn load_mcp_secrets(agent_id: &str) -> HashMap<String, String> {
     map
 }
 
+/// When the spec has no model_id, inherit the bound chat session's model so
+/// model.infer does not fall back to installed default_chat.
+async fn inherit_session_model(bus: &BusClient, spec: &mut AgentSpec) {
+    if spec
+        .model_id
+        .as_ref()
+        .map(|s| !s.trim().is_empty())
+        .unwrap_or(false)
+    {
+        return;
+    }
+    let Some(sid) = spec
+        .session_id
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    else {
+        return;
+    };
+    let Ok(resp) = bus
+        .call::<ChatSessionIdRequest, ChatSessionGetResponse>(
+            "chat.session.get",
+            &ChatSessionIdRequest {
+                session_id: sid.to_string(),
+            },
+            vec![],
+        )
+        .await
+    else {
+        return;
+    };
+    if let Some(mid) = resp.meta.model_id.filter(|s| !s.trim().is_empty()) {
+        spec.model_id = Some(mid);
+        let _ = persist::write_spec(spec);
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let (agent_id, bus_addr, spec_path, restore) = parse_args();
@@ -137,6 +175,8 @@ async fn main() {
     let bus = BusClient::connect(&bus_addr, format!("agent:{agent_id}"))
         .await
         .expect("connexion au bus");
+
+    inherit_session_model(&bus, &mut spec).await;
 
     let (cmd_tx, mut cmd_rx) = mpsc::channel::<WorkerCmd>(16);
 

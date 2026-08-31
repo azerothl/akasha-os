@@ -1112,6 +1112,9 @@ pub(crate) async fn spawn_chat_delegate_agent(
     req.skills = skills;
     req.tools = tools;
     req.session_id = Some(sid.clone());
+    // Bind the chat session model — null would make modeld use installed default_chat
+    // (often Qwen) instead of the model already selected/loaded for this session.
+    req.model_id = model_id.clone();
     if canvas_delegate {
         req.system_prompt = Some(chat_canvas::canvas_agent_system_prompt(canvas_aspect));
     }
