@@ -11,6 +11,7 @@ pub struct PanelActions {
     pub kill: bool,
     pub resume: bool,
     pub retry: bool,
+    pub continue_canvas: bool,
     pub export: bool,
     pub steer: Option<String>,
     pub open_child: Option<String>,
@@ -23,6 +24,7 @@ impl Default for PanelActions {
             kill: false,
             resume: false,
             retry: false,
+            continue_canvas: false,
             export: false,
             steer: None,
             open_child: None,
@@ -304,6 +306,36 @@ pub fn canvas_draw_failure_muted(
         return false;
     }
     aos_agent::canvas_scene::canvas_has_applied_traits(session_ops, trace)
+}
+
+/// True when a canvas draw agent hit max_steps but already applied traits — offer Continue.
+pub fn canvas_draw_step_cap_continue(
+    info: Option<&AgentInfo>,
+    session_ops: Option<&[aos_proto::CanvasOp]>,
+    trace: Option<&AgentTrace>,
+) -> bool {
+    let Some(a) = info else {
+        return false;
+    };
+    if a.state != AgentState::Failed {
+        return false;
+    }
+    if !agent_is_canvas_draw(a) {
+        return false;
+    }
+    if a
+        .fail_reason
+        .as_deref()
+        .is_some_and(aos_agent::context_budget::is_overflow_fail_reason)
+    {
+        return false;
+    }
+    if !aos_agent::canvas_scene::canvas_has_applied_traits(session_ops, trace) {
+        return false;
+    }
+    a.fail_reason
+        .as_deref()
+        .is_some_and(aos_agent::context_budget::is_technical_max_steps_fail_reason)
 }
 
 /// Canvas draw agent stopped without context overflow — use locked chrome, not runtime strings.
@@ -664,6 +696,7 @@ pub enum ChatCardAction {
     TargetReply,
     Export,
     Retry,
+    Continue,
 }
 
 pub fn chat_agent_card(
@@ -680,6 +713,7 @@ pub fn chat_agent_card(
     let mut action = ChatCardAction::None;
     let canvas_muted = canvas_draw_failure_muted(info, session_ops, trace);
     let canvas_fail = canvas_draw_fail_chrome(info, session_ops, trace);
+    let canvas_continue = canvas_draw_step_cap_continue(info, session_ops, trace);
     let (state_label, color, step, max_steps, task, fail, is_blocked) = if let Some(a) = info {
         (
             if canvas_fail || canvas_muted {
@@ -781,6 +815,10 @@ pub fn chat_agent_card(
                 );
                 if ui.add(egui::Button::new(t.canvas_draw_retry).small()).clicked() {
                     action = ChatCardAction::Retry;
+                }
+            } else if canvas_continue {
+                if ui.add(egui::Button::new(t.canvas_draw_continue).small()).clicked() {
+                    action = ChatCardAction::Continue;
                 }
             } else if let Some(reason) = fail {
                 let visible = resolve_visible_fail_reason(t, info, reason.as_str(), session_ops, trace);
@@ -998,7 +1036,13 @@ pub fn draw_agent_detail(
                         .is_some_and(aos_agent::context_budget::is_overflow_fail_reason);
                     let canvas_muted = canvas_draw_failure_muted(Some(a), session_ops, trace);
                     let canvas_draw = canvas_draw_fail_chrome(Some(a), session_ops, trace);
-                    if !canvas_muted {
+                    let canvas_continue =
+                        canvas_draw_step_cap_continue(Some(a), session_ops, trace);
+                    if canvas_continue {
+                        if ui.button(t.canvas_draw_continue).clicked() {
+                            actions.continue_canvas = true;
+                        }
+                    } else if !canvas_muted {
                         let retry_label = if overflow || canvas_draw {
                             t.canvas_draw_retry
                         } else {
@@ -1577,9 +1621,67 @@ Je vais répondre de manière naturelle"#;
         assert_eq!(t_fr.canvas_draw_failed, "Impossible de dessiner.");
         assert_eq!(t_en.canvas_draw_retry, "Try again");
         assert_eq!(t_fr.canvas_draw_retry, "Réessayer");
+        assert_eq!(t_en.canvas_draw_continue, "Continue");
+        assert_eq!(t_fr.canvas_draw_continue, "Continuer");
         assert!(!t_en.canvas_draw_failed.contains("InternalError"));
         assert!(!t_fr.canvas_draw_failed.contains("digest"));
         assert!(!t_en.canvas_draw_failed.contains('{'));
+    }
+
+    fn canvas_draw_agent_info(agent_id: &str) -> AgentInfo {
+        AgentInfo {
+            agent_id: agent_id.into(),
+            state: AgentState::Failed,
+            directive: "dessine un moulin".into(),
+            pid: None,
+            caps: vec![],
+            last_output: String::new(),
+            step: 64,
+            max_steps: 64,
+            current_task: None,
+            parent_id: None,
+            children: vec![],
+            tokens_used: 0,
+            skills: vec![],
+            tools: vec!["canvas.spline".into(), "canvas.rect".into()],
+            mcp_servers: vec![],
+            fail_reason: Some("max_steps (64) atteint".into()),
+            session_id: Some("sess-1".into()),
+            title: String::new(),
+            kind: AgentKind::Task,
+            display_name: None,
+            persona_id: None,
+            origin: None,
+        }
+    }
+
+    #[test]
+    fn canvas_draw_step_cap_continue_when_traits_on_session() {
+        let info = canvas_draw_agent_info("agent-102");
+        let ops = vec![aos_proto::CanvasOp {
+            seq: 1,
+            author_id: "agent-102".into(),
+            ts_ms: 0,
+            body: aos_proto::CanvasOpBody::Rect {
+                x: 0.1,
+                y: 0.2,
+                w: 0.3,
+                h: 0.4,
+                color: "#3ee0c4".into(),
+                width: 0.01,
+                fill: false,
+            },
+        }];
+        assert!(canvas_draw_step_cap_continue(Some(&info), Some(&ops), None));
+        assert!(canvas_draw_failure_muted(Some(&info), Some(&ops), None));
+        assert!(!canvas_draw_fail_chrome(Some(&info), Some(&ops), None));
+    }
+
+    #[test]
+    fn canvas_draw_step_cap_continue_false_on_empty_canvas() {
+        let info = canvas_draw_agent_info("agent-90");
+        assert!(!canvas_draw_step_cap_continue(Some(&info), None, None));
+        assert!(canvas_draw_fail_chrome(Some(&info), None, None));
     }
 
     #[test]

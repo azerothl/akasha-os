@@ -646,6 +646,8 @@ pub struct UiStrings {
     pub canvas_draw_failed: &'static str,
     /// Retry button when a canvas drawing agent fails entirely (boot-dialog pattern).
     pub canvas_draw_retry: &'static str,
+    /// Resume the same canvas agent after max_steps when strokes already exist.
+    pub canvas_draw_continue: &'static str,
     pub chat_you: &'static str,
     pub chat_assistant: &'static str,
     pub chat_system: &'static str,
@@ -1306,6 +1308,7 @@ const EN: UiStrings = UiStrings {
     document_open_failed: "Couldn't open this document.",
     canvas_draw_failed: "Couldn't draw.",
     canvas_draw_retry: "Try again",
+    canvas_draw_continue: "Continue",
     chat_you: "you",
     chat_assistant: "assistant",
     chat_system: "system",
@@ -1966,6 +1969,7 @@ const FR: UiStrings = UiStrings {
     document_open_failed: "Impossible d'ouvrir ce document.",
     canvas_draw_failed: "Impossible de dessiner.",
     canvas_draw_retry: "Réessayer",
+    canvas_draw_continue: "Continuer",
     chat_you: "vous",
     chat_assistant: "assistant",
     chat_system: "système",
