@@ -21,14 +21,14 @@ use crate::room_reply::split_room_reply;
 use crate::skills::{load_skills, merge_skill_tools};
 use crate::tool_exec::execute_room_tool;
 use crate::tools::{
-    caps_for_tools, merge_canvas_tools, select_tools, ToolDesc,
+    canvas_tools_from_module_list, caps_for_tools, merge_canvas_tools, select_tools, ToolDesc,
 };
 use aos_ipc::BusClient;
 use aos_proto::{
     AgentRoomConductRequest, AgentRoomConductResponse, AgentRoomTurnRequest,
     AgentRoomTurnResponse, AgentSpec, CancelRequest, ChatAttachment, ChatMessage,
     ChatRoomMember, ChatSessionAppendRequest, ChatSessionGetResponse, ChatSessionIdRequest,
-    ChatSessionMessage, ChatSessionMode, InferParams, InferRequest, TokenEvent,
+    ChatSessionMessage, ChatSessionMode, InferParams, InferRequest, ModuleInfo, TokenEvent,
 };
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -152,10 +152,14 @@ fn member_display_name<'a>(
 }
 
 /// Assemble tool ids + caps for a roster member turn.
-pub fn room_member_kit(spec: &AgentSpec, canvas_open: bool) -> (Vec<String>, Vec<String>) {
+pub fn room_member_kit(
+    spec: &AgentSpec,
+    canvas_open: bool,
+    canvas_exported: &[String],
+) -> (Vec<String>, Vec<String>) {
     let skill_docs = load_skills(&spec.skills);
     let mut tool_ids = merge_skill_tools(&spec.tools, &skill_docs);
-    merge_canvas_tools(&mut tool_ids, canvas_open);
+    merge_canvas_tools(&mut tool_ids, canvas_open, canvas_exported);
     let tools = select_tools(&tool_ids, &[]);
     let mut caps = spec.caps.clone();
     for c in caps_for_tools(&tools, &spec.mcp_servers) {
@@ -164,6 +168,13 @@ pub fn room_member_kit(spec: &AgentSpec, canvas_open: bool) -> (Vec<String>, Vec
         }
     }
     (tool_ids, caps)
+}
+
+pub async fn fetch_canvas_exported_tools(bus: &BusClient) -> Vec<String> {
+    bus.call::<(), Vec<ModuleInfo>>("module.list", &(), vec![])
+        .await
+        .map(|list| canvas_tools_from_module_list(&list))
+        .unwrap_or_default()
 }
 
 pub fn build_room_system_prompt(
@@ -588,7 +599,12 @@ pub async fn execute_room_turn(
     })?;
     spec.session_id = Some(req.session_id.clone());
 
-    let (tool_ids, caps) = room_member_kit(&spec, session.meta.canvas_open);
+    let canvas_exported = if session.meta.canvas_open {
+        fetch_canvas_exported_tools(bus).await
+    } else {
+        Vec::new()
+    };
+    let (tool_ids, caps) = room_member_kit(&spec, session.meta.canvas_open, &canvas_exported);
     let tool_descs = if tool_ids.is_empty() {
         Vec::new()
     } else {
@@ -1042,7 +1058,9 @@ mod tests {
             gate_mode: "ask".into(),
             origin: None,
         };
-        let (ids, caps) = room_member_kit(&spec, true);
+        use crate::tools::CANVAS_TOOL_IDS;
+        let exported: Vec<String> = CANVAS_TOOL_IDS.iter().map(|s| (*s).to_string()).collect();
+        let (ids, caps) = room_member_kit(&spec, true, &exported);
         assert!(ids.iter().any(|x| x == "canvas.set_style"));
         assert!(ids.iter().any(|x| x == "canvas.stroke"));
         assert!(ids.iter().any(|x| x == "canvas.line"));
@@ -1075,7 +1093,7 @@ mod tests {
             gate_mode: "ask".into(),
             origin: None,
         };
-        let (ids, caps) = room_member_kit(&spec, false);
+        let (ids, caps) = room_member_kit(&spec, false, &[]);
         assert!(!ids.iter().any(|x| x.starts_with("canvas.")));
         assert!(!caps.iter().any(|c| c == "tool.invoke:canvas"));
     }

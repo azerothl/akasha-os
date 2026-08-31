@@ -537,7 +537,7 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
         ),
         (
             "canvas.rect",
-            "Rectangle : x,y = coin haut-gauche, y vers le bas, w,h = taille (0..1). fill:true remplit. Alias cx,cy,w,h ou cx,cy,rx,ry.",
+            "Rectangle : x,y = coin haut-gauche, y vers le bas, w,h = taille (0..1). fill:true remplit. Alias cx,cy,w,h ; cx,cy,rx,ry ; width/height → w/h.",
             serde_json::json!({
                 "type":"object",
                 "properties":{
@@ -553,7 +553,7 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
         ),
         (
             "canvas.ellipse",
-            "Ellipse : x,y = coin haut-gauche, y vers le bas, w,h = taille (0..1). fill:true remplit. Alias cx,cy,w,h ou cx,cy,rx,ry. Aligner : partager x et w.",
+            "Ellipse : x,y = coin haut-gauche, y vers le bas, w,h = taille (0..1). fill:true remplit. Alias cx,cy,w,h ; cx,cy,rx,ry ; width/height → w/h. Aligner : partager x et w.",
             serde_json::json!({
                 "type":"object",
                 "properties":{
@@ -673,14 +673,55 @@ pub fn explicit_canvas_intent(text: &str) -> bool {
 }
 
 /// Append canvas tools when `include` is true (deduped).
-pub fn merge_canvas_tools(tool_ids: &mut Vec<String>, include: bool) {
+/// `exported` = tool names from the installed `canvas` module (`module.list`);
+/// only tools both in the catalog and exported are added.
+pub fn merge_canvas_tools(
+    tool_ids: &mut Vec<String>,
+    include: bool,
+    exported: &[String],
+) {
     if !include {
         return;
     }
-    for t in CANVAS_TOOL_IDS {
-        if !tool_ids.iter().any(|x| x == t) {
-            tool_ids.push((*t).into());
+    for t in filter_canvas_tool_ids(exported) {
+        if !tool_ids.iter().any(|x| x == &t) {
+            tool_ids.push(t);
         }
+    }
+}
+
+/// Intersect agent canvas catalog ids with tools the loaded canvas module exports.
+pub fn filter_canvas_tool_ids(exported: &[String]) -> Vec<String> {
+    CANVAS_TOOL_IDS
+        .iter()
+        .filter(|t| exported.iter().any(|e| e == *t))
+        .map(|t| (*t).to_string())
+        .collect()
+}
+
+/// Tool names exported by the installed `canvas` module (`module.list`).
+pub fn canvas_tools_from_module_list(modules: &[aos_proto::ModuleInfo]) -> Vec<String> {
+    modules
+        .iter()
+        .find(|m| m.name == "canvas")
+        .map(|m| m.tools.clone())
+        .unwrap_or_default()
+}
+
+/// Drop canvas.* tool ids that the loaded module does not export.
+pub fn restrict_canvas_tools(tool_ids: &mut Vec<String>, exported: &[String]) {
+    let allowed: std::collections::HashSet<String> = filter_canvas_tool_ids(exported)
+        .into_iter()
+        .collect();
+    tool_ids.retain(|t| !t.starts_with("canvas.") || allowed.contains(t));
+}
+
+/// Short drawing strategy for canvas agents — only mentions exported tools.
+pub fn canvas_draw_strategy_hint(exported: &[String]) -> String {
+    if exported.iter().any(|t| t == "canvas.path") {
+        "canvas.get puis canvas.path (silhouettes) ou canvas.stroke/rect/ellipse (fill:true pour remplir) en traits séquentiels.".into()
+    } else {
+        "canvas.get puis canvas.stroke/spline/rect/ellipse (fill:true pour remplir) en traits séquentiels.".into()
     }
 }
 
@@ -930,6 +971,19 @@ pub fn normalize_tool_args(name: &str, args: &serde_json::Value) -> serde_json::
             }
         }
     }
+    if (name == "canvas.rect" || name == "canvas.ellipse")
+        && !obj.contains_key("w")
+        && !obj.contains_key("h")
+        && obj.contains_key("width")
+        && obj.contains_key("height")
+    {
+        if let Some(v) = obj.get("width").cloned() {
+            obj.insert("w".into(), v);
+        }
+        if let Some(v) = obj.get("height").cloned() {
+            obj.insert("h".into(), v);
+        }
+    }
     out
 }
 
@@ -990,12 +1044,57 @@ mod tests {
 
     #[test]
     fn merge_canvas_tools_adds_invoke_cap_targets() {
+        let exported: Vec<String> = CANVAS_TOOL_IDS.iter().map(|s| (*s).to_string()).collect();
         let mut ids = vec!["notes.create".into()];
-        merge_canvas_tools(&mut ids, true);
+        merge_canvas_tools(&mut ids, true, &exported);
         assert!(ids.iter().any(|x| x == "canvas.stroke"));
         assert!(ids.iter().any(|x| x == "canvas.get"));
         let caps = caps_for_tools(&select_tools(&ids, &[]), &[]);
         assert!(caps.iter().any(|c| c == "tool.invoke:canvas"));
+    }
+
+    #[test]
+    fn filter_canvas_tool_ids_intersects_exported() {
+        let exported = vec![
+            "canvas.stroke".into(),
+            "canvas.rect".into(),
+            "canvas.get".into(),
+        ];
+        let ids = filter_canvas_tool_ids(&exported);
+        assert!(ids.iter().any(|x| x == "canvas.stroke"));
+        assert!(ids.iter().any(|x| x == "canvas.rect"));
+        assert!(!ids.iter().any(|x| x == "canvas.path"));
+    }
+
+    #[test]
+    fn restrict_canvas_tools_drops_unexported_path() {
+        let exported = vec!["canvas.stroke".into(), "canvas.rect".into()];
+        let mut ids = vec![
+            "canvas.path".into(),
+            "canvas.stroke".into(),
+            "notes.create".into(),
+        ];
+        restrict_canvas_tools(&mut ids, &exported);
+        assert!(!ids.iter().any(|x| x == "canvas.path"));
+        assert!(ids.iter().any(|x| x == "canvas.stroke"));
+        assert!(ids.iter().any(|x| x == "notes.create"));
+    }
+
+    #[test]
+    fn normalize_rect_width_height_aliases_to_w_h() {
+        let args = normalize_tool_args(
+            "canvas.rect",
+            &serde_json::json!({
+                "session_id": "s1",
+                "x": 0.1,
+                "y": 0.2,
+                "width": 0.3,
+                "height": 0.15,
+                "fill": true
+            }),
+        );
+        assert_eq!(args["w"], 0.3);
+        assert_eq!(args["h"], 0.15);
     }
 
     #[test]
