@@ -675,7 +675,7 @@ const CHAT_AGENT_MIN_STEPS: u32 = 64;
 pub(crate) const CHAT_AGENT_MAX_SUBAGENTS: u32 = 8;
 
 fn chat_agent_max_steps(prefs_max: u32) -> u32 {
-    prefs_max.max(CHAT_AGENT_MIN_STEPS).min(128)
+    prefs_max.clamp(CHAT_AGENT_MIN_STEPS, 128)
 }
 
 fn session_model_supports_vision(model_id: Option<&str>) -> bool {
@@ -825,16 +825,6 @@ fn stop_button_reserved_width(ui: &egui::Ui, t: &i18n::UiStrings) -> f32 {
     measured.max(fr_floor)
 }
 
-fn composer_measured_buttons_w(ui: &egui::Ui, t: &i18n::UiStrings, show_stop: bool) -> f32 {
-    let gap = ui.spacing().item_spacing.x;
-    let send_w = send_button_reserved_width(ui, t);
-    if show_stop {
-        send_w + gap + stop_button_reserved_width(ui, t)
-    } else {
-        send_w
-    }
-}
-
 /// Field width after reserving fixed Envoyer (+ Stop) and paperclip chrome (RTL allocation).
 fn composer_field_width(
     row_w: f32,
@@ -849,6 +839,7 @@ fn composer_field_width(
     (row_w - chrome).max(0.0)
 }
 
+#[cfg(test)]
 fn chat_composer_wraps(available_w: f32, attach_w: f32, buttons_w: f32) -> bool {
     available_w - attach_w - buttons_w < COMPOSER_MIN_INPUT_W
 }
@@ -1088,6 +1079,7 @@ pub(crate) async fn session_has_running_canvas_agent(bus: &BusClient, session_id
     })
 }
 
+#[allow(clippy::too_many_arguments)] // Agent launch inputs remain explicit at the UI/runtime boundary.
 pub(crate) async fn spawn_chat_delegate_agent(
     bus: Arc<BusClient>,
     evt_tx: Sender<Evt>,
@@ -1320,11 +1312,10 @@ fn chat_agent_kit_ex(
             }
         }
     }
-    if lower.contains("task") || lower.contains("tâche") || lower.contains("todo") {
-        if !skills.iter().any(|s| s == "tasks") {
+    if (lower.contains("task") || lower.contains("tâche") || lower.contains("todo"))
+        && !skills.iter().any(|s| s == "tasks") {
             skills.push("tasks".into());
         }
-    }
     if lower.contains("recherch")
         || lower.contains("web")
         || lower.contains("search")
@@ -1339,18 +1330,16 @@ fn chat_agent_kit_ex(
             }
         }
     }
-    if lower.contains("audio")
+    if (lower.contains("audio")
         || lower.contains("tts")
         || lower.contains("voix")
         || lower.contains("speech")
         || lower.contains("speak")
         || lower.contains("wav")
-        || lower.contains("vocal")
-    {
-        if !tools.iter().any(|x| x == "media.audio.generate") {
+        || lower.contains("vocal"))
+        && !tools.iter().any(|x| x == "media.audio.generate") {
             tools.push("media.audio.generate".into());
         }
-    }
     if !chat_canvas::chat_user_wants_explicit_canvas(task)
         && !canvas_open
         && (lower.contains("image")
@@ -1358,11 +1347,9 @@ fn chat_agent_kit_ex(
             || lower.contains("illustration")
             || lower.contains("diffusion")
             || chat_canvas::chat_user_has_draw_wording(task))
-    {
-        if !tools.iter().any(|x| x == "media.image.generate") {
+        && !tools.iter().any(|x| x == "media.image.generate") {
             tools.push("media.image.generate".into());
         }
-    }
     if canvas_open || chat_canvas::chat_user_wants_explicit_canvas(task) {
         for t in aos_agent::tools::filter_canvas_tool_ids(canvas_exported) {
             if !tools.iter().any(|x| x == &t) {
@@ -1973,7 +1960,6 @@ struct UiApp {
     agent_system_prompt: String,
     agent_docs: String,
     agent_max_steps: u32,
-    agent_optimize: bool,
     skill_catalog: Vec<SkillInfo>,
     skill_selected: Vec<String>,
     mcp_catalog: Vec<McpServerInfo>,
@@ -2287,7 +2273,6 @@ impl UiApp {
             agent_system_prompt: String::new(),
             agent_docs: String::new(),
             agent_max_steps,
-            agent_optimize: false,
             skill_catalog: Vec::new(),
             skill_selected: Vec::new(),
             mcp_catalog: Vec::new(),
@@ -6260,16 +6245,18 @@ impl UiApp {
                         research_choice::ResearchChoiceAction::None => {}
                     }
                 }
-                if let Some((msg_idx, action)) = document_progress_action {
-                    if let research_choice::DocumentProgressAction::Stop(agent_id) = action {
-                        for att in &mut self.chat[msg_idx].attachments {
-                            if let ChatAttachment::DocumentProgress { state, .. } = att {
-                                *state = "stopped".into();
-                            }
+                if let Some((
+                    msg_idx,
+                    research_choice::DocumentProgressAction::Stop(agent_id),
+                )) = document_progress_action
+                {
+                    for att in &mut self.chat[msg_idx].attachments {
+                        if let ChatAttachment::DocumentProgress { state, .. } = att {
+                            *state = "stopped".into();
                         }
-                        self.document_prep_kill_pending += 1;
-                        let _ = self.cmd_tx.send(Cmd::AgentKill { id: agent_id });
                     }
+                    self.document_prep_kill_pending += 1;
+                    let _ = self.cmd_tx.send(Cmd::AgentKill { id: agent_id });
                 }
                 if let Some((question, path)) = document_result_open {
                     research_document::open_document(

@@ -20,6 +20,7 @@ fn mix(a: egui::Color32, b: egui::Color32, t: f32) -> egui::Color32 {
     )
 }
 
+#[cfg(test)]
 fn relative_luminance(c: egui::Color32) -> f32 {
     fn channel(v: u8) -> f32 {
         let s = f32::from(v) / 255.0;
@@ -33,6 +34,7 @@ fn relative_luminance(c: egui::Color32) -> f32 {
 }
 
 /// WCAG 2.x contrast ratio between two sRGB colors.
+#[cfg(test)]
 pub fn contrast_ratio(fg: egui::Color32, bg: egui::Color32) -> f32 {
     let l1 = relative_luminance(fg);
     let l2 = relative_luminance(bg);

@@ -79,7 +79,7 @@ impl TasksPanelState {
                                 crate::icons::done_check(ui);
                             }
                             let label = if item.done {
-                                format!("{}", item.title)
+                                item.title.to_string()
                             } else {
                                 item.title.clone()
                             };

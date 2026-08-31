@@ -4,7 +4,6 @@ use aos_agent::document_index::ResearchDocumentEntry;
 use aos_proto::ChatAttachment;
 use eframe::egui;
 use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
-use std::path::PathBuf;
 
 use crate::decl_ui;
 use crate::i18n::UiStrings;
@@ -181,7 +180,7 @@ pub fn show_documents_list(
 }
 
 pub fn load_index_entries() -> Vec<ResearchDocumentEntry> {
-    let home = PathBuf::from(aos_home());
+    let home = aos_home();
     aos_agent::document_index::load_research_documents(&home)
 }
 

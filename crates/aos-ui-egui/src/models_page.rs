@@ -323,6 +323,7 @@ pub fn ui_hf_import(
     });
 }
 
+#[allow(clippy::too_many_arguments)] // Immediate-mode card callbacks are intentionally explicit.
 pub fn ui_model_card(
     ui: &mut egui::Ui,
     m: &CatalogModel,
@@ -409,6 +410,7 @@ pub fn ui_model_card(
         });
 }
 
+#[allow(clippy::too_many_arguments)] // Immediate-mode card callbacks are intentionally explicit.
 pub fn ui_installed_card(
     ui: &mut egui::Ui,
     m: &InstalledRow,

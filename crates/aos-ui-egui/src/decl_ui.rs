@@ -228,7 +228,7 @@ impl DeclUiPanelState {
                     .label
                     .clone()
                     .unwrap_or_else(|| "text".into());
-                form_fields.entry(key.clone()).or_insert_with(String::new);
+                form_fields.entry(key.clone()).or_default();
                 ui.label(&key);
                 ui.text_edit_multiline(form_fields.get_mut(&key).unwrap());
             }
@@ -466,7 +466,7 @@ fn render_stats(ui: &mut Ui, val: &Value, items: Option<&[String]>) {
     match val {
         Value::Object(map) => {
             let keys: Vec<_> = if let Some(items) = items {
-                items.iter().cloned().collect()
+                items.to_vec()
             } else {
                 let mut k: Vec<_> = map.keys().cloned().collect();
                 k.sort();
@@ -773,7 +773,7 @@ fn render_scatter(ui: &mut Ui, val: &Value, series_key: Option<&str>) {
         .height(160.0)
         .show(ui, |plot_ui| {
             plot_ui.points(
-                Points::new(PlotPoints::from_iter(points.into_iter()))
+                Points::new(PlotPoints::from_iter(points))
                     .radius(3.0_f32)
                     .name(series_key.unwrap_or("points")),
             );

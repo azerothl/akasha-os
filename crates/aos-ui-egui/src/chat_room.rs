@@ -60,14 +60,6 @@ pub fn format_turn_speaker_queue(
     Some(names.join(t.room_queue_joiner))
 }
 
-fn roster_member_label(t: &UiStrings, members: &[ChatRoomMember], agent_id: &str) -> String {
-    members
-        .iter()
-        .find(|m| m.agent_id == agent_id)
-        .map(|m| member_display_label(t, m))
-        .unwrap_or_else(|| agent_id.to_string())
-}
-
 pub fn active_session_meta<'a>(
     sessions: &'a [ChatSessionMeta],
     active_id: Option<&str>,
@@ -155,7 +147,7 @@ pub fn library_add_candidates(
     let present = member_ids(members);
     agents_with_library_placeholders(agents, t)
         .into_iter()
-        .filter(|a| is_salon_picker_candidate(a))
+        .filter(is_salon_picker_candidate)
         .filter(|a| !present.contains(a.agent_id.as_str()))
         .collect()
 }
@@ -258,9 +250,9 @@ fn strip_bare_agent_id_tokens(text: &str) -> String {
         if let Some(at) = rest.find('@') {
             out.push_str(&rest[..at]);
             let after_at = &rest[at + 1..];
-            if after_at.starts_with("agent-") {
+            if let Some(agent_suffix) = after_at.strip_prefix("agent-") {
                 let mut byte_end = 6;
-                for (i, c) in after_at[6..].char_indices() {
+                for (i, c) in agent_suffix.char_indices() {
                     if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
                         byte_end = 6 + i + c.len_utf8();
                     } else {

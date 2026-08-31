@@ -1,5 +1,6 @@
 //! In-app feature guides (EN/FR) — scrollable help surface, not a website or mill.
 
+#[cfg(test)]
 use crate::Tab;
 use eframe::egui::{self, Color32, Pos2, Rect, Stroke, Vec2};
 
@@ -42,6 +43,7 @@ impl GuideState {
     }
 }
 
+#[cfg(test)]
 pub fn topic_for_tab(tab: &Tab) -> Option<GuideTopic> {
     match tab {
         Tab::Chat => Some(GuideTopic::Chat),

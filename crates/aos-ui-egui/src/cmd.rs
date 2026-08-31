@@ -12,6 +12,7 @@ use aos_proto::{McpServerInfo};
 use crate::notes_panel;
 use crate::tasks_panel;
 
+#[allow(clippy::large_enum_variant)] // Boxing command payloads would complicate every UI dispatch site.
 pub(crate) enum Cmd {
     /// Chat session active : historique + texte user (persisté côté platformd).
     Chat {
@@ -117,6 +118,7 @@ pub(crate) enum Cmd {
     },
     AgentTrace { id: String },
     AgentExport { id: String },
+    #[allow(dead_code)] // Runtime support is kept for the prompt-optimizer UI integration.
     AgentPromptOptimize {
         goal: String,
         skills: Vec<String>,
@@ -407,7 +409,6 @@ pub(crate) enum Evt {
     SkillPassPending(Option<SkillPassPendingOffer>),
     SkillPassCreated {
         pattern_id: String,
-        skill_name: String,
     },
     SecretList {
         names: Vec<String>,
@@ -526,20 +527,6 @@ impl ChatLine {
         }
     }
 
-    pub(crate) fn with_speaker(
-        role: impl Into<String>,
-        text: impl Into<String>,
-        speaker_id: Option<String>,
-    ) -> Self {
-        Self {
-            role: role.into(),
-            text: text.into(),
-            attachments: Vec::new(),
-            speaker_id,
-            speaker_name: None,
-            thinking: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone)]

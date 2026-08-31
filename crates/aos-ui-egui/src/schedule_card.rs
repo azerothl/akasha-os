@@ -50,6 +50,7 @@ pub fn status_line(
     }
 }
 
+#[allow(clippy::too_many_arguments)] // Card rendering inputs are explicit and UI-local.
 pub fn render_schedule_card(
     ui: &mut egui::Ui,
     t: &UiStrings,
@@ -146,19 +147,19 @@ pub fn merge_schedule_list(local: &mut Vec<ScheduleEntry>, incoming: Vec<Schedul
     local.retain(|e| incoming_ids.contains(&e.id));
 }
 
-pub fn apply_local_pause(schedules: &mut Vec<ScheduleEntry>, id: &str) {
+pub fn apply_local_pause(schedules: &mut [ScheduleEntry], id: &str) {
     if let Some(entry) = schedules.iter_mut().find(|s| s.id == id) {
         entry.paused = true;
     }
 }
 
-pub fn apply_local_resume(schedules: &mut Vec<ScheduleEntry>, id: &str) {
+pub fn apply_local_resume(schedules: &mut [ScheduleEntry], id: &str) {
     if let Some(entry) = schedules.iter_mut().find(|s| s.id == id) {
         entry.paused = false;
     }
 }
 
-pub fn apply_local_stop(schedules: &mut Vec<ScheduleEntry>, id: &str) {
+pub fn apply_local_stop(schedules: &mut [ScheduleEntry], id: &str) {
     if let Some(entry) = schedules.iter_mut().find(|s| s.id == id) {
         entry.enabled = false;
         entry.paused = false;
@@ -192,6 +193,7 @@ pub fn send_schedule_action(cmd_tx: &std::sync::mpsc::Sender<Cmd>, action: Sched
 }
 
 /// Primary/secondary action labels per card state (for UI + tests).
+#[cfg(test)]
 pub fn action_labels_for_state<'a>(t: &'a UiStrings, state: &str) -> Option<(&'a str, &'a str)> {
     match state {
         "live" => Some((t.schedule_pause, t.schedule_stop)),

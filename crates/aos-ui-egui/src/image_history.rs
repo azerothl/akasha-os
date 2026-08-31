@@ -137,6 +137,6 @@ pub fn list_image_history(limit: usize) -> Vec<ImageGenMeta> {
         })
         .collect();
     metas.sort_by(|a, b| b.created_unix.cmp(&a.created_unix));
-    metas.truncate(limit.max(1).min(HISTORY_CAP));
+    metas.truncate(limit.clamp(1, HISTORY_CAP));
     metas
 }

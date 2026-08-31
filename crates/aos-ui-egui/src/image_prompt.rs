@@ -81,14 +81,14 @@ pub fn prompt_enrichment_kind(model_id: &str) -> Option<PromptEnrichmentKind> {
 /// True when Image Studio can offer LLM → JSON enrichment for this model.
 pub fn supports_json_prompt_enrichment(model_id: Option<&str>) -> bool {
     model_id
-        .and_then(|id| prompt_enrichment_kind(id))
+        .and_then(prompt_enrichment_kind)
         .is_some()
 }
 
 /// Default « enrich prompt » checkbox: on for Ideogram 4 only.
 pub fn default_enrich_prompt(model_id: Option<&str>) -> bool {
     matches!(
-        model_id.and_then(|id| prompt_enrichment_kind(id)),
+        model_id.and_then(prompt_enrichment_kind),
         Some(PromptEnrichmentKind::Ideogram4)
     )
 }

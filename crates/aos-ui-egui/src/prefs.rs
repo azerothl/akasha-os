@@ -310,8 +310,10 @@ mod tests {
 
     #[test]
     fn ui_scale_persists_in_preferences_json() {
-        let mut prefs = Preferences::default();
-        prefs.ui_scale_percent = 110;
+        let prefs = Preferences {
+            ui_scale_percent: 110,
+            ..Preferences::default()
+        };
         let raw = serde_json::to_string(&prefs).expect("serialize prefs");
         assert!(raw.contains("\"ui_scale_percent\":110"));
         let loaded: Preferences = serde_json::from_str(&raw).expect("deserialize prefs");

@@ -1020,7 +1020,7 @@ impl ImageStudioState {
     }
 
     fn reference_strength_value(&self) -> Option<f32> {
-        if self.pending_reference.first().is_some() {
+        if !self.pending_reference.is_empty() {
             Some(self.reference_strength.clamp(0.0, 1.0))
         } else if self.img2img_enabled {
             Some(self.img2img_strength.clamp(0.0, 1.0))
@@ -1155,7 +1155,6 @@ impl ImageStudioState {
             init_image,
             strength,
             mask_image,
-            ..MediaImageOptions::default()
         }
     }
 
@@ -1163,6 +1162,7 @@ impl ImageStudioState {
         self.video_result = Some(path);
     }
 
+    #[allow(clippy::too_many_arguments)] // The studio owns a broad, explicit UI integration boundary.
     pub fn ui(
         &mut self,
         ui: &mut egui::Ui,
@@ -1910,11 +1910,10 @@ impl ImageStudioState {
                     if expert_toggled && self.expert_mode {
                         self.load_expert_defaults_from_catalog();
                     }
-                    if self.expert_mode {
-                        if ui.button(t.studio_expert_reset).clicked() {
+                    if self.expert_mode
+                        && ui.button(t.studio_expert_reset).clicked() {
                             self.load_expert_defaults_from_catalog();
                         }
-                    }
                 });
                 if self.expert_mode {
                     ui.horizontal(|ui| {
@@ -2131,6 +2130,7 @@ fn ui_image_history(ui: &mut egui::Ui, t: &UiStrings, studio: &mut ImageStudioSt
         });
 }
 
+#[allow(clippy::too_many_arguments)] // Keeps the reusable widget configuration explicit.
 fn combo_image_pack(
     ui: &mut egui::Ui,
     widget_id: &str,
@@ -2559,9 +2559,11 @@ mod tests {
 
     #[test]
     fn pending_reference_overrides_expert_img2img_path() {
-        let mut studio = ImageStudioState::default();
-        studio.img2img_enabled = true;
-        studio.img2img_path = "/downloads/other.png".into();
+        let mut studio = ImageStudioState {
+            img2img_enabled: true,
+            img2img_path: "/downloads/other.png".into(),
+            ..ImageStudioState::default()
+        };
         studio.queue_reference_image("/downloads/ref.png".into());
         let opts = studio.to_options();
         assert_eq!(opts.init_image.as_deref(), Some("/downloads/ref.png"));
@@ -2569,10 +2571,12 @@ mod tests {
 
     #[test]
     fn expert_img2img_without_pending_reference() {
-        let mut studio = ImageStudioState::default();
-        studio.img2img_enabled = true;
-        studio.img2img_path = "/downloads/expert.png".into();
-        studio.img2img_strength = 0.42;
+        let studio = ImageStudioState {
+            img2img_enabled: true,
+            img2img_path: "/downloads/expert.png".into(),
+            img2img_strength: 0.42,
+            ..ImageStudioState::default()
+        };
         let opts = studio.to_options();
         assert_eq!(opts.init_image.as_deref(), Some("/downloads/expert.png"));
         assert_eq!(opts.strength, Some(0.42));
@@ -2580,9 +2584,11 @@ mod tests {
 
     #[test]
     fn inpaint_mask_sets_init_image_mask_and_strength() {
-        let mut studio = ImageStudioState::default();
-        studio.preview = Some("/downloads/result.png".into());
-        studio.inpaint_mode = true;
+        let mut studio = ImageStudioState {
+            preview: Some("/downloads/result.png".into()),
+            inpaint_mode: true,
+            ..ImageStudioState::default()
+        };
         let mut mask = crate::image_composition::InpaintMask::new(64, 64);
         mask.paint_brush(0.5, 0.5, 0.1);
         studio.inpaint_mask = Some(mask);
@@ -2610,9 +2616,11 @@ mod tests {
 
     #[test]
     fn video_mode_sets_vid_gen_and_frames() {
-        let mut studio = ImageStudioState::default();
-        studio.create_mode = CreateMode::Video;
-        studio.video_duration_secs = 3;
+        let studio = ImageStudioState {
+            create_mode: CreateMode::Video,
+            video_duration_secs: 3,
+            ..ImageStudioState::default()
+        };
         let opts = studio.to_options();
         assert_eq!(opts.sd_mode.as_deref(), Some("vid_gen"));
         assert_eq!(opts.video_frames, Some(49));

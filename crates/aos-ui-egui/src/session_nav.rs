@@ -53,6 +53,7 @@ pub fn should_replace_chat_on_same_session_reload(schedule_transcript_dirty: boo
 }
 
 /// Simulate handling a cross-session `SessionLoaded` (e.g. stale create after Pause).
+#[cfg(test)]
 pub fn apply_session_loaded_id(
     active_session: &mut Option<String>,
     pending: &mut PendingSessionNav,

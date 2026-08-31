@@ -802,10 +802,9 @@ async fn handle_cmd(
                 )
                 .await
             {
-                Ok(info) => {
+                Ok(_info) => {
                     let _ = evt_tx.send(Evt::SkillPassCreated {
                         pattern_id,
-                        skill_name: info.name,
                     });
                     if let Ok(list) = bus.call::<(), Vec<SkillInfo>>("skill.list", &(), vec![]).await
                     {
@@ -1542,11 +1541,10 @@ async fn handle_cmd(
             {
                 req.caps.push("tool.invoke:notes".into());
             }
-            if req.tools.iter().any(|t| t.starts_with("module.")) {
-                if !req.caps.iter().any(|c| c == "module.install") {
+            if req.tools.iter().any(|t| t.starts_with("module."))
+                && !req.caps.iter().any(|c| c == "module.install") {
                     req.caps.push("module.install".into());
                 }
-            }
             match bus
                 .call::<AgentCreateRequest, aos_proto::AgentCreateResponse>(
                     aos_agent::intents::CREATE,
@@ -1625,11 +1623,7 @@ async fn handle_cmd(
                         } else {
                             t.agents_roster_registered.replace("{id}", &r.agent_id)
                         };
-                        let card_title = if has_goal {
-                            name.clone()
-                        } else {
-                            name.clone()
-                        };
+                        let card_title = name.clone();
                         let att = ChatAttachment::AgentRef {
                             agent_id: r.agent_id.clone(),
                             title: card_title.clone(),
@@ -3244,7 +3238,7 @@ async fn handle_cmd(
             session_id,
             after_seq,
         } => {
-            match bus
+            if let Ok(resp) = bus
                 .call::<aos_proto::CanvasGetRequest, aos_proto::CanvasGetResponse>(
                     "canvas.get",
                     &aos_proto::CanvasGetRequest {
@@ -3253,21 +3247,17 @@ async fn handle_cmd(
                     },
                     vec![],
                 )
-                .await
-            {
-                Ok(resp) => {
-                    let delta = after_seq.is_some();
-                    let _ = evt_tx.send(Evt::CanvasSnapshot {
-                        session_id: resp.session_id,
-                        canvas_open: resp.canvas_open,
-                        next_seq: resp.next_seq,
-                        ops: resp.ops,
-                        pen: resp.pen,
-                        delta,
-                        canvas_seeing: Some(resp.canvas_seeing),
-                    });
-                }
-                Err(_) => {}
+                .await {
+                let delta = after_seq.is_some();
+                let _ = evt_tx.send(Evt::CanvasSnapshot {
+                    session_id: resp.session_id,
+                    canvas_open: resp.canvas_open,
+                    next_seq: resp.next_seq,
+                    ops: resp.ops,
+                    pen: resp.pen,
+                    delta,
+                    canvas_seeing: Some(resp.canvas_seeing),
+                });
             }
         }
         Cmd::CanvasSetAspect { session_id, aspect } => {
@@ -3383,10 +3373,6 @@ fn room_joined_ms() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_millis() as u64
-}
-
-pub fn joined_ms_now() -> u64 {
-    room_joined_ms()
 }
 
 async fn refresh_sessions(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>) {
@@ -3619,7 +3605,7 @@ async fn infer_llm_rewrite(
             Ok(TokenEvent::Delta { text }) => {
                 out.push_str(&text);
                 token_count += 1;
-                if token_count % 8 == 0 {
+                if token_count.is_multiple_of(8) {
                     let preview = if out.len() > 80 {
                         format!("…{}", &out[out.len() - 80..])
                     } else {

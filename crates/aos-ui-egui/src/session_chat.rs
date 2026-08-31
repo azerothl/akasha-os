@@ -110,6 +110,7 @@ pub(crate) fn on_delta(
 }
 
 /// Complete an assistant turn for `session_id`; paint or mark unread.
+#[allow(clippy::too_many_arguments)] // Session completion updates several coordinated view fields.
 pub(crate) fn on_done(
     state: &mut SessionChatState,
     active_session: Option<&str>,
@@ -199,7 +200,7 @@ mod tests {
     fn delta_for_background_session_does_not_paint_active_streaming() {
         let mut state = SessionChatState::default();
         let mut streaming = String::new();
-        state.begin_turn(&session_a());
+        state.begin_turn(session_a());
 
         on_delta(
             &mut state,
@@ -217,7 +218,7 @@ mod tests {
     fn delta_for_active_session_updates_streaming() {
         let mut state = SessionChatState::default();
         let mut streaming = String::new();
-        state.begin_turn(&session_a());
+        state.begin_turn(session_a());
 
         on_delta(
             &mut state,
@@ -238,7 +239,7 @@ mod tests {
         let mut pending = false;
         let mut inference_id = None;
 
-        state.begin_turn(&session_a());
+        state.begin_turn(session_a());
         on_delta(
             &mut state,
             Some(session_b()),
@@ -279,7 +280,7 @@ mod tests {
         let mut pending = true;
         let mut inference_id = None;
 
-        state.begin_turn(&session_a());
+        state.begin_turn(session_a());
         on_done(
             &mut state,
             Some(session_a()),
@@ -387,10 +388,8 @@ mod tests {
 
         // Returning to A clears unread and restores inflight view (completed).
         state.clear_unread(session_a());
-        let chat_a = vec![
-            ChatLine::plain("user", "question in A"),
-            ChatLine::plain("assistant", "reply text"),
-        ];
+        let chat_a = [ChatLine::plain("user", "question in A"),
+            ChatLine::plain("assistant", "reply text")];
         state.sync_active_view(
             Some(session_a()),
             &mut streaming,
@@ -405,7 +404,7 @@ mod tests {
     #[test]
     fn switch_active_view_while_background_session_still_pending() {
         let mut state = SessionChatState::default();
-        state.begin_turn(&session_a());
+        state.begin_turn(session_a());
 
         let mut streaming = String::new();
         let mut pending = false;

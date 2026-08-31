@@ -11,6 +11,7 @@ pub const PRIMARY_RAIL: [TabKind; 4] = [
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)] // Models overflow destinations as well as the active primary rail.
 pub enum TabKind {
     Chat,
     Agents,
@@ -29,6 +30,7 @@ pub enum TabKind {
     Module,
 }
 
+#[allow(dead_code)] // Shortcut helpers are retained with the navigation model.
 impl TabKind {
     pub fn is_tester(self) -> bool {
         matches!(self, TabKind::Scenarios | TabKind::Feedback)
@@ -48,6 +50,7 @@ impl TabKind {
     }
 }
 
+#[cfg(test)]
 pub fn tab_kind(tab: &Tab) -> TabKind {
     match tab {
         Tab::Chat => TabKind::Chat,
@@ -79,6 +82,7 @@ pub fn is_overflow_tab(tab: &Tab) -> bool {
     !is_primary_rail(tab)
 }
 
+#[cfg(test)]
 pub fn primary_rail_index(tab: &Tab) -> Option<usize> {
     let kind = tab_kind(tab);
     PRIMARY_RAIL.iter().position(|k| *k == kind)

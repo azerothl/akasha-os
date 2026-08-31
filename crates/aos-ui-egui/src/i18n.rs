@@ -1,6 +1,7 @@
 //! UI string tables (EN primary / FR) keyed by `onboarding.language`.
 
 #[derive(Clone, Copy)]
+#[allow(dead_code)] // Includes staged and legacy bilingual surfaces.
 pub struct UiStrings {
     pub preview_banner: &'static str,
     pub preview_tagline: &'static str,

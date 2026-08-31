@@ -379,6 +379,7 @@ pub fn overlay_allows_block_editing(preview_path: Option<&str>, overlay_opacity:
 }
 
 /// Right-pane composition editor (aspect frame + overlapping blocks).
+#[allow(clippy::too_many_arguments)] // Composition editor state is explicit at the UI boundary.
 pub fn ui_composition_canvas(
     ui: &mut egui::Ui,
     t: &UiStrings,

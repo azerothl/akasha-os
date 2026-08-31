@@ -877,6 +877,188 @@ pub fn ui_canvas_surface(
     action
 }
 
+// ── Frozen routing (designer) ───────────────────────────────────────────────
+// 1. Canvas OPEN + dessine/draw/sketch → board (`canvas.*`).
+// 2. Canvas CLOSED + dessine/draw/sketch → Create (`media.image.generate`).
+// 3. Explicit phrase (dans/sur le canvas, au trait, /canvas, …) → board; opens face even if closed.
+// 4. « encore » / « vas-y » alone → not enough for canvas or face.
+// 5. Lone « canvas » → not enough.
+
+/// Phrases that beat Create/image routing — lone « canvas » is not enough.
+const EXPLICIT_CANVAS_MARKERS: &[&str] = &[
+    "/canvas",
+    "/canevas",
+    "sur le canvas",
+    "dans le canvas",
+    "on the canvas",
+    "in the canvas",
+    "to the canvas",
+    "sur le canevas",
+    "dans le canevas",
+    "on the canevas",
+    "in the canevas",
+    "to the canevas",
+    // « au trait » = vector strokes on the session canvas (not pixel diffusion).
+    "au trait",
+];
+
+/// Explicit phrase → open canvas face (even when toggle was closed).
+pub fn chat_should_open_canvas_face(text: &str) -> bool {
+    chat_user_wants_explicit_canvas(text)
+}
+
+/// Explicit vector-canvas intent: toggle phrase, slash, or stroke wording — not bare « dessine ».
+pub fn chat_user_wants_explicit_canvas(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    EXPLICIT_CANVAS_MARKERS.iter().any(|m| lower.contains(m))
+}
+
+fn word_boundary_match(lower: &str, pat: &str) -> bool {
+    lower
+        .split(|c: char| !c.is_alphanumeric())
+        .any(|word| word == pat)
+}
+
+/// Bare draw / sketch wording in the message (no canvas-open context).
+pub fn chat_user_has_draw_wording(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    [
+        "dessin",
+        "dessine",
+        "dessiner",
+        "draw",
+        "drawing",
+        "sketch",
+        "trace",
+        "tracer",
+        "esquisse",
+        "redessine",
+        "redessiner",
+        "illustration",
+        "illustrer",
+    ]
+    .iter()
+    .any(|k| word_boundary_match(&lower, k))
+}
+
+/// Short follow-ups that must not spawn a new canvas agent from a closed board.
+fn chat_is_canvas_followup_steal(text: &str) -> bool {
+    let trimmed = text.trim().to_lowercase();
+    [
+        "encore",
+        "vas-y",
+        "vas y",
+        "go ahead",
+        "relance",
+        "lance",
+        "améliore",
+        "ameliore",
+    ]
+    .iter()
+    .any(|k| trimmed == *k)
+}
+
+/// Bare draw / sketch → Image Studio only when the session canvas is closed.
+pub fn chat_user_wants_pixel_draw(text: &str, canvas_open: bool) -> bool {
+    if chat_user_wants_explicit_canvas(text) || canvas_open {
+        return false;
+    }
+    chat_user_has_draw_wording(text)
+}
+
+/// Déléguer un agent canvas : marqueurs explicites, ou dessin nu avec le panneau ouvert.
+pub fn chat_wants_canvas_agent(text: &str, canvas_open: bool) -> bool {
+    if chat_user_wants_explicit_canvas(text) {
+        return true;
+    }
+    canvas_open && chat_user_has_draw_wording(text) && !chat_is_canvas_followup_steal(text)
+}
+
+fn canvas_aspect_chip_labels(t: &UiStrings) -> [(&'static str, CanvasAspect); 5] {
+    [
+        (t.canvas_aspect_square, CanvasAspect::Square),
+        (t.canvas_aspect_16_9, CanvasAspect::Landscape16x9),
+        (t.canvas_aspect_16_10, CanvasAspect::Landscape16x10),
+        (t.canvas_aspect_vertical, CanvasAspect::Portrait9x16),
+        (t.canvas_aspect_horizontal, CanvasAspect::Landscape3x2),
+    ]
+}
+
+
+/// Designer copy for delegated canvas agents — only lists tools the loaded module exports.
+pub fn canvas_agent_designer_guide(exported: &[String]) -> String {
+    let has_path = exported.iter().any(|t| t == "canvas.path");
+    let silhouette = if has_path {
+        "Silhouettes (colline, corps, toit, voiles) : `canvas.path` avec 4–8 points et fill:true — \
+un path par forme lisible, pas 20 splines/rects empilés. Traits fins : canvas.stroke/line/spline. "
+    } else {
+        "Silhouettes : empile canvas.spline ou canvas.rect/ellipse (fill:true) — \
+un shape par forme lisible. Traits fins : canvas.stroke/line. "
+    };
+    let windmill = if has_path {
+        "Exemple moulin sur colline : path colline (#8B7355) → path corps (#C4A574) → path toit (#8B4513) → \
+2–4 paths pour les ailes (#E8DCC8) ; rect/ellipse seulement pour détails (fenêtre, porte).\n"
+    } else {
+        "Exemple moulin : spline/rect pour colline et corps, ellipse pour voiles — rect pour fenêtre/porte.\n"
+    };
+    let tools_line = if exported.is_empty() {
+        "Outils canvas : (module non chargé — commence par canvas.get si disponible).".to_string()
+    } else {
+        let mut names: Vec<&str> = exported
+            .iter()
+            .filter(|t| t.starts_with("canvas."))
+            .map(|s| s.as_str())
+            .collect();
+        names.sort_unstable();
+        format!(
+            "Outils : {} (coords 0..1 ; rect/ellipse : x,y,w,h — alias width/height acceptés). \
+Pas media.image.generate. Pas agent.spawn.",
+            names.join(", ")
+        )
+    };
+    format!(
+        "Cible visuelle : lisible à l'export PNG (canvas.export ~512px) — pas un rectangle+triangle.\n\
+Espace : coords normalisées 0..1 uniquement (max 1.0) sur le cadre visible (origine coin supérieur gauche) — jamais des pixels.\n\
+« 200px » = taille d'export pour la lisibilité humaine, pas l'unité des coords (ne pas dessiner à x=200).\n\
+Règles : margin 0.08–0.12 ; sujet centré dans usable ; couches sol → volumes → détails → 2–3 ombres. \
+Lis `scene_bbox` dans le digest : ne superpose pas les nouvelles formes au même centre. \
+{silhouette}\
+Commence par canvas.get. Couleur : canvas.set_style {{color:\"#RRGGBB\"}} ou color= sur chaque op — \
+le teal signal n'est pas la seule teinte ; après critique, change de teinte pour ombres/détails.\n\
+Après critique : ajoute la pièce manquante seulement — jamais canvas.clear ni redessiner le sujet depuis zéro sauf si l'humain dit effacer.\n\
+{windmill}\
+{tools_line}"
+    )
+}
+
+const CANVAS_AGENT_NO_FANOUT_GUIDE: &str = "\
+Tu es l'auteur unique de ce dessin : traits séquentiels canvas.* (path pour silhouettes quand exporté, sinon spline/rect/ellipse). \
+Pas de agent.spawn ni agent.await — un seul agent, pas de sous-agents parallèles pour le même sujet.";
+
+/// System prompt addendum for delegated canvas agents (designer rules + frame aspect).
+pub fn canvas_agent_system_prompt(aspect: CanvasAspect, exported: &[String]) -> String {
+    format!(
+        "{}\n\
+         Proportions actuelles du cadre : {} ({}).\n\n\
+         {CANVAS_AGENT_NO_FANOUT_GUIDE}",
+        canvas_agent_designer_guide(exported),
+        aspect.agent_label_fr(),
+        aspect.agent_label_en(),
+    )
+}
+
+/// Full brief for display / logs: line 1 = user request verbatim, then designer guide.
+#[cfg(test)]
+pub fn canvas_agent_brief(user_text: &str, aspect: CanvasAspect, exported: &[String]) -> String {
+    format!(
+        "{}\n\n{}\nProportions actuelles du cadre : {} ({}).",
+        user_text.trim(),
+        canvas_agent_designer_guide(exported),
+        aspect.agent_label_fr(),
+        aspect.agent_label_en(),
+    )
+}
+
 #[cfg(test)]
 mod routing_tests {
     use super::*;
@@ -1161,185 +1343,4 @@ fn fit_board_rect_letterboxes_wide_in_tall_pane() {
         assert!(guide.contains("canvas.stroke"));
         assert!(guide.contains("spline/rect"));
     }
-}
-
-// ── Frozen routing (designer) ───────────────────────────────────────────────
-// 1. Canvas OPEN + dessine/draw/sketch → board (`canvas.*`).
-// 2. Canvas CLOSED + dessine/draw/sketch → Create (`media.image.generate`).
-// 3. Explicit phrase (dans/sur le canvas, au trait, /canvas, …) → board; opens face even if closed.
-// 4. « encore » / « vas-y » alone → not enough for canvas or face.
-// 5. Lone « canvas » → not enough.
-
-/// Phrases that beat Create/image routing — lone « canvas » is not enough.
-const EXPLICIT_CANVAS_MARKERS: &[&str] = &[
-    "/canvas",
-    "/canevas",
-    "sur le canvas",
-    "dans le canvas",
-    "on the canvas",
-    "in the canvas",
-    "to the canvas",
-    "sur le canevas",
-    "dans le canevas",
-    "on the canevas",
-    "in the canevas",
-    "to the canevas",
-    // « au trait » = vector strokes on the session canvas (not pixel diffusion).
-    "au trait",
-];
-
-/// Explicit phrase → open canvas face (even when toggle was closed).
-pub fn chat_should_open_canvas_face(text: &str) -> bool {
-    chat_user_wants_explicit_canvas(text)
-}
-
-/// Explicit vector-canvas intent: toggle phrase, slash, or stroke wording — not bare « dessine ».
-pub fn chat_user_wants_explicit_canvas(text: &str) -> bool {
-    let lower = text.to_lowercase();
-    EXPLICIT_CANVAS_MARKERS.iter().any(|m| lower.contains(m))
-}
-
-fn word_boundary_match(lower: &str, pat: &str) -> bool {
-    lower
-        .split(|c: char| !c.is_alphanumeric())
-        .any(|word| word == pat)
-}
-
-/// Bare draw / sketch wording in the message (no canvas-open context).
-pub fn chat_user_has_draw_wording(text: &str) -> bool {
-    let lower = text.to_lowercase();
-    [
-        "dessin",
-        "dessine",
-        "dessiner",
-        "draw",
-        "drawing",
-        "sketch",
-        "trace",
-        "tracer",
-        "esquisse",
-        "redessine",
-        "redessiner",
-        "illustration",
-        "illustrer",
-    ]
-    .iter()
-    .any(|k| word_boundary_match(&lower, *k))
-}
-
-/// Short follow-ups that must not spawn a new canvas agent from a closed board.
-fn chat_is_canvas_followup_steal(text: &str) -> bool {
-    let trimmed = text.trim().to_lowercase();
-    [
-        "encore",
-        "vas-y",
-        "vas y",
-        "go ahead",
-        "relance",
-        "lance",
-        "améliore",
-        "ameliore",
-    ]
-    .iter()
-    .any(|k| trimmed == *k)
-}
-
-/// Bare draw / sketch → Image Studio only when the session canvas is closed.
-pub fn chat_user_wants_pixel_draw(text: &str, canvas_open: bool) -> bool {
-    if chat_user_wants_explicit_canvas(text) || canvas_open {
-        return false;
-    }
-    chat_user_has_draw_wording(text)
-}
-
-/// Déléguer un agent canvas : marqueurs explicites, ou dessin nu avec le panneau ouvert.
-pub fn chat_wants_canvas_agent(text: &str, canvas_open: bool) -> bool {
-    if chat_user_wants_explicit_canvas(text) {
-        return true;
-    }
-    canvas_open && chat_user_has_draw_wording(text) && !chat_is_canvas_followup_steal(text)
-}
-
-fn canvas_aspect_chip_labels(t: &UiStrings) -> [(&'static str, CanvasAspect); 5] {
-    [
-        (t.canvas_aspect_square, CanvasAspect::Square),
-        (t.canvas_aspect_16_9, CanvasAspect::Landscape16x9),
-        (t.canvas_aspect_16_10, CanvasAspect::Landscape16x10),
-        (t.canvas_aspect_vertical, CanvasAspect::Portrait9x16),
-        (t.canvas_aspect_horizontal, CanvasAspect::Landscape3x2),
-    ]
-}
-
-
-/// Designer copy for delegated canvas agents — only lists tools the loaded module exports.
-pub fn canvas_agent_designer_guide(exported: &[String]) -> String {
-    let has_path = exported.iter().any(|t| t == "canvas.path");
-    let silhouette = if has_path {
-        "Silhouettes (colline, corps, toit, voiles) : `canvas.path` avec 4–8 points et fill:true — \
-un path par forme lisible, pas 20 splines/rects empilés. Traits fins : canvas.stroke/line/spline. "
-    } else {
-        "Silhouettes : empile canvas.spline ou canvas.rect/ellipse (fill:true) — \
-un shape par forme lisible. Traits fins : canvas.stroke/line. "
-    };
-    let windmill = if has_path {
-        "Exemple moulin sur colline : path colline (#8B7355) → path corps (#C4A574) → path toit (#8B4513) → \
-2–4 paths pour les ailes (#E8DCC8) ; rect/ellipse seulement pour détails (fenêtre, porte).\n"
-    } else {
-        "Exemple moulin : spline/rect pour colline et corps, ellipse pour voiles — rect pour fenêtre/porte.\n"
-    };
-    let tools_line = if exported.is_empty() {
-        "Outils canvas : (module non chargé — commence par canvas.get si disponible).".to_string()
-    } else {
-        let mut names: Vec<&str> = exported
-            .iter()
-            .filter(|t| t.starts_with("canvas."))
-            .map(|s| s.as_str())
-            .collect();
-        names.sort_unstable();
-        format!(
-            "Outils : {} (coords 0..1 ; rect/ellipse : x,y,w,h — alias width/height acceptés). \
-Pas media.image.generate. Pas agent.spawn.",
-            names.join(", ")
-        )
-    };
-    format!(
-        "Cible visuelle : lisible à l'export PNG (canvas.export ~512px) — pas un rectangle+triangle.\n\
-Espace : coords normalisées 0..1 uniquement (max 1.0) sur le cadre visible (origine coin supérieur gauche) — jamais des pixels.\n\
-« 200px » = taille d'export pour la lisibilité humaine, pas l'unité des coords (ne pas dessiner à x=200).\n\
-Règles : margin 0.08–0.12 ; sujet centré dans usable ; couches sol → volumes → détails → 2–3 ombres. \
-Lis `scene_bbox` dans le digest : ne superpose pas les nouvelles formes au même centre. \
-{silhouette}\
-Commence par canvas.get. Couleur : canvas.set_style {{color:\"#RRGGBB\"}} ou color= sur chaque op — \
-le teal signal n'est pas la seule teinte ; après critique, change de teinte pour ombres/détails.\n\
-Après critique : ajoute la pièce manquante seulement — jamais canvas.clear ni redessiner le sujet depuis zéro sauf si l'humain dit effacer.\n\
-{windmill}\
-{tools_line}"
-    )
-}
-
-const CANVAS_AGENT_NO_FANOUT_GUIDE: &str = "\
-Tu es l'auteur unique de ce dessin : traits séquentiels canvas.* (path pour silhouettes quand exporté, sinon spline/rect/ellipse). \
-Pas de agent.spawn ni agent.await — un seul agent, pas de sous-agents parallèles pour le même sujet.";
-
-/// System prompt addendum for delegated canvas agents (designer rules + frame aspect).
-pub fn canvas_agent_system_prompt(aspect: CanvasAspect, exported: &[String]) -> String {
-    format!(
-        "{}\n\
-         Proportions actuelles du cadre : {} ({}).\n\n\
-         {CANVAS_AGENT_NO_FANOUT_GUIDE}",
-        canvas_agent_designer_guide(exported),
-        aspect.agent_label_fr(),
-        aspect.agent_label_en(),
-    )
-}
-
-/// Full brief for display / logs: line 1 = user request verbatim, then designer guide.
-pub fn canvas_agent_brief(user_text: &str, aspect: CanvasAspect, exported: &[String]) -> String {
-    format!(
-        "{}\n\n{}\nProportions actuelles du cadre : {} ({}).",
-        user_text.trim(),
-        canvas_agent_designer_guide(exported),
-        aspect.agent_label_fr(),
-        aspect.agent_label_en(),
-    )
 }

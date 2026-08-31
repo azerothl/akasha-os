@@ -1,11 +1,14 @@
 //! Panneau détail agent : timeline mise en forme, sources, sous-agents.
 
-use aos_proto::{AgentInfo, AgentKind, AgentSource, AgentState, AgentStepRecord, AgentTrace};
+use aos_proto::{AgentInfo, AgentSource, AgentState, AgentStepRecord, AgentTrace};
+#[cfg(test)]
+use aos_proto::AgentKind;
 use eframe::egui::{self, Color32, RichText, Ui};
 use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
 
 use crate::icons;
 
+#[derive(Default)]
 pub struct PanelActions {
     pub pause: bool,
     pub kill: bool,
@@ -17,20 +20,6 @@ pub struct PanelActions {
     pub open_child: Option<String>,
 }
 
-impl Default for PanelActions {
-    fn default() -> Self {
-        Self {
-            pause: false,
-            kill: false,
-            resume: false,
-            retry: false,
-            continue_canvas: false,
-            export: false,
-            steer: None,
-            open_child: None,
-        }
-    }
-}
 
 pub fn state_color(state: &AgentState) -> Color32 {
     match state {
@@ -699,6 +688,7 @@ pub enum ChatCardAction {
     Continue,
 }
 
+#[allow(clippy::too_many_arguments)] // Card state remains explicit at this immediate-mode UI boundary.
 pub fn chat_agent_card(
     ui: &mut Ui,
     info: Option<&AgentInfo>,
@@ -891,6 +881,7 @@ fn card_frame(fill: Color32) -> egui::Frame {
         .inner_margin(egui::Margin::symmetric(8, 6))
 }
 
+#[allow(clippy::too_many_arguments)] // Detail-panel inputs are UI-local and intentionally explicit.
 pub fn draw_agent_detail(
     ui: &mut Ui,
     info: Option<&AgentInfo>,
@@ -1060,11 +1051,10 @@ pub fn draw_agent_detail(
                 }
                 AgentState::Created | AgentState::Roster => {}
             }
-            if !matches!(a.state, AgentState::Killed | AgentState::Done | AgentState::Roster) {
-                if ui.button(t.agent_kill).clicked() {
+            if !matches!(a.state, AgentState::Killed | AgentState::Done | AgentState::Roster)
+                && ui.button(t.agent_kill).clicked() {
                     actions.kill = true;
                 }
-            }
             if ui.button(t.agent_export).clicked() {
                 actions.export = true;
             }
@@ -1156,7 +1146,7 @@ pub fn draw_agent_detail(
                     if !tr.working_memory.is_empty() {
                         for (role, content) in &tr.working_memory {
                             if role == "system" && content.len() > 300 {
-                                ui.collapsing(format!("{role}"), |ui| {
+                                ui.collapsing(role.to_string(), |ui| {
                                     ui.small(content);
                                 });
                             } else {
