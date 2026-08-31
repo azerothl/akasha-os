@@ -192,9 +192,7 @@ pub async fn refresh_canvas_scene_after_op(
     CanvasSceneUpdate { text, png_path }
 }
 
-
 /// True when a canvas tool applies a visible trait (stroke/line/spline/path/rect/ellipse/fill/erase).
-
 /// Excludes read/style ops (`canvas.get`, `canvas.export`, `canvas.set_style`) and document resets.
 pub fn canvas_draw_tool_applies_trait(tool: &str) -> bool {
     matches!(
@@ -433,8 +431,8 @@ pub fn canvas_repeat_stroke_warning(
     trace: &[AgentStepRecord],
     action: &str,
 ) -> Option<&'static str> {
-    canvas_repeat_stroke_verdict(trace, action).and_then(|v| match v {
-        CanvasRepeatVerdict::Warn(msg) | CanvasRepeatVerdict::Abort(msg) => Some(msg),
+    canvas_repeat_stroke_verdict(trace, action).map(|v| match v {
+        CanvasRepeatVerdict::Warn(msg) | CanvasRepeatVerdict::Abort(msg) => msg,
     })
 }
 
@@ -507,7 +505,7 @@ fn bbox_near_duplicate(a: &[f32; 4], b: &[f32; 4]) -> bool {
 
 /// When to run the canvas critic (`reflect`): after each scene change, or every 3 steps.
 pub fn should_run_canvas_critic(canvas_agent: bool, canvas_scene_changed: bool, step: u32) -> bool {
-    (canvas_agent && canvas_scene_changed) || step % 3 == 0
+    (canvas_agent && canvas_scene_changed) || step.is_multiple_of(3)
 }
 
 /// Fetch canvas aspect for a session (for export dimensions).

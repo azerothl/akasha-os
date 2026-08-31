@@ -32,7 +32,7 @@ pub fn split_reasoning(text: &str) -> (String, String) {
             let body = rest[after..close_at].trim();
             if !body.is_empty() {
                 if !reasoning.is_empty() {
-                    reasoning.push_str("\n");
+                    reasoning.push('\n');
                 }
                 reasoning.push_str(body);
             }
@@ -43,7 +43,7 @@ pub fn split_reasoning(text: &str) -> (String, String) {
             let body = rest[after..].trim();
             if !body.is_empty() {
                 if !reasoning.is_empty() {
-                    reasoning.push_str("\n");
+                    reasoning.push('\n');
                 }
                 reasoning.push_str(body);
             }
@@ -66,10 +66,8 @@ pub fn strip_reasoning(text: &str) -> String {
 fn find_ignore_ascii_case(hay: &str, needle: &str) -> Option<usize> {
     let hay_l = hay.to_ascii_lowercase();
     let needle_l = needle.to_ascii_lowercase();
-    hay_l.find(&needle_l).map(|i| {
-        // Aligner sur la même frontière d'octet (ASCII tags)
-        i
-    })
+    // ASCII case folding preserves the byte boundary used by the original text.
+    hay_l.find(&needle_l)
 }
 
 /// Extrait une ou plusieurs actions depuis la sortie modèle (ordre conservé).

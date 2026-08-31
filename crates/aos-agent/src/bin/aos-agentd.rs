@@ -1210,7 +1210,7 @@ async fn main() {
                                     }
                                     AgentOutputEvent::Error { message } => {
                                         if aos_agent::context_budget::is_technical_vision_infer_error(
-                                            &message,
+                                            message,
                                         ) {
                                             eprintln!(
                                                 "agent vision refs ignorées (pas de mmproj) : {message}"
@@ -1218,7 +1218,7 @@ async fn main() {
                                         } else {
                                             let reason =
                                                 if aos_agent::context_budget::is_technical_prompt_overflow_message(
-                                                    &message,
+                                                    message,
                                                 ) {
                                                     eprintln!(
                                                         "agent prompt overflow (journal) : {message}"

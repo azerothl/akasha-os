@@ -1391,8 +1391,7 @@ async fn infer_turn(
                 || lower.ends_with(".jpeg")
                 || lower.ends_with(".webp")
         })
-        .cloned()
-        .take(4)
+        .take(4).cloned()
         .collect();
     let req = InferRequest {
         model_id: spec.model_id.clone(),
@@ -2177,6 +2176,7 @@ async fn wait_act_decision(
     }
 }
 
+#[allow(clippy::too_many_arguments)] // Gate state is explicit to keep authorization fail-closed.
 async fn gate_action(
     bus: &BusClient,
     shared: &Shared,
@@ -2236,6 +2236,7 @@ fn canvas_child_goal_statement(parent: &AgentSpec, brief: &str) -> String {
     }
 }
 
+#[allow(clippy::too_many_arguments)] // Child inheritance inputs stay explicit at the spawn boundary.
 async fn spawn_child(
     bus: &BusClient,
     shared: &Shared,

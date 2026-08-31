@@ -282,7 +282,7 @@ mod tests {
     fn next_fire_ms_delays_first_fire() {
         with_temp_home(|| {
             let now = now_ms().max(1);
-            let future = now.saturating_add(3600_000);
+            let future = now.saturating_add(3_600_000);
             let e = create(&ScheduleCreateRequest {
                 goal: "later".into(),
                 interval_secs: 3600,

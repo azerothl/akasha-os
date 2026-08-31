@@ -727,8 +727,9 @@ pub enum AgentKind {
 }
 
 /// Nœud du graphe de tâches.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TaskNodeStatus {
+    #[default]
     Pending,
     Running,
     Blocked,
@@ -744,12 +745,6 @@ pub struct TaskNode {
     pub status: TaskNodeStatus,
     #[serde(default)]
     pub notes: String,
-}
-
-impl Default for TaskNodeStatus {
-    fn default() -> Self {
-        Self::Pending
-    }
 }
 
 /// Information sur un agent (`agent.list`, `agent.state`).
@@ -929,6 +924,7 @@ pub struct AgentTrace {
 
 /// Élément du flux `agent.output` (journal temps réel d'un agent).
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::large_enum_variant)] // Stable protocol enum; boxing would change its public API.
 pub enum AgentOutputEvent {
     Log { line: String },
     Token { text: String },

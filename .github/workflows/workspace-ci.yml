@@ -41,7 +41,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: workspace-ci-linux
-      - name: Clippy
+      - name: Clippy core (warnings are errors)
+        run: cargo clippy -p aos-proto -p aos-agent --all-targets -- -D warnings
+      - name: Clippy workspace
         run: cargo clippy --workspace --all-targets
       - name: Test workspace
         run: cargo test --workspace

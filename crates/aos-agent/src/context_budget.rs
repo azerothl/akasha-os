@@ -299,7 +299,7 @@ pub fn enforce_prompt_budget(
         return Some(notes.join("; "));
     }
 
-    let keep = keep_recent.min(2).max(1);
+    let keep = keep_recent.clamp(1, 2);
     if let Some(sum) = compact_working_memory(memory, keep) {
         notes.push(sum);
     }

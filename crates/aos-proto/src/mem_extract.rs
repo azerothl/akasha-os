@@ -185,7 +185,7 @@ pub fn is_draw_or_canvas_request(text: &str) -> bool {
         "illustration",
         "illustrer",
     ];
-    DRAW_WORDS.iter().any(|k| word_boundary_match(&lower, *k))
+    DRAW_WORDS.iter().any(|k| word_boundary_match(&lower, k))
 }
 
 #[cfg(test)]

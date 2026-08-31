@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ResearchDocumentEntry {
@@ -19,16 +19,16 @@ struct ResearchDocumentIndex {
     entries: Vec<ResearchDocumentEntry>,
 }
 
-fn index_path(home: &PathBuf) -> PathBuf {
+fn index_path(home: &Path) -> PathBuf {
     home.join("var/documents/research-index.json")
 }
 
-fn index_dir(home: &PathBuf) -> PathBuf {
+fn index_dir(home: &Path) -> PathBuf {
     home.join("var/documents")
 }
 
 /// Load all indexed research documents, newest first.
-pub fn load_research_documents(home: &PathBuf) -> Vec<ResearchDocumentEntry> {
+pub fn load_research_documents(home: &Path) -> Vec<ResearchDocumentEntry> {
     let path = index_path(home);
     let raw = match fs::read_to_string(&path) {
         Ok(s) => s,
@@ -41,7 +41,7 @@ pub fn load_research_documents(home: &PathBuf) -> Vec<ResearchDocumentEntry> {
 
 /// Append or update an entry for `path` (dedupe by path).
 pub fn record_research_document(
-    home: &PathBuf,
+    home: &Path,
     question: &str,
     path: &str,
     label: &str,

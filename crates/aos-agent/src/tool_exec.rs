@@ -201,6 +201,7 @@ pub async fn invoke_native_tool(
 }
 
 /// Execute one room-member tool action.
+#[allow(clippy::too_many_arguments)] // Keeps capability and MCP context explicit at the tool boundary.
 pub async fn execute_room_tool(
     bus: &BusClient,
     agent_id: &str,

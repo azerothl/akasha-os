@@ -75,6 +75,7 @@ pub enum ControlCmd {
 
 /// Réponse d'un contrôle worker.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[allow(clippy::large_enum_variant)] // Stable wire shape; boxing would change the serialized contract.
 pub enum ControlResp {
     Ack,
     State(CognitiveState),

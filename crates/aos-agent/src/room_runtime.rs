@@ -61,6 +61,12 @@ pub struct RoomRoundState {
     pub current_inference: Mutex<Option<u64>>,
 }
 
+impl Default for RoomRoundState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RoomRoundState {
     pub fn new() -> Self {
         Self {
@@ -456,6 +462,7 @@ fn room_reply_from_model(text: &str, parsed: Option<&AgentAction>) -> Option<(St
     }
 }
 
+#[allow(clippy::too_many_arguments)] // Runtime context is explicit at this orchestration boundary.
 async fn run_room_tool_loop(
     bus: &BusClient,
     round: &RoomRoundState,
@@ -914,7 +921,7 @@ mod tests {
 
     #[test]
     fn room_infer_priority_disables_prefix_spec_path() {
-        assert!(ROOM_INFER_PRIORITY < 2);
+        const { assert!(ROOM_INFER_PRIORITY < 2) };
     }
 
     #[test]

@@ -62,7 +62,7 @@ pub fn compose_document(question: &str, search_hits: &[WebSearchHit], pages: &[B
                 let excerpt: String = page.text.chars().take(1200).collect();
                 out.push_str(&excerpt);
                 if page.text.chars().count() > 1200 {
-                    out.push_str("…");
+                    out.push('…');
                 }
                 out.push_str("\n\n");
             }

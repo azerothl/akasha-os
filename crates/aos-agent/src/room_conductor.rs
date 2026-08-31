@@ -197,10 +197,7 @@ pub fn detect_peer_address(
 
 /// Nombre effectif de tours agent autorisés (politique + plafond dur).
 pub fn effective_max_turns(policy: &ChatRoomConductorPolicy) -> u32 {
-    policy
-        .max_agent_turns_per_user
-        .min(HARD_MAX_AGENT_TURNS)
-        .max(1)
+    policy.max_agent_turns_per_user.clamp(1, HARD_MAX_AGENT_TURNS)
 }
 
 #[cfg(test)]
