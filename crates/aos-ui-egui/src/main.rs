@@ -5961,6 +5961,11 @@ impl UiApp {
                                                 id: agent_id.clone(),
                                             });
                                         }
+                                        agent_panel::ChatCardAction::Retry => {
+                                            let _ = self.cmd_tx.send(Cmd::AgentRetry {
+                                                id: agent_id.clone(),
+                                            });
+                                        }
                                         agent_panel::ChatCardAction::None => {}
                                     }
                                 }
@@ -7565,7 +7570,7 @@ impl UiApp {
                 ui.colored_label(
                     egui::Color32::from_rgb(220, 120, 100),
                     agent_panel::truncate(
-                        &i18n::resolve_agent_fail_reason(&t, Some(reason.as_str())),
+                        &agent_panel::resolve_visible_fail_reason(&t, Some(a), reason.as_str()),
                         40,
                     ),
                 );
