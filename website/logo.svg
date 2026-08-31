@@ -1,19 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Akasha OS">
   <title>Akasha OS</title>
   <defs>
-    <filter id="ion" x="-40%" y="-40%" width="180%" height="180%">
-      <feGaussianBlur in="SourceGraphic" stdDeviation="2.4" result="b"/>
-      <feMerge>
-        <feMergeNode in="b"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
+    <clipPath id="akasha-inscribe">
+      <circle cx="128" cy="128" r="102.25"/>
+    </clipPath>
   </defs>
   <rect width="256" height="256" fill="#070b14"/>
-  <g filter="url(#ion)" fill="none" stroke="#5ee7ff" stroke-linecap="round" stroke-linejoin="round">
-    <path stroke-width="14" d="M54 218 C 86 150, 108 84, 128 28 C 148 84, 170 150, 202 218"/>
-    <path stroke-width="8" d="M82 148 C 118 132, 152 134, 174 146 C 198 128, 214 162, 188 174 C 168 182, 158 152, 178 148"/>
+  <g fill="none" stroke="#3ee0c4">
+    <circle cx="128" cy="128" r="104" stroke-width="3.5"/>
+    <circle cx="128" cy="128" r="84" stroke-width="2.4"/>
+    <circle cx="128" cy="128" r="64" stroke-width="2.4"/>
   </g>
-  <circle cx="128" cy="147" r="9" fill="#ff5a48"/>
-  <circle cx="128" cy="147" r="3.4" fill="#5ee7ff"/>
+  <path d="M68.4 213.2 L128 48 L187.6 213.2" fill="none" stroke="#3ee0c4" stroke-width="15.5" stroke-linejoin="miter" stroke-miterlimit="6" stroke-linecap="butt" clip-path="url(#akasha-inscribe)"/>
+  <line x1="111" y1="128" x2="145" y2="128" stroke="#3ee0c4" stroke-width="2.25" stroke-linecap="butt"/>
+  <circle cx="128" cy="128" r="8.5" fill="#3ee0c4"/>
 </svg>
