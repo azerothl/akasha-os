@@ -132,8 +132,15 @@ pub struct InstalledModule {
     pub manifest: ModuleManifest,
     pub granted_caps: Vec<String>,
     pub quarantined: bool,
+    /// Outils réellement dispatchés par le WASM (manifest ∩ exports guest).
+    verified_tools: Vec<String>,
     dir: PathBuf,
     compiled: wasmtime::Module,
+}
+
+/// True when the guest handler rejected a tool name (not a validation error).
+pub fn is_unknown_tool_guest_error(err: &str, tool: &str) -> bool {
+    err == format!("outil inconnu: {tool}")
 }
 
 /// Le runtime de modules.
@@ -207,12 +214,20 @@ impl ModuleRuntime {
                 serde_yaml::from_str(&std::fs::read_to_string(mdir.join("manifest.yaml"))?)
                     .map_err(|e| ModuleError::BadManifest(e.to_string()))?;
             let compiled = self.compile(&mdir.join("module.wasm"))?;
+            let verified_tools = self.verify_manifest_tools(
+                &manifest,
+                &entry.name,
+                &mdir,
+                &entry.granted_caps,
+                &compiled,
+            );
             self.installed.insert(
                 entry.name.clone(),
                 InstalledModule {
                     manifest,
                     granted_caps: entry.granted_caps,
                     quarantined: entry.quarantined,
+                    verified_tools,
                     dir: mdir,
                     compiled,
                 },
@@ -303,13 +318,27 @@ impl ModuleRuntime {
         }
         copy_dir(source_dir, &dest)?;
         let compiled = self.compile(&dest.join("module.wasm"))?;
-        let info = module_info_from_installed(&manifest, granted.clone(), quarantined, Some(&dest));
+        let verified_tools = self.verify_manifest_tools(
+            &manifest,
+            &manifest.name,
+            &dest,
+            &granted,
+            &compiled,
+        );
+        let info = module_info_from_installed(
+            &manifest,
+            &verified_tools,
+            granted.clone(),
+            quarantined,
+            Some(&dest),
+        );
         self.installed.insert(
             manifest.name.clone(),
             InstalledModule {
                 manifest,
                 granted_caps: granted,
                 quarantined,
+                verified_tools,
                 dir: dest,
                 compiled,
             },
@@ -345,7 +374,15 @@ impl ModuleRuntime {
     pub fn list(&self) -> Vec<ModuleInfo> {
         self.installed
             .values()
-            .map(|m| module_info_from_installed(&m.manifest, m.granted_caps.clone(), m.quarantined, Some(&m.dir)))
+            .map(|m| {
+                module_info_from_installed(
+                    &m.manifest,
+                    &m.verified_tools,
+                    m.granted_caps.clone(),
+                    m.quarantined,
+                    Some(&m.dir),
+                )
+            })
             .collect()
     }
 
@@ -428,7 +465,7 @@ impl ModuleRuntime {
         if m.quarantined {
             return Err(ModuleError::Quarantined(module.into()));
         }
-        if !m.manifest.tools.iter().any(|t| t.name == tool) {
+        if !m.verified_tools.iter().any(|t| t == tool) {
             return Err(ModuleError::UnknownTool(tool.into()));
         }
         // Autorisation de l'appelant (§4.4) : les humains sont admin en v1.
@@ -440,13 +477,85 @@ impl ModuleRuntime {
             return Err(ModuleError::ActorDenied(module.into()));
         }
 
+        self.guest_invoke_compiled(
+            module,
+            &m.dir,
+            &m.granted_caps,
+            &m.compiled,
+            tool,
+            args,
+            actor,
+            trace_id,
+        )
+    }
+
+    fn verify_manifest_tools(
+        &self,
+        manifest: &ModuleManifest,
+        module_name: &str,
+        module_dir: &Path,
+        granted_caps: &[String],
+        compiled: &wasmtime::Module,
+    ) -> Vec<String> {
+        manifest
+            .tools
+            .iter()
+            .filter(|t| {
+                self.probe_wasm_exports_tool(
+                    module_name,
+                    module_dir,
+                    granted_caps,
+                    compiled,
+                    &t.name,
+                )
+            })
+            .map(|t| t.name.clone())
+            .collect()
+    }
+
+    fn probe_wasm_exports_tool(
+        &self,
+        module_name: &str,
+        module_dir: &Path,
+        granted_caps: &[String],
+        compiled: &wasmtime::Module,
+        tool: &str,
+    ) -> bool {
+        let probe_args = serde_json::json!({"session_id": "__probe__"});
+        match self.guest_invoke_compiled(
+            module_name,
+            module_dir,
+            granted_caps,
+            compiled,
+            tool,
+            &probe_args,
+            "human:probe",
+            "module-probe",
+        ) {
+            Ok(_) => true,
+            Err(ModuleError::Guest(e)) if is_unknown_tool_guest_error(&e, tool) => false,
+            Err(_) => true,
+        }
+    }
+
+    fn guest_invoke_compiled(
+        &self,
+        module: &str,
+        module_dir: &Path,
+        granted_caps: &[String],
+        compiled: &wasmtime::Module,
+        tool: &str,
+        args: &serde_json::Value,
+        actor: &str,
+        trace_id: &str,
+    ) -> Result<serde_json::Value, ModuleError> {
         let mut store = Store::new(
             &self.engine,
             StoreState {
                 ctx: HostCallCtx {
                     module: module.into(),
-                    module_dir: m.dir.clone(),
-                    granted_caps: m.granted_caps.clone(),
+                    module_dir: module_dir.to_path_buf(),
+                    granted_caps: granted_caps.to_vec(),
                     actor: actor.into(),
                     trace_id: trace_id.into(),
                 },
@@ -507,7 +616,7 @@ impl ModuleRuntime {
             .map_err(|e| ModuleError::Trap(e.to_string()))?;
 
         let instance = linker
-            .instantiate(&mut store, &m.compiled)
+            .instantiate(&mut store, compiled)
             .map_err(|e| ModuleError::Trap(e.to_string()))?;
         let req = serde_json::to_string(&GuestRequest { tool, args }).unwrap();
         let response = call_guest_invoke(&mut store, &instance, &req)?;
@@ -974,6 +1083,155 @@ min_os_api: 1
         let _ = std::fs::remove_dir_all(&base);
     }
 
+    /// Packaged canvas must export canvas.path when the manifest lists it (PR #102 follow-up).
+    #[test]
+    fn packaged_canvas_wasm_exports_path_when_manifest_lists_it() {
+        struct CanvasHost;
+        impl HostServices for CanvasHost {
+            fn call(
+                &self,
+                _ctx: &HostCallCtx,
+                service: &str,
+                _args: serde_json::Value,
+            ) -> Result<serde_json::Value, String> {
+                match service {
+                    "canvas.apply" => Ok(serde_json::json!({"next_seq": 1})),
+                    _ => Err(format!("unexpected host_call: {service}")),
+                }
+            }
+        }
+
+        let share_pkg = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../share/modules/canvas.aospkg");
+        assert!(
+            share_pkg.join("module.wasm").is_file(),
+            "share/modules/canvas.aospkg/module.wasm missing"
+        );
+        let manifest = std::fs::read_to_string(share_pkg.join("manifest.yaml")).unwrap();
+        if !manifest.contains("canvas.path") {
+            eprintln!("skip: manifest has no canvas.path");
+            return;
+        }
+
+        let base = tmpbase("canvas-packaged-path");
+        let mut rt = ModuleRuntime::open(base.join("modules"), Arc::new(CanvasHost)).unwrap();
+        let info = rt
+            .install(
+                &share_pkg,
+                Some(vec!["fs.write:/downloads/**".into()]),
+            )
+            .expect("install packaged canvas");
+        assert!(
+            info.tools.iter().any(|t| t == "canvas.path"),
+            "module.list must expose canvas.path when wasm exports it: {:?}",
+            info.tools
+        );
+
+        let path = rt.invoke(
+            "canvas",
+            "canvas.path",
+            &serde_json::json!({
+                "session_id": "sess-test",
+                "points": [
+                    {"x": 0.1, "y": 0.7},
+                    {"x": 0.5, "y": 0.55},
+                    {"x": 0.9, "y": 0.7}
+                ],
+                "fill": true
+            }),
+            "human:ui",
+            &[],
+            "t-canvas-path",
+        );
+        assert!(
+            path.is_ok(),
+            "packaged wasm must handle canvas.path: {:?}",
+            path.err()
+        );
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    /// When manifest advertises a tool the wasm does not dispatch, module.list must omit it.
+    #[test]
+    fn verified_tools_omit_manifest_only_tool_names() {
+        struct CanvasHost;
+        impl HostServices for CanvasHost {
+            fn call(
+                &self,
+                _ctx: &HostCallCtx,
+                _service: &str,
+                _args: serde_json::Value,
+            ) -> Result<serde_json::Value, String> {
+                Ok(serde_json::json!({}))
+            }
+        }
+
+        let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let output = std::process::Command::new("git")
+            .args([
+                "show",
+                "28e44cc:share/modules/canvas.aospkg/module.wasm",
+            ])
+            .current_dir(&repo)
+            .output()
+            .expect("git show legacy canvas.wasm");
+        if !output.status.success() {
+            eprintln!("skip verified_tools test: legacy wasm unavailable");
+            return;
+        }
+
+        let base = tmpbase("canvas-verified-tools");
+        let pkg = base.join("pkg");
+        std::fs::create_dir_all(pkg.join("ui")).unwrap();
+        std::fs::write(pkg.join("module.wasm"), &output.stdout).unwrap();
+        let old_hash = sha256_hex(&output.stdout);
+        let manifest = format!(
+            r#"name: canvas
+version: 1.0.0
+hash: {old_hash}
+permissions:
+  required_caps:
+    - fs.write:/downloads/**
+tools:
+  - name: canvas.set_style
+    description: set pen
+    input_schema:
+      type: object
+      properties:
+        session_id: {{ type: string }}
+      required: [session_id]
+  - name: canvas.path
+    description: phantom path in manifest only
+    input_schema:
+      type: object
+      properties:
+        session_id: {{ type: string }}
+        points: {{ type: array }}
+      required: [session_id, points]
+min_os_api: 1
+"#
+        );
+        std::fs::write(pkg.join("manifest.yaml"), manifest).unwrap();
+
+        let mut rt = ModuleRuntime::open(base.join("modules"), Arc::new(CanvasHost)).unwrap();
+        let info = rt
+            .install(&pkg, Some(vec!["fs.write:/downloads/**".into()]))
+            .expect("install legacy canvas package");
+        assert!(
+            !info.tools.iter().any(|t| t == "canvas.path"),
+            "phantom manifest tool must not appear in module.list: {:?}",
+            info.tools
+        );
+        assert!(
+            !info.tools.iter().any(|t| t == "canvas.set_style"),
+            "legacy wasm must not advertise set_style either: {:?}",
+            info.tools
+        );
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
     #[test]
     fn pre_pr41_canvas_wasm_rejects_set_style() {
         struct CanvasHost;
@@ -1049,8 +1307,8 @@ min_os_api: 1
             .unwrap_err()
             .to_string();
         assert!(
-            err.contains("outil inconnu: canvas.set_style"),
-            "legacy wasm must reject set_style: {err}"
+            err.contains("Unknown tool") || err.contains("outil inconnu"),
+            "legacy wasm must not expose set_style via module.list/invoke: {err}"
         );
 
         let _ = std::fs::remove_dir_all(&base);
@@ -1059,6 +1317,7 @@ min_os_api: 1
 
 fn module_info_from_installed(
     manifest: &ModuleManifest,
+    verified_tools: &[String],
     granted_caps: Vec<String>,
     quarantined: bool,
     dir: Option<&Path>,
@@ -1068,7 +1327,7 @@ fn module_info_from_installed(
         name: manifest.name.clone(),
         version: manifest.version.clone(),
         granted_caps,
-        tools: manifest.tools.iter().map(|t| t.name.clone()).collect(),
+        tools: verified_tools.to_vec(),
         quarantined,
         ui_mode,
         ui_title,
