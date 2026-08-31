@@ -47,6 +47,7 @@ mod troubleshoot;
 mod ui_format;
 mod ui_feedback;
 mod ui_providers;
+mod ui_security;
 
 use chat_ask::{agent_display_title, chat_has_open_ask, pending_ask_ids};
 use chat_bubble::{
@@ -7412,106 +7413,6 @@ impl UiApp {
                     }
                 }
             });
-    }
-
-    fn ui_audit(&mut self, ui: &mut egui::Ui) {
-        let t = i18n::strings(&self.prefs.language);
-        ui.heading(t.audit_heading);
-        ui.horizontal(|ui| {
-            if ui.button(t.decl_ui_refresh).clicked() {
-                let _ = self.cmd_tx.send(Cmd::Audit { last: 50 });
-            }
-            if ui.button(t.audit_kill_p4).clicked() {
-                let _ = self.cmd_tx.send(Cmd::KillAuditd);
-            }
-        });
-        let list_h = ui.available_height().max(120.0);
-        overflow_scroll_h(ui, "audit_list", list_h, |ui| {
-            for e in &self.audit {
-                ui.monospace(format!(
-                    "#{} {} {} {} → {}",
-                    e.seq, e.actor, e.action, e.target, e.hash
-                ));
-            }
-        });
-    }
-
-    fn ui_caps(&mut self, ui: &mut egui::Ui) {
-        let t = i18n::strings(&self.prefs.language);
-        ui.heading(t.caps_heading);
-        ui.weak(t.caps_blurb);
-        ui.separator();
-        ui.horizontal(|ui| {
-            ui.label(t.caps_subject);
-            ui.add(
-                egui::TextEdit::singleline(&mut self.caps_holder)
-                    .desired_width(280.0)
-                    .hint_text("agent:<id>"),
-            );
-            if ui
-                .button(t.caps_refresh)
-                .on_hover_text(t.tip_caps_refresh)
-                .clicked()
-                && !self.caps_holder.trim().is_empty()
-            {
-                let holder = self.caps_holder.trim().to_string();
-                self.caps_holder = holder.clone();
-                let _ = self.cmd_tx.send(Cmd::CapList { holder });
-            }
-        });
-        if let Some(id) = self.agent_active_tab.clone() {
-            ui.horizontal(|ui| {
-                let holder = agent_cap_holder(&id);
-                ui.weak(format!("Agent actif → {holder}"));
-                if ui.small_button("Charger").clicked() {
-                    self.caps_holder = holder.clone();
-                    let _ = self.cmd_tx.send(Cmd::CapList { holder });
-                }
-            });
-        }
-        ui.separator();
-        let holder = self.caps_holder.clone();
-        self.draw_caps_list(ui, &holder);
-    }
-
-    fn draw_caps_list(&mut self, ui: &mut egui::Ui, holder: &str) {
-        let t = i18n::strings(&self.prefs.language);
-        let matching: Vec<CapInfo> = if holder.is_empty() {
-            self.caps.clone()
-        } else {
-            self.caps
-                .iter()
-                .filter(|c| c.holder == holder)
-                .cloned()
-                .collect()
-        };
-        if matching.is_empty() {
-            ui.weak(t.caps_empty);
-            return;
-        }
-        let list_h = ui.available_height().max(120.0);
-        overflow_scroll_h(ui, format!("caps_list_{holder}"), list_h, |ui| {
-            for c in matching {
-                ui.group(|ui| {
-                    ui.horizontal(|ui| {
-                        ui.monospace(format!("#{}", c.cap_id));
-                        ui.label(&c.object);
-                        ui.weak(c.rights.join(", "));
-                        if ui
-                            .small_button(t.caps_revoke)
-                            .on_hover_text(t.tip_caps_revoke)
-                            .clicked()
-                        {
-                            let _ = self.cmd_tx.send(Cmd::CapRevoke {
-                                holder: c.holder.clone(),
-                                cap_id: c.cap_id,
-                                tree: false,
-                            });
-                        }
-                    });
-                });
-            }
-        });
     }
 
     fn ui_scenarios(&mut self, ui: &mut egui::Ui) {
