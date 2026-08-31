@@ -3,7 +3,7 @@
 use aos_ipc::BusClient;
 use aos_proto::{
     canvas_scene_digest, AgentStepRecord, CanvasAspect, CanvasExportRequest, CanvasGetRequest,
-    CanvasGetResponse, CanvasSeeingRequest,
+    CanvasGetResponse, CanvasSeeingRequest, ModelInfo,
 };
 use std::path::PathBuf;
 
@@ -282,6 +282,29 @@ pub fn merge_canvas_vision_refs(base: &[String], canvas_png: &str) -> Vec<String
     out
 }
 
+/// Drop PNG/JPEG/WebP paths when the loaded model has no mmproj projector.
+pub fn strip_vision_image_paths(refs: &[String]) -> Vec<String> {
+    refs.iter()
+        .filter(|p| !is_vision_image_path(p))
+        .cloned()
+        .collect()
+}
+
+/// Whether the session model context has a loaded mmproj projector.
+pub async fn session_model_has_vision(bus: &BusClient, model_id: Option<&str>) -> bool {
+    let Some(id) = model_id.filter(|s| !s.is_empty()) else {
+        return false;
+    };
+    let models: Vec<ModelInfo> = match bus.call("model.list", &(), vec![]).await {
+        Ok(m) => m,
+        Err(_) => return false,
+    };
+    models
+        .iter()
+        .find(|m| m.id == id)
+        .is_some_and(|m| m.has_vision)
+}
+
 fn is_vision_image_path(path: &str) -> bool {
     let lower = path.to_ascii_lowercase();
     lower.ends_with(".png")
@@ -291,12 +314,16 @@ fn is_vision_image_path(path: &str) -> bool {
 }
 
 /// Live canvas vision attach: export PNG + enable seeing chrome. Returns PNG path.
-/// Canvas snapshots are always exported (no catalog vision-profile gate).
+/// Skipped when the session model has no loaded mmproj (text-only infer still runs).
 pub async fn begin_canvas_vision(
     bus: &BusClient,
     session_id: &str,
     aspect: CanvasAspect,
+    model_id: Option<&str>,
 ) -> Option<String> {
+    if !session_model_has_vision(bus, model_id).await {
+        return None;
+    }
     let png = fetch_canvas_live_png(bus, session_id, aspect).await?;
     set_canvas_seeing(bus, session_id, true).await;
     Some(png)
@@ -432,6 +459,17 @@ mod tests {
         assert!(block.contains("scene_bbox"));
         assert!(block.contains("[canvas digest]"));
         assert!(block.contains("capture PNG"));
+    }
+
+    #[test]
+    fn strip_vision_image_paths_removes_png_jpeg_webp() {
+        let refs = vec![
+            "/downloads/canvas.png".into(),
+            "/documents/note.md".into(),
+            "/tmp/photo.jpg".into(),
+        ];
+        let stripped = strip_vision_image_paths(&refs);
+        assert_eq!(stripped, vec!["/documents/note.md".to_string()]);
     }
 
     #[test]

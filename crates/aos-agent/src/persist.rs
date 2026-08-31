@@ -93,6 +93,7 @@ pub fn assemble_trace(
 /// True when `fail_reason` must not appear verbatim in shared markdown export.
 fn is_technical_export_fail_reason(reason: &str) -> bool {
     crate::context_budget::is_overflow_fail_reason(reason)
+        || crate::context_budget::is_technical_vision_infer_error(reason)
         || {
             let lower = reason.to_ascii_lowercase();
             lower.contains("internalerror")

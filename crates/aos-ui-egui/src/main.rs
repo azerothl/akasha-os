@@ -4159,6 +4159,16 @@ impl eframe::App for UiApp {
                     self.mark_onboarding_chat_done();
                 }
                 Evt::Error(m) => {
+                    if aos_agent::context_budget::is_technical_vision_infer_error(&m) {
+                        self.chat_pending = false;
+                        self.streaming.clear();
+                        self.chat_inference_id = None;
+                        self.room_turn_pending_text = None;
+                        if self.status.starts_with("assistant :") {
+                            self.status.clear();
+                        }
+                        break;
+                    }
                     if m.contains("media.image") || m.starts_with("Image:") {
                         self.image_generating = None;
                     }

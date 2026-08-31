@@ -456,6 +456,7 @@ async fn handle_cmd(
                     &bus,
                     &session_id,
                     canvas_aspect,
+                    model_id.as_deref(),
                 )
                 .await
             } else {

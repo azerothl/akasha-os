@@ -270,6 +270,9 @@ pub struct ModelInfo {
     pub placement: Option<String>,
     /// Profil de placement effectif.
     pub profile: Option<String>,
+    /// `true` when a loaded mmproj projector is active on this model context.
+    #[serde(default)]
+    pub has_vision: bool,
 }
 
 /// `model.load`.

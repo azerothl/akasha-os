@@ -60,6 +60,16 @@ pub fn is_technical_prompt_overflow_message(msg: &str) -> bool {
     is_prompt_too_long_error(msg) || msg.contains("ctx=") || msg.contains("réserve_gen=")
 }
 
+/// Erreur vision/mmproj (ne jamais afficher tel quel dans le fil humain).
+pub fn is_technical_vision_infer_error(msg: &str) -> bool {
+    let m = msg.to_ascii_lowercase();
+    m.contains("images fournies")
+        || m.contains("mmproj")
+        || m.contains("projecteur")
+        || m.contains("visionunavailable")
+        || m.contains("mtmd")
+}
+
 /// `fail_reason` / thread sentinel quand le prompt dépasse le contexte après compaction.
 pub fn user_visible_overflow_fail_reason() -> &'static str {
     crate::actions::THREAD_FAIL_COULD_NOT_CONTINUE
@@ -560,6 +570,21 @@ mod tests {
         assert!(!sentinel.contains("réserve_gen"));
         assert!(!sentinel.contains("prompt="));
         assert_eq!(sentinel, "agent_could_not_continue");
+    }
+
+    #[test]
+    fn technical_vision_infer_error_not_user_visible() {
+        let raw = "images fournies mais aucun projecteur mmproj chargé";
+        assert!(is_technical_vision_infer_error(raw));
+        assert!(!raw.contains("ctx="));
+    }
+
+    #[test]
+    fn technical_vision_infer_error_matches_mtmd_and_projecteur() {
+        assert!(is_technical_vision_infer_error("VisionUnavailable"));
+        assert!(is_technical_vision_infer_error("mtmd prefill failed"));
+        assert!(is_technical_vision_infer_error("projecteur absent"));
+        assert!(!is_technical_vision_infer_error("Impossible de continuer."));
     }
 
     #[test]

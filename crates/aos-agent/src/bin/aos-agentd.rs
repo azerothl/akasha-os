@@ -1175,19 +1175,27 @@ async fn main() {
                                         }
                                     }
                                     AgentOutputEvent::Error { message } => {
-                                        let reason =
-                                            if aos_agent::context_budget::is_technical_prompt_overflow_message(
-                                                &message,
-                                            ) {
-                                                eprintln!(
-                                                    "agent prompt overflow (journal) : {message}"
-                                                );
-                                                aos_agent::actions::THREAD_FAIL_COULD_NOT_CONTINUE
-                                                    .to_string()
-                                            } else {
-                                                message.clone()
-                                            };
-                                        entry.info.fail_reason = Some(reason);
+                                        if aos_agent::context_budget::is_technical_vision_infer_error(
+                                            &message,
+                                        ) {
+                                            eprintln!(
+                                                "agent vision refs ignorées (pas de mmproj) : {message}"
+                                            );
+                                        } else {
+                                            let reason =
+                                                if aos_agent::context_budget::is_technical_prompt_overflow_message(
+                                                    &message,
+                                                ) {
+                                                    eprintln!(
+                                                        "agent prompt overflow (journal) : {message}"
+                                                    );
+                                                    aos_agent::actions::THREAD_FAIL_COULD_NOT_CONTINUE
+                                                        .to_string()
+                                                } else {
+                                                    message.clone()
+                                                };
+                                            entry.info.fail_reason = Some(reason);
+                                        }
                                     }
                                     AgentOutputEvent::Log { line } => {
                                         if let Some(rest) = line.strip_prefix("goal.complete : ")

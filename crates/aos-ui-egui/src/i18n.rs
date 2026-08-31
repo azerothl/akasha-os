@@ -2004,6 +2004,9 @@ pub fn resolve_agent_fail_reason(t: &UiStrings, reason: Option<&str>) -> String 
         Some(other) if aos_agent::context_budget::is_overflow_fail_reason(other) => {
             t.agent_could_not_continue.to_string()
         }
+        Some(other) if aos_agent::context_budget::is_technical_vision_infer_error(other) => {
+            t.agent_could_not_continue.to_string()
+        }
         Some(other) if !other.trim().is_empty() => other.to_string(),
         _ => t.agent_fail_unknown.to_string(),
     }
@@ -2154,6 +2157,20 @@ mod tests {
             ),
             en.agent_could_not_continue
         );
+    }
+
+    #[test]
+    fn agent_vision_mmproj_error_i18n_hides_technical_copy() {
+        let en = strings("en");
+        let fr = strings("fr");
+        let raw = "images fournies mais aucun projecteur mmproj chargé";
+        let resolved_en = resolve_agent_fail_reason(&en, Some(raw));
+        let resolved_fr = resolve_agent_fail_reason(&fr, Some(raw));
+        assert!(!resolved_en.contains("mmproj"));
+        assert!(!resolved_en.contains("projecteur"));
+        assert!(!resolved_fr.contains("mmproj"));
+        assert_eq!(resolved_en, en.agent_could_not_continue);
+        assert_eq!(resolved_fr, fr.agent_could_not_continue);
     }
 
     #[test]
