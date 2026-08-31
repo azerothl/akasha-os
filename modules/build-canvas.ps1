@@ -12,21 +12,18 @@ function Join-OsPath {
 }
 
 Write-Host "== build wasm32 (canvas) =="
+# canvas is its own Cargo workspace — never prefer packaging CARGO_TARGET_DIR
+# (stale module_canvas.wasm there drops canvas.path from the packaged guest).
+$canvasTarget = Join-OsPath $root modules canvas target
+$env:CARGO_TARGET_DIR = $canvasTarget
 cargo build --manifest-path (Join-OsPath $root modules canvas Cargo.toml) --target wasm32-unknown-unknown --release
 if ($LASTEXITCODE -ne 0) { throw "échec build wasm" }
 
 function Resolve-WasmArtifact {
     param([string]$FileName)
-    $candidates = @()
-    if ($env:CARGO_TARGET_DIR) {
-        $candidates += (Join-OsPath $env:CARGO_TARGET_DIR wasm32-unknown-unknown release $FileName)
-    }
-    $candidates += (Join-OsPath $root target wasm32-unknown-unknown release $FileName)
-    $candidates += (Join-OsPath $root modules canvas target wasm32-unknown-unknown release $FileName)
-    foreach ($c in $candidates) {
-        if (Test-Path $c) { return $c }
-    }
-    throw "WASM manquant: $FileName"
+    $c = Join-OsPath $canvasTarget wasm32-unknown-unknown release $FileName
+    if (Test-Path $c) { return $c }
+    throw "WASM manquant: $c"
 }
 
 $pkg = Join-OsPath $root modules canvas.aospkg
