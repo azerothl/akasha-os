@@ -21,6 +21,7 @@ mod chat_canvas;
 mod chat_media;
 mod chat_room;
 mod cmd;
+mod composer_layout;
 mod image_composition;
 mod image_history;
 mod image_prompt;
@@ -42,6 +43,13 @@ mod theme;
 
 use chat_ask::{agent_display_title, chat_has_open_ask, pending_ask_ids};
 use cmd::{AgentNotice, ChatLine, Cmd, Evt};
+use composer_layout::{
+    chat_canvas_layout, chat_composer_reserve_height, chat_sessions_split, composer_field_width,
+    estimate_composer_buttons_w, send_button_reserved_width, stop_button_reserved_width,
+    ChatCanvasLayout, ChatSessionsSplit, COMPOSER_MIN_INPUT_W,
+};
+#[cfg(test)]
+use composer_layout::{chat_composer_wraps, COMPOSER_INPUT_ROW_H};
 use os_open::{aos_home, app_icon, bin_aos_session, native_path, open_in_browser, open_os_folder, open_url, request_preview_restart};
 use runtime::runtime_main;
 use slash::{slash_completions, slash_insert_text, SLASH_COMMANDS};
@@ -733,144 +741,6 @@ fn preview_min_inner_width(t: &i18n::UiStrings) -> f32 {
     let canvas_split_min = 180.0 + CHAT_SPLIT_GAP + 200.0;
     let main_min = composer.max(session_bar).max(canvas_split_min);
     LEFT_NAV_W + CHAT_SIDE_MIN_W + CHAT_SPLIT_GAP + main_min + CHAT_MAIN_MARGIN
-}
-
-const COMPOSER_MIN_INPUT_W: f32 = 140.0;
-const COMPOSER_INPUT_ROW_H: f32 = 44.0;
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-struct ChatSessionsSplit {
-    side_w: f32,
-    chat_w: f32,
-}
-
-/// Sidebar + main chat widths that never exceed `full_w`.
-fn chat_sessions_split(full_w: f32, gap: f32, canvas_open: bool) -> ChatSessionsSplit {
-    let min_main = if canvas_open { 240.0_f32 } else { 200.0_f32 };
-    let max_side = if canvas_open { 160.0_f32 } else { 220.0_f32 };
-    let min_side = if canvas_open { 80.0_f32 } else { 120.0_f32 };
-    let mut side_w = max_side.min((full_w * 0.30).max(min_side));
-    if full_w - side_w - gap < min_main {
-        side_w = (full_w - gap - min_main).clamp(80.0, max_side);
-    }
-    side_w = side_w.min((full_w - gap).max(0.0));
-    let chat_w = (full_w - side_w - gap).max(0.0);
-    ChatSessionsSplit { side_w, chat_w }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum ChatCanvasLayout {
-    SideBySide { transcript_w: f32, canvas_w: f32 },
-    Stacked { transcript_h: f32, canvas_h: f32 },
-}
-
-/// Transcript + canvas layout that fits in `total_w` (side-by-side or stacked).
-fn chat_canvas_layout(total_w: f32, content_h: f32, split_gap: f32) -> ChatCanvasLayout {
-    const CANVAS_MIN: f32 = 96.0;
-    const TRANSCRIPT_MIN: f32 = 140.0;
-    const STACK_BELOW: f32 = 360.0;
-    if total_w < STACK_BELOW {
-        let transcript_h = (content_h * 0.55).max(72.0);
-        let canvas_h = (content_h - transcript_h - split_gap).max(72.0);
-        ChatCanvasLayout::Stacked {
-            transcript_h,
-            canvas_h,
-        }
-    } else {
-        let max_canvas = (total_w - TRANSCRIPT_MIN - split_gap).max(0.0);
-        let canvas_w = ((total_w - split_gap) * 0.40)
-            .clamp(CANVAS_MIN.min(max_canvas), max_canvas);
-        let transcript_w = (total_w - canvas_w - split_gap).max(0.0);
-        ChatCanvasLayout::SideBySide {
-            transcript_w,
-            canvas_w,
-        }
-    }
-}
-
-/// Conservative button-row width for composer wrap prediction (before egui measure).
-fn estimate_composer_buttons_w(send: &str, show_stop: bool, stop: &str) -> f32 {
-    const CHAR_W: f32 = 8.5;
-    const BTN_PAD: f32 = 20.0;
-    const ITEM_GAP: f32 = 4.0;
-    let mut w = send.len() as f32 * CHAR_W + BTN_PAD;
-    if show_stop {
-        w += ITEM_GAP + stop.len() as f32 * CHAR_W + BTN_PAD;
-    }
-    w
-}
-
-fn ui_button_width(ui: &egui::Ui, label: &str) -> f32 {
-    let padding = ui.style().spacing.button_padding;
-    let font_id = ui.style().text_styles[&egui::TextStyle::Button].clone();
-    let galley = ui.fonts(|f| {
-        f.layout_no_wrap(
-            label.to_owned(),
-            font_id,
-            egui::Color32::PLACEHOLDER,
-        )
-    });
-    galley.size().x + padding.x * 2.0
-}
-
-fn send_button_reserved_width(ui: &egui::Ui, t: &i18n::UiStrings) -> f32 {
-    let measured = ui_button_width(ui, t.agent_send);
-    let fr_floor = estimate_composer_buttons_w("Envoyer", false, "");
-    measured.max(fr_floor)
-}
-
-fn stop_button_reserved_width(ui: &egui::Ui, t: &i18n::UiStrings) -> f32 {
-    let measured = ui_button_width(ui, t.chat_stop);
-    let fr_floor = estimate_composer_buttons_w("Stop", false, "");
-    measured.max(fr_floor)
-}
-
-/// Field width after reserving fixed Envoyer (+ Stop) and paperclip chrome (RTL allocation).
-fn composer_field_width(
-    row_w: f32,
-    send_w: f32,
-    attach_w: f32,
-    stop_w: f32,
-    gap: f32,
-    show_stop: bool,
-) -> f32 {
-    let gaps = if show_stop { gap * 3.0 } else { gap * 2.0 };
-    let chrome = send_w + attach_w + gaps + if show_stop { stop_w } else { 0.0 };
-    (row_w - chrome).max(0.0)
-}
-
-#[cfg(test)]
-fn chat_composer_wraps(available_w: f32, attach_w: f32, buttons_w: f32) -> bool {
-    available_w - attach_w - buttons_w < COMPOSER_MIN_INPUT_W
-}
-
-/// Vertical space for the fixed send row plus optional stacks that grow upward.
-fn chat_composer_reserve_height(
-    chat_w: f32,
-    ask_queue_len: usize,
-    pending_images_len: usize,
-    pending_documents_len: usize,
-    show_vision_banner: bool,
-) -> f32 {
-    const ASK_QUEUE_H: f32 = 22.0;
-    const VISION_BANNER_H: f32 = 28.0;
-    const CHIP_W: f32 = 48.0;
-    const CHIP_ROW_H: f32 = 36.0;
-
-    let mut h = COMPOSER_INPUT_ROW_H;
-    if ask_queue_len > 1 {
-        h += ASK_QUEUE_H;
-    }
-    let pending_chips = pending_images_len + pending_documents_len;
-    if pending_chips > 0 {
-        if show_vision_banner {
-            h += VISION_BANNER_H;
-        }
-        let chips_per_row = (chat_w / CHIP_W).floor().max(1.0) as usize;
-        let rows = pending_chips.div_ceil(chips_per_row);
-        h += (rows as f32) * CHIP_ROW_H;
-    }
-    h
 }
 
 fn chat_markdown_viewer(ui: &egui::Ui) -> CommonMarkViewer<'static> {
