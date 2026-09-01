@@ -244,6 +244,7 @@ Copy-Item (Join-Path $root "docs\FIRST-RUN.md") "$OutDir\FIRST-RUN.md" -ErrorAct
 Copy-Item (Join-Path $root "docs\STATUS.md") "$OutDir\docs\STATUS.md" -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $root "docs\FEATURES.md") "$OutDir\docs\FEATURES.md" -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $root "docs\I18N.md") "$OutDir\docs\I18N.md" -ErrorAction SilentlyContinue
+Copy-Item (Join-Path $root "docs\write-a-skill.md") "$OutDir\docs\write-a-skill.md" -ErrorAction SilentlyContinue
 if (Test-Path (Join-Path $root "docs\fr")) {
     New-Item -ItemType Directory -Force -Path "$OutDir\docs\fr" | Out-Null
     Copy-Item (Join-Path $root "docs\fr\*") "$OutDir\docs\fr\" -Recurse -Force -ErrorAction SilentlyContinue

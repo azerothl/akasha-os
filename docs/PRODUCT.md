@@ -46,7 +46,7 @@ Constraints:
 - Site and product copy are bilingual EN / FR with equivalent content.
 - Stack for the public site is already decided: static HTML / CSS / JS in `website/`.
 
-Site routes: landing plus grant, why, install, about, community, an end-user docs hub (`website/docs/`), and a version log (`website/docs/whats-new.html`). Repo specs stay on GitHub.
+Site routes: landing plus grant, why, install, about, community, an end-user docs hub (`website/docs/`), a ten-minute skill guide (`website/docs/skill.html`), and a version log (`website/docs/whats-new.html`). Repo specs stay on GitHub.
 
 ## Brand Commitments
 

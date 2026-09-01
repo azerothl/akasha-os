@@ -48,8 +48,10 @@ dans une même PR.
 
 ## Proposer un skill
 
-Les skills sont du Markdown sous `share/skills/` / `var/skills/`. Exemple
-communautaire (hors zip Preview) :
+Les skills sont du Markdown sous `share/skills/` / `var/skills/`. Procédure
+dix minutes : [write-a-skill.md](write-a-skill.md) (site :
+[écrire un skill](https://azerothl.github.io/akasha-os/docs/skill.html?lang=fr)).
+Exemple communautaire (hors zip Preview) :
 [`community/skills/morning-brief/`](../../community/skills/morning-brief/).
 Recette livrée : [`skills/planner/SKILL.md`](../../skills/planner/SKILL.md).
 Ouvre

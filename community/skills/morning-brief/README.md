@@ -25,7 +25,9 @@ community/skills/morning-brief/SKILL.md  →  var/skills/morning-brief/SKILL.md
 ```
 
 Restart Preview, or run `skill.list`. Start an agent with skill
-`morning-brief`, or ask “Give me a morning brief”.
+`morning-brief`, or ask “Give me a morning brief”. Ten-minute procedure:
+[write a skill](https://azerothl.github.io/akasha-os/docs/skill.html)
+([`docs/write-a-skill.md`](../../../docs/write-a-skill.md)).
 
 Do **not** PR this into `crates/` or `skills/` (the shipped zip). A change
 to the example stays under `community/`.

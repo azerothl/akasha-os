@@ -226,6 +226,7 @@ cp -f "${ROOT}/docs/FIRST-RUN.md" "${OUT}/docs/FIRST-RUN.md" 2>/dev/null || true
 cp -f "${ROOT}/docs/STATUS.md" "${OUT}/docs/STATUS.md" 2>/dev/null || true
 cp -f "${ROOT}/docs/FEATURES.md" "${OUT}/docs/FEATURES.md" 2>/dev/null || true
 cp -f "${ROOT}/docs/I18N.md" "${OUT}/docs/I18N.md" 2>/dev/null || true
+cp -f "${ROOT}/docs/write-a-skill.md" "${OUT}/docs/write-a-skill.md" 2>/dev/null || true
 if [ -d "${ROOT}/docs/fr" ]; then
   mkdir -p "${OUT}/docs/fr"
   copy_tree "${ROOT}/docs/fr/." "${OUT}/docs/fr/"

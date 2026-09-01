@@ -44,8 +44,10 @@ Do **not** mix AGPL host files and permissive extension files in one PR.
 
 ## How to propose a skill
 
-Skills are Markdown under `share/skills/` / `var/skills/`. Community
-example (not in the Preview zip):
+Skills are Markdown under `share/skills/` / `var/skills/`. Ten-minute
+procedure: [docs/write-a-skill.md](docs/write-a-skill.md) (site:
+[write a skill](https://azerothl.github.io/akasha-os/docs/skill.html)).
+Community example (not in the Preview zip):
 [`community/skills/morning-brief/`](community/skills/morning-brief/). Shipped
 recipe: [`skills/planner/SKILL.md`](skills/planner/SKILL.md).
 Open a Show and tell Discussion with the `SKILL.md` body, or a PR under

@@ -20,6 +20,9 @@ Do not name a fork or package **Akasha OS**. The trademark stays reserved.
 
 Worked example: [`skills/morning-brief/`](skills/morning-brief/) — copy
 `SKILL.md` into Preview `var/skills/morning-brief/` (not shipped in the zip).
+Ten-minute procedure (site):
+[write a skill](https://azerothl.github.io/akasha-os/docs/skill.html). Repo
+copy: [`docs/write-a-skill.md`](../docs/write-a-skill.md).
 
 ## How to add a skill
 

@@ -17,6 +17,8 @@ commercial grant): [ADR 0006](../adr/0006-license-split.md). A Discussion is
 never a CLA event. Do not PR a skill into `crates/`. Example skill (MIT, not
 in the Preview zip):
 [`community/skills/morning-brief/`](../community/skills/morning-brief/).
+Ten-minute guide: [write-a-skill.md](write-a-skill.md) (site:
+[skill.html](https://azerothl.github.io/akasha-os/docs/skill.html)).
 
 ## Cohort gate
 
