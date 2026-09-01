@@ -91,7 +91,12 @@ pub fn show_fatal_dialog(title: &str, body: &str) {
 /// Boot-failure dialog: one-line body + localized Retry button. Returns `true` to retry.
 pub fn show_bootstrap_retry_dialog(title: &str, body: &str, retry_label: &str) -> bool {
     eprintln!("[aos-session] {title}\n{body}");
-    #[cfg(windows)]
+    #[cfg(test)]
+    {
+        eprintln!("[aos-session] {retry_label} (test — auto-retry)");
+        true
+    }
+    #[cfg(all(not(test), windows))]
     {
         let safe_title = ps_escape_single_quoted(title);
         let safe_body = ps_escape_single_quoted(body);
@@ -122,13 +127,13 @@ $form.Controls.Add($btn)
 $form.Add_Shown({{ $form.Activate(); $btn.Focus() }})
 if ($form.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{ exit 0 }} else {{ exit 1 }}"#
         );
-        return Command::new("powershell")
+        Command::new("powershell")
             .args(["-NoProfile", "-Command", &ps])
             .status()
             .map(|s| s.success())
-            .unwrap_or(false);
+            .unwrap_or(false)
     }
-    #[cfg(target_os = "macos")]
+    #[cfg(all(not(test), target_os = "macos"))]
     {
         let out = Command::new("osascript")
             .args([
@@ -149,7 +154,7 @@ if ($form.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{ exit 0 }}
             .map(|o| String::from_utf8_lossy(&o.stdout).trim() == retry_label)
             .unwrap_or(false);
     }
-    #[cfg(not(any(windows, target_os = "macos")))]
+    #[cfg(all(not(test), not(any(windows, target_os = "macos"))))]
     {
         eprintln!("[aos-session] {retry_label} (headless — auto-retry)");
         let _ = (title, body);
@@ -157,7 +162,7 @@ if ($form.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{ exit 0 }}
     }
 }
 
-#[cfg(windows)]
+#[cfg(all(windows, not(test)))]
 fn ps_escape_single_quoted(s: &str) -> String {
     s.replace('\'', "''")
 }
@@ -563,7 +568,7 @@ fn try_copy_with_retry(src: &Path, dst: &Path) -> io::Result<u64> {
             Err(e) => return Err(e),
         }
     }
-    Err(last.unwrap_or_else(|| io::Error::new(io::ErrorKind::Other, "copy retry exhausted")))
+    Err(last.unwrap_or_else(|| io::Error::other("copy retry exhausted")))
 }
 
 /// Drop leftover `*.old` sidecars from a previous in-place binary replace.

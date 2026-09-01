@@ -890,8 +890,7 @@ fn ensure_layout(home: &Path) -> Vec<String> {
     // (sinon un ancien WASM reste en place après update Preview — issue #1).
     let notes_share = home.join("share/modules/notes.aospkg");
     let notes_installed = home.join("var/modules/notes");
-    if notes_share.exists() {
-        if bootstrap::sync_packaged_module(&notes_share, &notes_installed) {
+    if notes_share.exists() && bootstrap::sync_packaged_module(&notes_share, &notes_installed) {
             synced.push("notes".into());
             let reg = home.join("var/modules/registry.yaml");
             if !reg.exists() {
@@ -908,14 +907,12 @@ fn ensure_layout(home: &Path) -> Vec<String> {
 "#,
                 );
             }
-        }
     }
 
     // Module tasks (Preview 0.3 / E3) — même resync au boot.
     let tasks_share = home.join("share/modules/tasks.aospkg");
     let tasks_installed = home.join("var/modules/tasks");
-    if tasks_share.exists() {
-        if bootstrap::sync_packaged_module(&tasks_share, &tasks_installed) {
+    if tasks_share.exists() && bootstrap::sync_packaged_module(&tasks_share, &tasks_installed) {
             synced.push("tasks".into());
             let reg = home.join("var/modules/registry.yaml");
             if let Ok(mut raw) = fs::read_to_string(&reg) {
@@ -943,14 +940,12 @@ fn ensure_layout(home: &Path) -> Vec<String> {
 "#,
                 );
             }
-        }
     }
 
     // Module canvas (chat drawing) — même resync au boot.
     let canvas_share = home.join("share/modules/canvas.aospkg");
     let canvas_installed = home.join("var/modules/canvas");
-    if canvas_share.exists() {
-        if bootstrap::sync_packaged_module(&canvas_share, &canvas_installed) {
+    if canvas_share.exists() && bootstrap::sync_packaged_module(&canvas_share, &canvas_installed) {
             synced.push("canvas".into());
             let reg = home.join("var/modules/registry.yaml");
             if let Ok(mut raw) = fs::read_to_string(&reg) {
@@ -985,7 +980,6 @@ fn ensure_layout(home: &Path) -> Vec<String> {
 "#,
                 );
             }
-        }
     }
 
     // Runtime scripté ext-rt (template pour modules agent) — package partagé.
@@ -1065,10 +1059,8 @@ fn write_runtime_configs(home: &Path) {
     let mut models_yaml = String::new();
     let mut embed_path = home.join("share/models/missing-embed.gguf");
     for (id, o, path) in &entries {
-        if id == &default_embed || o.profiles.iter().any(|p| p == "embed") {
-            if id == &default_embed {
-                embed_path = path.clone();
-            }
+        if id == &default_embed {
+            embed_path = path.clone();
         }
         models_yaml.push_str(&format!(
             r#"  {id}:

@@ -40,7 +40,7 @@ pub fn is_newer(local: &str, remote: &str) -> bool {
     let parse = |s: &str| -> Vec<u64> {
         s.trim()
             .trim_start_matches('v')
-            .split(|c| c == '.' || c == '-')
+            .split(['.', '-'])
             .filter_map(|p| {
                 p.chars()
                     .take_while(|c| c.is_ascii_digit())
@@ -371,7 +371,7 @@ fn open_with_retry(path: &Path) -> io::Result<File> {
             Err(e) => return Err(e),
         }
     }
-    Err(last.unwrap_or_else(|| io::Error::new(io::ErrorKind::Other, "open retry exhausted")))
+    Err(last.unwrap_or_else(|| io::Error::other("open retry exhausted")))
 }
 
 fn create_with_retry(path: &Path) -> io::Result<File> {
@@ -386,7 +386,7 @@ fn create_with_retry(path: &Path) -> io::Result<File> {
             Err(e) => return Err(e),
         }
     }
-    Err(last.unwrap_or_else(|| io::Error::new(io::ErrorKind::Other, "create retry exhausted")))
+    Err(last.unwrap_or_else(|| io::Error::other("create retry exhausted")))
 }
 
 pub(crate) fn extract_zip(archive: &Path, dest: &Path) -> Result<(), String> {
