@@ -63,15 +63,19 @@ pub const UI_SCALE_PRESETS: [u32; 4] = [90, 100, 110, 125];
 
 /// Preview UI language from OS locale when possible (`en` or `fr`).
 pub fn detect_os_language() -> String {
-    for key in ["LC_ALL", "LC_MESSAGES", "LANG"] {
-        if let Ok(raw) = std::env::var(key) {
-            let tag = raw.split('.').next().unwrap_or(&raw).to_ascii_lowercase();
-            if tag.starts_with("fr") {
-                return "fr".into();
-            }
-            if tag.starts_with("en") {
-                return "en".into();
-            }
+    detect_language_from_locales(
+        ["LC_ALL", "LC_MESSAGES", "LANG"].map(|key| std::env::var(key).ok()),
+    )
+}
+
+fn detect_language_from_locales(locales: impl IntoIterator<Item = Option<String>>) -> String {
+    for raw in locales.into_iter().flatten() {
+        let tag = raw.split('.').next().unwrap_or(&raw).to_ascii_lowercase();
+        if tag.starts_with("fr") {
+            return "fr".into();
+        }
+        if tag.starts_with("en") {
+            return "en".into();
         }
     }
     "en".into()
@@ -230,13 +234,12 @@ pub fn save_preferences(prefs: &Preferences) {
 /// Aligne les champs partagés dans onboarding.json (sans écraser le tutoriel).
 fn sync_onboarding_language(prefs: &Preferences) {
     let path = onboarding_path();
-    let mut map: serde_json::Map<String, serde_json::Value> = if let Ok(raw) =
-        std::fs::read_to_string(&path)
-    {
-        serde_json::from_str(&raw).unwrap_or_default()
-    } else {
-        serde_json::Map::new()
-    };
+    let mut map: serde_json::Map<String, serde_json::Value> =
+        if let Ok(raw) = std::fs::read_to_string(&path) {
+            serde_json::from_str(&raw).unwrap_or_default()
+        } else {
+            serde_json::Map::new()
+        };
     map.insert(
         "language".into(),
         serde_json::Value::String(prefs.language.clone()),
@@ -260,35 +263,26 @@ fn sync_onboarding_language(prefs: &Preferences) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
-
-    static LOCALE_ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn detect_os_language_defaults_to_en_without_locale() {
-        let _guard = LOCALE_ENV_LOCK.lock().unwrap();
-        std::env::remove_var("LC_ALL");
-        std::env::remove_var("LC_MESSAGES");
-        std::env::remove_var("LANG");
-        assert_eq!(detect_os_language(), "en");
+        assert_eq!(detect_language_from_locales([None, None, None]), "en");
     }
 
     #[test]
     fn detect_os_language_reads_fr_locale() {
-        let _guard = LOCALE_ENV_LOCK.lock().unwrap();
-        std::env::remove_var("LC_ALL");
-        std::env::remove_var("LC_MESSAGES");
-        std::env::set_var("LANG", "fr_FR.UTF-8");
-        assert_eq!(detect_os_language(), "fr");
-        std::env::remove_var("LANG");
+        assert_eq!(
+            detect_language_from_locales([None, None, Some("fr_FR.UTF-8".into())]),
+            "fr"
+        );
     }
 
     #[test]
     fn detect_os_language_reads_en_locale() {
-        let _guard = LOCALE_ENV_LOCK.lock().unwrap();
-        std::env::set_var("LC_ALL", "en_GB.UTF-8");
-        assert_eq!(detect_os_language(), "en");
-        std::env::remove_var("LC_ALL");
+        assert_eq!(
+            detect_language_from_locales([Some("en_GB.UTF-8".into()), None, None]),
+            "en"
+        );
     }
 
     #[test]
