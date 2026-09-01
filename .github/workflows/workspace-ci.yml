@@ -50,7 +50,19 @@ jobs:
           shared-key: workspace-ci-linux
       - name: Clippy core and primary UI (warnings are errors)
         run: cargo clippy -p aos-proto -p aos-agent -p aos-ui-egui --all-targets -- -D warnings
-      - name: Clippy workspace
-        run: cargo clippy --workspace --all-targets
-      - name: Test workspace
-        run: cargo test --workspace
+      # The release workflow owns CUDA builds. Keep the general CI job CPU-only
+      # so pull requests do not require a CUDA toolkit or compile llama.cpp twice.
+      - name: Clippy workspace (CPU)
+        run: cargo clippy --workspace --all-targets --exclude aos-llama --exclude aos-model --exclude aos-platform
+      - name: Clippy model stack (CPU)
+        run: |
+          cargo clippy -p aos-llama --no-default-features --all-targets
+          cargo clippy -p aos-model --no-default-features --all-targets
+          cargo clippy -p aos-platform --no-default-features --all-targets
+      - name: Test workspace (CPU)
+        run: cargo test --workspace --exclude aos-llama --exclude aos-model --exclude aos-platform
+      - name: Test model stack (CPU)
+        run: |
+          cargo test -p aos-llama --no-default-features
+          cargo test -p aos-model --no-default-features
+          cargo test -p aos-platform --no-default-features
