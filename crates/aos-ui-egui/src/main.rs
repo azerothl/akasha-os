@@ -45,6 +45,7 @@ mod chat_runtime_state;
 mod chat_sidebar_state;
 mod chat_state;
 mod chat_view_state;
+mod canvas_event_controller;
 mod cmd;
 mod composer_layout;
 mod image_composition;
@@ -2424,9 +2425,7 @@ impl eframe::App for UiApp {
                     }
                 }
                 Evt::CanvasMeta(meta) => {
-                    if let Some(s) = self.chat_state.sessions.iter_mut().find(|s| s.id == meta.id) {
-                        *s = meta.clone();
-                    }
+                    canvas_event_controller::on_canvas_meta(self, meta);
                 }
                 Evt::CanvasSnapshot {
                     session_id,
@@ -2439,48 +2438,24 @@ impl eframe::App for UiApp {
                     layers,
                     active_layer_id,
                 } => {
-                    if self.chat_state.active_session.as_deref() != Some(session_id.as_str()) {
-                        // still update meta open flag
-                    }
-                    if let Some(s) = self.chat_state.sessions.iter_mut().find(|s| s.id == session_id) {
-                        s.canvas_open = canvas_open;
-                    }
-                    if self.chat_state.active_session.as_deref() == Some(session_id.as_str()) {
-                        let now = ctx.input(|i| i.time);
-                        if delta {
-                            self.chat_state.view.canvas.merge_delta(ops, next_seq, now);
-                        } else {
-                            self.chat_state.view.canvas.apply_snapshot(ops, next_seq, now);
-                        }
-                        self.chat_state.view.canvas.sync_pen(&pen);
-                        if !layers.is_empty() {
-                            self.chat_state
-                                .view
-                                .canvas
-                                .sync_layers(layers, active_layer_id);
-                        }
-                        if let Some(seeing) = canvas_seeing {
-                            self.chat_state.view.canvas.seeing = seeing;
-                        }
-                    }
+                    canvas_event_controller::on_canvas_snapshot(
+                        self,
+                        ctx,
+                        canvas_event_controller::CanvasSnapshotEvent {
+                            session_id,
+                            canvas_open,
+                            next_seq,
+                            ops,
+                            pen,
+                            delta,
+                            canvas_seeing,
+                            layers,
+                            active_layer_id,
+                        },
+                    );
                 }
                 Evt::CanvasExported { path, session_id } => {
-                    if self.chat_state.active_session.as_deref() == Some(session_id.as_str()) {
-                        let t = i18n::strings(&self.prefs.language);
-                        self.status = t.canvas_export_status.replace("{path}", &path);
-                        self.chat_state.composer.last_session_image = Some(path.clone());
-                        self.chat.push(ChatLine {
-                            role: "assistant".into(),
-                            text: t.canvas_exported.replace("{path}", &path),
-                            attachments: vec![ChatAttachment::Image {
-                                path,
-                                prompt: "canvas export".into(),
-                            }],
-                            speaker_id: None,
-                            speaker_name: None,
-                            thinking: None,
-                        });
-                    }
+                    canvas_event_controller::on_canvas_exported(self, path, session_id);
                 }
                 Evt::SessionExported { path, session_id } => {
                     if self.chat_state.active_session.as_deref() == Some(session_id.as_str()) {
