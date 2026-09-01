@@ -434,7 +434,7 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                         ui.label("Brave Search");
                         ui.horizontal(|ui| {
                             ui.add(
-                                egui::TextEdit::singleline(&mut self.secret_brave)
+                                egui::TextEdit::singleline(&mut self.settings_ui.secret_brave)
                                     .password(true)
                                     .desired_width(220.0)
                                     .hint_text("BSA…"),
@@ -442,9 +442,9 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                             if ui.button(t.settings_secret_save).clicked() {
                                 let _ = self.cmd_tx.send(Cmd::SecretSet {
                                     name: "brave_search_api_key".into(),
-                                    value: self.secret_brave.clone(),
+                                    value: self.settings_ui.secret_brave.clone(),
                                 });
-                                self.secret_brave.clear();
+                                self.settings_ui.secret_brave.clear();
                             }
                         });
                         ui.end_row();
@@ -452,7 +452,7 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                         ui.label("GitHub token");
                         ui.horizontal(|ui| {
                             ui.add(
-                                egui::TextEdit::singleline(&mut self.secret_github)
+                                egui::TextEdit::singleline(&mut self.settings_ui.secret_github)
                                     .password(true)
                                     .desired_width(220.0)
                                     .hint_text("ghp_…"),
@@ -460,9 +460,9 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                             if ui.button(t.settings_secret_save).clicked() {
                                 let _ = self.cmd_tx.send(Cmd::SecretSet {
                                     name: "github_token".into(),
-                                    value: self.secret_github.clone(),
+                                    value: self.settings_ui.secret_github.clone(),
                                 });
-                                self.secret_github.clear();
+                                self.settings_ui.secret_github.clear();
                             }
                         });
                         ui.end_row();
@@ -470,7 +470,7 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                         ui.label(t.settings_secret_openai);
                         ui.horizontal(|ui| {
                             ui.add(
-                                egui::TextEdit::singleline(&mut self.secret_openai)
+                                egui::TextEdit::singleline(&mut self.settings_ui.secret_openai)
                                     .password(true)
                                     .desired_width(220.0)
                                     .hint_text("sk-…"),
@@ -478,9 +478,9 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                             if ui.button(t.settings_secret_save).clicked() {
                                 let _ = self.cmd_tx.send(Cmd::SecretSet {
                                     name: "openai_api_key".into(),
-                                    value: self.secret_openai.clone(),
+                                    value: self.settings_ui.secret_openai.clone(),
                                 });
-                                self.secret_openai.clear();
+                                self.settings_ui.secret_openai.clear();
                             }
                         });
                         ui.end_row();
@@ -489,14 +489,14 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                     if ui.button(t.settings_secret_list).clicked() {
                         let _ = self.cmd_tx.send(Cmd::SecretList);
                     }
-                    if self.secret_vault_encrypted {
+                    if self.settings_ui.secret_vault_encrypted {
                         ui.weak(t.settings_secret_encrypted);
                     }
-                    if !self.secret_names.is_empty() {
+                    if !self.settings_ui.secret_names.is_empty() {
                         ui.weak(format!(
                             "{}: {}",
                             t.settings_secret_configured,
-                            self.secret_names.join(", ")
+                            self.settings_ui.secret_names.join(", ")
                         ));
                     }
                 });
@@ -511,10 +511,11 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                     let _ = self.cmd_tx.send(Cmd::CatalogueRefresh);
                     let _ = self.cmd_tx.send(Cmd::ModuleList);
                 }
-                match self.catalogue.clone() {
+                match self.settings_ui.catalogue.clone() {
                     Some(cat) if cat.signature_ok => {
                         for e in cat.entries {
                             let installed = self
+                                .settings_ui
                                 .installed_modules
                                 .iter()
                                 .find(|m| m.name == e.name)
@@ -570,7 +571,7 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
 
                 ui.add_space(8.0);
                 ui.weak(t.settings_installed_modules);
-                for m in self.installed_modules.clone() {
+                for m in self.settings_ui.installed_modules.clone() {
                     ui.horizontal(|ui| {
                         ui.label(format!("{} v{}", m.name, m.version));
                         if aos_proto::decl_ui::is_bundled_module(&m.name) {
@@ -594,7 +595,7 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                     .show(ui, |ui| {
                         ui.label(t.schedule_goal);
                         ui.add(
-                            egui::TextEdit::singleline(&mut self.schedule_goal)
+                            egui::TextEdit::singleline(&mut self.settings_ui.schedule_goal)
                                 .desired_width(280.0)
                                 .hint_text("agent goal"),
                         );
@@ -603,7 +604,7 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                         ui.label(t.schedule_interval);
                         ui.horizontal(|ui| {
                             ui.add(
-                                egui::DragValue::new(&mut self.schedule_interval_secs)
+                                egui::DragValue::new(&mut self.settings_ui.schedule_interval_secs)
                                     .range(30..=86_400)
                                     .suffix(" s"),
                             );
@@ -611,15 +612,8 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                                 .button(t.schedule_create)
                                 .on_hover_text(t.tip_schedule_create)
                                 .clicked()
-                                && !self.schedule_goal.trim().is_empty()
                             {
-                                let _ = self.cmd_tx.send(Cmd::ScheduleCreate {
-                                    goal: self.schedule_goal.trim().to_string(),
-                                    interval_secs: self.schedule_interval_secs.max(30),
-                                    next_fire_ms: None,
-                                    display_title: None,
-                                });
-                                self.schedule_goal.clear();
+                                self.send_settings_schedule_create();
                             }
                             if ui.button(t.caps_refresh).clicked() {
                                 let _ = self.cmd_tx.send(Cmd::ScheduleList);

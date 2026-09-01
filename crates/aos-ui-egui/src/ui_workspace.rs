@@ -9,7 +9,7 @@ impl UiApp {
         let t = i18n::strings(&self.prefs.language);
         ui.weak(t.tasks_blurb);
         ui.separator();
-        let actions = self.tasks.ui(ui, &t);
+        let actions = self.workspace_ui.tasks.ui(ui, &t);
         if actions.list {
             let _ = self.cmd_tx.send(Cmd::TasksList);
         }
@@ -30,7 +30,7 @@ impl UiApp {
                 self.guide.open_topic(guide::GuideTopic::Library);
             }
         });
-        let actions = library_panel::render(ui, &t, &self.library);
+        let actions = library_panel::render(ui, &t, &self.workspace_ui.library);
         if actions.add_clicked {
             let filters = [(t.tab_library, aos_proto::chat_document::CHAT_DOCUMENT_EXTENSIONS)];
             if let Some(path) = os_open::pick_os_file(
@@ -52,7 +52,7 @@ impl UiApp {
         let t = i18n::strings(&self.prefs.language);
         ui.weak(t.notes_blurb);
         ui.separator();
-        let actions = notes_panel::show_notes_panel(ui, &mut self.notes, &t);
+        let actions = notes_panel::show_notes_panel(ui, &mut self.workspace_ui.notes, &t);
         if actions.list {
             let _ = self.cmd_tx.send(Cmd::NotesList);
         }
@@ -61,13 +61,15 @@ impl UiApp {
         }
         if let Some(path) = actions.read_path {
             let title = actions.read_title.clone().or_else(|| {
-                self.notes
+                self.workspace_ui
+                    .notes
                     .notes
                     .iter()
                     .find(|n| n.path == path)
                     .map(|n| n.title.clone())
             });
             let slug = self
+                .workspace_ui
                 .notes
                 .notes
                 .iter()

@@ -7,6 +7,10 @@ mod agent_act_phrase;
 mod agent_controller;
 mod agent_panel;
 mod agent_ui_state;
+mod settings_controller;
+mod settings_ui_state;
+mod workspace_controller;
+mod workspace_ui_state;
 mod decl_ui;
 mod guide;
 mod i18n;
@@ -101,7 +105,7 @@ use aos_agent::schedule_parse::ParsedSchedule;
 use aos_ipc::BusClient;
 use aos_proto::{
     AgentInfo, AgentState, AuditEvent, CapInfo, ChatAttachment, ChatSessionGetResponse,
-    ChatSessionIdRequest, DocumentRef, MemHit, ModelInfo, ModuleCatalogue, ModuleInfo,
+    ChatSessionIdRequest, DocumentRef, MemHit, ModelInfo,
     PendingConfirmation, ProviderRecord, SystemMetrics,
 };
 use prefs::{load_preferences, save_preferences, Preferences};
@@ -482,8 +486,6 @@ struct UiApp {
     tab: Tab,
     chat: Vec<ChatLine>,
     chat_state: chat_state::ChatState,
-    catalogue: Option<ModuleCatalogue>,
-    installed_modules: Vec<ModuleInfo>,
     network_online: bool,
     prefs: Preferences,
     agent_timeout_secs: u64,
@@ -495,11 +497,7 @@ struct UiApp {
     mem_sweep_last_pass_label: String,
     mem_edit_id: Option<u64>,
     mem_edit_text: String,
-    secret_brave: String,
-    secret_github: String,
-    secret_openai: String,
-    secret_names: Vec<String>,
-    secret_vault_encrypted: bool,
+    settings_ui: settings_ui_state::SettingsUiState,
     metrics: Option<SystemMetrics>,
     agents: Vec<AgentInfo>,
     /// États précédents pour détecter Done/Failed/Killed (notifications).
@@ -509,14 +507,8 @@ struct UiApp {
     /// agent_id déjà notifiés (dédup).
     agent_notified: std::collections::HashSet<String>,
     confirms: Vec<PendingConfirmation>,
-    notes: notes_panel::NotesPanelState,
-    /// Dernier payload notes brut (scénarios / debug).
-    notes_out: String,
-    tasks: tasks_panel::TasksPanelState,
-    library: library_panel::LibraryPanelState,
+    workspace_ui: workspace_ui_state::WorkspaceUiState,
     schedules: Vec<ScheduleEntry>,
-    schedule_goal: String,
-    schedule_interval_secs: u64,
     /// Act id waiting for `Evt::ScheduleCreated` to attach a thread card.
     schedule_pending_card_act: Option<String>,
     /// User-initiated session navigation intent for the next cross-session load.
@@ -760,8 +752,6 @@ impl UiApp {
             tab: Tab::Chat,
             chat: vec![ChatLine::plain("système", intro)],
             chat_state: chat_state::ChatState::default(),
-            catalogue: None,
-            installed_modules: Vec::new(),
             network_online,
             prefs,
             agent_timeout_secs,
@@ -773,24 +763,15 @@ impl UiApp {
             mem_sweep_last_pass_label: String::new(),
             mem_edit_id: None,
             mem_edit_text: String::new(),
-            secret_brave: String::new(),
-            secret_github: String::new(),
-            secret_openai: String::new(),
-            secret_names: Vec::new(),
-            secret_vault_encrypted: false,
+            settings_ui: settings_ui_state::SettingsUiState::default(),
             metrics: None,
             agents: Vec::new(),
             agent_prev_states: HashMap::new(),
             agent_notices: Vec::new(),
             agent_notified: std::collections::HashSet::new(),
             confirms: Vec::new(),
-            notes: notes_panel::NotesPanelState::default(),
-            notes_out: String::new(),
-            tasks: tasks_panel::TasksPanelState::default(),
-            library: library_panel::LibraryPanelState::default(),
+            workspace_ui: workspace_ui_state::WorkspaceUiState::default(),
             schedules: Vec::new(),
-            schedule_goal: String::new(),
-            schedule_interval_secs: 60,
             schedule_pending_card_act: None,
             pending_session_nav: session_nav::PendingSessionNav::None,
             schedule_transcript_dirty: false,
@@ -959,11 +940,7 @@ impl UiApp {
             return;
         }
         self.pending_module_agent = true;
-        self.pending_module_baseline = self
-            .installed_modules
-            .iter()
-            .map(|m| m.name.clone())
-            .collect();
+        self.pending_module_baseline = self.settings_ui.installed_module_names();
     }
 
     fn launch_module_author_agent(&mut self) {
@@ -2054,6 +2031,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                     }
                 }
                 let decl_mods: Vec<(String, String)> = self
+                    .settings_ui
                     .installed_modules
                     .iter()
                     .filter(|m| {
@@ -2742,37 +2720,14 @@ impl eframe::App for UiApp {
                     }
                     self.agents = a;
                 }
-                Evt::Notes(s) => {
-                    if self.pending_note_agent
-                        && !s.is_empty()
-                        && !s.contains("aucune note")
-                        && s != self.notes_out
-                    {
-                        self.scen_note_agent = true;
-                        self.pending_note_agent = false;
-                    }
-                    self.notes_out = s;
-                    self.scen_note_human = true;
-                }
-                Evt::NotesListed(notes) => {
-                    self.notes.apply_listed(notes);
-                    self.scen_note_human = true;
-                }
-                Evt::NoteLoaded(detail) => {
-                    self.notes.apply_loaded(detail);
-                }
-                Evt::NotesSearchHits(hits) => {
-                    self.notes.apply_search_hits(hits);
-                }
-                Evt::NotesRelated(hits) => {
-                    self.notes.apply_related(hits);
-                }
-                Evt::UserLibraryListed(docs) => {
-                    self.library.docs = docs;
-                }
+                Evt::Notes(s) => self.on_notes_raw(s),
+                Evt::NotesListed(notes) => self.on_notes_listed(notes),
+                Evt::NoteLoaded(detail) => self.on_note_loaded(detail),
+                Evt::NotesSearchHits(hits) => self.on_notes_search_hits(hits),
+                Evt::NotesRelated(hits) => self.on_notes_related(hits),
+                Evt::UserLibraryListed(docs) => self.on_user_library_listed(docs),
                 Evt::NotesSaved { path, slug, title } => {
-                    self.notes.mark_saved(path, slug, title);
-                    self.scen_note_human = true;
+                    self.on_notes_saved(path, slug, title);
                 }
                 Evt::Audit(a) => {
                     self.audit = a;
@@ -2795,10 +2750,7 @@ impl eframe::App for UiApp {
                     self.upsert_schedule_entry(entry);
                     self.sync_schedule_cards();
                 }
-                Evt::TasksListed(tasks) => {
-                    let t = i18n::strings(&self.prefs.language);
-                    self.tasks.apply_listed(tasks, t.tasks_count);
-                }
+                Evt::TasksListed(tasks) => self.on_tasks_listed(tasks),
                 Evt::Confirms(c) => self.confirms = c,
                 Evt::FeedbackOk(r) => {
                     let mut msg = format!(
@@ -3017,8 +2969,7 @@ impl eframe::App for UiApp {
                 }
                 Evt::MemHits(h) => self.mem_hits = h,
                 Evt::SecretList { names, encrypted } => {
-                    self.secret_names = names;
-                    self.secret_vault_encrypted = encrypted;
+                    self.on_secret_list(names, encrypted);
                 }
                 Evt::WebResults(r) => self.chat_state.sidebar.web_results = r,
                 Evt::BrowsePreview(t) => self.chat_state.sidebar.browse_preview = t,
@@ -3220,23 +3171,8 @@ impl eframe::App for UiApp {
                         self.status = t.chat_stopped.into();
                     }
                 }
-                Evt::Catalogue(c) => self.catalogue = Some(c),
-                Evt::InstalledModules(list) => {
-                    if self.pending_module_agent {
-                        let new_mod = list.iter().any(|m| {
-                            aos_proto::decl_ui::sidebar_decl_ui_module(
-                                &m.name,
-                                m.ui_mode.as_deref(),
-                            ) && !self.pending_module_baseline.iter().any(|n| n == &m.name)
-                        });
-                        if new_mod {
-                            self.scen_module_agent = true;
-                            self.pending_module_agent = false;
-                            self.pending_module_baseline.clear();
-                        }
-                    }
-                    self.installed_modules = list;
-                }
+                Evt::Catalogue(c) => self.on_catalogue(c),
+                Evt::InstalledModules(list) => self.on_installed_modules(list),
                 Evt::ModuleInstalled(msg) => {
                     self.status = msg;
                     let _ = self.cmd_tx.send(Cmd::CatalogueRefresh);
