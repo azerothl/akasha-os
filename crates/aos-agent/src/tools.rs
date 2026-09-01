@@ -880,6 +880,20 @@ pub fn canvas_tools_from_module_list(modules: &[aos_proto::ModuleInfo]) -> Vec<S
         .unwrap_or_default()
 }
 
+/// Canvas drawing agents must not inherit `user.ask` / spawn tools from `select_tools` "always".
+pub fn strip_canvas_blocked_runtime_tools(tools: &mut Vec<ToolDesc>, spec_tool_ids: &[String]) {
+    use crate::canvas_scene::agent_has_canvas_tools;
+    if !agent_has_canvas_tools(spec_tool_ids) {
+        return;
+    }
+    for blocked in ["user.ask", "agent.spawn", "agent.await"] {
+        if spec_tool_ids.iter().any(|t| t == blocked) {
+            continue;
+        }
+        tools.retain(|t| t.name != blocked);
+    }
+}
+
 /// Drop canvas.* tool ids that the loaded module does not export.
 pub fn restrict_canvas_tools(tool_ids: &mut Vec<String>, exported: &[String]) {
     let allowed: std::collections::HashSet<String> = filter_canvas_tool_ids(exported)
@@ -1236,6 +1250,17 @@ mod tests {
         assert!(ids.iter().any(|x| x == "canvas.stroke"));
         assert!(ids.iter().any(|x| x == "canvas.rect"));
         assert!(!ids.iter().any(|x| x == "canvas.path"));
+    }
+
+    #[test]
+    fn strip_canvas_blocked_runtime_tools_removes_user_ask() {
+        let spec = vec!["canvas.get".into(), "canvas.set_style".into()];
+        let mut tools = select_tools(&spec, &[]);
+        assert!(tools.iter().any(|t| t.name == "user.ask"));
+        strip_canvas_blocked_runtime_tools(&mut tools, &spec);
+        assert!(!tools.iter().any(|t| t.name == "user.ask"));
+        assert!(!tools.iter().any(|t| t.name == "agent.spawn"));
+        assert!(tools.iter().any(|t| t.name == "canvas.set_style"));
     }
 
     #[test]

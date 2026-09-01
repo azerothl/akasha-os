@@ -736,6 +736,8 @@ mod tests {
                 points: vec![aos_proto::CanvasPoint { x: 0.1, y: 0.2 }],
                 color: "#3ee0c4".into(),
                 width: 0.01,
+                opacity: 1.0,
+                dash: vec![],
             },
         }];
         let md_en = export_trace_markdown(&trace, Some(&info), "en", Some(&ops));

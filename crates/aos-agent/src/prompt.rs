@@ -51,7 +51,10 @@ pub fn compile_system_prompt(input: &PromptCompileInput<'_>) -> String {
                 "## Canvas de session\n\
                  Outils `canvas.*` : la session chat liée est `{sid}`. \
                  Omets `session_id` dans les args (le runtime le force). \
-                 N'invente jamais d'id (`chat-1`, `default`, `1`, …)."
+                 N'invente jamais d'id (`chat-1`, `default`, `1`, …).\n\
+                 Exécute les outils directement (`canvas.set_style`, `canvas.stroke`, …) — \
+                 **interdit** `user.ask` (couleur, style, coords ne demandent jamais l'humain). \
+                 **Interdit** `agent.spawn` / `agent.await` pour le même dessin."
             ));
         }
     }
