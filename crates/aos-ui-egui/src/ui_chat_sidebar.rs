@@ -25,8 +25,9 @@ impl UiApp {
                     ui.heading("Sessions");
                     ui.label("Model");
                     {
-                        let sid = self.active_session.clone();
+                        let sid = self.chat_state.active_session.clone();
                         let mut current = self
+                            .chat_state
                             .sessions
                             .iter()
                             .find(|s| Some(s.id.as_str()) == sid.as_deref())
@@ -116,12 +117,13 @@ impl UiApp {
                             });
                     }
                     if ui.button("+ Nouvelle").clicked() {
-                        let n = self.sessions.len() + 1;
+                        let n = self.chat_state.sessions.len() + 1;
                         self.request_session_create(Some(format!("Session {n}")));
                     }
-                    for s in self.sessions.clone() {
-                        let selected = self.active_session.as_deref() == Some(s.id.as_str());
-                        let unread = self.session_chat.is_unread(&s.id);
+                    for s in self.chat_state.sessions.clone() {
+                        let selected =
+                            self.chat_state.active_session.as_deref() == Some(s.id.as_str());
+                        let unread = self.chat_state.session_chat.is_unread(&s.id);
                         let row = ui.horizontal(|ui| {
                             if unread {
                                 let t = i18n::strings(&self.prefs.language);
@@ -143,7 +145,7 @@ impl UiApp {
                                 .hint_text("titre"),
                         );
                         if ui.button("Renommer").clicked() {
-                            if let Some(id) = self.active_session.clone() {
+                            if let Some(id) = self.chat_state.active_session.clone() {
                                 let _ = self.cmd_tx.send(Cmd::SessionRename {
                                     id,
                                     title: self.chat_state.sidebar.rename.clone(),
@@ -152,12 +154,12 @@ impl UiApp {
                         }
                     });
                     if ui.button(t.session_export).clicked() {
-                        if let Some(id) = self.active_session.clone() {
+                        if let Some(id) = self.chat_state.active_session.clone() {
                             let _ = self.cmd_tx.send(Cmd::SessionExport { id });
                         }
                     }
                     if ui.button("Supprimer").clicked() {
-                        if let Some(id) = self.active_session.clone() {
+                        if let Some(id) = self.chat_state.active_session.clone() {
                             self.request_session_delete(id);
                         }
                     }
@@ -169,7 +171,8 @@ impl UiApp {
                             .desired_width(side_w - 20.0)
                             .hint_text("recherche web"),
                     );
-                    if ui.button("Rechercher").clicked() && !self.chat_state.sidebar.web_query.is_empty()
+                    if ui.button("Rechercher").clicked()
+                        && !self.chat_state.sidebar.web_query.is_empty()
                     {
                         let _ = self.cmd_tx.send(Cmd::WebSearch {
                             query: self.chat_state.sidebar.web_query.clone(),

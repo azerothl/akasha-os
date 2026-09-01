@@ -24,7 +24,7 @@ impl UiApp {
             })
             .collect();
         let session_id = if library || join_active_room {
-            self.active_session.clone()
+            self.chat_state.active_session.clone()
         } else {
             None
         };
@@ -196,8 +196,8 @@ impl UiApp {
         });
 
         let room_active = chat_room::session_is_room(chat_room::active_session_meta(
-            &self.sessions,
-            self.active_session.as_deref(),
+            &self.chat_state.sessions,
+            self.chat_state.active_session.as_deref(),
         ));
         if room_active {
             ui.checkbox(
@@ -348,7 +348,7 @@ impl UiApp {
             if let Some(reason) = &a.fail_reason {
                 let session_ops = agent_canvas_session_ops(
                     a,
-                    self.active_session.as_deref(),
+                    self.chat_state.active_session.as_deref(),
                     &self.chat_state.view.canvas.ops,
                 );
                 let trace = self.agent_traces.get(&a.agent_id);
@@ -612,7 +612,7 @@ impl UiApp {
                         let session_ops = info.as_ref().and_then(|a| {
                             agent_canvas_session_ops(
                                 a,
-                                self.active_session.as_deref(),
+                                self.chat_state.active_session.as_deref(),
                                 &self.chat_state.view.canvas.ops,
                             )
                         });
@@ -640,9 +640,9 @@ impl UiApp {
                                 if let Some(sid) = info
                                     .as_ref()
                                     .and_then(|a| a.session_id.clone())
-                                    .or_else(|| self.active_session.clone())
+                                    .or_else(|| self.chat_state.active_session.clone())
                                 {
-                                    if self.active_session.as_deref() == Some(sid.as_str()) {
+                                    if self.chat_state.active_session.as_deref() == Some(sid.as_str()) {
                                         let title = info
                                             .as_ref()
                                             .map(|a| a.directive.clone())
@@ -681,7 +681,7 @@ impl UiApp {
                                 if let Some(sid) = info
                                     .as_ref()
                                     .and_then(|a| a.session_id.clone())
-                                    .or_else(|| self.active_session.clone())
+                                    .or_else(|| self.chat_state.active_session.clone())
                                 {
                                     let title = info
                                         .as_ref()

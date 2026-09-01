@@ -122,6 +122,7 @@ impl UiApp {
             }
             Some(chat_canvas::CanvasUiAction::Export) => {
                 let aspect = self
+                    .chat_state
                     .sessions
                     .iter()
                     .find(|s| s.id == session_id)
@@ -133,7 +134,12 @@ impl UiApp {
                 });
             }
             Some(chat_canvas::CanvasUiAction::SetAspect(aspect)) => {
-                if let Some(s) = self.sessions.iter_mut().find(|s| s.id == session_id) {
+                if let Some(s) = self
+                    .chat_state
+                    .sessions
+                    .iter_mut()
+                    .find(|s| s.id == session_id)
+                {
                     s.canvas_aspect = aspect;
                 }
                 let _ = self.cmd_tx.send(Cmd::CanvasSetAspect {
@@ -158,16 +164,17 @@ impl UiApp {
     }
 
     pub(crate) fn ui_session_bar(&mut self, ui: &mut egui::Ui, t: &i18n::UiStrings) {
-        let Some(sid) = self.active_session.clone() else {
+        let Some(sid) = self.chat_state.active_session.clone() else {
             return;
         };
-        let meta = chat_room::active_session_meta(&self.sessions, Some(sid.as_str()));
+        let meta = chat_room::active_session_meta(&self.chat_state.sessions, Some(sid.as_str()));
         let room = chat_room::session_is_room(meta);
         let canvas_open = meta.map(|m| m.canvas_open).unwrap_or(false);
         let members_vec = meta.map(|m| m.members.clone()).unwrap_or_default();
         let members = members_vec.as_slice();
         let model_id = meta.and_then(|m| m.model_id.clone());
         let session_title = self
+            .chat_state
             .sessions
             .iter()
             .find(|s| s.id == sid)
@@ -195,7 +202,8 @@ impl UiApp {
                         egui::Sense::hover()
                     }));
                     if room && title_resp.clicked() {
-                        self.chat_state.view.room_members_open = !self.chat_state.view.room_members_open;
+                        self.chat_state.view.room_members_open =
+                            !self.chat_state.view.room_members_open;
                     }
                     if room {
                         title_resp.on_hover_text(t.room_header_open_members);

@@ -112,7 +112,7 @@ impl UiApp {
                                     )
                                     .clicked()
                                 {
-                                    if let Some(sid) = self.active_session.clone() {
+                                    if let Some(sid) = self.chat_state.active_session.clone() {
                                         let _ = self
                                             .cmd_tx
                                             .send(Cmd::RoomTurnCancel { session_id: sid });
@@ -126,7 +126,7 @@ impl UiApp {
                                     )
                                     .clicked()
                                 {
-                                    if let Some(sid) = self.active_session.clone() {
+                                    if let Some(sid) = self.chat_state.active_session.clone() {
                                         let _ = self.cmd_tx.send(Cmd::ChatCancel {
                                             inference_id: id,
                                             session_id: sid,

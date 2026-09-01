@@ -23,30 +23,37 @@ impl UiApp {
                 ui.set_min_width(chat_w);
                 ui.set_min_height(full_y);
                 let room_mode = chat_room::session_is_room(chat_room::active_session_meta(
-                    &self.sessions,
-                    self.active_session.as_deref(),
+                    &self.chat_state.sessions,
+                    self.chat_state.active_session.as_deref(),
                 ));
-                let room_session_meta =
-                    chat_room::active_session_meta(&self.sessions, self.active_session.as_deref());
+                let room_session_meta = chat_room::active_session_meta(
+                    &self.chat_state.sessions,
+                    self.chat_state.active_session.as_deref(),
+                );
                 let room_members: Vec<ChatRoomMember> = room_session_meta
                     .map(|m| m.members.clone())
                     .unwrap_or_default();
                 let room_conductor_policy = room_session_meta.map(|m| m.conductor_policy.clone());
-                let canvas_open =
-                    chat_room::active_session_meta(&self.sessions, self.active_session.as_deref())
-                        .map(|m| m.canvas_open)
-                        .unwrap_or(false);
-                let canvas_aspect =
-                    chat_room::active_session_meta(&self.sessions, self.active_session.as_deref())
-                        .map(|m| m.canvas_aspect)
-                        .unwrap_or_default();
-                let active_sid = self.active_session.clone();
+                let canvas_open = chat_room::active_session_meta(
+                    &self.chat_state.sessions,
+                    self.chat_state.active_session.as_deref(),
+                )
+                .map(|m| m.canvas_open)
+                .unwrap_or(false);
+                let canvas_aspect = chat_room::active_session_meta(
+                    &self.chat_state.sessions,
+                    self.chat_state.active_session.as_deref(),
+                )
+                .map(|m| m.canvas_aspect)
+                .unwrap_or_default();
+                let active_sid = self.chat_state.active_session.clone();
 
                 let ask_queue = self.pending_ask_queue();
                 let session_model = self
+                    .chat_state
                     .sessions
                     .iter()
-                    .find(|s| self.active_session.as_deref() == Some(s.id.as_str()))
+                    .find(|s| self.chat_state.active_session.as_deref() == Some(s.id.as_str()))
                     .and_then(|s| s.model_id.clone());
                 let show_vision_banner = !self.chat_state.composer.pending_images.is_empty()
                     && !session_model_supports_vision(session_model.as_deref());

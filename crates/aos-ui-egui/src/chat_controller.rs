@@ -28,7 +28,7 @@ impl UiApp {
             self.handle_slash(&text);
             return;
         }
-        let Some(session_id) = self.active_session.clone() else {
+        let Some(session_id) = self.chat_state.active_session.clone() else {
             self.chat.push(ChatLine::plain(
                 "système",
                 "aucune session — créez-en une dans le panneau Sessions",
@@ -57,9 +57,10 @@ impl UiApp {
             }
         }
         if self
+            .chat_state
             .active_session
             .as_deref()
-            .is_some_and(|sid| self.session_chat.is_pending(sid))
+            .is_some_and(|sid| self.chat_state.session_chat.is_pending(sid))
         {
             self.chat.push(ChatLine::plain("user", text));
             self.chat.push(ChatLine::plain(
@@ -70,7 +71,7 @@ impl UiApp {
         }
         if let Some(spoken) = chat_tts_request(&text) {
             self.chat.push(ChatLine::plain("user", text.clone()));
-            if let Some(sid) = self.active_session.clone() {
+            if let Some(sid) = self.chat_state.active_session.clone() {
                 let _ = self.cmd_tx.send(Cmd::SessionAppend {
                     session_id: sid,
                     role: "user".into(),
@@ -90,6 +91,7 @@ impl UiApp {
         }
         if !pending_images.is_empty() {
             let model_id = self
+                .chat_state
                 .sessions
                 .iter()
                 .find(|s| s.id == session_id)
@@ -130,13 +132,13 @@ impl UiApp {
         let room_content =
             aos_proto::chat_document::merge_documents_into_user_content(&text, &pending_documents);
         if chat_room::session_is_room(chat_room::active_session_meta(
-            &self.sessions,
-            self.active_session.as_deref(),
+            &self.chat_state.sessions,
+            self.chat_state.active_session.as_deref(),
         )) {
-            let Some(session_id) = self.active_session.clone() else {
+            let Some(session_id) = self.chat_state.active_session.clone() else {
                 return;
             };
-            self.session_chat.begin_turn(&session_id);
+            self.chat_state.session_chat.begin_turn(&session_id);
             self.chat_state.runtime.begin_turn(Some(text.clone()));
             let _ = self.cmd_tx.send(Cmd::RoomTurn {
                 session_id,
@@ -148,19 +150,23 @@ impl UiApp {
             return;
         }
         let model_id = self
+            .chat_state
             .sessions
             .iter()
             .find(|s| s.id == session_id)
             .and_then(|s| s.model_id.clone());
         let canvas_open = self
+            .chat_state
             .sessions
             .iter()
             .find(|s| s.id == session_id)
             .map(|s| s.canvas_open)
             .unwrap_or(false)
-            || (self.active_session.as_deref() == Some(session_id.as_str())
-                && (!self.chat_state.view.canvas.ops.is_empty() || self.chat_state.view.canvas.next_seq > 1));
+            || (self.chat_state.active_session.as_deref() == Some(session_id.as_str())
+                && (!self.chat_state.view.canvas.ops.is_empty()
+                    || self.chat_state.view.canvas.next_seq > 1));
         let canvas_aspect = self
+            .chat_state
             .sessions
             .iter()
             .find(|s| s.id == session_id)
@@ -249,7 +255,7 @@ impl UiApp {
                 )
             })
             .collect();
-        self.session_chat.begin_turn(&session_id);
+        self.chat_state.session_chat.begin_turn(&session_id);
         self.chat_state.runtime.begin_turn(None);
         self.status = "assistant : génération…".into();
         let _ = self.cmd_tx.send(Cmd::Chat {
@@ -295,7 +301,7 @@ impl UiApp {
                 .to_string();
             return;
         };
-        if let Some(sid) = self.active_session.clone() {
+        if let Some(sid) = self.chat_state.active_session.clone() {
             let _ = self.cmd_tx.send(Cmd::SessionSetModel {
                 session_id: sid,
                 model_id: Some(model_id.clone()),

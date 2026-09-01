@@ -100,7 +100,7 @@ use aos_ipc::BusClient;
 use aos_proto::{
     AgentInfo, AgentState, AgentTrace, AuditEvent,
     CapInfo, ChatAttachment, ChatSessionGetResponse,
-    ChatSessionIdRequest, ChatSessionMeta, DocumentRef,
+    ChatSessionIdRequest, DocumentRef,
     McpServerInfo, MemHit, ModelInfo,
     ModuleCatalogue, ModuleInfo,
     PendingConfirmation, ProviderRecord,
@@ -487,9 +487,6 @@ struct UiApp {
     chat_state: chat_state::ChatState,
     catalogue: Option<ModuleCatalogue>,
     installed_modules: Vec<ModuleInfo>,
-    sessions: Vec<ChatSessionMeta>,
-    active_session: Option<String>,
-    session_chat: session_chat::SessionChatState,
     network_online: bool,
     prefs: Preferences,
     agent_timeout_secs: u64,
@@ -784,9 +781,6 @@ impl UiApp {
             chat_state: chat_state::ChatState::default(),
             catalogue: None,
             installed_modules: Vec::new(),
-            sessions: Vec::new(),
-            active_session: None,
-            session_chat: session_chat::SessionChatState::default(),
             network_online,
             prefs,
             agent_timeout_secs,
@@ -916,7 +910,7 @@ impl UiApp {
     }
 
     fn blocked_ask_ids(&self) -> Vec<String> {
-        let Some(sid) = self.active_session.as_deref() else {
+        let Some(sid) = self.chat_state.active_session.as_deref() else {
             return Vec::new();
         };
         self.agents
@@ -942,7 +936,7 @@ impl UiApp {
     }
 
     fn set_canvas_open_local(&mut self, session_id: &str, open: bool) {
-        if let Some(s) = self.sessions.iter_mut().find(|s| s.id == session_id) {
+        if let Some(s) = self.chat_state.sessions.iter_mut().find(|s| s.id == session_id) {
             s.canvas_open = open;
         }
     }
@@ -950,6 +944,7 @@ impl UiApp {
     /// Ouvre le panneau canvas (optimiste côté UI, puis bus).
     fn open_canvas_face(&mut self, session_id: &str) {
         let already = self
+            .chat_state
             .sessions
             .iter()
             .find(|s| s.id == session_id)
@@ -1055,7 +1050,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             } else {
                 Some(self.agent_model_id.clone())
             },
-            session_id: self.active_session.clone(),
+            session_id: self.chat_state.active_session.clone(),
             origin: "form".into(),
             join_active_room: false,
             library: false,
@@ -1201,7 +1196,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 thinking: None,
             });
         }
-        if let Some(sid) = self.active_session.clone() {
+        if let Some(sid) = self.chat_state.active_session.clone() {
             let _ = self.cmd_tx.send(Cmd::SessionAppend {
                 session_id: sid,
                 role: "assistant".into(),
@@ -1373,7 +1368,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         {
             self.onboarding.tutorial_step = 2;
             save_onboarding(&self.onboarding);
-            if let Some(id) = self.active_session.as_deref() {
+            if let Some(id) = self.chat_state.active_session.as_deref() {
                 let holder = format!("session:{id}");
                 self.caps_holder = holder.clone();
                 let _ = self.cmd_tx.send(Cmd::CapList { holder });
@@ -1474,7 +1469,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                     self.chat.push(ChatLine::plain("système", "usage : /agent <tâche>"));
                     return;
                 }
-                let Some(session_id) = self.active_session.clone() else {
+                let Some(session_id) = self.chat_state.active_session.clone() else {
                     self.chat.push(ChatLine::plain(
                         "système",
                         "aucune session — créez-en une avant /agent",
@@ -1542,7 +1537,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                     return;
                 }
                 self.status = "image : génération…".into();
-                if let Some(sid) = self.active_session.clone() {
+                if let Some(sid) = self.chat_state.active_session.clone() {
                     let _ = self.cmd_tx.send(Cmd::SessionAppend {
                         session_id: sid,
                         role: "user".into(),
@@ -1576,14 +1571,14 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 self.open_tts_card(rest);
             }
             "/canvas" => {
-                let Some(sid) = self.active_session.clone() else {
+                let Some(sid) = self.chat_state.active_session.clone() else {
                     self.chat.push(ChatLine::plain(
                         "système",
                         "aucune session — créez-en une d'abord",
                     ));
                     return;
                 };
-                let open = chat_room::active_session_meta(&self.sessions, Some(sid.as_str()))
+                let open = chat_room::active_session_meta(&self.chat_state.sessions, Some(sid.as_str()))
                     .map(|m| m.canvas_open)
                     .unwrap_or(false);
                 let _ = self.cmd_tx.send(Cmd::CanvasSetOpen {
@@ -1629,7 +1624,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             speaker_name: None,
             thinking: None,
         });
-        if let Some(sid) = self.active_session.clone() {
+        if let Some(sid) = self.chat_state.active_session.clone() {
             let _ = self.cmd_tx.send(Cmd::SessionAppend {
                 session_id: sid,
                 role: "assistant".into(),
@@ -1761,7 +1756,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             *state = "approved".into();
         }
         self.schedule_transcript_dirty = true;
-        if let Some(session_id) = self.active_session.clone() {
+        if let Some(session_id) = self.chat_state.active_session.clone() {
             let att = self.chat[msg_idx].attachments[att_idx].clone();
             let _ = self.cmd_tx.send(Cmd::SessionAppend {
                 session_id,
@@ -1810,7 +1805,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             *state = "denied".into();
         }
         self.schedule_transcript_dirty = true;
-        if let Some(session_id) = self.active_session.clone() {
+        if let Some(session_id) = self.chat_state.active_session.clone() {
             let att = self.chat[msg_idx].attachments[att_idx].clone();
             let _ = self.cmd_tx.send(Cmd::SessionAppend {
                 session_id,
@@ -1853,7 +1848,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                         *schedule_id = entry.id.clone();
                         line.attachments.push(card.clone());
                         self.schedule_transcript_dirty = true;
-                        if let Some(session_id) = self.active_session.clone() {
+                        if let Some(session_id) = self.chat_state.active_session.clone() {
                             let _ = self.cmd_tx.send(Cmd::SessionAppend {
                                 session_id,
                                 role: "assistant".into(),
@@ -1875,7 +1870,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             speaker_name: None,
             thinking: None,
         });
-        if let Some(session_id) = self.active_session.clone() {
+        if let Some(session_id) = self.chat_state.active_session.clone() {
             let _ = self.cmd_tx.send(Cmd::SessionAppend {
                 session_id,
                 role: "assistant".into(),
@@ -1971,7 +1966,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             speaker_name: None,
             thinking: None,
         });
-        if let Some(sid) = self.active_session.clone() {
+        if let Some(sid) = self.chat_state.active_session.clone() {
             let _ = self.cmd_tx.send(Cmd::SessionAppend {
                 session_id: sid,
                 role: "assistant".into(),
@@ -2359,8 +2354,8 @@ impl eframe::App for UiApp {
             match ev {
                 Evt::Delta { session_id, text } => {
                     session_chat::on_delta(
-                        &mut self.session_chat,
-                        self.active_session.as_deref(),
+                        &mut self.chat_state.session_chat,
+                        self.chat_state.active_session.as_deref(),
                         &session_id,
                         &text,
                         &mut self.chat_state.runtime.streaming,
@@ -2372,8 +2367,8 @@ impl eframe::App for UiApp {
                     attachments,
                 } => {
                     session_chat::on_done(
-                        &mut self.session_chat,
-                        self.active_session.as_deref(),
+                        &mut self.chat_state.session_chat,
+                        self.chat_state.active_session.as_deref(),
                         &session_id,
                         &text,
                         attachments,
@@ -2500,12 +2495,12 @@ impl eframe::App for UiApp {
                     if origin == "document" {
                         self.document_prep_agents
                             .insert(agent_id.clone(), title.clone());
-                        if self.active_session.as_deref() == Some(session_id.as_str()) {
+                        if self.chat_state.active_session.as_deref() == Some(session_id.as_str()) {
                             self.attach_document_progress_agent(&agent_id, &title);
                         }
                     } else {
                         self.arm_pending_module_agent(&title);
-                        if self.active_session.as_deref() == Some(session_id.as_str()) {
+                        if self.chat_state.active_session.as_deref() == Some(session_id.as_str()) {
                             self.chat.push(ChatLine {
                                 role: "assistant".into(),
                                 text: ack,
@@ -2574,7 +2569,7 @@ impl eframe::App for UiApp {
                                 }
                             } else if let Some(sid) = &ag.session_id {
                                 let on_this_session =
-                                    self.active_session.as_deref() == Some(sid.as_str());
+                                    self.chat_state.active_session.as_deref() == Some(sid.as_str());
                                 let already = self.chat.iter().any(|l| {
                                     l.attachments.iter().any(|a| {
                                         matches!(
@@ -2591,7 +2586,7 @@ impl eframe::App for UiApp {
                                 if on_this_session {
                                     let session_ops = agent_canvas_session_ops(
                                         ag,
-                                        self.active_session.as_deref(),
+                                        self.chat_state.active_session.as_deref(),
                                         &self.chat_state.view.canvas.ops,
                                     );
                                     let trace = self.agent_traces.get(&ag.agent_id);
@@ -2656,7 +2651,7 @@ impl eframe::App for UiApp {
                                 {
                                     let session_ops = agent_canvas_session_ops(
                                         ag,
-                                        self.active_session.as_deref(),
+                                        self.chat_state.active_session.as_deref(),
                                         &self.chat_state.view.canvas.ops,
                                     );
                                     let trace = self.agent_traces.get(&ag.agent_id);
@@ -2723,7 +2718,7 @@ impl eframe::App for UiApp {
                             }
                             if let Some(sid) = &ag.session_id {
                                 let on_this_session =
-                                    self.active_session.as_deref() == Some(sid.as_str());
+                                    self.chat_state.active_session.as_deref() == Some(sid.as_str());
                                 if on_this_session
                                     && chat_has_open_ask(&self.chat, &ag.agent_id)
                                 {
@@ -2753,7 +2748,7 @@ impl eframe::App for UiApp {
                         if ag.state == AgentState::Blocked {
                             if let Some(sid) = &ag.session_id {
                                 let on_this_session =
-                                    self.active_session.as_deref() == Some(sid.as_str());
+                                    self.chat_state.active_session.as_deref() == Some(sid.as_str());
                                 let already =
                                     chat_has_open_ask(&self.chat, &ag.agent_id);
                                 if on_this_session
@@ -2920,20 +2915,20 @@ impl eframe::App for UiApp {
                     self.fb_diag_meta = Some(req.meta);
                     self.tab = Tab::Feedback;
                 }
-                Evt::Sessions(list) => self.sessions = list,
+                Evt::Sessions(list) => self.chat_state.sessions = list,
                 Evt::SessionLoadIntent { id } => {
                     session_nav::apply_session_load_intent(&mut self.pending_session_nav, &id);
                 }
                 Evt::SessionLoaded { id, messages, meta } => {
-                    let session_changed = self.active_session.as_deref() != Some(id.as_str());
+                    let session_changed = self.chat_state.active_session.as_deref() != Some(id.as_str());
                     if session_changed
                         && !session_nav::should_switch_session_view(
-                            self.active_session.as_deref(),
+                            self.chat_state.active_session.as_deref(),
                             &self.pending_session_nav,
                             id.as_str(),
                         )
                     {
-                        if let Some(s) = self.sessions.iter_mut().find(|s| s.id == meta.id) {
+                        if let Some(s) = self.chat_state.sessions.iter_mut().find(|s| s.id == meta.id) {
                             *s = meta.clone();
                         }
                     } else if !session_changed
@@ -2942,16 +2937,16 @@ impl eframe::App for UiApp {
                         )
                     {
                         self.chat_state.sidebar.rename = meta.title.clone();
-                        if let Some(s) = self.sessions.iter_mut().find(|s| s.id == meta.id) {
+                        if let Some(s) = self.chat_state.sessions.iter_mut().find(|s| s.id == meta.id) {
                             *s = meta.clone();
                         }
                         self.sync_schedule_cards();
                         self.pending_session_nav = session_nav::PendingSessionNav::None;
                     } else {
                         self.pending_session_nav = session_nav::PendingSessionNav::None;
-                        self.active_session = Some(id.clone());
+                        self.chat_state.active_session = Some(id.clone());
                         self.chat_state.sidebar.rename = meta.title.clone();
-                        if let Some(s) = self.sessions.iter_mut().find(|s| s.id == meta.id) {
+                        if let Some(s) = self.chat_state.sessions.iter_mut().find(|s| s.id == meta.id) {
                             *s = meta.clone();
                         }
                         if session_changed {
@@ -2970,9 +2965,9 @@ impl eframe::App for UiApp {
                         }
                         self.sync_schedule_cards();
                         let _ = self.cmd_tx.send(Cmd::SkillPassPending);
-                        self.session_chat.clear_unread(&id);
-                        self.session_chat.sync_active_view(
-                            self.active_session.as_deref(),
+                        self.chat_state.session_chat.clear_unread(&id);
+                        self.chat_state.session_chat.sync_active_view(
+                            self.chat_state.active_session.as_deref(),
                             &mut self.chat_state.runtime.streaming,
                             &mut self.chat_state.runtime.pending,
                             &mut self.chat_state.runtime.inference_id,
@@ -2993,8 +2988,8 @@ impl eframe::App for UiApp {
                     agent_turns,
                     cancelled,
                 } => {
-                    self.session_chat.finish_turn(&session_id);
-                    if self.active_session.as_deref() == Some(session_id.as_str()) {
+                    self.chat_state.session_chat.finish_turn(&session_id);
+                    if self.chat_state.active_session.as_deref() == Some(session_id.as_str()) {
                         self.chat_state.runtime.pending = false;
                         self.chat_state.runtime.inference_id = None;
                         self.chat_state.runtime.room_turn_text = None;
@@ -3006,11 +3001,11 @@ impl eframe::App for UiApp {
                             self.status.clear();
                         }
                     } else if !cancelled && agent_turns > 0 {
-                        self.session_chat.mark_unread(&session_id);
+                        self.chat_state.session_chat.mark_unread(&session_id);
                     }
                 }
                 Evt::CanvasMeta(meta) => {
-                    if let Some(s) = self.sessions.iter_mut().find(|s| s.id == meta.id) {
+                    if let Some(s) = self.chat_state.sessions.iter_mut().find(|s| s.id == meta.id) {
                         *s = meta.clone();
                     }
                 }
@@ -3023,13 +3018,13 @@ impl eframe::App for UiApp {
                     delta,
                     canvas_seeing,
                 } => {
-                    if self.active_session.as_deref() != Some(session_id.as_str()) {
+                    if self.chat_state.active_session.as_deref() != Some(session_id.as_str()) {
                         // still update meta open flag
                     }
-                    if let Some(s) = self.sessions.iter_mut().find(|s| s.id == session_id) {
+                    if let Some(s) = self.chat_state.sessions.iter_mut().find(|s| s.id == session_id) {
                         s.canvas_open = canvas_open;
                     }
-                    if self.active_session.as_deref() == Some(session_id.as_str()) {
+                    if self.chat_state.active_session.as_deref() == Some(session_id.as_str()) {
                         let now = ctx.input(|i| i.time);
                         if delta {
                             self.chat_state.view.canvas.merge_delta(ops, next_seq, now);
@@ -3043,7 +3038,7 @@ impl eframe::App for UiApp {
                     }
                 }
                 Evt::CanvasExported { path, session_id } => {
-                    if self.active_session.as_deref() == Some(session_id.as_str()) {
+                    if self.chat_state.active_session.as_deref() == Some(session_id.as_str()) {
                         self.status = format!("Canvas → {path}");
                         self.chat_state.composer.last_session_image = Some(path.clone());
                         self.chat.push(ChatLine {
@@ -3060,7 +3055,7 @@ impl eframe::App for UiApp {
                     }
                 }
                 Evt::SessionExported { path, session_id } => {
-                    if self.active_session.as_deref() == Some(session_id.as_str()) {
+                    if self.chat_state.active_session.as_deref() == Some(session_id.as_str()) {
                         let t = i18n::strings(&self.prefs.language);
                         self.status = t.session_export_toast.replace("{path}", &path);
                     }
@@ -3197,7 +3192,7 @@ impl eframe::App for UiApp {
                         speaker_name: None,
                         thinking: None,
                     });
-                    if let Some(sid) = self.active_session.clone() {
+                    if let Some(sid) = self.chat_state.active_session.clone() {
                         let _ = self.cmd_tx.send(Cmd::SessionAppend {
                             session_id: sid,
                             role: "assistant".into(),
@@ -3263,8 +3258,8 @@ impl eframe::App for UiApp {
                     inference_id,
                 } => {
                     session_chat::on_infer_started(
-                        &mut self.session_chat,
-                        self.active_session.as_deref(),
+                        &mut self.chat_state.session_chat,
+                        self.chat_state.active_session.as_deref(),
                         &session_id,
                         inference_id,
                         &mut self.chat_state.runtime.inference_id,
@@ -3272,8 +3267,8 @@ impl eframe::App for UiApp {
                 }
                 Evt::ChatCancelled { session_id } => {
                     let on_active = session_chat::on_chat_cancelled(
-                        &mut self.session_chat,
-                        self.active_session.as_deref(),
+                        &mut self.chat_state.session_chat,
+                        self.chat_state.active_session.as_deref(),
                         &session_id,
                         &mut self.chat_state.runtime.streaming,
                         &mut self.chat_state.runtime.pending,
@@ -3474,6 +3469,7 @@ impl eframe::App for UiApp {
                             &n.summary,
                         );
                         let sess_title = self
+                            .chat_state
                             .sessions
                             .iter()
                             .find(|s| s.id == n.session_id)

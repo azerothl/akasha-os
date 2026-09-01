@@ -115,7 +115,7 @@ pub(crate) fn ui_model_download_restart(&mut self, ui: &mut egui::Ui, ctx: &egui
                                 });
                             }
                             if set_default {
-                                if let Some(sid) = self.active_session.clone() {
+                                if let Some(sid) = self.chat_state.active_session.clone() {
                                     let _ = self.cmd_tx.send(Cmd::SessionSetModel {
                                         session_id: sid,
                                         model_id: Some(id.clone()),
@@ -196,4 +196,3 @@ pub(crate) fn ui_model_download_restart(&mut self, ui: &mut egui::Ui, ctx: &egui
             });
     }
 }
-
