@@ -96,11 +96,7 @@ impl UiApp {
             });
         }
         if let Some(path) = actions.attach_path {
-            if self.agent_docs.is_empty() {
-                self.agent_docs = path;
-            } else if !self.agent_docs.split(',').any(|p| p.trim() == path) {
-                self.agent_docs = format!("{},{}", self.agent_docs, path);
-            }
+            self.agent_ui.attach_document(path);
             self.tab = Tab::Agents;
             self.status = "Note jointe — créez un agent avec ce document.".into();
         }

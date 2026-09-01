@@ -349,7 +349,7 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                             .add(egui::DragValue::new(&mut self.prefs.default_max_steps).range(1..=128))
                             .changed()
                         {
-                            self.agent_max_steps = self.prefs.default_max_steps;
+                            self.agent_ui.max_steps = self.prefs.default_max_steps;
                             save_preferences(&self.prefs);
                         }
                         ui.end_row();

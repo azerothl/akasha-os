@@ -170,7 +170,7 @@ impl UiApp {
                                             &self.chat_state.view.canvas.ops,
                                         )
                                     });
-                                    let trace = self.agent_traces.get(agent_id);
+                                    let trace = self.agent_ui.traces.get(agent_id);
                                     let action = ui
                                         .push_id(
                                             ("chat_agent_card", i, j, agent_id.as_str()),

@@ -4,7 +4,9 @@
 //! audit, scénarios guidés, retours (`feedback.submit`).
 
 mod agent_act_phrase;
+mod agent_controller;
 mod agent_panel;
+mod agent_ui_state;
 mod decl_ui;
 mod guide;
 mod i18n;
@@ -98,13 +100,9 @@ use aos_agent::schedule::ScheduleEntry;
 use aos_agent::schedule_parse::ParsedSchedule;
 use aos_ipc::BusClient;
 use aos_proto::{
-    AgentInfo, AgentState, AgentTrace, AuditEvent,
-    CapInfo, ChatAttachment, ChatSessionGetResponse,
-    ChatSessionIdRequest, DocumentRef,
-    McpServerInfo, MemHit, ModelInfo,
-    ModuleCatalogue, ModuleInfo,
-    PendingConfirmation, ProviderRecord,
-    SkillInfo, SystemMetrics,
+    AgentInfo, AgentState, AuditEvent, CapInfo, ChatAttachment, ChatSessionGetResponse,
+    ChatSessionIdRequest, DocumentRef, MemHit, ModelInfo, ModuleCatalogue, ModuleInfo,
+    PendingConfirmation, ProviderRecord, SystemMetrics,
 };
 use prefs::{load_preferences, save_preferences, Preferences};
 use eframe::egui;
@@ -114,7 +112,6 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
-use std::time::Instant;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct UpdateOffer {
     version: String,
@@ -526,23 +523,7 @@ struct UiApp {
     pending_session_nav: session_nav::PendingSessionNav,
     /// In-memory schedule act/card edits not yet safe to clobber from disk.
     schedule_transcript_dirty: bool,
-    agent_display_name: String,
-    agent_task: String,
-    agent_system_prompt: String,
-    agent_docs: String,
-    agent_max_steps: u32,
-    skill_catalog: Vec<SkillInfo>,
-    skill_selected: Vec<String>,
-    mcp_catalog: Vec<McpServerInfo>,
-    mcp_selected: Vec<String>,
-    tool_selected: Vec<String>,
-    agent_open_tabs: Vec<String>,
-    agent_active_tab: Option<String>,
-    agent_show_history: bool,
-    agent_traces: HashMap<String, AgentTrace>,
-    trace_fetched_at: Option<Instant>,
-    agent_steer_id: String,
-    agent_steer_txt: String,
+    agent_ui: agent_ui_state::AgentUiState,
     audit: Vec<AuditEvent>,
     caps: Vec<CapInfo>,
     caps_holder: String,
@@ -813,39 +794,7 @@ impl UiApp {
             schedule_pending_card_act: None,
             pending_session_nav: session_nav::PendingSessionNav::None,
             schedule_transcript_dirty: false,
-            agent_display_name: String::new(),
-            agent_task: String::new(),
-            agent_system_prompt: String::new(),
-            agent_docs: String::new(),
-            agent_max_steps,
-            skill_catalog: Vec::new(),
-            skill_selected: Vec::new(),
-            mcp_catalog: Vec::new(),
-            mcp_selected: Vec::new(),
-            tool_selected: vec![
-                "notes.create".into(),
-                "notes.list".into(),
-                "notes.read".into(),
-                "notes.search".into(),
-                "notes.update".into(),
-                "notes.links".into(),
-                "notes.related".into(),
-                "tasks.create".into(),
-                "tasks.list".into(),
-                "tasks.update".into(),
-                "tasks.complete".into(),
-                "module.scaffold".into(),
-                "module.package".into(),
-                "module.install".into(),
-                "module.list".into(),
-            ],
-            agent_open_tabs: Vec::new(),
-            agent_active_tab: None,
-            agent_show_history: false,
-            agent_traces: HashMap::new(),
-            trace_fetched_at: None,
-            agent_steer_id: String::new(),
-            agent_steer_txt: String::new(),
+            agent_ui: agent_ui_state::AgentUiState::with_max_steps(agent_max_steps),
             audit: Vec::new(),
             caps: Vec::new(),
             caps_holder: String::new(),
@@ -2589,7 +2538,7 @@ impl eframe::App for UiApp {
                                         self.chat_state.active_session.as_deref(),
                                         &self.chat_state.view.canvas.ops,
                                     );
-                                    let trace = self.agent_traces.get(&ag.agent_id);
+                                    let trace = self.agent_ui.traces.get(&ag.agent_id);
                                     let content = agent_completion_chat_text(
                                         ag,
                                         &t,
@@ -2654,7 +2603,7 @@ impl eframe::App for UiApp {
                                         self.chat_state.active_session.as_deref(),
                                         &self.chat_state.view.canvas.ops,
                                     );
-                                    let trace = self.agent_traces.get(&ag.agent_id);
+                                    let trace = self.agent_ui.traces.get(&ag.agent_id);
                                     let summary = if agent_panel::canvas_draw_failure_muted(
                                         Some(ag),
                                         session_ops,
@@ -3061,7 +3010,7 @@ impl eframe::App for UiApp {
                     }
                 }
                 Evt::AgentExported { path, agent_id } => {
-                    if self.agent_active_tab.as_deref() == Some(agent_id.as_str()) {
+                    if self.agent_ui.active_tab.as_deref() == Some(agent_id.as_str()) {
                         let t = i18n::strings(&self.prefs.language);
                         self.status = t.agent_export_toast.replace("{path}", &path);
                     }
@@ -3201,12 +3150,9 @@ impl eframe::App for UiApp {
                         });
                     }
                 }
-                Evt::Skills(list) => self.skill_catalog = list,
-                Evt::McpServers(list) => self.mcp_catalog = list,
-                Evt::PromptOptimized(p) => {
-                    self.agent_system_prompt = p;
-                    self.status = "prompt système optimisé".into();
-                }
+                Evt::Skills(list) => self.on_agent_skills(list),
+                Evt::McpServers(list) => self.on_agent_mcp_servers(list),
+                Evt::PromptOptimized(p) => self.on_agent_prompt_optimized(p),
                 Evt::Models(list) => self.model_infos = list,
                 Evt::Providers(list) => self.providers = list,
                 Evt::ProviderTested {
@@ -3245,14 +3191,7 @@ impl eframe::App for UiApp {
                     let t = i18n::strings(&self.prefs.language);
                     self.status = t.agents_edit_saved.into();
                 }
-                Evt::AgentTrace(t) => {
-                    if let Some(question) = self.document_prep_agents.remove(&t.agent_id) {
-                        if let Some(path) = aos_agent::document_prep::path_from_trace(&t) {
-                            self.attach_document_result_card(&question, &path);
-                        }
-                    }
-                    self.agent_traces.insert(t.agent_id.clone(), t);
-                }
+                Evt::AgentTrace(t) => self.on_agent_trace(t),
                 Evt::InferStarted {
                     session_id,
                     inference_id,
@@ -3660,7 +3599,7 @@ impl eframe::App for UiApp {
         }
 
         self.poll_agent_trace(ctx);
-        if !self.agent_open_tabs.is_empty() {
+        if !self.agent_ui.open_tabs.is_empty() {
             self.ui_agent_detail_panel(ctx);
         }
 

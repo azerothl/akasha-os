@@ -6,55 +6,10 @@ use crate::{
     i18n, icons, open_in_browser, overflow_scroll, overflow_scroll_h, ui_roster_tool_checkboxes,
     ChatLine, UiApp,
 };
-use aos_proto::{AgentInfo, AgentState, ChatAttachment, DocumentRef};
+use aos_proto::{AgentInfo, AgentState, ChatAttachment};
 use eframe::egui;
-use std::time::{Duration, Instant};
 
 impl UiApp {
-    pub(crate) fn send_agents_page_create(&mut self, room_active: bool, library: bool) {
-        let join_active_room = room_active && self.agent_join_room_on_create;
-        let documents: Vec<DocumentRef> = self
-            .agent_docs
-            .split(',')
-            .map(|s| s.trim())
-            .filter(|s| !s.is_empty())
-            .map(|p| DocumentRef {
-                path: p.to_string(),
-                label: p.to_string(),
-            })
-            .collect();
-        let session_id = if library || join_active_room {
-            self.chat_state.active_session.clone()
-        } else {
-            None
-        };
-        let _ = self.cmd_tx.send(Cmd::AgentCreate {
-            display_name: self.agent_display_name.clone(),
-            task: self.agent_task.clone(),
-            system_prompt: if self.agent_system_prompt.is_empty() {
-                None
-            } else {
-                Some(self.agent_system_prompt.clone())
-            },
-            skills: self.skill_selected.clone(),
-            tools: self.tool_selected.clone(),
-            mcp_servers: self.mcp_selected.clone(),
-            documents,
-            optimize_prompt: false,
-            max_steps: self.agent_max_steps,
-            timeout_secs: self.agent_timeout_secs,
-            model_id: if self.agent_model_id.is_empty() {
-                None
-            } else {
-                Some(self.agent_model_id.clone())
-            },
-            session_id,
-            origin: "library".into(),
-            join_active_room,
-            library,
-        });
-    }
-
     pub(crate) fn ui_agents(&mut self, ui: &mut egui::Ui) {
         let t = i18n::strings(&self.prefs.language);
         let g = guide::strings(&self.prefs.language);
@@ -70,11 +25,11 @@ impl UiApp {
             let _ = self.cmd_tx.send(Cmd::AgentCatalogRefresh);
         }
         ui.label(t.agents_label);
-        ui.text_edit_singleline(&mut self.agent_display_name);
+        ui.text_edit_singleline(&mut self.agent_ui.display_name);
         ui.label(t.agents_role);
         ui.weak(t.agents_role_optional);
         ui.add(
-            egui::TextEdit::multiline(&mut self.agent_task)
+            egui::TextEdit::multiline(&mut self.agent_ui.task)
                 .desired_rows(3)
                 .desired_width(f32::INFINITY),
         );
@@ -98,39 +53,39 @@ impl UiApp {
                 });
             ui.label(t.agents_system_prompt);
             ui.add(
-                egui::TextEdit::multiline(&mut self.agent_system_prompt)
+                egui::TextEdit::multiline(&mut self.agent_ui.system_prompt)
                     .desired_rows(2)
                     .desired_width(f32::INFINITY),
             );
             ui.collapsing("Skills", |ui| {
-                if self.skill_catalog.is_empty() {
+                if self.agent_ui.skill_catalog.is_empty() {
                     ui.weak(t.agents_catalog_empty);
                     for name in ["notes-writer", "research", "file-author", "planner"] {
-                        let mut on = self.skill_selected.iter().any(|s| s == name);
+                        let mut on = self.agent_ui.skill_selected.iter().any(|s| s == name);
                         if ui.checkbox(&mut on, name).changed() {
                             if on {
-                                self.skill_selected.push(name.into());
+                                self.agent_ui.skill_selected.push(name.into());
                             } else {
-                                self.skill_selected.retain(|s| s != name);
+                                self.agent_ui.skill_selected.retain(|s| s != name);
                             }
                         }
                     }
                 } else {
-                    for s in self.skill_catalog.clone() {
-                        let mut on = self.skill_selected.contains(&s.name);
+                    for s in self.agent_ui.skill_catalog.clone() {
+                        let mut on = self.agent_ui.skill_selected.contains(&s.name);
                         if ui
                             .checkbox(&mut on, format!("{} — {}", s.name, s.description))
                             .changed()
                         {
                             if on {
-                                self.skill_selected.push(s.name.clone());
+                                self.agent_ui.skill_selected.push(s.name.clone());
                                 for t in &s.tools {
-                                    if !self.tool_selected.contains(t) {
-                                        self.tool_selected.push(t.clone());
+                                    if !self.agent_ui.tool_selected.contains(t) {
+                                        self.agent_ui.tool_selected.push(t.clone());
                                     }
                                 }
                             } else {
-                                self.skill_selected.retain(|x| x != &s.name);
+                                self.agent_ui.skill_selected.retain(|x| x != &s.name);
                             }
                         }
                     }
@@ -161,38 +116,38 @@ impl UiApp {
                     "agent.await",
                     "plan.update",
                 ] {
-                    let mut on = self.tool_selected.iter().any(|t| t == name);
+                    let mut on = self.agent_ui.tool_selected.iter().any(|t| t == name);
                     if ui.checkbox(&mut on, name).changed() {
                         if on {
-                            self.tool_selected.push(name.into());
+                            self.agent_ui.tool_selected.push(name.into());
                         } else {
-                            self.tool_selected.retain(|t| t != name);
+                            self.agent_ui.tool_selected.retain(|t| t != name);
                         }
                     }
                 }
             });
 
             ui.collapsing(t.agents_mcp, |ui| {
-                if self.mcp_catalog.is_empty() {
+                if self.agent_ui.mcp_catalog.is_empty() {
                     ui.weak(t.agents_mcp_empty);
                 }
-                for s in self.mcp_catalog.clone() {
-                    let mut on = self.mcp_selected.contains(&s.name);
+                for s in self.agent_ui.mcp_catalog.clone() {
+                    let mut on = self.agent_ui.mcp_selected.contains(&s.name);
                     if ui
                         .checkbox(&mut on, format!("{} ({})", s.name, s.command))
                         .changed()
                     {
                         if on {
-                            self.mcp_selected.push(s.name.clone());
+                            self.agent_ui.mcp_selected.push(s.name.clone());
                         } else {
-                            self.mcp_selected.retain(|x| x != &s.name);
+                            self.agent_ui.mcp_selected.retain(|x| x != &s.name);
                         }
                     }
                 }
             });
 
             ui.label(t.agents_docs);
-            ui.text_edit_singleline(&mut self.agent_docs);
+            ui.text_edit_singleline(&mut self.agent_ui.docs);
         });
 
         let room_active = chat_room::session_is_room(chat_room::active_session_meta(
@@ -207,7 +162,7 @@ impl UiApp {
         }
 
         ui.horizontal(|ui| {
-            let can_create = !self.agent_display_name.trim().is_empty();
+            let can_create = !self.agent_ui.display_name.trim().is_empty();
             if ui
                 .add_enabled(can_create, egui::Button::new(t.agents_create))
                 .clicked()
@@ -217,7 +172,7 @@ impl UiApp {
             if ui.button(t.agents_create_task).clicked() {
                 if !can_create {
                     self.status = t.agents_label_required.into();
-                } else if self.agent_task.trim().is_empty() {
+                } else if self.agent_ui.task.trim().is_empty() {
                     self.status = t.agents_task_goal_required.into();
                 } else {
                     self.send_agents_page_create(room_active, false);
@@ -227,10 +182,10 @@ impl UiApp {
 
         ui.separator();
         ui.horizontal(|ui| {
-            ui.selectable_value(&mut self.agent_show_history, false, t.agents_tab_active);
-            ui.selectable_value(&mut self.agent_show_history, true, t.agents_tab_history);
+            ui.selectable_value(&mut self.agent_ui.show_history, false, t.agents_tab_active);
+            ui.selectable_value(&mut self.agent_ui.show_history, true, t.agents_tab_history);
         });
-        let history = self.agent_show_history;
+        let history = self.agent_ui.show_history;
         let library_agents = chat_room::agents_with_library_placeholders(&self.agents, &t);
         let visible: Vec<AgentInfo> = library_agents
             .iter()
@@ -279,15 +234,15 @@ impl UiApp {
         ui.separator();
         ui.label(t.agent_steer);
         ui.horizontal(|ui| {
-            ui.text_edit_singleline(&mut self.agent_steer_id);
-            ui.text_edit_singleline(&mut self.agent_steer_txt);
+            ui.text_edit_singleline(&mut self.agent_ui.steer_id);
+            ui.text_edit_singleline(&mut self.agent_ui.steer_txt);
             if ui.button(t.agent_send).clicked()
-                && !self.agent_steer_id.is_empty()
-                && !self.agent_steer_txt.is_empty()
+                && !self.agent_ui.steer_id.is_empty()
+                && !self.agent_ui.steer_txt.is_empty()
             {
                 let _ = self.cmd_tx.send(Cmd::AgentSteer {
-                    id: self.agent_steer_id.clone(),
-                    text: self.agent_steer_txt.clone(),
+                    id: self.agent_ui.steer_id.clone(),
+                    text: self.agent_ui.steer_txt.clone(),
                 });
             }
         });
@@ -305,7 +260,7 @@ impl UiApp {
                 ui.add_space(16.0 * indent as f32);
                 icons::child_branch(ui);
             }
-            let selected = self.agent_active_tab.as_deref() == Some(a.agent_id.as_str());
+            let selected = self.agent_ui.active_tab.as_deref() == Some(a.agent_id.as_str());
             let label = chat_room::roster_agent_label(&t, a);
             let label = agent_panel::truncate(&label, 48);
             if ui
@@ -351,7 +306,7 @@ impl UiApp {
                     self.chat_state.active_session.as_deref(),
                     &self.chat_state.view.canvas.ops,
                 );
-                let trace = self.agent_traces.get(&a.agent_id);
+                let trace = self.agent_ui.traces.get(&a.agent_id);
                 let visible = agent_panel::resolve_visible_fail_reason(
                     &t,
                     Some(a),
@@ -381,27 +336,6 @@ impl UiApp {
         });
     }
 
-    pub(crate) fn open_agent_tab(&mut self, id: &str) {
-        if !self.agent_open_tabs.iter().any(|t| t == id) {
-            self.agent_open_tabs.push(id.to_string());
-        }
-        self.agent_active_tab = Some(id.to_string());
-        self.agent_steer_id = id.to_string();
-        self.trace_fetched_at = None;
-        let _ = self.cmd_tx.send(Cmd::AgentTrace { id: id.to_string() });
-        let holder = agent_cap_holder(id);
-        self.caps_holder = holder.clone();
-        let _ = self.cmd_tx.send(Cmd::CapList { holder });
-        if self
-            .agents
-            .iter()
-            .find(|a| a.agent_id == id)
-            .is_some_and(|a| a.is_roster())
-        {
-            let _ = self.cmd_tx.send(Cmd::AgentSpecGet { id: id.to_string() });
-        }
-    }
-
     pub(crate) fn ui_roster_detail_edits(
         &mut self,
         ui: &mut egui::Ui,
@@ -417,7 +351,7 @@ impl UiApp {
             ui_roster_tool_checkboxes(ui, &t, &mut draft.tools);
         });
         ui.collapsing(t.agents_skills, |ui| {
-            if self.skill_catalog.is_empty() {
+            if self.agent_ui.skill_catalog.is_empty() {
                 ui.weak(t.agents_catalog_empty);
                 for name in ["notes-writer", "research", "file-author", "planner"] {
                     let mut on = draft.skills.iter().any(|s| s == name);
@@ -430,7 +364,7 @@ impl UiApp {
                     }
                 }
             } else {
-                for s in self.skill_catalog.clone() {
+                for s in self.agent_ui.skill_catalog.clone() {
                     let mut on = draft.skills.contains(&s.name);
                     if ui
                         .checkbox(&mut on, format!("{} — {}", s.name, s.description))
@@ -451,10 +385,10 @@ impl UiApp {
             }
         });
         ui.collapsing(t.agents_mcp, |ui| {
-            if self.mcp_catalog.is_empty() {
+            if self.agent_ui.mcp_catalog.is_empty() {
                 ui.weak(t.agents_mcp_empty);
             }
-            for s in self.mcp_catalog.clone() {
+            for s in self.agent_ui.mcp_catalog.clone() {
                 let mut on = draft.mcp_servers.contains(&s.name);
                 if ui
                     .checkbox(&mut on, &s.name)
@@ -492,33 +426,8 @@ impl UiApp {
         }
     }
 
-    pub(crate) fn close_agent_tab(&mut self, id: &str) {
-        self.agent_open_tabs.retain(|t| t != id);
-        self.agent_traces.remove(id);
-        if self.agent_active_tab.as_deref() == Some(id) {
-            self.agent_active_tab = self.agent_open_tabs.last().cloned();
-        }
-    }
-
-    pub(crate) fn poll_agent_trace(&mut self, ctx: &egui::Context) {
-        if self.agent_open_tabs.is_empty() {
-            return;
-        }
-        ctx.request_repaint_after(Duration::from_millis(400));
-        let due = self
-            .trace_fetched_at
-            .map(|t| t.elapsed() >= Duration::from_secs(1))
-            .unwrap_or(true);
-        if due {
-            self.trace_fetched_at = Some(Instant::now());
-            for id in self.agent_open_tabs.clone() {
-                let _ = self.cmd_tx.send(Cmd::AgentTrace { id });
-            }
-        }
-    }
-
     pub(crate) fn ui_agent_detail_panel(&mut self, ctx: &egui::Context) {
-        if self.agent_open_tabs.is_empty() {
+        if self.agent_ui.open_tabs.is_empty() {
             return;
         }
         egui::SidePanel::right("agent_detail_tabs")
@@ -531,16 +440,14 @@ impl UiApp {
                     ui.heading(t.agent_detail);
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui.small_button(t.agent_close_all).clicked() {
-                            self.agent_open_tabs.clear();
-                            self.agent_active_tab = None;
-                            self.agent_traces.clear();
+                            self.agent_ui.close_all_tabs();
                         }
                     });
                 });
                 ui.horizontal_wrapped(|ui| {
-                    let tabs = self.agent_open_tabs.clone();
+                    let tabs = self.agent_ui.open_tabs.clone();
                     for id in tabs {
-                        let selected = self.agent_active_tab.as_deref() == Some(id.as_str());
+                        let selected = self.agent_ui.active_tab.as_deref() == Some(id.as_str());
                         let label = if let Some(a) = self.agents.iter().find(|x| x.agent_id == id) {
                             format!(
                                 "{} [{:?}]",
@@ -561,8 +468,7 @@ impl UiApp {
                             .show(ui, |ui| {
                                 ui.horizontal(|ui| {
                                     if ui.selectable_label(selected, label).clicked() {
-                                        self.agent_active_tab = Some(id.clone());
-                                        self.agent_steer_id = id.clone();
+                                        self.agent_ui.select_tab(&id);
                                         let holder = agent_cap_holder(&id);
                                         self.caps_holder = holder.clone();
                                         let _ = self.cmd_tx.send(Cmd::CapList { holder });
@@ -587,7 +493,7 @@ impl UiApp {
                 ui.separator();
 
                 overflow_scroll(ui, "agent_detail_body", |ui| {
-                    let active = self.agent_active_tab.clone();
+                    let active = self.agent_ui.active_tab.clone();
                     if let Some(id) = active {
                         let holder = agent_cap_holder(&id);
                         let t = i18n::strings(&self.prefs.language);
@@ -605,7 +511,7 @@ impl UiApp {
                         ui.separator();
 
                         let info = self.agents.iter().find(|a| a.agent_id == id).cloned();
-                        let trace = self.agent_traces.get(&id).cloned();
+                        let trace = self.agent_ui.traces.get(&id).cloned();
                         if info.as_ref().is_some_and(|a| a.is_roster()) {
                             self.ui_roster_detail_edits(ui, &id, t);
                         }
@@ -621,7 +527,7 @@ impl UiApp {
                             info.as_ref(),
                             trace.as_ref(),
                             session_ops,
-                            &mut self.agent_steer_txt,
+                            &mut self.agent_ui.steer_txt,
                             &mut self.chat_md_cache,
                             &open_in_browser,
                             &t,
@@ -700,7 +606,7 @@ impl UiApp {
                                     text,
                                 });
                             }
-                            self.agent_steer_txt.clear();
+                            self.agent_ui.steer_txt.clear();
                         }
                         if let Some(child) = actions.open_child {
                             self.open_agent_tab(&child);

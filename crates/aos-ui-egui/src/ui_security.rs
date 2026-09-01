@@ -51,7 +51,7 @@ pub(crate) fn ui_audit(&mut self, ui: &mut egui::Ui) {
                 let _ = self.cmd_tx.send(Cmd::CapList { holder });
             }
         });
-        if let Some(id) = self.agent_active_tab.clone() {
+        if let Some(id) = self.agent_ui.active_tab.clone() {
             ui.horizontal(|ui| {
                 let holder = agent_cap_holder(&id);
                 ui.weak(format!("Agent actif → {holder}"));
