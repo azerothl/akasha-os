@@ -47,7 +47,9 @@ pub fn visible_stub_png(prompt: &str) -> Vec<u8> {
             img.put_pixel(x, y, Rgb([32, 96, 120]));
         }
     }
-    let seed = prompt.bytes().fold(0u32, |a, b| a.wrapping_mul(16777619) ^ b as u32);
+    let seed = prompt
+        .bytes()
+        .fold(0u32, |a, b| a.wrapping_mul(16777619) ^ b as u32);
     let bars = 8u32;
     let bw = w / bars;
     for i in 0..bars {
@@ -379,10 +381,7 @@ fn collect_image_args(
     }
     let dit = opts.diffusion_model.is_some() || opts.uncond_diffusion_model.is_some();
     if dit {
-        let dm = opts
-            .diffusion_model
-            .as_deref()
-            .unwrap_or(weights);
+        let dm = opts.diffusion_model.as_deref().unwrap_or(weights);
         a.push("--diffusion-model".into());
         a.push(dm.to_string_lossy().into_owned());
     } else {
@@ -661,7 +660,7 @@ fn sd_stream_lines<R: std::io::Read + Send + 'static>(
                 Ok(n) => {
                     carry.push_str(&String::from_utf8_lossy(&buf[..n]));
                     loop {
-                        let Some(pos) = carry.find(|c| c == '\n' || c == '\r') else {
+                        let Some(pos) = carry.find(['\n', '\r']) else {
                             break;
                         };
                         let line = carry[..pos].trim().to_string();
@@ -716,7 +715,12 @@ fn parse_sd_step_impl(line: &str) -> Option<(u32, u32)> {
 
 fn parse_step_fraction(raw: &str) -> Option<(u32, u32)> {
     let slash = raw.find('/')?;
-    let step: u32 = raw[..slash].trim().trim_start_matches('|').trim().parse().ok()?;
+    let step: u32 = raw[..slash]
+        .trim()
+        .trim_start_matches('|')
+        .trim()
+        .parse()
+        .ok()?;
     let after = raw[slash + 1..].trim();
     let end = after
         .find(|c: char| !c.is_ascii_digit())
@@ -757,7 +761,11 @@ fn collect_upscale_args(source: &Path, dest: &Path, opts: &UpscaleOpts) -> Vec<S
 }
 
 /// Upscale `source` PNG/JPG to `dest` using ESRGAN via sd.cpp upscale mode.
-pub fn upscale_image(source: &Path, dest: &Path, opts: &UpscaleOpts) -> Result<MediaEngine, MediaError> {
+pub fn upscale_image(
+    source: &Path,
+    dest: &Path,
+    opts: &UpscaleOpts,
+) -> Result<MediaEngine, MediaError> {
     if let Some(parent) = dest.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -850,7 +858,10 @@ pub fn generate_speech_opts(
         return Ok(MediaEngine::Stub);
     }
     let bin = look_bin("piper").expect("piper bin");
-    let work = bin.parent().map(|p| p.to_path_buf()).unwrap_or_else(bin_dir);
+    let work = bin
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(bin_dir);
     let mut cmd = Command::new(&bin);
     cmd.current_dir(&work)
         .arg("--model")
@@ -903,6 +914,9 @@ pub fn generate_speech_opts(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static MEDIA_STUB_ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn stub_png_est_un_png() {
@@ -918,6 +932,9 @@ mod tests {
 
     #[test]
     fn generate_image_stub() {
+        let _guard = MEDIA_STUB_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         std::env::set_var("AOS_MEDIA_STUB", "1");
         let dir = std::env::temp_dir().join("aos-sd-test");
         let _ = std::fs::create_dir_all(&dir);
@@ -925,13 +942,19 @@ mod tests {
         let eng = generate_image(Path::new("missing.safetensors"), "a cat", &dest).unwrap();
         assert_eq!(eng, MediaEngine::Stub);
         let bytes = std::fs::read(&dest).unwrap();
-        assert!(bytes.len() > 1024, "stub must be large enough to see in chat");
+        assert!(
+            bytes.len() > 1024,
+            "stub must be large enough to see in chat"
+        );
         assert_eq!(&bytes[..8], b"\x89PNG\r\n\x1a\n");
         std::env::remove_var("AOS_MEDIA_STUB");
     }
 
     #[test]
     fn generate_speech_stub() {
+        let _guard = MEDIA_STUB_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         std::env::set_var("AOS_MEDIA_STUB", "1");
         let dir = std::env::temp_dir().join("aos-sd-test");
         let dest = dir.join("out.wav");
@@ -950,15 +973,20 @@ mod tests {
 
     #[test]
     fn generate_image_opts_stub_not_always_512() {
+        let _guard = MEDIA_STUB_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         std::env::set_var("AOS_MEDIA_STUB", "1");
         let dir = std::env::temp_dir().join("aos-sd-test");
         let _ = std::fs::create_dir_all(&dir);
         let dest = dir.join("out-opts.png");
-        let mut opts = ImageGenOpts::default();
-        opts.width = 768;
-        opts.steps = 8;
-        let eng = generate_image_opts(Path::new("missing.safetensors"), "cube", &dest, &opts)
-            .unwrap();
+        let opts = ImageGenOpts {
+            width: 768,
+            steps: 8,
+            ..Default::default()
+        };
+        let eng =
+            generate_image_opts(Path::new("missing.safetensors"), "cube", &dest, &opts).unwrap();
         assert_eq!(eng, MediaEngine::Stub);
         std::env::remove_var("AOS_MEDIA_STUB");
     }
@@ -969,9 +997,11 @@ mod tests {
         let _ = std::fs::create_dir_all(&dir);
         let init = dir.join("base.png");
         std::fs::write(&init, b"fake").unwrap();
-        let mut opts = ImageGenOpts::default();
-        opts.init_image_path = Some(init.clone());
-        opts.strength = Some(0.42);
+        let opts = ImageGenOpts {
+            init_image_path: Some(init.clone()),
+            strength: Some(0.42),
+            ..Default::default()
+        };
         let args = collect_image_args(
             Path::new("model.safetensors"),
             "cat",
@@ -987,10 +1017,12 @@ mod tests {
 
     #[test]
     fn image_gen_vid_gen_argv() {
-        let mut opts = ImageGenOpts::default();
-        opts.sd_mode = Some("vid_gen".into());
-        opts.video_frames = Some(33);
-        opts.flow_shift = Some(3.0);
+        let opts = ImageGenOpts {
+            sd_mode: Some("vid_gen".into()),
+            video_frames: Some(33),
+            flow_shift: Some(3.0),
+            ..Default::default()
+        };
         let args = collect_image_args(
             Path::new("wan.gguf"),
             "a cat walking",
@@ -1015,9 +1047,11 @@ mod tests {
         let mask = dir.join("mask.png");
         std::fs::write(&init, b"fake").unwrap();
         std::fs::write(&mask, b"fake").unwrap();
-        let mut opts = ImageGenOpts::default();
-        opts.init_image_path = Some(init);
-        opts.mask_image_path = Some(mask.clone());
+        let opts = ImageGenOpts {
+            init_image_path: Some(init),
+            mask_image_path: Some(mask.clone()),
+            ..Default::default()
+        };
         let args = collect_image_args(
             Path::new("model.safetensors"),
             "cat",
@@ -1040,11 +1074,7 @@ mod tests {
             upscale_repeats: 2,
             upscale_tile_size: Some(128),
         };
-        let args = collect_upscale_args(
-            Path::new("in.png"),
-            Path::new("out.png"),
-            &opts,
-        );
+        let args = collect_upscale_args(Path::new("in.png"), Path::new("out.png"), &opts);
         assert!(args.contains(&"--mode".into()));
         assert!(args.contains(&"upscale".into()));
         assert!(args.contains(&"-i".into()));
@@ -1060,10 +1090,12 @@ mod tests {
 
     #[test]
     fn image_gen_upscale_argv() {
-        let mut opts = ImageGenOpts::default();
-        opts.upscale_model_path = Some(PathBuf::from("RealESRGAN_x4plus_anime_6B.pth"));
-        opts.upscale_repeats = 1;
-        opts.upscale_tile_size = Some(128);
+        let opts = ImageGenOpts {
+            upscale_model_path: Some(PathBuf::from("RealESRGAN_x4plus_anime_6B.pth")),
+            upscale_repeats: 1,
+            upscale_tile_size: Some(128),
+            ..Default::default()
+        };
         let args = collect_image_args(
             Path::new("model.safetensors"),
             "a cat",
@@ -1083,18 +1115,20 @@ mod tests {
 
     #[test]
     fn ideogram_argv_matches_sdcpp_recipe() {
-        let mut opts = ImageGenOpts::default();
-        opts.width = 1024;
-        opts.height = 1024;
-        opts.steps = 28;
-        opts.diffusion_model = Some(PathBuf::from("ideogram4-Q4_0.gguf"));
-        opts.uncond_diffusion_model = Some(PathBuf::from("ideogram4_uncond-Q4_0.gguf"));
-        opts.llm_path = Some(PathBuf::from("Qwen3-VL-8B-Instruct-Q4_K_M.gguf"));
-        opts.vae_path = Some(PathBuf::from("flux2_ae.safetensors"));
-        opts.offload_to_cpu = true;
-        opts.diffusion_fa = true;
-        opts.max_vram = Some("-1".into());
-        opts.stream_layers = true;
+        let opts = ImageGenOpts {
+            width: 1024,
+            height: 1024,
+            steps: 28,
+            diffusion_model: Some(PathBuf::from("ideogram4-Q4_0.gguf")),
+            uncond_diffusion_model: Some(PathBuf::from("ideogram4_uncond-Q4_0.gguf")),
+            llm_path: Some(PathBuf::from("Qwen3-VL-8B-Instruct-Q4_K_M.gguf")),
+            vae_path: Some(PathBuf::from("flux2_ae.safetensors")),
+            offload_to_cpu: true,
+            diffusion_fa: true,
+            max_vram: Some("-1".into()),
+            stream_layers: true,
+            ..Default::default()
+        };
         let args = collect_image_args(
             Path::new("ideogram4-Q4_0.gguf"),
             r#"{"high_level_description":"a cat"}"#,
@@ -1115,7 +1149,10 @@ mod tests {
         assert_eq!(sanitize_max_vram("-1").as_deref(), Some("-1"));
         assert_eq!(sanitize_max_vram("cuda0=8").as_deref(), Some("cuda0=8"));
         assert!(sanitize_max_vram("8;rm").is_none());
-        assert_eq!(sanitize_backend_spec("te=cpu,diffusion=cuda0").as_deref(), Some("te=cpu,diffusion=cuda0"));
+        assert_eq!(
+            sanitize_backend_spec("te=cpu,diffusion=cuda0").as_deref(),
+            Some("te=cpu,diffusion=cuda0")
+        );
         assert!(sanitize_backend_spec("cpu; rm -rf").is_none());
         assert_eq!(
             sanitize_backend_spec("mixte").as_deref(),
@@ -1125,7 +1162,10 @@ mod tests {
             sanitize_backend_spec("mixed").as_deref(),
             Some(DEFAULT_MIXED_BACKEND)
         );
-        assert_eq!(sanitize_params_backend_spec("mixte").as_deref(), Some("cpu"));
+        assert_eq!(
+            sanitize_params_backend_spec("mixte").as_deref(),
+            Some("cpu")
+        );
         assert!(sanitize_backend_spec("bogus").is_none());
         assert!(sanitize_params_backend_spec("bogus").is_none());
     }
