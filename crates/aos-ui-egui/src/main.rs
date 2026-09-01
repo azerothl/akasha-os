@@ -28,6 +28,7 @@ mod i18n;
 mod model_setup;
 mod models_page;
 mod module_actions;
+mod module_event_controller;
 mod notes_panel;
 mod prefs;
 mod schedule_act_phrase;
@@ -2153,50 +2154,14 @@ impl eframe::App for UiApp {
                         self.status = t.chat_stopped.into();
                     }
                 }
-                Evt::Catalogue(c) => self.on_catalogue(c),
-                Evt::InstalledSkills(list) => {
-                    self.on_installed_skills(list.into_iter().map(|s| s.name).collect());
-                }
-                Evt::InstalledModules(list) => self.on_installed_modules(list),
-                Evt::ModuleInstalled(msg) => {
-                    self.status = msg;
-                    let _ = self.cmd_tx.send(Cmd::CatalogueRefresh);
-                    let _ = self.cmd_tx.send(Cmd::ModuleList);
-                }
-                Evt::ModuleUninstalled(name) => {
-                    self.status = format!("uninstalled {name}");
-                    self.decl_panels.remove(&name);
-                    if matches!(&self.tab, Tab::Module(m) if m == &name) {
-                        self.tab = Tab::Settings;
-                    }
-                    let _ = self.cmd_tx.send(Cmd::ModuleList);
-                }
-                Evt::ModuleUiLoaded(resp) => {
-                    let module = resp.module.clone();
-                    let title = resp.document.title.clone();
-                    let binds = {
-                        let panel = self
-                            .decl_panels
-                            .entry(module.clone())
-                            .or_insert_with(|| decl_ui::DeclUiPanelState::new(&module));
-                        panel.set_document(resp.document);
-                        decl_ui::ingest_tool_schemas(&resp.tools, &mut panel.tool_schemas);
-                        panel.status = format!("loaded {title}");
-                        panel.tools_to_bind()
-                    };
-                    for tool in binds {
-                        let _ = self.cmd_tx.send(Cmd::ModuleUiBind {
-                            module: module.clone(),
-                            tool,
-                        });
-                    }
-                }
+                Evt::Catalogue(c) => module_event_controller::on_catalogue(self, c),
+                Evt::InstalledSkills(list) => module_event_controller::on_installed_skills(self, list),
+                Evt::InstalledModules(list) => module_event_controller::on_installed_modules(self, list),
+                Evt::ModuleInstalled(msg) => module_event_controller::on_installed(self, msg),
+                Evt::ModuleUninstalled(name) => module_event_controller::on_uninstalled(self, name),
+                Evt::ModuleUiLoaded(resp) => module_event_controller::on_ui_loaded(self, resp),
                 Evt::ModuleUiFailed { module, error } => {
-                    let panel = self
-                        .decl_panels
-                        .entry(module.clone())
-                        .or_insert_with(|| decl_ui::DeclUiPanelState::new(&module));
-                    panel.set_error(error);
+                    module_event_controller::on_ui_failed(self, module, error);
                 }
                 Evt::ModuleUiBind {
                     module,
@@ -2204,12 +2169,7 @@ impl eframe::App for UiApp {
                     result,
                     error,
                 } => {
-                    if let Some(panel) = self.decl_panels.get_mut(&module) {
-                        panel.set_bind_result(&tool, result);
-                        if let Some(e) = error {
-                            panel.status = format!("{tool}: {e}");
-                        }
-                    }
+                    module_event_controller::on_ui_bind(self, module, tool, result, error);
                 }
                 Evt::ModuleUiInvokeDone {
                     module,
@@ -2218,18 +2178,7 @@ impl eframe::App for UiApp {
                     result,
                     error,
                 } => {
-                    if let Some(panel) = self.decl_panels.get_mut(&module) {
-                        if ok {
-                            // Keep invoke results in the bind cache so widgets bound
-                            // to this tool can update immediately without full reload.
-                            panel.set_bind_result(&tool, result);
-                        }
-                        panel.status = if ok {
-                            format!("{tool} ok")
-                        } else {
-                            error.unwrap_or_else(|| format!("{tool} failed"))
-                        };
-                    }
+                    module_event_controller::on_ui_invoke_done(self, module, tool, ok, result, error);
                 }
             }
         }
