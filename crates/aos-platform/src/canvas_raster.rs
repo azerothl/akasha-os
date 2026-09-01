@@ -144,19 +144,27 @@ fn append_svg_op(out: &mut String, body: &CanvasOpBody, w: u32, h: u32) {
             color,
             fill,
             width,
+            rotation,
         } => {
             let x0 = svg_px(*x, w);
             let y0 = svg_px(*y, h);
             let ww = svg_px(*x + *bw, w) - x0;
             let hh = svg_px(*y + *bh, h) - y0;
+            let cx = svg_px(*x + *bw * 0.5, w);
+            let cy = svg_px(*y + *bh * 0.5, h);
+            let rot = if rotation.abs() > 0.001 {
+                format!(" transform=\"rotate({rotation:.2} {cx:.2} {cy:.2})\"")
+            } else {
+                String::new()
+            };
             if *fill {
                 out.push_str(&format!(
-                    "<rect x=\"{x0:.2}\" y=\"{y0:.2}\" width=\"{ww:.2}\" height=\"{hh:.2}\" fill=\"{}\"/>",
+                    "<rect x=\"{x0:.2}\" y=\"{y0:.2}\" width=\"{ww:.2}\" height=\"{hh:.2}\" fill=\"{}\"{rot}/>",
                     svg_color(color)
                 ));
             } else {
                 out.push_str(&format!(
-                    "<rect x=\"{x0:.2}\" y=\"{y0:.2}\" width=\"{ww:.2}\" height=\"{hh:.2}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\"/>",
+                    "<rect x=\"{x0:.2}\" y=\"{y0:.2}\" width=\"{ww:.2}\" height=\"{hh:.2}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\"{rot}/>",
                     svg_color(color),
                     (*width * w.min(h) as f32 * 0.5).max(1.0)
                 ));
@@ -170,19 +178,25 @@ fn append_svg_op(out: &mut String, body: &CanvasOpBody, w: u32, h: u32) {
             color,
             fill,
             width,
+            rotation,
         } => {
             let cx = svg_px(*x + *bw * 0.5, w);
             let cy = svg_px(*y + *bh * 0.5, h);
             let rx = (*bw * w as f32 * 0.5).abs().max(1.0);
             let ry = (*bh * h as f32 * 0.5).abs().max(1.0);
+            let rot = if rotation.abs() > 0.001 {
+                format!(" transform=\"rotate({rotation:.2} {cx:.2} {cy:.2})\"")
+            } else {
+                String::new()
+            };
             if *fill {
                 out.push_str(&format!(
-                    "<ellipse cx=\"{cx:.2}\" cy=\"{cy:.2}\" rx=\"{rx:.2}\" ry=\"{ry:.2}\" fill=\"{}\"/>",
+                    "<ellipse cx=\"{cx:.2}\" cy=\"{cy:.2}\" rx=\"{rx:.2}\" ry=\"{ry:.2}\" fill=\"{}\"{rot}/>",
                     svg_color(color)
                 ));
             } else {
                 out.push_str(&format!(
-                    "<ellipse cx=\"{cx:.2}\" cy=\"{cy:.2}\" rx=\"{rx:.2}\" ry=\"{ry:.2}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\"/>",
+                    "<ellipse cx=\"{cx:.2}\" cy=\"{cy:.2}\" rx=\"{rx:.2}\" ry=\"{ry:.2}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\"{rot}/>",
                     svg_color(color),
                     (*width * w.min(h) as f32 * 0.5).max(1.0)
                 ));
@@ -298,15 +312,30 @@ fn paint_op(img: &mut RgbImage, body: &CanvasOpBody, opacity: f32) {
             color,
             fill,
             width,
+            rotation,
         } => {
             let c = parse_color(color).unwrap_or(DEFAULT_FG);
-            let (x0, y0) = to_px(img, *x, *y);
-            let (x1, y1) = to_px(img, x + w, y + h);
-            if *fill {
-                fill_rect(img, x0, y0, x1, y1, c);
+            if rotation.abs() > 0.001 {
+                let corners = aos_proto::canvas_rect_corners(*x, *y, *w, *h, *rotation);
+                let pts: Vec<(i32, i32)> = corners
+                    .iter()
+                    .map(|(px, py)| to_px(img, *px, *py))
+                    .collect();
+                if *fill {
+                    fill_polygon(img, &pts, c);
+                } else {
+                    let rad = radius(img, *width).max(1);
+                    stroke_closed_i32(img, &pts, c, rad);
+                }
             } else {
-                let rad = radius(img, *width).max(1);
-                stroke_rect(img, x0, y0, x1, y1, c, rad);
+                let (x0, y0) = to_px(img, *x, *y);
+                let (x1, y1) = to_px(img, x + w, y + h);
+                if *fill {
+                    fill_rect(img, x0, y0, x1, y1, c);
+                } else {
+                    let rad = radius(img, *width).max(1);
+                    stroke_rect(img, x0, y0, x1, y1, c, rad);
+                }
             }
         }
         CanvasOpBody::Ellipse {
@@ -317,16 +346,37 @@ fn paint_op(img: &mut RgbImage, body: &CanvasOpBody, opacity: f32) {
             color,
             fill,
             width,
+            rotation,
         } => {
             let c = parse_color(color).unwrap_or(DEFAULT_FG);
-            let (cx, cy) = to_px(img, x + w * 0.5, y + h * 0.5);
-            let rx = ((w.abs() * img.width() as f32) * 0.5).max(1.0) as i32;
-            let ry = ((h.abs() * img.height() as f32) * 0.5).max(1.0) as i32;
-            if *fill {
-                fill_ellipse(img, cx, cy, rx, ry, c);
+            let cx = x + w * 0.5;
+            let cy = y + h * 0.5;
+            if rotation.abs() > 0.001 {
+                let pts: Vec<(i32, i32)> = (0..48)
+                    .map(|i| {
+                        let t = std::f32::consts::TAU * (i as f32) / 48.0;
+                        let px = cx + (w.abs() * 0.5) * t.cos();
+                        let py = cy + (h.abs() * 0.5) * t.sin();
+                        let (rx, ry) = aos_proto::canvas_rotate_point(cx, cy, px, py, *rotation);
+                        to_px(img, rx, ry)
+                    })
+                    .collect();
+                if *fill {
+                    fill_polygon(img, &pts, c);
+                } else {
+                    let rad = radius(img, *width).max(1);
+                    stroke_closed_i32(img, &pts, c, rad);
+                }
             } else {
-                let rad = radius(img, *width).max(1);
-                stroke_ellipse(img, cx, cy, rx, ry, c, rad);
+                let (cxp, cyp) = to_px(img, cx, cy);
+                let rx = ((w.abs() * img.width() as f32) * 0.5).max(1.0) as i32;
+                let ry = ((h.abs() * img.height() as f32) * 0.5).max(1.0) as i32;
+                if *fill {
+                    fill_ellipse(img, cxp, cyp, rx, ry, c);
+                } else {
+                    let rad = radius(img, *width).max(1);
+                    stroke_ellipse(img, cxp, cyp, rx, ry, c, rad);
+                }
             }
         }
         CanvasOpBody::Line { p0, p1, color, width } => {
@@ -428,6 +478,17 @@ fn disc(img: &mut RgbImage, cx: i32, cy: i32, r: i32, c: Rgb<u8>) {
                 put(img, cx + dx, cy + dy, c);
             }
         }
+    }
+}
+
+fn stroke_closed_i32(img: &mut RgbImage, pts: &[(i32, i32)], c: Rgb<u8>, rad: i32) {
+    if pts.len() < 2 {
+        return;
+    }
+    for i in 0..pts.len() {
+        let (x0, y0) = pts[i];
+        let (x1, y1) = pts[(i + 1) % pts.len()];
+        line(img, x0, y0, x1, y1, rad, c);
     }
 }
 
@@ -679,6 +740,7 @@ mod tests {
                     color: "#3ee0c4".into(),
                     fill: true,
                     width: 0.01,
+                    rotation: 0.0,
                 },
             }],
             ..Default::default()

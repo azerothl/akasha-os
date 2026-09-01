@@ -32,6 +32,8 @@ fn handle(tool: &str, args: &Value) -> Result<Value, String> {
         "canvas.layer_reorder" => layer_reorder(args),
         "canvas.layer_delete" => layer_delete(args),
         "canvas.layer_activate" => layer_activate(args),
+        "canvas.align" => align(args),
+        "canvas.rotate" => rotate(args),
         _ => Err(format!("outil inconnu: {tool}")),
     }
 }
@@ -299,6 +301,7 @@ struct ShapeArgs {
     color: Option<String>,
     fill: bool,
     width: Option<f32>,
+    rotation: f32,
 }
 
 fn parse_f32_field(args: &Value, key: &str) -> Option<f32> {
@@ -416,6 +419,7 @@ fn parse_shape_args(args: &Value, tool: &str) -> Result<ShapeArgs, String> {
         .map(str::to_string);
     let fill = args.get("fill").and_then(|v| v.as_bool()).unwrap_or(false);
     let width = parse_f32_field(&args, "width");
+    let rotation = parse_f32_field(&args, "rotation").unwrap_or(0.0);
 
     Ok(ShapeArgs {
         session_id,
@@ -427,6 +431,7 @@ fn parse_shape_args(args: &Value, tool: &str) -> Result<ShapeArgs, String> {
         color,
         fill,
         width,
+        rotation,
     })
 }
 
@@ -441,6 +446,9 @@ fn shape_op(kind: &str, a: &ShapeArgs) -> Value {
     }
     if let Some(w) = a.width {
         op["width"] = json!(w);
+    }
+    if a.rotation.abs() > 0.001 {
+        op["rotation"] = json!(a.rotation);
     }
     op
 }
@@ -667,6 +675,31 @@ fn layer_activate(args: &Value) -> Result<Value, String> {
     host_edit(args, "layer_activate", json!({ "id": id }))
 }
 
+fn align(args: &Value) -> Result<Value, String> {
+    let seq = require_u64(args, "seq")?;
+    let edges = args
+        .get("edges")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|e| e.as_str().map(str::to_string))
+                .collect::<Vec<_>>()
+        })
+        .filter(|e| !e.is_empty())
+        .ok_or_else(|| "edges requis (left|right|top|bottom|center_x|center_y)".to_string())?;
+    let mut extra = json!({ "seq": seq, "edges": edges });
+    if let Some(to) = args.get("to_seq") {
+        extra["to_seq"] = to.clone();
+    }
+    host_edit(args, "align", extra)
+}
+
+fn rotate(args: &Value) -> Result<Value, String> {
+    let seq = require_u64(args, "seq")?;
+    let rotation = require_f32(args, "rotation")?;
+    host_edit(args, "rotate", json!({ "seq": seq, "rotation": rotation }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -810,6 +843,7 @@ mod tests {
             color: None,
             fill: true,
             width: None,
+            rotation: 0.0,
         };
         let resp = json!({"next_seq": 12});
         let msg = shape_success_message("ellipse", &a, &resp);
@@ -853,6 +887,7 @@ mod tests {
             color: Some("#c0c0c0".into()),
             fill: true,
             width: None,
+            rotation: 0.0,
         };
         let op = shape_op("ellipse", &a);
         assert_eq!(op["kind"], "ellipse");

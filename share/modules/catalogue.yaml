@@ -30,7 +30,7 @@ entries:
     version: "1.0.0"
     kind: module
     path: share/modules/canvas.aospkg
-    hash: sha256:5143f2e62aeabf11af16af64b0886f6ae8c39608a79d8d3ca8f9c374e2dcfa32
+    hash: sha256:bb3c0c91ec42453c32806ad89520978aedc5fb2a3445f3d87df7d63e20672350
     attested_caps:
       - fs.write:/downloads/**
   - name: mcp-example

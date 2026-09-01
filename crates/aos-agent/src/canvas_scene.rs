@@ -276,6 +276,8 @@ pub fn canvas_tool_mutates_scene(tool: &str) -> bool {
             | "canvas.layer_reorder"
             | "canvas.layer_delete"
             | "canvas.layer_activate"
+            | "canvas.align"
+            | "canvas.rotate"
     )
 }
 

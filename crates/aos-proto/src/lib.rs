@@ -14,10 +14,11 @@ pub mod mem_extract;
 mod canvas_layers;
 
 pub use canvas_layers::{
-    canvas_hit_test, canvas_layer_by_id, canvas_layer_effective_locked,
-    canvas_layer_effective_opacity, canvas_layer_effective_visible, default_canvas_layer_id,
-    ensure_canvas_layers, translate_canvas_op_body, CanvasEdit, CanvasEditRequest,
-    CanvasEditResponse, CanvasLayer, DEFAULT_CANVAS_LAYER_ID,
+    align_canvas_op_body, canvas_hit_test, canvas_layer_by_id, canvas_layer_effective_locked,
+    canvas_layer_effective_opacity, canvas_layer_effective_visible, canvas_rect_corners,
+    canvas_rotate_point, default_canvas_layer_id, ensure_canvas_layers, set_canvas_op_rotation,
+    translate_canvas_op_body, usable_canvas_bbox, CanvasEdit, CanvasEditRequest, CanvasEditResponse,
+    CanvasLayer, DEFAULT_CANVAS_LAYER_ID,
 };
 
 // ---------------------------------------------------------------------------
@@ -2691,6 +2692,9 @@ pub enum CanvasOpBody {
         fill: bool,
         #[serde(default)]
         width: f32,
+        /// Degrees, pivot at bbox centre.
+        #[serde(default)]
+        rotation: f32,
     },
     Ellipse {
         x: f32,
@@ -2703,6 +2707,9 @@ pub enum CanvasOpBody {
         fill: bool,
         #[serde(default)]
         width: f32,
+        /// Degrees, pivot at bbox centre.
+        #[serde(default)]
+        rotation: f32,
     },
     Erase {
         points: Vec<CanvasPoint>,
@@ -3030,8 +3037,29 @@ pub fn canvas_op_bbox(body: &CanvasOpBody) -> Option<CanvasBBox> {
             }
             b.expand_points(points);
         }
-        CanvasOpBody::Rect { x, y, w, h, .. } | CanvasOpBody::Ellipse { x, y, w, h, .. } => {
-            b.expand_rect(*x, *y, *w, *h);
+        CanvasOpBody::Rect {
+            x,
+            y,
+            w,
+            h,
+            rotation,
+            ..
+        }
+        | CanvasOpBody::Ellipse {
+            x,
+            y,
+            w,
+            h,
+            rotation,
+            ..
+        } => {
+            if rotation.abs() < 0.001 {
+                b.expand_rect(*x, *y, *w, *h);
+            } else {
+                for (px, py) in canvas_rect_corners(*x, *y, *w, *h, *rotation) {
+                    b.expand_point(px, py);
+                }
+            }
         }
         CanvasOpBody::Fill { x, y, .. } => {
             b.expand_point(*x, *y);
@@ -3119,7 +3147,7 @@ pub fn canvas_scene_digest(doc: &CanvasDoc, aspect: CanvasAspect) -> String {
         ),
         "placement=read scene_bbox + per-seq bbox; place new ops inside usable; avoid stacking on the same center"
             .into(),
-        "edit=canvas.move {seq,dx,dy} canvas.delete {seq} canvas.layer_set {id,visible,locked,opacity} — do not canvas.clear"
+        "edit=canvas.move {seq,dx,dy} canvas.delete {seq} canvas.align {seq,edges} canvas.rotate {seq,rotation} canvas.layer_set {id,visible,locked,opacity} — do not canvas.clear"
             .into(),
     ];
 
@@ -4573,6 +4601,7 @@ mod chat_session_room_tests {
             color: "#3ee0c4".into(),
             fill: true,
             width: 0.01,
+            rotation: 0.0,
         };
         assert!(normalize_canvas_op_coords(&mut body));
         let bbox = canvas_op_bbox(&body).expect("bbox");
@@ -4592,6 +4621,7 @@ mod chat_session_room_tests {
             color: "#3ee0c4".into(),
             fill: true,
             width: 0.01,
+            rotation: 0.0,
         };
         let mut r2 = CanvasOpBody::Rect {
             x: 200.0,
@@ -4601,6 +4631,7 @@ mod chat_session_room_tests {
             color: "#ff4400".into(),
             fill: true,
             width: 0.01,
+            rotation: 0.0,
         };
         normalize_canvas_op_coords(&mut r1);
         normalize_canvas_op_coords(&mut r2);

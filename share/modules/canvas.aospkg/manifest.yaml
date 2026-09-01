@@ -1,6 +1,6 @@
 name: canvas
 version: 1.0.0
-hash: 5143f2e62aeabf11af16af64b0886f6ae8c39608a79d8d3ca8f9c374e2dcfa32
+hash: bb3c0c91ec42453c32806ad89520978aedc5fb2a3445f3d87df7d63e20672350
 permissions:
   required_caps:
     - fs.write:/downloads/**
@@ -46,7 +46,7 @@ tools:
         width: { type: number }
       required: [session_id, points]
   - name: canvas.path
-    description: Draw a smooth filled silhouette (closed path) through control points â€” prefer for hills, bodies, sails
+    description: Draw a smooth filled silhouette (closed path) through control points Ã¢â‚¬â€ prefer for hills, bodies, sails
     input_schema:
       type: object
       properties:
@@ -230,4 +230,23 @@ tools:
         session_id: { type: string }
         id: { type: string }
       required: [session_id, id]
+  - name: canvas.align
+    description: Align seq to to_seq or the usable 0.10 margin
+    input_schema:
+      type: object
+      properties:
+        session_id: { type: string }
+        seq: { type: integer }
+        to_seq: { type: integer }
+        edges: { type: array, items: { type: string } }
+      required: [session_id, seq, edges]
+  - name: canvas.rotate
+    description: Set rect/ellipse rotation in degrees around the bbox centre
+    input_schema:
+      type: object
+      properties:
+        session_id: { type: string }
+        seq: { type: integer }
+        rotation: { type: number }
+      required: [session_id, seq, rotation]
 min_os_api: 1

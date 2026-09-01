@@ -1,9 +1,10 @@
 //! Sessions de conversation persistées (Preview PC.6).
 
 use aos_proto::{
-    canvas_layer_effective_locked, ensure_canvas_layers, normalize_canvas_color,
-    normalize_canvas_op_coords, resolve_canvas_op_style, translate_canvas_op_body, CanvasAspect,
-    CanvasDoc, CanvasEdit, CanvasLayer, CanvasOp, CanvasOpBody, CanvasPenStyle, ChatAttachment,
+    align_canvas_op_body, canvas_layer_effective_locked, canvas_op_bbox, ensure_canvas_layers,
+    normalize_canvas_color, normalize_canvas_op_coords, resolve_canvas_op_style,
+    set_canvas_op_rotation, translate_canvas_op_body, usable_canvas_bbox, CanvasAspect, CanvasDoc,
+    CanvasEdit, CanvasLayer, CanvasOp, CanvasOpBody, CanvasPenStyle, ChatAttachment,
     ChatRoomConductorPolicy, ChatRoomMember, ChatSessionMessage, ChatSessionMeta, ChatSessionMode,
 };
 use serde::{Deserialize, Serialize};
@@ -270,6 +271,7 @@ impl ChatSessionStore {
                 color,
                 width,
                 fill,
+                rotation,
             } => {
                 let layer_id = doc
                     .ops
@@ -285,7 +287,56 @@ impl ChatSessionStore {
                     .iter_mut()
                     .find(|o| o.seq == seq)
                     .expect("seq");
-                restyle_op_body(&mut op.body, color.as_deref(), width, fill)?;
+                restyle_op_body(&mut op.body, color.as_deref(), width, fill, rotation)?;
+            }
+            CanvasEdit::Rotate { seq, rotation } => {
+                let layer_id = doc
+                    .ops
+                    .iter()
+                    .find(|o| o.seq == seq)
+                    .map(|o| o.layer_id.clone())
+                    .ok_or_else(|| SessionError::BadRequest("seq inconnue".into()))?;
+                if canvas_layer_effective_locked(&doc, &layer_id) {
+                    return Err(SessionError::BadRequest("calque verrouillé".into()));
+                }
+                let op = doc
+                    .ops
+                    .iter_mut()
+                    .find(|o| o.seq == seq)
+                    .expect("seq");
+                set_canvas_op_rotation(&mut op.body, rotation)
+                    .map_err(SessionError::BadRequest)?;
+            }
+            CanvasEdit::Align {
+                seq,
+                to_seq,
+                edges,
+            } => {
+                if edges.is_empty() {
+                    return Err(SessionError::BadRequest("edges requis".into()));
+                }
+                let src_idx = doc
+                    .ops
+                    .iter()
+                    .position(|o| o.seq == seq)
+                    .ok_or_else(|| SessionError::BadRequest("seq inconnue".into()))?;
+                if canvas_layer_effective_locked(&doc, &doc.ops[src_idx].layer_id) {
+                    return Err(SessionError::BadRequest("calque verrouillé".into()));
+                }
+                let src_bbox = canvas_op_bbox(&doc.ops[src_idx].body)
+                    .ok_or_else(|| SessionError::BadRequest("bbox source".into()))?;
+                let target = if let Some(to) = to_seq {
+                    let other = doc
+                        .ops
+                        .iter()
+                        .find(|o| o.seq == to)
+                        .ok_or_else(|| SessionError::BadRequest("to_seq inconnue".into()))?;
+                    canvas_op_bbox(&other.body)
+                        .ok_or_else(|| SessionError::BadRequest("bbox cible".into()))?
+                } else {
+                    usable_canvas_bbox()
+                };
+                align_canvas_op_body(&mut doc.ops[src_idx].body, src_bbox, target, &edges);
             }
             CanvasEdit::LayerCreate { name, parent_id } => {
                 if let Some(parent) = parent_id.as_deref() {
@@ -736,6 +787,7 @@ fn restyle_op_body(
     color: Option<&str>,
     width: Option<f32>,
     fill: Option<bool>,
+    rotation: Option<f32>,
 ) -> Result<(), SessionError> {
     if let Some(c) = color {
         let normalized = normalize_canvas_color(c)
@@ -771,6 +823,9 @@ fn restyle_op_body(
             | CanvasOpBody::Path { fill: slot, .. } => *slot = fill,
             _ => {}
         }
+    }
+    if let Some(rotation) = rotation {
+        set_canvas_op_rotation(body, rotation).map_err(SessionError::BadRequest)?;
     }
     Ok(())
 }
@@ -1042,6 +1097,7 @@ archived: false
                     color: "#3ee0c4".into(),
                     fill: true,
                     width: 0.01,
+                    rotation: 0.0,
                 },
             )
             .unwrap();
@@ -1091,6 +1147,64 @@ archived: false
             .canvas_edit(&m.id, "human", CanvasEdit::Delete { seq })
             .unwrap();
         assert!(doc.ops.is_empty());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn canvas_edit_align_and_rotate_rect() {
+        let dir = std::env::temp_dir().join(format!("aos-sess-align-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let s = ChatSessionStore::open(&dir).unwrap();
+        let m = s.create(Some("Align".into()), None).unwrap();
+        let (_, _, applied) = s
+            .canvas_apply(
+                &m.id,
+                "human",
+                CanvasOpBody::Rect {
+                    x: 0.40,
+                    y: 0.40,
+                    w: 0.20,
+                    h: 0.10,
+                    color: "#3ee0c4".into(),
+                    fill: true,
+                    width: 0.01,
+                    rotation: 0.0,
+                },
+            )
+            .unwrap();
+        let seq = applied.unwrap().seq;
+        let (_, doc) = s
+            .canvas_edit(
+                &m.id,
+                "human",
+                CanvasEdit::Align {
+                    seq,
+                    to_seq: None,
+                    edges: vec!["left".into()],
+                },
+            )
+            .unwrap();
+        match &doc.ops[0].body {
+            CanvasOpBody::Rect { x, rotation, .. } => {
+                assert!((*x - 0.10).abs() < 1e-4);
+                assert!(*rotation == 0.0);
+            }
+            _ => panic!("rect"),
+        }
+        let (_, doc) = s
+            .canvas_edit(
+                &m.id,
+                "human",
+                CanvasEdit::Rotate {
+                    seq,
+                    rotation: 15.0,
+                },
+            )
+            .unwrap();
+        match &doc.ops[0].body {
+            CanvasOpBody::Rect { rotation, .. } => assert!((*rotation - 15.0).abs() < 1e-4),
+            _ => panic!("rect"),
+        }
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -1149,6 +1263,7 @@ archived: false
                     color: "#3ee0c4".into(),
                     fill: true,
                     width: 0.01,
+                    rotation: 0.0,
                 },
             )
             .unwrap();

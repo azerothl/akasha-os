@@ -1,6 +1,9 @@
 //! Named canvas layers / groups and in-place object edits.
 
-use super::{canvas_op_bbox, CanvasDoc, CanvasOp, CanvasOpBody, CanvasPenStyle, CanvasPoint};
+use super::{
+    canvas_op_bbox, CanvasBBox, CanvasDoc, CanvasOp, CanvasOpBody, CanvasPenStyle, CanvasPoint,
+    CANVAS_LAYOUT_MARGIN,
+};
 use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_CANVAS_LAYER_ID: &str = "lyr-1";
@@ -70,6 +73,18 @@ pub enum CanvasEdit {
         width: Option<f32>,
         #[serde(default)]
         fill: Option<bool>,
+        #[serde(default)]
+        rotation: Option<f32>,
+    },
+    Rotate {
+        seq: u64,
+        rotation: f32,
+    },
+    Align {
+        seq: u64,
+        #[serde(default)]
+        to_seq: Option<u64>,
+        edges: Vec<String>,
     },
     LayerCreate {
         #[serde(default)]
@@ -224,6 +239,65 @@ pub fn translate_canvas_op_body(body: &mut CanvasOpBody, dx: f32, dy: f32) {
     }
 }
 
+pub fn canvas_rotate_point(cx: f32, cy: f32, x: f32, y: f32, degrees: f32) -> (f32, f32) {
+    let rad = degrees.to_radians();
+    let (sin, cos) = rad.sin_cos();
+    let dx = x - cx;
+    let dy = y - cy;
+    (cx + dx * cos - dy * sin, cy + dx * sin + dy * cos)
+}
+
+pub fn canvas_rect_corners(x: f32, y: f32, w: f32, h: f32, rotation: f32) -> [(f32, f32); 4] {
+    let pts = [(x, y), (x + w, y), (x + w, y + h), (x, y + h)];
+    if rotation.abs() < 0.001 {
+        return pts;
+    }
+    let cx = x + w * 0.5;
+    let cy = y + h * 0.5;
+    pts.map(|(px, py)| canvas_rotate_point(cx, cy, px, py, rotation))
+}
+
+pub fn set_canvas_op_rotation(body: &mut CanvasOpBody, rotation: f32) -> Result<(), String> {
+    match body {
+        CanvasOpBody::Rect {
+            rotation: slot, ..
+        }
+        | CanvasOpBody::Ellipse {
+            rotation: slot, ..
+        } => {
+            *slot = rotation;
+            Ok(())
+        }
+        _ => Err("rotation seulement rect/ellipse".into()),
+    }
+}
+
+pub fn usable_canvas_bbox() -> CanvasBBox {
+    CanvasBBox {
+        x0: CANVAS_LAYOUT_MARGIN,
+        y0: CANVAS_LAYOUT_MARGIN,
+        x1: 1.0 - CANVAS_LAYOUT_MARGIN,
+        y1: 1.0 - CANVAS_LAYOUT_MARGIN,
+    }
+}
+
+pub fn align_canvas_op_body(body: &mut CanvasOpBody, src: CanvasBBox, target: CanvasBBox, edges: &[String]) {
+    let mut dx = 0.0;
+    let mut dy = 0.0;
+    for edge in edges {
+        match edge.as_str() {
+            "left" => dx = target.x0 - src.x0,
+            "right" => dx = target.x1 - src.x1,
+            "top" => dy = target.y0 - src.y0,
+            "bottom" => dy = target.y1 - src.y1,
+            "center_x" => dx = (target.x0 + target.x1) * 0.5 - (src.x0 + src.x1) * 0.5,
+            "center_y" => dy = (target.y0 + target.y1) * 0.5 - (src.y0 + src.y1) * 0.5,
+            _ => {}
+        }
+    }
+    translate_canvas_op_body(body, dx, dy);
+}
+
 pub fn canvas_hit_test<'a, I>(ops: I, x: f32, y: f32) -> Option<u64>
 where
     I: IntoIterator<Item = &'a CanvasOp>,
@@ -297,6 +371,7 @@ mod tests {
             color: "#fff".into(),
             fill: true,
             width: 0.01,
+            rotation: 0.0,
         };
         translate_canvas_op_body(&mut body, 0.2, 0.0);
         match body {
@@ -326,5 +401,53 @@ mod tests {
         ensure_canvas_layers(&mut doc);
         assert_eq!(doc.ops[0].layer_id, DEFAULT_CANVAS_LAYER_ID);
         assert_eq!(doc.layers.len(), 1);
+    }
+
+    #[test]
+    fn align_left_moves_to_usable_margin() {
+        let mut body = CanvasOpBody::Rect {
+            x: 0.40,
+            y: 0.40,
+            w: 0.20,
+            h: 0.10,
+            color: "#fff".into(),
+            fill: true,
+            width: 0.01,
+            rotation: 0.0,
+        };
+        let src = crate::canvas_op_bbox(&body).expect("bbox");
+        align_canvas_op_body(&mut body, src, usable_canvas_bbox(), &["left".into()]);
+        match body {
+            CanvasOpBody::Rect { x, .. } => assert!((x - 0.10).abs() < 1e-4),
+            _ => panic!("rect"),
+        }
+    }
+
+    #[test]
+    fn rotated_rect_bbox_is_larger_than_axis_aligned() {
+        let axis = crate::canvas_op_bbox(&CanvasOpBody::Rect {
+            x: 0.40,
+            y: 0.40,
+            w: 0.20,
+            h: 0.10,
+            color: "#fff".into(),
+            fill: true,
+            width: 0.01,
+            rotation: 0.0,
+        })
+        .unwrap();
+        let rotated = crate::canvas_op_bbox(&CanvasOpBody::Rect {
+            x: 0.40,
+            y: 0.40,
+            w: 0.20,
+            h: 0.10,
+            color: "#fff".into(),
+            fill: true,
+            width: 0.01,
+            rotation: 45.0,
+        })
+        .unwrap();
+        assert!(rotated.x1 - rotated.x0 > axis.x1 - axis.x0);
+        assert!(rotated.y1 - rotated.y0 > axis.y1 - axis.y0);
     }
 }

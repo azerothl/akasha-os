@@ -729,6 +729,33 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
             }),
         ),
         (
+            "canvas.align",
+            "Aligner seq sur to_seq (ou la marge 0.10 si to_seq omis) : edges left|right|top|bottom|center_x|center_y",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "seq":{"type":"integer"},
+                    "to_seq":{"type":"integer"},
+                    "edges":{"type":"array","items":{"type":"string"}}
+                },
+                "required":["seq","edges"]
+            }),
+        ),
+        (
+            "canvas.rotate",
+            "Rotation en degrés d'un rect/ellipse (pivot centre)",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "seq":{"type":"integer"},
+                    "rotation":{"type":"number"}
+                },
+                "required":["seq","rotation"]
+            }),
+        ),
+        (
             "canvas.get",
             "Lire le canvas existant (toujours en premier ; after_seq optionnel) — poursuis le dessin, ne redémarre pas sauf demande",
             serde_json::json!({
@@ -790,6 +817,8 @@ pub const CANVAS_TOOL_IDS: &[&str] = &[
     "canvas.layer_reorder",
     "canvas.layer_delete",
     "canvas.layer_activate",
+    "canvas.align",
+    "canvas.rotate",
 ];
 
 /// Phrases that beat Create/image routing — must stay aligned with `chat_canvas` routing.
