@@ -3,8 +3,9 @@
 use crate::cmd::{ChatLine, Cmd};
 use crate::{
     chat_agent_max_steps, chat_canvas, chat_room, chrono_like_stamp, i18n, local_tz_offset_minutes,
-    models_page, now_ms, session_model_supports_vision, ResearchPendingChat, UiApp,
+    models_page, now_ms, session_model_supports_vision, UiApp,
 };
+use crate::research_ui_state::ResearchPendingChat;
 use aos_agent::schedule_parse;
 use aos_proto::{chat_tts_request, ChatAttachment};
 

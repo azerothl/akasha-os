@@ -395,7 +395,11 @@ impl UiApp {
                     let _ = self.cmd_tx.send(Cmd::AgentKill { id: agent_id });
                 }
                 if let Some((question, path)) = document_result_open {
-                    research_document::open_document(&mut self.document_overlay, &question, &path);
+                    research_document::open_document(
+                        &mut self.research_ui.overlay,
+                        &question,
+                        &path,
+                    );
                 }
                 if let Some((act_id, msg_idx, approved)) = schedule_act {
                     if approved {

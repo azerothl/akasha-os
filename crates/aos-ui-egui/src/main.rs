@@ -11,6 +11,8 @@ mod memory_controller;
 mod memory_ui_state;
 mod models_controller;
 mod models_ui_state;
+mod research_controller;
+mod research_ui_state;
 mod settings_controller;
 mod settings_ui_state;
 mod workspace_controller;
@@ -109,7 +111,7 @@ use aos_agent::schedule_parse::ParsedSchedule;
 use aos_ipc::BusClient;
 use aos_proto::{
     AgentInfo, AgentState, AuditEvent, CapInfo, ChatAttachment, ChatSessionGetResponse,
-    ChatSessionIdRequest, DocumentRef,
+    ChatSessionIdRequest,
     PendingConfirmation, SystemMetrics,
 };
 use prefs::{load_preferences, save_preferences, Preferences};
@@ -544,29 +546,7 @@ struct UiApp {
     image_generating: Option<image_studio::ImageGenUiState>,
     show_go_to_palette: bool,
     guide: guide::GuideState,
-    /// Deferred normal chat after user picks Answer on a research choice card.
-    research_pending_chat: Option<ResearchPendingChat>,
-    /// Recoverable prepared documents (var/documents index).
-    research_documents: Vec<aos_agent::document_index::ResearchDocumentEntry>,
-    document_overlay: research_document::DocumentOverlayState,
-    documents_list: research_document::DocumentsListState,
-}
-
-#[derive(Clone)]
-struct ResearchPendingChat {
-    session_id: String,
-    history: Vec<(String, String)>,
-    user_text: String,
-    model_id: Option<String>,
-    images: Vec<String>,
-    documents: Vec<DocumentRef>,
-    auto_remember: bool,
-    max_steps: u32,
-    routing: String,
-    language: String,
-    canvas_open: bool,
-    canvas_aspect: aos_proto::CanvasAspect,
-    choice_id: String,
+    research_ui: research_ui_state::ResearchUiState,
 }
 
 const ROSTER_TOOL_GROUPS: &[(&str, &[&str])] = &[
@@ -753,10 +733,7 @@ impl UiApp {
             image_generating: None,
             show_go_to_palette: false,
             guide: guide::GuideState::default(),
-            research_pending_chat: None,
-            research_documents: research_document::load_index_entries(),
-            document_overlay: research_document::DocumentOverlayState::default(),
-            documents_list: research_document::DocumentsListState::default(),
+            research_ui: research_ui_state::ResearchUiState::default(),
         }
     }
 
@@ -895,244 +872,6 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         });
         self.tab = Tab::Agents;
         self.status = t.scen_module_agent_launched.into();
-    }
-
-    fn dispatch_pending_chat(&mut self, pending: ResearchPendingChat) {
-        self.chat_state.runtime.begin_turn(None);
-        self.status = "assistant : génération…".into();
-        let _ = self.cmd_tx.send(Cmd::Chat {
-            session_id: pending.session_id,
-            history: pending.history,
-            user_text: pending.user_text,
-            model_id: pending.model_id,
-            images: pending.images,
-            documents: pending.documents,
-            auto_remember: pending.auto_remember,
-            max_steps: pending.max_steps,
-            routing: pending.routing,
-            language: pending.language,
-            canvas_open: pending.canvas_open,
-            canvas_aspect: pending.canvas_aspect,
-        });
-        self.mark_onboarding_chat_sent();
-        self.scen_chat = true;
-    }
-
-    fn offer_research_choice(
-        &mut self,
-        session_id: &str,
-        user_text: &str,
-        pending: ResearchPendingChat,
-    ) {
-        let att = research_choice::choice_attachment(user_text, &pending.choice_id);
-        self.chat.push(ChatLine {
-            role: "assistant".into(),
-            text: String::new(),
-            attachments: vec![att.clone()],
-            speaker_id: None,
-            speaker_name: None,
-            thinking: None,
-        });
-        let _ = self.cmd_tx.send(Cmd::SessionAppend {
-            session_id: session_id.to_string(),
-            role: "assistant".into(),
-            content: String::new(),
-            attachments: vec![att],
-        });
-        self.research_pending_chat = Some(pending);
-        self.mark_onboarding_chat_sent();
-        self.scen_chat = true;
-    }
-
-    fn start_document_prep(&mut self, session_id: &str, pending: ResearchPendingChat) {
-        let question = pending.user_text.clone();
-        let t = i18n::strings(&pending.language);
-        let ack = t.document_prep_ack;
-        let att = research_document::progress_attachment(&question, "pending");
-        self.chat.push(ChatLine {
-            role: "assistant".into(),
-            text: ack.into(),
-            attachments: vec![att.clone()],
-            speaker_id: None,
-            speaker_name: None,
-            thinking: None,
-        });
-        let _ = self.cmd_tx.send(Cmd::SessionAppend {
-            session_id: session_id.to_string(),
-            role: "assistant".into(),
-            content: ack.into(),
-            attachments: vec![att],
-        });
-        let _ = self.cmd_tx.send(Cmd::DocumentPrepSpawn {
-            session_id: session_id.to_string(),
-            question: pending.user_text,
-            language: pending.language,
-            model_id: pending.model_id,
-            max_steps: pending.max_steps,
-        });
-        self.mark_onboarding_chat_sent();
-        self.scen_chat = true;
-    }
-
-    fn attach_document_progress_agent(&mut self, agent_id: &str, question: &str) {
-        let att = research_document::progress_attachment(question, agent_id);
-        for line in &mut self.chat {
-            let has_placeholder = line.attachments.iter().any(|a| {
-                matches!(
-                    a,
-                    ChatAttachment::DocumentProgress {
-                        agent_id: id,
-                        ..
-                    } if id == "pending"
-                )
-            });
-            if has_placeholder {
-                line.attachments.retain(|a| {
-                    !matches!(
-                        a,
-                        ChatAttachment::DocumentProgress {
-                            agent_id: id,
-                            ..
-                        } if id == "pending"
-                    )
-                });
-                line.attachments.push(att.clone());
-                return;
-            }
-        }
-        self.chat.push(ChatLine {
-            role: "assistant".into(),
-            text: String::new(),
-            attachments: vec![att],
-            speaker_id: None,
-            speaker_name: None,
-            thinking: None,
-        });
-    }
-
-    fn replace_progress_with_result(&mut self, question: &str, path: &str) {
-        let label = research_choice::label_from_path(path);
-        let result = research_choice::document_result_attachment(question, path, &label);
-        let mut replaced = false;
-        for line in &mut self.chat {
-            if line.attachments.iter().any(|a| {
-                matches!(a, ChatAttachment::DocumentProgress { .. })
-            }) {
-                line.attachments.retain(|a| !matches!(a, ChatAttachment::DocumentProgress { .. }));
-                line.attachments.push(result.clone());
-                replaced = true;
-                break;
-            }
-        }
-        if !replaced {
-            self.chat.push(ChatLine {
-                role: "assistant".into(),
-                text: String::new(),
-                attachments: vec![result.clone()],
-                speaker_id: None,
-                speaker_name: None,
-                thinking: None,
-            });
-        }
-        if let Some(sid) = self.chat_state.active_session.clone() {
-            let _ = self.cmd_tx.send(Cmd::SessionAppend {
-                session_id: sid,
-                role: "assistant".into(),
-                content: String::new(),
-                attachments: vec![result],
-            });
-        }
-    }
-
-    fn record_prepared_document(&mut self, question: &str, path: &str, label: &str) {
-        let home = aos_home();
-        let ms = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_millis() as u64)
-            .unwrap_or(0);
-        let _ = aos_agent::document_index::record_research_document(
-            &home,
-            question,
-            path,
-            label,
-            ms,
-        );
-        self.research_documents = research_document::load_index_entries();
-    }
-
-    fn resolve_research_choice_answer(&mut self, choice_id: &str, msg_idx: usize) {
-        let Some(pending) = self.research_pending_chat.take() else {
-            return;
-        };
-        if pending.choice_id != choice_id {
-            self.research_pending_chat = Some(pending);
-            return;
-        }
-        if let Some(att) = self.chat[msg_idx].attachments.iter_mut().find_map(|a| {
-            if let ChatAttachment::ResearchChoice {
-                choice_id: id,
-                state,
-                ..
-            } = a
-            {
-                if id == choice_id {
-                    Some(state)
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        }) {
-            *att = "answer".into();
-        }
-        self.dispatch_pending_chat(pending);
-    }
-
-    fn resolve_research_choice_document(
-        &mut self,
-        choice_id: &str,
-        msg_idx: usize,
-        session_id: &str,
-    ) {
-        let pending = match self.research_pending_chat.take() {
-            Some(p) if p.choice_id == choice_id => p,
-            other => {
-                self.research_pending_chat = other;
-                return;
-            }
-        };
-        if let Some(att) = self.chat[msg_idx].attachments.iter_mut().find_map(|a| {
-            if let ChatAttachment::ResearchChoice {
-                choice_id: id,
-                state,
-                ..
-            } = a
-            {
-                if id == choice_id {
-                    Some(state)
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        }) {
-            *att = "document".into();
-        }
-        let _ = self.cmd_tx.send(Cmd::SessionAppend {
-            session_id: session_id.to_string(),
-            role: "user".into(),
-            content: pending.user_text.clone(),
-            attachments: vec![],
-        });
-        self.start_document_prep(session_id, pending);
-    }
-
-    fn attach_document_result_card(&mut self, question: &str, path: &str) {
-        let label = research_choice::label_from_path(path);
-        self.replace_progress_with_result(question, path);
-        self.record_prepared_document(question, path, &label);
     }
 
     fn send_ask_reply(&mut self, session_id: String, agent_id: String, title: String, text: String) {
@@ -1905,12 +1644,11 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                     }
                 }
                 if ui
-                    .selectable_label(self.documents_list.open, t.nav_documents)
+                    .selectable_label(self.research_ui.documents_list.open, t.nav_documents)
                     .on_hover_text(t.documents_list_title)
                     .clicked()
                 {
-                    self.documents_list.open = true;
-                    self.research_documents = research_document::load_index_entries();
+                    self.research_ui.open_documents_list();
                 }
                 for (tab, label, hint) in [
                     (Tab::Caps, t.tab_caps, t.tab_hint_caps),
@@ -3354,14 +3092,14 @@ impl eframe::App for UiApp {
         guide::show_window(ctx, &mut self.guide, &self.prefs.language, &mut restart_onboarding);
         research_document::show_documents_list(
             ctx,
-            &mut self.documents_list,
-            &self.research_documents,
-            &mut self.document_overlay,
+            &mut self.research_ui.documents_list,
+            &self.research_ui.documents,
+            &mut self.research_ui.overlay,
             &t,
         );
         research_document::show_document_overlay(
             ctx,
-            &mut self.document_overlay,
+            &mut self.research_ui.overlay,
             &mut self.chat_md_cache,
             &t,
         );
