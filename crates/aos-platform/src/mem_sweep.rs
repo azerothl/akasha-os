@@ -335,7 +335,6 @@ pub fn should_skip_sweep_turn(user_text: &str, assistant_text: &str) -> bool {
 mod tests {
     use super::*;
     use crate::memory::MemoryStore;
-    use aos_proto::MemExtractedFact;
 
     fn v(x: f32) -> Vec<f32> {
         vec![x, 1.0 - x, 0.5]

@@ -276,6 +276,11 @@ pub(crate) enum Cmd {
         aspect: aos_proto::CanvasAspect,
         format: String,
     },
+    CanvasImport {
+        session_id: String,
+        doc: aos_proto::CanvasDoc,
+        aspect: Option<aos_proto::CanvasAspect>,
+    },
     CanvasEdit {
         session_id: String,
         author_id: String,

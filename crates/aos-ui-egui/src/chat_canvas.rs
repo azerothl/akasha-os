@@ -2,8 +2,9 @@
 
 use aos_proto::{
     canvas_hit_test, canvas_layer_effective_locked, canvas_op_bbox, canvas_rect_corners,
-    canvas_rotate_point, translate_canvas_op_body, CanvasAspect, CanvasEdit, CanvasLayer, CanvasOp,
-    CanvasOpBody, CanvasPenStyle, CanvasPoint,
+    canvas_rotate_point, default_canvas_opacity, translate_canvas_op_body, CanvasAspect,
+    CanvasEdit, CanvasLayer, CanvasLinearGradient, CanvasOp, CanvasOpBody, CanvasPenStyle,
+    CanvasPoint,
 };
 use eframe::egui::epaint::{CircleShape, PathShape, PathStroke, Shape, StrokeKind};
 use eframe::egui::{Align2, Color32, FontId, Pos2, Sense, Stroke, Ui, Vec2};
@@ -15,6 +16,7 @@ use crate::theme::{PAPER, SIGNAL, VOID};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CanvasTool {
     Select,
+    Pan,
     Pen,
     Eraser,
     Line,
@@ -34,7 +36,9 @@ pub enum CanvasUiAction {
     },
     ExportPng,
     ExportSvg,
+    ImportJson,
     SetAspect(CanvasAspect),
+    ResetView,
 }
 
 #[derive(Debug, Clone)]
@@ -66,6 +70,16 @@ pub struct CanvasPanelState {
     pub selected_seq: Option<u64>,
     pub layers: Vec<CanvasLayer>,
     pub active_layer_id: String,
+    /// Per-op alpha for new strokes (0..1).
+    pub pen_opacity: f32,
+    /// Dashed outline for line-like tools.
+    pub pen_dashed: bool,
+    /// Linear gradient fill for closed shapes.
+    pub use_gradient: bool,
+    pub gradient_color2: Color32,
+    /// View pan (screen px) and zoom around the letterboxed board.
+    pub view_pan: Vec2,
+    pub view_zoom: f32,
 }
 
 impl Default for CanvasPanelState {
@@ -90,6 +104,12 @@ impl Default for CanvasPanelState {
             selected_seq: None,
             layers: Vec::new(),
             active_layer_id: String::new(),
+            pen_opacity: default_canvas_opacity(),
+            pen_dashed: false,
+            use_gradient: false,
+            gradient_color2: Color32::from_rgb(0xf4, 0x00, 0x09),
+            view_pan: Vec2::ZERO,
+            view_zoom: 1.0,
         }
     }
 }
@@ -185,6 +205,33 @@ pub fn parse_hex_color(s: &str) -> Color32 {
 
 pub fn color_to_hex(c: Color32) -> String {
     format!("#{:02x}{:02x}{:02x}", c.r(), c.g(), c.b())
+}
+
+fn pen_style_fields(state: &CanvasPanelState) -> (f32, Vec<f32>, Option<CanvasLinearGradient>) {
+    let dash = if state.pen_dashed {
+        vec![0.03, 0.03]
+    } else {
+        vec![]
+    };
+    let gradient = if state.use_gradient && state.shape_fill {
+        Some(CanvasLinearGradient {
+            color0: color_to_hex(state.color),
+            color1: color_to_hex(state.gradient_color2),
+            angle_deg: 0.0,
+        })
+    } else {
+        None
+    };
+    (state.pen_opacity, dash, gradient)
+}
+
+fn with_alpha(c: Color32, alpha: f32) -> Color32 {
+    Color32::from_rgba_unmultiplied(
+        c.r(),
+        c.g(),
+        c.b(),
+        (c.a() as f32 * alpha.clamp(0.0, 1.0)).round() as u8,
+    )
 }
 
 fn author_stroke_color(author_id: &str, stored: &str, dark: bool) -> Color32 {
@@ -355,7 +402,7 @@ fn paint_op(
             points,
             color,
             width,
-        } => {
+        .. } => {
             if points.len() < 2 {
                 return;
             }
@@ -390,7 +437,7 @@ fn paint_op(
             fill,
             width,
             rotation,
-        } => {
+        .. } => {
             let c = author_stroke_color(&op.author_id, color, dark);
             let corners = canvas_rect_corners(*x, *y, w * progress, h * progress, *rotation);
             let screen: Vec<Pos2> = corners
@@ -423,7 +470,7 @@ fn paint_op(
             fill,
             width,
             rotation,
-        } => {
+        .. } => {
             let c = author_stroke_color(&op.author_id, color, dark);
             let cx = x + w * 0.5;
             let cy = y + h * 0.5;
@@ -453,7 +500,7 @@ fn paint_op(
                 }));
             }
         }
-        CanvasOpBody::Line { p0, p1, color, width } => {
+        CanvasOpBody::Line { p0, p1, color, width, .. } => {
             let c = author_stroke_color(&op.author_id, color, dark);
             let rad = radius_px(rect, *width);
             let end = CanvasPoint {
@@ -463,7 +510,7 @@ fn paint_op(
             let screen = [to_screen(rect, *p0), to_screen(rect, end)];
             painter.add(Shape::line(screen.to_vec(), PathStroke::new(rad * 2.0, c)));
         }
-        CanvasOpBody::Spline { points, color, width } => {
+        CanvasOpBody::Spline { points, color, width, .. } => {
             if points.len() < 2 {
                 return;
             }
@@ -481,7 +528,7 @@ fn paint_op(
             width,
             fill,
             closed,
-        } => {
+        .. } => {
             if points.len() < 2 {
                 return;
             }
@@ -513,7 +560,7 @@ fn paint_op(
                 painter.add(Shape::line(stroke_pts, PathStroke::new(rad * 2.0, c)));
             }
         }
-        CanvasOpBody::Fill { x, y, color } => {
+        CanvasOpBody::Fill { x, y, color, .. } => {
             let c = author_stroke_color(&op.author_id, color, dark);
             let center = to_screen(rect, CanvasPoint { x: *x, y: *y });
             let arm = (rect.width().min(rect.height()) * 0.012 * progress).max(3.0);
@@ -602,6 +649,17 @@ fn fit_board_rect(outer: eframe::egui::Rect, aspect: CanvasAspect) -> eframe::eg
     eframe::egui::Rect::from_center_size(outer.center(), Vec2::new(board_w, board_h))
 }
 
+fn view_board_rect(
+    outer: eframe::egui::Rect,
+    aspect: CanvasAspect,
+    pan: Vec2,
+    zoom: f32,
+) -> eframe::egui::Rect {
+    let base = fit_board_rect(outer, aspect);
+    let zoom = zoom.clamp(0.25, 4.0);
+    eframe::egui::Rect::from_center_size(base.center() + pan, base.size() * zoom)
+}
+
 /// SIGNAL pastille shown while a vision model reads the live canvas board.
 fn ui_canvas_seeing_pill(ui: &mut Ui, label: &str) {
     eframe::egui::Frame::new()
@@ -677,6 +735,7 @@ pub fn ui_canvas_toolbar(
         }
 
         ui.selectable_value(&mut state.tool, CanvasTool::Select, t.canvas_tool_select);
+        ui.selectable_value(&mut state.tool, CanvasTool::Pan, t.canvas_tool_pan);
         ui.selectable_value(&mut state.tool, CanvasTool::Pen, t.canvas_tool_pen);
         ui.selectable_value(&mut state.tool, CanvasTool::Eraser, t.canvas_tool_eraser);
         ui.selectable_value(&mut state.tool, CanvasTool::Line, t.canvas_tool_line);
@@ -717,10 +776,12 @@ pub fn ui_canvas_toolbar(
                 }
                 if let Some(op) = state.ops.iter_mut().find(|o| o.seq == seq) {
                     if let CanvasOpBody::Rect {
-                        rotation, ..
+                        rotation,
+                        ..
                     }
                     | CanvasOpBody::Ellipse {
-                        rotation, ..
+                        rotation,
+                        ..
                     } = &mut op.body
                     {
                         let mut rot = *rotation;
@@ -770,6 +831,37 @@ pub fn ui_canvas_toolbar(
                 width: Some(state.width),
             });
         }
+        ui.add(
+            eframe::egui::Slider::new(&mut state.pen_opacity, 0.05..=1.0).text(t.canvas_opacity),
+        );
+        ui.toggle_value(
+            &mut state.pen_dashed,
+            eframe::egui::RichText::new(t.canvas_dashed).weak(),
+        );
+        if matches!(
+            state.tool,
+            CanvasTool::Rect | CanvasTool::Ellipse | CanvasTool::Path
+        ) && state.shape_fill {
+            ui.toggle_value(
+                &mut state.use_gradient,
+                eframe::egui::RichText::new(t.canvas_gradient).weak(),
+            );
+            if state.use_gradient {
+                let mut rgba = [
+                    state.gradient_color2.r() as f32 / 255.0,
+                    state.gradient_color2.g() as f32 / 255.0,
+                    state.gradient_color2.b() as f32 / 255.0,
+                    1.0,
+                ];
+                if ui.color_edit_button_rgba_unmultiplied(&mut rgba).changed() {
+                    state.gradient_color2 = Color32::from_rgb(
+                        (rgba[0] * 255.0) as u8,
+                        (rgba[1] * 255.0) as u8,
+                        (rgba[2] * 255.0) as u8,
+                    );
+                }
+            }
+        }
 
         if ui
             .button(eframe::egui::RichText::new(t.canvas_undo).weak())
@@ -788,6 +880,18 @@ pub fn ui_canvas_toolbar(
             .clicked()
         {
             action = Some(CanvasUiAction::ExportSvg);
+        }
+        if ui
+            .button(eframe::egui::RichText::new(t.canvas_import).weak())
+            .clicked()
+        {
+            action = Some(CanvasUiAction::ImportJson);
+        }
+        if ui
+            .button(eframe::egui::RichText::new(t.canvas_reset_view).weak())
+            .clicked()
+        {
+            action = Some(CanvasUiAction::ResetView);
         }
         ui.toggle_value(
             &mut state.show_grid,
@@ -943,7 +1047,7 @@ pub fn ui_canvas_surface(
     let (response, painter) =
         ui.allocate_painter(Vec2::new(pane_w, pane_h), Sense::click_and_drag());
     let outer = response.rect;
-    let rect = fit_board_rect(outer, aspect);
+    let rect = view_board_rect(outer, aspect, state.view_pan, state.view_zoom);
     let bg = canvas_bg(dark);
     painter.rect_filled(rect, 0.0, bg);
     painter.rect_stroke(rect, 0.0, Stroke::new(1.5_f32, SIGNAL), StrokeKind::Inside);
@@ -1067,17 +1171,31 @@ pub fn ui_canvas_surface(
             | CanvasTool::Eraser
             | CanvasTool::Spline
             | CanvasTool::Path
-            | CanvasTool::Select => {}
+            | CanvasTool::Select
+            | CanvasTool::Pan => {}
+        }
+    }
+
+    if response.hovered() {
+        let scroll = ui.input(|i| i.smooth_scroll_delta.y);
+        if scroll.abs() > 0.01 {
+            let factor = (scroll * 0.002).exp();
+            state.view_zoom = (state.view_zoom * factor).clamp(0.25, 4.0);
+            ui.ctx().request_repaint();
         }
     }
 
     if response.dragged() {
-        if let Some(pos) = response.interact_pointer_pos() {
+        if state.tool == CanvasTool::Pan {
+            state.view_pan += response.drag_delta();
+            ui.ctx().request_repaint();
+        } else if let Some(pos) = response.interact_pointer_pos() {
             if !rect.contains(pos) {
                 return action;
             }
             let p = maybe_snap_point(to_norm(rect, pos), state.snap);
             match state.tool {
+                CanvasTool::Pan => {}
                 CanvasTool::Pen | CanvasTool::Eraser | CanvasTool::Spline | CanvasTool::Path => {
                     if state
                         .draft_points
@@ -1133,12 +1251,19 @@ pub fn ui_canvas_surface(
             state.drag_current = None;
         } else {
         match state.tool {
+            CanvasTool::Pan => {
+                state.drag_origin = None;
+                state.drag_current = None;
+            }
             CanvasTool::Pen => {
                 if state.draft_points.len() >= 2 {
+                    let (opacity, dash, _) = pen_style_fields(state);
                     action = Some(CanvasUiAction::Apply(CanvasOpBody::Stroke {
                         points: std::mem::take(&mut state.draft_points),
                         color: color_to_hex(state.color),
                         width: state.width,
+                        opacity,
+                        dash,
                     }));
                 } else {
                     state.draft_points.clear();
@@ -1154,10 +1279,13 @@ pub fn ui_canvas_surface(
             }
             CanvasTool::Spline => {
                 if state.draft_points.len() >= 2 {
+                    let (opacity, dash, _) = pen_style_fields(state);
                     action = Some(CanvasUiAction::Apply(CanvasOpBody::Spline {
                         points: std::mem::take(&mut state.draft_points),
                         color: color_to_hex(state.color),
                         width: state.width,
+                        opacity,
+                        dash,
                     }));
                 } else {
                     state.draft_points.clear();
@@ -1165,11 +1293,14 @@ pub fn ui_canvas_surface(
             }
             CanvasTool::Line => {
                 if let (Some(a), Some(b)) = (state.drag_origin.take(), state.drag_current.take()) {
+                    let (opacity, dash, _) = pen_style_fields(state);
                     action = Some(CanvasUiAction::Apply(CanvasOpBody::Line {
                         p0: a,
                         p1: b,
                         color: color_to_hex(state.color),
                         width: state.width,
+                        opacity,
+                        dash,
                     }));
                 }
             }
@@ -1179,6 +1310,7 @@ pub fn ui_canvas_surface(
                     let y = a.y.min(b.y);
                     let w = (a.x - b.x).abs().max(0.01);
                     let h = (a.y - b.y).abs().max(0.01);
+                    let (opacity, dash, gradient) = pen_style_fields(state);
                     action = Some(CanvasUiAction::Apply(CanvasOpBody::Rect {
                         x,
                         y,
@@ -1188,6 +1320,9 @@ pub fn ui_canvas_surface(
                         fill: state.shape_fill,
                         width: state.width,
                         rotation: 0.0,
+                        opacity,
+                        dash,
+                        gradient,
                     }));
                 }
             }
@@ -1197,6 +1332,7 @@ pub fn ui_canvas_surface(
                     let y = a.y.min(b.y);
                     let w = (a.x - b.x).abs().max(0.01);
                     let h = (a.y - b.y).abs().max(0.01);
+                    let (opacity, dash, gradient) = pen_style_fields(state);
                     action = Some(CanvasUiAction::Apply(CanvasOpBody::Ellipse {
                         x,
                         y,
@@ -1206,17 +1342,24 @@ pub fn ui_canvas_surface(
                         fill: state.shape_fill,
                         width: state.width,
                         rotation: 0.0,
+                        opacity,
+                        dash,
+                        gradient,
                     }));
                 }
             }
             CanvasTool::Path => {
                 if state.draft_points.len() >= 3 {
+                    let (opacity, dash, gradient) = pen_style_fields(state);
                     action = Some(CanvasUiAction::Apply(CanvasOpBody::Path {
                         points: std::mem::take(&mut state.draft_points),
                         color: color_to_hex(state.color),
                         width: state.width,
                         fill: state.shape_fill,
                         closed: true,
+                        opacity,
+                        dash,
+                        gradient,
                     }));
                 } else {
                     state.draft_points.clear();

@@ -206,6 +206,33 @@ impl UiApp {
                     aspect,
                 });
             }
+            Some(chat_canvas::CanvasUiAction::ImportJson) => {
+                let t = crate::i18n::strings(&self.prefs.language);
+                if let Some(path) = crate::os_open::pick_os_file(
+                    t.canvas_import,
+                    &[("JSON", &["json"])],
+                    crate::os_open::user_downloads_dir().as_deref(),
+                ) {
+                    if let Ok(raw) = std::fs::read_to_string(&path) {
+                        match aos_proto::parse_canvas_sidecar_json(&raw) {
+                            Ok((doc, aspect)) => {
+                                let _ = self.cmd_tx.send(Cmd::CanvasImport {
+                                    session_id: session_id.to_string(),
+                                    doc,
+                                    aspect: Some(aspect),
+                                });
+                            }
+                            Err(e) => {
+                                self.status = format!("{}: {e}", t.canvas_import);
+                            }
+                        }
+                    }
+                }
+            }
+            Some(chat_canvas::CanvasUiAction::ResetView) => {
+                self.chat_state.view.canvas.view_pan = eframe::egui::Vec2::ZERO;
+                self.chat_state.view.canvas.view_zoom = 1.0;
+            }
             None => {}
         }
     }

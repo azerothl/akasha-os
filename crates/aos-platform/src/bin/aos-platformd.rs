@@ -1928,6 +1928,52 @@ async fn main() {
         });
     }
 
+    {
+        let s = sub.clone();
+        svc.on("canvas.import", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<CanvasImportRequest>() {
+                    Ok(req) => {
+                        let result = s.sessions.lock().unwrap().canvas_import(
+                            &req.session_id,
+                            req.doc,
+                            req.canvas_aspect,
+                        );
+                        match result {
+                            Ok((meta, doc)) => {
+                                let _ = ctx
+                                    .respond(
+                                        aos_ipc::msg::Status::Ok,
+                                        &CanvasImportResponse {
+                                            canvas_open: meta.canvas_open,
+                                            next_seq: doc.next_seq,
+                                            ops: doc.ops,
+                                            pen: doc.pen,
+                                            layers: doc.layers,
+                                            active_layer_id: doc.active_layer_id,
+                                            canvas_aspect: meta.canvas_aspect,
+                                        },
+                                    )
+                                    .await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(aos_ipc::msg::Status::BadRequest, &e.to_string())
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+
     // --- web.search / net.fetch / files.generate / fs.*_bytes (PC.8–9) ---
     {
         let s = sub.clone();

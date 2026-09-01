@@ -2,10 +2,12 @@
 
 use aos_proto::{
     align_canvas_op_body, canvas_layer_effective_locked, canvas_op_bbox, ensure_canvas_layers,
-    normalize_canvas_color, normalize_canvas_op_coords, resolve_canvas_op_style,
+    normalize_canvas_color, normalize_canvas_op_coords, resolve_canvas_op_style_ex,
+    set_canvas_op_body_dash, set_canvas_op_body_gradient, set_canvas_op_body_opacity,
     set_canvas_op_rotation, translate_canvas_op_body, usable_canvas_bbox, CanvasAspect, CanvasDoc,
-    CanvasEdit, CanvasLayer, CanvasOp, CanvasOpBody, CanvasPenStyle, ChatAttachment,
-    ChatRoomConductorPolicy, ChatRoomMember, ChatSessionMessage, ChatSessionMeta, ChatSessionMode,
+    CanvasEdit, CanvasLayer, CanvasLinearGradient, CanvasOp, CanvasOpBody, CanvasPenStyle,
+    ChatAttachment, ChatRoomConductorPolicy, ChatRoomMember, ChatSessionMessage, ChatSessionMeta,
+    ChatSessionMode,
 };
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -193,7 +195,7 @@ impl ChatSessionStore {
                     return Err(SessionError::BadRequest("calque verrouillé".into()));
                 }
                 normalize_canvas_op_coords(&mut body);
-                resolve_canvas_op_style(&mut body, &doc.pen);
+                resolve_canvas_op_style_ex(&mut body, &doc.pen);
                 let op = CanvasOp {
                     seq: doc.next_seq,
                     author_id: author_id.into(),
@@ -214,6 +216,31 @@ impl ChatSessionStore {
         meta.updated_ms = Self::now_ms();
         self.save_meta(&meta)?;
         Ok((self.to_public(meta), doc, applied))
+    }
+
+    /// Replace the session canvas document from an exported sidecar (round-trip import).
+    pub fn canvas_import(
+        &self,
+        id: &str,
+        mut doc: CanvasDoc,
+        aspect: Option<CanvasAspect>,
+    ) -> Result<(ChatSessionMeta, CanvasDoc), SessionError> {
+        let mut meta = self.load_meta(id)?;
+        doc.session_id = id.into();
+        ensure_canvas_layers(&mut doc);
+        if doc.next_seq == 0 {
+            doc.next_seq = doc.ops.iter().map(|o| o.seq).max().unwrap_or(0).saturating_add(1);
+        }
+        for op in &mut doc.ops {
+            normalize_canvas_op_coords(&mut op.body);
+            resolve_canvas_op_style_ex(&mut op.body, &doc.pen);
+        }
+        self.save_canvas(&doc)?;
+        if let Some(a) = aspect {
+            meta.canvas_aspect = a;
+            self.save_meta(&meta)?;
+        }
+        Ok((self.to_public(meta), doc))
     }
 
     /// In-place object / layer mutation. Does not append a paint op.
@@ -272,6 +299,9 @@ impl ChatSessionStore {
                 width,
                 fill,
                 rotation,
+                opacity,
+                dash,
+                gradient,
             } => {
                 let layer_id = doc
                     .ops
@@ -287,7 +317,16 @@ impl ChatSessionStore {
                     .iter_mut()
                     .find(|o| o.seq == seq)
                     .expect("seq");
-                restyle_op_body(&mut op.body, color.as_deref(), width, fill, rotation)?;
+                restyle_op_body(
+                    &mut op.body,
+                    color.as_deref(),
+                    width,
+                    fill,
+                    rotation,
+                    opacity,
+                    dash,
+                    gradient,
+                )?;
             }
             CanvasEdit::Rotate { seq, rotation } => {
                 let layer_id = doc
@@ -788,6 +827,9 @@ fn restyle_op_body(
     width: Option<f32>,
     fill: Option<bool>,
     rotation: Option<f32>,
+    opacity: Option<f32>,
+    dash: Option<Vec<f32>>,
+    gradient: Option<Option<CanvasLinearGradient>>,
 ) -> Result<(), SessionError> {
     if let Some(c) = color {
         let normalized = normalize_canvas_color(c)
@@ -826,6 +868,15 @@ fn restyle_op_body(
     }
     if let Some(rotation) = rotation {
         set_canvas_op_rotation(body, rotation).map_err(SessionError::BadRequest)?;
+    }
+    if let Some(o) = opacity {
+        set_canvas_op_body_opacity(body, o);
+    }
+    if let Some(d) = dash {
+        set_canvas_op_body_dash(body, d);
+    }
+    if let Some(g) = gradient {
+        set_canvas_op_body_gradient(body, g);
     }
     Ok(())
 }
@@ -1016,6 +1067,8 @@ archived: false
                     ],
                     color: "#3ee0c4".into(),
                     width: 0.02,
+                    opacity: 1.0,
+                    dash: vec![],
                 },
             )
             .unwrap();
@@ -1048,6 +1101,8 @@ archived: false
             ],
             color: "#3ee0c4".into(),
             width: 0.02,
+            opacity: 1.0,
+            dash: vec![],
         };
         s.canvas_apply(&m.id, "human", stroke.clone()).unwrap();
         s.canvas_apply(&m.id, "agent-a", stroke).unwrap();
@@ -1070,6 +1125,8 @@ archived: false
             ],
             color: "#3ee0c4".into(),
             width: 0.02,
+            opacity: 1.0,
+            dash: vec![],
         };
         s.canvas_apply(&m.id, "human", stroke.clone()).unwrap();
         s.canvas_apply(&m.id, "agent-a", stroke).unwrap();
@@ -1098,6 +1155,9 @@ archived: false
                     fill: true,
                     width: 0.01,
                     rotation: 0.0,
+                    opacity: 1.0,
+                    dash: vec![],
+                    gradient: None,
                 },
             )
             .unwrap();
@@ -1169,6 +1229,9 @@ archived: false
                     fill: true,
                     width: 0.01,
                     rotation: 0.0,
+                    opacity: 1.0,
+                    dash: vec![],
+                    gradient: None,
                 },
             )
             .unwrap();
@@ -1231,6 +1294,8 @@ archived: false
                     ],
                     color: String::new(),
                     width: 0.0,
+                    opacity: 1.0,
+                    dash: vec![],
                 },
             )
             .unwrap();
@@ -1264,6 +1329,9 @@ archived: false
                     fill: true,
                     width: 0.01,
                     rotation: 0.0,
+                    opacity: 1.0,
+                    dash: vec![],
+                    gradient: None,
                 },
             )
             .unwrap();
@@ -1276,6 +1344,47 @@ archived: false
                 assert!(*h > 0.2 && *h < 0.3);
             }
             other => panic!("expected rect, got {other:?}"),
+        }
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn canvas_import_replaces_document() {
+        let dir = std::env::temp_dir().join(format!("aos-sess-import-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let s = ChatSessionStore::open(&dir).unwrap();
+        let m = s.create(Some("Import".into()), None).unwrap();
+        let mut imported = CanvasDoc {
+            session_id: m.id.clone(),
+            next_seq: 2,
+            pen: CanvasPenStyle::default(),
+            ops: vec![CanvasOp {
+                seq: 1,
+                author_id: "human".into(),
+                ts_ms: 1,
+                layer_id: String::new(),
+                body: CanvasOpBody::Line {
+                    p0: aos_proto::CanvasPoint { x: 0.1, y: 0.1 },
+                    p1: aos_proto::CanvasPoint { x: 0.9, y: 0.9 },
+                    color: "#3ee0c4".into(),
+                    width: 0.02,
+                    opacity: 0.5,
+                    dash: vec![0.02, 0.02],
+                },
+            }],
+            ..Default::default()
+        };
+        ensure_canvas_layers(&mut imported);
+        let (meta, doc) = s
+            .canvas_import(&m.id, imported, Some(CanvasAspect::Portrait9x16))
+            .unwrap();
+        assert_eq!(meta.canvas_aspect, CanvasAspect::Portrait9x16);
+        assert_eq!(doc.ops.len(), 1);
+        if let CanvasOpBody::Line { opacity, dash, .. } = &doc.ops[0].body {
+            assert!((*opacity - 0.5).abs() < 1e-5);
+            assert_eq!(dash, &vec![0.02, 0.02]);
+        } else {
+            panic!("line");
         }
         let _ = fs::remove_dir_all(&dir);
     }

@@ -3437,6 +3437,42 @@ async fn handle_cmd(
                 }
             }
         }
+        Cmd::CanvasImport {
+            session_id,
+            doc,
+            aspect,
+        } => {
+            match bus
+                .call::<aos_proto::CanvasImportRequest, aos_proto::CanvasImportResponse>(
+                    "canvas.import",
+                    &aos_proto::CanvasImportRequest {
+                        session_id: session_id.clone(),
+                        doc,
+                        canvas_aspect: aspect,
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(resp) => {
+                    let _ = evt_tx.send(Evt::CanvasSnapshot {
+                        session_id: session_id.clone(),
+                        canvas_open: resp.canvas_open,
+                        next_seq: resp.next_seq,
+                        ops: resp.ops,
+                        pen: resp.pen,
+                        delta: false,
+                        canvas_seeing: None,
+                        layers: resp.layers,
+                        active_layer_id: resp.active_layer_id,
+                    });
+                    refresh_sessions(&bus, &evt_tx).await;
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
         Cmd::CanvasExport { session_id, aspect, format } => {
             let (width, height) = aspect.export_dimensions(1024);
             let format = if format.trim().is_empty() {

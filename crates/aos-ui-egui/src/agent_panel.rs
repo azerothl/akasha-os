@@ -1661,7 +1661,8 @@ Je vais répondre de manière naturelle"#;
                 color: "#3ee0c4".into(),
                 width: 0.01,
                 fill: false,
-                rotation: 0.0,
+                rotation: 0.0,,
+                    opacity: 1.0, dash: vec![], gradient: None
             },
         }];
         assert!(canvas_draw_step_cap_continue(Some(&info), Some(&ops), None));
@@ -1755,7 +1756,8 @@ Je vais répondre de manière naturelle"#;
                 color: String::new(),
                 fill: false,
                 width: 0.0,
-                rotation: 0.0,
+                rotation: 0.0,,
+                    opacity: 1.0, dash: vec![], gradient: None
             },
         }];
         assert!(!canvas_draw_fail_chrome(Some(&info), Some(&ops), None));

@@ -75,6 +75,12 @@ pub enum CanvasEdit {
         fill: Option<bool>,
         #[serde(default)]
         rotation: Option<f32>,
+        #[serde(default)]
+        opacity: Option<f32>,
+        #[serde(default)]
+        dash: Option<Vec<f32>>,
+        #[serde(default)]
+        gradient: Option<Option<crate::CanvasLinearGradient>>,
     },
     Rotate {
         seq: u64,
@@ -260,10 +266,12 @@ pub fn canvas_rect_corners(x: f32, y: f32, w: f32, h: f32, rotation: f32) -> [(f
 pub fn set_canvas_op_rotation(body: &mut CanvasOpBody, rotation: f32) -> Result<(), String> {
     match body {
         CanvasOpBody::Rect {
-            rotation: slot, ..
+            rotation: slot,
+            ..
         }
         | CanvasOpBody::Ellipse {
-            rotation: slot, ..
+            rotation: slot,
+            ..
         } => {
             *slot = rotation;
             Ok(())
@@ -372,6 +380,9 @@ mod tests {
             fill: true,
             width: 0.01,
             rotation: 0.0,
+            opacity: 1.0,
+            dash: vec![],
+            gradient: None,
         };
         translate_canvas_op_body(&mut body, 0.2, 0.0);
         match body {
@@ -414,6 +425,9 @@ mod tests {
             fill: true,
             width: 0.01,
             rotation: 0.0,
+            opacity: 1.0,
+            dash: vec![],
+            gradient: None,
         };
         let src = crate::canvas_op_bbox(&body).expect("bbox");
         align_canvas_op_body(&mut body, src, usable_canvas_bbox(), &["left".into()]);
@@ -434,6 +448,9 @@ mod tests {
             fill: true,
             width: 0.01,
             rotation: 0.0,
+            opacity: 1.0,
+            dash: vec![],
+            gradient: None,
         })
         .unwrap();
         let rotated = crate::canvas_op_bbox(&CanvasOpBody::Rect {
@@ -445,6 +462,9 @@ mod tests {
             fill: true,
             width: 0.01,
             rotation: 45.0,
+            opacity: 1.0,
+            dash: vec![],
+            gradient: None,
         })
         .unwrap();
         assert!(rotated.x1 - rotated.x0 > axis.x1 - axis.x0);

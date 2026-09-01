@@ -1,8 +1,8 @@
 //! Rasterize a session canvas document to PNG (export snapshot, not diffusion).
 
 use aos_proto::{
-    canvas_layer_effective_opacity, canvas_layer_effective_visible, CanvasAspect, CanvasDoc,
-    CanvasOpBody, CanvasPoint, DEFAULT_CANVAS_LAYER_ID,
+    canvas_layer_effective_opacity, canvas_layer_effective_visible, canvas_op_body_opacity,
+    CanvasAspect, CanvasDoc, CanvasOpBody, CanvasPoint, DEFAULT_CANVAS_LAYER_ID,
 };
 use image::{ImageBuffer, Rgb, RgbImage};
 use std::cell::Cell;
@@ -22,7 +22,8 @@ pub fn export_png(doc: &CanvasDoc, width: u32, height: u32) -> Result<Vec<u8>, S
         if !canvas_layer_effective_visible(doc, &op.layer_id) {
             continue;
         }
-        let opacity = canvas_layer_effective_opacity(doc, &op.layer_id);
+        let opacity =
+            canvas_layer_effective_opacity(doc, &op.layer_id) * canvas_op_body_opacity(&op.body);
         if opacity <= 0.001 {
             continue;
         }
@@ -145,7 +146,7 @@ fn append_svg_op(out: &mut String, body: &CanvasOpBody, w: u32, h: u32) {
             fill,
             width,
             rotation,
-        } => {
+        .. } => {
             let x0 = svg_px(*x, w);
             let y0 = svg_px(*y, h);
             let ww = svg_px(*x + *bw, w) - x0;
@@ -179,7 +180,7 @@ fn append_svg_op(out: &mut String, body: &CanvasOpBody, w: u32, h: u32) {
             fill,
             width,
             rotation,
-        } => {
+        .. } => {
             let cx = svg_px(*x + *bw * 0.5, w);
             let cy = svg_px(*y + *bh * 0.5, h);
             let rx = (*bw * w as f32 * 0.5).abs().max(1.0);
@@ -202,7 +203,7 @@ fn append_svg_op(out: &mut String, body: &CanvasOpBody, w: u32, h: u32) {
                 ));
             }
         }
-        CanvasOpBody::Line { p0, p1, color, width } => {
+        CanvasOpBody::Line { p0, p1, color, width, .. } => {
             out.push_str(&format!(
                 "<line x1=\"{:.2}\" y1=\"{:.2}\" x2=\"{:.2}\" y2=\"{:.2}\" stroke=\"{}\" stroke-width=\"{:.2}\" stroke-linecap=\"round\"/>",
                 svg_px(p0.x, w),
@@ -213,8 +214,8 @@ fn append_svg_op(out: &mut String, body: &CanvasOpBody, w: u32, h: u32) {
                 (*width * w.min(h) as f32 * 0.5).max(1.0)
             ));
         }
-        CanvasOpBody::Stroke { points, color, width }
-        | CanvasOpBody::Spline { points, color, width } => {
+        CanvasOpBody::Stroke { points, color, width, .. }
+        | CanvasOpBody::Spline { points, color, width, .. } => {
             if points.len() < 2 {
                 return;
             }
@@ -246,7 +247,7 @@ fn append_svg_op(out: &mut String, body: &CanvasOpBody, w: u32, h: u32) {
             width,
             fill,
             closed,
-        } => {
+        .. } => {
             if points.len() < 2 {
                 return;
             }
@@ -294,7 +295,7 @@ fn paint_op(img: &mut RgbImage, body: &CanvasOpBody, opacity: f32) {
             points,
             color,
             width,
-        } => {
+        .. } => {
             let c = parse_color(color).unwrap_or(DEFAULT_FG);
             let rad = radius(img, *width);
             stroke_polyline(img, points, c, rad);
@@ -313,7 +314,7 @@ fn paint_op(img: &mut RgbImage, body: &CanvasOpBody, opacity: f32) {
             fill,
             width,
             rotation,
-        } => {
+        .. } => {
             let c = parse_color(color).unwrap_or(DEFAULT_FG);
             if rotation.abs() > 0.001 {
                 let corners = aos_proto::canvas_rect_corners(*x, *y, *w, *h, *rotation);
@@ -347,7 +348,7 @@ fn paint_op(img: &mut RgbImage, body: &CanvasOpBody, opacity: f32) {
             fill,
             width,
             rotation,
-        } => {
+        .. } => {
             let c = parse_color(color).unwrap_or(DEFAULT_FG);
             let cx = x + w * 0.5;
             let cy = y + h * 0.5;
@@ -379,14 +380,14 @@ fn paint_op(img: &mut RgbImage, body: &CanvasOpBody, opacity: f32) {
                 }
             }
         }
-        CanvasOpBody::Line { p0, p1, color, width } => {
+        CanvasOpBody::Line { p0, p1, color, width, .. } => {
             let c = parse_color(color).unwrap_or(DEFAULT_FG);
             let rad = radius(img, *width);
             let (x0, y0) = to_px(img, p0.x, p0.y);
             let (x1, y1) = to_px(img, p1.x, p1.y);
             line(img, x0, y0, x1, y1, rad, c);
         }
-        CanvasOpBody::Spline { points, color, width } => {
+        CanvasOpBody::Spline { points, color, width, .. } => {
             if points.len() < 2 {
                 return;
             }
@@ -401,7 +402,7 @@ fn paint_op(img: &mut RgbImage, body: &CanvasOpBody, opacity: f32) {
             width,
             fill,
             closed,
-        } => {
+        .. } => {
             if points.len() < 2 {
                 return;
             }
@@ -423,7 +424,7 @@ fn paint_op(img: &mut RgbImage, body: &CanvasOpBody, opacity: f32) {
                 stroke_polyline(img, &sampled, c, rad);
             }
         }
-        CanvasOpBody::Fill { x, y, color } => {
+        CanvasOpBody::Fill { x, y, color, .. } => {
             let c = parse_color(color).unwrap_or(DEFAULT_FG);
             let (px, py) = to_px(img, *x, *y);
             flood_fill(img, px, py, c);
@@ -698,6 +699,8 @@ mod tests {
                     ],
                     color: "#3ee0c4".into(),
                     width: 0.03,
+                    opacity: 1.0,
+                    dash: vec![],
                 },
             }],
             ..Default::default()
@@ -710,6 +713,11 @@ mod tests {
         assert!(text.contains("\"session_id\": \"s\""));
         assert!(text.contains("\"canvas_aspect\""));
         assert!(text.contains("\"ops\""));
+        let (parsed, aspect) =
+            aos_proto::parse_canvas_sidecar_json(&text).expect("sidecar round-trip");
+        assert_eq!(aspect, CanvasAspect::Square);
+        assert_eq!(parsed.session_id, "s");
+        assert_eq!(parsed.ops.len(), 1);
     }
 
     #[test]
@@ -741,6 +749,9 @@ mod tests {
                     fill: true,
                     width: 0.01,
                     rotation: 0.0,
+                    opacity: 1.0,
+                    dash: vec![],
+                    gradient: None,
                 },
             }],
             ..Default::default()
@@ -768,6 +779,9 @@ mod tests {
             width: 0.0,
             fill: true,
             closed: true,
+            opacity: 1.0,
+            dash: vec![],
+            gradient: None,
         };
         let body = CanvasOpBody::Path {
             points: vec![
@@ -780,6 +794,9 @@ mod tests {
             width: 0.0,
             fill: true,
             closed: true,
+            opacity: 1.0,
+            dash: vec![],
+            gradient: None,
         };
         let roof = CanvasOpBody::Path {
             points: vec![
@@ -791,6 +808,9 @@ mod tests {
             width: 0.0,
             fill: true,
             closed: true,
+            opacity: 1.0,
+            dash: vec![],
+            gradient: None,
         };
         let sail_a = CanvasOpBody::Path {
             points: vec![
@@ -803,6 +823,9 @@ mod tests {
             width: 0.0,
             fill: true,
             closed: true,
+            opacity: 1.0,
+            dash: vec![],
+            gradient: None,
         };
         let doc = CanvasDoc {
             session_id: "windmill".into(),
