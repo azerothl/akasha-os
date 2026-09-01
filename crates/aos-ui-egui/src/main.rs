@@ -9,6 +9,8 @@ mod agent_panel;
 mod agent_ui_state;
 mod memory_controller;
 mod memory_ui_state;
+mod models_controller;
+mod models_ui_state;
 mod settings_controller;
 mod settings_ui_state;
 mod workspace_controller;
@@ -107,8 +109,8 @@ use aos_agent::schedule_parse::ParsedSchedule;
 use aos_ipc::BusClient;
 use aos_proto::{
     AgentInfo, AgentState, AuditEvent, CapInfo, ChatAttachment, ChatSessionGetResponse,
-    ChatSessionIdRequest, DocumentRef, ModelInfo,
-    PendingConfirmation, ProviderRecord, SystemMetrics,
+    ChatSessionIdRequest, DocumentRef,
+    PendingConfirmation, SystemMetrics,
 };
 use prefs::{load_preferences, save_preferences, Preferences};
 use eframe::egui;
@@ -535,27 +537,11 @@ struct UiApp {
     chat_md_cache: CommonMarkCache,
     update_download_child: Option<std::process::Child>,
     update_status: String,
-    model_infos: Vec<ModelInfo>,
-    providers: Vec<ProviderRecord>,
-    provider_id: String,
-    provider_preset: String,
-    provider_endpoint: String,
-    provider_secret_name: String,
-    provider_secret_value: String,
-    provider_enabled: bool,
-    provider_test_msg: String,
-    model_updates_msg: String,
-    download_status: String,
-    model_download: Option<ModelDownloadUiState>,
-    model_download_restart: Option<String>,
+    models_ui: models_ui_state::ModelsUiState,
     decl_panels: HashMap<String, decl_ui::DeclUiPanelState>,
     decl_md_cache: CommonMarkCache,
     image_studio: image_studio::ImageStudioState,
     image_generating: Option<image_studio::ImageGenUiState>,
-    models_catalog_tab: models_page::ModelCatalogTab,
-    hf_download_url: String,
-    hf_download_name: String,
-    hf_download_status: String,
     show_go_to_palette: bool,
     guide: guide::GuideState,
     /// Deferred normal chat after user picks Answer on a research choice card.
@@ -668,14 +654,6 @@ fn ui_roster_tool_checkboxes(ui: &mut egui::Ui, t: &i18n::UiStrings, selected: &
     }
 }
 
-#[derive(Debug, Clone)]
-struct ModelDownloadUiState {
-    model_id: String,
-    percent: u8,
-    done_bytes: u64,
-    total_bytes: u64,
-}
-
 impl UiApp {
     fn new(cmd_tx: Sender<Cmd>, evt_rx: Receiver<Evt>, version: String) -> Self {
         let onboarding = load_onboarding();
@@ -768,27 +746,11 @@ impl UiApp {
             chat_md_cache: CommonMarkCache::default(),
             update_download_child: None,
             update_status: String::new(),
-            model_infos: Vec::new(),
-            providers: Vec::new(),
-            provider_id: String::new(),
-            provider_preset: "openai".into(),
-            provider_endpoint: "https://api.openai.com/v1".into(),
-            provider_secret_name: "openai_api_key".into(),
-            provider_secret_value: String::new(),
-            provider_enabled: true,
-            provider_test_msg: String::new(),
-            model_updates_msg,
-            download_status: String::new(),
-            model_download: None,
-            model_download_restart: None,
+            models_ui: models_ui_state::ModelsUiState::with_updates_msg(model_updates_msg),
             decl_panels: HashMap::new(),
             decl_md_cache: CommonMarkCache::default(),
             image_studio: image_studio::ImageStudioState::default(),
             image_generating: None,
-            models_catalog_tab: models_page::ModelCatalogTab::Llm,
-            hf_download_url: String::new(),
-            hf_download_name: String::new(),
-            hf_download_status: String::new(),
             show_go_to_palette: false,
             guide: guide::GuideState::default(),
             research_pending_chat: None,
@@ -2272,10 +2234,7 @@ impl eframe::App for UiApp {
                 }
                 Evt::Status(m) => {
                     if let Some(id) = m.strip_prefix("model removed:") {
-                        let id = id.trim().to_string();
-                        self.model_download_restart = Some(id.clone());
-                        let t = i18n::strings(&self.prefs.language);
-                        self.download_status = t.models_removed.to_string();
+                        self.on_model_removed(id.trim().to_string());
                     }
                     if m == format!("{} ok", aos_agent::intents::KILL)
                         && self.agent_ui.consume_document_prep_kill_ok()
@@ -2286,16 +2245,7 @@ impl eframe::App for UiApp {
                     }
                 }
                 Evt::ModelDownloadStarted { model_id } => {
-                    self.model_download_restart = None;
-                    self.model_download = Some(ModelDownloadUiState {
-                        model_id: model_id.clone(),
-                        percent: 0,
-                        done_bytes: 0,
-                        total_bytes: 0,
-                    });
-                    let t = i18n::strings(&self.prefs.language);
-                    self.download_status =
-                        t.models_downloading.replace("{}", &model_id);
+                    self.on_model_download_started(model_id);
                 }
                 Evt::ModelDownloadProgress {
                     model_id,
@@ -2303,35 +2253,13 @@ impl eframe::App for UiApp {
                     total_bytes,
                     percent,
                 } => {
-                    self.model_download = Some(ModelDownloadUiState {
-                        model_id: model_id.clone(),
-                        percent,
-                        done_bytes,
-                        total_bytes,
-                    });
-                    let t = i18n::strings(&self.prefs.language);
-                    self.download_status = format!(
-                        "{} {percent}%",
-                        t.models_downloading.replace("{}", &model_id)
-                    );
+                    self.on_model_download_progress(model_id, done_bytes, total_bytes, percent);
                 }
                 Evt::ModelDownloadFinished { model_id } => {
-                    self.model_download = None;
-                    self.model_download_restart = Some(model_id.clone());
-                    let t = i18n::strings(&self.prefs.language);
-                    self.download_status =
-                        t.models_download_done.replace("{}", &model_id);
-                    self.model_updates_msg.clear();
-                    self.image_studio.on_download_finished(&model_id);
+                    self.on_model_download_finished(model_id);
                 }
                 Evt::ModelDownloadFailed { model_id, error } => {
-                    self.model_download = None;
-                    self.model_download_restart = None;
-                    let t = i18n::strings(&self.prefs.language);
-                    self.download_status = format!(
-                        "{}: {error}",
-                        t.models_download_failed.replace("{}", &model_id)
-                    );
+                    self.on_model_download_failed(model_id, error);
                 }
                 Evt::MemExtracted { n } => self.on_mem_extracted(n),
                 Evt::MemSweepStatus {
@@ -3040,23 +2968,13 @@ impl eframe::App for UiApp {
                 Evt::Skills(list) => self.on_agent_skills(list),
                 Evt::McpServers(list) => self.on_agent_mcp_servers(list),
                 Evt::PromptOptimized(p) => self.on_agent_prompt_optimized(p),
-                Evt::Models(list) => self.model_infos = list,
-                Evt::Providers(list) => self.providers = list,
+                Evt::Models(list) => self.on_models(list),
+                Evt::Providers(list) => self.on_providers(list),
                 Evt::ProviderTested {
                     ok,
                     message,
                     models,
-                } => {
-                    self.provider_test_msg = if ok {
-                        format!("ok — {message}")
-                    } else {
-                        format!("fail — {message}")
-                    };
-                    if !models.is_empty() {
-                        self.provider_test_msg
-                            .push_str(&format!(" ({})", models.join(", ")));
-                    }
-                }
+                } => self.on_provider_tested(ok, message, models),
                 Evt::AgentSpecLoaded { spec } => self.on_agent_spec_loaded(spec),
                 Evt::AgentRosterSaved => {
                     let t = i18n::strings(&self.prefs.language);
@@ -3308,18 +3226,18 @@ impl eframe::App for UiApp {
                     }
                 });
             });
-            if !self.model_updates_msg.is_empty() {
+            if !self.models_ui.model_updates_msg.is_empty() {
                 ui.horizontal(|ui| {
                     ui.colored_label(
                         egui::Color32::from_rgb(180, 220, 120),
-                        format!("Models: {}", self.model_updates_msg),
+                        format!("Models: {}", self.models_ui.model_updates_msg),
                     );
                     if ui.button("Open Models").clicked() {
                         self.tab = Tab::Models;
                     }
                 });
             }
-            if self.model_download_restart.is_some() {
+            if self.models_ui.model_download_restart.is_some() {
                 self.ui_model_download_restart(ui, ctx);
             }
             if !self.status.is_empty() {
@@ -3475,7 +3393,7 @@ impl eframe::App for UiApp {
                 let g = guide::strings(&self.prefs.language);
                 let mut open_create_guide = false;
                 let gen = self.image_generating.as_ref();
-                let dl_busy = self.model_download.is_some();
+                let dl_busy = self.models_ui.download_busy();
                 let last_session = &mut self.chat_state.composer.last_session_image;
                 self.image_studio.ui(
                     ui,

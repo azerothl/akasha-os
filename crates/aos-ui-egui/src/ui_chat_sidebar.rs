@@ -54,7 +54,7 @@ impl UiApp {
                                 }
                                 let local_only = self.prefs.routing == "local_only";
                                 ui.weak("Local");
-                                for m in &self.model_infos {
+                                for m in &self.models_ui.model_infos {
                                     if m.id.starts_with("provider:") {
                                         continue;
                                     }
@@ -75,12 +75,13 @@ impl UiApp {
                                     }
                                 }
                                 ui.weak("Providers");
-                                for m in &self.model_infos {
+                                for m in &self.models_ui.model_infos {
                                     if !m.id.starts_with("provider:") {
                                         continue;
                                     }
                                     let pid = m.id.split(':').nth(1).unwrap_or("");
                                     let loopback = self
+                                        .models_ui
                                         .providers
                                         .iter()
                                         .find(|p| p.id == pid)

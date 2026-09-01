@@ -238,6 +238,7 @@ impl UiApp {
                                 }
                                 ChatAttachment::TtsDraft { .. } => {
                                     let piper: Vec<String> = self
+                                        .models_ui
                                         .model_infos
                                         .iter()
                                         .filter(|m| m.id.contains("piper"))

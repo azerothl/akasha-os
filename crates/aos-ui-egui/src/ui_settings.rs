@@ -167,7 +167,7 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                             self.agent_ui.model_id.clear();
                             save_preferences(&self.prefs);
                         }
-                        for m in self.model_infos.clone() {
+                        for m in self.models_ui.model_infos.clone() {
                             let selected =
                                 self.prefs.default_agent_model.as_deref() == Some(m.id.as_str());
                             if ui.selectable_label(selected, &m.id).clicked() {
@@ -195,7 +195,7 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                             self.prefs.default_image_model = None;
                             save_preferences(&self.prefs);
                         }
-                        for m in self.model_infos.clone() {
+                        for m in self.models_ui.model_infos.clone() {
                             if !(m.id.contains("sd-")
                                 || m.id.contains("flux")
                                 || m.id.contains("ideogram")
@@ -229,7 +229,7 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                             self.prefs.default_audio_model = None;
                             save_preferences(&self.prefs);
                         }
-                        for m in self.model_infos.clone() {
+                        for m in self.models_ui.model_infos.clone() {
                             if !m.id.contains("piper") {
                                 continue;
                             }

@@ -43,7 +43,7 @@ impl UiApp {
                 })
                 .show_ui(ui, |ui| {
                     ui.selectable_value(&mut self.agent_ui.model_id, String::new(), "default");
-                    for m in &self.model_infos {
+                    for m in &self.models_ui.model_infos {
                         ui.selectable_value(
                             &mut self.agent_ui.model_id,
                             m.id.clone(),

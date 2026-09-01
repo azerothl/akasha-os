@@ -7,23 +7,22 @@ use crate::{i18n, icons, models_page, UiApp};
 use eframe::egui;
 
 impl UiApp {
-pub(crate) fn ui_model_download_restart(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        if self.model_download_restart.is_none() {
+    pub(crate) fn ui_model_download_restart(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        if self.models_ui.model_download_restart.is_none() {
             return;
         }
         let t = i18n::strings(&self.prefs.language);
         ui.horizontal(|ui| {
             ui.colored_label(
                 egui::Color32::from_rgb(120, 200, 140),
-                self.download_status.as_str(),
+                self.models_ui.download_status.as_str(),
             );
             if ui.button(t.models_restart_preview).clicked() {
                 request_preview_restart(ctx);
-                self.model_download_restart = None;
+                self.models_ui.dismiss_download_restart(false);
             }
             if icons::close_button(ui).clicked() {
-                self.model_download_restart = None;
-                self.download_status.clear();
+                self.models_ui.dismiss_download_restart(true);
             }
         });
     }
@@ -37,16 +36,18 @@ pub(crate) fn ui_model_download_restart(&mut self, ui: &mut egui::Ui, ctx: &egui
                 let _ = self.cmd_tx.send(Cmd::ModelsRefresh);
             }
         });
-        if !self.model_updates_msg.is_empty() {
+        if !self.models_ui.model_updates_msg.is_empty() {
             ui.colored_label(
                 egui::Color32::from_rgb(180, 220, 120),
-                &self.model_updates_msg,
+                &self.models_ui.model_updates_msg,
             );
         }
-        if !self.download_status.is_empty() && self.model_download_restart.is_none() {
-            ui.label(&self.download_status);
+        if !self.models_ui.download_status.is_empty()
+            && self.models_ui.model_download_restart.is_none()
+        {
+            ui.label(&self.models_ui.download_status);
         }
-        if let Some(dl) = &self.model_download {
+        if let Some(dl) = &self.models_ui.model_download {
             let frac = (dl.percent as f32 / 100.0).clamp(0.0, 1.0);
             let txt = if dl.total_bytes > 0 {
                 format!(
@@ -62,33 +63,34 @@ pub(crate) fn ui_model_download_restart(&mut self, ui: &mut egui::Ui, ctx: &egui
         }
         self.ui_model_download_restart(ui, ctx);
 
+        let hf_busy = self.models_ui.download_busy();
         models_page::ui_hf_import(
             ui,
-            &mut self.hf_download_url,
-            &mut self.hf_download_name,
-            &mut self.hf_download_status,
-            self.model_download.is_some(),
+            &mut self.models_ui.hf_download_url,
+            &mut self.models_ui.hf_download_name,
+            &mut self.models_ui.hf_download_status,
+            hf_busy,
             &self.cmd_tx,
             &t,
         );
 
         ui.separator();
-        models_page::ui_catalog_tab_bar(ui, &mut self.models_catalog_tab, &t);
+        models_page::ui_catalog_tab_bar(ui, &mut self.models_ui.catalog_tab, &t);
         if matches!(
-            self.models_catalog_tab,
+            self.models_ui.catalog_tab,
             models_page::ModelCatalogTab::Image | models_page::ModelCatalogTab::Audio
         ) {
             ui.weak(t.models_media_packs);
         }
 
         let catalog = models_page::load_catalog_models();
-        let installed_rows = models_page::load_installed_rows(&self.model_infos);
-        let busy = self.model_download.is_some();
+        let installed_rows = models_page::load_installed_rows(&self.models_ui.model_infos);
+        let busy = self.models_ui.download_busy();
 
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
             .show(ui, |ui| {
-                match self.models_catalog_tab {
+                match self.models_ui.catalog_tab {
                     models_page::ModelCatalogTab::Installed => {
                         if installed_rows.is_empty() {
                             ui.weak(t.models_catalog_empty);
