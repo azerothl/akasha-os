@@ -36,16 +36,16 @@ impl UiApp {
         ui.collapsing(t.agents_advanced, |ui| {
             ui.label(t.agents_model);
             egui::ComboBox::from_id_salt("agent_model")
-                .selected_text(if self.agent_model_id.is_empty() {
+                .selected_text(if self.agent_ui.model_id.is_empty() {
                     "default".to_string()
                 } else {
-                    self.agent_model_id.clone()
+                    self.agent_ui.model_id.clone()
                 })
                 .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut self.agent_model_id, String::new(), "default");
+                    ui.selectable_value(&mut self.agent_ui.model_id, String::new(), "default");
                     for m in &self.model_infos {
                         ui.selectable_value(
-                            &mut self.agent_model_id,
+                            &mut self.agent_ui.model_id,
                             m.id.clone(),
                             format!("{} [{:?}]", m.id, m.state),
                         );
@@ -156,7 +156,7 @@ impl UiApp {
         ));
         if room_active {
             ui.checkbox(
-                &mut self.agent_join_room_on_create,
+                &mut self.agent_ui.join_room_on_create,
                 t.agents_join_room_on_create,
             );
         }
@@ -342,7 +342,7 @@ impl UiApp {
         agent_id: &str,
         t: i18n::UiStrings,
     ) {
-        let Some(draft) = self.roster_edit_drafts.get_mut(agent_id) else {
+        let Some(draft) = self.agent_ui.roster_edit_drafts.get_mut(agent_id) else {
             ui.weak("…");
             return;
         };

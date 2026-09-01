@@ -488,7 +488,6 @@ struct UiApp {
     chat_state: chat_state::ChatState,
     network_online: bool,
     prefs: Preferences,
-    agent_timeout_secs: u64,
     mem_query: String,
     mem_note: String,
     mem_hits: Vec<MemHit>,
@@ -499,13 +498,8 @@ struct UiApp {
     mem_edit_text: String,
     settings_ui: settings_ui_state::SettingsUiState,
     metrics: Option<SystemMetrics>,
+    /// Live agent roster (shared with chat / ask / room membership).
     agents: Vec<AgentInfo>,
-    /// États précédents pour détecter Done/Failed/Killed (notifications).
-    agent_prev_states: HashMap<String, AgentState>,
-    /// Notices terminales hors session active.
-    agent_notices: Vec<AgentNotice>,
-    /// agent_id déjà notifiés (dédup).
-    agent_notified: std::collections::HashSet<String>,
     confirms: Vec<PendingConfirmation>,
     workspace_ui: workspace_ui_state::WorkspaceUiState,
     schedules: Vec<ScheduleEntry>,
@@ -555,13 +549,10 @@ struct UiApp {
     provider_secret_value: String,
     provider_enabled: bool,
     provider_test_msg: String,
-    agent_model_id: String,
     model_updates_msg: String,
     download_status: String,
     model_download: Option<ModelDownloadUiState>,
     model_download_restart: Option<String>,
-    /// Agent visé pour la prochaine réponse `user.ask` (plusieurs bloqués).
-    ask_reply_target: Option<String>,
     decl_panels: HashMap<String, decl_ui::DeclUiPanelState>,
     decl_md_cache: CommonMarkCache,
     image_studio: image_studio::ImageStudioState,
@@ -571,15 +562,9 @@ struct UiApp {
     hf_download_name: String,
     hf_download_status: String,
     show_go_to_palette: bool,
-    agent_join_room_on_create: bool,
-    roster_edit_drafts: HashMap<String, RosterEditDraft>,
     guide: guide::GuideState,
     /// Deferred normal chat after user picks Answer on a research choice card.
     research_pending_chat: Option<ResearchPendingChat>,
-    /// Document-prep agent_id → original question (result card title).
-    document_prep_agents: HashMap<String, String>,
-    /// Suppress agent.kill ok status banners after document prep stop.
-    document_prep_kill_pending: u32,
     /// Recoverable prepared documents (var/documents index).
     research_documents: Vec<aos_agent::document_index::ResearchDocumentEntry>,
     document_overlay: research_document::DocumentOverlayState,
@@ -601,17 +586,6 @@ struct ResearchPendingChat {
     canvas_open: bool,
     canvas_aspect: aos_proto::CanvasAspect,
     choice_id: String,
-}
-
-#[derive(Clone, Default)]
-struct RosterEditDraft {
-    display_name: String,
-    role: String,
-    system_prompt: String,
-    skills: Vec<String>,
-    tools: Vec<String>,
-    mcp_servers: Vec<String>,
-    model_id: String,
 }
 
 const ROSTER_TOOL_GROUPS: &[(&str, &[&str])] = &[
@@ -754,7 +728,6 @@ impl UiApp {
             chat_state: chat_state::ChatState::default(),
             network_online,
             prefs,
-            agent_timeout_secs,
             mem_query: String::new(),
             mem_note: String::new(),
             mem_hits: Vec::new(),
@@ -766,16 +739,17 @@ impl UiApp {
             settings_ui: settings_ui_state::SettingsUiState::default(),
             metrics: None,
             agents: Vec::new(),
-            agent_prev_states: HashMap::new(),
-            agent_notices: Vec::new(),
-            agent_notified: std::collections::HashSet::new(),
             confirms: Vec::new(),
             workspace_ui: workspace_ui_state::WorkspaceUiState::default(),
             schedules: Vec::new(),
             schedule_pending_card_act: None,
             pending_session_nav: session_nav::PendingSessionNav::None,
             schedule_transcript_dirty: false,
-            agent_ui: agent_ui_state::AgentUiState::with_max_steps(agent_max_steps),
+            agent_ui: agent_ui_state::AgentUiState::with_create_defaults(
+                agent_max_steps,
+                agent_timeout_secs,
+                default_model,
+            ),
             audit: Vec::new(),
             caps: Vec::new(),
             caps_holder: String::new(),
@@ -812,12 +786,10 @@ impl UiApp {
             provider_secret_value: String::new(),
             provider_enabled: true,
             provider_test_msg: String::new(),
-            agent_model_id: default_model,
             model_updates_msg,
             download_status: String::new(),
             model_download: None,
             model_download_restart: None,
-            ask_reply_target: None,
             decl_panels: HashMap::new(),
             decl_md_cache: CommonMarkCache::default(),
             image_studio: image_studio::ImageStudioState::default(),
@@ -827,12 +799,8 @@ impl UiApp {
             hf_download_name: String::new(),
             hf_download_status: String::new(),
             show_go_to_palette: false,
-            agent_join_room_on_create: false,
-            roster_edit_drafts: HashMap::new(),
             guide: guide::GuideState::default(),
             research_pending_chat: None,
-            document_prep_agents: HashMap::new(),
-            document_prep_kill_pending: 0,
             research_documents: research_document::load_index_entries(),
             document_overlay: research_document::DocumentOverlayState::default(),
             documents_list: research_document::DocumentsListState::default(),
@@ -857,6 +825,7 @@ impl UiApp {
     fn blocked_ask_agent(&self) -> Option<&AgentInfo> {
         let queue = self.pending_ask_queue();
         let chosen = self
+            .agent_ui
             .ask_reply_target
             .as_ref()
             .filter(|t| queue.iter().any(|x| x == *t))
@@ -917,13 +886,7 @@ impl UiApp {
             });
             let _ = self.cmd_tx.send(Cmd::AgentKill { id: agent_id });
         }
-        if self
-            .ask_reply_target
-            .as_ref()
-            .is_some_and(|t| blocked_ids.iter().any(|id| id == t))
-        {
-            self.ask_reply_target = None;
-        }
+        self.agent_ui.clear_ask_reply_if_any(&blocked_ids);
     }
 
     fn task_looks_like_module_authoring(task: &str) -> bool {
@@ -971,11 +934,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             optimize_prompt: false,
             max_steps: self.prefs.default_max_steps.max(20),
             timeout_secs: self.prefs.default_timeout_secs.max(180),
-            model_id: if self.agent_model_id.is_empty() {
-                None
-            } else {
-                Some(self.agent_model_id.clone())
-            },
+            model_id: self.agent_ui.create_model_id(),
             session_id: self.chat_state.active_session.clone(),
             origin: "form".into(),
             join_active_room: false,
@@ -1250,9 +1209,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             id: agent_id.clone(),
             text,
         });
-        if self.ask_reply_target.as_deref() == Some(agent_id.as_str()) {
-            self.ask_reply_target = None;
-        }
+        self.agent_ui.clear_ask_reply_if(&agent_id);
         self.status = "réponse envoyée à l'agent".into();
     }
 
@@ -2332,9 +2289,9 @@ impl eframe::App for UiApp {
                         self.download_status = t.models_removed.to_string();
                     }
                     if m == format!("{} ok", aos_agent::intents::KILL)
-                        && self.document_prep_kill_pending > 0
+                        && self.agent_ui.consume_document_prep_kill_ok()
                     {
-                        self.document_prep_kill_pending -= 1;
+                        // swallow kill-ok banner for document-prep stop
                     } else {
                         self.status = m;
                     }
@@ -2420,8 +2377,7 @@ impl eframe::App for UiApp {
                     ack,
                 } => {
                     if origin == "document" {
-                        self.document_prep_agents
-                            .insert(agent_id.clone(), title.clone());
+                        self.on_document_prep_spawned(agent_id.clone(), title.clone());
                         if self.chat_state.active_session.as_deref() == Some(session_id.as_str()) {
                             self.attach_document_progress_agent(&agent_id, &title);
                         }
@@ -2467,9 +2423,9 @@ impl eframe::App for UiApp {
                     {
                         let _ = self.cmd_tx.send(Cmd::ModuleList);
                     }
-                    let seeding = self.agent_prev_states.is_empty();
+                    let seeding = self.agent_ui.prev_states_seeding();
                     for ag in &a {
-                        let prev = self.agent_prev_states.get(&ag.agent_id).cloned();
+                        let prev = self.agent_ui.prev_states.get(&ag.agent_id).cloned();
                         let terminal = matches!(
                             ag.state,
                             AgentState::Done | AgentState::Failed | AgentState::Killed
@@ -2484,15 +2440,17 @@ impl eframe::App for UiApp {
                             })
                             .unwrap_or(false);
                         if terminal {
-                            if self.document_prep_agents.contains_key(&ag.agent_id) && was_active && !seeding
+                            if self.agent_ui.document_prep_agents.contains_key(&ag.agent_id)
+                                && was_active
+                                && !seeding
                             {
                                 if ag.state == AgentState::Done {
                                     let _ = self.cmd_tx.send(Cmd::AgentTrace {
                                         id: ag.agent_id.clone(),
                                     });
                                 } else {
-                                    self.document_prep_agents.remove(&ag.agent_id);
-                                    self.agent_notified.insert(ag.agent_id.clone());
+                                    self.agent_ui.take_document_prep(&ag.agent_id);
+                                    self.agent_ui.mark_notified(&ag.agent_id);
                                 }
                             } else if let Some(sid) = &ag.session_id {
                                 let on_this_session =
@@ -2546,7 +2504,10 @@ impl eframe::App for UiApp {
                                             }
                                         }
                                     } else if !seeding
-                                        && !self.document_prep_agents.contains_key(&ag.agent_id)
+                                        && !self
+                                            .agent_ui
+                                            .document_prep_agents
+                                            .contains_key(&ag.agent_id)
                                     {
                                         if content.is_empty()
                                             && !agent_panel::canvas_draw_step_cap_continue(
@@ -2555,7 +2516,7 @@ impl eframe::App for UiApp {
                                                 trace,
                                             )
                                         {
-                                            self.agent_notified.insert(ag.agent_id.clone());
+                                            self.agent_ui.mark_notified(&ag.agent_id);
                                             continue;
                                         }
                                         self.chat.push(ChatLine {
@@ -2573,7 +2534,7 @@ impl eframe::App for UiApp {
                                     }
                                 } else if !seeding
                                     && !on_this_session
-                                    && !self.agent_notified.contains(&ag.agent_id)
+                                    && !self.agent_ui.notified.contains(&ag.agent_id)
                                     && was_active
                                 {
                                     let session_ops = agent_canvas_session_ops(
@@ -2627,11 +2588,10 @@ impl eframe::App for UiApp {
                                     }
                                     };
                                     if summary.is_empty() {
-                                        self.agent_notified.insert(ag.agent_id.clone());
+                                        self.agent_ui.mark_notified(&ag.agent_id);
                                         continue;
                                     }
-                                    self.agent_notified.insert(ag.agent_id.clone());
-                                    self.agent_notices.push(AgentNotice {
+                                    self.agent_ui.push_notice_once(AgentNotice {
                                         agent_id: ag.agent_id.clone(),
                                         session_id: sid.clone(),
                                         summary,
@@ -2640,9 +2600,7 @@ impl eframe::App for UiApp {
                             }
                         }
                         if prev == Some(AgentState::Blocked) && ag.state != AgentState::Blocked {
-                            if self.ask_reply_target.as_deref() == Some(ag.agent_id.as_str()) {
-                                self.ask_reply_target = None;
-                            }
+                            self.agent_ui.clear_ask_reply_if(&ag.agent_id);
                             if let Some(sid) = &ag.session_id {
                                 let on_this_session =
                                     self.chat_state.active_session.as_deref() == Some(sid.as_str());
@@ -2701,10 +2659,9 @@ impl eframe::App for UiApp {
                                         thinking: None,
                                     });
                                 } else if !on_this_session
-                                    && !self.agent_notified.contains(&ag.agent_id)
+                                    && !self.agent_ui.notified.contains(&ag.agent_id)
                                 {
-                                    self.agent_notified.insert(ag.agent_id.clone());
-                                    self.agent_notices.push(AgentNotice {
+                                    self.agent_ui.push_notice_once(AgentNotice {
                                         agent_id: ag.agent_id.clone(),
                                         session_id: sid.clone(),
                                         summary: format!(
@@ -2715,8 +2672,8 @@ impl eframe::App for UiApp {
                                 }
                             }
                         }
-                        self.agent_prev_states
-                            .insert(ag.agent_id.clone(), ag.state.clone());
+                        self.agent_ui
+                            .record_prev_state(ag.agent_id.clone(), ag.state.clone());
                     }
                     self.agents = a;
                 }
@@ -3121,23 +3078,7 @@ impl eframe::App for UiApp {
                             .push_str(&format!(" ({})", models.join(", ")));
                     }
                 }
-                Evt::AgentSpecLoaded { spec } => {
-                    self.roster_edit_drafts.insert(
-                        spec.agent_id.clone(),
-                        RosterEditDraft {
-                            display_name: spec
-                                .display_name
-                                .clone()
-                                .unwrap_or_else(|| spec.roster_display_name().to_string()),
-                            role: spec.goal.statement.clone(),
-                            system_prompt: spec.system_prompt.clone().unwrap_or_default(),
-                            skills: spec.skills.clone(),
-                            tools: spec.tools.clone(),
-                            mcp_servers: spec.mcp_servers.clone(),
-                            model_id: spec.model_id.clone().unwrap_or_default(),
-                        },
-                    );
-                }
+                Evt::AgentSpecLoaded { spec } => self.on_agent_spec_loaded(spec),
                 Evt::AgentRosterSaved => {
                     let t = i18n::strings(&self.prefs.language);
                     self.status = t.agents_edit_saved.into();
@@ -3333,8 +3274,8 @@ impl eframe::App for UiApp {
         }
 
         egui::TopBottomPanel::top("banner").show(ctx, |ui| {
-            if !self.agent_notices.is_empty() {
-                let notices = self.agent_notices.clone();
+            if !self.agent_ui.notices.is_empty() {
+                let notices = self.agent_ui.notices.clone();
                 let mut dismiss: Vec<String> = Vec::new();
                 let mut open_sess: Option<String> = None;
                 for n in &notices {
@@ -3360,8 +3301,7 @@ impl eframe::App for UiApp {
                         }
                     });
                 }
-                self.agent_notices
-                    .retain(|x| !dismiss.contains(&x.agent_id));
+                self.agent_ui.dismiss_notices(&dismiss);
                 if let Some(id) = open_sess {
                     self.tab = Tab::Chat;
                     self.request_session_select(id);

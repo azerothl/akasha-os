@@ -2,13 +2,13 @@
 
 use crate::cmd::Cmd;
 use crate::{agent_cap_holder, UiApp};
-use aos_proto::{AgentTrace, DocumentRef, McpServerInfo, SkillInfo};
+use aos_proto::{AgentSpec, AgentTrace, DocumentRef, McpServerInfo, SkillInfo};
 use eframe::egui;
 use std::time::Duration;
 
 impl UiApp {
     pub(crate) fn send_agents_page_create(&mut self, room_active: bool, library: bool) {
-        let join_active_room = room_active && self.agent_join_room_on_create;
+        let join_active_room = room_active && self.agent_ui.join_room_on_create;
         let documents: Vec<DocumentRef> = self
             .agent_ui
             .docs
@@ -39,12 +39,8 @@ impl UiApp {
             documents,
             optimize_prompt: false,
             max_steps: self.agent_ui.max_steps,
-            timeout_secs: self.agent_timeout_secs,
-            model_id: if self.agent_model_id.is_empty() {
-                None
-            } else {
-                Some(self.agent_model_id.clone())
-            },
+            timeout_secs: self.agent_ui.timeout_secs,
+            model_id: self.agent_ui.create_model_id(),
             session_id,
             origin: "library".into(),
             join_active_room,
@@ -100,11 +96,19 @@ impl UiApp {
     }
 
     pub(crate) fn on_agent_trace(&mut self, t: AgentTrace) {
-        if let Some(question) = self.document_prep_agents.remove(&t.agent_id) {
+        if let Some(question) = self.agent_ui.take_document_prep(&t.agent_id) {
             if let Some(path) = aos_agent::document_prep::path_from_trace(&t) {
                 self.attach_document_result_card(&question, &path);
             }
         }
         self.agent_ui.upsert_trace(t);
+    }
+
+    pub(crate) fn on_agent_spec_loaded(&mut self, spec: AgentSpec) {
+        self.agent_ui.upsert_roster_draft_from_spec(&spec);
+    }
+
+    pub(crate) fn on_document_prep_spawned(&mut self, agent_id: String, title: String) {
+        self.agent_ui.register_document_prep(agent_id, title);
     }
 }

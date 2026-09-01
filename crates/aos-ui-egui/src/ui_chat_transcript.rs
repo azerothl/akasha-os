@@ -390,7 +390,7 @@ impl UiApp {
                             *state = "stopped".into();
                         }
                     }
-                    self.document_prep_kill_pending += 1;
+                    self.agent_ui.bump_document_prep_kill_pending();
                     let _ = self.cmd_tx.send(Cmd::AgentKill { id: agent_id });
                 }
                 if let Some((question, path)) = document_result_open {
@@ -412,7 +412,7 @@ impl UiApp {
                     self.tab = Tab::Image;
                 }
                 if let Some(id) = target_reply {
-                    self.ask_reply_target = Some(id);
+                    self.agent_ui.set_ask_reply_target(id);
                     self.chat_state.composer.refocus = true;
                     self.status = "réponse destinée à cet agent".into();
                 }

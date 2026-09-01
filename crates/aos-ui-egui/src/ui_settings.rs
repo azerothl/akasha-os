@@ -164,7 +164,7 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                             .clicked()
                         {
                             self.prefs.default_agent_model = None;
-                            self.agent_model_id.clear();
+                            self.agent_ui.model_id.clear();
                             save_preferences(&self.prefs);
                         }
                         for m in self.model_infos.clone() {
@@ -172,7 +172,7 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                                 self.prefs.default_agent_model.as_deref() == Some(m.id.as_str());
                             if ui.selectable_label(selected, &m.id).clicked() {
                                 self.prefs.default_agent_model = Some(m.id.clone());
-                                self.agent_model_id = m.id;
+                                self.agent_ui.model_id = m.id;
                                 save_preferences(&self.prefs);
                             }
                         }
@@ -362,7 +362,7 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                             )
                             .changed()
                         {
-                            self.agent_timeout_secs = self.prefs.default_timeout_secs;
+                            self.agent_ui.timeout_secs = self.prefs.default_timeout_secs;
                             save_preferences(&self.prefs);
                         }
                         ui.end_row();
