@@ -3,7 +3,8 @@
 use crate::cmd::Cmd;
 use crate::os_open::aos_home;
 use crate::prefs::{save_preferences, UI_SCALE_PRESETS};
-use crate::{i18n, save_onboarding, Tab, UiApp};
+use crate::onboarding::save_onboarding;
+use crate::{i18n, Tab, UiApp};
 use eframe::egui;
 
 impl UiApp {

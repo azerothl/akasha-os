@@ -102,6 +102,7 @@ use module_actions::{
     agent_id_cmd, invoke_module_bind, invoke_module_tool, invoke_notes, invoke_tasks,
     load_module_ui,
 };
+use onboarding::{load_onboarding, save_onboarding, OnboardingState};
 use troubleshoot::run_troubleshoot;
 use ui_format::{
     chrono_like_stamp, format_local_time_hm, format_model_infer_line,
@@ -122,7 +123,6 @@ use eframe::egui;
 use egui_commonmark::CommonMarkCache;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -171,37 +171,6 @@ enum Tab {
 
 fn agent_cap_holder(agent_id: &str) -> String {
     format!("agent:{agent_id}")
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct OnboardingState {
-    completed: bool,
-    language: String,
-    routing: String,
-    trust_default: String,
-    #[serde(default)]
-    tutorial_step: u32,
-    /// User sent a chat message during the first-run chat step.
-    #[serde(default)]
-    chat_sent: bool,
-    /// Assistant replied to the first-run chat message.
-    #[serde(default)]
-    first_chat_done: bool,
-}
-
-impl Default for OnboardingState {
-    fn default() -> Self {
-        let language = prefs::detect_os_language();
-        Self {
-            completed: false,
-            language: language.clone(),
-            routing: "local_only".into(),
-            trust_default: "medium".into(),
-            tutorial_step: 0,
-            chat_sent: false,
-            first_chat_done: false,
-        }
-    }
 }
 
 /// Vertical scroll that fills the remaining panel height.
@@ -271,27 +240,6 @@ fn main() -> eframe::Result<()> {
         }),
     )
 }
-
-fn onboarding_path() -> PathBuf {
-    aos_home().join("var/run/onboarding.json")
-}
-
-fn load_onboarding() -> OnboardingState {
-    let p = onboarding_path();
-    std::fs::read_to_string(&p)
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default()
-}
-
-fn save_onboarding(state: &OnboardingState) {
-    let p = onboarding_path();
-    let _ = std::fs::create_dir_all(p.parent().unwrap());
-    if let Ok(s) = serde_json::to_string_pretty(state) {
-        let _ = std::fs::write(p, s);
-    }
-}
-
 
 fn agent_is_live(state: &AgentState) -> bool {
     matches!(
