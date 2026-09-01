@@ -1,6 +1,8 @@
 //! Declarative module panel integration.
 
-use crate::*;
+use crate::cmd::Cmd;
+use crate::{decl_ui, i18n, UiApp};
+use eframe::egui;
 
 impl UiApp {
     pub(crate) fn ui_decl_module(&mut self, ui: &mut egui::Ui, module: &str) {
