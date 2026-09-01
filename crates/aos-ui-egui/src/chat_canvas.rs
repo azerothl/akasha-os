@@ -543,11 +543,7 @@ fn paint_op(
                 }));
             }
             if *width > 0.0 {
-                let stroke_pts: Vec<CanvasPoint> = if *closed {
-                    slice.to_vec()
-                } else {
-                    slice.to_vec()
-                };
+                let stroke_pts: Vec<CanvasPoint> = slice.to_vec();
                 paint_polyline(painter, rect, &stroke_pts, *width, stroke_c, dash);
             }
         }
