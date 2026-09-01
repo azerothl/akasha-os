@@ -1,6 +1,14 @@
 //! Chat composer, attachments, mentions, and slash-command completion.
 
-use crate::*;
+use crate::chat_ask::agent_display_title;
+use crate::cmd::Cmd;
+use crate::composer_layout::{
+    composer_field_width, send_button_reserved_width, stop_button_reserved_width,
+};
+use crate::slash::{slash_completions, slash_insert_text};
+use crate::{chat_media, chat_room, i18n, icons, os_open, UiApp};
+use aos_proto::ChatRoomMember;
+use eframe::egui;
 
 impl UiApp {
     #[allow(clippy::too_many_arguments)]

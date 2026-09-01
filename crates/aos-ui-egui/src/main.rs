@@ -71,9 +71,8 @@ use chat_delegate::chat_delegate_kit;
 use chat_bubble::chat_bubble_max_width;
 use cmd::{AgentNotice, ChatLine, Cmd, Evt};
 use composer_layout::{
-    chat_canvas_layout, chat_composer_reserve_height, chat_sessions_split, composer_field_width,
-    estimate_composer_buttons_w, send_button_reserved_width, stop_button_reserved_width,
-    ChatCanvasLayout, ChatSessionsSplit, COMPOSER_MIN_INPUT_W,
+    chat_canvas_layout, chat_composer_reserve_height, chat_sessions_split,
+    estimate_composer_buttons_w, ChatCanvasLayout, ChatSessionsSplit, COMPOSER_MIN_INPUT_W,
 };
 #[cfg(test)]
 use composer_layout::{chat_composer_wraps, COMPOSER_INPUT_ROW_H};
@@ -89,7 +88,7 @@ use ui_format::{
     format_schedule_next_label, human_bytes, local_tz_offset_minutes, memory_relation_lines,
     now_ms,
 };
-use slash::{slash_completions, slash_insert_text, SLASH_COMMANDS};
+use slash::SLASH_COMMANDS;
 use aos_agent::schedule::ScheduleEntry;
 use aos_agent::schedule_parse::{self, ParsedSchedule};
 use aos_ipc::BusClient;
