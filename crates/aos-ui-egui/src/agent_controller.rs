@@ -52,7 +52,7 @@ impl UiApp {
         self.agent_ui.open_tab(id);
         let _ = self.cmd_tx.send(Cmd::AgentTrace { id: id.to_string() });
         let holder = agent_cap_holder(id);
-        self.caps_holder = holder.clone();
+        self.security_ui.select_holder(holder.clone());
         let _ = self.cmd_tx.send(Cmd::CapList { holder });
         if self
             .agents

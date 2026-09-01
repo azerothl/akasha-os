@@ -13,6 +13,7 @@ mod models_controller;
 mod models_ui_state;
 mod research_controller;
 mod research_ui_state;
+mod security_ui_state;
 mod settings_controller;
 mod settings_ui_state;
 mod workspace_controller;
@@ -112,7 +113,7 @@ use aos_agent::schedule::ScheduleEntry;
 use aos_agent::schedule_parse::ParsedSchedule;
 use aos_ipc::BusClient;
 use aos_proto::{
-    AgentInfo, AgentState, AuditEvent, CapInfo, ChatAttachment, ChatSessionGetResponse,
+    AgentInfo, AgentState, ChatAttachment, ChatSessionGetResponse,
     ChatSessionIdRequest,
     PendingConfirmation, SystemMetrics,
 };
@@ -507,9 +508,7 @@ struct UiApp {
     pending_session_nav: session_nav::PendingSessionNav,
     schedule_ui: schedule_ui_state::ScheduleUiState,
     agent_ui: agent_ui_state::AgentUiState,
-    audit: Vec<AuditEvent>,
-    caps: Vec<CapInfo>,
-    caps_holder: String,
+    security_ui: security_ui_state::SecurityUiState,
     status: String,
     onboarding: OnboardingState,
     show_onboarding: bool,
@@ -685,9 +684,7 @@ impl UiApp {
                 agent_timeout_secs,
                 default_model,
             ),
-            audit: Vec::new(),
-            caps: Vec::new(),
-            caps_holder: String::new(),
+            security_ui: security_ui_state::SecurityUiState::default(),
             status: String::new(),
             onboarding,
             show_onboarding,
@@ -923,7 +920,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             save_onboarding(&self.onboarding);
             if let Some(id) = self.chat_state.active_session.as_deref() {
                 let holder = format!("session:{id}");
-                self.caps_holder = holder.clone();
+                self.security_ui.select_holder(holder.clone());
                 let _ = self.cmd_tx.send(Cmd::CapList { holder });
             }
         }
@@ -955,7 +952,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         }
         ui.label(
             t.onboard_allowance_caps
-                .replace("{n}", &self.caps.len().to_string()),
+                .replace("{n}", &self.security_ui.caps.len().to_string()),
         );
         ui.label(t.onboard_allowance_no_agent_tools);
         ui.add_space(8.0);
@@ -1551,9 +1548,9 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             Tab::Audit => {
                 let _ = self.cmd_tx.send(Cmd::Audit { last: 40 });
             }
-            Tab::Caps if !self.caps_holder.is_empty() => {
+            Tab::Caps if !self.security_ui.caps_holder.is_empty() => {
                 let _ = self.cmd_tx.send(Cmd::CapList {
-                    holder: self.caps_holder.clone(),
+                    holder: self.security_ui.caps_holder.clone(),
                 });
             }
             Tab::Notes => {
@@ -1759,13 +1756,14 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 self.on_tab_open(Tab::Models);
             }
             ui.separator();
-            let caps_text = if self.caps.is_empty() {
+            let caps_text = if self.security_ui.caps.is_empty() {
                 format!("{}: —", t.status_caps_label)
             } else {
                 format!(
                     "{}: {}",
                     t.status_caps_label,
-                    t.status_caps_count.replace("{n}", &self.caps.len().to_string())
+                    t.status_caps_count
+                        .replace("{n}", &self.security_ui.caps.len().to_string())
                 )
             };
             if ui.small_button(caps_text).clicked() {
@@ -2316,12 +2314,11 @@ impl eframe::App for UiApp {
                     self.on_notes_saved(path, slug, title);
                 }
                 Evt::Audit(a) => {
-                    self.audit = a;
+                    self.security_ui.set_audit(a);
                     self.scen_audit = true;
                 }
                 Evt::Caps { holder, caps } => {
-                    self.caps_holder = holder;
-                    self.caps = caps;
+                    self.security_ui.set_caps(holder, caps);
                 }
                 Evt::Schedules(s) => {
                     self.schedule_ui.merge_entries(s);

@@ -470,7 +470,7 @@ impl UiApp {
                                     if ui.selectable_label(selected, label).clicked() {
                                         self.agent_ui.select_tab(&id);
                                         let holder = agent_cap_holder(&id);
-                                        self.caps_holder = holder.clone();
+                                        self.security_ui.select_holder(holder.clone());
                                         let _ = self.cmd_tx.send(Cmd::CapList { holder });
                                         if self
                                             .agents
@@ -500,7 +500,7 @@ impl UiApp {
                         ui.collapsing(format!("{} ({holder})", t.caps_heading), |ui| {
                             ui.horizontal(|ui| {
                                 if ui.small_button(t.caps_refresh).clicked() {
-                                    self.caps_holder = holder.clone();
+                                    self.security_ui.select_holder(holder.clone());
                                     let _ = self.cmd_tx.send(Cmd::CapList {
                                         holder: holder.clone(),
                                     });

@@ -19,7 +19,7 @@ pub(crate) fn ui_audit(&mut self, ui: &mut egui::Ui) {
         });
         let list_h = ui.available_height().max(120.0);
         overflow_scroll_h(ui, "audit_list", list_h, |ui| {
-            for e in &self.audit {
+            for e in &self.security_ui.audit {
                 ui.monospace(format!(
                     "#{} {} {} {} → {}",
                     e.seq, e.actor, e.action, e.target, e.hash
@@ -36,7 +36,7 @@ pub(crate) fn ui_audit(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.label(t.caps_subject);
             ui.add(
-                egui::TextEdit::singleline(&mut self.caps_holder)
+                egui::TextEdit::singleline(&mut self.security_ui.caps_holder)
                     .desired_width(280.0)
                     .hint_text("agent:<id>"),
             );
@@ -44,10 +44,10 @@ pub(crate) fn ui_audit(&mut self, ui: &mut egui::Ui) {
                 .button(t.caps_refresh)
                 .on_hover_text(t.tip_caps_refresh)
                 .clicked()
-                && !self.caps_holder.trim().is_empty()
+                && !self.security_ui.caps_holder.trim().is_empty()
             {
-                let holder = self.caps_holder.trim().to_string();
-                self.caps_holder = holder.clone();
+                let holder = self.security_ui.caps_holder.trim().to_string();
+                self.security_ui.select_holder(holder.clone());
                 let _ = self.cmd_tx.send(Cmd::CapList { holder });
             }
         });
@@ -56,22 +56,23 @@ pub(crate) fn ui_audit(&mut self, ui: &mut egui::Ui) {
                 let holder = agent_cap_holder(&id);
                 ui.weak(format!("Agent actif → {holder}"));
                 if ui.small_button("Charger").clicked() {
-                    self.caps_holder = holder.clone();
+                    self.security_ui.select_holder(holder.clone());
                     let _ = self.cmd_tx.send(Cmd::CapList { holder });
                 }
             });
         }
         ui.separator();
-        let holder = self.caps_holder.clone();
+        let holder = self.security_ui.caps_holder.clone();
         self.draw_caps_list(ui, &holder);
     }
 
     pub(crate) fn draw_caps_list(&mut self, ui: &mut egui::Ui, holder: &str) {
         let t = i18n::strings(&self.prefs.language);
         let matching: Vec<CapInfo> = if holder.is_empty() {
-            self.caps.clone()
+            self.security_ui.caps.clone()
         } else {
-            self.caps
+            self.security_ui
+                .caps
                 .iter()
                 .filter(|c| c.holder == holder)
                 .cloned()
