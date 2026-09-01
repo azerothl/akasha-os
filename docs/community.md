@@ -14,7 +14,9 @@ Public site: [Community](https://azerothl.github.io/akasha-os/community.html).
 
 License split (kernel AGPL + CLA vs guest extensions Apache/MIT, no
 commercial grant): [ADR 0006](../adr/0006-license-split.md). A Discussion is
-never a CLA event. Do not PR a skill into `crates/`.
+never a CLA event. Do not PR a skill into `crates/`. Example skill (MIT, not
+in the Preview zip):
+[`community/skills/morning-brief/`](../community/skills/morning-brief/).
 
 ## Cohort gate
 

@@ -44,9 +44,11 @@ Do **not** mix AGPL host files and permissive extension files in one PR.
 
 ## How to propose a skill
 
-Skills are Markdown under `share/skills/` / `var/skills/` (see a shipped
-example such as [`skills/planner/SKILL.md`](skills/planner/SKILL.md)). Open a
-Show and tell Discussion with the `SKILL.md` body, or a PR under
+Skills are Markdown under `share/skills/` / `var/skills/`. Community
+example (not in the Preview zip):
+[`community/skills/morning-brief/`](community/skills/morning-brief/). Shipped
+recipe: [`skills/planner/SKILL.md`](skills/planner/SKILL.md).
+Open a Show and tell Discussion with the `SKILL.md` body, or a PR under
 [`community/`](community/README.md) (MIT default, no commercial grant). A PR
 that changes shipped `skills/` in the Preview zip is MIT — still no
 commercial grant.

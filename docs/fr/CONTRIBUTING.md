@@ -48,8 +48,11 @@ dans une même PR.
 
 ## Proposer un skill
 
-Les skills sont du Markdown sous `share/skills/` / `var/skills/` (exemple
-livré : [`skills/planner/SKILL.md`](../../skills/planner/SKILL.md)). Ouvre
+Les skills sont du Markdown sous `share/skills/` / `var/skills/`. Exemple
+communautaire (hors zip Preview) :
+[`community/skills/morning-brief/`](../../community/skills/morning-brief/).
+Recette livrée : [`skills/planner/SKILL.md`](../../skills/planner/SKILL.md).
+Ouvre
 une Discussion Show and tell avec le corps du `SKILL.md`, ou une PR sous
 [`community/`](../../community/README.md) (défaut MIT, pas d’octroi
 commercial). Une PR qui change les `skills/` livrés dans le zip Preview est

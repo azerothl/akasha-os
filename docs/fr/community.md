@@ -17,7 +17,8 @@ Site public :
 Split de licence (noyau AGPL + CLA vs extensions guest Apache/MIT, pas
 d’octroi commercial) : [ADR 0006](../../adr/0006-license-split.md). Une
 Discussion n’est jamais un événement CLA. Ne pas PR un skill dans
-`crates/`.
+`crates/`. Skill d’exemple (MIT, hors zip Preview) :
+[`community/skills/morning-brief/`](../../community/skills/morning-brief/).
 
 ## Gate cohorte
 
