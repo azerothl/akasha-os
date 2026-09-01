@@ -60,10 +60,6 @@ mod ui_settings;
 mod ui_workspace;
 
 use chat_ask::{agent_display_title, chat_has_open_ask, pending_ask_ids};
-use chat_bubble::{
-    chat_bubble_colors, chat_bubble_kind, chat_markdown_viewer, chat_message_frame,
-    chat_role_label, ChatBubbleKind,
-};
 use chat_delegate::{
     chat_agent_kit, chat_delegate_agent_spec, session_has_running_canvas_agent,
     spawn_chat_delegate_agent, spawn_document_prep_agent,

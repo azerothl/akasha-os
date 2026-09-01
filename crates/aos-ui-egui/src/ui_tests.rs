@@ -350,6 +350,7 @@ mod canvas_completion_tests {
 #[cfg(test)]
 mod layout_tests {
     use super::*;
+    use crate::chat_bubble::ChatBubbleKind;
 
     #[test]
     fn chat_sessions_split_never_exceeds_total() {

@@ -1,6 +1,17 @@
 //! Conversation transcript, message cards, and attachment rendering.
 
-use crate::*;
+use crate::chat_bubble::{
+    chat_bubble_colors, chat_bubble_kind, chat_markdown_viewer, chat_message_frame,
+    chat_role_label, ChatBubbleKind,
+};
+use crate::cmd::Cmd;
+use crate::{
+    agent_act_phrase, agent_canvas_session_ops, agent_panel, chat_media, chat_room, i18n,
+    local_tz_offset_minutes, now_ms, research_choice, research_document, schedule_card,
+    skill_offer, Tab, UiApp,
+};
+use aos_proto::{ChatAttachment, ChatRoomMember};
+use eframe::egui;
 
 impl UiApp {
     pub(crate) fn ui_chat_transcript(
