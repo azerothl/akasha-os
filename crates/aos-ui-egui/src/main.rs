@@ -1486,8 +1486,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             speaker_name: None,
             thinking: None,
         });
-        self.chat_composer.pending_images.clear();
-        self.chat_composer.pending_documents.clear();
+        self.chat_composer.clear_attachments();
         let room_content = aos_proto::chat_document::merge_documents_into_user_content(
             &text,
             &pending_documents,
@@ -1635,23 +1634,8 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
     }
 
     fn queue_chat_document(&mut self, path: String) {
-        if path.is_empty() || !aos_proto::chat_document::is_chat_document_path(&path) {
+        if !self.chat_composer.queue_document(path) {
             return;
-        }
-        let label = aos_proto::chat_document::document_label_from_path(&path);
-        let doc = DocumentRef { path, label };
-        if !self
-            .chat_composer
-            .pending_documents
-            .iter()
-            .any(|d| d.path == doc.path)
-        {
-            if self.chat_composer.pending_documents.len()
-                >= aos_proto::chat_document::CHAT_MAX_PENDING_DOCUMENTS
-            {
-                self.chat_composer.pending_documents.remove(0);
-            }
-            self.chat_composer.pending_documents.push(doc);
         }
         self.status = i18n::strings(&self.prefs.language)
             .chat_attach_document
@@ -1659,16 +1643,9 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
     }
 
     fn queue_chat_image(&mut self, path: String) {
-        if path.is_empty() {
+        if !self.chat_composer.queue_image(path) {
             return;
         }
-        if !self.chat_composer.pending_images.iter().any(|p| p == &path) {
-            if self.chat_composer.pending_images.len() >= 4 {
-                self.chat_composer.pending_images.remove(0);
-            }
-            self.chat_composer.pending_images.push(path.clone());
-        }
-        self.chat_composer.last_session_image = Some(path);
         self.status = i18n::strings(&self.prefs.language)
             .chat_attach_image
             .to_string();
