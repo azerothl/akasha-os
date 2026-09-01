@@ -3413,6 +3413,7 @@ async fn handle_cmd(
                         .unwrap_or("")
                         .to_string();
                     if !path.is_empty() {
+                        let t = i18n::strings(&crate::prefs::load_preferences().language);
                         let att = ChatAttachment::Image {
                             path: path.clone(),
                             prompt: "canvas export".into(),
@@ -3423,7 +3424,7 @@ async fn handle_cmd(
                                 &ChatSessionAppendRequest {
                                     session_id: session_id.clone(),
                                     role: "assistant".into(),
-                                    content: format!("Canvas exporté : {path}"),
+                                    content: t.canvas_exported.replace("{path}", &path),
                                     attachments: vec![att],
                                     speaker_id: None,
                                     speaker_name: None,

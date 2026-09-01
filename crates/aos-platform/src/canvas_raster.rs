@@ -1,6 +1,6 @@
 //! Rasterize a session canvas document to PNG (export snapshot, not diffusion).
 
-use aos_proto::{CanvasDoc, CanvasOpBody, CanvasPenStyle, CanvasPoint};
+use aos_proto::{CanvasAspect, CanvasDoc, CanvasOpBody, CanvasPoint};
 use image::{ImageBuffer, Rgb, RgbImage};
 
 const BG: Rgb<u8> = Rgb([7, 11, 20]); // void
@@ -18,6 +18,26 @@ pub fn export_png(doc: &CanvasDoc, width: u32, height: u32) -> Result<Vec<u8>, S
     img.write_to(&mut cursor, image::ImageFormat::Png)
         .map_err(|e| e.to_string())?;
     Ok(buf)
+}
+
+/// JSON sidecar next to a PNG export — full vector doc + aspect for reuse.
+pub fn export_sidecar_json(doc: &CanvasDoc, aspect: CanvasAspect) -> Result<Vec<u8>, String> {
+    let payload = serde_json::json!({
+        "canvas_aspect": aspect,
+        "session_id": doc.session_id,
+        "next_seq": doc.next_seq,
+        "ops": doc.ops,
+        "pen": doc.pen,
+    });
+    serde_json::to_vec_pretty(&payload).map_err(|e| e.to_string())
+}
+
+/// `canvas-sess-123.png` → `canvas-sess-123.json`.
+pub fn sidecar_path_for_png(png_path: &str) -> String {
+    match png_path.rsplit_once('.') {
+        Some((stem, ext)) if ext.eq_ignore_ascii_case("png") => format!("{stem}.json"),
+        _ => format!("{png_path}.json"),
+    }
 }
 
 fn paint_op(img: &mut RgbImage, body: &CanvasOpBody) {
@@ -353,7 +373,7 @@ fn flood_fill(img: &mut RgbImage, sx: i32, sy: i32, c: Rgb<u8>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aos_proto::{CanvasOp, CanvasPoint};
+    use aos_proto::{CanvasOp, CanvasPenStyle, CanvasPoint};
 
     #[test]
     fn export_stroke_png_nonempty() {
@@ -378,6 +398,20 @@ mod tests {
         let png = export_png(&doc, 128, 128).unwrap();
         assert!(png.starts_with(&[0x89, b'P', b'N', b'G']));
         assert!(png.len() > 64);
+        let sidecar = export_sidecar_json(&doc, CanvasAspect::Square).unwrap();
+        let text = String::from_utf8(sidecar).unwrap();
+        assert!(text.contains("\"session_id\": \"s\""));
+        assert!(text.contains("\"canvas_aspect\""));
+        assert!(text.contains("\"ops\""));
+    }
+
+    #[test]
+    fn sidecar_path_replaces_png_extension() {
+        assert_eq!(
+            sidecar_path_for_png("/downloads/canvas-abc-1.png"),
+            "/downloads/canvas-abc-1.json"
+        );
+        assert_eq!(sidecar_path_for_png("board"), "board.json");
     }
 
     #[test]

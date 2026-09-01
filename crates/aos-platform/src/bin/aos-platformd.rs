@@ -3989,8 +3989,19 @@ fn export_canvas_png(
         .unwrap()
         .write_bytes(&path, &bytes, "service:platformd", &caps)
         .map_err(|e| e.to_string())?;
+    let sidecar_path = aos_platform::canvas_raster::sidecar_path_for_png(&path);
+    if let Ok(sidecar) =
+        aos_platform::canvas_raster::export_sidecar_json(&doc, meta.canvas_aspect)
+    {
+        let _ = s
+            .fs
+            .lock()
+            .unwrap()
+            .write_bytes(&sidecar_path, &sidecar, "service:platformd", &caps);
+    }
     Ok(serde_json::json!({
         "path": path,
+        "sidecar": sidecar_path,
         "bytes": bytes.len(),
         "version": version,
         "session_id": meta.id,

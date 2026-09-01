@@ -3092,6 +3092,7 @@ pub fn canvas_scene_digest(doc: &CanvasDoc, aspect: CanvasAspect) -> String {
         ),
         "coords=normalized 0..1 (origin top-left; x→ right, y↓ down; letterboxed board face — not pixels; max=1.0)"
             .into(),
+        "snap_step=0.01 (1% of board edge; copy last_bbox x,w to stack vertically)".into(),
         "origin=top-left, y↓ (x,y = coin haut-gauche, pas le centre)".into(),
         "shapes=rect/ellipse x,y,w,h top-left+size (same bbox; fill:true fills; cx,cy,rx,ry alias OK)".into(),
         "align ex: top ellipse x=0.35 w=0.30; bottom ellipse same x,w; body rect same x,w, y between".into(),
@@ -3126,6 +3127,14 @@ pub fn canvas_scene_digest(doc: &CanvasDoc, aspect: CanvasAspect) -> String {
             "scene_bbox=({:.3},{:.3})-({:.3},{:.3})",
             scene_bbox.x0, scene_bbox.y0, scene_bbox.x1, scene_bbox.y1
         ));
+    }
+    if let Some(last) = doc.ops.last() {
+        if let Some(b) = canvas_op_bbox(&last.body) {
+            lines.push(format!(
+                "last_seq={} last_bbox=({:.3},{:.3})-({:.3},{:.3}) — copy x,w from last_bbox to align the next shape",
+                last.seq, b.x0, b.y0, b.x1, b.y1
+            ));
+        }
     }
 
     const MAX_OPS: usize = 48;
@@ -4477,6 +4486,9 @@ mod chat_session_room_tests {
         assert!(digest.contains("origin=top-left"));
         assert!(digest.contains("pas le centre"));
         assert!(digest.contains("align ex:"));
+        assert!(digest.contains("snap_step=0.01"));
+        assert!(digest.contains("last_seq=2"));
+        assert!(digest.contains("last_bbox="));
     }
 
     #[test]

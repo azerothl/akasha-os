@@ -2457,11 +2457,12 @@ impl eframe::App for UiApp {
                 }
                 Evt::CanvasExported { path, session_id } => {
                     if self.chat_state.active_session.as_deref() == Some(session_id.as_str()) {
-                        self.status = format!("Canvas → {path}");
+                        let t = i18n::strings(&self.prefs.language);
+                        self.status = t.canvas_export_status.replace("{path}", &path);
                         self.chat_state.composer.last_session_image = Some(path.clone());
                         self.chat.push(ChatLine {
                             role: "assistant".into(),
-                            text: format!("Canvas exporté : {path}"),
+                            text: t.canvas_exported.replace("{path}", &path),
                             attachments: vec![ChatAttachment::Image {
                                 path,
                                 prompt: "canvas export".into(),

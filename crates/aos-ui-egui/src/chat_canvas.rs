@@ -2,7 +2,7 @@
 
 use aos_proto::{CanvasAspect, CanvasOp, CanvasOpBody, CanvasPenStyle, CanvasPoint};
 use eframe::egui::epaint::{CircleShape, PathShape, PathStroke, RectShape, Shape, StrokeKind};
-use eframe::egui::{Color32, Pos2, Sense, Stroke, Ui, Vec2};
+use eframe::egui::{Align2, Color32, FontId, Pos2, Sense, Stroke, Ui, Vec2};
 
 use crate::chat_room;
 use crate::i18n::UiStrings;
@@ -52,6 +52,10 @@ pub struct CanvasPanelState {
     pub clear_confirm_open: bool,
     /// True while a vision model is reading this canvas (tester-cohort slice 2).
     pub seeing: bool,
+    /// Overlay a 10×10 board grid (display only).
+    pub show_grid: bool,
+    /// Snap pointer and committed coords to 0.01.
+    pub snap: bool,
 }
 
 impl Default for CanvasPanelState {
@@ -71,6 +75,8 @@ impl Default for CanvasPanelState {
             poll_due: 0.0,
             clear_confirm_open: false,
             seeing: false,
+            show_grid: false,
+            snap: false,
         }
     }
 }
@@ -183,6 +189,82 @@ fn to_norm(rect: eframe::egui::Rect, p: Pos2) -> CanvasPoint {
     CanvasPoint {
         x: ((p.x - rect.left()) / rect.width()).clamp(0.0, 1.0),
         y: ((p.y - rect.top()) / rect.height()).clamp(0.0, 1.0),
+    }
+}
+
+const SNAP_STEP: f32 = 0.01;
+
+pub(crate) fn snap_unit(v: f32) -> f32 {
+    ((v / SNAP_STEP).round() * SNAP_STEP).clamp(0.0, 1.0)
+}
+
+pub(crate) fn snap_point(p: CanvasPoint) -> CanvasPoint {
+    CanvasPoint {
+        x: snap_unit(p.x),
+        y: snap_unit(p.y),
+    }
+}
+
+fn snap_points(points: &mut [CanvasPoint]) {
+    for p in points {
+        *p = snap_point(*p);
+    }
+}
+
+fn snap_body(body: &mut CanvasOpBody) {
+    match body {
+        CanvasOpBody::Stroke { points, .. }
+        | CanvasOpBody::Erase { points, .. }
+        | CanvasOpBody::Spline { points, .. }
+        | CanvasOpBody::Path { points, .. } => snap_points(points),
+        CanvasOpBody::Line { p0, p1, .. } => {
+            *p0 = snap_point(*p0);
+            *p1 = snap_point(*p1);
+        }
+        CanvasOpBody::Rect { x, y, w, h, .. } | CanvasOpBody::Ellipse { x, y, w, h, .. } => {
+            let x1 = snap_unit(*x + *w);
+            let y1 = snap_unit(*y + *h);
+            *x = snap_unit(*x);
+            *y = snap_unit(*y);
+            *w = (x1 - *x).abs().max(SNAP_STEP);
+            *h = (y1 - *y).abs().max(SNAP_STEP);
+        }
+        CanvasOpBody::Fill { x, y, .. } => {
+            *x = snap_unit(*x);
+            *y = snap_unit(*y);
+        }
+        CanvasOpBody::Clear | CanvasOpBody::Undo => {}
+    }
+}
+
+fn maybe_snap_point(p: CanvasPoint, snap: bool) -> CanvasPoint {
+    if snap {
+        snap_point(p)
+    } else {
+        p
+    }
+}
+
+fn paint_board_grid(painter: &eframe::egui::Painter, rect: eframe::egui::Rect) {
+    let fine = Color32::from_rgba_unmultiplied(SIGNAL.r(), SIGNAL.g(), SIGNAL.b(), 36);
+    let usable = Color32::from_rgba_unmultiplied(SIGNAL.r(), SIGNAL.g(), SIGNAL.b(), 72);
+    for i in 1..10 {
+        let t = i as f32 / 10.0;
+        let stroke = if i == 1 || i == 9 {
+            Stroke::new(1.0_f32, usable)
+        } else {
+            Stroke::new(1.0_f32, fine)
+        };
+        let x = rect.left() + t * rect.width();
+        let y = rect.top() + t * rect.height();
+        painter.line_segment(
+            [Pos2::new(x, rect.top()), Pos2::new(x, rect.bottom())],
+            stroke,
+        );
+        painter.line_segment(
+            [Pos2::new(rect.left(), y), Pos2::new(rect.right(), y)],
+            stroke,
+        );
     }
 }
 
@@ -479,6 +561,8 @@ pub fn toolbar_content_min_width(t: &UiStrings, seeing: bool, clear_confirm: boo
     w += 88.0; // color picker + width slider
     w += t.canvas_undo.len() as f32 * CHAR_W + BTN_PAD + GAP;
     w += t.canvas_export.len() as f32 * CHAR_W + BTN_PAD + GAP;
+    w += t.canvas_grid.len() as f32 * CHAR_W + BTN_PAD + GAP;
+    w += t.canvas_snap.len() as f32 * CHAR_W + BTN_PAD + GAP;
     if clear_confirm {
         w += t.canvas_clear_confirm.len() as f32 * CHAR_W
             + t.canvas_clear_confirm_yes.len() as f32 * CHAR_W
@@ -561,6 +645,14 @@ pub fn ui_canvas_toolbar(
         {
             action = Some(CanvasUiAction::Export);
         }
+        ui.toggle_value(
+            &mut state.show_grid,
+            eframe::egui::RichText::new(t.canvas_grid).weak(),
+        );
+        ui.toggle_value(
+            &mut state.snap,
+            eframe::egui::RichText::new(t.canvas_snap).weak(),
+        );
 
         if state.clear_confirm_open {
             ui.label(eframe::egui::RichText::new(t.canvas_clear_confirm).small());
@@ -629,6 +721,9 @@ pub fn ui_canvas_surface(
     let bg = canvas_bg(dark);
     painter.rect_filled(rect, 0.0, bg);
     painter.rect_stroke(rect, 0.0, Stroke::new(1.5_f32, SIGNAL), StrokeKind::Inside);
+    if state.show_grid {
+        paint_board_grid(&painter, rect);
+    }
 
     let now = ui.ctx().input(|i| i.time);
     if state.seeing {
@@ -718,7 +813,7 @@ pub fn ui_canvas_surface(
             if !rect.contains(pos) {
                 return action;
             }
-            let p = to_norm(rect, pos);
+            let p = maybe_snap_point(to_norm(rect, pos), state.snap);
             match state.tool {
                 CanvasTool::Pen | CanvasTool::Eraser | CanvasTool::Spline => {
                     if state
@@ -745,7 +840,7 @@ pub fn ui_canvas_surface(
     if response.clicked() && state.tool == CanvasTool::Fill {
         if let Some(pos) = response.interact_pointer_pos() {
             if rect.contains(pos) {
-                let p = to_norm(rect, pos);
+                let p = maybe_snap_point(to_norm(rect, pos), state.snap);
                 action = Some(CanvasUiAction::Apply(CanvasOpBody::Fill {
                     x: p.x,
                     y: p.y,
@@ -872,6 +967,29 @@ pub fn ui_canvas_surface(
             .y
             .clamp(rect.top() + 8.0, rect.bottom() - galley.size().y - 8.0);
         ui.painter().galley(pos, galley, Color32::TRANSPARENT);
+    }
+
+    if let Some(pos) = response.hover_pos() {
+        if rect.contains(pos) {
+            let p = maybe_snap_point(to_norm(rect, pos), state.snap);
+            let (ew, eh) = aspect.export_dimensions(1024);
+            let px = p.x * (ew.saturating_sub(1) as f32);
+            let py = p.y * (eh.saturating_sub(1) as f32);
+            let label = format!("{:.2}, {:.2}  ·  {:.0}×{:.0} px", p.x, p.y, px, py);
+            painter.text(
+                Pos2::new(rect.left() + 8.0, rect.bottom() - 6.0),
+                Align2::LEFT_BOTTOM,
+                label,
+                FontId::monospace(11.0),
+                SIGNAL,
+            );
+        }
+    }
+
+    if state.snap {
+        if let Some(CanvasUiAction::Apply(body)) = action.as_mut() {
+            snap_body(body);
+        }
     }
 
     action
@@ -1017,7 +1135,7 @@ Pas media.image.generate. Pas agent.spawn.",
         )
     };
     format!(
-        "Cible visuelle : lisible à l'export PNG (canvas.export ~512px) — pas un rectangle+triangle.\n\
+        "Cible visuelle : lisible à l'export PNG (canvas.export, long edge 1024) — pas un rectangle+triangle.\n\
 Espace : coords normalisées 0..1 uniquement (max 1.0) sur le cadre visible (origine coin supérieur gauche) — jamais des pixels.\n\
 « 200px » = taille d'export pour la lisibilité humaine, pas l'unité des coords (ne pas dessiner à x=200).\n\
 Règles : margin 0.08–0.12 ; sujet centré dans usable ; couches sol → volumes → détails → 2–3 ombres. \
@@ -1225,6 +1343,17 @@ mod routing_tests {
         state.apply_snapshot(vec![], 4, 2.0);
         assert!(state.ops.is_empty());
         assert_eq!(state.next_seq, 4);
+    }
+
+    #[test]
+    fn snap_unit_rounds_to_hundredths() {
+        assert!((snap_unit(0.014) - 0.01).abs() < 1e-6);
+        assert!((snap_unit(0.015) - 0.02).abs() < 1e-6);
+        assert_eq!(snap_unit(-0.2), 0.0);
+        assert_eq!(snap_unit(1.4), 1.0);
+        let p = snap_point(CanvasPoint { x: 0.333, y: 0.666 });
+        assert!((p.x - 0.33).abs() < 1e-6);
+        assert!((p.y - 0.67).abs() < 1e-6);
     }
 
     #[test]

@@ -972,14 +972,23 @@ impl HostServices for PlatformSubsystem {
                 if session_id.is_empty() {
                     return Err("session_id requis".into());
                 }
-                let width = args["width"].as_u64().unwrap_or(768) as u32;
-                let height = args["height"].as_u64().unwrap_or(512) as u32;
-                let (_, doc, _) = self
+                let (meta, doc, _) = self
                     .sessions
                     .lock()
                     .unwrap()
                     .canvas_get(&session_id, None)
                     .map_err(|e| e.to_string())?;
+                let (def_w, def_h) = meta.canvas_aspect.export_dimensions(1024);
+                let width = args
+                    .get("width")
+                    .and_then(|v| v.as_u64())
+                    .map(|v| v as u32)
+                    .unwrap_or(def_w);
+                let height = args
+                    .get("height")
+                    .and_then(|v| v.as_u64())
+                    .map(|v| v as u32)
+                    .unwrap_or(def_h);
                 let bytes = crate::canvas_raster::export_png(&doc, width, height)?;
                 let path = args["path"]
                     .as_str()
@@ -1007,8 +1016,20 @@ impl HostServices for PlatformSubsystem {
                         &ctx.granted_caps,
                     )
                     .map_err(|e| e.to_string())?;
+                let sidecar_path = crate::canvas_raster::sidecar_path_for_png(&path);
+                if let Ok(sidecar) =
+                    crate::canvas_raster::export_sidecar_json(&doc, meta.canvas_aspect)
+                {
+                    let _ = self.fs.lock().unwrap().write_bytes(
+                        &sidecar_path,
+                        &sidecar,
+                        &format!("module:{}", ctx.module),
+                        &ctx.granted_caps,
+                    );
+                }
                 Ok(serde_json::json!({
                     "path": path,
+                    "sidecar": sidecar_path,
                     "bytes": bytes.len(),
                     "version": version,
                 }))
