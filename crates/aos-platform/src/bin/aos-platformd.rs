@@ -4111,7 +4111,7 @@ fn export_canvas_png(
         .write_bytes(&path, &bytes, "service:platformd", &caps)
         .map_err(|e| e.to_string())?;
     let sidecar_path = if write_sidecar {
-        let sidecar_path = aos_platform::canvas_raster::sidecar_path_for_png(&path);
+        let sidecar_path = aos_platform::canvas_raster::sidecar_path_for_export(&path);
         if let Ok(sidecar) =
             aos_platform::canvas_raster::export_sidecar_json(&doc, meta.canvas_aspect)
         {

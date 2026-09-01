@@ -51,11 +51,15 @@ pub fn export_sidecar_json(doc: &CanvasDoc, aspect: CanvasAspect) -> Result<Vec<
     serde_json::to_vec_pretty(&payload).map_err(|e| e.to_string())
 }
 
-/// `canvas-sess-123.png` → `canvas-sess-123.json`.
-pub fn sidecar_path_for_png(png_path: &str) -> String {
-    match png_path.rsplit_once('.') {
-        Some((stem, ext)) if ext.eq_ignore_ascii_case("png") => format!("{stem}.json"),
-        _ => format!("{png_path}.json"),
+/// `canvas-sess-123.png` or `.svg` → `canvas-sess-123.json`.
+pub fn sidecar_path_for_export(export_path: &str) -> String {
+    match export_path.rsplit_once('.') {
+        Some((stem, ext))
+            if ext.eq_ignore_ascii_case("png") || ext.eq_ignore_ascii_case("svg") =>
+        {
+            format!("{stem}.json")
+        }
+        _ => format!("{export_path}.json"),
     }
 }
 
@@ -721,12 +725,16 @@ mod tests {
     }
 
     #[test]
-    fn sidecar_path_replaces_png_extension() {
+    fn sidecar_path_replaces_export_extension() {
         assert_eq!(
-            sidecar_path_for_png("/downloads/canvas-abc-1.png"),
+            sidecar_path_for_export("/downloads/canvas-abc-1.png"),
             "/downloads/canvas-abc-1.json"
         );
-        assert_eq!(sidecar_path_for_png("board"), "board.json");
+        assert_eq!(
+            sidecar_path_for_export("/downloads/canvas-abc-1.svg"),
+            "/downloads/canvas-abc-1.json"
+        );
+        assert_eq!(sidecar_path_for_export("board"), "board.json");
     }
 
     #[test]

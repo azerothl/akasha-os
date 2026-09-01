@@ -687,13 +687,14 @@ pub fn toolbar_content_min_width(t: &UiStrings, seeing: bool, clear_confirm: boo
     }
     for label in [
         t.canvas_tool_select,
+        t.canvas_tool_pan,
         t.canvas_tool_pen,
         t.canvas_tool_eraser,
         t.canvas_tool_line,
         t.canvas_tool_spline,
+        t.canvas_tool_path,
         t.canvas_tool_rect,
         t.canvas_tool_ellipse,
-        t.canvas_tool_fill,
     ] {
         w += label.len() as f32 * CHAR_W + BTN_PAD + GAP;
     }
