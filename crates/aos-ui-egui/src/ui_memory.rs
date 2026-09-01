@@ -1,0 +1,151 @@
+//! User memory management panel.
+
+use crate::cmd::Cmd;
+use crate::{guide, i18n, icons, memory_relation_lines, overflow_scroll_h, UiApp};
+use eframe::egui;
+use std::collections::HashMap;
+
+impl UiApp {
+    pub(crate) fn ui_memory(&mut self, ui: &mut egui::Ui) {
+        let t = i18n::strings(&self.prefs.language);
+        let g = guide::strings(&self.prefs.language);
+        ui.horizontal(|ui| {
+            ui.heading(t.tab_memory);
+            if guide::tab_help_button(ui, g.help_tooltip) {
+                self.guide.open_topic(guide::GuideTopic::Memory);
+            }
+        });
+        ui.weak(t.memory_blurb);
+        if self.mem_sweep_last_pass_ms > 0 && !self.mem_sweep_last_pass_label.is_empty() {
+            ui.weak(
+                t.memory_updated_at
+                    .replace("{}", &self.mem_sweep_last_pass_label),
+            );
+        }
+        ui.separator();
+        ui.horizontal(|ui| {
+            ui.add(
+                egui::TextEdit::singleline(&mut self.mem_note)
+                    .desired_width(400.0)
+                    .hint_text(t.memory_hint_remember),
+            );
+            if ui.button(t.memory_btn_remember).clicked() && !self.mem_note.is_empty() {
+                let _ = self.cmd_tx.send(Cmd::MemRemember {
+                    text: self.mem_note.clone(),
+                    pinned: true,
+                });
+                self.mem_note.clear();
+            }
+            if ui.button(t.memory_btn_list).clicked() {
+                let _ = self.cmd_tx.send(Cmd::MemList {
+                    include_superseded: self.mem_show_superseded,
+                });
+            }
+            if ui.button(t.memory_btn_wipe).clicked() {
+                let _ = self.cmd_tx.send(Cmd::MemWipeUser);
+            }
+        });
+        ui.horizontal(|ui| {
+            ui.add(
+                egui::TextEdit::singleline(&mut self.mem_query)
+                    .desired_width(400.0)
+                    .hint_text(t.memory_hint_recall),
+            );
+            if ui.button(t.memory_btn_recall).clicked() && !self.mem_query.is_empty() {
+                let _ = self.cmd_tx.send(Cmd::MemRecall {
+                    query: self.mem_query.clone(),
+                });
+            }
+            ui.checkbox(&mut self.mem_show_superseded, t.memory_show_superseded);
+        });
+        if let Some(edit_id) = self.mem_edit_id {
+            ui.horizontal(|ui| {
+                ui.label(format!("{} #{edit_id}", t.memory_editing));
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.mem_edit_text).desired_width(360.0),
+                );
+                if ui.button(t.memory_btn_save).clicked() && !self.mem_edit_text.is_empty() {
+                    let _ = self.cmd_tx.send(Cmd::MemEdit {
+                        id: edit_id,
+                        text: self.mem_edit_text.clone(),
+                    });
+                    self.mem_edit_id = None;
+                    self.mem_edit_text.clear();
+                }
+                if ui.button(t.memory_btn_supersede).clicked() && !self.mem_edit_text.is_empty() {
+                    let _ = self.cmd_tx.send(Cmd::MemSupersede {
+                        id: edit_id,
+                        text: self.mem_edit_text.clone(),
+                    });
+                    self.mem_edit_id = None;
+                    self.mem_edit_text.clear();
+                }
+                if ui.button(t.memory_btn_cancel).clicked() {
+                    self.mem_edit_id = None;
+                    self.mem_edit_text.clear();
+                }
+            });
+        }
+        ui.separator();
+        let mut edit_req: Option<(u64, String)> = None;
+        let mut delete_id: Option<u64> = None;
+        let mut supersede_req: Option<(u64, String)> = None;
+        let visible_hits: Vec<_> = self
+            .mem_hits
+            .iter()
+            .filter(|h| {
+                aos_proto::mem_extract::is_human_memory_fact(&h.text)
+                    && (self.mem_show_superseded || !h.superseded)
+            })
+            .collect();
+        let fact_texts: HashMap<u64, String> = self
+            .mem_hits
+            .iter()
+            .map(|h| (h.id, h.text.clone()))
+            .collect();
+        let list_h = ui.available_height().max(120.0);
+        overflow_scroll_h(ui, "memory_hits", list_h, |ui| {
+            if visible_hits.is_empty() {
+                ui.weak(t.memory_empty);
+            }
+            for h in visible_hits {
+                ui.horizontal_wrapped(|ui| {
+                    if h.pinned {
+                        icons::pin_indicator(ui);
+                    }
+                    let mut fact = egui::RichText::new(h.text.trim());
+                    if h.superseded {
+                        fact = fact.weak().strikethrough();
+                    }
+                    ui.label(fact);
+                });
+                for line in memory_relation_lines(h, &fact_texts, &t) {
+                    ui.weak(line);
+                }
+                ui.horizontal(|ui| {
+                    if ui.small_button(t.memory_btn_edit).clicked() {
+                        edit_req = Some((h.id, h.text.clone()));
+                    }
+                    if ui.small_button(t.memory_btn_replace).clicked() {
+                        supersede_req = Some((h.id, h.text.clone()));
+                    }
+                    if ui.small_button(t.memory_btn_delete).clicked() {
+                        delete_id = Some(h.id);
+                    }
+                });
+                ui.add_space(6.0);
+            }
+        });
+        if let Some((id, text)) = edit_req {
+            self.mem_edit_id = Some(id);
+            self.mem_edit_text = text;
+        }
+        if let Some((id, text)) = supersede_req {
+            self.mem_edit_id = Some(id);
+            self.mem_edit_text = text;
+        }
+        if let Some(id) = delete_id {
+            let _ = self.cmd_tx.send(Cmd::MemDelete { id });
+        }
+    }
+}
