@@ -52,6 +52,7 @@ mod ui_chat_composer;
 mod ui_chat_session;
 mod ui_chat_sidebar;
 mod ui_chat_transcript;
+mod ui_chat_workspace;
 mod ui_decl_module;
 mod ui_models;
 mod ui_memory;
