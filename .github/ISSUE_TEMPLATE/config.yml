@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Preview cohort / questions
+    url: https://github.com/azerothl/akasha-os/discussions
+    about: Install, the 15-minute path, or a cohort check-in. Not for security reports.
+  - name: Security report
+    url: https://github.com/azerothl/akasha-os/blob/main/SECURITY.md
+    about: Do not file security issues in public. Follow SECURITY.md (email).

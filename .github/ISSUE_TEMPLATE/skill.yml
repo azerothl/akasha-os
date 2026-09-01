@@ -1,0 +1,26 @@
+name: Skill idea
+description: Propose a skill (Markdown recipe). A Discussion is usually better than an issue.
+title: "[skill] "
+labels: ["area:skills"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Prefer a **Show and tell** Discussion if you are sharing a `SKILL.md`
+        without a pull request. A PR into this repo is covered by
+        [CONTRIBUTING.md](https://github.com/azerothl/akasha-os/blob/main/CONTRIBUTING.md)
+        (AGPL + commercial grant).
+  - type: input
+    id: name
+    attributes:
+      label: Skill name
+      placeholder: morning-brief
+    validations:
+      required: true
+  - type: textarea
+    id: body
+    attributes:
+      label: SKILL.md body
+      description: Paste the Markdown. Tools list and when it should activate.
+    validations:
+      required: true

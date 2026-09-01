@@ -22,7 +22,7 @@ The development of Agent OS has two layers that must not be collapsed:
 
 P0–P5 prove and polish the system **on the host**; **PV** is the **seL4 kernel
 scaffolding** (QEMU VM, without GPU); **PC** is the **distributable Preview**
-for a tester cohort (Win/Linux installer, not seL4). The
+for a tester cohort (Win/Linux/macOS installer, not seL4). The
 `docs/technical-specs.md` §1.3 strategy remains: prove agentic algorithms in
 userspace before committing to the microkernel port.
 
@@ -35,7 +35,7 @@ userspace before committing to the microkernel port.
 | **P3**      | Linux host                            | **Remote backends, privacy routing, complete security**                                       | ~6–8 weeks          | done        |
 | **P4**      | Host (userspace caps)                 | **Microkernel semantics** (`aos-capkd`, process isolation) — seL4 deferred (GPU)              | ~12–16 weeks        | done        |
 | **PV**      | QEMU + seL4 (without GPU)             | **Real kernel port**: Microkit PDs, seL4 IPC, CPU-only replay of the P4 gate                  | ~8–10 weeks         | PV.1–PV.3 ✅ |
-| **PC**      | Win/Linux host + NVIDIA               | Installable **0.1 Preview**: session, egui, cohort feedback                                   | ~2–4 weeks          | 🚧 cohort   |
+| **PC**      | Win/Linux/macOS host                  | Installable Preview: session, egui, cohort feedback (3 Win + 1 Linux + 1 Mac)                 | ~2–4 weeks          | 🚧 cohort   |
 | **P5**      | GPU host / polish                     | **First-class GPU/NPU**, multi-GPU, polish (parallel with PV/PC)                              | ~10–12 weeks        | P5.1 ✅      |
 | **P03**     | Win/Linux Preview host                | Preview **0.3.0** — E1–E5 (CPU path, scheduler, tasks, caps UI, metrics)                      | shipped             | done        |
 | **P04**     | Win/Linux Preview host                | Preview **0.4.0** — E6 / E7-lite / E10-lite (memory graph, vault, cap review)                 | shipped             | done        |
@@ -72,7 +72,7 @@ passed.** This prevents technical debt from accumulating in the lower layers.
 | **Gate P3** | Automatic local→remote switch according to privacy policy, `local_only` mode verifiable through egress monitoring, blocking confirmation for a sensitive action                  |
 | **Gate P4** | Essential services isolated + native userspace caps (`aos-capkd`) on the host; kill Audit without affecting Model                                                                |
 | **Gate PV** | seL4/Microkit boot under QEMU `virt` (without GPU); `cap.`* intents through the PD bus; immediate revocation; stop Audit without killing CapKernel                               |
-| **Gate PC** | 3 Windows testers + 1 Linux tester install Preview without a toolchain; `TESTER.md` protocol; ≥1 actionable `feedback.submit`                                                    |
+| **Gate PC** | 3 Windows + 1 Linux + 1 macOS Apple Silicon testers install Preview without a toolchain; 15-minute `TESTER.md` path; ≥1 actionable `feedback.submit` each                         |
 | **Gate P5**  | Continuous batching for multiple agents with < 20% degradation over 8 simultaneous streams, functional multi-GPU pipeline, aarch64 port validated on at least one target machine |
 | **Gate P03** | Metrics + caps UI + CPU-only boot + scheduler fire + tasks dual-surface — [phase-preview-03.md](phases/phase-preview-03.md) |
 | **Gate P04** | Typed memory graph + vault + module cap review — [phase-preview-04.md](phases/phase-preview-04.md) |
@@ -473,9 +473,10 @@ with the transport contract = seL4 primitives. Bare metal reuses this image
 ### Objective
 
 Deliver **Agent OS Preview 0.1**: the same host stack (P1–P5),
-**installable** by external testers on Windows and Linux x64 + NVIDIA,
-**without compiling**. egui UI = main surface; feedback through
-`feedback.submit` (local only). **This is not bare metal** (ADR 0001).
+**installable** by external testers on Windows and Linux x64 (NVIDIA
+recommended; CPU path OK) or macOS Apple Silicon, **without compiling**.
+egui UI = main surface; feedback through `feedback.submit` (local only).
+**This is not bare metal** (ADR 0001).
 
 ### Deliverables
 
@@ -499,9 +500,10 @@ Deliver **Agent OS Preview 0.1**: the same host stack (P1–P5),
 
 ### Exit gates (Gate PC)
 
-- [x] Win + Linux installer/archive without `cargo`
-- [x] `docs/TESTER.md` protocol playable from egui
-- [x] ≥1 actionable `feedback.submit` response from the pilot cohort
+- [x] Win + Linux + macOS Apple Silicon installer/archive without `cargo`
+- [x] `docs/TESTER.md` 15-minute path playable from egui
+- [ ] Cohort gate: 3 Windows + 1 Linux + 1 macOS Apple Silicon; ≥1
+      actionable `feedback.submit` each
 
 ```powershell
 .\packaging\build-preview.ps1
@@ -732,7 +734,7 @@ Detail: [phases/phase-preview-11.md](phases/phase-preview-11.md).
 | **P5.3 / E11** | `AccelDevice` + bare metal (after PV.4) |
 | **P5.5** | Validated aarch64 host |
 | **P5.4 remainder** | Accessibility (F-UI-08) |
-| **PC cohort** | 3 Win + 1 Linux testers; independent of Preview increments |
+| **PC cohort** | 3 Windows + 1 Linux + 1 macOS Apple Silicon testers; independent of Preview increments |
 | **E12 / E13** | Horizon C (cognitive preemption, compositor / optional webview) |
 | **PV.4+** | Bare metal seL4 (internal `sel4-pv-*` gates PV.1–PV.3 only in 0.10) |
 

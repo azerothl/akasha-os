@@ -1,0 +1,43 @@
+title: "[Cohort] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check in after the [15-minute path](https://github.com/azerothl/akasha-os/blob/main/docs/TESTER.md#short-path-15-minutes).
+        File bugs from the in-app Feedback tab so `var/feedback/` is attached.
+  - type: dropdown
+    id: os
+    attributes:
+      label: Host OS
+      options:
+        - Windows 10/11 x64
+        - Linux x64
+        - macOS Apple Silicon
+    validations:
+      required: true
+  - type: dropdown
+    id: infer
+    attributes:
+      label: Inference
+      options:
+        - NVIDIA GPU
+        - CPU-only (Windows/Linux)
+        - Metal / CPU (macOS)
+        - Not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: short
+    attributes:
+      label: Short path
+      options:
+        - Chat and notes worked; feedback sent
+        - Partial (say what failed below)
+        - Not yet
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Version, what felt clear or broken, Gatekeeper on Mac, anything else.

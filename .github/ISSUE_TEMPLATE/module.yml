@@ -1,0 +1,36 @@
+name: Module idea
+description: Propose a dual-surface WASM module. A Discussion is usually better than an issue.
+title: "[module] "
+labels: ["area:modules"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Prefer a **Show and tell** Discussion if you are sharing a `.aospkg`
+        without a pull request. A PR into this repo is covered by
+        [CONTRIBUTING.md](https://github.com/azerothl/akasha-os/blob/main/CONTRIBUTING.md)
+        (AGPL + commercial grant). Install in Preview still runs cap review.
+  - type: input
+    id: name
+    attributes:
+      label: Module name
+      placeholder: cohortmod
+    validations:
+      required: true
+  - type: textarea
+    id: caps
+    attributes:
+      label: Required caps
+      description: Same shape as a manifest `required_caps` list.
+      placeholder: |
+        - fs.read:/documents/example/**
+        - fs.write:/documents/example/**
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What it does
+      description: Tools for agents, widgets for humans (closed declarative_ui list).
+    validations:
+      required: true

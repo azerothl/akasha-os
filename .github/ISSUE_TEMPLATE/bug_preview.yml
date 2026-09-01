@@ -1,0 +1,63 @@
+name: Preview bug
+description: Something in Preview does not work as documented
+title: "[Preview][bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Prefer the in-app **Feedback** tab so a copy lands in `var/feedback/`.
+        Use this form if you already have logs or cannot open Preview.
+        Security reports: [SECURITY.md](https://github.com/azerothl/akasha-os/blob/main/SECURITY.md) — do not file them here.
+  - type: dropdown
+    id: os
+    attributes:
+      label: Host OS
+      options:
+        - Windows 10/11 x64
+        - Linux x64
+        - macOS Apple Silicon
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: infer
+    attributes:
+      label: Inference
+      options:
+        - NVIDIA GPU
+        - CPU-only (Windows/Linux)
+        - Metal / CPU (macOS)
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Preview version
+      description: From VERSION in the install prefix, or the window title.
+      placeholder: "0.15.1"
+    validations:
+      required: true
+  - type: dropdown
+    id: path
+    attributes:
+      label: Which path
+      options:
+        - Short path (15 minutes)
+        - Full TESTER protocol
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: Steps, then the failure. Paste relevant log lines if you have them.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: A sentence from TESTER.md, FEATURES.md, or the UI.

@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Community — Akasha OS Preview</title>
+    <meta
+      name="description"
+      content="Join the Akasha OS Preview cohort: 15-minute path, GitHub Discussions, no Discord yet. Gate: 3 Windows + 1 Linux + 1 Mac."
+    />
+    <meta property="og:title" content="Akasha OS: Community" />
+    <meta
+      property="og:description"
+      content="Preview cohort is open. Install without cargo, walk the 15-minute path, send feedback from the UI."
+    />
+    <meta property="og:type" content="website" />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <meta property="og:image" content="https://azerothl.github.io/akasha-os/og.png" />
+    <meta name="theme-color" content="#070b14" />
+  </head>
+  <body class="plate">
+    <!--
+      THESIS: Community is a cohort protocol and a Discussion, not a Discord.
+      OWN-WORLD: Orrery inner plate — void, cyan rails. FORM: seed c1699dbf reroll 1.
+      STORY: A tester installs without cargo, walks 15 minutes, files from the UI.
+      FIRST VIEWPORT: Gate numbers, then the short path.
+      FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+    -->
+    <canvas class="ether" data-ether aria-hidden="true"></canvas>
+    <a class="skip" href="#content">Skip to content</a>
+    <div class="shell">
+      <header class="axis">
+        <a class="mark" href="./" aria-label="Akasha OS home">
+          <img src="logo.svg" alt="" width="40" height="40" />
+          <span class="mark-id">Akasha OS</span>
+        </a>
+        <nav class="lanes" aria-label="Primary">
+          <a href="grant.html">grant</a>
+          <a href="why.html">why</a>
+          <a href="install.html">install</a>
+          <a href="docs/">docs</a>
+          <a href="docs/whats-new.html">news</a>
+          <a href="community.html" aria-current="page">community</a>
+          <a href="about.html">about</a>
+        </nav>
+        <div class="lang" role="group" aria-label="Language">
+          <button type="button" data-set-lang="en" aria-pressed="true">EN</button>
+          <button type="button" data-set-lang="fr" aria-pressed="false">FR</button>
+        </div>
+      </header>
+      <main id="content" class="plate-main">
+        <h1>
+          <span data-lang="en">
+            The Preview
+            <span data-aos-version="0.15.1">0.15.1</span> cohort is open. Install
+            without cargo, walk fifteen minutes, send feedback from the UI.
+            GitHub Discussions is the hangout — not Discord.
+          </span>
+          <span data-lang="fr">
+            La cohorte Preview
+            <span data-aos-version="0.15.1">0.15.1</span> est ouverte. Installez
+            sans cargo, marchez quinze minutes, envoyez un retour depuis l’UI.
+            GitHub Discussions est le lieu de rencontre — pas Discord.
+          </span>
+        </h1>
+
+        <aside class="callout">
+          <h3 data-lang="en">Cohort gate</h3>
+          <h3 data-lang="fr">Gate cohorte</h3>
+          <p data-lang="en">
+            Success is <strong>3 Windows + 1 Linux + 1 macOS Apple Silicon</strong>
+            testers completing the short path below, each with a usable
+            <code>var/feedback/</code> report. Preview is a host app, not a
+            bootable OS. Intel Mac is out. NVIDIA is recommended on Windows and
+            Linux; CPU-only is slower but counts. macOS builds are unsigned —
+            expect Gatekeeper after <code>install.sh</code>.
+          </p>
+          <p data-lang="fr">
+            Le succès, c’est <strong>3 Windows + 1 Linux + 1 macOS Apple
+            Silicon</strong> qui finissent le chemin court ci-dessous, chacun
+            avec un rapport <code>var/feedback/</code> exploitable. La Preview
+            est une appli hôte, pas un OS bootable. Pas d’Intel Mac. NVIDIA est
+            recommandé sous Windows et Linux ; le CPU-only est plus lent mais
+            compte. Les builds macOS ne sont pas signés — Gatekeeper avertira
+            après <code>install.sh</code>.
+          </p>
+        </aside>
+
+        <article class="grant">
+          <h2 data-lang="en">Short path (15 minutes)</h2>
+          <h2 data-lang="fr">Chemin court (15 minutes)</h2>
+          <p class="hist" data-lang="en">
+            This is enough to count toward the gate. Skip what your hardware
+            cannot do, and say so in the report. The long protocol in
+            <a href="docs/feedback.html">feedback</a> is a team checklist, not
+            a drill for every tester.
+          </p>
+          <p class="hist" data-lang="fr">
+            Cela suffit pour compter dans la gate. Sautez ce que votre matériel
+            ne permet pas, et dites-le dans le rapport. Le protocole long dans
+            <a href="docs/feedback.html">feedback</a> est une checklist équipe,
+            pas un drill pour chaque testeur.
+          </p>
+          <ol class="steps">
+            <li data-lang="en">
+              <a href="install.html">Install</a> from GitHub Releases —
+              <code>install.ps1</code> (Windows) or <code>./install.sh</code>
+              (Linux / macOS Apple Silicon).
+            </li>
+            <li data-lang="fr">
+              <a href="install.html">Installer</a> depuis les GitHub Releases —
+              <code>install.ps1</code> (Windows) ou <code>./install.sh</code>
+              (Linux / macOS Apple Silicon).
+            </li>
+            <li data-lang="en">
+              Launch Akasha OS Preview. Finish model setup and the four-step
+              tutorial.
+            </li>
+            <li data-lang="fr">
+              Lancer Akasha OS Preview. Terminer le choix des modèles et le
+              tutoriel en quatre étapes.
+            </li>
+            <li data-lang="en">
+              Chat tab, network still off: ask “What is Akasha OS?” and wait
+              for a streamed reply.
+            </li>
+            <li data-lang="fr">
+              Onglet Chat, réseau encore off : demander « Qu’est-ce qu’Akasha
+              OS ? » et attendre une réponse streamée.
+            </li>
+            <li data-lang="en">
+              Notes tab: title + body → Create, then List.
+            </li>
+            <li data-lang="fr">
+              Onglet Notes : titre + corps → Create, puis List.
+            </li>
+            <li data-lang="en">
+              Feedback tab: Send feedback. Keep Create a GitHub issue checked
+              (except security). Confirm Submit on GitHub if you have an
+              account.
+            </li>
+            <li data-lang="fr">
+              Onglet Feedback : Send feedback. Laisser Create a GitHub issue
+              coché (sauf security). Confirmer Submit sur GitHub si vous avez
+              un compte.
+            </li>
+          </ol>
+        </article>
+
+        <article class="grant">
+          <h2 data-lang="en">Where to talk</h2>
+          <h2 data-lang="fr">Où parler</h2>
+          <p class="hist" data-lang="en">
+            Open a check-in on
+            <a href="https://github.com/azerothl/akasha-os/discussions">GitHub Discussions</a>
+            with your OS, GPU or CPU, and whether chat and notes worked. Ask
+            questions there. Share a skill or a module as Show and tell — that
+            is not a pull request and does not grant the commercial license.
+            Bugs still go through the Feedback tab so
+            <code>var/feedback/</code> is attached.
+          </p>
+          <p class="hist" data-lang="fr">
+            Ouvrez un check-in sur
+            <a href="https://github.com/azerothl/akasha-os/discussions">GitHub Discussions</a>
+            avec votre OS, GPU ou CPU, et si chat et notes ont marché. Posez
+            les questions là. Partagez un skill ou un module en Show and tell
+            — ce n’est pas une pull request et cela n’accorde pas la licence
+            commerciale. Les bugs passent encore par l’onglet Feedback pour
+            attacher <code>var/feedback/</code>.
+          </p>
+          <p class="hist" data-lang="en">
+            There is no Discord. Messaging channels are out of the OS core;
+            this page is for humans. Code of conduct and security policy live
+            in the
+            <a href="https://github.com/azerothl/akasha-os/blob/main/CODE_OF_CONDUCT.md">repository</a>
+            with
+            <a href="https://github.com/azerothl/akasha-os/blob/main/CONTRIBUTING.md">how to contribute</a>.
+          </p>
+          <p class="hist" data-lang="fr">
+            Pas de Discord. Les canaux de messagerie sont hors du noyau OS ;
+            cette page est pour les humains. Le code de conduite et la
+            politique de sécurité vivent dans le
+            <a href="https://github.com/azerothl/akasha-os/blob/main/docs/fr/CODE_OF_CONDUCT.md">dépôt</a>
+            avec
+            <a href="https://github.com/azerothl/akasha-os/blob/main/docs/fr/CONTRIBUTING.md">comment contribuer</a>.
+          </p>
+        </article>
+
+        <a class="continue pager" href="install.html">
+          <span class="continue-label">Install</span>
+        </a>
+      </main>
+      <footer>
+        <p>AKASHA OS · <a href="https://github.com/azerothl/akasha-os">github.com/azerothl/akasha-os</a></p>
+      </footer>
+    </div>
+    <script src="app.js"></script>
+    <script type="module" src="orrery.js"></script>
+  </body>
+</html>

@@ -57,7 +57,9 @@ Windows 10/11 x64 **ou** Linux x64 ; GPU NVIDIA **ou** mode CPU-only (plus lent)
 2. `install.ps1` / `./install.sh`.
 3. Lancer **Akasha OS Preview** (téléchargement des modèles au 1er run + tutoriel).
 
-Voir [INSTALL.md](INSTALL.md), [FIRST-RUN.md](FIRST-RUN.md), [TESTER.md](TESTER.md).
+Voir [INSTALL.md](INSTALL.md), [FIRST-RUN.md](FIRST-RUN.md),
+[TESTER.md](TESTER.md) (chemin de 15 minutes d’abord). Lieu de rencontre :
+[community.md](community.md).
 
 ### Build depuis les sources
 
@@ -85,7 +87,8 @@ cargo run -p aos-session --release
 | [paysage-concurrentiel.md](paysage-concurrentiel.md) | Paysage OS agentiques vs Akasha OS |
 | [plan-evolutions.md](plan-evolutions.md) | Priorités d’évolution post-paysage (E1–E15) |
 | [I18N.md](I18N.md) | Convention multilingue |
-| [../../CONTRIBUTING.md](../../CONTRIBUTING.md) | Contributions |
+| [community.md](community.md) | Cohorte Preview (Discussions ; 3 Win + 1 Linux + 1 Mac) |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Comment tester, discuter, et (si PR) licence |
 
 ## Licence
 
@@ -93,4 +96,6 @@ Double licence AGPL-3.0-only + commerciale — voir le [README anglais](../../RE
 
 ## Statut
 
-Voir **[STATUS.md](STATUS.md)**.
+Cohorte Preview (PC) en cours. Gate : **3 Windows + 1 Linux + 1 macOS
+Apple Silicon** sur le chemin de 15 minutes. Tables :
+**[STATUS.md](STATUS.md)**.

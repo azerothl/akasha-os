@@ -64,7 +64,8 @@ macOS builds are unsigned — expect Gatekeeper after download; run `install.sh`
    opens the in-app tutorial.
 
 See [docs/INSTALL.md](docs/INSTALL.md) and [docs/FIRST-RUN.md](docs/FIRST-RUN.md).
-Cohort protocol: [docs/TESTER.md](docs/TESTER.md).
+Cohort protocol: [docs/TESTER.md](docs/TESTER.md) (15-minute path first).
+Hangout: [docs/community.md](docs/community.md).
 
 ### Developers / build from source
 
@@ -94,7 +95,8 @@ cargo run -p aos-session --release
 | [docs/competitive-landscape.md](docs/competitive-landscape.md) | Agentic OS landscape vs Akasha OS |
 | [docs/evolution-roadmap.md](docs/evolution-roadmap.md) | Post-landscape evolution priorities (E1–E15) |
 | [docs/I18N.md](docs/I18N.md) | Language layout (EN / FR) |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | Contribution license terms |
+| [docs/community.md](docs/community.md) | Preview cohort hangout (Discussions; 3 Win + 1 Linux + 1 Mac) |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | How to test, discuss, and (if you PR) license terms |
 
 French mirrors live under [`docs/fr/`](docs/fr/).
 
@@ -114,5 +116,6 @@ The **Akasha OS** trademark is reserved.
 
 ## Status
 
-Preview cohort (PC) is in progress. Full gate tables:
+Preview cohort (PC) is in progress. Gate: **3 Windows + 1 Linux + 1 macOS
+Apple Silicon** on the 15-minute path. Full tables:
 **[docs/STATUS.md](docs/STATUS.md)**.

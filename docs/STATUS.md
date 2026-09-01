@@ -8,7 +8,8 @@ Summary of delivered phases. Detail: [development-plan.md](development-plan.md),
 **Headline:** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
 **Preview:** 0.15.1 — in-app guides, chat schedules, research documents, user library, morning skill offer. Not a bootable OS. Cohort gate
-still open. **Next:** PC cohort close; Horizon C / PV.4+ when scheduled; E9
+still open (**3 Windows + 1 Linux + 1 macOS Apple Silicon**, 15-minute
+path). **Next:** PC cohort close; Horizon C / PV.4+ when scheduled; E9
 hard-green after a documented 2-GPU run.
 
 ## P13 — Preview 0.13.0 (create + chat documents) — done
@@ -245,7 +246,8 @@ Detail: [phases/phase-p5.md](phases/phase-p5.md).
 | Notes package resync on boot | done |
 | In-app Troubleshoot report | done |
 
-Cohort gate (3 Win + 1 Linux testers, no toolchain) remains **open**.
+Cohort gate (3 Windows + 1 Linux + 1 macOS Apple Silicon testers, no
+toolchain, [short path](TESTER.md#short-path-15-minutes)) remains **open**.
 
 Detail: [phases/phase-pc.md](phases/phase-pc.md), [FEATURES.md](FEATURES.md).
 

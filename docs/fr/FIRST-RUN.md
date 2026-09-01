@@ -8,7 +8,9 @@
 **NVIDIA est recommandé sur Win/Linux** ; le même zip embarque `aos-modeld-cpu`
 (Réglages → Inférence redémarre modeld dans la session). Les builds macOS sont non signés.
 
-Catalogue : [FEATURES.md](FEATURES.md).
+Catalogue : [FEATURES.md](FEATURES.md). Testeurs de cohorte : le
+[chemin de 15 minutes](TESTER.md#chemin-court-15-minutes) suffit pour
+compter ; lieu de rencontre : [community.md](community.md).
 
 ## Avant de lancer
 

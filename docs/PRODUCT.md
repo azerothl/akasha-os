@@ -8,7 +8,7 @@ web
 
 ## Users
 
-Primary users are Preview cohort testers. They sit at a Windows 10/11 x64 or Linux x64 machine (NVIDIA GPU recommended; CPU-only supported but slower), deciding whether this install is worth their time. They do not want to clone the repo or use `cargo`. Their job is to understand why an agent-native OS is different from an agent app on a general-purpose OS, then install Preview and send feedback from the UI.
+Primary users are Preview cohort testers. They sit at a Windows 10/11 x64, Linux x64, or macOS Apple Silicon machine (NVIDIA GPU recommended on Win/Linux; CPU-only supported but slower; Mac builds are unsigned), deciding whether this install is worth their time. They do not want to clone the repo or use `cargo`. Their job is to understand why an agent-native OS is different from an agent app on a general-purpose OS, then install Preview, walk the 15-minute path, and send feedback from the UI.
 
 Other audiences (systems/security/AI researchers, commercial-license evaluators) exist in the repo but are not the primary user of this surface.
 
@@ -16,7 +16,7 @@ Other audiences (systems/security/AI researchers, commercial-license evaluators)
 
 Akasha OS is an agent-native operating system: agents, models, tools, and memory are first-class system services with explicit capabilities, audit, and policy. Preview 0.15.1 is an installable host app on Windows/Linux (NVIDIA optional via CPU path in the same zip) and macOS Apple Silicon (unsigned), not a bootable OS image. A seL4 bare-metal track is separate.
 
-Success for the public site: a tester understands, in full sentences, what Preview can do and how it differs from a chat wrapper; then installs and follows the tester protocol.
+Success for the public site: a tester understands, in full sentences, what Preview can do and how it differs from a chat wrapper; then installs and follows the 15-minute path. Cohort gate: 3 Windows + 1 Linux + 1 macOS Apple Silicon, each with a usable `var/feedback/` report.
 
 ## Positioning
 
@@ -29,7 +29,8 @@ A neighboring chat wrapper or “AI desktop” cannot truthfully claim that agen
 - Public site: static pages in `website/`, published to GitHub Pages at https://azerothl.github.io/akasha-os/
 - Download: GitHub Releases zip/tar.gz; `install.ps1` (Windows) or `./install.sh` (Linux)
 - First run: model download if needed, then in-app tutorial
-- Tester protocol: `docs/TESTER.md` — install without cargo, exercise paths, feedback from the UI
+- Tester protocol: `docs/TESTER.md` — 15-minute path (install without cargo, one offline chat, one note, feedback from the UI); long protocol remains the team checklist
+- Community hangout: GitHub Discussions; public page `website/community.html`. No Discord yet.
 - End-user manual lives on the public site (`website/docs/`). Repo specs, ADRs, and the seL4 track stay in `docs/` (French mirrors under `docs/fr/`).
 - Contact for commercial license: loic.peaudecerf@proton.me
 
@@ -45,7 +46,7 @@ Constraints:
 - Site and product copy are bilingual EN / FR with equivalent content.
 - Stack for the public site is already decided: static HTML / CSS / JS in `website/`.
 
-Site routes: landing plus grant, why, install, about, an end-user docs hub (`website/docs/`), and a version log (`website/docs/whats-new.html`). Repo specs stay on GitHub.
+Site routes: landing plus grant, why, install, about, community, an end-user docs hub (`website/docs/`), and a version log (`website/docs/whats-new.html`). Repo specs stay on GitHub.
 
 ## Brand Commitments
 

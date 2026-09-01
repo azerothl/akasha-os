@@ -4,15 +4,16 @@
 
 ## Goal
 
-Ship **Agent OS Preview 0.1** to a cohort: install on Windows / Linux x64 +
-NVIDIA, test from egui, send local feedback. **Not** seL4 / bare metal.
+Ship **Agent OS Preview** to a cohort: install on Windows / Linux x64
+(NVIDIA recommended; CPU path OK) or macOS Apple Silicon, test from egui,
+send local feedback. **Not** seL4 / bare metal.
 
 ## Deliverables
 
 | # | Deliverable | Status |
 |---|-------------|--------|
 | PC.1 | `aos-session` | done |
-| PC.2 | Win/Linux packaging | GitHub Actions CI + model download |
+| PC.2 | Win/Linux/macOS packaging | GitHub Actions CI + model download |
 | PC.3 | egui cohort UI | done (+ tutorial) |
 | PC.4 | `feedback.submit` | local + GitHub issue |
 | PC.5 | INSTALL + TESTER + FIRST-RUN | done |
@@ -41,7 +42,10 @@ See scenarios in [`docs/TESTER.md`](../TESTER.md).
 
 ## Cohort gate
 
-3 Win + 1 Linux complete `docs/TESTER.md` without a toolchain; ≥1 feedback.
+3 Windows + 1 Linux + 1 macOS Apple Silicon complete the
+[15-minute path](../TESTER.md#short-path-15-minutes) without a toolchain;
+≥1 feedback each. Long TESTER protocol remains the team checklist
+(PC.6–PC.9, PC.11–PC.13).
 
 ```powershell
 .\packaging\build-preview.ps1

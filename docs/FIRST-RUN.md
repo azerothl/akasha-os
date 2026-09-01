@@ -8,7 +8,9 @@
 **NVIDIA is recommended on Win/Linux**; the same zip ships a CPU-linked `aos-modeld-cpu`
 (Settings → Inference restarts modeld in-session). macOS builds are unsigned.
 
-Full feature list: [FEATURES.md](FEATURES.md).
+Full feature list: [FEATURES.md](FEATURES.md). Cohort testers: the
+[15-minute path](TESTER.md#short-path-15-minutes) is enough to count;
+hangout is [community.md](community.md).
 
 ## Before you launch
 

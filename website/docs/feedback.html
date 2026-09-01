@@ -37,6 +37,7 @@
           <a href="../install.html">install</a>
           <a href="../docs/" aria-current="page">docs</a>
           <a href="whats-new.html">news</a>
+          <a href="../community.html">community</a>
           <a href="../about.html">about</a>
         </nav>
         <div class="lang" role="group" aria-label="Language">
@@ -49,52 +50,83 @@
         <h1>
           <span data-lang="en">
             If you are in the Preview
-            <span data-aos-version="0.15.1">0.15.1</span> cohort, this page is the
-            protocol: install without cargo or a clone, exercise the main
-            paths, then send a report from the UI. The same outline lives in
-            the Scenarios tab.
+            <span data-aos-version="0.15.1">0.15.1</span> cohort, start with the
+            15-minute path: install without cargo or a clone, one offline chat,
+            one note, then send a report from the UI. That is enough to count.
           </span>
           <span data-lang="fr">
             Si vous êtes dans la cohorte Preview
-            <span data-aos-version="0.15.1">0.15.1</span>, cette page est le protocole :
-            installer sans cargo ni clone, exercer les chemins principaux, puis
-            envoyer un rapport depuis l’UI. Le même plan vit dans l’onglet
-            Scenarios.
+            <span data-aos-version="0.15.1">0.15.1</span>, commencez par le chemin
+            de 15 minutes : installer sans cargo ni clone, un chat hors ligne,
+            une note, puis un rapport depuis l’UI. Cela suffit pour compter.
           </span>
         </h1>
 
         <aside class="callout">
-          <h3 data-lang="en">What we are asking</h3>
-          <h3 data-lang="fr">Ce que nous demandons</h3>
+          <h3 data-lang="en">Cohort gate</h3>
+          <h3 data-lang="fr">Gate cohorte</h3>
           <p data-lang="en">
-            You do not need to be exhaustive on day one. Walk the paths you can
-            honestly cover, note what felt clear or broken, and file from
-            Feedback. A partial report with a real setup is more useful than a
-            perfect checklist left empty.
+            Success is <strong>3 Windows + 1 Linux + 1 macOS Apple Silicon</strong>
+            testers completing the short path, each with a usable
+            <code>var/feedback/</code> report. You do not need to be exhaustive
+            on day one. A partial report with a real setup is more useful than a
+            perfect checklist left empty. Hangout:
+            <a href="../community.html">community</a>.
           </p>
           <p data-lang="fr">
-            Vous n’avez pas besoin d’être exhaustif dès le premier jour.
-            Parcourez les chemins que vous pouvez couvrir honnêtement, notez ce
-            qui était clair ou cassé, et envoyez depuis Feedback. Un rapport
-            partiel avec une vraie install vaut mieux qu’une checklist parfaite
-            laissée vide.
+            Le succès, c’est <strong>3 Windows + 1 Linux + 1 macOS Apple
+            Silicon</strong> qui finissent le chemin court, chacun avec un
+            rapport <code>var/feedback/</code> exploitable. Vous n’avez pas
+            besoin d’être exhaustif dès le premier jour. Un rapport partiel
+            avec une vraie install vaut mieux qu’une checklist parfaite laissée
+            vide. Lieu de rencontre :
+            <a href="../community.html">community</a>.
           </p>
         </aside>
 
         <article class="grant">
-          <h2 data-lang="en">Before you start</h2>
-          <h2 data-lang="fr">Avant de commencer</h2>
+          <h2 data-lang="en">Short path (15 minutes)</h2>
+          <h2 data-lang="fr">Chemin court (15 minutes)</h2>
+          <ol class="steps">
+            <li data-lang="en">
+              <a href="../install.html">Install</a> from Releases —
+              <code>install.ps1</code> (Windows) or <code>./install.sh</code>
+              (Linux / macOS Apple Silicon). macOS is unsigned; Intel Mac is
+              out.
+            </li>
+            <li data-lang="fr">
+              <a href="../install.html">Installer</a> depuis les Releases —
+              <code>install.ps1</code> (Windows) ou <code>./install.sh</code>
+              (Linux / macOS Apple Silicon). macOS n’est pas signé ; pas
+              d’Intel Mac.
+            </li>
+            <li data-lang="en">Finish model setup and the 4-step tutorial.</li>
+            <li data-lang="fr">Terminer le réglage des modèles et le tutoriel (4 étapes).</li>
+            <li data-lang="en">Chat, network off: ask “What is Akasha OS?” and wait for a streamed reply.</li>
+            <li data-lang="fr">Chat, réseau off : demander « Qu’est-ce qu’Akasha OS ? » et attendre une réponse streamée.</li>
+            <li data-lang="en">Notes: title + body → Create, then List.</li>
+            <li data-lang="fr">Notes : titre + corps → Create, puis List.</li>
+            <li data-lang="en">Feedback tab → Send feedback. Keep Create a GitHub issue checked (except security).</li>
+            <li data-lang="fr">Onglet Feedback → Send feedback. Laisser Create a GitHub issue coché (sauf security).</li>
+          </ol>
+        </article>
+
+        <article class="grant">
+          <h2 data-lang="en">Before you start (full protocol)</h2>
+          <h2 data-lang="fr">Avant de commencer (protocole long)</h2>
           <p class="hist" data-lang="en">
-            You need Windows or Linux x64 (NVIDIA recommended; CPU path OK).
-            Follow <a href="../install.html">install</a>, launch Akasha OS
-            Preview (<code>aos-session</code>), and confirm the banner that this
-            is Preview on Windows/Linux — not the bootable OS yet.
+            You need Windows or Linux x64 or macOS Apple Silicon (NVIDIA
+            recommended on Win/Linux; CPU path OK). Follow
+            <a href="../install.html">install</a>, launch Akasha OS Preview
+            (<code>aos-session</code>), and confirm the banner that this is
+            Preview on the host — not the bootable OS yet.
           </p>
           <p class="hist" data-lang="fr">
-            Il faut Windows ou Linux x64 (NVIDIA recommandé ; chemin CPU OK).
-            Suivez <a href="../install.html">install</a>, lancez Akasha OS
-            Preview (<code>aos-session</code>), et confirmez la bannière : Preview
-            on Windows/Linux — pas encore l’OS bootable.
+            Il faut Windows ou Linux x64 ou macOS Apple Silicon (NVIDIA
+            recommandé sous Win/Linux ; chemin CPU OK). Suivez
+            <a href="../install.html">install</a>, lancez Akasha OS Preview
+            (<code>aos-session</code>), et confirmez la bannière : Preview sur
+            l’hôte — pas encore l’OS bootable.
           </p>
         </article>
 
@@ -171,11 +203,18 @@
           <p class="hist" data-lang="en">
             Security reports are not published. There is no automatic network
             upload except explicit search, download, and GitHub submit.
+            Optional check-in on
+            <a href="https://github.com/azerothl/akasha-os/discussions">Discussions</a>
+            after you send — hangout is
+            <a href="../community.html">community</a>, not Discord.
           </p>
           <p class="hist" data-lang="fr">
             Les rapports sécurité ne sont pas publiés. Pas d’upload réseau
             automatique hors recherche, téléchargement et envoi GitHub
-            explicites.
+            explicites. Check-in optionnel sur
+            <a href="https://github.com/azerothl/akasha-os/discussions">Discussions</a>
+            après l’envoi — le lieu de rencontre est
+            <a href="../community.html">community</a>, pas Discord.
           </p>
         </article>
 

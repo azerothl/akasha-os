@@ -2,19 +2,49 @@
 
 **Language:** English | [Français](fr/TESTER.md)
 
-> Date: 26/08/2026 · Preview **0.13.0**
+> Date: 01/09/2026 · Preview **0.15.1**
 
 Thank you for testing Preview. Goal: install **without** `cargo` or cloning
 the repo, exercise the main paths, and send feedback **from the UI**.
-Feature catalogue: [FEATURES.md](FEATURES.md).
+Feature catalogue: [FEATURES.md](FEATURES.md). Community hangout:
+[community.md](community.md) (GitHub Discussions — no Discord yet).
+
+**Cohort gate:** 3 Windows + 1 Linux + 1 macOS Apple Silicon testers complete
+the [short path](#short-path-15-minutes) without a Rust toolchain; each leaves
+a usable `var/feedback/fb-*.json` (and preferably a GitHub issue). The long
+protocol below remains the team checklist for PC.6–PC.9 and PC.11–PC.13.
+
+## Short path (15 minutes)
+
+This is enough to count toward the cohort gate. Skip what your hardware cannot
+do, and say so in the report.
+
+1. Install from [GitHub Releases](https://github.com/azerothl/akasha-os/releases)
+   — `install.ps1` (Windows) or `./install.sh` (Linux / macOS Apple Silicon).
+   macOS builds are unsigned; expect Gatekeeper. Intel Mac is not supported.
+2. Launch **Akasha OS Preview**. Finish **model setup** and the **tutorial**
+   (4 steps).
+3. **Chat** tab, network still off: ask “What is Akasha OS?” and wait for a
+   streamed reply.
+4. **Notes** tab: title + body → **Create**, then **List**.
+5. **Feedback** tab: title, category, body → **Send feedback**. Keep
+   **Create a GitHub issue** checked (except security). Confirm Submit on
+   GitHub if you have an account.
+
+Optional: open a
+[Discussion check-in](https://github.com/azerothl/akasha-os/discussions)
+(OS, GPU or CPU, whether chat and notes worked). Then stop, or continue with
+the steps below.
 
 ## Before you start
 
-- Windows or Linux x64 (NVIDIA recommended; CPU-only package / path also OK)
+- Windows 10/11 x64, Linux x64, or macOS Apple Silicon (not Intel Mac)
+- NVIDIA recommended on Windows/Linux; CPU-only path in the same Win/Linux
+  archive is OK (slower). macOS uses Metal + CPU.
 - Install: see [INSTALL.md](INSTALL.md)
 - Launch **Akasha OS Preview** (`aos-session`)
 
-Expected banner: *Preview on Windows/Linux — this is not the bootable OS yet*.
+Expected banner: Preview on the host OS — this is not the bootable OS yet.
 
 ## Steps (also in the Scenarios tab)
 
@@ -300,16 +330,17 @@ GitHub feedback submit).
 
 ## Success criteria (team)
 
-- 3 Windows + 1 Linux testers complete this protocol without a Rust toolchain
+- **Gate:** 3 Windows + 1 Linux + 1 macOS Apple Silicon testers complete the
+  **short path** without a Rust toolchain
 - At least one usable `var/feedback/fb-*.json` per report
-- Gates PC.6–PC.9 and PC.11–PC.13 checked on at least one machine
+- Gates PC.6–PC.9 and PC.11–PC.13 checked on at least one machine (long
+  protocol; not required of every tester)
 
-## Out of scope Preview 0.11.0
+## Out of scope Preview 0.15.1
 
 - seL4 / bare-metal boot
-- macOS
+- Intel Mac
 - 32B model in the installer
 - Product video UI / STT / always-on voice
-- Inpaint / mask as a first-class intent
 - Public marketplace / messaging channels / multi-GPU hard-green
 - `webview` widget kind

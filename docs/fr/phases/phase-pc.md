@@ -5,16 +5,16 @@
 
 ## Objectif
 
-Distribuer **Agent OS Preview 0.1** à une cohorte : installer sur Windows /
-Linux x64 + NVIDIA, tester depuis egui, renvoyer des feedbacks locaux.
-**Pas** seL4 / fer nu.
+Distribuer **Agent OS Preview** à une cohorte : installer sur Windows /
+Linux x64 (NVIDIA recommandé ; chemin CPU OK) ou macOS Apple Silicon,
+tester depuis egui, renvoyer des feedbacks locaux. **Pas** seL4 / fer nu.
 
 ## Livrables
 
 | # | Livrable | État |
 |---|----------|------|
 | PC.1 | `aos-session` | fait |
-| PC.2 | Packaging Win/Linux | CI GitHub Actions + download modèles |
+| PC.2 | Packaging Win/Linux/macOS | CI GitHub Actions + download modèles |
 | PC.3 | UI egui cohorte | fait (+ tutoriel) |
 | PC.4 | `feedback.submit` | local + issue GitHub |
 | PC.5 | INSTALL + TESTER + FIRST-RUN | fait |
@@ -43,7 +43,10 @@ Voir scénarios dans [`docs/TESTER.md`](docs/TESTER.md).
 
 ## Gate cohorte
 
-3 Win + 1 Linux suivent `docs/TESTER.md` sans toolchain ; ≥1 feedback.
+3 Windows + 1 Linux + 1 macOS Apple Silicon suivent le
+[chemin de 15 minutes](../TESTER.md#chemin-court-15-minutes) sans
+toolchain ; ≥1 feedback chacun. Le protocole TESTER long reste la
+checklist équipe (PC.6–PC.9, PC.11–PC.13).
 
 ```powershell
 .\packaging\build-preview.ps1

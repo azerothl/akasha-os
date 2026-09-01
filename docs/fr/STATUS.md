@@ -7,9 +7,11 @@ Résumé des phases livrées. Détail : [plan-developpement-phases.md](plan-deve
 
 **En-tête :** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview :** 0.13.0 (26/08/2026) — image de référence, inpaint, courte vidéo, documents chat (#52–#55). Pas un OS bootable. Gate cohorte encore
-ouverte. **Suite :** fermeture cohorte PC ; Horizon C / PV.4+ quand planifié ;
-E9 hard-green après un run 2 GPU documenté.
+**Preview :** 0.15.1 — guides in-app, planifications chat, documents
+recherche, bibliothèque utilisateur, offre skill matin. Pas un OS bootable.
+Gate cohorte encore ouverte (**3 Windows + 1 Linux + 1 macOS Apple
+Silicon**, chemin de 15 minutes). **Suite :** fermeture cohorte PC ; Horizon C
+/ PV.4+ quand planifié ; E9 hard-green après un run 2 GPU documenté.
 
 ## P13 — Preview 0.13.0 (créer + documents chat) — fait
 
@@ -215,7 +217,9 @@ Voir [phases/phase-p5.md](phases/phase-p5.md).
 | Setup modèles selon le matériel | fait |
 | Site public (EN/FR) | fait |
 
-Gate cohorte (3 Win + 1 Linux, sans toolchain) encore **ouverte**.
+Gate cohorte (3 Windows + 1 Linux + 1 macOS Apple Silicon, sans
+toolchain, [chemin court](TESTER.md#chemin-court-15-minutes)) encore
+**ouverte**.
 
 Détail : [phases/phase-pc.md](phases/phase-pc.md), [FEATURES.md](FEATURES.md).
 Tables EN : [../STATUS.md](../STATUS.md).

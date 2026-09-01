@@ -22,7 +22,7 @@ Le développement d'Agent OS a **deux couches** à ne pas fusionner :
 
 P0–P5 prouvent et polissent le système **sur l'hôte** ; **PV** est l'échafaudage
 **noyau seL4** (VM QEMU, sans GPU) ; **PC** est la **Preview distribuable**
-pour une cohorte de testeurs (installeur Win/Linux, pas seL4). La stratégie
+pour une cohorte de testeurs (installeur Win/Linux/macOS, pas seL4). La stratégie
 `specs-techniques.md` §1.3 reste : prouver les algorithmes agentiques en
 userspace avant d'engager le port microkernel.
 
@@ -34,7 +34,7 @@ userspace avant d'engager le port microkernel.
 | **P3** | Linux host | **Backends distants, routage privacy, sécurité complète** | ~6-8 semaines | fait |
 | **P4** | Hôte (caps userspace) | **Sémantique microkernel** (`aos-capkd`, isolation processus) — seL4 reporté (GPU) | ~12-16 semaines | fait |
 | **PV** | QEMU + seL4 (sans GPU) | **Port noyau réel** : PDs Microkit, IPC seL4, rejeu gate P4 CPU-only | ~8-10 semaines | PV.1–PV.3 ✅ |
-| **PC** | Hôte Win/Linux + NVIDIA | **Preview 0.1** installable : session, egui, feedback cohorte | ~2-4 semaines | 🚧 cohorte |
+| **PC** | Hôte Win/Linux/macOS | Preview installable : session, egui, feedback cohorte (3 Win + 1 Linux + 1 Mac) | ~2-4 semaines | 🚧 cohorte |
 | **P5** | Hôte GPU / polish | **GPU/NPU first-class**, multi-GPU, polish (parallèle à PV/PC) | ~10-12 semaines | P5.1 ✅ |
 | **P03** | Hôte Preview Win/Linux | Preview **0.3.0** — E1–E5 (chemin CPU, scheduler, tasks, UI caps, métriques) | livré | fait |
 | **P04** | Hôte Preview Win/Linux | Preview **0.4.0** — E6 / E7-lite / E10-lite (graphe mémoire, vault, revue caps) | livré | fait |
@@ -65,7 +65,7 @@ Chaque phase se termine par un **gate de sortie** : une démonstration exécutab
 | **Gate P3** | Bascule automatique local→distant selon politique privacy, mode `local_only` vérifiable par egress monitoring, confirmation bloquante sur action sensible |
 | **Gate P4** | Services essentiels isolés + caps natives userspace (`aos-capkd`) sur l'hôte ; kill Audit sans impacter Model |
 | **Gate PV** | Boot seL4/Microkit sous QEMU `virt` (sans GPU) ; intents `cap.*` via PD bus ; révocation immédiate ; stop Audit sans tuer CapKernel |
-| **Gate PC** | 3 testeurs Win + 1 Linux installent Preview sans toolchain ; protocole TESTER.md ; ≥1 `feedback.submit` exploitable |
+| **Gate PC** | 3 testeurs Windows + 1 Linux + 1 macOS Apple Silicon installent Preview sans toolchain ; chemin de 15 minutes TESTER.md ; ≥1 `feedback.submit` exploitable chacun |
 | **Gate P5** | Continuous batching multi-agents avec période de dégradation < 20% sur 8 flux simultanés, multi-GPU pipeline fonctionnel, port aarch64 validé sur au moins une machine cible |
 | **Gate P03** | Métriques + UI caps + boot CPU-only + fire scheduler + tasks dual-surface — [phases/phase-preview-03.md](phases/phase-preview-03.md) |
 | **Gate P04** | Graphe mémoire typé + vault + revue de caps module — [phases/phase-preview-04.md](phases/phase-preview-04.md) |
@@ -330,9 +330,10 @@ cette image (ADR 0001). **Parallèle à P5** (GPU sur l'hôte).
 ### Objectif
 
 Livrer **Agent OS Preview 0.1** : même stack hôte (P1–P5) **installable**
-par des testeurs externes sur Windows et Linux x64 + NVIDIA, **sans**
-compiler. UI egui = surface principale ; retours via `feedback.submit`
-(local only). **Ce n'est pas le fer nu** (ADR 0001).
+par des testeurs externes sur Windows et Linux x64 (NVIDIA recommandé ;
+chemin CPU OK) ou macOS Apple Silicon, **sans** compiler. UI egui =
+surface principale ; retours via `feedback.submit` (local only). **Ce
+n'est pas le fer nu** (ADR 0001).
 
 ### Livrables
 
@@ -352,9 +353,10 @@ compiler. UI egui = surface principale ; retours via `feedback.submit`
 
 ### Gates de sortie (Gate PC)
 
-- [x] Installeur / archive Win + Linux sans `cargo`
-- [x] Protocole `docs/TESTER.md` jouable depuis egui
-- [x] ≥1 retour `feedback.submit` exploitable en cohorte pilote
+- [x] Installeur / archive Win + Linux + macOS Apple Silicon sans `cargo`
+- [x] Chemin de 15 minutes `docs/TESTER.md` jouable depuis egui
+- [ ] Gate cohorte : 3 Windows + 1 Linux + 1 macOS Apple Silicon ; ≥1
+      `feedback.submit` exploitable chacun
 
 ```powershell
 .\packaging\build-preview.ps1
@@ -563,7 +565,7 @@ hardware ou un daemon existe ; toujours Horizon B / C :
 | **P5.3 / E11** | `AccelDevice` + fer nu (après PV.4) |
 | **P5.5** | Hôte aarch64 validé |
 | **P5.4 restant** | Accessibilité (F-UI-08) |
-| **Cohorte PC** | 3 Win + 1 Linux ; indépendante des incréments Preview |
+| **Cohorte PC** | 3 Windows + 1 Linux + 1 macOS Apple Silicon ; indépendante des incréments Preview |
 | **E12 / E13** | Horizon C (préemption cognitive, compositor / webview optionnelle) |
 
 ---
