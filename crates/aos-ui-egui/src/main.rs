@@ -18,6 +18,7 @@ mod settings_ui_state;
 mod workspace_controller;
 mod workspace_ui_state;
 mod decl_ui;
+mod feedback_ui_state;
 mod guide;
 mod i18n;
 mod model_setup;
@@ -522,17 +523,7 @@ struct UiApp {
     scen_confirm: bool,
     scen_audit: bool,
     scen_module_agent: bool,
-    // feedback
-    fb_title: String,
-    fb_category: String,
-    fb_severity: String,
-    fb_body: String,
-    fb_scenario: String,
-    fb_result: String,
-    fb_github: bool,
-    fb_dir: Option<PathBuf>,
-    /// Méta du rapport de dépannage (préservée pour la remontée d'issue).
-    fb_diag_meta: Option<serde_json::Value>,
+    feedback_ui: feedback_ui_state::FeedbackUiState,
     chat_md_cache: CommonMarkCache,
     update_download_child: Option<std::process::Child>,
     update_status: String,
@@ -709,15 +700,7 @@ impl UiApp {
             scen_confirm: false,
             scen_audit: false,
             scen_module_agent: false,
-            fb_title: String::new(),
-            fb_category: "ux".into(),
-            fb_severity: "medium".into(),
-            fb_body: String::new(),
-            fb_scenario: String::new(),
-            fb_result: String::new(),
-            fb_github: true,
-            fb_dir: None,
-            fb_diag_meta: None,
+            feedback_ui: feedback_ui_state::FeedbackUiState::default(),
             chat_md_cache: CommonMarkCache::default(),
             update_download_child: None,
             update_status: String::new(),
@@ -1555,7 +1538,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
 
     fn on_tab_open(&mut self, tab: Tab) {
         if tab == Tab::Feedback && self.tab != Tab::Feedback {
-            self.fb_result.clear();
+            self.feedback_ui.result.clear();
         }
         self.tab = tab.clone();
         match tab {
@@ -2393,7 +2376,7 @@ impl eframe::App for UiApp {
                             }
                         }
                     }
-                    self.fb_result = msg;
+                    self.feedback_ui.result = msg;
                     self.status = format!("feedback {}", r.id);
                     let export_raw = native_path(&r.export_dir);
                     let export = if export_raw.is_absolute() {
@@ -2401,7 +2384,7 @@ impl eframe::App for UiApp {
                     } else {
                         aos_home().join(&export_raw)
                     };
-                    self.fb_dir = export
+                    self.feedback_ui.export_dir = export
                         .parent()
                         .filter(|p| !p.as_os_str().is_empty())
                         .map(|p| p.to_path_buf())
@@ -2409,14 +2392,14 @@ impl eframe::App for UiApp {
                     self.reset_feedback_form();
                 }
                 Evt::FeedbackDraft(req) => {
-                    self.fb_title = req.title;
-                    self.fb_category = req.category;
-                    self.fb_severity = req.severity;
-                    self.fb_body = req.body;
-                    self.fb_scenario = req.scenario.unwrap_or_default();
-                    self.fb_github = req.publish_github
-                        && !self.fb_category.eq_ignore_ascii_case("security");
-                    self.fb_diag_meta = Some(req.meta);
+                    self.feedback_ui.title = req.title;
+                    self.feedback_ui.category = req.category;
+                    self.feedback_ui.severity = req.severity;
+                    self.feedback_ui.body = req.body;
+                    self.feedback_ui.scenario = req.scenario.unwrap_or_default();
+                    self.feedback_ui.publish_github = req.publish_github
+                        && !self.feedback_ui.category.eq_ignore_ascii_case("security");
+                    self.feedback_ui.diag_meta = Some(req.meta);
                     self.tab = Tab::Feedback;
                 }
                 Evt::Sessions(list) => self.chat_state.sessions = list,
