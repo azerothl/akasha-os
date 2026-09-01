@@ -28,6 +28,13 @@ jobs:
       - name: Check release version consistency
         shell: pwsh
         run: ./packaging/check-version.ps1
+      - name: Reject UI crate glob imports
+        shell: bash
+        run: |
+          if rg -n -g '*.rs' 'use crate::\*' crates/aos-ui-egui/src; then
+            echo 'UI modules must declare their crate dependencies explicitly.' >&2
+            exit 1
+          fi
 
   rust:
     name: Clippy and tests
