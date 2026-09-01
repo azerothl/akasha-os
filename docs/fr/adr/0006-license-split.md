@@ -71,9 +71,9 @@ l’userspace dont les auteurs choisissent la licence.
 
 Le titulaire du copyright (Loïc Peaudecerf) **autorise** la relicence du SDK
 guest, des modules guest first-party et des skills livrés selon le tableau.
-Tant que les champs SPDX / `license` des `Cargo.toml` ne sont pas mis à
-jour, ces arbres restent AGPL sur le disque ; le suivi ci-dessous est
-obligatoire avant d’annoncer le split comme fait.
+Les identifiants SPDX et les champs `license` des `Cargo.toml` de ces arbres
+sont Apache-2.0 / MIT depuis le suivi qui a posé `LICENSE-APACHE`,
+`LICENSE-MIT` et `community/`.
 
 ### Pourquoi Apache-2.0 pour le SDK (et les modules first-party)
 
@@ -115,18 +115,15 @@ binaire hôte ou vendor `crates/` est un autre cas ; ça reste AGPL.
 - La marque **Akasha OS** reste réservée. Un module ou fork communautaire
   ne prend pas ce nom de produit (`LICENSE-COMMERCIAL.md` §3).
 
-### Suivi d’implémentation (pas les fichiers de cette ADR)
+### Suivi d’implémentation
 
-1. Ajouter `LICENSE-APACHE` et `LICENSE-MIT` à la racine (ou sous
-   `modules/` / `community/`). Pointer les `license` des `Cargo.toml` du SDK
-   et des modules guest first-party vers Apache-2.0. En-têtes SPDX.
-2. Marquer les `skills/*/SKILL.md` livrés comme MIT.
-3. Créer `community/` avec un README (défaut MIT, pas le CLA hôte).
-4. Réécrire la section licence de [CONTRIBUTING.md](../CONTRIBUTING.md)
-   (idem `docs/fr/CONTRIBUTING.md`).
-5. Zip Preview honnête : notes/tasks bundlés Apache après relicence ;
-   binaires hôte AGPL. `NOTICE` pour le produit hôte ; chaque paquet guest
-   porte sa licence.
+1. ~~Ajouter `LICENSE-APACHE` / `LICENSE-MIT` ; Apache-2.0 sur les `Cargo.toml` guest ; SPDX.~~
+2. ~~Marquer les `skills/*/SKILL.md` livrés comme MIT.~~
+3. ~~Créer `community/` avec un README (défaut MIT, pas le CLA hôte).~~
+4. ~~Réécrire [CONTRIBUTING.md](../CONTRIBUTING.md) (et `docs/fr/CONTRIBUTING.md`).~~
+5. Zip Preview honnête : inclure `LICENSE-APACHE` et `LICENSE-MIT` à côté de
+   `LICENSE` ; notes/tasks bundlés Apache ; binaires hôte AGPL. `NOTICE`
+   décrit les deux couches.
 6. Un catalogue réseau signé (E10) peut venir plus tard ; il n’exige pas
    l’octroi commercial. La revue de caps à l’install est inchangée.
 

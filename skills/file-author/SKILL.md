@@ -1,6 +1,7 @@
 ---
 name: file-author
 description: Read/write files and generate artifacts (md, txt, json, csv, pdf)
+license: MIT
 tools:
   - fs.read
   - fs.write

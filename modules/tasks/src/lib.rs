@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Module « tasks » — second dual-surface artefact (Preview 0.3 / E3).
 //!
 //! Tools: `tasks.create` / `tasks.list` / `tasks.update` / `tasks.complete`

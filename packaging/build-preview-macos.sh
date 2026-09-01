@@ -231,6 +231,8 @@ if [ -d "${ROOT}/docs/fr" ]; then
   copy_tree "${ROOT}/docs/fr/." "${OUT}/docs/fr/"
 fi
 cp -f "${ROOT}/LICENSE" "${OUT}/" 2>/dev/null || true
+cp -f "${ROOT}/LICENSE-APACHE" "${OUT}/" 2>/dev/null || true
+cp -f "${ROOT}/LICENSE-MIT" "${OUT}/" 2>/dev/null || true
 cp -f "${ROOT}/NOTICE" "${OUT}/" 2>/dev/null || true
 cp -f "${ROOT}/LICENSE-COMMERCIAL.md" "${OUT}/" 2>/dev/null || true
 cp -f "$(dirname "$0")/install-macos.sh" "${OUT}/install.sh"

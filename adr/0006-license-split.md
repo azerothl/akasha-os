@@ -69,9 +69,9 @@ userspace that authors license themselves.
 | Future signed catalogue repo (E10) | Index Apache-2.0; each package keeps its license | **No** |
 
 The copyright holder (Loïc Peaudecerf) **authorizes** relicensing the guest SDK,
-first-party guest modules, and shipped skills as in the table. Until SPDX and
-`Cargo.toml` `license` fields are updated, those trees remain AGPL on disk;
-follow-up work below is mandatory before advertising the split as done.
+first-party guest modules, and shipped skills as in the table. SPDX identifiers
+and `Cargo.toml` `license` fields for those trees are Apache-2.0 / MIT as of
+the follow-up that landed `LICENSE-APACHE`, `LICENSE-MIT`, and `community/`.
 
 ### Why Apache-2.0 for the SDK (and first-party modules)
 
@@ -114,20 +114,15 @@ AGPL.
 - The **Akasha OS** trademark stays reserved. A community module or fork must
   not take that product name (`LICENSE-COMMERCIAL.md` §3).
 
-### Implementation follow-up (not this ADR’s files)
+### Implementation follow-up
 
-1. Add `LICENSE-APACHE` and `LICENSE-MIT` at the repo root (or under
-   `modules/` / `community/`). Point `modules/sdk` and first-party guest
-   `Cargo.toml` `license` fields at Apache-2.0. Add SPDX headers on those
-   crates.
-2. Mark shipped `skills/*/SKILL.md` as MIT (short license blurb or SPDX).
-3. Create `community/` with a README that states default MIT and “not the
-   host CLA”.
-4. Rewrite [CONTRIBUTING.md](../CONTRIBUTING.md) contribution-license section
-   to the table above (same change in `docs/fr/CONTRIBUTING.md`).
-5. Keep Preview zip contents honest: bundled notes/tasks remain Apache after
-   relicense; the host binaries remain AGPL. `NOTICE` stays for the host
-   product; guest packages carry their own license file.
+1. ~~Add `LICENSE-APACHE` / `LICENSE-MIT`; Apache-2.0 on guest `Cargo.toml`; SPDX on those crates.~~
+2. ~~Mark shipped `skills/*/SKILL.md` as MIT.~~
+3. ~~Create `community/` with a README (default MIT, not the host CLA).~~
+4. ~~Rewrite [CONTRIBUTING.md](../CONTRIBUTING.md) (and `docs/fr/CONTRIBUTING.md`).~~
+5. Keep Preview zip contents honest: include `LICENSE-APACHE` and `LICENSE-MIT`
+   next to `LICENSE`; bundled notes/tasks are Apache; host binaries remain
+   AGPL. `NOTICE` describes both layers.
 6. A network signed catalogue (E10) may come later; it must not require the
    commercial grant. Cap review on install is unchanged.
 

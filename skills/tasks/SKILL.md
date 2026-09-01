@@ -1,6 +1,7 @@
 ---
 name: tasks
 description: Create and manage shared tasks (human + agent dual-surface)
+license: MIT
 tools:
   - tasks.create
   - tasks.list

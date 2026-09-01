@@ -102,7 +102,7 @@ French mirrors live under [`docs/fr/`](docs/fr/).
 
 ## Licence
 
-**Dual licensing.**
+**Host OS — dual licensing.**
 
 - **AGPL-3.0-only** ([`LICENSE`](LICENSE)) — free use/modify/distribute,
   including commercially, if you honor AGPL (source available, including
@@ -111,6 +111,14 @@ French mirrors live under [`docs/fr/`](docs/fr/).
 - **Commercial license** ([`LICENSE-COMMERCIAL.md`](LICENSE-COMMERCIAL.md)) —
   proprietary forks / closed SaaS. Attribution + royalty. Contact:
   loic.peaudecerf@proton.me.
+
+**Guest extensions** ([ADR 0006](adr/0006-license-split.md)) — no commercial
+grant:
+
+- WASM SDK and first-party modules (`modules/`) — **Apache-2.0**
+  ([`LICENSE-APACHE`](LICENSE-APACHE))
+- Shipped skills and [`community/`](community/README.md) — **MIT**
+  ([`LICENSE-MIT`](LICENSE-MIT)) by default
 
 The **Akasha OS** trademark is reserved.
 

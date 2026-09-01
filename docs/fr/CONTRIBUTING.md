@@ -37,8 +37,8 @@ extensions).
 |--------|----|----------------|
 | Rapport testeur | Feedback in-app → issue GitHub | n/a |
 | Question / check-in cohorte | [Discussions](https://github.com/azerothl/akasha-os/discussions) | n/a |
-| Idée de skill ou de module | Discussions (Show and tell) ou PR `community/` plus tard | **Pas** d’octroi commercial. Une Discussion est toujours sûre. `community/` défaut MIT (SPDX dans les fichiers). |
-| SDK guest / module WASM first-party | PR sous `modules/` | Apache-2.0 après relicence ; **pas** d’octroi commercial. Tant que le SPDX n’est pas posé, demander avant d’ouvrir la PR. |
+| Idée de skill ou de module | Discussions (Show and tell) ou PR [`community/`](../../community/README.md) | **Pas** d’octroi commercial. Une Discussion est toujours sûre. `community/` défaut MIT |
+| SDK guest / module WASM first-party | PR sous `modules/` | Apache-2.0 ([`LICENSE-APACHE`](../../LICENSE-APACHE)) ; **pas** d’octroi commercial |
 | Typo / traduction de docs | Pull request sous `docs/` | CLA hôte (AGPL + octroi commercial) |
 | Proposition d’ADR | Pull request sous `adr/` | CLA hôte |
 | Noyau / crate / UI hôte | Pull request sous `crates/`, `packaging/`, `website/` | CLA hôte |
@@ -51,17 +51,17 @@ dans une même PR.
 Les skills sont du Markdown sous `share/skills/` / `var/skills/` (exemple
 livré : [`skills/planner/SKILL.md`](../../skills/planner/SKILL.md)). Ouvre
 une Discussion Show and tell avec le corps du `SKILL.md`, ou une PR sous
-`community/` une fois l’arbre créé (défaut MIT, pas d’octroi commercial).
-Une PR qui change les `skills/` livrés dans le zip Preview est MIT après
-relicence — toujours sans octroi commercial.
+[`community/`](../../community/README.md) (défaut MIT, pas d’octroi
+commercial). Une PR qui change les `skills/` livrés dans le zip Preview est
+MIT — toujours sans octroi commercial.
 
 ## Scaffolder un module
 
 Dans la Preview : Settings → Modules, ou demande à un agent
 `module.scaffold` (TESTER étapes 14–15). Partage le `.aospkg` en Discussion
-(pas de CLA) ou sous `community/` plus tard. L’install fait toujours la
-revue de caps. SDK guest : [`modules/sdk`](../../modules/sdk) (Apache-2.0
-selon l’ADR 0006).
+(pas de CLA) ou sous [`community/`](../../community/README.md). L’install
+fait toujours la revue de caps. SDK guest :
+[`modules/sdk`](../../modules/sdk) (Apache-2.0).
 
 ## Proposer une ADR
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Logique pure du module notes (slug, wikilinks, graphe, related) — testable hors WASM.
 
 use serde::{Deserialize, Serialize};

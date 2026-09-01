@@ -249,6 +249,8 @@ if (Test-Path (Join-Path $root "docs\fr")) {
     Copy-Item (Join-Path $root "docs\fr\*") "$OutDir\docs\fr\" -Recurse -Force -ErrorAction SilentlyContinue
 }
 Copy-Item (Join-Path $root "LICENSE") "$OutDir\" -ErrorAction SilentlyContinue
+Copy-Item (Join-Path $root "LICENSE-APACHE") "$OutDir\" -ErrorAction SilentlyContinue
+Copy-Item (Join-Path $root "LICENSE-MIT") "$OutDir\" -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $root "NOTICE") "$OutDir\" -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $root "LICENSE-COMMERCIAL.md") "$OutDir\" -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $PSScriptRoot "install-windows.ps1") "$OutDir\install.ps1" -Force

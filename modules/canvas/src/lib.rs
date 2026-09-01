@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Module « canvas » — dessin vectoriel partagé dans une session chat.
 //!
 //! Outils exposés aux agents via `module.invoke` ; le document vit côté

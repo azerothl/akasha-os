@@ -4,13 +4,21 @@ Copyright (C) 2026 Loïc Peaudecerf
 This product is part of the Akasha OS project.
 Upstream: https://github.com/azerothl/akasha-os
 
-This software is dual-licensed:
+The **host OS** (crates, daemons, host UI, packaging, website, docs that
+describe the host) is dual-licensed:
 - GNU Affero General Public License v3.0 only (see LICENSE)
 - a commercial license (see LICENSE-COMMERCIAL.md)
 
-Redistributions of a fork or derivative (source or binary), including under
-a commercial license, must retain this NOTICE and a prominent reference to
-the original Akasha OS project and the URL above.
+**Guest extensions** (ADR 0006) are not under that dual license:
+- `modules/sdk` and first-party WASM modules (`modules/notes`, `tasks`,
+  `canvas`, `ext-rt`) — Apache License 2.0 (see LICENSE-APACHE)
+- shipped skills (`skills/`) and `community/` — MIT License (see
+  LICENSE-MIT), unless a file states another OSI license
+
+Redistributions of a fork or derivative of the **host** (source or binary),
+including under a commercial license, must retain this NOTICE and a
+prominent reference to the original Akasha OS project and the URL above.
+Guest packages must keep their own license file or SPDX identifier.
 
 The name "Akasha OS" is reserved. Forks must not use this name as the
 product name without written permission.

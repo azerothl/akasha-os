@@ -1,6 +1,7 @@
 ---
 name: research
 description: Web search and page fetch to document an answer
+license: MIT
 tools:
   - memory.recall
   - web.search

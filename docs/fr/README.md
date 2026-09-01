@@ -92,7 +92,10 @@ cargo run -p aos-session --release
 
 ## Licence
 
-Double licence AGPL-3.0-only + commerciale — voir le [README anglais](../../README.md).
+**OS hôte** : double licence AGPL-3.0-only + commerciale.
+**Extensions guest** ([ADR 0006](../../adr/0006-license-split.md)) : Apache-2.0
+(`modules/`) et MIT (`skills/`, `community/`) — pas d’octroi commercial.
+Détail : [README anglais](../../README.md).
 
 ## Statut
 

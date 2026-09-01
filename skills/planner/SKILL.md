@@ -1,6 +1,7 @@
 ---
 name: planner
 description: Break a complex goal into subtasks and delegate to sub-agents
+license: MIT
 tools:
   - plan.update
   - agent.spawn

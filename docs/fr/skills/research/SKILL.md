@@ -1,6 +1,7 @@
 ---
 name: research
 description: Recherche web et récupération de pages pour documenter une réponse
+license: MIT
 tools:
   - memory.recall
   - web.search

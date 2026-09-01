@@ -3,7 +3,7 @@ name = "module-ext-rt"
 description = "Runtime scripté WASM pour modules agent (handlers.yaml)"
 version = "0.1.0"
 edition = "2021"
-license = "AGPL-3.0-only"
+license = "Apache-2.0"
 
 [workspace]
 

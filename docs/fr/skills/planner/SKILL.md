@@ -1,6 +1,7 @@
 ---
 name: planner
 description: Décomposer un goal complexe en sous-tâches et déléguer à des sous-agents
+license: MIT
 tools:
   - plan.update
   - agent.spawn

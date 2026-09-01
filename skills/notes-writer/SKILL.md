@@ -1,6 +1,7 @@
 ---
 name: notes-writer
 description: Create, update, link, and explore markdown notes via the notes module
+license: MIT
 tools:
   - notes.create
   - notes.update

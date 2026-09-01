@@ -20,7 +20,7 @@ for dir in bin share data docs; do
   fi
 done
 for f in VERSION INSTALL.md TESTER.md FIRST-RUN.md README.txt \
-         LICENSE NOTICE LICENSE-COMMERCIAL.md install.sh; do
+         LICENSE LICENSE-APACHE LICENSE-MIT NOTICE LICENSE-COMMERCIAL.md install.sh; do
   if [ -f "${HERE}/${f}" ]; then
     cp -f "${HERE}/${f}" "${PREFIX}/"
   fi

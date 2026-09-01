@@ -3,7 +3,7 @@ name = "aos-module-sdk"
 description = "SDK guest pour modules Akasha OS (WASM)"
 version = "0.1.0"
 edition = "2021"
-license = "AGPL-3.0-only"
+license = "Apache-2.0"
 
 # Workspace propre : le SDK compile pour wasm32 ; exclu du workspace hôte.
 [workspace]

@@ -34,8 +34,8 @@ License policy: [ADR 0006](adr/0006-license-split.md) (kernel vs extensions).
 |------|-------|----------------|
 | Tester report | In-app Feedback → GitHub issue | n/a |
 | Question / cohort check-in | [Discussions](https://github.com/azerothl/akasha-os/discussions) | n/a |
-| Skill or module idea | Discussions (Show and tell) or a later `community/` PR | **No** commercial grant. Discussion is always safe. `community/` default MIT (SPDX in the files). |
-| Guest SDK / first-party WASM module | PR under `modules/` | Apache-2.0 after relicense; **no** commercial grant. Until SPDX lands, ask before opening the PR. |
+| Skill or module idea | Discussions (Show and tell) or [`community/`](community/README.md) PR | **No** commercial grant. Discussion is always safe. `community/` default MIT |
+| Guest SDK / first-party WASM module | PR under `modules/` | Apache-2.0 ([`LICENSE-APACHE`](LICENSE-APACHE)); **no** commercial grant |
 | Docs typo / translation | Pull request under `docs/` | Host CLA (AGPL + commercial grant) |
 | ADR proposal | Pull request under `adr/` | Host CLA |
 | Kernel / crate / host UI | Pull request under `crates/`, `packaging/`, `website/` | Host CLA |
@@ -46,17 +46,17 @@ Do **not** mix AGPL host files and permissive extension files in one PR.
 
 Skills are Markdown under `share/skills/` / `var/skills/` (see a shipped
 example such as [`skills/planner/SKILL.md`](skills/planner/SKILL.md)). Open a
-Show and tell Discussion with the `SKILL.md` body, or a PR under `community/`
-once that tree exists (MIT default, no commercial grant). A PR that changes
-shipped `skills/` in the Preview zip is MIT after relicense — still no
+Show and tell Discussion with the `SKILL.md` body, or a PR under
+[`community/`](community/README.md) (MIT default, no commercial grant). A PR
+that changes shipped `skills/` in the Preview zip is MIT — still no
 commercial grant.
 
 ## How to scaffold a module
 
 In Preview: Settings → Modules, or ask an agent to `module.scaffold` (TESTER
 steps 14–15). Share the `.aospkg` in a Discussion (no CLA) or under
-`community/` later. Install still runs cap review. Guest SDK:
-[`modules/sdk`](modules/sdk) (Apache-2.0 per ADR 0006).
+[`community/`](community/README.md). Install still runs cap review. Guest SDK:
+[`modules/sdk`](modules/sdk) (Apache-2.0).
 
 ## How to propose an ADR
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! # aos-module-sdk — SDK côté guest pour les modules Akasha OS (WASM).
 //!
 //! Un module ne peut communiquer avec le système **que** via `host_call`

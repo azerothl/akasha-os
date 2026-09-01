@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Module « notes » — module de référence double-surface (P2.6).
 //!
 //! Outils exposés aux agents et à l'UI humaine via `module.invoke` :

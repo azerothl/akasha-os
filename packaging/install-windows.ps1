@@ -19,7 +19,7 @@ foreach ($dir in @("bin", "share", "data", "docs")) {
     }
 }
 foreach ($f in @("VERSION", "INSTALL.md", "TESTER.md", "FIRST-RUN.md", "README.txt",
-                 "LICENSE", "NOTICE", "LICENSE-COMMERCIAL.md", "install.ps1", "install.cmd")) {
+                 "LICENSE", "LICENSE-APACHE", "LICENSE-MIT", "NOTICE", "LICENSE-COMMERCIAL.md", "install.ps1", "install.cmd")) {
     $src = Join-Path $here $f
     if (Test-Path $src) { Copy-Item $src (Join-Path $Prefix $f) -Force }
 }

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Module runtime scripté `ext-rt` — exécute `handlers.yaml` via host_call.
 //!
 //! Les modules agent « script » réutilisent ce binaire WASM ; seul
