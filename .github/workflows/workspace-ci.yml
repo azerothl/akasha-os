@@ -53,7 +53,7 @@ jobs:
       # The release workflow owns CUDA builds. Keep the general CI job CPU-only
       # so pull requests do not require a CUDA toolkit or compile llama.cpp twice.
       - name: Clippy workspace (CPU)
-        run: cargo clippy --workspace --all-targets --exclude aos-llama --exclude aos-model --exclude aos-platform
+        run: cargo clippy --workspace --all-targets --exclude aos-llama --exclude aos-model --exclude aos-platform -- -D warnings
       - name: Clippy model stack (CPU)
         run: |
           cargo clippy -p aos-llama --no-default-features --all-targets -- -D warnings
