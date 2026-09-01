@@ -53,6 +53,7 @@ mod image_prompt;
 mod icons;
 mod image_studio;
 mod library_panel;
+mod media_event_controller;
 mod nav;
 mod onboarding;
 mod os_open;
@@ -2509,26 +2510,19 @@ impl eframe::App for UiApp {
                     self.chat.push(ChatLine::plain("système", msg));
                 }
                 Evt::MediaImageEnriched { enriched } => {
-                    self.image_studio.set_enriched_prompt(&enriched);
-                    self.status = "Image: enhanced prompt ready, generating…".into();
+                    media_event_controller::on_image_enriched(self, enriched);
                 }
                 Evt::MediaImageStarted {
                     enriching,
                     upscaling,
                     total_steps,
                 } => {
-                    self.image_generating = Some(image_studio::ImageGenUiState {
+                    media_event_controller::on_image_started(
+                        self,
                         enriching,
                         upscaling,
-                        step: 0,
                         total_steps,
-                        elapsed_secs: 0,
-                    });
-                    if enriching {
-                        self.status = "Image: rewriting prompt…".into();
-                    } else {
-                        self.status = format!("Image: generating ({total_steps} steps)…");
-                    }
+                    );
                 }
                 Evt::MediaImageProgress {
                     enriching,
@@ -2537,27 +2531,14 @@ impl eframe::App for UiApp {
                     total_steps,
                     elapsed_secs,
                 } => {
-                    self.image_generating = Some(image_studio::ImageGenUiState {
+                    media_event_controller::on_image_progress(
+                        self,
                         enriching,
                         upscaling,
                         step,
                         total_steps,
                         elapsed_secs,
-                    });
-                    if enriching {
-                        self.status =
-                            format!("Image: rewriting prompt… ({elapsed_secs}s)");
-                    } else if upscaling {
-                        self.status = format!("Image: upscaling… ({elapsed_secs}s)");
-                    } else if step > 0 && total_steps > 0 {
-                        self.status = format!(
-                            "Image: step {step}/{total_steps} ({elapsed_secs}s)"
-                        );
-                    } else {
-                        self.status = format!(
-                            "Image: generating ({total_steps} steps, {elapsed_secs}s)…"
-                        );
-                    }
+                    );
                 }
                 Evt::MediaOk {
                     kind,
@@ -2569,63 +2550,18 @@ impl eframe::App for UiApp {
                     composition_blocks,
                     model_id: _,
                 } => {
-                    self.image_generating = None;
-                    self.status = format!("{kind} → {path} ({bytes} bytes, {engine})");
-                    let att = if kind == "audio" {
-                        ChatAttachment::Audio { path: path.clone() }
-                    } else {
-                        ChatAttachment::Image {
-                            path: path.clone(),
-                            prompt: prompt.clone(),
-                        }
-                    };
-                    if kind == "image" || kind == "video" {
-                        if kind == "image" {
-                            self.chat_state.composer.last_session_image = Some(path.clone());
-                            if prompt.is_empty() {
-                                self.image_studio.preview = Some(path.clone());
-                                self.image_studio.apply_history_for_path(&path);
-                            } else {
-                                self.image_studio.open_from_chat(
-                                    &prompt,
-                                    &path,
-                                    generation_prompt.as_deref(),
-                                );
-                                if !composition_blocks.is_empty() {
-                                    self.image_studio
-                                        .set_composition_blocks(composition_blocks);
-                                } else {
-                                    self.image_studio.apply_history_for_path(&path);
-                                }
-                            }
-                        } else {
-                            self.image_studio.on_video_generated(path.clone());
-                        }
-                        self.tab = Tab::Image;
-                    }
-                    let note = if engine == "stub" {
-                        format!(
-                            "{kind}: {path}\n(stub — pack média ou moteur sd.cpp/piper absent)"
-                        )
-                    } else {
-                        format!("{kind}: {path} ({engine})")
-                    };
-                    self.chat.push(ChatLine {
-                        role: "assistant".into(),
-                        text: note.clone(),
-                        attachments: vec![att.clone()],
-                        speaker_id: None,
-                        speaker_name: None,
-                        thinking: None,
-                    });
-                    if let Some(sid) = self.chat_state.active_session.clone() {
-                        let _ = self.cmd_tx.send(Cmd::SessionAppend {
-                            session_id: sid,
-                            role: "assistant".into(),
-                            content: note,
-                            attachments: vec![att],
-                        });
-                    }
+                    media_event_controller::on_media_ok(
+                        self,
+                        media_event_controller::MediaOkEvent {
+                            kind,
+                            path,
+                            bytes,
+                            engine,
+                            prompt,
+                            generation_prompt,
+                            composition_blocks,
+                        },
+                    );
                 }
                 Evt::Skills(list) => self.on_agent_skills(list),
                 Evt::McpServers(list) => self.on_agent_mcp_servers(list),
