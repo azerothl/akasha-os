@@ -111,7 +111,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct UpdateOffer {
     version: String,

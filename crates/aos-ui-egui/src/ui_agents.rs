@@ -1,6 +1,14 @@
 //! Agent roster, creation, and detail panels.
 
-use crate::*;
+use crate::cmd::Cmd;
+use crate::{
+    agent_canvas_session_ops, agent_cap_holder, agent_panel, agent_shown_in_tab, chat_room, guide,
+    i18n, icons, open_in_browser, overflow_scroll, overflow_scroll_h, ui_roster_tool_checkboxes,
+    ChatLine, UiApp,
+};
+use aos_proto::{AgentInfo, AgentState, ChatAttachment, DocumentRef};
+use eframe::egui;
+use std::time::{Duration, Instant};
 
 impl UiApp {
     pub(crate) fn send_agents_page_create(&mut self, room_active: bool, library: bool) {
