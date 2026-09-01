@@ -46,7 +46,7 @@ tools:
         width: { type: number }
       required: [session_id, points]
   - name: canvas.path
-    description: Draw a smooth filled silhouette (closed path) through control points Ã¢â‚¬â€ prefer for hills, bodies, sails
+    description: Draw a smooth filled silhouette (closed path) through control points — prefer for hills, bodies, sails
     input_schema:
       type: object
       properties:

@@ -40,8 +40,9 @@ $manifestTemplate = Join-OsPath $root share modules canvas.aospkg manifest.yaml
 if (-not (Test-Path $manifestTemplate)) {
     throw "manifest template missing: $manifestTemplate"
 }
-$manifest = (Get-Content $manifestTemplate -Raw) -replace '(?m)^hash:\s*.*$', "hash: $hash"
-[System.IO.File]::WriteAllText((Join-OsPath $pkg manifest.yaml), $manifest)
+$manifest = (Get-Content $manifestTemplate -Raw -Encoding UTF8) -replace '(?m)^hash:\s*.*$', "hash: $hash"
+$utf8NoBom = New-Object System.Text.UTF8Encoding $false
+[System.IO.File]::WriteAllText((Join-OsPath $pkg manifest.yaml), $manifest, $utf8NoBom)
 
 $uiJson = @'
 {
@@ -50,7 +51,7 @@ $uiJson = @'
   "description": "Session drawing canvas — surface is the Chat panel, not a sidebar tab."
 }
 '@
-[System.IO.File]::WriteAllText((Join-OsPath $pkg ui index.html), $uiJson)
+[System.IO.File]::WriteAllText((Join-OsPath $pkg ui index.html), $uiJson, $utf8NoBom)
 
 New-Item -ItemType Directory -Path $share -Force | Out-Null
 Copy-Item (Join-OsPath $pkg *) $share -Recurse -Force
@@ -59,14 +60,14 @@ Write-Host "== package ready: $pkg / $share (hash $hash) =="
 $catalogue = Join-OsPath $root share modules catalogue.yaml
 if (Test-Path $catalogue) {
     Write-Host "== update catalogue.yaml canvas hash =="
-    $raw = Get-Content $catalogue -Raw
+    $raw = Get-Content $catalogue -Raw -Encoding UTF8
     $updated = [regex]::Replace(
         $raw,
         '(  - name: canvas\r?\n(?:    .*\r?\n)*?    hash: )sha256:[a-f0-9]+',
         "`${1}sha256:$hash"
     )
     if ($updated -ne $raw) {
-        [System.IO.File]::WriteAllText($catalogue, $updated)
+        [System.IO.File]::WriteAllText($catalogue, $updated, $utf8NoBom)
         Push-Location $root
         try {
             $env:UPDATE_CATALOGUE = "1"
