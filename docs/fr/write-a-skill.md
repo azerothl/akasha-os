@@ -38,6 +38,9 @@ humains.
 
 ## Chemin A — copier l’exemple
 
+Dans la Preview : Settings → Catalogue local de modules → activer le
+**catalogue communautaire** → Récupérer l’index → Installer
+`morning-brief` (même revue de caps qu’un module). Ou copier
 [`community/skills/morning-brief/SKILL.md`](../../community/skills/morning-brief/SKILL.md)
 → `var/skills/morning-brief/SKILL.md`. Demander « Give me a morning
 brief » (recette agent en anglais). Local seulement : mémoire, tâches

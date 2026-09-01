@@ -2468,18 +2468,186 @@ async fn main() {
         svc.on("module.catalogue", move |ctx| {
             let s = s.clone();
             async move {
-                let payload = s
-                    .modules
-                    .lock()
-                    .unwrap()
-                    .catalogue()
-                    .map(|c| c.proto().clone())
-                    .unwrap_or(ModuleCatalogue {
-                        version: 0,
-                        entries: vec![],
-                        signature_ok: false,
-                    });
+                let payload = s.merged_catalogue();
                 let _ = ctx.respond(aos_ipc::msg::Status::Ok, &payload).await;
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("module.catalogue.source", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<CatalogueSourceRequest>() {
+                    Ok(req) => {
+                        let r = {
+                            let mut extra = s.extra_catalogue.lock().unwrap();
+                            if let Err(e) = extra.set_url(req.url) {
+                                Err(e.to_string())
+                            } else if let Err(e) = extra.set_enabled(req.enabled) {
+                                Err(e.to_string())
+                            } else {
+                                Ok(())
+                            }
+                        };
+                        match r {
+                            Ok(()) => {
+                                s.sync_extra_into_runtime();
+                                let _ = ctx
+                                    .respond(aos_ipc::msg::Status::Ok, &s.merged_catalogue())
+                                    .await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(aos_ipc::msg::Status::InternalError, &e)
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("module.catalogue.refresh", move |ctx| {
+            let s = s.clone();
+            async move {
+                let r = tokio::task::spawn_blocking({
+                    let s = s.clone();
+                    move || {
+                        let mut extra = s.extra_catalogue.lock().unwrap();
+                        extra.refresh()
+                    }
+                })
+                .await
+                .unwrap_or_else(|e| {
+                    Err(aos_platform::catalogue::CatalogueError::Fetch(e.to_string()))
+                });
+                match r {
+                    Ok(()) => {
+                        s.sync_extra_into_runtime();
+                        let _ = ctx
+                            .respond(aos_ipc::msg::Status::Ok, &s.merged_catalogue())
+                            .await;
+                    }
+                    Err(e) => {
+                        s.sync_extra_into_runtime();
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::InternalError, &e.to_string())
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("module.catalogue.install", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<CatalogueInstallRequest>() {
+                    Ok(req) => {
+                        let actor = if req.actor.is_empty() {
+                            "human:ui".into()
+                        } else {
+                            req.actor.clone()
+                        };
+                        let allowed = actor.starts_with("human:")
+                            || req.actor_caps.iter().any(|c| c == "module.install")
+                            || s.granted_caps
+                                .lock()
+                                .unwrap()
+                                .get(actor.strip_prefix("agent:").unwrap_or(&actor))
+                                .map(|caps| caps.iter().any(|c| c == "module.install"))
+                                .unwrap_or(false);
+                        if !allowed {
+                            let _ = ctx
+                                .respond_error(
+                                    aos_ipc::msg::Status::PermissionDenied,
+                                    "module.catalogue.install : capacité requise (cap.request)",
+                                )
+                                .await;
+                            return;
+                        }
+                        let first = tokio::task::spawn_blocking({
+                            let s = s.clone();
+                            let name = req.name.clone();
+                            let approved = req.approved_caps.clone();
+                            move || install_catalogue_entry(&s, &name, approved)
+                        })
+                        .await
+                        .unwrap_or_else(|e| Err(format!("join: {e}")));
+                        let result = match first {
+                            Err(msg) if msg.starts_with("CAP_REVIEW:") => {
+                                let caps_csv = msg.trim_start_matches("CAP_REVIEW:");
+                                let required: Vec<String> = caps_csv
+                                    .split(',')
+                                    .map(|s| s.trim().to_string())
+                                    .filter(|s| !s.is_empty())
+                                    .collect();
+                                let reason = format!(
+                                    "Revue des caps requise pour installer ce paquet.\nCaps demandées:\n- {}",
+                                    required.join("\n- ")
+                                );
+                                let (_id, rx) = s
+                                    .confirm
+                                    .ask(
+                                        actor.clone(),
+                                        "module.catalogue.install".into(),
+                                        req.name.clone(),
+                                        reason,
+                                        Some(120),
+                                    )
+                                    .await;
+                                let approved = rx.await.unwrap_or(false);
+                                let caps = if approved {
+                                    Some(required)
+                                } else {
+                                    Some(Vec::new())
+                                };
+                                tokio::task::spawn_blocking({
+                                    let s = s.clone();
+                                    let name = req.name.clone();
+                                    move || install_catalogue_entry(&s, &name, caps)
+                                })
+                                .await
+                                .unwrap_or_else(|e| Err(format!("join: {e}")))
+                            }
+                            other => other,
+                        };
+                        match result {
+                            Ok(info) => {
+                                s.audit(AuditAppendRequest {
+                                    trace_id: String::new(),
+                                    actor,
+                                    action: "module.catalogue.install".into(),
+                                    target: info.name.clone(),
+                                    detail: serde_json::json!({
+                                        "kind": info.kind,
+                                        "quarantined": info.quarantined,
+                                    }),
+                                });
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &info).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(aos_ipc::msg::Status::InternalError, &e)
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
             }
         });
     }
@@ -4268,5 +4436,73 @@ async fn run_skill_pass(
         pending_pattern_id: best.map(|c| c.pattern_id),
         last_pass_ms: now,
     })
+}
+
+fn install_catalogue_entry(
+    s: &aos_platform::PlatformSubsystem,
+    name: &str,
+    approved: Option<Vec<String>>,
+) -> Result<CatalogueInstallResponse, String> {
+    let extra = s.extra_catalogue.lock().unwrap().clone();
+    let bundled = s.modules.lock().unwrap().catalogue().cloned();
+    let entry = aos_platform::catalogue::find_entry(bundled.as_ref(), &extra, name)
+        .map_err(|e| e.to_string())?
+        .clone();
+    if entry.source == "community"
+        && (!extra.enabled
+            || extra
+                .loaded
+                .as_ref()
+                .map(|c| !c.inner.signature_ok)
+                .unwrap_or(true))
+    {
+        return Err("signature catalogue invalide".into());
+    }
+    let home = extra.home.clone();
+    let resolved = aos_platform::catalogue::resolve_package(
+        &entry,
+        &extra,
+        &home,
+        aos_platform::catalogue::fetch_bytes,
+    )
+    .map_err(|e| e.to_string())?;
+    match resolved {
+        aos_platform::catalogue::ResolvedPackage::Skill { bytes } => {
+            match s
+                .skills
+                .lock()
+                .unwrap()
+                .install_from_markdown(&entry.name, &bytes, approved)
+            {
+                Ok(info) => Ok(CatalogueInstallResponse {
+                    name: info.name,
+                    kind: "skill".into(),
+                    version: entry.version,
+                    quarantined: false,
+                }),
+                Err(aos_platform::skill::SkillError::CapReviewRequired(caps)) => {
+                    Err(format!("CAP_REVIEW:{caps}"))
+                }
+                Err(e) => Err(e.to_string()),
+            }
+        }
+        aos_platform::catalogue::ResolvedPackage::ModuleDir { path } => {
+            match s.modules.lock().unwrap().install(&path, approved) {
+                Ok(info) => Ok(CatalogueInstallResponse {
+                    name: info.name,
+                    kind: "module".into(),
+                    version: info.version,
+                    quarantined: info.quarantined,
+                }),
+                Err(aos_platform::module_rt::ModuleError::CapReviewRequired(caps)) => {
+                    Err(format!("CAP_REVIEW:{caps}"))
+                }
+                Err(e) => Err(e.to_string()),
+            }
+        }
+        aos_platform::catalogue::ResolvedPackage::File { .. } => {
+            Err("kind mcp : pas d'install depuis le catalogue extra".into())
+        }
+    }
 }
 

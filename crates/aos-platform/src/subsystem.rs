@@ -40,6 +40,9 @@ pub struct PlatformConfig {
     /// Catalogue local signé (E10). Défaut `share/modules/catalogue.yaml`.
     #[serde(default = "default_catalogue_file")]
     pub catalogue_file: String,
+    /// Cache + source.yaml for the opt-in community catalogue.
+    #[serde(default = "default_community_catalogue_dir")]
+    pub community_catalogue_dir: String,
     #[serde(default = "default_skills_dir")]
     pub skills_dir: String,
     #[serde(default = "default_sessions_dir")]
@@ -86,6 +89,9 @@ fn default_modules_dir() -> String {
 }
 fn default_catalogue_file() -> String {
     "share/modules/catalogue.yaml".into()
+}
+fn default_community_catalogue_dir() -> String {
+    "var/catalogue/community".into()
 }
 fn default_skills_dir() -> String {
     "var/skills".into()
@@ -138,6 +144,8 @@ pub struct PlatformSubsystem {
     canvas_apply_locks: Mutex<HashMap<String, Arc<Mutex<()>>>>,
     /// Sessions où un modèle vision lit le canvas en direct (refcount).
     canvas_seeing: Mutex<HashMap<String, u32>>,
+    /// Opt-in extra signed catalogue (Git index, cached).
+    pub extra_catalogue: Mutex<crate::catalogue::ExtraCatalogueSource>,
 }
 
 impl PlatformSubsystem {
@@ -179,6 +187,15 @@ impl PlatformSubsystem {
                 Err(e) => eprintln!("[aos-platform] catalogue: {e}"),
             }
         }
+        let home = std::env::var("AOS_HOME").unwrap_or_else(|_| ".".into());
+        let mut extra = crate::catalogue::ExtraCatalogueSource::open(
+            Path::new(&home),
+            Path::new(&config.community_catalogue_dir),
+        );
+        extra.load_offline();
+        if extra.enabled {
+            rt.set_extra_catalogue(extra.loaded.clone());
+        }
         let skills = crate::skill::SkillStore::open(&config.skills_dir).map_err(|e| e.to_string())?;
         let author =
             crate::module_compile::ModuleAuthor::open(&config.modules_dir).map_err(|e| e.to_string())?;
@@ -217,6 +234,7 @@ impl PlatformSubsystem {
             bus: Mutex::new(None),
             canvas_apply_locks: Mutex::new(HashMap::new()),
             canvas_seeing: Mutex::new(HashMap::new()),
+            extra_catalogue: Mutex::new(extra),
         });
         let _ = late.0.set(sub.clone());
         sub.audit(AuditAppendRequest {
@@ -236,6 +254,21 @@ impl PlatformSubsystem {
 
     pub fn bus(&self) -> Option<Arc<aos_ipc::BusClient>> {
         self.bus.lock().unwrap().clone()
+    }
+
+    /// Bundled + opt-in extra catalogue for Settings / `module.catalogue`.
+    pub fn merged_catalogue(&self) -> aos_proto::ModuleCatalogue {
+        let extra = self.extra_catalogue.lock().unwrap();
+        let modules = self.modules.lock().unwrap();
+        crate::catalogue::merge_catalogues(modules.catalogue().map(|c| c.proto()), &extra)
+    }
+
+    pub fn sync_extra_into_runtime(&self) {
+        let loaded = self.extra_catalogue.lock().unwrap().loaded.clone();
+        self.modules
+            .lock()
+            .unwrap()
+            .set_extra_catalogue(loaded);
     }
 
     /// Verrou d'application canvas par session (sérialise les écritures concurrentes).
@@ -1020,6 +1053,7 @@ mod canvas_seeing_tests {
             memory_dir: temp_path("memory"),
             modules_dir: temp_path("modules"),
             catalogue_file: "/dev/null".into(),
+            community_catalogue_dir: temp_path("community-cat"),
             skills_dir: temp_path("skills"),
             sessions_dir: temp_path("sessions"),
             embed_model: None,

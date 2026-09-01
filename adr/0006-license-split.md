@@ -123,8 +123,8 @@ AGPL.
 5. Keep Preview zip contents honest: include `LICENSE-APACHE` and `LICENSE-MIT`
    next to `LICENSE`; bundled notes/tasks are Apache; host binaries remain
    AGPL. `NOTICE` describes both layers.
-6. A network signed catalogue (E10) may come later; it must not require the
-   commercial grant. Cap review on install is unchanged.
+6. Opt-in signed Git catalogue (E10 extra source): [ADR 0007](0007-signed-git-catalogue.md).
+   No commercial grant. Cap review on install is unchanged.
 
 ### Out of scope
 

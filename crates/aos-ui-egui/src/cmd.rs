@@ -287,6 +287,16 @@ pub(crate) enum Cmd {
         session_id: String,
     },
     CatalogueRefresh,
+    CatalogueSetSource {
+        enabled: bool,
+    },
+    CatalogueFetchExtra,
+    CatalogueInstall {
+        name: String,
+    },
+    SkillUninstall {
+        name: String,
+    },
     ModuleList,
     ModuleInstall {
         source_dir: String,
@@ -482,6 +492,7 @@ pub(crate) enum Evt {
     },
     ChatCancelled { session_id: String },
     Catalogue(ModuleCatalogue),
+    InstalledSkills(Vec<aos_proto::SkillInfo>),
     InstalledModules(Vec<ModuleInfo>),
     ModuleInstalled(String),
     ModuleUninstalled(String),

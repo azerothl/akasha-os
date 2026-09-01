@@ -511,45 +511,112 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                     let _ = self.cmd_tx.send(Cmd::CatalogueRefresh);
                     let _ = self.cmd_tx.send(Cmd::ModuleList);
                 }
+                ui.add_space(6.0);
+                ui.weak(t.settings_catalogue_community_blurb);
+                let mut community_on = self.prefs.community_catalogue_enabled;
+                if ui
+                    .checkbox(&mut community_on, t.settings_catalogue_community_enable)
+                    .changed()
+                {
+                    self.prefs.community_catalogue_enabled = community_on;
+                    save_preferences(&self.prefs);
+                    let _ = self.cmd_tx.send(Cmd::CatalogueSetSource {
+                        enabled: community_on,
+                    });
+                }
+                if community_on && ui.button(t.settings_catalogue_community_fetch).clicked() {
+                    let _ = self.cmd_tx.send(Cmd::CatalogueFetchExtra);
+                }
+                if let Some(cat) = &self.settings_ui.catalogue {
+                    if cat.extra_enabled && cat.extra_cached && cat.extra_signature_ok {
+                        ui.weak(t.settings_catalogue_community_cached);
+                    }
+                    if cat.extra_enabled && !cat.extra_error.is_empty() {
+                        ui.weak(format!("{} ({})", t.settings_catalogue_community_unsigned, cat.extra_error));
+                    } else if cat.extra_enabled && !cat.extra_signature_ok {
+                        ui.weak(t.settings_catalogue_community_unsigned);
+                    }
+                }
                 match self.settings_ui.catalogue.clone() {
-                    Some(cat) if cat.signature_ok => {
+                    Some(cat) if cat.signature_ok || cat.extra_signature_ok => {
                         for e in cat.entries {
-                            let installed = self
+                            let source_label = if e.source == "community" {
+                                t.settings_catalogue_source_community
+                            } else {
+                                t.settings_catalogue_source_bundled
+                            };
+                            let installed_mod = self
                                 .settings_ui
                                 .installed_modules
                                 .iter()
                                 .find(|m| m.name == e.name)
                                 .cloned();
+                            let skill_installed =
+                                self.settings_ui.installed_skills.iter().any(|n| n == &e.name);
                             ui.horizontal(|ui| {
-                                let mut label =
-                                    format!("{} {} ({})", e.name, e.version, e.kind);
-                                if let Some(m) = &installed {
+                                let mut label = format!(
+                                    "{} {} ({}) [{}]",
+                                    e.name, e.version, e.kind, source_label
+                                );
+                                if !e.license.is_empty() {
+                                    label.push_str(&format!(" {}", e.license));
+                                }
+                                if installed_mod.is_some() || skill_installed {
                                     label.push_str(&format!(
                                         " [{}]",
                                         t.settings_catalogue_installed
                                     ));
-                                    if m.quarantined {
+                                    if installed_mod
+                                        .as_ref()
+                                        .map(|m| m.quarantined)
+                                        .unwrap_or(false)
+                                    {
                                         label.push_str(" [quarantine]");
                                     }
                                 }
                                 ui.label(label);
-                                if e.kind == "module" {
-                                    if aos_proto::decl_ui::is_bundled_module(&e.name) {
-                                        ui.weak(t.settings_bundled_locked);
-                                    } else if installed.is_some() {
-                                        if ui.button(t.settings_catalogue_uninstall).clicked() {
-                                            let _ = self.cmd_tx.send(Cmd::ModuleUninstall {
+                                match e.kind.as_str() {
+                                    "module" => {
+                                        if aos_proto::decl_ui::is_bundled_module(&e.name) {
+                                            ui.weak(t.settings_bundled_locked);
+                                        } else if installed_mod.is_some() {
+                                            if ui.button(t.settings_catalogue_uninstall).clicked()
+                                            {
+                                                let _ = self.cmd_tx.send(Cmd::ModuleUninstall {
+                                                    name: e.name.clone(),
+                                                });
+                                            }
+                                        } else if e.source == "community" {
+                                            if ui.button(t.settings_catalogue_install).clicked() {
+                                                let _ = self.cmd_tx.send(Cmd::CatalogueInstall {
+                                                    name: e.name.clone(),
+                                                });
+                                            }
+                                        } else if ui.button(t.settings_catalogue_install).clicked()
+                                        {
+                                            let src = aos_home().join(&e.path);
+                                            let _ = self.cmd_tx.send(Cmd::ModuleInstall {
+                                                source_dir: src.to_string_lossy().into_owned(),
+                                                approved_caps: None,
+                                            });
+                                        }
+                                    }
+                                    "skill" => {
+                                        if skill_installed {
+                                            if ui.button(t.settings_catalogue_uninstall).clicked()
+                                            {
+                                                let _ = self.cmd_tx.send(Cmd::SkillUninstall {
+                                                    name: e.name.clone(),
+                                                });
+                                            }
+                                        } else if ui.button(t.settings_catalogue_install).clicked()
+                                        {
+                                            let _ = self.cmd_tx.send(Cmd::CatalogueInstall {
                                                 name: e.name.clone(),
                                             });
                                         }
-                                    } else if ui.button(t.settings_catalogue_install).clicked()
-                                    {
-                                        let src = aos_home().join(&e.path);
-                                        let _ = self.cmd_tx.send(Cmd::ModuleInstall {
-                                            source_dir: src.to_string_lossy().into_owned(),
-                                            approved_caps: None,
-                                        });
                                     }
+                                    _ => {}
                                 }
                             });
                             if !e.attested_caps.is_empty() {

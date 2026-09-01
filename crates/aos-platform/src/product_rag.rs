@@ -400,6 +400,7 @@ mod tests {
             memory_dir: memory_dir.into(),
             modules_dir: temp_path("modules"),
             catalogue_file: "/dev/null".into(),
+            community_catalogue_dir: temp_path("community-cat"),
             skills_dir: temp_path("skills"),
             sessions_dir: temp_path("sessions"),
             embed_model: None,

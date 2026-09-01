@@ -694,6 +694,9 @@ impl UiApp {
         let _ = cmd_tx.send(Cmd::SkillPassPending);
         let _ = cmd_tx.send(Cmd::CatalogueRefresh);
         let _ = cmd_tx.send(Cmd::ModuleList);
+        if prefs.community_catalogue_enabled {
+            let _ = cmd_tx.send(Cmd::CatalogueSetSource { enabled: true });
+        }
         let _ = cmd_tx.send(Cmd::SetRouting {
             mode: prefs.routing.clone(),
         });
@@ -3113,6 +3116,9 @@ impl eframe::App for UiApp {
                     }
                 }
                 Evt::Catalogue(c) => self.on_catalogue(c),
+                Evt::InstalledSkills(list) => {
+                    self.on_installed_skills(list.into_iter().map(|s| s.name).collect());
+                }
                 Evt::InstalledModules(list) => self.on_installed_modules(list),
                 Evt::ModuleInstalled(msg) => {
                     self.status = msg;

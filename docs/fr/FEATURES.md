@@ -102,7 +102,7 @@ Ce n'est **pas** l'OS bootable. Les exigences v1 sont dans
 - **Schémas pont sibling** (E8) : export JSON Schema de `mem.*` / `secrets.*` sous [`docs/bridge/`](../bridge/)
 - **Contrat** HTTP JSON ↔ intents CBOR dans [sibling-bridge.md](sibling-bridge.md) (pas de daemon live)
 - **Keyring OS** pour la clé maître du vault (E7) : Credential Manager / Secret Service ; fallback fichier 0600 (`AOS_SECRETS_FILE_KEY=1`)
-- **Catalogue local signé** (E10) : `share/modules/catalogue.yaml` + ed25519 ; vérif hash à l'install ; liste / Installer dans Settings
+- **Catalogue local signé** (E10) : `share/modules/catalogue.yaml` + ed25519 ; vérif hash à l'install ; liste / Installer dans Settings. Source extra opt-in : index Git signé `community/catalogue.yaml` (cache hors ligne ; même revue de caps ; altération refusée).
 - Chat **Stop** annule le `model.infer` en cours ; **Copier** sur les messages et le corps Dépannage
 
 ### Nouveautés 0.5.0
@@ -344,7 +344,7 @@ Persistés dans `var/run/preferences.json` (migration depuis `onboarding.json` s
 | Agents | Modèle par défaut, max steps (1–128), timeout (60–86400 s) |
 | Schedules | Intervalle de déclenchement agent (`schedule.*`) |
 | Secrets | Clés Brave / GitHub / OpenAI → vault chiffré ; clé maître dans le keyring OS |
-| Modules | Catalogue local signé (E10) ; l'install demande toujours la revue de caps ; désinstall des non-bundlés (pas `notes` / `tasks` / `ext-rt` / `canvas`) |
+| Modules | Catalogue local signé (E10) ; index Git communautaire opt-in ; l'install demande toujours la revue de caps ; désinstall des non-bundlés (pas `notes` / `tasks` / `ext-rt` / `canvas`) |
 | Web | Moteur de recherche, max caractères browse, max octets fetch |
 
 ---
@@ -382,7 +382,7 @@ Piste VM seL4 (PV.1–PV.3) séparée : [phases/phase-vm-sel4.md](phases/phase-v
 - Image bootable / fer nu
 - STT / voix permanente
 - APIs natives Messages/Gemini/Bedrock (Providers OpenAI-compat seulement)
-- Marketplace public de modules (catalogue local signé seulement)
+- Store public / payant de modules (le catalogue Git signé opt-in n’est pas un clone de ClawHub)
 - Canaux de messagerie (Slack/Discord/etc.) dans le noyau OS
 - Comptes multi-utilisateur simultanés
 - Multi-GPU **hard-green** sans run 2 GPU documenté (chemin + skip 1 GPU en 0.10)

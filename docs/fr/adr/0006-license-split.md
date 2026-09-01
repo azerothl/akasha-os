@@ -124,8 +124,9 @@ binaire hôte ou vendor `crates/` est un autre cas ; ça reste AGPL.
 5. Zip Preview honnête : inclure `LICENSE-APACHE` et `LICENSE-MIT` à côté de
    `LICENSE` ; notes/tasks bundlés Apache ; binaires hôte AGPL. `NOTICE`
    décrit les deux couches.
-6. Un catalogue réseau signé (E10) peut venir plus tard ; il n’exige pas
-   l’octroi commercial. La revue de caps à l’install est inchangée.
+6. Catalogue Git signé opt-in (source extra E10) :
+   [ADR 0007](0007-signed-git-catalogue.md). Pas d’octroi commercial. La
+   revue de caps à l’install est inchangée.
 
 ### Hors scope
 

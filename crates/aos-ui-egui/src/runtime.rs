@@ -998,6 +998,104 @@ async fn handle_cmd(
                     let _ = evt_tx.send(Evt::Error(e.to_string()));
                 }
             }
+            if let Ok(list) = bus
+                .call::<(), Vec<SkillInfo>>("skill.list", &(), vec![])
+                .await
+            {
+                let _ = evt_tx.send(Evt::InstalledSkills(list));
+            }
+        }
+        Cmd::CatalogueSetSource { enabled } => {
+            match bus
+                .call::<aos_proto::CatalogueSourceRequest, ModuleCatalogue>(
+                    "module.catalogue.source",
+                    &aos_proto::CatalogueSourceRequest {
+                        enabled,
+                        url: String::new(),
+                        actor: "human:ui".into(),
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(c) => {
+                    let _ = evt_tx.send(Evt::Catalogue(c));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::CatalogueFetchExtra => {
+            match bus
+                .call::<(), ModuleCatalogue>("module.catalogue.refresh", &(), vec![])
+                .await
+            {
+                Ok(c) => {
+                    let _ = evt_tx.send(Evt::Catalogue(c));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::CatalogueInstall { name } => {
+            match bus
+                .call::<aos_proto::CatalogueInstallRequest, aos_proto::CatalogueInstallResponse>(
+                    "module.catalogue.install",
+                    &aos_proto::CatalogueInstallRequest {
+                        name: name.clone(),
+                        approved_caps: None,
+                        actor: "human:ui".into(),
+                        actor_caps: vec![],
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(info) => {
+                    let _ = evt_tx.send(Evt::ModuleInstalled(format!(
+                        "{} {} (quarantined={})",
+                        info.kind, info.name, info.quarantined
+                    )));
+                    if let Ok(list) = bus
+                        .call::<(), Vec<SkillInfo>>("skill.list", &(), vec![])
+                        .await
+                    {
+                        let _ = evt_tx.send(Evt::InstalledSkills(list));
+                    }
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::SkillUninstall { name } => {
+            match bus
+                .call::<aos_proto::SkillNameRequest, bool>(
+                    "skill.uninstall",
+                    &aos_proto::SkillNameRequest {
+                        name: name.clone(),
+                        actor: "human:ui".into(),
+                        actor_caps: vec![],
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(_) => {
+                    let _ = evt_tx.send(Evt::ModuleUninstalled(name));
+                    if let Ok(list) = bus
+                        .call::<(), Vec<SkillInfo>>("skill.list", &(), vec![])
+                        .await
+                    {
+                        let _ = evt_tx.send(Evt::InstalledSkills(list));
+                    }
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
         }
         Cmd::ModuleList => {
             match bus

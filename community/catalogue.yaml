@@ -1,0 +1,14 @@
+# Community signed catalogue (E10). Index license: Apache-2.0.
+# Each package keeps the license in its files / `license` field.
+# Signature: catalogue.yaml.sig (ed25519). Authenticity is the signature,
+# not HTTPS. Same Preview catalogue key as share/modules/catalogue.pub.
+# Not a store. Preview loads this only as an opt-in extra source.
+version: 1
+entries:
+  - name: morning-brief
+    version: "1.0.0"
+    kind: skill
+    path: community/skills/morning-brief/SKILL.md
+    hash: sha256:effdfee5569cf21ff495af9b1df2cf1898108142b1a45375a8fda3a68539cc50
+    license: MIT
+    attested_caps: []

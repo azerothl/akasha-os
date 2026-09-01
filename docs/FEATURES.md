@@ -102,7 +102,7 @@ This is **not** the bootable OS. Target v1 requirements live in
 - **Sibling bridge schemas** (E8): JSON Schema export of `mem.*` / `secrets.*` under [`docs/bridge/`](bridge/)
 - HTTP JSON ↔ CBOR intent **contract** in [sibling-bridge.md](sibling-bridge.md) (no live daemon)
 - **OS keyring** for the vault master key (E7): Windows Credential Manager / Linux Secret Service; file 0600 fallback (`AOS_SECRETS_FILE_KEY=1`)
-- **Local signed module catalogue** (E10): `share/modules/catalogue.yaml` + ed25519; hash check on install; Settings list / Install
+- **Local signed module catalogue** (E10): `share/modules/catalogue.yaml` + ed25519; hash check on install; Settings list / Install. Opt-in extra: signed Git index `community/catalogue.yaml` (cached offline; same cap review; tamper refuses).
 - Chat **Stop** cancels the in-flight `model.infer`; **Copy** on messages and Troubleshoot body
 
 ### What's new in 0.5.0
@@ -344,7 +344,7 @@ Persisted in `var/run/preferences.json` (migrated from `onboarding.json` if need
 | Agents | Default model, max steps (1–128), timeout (60–86400 s) |
 | Schedules | Interval agent fires (`schedule.*`) |
 | Secrets | Brave / GitHub / OpenAI keys → encrypted vault; master key in OS keyring |
-| Modules | Local signed catalogue (E10); Install still requires cap review; Uninstall non-bundled modules (not `notes` / `tasks` / `ext-rt` / `canvas`) |
+| Modules | Local signed catalogue (E10); opt-in community Git index; Install still requires cap review; Uninstall non-bundled modules (not `notes` / `tasks` / `ext-rt` / `canvas`) |
 | Web | Search engine, browse max chars, fetch max bytes |
 
 ---
@@ -382,7 +382,7 @@ seL4 VM track (PV.1–PV.3) is separate: see [phases/phase-vm-sel4.md](phases/ph
 - Bootable / bare-metal image
 - STT / always-on voice
 - Native Messages/Gemini/Bedrock APIs (OpenAI-compat Providers only)
-- Public module marketplace (local signed catalogue only)
+- Paid / public module store (opt-in signed Git catalogue is not a ClawHub clone)
 - Messaging channels (Slack/Discord/etc.) in the OS core
 - Simultaneous multi-user accounts
 - Multi-GPU **hard-green** without a documented 2-GPU run (code path + 1-GPU skip ship in 0.10)

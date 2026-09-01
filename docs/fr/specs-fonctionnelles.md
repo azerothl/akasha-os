@@ -395,6 +395,6 @@ Détail : `FEATURES.md`.
 | E17 | **Livré Preview 0.8.0** — artefact unifié ; Réglages gpu/cpu/auto redémarre modeld dans la session |
 | F-UI-01–05, 09 | Double surface + panneau transparence + Settings |
 | F-SEC-01–08 | Caps, confirm, egress deny-by-default, isolation auditd ; clé maître du vault dans le keyring OS (fallback fichier 0600) ; agents interdits de `secrets.get` |
-| F-MOD catalogue | Catalogue local signé `share/modules/catalogue.yaml` ; vérif hash à `module.install` |
+| F-MOD catalogue | Catalogue local signé `share/modules/catalogue.yaml` ; source extra Git opt-in (`community/catalogue.yaml`) ; vérif hash + revue de caps à l’install |
 | E8 pont | JSON Schema `docs/bridge/` + contrat HTTP JSON ↔ CBOR (pas de daemon live) |
 | F-NET-01–02 | Recherche multi-moteurs + `web.browse` |

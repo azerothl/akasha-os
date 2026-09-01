@@ -395,6 +395,6 @@ Detail: `docs/FEATURES.md`.
 | E17 | **Shipped Preview 0.8.0** — unified artefact; Settings gpu/cpu/auto restarts modeld in-session |
 | F-UI-01–05, 09 | Dual surface + transparency panel + Settings |
 | F-SEC-01–08 | Caps, confirm, egress deny-by-default, auditd isolation; vault master key in OS keyring (file 0600 fallback); agents denied `secrets.get` |
-| F-MOD catalogue | Signed local `share/modules/catalogue.yaml`; hash check on `module.install` |
+| F-MOD catalogue | Signed local `share/modules/catalogue.yaml`; opt-in Git extra source (`community/catalogue.yaml`); hash check + cap review on install |
 | E8 bridge | JSON Schema `docs/bridge/` + HTTP JSON ↔ CBOR contract (no live daemon) |
 | F-NET-01–02 | Multi-engine search + `web.browse` |  

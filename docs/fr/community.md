@@ -19,6 +19,10 @@ d’octroi commercial) : [ADR 0006](../../adr/0006-license-split.md). Une
 Discussion n’est jamais un événement CLA. Ne pas PR un skill dans
 `crates/`. Skill d’exemple (MIT, hors zip Preview) :
 [`community/skills/morning-brief/`](../../community/skills/morning-brief/).
+Index signé : [`community/catalogue.yaml`](../../community/catalogue.yaml)
+([ADR 0007](../../adr/0007-signed-git-catalogue.md)). Dans la Preview :
+Settings → Catalogue local de modules → activer la source communautaire →
+Installer. Un index altéré est refusé. La revue de caps est inchangée.
 Guide dix minutes : [write-a-skill.md](write-a-skill.md) (site :
 [skill.html](https://azerothl.github.io/akasha-os/docs/skill.html?lang=fr)).
 Premier module (sans cargo) : [write-a-module.md](write-a-module.md) (site :

@@ -36,6 +36,9 @@ Preview loads **`SKILL.md` only**. A `SKILL.fr.md` is for humans.
 
 ## Path A — copy the example
 
+In Preview: Settings → Local module catalogue → enable **Community
+catalogue** → Fetch community index → Install `morning-brief` (same cap
+review as a module). Or copy
 [`community/skills/morning-brief/SKILL.md`](../community/skills/morning-brief/SKILL.md)
 → `var/skills/morning-brief/SKILL.md`. Ask “Give me a morning brief”.
 Local only: memory, open tasks, notes. No network.

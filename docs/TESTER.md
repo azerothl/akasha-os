@@ -164,6 +164,14 @@ Expected banner: Preview on the host OS — this is not the bootable OS yet.
 - **Install** on a listed module → cap review confirmation (same as 7c).
 - Tampering with a packaged WASM while keeping the catalogue entry must refuse.
 
+Optional extra source (E10 Git index, off by default):
+
+- Enable **Community catalogue**, then **Fetch community index**.
+- `morning-brief` is labeled community. Install → same cap review (empty
+  caps = no dialog). A bad signature must refuse, not silent-install.
+- After a successful fetch, turn the network off: the cached index still
+  lists. Policy: [ADR 0007](../adr/0007-signed-git-catalogue.md).
+
 ### 7h. Chat Stop + Copy (P06.5)
 
 - During a streaming reply, **Stop** interrupts generation.

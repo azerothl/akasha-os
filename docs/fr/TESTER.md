@@ -166,6 +166,15 @@ Bannière attendue : Preview sur l’OS hôte — ce n’est pas encore l’OS b
 - **Installer** un module listé → confirmation de revue de caps (comme 7c).
 - Altérer un WASM packagé tout en gardant l'entrée catalogue doit refuser.
 
+Source extra optionnelle (index Git E10, désactivée par défaut) :
+
+- Activer **Catalogue communautaire**, puis **Récupérer l’index communautaire**.
+- `morning-brief` est étiqueté communauté. Installer → même revue de caps
+  (caps vides = pas de dialogue). Une mauvaise signature doit refuser,
+  pas installer en silence.
+- Après un fetch réussi, couper le réseau : l’index en cache liste encore.
+  Politique : [ADR 0007](../../adr/0007-signed-git-catalogue.md).
+
 ### 7h. Stop chat + Copier (P06.5)
 
 - Pendant un stream, **Stop** interrompt la génération.

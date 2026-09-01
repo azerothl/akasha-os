@@ -2,8 +2,12 @@
 
 **Language:** English | [Français](#francais)
 
-Example **community** skill (MIT). It is **not** in the Preview zip. Copy it
-into `var/skills/` yourself. Policy: [ADR 0006](../../../adr/0006-license-split.md).
+Example **community** skill (MIT). It is **not** in the Preview zip. It is
+listed in the signed [`community/catalogue.yaml`](../../catalogue.yaml).
+Enable the community catalogue in Settings and Install, or copy
+`SKILL.md` into `var/skills/` yourself. Policy:
+[ADR 0006](../../../adr/0006-license-split.md),
+[ADR 0007](../../../adr/0007-signed-git-catalogue.md).
 
 The agent recipe is [`SKILL.md`](SKILL.md) (English). Human translation:
 [`SKILL.fr.md`](SKILL.fr.md). Preview loads only `SKILL.md`.
@@ -36,6 +40,8 @@ to the example stays under `community/`.
 
 ## Français
 
-Skill **communautaire** d’exemple (MIT). **Pas** dans le zip Preview. Copier
-`SKILL.md` vers `var/skills/morning-brief/` (chemins ci-dessus). La recette
-agent est en anglais ; [`SKILL.fr.md`](SKILL.fr.md) est pour les humains.
+Skill **communautaire** d’exemple (MIT). **Pas** dans le zip Preview. Listé
+dans l’index signé. Activer le catalogue communautaire dans Settings, ou
+copier `SKILL.md` vers `var/skills/morning-brief/` (chemins ci-dessus). La
+recette agent est en anglais ; [`SKILL.fr.md`](SKILL.fr.md) est pour les
+humains.

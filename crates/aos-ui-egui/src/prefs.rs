@@ -56,6 +56,9 @@ pub struct Preferences {
     /// `ask` (default) | `autonomous` — inline Allow Once gate for chat agents.
     #[serde(default = "default_agent_gate_mode")]
     pub agent_gate_mode: String,
+    /// Opt-in extra signed Git catalogue (community/). Off by default.
+    #[serde(default)]
+    pub community_catalogue_enabled: bool,
 }
 
 /// Preset scale steps exposed in Settings → Me.
@@ -166,6 +169,7 @@ impl Default for Preferences {
             image_steps: default_image_steps(),
             ui_scale_percent: default_ui_scale_percent(),
             agent_gate_mode: default_agent_gate_mode(),
+            community_catalogue_enabled: false,
         }
     }
 }

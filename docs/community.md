@@ -17,6 +17,10 @@ commercial grant): [ADR 0006](../adr/0006-license-split.md). A Discussion is
 never a CLA event. Do not PR a skill into `crates/`. Example skill (MIT, not
 in the Preview zip):
 [`community/skills/morning-brief/`](../community/skills/morning-brief/).
+Signed index: [`community/catalogue.yaml`](../community/catalogue.yaml)
+([ADR 0007](../adr/0007-signed-git-catalogue.md)). In Preview, Settings →
+Local module catalogue → enable the community source → Install. Tampering
+is refused. Cap review is unchanged.
 Ten-minute guide: [write-a-skill.md](write-a-skill.md) (site:
 [skill.html](https://azerothl.github.io/akasha-os/docs/skill.html)).
 First module (no cargo): [write-a-module.md](write-a-module.md) (site:

@@ -2035,24 +2035,79 @@ pub struct ModuleInstallRequest {
 pub struct CatalogueEntry {
     pub name: String,
     pub version: String,
-    /// `module` | `mcp`
+    /// `module` | `mcp` | `skill`
     pub kind: String,
-    /// Chemin relatif à la racine Preview (`share/...`).
+    /// Chemin relatif à la racine dépôt / Preview (`share/...` ou `community/...`).
     pub path: String,
-    /// SHA-256 du WASM (`module`) ou du fichier (`mcp`), optionnellement préfixé `sha256:`.
+    /// SHA-256 du WASM (`module`), du fichier (`mcp` / `skill`), optionnellement préfixé `sha256:`.
     pub hash: String,
     #[serde(default)]
     pub attested_caps: Vec<String>,
+    /// SPDX / OSI license of this package (index itself is Apache-2.0).
+    #[serde(default)]
+    pub license: String,
+    /// `bundled` | `community` — set by the host when merging sources.
+    #[serde(default)]
+    pub source: String,
 }
 
-/// `module.catalogue` — registre local signé (pas un store réseau).
+/// `module.catalogue` — registre signé (bundled + opt-in extra Git source).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModuleCatalogue {
     pub version: u32,
     pub entries: Vec<CatalogueEntry>,
-    /// True si `catalogue.yaml.sig` a été vérifiée avec `catalogue.pub`.
+    /// True si le catalogue bundlé a une signature ed25519 valide.
     #[serde(default)]
     pub signature_ok: bool,
+    /// User enabled the opt-in community / extra Git source.
+    #[serde(default)]
+    pub extra_enabled: bool,
+    /// Extra index verified with the pinned Preview catalogue key.
+    #[serde(default)]
+    pub extra_signature_ok: bool,
+    /// Extra index came from the offline cache (or a local `community/` tree).
+    #[serde(default)]
+    pub extra_cached: bool,
+    /// Last extra-source error (tamper, fetch, …). Empty when ok.
+    #[serde(default)]
+    pub extra_error: String,
+    /// Configured extra index URL (raw signed `catalogue.yaml`).
+    #[serde(default)]
+    pub extra_url: String,
+}
+
+/// `module.catalogue.source` — enable / disable the opt-in extra catalogue.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CatalogueSourceRequest {
+    pub enabled: bool,
+    /// Override the default raw GitHub / static index URL. Empty = keep current.
+    #[serde(default)]
+    pub url: String,
+    #[serde(default)]
+    pub actor: String,
+}
+
+/// `module.catalogue.install` — install a listed skill or module after hash + cap review.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CatalogueInstallRequest {
+    pub name: String,
+    #[serde(default)]
+    pub approved_caps: Option<Vec<String>>,
+    #[serde(default)]
+    pub actor: String,
+    #[serde(default)]
+    pub actor_caps: Vec<String>,
+}
+
+/// Result of `module.catalogue.install`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CatalogueInstallResponse {
+    pub name: String,
+    pub kind: String,
+    #[serde(default)]
+    pub version: String,
+    #[serde(default)]
+    pub quarantined: bool,
 }
 
 /// `module.scaffold` — génère un squelette de module (script ou rust).

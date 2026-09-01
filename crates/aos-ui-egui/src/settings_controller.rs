@@ -14,6 +14,10 @@ impl UiApp {
         self.settings_ui.set_catalogue(catalogue);
     }
 
+    pub(crate) fn on_installed_skills(&mut self, names: Vec<String>) {
+        self.settings_ui.set_installed_skills(names);
+    }
+
     pub(crate) fn on_installed_modules(&mut self, list: Vec<ModuleInfo>) {
         if self.pending_module_agent
             && SettingsUiState::has_new_decl_module(&list, &self.pending_module_baseline)

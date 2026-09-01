@@ -150,6 +150,7 @@ pub struct ModuleRuntime {
     installed: HashMap<String, InstalledModule>,
     services: Arc<dyn HostServices>,
     catalogue: Option<crate::catalogue::SignedCatalogue>,
+    extra_catalogue: Option<crate::catalogue::SignedCatalogue>,
 }
 
 /// Bornes d'exécution par invocation (§7.4).
@@ -172,6 +173,7 @@ impl ModuleRuntime {
             installed: HashMap::new(),
             services,
             catalogue: None,
+            extra_catalogue: None,
         };
         rt.load_registry()?;
         Ok(rt)
@@ -184,6 +186,14 @@ impl ModuleRuntime {
 
     pub fn catalogue(&self) -> Option<&crate::catalogue::SignedCatalogue> {
         self.catalogue.as_ref()
+    }
+
+    pub fn set_extra_catalogue(&mut self, catalogue: Option<crate::catalogue::SignedCatalogue>) {
+        self.extra_catalogue = catalogue;
+    }
+
+    pub fn extra_catalogue(&self) -> Option<&crate::catalogue::SignedCatalogue> {
+        self.extra_catalogue.as_ref()
     }
 
     fn registry_path(&self) -> PathBuf {
@@ -283,16 +293,20 @@ impl ModuleRuntime {
         if manifest.hash != hash && manifest.hash != format!("sha256:{hash}") {
             return Err(ModuleError::HashMismatch);
         }
-        if let Some(cat) = &self.catalogue {
-            cat.check_module_hash(&manifest.name, &hash)
-                .map_err(|e| match e {
-                    crate::catalogue::CatalogueError::HashMismatch(n) => {
-                        ModuleError::CatalogueMismatch(n)
-                    }
-                    crate::catalogue::CatalogueError::BadSignature => ModuleError::CatalogueSignature,
-                    other => ModuleError::BadManifest(other.to_string()),
-                })?;
-        }
+        crate::catalogue::check_hash_in(
+            self.catalogue.as_ref(),
+            self.extra_catalogue.as_ref(),
+            &manifest.name,
+            "module",
+            &hash,
+        )
+        .map_err(|e| match e {
+            crate::catalogue::CatalogueError::HashMismatch(n) => {
+                ModuleError::CatalogueMismatch(n)
+            }
+            crate::catalogue::CatalogueError::BadSignature => ModuleError::CatalogueSignature,
+            other => ModuleError::BadManifest(other.to_string()),
+        })?;
         let granted = match approved_caps {
             Some(caps) => caps,
             None if manifest.permissions.required_caps.is_empty() => Vec::new(),

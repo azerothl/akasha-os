@@ -10,6 +10,7 @@ pub(crate) struct SettingsUiState {
     pub(crate) secret_names: Vec<String>,
     pub(crate) secret_vault_encrypted: bool,
     pub(crate) catalogue: Option<ModuleCatalogue>,
+    pub(crate) installed_skills: Vec<String>,
     pub(crate) installed_modules: Vec<ModuleInfo>,
     pub(crate) schedule_goal: String,
     pub(crate) schedule_interval_secs: u64,
@@ -24,6 +25,7 @@ impl Default for SettingsUiState {
             secret_names: Vec::new(),
             secret_vault_encrypted: false,
             catalogue: None,
+            installed_skills: Vec::new(),
             installed_modules: Vec::new(),
             schedule_goal: String::new(),
             schedule_interval_secs: 60,
@@ -39,6 +41,10 @@ impl SettingsUiState {
 
     pub(crate) fn set_catalogue(&mut self, catalogue: ModuleCatalogue) {
         self.catalogue = Some(catalogue);
+    }
+
+    pub(crate) fn set_installed_skills(&mut self, names: Vec<String>) {
+        self.installed_skills = names;
     }
 
     pub(crate) fn set_installed_modules(&mut self, list: Vec<ModuleInfo>) {
