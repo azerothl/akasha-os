@@ -78,6 +78,17 @@ pub(crate) fn ui_audit(&mut self, ui: &mut egui::Ui) {
                 .collect()
         };
         if matching.is_empty() {
+            if let Some(agent_id) = holder.strip_prefix("agent:") {
+                if let Some(info) = self.agents.iter().find(|a| a.agent_id == agent_id) {
+                    if !info.caps.is_empty() {
+                        ui.weak(t.caps_logical);
+                        for c in &info.caps {
+                            ui.monospace(c);
+                        }
+                        return;
+                    }
+                }
+            }
             ui.weak(t.caps_empty);
             return;
         }

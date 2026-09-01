@@ -19,11 +19,12 @@ use aos_proto::{
     AgentOutputEvent, AgentPromptOptimizeRequest, AgentPromptOptimizeResponse,
     AgentRoomConductRequest, AgentRoomTurnRequest, AgentRosterUpdateRequest, AgentSpec,
     AgentSpecResponse, AgentStartRequest, AgentState, AgentSteerRequest, AgentStepRecord,
-    AgentTrace, ChatAttachment, ChatMessage, ChatSessionAppendRequest, ChatSessionGetResponse,
-    ChatSessionIdRequest, ChatSessionRoomTurnCancelRequest, CancelRequest, InferParams,
-    InferRequest, McpServerInfo, SecretGetRequest, SkillInfo, TokenEvent,
+    AgentTrace, CapInfo, CapListRequest, CapMintRequest, CapMintResponse, ChatAttachment,
+    ChatMessage, ChatSessionAppendRequest, ChatSessionGetResponse, ChatSessionIdRequest,
+    ChatSessionRoomTurnCancelRequest, CancelRequest, InferParams, InferRequest, McpServerInfo,
+    SecretGetRequest, SkillInfo, TokenEvent,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::process::Command;
@@ -234,6 +235,59 @@ fn mcp_secrets_path(agent_id: &str) -> PathBuf {
 
 /// Résout `${secret:…}` pour les serveurs MCP de l'agent et écrit un fichier
 /// éphémère lu puis effacé par le worker.
+
+/// Droits émis pour chaque cap agent publiée dans `aos-capkd`.
+fn agent_cap_rights() -> Vec<String> {
+    vec![
+        "read".into(),
+        "write".into(),
+        "execute".into(),
+        "grant".into(),
+        "revoke".into(),
+    ]
+}
+
+/// Publie les caps logiques de l'agent dans le noyau (`holder = agent:<id>`),
+/// sans dupliquer les objets déjà présents. L'UI Capacité interroge `cap.list`
+/// sur `aos-capkd`, pas le CapStore local d'agentd.
+async fn publish_caps_to_capkd(bus: &BusClient, agent_id: &str, caps: &[String]) {
+    if caps.is_empty() {
+        return;
+    }
+    let holder = format!("agent:{agent_id}");
+    let existing = bus
+        .call::<CapListRequest, Vec<CapInfo>>(
+            "cap.list",
+            &CapListRequest {
+                holder: holder.clone(),
+            },
+            vec![],
+        )
+        .await
+        .unwrap_or_default();
+    let have: HashSet<&str> = existing.iter().map(|c| c.object.as_str()).collect();
+    let rights = agent_cap_rights();
+    for object in caps {
+        if have.contains(object.as_str()) {
+            continue;
+        }
+        if let Err(e) = bus
+            .call::<CapMintRequest, CapMintResponse>(
+                "cap.mint",
+                &CapMintRequest {
+                    holder: holder.clone(),
+                    object: object.clone(),
+                    rights: rights.clone(),
+                },
+                vec![],
+            )
+            .await
+        {
+            eprintln!("[aos-agentd] cap.mint {holder}/{object}: {e}");
+        }
+    }
+}
+
 async fn prepare_mcp_secrets(
     bus: &BusClient,
     agent_id: &str,
@@ -386,6 +440,10 @@ async fn spawn_worker(
             },
         );
         persist::update_info_sidecar(&rt.agents[agent_id].info);
+    }
+
+    if let Some(bus) = bus {
+        publish_caps_to_capkd(bus, agent_id, &spec.caps).await;
     }
 
     let shared2 = shared.clone();
@@ -674,9 +732,11 @@ async fn main() {
     // --- agent.start (restore) ---
     {
         let shared = shared.clone();
+        let bus2 = bus.clone();
         let bus_addr2 = bus_addr.clone();
         svc.on(intents::START, move |ctx| {
             let shared = shared.clone();
+            let bus = bus2.clone();
             let bus_addr = bus_addr2.clone();
             async move {
                 let req: AgentStartRequest = match ctx.payload() {
@@ -709,7 +769,7 @@ async fn main() {
                         }
                     }
                 }
-                match spawn_worker(&shared, &bus_addr, &req.agent_id, &spec, true, None).await {
+                match spawn_worker(&shared, &bus_addr, &req.agent_id, &spec, true, Some(&bus)).await {
                     Ok(_) => {
                         let _ = ctx.respond(aos_ipc::msg::Status::Ok, &true).await;
                     }
@@ -873,7 +933,7 @@ async fn main() {
                                     &req.agent_id,
                                     &spec,
                                     true,
-                                    None,
+                                    Some(&bus),
                                 )
                                 .await
                                 {
@@ -1438,6 +1498,41 @@ async fn main() {
                                 let _ = persist::write_spec(&spec);
                             }
                         }
+                        publish_caps_to_capkd(&bus, &req.agent_id, &[req.cap.clone()]).await;
+                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &true).await;
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+
+    // --- agent.caps.sync — publie les caps logiques dans aos-capkd ---
+    {
+        let shared2 = shared.clone();
+        let bus2 = bus.clone();
+        svc.on(intents::CAPS_SYNC, move |ctx| {
+            let shared = shared2.clone();
+            let bus = bus2.clone();
+            async move {
+                match ctx.payload::<AgentIdRequest>() {
+                    Ok(req) => {
+                        let caps = {
+                            let rt = shared.lock().await;
+                            if let Some(entry) = rt.agents.get(&req.agent_id) {
+                                entry.info.caps.clone()
+                            } else {
+                                drop(rt);
+                                persist::read_spec(&req.agent_id)
+                                    .map(|s| s.caps)
+                                    .unwrap_or_default()
+                            }
+                        };
+                        publish_caps_to_capkd(&bus, &req.agent_id, &caps).await;
                         let _ = ctx.respond(aos_ipc::msg::Status::Ok, &true).await;
                     }
                     Err(_) => {

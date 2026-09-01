@@ -1969,6 +1969,18 @@ async fn handle_cmd(
             }
         }
         Cmd::CapList { holder } => {
+            if let Some(agent_id) = holder.strip_prefix("agent:") {
+                // Ensure logical agent caps are present in aos-capkd before listing.
+                let _ = bus
+                    .call::<AgentIdRequest, bool>(
+                        agent_intents::CAPS_SYNC,
+                        &AgentIdRequest {
+                            agent_id: agent_id.to_string(),
+                        },
+                        vec![],
+                    )
+                    .await;
+            }
             match bus
                 .call::<CapListRequest, Vec<CapInfo>>(
                     "cap.list",

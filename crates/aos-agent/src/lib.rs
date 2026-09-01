@@ -45,6 +45,8 @@ pub mod intents {
     pub const RETRY: &str = "agent.retry";
     pub const PROMPT_OPTIMIZE: &str = "agent.prompt.optimize";
     pub const GRANT: &str = "agent.grant";
+    /// Publie les caps logiques de l'agent dans `aos-capkd` (holder `agent:<id>`).
+    pub const CAPS_SYNC: &str = "agent.caps.sync";
     pub const SKILL_LIST: &str = "skill.list";
     pub const SKILL_GET: &str = "skill.get";
     pub const MCP_LIST: &str = "mcp.list";
