@@ -68,4 +68,5 @@ Do not search the web. Do not create notes or tasks.
 [Show and tell](https://github.com/azerothl/akasha-os/discussions) avec le
 fichier collé — pas un CLA. Une PR va sous `community/` seulement, jamais
 `crates/`. Voir [community.md](community.md) et
-[CONTRIBUTING.md](CONTRIBUTING.md).
+[CONTRIBUTING.md](CONTRIBUTING.md). Suite :
+[premier module](write-a-module.md) (toujours sans cargo).

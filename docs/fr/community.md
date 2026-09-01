@@ -21,6 +21,8 @@ Discussion n’est jamais un événement CLA. Ne pas PR un skill dans
 [`community/skills/morning-brief/`](../../community/skills/morning-brief/).
 Guide dix minutes : [write-a-skill.md](write-a-skill.md) (site :
 [skill.html](https://azerothl.github.io/akasha-os/docs/skill.html?lang=fr)).
+Premier module (sans cargo) : [write-a-module.md](write-a-module.md) (site :
+[module.html](https://azerothl.github.io/akasha-os/docs/module.html?lang=fr)).
 
 ## Gate cohorte
 

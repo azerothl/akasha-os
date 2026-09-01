@@ -226,6 +226,8 @@ et envoi de retour GitHub).
 
 ### 15. Créer un module par agent (0.7.0 / E15)
 
+Guide testeur (sans cargo) : [write-a-module.md](write-a-module.md).
+
 - Onglet **Scénarios** → **Lancer un agent : créer le module cohortmod**
   (ou Chat : « crée un module ping » — Preview lance un agent même si le
   modèle dump du JSON d’UI ; ou Agents / `/agent` : scaffold + package + install).

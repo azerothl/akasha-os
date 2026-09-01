@@ -89,6 +89,7 @@ cargo run -p aos-session --release
 | [I18N.md](I18N.md) | Convention multilingue |
 | [community.md](community.md) | Cohorte Preview (Discussions ; 3 Win + 1 Linux + 1 Mac) |
 | [write-a-skill.md](write-a-skill.md) | Guide skill en dix minutes (MIT, `var/skills/`) |
+| [write-a-module.md](write-a-module.md) | Premier module sans cargo (scaffold / caps) |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Comment tester, discuter, et (si PR) licence |
 
 ## Licence

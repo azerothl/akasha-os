@@ -34,9 +34,12 @@ copy: [`docs/write-a-skill.md`](../docs/write-a-skill.md).
 
 ## How to add a module
 
-Scaffold in Preview (`module.scaffold` / package), keep the `.aospkg` here
-under `community/modules/`, and list required caps in the manifest. Install
-in Preview still runs cap review. Guest code compiles against
+Procedure (site):
+[first module](https://azerothl.github.io/akasha-os/docs/module.html). Repo:
+[`docs/write-a-module.md`](../docs/write-a-module.md). Scaffold in Preview
+(`module.scaffold` kind `script` / package / install), keep the `.aospkg`
+here under `community/modules/`, and list required caps in the manifest.
+Install in Preview still runs cap review. Guest code compiles against
 [`modules/sdk`](../modules/sdk) (Apache-2.0).
 
 ---
@@ -49,6 +52,7 @@ Cet arbre **n’est pas** l’hôte Akasha OS. Il sert aux skills, modules
 Politique : [ADR 0006](../adr/0006-license-split.md). Défaut **MIT**
 ([`LICENSE-MIT`](../LICENSE-MIT)). Exemple :
 [`skills/morning-brief/`](skills/morning-brief/) — copier `SKILL.md` vers
-`var/skills/morning-brief/`. Une Discussion Show and tell reste valable sans
-PR. Une PR ici ne doit pas toucher `crates/`. La marque Akasha OS reste
-réservée.
+`var/skills/morning-brief/`. Guide module :
+[premier module](https://azerothl.github.io/akasha-os/docs/module.html?lang=fr).
+Une Discussion Show and tell reste valable sans PR. Une PR ici ne doit pas
+toucher `crates/`. La marque Akasha OS reste réservée.

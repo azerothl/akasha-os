@@ -221,6 +221,8 @@ GitHub feedback submit).
 
 ### 15. Create a module via agent (0.7.0 / E15)
 
+Tester-facing write-up (no cargo): [write-a-module.md](write-a-module.md).
+
 - **Scenarios** tab → **Launch agent: create module cohortmod**
   (or Chat: « crée un module ping » — Preview spawns an agent even if the
   model dumps UI JSON; or Agents / `/agent` with scaffold + package + install).

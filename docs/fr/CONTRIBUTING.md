@@ -62,11 +62,14 @@ MIT — toujours sans octroi commercial.
 
 ## Scaffolder un module
 
-Dans la Preview : Settings → Modules, ou demande à un agent
-`module.scaffold` (TESTER étapes 14–15). Partage le `.aospkg` en Discussion
-(pas de CLA) ou sous [`community/`](../../community/README.md). L’install
-fait toujours la revue de caps. SDK guest :
-[`modules/sdk`](../../modules/sdk) (Apache-2.0).
+Procédure : [write-a-module.md](write-a-module.md) (site :
+[premier module](https://azerothl.github.io/akasha-os/docs/module.html?lang=fr)).
+Dans la Preview : Scenarios / Chat « crée un module … », ou Settings →
+Modules (`module.scaffold` kind `script` → package → install). Partage le
+`.aospkg` en Discussion (pas de CLA) ou sous
+[`community/modules/`](../../community/README.md). L’install fait toujours
+la revue de caps. SDK guest : [`modules/sdk`](../../modules/sdk)
+(Apache-2.0).
 
 ## Proposer une ADR
 

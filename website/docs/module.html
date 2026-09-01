@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>First module — Akasha OS Preview</title>
+    <meta
+      name="description"
+      content="Create a dual-surface Preview module without cargo: scaffold, package, cap review, Modules tab. Not a public marketplace."
+    />
+    <link rel="stylesheet" href="../styles.css" />
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="../favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="../apple-touch-icon.png" />
+    <meta property="og:image" content="https://azerothl.github.io/akasha-os/og.png" />
+    <meta name="theme-color" content="#070b14" />
+  </head>
+  <body class="plate">
+    <!--
+      THESIS: A first module is scaffold → package → cap review in Preview, not a crate PR.
+      OWN-WORLD: Orrery inner plate — void, cyan rails. FORM: seed c1699dbf reroll 1.
+      STORY: Tester asks Chat to create a module, accepts caps, opens the new Modules tab.
+      FIRST VIEWPORT: Dual-surface, no cargo, no webview, no store.
+      FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+    -->
+    <canvas class="ether" data-ether aria-hidden="true"></canvas>
+    <a class="skip" href="#content">Skip to content</a>
+    <div class="shell">
+      <header class="axis">
+        <a class="mark" href="../" aria-label="Akasha OS home">
+          <img src="../logo.svg" alt="" width="40" height="40" />
+          <span class="mark-id">Akasha OS</span>
+        </a>
+        <nav class="lanes" aria-label="Primary">
+          <a href="../grant.html">grant</a>
+          <a href="../why.html">why</a>
+          <a href="../install.html">install</a>
+          <a href="../docs/" aria-current="page">docs</a>
+          <a href="whats-new.html">news</a>
+          <a href="../community.html">community</a>
+          <a href="../about.html">about</a>
+        </nav>
+        <div class="lang" role="group" aria-label="Language">
+          <button type="button" data-set-lang="en" aria-pressed="true">EN</button>
+          <button type="button" data-set-lang="fr" aria-pressed="false">FR</button>
+        </div>
+      </header>
+      <main id="content" class="plate-main">
+        <h1>
+          <span data-lang="en">
+            A module is dual-surface: tools for agents, a closed widget tree
+            for you. Preview
+            <span data-aos-version="0.15.1">0.15.1</span>
+            can scaffold, package, and install one without cargo. That is
+            longer than a
+            <a href="skill.html">skill</a>, and it is still not a kernel pull
+            request.
+          </span>
+          <span data-lang="fr">
+            Un module est dual-surface : des outils pour les agents, un arbre
+            de widgets fermé pour vous. La Preview
+            <span data-aos-version="0.15.1">0.15.1</span>
+            peut en scaffolder, packager et installer un sans cargo. C’est plus
+            long qu’un
+            <a href="skill.html">skill</a>, et ce n’est toujours pas une pull
+            request noyau.
+          </span>
+        </h1>
+
+        <aside class="callout">
+          <h3 data-lang="en">What this is not</h3>
+          <h3 data-lang="fr">Ce que ce n’est pas</h3>
+          <p data-lang="en">
+            Not <code>notes</code>, <code>tasks</code>, <code>canvas</code>, or
+            <code>ext-rt</code> — those are bundled. Not HTML/JS or a webview
+            (closed <code>declarative_ui</code> only). Not a public marketplace:
+            install is a local signed catalogue plus cap review. Guest packages
+            default MIT in
+            <code>community/</code>; the WASM SDK is Apache-2.0. The host stays
+            AGPL —
+            <a href="https://github.com/azerothl/akasha-os/blob/main/adr/0006-license-split.md">ADR 0006</a>.
+          </p>
+          <p data-lang="fr">
+            Pas <code>notes</code>, <code>tasks</code>, <code>canvas</code> ni
+            <code>ext-rt</code> — ceux-là sont bundlés. Pas d’HTML/JS ni de
+            webview (<code>declarative_ui</code> fermé seulement). Pas de
+            marketplace public : l’install est un catalogue local signé plus la
+            revue de caps. Les paquets guest sont MIT par défaut dans
+            <code>community/</code> ; le SDK WASM est Apache-2.0. L’hôte reste
+            AGPL —
+            <a href="https://github.com/azerothl/akasha-os/blob/main/docs/fr/adr/0006-license-split.md">ADR 0006</a>.
+          </p>
+        </aside>
+
+        <article class="grant">
+          <h2 data-lang="en">Path A — ask the agent (no cargo)</h2>
+          <h2 data-lang="fr">Chemin A — demander à l’agent (sans cargo)</h2>
+          <p class="hist" data-lang="en">
+            This is the tester path. Pick a name that is not bundled
+            (<code>cohortmod</code>, <code>pingmod</code>): lowercase, digits,
+            hyphens; 2–32 characters; start with a letter.
+          </p>
+          <p class="hist" data-lang="fr">
+            C’est le chemin testeur. Choisissez un nom qui n’est pas bundlé
+            (<code>cohortmod</code>, <code>pingmod</code>) : minuscules,
+            chiffres, tirets ; 2–32 caractères ; commence par une lettre.
+          </p>
+          <ol class="steps">
+            <li data-lang="en">
+              Preview already installed. If not,
+              <a href="../install.html">install</a> then the
+              <a href="../community.html">15-minute path</a>.
+            </li>
+            <li data-lang="fr">
+              Preview déjà installée. Sinon,
+              <a href="../install.html">installer</a> puis le
+              <a href="../community.html">chemin de 15 minutes</a>.
+            </li>
+            <li data-lang="en">
+              Scenarios tab → <strong>Launch agent: create module cohortmod</strong>,
+              or Chat: “create a module pingmod” / « crée un module pingmod ».
+              Agents / <code>/agent</code> with scaffold + package + install
+              works too.
+            </li>
+            <li data-lang="fr">
+              Onglet Scenarios → <strong>Launch agent: create module cohortmod</strong>,
+              ou Chat : « crée un module pingmod ». Agents /
+              <code>/agent</code> avec scaffold + package + install marche
+              aussi.
+            </li>
+            <li data-lang="en">
+              When the <strong>cap review</strong> lists required caps
+              (often <code>fs.write:/documents/&lt;name&gt;/**</code> plus
+              <code>module.install</code>): read it. Deny once if you are
+              checking fail-closed; Accept to install. Timeout is deny.
+            </li>
+            <li data-lang="fr">
+              Quand la <strong>revue de caps</strong> liste les caps requises
+              (souvent <code>fs.write:/documents/&lt;name&gt;/**</code> plus
+              <code>module.install</code>) : lisez. Deny une fois si vous
+              testez le fail-closed ; Accept pour installer. Timeout = refus.
+            </li>
+            <li data-lang="en">
+              Sidebar <strong>Modules → &lt;name&gt;</strong> appears (not
+              Notes / Tasks). Open it: heading, form or button, table on the
+              primary tool. Submit once; the result should refresh.
+            </li>
+            <li data-lang="fr">
+              La barre <strong>Modules → &lt;name&gt;</strong> apparaît (pas
+              Notes / Tasks). Ouvrez : heading, formulaire ou bouton, table
+              sur l’outil principal. Soumettez une fois ; le résultat doit se
+              rafraîchir.
+            </li>
+          </ol>
+        </article>
+
+        <article class="grant">
+          <h2 data-lang="en">Where the files go</h2>
+          <h2 data-lang="fr">Où vont les fichiers</h2>
+          <p class="hist" data-lang="en">
+            Authoring lives under the Preview home
+            <code>var/modules/</code>: source in <code>src/&lt;name&gt;/</code>
+            (script <code>handlers.yaml</code>), package at
+            <code>packages/&lt;name&gt;.aospkg</code>. Windows home is
+            <code>%LOCALAPPDATA%\AgentOS-Preview</code>; Linux and macOS use
+            <code>~/.local/share/agentos-preview</code>.
+          </p>
+          <p class="hist" data-lang="fr">
+            L’authoring vit sous le home Preview
+            <code>var/modules/</code> : source dans
+            <code>src/&lt;name&gt;/</code> (<code>handlers.yaml</code>
+            script), paquet dans <code>packages/&lt;name&gt;.aospkg</code>.
+            Home Windows : <code>%LOCALAPPDATA%\AgentOS-Preview</code> ; Linux
+            et macOS : <code>~/.local/share/agentos-preview</code>.
+          </p>
+          <p class="hist" data-lang="en">
+            The host copies a closed widget tree into
+            <code>ui/index.html</code> (default: heading + form + table).
+            Invalid documents show an error banner — no partial widgets, no
+            HTML/JS. Everyday map:
+            <a href="use.html">use</a> → Extend.
+          </p>
+          <p class="hist" data-lang="fr">
+            L’hôte copie un arbre de widgets fermé dans
+            <code>ui/index.html</code> (défaut : heading + form + table). Un
+            document invalide affiche une bannière d’erreur — pas de widgets
+            partiels, pas d’HTML/JS. Carte quotidienne :
+            <a href="use.html">use</a> → Étendre.
+          </p>
+        </article>
+
+        <article class="grant">
+          <h2 data-lang="en">Path B — Settings</h2>
+          <h2 data-lang="fr">Chemin B — Settings</h2>
+          <p class="hist" data-lang="en">
+            Same three intents without Chat: Settings → Modules,
+            <code>module.scaffold</code> (kind <code>script</code>), then
+            <code>module.package</code>, then <code>module.install</code>. Cap
+            review is the same. Uninstall from Settings → Installed modules
+            (not the bundled four). Re-install still works.
+          </p>
+          <p class="hist" data-lang="fr">
+            Les trois mêmes intents sans Chat : Settings → Modules,
+            <code>module.scaffold</code> (kind <code>script</code>), puis
+            <code>module.package</code>, puis <code>module.install</code>. Même
+            revue de caps. Désinstall depuis Settings → Installed modules (pas
+            les quatre bundlés). Réinstaller marche encore.
+          </p>
+        </article>
+
+        <article class="grant">
+          <h2 data-lang="en">Rust compile (not the first module)</h2>
+          <h2 data-lang="fr">Compile Rust (pas le premier module)</h2>
+          <p class="hist" data-lang="en">
+            <code>module.scaffold</code> kind <code>rust</code> plus
+            <code>module.compile</code> is a critical cap: confirmation even in
+            High trust, static refuse of <code>unsafe</code> / ambient
+            <code>std::fs</code> / net / process, <code>CARGO_NET_OFFLINE=true</code>.
+            Guest code uses
+            <a href="https://github.com/azerothl/akasha-os/tree/main/modules/sdk"><code>modules/sdk</code></a>
+            (Apache-2.0). Skip this until a script module has run on your
+            machine.
+          </p>
+          <p class="hist" data-lang="fr">
+            <code>module.scaffold</code> kind <code>rust</code> plus
+            <code>module.compile</code> est une cap critique : confirmation
+            même en High, refus statique de <code>unsafe</code> / 
+            <code>std::fs</code> ambiant / net / process,
+            <code>CARGO_NET_OFFLINE=true</code>. Le guest utilise
+            <a href="https://github.com/azerothl/akasha-os/tree/main/modules/sdk"><code>modules/sdk</code></a>
+            (Apache-2.0). Passez tant qu’un module script n’a pas tourné chez
+            vous.
+          </p>
+        </article>
+
+        <article class="grant">
+          <h2 data-lang="en">Share it</h2>
+          <h2 data-lang="fr">Le partager</h2>
+          <p class="hist" data-lang="en">
+            Copy <code>var/modules/packages/&lt;name&gt;.aospkg</code> into a
+            <a href="https://github.com/azerothl/akasha-os/discussions">Show and tell Discussion</a>
+            — that is not a CLA. A pull request belongs under
+            <code>community/modules/</code> only, never <code>crates/</code>.
+            Whoever installs still gets cap review. There is no public store.
+            Hangout: <a href="../community.html">community</a>.
+          </p>
+          <p class="hist" data-lang="fr">
+            Copiez <code>var/modules/packages/&lt;name&gt;.aospkg</code> dans une
+            <a href="https://github.com/azerothl/akasha-os/discussions">Discussion Show and tell</a>
+            — ce n’est pas un CLA. Une pull request va sous
+            <code>community/modules/</code> seulement, jamais
+            <code>crates/</code>. Qui installe a encore la revue de caps. Pas
+            de store public. Lieu de rencontre :
+            <a href="../community.html">community</a>.
+          </p>
+        </article>
+
+        <a class="continue pager" href="../community.html">
+          <span class="continue-label">Community</span>
+        </a>
+      </main>
+      <footer>
+        <p>AKASHA OS · <a href="https://github.com/azerothl/akasha-os">github.com/azerothl/akasha-os</a></p>
+      </footer>
+    </div>
+    <script src="../app.js"></script>
+    <script type="module" src="../orrery.js"></script>
+  </body>
+</html>

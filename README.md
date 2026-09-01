@@ -97,6 +97,7 @@ cargo run -p aos-session --release
 | [docs/I18N.md](docs/I18N.md) | Language layout (EN / FR) |
 | [docs/community.md](docs/community.md) | Preview cohort hangout (Discussions; 3 Win + 1 Linux + 1 Mac) |
 | [docs/write-a-skill.md](docs/write-a-skill.md) | Ten-minute skill guide (MIT, `var/skills/`) |
+| [docs/write-a-module.md](docs/write-a-module.md) | First module without cargo (scaffold / caps) |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to test, discuss, and (if you PR) license terms |
 
 French mirrors live under [`docs/fr/`](docs/fr/).

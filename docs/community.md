@@ -19,6 +19,8 @@ in the Preview zip):
 [`community/skills/morning-brief/`](../community/skills/morning-brief/).
 Ten-minute guide: [write-a-skill.md](write-a-skill.md) (site:
 [skill.html](https://azerothl.github.io/akasha-os/docs/skill.html)).
+First module (no cargo): [write-a-module.md](write-a-module.md) (site:
+[module.html](https://azerothl.github.io/akasha-os/docs/module.html)).
 
 ## Cohort gate
 
