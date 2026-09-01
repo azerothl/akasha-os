@@ -55,6 +55,12 @@ pub struct CapKernel {
     next_holder: u64,
 }
 
+impl Default for CapKernel {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CapKernel {
     pub fn new() -> Self {
         Self {
