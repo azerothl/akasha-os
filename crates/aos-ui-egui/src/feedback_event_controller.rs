@@ -2,7 +2,22 @@
 
 use crate::os_open::{aos_home, native_path, open_in_browser};
 use crate::UiApp;
-use aos_proto::FeedbackSubmitResponse;
+use aos_proto::{FeedbackSubmitRequest, FeedbackSubmitResponse};
+
+pub(crate) fn on_feedback_draft(app: &mut UiApp, request: FeedbackSubmitRequest) {
+    app.feedback_ui.title = request.title;
+    app.feedback_ui.category = request.category;
+    app.feedback_ui.severity = request.severity;
+    app.feedback_ui.body = request.body;
+    app.feedback_ui.scenario = request.scenario.unwrap_or_default();
+    app.feedback_ui.publish_github = request.publish_github
+        && !app
+            .feedback_ui
+            .category
+            .eq_ignore_ascii_case("security");
+    app.feedback_ui.diag_meta = Some(request.meta);
+    app.tab = crate::Tab::Feedback;
+}
 
 pub(crate) fn on_feedback_ok(app: &mut UiApp, response: FeedbackSubmitResponse) {
     let mut message = format!(

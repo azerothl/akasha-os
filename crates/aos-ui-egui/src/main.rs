@@ -1951,17 +1951,7 @@ impl eframe::App for UiApp {
                 Evt::FeedbackOk(r) => {
                     feedback_event_controller::on_feedback_ok(self, r);
                 }
-                Evt::FeedbackDraft(req) => {
-                    self.feedback_ui.title = req.title;
-                    self.feedback_ui.category = req.category;
-                    self.feedback_ui.severity = req.severity;
-                    self.feedback_ui.body = req.body;
-                    self.feedback_ui.scenario = req.scenario.unwrap_or_default();
-                    self.feedback_ui.publish_github = req.publish_github
-                        && !self.feedback_ui.category.eq_ignore_ascii_case("security");
-                    self.feedback_ui.diag_meta = Some(req.meta);
-                    self.tab = Tab::Feedback;
-                }
+                Evt::FeedbackDraft(req) => feedback_event_controller::on_feedback_draft(self, req),
                 Evt::Sessions(list) => session_event_controller::on_sessions(self, list),
                 Evt::SessionLoadIntent { id } => {
                     session_event_controller::on_load_intent(self, id);
