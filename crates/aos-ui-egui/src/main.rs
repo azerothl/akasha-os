@@ -2435,6 +2435,8 @@ impl eframe::App for UiApp {
                     pen,
                     delta,
                     canvas_seeing,
+                    layers,
+                    active_layer_id,
                 } => {
                     if self.chat_state.active_session.as_deref() != Some(session_id.as_str()) {
                         // still update meta open flag
@@ -2450,6 +2452,12 @@ impl eframe::App for UiApp {
                             self.chat_state.view.canvas.apply_snapshot(ops, next_seq, now);
                         }
                         self.chat_state.view.canvas.sync_pen(&pen);
+                        if !layers.is_empty() {
+                            self.chat_state
+                                .view
+                                .canvas
+                                .sync_layers(layers, active_layer_id);
+                        }
                         if let Some(seeing) = canvas_seeing {
                             self.chat_state.view.canvas.seeing = seeing;
                         }

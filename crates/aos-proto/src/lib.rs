@@ -11,6 +11,14 @@ pub mod bridge;
 pub mod chat_document;
 pub mod decl_ui;
 pub mod mem_extract;
+mod canvas_layers;
+
+pub use canvas_layers::{
+    canvas_hit_test, canvas_layer_by_id, canvas_layer_effective_locked,
+    canvas_layer_effective_opacity, canvas_layer_effective_visible, default_canvas_layer_id,
+    ensure_canvas_layers, translate_canvas_op_body, CanvasEdit, CanvasEditRequest,
+    CanvasEditResponse, CanvasLayer, DEFAULT_CANVAS_LAYER_ID,
+};
 
 // ---------------------------------------------------------------------------
 // Model API (§11.1)
@@ -3083,12 +3091,17 @@ pub fn canvas_scene_digest(doc: &CanvasDoc, aspect: CanvasAspect) -> String {
 
     let mut lines = vec![
         format!(
-            "next_seq={} aspect={} ops={} pen={} width={:.3}",
+            "next_seq={} aspect={} ops={} pen={} width={:.3} active_layer={}",
             doc.next_seq,
             aspect.agent_label_en(),
             doc.ops.len(),
             doc.pen.color,
-            doc.pen.width
+            doc.pen.width,
+            if doc.active_layer_id.is_empty() {
+                DEFAULT_CANVAS_LAYER_ID.to_string()
+            } else {
+                doc.active_layer_id.clone()
+            }
         ),
         "coords=normalized 0..1 (origin top-left; x→ right, y↓ down; letterboxed board face — not pixels; max=1.0)"
             .into(),
@@ -3106,6 +3119,8 @@ pub fn canvas_scene_digest(doc: &CanvasDoc, aspect: CanvasAspect) -> String {
         ),
         "placement=read scene_bbox + per-seq bbox; place new ops inside usable; avoid stacking on the same center"
             .into(),
+        "edit=canvas.move {seq,dx,dy} canvas.delete {seq} canvas.layer_set {id,visible,locked,opacity} — do not canvas.clear"
+            .into(),
     ];
 
     if !kind_counts.is_empty() {
@@ -3121,6 +3136,23 @@ pub fn canvas_scene_digest(doc: &CanvasDoc, aspect: CanvasAspect) -> String {
             .map(|(a, n)| format!("{a}={n}"))
             .collect();
         lines.push(format!("authors: {}", authors.join(", ")));
+    }
+    if !doc.layers.is_empty() {
+        let layer_bits: Vec<String> = doc
+            .layers
+            .iter()
+            .map(|layer| {
+                format!(
+                    "{}:{} vis={} lock={} op={:.2}",
+                    layer.id,
+                    layer.name.replace(' ', "_"),
+                    if layer.visible { 1 } else { 0 },
+                    if layer.locked { 1 } else { 0 },
+                    layer.opacity
+                )
+            })
+            .collect();
+        lines.push(format!("layers: {}", layer_bits.join(", ")));
     }
     if has_scene_bbox {
         lines.push(format!(
@@ -3148,11 +3180,28 @@ pub fn canvas_scene_digest(doc: &CanvasDoc, aspect: CanvasAspect) -> String {
         let kind = canvas_op_kind_label(&op.body);
         if let Some(b) = canvas_op_bbox(&op.body) {
             lines.push(format!(
-                "seq={} {kind} ({:.3},{:.3})-({:.3},{:.3})",
-                op.seq, b.x0, b.y0, b.x1, b.y1
+                "seq={} layer={} {kind} ({:.3},{:.3})-({:.3},{:.3})",
+                op.seq,
+                if op.layer_id.is_empty() {
+                    DEFAULT_CANVAS_LAYER_ID
+                } else {
+                    op.layer_id.as_str()
+                },
+                b.x0,
+                b.y0,
+                b.x1,
+                b.y1
             ));
         } else {
-            lines.push(format!("seq={} {kind}", op.seq));
+            lines.push(format!(
+                "seq={} layer={} {kind}",
+                op.seq,
+                if op.layer_id.is_empty() {
+                    DEFAULT_CANVAS_LAYER_ID
+                } else {
+                    op.layer_id.as_str()
+                }
+            ));
         }
     }
     if truncated {
@@ -3171,6 +3220,8 @@ pub struct CanvasOp {
     pub seq: u64,
     pub author_id: String,
     pub ts_ms: u64,
+    #[serde(default = "default_canvas_layer_id")]
+    pub layer_id: String,
     #[serde(flatten)]
     pub body: CanvasOpBody,
 }
@@ -3187,6 +3238,12 @@ pub struct CanvasDoc {
     /// Crayon courant (couleur / épaisseur) pour humain et agents.
     #[serde(default)]
     pub pen: CanvasPenStyle,
+    #[serde(default)]
+    pub next_layer_id: u64,
+    #[serde(default)]
+    pub layers: Vec<CanvasLayer>,
+    #[serde(default)]
+    pub active_layer_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -3210,6 +3267,10 @@ pub struct CanvasGetResponse {
     /// True while a vision model is actively reading this canvas (tester-cohort slice 2).
     #[serde(default)]
     pub canvas_seeing: bool,
+    #[serde(default)]
+    pub layers: Vec<CanvasLayer>,
+    #[serde(default)]
+    pub active_layer_id: String,
 }
 
 /// `canvas.seeing` — signal that a vision pass is reading the live canvas (not a mutation).
@@ -3273,6 +3334,9 @@ pub struct CanvasExportRequest {
     pub width: Option<u32>,
     #[serde(default)]
     pub height: Option<u32>,
+    /// `png` (default), `svg`, or `json`.
+    #[serde(default)]
+    pub format: Option<String>,
 }
 
 /// Pièce jointe d'un message de session (ex. référence agent en fond).
@@ -4344,6 +4408,7 @@ mod chat_session_room_tests {
             seq: 1,
             author_id: "human".into(),
             ts_ms: 42,
+            layer_id: String::new(),
             body: CanvasOpBody::Stroke {
                 points: vec![CanvasPoint { x: 0.1, y: 0.2 }, CanvasPoint { x: 0.3, y: 0.4 }],
                 color: "#3ee0c4".into(),
@@ -4451,6 +4516,7 @@ mod chat_session_room_tests {
                     seq: 1,
                     author_id: "human".into(),
                     ts_ms: 1,
+                    layer_id: String::new(),
                     body: CanvasOpBody::Line {
                         p0: CanvasPoint { x: 0.1, y: 0.1 },
                         p1: CanvasPoint { x: 0.2, y: 0.2 },
@@ -4462,6 +4528,7 @@ mod chat_session_room_tests {
                     seq: 2,
                     author_id: "agent-a".into(),
                     ts_ms: 2,
+                    layer_id: String::new(),
                     body: CanvasOpBody::Fill {
                         x: 0.5,
                         y: 0.5,
@@ -4469,6 +4536,7 @@ mod chat_session_room_tests {
                     },
                 },
             ],
+            ..Default::default()
         };
         let digest = canvas_scene_digest(&doc, CanvasAspect::Square);
         assert!(digest.contains("coords=normalized"));
@@ -4483,6 +4551,7 @@ mod chat_session_room_tests {
         assert!(digest.contains("margin=0.10"));
         assert!(digest.contains("usable=(0.10,0.10)-(0.90,0.90)"));
         assert!(digest.contains("placement="));
+        assert!(digest.contains("edit=canvas.move"));
         assert!(digest.contains("origin=top-left"));
         assert!(digest.contains("pas le centre"));
         assert!(digest.contains("align ex:"));

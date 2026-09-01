@@ -731,6 +731,7 @@ mod tests {
             seq: 1,
             author_id: "agent-99".into(),
             ts_ms: 0,
+            layer_id: String::new(),
             body: aos_proto::CanvasOpBody::Stroke {
                 points: vec![aos_proto::CanvasPoint { x: 0.1, y: 0.2 }],
                 color: "#3ee0c4".into(),

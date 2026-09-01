@@ -590,10 +590,142 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
         ),
         (
             "canvas.undo",
-            "Annuler le dernier trait humain sur le canvas de session",
+            "Annuler le dernier trait de l'auteur courant sur le canvas de session",
             serde_json::json!({
                 "type":"object",
                 "properties":{"session_id": sid_schema()}
+            }),
+        ),
+        (
+            "canvas.delete",
+            "Supprimer l'objet canvas identifié par seq (voir digest canvas.get)",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "seq":{"type":"integer"}
+                },
+                "required":["seq"]
+            }),
+        ),
+        (
+            "canvas.move",
+            "Déplacer l'objet seq de dx,dy en coords 0..1 (clamp)",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "seq":{"type":"integer"},
+                    "dx":{"type":"number"},
+                    "dy":{"type":"number"}
+                },
+                "required":["seq","dx","dy"]
+            }),
+        ),
+        (
+            "canvas.reorder",
+            "Changer l'empilement de l'objet seq (z=0 arrière)",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "seq":{"type":"integer"},
+                    "z":{"type":"integer"}
+                },
+                "required":["seq","z"]
+            }),
+        ),
+        (
+            "canvas.restyle",
+            "Changer couleur / épaisseur / fill d'un objet seq",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "seq":{"type":"integer"},
+                    "color":{"type":"string"},
+                    "width":{"type":"number"},
+                    "fill":{"type":"boolean"}
+                },
+                "required":["seq"]
+            }),
+        ),
+        (
+            "canvas.layer_create",
+            "Créer un calque nommé (option parent_id pour un groupe)",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "name":{"type":"string"},
+                    "parent_id":{"type":"string"}
+                }
+            }),
+        ),
+        (
+            "canvas.layer_rename",
+            "Renommer un calque",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "id":{"type":"string"},
+                    "name":{"type":"string"}
+                },
+                "required":["id","name"]
+            }),
+        ),
+        (
+            "canvas.layer_set",
+            "Hide / lock / opacity d'un calque (visible, locked, opacity 0..1)",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "id":{"type":"string"},
+                    "visible":{"type":"boolean"},
+                    "locked":{"type":"boolean"},
+                    "opacity":{"type":"number"}
+                },
+                "required":["id"]
+            }),
+        ),
+        (
+            "canvas.layer_reorder",
+            "Réordonner un calque (z parmi les frères ; parent_id optionnel)",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "id":{"type":"string"},
+                    "parent_id":{"type":"string"},
+                    "z":{"type":"integer"}
+                },
+                "required":["id","z"]
+            }),
+        ),
+        (
+            "canvas.layer_delete",
+            "Supprimer un calque (ops réassignées au parent ou au défaut)",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "id":{"type":"string"}
+                },
+                "required":["id"]
+            }),
+        ),
+        (
+            "canvas.layer_activate",
+            "Calque actif pour les prochains traits",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "id":{"type":"string"}
+                },
+                "required":["id"]
             }),
         ),
         (
@@ -609,14 +741,15 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
         ),
         (
             "canvas.export",
-            "Exporter le canvas en PNG sous /downloads (snapshot, pas diffusion)",
+            "Exporter le canvas (PNG par défaut ; format svg|json) sous /downloads",
             serde_json::json!({
                 "type":"object",
                 "properties":{
                     "session_id": sid_schema(),
                     "path":{"type":"string"},
                     "width":{"type":"integer"},
-                    "height":{"type":"integer"}
+                    "height":{"type":"integer"},
+                    "format":{"type":"string","description":"png (défaut), svg, ou json"}
                 }
             }),
         ),
@@ -647,6 +780,16 @@ pub const CANVAS_TOOL_IDS: &[&str] = &[
     "canvas.undo",
     "canvas.get",
     "canvas.export",
+    "canvas.delete",
+    "canvas.move",
+    "canvas.reorder",
+    "canvas.restyle",
+    "canvas.layer_create",
+    "canvas.layer_rename",
+    "canvas.layer_set",
+    "canvas.layer_reorder",
+    "canvas.layer_delete",
+    "canvas.layer_activate",
 ];
 
 /// Phrases that beat Create/image routing — must stay aligned with `chat_canvas` routing.

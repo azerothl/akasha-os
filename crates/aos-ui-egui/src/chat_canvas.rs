@@ -1,6 +1,9 @@
 //! Chat session canvas — shared vector drawing (human + agents).
 
-use aos_proto::{CanvasAspect, CanvasOp, CanvasOpBody, CanvasPenStyle, CanvasPoint};
+use aos_proto::{
+    canvas_hit_test, canvas_layer_effective_locked, canvas_op_bbox, translate_canvas_op_body,
+    CanvasAspect, CanvasEdit, CanvasLayer, CanvasOp, CanvasOpBody, CanvasPenStyle, CanvasPoint,
+};
 use eframe::egui::epaint::{CircleShape, PathShape, PathStroke, RectShape, Shape, StrokeKind};
 use eframe::egui::{Align2, Color32, FontId, Pos2, Sense, Stroke, Ui, Vec2};
 
@@ -10,6 +13,7 @@ use crate::theme::{PAPER, SIGNAL, VOID};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CanvasTool {
+    Select,
     Pen,
     Eraser,
     Line,
@@ -22,11 +26,13 @@ pub enum CanvasTool {
 #[derive(Debug, Clone)]
 pub enum CanvasUiAction {
     Apply(CanvasOpBody),
+    Edit(CanvasEdit),
     SetStyle {
         color: Option<String>,
         width: Option<f32>,
     },
-    Export,
+    ExportPng,
+    ExportSvg,
     SetAspect(CanvasAspect),
 }
 
@@ -56,6 +62,9 @@ pub struct CanvasPanelState {
     pub show_grid: bool,
     /// Snap pointer and committed coords to 0.01.
     pub snap: bool,
+    pub selected_seq: Option<u64>,
+    pub layers: Vec<CanvasLayer>,
+    pub active_layer_id: String,
 }
 
 impl Default for CanvasPanelState {
@@ -77,6 +86,9 @@ impl Default for CanvasPanelState {
             seeing: false,
             show_grid: false,
             snap: false,
+            selected_seq: None,
+            layers: Vec::new(),
+            active_layer_id: String::new(),
         }
     }
 }
@@ -150,6 +162,11 @@ impl CanvasPanelState {
     pub fn sync_pen(&mut self, pen: &CanvasPenStyle) {
         self.color = parse_hex_color(&pen.color);
         self.width = pen.width;
+    }
+
+    pub fn sync_layers(&mut self, layers: Vec<CanvasLayer>, active_layer_id: String) {
+        self.layers = layers;
+        self.active_layer_id = active_layer_id;
     }
 }
 
@@ -243,6 +260,50 @@ fn maybe_snap_point(p: CanvasPoint, snap: bool) -> CanvasPoint {
     } else {
         p
     }
+}
+
+fn layer_is_visible(layers: &[CanvasLayer], layer_id: &str) -> bool {
+    if layers.is_empty() {
+        return true;
+    }
+    let mut id = Some(layer_id);
+    let mut guard = 0;
+    while let Some(cur) = id {
+        if guard > 32 {
+            break;
+        }
+        guard += 1;
+        let Some(layer) = layers.iter().find(|l| l.id == cur) else {
+            return false;
+        };
+        if !layer.visible {
+            return false;
+        }
+        id = layer.parent_id.as_deref();
+    }
+    true
+}
+
+fn layer_is_locked(layers: &[CanvasLayer], layer_id: &str) -> bool {
+    if layers.is_empty() {
+        return false;
+    }
+    let mut id = Some(layer_id);
+    let mut guard = 0;
+    while let Some(cur) = id {
+        if guard > 32 {
+            break;
+        }
+        guard += 1;
+        let Some(layer) = layers.iter().find(|l| l.id == cur) else {
+            return false;
+        };
+        if layer.locked {
+            return true;
+        }
+        id = layer.parent_id.as_deref();
+    }
+    false
 }
 
 fn paint_board_grid(painter: &eframe::egui::Painter, rect: eframe::egui::Rect) {
@@ -546,6 +607,7 @@ pub fn toolbar_content_min_width(t: &UiStrings, seeing: bool, clear_confirm: boo
         w += t.canvas_seeing_now.len() as f32 * CHAR_W + 24.0 + GAP;
     }
     for label in [
+        t.canvas_tool_select,
         t.canvas_tool_pen,
         t.canvas_tool_eraser,
         t.canvas_tool_line,
@@ -561,6 +623,7 @@ pub fn toolbar_content_min_width(t: &UiStrings, seeing: bool, clear_confirm: boo
     w += 88.0; // color picker + width slider
     w += t.canvas_undo.len() as f32 * CHAR_W + BTN_PAD + GAP;
     w += t.canvas_export.len() as f32 * CHAR_W + BTN_PAD + GAP;
+    w += t.canvas_export_svg.len() as f32 * CHAR_W + BTN_PAD + GAP;
     w += t.canvas_grid.len() as f32 * CHAR_W + BTN_PAD + GAP;
     w += t.canvas_snap.len() as f32 * CHAR_W + BTN_PAD + GAP;
     if clear_confirm {
@@ -592,6 +655,7 @@ pub fn ui_canvas_toolbar(
             ui_canvas_seeing_pill(ui, t.canvas_seeing_now);
         }
 
+        ui.selectable_value(&mut state.tool, CanvasTool::Select, t.canvas_tool_select);
         ui.selectable_value(&mut state.tool, CanvasTool::Pen, t.canvas_tool_pen);
         ui.selectable_value(&mut state.tool, CanvasTool::Eraser, t.canvas_tool_eraser);
         ui.selectable_value(&mut state.tool, CanvasTool::Line, t.canvas_tool_line);
@@ -643,7 +707,13 @@ pub fn ui_canvas_toolbar(
             .button(eframe::egui::RichText::new(t.canvas_export).weak())
             .clicked()
         {
-            action = Some(CanvasUiAction::Export);
+            action = Some(CanvasUiAction::ExportPng);
+        }
+        if ui
+            .button(eframe::egui::RichText::new(t.canvas_export_svg).weak())
+            .clicked()
+        {
+            action = Some(CanvasUiAction::ExportSvg);
         }
         ui.toggle_value(
             &mut state.show_grid,
@@ -702,6 +772,88 @@ pub fn ui_canvas_aspect_row(
     action
 }
 
+/// Compact layer stack: name, hide, lock, new layer.
+pub fn ui_canvas_layers(
+    ui: &mut Ui,
+    t: &UiStrings,
+    state: &mut CanvasPanelState,
+) -> Option<CanvasUiAction> {
+    let mut action: Option<CanvasUiAction> = None;
+    ui.horizontal_wrapped(|ui| {
+        if ui
+            .button(eframe::egui::RichText::new(t.canvas_layer_add).weak())
+            .clicked()
+        {
+            action = Some(CanvasUiAction::Edit(CanvasEdit::LayerCreate {
+                name: None,
+                parent_id: None,
+            }));
+        }
+        let layers = state.layers.clone();
+        let layer_count = layers.len();
+        for layer in layers {
+            let selected = state.active_layer_id == layer.id;
+            if ui.selectable_label(selected, &layer.name).clicked() {
+                action = Some(CanvasUiAction::Edit(CanvasEdit::LayerActivate {
+                    id: layer.id.clone(),
+                }));
+            }
+            let mut vis = layer.visible;
+            if ui
+                .checkbox(&mut vis, "")
+                .on_hover_text(t.canvas_layer_visible)
+                .changed()
+            {
+                action = Some(CanvasUiAction::Edit(CanvasEdit::LayerSet {
+                    id: layer.id.clone(),
+                    visible: Some(vis),
+                    locked: None,
+                    opacity: None,
+                }));
+            }
+            let mut locked = layer.locked;
+            if ui
+                .checkbox(&mut locked, "")
+                .on_hover_text(t.canvas_layer_locked)
+                .changed()
+            {
+                action = Some(CanvasUiAction::Edit(CanvasEdit::LayerSet {
+                    id: layer.id.clone(),
+                    visible: None,
+                    locked: Some(locked),
+                    opacity: None,
+                }));
+            }
+            let mut opacity = layer.opacity;
+            let opacity_resp = ui.add(
+                eframe::egui::DragValue::new(&mut opacity)
+                    .range(0.0..=1.0)
+                    .speed(0.05)
+                    .max_decimals(2),
+            );
+            if opacity_resp.changed() {
+                action = Some(CanvasUiAction::Edit(CanvasEdit::LayerSet {
+                    id: layer.id.clone(),
+                    visible: None,
+                    locked: None,
+                    opacity: Some(opacity),
+                }));
+            }
+            opacity_resp.on_hover_text(t.canvas_layer_opacity);
+            if layer_count > 1
+                && ui
+                    .button(eframe::egui::RichText::new(t.canvas_layer_delete).small().weak())
+                    .clicked()
+            {
+                action = Some(CanvasUiAction::Edit(CanvasEdit::LayerDelete {
+                    id: layer.id.clone(),
+                }));
+            }
+        }
+    });
+    action
+}
+
 /// Drawing surface — letterboxed board inside the split pane.
 pub fn ui_canvas_surface(
     ui: &mut Ui,
@@ -740,8 +892,28 @@ pub fn ui_canvas_surface(
     }
 
     for op in &state.ops {
+        if !layer_is_visible(&state.layers, &op.layer_id) {
+            continue;
+        }
         let p = anim_progress(state, op.seq, now);
         paint_op(&painter, rect, op, dark, p);
+    }
+
+    if let Some(seq) = state.selected_seq {
+        if let Some(op) = state.ops.iter().find(|o| o.seq == seq) {
+            if let Some(b) = canvas_op_bbox(&op.body) {
+                let sel = eframe::egui::Rect::from_two_pos(
+                    to_screen(rect, CanvasPoint { x: b.x0, y: b.y0 }),
+                    to_screen(rect, CanvasPoint { x: b.x1, y: b.y1 }),
+                );
+                painter.rect_stroke(
+                    sel,
+                    0.0,
+                    Stroke::new(1.5_f32, SIGNAL),
+                    StrokeKind::Outside,
+                );
+            }
+        }
     }
 
     if state.draft_points.len() >= 2 {
@@ -804,7 +976,8 @@ pub fn ui_canvas_surface(
             CanvasTool::Pen
             | CanvasTool::Eraser
             | CanvasTool::Spline
-            | CanvasTool::Fill => {}
+            | CanvasTool::Fill
+            | CanvasTool::Select => {}
         }
     }
 
@@ -831,10 +1004,33 @@ pub fn ui_canvas_surface(
                     }
                     state.drag_current = Some(p);
                 }
+                CanvasTool::Select => {
+                    if state.drag_origin.is_none() {
+                        state.drag_origin = Some(p);
+                    }
+                    state.drag_current = Some(p);
+                }
                 CanvasTool::Fill => {}
             }
         }
         ui.ctx().request_repaint();
+    }
+
+    if response.clicked() && state.tool == CanvasTool::Select {
+        if let Some(pos) = response.interact_pointer_pos() {
+            if rect.contains(pos) {
+                let p = maybe_snap_point(to_norm(rect, pos), state.snap);
+                let visible: Vec<&CanvasOp> = state
+                    .ops
+                    .iter()
+                    .filter(|op| {
+                        layer_is_visible(&state.layers, &op.layer_id)
+                            && !layer_is_locked(&state.layers, &op.layer_id)
+                    })
+                    .collect();
+                state.selected_seq = canvas_hit_test(visible, p.x, p.y);
+            }
+        }
     }
 
     if response.clicked() && state.tool == CanvasTool::Fill {
@@ -936,7 +1132,68 @@ pub fn ui_canvas_surface(
                 }
             }
             CanvasTool::Fill => {}
+            CanvasTool::Select => {
+                if let (Some(a), Some(b), Some(seq)) = (
+                    state.drag_origin.take(),
+                    state.drag_current.take(),
+                    state.selected_seq,
+                ) {
+                    let dx = b.x - a.x;
+                    let dy = b.y - a.y;
+                    if dx.abs() + dy.abs() > 0.002 {
+                        let locked = state
+                            .ops
+                            .iter()
+                            .find(|o| o.seq == seq)
+                            .map(|o| {
+                                canvas_layer_effective_locked(
+                                    &aos_proto::CanvasDoc {
+                                        layers: state.layers.clone(),
+                                        active_layer_id: state.active_layer_id.clone(),
+                                        ..Default::default()
+                                    },
+                                    &o.layer_id,
+                                )
+                            })
+                            .unwrap_or(false);
+                        if !locked {
+                            if let Some(op) = state.ops.iter_mut().find(|o| o.seq == seq) {
+                                translate_canvas_op_body(&mut op.body, dx, dy);
+                            }
+                            action = Some(CanvasUiAction::Edit(CanvasEdit::Move { seq, dx, dy }));
+                        }
+                    }
+                }
+            }
         }
+        }
+    }
+
+    if action.is_none() && response.hovered() {
+        if state.tool == CanvasTool::Select {
+            if let Some(seq) = state.selected_seq {
+                let delete = ui.input(|i| {
+                    i.key_pressed(eframe::egui::Key::Delete)
+                        || i.key_pressed(eframe::egui::Key::Backspace)
+                });
+                if delete && !layer_is_locked(
+                    &state.layers,
+                    state
+                        .ops
+                        .iter()
+                        .find(|o| o.seq == seq)
+                        .map(|o| o.layer_id.as_str())
+                        .unwrap_or(""),
+                ) {
+                    action = Some(CanvasUiAction::Edit(CanvasEdit::Delete { seq }));
+                    state.ops.retain(|o| o.seq != seq);
+                    state.selected_seq = None;
+                }
+            }
+        }
+        let undo = ui.input(|i| i.modifiers.command && i.key_pressed(eframe::egui::Key::Z));
+        if undo && action.is_none() {
+            action = Some(CanvasUiAction::Apply(CanvasOpBody::Undo));
         }
     }
 
@@ -1278,6 +1535,7 @@ mod routing_tests {
             seq,
             author_id: "agent-81".into(),
             ts_ms: 0,
+            layer_id: String::new(),
             body: CanvasOpBody::Line {
                 p0: CanvasPoint { x: 0.2, y: 0.2 },
                 p1: CanvasPoint { x: 0.8, y: 0.2 },
@@ -1294,6 +1552,7 @@ mod routing_tests {
             seq: 0,
             author_id: "human".into(),
             ts_ms: 0,
+            layer_id: String::new(),
             body: CanvasOpBody::Stroke {
                 points: vec![CanvasPoint { x: 0.1, y: 0.1 }, CanvasPoint { x: 0.2, y: 0.2 }],
                 color: "#3ee0c4".into(),

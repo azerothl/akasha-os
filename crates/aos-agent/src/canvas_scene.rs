@@ -109,6 +109,9 @@ pub async fn fetch_canvas_scene_digest(bus: &BusClient, session_id: &str) -> Opt
             next_seq: resp.next_seq,
             ops: resp.ops,
             pen: resp.pen,
+            layers: resp.layers,
+            active_layer_id: resp.active_layer_id,
+            ..Default::default()
         },
         resp.canvas_aspect,
     ))
@@ -263,6 +266,16 @@ pub fn canvas_tool_mutates_scene(tool: &str) -> bool {
             | "canvas.erase"
             | "canvas.clear"
             | "canvas.undo"
+            | "canvas.delete"
+            | "canvas.move"
+            | "canvas.reorder"
+            | "canvas.restyle"
+            | "canvas.layer_create"
+            | "canvas.layer_rename"
+            | "canvas.layer_set"
+            | "canvas.layer_reorder"
+            | "canvas.layer_delete"
+            | "canvas.layer_activate"
     )
 }
 
@@ -348,6 +361,7 @@ pub async fn fetch_canvas_live_png(
                 path: None,
                 width: Some(width),
                 height: Some(height),
+                format: None,
             },
             vec![],
         )
@@ -528,6 +542,8 @@ pub async fn fetch_canvas_aspect(bus: &BusClient, session_id: &str) -> CanvasAsp
             ops: vec![],
             pen: Default::default(),
             canvas_seeing: false,
+            layers: vec![],
+            active_layer_id: String::new(),
         });
     resp.canvas_aspect
 }
@@ -540,6 +556,8 @@ mod tests {
     fn mutating_tools_detected() {
         assert!(canvas_tool_mutates_scene("canvas.line"));
         assert!(canvas_tool_mutates_scene("canvas.fill"));
+        assert!(canvas_tool_mutates_scene("canvas.move"));
+        assert!(canvas_tool_mutates_scene("canvas.layer_set"));
         assert!(!canvas_tool_mutates_scene("canvas.get"));
     }
 
