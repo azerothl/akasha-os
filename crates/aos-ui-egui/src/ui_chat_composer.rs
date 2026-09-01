@@ -10,19 +10,27 @@ use crate::{chat_media, chat_room, i18n, icons, os_open, UiApp};
 use aos_proto::ChatRoomMember;
 use eframe::egui;
 
+pub(crate) struct ChatComposerContext<'a> {
+    pub(crate) strings: &'a i18n::UiStrings,
+    pub(crate) room_mode: bool,
+    pub(crate) room_members: &'a [ChatRoomMember],
+    pub(crate) ask_queue: &'a [String],
+    pub(crate) height: f32,
+    pub(crate) show_vision_banner: bool,
+    pub(crate) chat_width: f32,
+}
+
 impl UiApp {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn ui_chat_composer(
-        &mut self,
-        ui: &mut egui::Ui,
-        t: &i18n::UiStrings,
-        room_mode: bool,
-        room_members: &[ChatRoomMember],
-        ask_queue: &[String],
-        composer_h: f32,
-        show_vision_banner: bool,
-        chat_w: f32,
-    ) {
+    pub(crate) fn ui_chat_composer(&mut self, ui: &mut egui::Ui, context: ChatComposerContext<'_>) {
+        let ChatComposerContext {
+            strings: t,
+            room_mode,
+            room_members,
+            ask_queue,
+            height: composer_h,
+            show_vision_banner,
+            chat_width: chat_w,
+        } = context;
         let completions = slash_completions(&self.input);
         let mention_hits = if room_mode {
             chat_room::mention_completions(&self.input, room_members, t)

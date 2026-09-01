@@ -6,6 +6,7 @@ use crate::composer_layout::{
     ChatSessionsSplit,
 };
 use crate::os_open::{aos_home, open_os_folder};
+use crate::ui_chat_composer::ChatComposerContext;
 use crate::{
     chat_canvas, chat_room, i18n, icons, overflow_scroll, session_model_supports_vision, theme,
     UiApp,
@@ -435,13 +436,15 @@ impl UiApp {
 
                     self.ui_chat_composer(
                         ui,
-                        &t,
-                        room_mode,
-                        &room_members,
-                        &ask_queue,
-                        composer_h,
-                        show_vision_banner,
-                        chat_w,
+                        ChatComposerContext {
+                            strings: &t,
+                            room_mode,
+                            room_members: &room_members,
+                            ask_queue: &ask_queue,
+                            height: composer_h,
+                            show_vision_banner,
+                            chat_width: chat_w,
+                        },
                     );
                 },
             );
