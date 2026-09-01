@@ -632,7 +632,7 @@ fn decrypt_vault(path: &Path, master: &[u8; 32]) -> Result<HashMap<String, Strin
     Ok(file.keys)
 }
 
-#[cfg(windows)]
+#[cfg(all(windows, not(test)))]
 fn protect_master(plain: &[u8]) -> Result<Vec<u8>, SecretError> {
     use std::ptr;
     use windows::core::PCWSTR;
@@ -719,7 +719,10 @@ fn unprotect_master(raw: &[u8]) -> Result<Vec<u8>, SecretError> {
     Ok(raw.to_vec())
 }
 
-#[cfg(not(windows))]
+// Unit tests must also run in headless Windows CI/service accounts where
+// DPAPI can be unavailable. The raw key is accepted by `unprotect_master`
+// as the legacy development format and keeps those tests deterministic.
+#[cfg(any(not(windows), all(windows, test)))]
 fn protect_master(plain: &[u8]) -> Result<Vec<u8>, SecretError> {
     Ok(plain.to_vec())
 }
