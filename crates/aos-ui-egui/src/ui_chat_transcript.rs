@@ -166,7 +166,7 @@ impl UiApp {
                                     let session_ops = info.and_then(|ag| {
                                         agent_canvas_session_ops(
                                             ag,
-                                            self.active_session.as_deref(),
+                                            self.chat_state.active_session.as_deref(),
                                             &self.chat_state.view.canvas.ops,
                                         )
                                     });
@@ -375,7 +375,7 @@ impl UiApp {
                             self.resolve_research_choice_answer(&choice_id, msg_idx);
                         }
                         research_choice::ResearchChoiceAction::Document => {
-                            if let Some(sid) = self.active_session.clone() {
+                            if let Some(sid) = self.chat_state.active_session.clone() {
                                 self.resolve_research_choice_document(&choice_id, msg_idx, &sid);
                             }
                         }

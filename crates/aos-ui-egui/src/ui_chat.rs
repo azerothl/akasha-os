@@ -10,7 +10,7 @@ impl UiApp {
         let full = ui.available_size();
         let gap = 8.0_f32;
         let canvas_open =
-            chat_room::active_session_meta(&self.sessions, self.active_session.as_deref())
+            chat_room::active_session_meta(&self.chat_state.sessions, self.chat_state.active_session.as_deref())
                 .map(|m| m.canvas_open)
                 .unwrap_or(false);
         let ChatSessionsSplit { side_w, chat_w } = chat_sessions_split(full.x, gap, canvas_open);
