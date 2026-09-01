@@ -56,9 +56,9 @@ jobs:
         run: cargo clippy --workspace --all-targets --exclude aos-llama --exclude aos-model --exclude aos-platform
       - name: Clippy model stack (CPU)
         run: |
-          cargo clippy -p aos-llama --no-default-features --all-targets
-          cargo clippy -p aos-model --no-default-features --all-targets
-          cargo clippy -p aos-platform --no-default-features --all-targets
+          cargo clippy -p aos-llama --no-default-features --all-targets -- -D warnings
+          cargo clippy -p aos-model --no-default-features --all-targets -- -D warnings
+          cargo clippy -p aos-platform --no-default-features --all-targets -- -D warnings
       - name: Test workspace (CPU)
         run: cargo test --workspace --exclude aos-llama --exclude aos-model --exclude aos-platform
       - name: Test model stack (CPU)
