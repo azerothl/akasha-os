@@ -50,6 +50,7 @@ mod chat_sidebar_state;
 mod chat_state;
 mod chat_view_state;
 mod canvas_event_controller;
+mod canvas_paint;
 mod cmd;
 mod confirmation_ui_state;
 mod composer_layout;
@@ -395,7 +396,7 @@ fn session_model_supports_vision(model_id: Option<&str>) -> bool {
 }
 
 /// One-row height for the canvas tool strip (session bar row 2).
-const CANVAS_TOOLBAR_ROW_H: f32 = 36.0;
+const CANVAS_TOOLBAR_ROW_H: f32 = 112.0;
 
 /// Minimum inner window size (width × height) for a usable Preview layout.
 fn preview_min_inner_size() -> [f32; 2] {
@@ -1063,20 +1064,27 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 self.open_tts_card(rest);
             }
             "/canvas" => {
+                let t = i18n::strings(&self.prefs.language);
                 let Some(sid) = self.chat_state.active_session.clone() else {
-                    self.chat.push(ChatLine::plain(
-                        "système",
-                        "aucune session — créez-en une d'abord",
-                    ));
+                    self.chat
+                        .push(ChatLine::plain("système", t.canvas_no_active_session));
                     return;
                 };
                 let open = chat_room::active_session_meta(&self.chat_state.sessions, Some(sid.as_str()))
                     .map(|m| m.canvas_open)
                     .unwrap_or(false);
+                let new_open = !open;
+                self.set_canvas_open_local(&sid, new_open);
                 let _ = self.cmd_tx.send(Cmd::CanvasSetOpen {
-                    session_id: sid,
-                    open: !open,
+                    session_id: sid.clone(),
+                    open: new_open,
                 });
+                if new_open {
+                    let _ = self.cmd_tx.send(Cmd::CanvasPoll {
+                        session_id: sid,
+                        after_seq: None,
+                    });
+                }
             }
             _ => {
                 self.chat.push(ChatLine::plain(

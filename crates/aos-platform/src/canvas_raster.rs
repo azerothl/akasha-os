@@ -1,8 +1,9 @@
 //! Rasterize a session canvas document to PNG (export snapshot, not diffusion).
 
 use aos_proto::{
-    canvas_layer_effective_opacity, canvas_layer_effective_visible, canvas_op_body_opacity,
-    CanvasAspect, CanvasDoc, CanvasOpBody, CanvasPoint, DEFAULT_CANVAS_LAYER_ID,
+    canvas_layer_effective_opacity, canvas_layer_effective_visible, canvas_op_body_dash,
+    canvas_op_body_gradient, canvas_op_body_opacity, sample_linear_gradient, CanvasAspect,
+    CanvasDoc, CanvasOpBody, CanvasPoint, DEFAULT_CANVAS_LAYER_ID,
 };
 use image::{ImageBuffer, Rgb, RgbImage};
 use std::cell::Cell;
@@ -139,7 +140,40 @@ pub fn svg_path_for_png(png_path: &str) -> String {
     }
 }
 
+fn svg_opacity_attr(body: &CanvasOpBody) -> String {
+    let op = canvas_op_body_opacity(body);
+    if op >= 0.999 {
+        String::new()
+    } else {
+        format!(" opacity=\"{op:.3}\"")
+    }
+}
+
+fn svg_dash_attr(body: &CanvasOpBody, w: u32, h: u32) -> String {
+    let dash = canvas_op_body_dash(body);
+    if dash.is_empty() {
+        return String::new();
+    }
+    let scale = w.min(h) as f32;
+    let vals: Vec<String> = dash
+        .iter()
+        .map(|d| format!("{:.2}", (d * scale).max(1.0)))
+        .collect();
+    format!(" stroke-dasharray=\"{}\"", vals.join(" "))
+}
+
+fn svg_fill_color(body: &CanvasOpBody, color: &str, cx: f32, cy: f32) -> String {
+    if let Some(g) = canvas_op_body_gradient(body) {
+        if let Some([r, g, b]) = sample_linear_gradient(g, cx, cy) {
+            return format!("#{:02x}{:02x}{:02x}", r, g, b);
+        }
+    }
+    svg_color(color)
+}
+
 fn append_svg_op(out: &mut String, body: &CanvasOpBody, w: u32, h: u32) {
+    let op_attr = svg_opacity_attr(body);
+    let dash_attr = svg_dash_attr(body, w, h);
     match body {
         CanvasOpBody::Rect {
             x,
@@ -150,7 +184,8 @@ fn append_svg_op(out: &mut String, body: &CanvasOpBody, w: u32, h: u32) {
             fill,
             width,
             rotation,
-        .. } => {
+            ..
+        } => {
             let x0 = svg_px(*x, w);
             let y0 = svg_px(*y, h);
             let ww = svg_px(*x + *bw, w) - x0;
@@ -162,14 +197,14 @@ fn append_svg_op(out: &mut String, body: &CanvasOpBody, w: u32, h: u32) {
             } else {
                 String::new()
             };
+            let fill_c = svg_fill_color(body, color, *x + bw * 0.5, *y + bh * 0.5);
             if *fill {
                 out.push_str(&format!(
-                    "<rect x=\"{x0:.2}\" y=\"{y0:.2}\" width=\"{ww:.2}\" height=\"{hh:.2}\" fill=\"{}\"{rot}/>",
-                    svg_color(color)
+                    "<rect x=\"{x0:.2}\" y=\"{y0:.2}\" width=\"{ww:.2}\" height=\"{hh:.2}\" fill=\"{fill_c}\"{op_attr}{rot}/>",
                 ));
             } else {
                 out.push_str(&format!(
-                    "<rect x=\"{x0:.2}\" y=\"{y0:.2}\" width=\"{ww:.2}\" height=\"{hh:.2}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\"{rot}/>",
+                    "<rect x=\"{x0:.2}\" y=\"{y0:.2}\" width=\"{ww:.2}\" height=\"{hh:.2}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\"{op_attr}{dash_attr}{rot}/>",
                     svg_color(color),
                     (*width * w.min(h) as f32 * 0.5).max(1.0)
                 ));
@@ -184,7 +219,8 @@ fn append_svg_op(out: &mut String, body: &CanvasOpBody, w: u32, h: u32) {
             fill,
             width,
             rotation,
-        .. } => {
+            ..
+        } => {
             let cx = svg_px(*x + *bw * 0.5, w);
             let cy = svg_px(*y + *bh * 0.5, h);
             let rx = (*bw * w as f32 * 0.5).abs().max(1.0);
@@ -194,14 +230,14 @@ fn append_svg_op(out: &mut String, body: &CanvasOpBody, w: u32, h: u32) {
             } else {
                 String::new()
             };
+            let fill_c = svg_fill_color(body, color, *x + bw * 0.5, *y + bh * 0.5);
             if *fill {
                 out.push_str(&format!(
-                    "<ellipse cx=\"{cx:.2}\" cy=\"{cy:.2}\" rx=\"{rx:.2}\" ry=\"{ry:.2}\" fill=\"{}\"{rot}/>",
-                    svg_color(color)
+                    "<ellipse cx=\"{cx:.2}\" cy=\"{cy:.2}\" rx=\"{rx:.2}\" ry=\"{ry:.2}\" fill=\"{fill_c}\"{op_attr}{rot}/>",
                 ));
             } else {
                 out.push_str(&format!(
-                    "<ellipse cx=\"{cx:.2}\" cy=\"{cy:.2}\" rx=\"{rx:.2}\" ry=\"{ry:.2}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\"{rot}/>",
+                    "<ellipse cx=\"{cx:.2}\" cy=\"{cy:.2}\" rx=\"{rx:.2}\" ry=\"{ry:.2}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\"{op_attr}{dash_attr}{rot}/>",
                     svg_color(color),
                     (*width * w.min(h) as f32 * 0.5).max(1.0)
                 ));
@@ -209,7 +245,7 @@ fn append_svg_op(out: &mut String, body: &CanvasOpBody, w: u32, h: u32) {
         }
         CanvasOpBody::Line { p0, p1, color, width, .. } => {
             out.push_str(&format!(
-                "<line x1=\"{:.2}\" y1=\"{:.2}\" x2=\"{:.2}\" y2=\"{:.2}\" stroke=\"{}\" stroke-width=\"{:.2}\" stroke-linecap=\"round\"/>",
+                "<line x1=\"{:.2}\" y1=\"{:.2}\" x2=\"{:.2}\" y2=\"{:.2}\" stroke=\"{}\" stroke-width=\"{:.2}\" stroke-linecap=\"round\"{op_attr}{dash_attr}/>",
                 svg_px(p0.x, w),
                 svg_px(p0.y, h),
                 svg_px(p1.x, w),
@@ -230,7 +266,7 @@ fn append_svg_op(out: &mut String, body: &CanvasOpBody, w: u32, h: u32) {
             };
             let d = svg_poly_d(&sampled, w, h, false);
             out.push_str(&format!(
-                "<path d=\"{d}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>",
+                "<path d=\"{d}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\" stroke-linecap=\"round\" stroke-linejoin=\"round\"{op_attr}{dash_attr}/>",
                 svg_color(color),
                 (*width * w.min(h) as f32 * 0.5).max(1.0)
             ));
@@ -251,14 +287,16 @@ fn append_svg_op(out: &mut String, body: &CanvasOpBody, w: u32, h: u32) {
             width,
             fill,
             closed,
-        .. } => {
+            ..
+        } => {
             if points.len() < 2 {
                 return;
             }
             let sampled = sample_spline(points, 24);
             let d = svg_poly_d(&sampled, w, h, *closed);
+            let center = sampled.first().copied().unwrap_or(CanvasPoint { x: 0.5, y: 0.5 });
             let fill_attr = if *fill {
-                svg_color(color)
+                svg_fill_color(body, color, center.x, center.y)
             } else {
                 "none".into()
             };
@@ -269,11 +307,13 @@ fn append_svg_op(out: &mut String, body: &CanvasOpBody, w: u32, h: u32) {
             };
             if stroke_w > 0.0 {
                 out.push_str(&format!(
-                    "<path d=\"{d}\" fill=\"{fill_attr}\" stroke=\"{}\" stroke-width=\"{stroke_w:.2}\"/>",
+                    "<path d=\"{d}\" fill=\"{fill_attr}\" stroke=\"{}\" stroke-width=\"{stroke_w:.2}\"{op_attr}{dash_attr}/>",
                     svg_color(color)
                 ));
             } else {
-                out.push_str(&format!("<path d=\"{d}\" fill=\"{fill_attr}\"/>"));
+                out.push_str(&format!(
+                    "<path d=\"{d}\" fill=\"{fill_attr}\"{op_attr}/>"
+                ));
             }
         }
         CanvasOpBody::Fill { .. } | CanvasOpBody::Clear | CanvasOpBody::Undo => {}
@@ -292,17 +332,95 @@ fn svg_poly_d(points: &[CanvasPoint], w: u32, h: u32, closed: bool) -> String {
     d
 }
 
+fn png_rgb(body: &CanvasOpBody, color: &str, cx: f32, cy: f32) -> Rgb<u8> {
+    if let Some(g) = canvas_op_body_gradient(body) {
+        if let Some([r, g, b]) = sample_linear_gradient(g, cx, cy) {
+            return Rgb([r, g, b]);
+        }
+    }
+    parse_color(color).unwrap_or(DEFAULT_FG)
+}
+
+fn stroke_polyline_styled(
+    img: &mut RgbImage,
+    points: &[CanvasPoint],
+    c: Rgb<u8>,
+    rad: i32,
+    dash: &[f32],
+) {
+    if dash.is_empty() {
+        stroke_polyline(img, points, c, rad);
+        return;
+    }
+    if points.len() < 2 {
+        return;
+    }
+    let scale = img.width().min(img.height()) as f32;
+    let pattern: Vec<f32> = dash.iter().map(|d| (d * scale).max(1.0)).collect();
+    if pattern.len() < 2 {
+        stroke_polyline(img, points, c, rad);
+        return;
+    }
+    let pts: Vec<(i32, i32)> = points
+        .iter()
+        .map(|p| to_px(img, p.x, p.y))
+        .collect();
+    let mut pat_i = 0usize;
+    let mut draw = true;
+    let mut remain = pattern[0];
+    for window in pts.windows(2) {
+        let (x0, y0) = window[0];
+        let (x1, y1) = window[1];
+        let dx = (x1 - x0) as f32;
+        let dy = (y1 - y0) as f32;
+        let seg_len = (dx * dx + dy * dy).sqrt();
+        if seg_len <= 0.001 {
+            continue;
+        }
+        let ux = dx / seg_len;
+        let uy = dy / seg_len;
+        let mut traveled = 0.0_f32;
+        while traveled < seg_len - 0.001 {
+            let step = remain.min(seg_len - traveled);
+            let sx = x0 as f32 + ux * traveled;
+            let sy = y0 as f32 + uy * traveled;
+            let ex = x0 as f32 + ux * (traveled + step);
+            let ey = y0 as f32 + uy * (traveled + step);
+            if draw {
+                line(
+                    img,
+                    sx.round() as i32,
+                    sy.round() as i32,
+                    ex.round() as i32,
+                    ey.round() as i32,
+                    rad,
+                    c,
+                );
+            }
+            traveled += step;
+            remain -= step;
+            if remain <= 0.001 {
+                pat_i = (pat_i + 1) % pattern.len();
+                remain = pattern[pat_i];
+                draw = !draw;
+            }
+        }
+    }
+}
+
 fn paint_op(img: &mut RgbImage, body: &CanvasOpBody, opacity: f32) {
     PAINT_OPACITY.with(|c| c.set(opacity.clamp(0.0, 1.0)));
+    let dash = canvas_op_body_dash(body);
     match body {
         CanvasOpBody::Stroke {
             points,
             color,
             width,
-        .. } => {
+            ..
+        } => {
             let c = parse_color(color).unwrap_or(DEFAULT_FG);
             let rad = radius(img, *width);
-            stroke_polyline(img, points, c, rad);
+            stroke_polyline_styled(img, points, c, rad, dash);
         }
         CanvasOpBody::Erase { points, width } => {
             let rad = radius(img, *width);
@@ -318,8 +436,11 @@ fn paint_op(img: &mut RgbImage, body: &CanvasOpBody, opacity: f32) {
             fill,
             width,
             rotation,
-        .. } => {
-            let c = parse_color(color).unwrap_or(DEFAULT_FG);
+            ..
+        } => {
+            let cx = x + w * 0.5;
+            let cy = y + h * 0.5;
+            let c = png_rgb(body, color, cx, cy);
             if rotation.abs() > 0.001 {
                 let corners = aos_proto::canvas_rect_corners(*x, *y, *w, *h, *rotation);
                 let pts: Vec<(i32, i32)> = corners
@@ -352,10 +473,11 @@ fn paint_op(img: &mut RgbImage, body: &CanvasOpBody, opacity: f32) {
             fill,
             width,
             rotation,
-        .. } => {
-            let c = parse_color(color).unwrap_or(DEFAULT_FG);
+            ..
+        } => {
             let cx = x + w * 0.5;
             let cy = y + h * 0.5;
+            let c = png_rgb(body, color, cx, cy);
             if rotation.abs() > 0.001 {
                 let pts: Vec<(i32, i32)> = (0..48)
                     .map(|i| {
@@ -387,9 +509,7 @@ fn paint_op(img: &mut RgbImage, body: &CanvasOpBody, opacity: f32) {
         CanvasOpBody::Line { p0, p1, color, width, .. } => {
             let c = parse_color(color).unwrap_or(DEFAULT_FG);
             let rad = radius(img, *width);
-            let (x0, y0) = to_px(img, p0.x, p0.y);
-            let (x1, y1) = to_px(img, p1.x, p1.y);
-            line(img, x0, y0, x1, y1, rad, c);
+            stroke_polyline_styled(img, &[*p0, *p1], c, rad, dash);
         }
         CanvasOpBody::Spline { points, color, width, .. } => {
             if points.len() < 2 {
@@ -398,7 +518,7 @@ fn paint_op(img: &mut RgbImage, body: &CanvasOpBody, opacity: f32) {
             let c = parse_color(color).unwrap_or(DEFAULT_FG);
             let rad = radius(img, *width);
             let sampled = sample_spline(points, 24);
-            stroke_polyline(img, &sampled, c, rad);
+            stroke_polyline_styled(img, &sampled, c, rad, dash);
         }
         CanvasOpBody::Path {
             points,
@@ -406,11 +526,13 @@ fn paint_op(img: &mut RgbImage, body: &CanvasOpBody, opacity: f32) {
             width,
             fill,
             closed,
-        .. } => {
+            ..
+        } => {
             if points.len() < 2 {
                 return;
             }
-            let c = parse_color(color).unwrap_or(DEFAULT_FG);
+            let center = points.first().copied().unwrap_or(CanvasPoint { x: 0.5, y: 0.5 });
+            let c = png_rgb(body, color, center.x, center.y);
             let sampled = sample_spline(points, 24);
             let mut pts: Vec<(i32, i32)> = sampled.iter().map(|p| to_px(img, p.x, p.y)).collect();
             if *closed && pts.len() >= 3 {
@@ -425,7 +547,7 @@ fn paint_op(img: &mut RgbImage, body: &CanvasOpBody, opacity: f32) {
             }
             if *width > 0.0 {
                 let rad = radius(img, *width);
-                stroke_polyline(img, &sampled, c, rad);
+                stroke_polyline_styled(img, &sampled, c, rad, dash);
             }
         }
         CanvasOpBody::Fill { x, y, color, .. } => {
@@ -769,6 +891,33 @@ mod tests {
         assert!(svg.contains("<svg"));
         assert!(svg.contains("lyr-1"));
         assert!(svg.contains("<rect"));
+    }
+
+    #[test]
+    fn export_svg_includes_opacity_and_dash() {
+        let doc = CanvasDoc {
+            session_id: "s".into(),
+            next_seq: 2,
+            pen: CanvasPenStyle::default(),
+            ops: vec![CanvasOp {
+                seq: 1,
+                author_id: "human".into(),
+                ts_ms: 1,
+                layer_id: String::new(),
+                body: CanvasOpBody::Line {
+                    p0: CanvasPoint { x: 0.1, y: 0.1 },
+                    p1: CanvasPoint { x: 0.9, y: 0.9 },
+                    color: "#3ee0c4".into(),
+                    width: 0.02,
+                    opacity: 0.5,
+                    dash: vec![0.03, 0.03],
+                },
+            }],
+            ..Default::default()
+        };
+        let svg = String::from_utf8(export_svg(&doc, 128, 128).unwrap()).unwrap();
+        assert!(svg.contains("opacity=\"0.500\""));
+        assert!(svg.contains("stroke-dasharray"));
     }
 
     #[test]

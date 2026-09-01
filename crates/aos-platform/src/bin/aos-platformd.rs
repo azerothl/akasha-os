@@ -1742,6 +1742,8 @@ async fn main() {
                                 &req.session_id,
                                 req.color.as_deref(),
                                 req.width,
+                                req.opacity,
+                                req.dash.as_deref(),
                             )
                         };
                         match result {

@@ -5,7 +5,12 @@ use crate::{
     chat_canvas, chat_room, guide, i18n, icons, session_toggle_chip, session_toggle_reserve_width,
     UiApp, CANVAS_TOOLBAR_ROW_H,
 };
-use aos_proto::{AgentInfo, ChatRoomMember, ChatSessionMode};
+use aos_proto::{
+    align_canvas_op_body, canvas_op_bbox, set_canvas_op_body_dash, set_canvas_op_body_gradient,
+    set_canvas_op_body_opacity, set_canvas_op_rotation,
+    usable_canvas_bbox, normalize_canvas_color, AgentInfo, CanvasLayer, CanvasOpBody,
+    ChatRoomMember, ChatSessionMode,
+};
 use eframe::egui;
 
 impl UiApp {
@@ -149,6 +154,198 @@ impl UiApp {
                             self.chat_state.view.canvas.selected_seq = None;
                         }
                     }
+                    aos_proto::CanvasEdit::Reorder { seq, z } => {
+                        if let Some(pos) = self
+                            .chat_state
+                            .view
+                            .canvas
+                            .ops
+                            .iter()
+                            .position(|o| o.seq == *seq)
+                        {
+                            let op = self.chat_state.view.canvas.ops.remove(pos);
+                            let z = (*z).clamp(0, self.chat_state.view.canvas.ops.len() as i64)
+                                as usize;
+                            self.chat_state.view.canvas.ops.insert(z, op);
+                        }
+                    }
+                    aos_proto::CanvasEdit::Restyle {
+                        seq,
+                        color,
+                        width,
+                        fill,
+                        rotation,
+                        opacity,
+                        dash,
+                        gradient,
+                    } => {
+                        if let Some(op) = self
+                            .chat_state
+                            .view
+                            .canvas
+                            .ops
+                            .iter_mut()
+                            .find(|o| o.seq == *seq)
+                        {
+                            if let Some(c) = color.as_deref() {
+                                if let Some(normalized) = normalize_canvas_color(c) {
+                                    match &mut op.body {
+                                        CanvasOpBody::Stroke { color, .. }
+                                        | CanvasOpBody::Rect { color, .. }
+                                        | CanvasOpBody::Ellipse { color, .. }
+                                        | CanvasOpBody::Line { color, .. }
+                                        | CanvasOpBody::Spline { color, .. }
+                                        | CanvasOpBody::Path { color, .. }
+                                        | CanvasOpBody::Fill { color, .. } => {
+                                            *color = normalized;
+                                        }
+                                        CanvasOpBody::Erase { .. }
+                                        | CanvasOpBody::Clear
+                                        | CanvasOpBody::Undo => {}
+                                    }
+                                }
+                            }
+                            if let Some(w) = width {
+                                let w = w.clamp(0.001, 0.25);
+                                match &mut op.body {
+                                    CanvasOpBody::Stroke { width, .. }
+                                    | CanvasOpBody::Rect { width, .. }
+                                    | CanvasOpBody::Ellipse { width, .. }
+                                    | CanvasOpBody::Line { width, .. }
+                                    | CanvasOpBody::Spline { width, .. }
+                                    | CanvasOpBody::Path { width, .. }
+                                    | CanvasOpBody::Erase { width, .. } => *width = w,
+                                    CanvasOpBody::Fill { .. }
+                                    | CanvasOpBody::Clear
+                                    | CanvasOpBody::Undo => {}
+                                }
+                            }
+                            if let Some(fill) = fill {
+                                match &mut op.body {
+                                    CanvasOpBody::Rect { fill: slot, .. }
+                                    | CanvasOpBody::Ellipse { fill: slot, .. }
+                                    | CanvasOpBody::Path { fill: slot, .. } => *slot = *fill,
+                                    _ => {}
+                                }
+                            }
+                            if let Some(rotation) = rotation {
+                                let _ = set_canvas_op_rotation(&mut op.body, *rotation);
+                            }
+                            if let Some(opacity) = opacity {
+                                set_canvas_op_body_opacity(&mut op.body, *opacity);
+                            }
+                            if let Some(dash) = dash {
+                                set_canvas_op_body_dash(&mut op.body, dash.clone());
+                            }
+                            if let Some(gradient) = gradient {
+                                set_canvas_op_body_gradient(&mut op.body, gradient.clone());
+                            }
+                        }
+                    }
+                    aos_proto::CanvasEdit::Align {
+                        seq,
+                        to_seq,
+                        edges,
+                    } => {
+                        let canvas = &mut self.chat_state.view.canvas;
+                        if let Some(src_idx) = canvas.ops.iter().position(|o| o.seq == *seq) {
+                            if let Some(src_bbox) = canvas_op_bbox(&canvas.ops[src_idx].body) {
+                                let target = if let Some(to) = to_seq {
+                                    canvas
+                                        .ops
+                                        .iter()
+                                        .find(|o| o.seq == *to)
+                                        .and_then(|o| canvas_op_bbox(&o.body))
+                                        .unwrap_or_else(usable_canvas_bbox)
+                                } else {
+                                    usable_canvas_bbox()
+                                };
+                                align_canvas_op_body(
+                                    &mut canvas.ops[src_idx].body,
+                                    src_bbox,
+                                    target,
+                                    edges,
+                                );
+                            }
+                        }
+                    }
+                    aos_proto::CanvasEdit::LayerRename { id, name } => {
+                        if let Some(layer) = self
+                            .chat_state
+                            .view
+                            .canvas
+                            .layers
+                            .iter_mut()
+                            .find(|l| l.id == *id)
+                        {
+                            layer.name = name.clone();
+                        }
+                    }
+                    aos_proto::CanvasEdit::LayerReorder { id, parent_id, z } => {
+                        let canvas = &mut self.chat_state.view.canvas;
+                        if let Some(layer) = canvas.layers.iter_mut().find(|l| l.id == *id) {
+                            layer.parent_id = parent_id.clone();
+                        }
+                        if let Some(pos) = canvas.layers.iter().position(|l| l.id == *id) {
+                            let layer = canvas.layers.remove(pos);
+                            let z = (*z).clamp(0, canvas.layers.len() as i64) as usize;
+                            canvas.layers.insert(z, layer);
+                        }
+                    }
+                    aos_proto::CanvasEdit::LayerCreate { name, parent_id } => {
+                        let canvas = &mut self.chat_state.view.canvas;
+                        let n = canvas
+                            .layers
+                            .iter()
+                            .filter_map(|l| l.id.strip_prefix("lyr-"))
+                            .filter_map(|s| s.parse::<u32>().ok())
+                            .max()
+                            .unwrap_or(1)
+                            .saturating_add(1);
+                        let layer_id = format!("lyr-{n}");
+                        let label = name
+                            .as_ref()
+                            .filter(|s| !s.trim().is_empty())
+                            .cloned()
+                            .unwrap_or_else(|| format!("Layer {}", canvas.layers.len() + 1));
+                        canvas.layers.push(CanvasLayer {
+                            id: layer_id.clone(),
+                            name: label,
+                            parent_id: parent_id.clone(),
+                            visible: true,
+                            locked: false,
+                            opacity: 1.0,
+                        });
+                        canvas.active_layer_id = layer_id;
+                    }
+                    aos_proto::CanvasEdit::LayerDelete { id } => {
+                        let canvas = &mut self.chat_state.view.canvas;
+                        if canvas.layers.len() > 1 {
+                            if let Some(idx) = canvas.layers.iter().position(|l| l.id == *id) {
+                                let removed = canvas.layers.remove(idx);
+                                let fallback = removed
+                                    .parent_id
+                                    .clone()
+                                    .filter(|p| canvas.layers.iter().any(|l| l.id == *p))
+                                    .unwrap_or_else(|| canvas.layers[0].id.clone());
+                                for child in canvas
+                                    .layers
+                                    .iter_mut()
+                                    .filter(|l| l.parent_id.as_deref() == Some(id.as_str()))
+                                {
+                                    child.parent_id = removed.parent_id.clone();
+                                }
+                                for op in &mut canvas.ops {
+                                    if op.layer_id == *id {
+                                        op.layer_id = fallback.clone();
+                                    }
+                                }
+                                if canvas.active_layer_id == *id {
+                                    canvas.active_layer_id = fallback;
+                                }
+                            }
+                        }
+                    }
                     _ => {}
                 }
                 let _ = self.cmd_tx.send(Cmd::CanvasEdit {
@@ -157,11 +354,18 @@ impl UiApp {
                     edit,
                 });
             }
-            Some(chat_canvas::CanvasUiAction::SetStyle { color, width }) => {
+            Some(chat_canvas::CanvasUiAction::SetStyle {
+                color,
+                width,
+                opacity,
+                dash,
+            }) => {
                 let _ = self.cmd_tx.send(Cmd::CanvasSetStyle {
                     session_id: session_id.to_string(),
                     color,
                     width,
+                    opacity,
+                    dash,
                 });
             }
             Some(chat_canvas::CanvasUiAction::ExportPng) => {
@@ -190,6 +394,20 @@ impl UiApp {
                     session_id: session_id.to_string(),
                     aspect,
                     format: "svg".into(),
+                });
+            }
+            Some(chat_canvas::CanvasUiAction::ExportJson) => {
+                let aspect = self
+                    .chat_state
+                    .sessions
+                    .iter()
+                    .find(|s| s.id == session_id)
+                    .map(|s| s.canvas_aspect)
+                    .unwrap_or_default();
+                let _ = self.cmd_tx.send(Cmd::CanvasExport {
+                    session_id: session_id.to_string(),
+                    aspect,
+                    format: "json".into(),
                 });
             }
             Some(chat_canvas::CanvasUiAction::SetAspect(aspect)) => {
@@ -358,6 +576,10 @@ impl UiApp {
                                     ui,
                                     t,
                                     &mut self.chat_state.view.canvas,
+                                    chat_canvas::canvas_agent_drawing_on_session(
+                                        &self.agents,
+                                        &sid,
+                                    ),
                                     Some(g.help_tooltip),
                                     &mut open_canvas_guide,
                                 );

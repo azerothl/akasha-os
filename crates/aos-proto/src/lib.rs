@@ -3361,6 +3361,10 @@ pub struct CanvasSetStyleRequest {
     pub color: Option<String>,
     #[serde(default)]
     pub width: Option<f32>,
+    #[serde(default)]
+    pub opacity: Option<f32>,
+    #[serde(default)]
+    pub dash: Option<Vec<f32>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

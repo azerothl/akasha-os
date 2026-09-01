@@ -3319,6 +3319,8 @@ async fn handle_cmd(
             session_id,
             color,
             width,
+            opacity,
+            dash,
         } => {
             match bus
                 .call::<aos_proto::CanvasSetStyleRequest, aos_proto::CanvasSetStyleResponse>(
@@ -3327,6 +3329,8 @@ async fn handle_cmd(
                         session_id: session_id.clone(),
                         color,
                         width,
+                        opacity,
+                        dash,
                     },
                     vec![],
                 )
@@ -3434,6 +3438,29 @@ async fn handle_cmd(
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));
+                    if let Ok(resp) = bus
+                        .call::<aos_proto::CanvasGetRequest, aos_proto::CanvasGetResponse>(
+                            "canvas.get",
+                            &aos_proto::CanvasGetRequest {
+                                session_id: session_id.clone(),
+                                after_seq: None,
+                            },
+                            vec![],
+                        )
+                        .await
+                    {
+                        let _ = evt_tx.send(Evt::CanvasSnapshot {
+                            session_id: resp.session_id,
+                            canvas_open: resp.canvas_open,
+                            next_seq: resp.next_seq,
+                            ops: resp.ops,
+                            pen: resp.pen,
+                            delta: false,
+                            canvas_seeing: Some(resp.canvas_seeing),
+                            layers: resp.layers,
+                            active_layer_id: resp.active_layer_id,
+                        });
+                    }
                 }
             }
         }

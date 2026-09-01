@@ -9,7 +9,9 @@ use aos_proto::{
 use eframe::egui::epaint::{CircleShape, PathShape, PathStroke, Shape, StrokeKind};
 use eframe::egui::{Align2, Color32, FontId, Pos2, Sense, Stroke, Ui, Vec2};
 
-use crate::chat_room;
+use crate::canvas_paint::{
+    self, body_dash, fill_color, layer_effective_opacity, paint_polyline, path_stroke, stroke_color,
+};
 use crate::i18n::UiStrings;
 use crate::theme::{PAPER, SIGNAL, VOID};
 
@@ -33,9 +35,12 @@ pub enum CanvasUiAction {
     SetStyle {
         color: Option<String>,
         width: Option<f32>,
+        opacity: Option<f32>,
+        dash: Option<Vec<f32>>,
     },
     ExportPng,
     ExportSvg,
+    ExportJson,
     ImportJson,
     SetAspect(CanvasAspect),
     ResetView,
@@ -80,6 +85,9 @@ pub struct CanvasPanelState {
     /// View pan (screen px) and zoom around the letterboxed board.
     pub view_pan: Vec2,
     pub view_zoom: f32,
+    /// Inline rename for active layer.
+    pub layer_rename_id: Option<String>,
+    pub layer_rename_text: String,
 }
 
 impl Default for CanvasPanelState {
@@ -110,6 +118,8 @@ impl Default for CanvasPanelState {
             gradient_color2: Color32::from_rgb(0xf4, 0x00, 0x09),
             view_pan: Vec2::ZERO,
             view_zoom: 1.0,
+            layer_rename_id: None,
+            layer_rename_text: String::new(),
         }
     }
 }
@@ -181,8 +191,10 @@ impl CanvasPanelState {
     }
 
     pub fn sync_pen(&mut self, pen: &CanvasPenStyle) {
-        self.color = parse_hex_color(&pen.color);
+        self.color = canvas_paint::parse_hex_color(&pen.color);
         self.width = pen.width;
+        self.pen_opacity = pen.opacity;
+        self.pen_dashed = !pen.dash.is_empty();
     }
 
     pub fn sync_layers(&mut self, layers: Vec<CanvasLayer>, active_layer_id: String) {
@@ -191,21 +203,7 @@ impl CanvasPanelState {
     }
 }
 
-pub fn parse_hex_color(s: &str) -> Color32 {
-    let t = s.trim().trim_start_matches('#');
-    if t.len() >= 6 {
-        let r = u8::from_str_radix(&t[0..2], 16).unwrap_or(62);
-        let g = u8::from_str_radix(&t[2..4], 16).unwrap_or(224);
-        let b = u8::from_str_radix(&t[4..6], 16).unwrap_or(196);
-        Color32::from_rgb(r, g, b)
-    } else {
-        Color32::from_rgb(0x3e, 0xe0, 0xc4)
-    }
-}
-
-pub fn color_to_hex(c: Color32) -> String {
-    format!("#{:02x}{:02x}{:02x}", c.r(), c.g(), c.b())
-}
+pub use canvas_paint::color_to_hex;
 
 fn pen_style_fields(state: &CanvasPanelState) -> (f32, Vec<f32>, Option<CanvasLinearGradient>) {
     let dash = if state.pen_dashed {
@@ -225,20 +223,12 @@ fn pen_style_fields(state: &CanvasPanelState) -> (f32, Vec<f32>, Option<CanvasLi
     (state.pen_opacity, dash, gradient)
 }
 
-fn author_stroke_color(author_id: &str, stored: &str, dark: bool) -> Color32 {
-    if stored.trim().is_empty() {
-        let (r, g, b) = chat_room::speaker_color_rgb(author_id, dark);
-        Color32::from_rgb(r, g, b)
-    } else {
-        parse_hex_color(stored)
-    }
+fn to_screen(rect: eframe::egui::Rect, p: CanvasPoint) -> Pos2 {
+    canvas_paint::to_screen(rect, p)
 }
 
-fn to_screen(rect: eframe::egui::Rect, p: CanvasPoint) -> Pos2 {
-    Pos2::new(
-        rect.left() + p.x.clamp(0.0, 1.0) * rect.width(),
-        rect.top() + p.y.clamp(0.0, 1.0) * rect.height(),
-    )
+fn radius_px(rect: eframe::egui::Rect, width: f32) -> f32 {
+    canvas_paint::radius_px(rect, width)
 }
 
 fn to_norm(rect: eframe::egui::Rect, p: Pos2) -> CanvasPoint {
@@ -368,11 +358,6 @@ fn paint_board_grid(painter: &eframe::egui::Painter, rect: eframe::egui::Rect) {
     }
 }
 
-fn radius_px(rect: eframe::egui::Rect, width: f32) -> f32 {
-    let side = rect.width().min(rect.height());
-    (width.clamp(0.001, 0.25) * side * 0.5).max(1.0)
-}
-
 fn anim_progress(state: &CanvasPanelState, seq: u64, now: f64) -> f32 {
     if let Some((_, start)) = state.animating.iter().find(|(s, _)| *s == seq) {
         ((now - start) / 0.30).clamp(0.0, 1.0) as f32
@@ -385,24 +370,29 @@ fn paint_op(
     painter: &eframe::egui::Painter,
     rect: eframe::egui::Rect,
     op: &CanvasOp,
+    layers: &[CanvasLayer],
     dark: bool,
     progress: f32,
 ) {
+    let layer_opacity = layer_effective_opacity(layers, &op.layer_id);
+    if layer_opacity <= 0.001 {
+        return;
+    }
+    let dash = body_dash(&op.body);
     match &op.body {
         CanvasOpBody::Stroke {
             points,
             color,
             width,
-        .. } => {
+            ..
+        } => {
             if points.len() < 2 {
                 return;
             }
             let n = ((points.len() as f32) * progress).ceil().max(2.0) as usize;
             let slice = &points[..n.min(points.len())];
-            let c = author_stroke_color(&op.author_id, color, dark);
-            let rad = radius_px(rect, *width);
-            let screen: Vec<Pos2> = slice.iter().map(|p| to_screen(rect, *p)).collect();
-            painter.add(Shape::line(screen, PathStroke::new(rad * 2.0, c)));
+            let c = stroke_color(&op.body, &op.author_id, color, dark, layer_opacity);
+            paint_polyline(painter, rect, slice, *width, c, dash);
         }
         CanvasOpBody::Erase { points, width } => {
             if points.is_empty() {
@@ -416,7 +406,7 @@ fn paint_op(
             if screen.len() == 1 {
                 painter.add(Shape::Circle(CircleShape::filled(screen[0], rad, bg)));
             } else {
-                painter.add(Shape::line(screen, PathStroke::new(rad * 2.0, bg)));
+                painter.add(Shape::line(screen, path_stroke(rad * 2.0, bg)));
             }
         }
         CanvasOpBody::Rect {
@@ -428,8 +418,14 @@ fn paint_op(
             fill,
             width,
             rotation,
-        .. } => {
-            let c = author_stroke_color(&op.author_id, color, dark);
+            ..
+        } => {
+            let center = CanvasPoint {
+                x: x + w * 0.5 * progress,
+                y: y + h * 0.5 * progress,
+            };
+            let c = fill_color(&op.body, &op.author_id, color, dark, layer_opacity, center);
+            let stroke_c = stroke_color(&op.body, &op.author_id, color, dark, layer_opacity);
             let corners = canvas_rect_corners(*x, *y, w * progress, h * progress, *rotation);
             let screen: Vec<Pos2> = corners
                 .iter()
@@ -448,7 +444,7 @@ fn paint_op(
                     points: screen,
                     closed: true,
                     fill: Color32::TRANSPARENT,
-                    stroke: PathStroke::new(rad * 2.0, c),
+                    stroke: path_stroke(rad * 2.0, stroke_c),
                 }));
             }
         }
@@ -461,10 +457,13 @@ fn paint_op(
             fill,
             width,
             rotation,
-        .. } => {
-            let c = author_stroke_color(&op.author_id, color, dark);
+            ..
+        } => {
             let cx = x + w * 0.5;
             let cy = y + h * 0.5;
+            let center = CanvasPoint { x: cx, y: cy };
+            let c = fill_color(&op.body, &op.author_id, color, dark, layer_opacity, center);
+            let stroke_c = stroke_color(&op.body, &op.author_id, color, dark, layer_opacity);
             let pts: Vec<Pos2> = (0..48)
                 .map(|i| {
                     let t = std::f32::consts::TAU * (i as f32) / 48.0;
@@ -487,31 +486,27 @@ fn paint_op(
                     points: pts,
                     closed: true,
                     fill: Color32::TRANSPARENT,
-                    stroke: PathStroke::new(rad * 2.0, c),
+                    stroke: path_stroke(rad * 2.0, stroke_c),
                 }));
             }
         }
         CanvasOpBody::Line { p0, p1, color, width, .. } => {
-            let c = author_stroke_color(&op.author_id, color, dark);
-            let rad = radius_px(rect, *width);
+            let c = stroke_color(&op.body, &op.author_id, color, dark, layer_opacity);
             let end = CanvasPoint {
                 x: p0.x + (p1.x - p0.x) * progress,
                 y: p0.y + (p1.y - p0.y) * progress,
             };
-            let screen = [to_screen(rect, *p0), to_screen(rect, end)];
-            painter.add(Shape::line(screen.to_vec(), PathStroke::new(rad * 2.0, c)));
+            paint_polyline(painter, rect, &[*p0, end], *width, c, dash);
         }
         CanvasOpBody::Spline { points, color, width, .. } => {
             if points.len() < 2 {
                 return;
             }
-            let c = author_stroke_color(&op.author_id, color, dark);
-            let rad = radius_px(rect, *width);
+            let c = stroke_color(&op.body, &op.author_id, color, dark, layer_opacity);
             let sampled = sample_spline_points(points, 24);
             let n = ((sampled.len() as f32) * progress).ceil().max(2.0) as usize;
             let slice = &sampled[..n.min(sampled.len())];
-            let screen: Vec<Pos2> = slice.iter().map(|p| to_screen(rect, *p)).collect();
-            painter.add(Shape::line(screen, PathStroke::new(rad * 2.0, c)));
+            paint_polyline(painter, rect, slice, *width, c, dash);
         }
         CanvasOpBody::Path {
             points,
@@ -519,14 +514,20 @@ fn paint_op(
             width,
             fill,
             closed,
-        .. } => {
+            ..
+        } => {
             if points.len() < 2 {
                 return;
             }
-            let c = author_stroke_color(&op.author_id, color, dark);
             let sampled = sample_spline_points(points, 24);
             let n = ((sampled.len() as f32) * progress).ceil().max(2.0) as usize;
             let slice = &sampled[..n.min(sampled.len())];
+            let center = slice
+                .first()
+                .copied()
+                .unwrap_or(CanvasPoint { x: 0.5, y: 0.5 });
+            let fill_c = fill_color(&op.body, &op.author_id, color, dark, layer_opacity, center);
+            let stroke_c = stroke_color(&op.body, &op.author_id, color, dark, layer_opacity);
             let mut screen: Vec<Pos2> = slice.iter().map(|p| to_screen(rect, *p)).collect();
             if *closed && screen.len() >= 3 {
                 if let Some(first) = screen.first().copied() {
@@ -537,38 +538,24 @@ fn paint_op(
                 painter.add(Shape::Path(PathShape {
                     points: screen.clone(),
                     closed: *closed,
-                    fill: c,
+                    fill: fill_c,
                     stroke: PathStroke::NONE,
                 }));
             }
             if *width > 0.0 {
-                let rad = radius_px(rect, *width);
-                let stroke_pts = if *closed {
-                    screen
+                let stroke_pts: Vec<CanvasPoint> = if *closed {
+                    slice.to_vec()
                 } else {
-                    slice.iter().map(|p| to_screen(rect, *p)).collect()
+                    slice.to_vec()
                 };
-                painter.add(Shape::line(stroke_pts, PathStroke::new(rad * 2.0, c)));
+                paint_polyline(painter, rect, &stroke_pts, *width, stroke_c, dash);
             }
         }
         CanvasOpBody::Fill { x, y, color, .. } => {
-            let c = author_stroke_color(&op.author_id, color, dark);
+            let c = stroke_color(&op.body, &op.author_id, color, dark, layer_opacity);
             let center = to_screen(rect, CanvasPoint { x: *x, y: *y });
-            let arm = (rect.width().min(rect.height()) * 0.012 * progress).max(3.0);
-            painter.line_segment(
-                [
-                    Pos2::new(center.x - arm, center.y),
-                    Pos2::new(center.x + arm, center.y),
-                ],
-                Stroke::new(1.5_f32, c),
-            );
-            painter.line_segment(
-                [
-                    Pos2::new(center.x, center.y - arm),
-                    Pos2::new(center.x, center.y + arm),
-                ],
-                Stroke::new(1.5_f32, c),
-            );
+            let arm = (rect.width().min(rect.height()) * 0.008 * progress).max(2.0);
+            painter.circle_stroke(center, arm, Stroke::new(1.2, c));
         }
         CanvasOpBody::Clear | CanvasOpBody::Undo => {}
     }
@@ -694,7 +681,7 @@ pub fn toolbar_content_min_width(t: &UiStrings, seeing: bool, clear_confirm: boo
     w += 88.0; // color picker + width slider
     w += t.canvas_undo.len() as f32 * CHAR_W + BTN_PAD + GAP;
     w += t.canvas_export.len() as f32 * CHAR_W + BTN_PAD + GAP;
-    w += t.canvas_export_svg.len() as f32 * CHAR_W + BTN_PAD + GAP;
+    w += t.canvas_export_json.len() as f32 * CHAR_W + BTN_PAD + GAP;
     w += t.canvas_grid.len() as f32 * CHAR_W + BTN_PAD + GAP;
     w += t.canvas_snap.len() as f32 * CHAR_W + BTN_PAD + GAP;
     if clear_confirm {
@@ -709,215 +696,307 @@ pub fn toolbar_content_min_width(t: &UiStrings, seeing: bool, clear_confirm: boo
     w
 }
 
+/// True when a running agent on this session is using canvas tools.
+pub fn canvas_agent_drawing_on_session(
+    agents: &[aos_proto::AgentInfo],
+    session_id: &str,
+) -> bool {
+    use aos_proto::AgentState;
+    agents.iter().any(|a| {
+        a.session_id.as_deref() == Some(session_id)
+            && matches!(a.state, AgentState::Running)
+            && a.tools.iter().any(|tool| tool.starts_with("canvas."))
+    })
+}
+
+fn pen_dash_vec(dashed: bool) -> Vec<f32> {
+    if dashed {
+        vec![0.03, 0.03]
+    } else {
+        vec![]
+    }
+}
+
 /// Drawing tools for the unified session bar (pen, eraser, shapes, tint, thickness).
 pub fn ui_canvas_toolbar(
     ui: &mut Ui,
     t: &UiStrings,
     state: &mut CanvasPanelState,
+    canvas_agent_drawing: bool,
     help_tooltip: Option<&str>,
     help_clicked: &mut bool,
 ) -> Option<CanvasUiAction> {
     let mut action: Option<CanvasUiAction> = None;
-    ui.horizontal(|ui| {
-        let compact = ui.spacing().item_spacing;
-        ui.spacing_mut().item_spacing = eframe::egui::vec2(4.0, compact.y);
-
-        if state.seeing {
-            ui_canvas_seeing_pill(ui, t.canvas_seeing_now);
-        }
-
-        ui.selectable_value(&mut state.tool, CanvasTool::Select, t.canvas_tool_select);
-        ui.selectable_value(&mut state.tool, CanvasTool::Pan, t.canvas_tool_pan);
-        ui.selectable_value(&mut state.tool, CanvasTool::Pen, t.canvas_tool_pen);
-        ui.selectable_value(&mut state.tool, CanvasTool::Eraser, t.canvas_tool_eraser);
-        ui.selectable_value(&mut state.tool, CanvasTool::Line, t.canvas_tool_line);
-        ui.selectable_value(&mut state.tool, CanvasTool::Spline, t.canvas_tool_spline);
-        ui.selectable_value(&mut state.tool, CanvasTool::Path, t.canvas_tool_path);
-        ui.selectable_value(&mut state.tool, CanvasTool::Rect, t.canvas_tool_rect);
-        ui.selectable_value(&mut state.tool, CanvasTool::Ellipse, t.canvas_tool_ellipse);
-
-        if matches!(
-            state.tool,
-            CanvasTool::Rect | CanvasTool::Ellipse | CanvasTool::Path
-        ) {
-            let fill_label = eframe::egui::RichText::new(t.canvas_fill_toggle).weak();
-            ui.toggle_value(&mut state.shape_fill, fill_label);
-        }
+    let compact = ui.spacing().item_spacing;
+    ui.spacing_mut().item_spacing = eframe::egui::vec2(4.0, compact.y);
+    ui.vertical(|ui| {
+        ui.horizontal(|ui| {
+            if state.seeing {
+                ui_canvas_seeing_pill(ui, t.canvas_seeing_now);
+            }
+            if canvas_agent_drawing {
+                ui.weak(t.canvas_thinking);
+            }
+            ui.selectable_value(&mut state.tool, CanvasTool::Select, t.canvas_tool_select);
+            ui.selectable_value(&mut state.tool, CanvasTool::Pan, t.canvas_tool_pan);
+            ui.selectable_value(&mut state.tool, CanvasTool::Pen, t.canvas_tool_pen);
+            ui.selectable_value(&mut state.tool, CanvasTool::Eraser, t.canvas_tool_eraser);
+            ui.selectable_value(&mut state.tool, CanvasTool::Line, t.canvas_tool_line);
+            ui.selectable_value(&mut state.tool, CanvasTool::Spline, t.canvas_tool_spline);
+            ui.selectable_value(&mut state.tool, CanvasTool::Path, t.canvas_tool_path);
+            ui.selectable_value(&mut state.tool, CanvasTool::Rect, t.canvas_tool_rect);
+            ui.selectable_value(&mut state.tool, CanvasTool::Ellipse, t.canvas_tool_ellipse);
+            ui.label(t.canvas_tint);
+            let mut rgba = [
+                state.color.r() as f32 / 255.0,
+                state.color.g() as f32 / 255.0,
+                state.color.b() as f32 / 255.0,
+                1.0,
+            ];
+            if ui.color_edit_button_rgba_unmultiplied(&mut rgba).changed() {
+                state.color = Color32::from_rgb(
+                    (rgba[0] * 255.0) as u8,
+                    (rgba[1] * 255.0) as u8,
+                    (rgba[2] * 255.0) as u8,
+                );
+                action = Some(CanvasUiAction::SetStyle {
+                    color: Some(color_to_hex(state.color)),
+                    width: None,
+                    opacity: None,
+                    dash: None,
+                });
+            }
+            let width_resp = ui.add(
+                eframe::egui::Slider::new(&mut state.width, 0.005..=0.06).text(t.canvas_width),
+            );
+            if width_resp.changed() {
+                action = Some(CanvasUiAction::SetStyle {
+                    color: None,
+                    width: Some(state.width),
+                    opacity: None,
+                    dash: None,
+                });
+            }
+            if let Some(tip) = help_tooltip {
+                if crate::guide::tab_help_button(ui, tip) {
+                    *help_clicked = true;
+                }
+            }
+        });
 
         if state.tool == CanvasTool::Select {
-            if let Some(seq) = state.selected_seq {
-                for (label, edge) in [
-                    (t.canvas_align_left, "left"),
-                    (t.canvas_align_right, "right"),
-                    (t.canvas_align_top, "top"),
-                    (t.canvas_align_bottom, "bottom"),
-                    (t.canvas_align_cx, "center_x"),
-                    (t.canvas_align_cy, "center_y"),
-                ] {
-                    if ui
-                        .button(eframe::egui::RichText::new(label).weak())
-                        .on_hover_text(t.canvas_align_to_margin)
-                        .clicked()
-                    {
-                        action = Some(CanvasUiAction::Edit(CanvasEdit::Align {
-                            seq,
-                            to_seq: None,
-                            edges: vec![edge.into()],
-                        }));
-                    }
-                }
-                if let Some(op) = state.ops.iter_mut().find(|o| o.seq == seq) {
-                    if let CanvasOpBody::Rect {
-                        rotation,
-                        ..
-                    }
-                    | CanvasOpBody::Ellipse {
-                        rotation,
-                        ..
-                    } = &mut op.body
-                    {
-                        let mut rot = *rotation;
-                        let rot_resp = ui.add(
-                            eframe::egui::DragValue::new(&mut rot)
-                                .suffix("°")
-                                .range(-180.0..=180.0)
-                                .speed(1.0),
-                        );
-                        rot_resp.clone().on_hover_text(t.canvas_rotation);
-                        if rot_resp.changed() {
-                            *rotation = rot;
-                            action = Some(CanvasUiAction::Edit(CanvasEdit::Rotate {
+            ui.horizontal(|ui| {
+                if let Some(seq) = state.selected_seq {
+                    for (label, edge) in [
+                        (t.canvas_align_left, "left"),
+                        (t.canvas_align_right, "right"),
+                        (t.canvas_align_top, "top"),
+                        (t.canvas_align_bottom, "bottom"),
+                        (t.canvas_align_cx, "center_x"),
+                        (t.canvas_align_cy, "center_y"),
+                    ] {
+                        if ui
+                            .button(eframe::egui::RichText::new(label).weak())
+                            .on_hover_text(t.canvas_align_to_margin)
+                            .clicked()
+                        {
+                            action = Some(CanvasUiAction::Edit(CanvasEdit::Align {
                                 seq,
-                                rotation: rot,
+                                to_seq: None,
+                                edges: vec![edge.into()],
+                            }));
+                        }
+                    }
+                    if let Some(idx) = state.ops.iter().position(|o| o.seq == seq) {
+                        if ui.small_button(t.canvas_z_back).clicked() && idx > 0 {
+                            action = Some(CanvasUiAction::Edit(CanvasEdit::Reorder {
+                                seq,
+                                z: (idx as i64) - 1,
+                            }));
+                        }
+                        if ui.small_button(t.canvas_z_forward).clicked()
+                            && idx + 1 < state.ops.len()
+                        {
+                            action = Some(CanvasUiAction::Edit(CanvasEdit::Reorder {
+                                seq,
+                                z: (idx as i64) + 1,
+                            }));
+                        }
+                    }
+                    if let Some(op) = state.ops.iter_mut().find(|o| o.seq == seq) {
+                        if let CanvasOpBody::Rect { rotation, .. }
+                        | CanvasOpBody::Ellipse { rotation, .. } = &mut op.body
+                        {
+                            let mut rot = *rotation;
+                            let rot_resp = ui.add(
+                                eframe::egui::DragValue::new(&mut rot)
+                                    .suffix("°")
+                                    .range(-180.0..=180.0)
+                                    .speed(1.0),
+                            );
+                            rot_resp.clone().on_hover_text(t.canvas_rotation);
+                            if rot_resp.changed() {
+                                *rotation = rot;
+                                action = Some(CanvasUiAction::Edit(CanvasEdit::Rotate {
+                                    seq,
+                                    rotation: rot,
+                                }));
+                            }
+                        }
+                        let mut restyle_opacity =
+                            aos_proto::canvas_op_body_opacity(&op.body);
+                        if ui
+                            .add(
+                                eframe::egui::Slider::new(&mut restyle_opacity, 0.05..=1.0)
+                                    .text(t.canvas_opacity),
+                            )
+                            .changed()
+                        {
+                            action = Some(CanvasUiAction::Edit(CanvasEdit::Restyle {
+                                seq,
+                                color: None,
+                                width: None,
+                                fill: None,
+                                rotation: None,
+                                opacity: Some(restyle_opacity),
+                                dash: None,
+                                gradient: None,
                             }));
                         }
                     }
                 }
-            }
+            });
         }
 
-        ui.label(t.canvas_tint);
-        let mut rgba = [
-            state.color.r() as f32 / 255.0,
-            state.color.g() as f32 / 255.0,
-            state.color.b() as f32 / 255.0,
-            1.0,
-        ];
-        if ui.color_edit_button_rgba_unmultiplied(&mut rgba).changed() {
-            state.color = Color32::from_rgb(
-                (rgba[0] * 255.0) as u8,
-                (rgba[1] * 255.0) as u8,
-                (rgba[2] * 255.0) as u8,
+        ui.horizontal(|ui| {
+            if matches!(
+                state.tool,
+                CanvasTool::Rect | CanvasTool::Ellipse | CanvasTool::Path
+            ) {
+                ui.toggle_value(
+                    &mut state.shape_fill,
+                    eframe::egui::RichText::new(t.canvas_fill_toggle).weak(),
+                );
+            }
+            let opacity_resp = ui.add(
+                eframe::egui::Slider::new(&mut state.pen_opacity, 0.05..=1.0).text(t.canvas_opacity),
             );
-            action = Some(CanvasUiAction::SetStyle {
-                color: Some(color_to_hex(state.color)),
-                width: None,
-            });
-        }
-        let width_resp = ui.add(
-            eframe::egui::Slider::new(&mut state.width, 0.005..=0.06).text(t.canvas_width),
-        );
-        if width_resp.changed() {
-            action = Some(CanvasUiAction::SetStyle {
-                color: None,
-                width: Some(state.width),
-            });
-        }
-        ui.add(
-            eframe::egui::Slider::new(&mut state.pen_opacity, 0.05..=1.0).text(t.canvas_opacity),
-        );
-        ui.toggle_value(
-            &mut state.pen_dashed,
-            eframe::egui::RichText::new(t.canvas_dashed).weak(),
-        );
-        if matches!(
-            state.tool,
-            CanvasTool::Rect | CanvasTool::Ellipse | CanvasTool::Path
-        ) && state.shape_fill {
-            ui.toggle_value(
-                &mut state.use_gradient,
-                eframe::egui::RichText::new(t.canvas_gradient).weak(),
-            );
-            if state.use_gradient {
-                let mut rgba = [
-                    state.gradient_color2.r() as f32 / 255.0,
-                    state.gradient_color2.g() as f32 / 255.0,
-                    state.gradient_color2.b() as f32 / 255.0,
-                    1.0,
-                ];
-                if ui.color_edit_button_rgba_unmultiplied(&mut rgba).changed() {
-                    state.gradient_color2 = Color32::from_rgb(
-                        (rgba[0] * 255.0) as u8,
-                        (rgba[1] * 255.0) as u8,
-                        (rgba[2] * 255.0) as u8,
-                    );
+            if opacity_resp.changed() {
+                action = Some(CanvasUiAction::SetStyle {
+                    color: None,
+                    width: None,
+                    opacity: Some(state.pen_opacity),
+                    dash: None,
+                });
+            }
+            if ui
+                .toggle_value(
+                    &mut state.pen_dashed,
+                    eframe::egui::RichText::new(t.canvas_dashed).weak(),
+                )
+                .changed()
+            {
+                action = Some(CanvasUiAction::SetStyle {
+                    color: None,
+                    width: None,
+                    opacity: None,
+                    dash: Some(pen_dash_vec(state.pen_dashed)),
+                });
+            }
+            if matches!(
+                state.tool,
+                CanvasTool::Rect | CanvasTool::Ellipse | CanvasTool::Path
+            ) && state.shape_fill
+            {
+                ui.toggle_value(
+                    &mut state.use_gradient,
+                    eframe::egui::RichText::new(t.canvas_gradient).weak(),
+                );
+                if state.use_gradient {
+                    let mut rgba = [
+                        state.gradient_color2.r() as f32 / 255.0,
+                        state.gradient_color2.g() as f32 / 255.0,
+                        state.gradient_color2.b() as f32 / 255.0,
+                        1.0,
+                    ];
+                    if ui.color_edit_button_rgba_unmultiplied(&mut rgba).changed() {
+                        state.gradient_color2 = Color32::from_rgb(
+                            (rgba[0] * 255.0) as u8,
+                            (rgba[1] * 255.0) as u8,
+                            (rgba[2] * 255.0) as u8,
+                        );
+                    }
                 }
             }
-        }
+        });
 
-        if ui
-            .button(eframe::egui::RichText::new(t.canvas_undo).weak())
-            .clicked()
-        {
-            action = Some(CanvasUiAction::Apply(CanvasOpBody::Undo));
-        }
-        if ui
-            .button(eframe::egui::RichText::new(t.canvas_export).weak())
-            .clicked()
-        {
-            action = Some(CanvasUiAction::ExportPng);
-        }
-        if ui
-            .button(eframe::egui::RichText::new(t.canvas_export_svg).weak())
-            .clicked()
-        {
-            action = Some(CanvasUiAction::ExportSvg);
-        }
-        if ui
-            .button(eframe::egui::RichText::new(t.canvas_import).weak())
-            .clicked()
-        {
-            action = Some(CanvasUiAction::ImportJson);
-        }
-        if ui
-            .button(eframe::egui::RichText::new(t.canvas_reset_view).weak())
-            .clicked()
-        {
-            action = Some(CanvasUiAction::ResetView);
-        }
-        ui.toggle_value(
-            &mut state.show_grid,
-            eframe::egui::RichText::new(t.canvas_grid).weak(),
-        );
-        ui.toggle_value(
-            &mut state.snap,
-            eframe::egui::RichText::new(t.canvas_snap).weak(),
-        );
-
-        if state.clear_confirm_open {
-            ui.label(eframe::egui::RichText::new(t.canvas_clear_confirm).small());
+        ui.horizontal(|ui| {
             if ui
-                .button(eframe::egui::RichText::new(t.canvas_clear_confirm_yes).color(crate::theme::HYDROGEN))
+                .button(eframe::egui::RichText::new(t.canvas_undo).weak())
                 .clicked()
             {
-                state.clear_confirm_open = false;
-                action = Some(CanvasUiAction::Apply(CanvasOpBody::Clear));
+                action = Some(CanvasUiAction::Apply(CanvasOpBody::Undo));
             }
-            if ui.button(t.canvas_clear_confirm_no).clicked() {
-                state.clear_confirm_open = false;
+            if ui
+                .button(eframe::egui::RichText::new(t.canvas_export).weak())
+                .clicked()
+            {
+                action = Some(CanvasUiAction::ExportPng);
             }
-        } else if ui
-            .button(eframe::egui::RichText::new(t.canvas_clear).color(crate::theme::HYDROGEN))
-            .clicked()
-        {
-            state.clear_confirm_open = true;
-        }
-
-        if let Some(tip) = help_tooltip {
-            if crate::guide::tab_help_button(ui, tip) {
-                *help_clicked = true;
+            if ui
+                .button(eframe::egui::RichText::new(t.canvas_export_svg).weak())
+                .clicked()
+            {
+                action = Some(CanvasUiAction::ExportSvg);
             }
-        }
+            if ui
+                .button(eframe::egui::RichText::new(t.canvas_export_json).weak())
+                .clicked()
+            {
+                action = Some(CanvasUiAction::ExportJson);
+            }
+            if ui
+                .button(eframe::egui::RichText::new(t.canvas_import).weak())
+                .clicked()
+            {
+                action = Some(CanvasUiAction::ImportJson);
+            }
+            if ui
+                .button(eframe::egui::RichText::new(t.canvas_reset_view).weak())
+                .clicked()
+            {
+                action = Some(CanvasUiAction::ResetView);
+            }
+            ui.toggle_value(
+                &mut state.show_grid,
+                eframe::egui::RichText::new(t.canvas_grid).weak(),
+            );
+            ui.toggle_value(
+                &mut state.snap,
+                eframe::egui::RichText::new(t.canvas_snap).weak(),
+            );
+            if state.clear_confirm_open {
+                ui.label(eframe::egui::RichText::new(t.canvas_clear_confirm).small());
+                if ui
+                    .button(
+                        eframe::egui::RichText::new(t.canvas_clear_confirm_yes)
+                            .color(crate::theme::HYDROGEN),
+                    )
+                    .clicked()
+                {
+                    state.clear_confirm_open = false;
+                    action = Some(CanvasUiAction::Apply(CanvasOpBody::Clear));
+                }
+                if ui.button(t.canvas_clear_confirm_no).clicked() {
+                    state.clear_confirm_open = false;
+                }
+            } else if ui
+                .button(eframe::egui::RichText::new(t.canvas_clear).color(crate::theme::HYDROGEN))
+                .clicked()
+            {
+                state.clear_confirm_open = true;
+            }
+        });
     });
 
     action
@@ -961,16 +1040,41 @@ pub fn ui_canvas_layers(
         }
         let layers = state.layers.clone();
         let layer_count = layers.len();
-        for layer in layers {
-            let selected = state.active_layer_id == layer.id;
+        let active_id = state.active_layer_id.clone();
+        for (layer_idx, layer) in layers.iter().enumerate() {
+            let selected = active_id == layer.id;
             if ui.selectable_label(selected, &layer.name).clicked() {
                 action = Some(CanvasUiAction::Edit(CanvasEdit::LayerActivate {
                     id: layer.id.clone(),
                 }));
             }
+            if selected {
+                if ui.small_button(t.canvas_layer_rename).clicked() {
+                    state.layer_rename_id = Some(layer.id.clone());
+                    state.layer_rename_text = layer.name.clone();
+                }
+                if layer_idx > 0
+                    && ui.small_button("↑").on_hover_text(t.canvas_z_forward).clicked()
+                {
+                    action = Some(CanvasUiAction::Edit(CanvasEdit::LayerReorder {
+                        id: layer.id.clone(),
+                        parent_id: None,
+                        z: (layer_idx as i64) - 1,
+                    }));
+                }
+                if layer_idx + 1 < layer_count
+                    && ui.small_button("↓").on_hover_text(t.canvas_z_back).clicked()
+                {
+                    action = Some(CanvasUiAction::Edit(CanvasEdit::LayerReorder {
+                        id: layer.id.clone(),
+                        parent_id: None,
+                        z: (layer_idx as i64) + 1,
+                    }));
+                }
+            }
             let mut vis = layer.visible;
             if ui
-                .checkbox(&mut vis, "")
+                .toggle_value(&mut vis, t.canvas_layer_vis_short)
                 .on_hover_text(t.canvas_layer_visible)
                 .changed()
             {
@@ -983,7 +1087,7 @@ pub fn ui_canvas_layers(
             }
             let mut locked = layer.locked;
             if ui
-                .checkbox(&mut locked, "")
+                .toggle_value(&mut locked, t.canvas_layer_lock_short)
                 .on_hover_text(t.canvas_layer_locked)
                 .changed()
             {
@@ -1019,6 +1123,22 @@ pub fn ui_canvas_layers(
                     id: layer.id.clone(),
                 }));
             }
+        }
+        if let Some(rename_id) = state.layer_rename_id.clone() {
+            ui.horizontal(|ui| {
+                ui.label(t.canvas_layer_rename);
+                let resp = ui.text_edit_singleline(&mut state.layer_rename_text);
+                if resp.lost_focus() {
+                    let name = state.layer_rename_text.trim().to_string();
+                    if !name.is_empty() {
+                        action = Some(CanvasUiAction::Edit(CanvasEdit::LayerRename {
+                            id: rename_id,
+                            name,
+                        }));
+                    }
+                    state.layer_rename_id = None;
+                }
+            });
         }
     });
     action
@@ -1066,7 +1186,7 @@ pub fn ui_canvas_surface(
             continue;
         }
         let p = anim_progress(state, op.seq, now);
-        paint_op(&painter, rect, op, dark, p);
+        paint_op(&painter, rect, op, &state.layers, dark, p);
     }
 
     if let Some(seq) = state.selected_seq {
@@ -1097,6 +1217,8 @@ pub fn ui_canvas_surface(
         } else {
             state.color
         };
+        let (opacity, dash, _) = pen_style_fields(state);
+        let draft_color = canvas_paint::with_alpha(c, opacity);
         let rad = radius_px(rect, state.width);
         match state.tool {
             CanvasTool::Spline if screen.len() >= 2 => {
@@ -1104,7 +1226,18 @@ pub fn ui_canvas_surface(
                     .iter()
                     .map(|p| to_screen(rect, *p))
                     .collect();
-                painter.add(Shape::line(sampled, PathStroke::new(rad * 2.0, c)));
+                if dash.is_empty() {
+                    painter.add(Shape::line(sampled, path_stroke(rad * 2.0, draft_color)));
+                } else {
+                    paint_polyline(
+                        &painter,
+                        rect,
+                        &state.draft_points,
+                        state.width,
+                        draft_color,
+                        &dash,
+                    );
+                }
             }
             CanvasTool::Path if screen.len() >= 2 => {
                 let sampled: Vec<Pos2> = sample_spline_points(&state.draft_points, 16)
@@ -1115,15 +1248,35 @@ pub fn ui_canvas_surface(
                     painter.add(Shape::Path(PathShape {
                         points: sampled,
                         closed: true,
-                        fill: c,
+                        fill: draft_color,
                         stroke: PathStroke::NONE,
                     }));
+                } else if dash.is_empty() {
+                    painter.add(Shape::line(sampled, path_stroke(rad * 2.0, draft_color)));
                 } else {
-                    painter.add(Shape::line(sampled, PathStroke::new(rad * 2.0, c)));
+                    paint_polyline(
+                        &painter,
+                        rect,
+                        &state.draft_points,
+                        state.width,
+                        draft_color,
+                        &dash,
+                    );
                 }
             }
             _ => {
-                painter.add(Shape::line(screen, PathStroke::new(rad * 2.0, c)));
+                if dash.is_empty() {
+                    painter.add(Shape::line(screen, path_stroke(rad * 2.0, draft_color)));
+                } else {
+                    paint_polyline(
+                        &painter,
+                        rect,
+                        &state.draft_points,
+                        state.width,
+                        draft_color,
+                        &dash,
+                    );
+                }
             }
         }
     }
@@ -1892,10 +2045,10 @@ fn fit_board_rect_letterboxes_wide_in_tall_pane() {
 
     #[test]
     fn author_stroke_color_uses_stored_hex_for_agents() {
-        let red = author_stroke_color("agent-a", "#F40009", true);
-        assert_eq!(red, parse_hex_color("#F40009"));
-        let speaker = author_stroke_color("agent-a", "", true);
-        assert_ne!(speaker, parse_hex_color("#F40009"));
+        let red = canvas_paint::author_stroke_color("agent-a", "#F40009", true);
+        assert_eq!(red, canvas_paint::parse_hex_color("#F40009"));
+        let speaker = canvas_paint::author_stroke_color("agent-a", "", true);
+        assert_ne!(speaker, canvas_paint::parse_hex_color("#F40009"));
     }
 
     #[test]

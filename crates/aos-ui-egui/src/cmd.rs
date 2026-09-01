@@ -266,6 +266,8 @@ pub(crate) enum Cmd {
         session_id: String,
         color: Option<String>,
         width: Option<f32>,
+        opacity: Option<f32>,
+        dash: Option<Vec<f32>>,
     },
     CanvasPoll {
         session_id: String,

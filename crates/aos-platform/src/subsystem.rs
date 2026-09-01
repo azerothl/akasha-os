@@ -917,7 +917,7 @@ impl HostServices for PlatformSubsystem {
                     .sessions
                     .lock()
                     .unwrap()
-                    .canvas_set_style(&session_id, color, width)
+                    .canvas_set_style(&session_id, color, width, None, None)
                     .map_err(|e| e.to_string())?;
                 Ok(serde_json::json!({
                     "canvas_open": meta.canvas_open,

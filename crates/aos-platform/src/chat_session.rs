@@ -501,6 +501,8 @@ impl ChatSessionStore {
         id: &str,
         color: Option<&str>,
         width: Option<f32>,
+        opacity: Option<f32>,
+        dash: Option<&[f32]>,
     ) -> Result<(ChatSessionMeta, CanvasDoc), SessionError> {
         let _ = self.load_meta(id)?;
         let mut doc = self.load_canvas(id)?;
@@ -515,6 +517,12 @@ impl ChatSessionStore {
                 return Err(SessionError::BadRequest("width doit être > 0".into()));
             }
             doc.pen.width = w.clamp(0.001, 0.25);
+        }
+        if let Some(o) = opacity {
+            doc.pen.opacity = o.clamp(0.0, 1.0);
+        }
+        if let Some(d) = dash {
+            doc.pen.dash = d.to_vec();
         }
         self.save_canvas(&doc)?;
         let mut meta = self.load_meta(id)?;
@@ -1278,10 +1286,16 @@ archived: false
         let s = ChatSessionStore::open(&dir).unwrap();
         let m = s.create(Some("Pen".into()), None).unwrap();
         let (_, doc) = s
-            .canvas_set_style(&m.id, Some("#ff4400"), Some(0.025))
+            .canvas_set_style(&m.id, Some("#ff4400"), Some(0.025), None, None)
             .unwrap();
         assert_eq!(doc.pen.color, "#ff4400");
         assert!((doc.pen.width - 0.025).abs() < 0.0001);
+
+        let (_, doc2) = s
+            .canvas_set_style(&m.id, None, None, Some(0.4), Some(&[0.02, 0.02]))
+            .unwrap();
+        assert!((doc2.pen.opacity - 0.4).abs() < 0.0001);
+        assert_eq!(doc2.pen.dash, vec![0.02, 0.02]);
 
         let (_, _, applied) = s
             .canvas_apply(
