@@ -1,11 +1,19 @@
 //! Conversation workspace, transcript, canvas, and composer.
 
-use crate::*;
+use crate::cmd::Cmd;
+use crate::composer_layout::{
+    chat_canvas_layout, chat_composer_reserve_height, chat_sessions_split, ChatCanvasLayout,
+    ChatSessionsSplit,
+};
+use crate::os_open::{aos_home, open_os_folder};
+use crate::{
+    chat_canvas, chat_room, i18n, icons, overflow_scroll, session_model_supports_vision, theme,
+    UiApp,
+};
+use aos_proto::ChatRoomMember;
+use eframe::egui;
 
 impl UiApp {
-
-
-
     pub(crate) fn ui_chat(&mut self, ui: &mut egui::Ui) {
         let t = i18n::strings(&self.prefs.language);
         let full = ui.available_size();

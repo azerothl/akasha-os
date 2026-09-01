@@ -70,13 +70,10 @@ use chat_delegate::chat_delegate_kit;
 #[cfg(test)]
 use chat_bubble::chat_bubble_max_width;
 use cmd::{AgentNotice, ChatLine, Cmd, Evt};
-use composer_layout::{
-    chat_canvas_layout, chat_composer_reserve_height, chat_sessions_split,
-    estimate_composer_buttons_w, ChatCanvasLayout, ChatSessionsSplit, COMPOSER_MIN_INPUT_W,
-};
+use composer_layout::{estimate_composer_buttons_w, COMPOSER_MIN_INPUT_W};
 #[cfg(test)]
 use composer_layout::{chat_composer_wraps, COMPOSER_INPUT_ROW_H};
-use os_open::{aos_home, app_icon, bin_aos_session, native_path, open_in_browser, open_os_folder};
+use os_open::{aos_home, app_icon, bin_aos_session, native_path, open_in_browser};
 use runtime::runtime_main;
 use module_actions::{
     agent_id_cmd, invoke_module_bind, invoke_module_tool, invoke_notes, invoke_tasks,
@@ -94,7 +91,7 @@ use aos_agent::schedule_parse::{self, ParsedSchedule};
 use aos_ipc::BusClient;
 use aos_proto::{
     AgentInfo, AgentState, AgentTrace, AuditEvent,
-    CapInfo, ChatAttachment, ChatRoomMember, ChatSessionGetResponse,
+    CapInfo, ChatAttachment, ChatSessionGetResponse,
     ChatSessionIdRequest, ChatSessionMeta, DocumentRef,
     McpServerInfo, MemHit, ModelInfo,
     ModuleCatalogue, ModuleInfo,

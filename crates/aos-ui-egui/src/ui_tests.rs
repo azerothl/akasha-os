@@ -351,7 +351,10 @@ mod canvas_completion_tests {
 mod layout_tests {
     use super::*;
     use crate::chat_bubble::ChatBubbleKind;
-    use crate::composer_layout::composer_field_width;
+    use crate::composer_layout::{
+        chat_canvas_layout, chat_composer_reserve_height, chat_sessions_split,
+        composer_field_width, ChatCanvasLayout,
+    };
 
     #[test]
     fn chat_sessions_split_never_exceeds_total() {
