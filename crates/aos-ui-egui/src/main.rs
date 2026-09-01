@@ -50,6 +50,7 @@ mod ui_agents;
 mod ui_chat;
 mod ui_chat_session;
 mod ui_chat_transcript;
+mod ui_decl_module;
 mod ui_models;
 mod ui_memory;
 mod ui_providers;
