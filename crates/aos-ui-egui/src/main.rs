@@ -22,6 +22,7 @@ mod workspace_controller;
 mod workspace_ui_state;
 mod decl_ui;
 mod feedback_ui_state;
+mod feedback_event_controller;
 mod guide;
 mod i18n;
 mod model_setup;
@@ -102,7 +103,7 @@ use cmd::{ChatLine, Cmd, Evt};
 use composer_layout::{estimate_composer_buttons_w, COMPOSER_MIN_INPUT_W};
 #[cfg(test)]
 use composer_layout::{chat_composer_wraps, COMPOSER_INPUT_ROW_H};
-use os_open::{aos_home, app_icon, bin_aos_session, native_path, open_in_browser};
+use os_open::{aos_home, app_icon, bin_aos_session, open_in_browser};
 use runtime::runtime_main;
 use module_actions::{
     agent_id_cmd, invoke_module_bind, invoke_module_tool, invoke_notes, invoke_tasks,
@@ -2000,57 +2001,7 @@ impl eframe::App for UiApp {
                 Evt::TasksListed(tasks) => self.on_tasks_listed(tasks),
                 Evt::Confirms(c) => self.confirmations_ui.replace(c),
                 Evt::FeedbackOk(r) => {
-                    let mut msg = format!(
-                        "Enregistré localement : {}\nDossier : {}",
-                        r.path, r.export_dir
-                    );
-                    match r.github_status.as_str() {
-                        "created" | "api" | "gh" => {
-                            if let Some(url) = &r.github_issue_url {
-                                msg.push_str(&format!(
-                                    "\nIssue GitHub #{} : {url}",
-                                    r.github_issue_number
-                                        .map(|n| n.to_string())
-                                        .unwrap_or_else(|| "?".into())
-                                ));
-                                open_in_browser(url);
-                            }
-                        }
-                        "skipped_security" => {
-                            msg.push_str(
-                                "\nCatégorie security : non publié (issue publique interdite). Conservez le dossier local.",
-                            );
-                        }
-                        s if s == "form" || s.starts_with("form ") => {
-                            if let Some(url) = &r.github_issue_url {
-                                msg.push_str(
-                                    "\nFormulaire GitHub ouvert — cliquez « Submit new issue » pour publier.",
-                                );
-                                open_in_browser(url);
-                            }
-                        }
-                        "local_only" => {}
-                        other => {
-                            msg.push_str(&format!("\nGitHub : {other}"));
-                            if let Some(url) = &r.github_issue_url {
-                                open_in_browser(url);
-                            }
-                        }
-                    }
-                    self.feedback_ui.result = msg;
-                    self.status = format!("feedback {}", r.id);
-                    let export_raw = native_path(&r.export_dir);
-                    let export = if export_raw.is_absolute() {
-                        export_raw
-                    } else {
-                        aos_home().join(&export_raw)
-                    };
-                    self.feedback_ui.export_dir = export
-                        .parent()
-                        .filter(|p| !p.as_os_str().is_empty())
-                        .map(|p| p.to_path_buf())
-                        .or(Some(export));
-                    self.reset_feedback_form();
+                    feedback_event_controller::on_feedback_ok(self, r);
                 }
                 Evt::FeedbackDraft(req) => {
                     self.feedback_ui.title = req.title;

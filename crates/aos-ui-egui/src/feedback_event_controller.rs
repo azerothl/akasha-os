@@ -1,0 +1,61 @@
+//! Event handlers for feedback submission results.
+
+use crate::os_open::{aos_home, native_path, open_in_browser};
+use crate::UiApp;
+use aos_proto::FeedbackSubmitResponse;
+
+pub(crate) fn on_feedback_ok(app: &mut UiApp, response: FeedbackSubmitResponse) {
+    let mut message = format!(
+        "Enregistré localement : {}\nDossier : {}",
+        response.path, response.export_dir
+    );
+    match response.github_status.as_str() {
+        "created" | "api" | "gh" => {
+            if let Some(url) = &response.github_issue_url {
+                message.push_str(&format!(
+                    "\nIssue GitHub #{} : {}",
+                    response
+                        .github_issue_number
+                        .map(|number| number.to_string())
+                        .unwrap_or_else(|| "?".into()),
+                    url
+                ));
+                open_in_browser(url);
+            }
+        }
+        "skipped_security" => {
+            message.push_str(
+                "\nCatégorie security : non publié (issue publique interdite). Conservez le dossier local.",
+            );
+        }
+        status if status == "form" || status.starts_with("form ") => {
+            if let Some(url) = &response.github_issue_url {
+                message.push_str(
+                    "\nFormulaire GitHub ouvert — cliquez « Submit new issue » pour publier.",
+                );
+                open_in_browser(url);
+            }
+        }
+        "local_only" => {}
+        other => {
+            message.push_str(&format!("\nGitHub : {other}"));
+            if let Some(url) = &response.github_issue_url {
+                open_in_browser(url);
+            }
+        }
+    }
+    app.feedback_ui.result = message;
+    app.status = format!("feedback {}", response.id);
+    let export_raw = native_path(&response.export_dir);
+    let export = if export_raw.is_absolute() {
+        export_raw
+    } else {
+        aos_home().join(&export_raw)
+    };
+    app.feedback_ui.export_dir = export
+        .parent()
+        .filter(|path| !path.as_os_str().is_empty())
+        .map(|path| path.to_path_buf())
+        .or(Some(export));
+    app.reset_feedback_form();
+}
