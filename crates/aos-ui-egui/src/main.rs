@@ -14,6 +14,7 @@ mod models_ui_state;
 mod research_controller;
 mod research_ui_state;
 mod security_ui_state;
+mod scenario_ui_state;
 mod settings_controller;
 mod settings_ui_state;
 mod workspace_controller;
@@ -460,16 +461,7 @@ struct UiApp {
     status: String,
     onboarding: OnboardingState,
     show_onboarding: bool,
-    pending_note_agent: bool,
-    pending_module_agent: bool,
-    pending_module_baseline: Vec<String>,
-    // scenarios
-    scen_chat: bool,
-    scen_note_human: bool,
-    scen_note_agent: bool,
-    scen_confirm: bool,
-    scen_audit: bool,
-    scen_module_agent: bool,
+    scenario_ui: scenario_ui_state::ScenarioUiState,
     feedback_ui: feedback_ui_state::FeedbackUiState,
     chat_md_cache: CommonMarkCache,
     update_download_child: Option<std::process::Child>,
@@ -636,15 +628,7 @@ impl UiApp {
             status: String::new(),
             onboarding,
             show_onboarding,
-            pending_note_agent: false,
-            pending_module_agent: false,
-            pending_module_baseline: Vec::new(),
-            scen_chat: false,
-            scen_note_human: false,
-            scen_note_agent: false,
-            scen_confirm: false,
-            scen_audit: false,
-            scen_module_agent: false,
+            scenario_ui: scenario_ui_state::ScenarioUiState::default(),
             feedback_ui: feedback_ui_state::FeedbackUiState::default(),
             chat_md_cache: CommonMarkCache::default(),
             update_download_child: None,
@@ -755,8 +739,8 @@ impl UiApp {
         if !Self::task_looks_like_module_authoring(task) {
             return;
         }
-        self.pending_module_agent = true;
-        self.pending_module_baseline = self.settings_ui.installed_module_names();
+        self.scenario_ui
+            .arm_module_agent(self.settings_ui.installed_module_names());
     }
 
     fn launch_module_author_agent(&mut self) {
@@ -981,7 +965,9 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                     content: text.to_string(),
                     attachments: vec![],
                 });
-                self.pending_note_agent = rest.to_lowercase().contains("note");
+                if rest.to_lowercase().contains("note") {
+                    self.scenario_ui.mark_note_agent_pending();
+                }
                 self.arm_pending_module_agent(rest);
                 let (skills, tools) = chat_agent_kit(rest);
                 let _ = self.cmd_tx.send(Cmd::AgentCreate {
@@ -1218,7 +1204,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             });
         }
         self.mark_onboarding_chat_sent();
-        self.scen_chat = true;
+        self.scenario_ui.chat = true;
     }
 
     fn approve_schedule_act(&mut self, act_id: &str, msg_idx: usize) {
@@ -1978,7 +1964,7 @@ impl eframe::App for UiApp {
                 }
                 Evt::Agents(a) => {
                     let t = i18n::strings(&self.prefs.language);
-                    if self.pending_note_agent
+                    if self.scenario_ui.pending_note_agent
                         && a.iter().any(|ag| {
                             matches!(
                                 ag.state,
@@ -1988,7 +1974,7 @@ impl eframe::App for UiApp {
                     {
                         let _ = self.cmd_tx.send(Cmd::NotesList);
                     }
-                    if self.pending_module_agent
+                    if self.scenario_ui.pending_module_agent
                         && a.iter().any(|ag| {
                             matches!(
                                 ag.state,
@@ -2263,7 +2249,7 @@ impl eframe::App for UiApp {
                 }
                 Evt::Audit(a) => {
                     self.security_ui.set_audit(a);
-                    self.scen_audit = true;
+                    self.scenario_ui.audit = true;
                 }
                 Evt::Caps { holder, caps } => {
                     self.security_ui.set_caps(holder, caps);
@@ -2947,14 +2933,14 @@ impl eframe::App for UiApp {
                                         id: c.id.clone(),
                                         approved: true,
                                     });
-                                    self.scen_confirm = true;
+                                    self.scenario_ui.confirm = true;
                                 }
                                 if ui.button(t.confirm_deny).clicked() {
                                     let _ = self.cmd_tx.send(Cmd::Confirm {
                                         id: c.id.clone(),
                                         approved: false,
                                     });
-                                    self.scen_confirm = true;
+                                    self.scenario_ui.confirm = true;
                                 }
                             });
                         });

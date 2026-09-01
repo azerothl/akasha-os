@@ -67,12 +67,12 @@ impl UiApp {
                 "os": std::env::consts::OS,
                 "arch": std::env::consts::ARCH,
                 "scenarios": {
-                    "chat_offline": self.scen_chat,
-                    "note_human": self.scen_note_human,
-                    "note_agent": self.scen_note_agent,
-                    "confirm": self.scen_confirm,
-                    "audit": self.scen_audit,
-                    "module_agent": self.scen_module_agent,
+                    "chat_offline": self.scenario_ui.chat,
+                    "note_human": self.scenario_ui.note_human,
+                    "note_agent": self.scenario_ui.note_agent,
+                    "confirm": self.scenario_ui.confirm,
+                    "audit": self.scenario_ui.audit,
+                    "module_agent": self.scenario_ui.module_agent,
                 },
                 "onboarding": self.onboarding,
             });

@@ -8,16 +8,15 @@ use aos_proto::UserLibraryDoc;
 impl UiApp {
     pub(crate) fn on_notes_raw(&mut self, s: String) {
         let is_new = self.workspace_ui.apply_notes_raw(s);
-        if self.pending_note_agent && is_new {
-            self.scen_note_agent = true;
-            self.pending_note_agent = false;
+        if self.scenario_ui.pending_note_agent && is_new {
+            self.scenario_ui.mark_note_agent();
         }
-        self.scen_note_human = true;
+        self.scenario_ui.note_human = true;
     }
 
     pub(crate) fn on_notes_listed(&mut self, notes: Vec<NoteListItem>) {
         self.workspace_ui.apply_notes_listed(notes);
-        self.scen_note_human = true;
+        self.scenario_ui.note_human = true;
     }
 
     pub(crate) fn on_note_loaded(&mut self, detail: NoteDetail) {
@@ -34,7 +33,7 @@ impl UiApp {
 
     pub(crate) fn on_notes_saved(&mut self, path: String, slug: String, title: String) {
         self.workspace_ui.mark_note_saved(path, slug, title);
-        self.scen_note_human = true;
+        self.scenario_ui.note_human = true;
     }
 
     pub(crate) fn on_user_library_listed(&mut self, docs: Vec<UserLibraryDoc>) {

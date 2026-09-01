@@ -25,7 +25,7 @@ impl UiApp {
             canvas_aspect: pending.canvas_aspect,
         });
         self.mark_onboarding_chat_sent();
-        self.scen_chat = true;
+        self.scenario_ui.chat = true;
     }
 
     pub(crate) fn offer_research_choice(
@@ -51,7 +51,7 @@ impl UiApp {
         });
         self.research_ui.set_pending(pending);
         self.mark_onboarding_chat_sent();
-        self.scen_chat = true;
+        self.scenario_ui.chat = true;
     }
 
     pub(crate) fn start_document_prep(&mut self, session_id: &str, pending: ResearchPendingChat) {
@@ -81,7 +81,7 @@ impl UiApp {
             max_steps: pending.max_steps,
         });
         self.mark_onboarding_chat_sent();
-        self.scen_chat = true;
+        self.scenario_ui.chat = true;
     }
 
     pub(crate) fn attach_document_progress_agent(&mut self, agent_id: &str, question: &str) {

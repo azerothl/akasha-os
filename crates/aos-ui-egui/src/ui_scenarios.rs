@@ -8,12 +8,12 @@ impl UiApp {
 pub(crate) fn ui_scenarios(&mut self, ui: &mut egui::Ui) {
         let t = i18n::strings(&self.prefs.language);
         let mut flags = scenarios_panel::ScenarioFlags {
-            chat: self.scen_chat,
-            note_human: self.scen_note_human,
-            note_agent: self.scen_note_agent,
-            confirm: self.scen_confirm,
-            audit: self.scen_audit,
-            module_agent: self.scen_module_agent,
+            chat: self.scenario_ui.chat,
+            note_human: self.scenario_ui.note_human,
+            note_agent: self.scenario_ui.note_agent,
+            confirm: self.scenario_ui.confirm,
+            audit: self.scenario_ui.audit,
+            module_agent: self.scenario_ui.module_agent,
         };
         let mut launch = false;
         let mut test_confirm = false;
@@ -24,12 +24,12 @@ pub(crate) fn ui_scenarios(&mut self, ui: &mut egui::Ui) {
             || launch = true,
             || test_confirm = true,
         );
-        self.scen_chat = flags.chat;
-        self.scen_note_human = flags.note_human;
-        self.scen_note_agent = flags.note_agent;
-        self.scen_confirm = flags.confirm;
-        self.scen_audit = flags.audit;
-        self.scen_module_agent = flags.module_agent;
+        self.scenario_ui.chat = flags.chat;
+        self.scenario_ui.note_human = flags.note_human;
+        self.scenario_ui.note_agent = flags.note_agent;
+        self.scenario_ui.confirm = flags.confirm;
+        self.scenario_ui.audit = flags.audit;
+        self.scenario_ui.module_agent = flags.module_agent;
         if launch {
             self.launch_module_author_agent();
         }

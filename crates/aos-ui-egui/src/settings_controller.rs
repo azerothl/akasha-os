@@ -19,12 +19,13 @@ impl UiApp {
     }
 
     pub(crate) fn on_installed_modules(&mut self, list: Vec<ModuleInfo>) {
-        if self.pending_module_agent
-            && SettingsUiState::has_new_decl_module(&list, &self.pending_module_baseline)
+        if self.scenario_ui.pending_module_agent
+            && SettingsUiState::has_new_decl_module(
+                &list,
+                &self.scenario_ui.pending_module_baseline,
+            )
         {
-            self.scen_module_agent = true;
-            self.pending_module_agent = false;
-            self.pending_module_baseline.clear();
+            self.scenario_ui.mark_module_agent();
         }
         self.settings_ui.set_installed_modules(list);
     }

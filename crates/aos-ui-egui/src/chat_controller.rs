@@ -147,7 +147,7 @@ impl UiApp {
                 images: pending_images,
             });
             self.mark_onboarding_chat_sent();
-            self.scen_chat = true;
+            self.scenario_ui.chat = true;
             return;
         }
         let model_id = self
@@ -274,7 +274,7 @@ impl UiApp {
             canvas_aspect,
         });
         self.mark_onboarding_chat_sent();
-        self.scen_chat = true;
+        self.scenario_ui.chat = true;
     }
 
     pub(crate) fn queue_chat_document(&mut self, path: String) {
