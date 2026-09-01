@@ -48,13 +48,13 @@ impl UiApp {
                     .iter()
                     .find(|s| self.active_session.as_deref() == Some(s.id.as_str()))
                     .and_then(|s| s.model_id.clone());
-                let show_vision_banner = !self.chat_composer.pending_images.is_empty()
+                let show_vision_banner = !self.chat_state.composer.pending_images.is_empty()
                     && !session_model_supports_vision(session_model.as_deref());
                 let composer_h = chat_composer_reserve_height(
                     chat_w,
                     ask_queue.len(),
-                    self.chat_composer.pending_images.len(),
-                    self.chat_composer.pending_documents.len(),
+                    self.chat_state.composer.pending_images.len(),
+                    self.chat_state.composer.pending_documents.len(),
                     show_vision_banner,
                 );
                 let pane_h = ui.available_height();
@@ -111,7 +111,7 @@ impl UiApp {
                                                     );
                                                     let action = chat_canvas::ui_canvas_surface(
                                                         ui,
-                                                        &mut self.chat_view.canvas,
+                                                        &mut self.chat_state.view.canvas,
                                                         canvas_aspect,
                                                         t.canvas_empty_hint,
                                                     );
@@ -157,7 +157,7 @@ impl UiApp {
                                                 self.dispatch_canvas_ui_action(aspect_action, sid);
                                                 let action = chat_canvas::ui_canvas_surface(
                                                     ui,
-                                                    &mut self.chat_view.canvas,
+                                                    &mut self.chat_state.view.canvas,
                                                     canvas_aspect,
                                                     t.canvas_empty_hint,
                                                 );

@@ -10,9 +10,9 @@ use aos_proto::{chat_tts_request, ChatAttachment};
 
 impl UiApp {
     pub(crate) fn send_chat(&mut self) {
-        let text = self.chat_composer.input.trim().to_string();
-        let pending_images = self.chat_composer.pending_images.clone();
-        let pending_documents = self.chat_composer.pending_documents.clone();
+        let text = self.chat_state.composer.input.trim().to_string();
+        let pending_images = self.chat_state.composer.pending_images.clone();
+        let pending_documents = self.chat_state.composer.pending_documents.clone();
         if text.is_empty() && pending_images.is_empty() && pending_documents.is_empty() {
             return;
         }
@@ -22,8 +22,8 @@ impl UiApp {
         } else {
             text
         };
-        self.chat_composer.input.clear();
-        self.chat_composer.refocus = true;
+        self.chat_state.composer.input.clear();
+        self.chat_state.composer.refocus = true;
         if text.starts_with('/') && pending_images.is_empty() && pending_documents.is_empty() {
             self.handle_slash(&text);
             return;
@@ -126,7 +126,7 @@ impl UiApp {
             speaker_name: None,
             thinking: None,
         });
-        self.chat_composer.clear_attachments();
+        self.chat_state.composer.clear_attachments();
         let room_content =
             aos_proto::chat_document::merge_documents_into_user_content(&text, &pending_documents);
         if chat_room::session_is_room(chat_room::active_session_meta(
@@ -137,7 +137,7 @@ impl UiApp {
                 return;
             };
             self.session_chat.begin_turn(&session_id);
-            self.chat_runtime.begin_turn(Some(text.clone()));
+            self.chat_state.runtime.begin_turn(Some(text.clone()));
             let _ = self.cmd_tx.send(Cmd::RoomTurn {
                 session_id,
                 content: room_content,
@@ -159,7 +159,7 @@ impl UiApp {
             .map(|s| s.canvas_open)
             .unwrap_or(false)
             || (self.active_session.as_deref() == Some(session_id.as_str())
-                && (!self.chat_view.canvas.ops.is_empty() || self.chat_view.canvas.next_seq > 1));
+                && (!self.chat_state.view.canvas.ops.is_empty() || self.chat_state.view.canvas.next_seq > 1));
         let canvas_aspect = self
             .sessions
             .iter()
@@ -250,7 +250,7 @@ impl UiApp {
             })
             .collect();
         self.session_chat.begin_turn(&session_id);
-        self.chat_runtime.begin_turn(None);
+        self.chat_state.runtime.begin_turn(None);
         self.status = "assistant : génération…".into();
         let _ = self.cmd_tx.send(Cmd::Chat {
             session_id,
@@ -271,7 +271,7 @@ impl UiApp {
     }
 
     pub(crate) fn queue_chat_document(&mut self, path: String) {
-        if !self.chat_composer.queue_document(path) {
+        if !self.chat_state.composer.queue_document(path) {
             return;
         }
         self.status = i18n::strings(&self.prefs.language)
@@ -280,7 +280,7 @@ impl UiApp {
     }
 
     pub(crate) fn queue_chat_image(&mut self, path: String) {
-        if !self.chat_composer.queue_image(path) {
+        if !self.chat_state.composer.queue_image(path) {
             return;
         }
         self.status = i18n::strings(&self.prefs.language)

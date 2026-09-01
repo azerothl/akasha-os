@@ -27,6 +27,7 @@ mod chat_media;
 mod chat_room;
 mod chat_runtime_state;
 mod chat_sidebar_state;
+mod chat_state;
 mod chat_view_state;
 mod cmd;
 mod composer_layout;
@@ -483,14 +484,12 @@ struct UiApp {
     version: String,
     tab: Tab,
     chat: Vec<ChatLine>,
-    chat_runtime: chat_runtime_state::ChatRuntimeState,
-    chat_composer: chat_composer_state::ChatComposerState,
+    chat_state: chat_state::ChatState,
     catalogue: Option<ModuleCatalogue>,
     installed_modules: Vec<ModuleInfo>,
     sessions: Vec<ChatSessionMeta>,
     active_session: Option<String>,
     session_chat: session_chat::SessionChatState,
-    chat_sidebar: chat_sidebar_state::ChatSidebarState,
     network_online: bool,
     prefs: Preferences,
     agent_timeout_secs: u64,
@@ -603,7 +602,6 @@ struct UiApp {
     hf_download_status: String,
     show_go_to_palette: bool,
     agent_join_room_on_create: bool,
-    chat_view: chat_view_state::ChatViewState,
     roster_edit_drafts: HashMap<String, RosterEditDraft>,
     guide: guide::GuideState,
     /// Deferred normal chat after user picks Answer on a research choice card.
@@ -783,14 +781,12 @@ impl UiApp {
             version,
             tab: Tab::Chat,
             chat: vec![ChatLine::plain("système", intro)],
-            chat_runtime: chat_runtime_state::ChatRuntimeState::default(),
-            chat_composer: chat_composer_state::ChatComposerState::default(),
+            chat_state: chat_state::ChatState::default(),
             catalogue: None,
             installed_modules: Vec::new(),
             sessions: Vec::new(),
             active_session: None,
             session_chat: session_chat::SessionChatState::default(),
-            chat_sidebar: chat_sidebar_state::ChatSidebarState::default(),
             network_online,
             prefs,
             agent_timeout_secs,
@@ -908,7 +904,6 @@ impl UiApp {
             hf_download_status: String::new(),
             show_go_to_palette: false,
             agent_join_room_on_create: false,
-            chat_view: chat_view_state::ChatViewState::default(),
             roster_edit_drafts: HashMap::new(),
             guide: guide::GuideState::default(),
             research_pending_chat: None,
@@ -1070,7 +1065,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
     }
 
     fn dispatch_pending_chat(&mut self, pending: ResearchPendingChat) {
-        self.chat_runtime.begin_turn(None);
+        self.chat_state.runtime.begin_turn(None);
         self.status = "assistant : génération…".into();
         let _ = self.cmd_tx.send(Cmd::Chat {
             session_id: pending.session_id,
@@ -2368,7 +2363,7 @@ impl eframe::App for UiApp {
                         self.active_session.as_deref(),
                         &session_id,
                         &text,
-                        &mut self.chat_runtime.streaming,
+                        &mut self.chat_state.runtime.streaming,
                     );
                 }
                 Evt::Done {
@@ -2383,9 +2378,9 @@ impl eframe::App for UiApp {
                         &text,
                         attachments,
                         &mut self.chat,
-                        &mut self.chat_runtime.streaming,
-                        &mut self.chat_runtime.pending,
-                        &mut self.chat_runtime.inference_id,
+                        &mut self.chat_state.runtime.streaming,
+                        &mut self.chat_state.runtime.pending,
+                        &mut self.chat_state.runtime.inference_id,
                     );
                     if self.status.starts_with("assistant :") {
                         self.status.clear();
@@ -2394,7 +2389,7 @@ impl eframe::App for UiApp {
                 }
                 Evt::Error(m) => {
                     if aos_agent::context_budget::is_technical_vision_infer_error(&m) {
-                        self.chat_runtime.finish_turn();
+                        self.chat_state.runtime.finish_turn();
                         if self.status.starts_with("assistant :") {
                             self.status.clear();
                         }
@@ -2405,7 +2400,7 @@ impl eframe::App for UiApp {
                     }
                     self.status = m.clone();
                     self.chat.push(ChatLine::plain("système", m));
-                    self.chat_runtime.finish_turn();
+                    self.chat_state.runtime.finish_turn();
                 }
                 Evt::Status(m) => {
                     if let Some(id) = m.strip_prefix("model removed:") {
@@ -2597,7 +2592,7 @@ impl eframe::App for UiApp {
                                     let session_ops = agent_canvas_session_ops(
                                         ag,
                                         self.active_session.as_deref(),
-                                        &self.chat_view.canvas.ops,
+                                        &self.chat_state.view.canvas.ops,
                                     );
                                     let trace = self.agent_traces.get(&ag.agent_id);
                                     let content = agent_completion_chat_text(
@@ -2662,7 +2657,7 @@ impl eframe::App for UiApp {
                                     let session_ops = agent_canvas_session_ops(
                                         ag,
                                         self.active_session.as_deref(),
-                                        &self.chat_view.canvas.ops,
+                                        &self.chat_state.view.canvas.ops,
                                     );
                                     let trace = self.agent_traces.get(&ag.agent_id);
                                     let summary = if agent_panel::canvas_draw_failure_muted(
@@ -2946,7 +2941,7 @@ impl eframe::App for UiApp {
                             self.schedule_transcript_dirty,
                         )
                     {
-                        self.chat_sidebar.rename = meta.title.clone();
+                        self.chat_state.sidebar.rename = meta.title.clone();
                         if let Some(s) = self.sessions.iter_mut().find(|s| s.id == meta.id) {
                             *s = meta.clone();
                         }
@@ -2955,12 +2950,12 @@ impl eframe::App for UiApp {
                     } else {
                         self.pending_session_nav = session_nav::PendingSessionNav::None;
                         self.active_session = Some(id.clone());
-                        self.chat_sidebar.rename = meta.title.clone();
+                        self.chat_state.sidebar.rename = meta.title.clone();
                         if let Some(s) = self.sessions.iter_mut().find(|s| s.id == meta.id) {
                             *s = meta.clone();
                         }
                         if session_changed {
-                            self.chat_view.room_members_open = false;
+                            self.chat_state.view.room_members_open = false;
                             let mut chat = Vec::new();
                             if !designer_shot_mode() {
                                 chat.push(ChatLine::plain(
@@ -2978,18 +2973,18 @@ impl eframe::App for UiApp {
                         self.session_chat.clear_unread(&id);
                         self.session_chat.sync_active_view(
                             self.active_session.as_deref(),
-                            &mut self.chat_runtime.streaming,
-                            &mut self.chat_runtime.pending,
-                            &mut self.chat_runtime.inference_id,
+                            &mut self.chat_state.runtime.streaming,
+                            &mut self.chat_state.runtime.pending,
+                            &mut self.chat_state.runtime.inference_id,
                         );
-                        self.chat_runtime.room_turn_text = None;
+                        self.chat_state.runtime.room_turn_text = None;
                         if meta.canvas_open {
                             let _ = self.cmd_tx.send(Cmd::CanvasPoll {
                                 session_id: id.clone(),
                                 after_seq: None,
                             });
                         } else {
-                            self.chat_view.canvas = chat_canvas::CanvasPanelState::default();
+                            self.chat_state.view.canvas = chat_canvas::CanvasPanelState::default();
                         }
                     }
                 }
@@ -3000,9 +2995,9 @@ impl eframe::App for UiApp {
                 } => {
                     self.session_chat.finish_turn(&session_id);
                     if self.active_session.as_deref() == Some(session_id.as_str()) {
-                        self.chat_runtime.pending = false;
-                        self.chat_runtime.inference_id = None;
-                        self.chat_runtime.room_turn_text = None;
+                        self.chat_state.runtime.pending = false;
+                        self.chat_state.runtime.inference_id = None;
+                        self.chat_state.runtime.room_turn_text = None;
                         if let Some(status) =
                             chat_room::room_turn_done_status(agent_turns, cancelled)
                         {
@@ -3037,20 +3032,20 @@ impl eframe::App for UiApp {
                     if self.active_session.as_deref() == Some(session_id.as_str()) {
                         let now = ctx.input(|i| i.time);
                         if delta {
-                            self.chat_view.canvas.merge_delta(ops, next_seq, now);
+                            self.chat_state.view.canvas.merge_delta(ops, next_seq, now);
                         } else {
-                            self.chat_view.canvas.apply_snapshot(ops, next_seq, now);
+                            self.chat_state.view.canvas.apply_snapshot(ops, next_seq, now);
                         }
-                        self.chat_view.canvas.sync_pen(&pen);
+                        self.chat_state.view.canvas.sync_pen(&pen);
                         if let Some(seeing) = canvas_seeing {
-                            self.chat_view.canvas.seeing = seeing;
+                            self.chat_state.view.canvas.seeing = seeing;
                         }
                     }
                 }
                 Evt::CanvasExported { path, session_id } => {
                     if self.active_session.as_deref() == Some(session_id.as_str()) {
                         self.status = format!("Canvas → {path}");
-                        self.chat_composer.last_session_image = Some(path.clone());
+                        self.chat_state.composer.last_session_image = Some(path.clone());
                         self.chat.push(ChatLine {
                             role: "assistant".into(),
                             text: format!("Canvas exporté : {path}"),
@@ -3081,8 +3076,8 @@ impl eframe::App for UiApp {
                     self.secret_names = names;
                     self.secret_vault_encrypted = encrypted;
                 }
-                Evt::WebResults(r) => self.chat_sidebar.web_results = r,
-                Evt::BrowsePreview(t) => self.chat_sidebar.browse_preview = t,
+                Evt::WebResults(r) => self.chat_state.sidebar.web_results = r,
+                Evt::BrowsePreview(t) => self.chat_state.sidebar.browse_preview = t,
                 Evt::NetMode(online) => {
                     self.network_online = online;
                     self.prefs.network_online = online;
@@ -3165,7 +3160,7 @@ impl eframe::App for UiApp {
                     };
                     if kind == "image" || kind == "video" {
                         if kind == "image" {
-                            self.chat_composer.last_session_image = Some(path.clone());
+                            self.chat_state.composer.last_session_image = Some(path.clone());
                             if prompt.is_empty() {
                                 self.image_studio.preview = Some(path.clone());
                                 self.image_studio.apply_history_for_path(&path);
@@ -3272,7 +3267,7 @@ impl eframe::App for UiApp {
                         self.active_session.as_deref(),
                         &session_id,
                         inference_id,
-                        &mut self.chat_runtime.inference_id,
+                        &mut self.chat_state.runtime.inference_id,
                     );
                 }
                 Evt::ChatCancelled { session_id } => {
@@ -3280,13 +3275,13 @@ impl eframe::App for UiApp {
                         &mut self.session_chat,
                         self.active_session.as_deref(),
                         &session_id,
-                        &mut self.chat_runtime.streaming,
-                        &mut self.chat_runtime.pending,
-                        &mut self.chat_runtime.inference_id,
+                        &mut self.chat_state.runtime.streaming,
+                        &mut self.chat_state.runtime.pending,
+                        &mut self.chat_state.runtime.inference_id,
                         &mut self.chat,
                     );
                     if on_active {
-                        self.chat_runtime.room_turn_text = None;
+                        self.chat_state.runtime.room_turn_text = None;
                         let t = i18n::strings(&self.prefs.language);
                         self.status = t.chat_stopped.into();
                     }
@@ -3688,7 +3683,7 @@ impl eframe::App for UiApp {
                 let mut open_create_guide = false;
                 let gen = self.image_generating.as_ref();
                 let dl_busy = self.model_download.is_some();
-                let last_session = &mut self.chat_composer.last_session_image;
+                let last_session = &mut self.chat_state.composer.last_session_image;
                 self.image_studio.ui(
                     ui,
                     &t,

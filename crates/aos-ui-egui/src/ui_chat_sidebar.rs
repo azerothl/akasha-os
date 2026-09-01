@@ -138,7 +138,7 @@ impl UiApp {
                     }
                     ui.horizontal(|ui| {
                         ui.add(
-                            egui::TextEdit::singleline(&mut self.chat_sidebar.rename)
+                            egui::TextEdit::singleline(&mut self.chat_state.sidebar.rename)
                                 .desired_width(120.0)
                                 .hint_text("titre"),
                         );
@@ -146,7 +146,7 @@ impl UiApp {
                             if let Some(id) = self.active_session.clone() {
                                 let _ = self.cmd_tx.send(Cmd::SessionRename {
                                     id,
-                                    title: self.chat_sidebar.rename.clone(),
+                                    title: self.chat_state.sidebar.rename.clone(),
                                 });
                             }
                         }
@@ -165,56 +165,56 @@ impl UiApp {
                     ui.heading("Web / fichiers");
                     ui.set_min_width(side_w - 16.0);
                     ui.add(
-                        egui::TextEdit::singleline(&mut self.chat_sidebar.web_query)
+                        egui::TextEdit::singleline(&mut self.chat_state.sidebar.web_query)
                             .desired_width(side_w - 20.0)
                             .hint_text("recherche web"),
                     );
-                    if ui.button("Rechercher").clicked() && !self.chat_sidebar.web_query.is_empty()
+                    if ui.button("Rechercher").clicked() && !self.chat_state.sidebar.web_query.is_empty()
                     {
                         let _ = self.cmd_tx.send(Cmd::WebSearch {
-                            query: self.chat_sidebar.web_query.clone(),
+                            query: self.chat_state.sidebar.web_query.clone(),
                             engine: self.prefs.web_search_engine.clone(),
                         });
                     }
-                    for hit in &self.chat_sidebar.web_results {
+                    for hit in &self.chat_state.sidebar.web_results {
                         ui.small(format!("• {} — {}", hit.title, hit.url));
                     }
                     ui.add(
-                        egui::TextEdit::singleline(&mut self.chat_sidebar.fetch_url)
+                        egui::TextEdit::singleline(&mut self.chat_state.sidebar.fetch_url)
                             .desired_width(side_w - 20.0)
                             .hint_text("https://…"),
                     );
                     ui.horizontal(|ui| {
                         if ui.button("Télécharger URL").clicked()
-                            && !self.chat_sidebar.fetch_url.is_empty()
+                            && !self.chat_state.sidebar.fetch_url.is_empty()
                         {
                             let _ = self.cmd_tx.send(Cmd::NetFetch {
-                                url: self.chat_sidebar.fetch_url.clone(),
+                                url: self.chat_state.sidebar.fetch_url.clone(),
                                 max_bytes: self.prefs.web_fetch_max_bytes,
                             });
                         }
                         let t = i18n::strings(&self.prefs.language);
                         if ui.button(t.web_browse_btn).clicked()
-                            && !self.chat_sidebar.fetch_url.is_empty()
+                            && !self.chat_state.sidebar.fetch_url.is_empty()
                         {
                             let _ = self.cmd_tx.send(Cmd::WebBrowse {
-                                url: self.chat_sidebar.fetch_url.clone(),
+                                url: self.chat_state.sidebar.fetch_url.clone(),
                                 max_chars: self.prefs.web_browse_max_chars,
                             });
                         }
                     });
-                    if !self.chat_sidebar.browse_preview.is_empty() {
+                    if !self.chat_state.sidebar.browse_preview.is_empty() {
                         ui.collapsing("Aperçu page", |ui| {
-                            ui.small(&self.chat_sidebar.browse_preview);
+                            ui.small(&self.chat_state.sidebar.browse_preview);
                         });
                     }
                     ui.horizontal(|ui| {
                         egui::ComboBox::from_id_salt("gen_fmt")
-                            .selected_text(&self.chat_sidebar.generated_format)
+                            .selected_text(&self.chat_state.sidebar.generated_format)
                             .show_ui(ui, |ui| {
                                 for f in ["md", "txt", "json", "csv", "png", "pdf"] {
                                     ui.selectable_value(
-                                        &mut self.chat_sidebar.generated_format,
+                                        &mut self.chat_state.sidebar.generated_format,
                                         f.into(),
                                         f,
                                     );
@@ -222,23 +222,23 @@ impl UiApp {
                             });
                     });
                     ui.add(
-                        egui::TextEdit::singleline(&mut self.chat_sidebar.generated_path)
+                        egui::TextEdit::singleline(&mut self.chat_state.sidebar.generated_path)
                             .desired_width(side_w - 20.0)
                             .hint_text("/downloads/…"),
                     );
                     ui.add(
-                        egui::TextEdit::multiline(&mut self.chat_sidebar.generated_content)
+                        egui::TextEdit::multiline(&mut self.chat_state.sidebar.generated_content)
                             .desired_width(side_w - 20.0)
                             .desired_rows(3)
                             .hint_text("contenu"),
                     );
                     if ui.button("Générer fichier").clicked()
-                        && !self.chat_sidebar.generated_path.is_empty()
+                        && !self.chat_state.sidebar.generated_path.is_empty()
                     {
                         let _ = self.cmd_tx.send(Cmd::FilesGenerate {
-                            format: self.chat_sidebar.generated_format.clone(),
-                            path: self.chat_sidebar.generated_path.clone(),
-                            content: self.chat_sidebar.generated_content.clone(),
+                            format: self.chat_state.sidebar.generated_format.clone(),
+                            path: self.chat_state.sidebar.generated_path.clone(),
+                            content: self.chat_state.sidebar.generated_content.clone(),
                             title: Some("Akasha OS".into()),
                         });
                     }

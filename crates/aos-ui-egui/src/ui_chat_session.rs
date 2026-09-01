@@ -83,22 +83,23 @@ impl UiApp {
         match action {
             Some(chat_canvas::CanvasUiAction::Apply(op)) => {
                 match &op {
-                    aos_proto::CanvasOpBody::Clear => self.chat_view.canvas.ops.clear(),
+                    aos_proto::CanvasOpBody::Clear => self.chat_state.view.canvas.ops.clear(),
                     aos_proto::CanvasOpBody::Undo => {
                         if let Some(pos) = self
-                            .chat_view
+                            .chat_state
+                            .view
                             .canvas
                             .ops
                             .iter()
                             .rposition(|o| o.author_id == "human")
                         {
-                            self.chat_view.canvas.ops.remove(pos);
+                            self.chat_state.view.canvas.ops.remove(pos);
                         }
                     }
                     // Apply optimistically so the stroke/shape is visible immediately without
                     // waiting for the server roundtrip snapshot.
                     _ => {
-                        self.chat_view.canvas.ops.push(aos_proto::CanvasOp {
+                        self.chat_state.view.canvas.ops.push(aos_proto::CanvasOp {
                             seq: 0,
                             author_id: "human".into(),
                             ts_ms: 0,
@@ -146,9 +147,9 @@ impl UiApp {
 
     pub(crate) fn canvas_poll_if_due(&mut self, ui: &egui::Ui, session_id: &str) {
         let now = ui.ctx().input(|i| i.time);
-        if now >= self.chat_view.canvas.poll_due {
-            self.chat_view.canvas.poll_due = now + 0.20;
-            let after = self.chat_view.canvas.poll_after_seq();
+        if now >= self.chat_state.view.canvas.poll_due {
+            self.chat_state.view.canvas.poll_due = now + 0.20;
+            let after = self.chat_state.view.canvas.poll_after_seq();
             let _ = self.cmd_tx.send(Cmd::CanvasPoll {
                 session_id: session_id.to_string(),
                 after_seq: after,
@@ -194,14 +195,14 @@ impl UiApp {
                         egui::Sense::hover()
                     }));
                     if room && title_resp.clicked() {
-                        self.chat_view.room_members_open = !self.chat_view.room_members_open;
+                        self.chat_state.view.room_members_open = !self.chat_state.view.room_members_open;
                     }
                     if room {
                         title_resp.on_hover_text(t.room_header_open_members);
                         if !members.is_empty() {
                             ui.weak(format!("· {count_line}"));
                         }
-                        icons::caret(ui, self.chat_view.room_members_open);
+                        icons::caret(ui, self.chat_state.view.room_members_open);
                     }
 
                     if guide::tab_help_button(ui, g.help_tooltip) {
@@ -242,8 +243,8 @@ impl UiApp {
             let mut open_canvas_guide = false;
             let toolbar_min_w = chat_canvas::toolbar_content_min_width(
                 t,
-                self.chat_view.canvas.seeing,
-                self.chat_view.canvas.clear_confirm_open,
+                self.chat_state.view.canvas.seeing,
+                self.chat_state.view.canvas.clear_confirm_open,
             );
             let track_w = ui.available_width();
             ui.allocate_ui_with_layout(
@@ -262,7 +263,7 @@ impl UiApp {
                                 toolbar_action = chat_canvas::ui_canvas_toolbar(
                                     ui,
                                     t,
-                                    &mut self.chat_view.canvas,
+                                    &mut self.chat_state.view.canvas,
                                     Some(g.help_tooltip),
                                     &mut open_canvas_guide,
                                 );
@@ -278,7 +279,7 @@ impl UiApp {
             }
         }
 
-        if room && self.chat_view.room_members_open {
+        if room && self.chat_state.view.room_members_open {
             egui::Frame::group(ui.style())
                 .inner_margin(egui::Margin::symmetric(8, 6))
                 .show(ui, |ui| {
@@ -300,7 +301,7 @@ impl UiApp {
                 });
         }
 
-        if room && !members.is_empty() && !self.chat_view.room_members_open {
+        if room && !members.is_empty() && !self.chat_state.view.room_members_open {
             ui.horizontal_wrapped(|ui| {
                 for mem in members {
                     self.ui_room_member_chip(ui, t, &sid, mem);

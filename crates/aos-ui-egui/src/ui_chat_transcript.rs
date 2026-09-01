@@ -134,7 +134,7 @@ impl UiApp {
                                     t,
                                     i,
                                     th,
-                                    &mut self.chat_view.room_thinking_open,
+                                    &mut self.chat_state.view.room_thinking_open,
                                 );
                             }
                         }
@@ -167,7 +167,7 @@ impl UiApp {
                                         agent_canvas_session_ops(
                                             ag,
                                             self.active_session.as_deref(),
-                                            &self.chat_view.canvas.ops,
+                                            &self.chat_state.view.canvas.ops,
                                         )
                                     });
                                     let trace = self.agent_traces.get(agent_id);
@@ -413,10 +413,10 @@ impl UiApp {
                 }
                 if let Some(id) = target_reply {
                     self.ask_reply_target = Some(id);
-                    self.chat_composer.refocus = true;
+                    self.chat_state.composer.refocus = true;
                     self.status = "réponse destinée à cet agent".into();
                 }
-                if !self.chat_runtime.streaming.is_empty() {
+                if !self.chat_state.runtime.streaming.is_empty() {
                     let (_, _, role_color) =
                         chat_bubble_colors(ChatBubbleKind::Assistant, ui.visuals().dark_mode);
                     chat_message_frame(ui, ChatBubbleKind::Assistant, None, |ui| {
@@ -425,17 +425,17 @@ impl UiApp {
                             egui::RichText::new(t.chat_assistant).strong().small(),
                         );
                         let streaming = agent_panel::format_chat_streaming_preview(
-                            &self.chat_runtime.streaming,
+                            &self.chat_state.runtime.streaming,
                         );
                         ui.push_id("chat_md_stream", |ui| {
                             chat_markdown_viewer(ui).show(ui, &mut self.chat_md_cache, &streaming);
                         });
                     });
-                } else if self.chat_runtime.pending {
+                } else if self.chat_state.runtime.pending {
                     let (_, _, role_color) =
                         chat_bubble_colors(ChatBubbleKind::Assistant, ui.visuals().dark_mode);
                     let thinking = if room_mode {
-                        self.chat_runtime
+                        self.chat_state.runtime
                             .room_turn_text
                             .as_deref()
                             .and_then(|msg| {
