@@ -7,6 +7,8 @@ mod agent_act_phrase;
 mod agent_controller;
 mod agent_panel;
 mod agent_ui_state;
+mod memory_controller;
+mod memory_ui_state;
 mod settings_controller;
 mod settings_ui_state;
 mod workspace_controller;
@@ -105,7 +107,7 @@ use aos_agent::schedule_parse::ParsedSchedule;
 use aos_ipc::BusClient;
 use aos_proto::{
     AgentInfo, AgentState, AuditEvent, CapInfo, ChatAttachment, ChatSessionGetResponse,
-    ChatSessionIdRequest, DocumentRef, MemHit, ModelInfo,
+    ChatSessionIdRequest, DocumentRef, ModelInfo,
     PendingConfirmation, ProviderRecord, SystemMetrics,
 };
 use prefs::{load_preferences, save_preferences, Preferences};
@@ -488,14 +490,7 @@ struct UiApp {
     chat_state: chat_state::ChatState,
     network_online: bool,
     prefs: Preferences,
-    mem_query: String,
-    mem_note: String,
-    mem_hits: Vec<MemHit>,
-    mem_show_superseded: bool,
-    mem_sweep_last_pass_ms: u64,
-    mem_sweep_last_pass_label: String,
-    mem_edit_id: Option<u64>,
-    mem_edit_text: String,
+    memory_ui: memory_ui_state::MemoryUiState,
     settings_ui: settings_ui_state::SettingsUiState,
     metrics: Option<SystemMetrics>,
     /// Live agent roster (shared with chat / ask / room membership).
@@ -731,14 +726,7 @@ impl UiApp {
             chat_state: chat_state::ChatState::default(),
             network_online,
             prefs,
-            mem_query: String::new(),
-            mem_note: String::new(),
-            mem_hits: Vec::new(),
-            mem_show_superseded: true,
-            mem_sweep_last_pass_ms: 0,
-            mem_sweep_last_pass_label: String::new(),
-            mem_edit_id: None,
-            mem_edit_text: String::new(),
+            memory_ui: memory_ui_state::MemoryUiState::default(),
             settings_ui: settings_ui_state::SettingsUiState::default(),
             metrics: None,
             agents: Vec::new(),
@@ -1887,9 +1875,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 let _ = self.cmd_tx.send(Cmd::NotesList);
             }
             Tab::Memory => {
-                let _ = self.cmd_tx.send(Cmd::MemList {
-                    include_superseded: self.mem_show_superseded,
-                });
+                self.send_mem_list();
                 let _ = self.cmd_tx.send(Cmd::MemSweepStatus);
             }
             Tab::Tasks => {
@@ -2347,21 +2333,11 @@ impl eframe::App for UiApp {
                         t.models_download_failed.replace("{}", &model_id)
                     );
                 }
-                Evt::MemExtracted { n } => {
-                    let t = i18n::strings(&self.prefs.language);
-                    self.status = t.memory_extracted_toast.replace("{}", &n.to_string());
-                    // Refresh memory list so the chat badge appears.
-                    let _ = self.cmd_tx.send(Cmd::MemList {
-                        include_superseded: self.mem_show_superseded,
-                    });
-                }
+                Evt::MemExtracted { n } => self.on_mem_extracted(n),
                 Evt::MemSweepStatus {
                     last_pass_ms,
                     last_pass_label,
-                } => {
-                    self.mem_sweep_last_pass_ms = last_pass_ms;
-                    self.mem_sweep_last_pass_label = last_pass_label;
-                }
+                } => self.on_mem_sweep_status(last_pass_ms, last_pass_label),
                 Evt::SkillPassPending(offer) => {
                     if let Some(o) = offer {
                         self.offer_skill_card(&o);
@@ -2927,7 +2903,7 @@ impl eframe::App for UiApp {
                         self.status = t.agent_export_toast.replace("{path}", &path);
                     }
                 }
-                Evt::MemHits(h) => self.mem_hits = h,
+                Evt::MemHits(h) => self.on_mem_hits(h),
                 Evt::SecretList { names, encrypted } => {
                     self.on_secret_list(names, encrypted);
                 }
