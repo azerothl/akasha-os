@@ -688,10 +688,10 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                         });
                         ui.end_row();
                     });
-                if self.schedules.is_empty() {
+                if self.schedule_ui.entries.is_empty() {
                     ui.weak("Aucun schedule");
                 } else {
-                    for s in self.schedules.clone() {
+                    for s in self.schedule_ui.entries.clone() {
                         ui.horizontal(|ui| {
                             let flag = if s.enabled { "ON" } else { "OFF" };
                             ui.monospace(&s.id);

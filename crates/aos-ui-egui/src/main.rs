@@ -27,6 +27,7 @@ mod notes_panel;
 mod prefs;
 mod schedule_act_phrase;
 mod schedule_card;
+mod schedule_ui_state;
 mod session_nav;
 mod tasks_panel;
 mod chat_ask;
@@ -501,13 +502,9 @@ struct UiApp {
     agents: Vec<AgentInfo>,
     confirms: Vec<PendingConfirmation>,
     workspace_ui: workspace_ui_state::WorkspaceUiState,
-    schedules: Vec<ScheduleEntry>,
-    /// Act id waiting for `Evt::ScheduleCreated` to attach a thread card.
-    schedule_pending_card_act: Option<String>,
     /// User-initiated session navigation intent for the next cross-session load.
     pending_session_nav: session_nav::PendingSessionNav,
-    /// In-memory schedule act/card edits not yet safe to clobber from disk.
-    schedule_transcript_dirty: bool,
+    schedule_ui: schedule_ui_state::ScheduleUiState,
     agent_ui: agent_ui_state::AgentUiState,
     audit: Vec<AuditEvent>,
     caps: Vec<CapInfo>,
@@ -690,10 +687,8 @@ impl UiApp {
             agents: Vec::new(),
             confirms: Vec::new(),
             workspace_ui: workspace_ui_state::WorkspaceUiState::default(),
-            schedules: Vec::new(),
-            schedule_pending_card_act: None,
             pending_session_nav: session_nav::PendingSessionNav::None,
-            schedule_transcript_dirty: false,
+            schedule_ui: schedule_ui_state::ScheduleUiState::default(),
             agent_ui: agent_ui_state::AgentUiState::with_create_defaults(
                 agent_max_steps,
                 agent_timeout_secs,
@@ -1271,7 +1266,8 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 attachments: vec![att],
             });
         } else {
-            self.schedule_pending_card_act = Some(format!("sched-auto-{}", chrono_like_stamp()));
+            self.schedule_ui
+                .set_pending_card_act(format!("sched-auto-{}", chrono_like_stamp()));
             self.chat.push(ChatLine {
                 role: "assistant".into(),
                 text: schedule_act_phrase::format_resolved_act(
@@ -1330,7 +1326,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         {
             *state = "approved".into();
         }
-        self.schedule_transcript_dirty = true;
+        self.schedule_ui.mark_transcript_dirty();
         if let Some(session_id) = self.chat_state.active_session.clone() {
             let att = self.chat[msg_idx].attachments[att_idx].clone();
             let _ = self.cmd_tx.send(Cmd::SessionAppend {
@@ -1340,7 +1336,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 attachments: vec![att],
             });
         }
-        self.schedule_pending_card_act = Some(act_id.to_string());
+        self.schedule_ui.set_pending_card_act(act_id.to_string());
         let _ = self.cmd_tx.send(Cmd::ScheduleCreate {
             goal,
             interval_secs,
@@ -1379,7 +1375,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         {
             *state = "denied".into();
         }
-        self.schedule_transcript_dirty = true;
+        self.schedule_ui.mark_transcript_dirty();
         if let Some(session_id) = self.chat_state.active_session.clone() {
             let att = self.chat[msg_idx].attachments[att_idx].clone();
             let _ = self.cmd_tx.send(Cmd::SessionAppend {
@@ -1392,7 +1388,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
     }
 
     fn attach_schedule_card(&mut self, entry: &ScheduleEntry) {
-        let act_id = match self.schedule_pending_card_act.take() {
+        let act_id = match self.schedule_ui.take_pending_card_act() {
             Some(id) => id,
             None => return,
         };
@@ -1422,7 +1418,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                     if *id == act_id && state == "approved" {
                         *schedule_id = entry.id.clone();
                         line.attachments.push(card.clone());
-                        self.schedule_transcript_dirty = true;
+                        self.schedule_ui.mark_transcript_dirty();
                         if let Some(session_id) = self.chat_state.active_session.clone() {
                             let _ = self.cmd_tx.send(Cmd::SessionAppend {
                                 session_id,
@@ -1436,7 +1432,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 }
             }
         }
-        self.schedule_transcript_dirty = true;
+        self.schedule_ui.mark_transcript_dirty();
         self.chat.push(ChatLine {
             role: "assistant".into(),
             text: String::new(),
@@ -1457,19 +1453,19 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
 
     fn request_session_select(&mut self, id: String) {
         self.pending_session_nav = session_nav::PendingSessionNav::Explicit(id.clone());
-        self.schedule_transcript_dirty = false;
+        self.schedule_ui.clear_transcript_dirty();
         let _ = self.cmd_tx.send(Cmd::SessionSelect { id });
     }
 
     fn request_session_create(&mut self, title: Option<String>) {
         self.pending_session_nav = session_nav::PendingSessionNav::AwaitingCreate;
-        self.schedule_transcript_dirty = false;
+        self.schedule_ui.clear_transcript_dirty();
         let _ = self.cmd_tx.send(Cmd::SessionCreate { title });
     }
 
     fn request_session_delete(&mut self, id: String) {
         self.pending_session_nav = session_nav::PendingSessionNav::AwaitingDelete;
-        self.schedule_transcript_dirty = false;
+        self.schedule_ui.clear_transcript_dirty();
         let _ = self.cmd_tx.send(Cmd::SessionDelete { id });
     }
 
@@ -1478,7 +1474,12 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         for line in &mut self.chat {
             for att in &mut line.attachments {
                 if let ChatAttachment::ScheduleCard { schedule_id, .. } = att {
-                    if let Some(entry) = self.schedules.iter().find(|s| s.id == *schedule_id) {
+                    if let Some(entry) = self
+                        .schedule_ui
+                        .entries
+                        .iter()
+                        .find(|s| s.id == *schedule_id)
+                    {
                         schedule_card::sync_card_attachment(att, entry, now);
                     }
                 }
@@ -1487,24 +1488,24 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
     }
 
     fn upsert_schedule_entry(&mut self, entry: ScheduleEntry) {
-        schedule_card::upsert_schedule_entry(&mut self.schedules, entry);
+        self.schedule_ui.upsert_entry(entry);
     }
 
     fn apply_schedule_card_action_local(&mut self, action: schedule_card::ScheduleCardAction) {
         let now = now_ms();
         match &action {
             schedule_card::ScheduleCardAction::Pause(id) => {
-                schedule_card::apply_local_pause(&mut self.schedules, id);
+                schedule_card::apply_local_pause(&mut self.schedule_ui.entries, id);
             }
             schedule_card::ScheduleCardAction::Resume(id) => {
-                schedule_card::apply_local_resume(&mut self.schedules, id);
+                schedule_card::apply_local_resume(&mut self.schedule_ui.entries, id);
             }
             schedule_card::ScheduleCardAction::Stop(id) => {
-                schedule_card::apply_local_stop(&mut self.schedules, id);
+                schedule_card::apply_local_stop(&mut self.schedule_ui.entries, id);
             }
             schedule_card::ScheduleCardAction::None => return,
         }
-        self.schedule_transcript_dirty = true;
+        self.schedule_ui.mark_transcript_dirty();
         let id = match action {
             schedule_card::ScheduleCardAction::Pause(id)
             | schedule_card::ScheduleCardAction::Resume(id)
@@ -1517,7 +1518,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                     if schedule_id == &id {
                         schedule_card::apply_local_action_to_attachment(
                             att,
-                            &self.schedules,
+                            &self.schedule_ui.entries,
                             &id,
                             now,
                         );
@@ -2340,7 +2341,7 @@ impl eframe::App for UiApp {
                     self.caps = caps;
                 }
                 Evt::Schedules(s) => {
-                    schedule_card::merge_schedule_list(&mut self.schedules, s);
+                    self.schedule_ui.merge_entries(s);
                     self.sync_schedule_cards();
                 }
                 Evt::ScheduleCreated(entry) => {
@@ -2436,7 +2437,7 @@ impl eframe::App for UiApp {
                         }
                     } else if !session_changed
                         && !session_nav::should_replace_chat_on_same_session_reload(
-                            self.schedule_transcript_dirty,
+                            self.schedule_ui.transcript_dirty,
                         )
                     {
                         self.chat_state.sidebar.rename = meta.title.clone();

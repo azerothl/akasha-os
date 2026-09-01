@@ -330,8 +330,11 @@ impl UiApp {
                                     next_fire_ms,
                                     ..
                                 } => {
-                                    let entry =
-                                        self.schedules.iter().find(|s| s.id == *schedule_id);
+                                    let entry = self
+                                        .schedule_ui
+                                        .entries
+                                        .iter()
+                                        .find(|s| s.id == *schedule_id);
                                     let display_state =
                                         schedule_card::resolved_card_state(entry, state);
                                     let display_next = entry
