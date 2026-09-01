@@ -1,6 +1,12 @@
 //! Conversation session bar, room members, and canvas session actions.
 
-use crate::*;
+use crate::cmd::Cmd;
+use crate::{
+    chat_canvas, chat_room, guide, i18n, icons, session_toggle_chip, session_toggle_reserve_width,
+    UiApp, CANVAS_TOOLBAR_ROW_H,
+};
+use aos_proto::{AgentInfo, ChatRoomMember, ChatSessionMode};
+use eframe::egui;
 
 impl UiApp {
     pub(crate) fn ui_room_member_chip(

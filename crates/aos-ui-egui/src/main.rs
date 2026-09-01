@@ -99,7 +99,7 @@ use aos_ipc::BusClient;
 use aos_proto::{
     AgentInfo, AgentState, AgentTrace, AuditEvent,
     CapInfo, ChatAttachment, ChatRoomMember, ChatSessionGetResponse,
-    ChatSessionIdRequest, ChatSessionMeta, ChatSessionMode, DocumentRef,
+    ChatSessionIdRequest, ChatSessionMeta, DocumentRef,
     McpServerInfo, MemHit, ModelInfo,
     ModuleCatalogue, ModuleInfo,
     PendingConfirmation, ProviderRecord,
