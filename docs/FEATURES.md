@@ -202,7 +202,7 @@ Slash commands:
 | `/speak <text>` | Generate a WAV (`media.audio.generate`) under `/downloads` |
 | `/canvas` | Toggle the shared vector drawing canvas for this session |
 
-**Chat canvas (vector strokes, live)** — session-scoped drawing surface (human + agents). Bundled WASM module `canvas` exposes `canvas.stroke` / `rect` / `ellipse` / `erase` / `clear` / `undo` / `get` / `export`. Document persists as `var/sessions/<id>/canvas.json` (not diffusion). Distinct from Image Studio composition blocks and `/image`.
+**Chat canvas (vector strokes, live)** — session-scoped drawing surface (human + agents). Humans: Select (move / delete / align / rotate), Pan + scroll zoom, pen, line, spline, path (filled silhouette), rect, ellipse; per-op opacity, dashed strokes, linear gradient fills; named layers (hide / lock / opacity); grid and 0.01 snap; export PNG, SVG, or JSON; **import JSON sidecar** (round-trip). Agents: bundled WASM `canvas.*` (`stroke` / `path` / `rect` / `ellipse` / `move` / `delete` / `align` / `rotate` / `layer_*` / `get` / `export`). Flood-fill (`canvas.fill`) is raster-only on export — not a human toolbar tool. Document: `var/sessions/<id>/canvas.json`. Distinct from Image Studio and `/image`.
 
 ---
 

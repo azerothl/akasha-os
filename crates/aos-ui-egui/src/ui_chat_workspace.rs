@@ -116,6 +116,12 @@ impl UiApp {
                                                         aspect_action,
                                                         sid,
                                                     );
+                                                    let layer_action = chat_canvas::ui_canvas_layers(
+                                                        ui,
+                                                        t,
+                                                        &mut self.chat_state.view.canvas,
+                                                    );
+                                                    self.dispatch_canvas_ui_action(layer_action, sid);
                                                     let action = chat_canvas::ui_canvas_surface(
                                                         ui,
                                                         &mut self.chat_state.view.canvas,
@@ -162,6 +168,12 @@ impl UiApp {
                                                         canvas_aspect,
                                                     );
                                                 self.dispatch_canvas_ui_action(aspect_action, sid);
+                                                let layer_action = chat_canvas::ui_canvas_layers(
+                                                    ui,
+                                                    t,
+                                                    &mut self.chat_state.view.canvas,
+                                                );
+                                                self.dispatch_canvas_ui_action(layer_action, sid);
                                                 let action = chat_canvas::ui_canvas_surface(
                                                     ui,
                                                     &mut self.chat_state.view.canvas,

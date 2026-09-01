@@ -22,6 +22,18 @@ fn handle(tool: &str, args: &Value) -> Result<Value, String> {
         "canvas.undo" => undo(args),
         "canvas.get" => get(args),
         "canvas.export" => export(args),
+        "canvas.delete" => delete(args),
+        "canvas.move" => move_op(args),
+        "canvas.reorder" => reorder(args),
+        "canvas.restyle" => restyle(args),
+        "canvas.layer_create" => layer_create(args),
+        "canvas.layer_rename" => layer_rename(args),
+        "canvas.layer_set" => layer_set(args),
+        "canvas.layer_reorder" => layer_reorder(args),
+        "canvas.layer_delete" => layer_delete(args),
+        "canvas.layer_activate" => layer_activate(args),
+        "canvas.align" => align(args),
+        "canvas.rotate" => rotate(args),
         _ => Err(format!("outil inconnu: {tool}")),
     }
 }
@@ -289,6 +301,7 @@ struct ShapeArgs {
     color: Option<String>,
     fill: bool,
     width: Option<f32>,
+    rotation: f32,
 }
 
 fn parse_f32_field(args: &Value, key: &str) -> Option<f32> {
@@ -406,6 +419,7 @@ fn parse_shape_args(args: &Value, tool: &str) -> Result<ShapeArgs, String> {
         .map(str::to_string);
     let fill = args.get("fill").and_then(|v| v.as_bool()).unwrap_or(false);
     let width = parse_f32_field(&args, "width");
+    let rotation = parse_f32_field(&args, "rotation").unwrap_or(0.0);
 
     Ok(ShapeArgs {
         session_id,
@@ -417,6 +431,7 @@ fn parse_shape_args(args: &Value, tool: &str) -> Result<ShapeArgs, String> {
         color,
         fill,
         width,
+        rotation,
     })
 }
 
@@ -431,6 +446,9 @@ fn shape_op(kind: &str, a: &ShapeArgs) -> Value {
     }
     if let Some(w) = a.width {
         op["width"] = json!(w);
+    }
+    if a.rotation.abs() > 0.001 {
+        op["rotation"] = json!(a.rotation);
     }
     op
 }
@@ -517,7 +535,169 @@ fn export(args: &Value) -> Result<Value, String> {
     if let Some(h) = args.get("height") {
         payload["height"] = h.clone();
     }
+    if let Some(f) = args.get("format") {
+        payload["format"] = f.clone();
+    }
     aos_module_sdk::call("canvas.export", &payload)
+}
+
+fn require_u64(args: &Value, key: &str) -> Result<u64, String> {
+    args.get(key)
+        .and_then(|v| v.as_u64())
+        .ok_or_else(|| format!("{key} requis"))
+}
+
+fn require_f32(args: &Value, key: &str) -> Result<f32, String> {
+    args.get(key)
+        .and_then(|v| v.as_f64())
+        .map(|v| v as f32)
+        .filter(|v| v.is_finite())
+        .ok_or_else(|| format!("{key} requis"))
+}
+
+fn require_id(args: &Value) -> Result<String, String> {
+    args.get("id")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| "id requis".into())
+}
+
+fn edit_payload(args: &Value, op: &str, extra: Value) -> Result<Value, String> {
+    let sid = require_session(args)?;
+    let mut payload = extra;
+    let obj = payload
+        .as_object_mut()
+        .ok_or_else(|| "payload objet requis".to_string())?;
+    obj.insert("session_id".into(), json!(sid));
+    obj.insert("author_id".into(), json!(author_id(args)));
+    obj.insert("op".into(), json!(op));
+    Ok(payload)
+}
+
+fn host_edit(args: &Value, op: &str, extra: Value) -> Result<Value, String> {
+    let payload = edit_payload(args, op, extra)?;
+    aos_module_sdk::call("canvas.edit", &payload)
+}
+
+fn delete(args: &Value) -> Result<Value, String> {
+    let seq = require_u64(args, "seq")?;
+    host_edit(args, "delete", json!({ "seq": seq }))
+}
+
+fn move_op(args: &Value) -> Result<Value, String> {
+    let seq = require_u64(args, "seq")?;
+    let dx = require_f32(args, "dx")?;
+    let dy = require_f32(args, "dy")?;
+    host_edit(args, "move", json!({ "seq": seq, "dx": dx, "dy": dy }))
+}
+
+fn reorder(args: &Value) -> Result<Value, String> {
+    let seq = require_u64(args, "seq")?;
+    let z = args
+        .get("z")
+        .and_then(|v| v.as_i64())
+        .ok_or_else(|| "z requis".to_string())?;
+    host_edit(args, "reorder", json!({ "seq": seq, "z": z }))
+}
+
+fn restyle(args: &Value) -> Result<Value, String> {
+    let seq = require_u64(args, "seq")?;
+    let mut extra = json!({ "seq": seq });
+    if let Some(c) = args.get("color") {
+        extra["color"] = c.clone();
+    }
+    if let Some(w) = args.get("width") {
+        extra["width"] = w.clone();
+    }
+    if let Some(f) = args.get("fill") {
+        extra["fill"] = f.clone();
+    }
+    host_edit(args, "restyle", extra)
+}
+
+fn layer_create(args: &Value) -> Result<Value, String> {
+    let mut extra = json!({});
+    if let Some(n) = args.get("name") {
+        extra["name"] = n.clone();
+    }
+    if let Some(p) = args.get("parent_id") {
+        extra["parent_id"] = p.clone();
+    }
+    host_edit(args, "layer_create", extra)
+}
+
+fn layer_rename(args: &Value) -> Result<Value, String> {
+    let id = require_id(args)?;
+    let name = args
+        .get("name")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| "name requis".to_string())?;
+    host_edit(args, "layer_rename", json!({ "id": id, "name": name }))
+}
+
+fn layer_set(args: &Value) -> Result<Value, String> {
+    let id = require_id(args)?;
+    let mut extra = json!({ "id": id });
+    if let Some(v) = args.get("visible") {
+        extra["visible"] = v.clone();
+    }
+    if let Some(v) = args.get("locked") {
+        extra["locked"] = v.clone();
+    }
+    if let Some(v) = args.get("opacity") {
+        extra["opacity"] = v.clone();
+    }
+    host_edit(args, "layer_set", extra)
+}
+
+fn layer_reorder(args: &Value) -> Result<Value, String> {
+    let id = require_id(args)?;
+    let z = args
+        .get("z")
+        .and_then(|v| v.as_i64())
+        .ok_or_else(|| "z requis".to_string())?;
+    let mut extra = json!({ "id": id, "z": z });
+    if let Some(p) = args.get("parent_id") {
+        extra["parent_id"] = p.clone();
+    }
+    host_edit(args, "layer_reorder", extra)
+}
+
+fn layer_delete(args: &Value) -> Result<Value, String> {
+    let id = require_id(args)?;
+    host_edit(args, "layer_delete", json!({ "id": id }))
+}
+
+fn layer_activate(args: &Value) -> Result<Value, String> {
+    let id = require_id(args)?;
+    host_edit(args, "layer_activate", json!({ "id": id }))
+}
+
+fn align(args: &Value) -> Result<Value, String> {
+    let seq = require_u64(args, "seq")?;
+    let edges = args
+        .get("edges")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|e| e.as_str().map(str::to_string))
+                .collect::<Vec<_>>()
+        })
+        .filter(|e| !e.is_empty())
+        .ok_or_else(|| "edges requis (left|right|top|bottom|center_x|center_y)".to_string())?;
+    let mut extra = json!({ "seq": seq, "edges": edges });
+    if let Some(to) = args.get("to_seq") {
+        extra["to_seq"] = to.clone();
+    }
+    host_edit(args, "align", extra)
+}
+
+fn rotate(args: &Value) -> Result<Value, String> {
+    let seq = require_u64(args, "seq")?;
+    let rotation = require_f32(args, "rotation")?;
+    host_edit(args, "rotate", json!({ "seq": seq, "rotation": rotation }))
 }
 
 #[cfg(test)]
@@ -663,6 +843,7 @@ mod tests {
             color: None,
             fill: true,
             width: None,
+            rotation: 0.0,
         };
         let resp = json!({"next_seq": 12});
         let msg = shape_success_message("ellipse", &a, &resp);
@@ -706,6 +887,7 @@ mod tests {
             color: Some("#c0c0c0".into()),
             fill: true,
             width: None,
+            rotation: 0.0,
         };
         let op = shape_op("ellipse", &a);
         assert_eq!(op["kind"], "ellipse");
@@ -713,5 +895,15 @@ mod tests {
         assert!((op["w"].as_f64().unwrap() - 0.30).abs() < 1e-6);
         assert_eq!(op["fill"], true);
         assert_eq!(op["color"], "#c0c0c0");
+    }
+
+    #[test]
+    fn edit_payload_tags_delete() {
+        let args = json!({ "session_id": "s1", "author_id": "agent", "seq": 12 });
+        let payload = edit_payload(&args, "delete", json!({ "seq": 12 })).expect("payload");
+        assert_eq!(payload["op"], "delete");
+        assert_eq!(payload["seq"], 12);
+        assert_eq!(payload["session_id"], "s1");
+        assert_eq!(payload["author_id"], "agent");
     }
 }

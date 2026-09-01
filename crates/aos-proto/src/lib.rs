@@ -11,6 +11,21 @@ pub mod bridge;
 pub mod chat_document;
 pub mod decl_ui;
 pub mod mem_extract;
+mod canvas_layers;
+mod canvas_style;
+
+pub use canvas_layers::{
+    align_canvas_op_body, canvas_hit_test, canvas_layer_by_id, canvas_layer_effective_locked,
+    canvas_layer_effective_opacity, canvas_layer_effective_visible, canvas_rect_corners,
+    canvas_rotate_point, default_canvas_layer_id, ensure_canvas_layers, set_canvas_op_rotation,
+    translate_canvas_op_body, usable_canvas_bbox, CanvasEdit, CanvasEditRequest, CanvasEditResponse,
+    CanvasLayer, DEFAULT_CANVAS_LAYER_ID,
+};
+pub use canvas_style::{
+    canvas_op_body_dash, canvas_op_body_gradient, canvas_op_body_opacity, default_canvas_opacity,
+    parse_rgb, parse_canvas_sidecar_json, resolve_canvas_op_style_ex, sample_linear_gradient, set_canvas_op_body_dash,
+    set_canvas_op_body_gradient, set_canvas_op_body_opacity, CanvasLinearGradient,
+};
 
 // ---------------------------------------------------------------------------
 // Model API (§11.1)
@@ -2671,6 +2686,12 @@ pub enum CanvasOpBody {
         /// Épaisseur relative au petit côté du canvas (0..1) — ≤0 = crayon de session.
         #[serde(default)]
         width: f32,
+        /// Per-op alpha 0..1 (multiplied with layer opacity when rasterized).
+        #[serde(default = "default_canvas_opacity")]
+        opacity: f32,
+        /// Dash pattern as normalized lengths along the stroke (even count: on, off, …).
+        #[serde(default)]
+        dash: Vec<f32>,
     },
     Rect {
         x: f32,
@@ -2683,6 +2704,15 @@ pub enum CanvasOpBody {
         fill: bool,
         #[serde(default)]
         width: f32,
+        /// Degrees, pivot at bbox centre.
+        #[serde(default)]
+        rotation: f32,
+        #[serde(default = "default_canvas_opacity")]
+        opacity: f32,
+        #[serde(default)]
+        dash: Vec<f32>,
+        #[serde(default)]
+        gradient: Option<CanvasLinearGradient>,
     },
     Ellipse {
         x: f32,
@@ -2695,6 +2725,15 @@ pub enum CanvasOpBody {
         fill: bool,
         #[serde(default)]
         width: f32,
+        /// Degrees, pivot at bbox centre.
+        #[serde(default)]
+        rotation: f32,
+        #[serde(default = "default_canvas_opacity")]
+        opacity: f32,
+        #[serde(default)]
+        dash: Vec<f32>,
+        #[serde(default)]
+        gradient: Option<CanvasLinearGradient>,
     },
     Erase {
         points: Vec<CanvasPoint>,
@@ -2708,6 +2747,10 @@ pub enum CanvasOpBody {
         color: String,
         #[serde(default)]
         width: f32,
+        #[serde(default = "default_canvas_opacity")]
+        opacity: f32,
+        #[serde(default)]
+        dash: Vec<f32>,
     },
     /// Courbe lisse passant par les points de contrôle.
     Spline {
@@ -2716,6 +2759,10 @@ pub enum CanvasOpBody {
         color: String,
         #[serde(default)]
         width: f32,
+        #[serde(default = "default_canvas_opacity")]
+        opacity: f32,
+        #[serde(default)]
+        dash: Vec<f32>,
     },
     /// Contour lisse fermé ou ouvert — silhouette remplie (fill) ou trait lisse.
     Path {
@@ -2728,6 +2775,12 @@ pub enum CanvasOpBody {
         fill: bool,
         #[serde(default = "default_canvas_path_closed")]
         closed: bool,
+        #[serde(default = "default_canvas_opacity")]
+        opacity: f32,
+        #[serde(default)]
+        dash: Vec<f32>,
+        #[serde(default)]
+        gradient: Option<CanvasLinearGradient>,
     },
     /// Remplissage par inondation à partir d'un point (coords 0..1).
     Fill {
@@ -2735,6 +2788,8 @@ pub enum CanvasOpBody {
         y: f32,
         #[serde(default)]
         color: String,
+        #[serde(default = "default_canvas_opacity")]
+        opacity: f32,
     },
     Clear,
     Undo,
@@ -2751,6 +2806,10 @@ pub struct CanvasPenStyle {
     pub color: String,
     #[serde(default = "default_canvas_pen_width")]
     pub width: f32,
+    #[serde(default = "default_canvas_opacity")]
+    pub opacity: f32,
+    #[serde(default)]
+    pub dash: Vec<f32>,
 }
 
 fn default_canvas_pen_width() -> f32 {
@@ -2770,6 +2829,8 @@ impl Default for CanvasPenStyle {
         Self {
             color: default_canvas_color(),
             width: default_canvas_pen_width(),
+            opacity: default_canvas_opacity(),
+            dash: Vec::new(),
         }
     }
 }
@@ -3022,8 +3083,29 @@ pub fn canvas_op_bbox(body: &CanvasOpBody) -> Option<CanvasBBox> {
             }
             b.expand_points(points);
         }
-        CanvasOpBody::Rect { x, y, w, h, .. } | CanvasOpBody::Ellipse { x, y, w, h, .. } => {
-            b.expand_rect(*x, *y, *w, *h);
+        CanvasOpBody::Rect {
+            x,
+            y,
+            w,
+            h,
+            rotation,
+            ..
+        }
+        | CanvasOpBody::Ellipse {
+            x,
+            y,
+            w,
+            h,
+            rotation,
+            ..
+        } => {
+            if rotation.abs() < 0.001 {
+                b.expand_rect(*x, *y, *w, *h);
+            } else {
+                for (px, py) in canvas_rect_corners(*x, *y, *w, *h, *rotation) {
+                    b.expand_point(px, py);
+                }
+            }
         }
         CanvasOpBody::Fill { x, y, .. } => {
             b.expand_point(*x, *y);
@@ -3083,15 +3165,21 @@ pub fn canvas_scene_digest(doc: &CanvasDoc, aspect: CanvasAspect) -> String {
 
     let mut lines = vec![
         format!(
-            "next_seq={} aspect={} ops={} pen={} width={:.3}",
+            "next_seq={} aspect={} ops={} pen={} width={:.3} active_layer={}",
             doc.next_seq,
             aspect.agent_label_en(),
             doc.ops.len(),
             doc.pen.color,
-            doc.pen.width
+            doc.pen.width,
+            if doc.active_layer_id.is_empty() {
+                DEFAULT_CANVAS_LAYER_ID.to_string()
+            } else {
+                doc.active_layer_id.clone()
+            }
         ),
         "coords=normalized 0..1 (origin top-left; x→ right, y↓ down; letterboxed board face — not pixels; max=1.0)"
             .into(),
+        "snap_step=0.01 (1% of board edge; copy last_bbox x,w to stack vertically)".into(),
         "origin=top-left, y↓ (x,y = coin haut-gauche, pas le centre)".into(),
         "shapes=rect/ellipse x,y,w,h top-left+size (same bbox; fill:true fills; cx,cy,rx,ry alias OK)".into(),
         "align ex: top ellipse x=0.35 w=0.30; bottom ellipse same x,w; body rect same x,w, y between".into(),
@@ -3104,6 +3192,8 @@ pub fn canvas_scene_digest(doc: &CanvasDoc, aspect: CanvasAspect) -> String {
             1.0 - CANVAS_LAYOUT_MARGIN,
         ),
         "placement=read scene_bbox + per-seq bbox; place new ops inside usable; avoid stacking on the same center"
+            .into(),
+        "edit=canvas.move {seq,dx,dy} canvas.delete {seq} canvas.align {seq,edges} canvas.rotate {seq,rotation} canvas.layer_set {id,visible,locked,opacity} — do not canvas.clear"
             .into(),
     ];
 
@@ -3121,11 +3211,36 @@ pub fn canvas_scene_digest(doc: &CanvasDoc, aspect: CanvasAspect) -> String {
             .collect();
         lines.push(format!("authors: {}", authors.join(", ")));
     }
+    if !doc.layers.is_empty() {
+        let layer_bits: Vec<String> = doc
+            .layers
+            .iter()
+            .map(|layer| {
+                format!(
+                    "{}:{} vis={} lock={} op={:.2}",
+                    layer.id,
+                    layer.name.replace(' ', "_"),
+                    if layer.visible { 1 } else { 0 },
+                    if layer.locked { 1 } else { 0 },
+                    layer.opacity
+                )
+            })
+            .collect();
+        lines.push(format!("layers: {}", layer_bits.join(", ")));
+    }
     if has_scene_bbox {
         lines.push(format!(
             "scene_bbox=({:.3},{:.3})-({:.3},{:.3})",
             scene_bbox.x0, scene_bbox.y0, scene_bbox.x1, scene_bbox.y1
         ));
+    }
+    if let Some(last) = doc.ops.last() {
+        if let Some(b) = canvas_op_bbox(&last.body) {
+            lines.push(format!(
+                "last_seq={} last_bbox=({:.3},{:.3})-({:.3},{:.3}) — copy x,w from last_bbox to align the next shape",
+                last.seq, b.x0, b.y0, b.x1, b.y1
+            ));
+        }
     }
 
     const MAX_OPS: usize = 48;
@@ -3139,11 +3254,28 @@ pub fn canvas_scene_digest(doc: &CanvasDoc, aspect: CanvasAspect) -> String {
         let kind = canvas_op_kind_label(&op.body);
         if let Some(b) = canvas_op_bbox(&op.body) {
             lines.push(format!(
-                "seq={} {kind} ({:.3},{:.3})-({:.3},{:.3})",
-                op.seq, b.x0, b.y0, b.x1, b.y1
+                "seq={} layer={} {kind} ({:.3},{:.3})-({:.3},{:.3})",
+                op.seq,
+                if op.layer_id.is_empty() {
+                    DEFAULT_CANVAS_LAYER_ID
+                } else {
+                    op.layer_id.as_str()
+                },
+                b.x0,
+                b.y0,
+                b.x1,
+                b.y1
             ));
         } else {
-            lines.push(format!("seq={} {kind}", op.seq));
+            lines.push(format!(
+                "seq={} layer={} {kind}",
+                op.seq,
+                if op.layer_id.is_empty() {
+                    DEFAULT_CANVAS_LAYER_ID
+                } else {
+                    op.layer_id.as_str()
+                }
+            ));
         }
     }
     if truncated {
@@ -3162,6 +3294,8 @@ pub struct CanvasOp {
     pub seq: u64,
     pub author_id: String,
     pub ts_ms: u64,
+    #[serde(default = "default_canvas_layer_id")]
+    pub layer_id: String,
     #[serde(flatten)]
     pub body: CanvasOpBody,
 }
@@ -3178,6 +3312,12 @@ pub struct CanvasDoc {
     /// Crayon courant (couleur / épaisseur) pour humain et agents.
     #[serde(default)]
     pub pen: CanvasPenStyle,
+    #[serde(default)]
+    pub next_layer_id: u64,
+    #[serde(default)]
+    pub layers: Vec<CanvasLayer>,
+    #[serde(default)]
+    pub active_layer_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -3201,6 +3341,10 @@ pub struct CanvasGetResponse {
     /// True while a vision model is actively reading this canvas (tester-cohort slice 2).
     #[serde(default)]
     pub canvas_seeing: bool,
+    #[serde(default)]
+    pub layers: Vec<CanvasLayer>,
+    #[serde(default)]
+    pub active_layer_id: String,
 }
 
 /// `canvas.seeing` — signal that a vision pass is reading the live canvas (not a mutation).
@@ -3264,6 +3408,32 @@ pub struct CanvasExportRequest {
     pub width: Option<u32>,
     #[serde(default)]
     pub height: Option<u32>,
+    /// `png` (default), `svg`, or `json`.
+    #[serde(default)]
+    pub format: Option<String>,
+}
+
+/// Replace session canvas from an exported JSON sidecar (round-trip).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CanvasImportRequest {
+    pub session_id: String,
+    pub doc: CanvasDoc,
+    #[serde(default)]
+    pub canvas_aspect: Option<CanvasAspect>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CanvasImportResponse {
+    pub canvas_open: bool,
+    pub next_seq: u64,
+    pub ops: Vec<CanvasOp>,
+    #[serde(default)]
+    pub pen: CanvasPenStyle,
+    #[serde(default)]
+    pub layers: Vec<CanvasLayer>,
+    #[serde(default)]
+    pub active_layer_id: String,
+    pub canvas_aspect: CanvasAspect,
 }
 
 /// Pièce jointe d'un message de session (ex. référence agent en fond).
@@ -4335,10 +4505,13 @@ mod chat_session_room_tests {
             seq: 1,
             author_id: "human".into(),
             ts_ms: 42,
+            layer_id: String::new(),
             body: CanvasOpBody::Stroke {
                 points: vec![CanvasPoint { x: 0.1, y: 0.2 }, CanvasPoint { x: 0.3, y: 0.4 }],
                 color: "#3ee0c4".into(),
                 width: 0.02,
+                opacity: 1.0,
+                dash: vec![],
             },
         };
         let json = serde_json::to_string(&op).unwrap();
@@ -4355,6 +4528,8 @@ mod chat_session_room_tests {
             p1: CanvasPoint { x: 0.8, y: 0.7 },
             color: "#ff0000".into(),
             width: 0.01,
+            opacity: 1.0,
+            dash: vec![],
         };
         let line_json = serde_json::to_string(&line).unwrap();
         assert!(line_json.contains("\"kind\":\"line\""));
@@ -4369,6 +4544,8 @@ mod chat_session_room_tests {
             ],
             color: "#00ff00".into(),
             width: 0.015,
+            opacity: 1.0,
+            dash: vec![],
         };
         let spline_json = serde_json::to_string(&spline).unwrap();
         assert!(spline_json.contains("\"kind\":\"spline\""));
@@ -4387,6 +4564,9 @@ mod chat_session_room_tests {
             width: 0.0,
             fill: true,
             closed: true,
+            opacity: 1.0,
+            dash: vec![],
+            gradient: None,
         };
         let path_json = serde_json::to_string(&path).unwrap();
         assert!(path_json.contains("\"kind\":\"path\""));
@@ -4399,6 +4579,7 @@ mod chat_session_room_tests {
             x: 0.5,
             y: 0.5,
             color: "#0000ff".into(),
+            opacity: 1.0,
         };
         let fill_json = serde_json::to_string(&fill).unwrap();
         assert!(fill_json.contains("\"kind\":\"fill\""));
@@ -4411,11 +4592,15 @@ mod chat_session_room_tests {
         let pen = CanvasPenStyle {
             color: "#aabbcc".into(),
             width: 0.022,
+            opacity: 1.0,
+            dash: vec![],
         };
         let mut stroke = CanvasOpBody::Stroke {
             points: vec![CanvasPoint { x: 0.0, y: 0.0 }, CanvasPoint { x: 1.0, y: 1.0 }],
             color: String::new(),
             width: 0.0,
+            opacity: 1.0,
+            dash: vec![],
         };
         resolve_canvas_op_style(&mut stroke, &pen);
         match stroke {
@@ -4442,24 +4627,30 @@ mod chat_session_room_tests {
                     seq: 1,
                     author_id: "human".into(),
                     ts_ms: 1,
+                    layer_id: String::new(),
                     body: CanvasOpBody::Line {
                         p0: CanvasPoint { x: 0.1, y: 0.1 },
                         p1: CanvasPoint { x: 0.2, y: 0.2 },
                         color: "#3ee0c4".into(),
                         width: 0.01,
+                        opacity: 1.0,
+                        dash: vec![],
                     },
                 },
                 CanvasOp {
                     seq: 2,
                     author_id: "agent-a".into(),
                     ts_ms: 2,
+                    layer_id: String::new(),
                     body: CanvasOpBody::Fill {
                         x: 0.5,
                         y: 0.5,
                         color: "#ff00ff".into(),
+                        opacity: 1.0,
                     },
                 },
             ],
+            ..Default::default()
         };
         let digest = canvas_scene_digest(&doc, CanvasAspect::Square);
         assert!(digest.contains("coords=normalized"));
@@ -4474,9 +4665,13 @@ mod chat_session_room_tests {
         assert!(digest.contains("margin=0.10"));
         assert!(digest.contains("usable=(0.10,0.10)-(0.90,0.90)"));
         assert!(digest.contains("placement="));
+        assert!(digest.contains("edit=canvas.move"));
         assert!(digest.contains("origin=top-left"));
         assert!(digest.contains("pas le centre"));
         assert!(digest.contains("align ex:"));
+        assert!(digest.contains("snap_step=0.01"));
+        assert!(digest.contains("last_seq=2"));
+        assert!(digest.contains("last_bbox="));
     }
 
     #[test]
@@ -4492,6 +4687,10 @@ mod chat_session_room_tests {
             color: "#3ee0c4".into(),
             fill: true,
             width: 0.01,
+            rotation: 0.0,
+            opacity: 1.0,
+            dash: vec![],
+            gradient: None,
         };
         assert!(normalize_canvas_op_coords(&mut body));
         let bbox = canvas_op_bbox(&body).expect("bbox");
@@ -4511,6 +4710,10 @@ mod chat_session_room_tests {
             color: "#3ee0c4".into(),
             fill: true,
             width: 0.01,
+            rotation: 0.0,
+            opacity: 1.0,
+            dash: vec![],
+            gradient: None,
         };
         let mut r2 = CanvasOpBody::Rect {
             x: 200.0,
@@ -4520,6 +4723,10 @@ mod chat_session_room_tests {
             color: "#ff4400".into(),
             fill: true,
             width: 0.01,
+            rotation: 0.0,
+            opacity: 1.0,
+            dash: vec![],
+            gradient: None,
         };
         normalize_canvas_op_coords(&mut r1);
         normalize_canvas_op_coords(&mut r2);
@@ -4536,6 +4743,8 @@ mod chat_session_room_tests {
             p1: CanvasPoint { x: 1.2, y: 0.8 },
             color: "#3ee0c4".into(),
             width: 0.01,
+            opacity: 1.0,
+            dash: vec![],
         };
         assert!(!normalize_canvas_op_coords(&mut body));
         match body {

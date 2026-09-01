@@ -1628,6 +1628,8 @@ async fn main() {
                                             ops,
                                             pen: doc.pen.clone(),
                                             canvas_seeing: seeing,
+                                            layers: doc.layers.clone(),
+                                            active_layer_id: doc.active_layer_id.clone(),
                                         },
                                     )
                                     .await;
@@ -1776,6 +1778,62 @@ async fn main() {
     }
     {
         let s = sub.clone();
+        svc.on("canvas.edit", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<CanvasEditRequest>() {
+                    Ok(req) => {
+                        let apply_lock = s.canvas_apply_lock(&req.session_id);
+                        let author = if req.author_id.trim().is_empty() {
+                            "human".into()
+                        } else {
+                            req.author_id.clone()
+                        };
+                        let result = {
+                            let _guard = apply_lock.lock().unwrap();
+                            s.sessions.lock().unwrap().canvas_edit(
+                                &req.session_id,
+                                &author,
+                                req.edit,
+                            )
+                        };
+                        match result {
+                            Ok((meta, doc)) => {
+                                let _ = ctx
+                                    .respond(
+                                        aos_ipc::msg::Status::Ok,
+                                        &serde_json::json!({
+                                            "canvas_open": meta.canvas_open,
+                                            "next_seq": doc.next_seq,
+                                            "ops": doc.ops,
+                                            "layers": doc.layers,
+                                            "active_layer_id": doc.active_layer_id,
+                                            "pen": doc.pen,
+                                        }),
+                                    )
+                                    .await;
+                            }
+                            Err(e) => {
+                                let status = if e.to_string().contains("inconnue") {
+                                    aos_ipc::msg::Status::NotFound
+                                } else {
+                                    aos_ipc::msg::Status::BadRequest
+                                };
+                                let _ = ctx.respond_error(status, &e.to_string()).await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
         svc.on("canvas.set_open", move |ctx| {
             let s = s.clone();
             async move {
@@ -1860,6 +1918,52 @@ async fn main() {
                                 .await;
                         }
                     },
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+
+    {
+        let s = sub.clone();
+        svc.on("canvas.import", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<CanvasImportRequest>() {
+                    Ok(req) => {
+                        let result = s.sessions.lock().unwrap().canvas_import(
+                            &req.session_id,
+                            req.doc,
+                            req.canvas_aspect,
+                        );
+                        match result {
+                            Ok((meta, doc)) => {
+                                let _ = ctx
+                                    .respond(
+                                        aos_ipc::msg::Status::Ok,
+                                        &CanvasImportResponse {
+                                            canvas_open: meta.canvas_open,
+                                            next_seq: doc.next_seq,
+                                            ops: doc.ops,
+                                            pen: doc.pen,
+                                            layers: doc.layers,
+                                            active_layer_id: doc.active_layer_id,
+                                            canvas_aspect: meta.canvas_aspect,
+                                        },
+                                    )
+                                    .await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(aos_ipc::msg::Status::BadRequest, &e.to_string())
+                                    .await;
+                            }
+                        }
+                    }
                     Err(_) => {
                         let _ = ctx
                             .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
@@ -3971,17 +4075,34 @@ fn export_canvas_png(
     let h = req
         .height
         .unwrap_or_else(|| meta.canvas_aspect.export_dimensions(1024).1);
-    let bytes = aos_platform::canvas_raster::export_png(&doc, w, h)?;
-    let path = req.path.clone().unwrap_or_else(|| {
-        format!(
-            "/downloads/canvas-{}-{}.png",
-            meta.id,
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_millis())
-                .unwrap_or(0)
-        )
-    });
+    let format = req
+        .format
+        .as_deref()
+        .unwrap_or("png")
+        .to_ascii_lowercase();
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let (bytes, path, write_sidecar) = if format == "svg" {
+        let bytes = aos_platform::canvas_raster::export_svg(&doc, w, h)?;
+        let path = req.path.clone().unwrap_or_else(|| {
+            format!("/downloads/canvas-{}-{}.svg", meta.id, stamp)
+        });
+        (bytes, path, true)
+    } else if format == "json" {
+        let bytes = aos_platform::canvas_raster::export_sidecar_json(&doc, meta.canvas_aspect)?;
+        let path = req.path.clone().unwrap_or_else(|| {
+            format!("/downloads/canvas-{}-{}.json", meta.id, stamp)
+        });
+        (bytes, path, false)
+    } else {
+        let bytes = aos_platform::canvas_raster::export_png(&doc, w, h)?;
+        let path = req.path.clone().unwrap_or_else(|| {
+            format!("/downloads/canvas-{}-{}.png", meta.id, stamp)
+        });
+        (bytes, path, true)
+    };
     let caps = vec!["fs.write:/downloads/**".to_string()];
     let version = s
         .fs
@@ -3989,8 +4110,24 @@ fn export_canvas_png(
         .unwrap()
         .write_bytes(&path, &bytes, "service:platformd", &caps)
         .map_err(|e| e.to_string())?;
+    let sidecar_path = if write_sidecar {
+        let sidecar_path = aos_platform::canvas_raster::sidecar_path_for_export(&path);
+        if let Ok(sidecar) =
+            aos_platform::canvas_raster::export_sidecar_json(&doc, meta.canvas_aspect)
+        {
+            let _ = s
+                .fs
+                .lock()
+                .unwrap()
+                .write_bytes(&sidecar_path, &sidecar, "service:platformd", &caps);
+        }
+        sidecar_path
+    } else {
+        path.clone()
+    };
     Ok(serde_json::json!({
         "path": path,
+        "sidecar": sidecar_path,
         "bytes": bytes.len(),
         "version": version,
         "session_id": meta.id,

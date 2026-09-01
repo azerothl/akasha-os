@@ -1,6 +1,6 @@
 name: canvas
 version: 1.0.0
-hash: f017e8e494654105be0241f472c06e51a9bab9d242eb320c60c10cd82bac5009
+hash: bb3c0c91ec42453c32806ad89520978aedc5fb2a3445f3d87df7d63e20672350
 permissions:
   required_caps:
     - fs.write:/downloads/**
@@ -127,7 +127,7 @@ tools:
         after_seq: { type: integer }
       required: [session_id]
   - name: canvas.export
-    description: Export canvas as PNG under /downloads
+    description: Export canvas as PNG, SVG, or JSON under /downloads
     input_schema:
       type: object
       properties:
@@ -135,5 +135,118 @@ tools:
         path: { type: string }
         width: { type: integer }
         height: { type: integer }
+        format: { type: string }
       required: [session_id]
+  - name: canvas.delete
+    description: Delete the canvas object identified by seq
+    input_schema:
+      type: object
+      properties:
+        session_id: { type: string }
+        seq: { type: integer }
+      required: [session_id, seq]
+  - name: canvas.move
+    description: Move the canvas object seq by dx,dy in normalized 0..1 space
+    input_schema:
+      type: object
+      properties:
+        session_id: { type: string }
+        seq: { type: integer }
+        dx: { type: number }
+        dy: { type: number }
+      required: [session_id, seq, dx, dy]
+  - name: canvas.reorder
+    description: Change z-order of canvas object seq (0 = back)
+    input_schema:
+      type: object
+      properties:
+        session_id: { type: string }
+        seq: { type: integer }
+        z: { type: integer }
+      required: [session_id, seq, z]
+  - name: canvas.restyle
+    description: Change color, width, or fill of canvas object seq
+    input_schema:
+      type: object
+      properties:
+        session_id: { type: string }
+        seq: { type: integer }
+        color: { type: string }
+        width: { type: number }
+        fill: { type: boolean }
+      required: [session_id, seq]
+  - name: canvas.layer_create
+    description: Create a named canvas layer (optional parent_id for a group)
+    input_schema:
+      type: object
+      properties:
+        session_id: { type: string }
+        name: { type: string }
+        parent_id: { type: string }
+      required: [session_id]
+  - name: canvas.layer_rename
+    description: Rename a canvas layer
+    input_schema:
+      type: object
+      properties:
+        session_id: { type: string }
+        id: { type: string }
+        name: { type: string }
+      required: [session_id, id, name]
+  - name: canvas.layer_set
+    description: Set canvas layer visible, locked, and/or opacity
+    input_schema:
+      type: object
+      properties:
+        session_id: { type: string }
+        id: { type: string }
+        visible: { type: boolean }
+        locked: { type: boolean }
+        opacity: { type: number }
+      required: [session_id, id]
+  - name: canvas.layer_reorder
+    description: Reorder a canvas layer among siblings
+    input_schema:
+      type: object
+      properties:
+        session_id: { type: string }
+        id: { type: string }
+        parent_id: { type: string }
+        z: { type: integer }
+      required: [session_id, id, z]
+  - name: canvas.layer_delete
+    description: Delete a canvas layer (ops reassigned to parent or default)
+    input_schema:
+      type: object
+      properties:
+        session_id: { type: string }
+        id: { type: string }
+      required: [session_id, id]
+  - name: canvas.layer_activate
+    description: Set the active canvas layer for subsequent drawing
+    input_schema:
+      type: object
+      properties:
+        session_id: { type: string }
+        id: { type: string }
+      required: [session_id, id]
+  - name: canvas.align
+    description: Align seq to to_seq or the usable 0.10 margin
+    input_schema:
+      type: object
+      properties:
+        session_id: { type: string }
+        seq: { type: integer }
+        to_seq: { type: integer }
+        edges: { type: array, items: { type: string } }
+      required: [session_id, seq, edges]
+  - name: canvas.rotate
+    description: Set rect/ellipse rotation in degrees around the bbox centre
+    input_schema:
+      type: object
+      properties:
+        session_id: { type: string }
+        seq: { type: integer }
+        rotation: { type: number }
+      required: [session_id, seq, rotation]
 min_os_api: 1

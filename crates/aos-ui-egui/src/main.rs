@@ -2435,6 +2435,8 @@ impl eframe::App for UiApp {
                     pen,
                     delta,
                     canvas_seeing,
+                    layers,
+                    active_layer_id,
                 } => {
                     if self.chat_state.active_session.as_deref() != Some(session_id.as_str()) {
                         // still update meta open flag
@@ -2450,6 +2452,12 @@ impl eframe::App for UiApp {
                             self.chat_state.view.canvas.apply_snapshot(ops, next_seq, now);
                         }
                         self.chat_state.view.canvas.sync_pen(&pen);
+                        if !layers.is_empty() {
+                            self.chat_state
+                                .view
+                                .canvas
+                                .sync_layers(layers, active_layer_id);
+                        }
                         if let Some(seeing) = canvas_seeing {
                             self.chat_state.view.canvas.seeing = seeing;
                         }
@@ -2457,11 +2465,12 @@ impl eframe::App for UiApp {
                 }
                 Evt::CanvasExported { path, session_id } => {
                     if self.chat_state.active_session.as_deref() == Some(session_id.as_str()) {
-                        self.status = format!("Canvas → {path}");
+                        let t = i18n::strings(&self.prefs.language);
+                        self.status = t.canvas_export_status.replace("{path}", &path);
                         self.chat_state.composer.last_session_image = Some(path.clone());
                         self.chat.push(ChatLine {
                             role: "assistant".into(),
-                            text: format!("Canvas exporté : {path}"),
+                            text: t.canvas_exported.replace("{path}", &path),
                             attachments: vec![ChatAttachment::Image {
                                 path,
                                 prompt: "canvas export".into(),

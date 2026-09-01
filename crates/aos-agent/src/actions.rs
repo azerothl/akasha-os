@@ -92,6 +92,39 @@ pub fn parse_action(text: &str) -> Option<AgentAction> {
     parse_actions(text).into_iter().next()
 }
 
+/// When the model misuses `user.ask` and puts a tool JSON in the question field, recover it.
+pub fn parse_embedded_action_question(text: &str) -> Option<AgentAction> {
+    let trimmed = text.trim();
+    let unfenced = trimmed
+        .strip_prefix("```json")
+        .or_else(|| trimmed.strip_prefix("```JSON"))
+        .or_else(|| trimmed.strip_prefix("```"))
+        .map(|body| body.strip_suffix("```").unwrap_or(body).trim())
+        .unwrap_or(trimmed);
+    if let Some(action) = parse_action(unfenced) {
+        if !action.action.is_empty() && action.action != "user.ask" {
+            return Some(action);
+        }
+    }
+    let value: serde_json::Value = serde_json::from_str(unfenced).ok()?;
+    let action = value.get("action")?.as_str()?.trim();
+    if action.is_empty() || action == "user.ask" {
+        return None;
+    }
+    Some(AgentAction {
+        thought: value
+            .get("thought")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        action: action.to_string(),
+        args: value
+            .get("args")
+            .cloned()
+            .unwrap_or(serde_json::json!({})),
+    })
+}
+
 /// Retire balises DSML / `<tool_call>` sans compacter les sauts de ligne (prose).
 pub fn strip_tool_markup_tags(text: &str) -> String {
     let mut out = text.to_string();
@@ -552,5 +585,20 @@ Thinking Process:
     #[test]
     fn thread_fail_sentinel_is_stable() {
         assert_eq!(THREAD_FAIL_COULD_NOT_ACT, "agent_could_not_act");
+    }
+
+    #[test]
+    fn parse_embedded_action_question_from_fenced_json() {
+        let q = r##"```json
+{
+"action": "canvas.set_style",
+"args": {
+"color": "#8D6E63"
+}
+}
+```"##;
+        let a = parse_embedded_action_question(q).unwrap();
+        assert_eq!(a.action, "canvas.set_style");
+        assert_eq!(a.args["color"], "#8D6E63");
     }
 }

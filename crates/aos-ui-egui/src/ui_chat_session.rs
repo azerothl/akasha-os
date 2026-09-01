@@ -96,13 +96,13 @@ impl UiApp {
                             self.chat_state.view.canvas.ops.remove(pos);
                         }
                     }
-                    // Apply optimistically so the stroke/shape is visible immediately without
-                    // waiting for the server roundtrip snapshot.
                     _ => {
+                        let layer_id = self.chat_state.view.canvas.active_layer_id.clone();
                         self.chat_state.view.canvas.ops.push(aos_proto::CanvasOp {
                             seq: 0,
                             author_id: "human".into(),
                             ts_ms: 0,
+                            layer_id,
                             body: op.clone(),
                         });
                     }
@@ -113,6 +113,50 @@ impl UiApp {
                     op,
                 });
             }
+            Some(chat_canvas::CanvasUiAction::Edit(edit)) => {
+                match &edit {
+                    aos_proto::CanvasEdit::LayerSet {
+                        id,
+                        visible,
+                        locked,
+                        opacity,
+                    } => {
+                        if let Some(layer) = self
+                            .chat_state
+                            .view
+                            .canvas
+                            .layers
+                            .iter_mut()
+                            .find(|l| l.id == *id)
+                        {
+                            if let Some(v) = visible {
+                                layer.visible = *v;
+                            }
+                            if let Some(v) = locked {
+                                layer.locked = *v;
+                            }
+                            if let Some(v) = opacity {
+                                layer.opacity = *v;
+                            }
+                        }
+                    }
+                    aos_proto::CanvasEdit::LayerActivate { id } => {
+                        self.chat_state.view.canvas.active_layer_id = id.clone();
+                    }
+                    aos_proto::CanvasEdit::Delete { seq } => {
+                        self.chat_state.view.canvas.ops.retain(|o| o.seq != *seq);
+                        if self.chat_state.view.canvas.selected_seq == Some(*seq) {
+                            self.chat_state.view.canvas.selected_seq = None;
+                        }
+                    }
+                    _ => {}
+                }
+                let _ = self.cmd_tx.send(Cmd::CanvasEdit {
+                    session_id: session_id.to_string(),
+                    author_id: "human".into(),
+                    edit,
+                });
+            }
             Some(chat_canvas::CanvasUiAction::SetStyle { color, width }) => {
                 let _ = self.cmd_tx.send(Cmd::CanvasSetStyle {
                     session_id: session_id.to_string(),
@@ -120,7 +164,7 @@ impl UiApp {
                     width,
                 });
             }
-            Some(chat_canvas::CanvasUiAction::Export) => {
+            Some(chat_canvas::CanvasUiAction::ExportPng) => {
                 let aspect = self
                     .chat_state
                     .sessions
@@ -131,6 +175,21 @@ impl UiApp {
                 let _ = self.cmd_tx.send(Cmd::CanvasExport {
                     session_id: session_id.to_string(),
                     aspect,
+                    format: "png".into(),
+                });
+            }
+            Some(chat_canvas::CanvasUiAction::ExportSvg) => {
+                let aspect = self
+                    .chat_state
+                    .sessions
+                    .iter()
+                    .find(|s| s.id == session_id)
+                    .map(|s| s.canvas_aspect)
+                    .unwrap_or_default();
+                let _ = self.cmd_tx.send(Cmd::CanvasExport {
+                    session_id: session_id.to_string(),
+                    aspect,
+                    format: "svg".into(),
                 });
             }
             Some(chat_canvas::CanvasUiAction::SetAspect(aspect)) => {
@@ -146,6 +205,33 @@ impl UiApp {
                     session_id: session_id.to_string(),
                     aspect,
                 });
+            }
+            Some(chat_canvas::CanvasUiAction::ImportJson) => {
+                let t = crate::i18n::strings(&self.prefs.language);
+                if let Some(path) = crate::os_open::pick_os_file(
+                    t.canvas_import,
+                    &[("JSON", &["json"])],
+                    crate::os_open::user_downloads_dir().as_deref(),
+                ) {
+                    if let Ok(raw) = std::fs::read_to_string(&path) {
+                        match aos_proto::parse_canvas_sidecar_json(&raw) {
+                            Ok((doc, aspect)) => {
+                                let _ = self.cmd_tx.send(Cmd::CanvasImport {
+                                    session_id: session_id.to_string(),
+                                    doc,
+                                    aspect: Some(aspect),
+                                });
+                            }
+                            Err(e) => {
+                                self.status = format!("{}: {e}", t.canvas_import);
+                            }
+                        }
+                    }
+                }
+            }
+            Some(chat_canvas::CanvasUiAction::ResetView) => {
+                self.chat_state.view.canvas.view_pan = eframe::egui::Vec2::ZERO;
+                self.chat_state.view.canvas.view_zoom = 1.0;
             }
             None => {}
         }

@@ -3265,6 +3265,8 @@ async fn handle_cmd(
                                 pen: resp.pen,
                                 delta: false,
                                 canvas_seeing: Some(resp.canvas_seeing),
+                                layers: resp.layers.clone(),
+                                active_layer_id: resp.active_layer_id.clone(),
                             });
                         }
                     }
@@ -3301,6 +3303,8 @@ async fn handle_cmd(
                         pen: resp.doc.pen,
                         delta: false,
                         canvas_seeing: None,
+                        layers: resp.doc.layers.clone(),
+                        active_layer_id: resp.doc.active_layer_id.clone(),
                     });
                     if resp.canvas_open {
                         refresh_sessions(&bus, &evt_tx).await;
@@ -3337,6 +3341,8 @@ async fn handle_cmd(
                         pen: resp.pen,
                         delta: false,
                         canvas_seeing: None,
+                        layers: resp.doc.layers.clone(),
+                        active_layer_id: resp.doc.active_layer_id.clone(),
                     });
                 }
                 Err(e) => {
@@ -3367,6 +3373,8 @@ async fn handle_cmd(
                     pen: resp.pen,
                     delta,
                     canvas_seeing: Some(resp.canvas_seeing),
+                    layers: resp.layers.clone(),
+                    active_layer_id: resp.active_layer_id.clone(),
                 });
             }
         }
@@ -3391,8 +3399,87 @@ async fn handle_cmd(
                 }
             }
         }
-        Cmd::CanvasExport { session_id, aspect } => {
+        Cmd::CanvasEdit {
+            session_id,
+            author_id,
+            edit,
+        } => {
+            match bus
+                .call::<aos_proto::CanvasEditRequest, aos_proto::CanvasEditResponse>(
+                    "canvas.edit",
+                    &aos_proto::CanvasEditRequest {
+                        session_id: session_id.clone(),
+                        author_id,
+                        edit,
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(resp) => {
+                    let _ = evt_tx.send(Evt::CanvasSnapshot {
+                        session_id: session_id.clone(),
+                        canvas_open: resp.canvas_open,
+                        next_seq: resp.next_seq,
+                        ops: resp.ops,
+                        pen: resp.pen,
+                        delta: false,
+                        canvas_seeing: None,
+                        layers: resp.layers,
+                        active_layer_id: resp.active_layer_id,
+                    });
+                    if resp.canvas_open {
+                        refresh_sessions(&bus, &evt_tx).await;
+                    }
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::CanvasImport {
+            session_id,
+            doc,
+            aspect,
+        } => {
+            match bus
+                .call::<aos_proto::CanvasImportRequest, aos_proto::CanvasImportResponse>(
+                    "canvas.import",
+                    &aos_proto::CanvasImportRequest {
+                        session_id: session_id.clone(),
+                        doc,
+                        canvas_aspect: aspect,
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(resp) => {
+                    let _ = evt_tx.send(Evt::CanvasSnapshot {
+                        session_id: session_id.clone(),
+                        canvas_open: resp.canvas_open,
+                        next_seq: resp.next_seq,
+                        ops: resp.ops,
+                        pen: resp.pen,
+                        delta: false,
+                        canvas_seeing: None,
+                        layers: resp.layers,
+                        active_layer_id: resp.active_layer_id,
+                    });
+                    refresh_sessions(&bus, &evt_tx).await;
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::CanvasExport { session_id, aspect, format } => {
             let (width, height) = aspect.export_dimensions(1024);
+            let format = if format.trim().is_empty() {
+                "png".into()
+            } else {
+                format.to_ascii_lowercase()
+            };
             match bus
                 .call::<aos_proto::CanvasExportRequest, serde_json::Value>(
                     "canvas.export",
@@ -3401,6 +3488,7 @@ async fn handle_cmd(
                         path: None,
                         width: Some(width),
                         height: Some(height),
+                        format: Some(format.clone()),
                     },
                     vec![],
                 )
@@ -3413,9 +3501,17 @@ async fn handle_cmd(
                         .unwrap_or("")
                         .to_string();
                     if !path.is_empty() {
-                        let att = ChatAttachment::Image {
-                            path: path.clone(),
-                            prompt: "canvas export".into(),
+                        let t = i18n::strings(&crate::prefs::load_preferences().language);
+                        let att = if format == "png" {
+                            ChatAttachment::Image {
+                                path: path.clone(),
+                                prompt: "canvas export".into(),
+                            }
+                        } else {
+                            ChatAttachment::Document {
+                                path: path.clone(),
+                                label: format!("canvas {format}"),
+                            }
                         };
                         let _ = bus
                             .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
@@ -3423,7 +3519,7 @@ async fn handle_cmd(
                                 &ChatSessionAppendRequest {
                                     session_id: session_id.clone(),
                                     role: "assistant".into(),
-                                    content: format!("Canvas exporté : {path}"),
+                                    content: t.canvas_exported.replace("{path}", &path),
                                     attachments: vec![att],
                                     speaker_id: None,
                                     speaker_name: None,

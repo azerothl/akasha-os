@@ -4,8 +4,8 @@
 //!          [--restore]`
 
 use aos_agent::actions::{
-    parse_actions, strip_reasoning, strip_tool_markup, AgentAction, THREAD_FAIL_COULD_NOT_ACT,
-    THREAD_FAIL_COULD_NOT_CONTINUE,
+    parse_actions, parse_embedded_action_question, strip_reasoning, strip_tool_markup,
+    AgentAction, THREAD_FAIL_COULD_NOT_ACT, THREAD_FAIL_COULD_NOT_CONTINUE,
 };
 use aos_agent::assess::{parse_assess_response, AssessResult};
 use aos_agent::mcp::{open_mcp_tools_with_secrets, McpSession};
@@ -30,7 +30,8 @@ use aos_agent::tool_exec::format_module_invoke_result;
 use aos_agent::tools::{
     canonicalize_tool_name, canvas_tools_from_module_list, caps_for_tools, caps_subset,
     classify_action, canvas_draw_strategy_hint, is_module_fallback_candidate,
-    normalize_tool_args, resolve_tool_backend, restrict_canvas_tools, select_tools, ToolBackend,
+    normalize_tool_args, resolve_tool_backend, restrict_canvas_tools, select_tools,
+    strip_canvas_blocked_runtime_tools, ToolBackend,
     ToolDesc,
 };
 use aos_agent::{intents, CognitiveState, ControlCmd, ControlResp, ReportPayload};
@@ -216,6 +217,7 @@ async fn main() {
     let mut module_tools = discover_module_tools(&bus).await;
     module_tools.extend(mcp_tools);
     let mut tools = select_tools(&tool_ids, &module_tools);
+    strip_canvas_blocked_runtime_tools(&mut tools, &spec.tools);
     // Enrich caps from tools if create didn't set them all
     let derived = caps_for_tools(&tools, &spec.mcp_servers);
     for c in derived {
@@ -1654,6 +1656,21 @@ async fn execute_action(
                 .unwrap_or("")
                 .trim()
                 .to_string();
+            if let Some(embedded) = parse_embedded_action_question(&question) {
+                return ActResult::Continue(format!(
+                    "user.ask incorrect : exécute directement \
+                     {{\"action\":\"{}\",\"args\":{}}} — pas de question à l'humain.",
+                    embedded.action, embedded.args
+                ));
+            }
+            if agent_has_canvas_tools(&spec.tools) {
+                return ActResult::Continue(
+                    "canvas : n'utilise pas user.ask — exécute l'outil directement \
+                     (ex. {\"action\":\"canvas.set_style\",\"args\":{\"color\":\"#8D6E63\"}}). \
+                     Couleur, style et coords ne demandent jamais l'humain."
+                        .into(),
+                );
+            }
             if question.is_empty() {
                 ActResult::Continue("user.ask : question vide".into())
             } else {
@@ -3200,6 +3217,7 @@ async fn apply_assess_to_runtime(
         *skill_docs = load_skills(&spec.skills);
         let tool_ids = merge_skill_tools(&spec.tools, skill_docs);
         *tools = select_tools(&tool_ids, module_tools);
+        strip_canvas_blocked_runtime_tools(tools, &spec.tools);
         let derived = caps_for_tools(tools, &spec.mcp_servers);
         for c in derived {
             if !spec.caps.contains(&c) {

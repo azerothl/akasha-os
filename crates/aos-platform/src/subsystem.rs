@@ -897,6 +897,8 @@ impl HostServices for PlatformSubsystem {
                     "next_seq": doc.next_seq,
                     "ops": ops,
                     "pen": doc.pen,
+                    "layers": doc.layers,
+                    "active_layer_id": doc.active_layer_id,
                 }))
             }
             "canvas.set_style" => {
@@ -964,6 +966,36 @@ impl HostServices for PlatformSubsystem {
                     "applied": applied,
                 }))
             }
+            "canvas.edit" => {
+                if ctx.module != "canvas" {
+                    return Err("canvas.edit réservé au module canvas".into());
+                }
+                let session_id = args["session_id"].as_str().unwrap_or("").to_string();
+                if session_id.is_empty() {
+                    return Err("session_id requis".into());
+                }
+                let author_id = args["author_id"]
+                    .as_str()
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or("agent");
+                let edit: aos_proto::CanvasEdit = serde_json::from_value(args.clone())
+                    .map_err(|e| format!("edit invalide: {e}"))?;
+                let apply_lock = self.canvas_apply_lock(&session_id);
+                let _guard = apply_lock.lock().unwrap();
+                let (meta, doc) = self
+                    .sessions
+                    .lock()
+                    .unwrap()
+                    .canvas_edit(&session_id, author_id, edit)
+                    .map_err(|e| e.to_string())?;
+                Ok(serde_json::json!({
+                    "canvas_open": meta.canvas_open,
+                    "next_seq": doc.next_seq,
+                    "ops": doc.ops,
+                    "layers": doc.layers,
+                    "active_layer_id": doc.active_layer_id,
+                }))
+            }
             "canvas.export" => {
                 if ctx.module != "canvas" {
                     return Err("canvas.export réservé au module canvas".into());
@@ -972,29 +1004,57 @@ impl HostServices for PlatformSubsystem {
                 if session_id.is_empty() {
                     return Err("session_id requis".into());
                 }
-                let width = args["width"].as_u64().unwrap_or(768) as u32;
-                let height = args["height"].as_u64().unwrap_or(512) as u32;
-                let (_, doc, _) = self
+                let (meta, doc, _) = self
                     .sessions
                     .lock()
                     .unwrap()
                     .canvas_get(&session_id, None)
                     .map_err(|e| e.to_string())?;
-                let bytes = crate::canvas_raster::export_png(&doc, width, height)?;
-                let path = args["path"]
-                    .as_str()
-                    .filter(|s| !s.is_empty())
-                    .map(str::to_string)
-                    .unwrap_or_else(|| {
-                        format!(
-                            "/downloads/canvas-{}-{}.png",
-                            session_id,
-                            std::time::SystemTime::now()
-                                .duration_since(std::time::UNIX_EPOCH)
-                                .map(|d| d.as_millis())
-                                .unwrap_or(0)
-                        )
-                    });
+                let (def_w, def_h) = meta.canvas_aspect.export_dimensions(1024);
+                let width = args
+                    .get("width")
+                    .and_then(|v| v.as_u64())
+                    .map(|v| v as u32)
+                    .unwrap_or(def_w);
+                let height = args
+                    .get("height")
+                    .and_then(|v| v.as_u64())
+                    .map(|v| v as u32)
+                    .unwrap_or(def_h);
+                let format = args
+                    .get("format")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("png")
+                    .to_ascii_lowercase();
+                let stamp = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis())
+                    .unwrap_or(0);
+                let (bytes, path, write_sidecar) = if format == "svg" {
+                    let bytes = crate::canvas_raster::export_svg(&doc, width, height)?;
+                    let path = args["path"]
+                        .as_str()
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string)
+                        .unwrap_or_else(|| format!("/downloads/canvas-{session_id}-{stamp}.svg"));
+                    (bytes, path, true)
+                } else if format == "json" {
+                    let bytes = crate::canvas_raster::export_sidecar_json(&doc, meta.canvas_aspect)?;
+                    let path = args["path"]
+                        .as_str()
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string)
+                        .unwrap_or_else(|| format!("/downloads/canvas-{session_id}-{stamp}.json"));
+                    (bytes, path, false)
+                } else {
+                    let bytes = crate::canvas_raster::export_png(&doc, width, height)?;
+                    let path = args["path"]
+                        .as_str()
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string)
+                        .unwrap_or_else(|| format!("/downloads/canvas-{session_id}-{stamp}.png"));
+                    (bytes, path, true)
+                };
                 Self::require_cap(ctx, "fs.write", &path)?;
                 let version = self
                     .fs
@@ -1007,8 +1067,25 @@ impl HostServices for PlatformSubsystem {
                         &ctx.granted_caps,
                     )
                     .map_err(|e| e.to_string())?;
+                let sidecar_path = if write_sidecar {
+                    let sidecar_path = crate::canvas_raster::sidecar_path_for_export(&path);
+                    if let Ok(sidecar) =
+                        crate::canvas_raster::export_sidecar_json(&doc, meta.canvas_aspect)
+                    {
+                        let _ = self.fs.lock().unwrap().write_bytes(
+                            &sidecar_path,
+                            &sidecar,
+                            &format!("module:{}", ctx.module),
+                            &ctx.granted_caps,
+                        );
+                    }
+                    sidecar_path
+                } else {
+                    path.clone()
+                };
                 Ok(serde_json::json!({
                     "path": path,
+                    "sidecar": sidecar_path,
                     "bytes": bytes.len(),
                     "version": version,
                 }))

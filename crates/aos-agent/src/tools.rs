@@ -590,10 +590,169 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
         ),
         (
             "canvas.undo",
-            "Annuler le dernier trait humain sur le canvas de session",
+            "Annuler le dernier trait de l'auteur courant sur le canvas de session",
             serde_json::json!({
                 "type":"object",
                 "properties":{"session_id": sid_schema()}
+            }),
+        ),
+        (
+            "canvas.delete",
+            "Supprimer l'objet canvas identifié par seq (voir digest canvas.get)",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "seq":{"type":"integer"}
+                },
+                "required":["seq"]
+            }),
+        ),
+        (
+            "canvas.move",
+            "Déplacer l'objet seq de dx,dy en coords 0..1 (clamp)",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "seq":{"type":"integer"},
+                    "dx":{"type":"number"},
+                    "dy":{"type":"number"}
+                },
+                "required":["seq","dx","dy"]
+            }),
+        ),
+        (
+            "canvas.reorder",
+            "Changer l'empilement de l'objet seq (z=0 arrière)",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "seq":{"type":"integer"},
+                    "z":{"type":"integer"}
+                },
+                "required":["seq","z"]
+            }),
+        ),
+        (
+            "canvas.restyle",
+            "Changer couleur / épaisseur / fill d'un objet seq",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "seq":{"type":"integer"},
+                    "color":{"type":"string"},
+                    "width":{"type":"number"},
+                    "fill":{"type":"boolean"}
+                },
+                "required":["seq"]
+            }),
+        ),
+        (
+            "canvas.layer_create",
+            "Créer un calque nommé (option parent_id pour un groupe)",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "name":{"type":"string"},
+                    "parent_id":{"type":"string"}
+                }
+            }),
+        ),
+        (
+            "canvas.layer_rename",
+            "Renommer un calque",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "id":{"type":"string"},
+                    "name":{"type":"string"}
+                },
+                "required":["id","name"]
+            }),
+        ),
+        (
+            "canvas.layer_set",
+            "Hide / lock / opacity d'un calque (visible, locked, opacity 0..1)",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "id":{"type":"string"},
+                    "visible":{"type":"boolean"},
+                    "locked":{"type":"boolean"},
+                    "opacity":{"type":"number"}
+                },
+                "required":["id"]
+            }),
+        ),
+        (
+            "canvas.layer_reorder",
+            "Réordonner un calque (z parmi les frères ; parent_id optionnel)",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "id":{"type":"string"},
+                    "parent_id":{"type":"string"},
+                    "z":{"type":"integer"}
+                },
+                "required":["id","z"]
+            }),
+        ),
+        (
+            "canvas.layer_delete",
+            "Supprimer un calque (ops réassignées au parent ou au défaut)",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "id":{"type":"string"}
+                },
+                "required":["id"]
+            }),
+        ),
+        (
+            "canvas.layer_activate",
+            "Calque actif pour les prochains traits",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "id":{"type":"string"}
+                },
+                "required":["id"]
+            }),
+        ),
+        (
+            "canvas.align",
+            "Aligner seq sur to_seq (ou la marge 0.10 si to_seq omis) : edges left|right|top|bottom|center_x|center_y",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "seq":{"type":"integer"},
+                    "to_seq":{"type":"integer"},
+                    "edges":{"type":"array","items":{"type":"string"}}
+                },
+                "required":["seq","edges"]
+            }),
+        ),
+        (
+            "canvas.rotate",
+            "Rotation en degrés d'un rect/ellipse (pivot centre)",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "seq":{"type":"integer"},
+                    "rotation":{"type":"number"}
+                },
+                "required":["seq","rotation"]
             }),
         ),
         (
@@ -609,14 +768,15 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
         ),
         (
             "canvas.export",
-            "Exporter le canvas en PNG sous /downloads (snapshot, pas diffusion)",
+            "Exporter le canvas (PNG par défaut ; format svg|json) sous /downloads",
             serde_json::json!({
                 "type":"object",
                 "properties":{
                     "session_id": sid_schema(),
                     "path":{"type":"string"},
                     "width":{"type":"integer"},
-                    "height":{"type":"integer"}
+                    "height":{"type":"integer"},
+                    "format":{"type":"string","description":"png (défaut), svg, ou json"}
                 }
             }),
         ),
@@ -647,6 +807,18 @@ pub const CANVAS_TOOL_IDS: &[&str] = &[
     "canvas.undo",
     "canvas.get",
     "canvas.export",
+    "canvas.delete",
+    "canvas.move",
+    "canvas.reorder",
+    "canvas.restyle",
+    "canvas.layer_create",
+    "canvas.layer_rename",
+    "canvas.layer_set",
+    "canvas.layer_reorder",
+    "canvas.layer_delete",
+    "canvas.layer_activate",
+    "canvas.align",
+    "canvas.rotate",
 ];
 
 /// Phrases that beat Create/image routing — must stay aligned with `chat_canvas` routing.
@@ -706,6 +878,20 @@ pub fn canvas_tools_from_module_list(modules: &[aos_proto::ModuleInfo]) -> Vec<S
         .find(|m| m.name == "canvas")
         .map(|m| m.tools.clone())
         .unwrap_or_default()
+}
+
+/// Canvas drawing agents must not inherit `user.ask` / spawn tools from `select_tools` "always".
+pub fn strip_canvas_blocked_runtime_tools(tools: &mut Vec<ToolDesc>, spec_tool_ids: &[String]) {
+    use crate::canvas_scene::agent_has_canvas_tools;
+    if !agent_has_canvas_tools(spec_tool_ids) {
+        return;
+    }
+    for blocked in ["user.ask", "agent.spawn", "agent.await"] {
+        if spec_tool_ids.iter().any(|t| t == blocked) {
+            continue;
+        }
+        tools.retain(|t| t.name != blocked);
+    }
 }
 
 /// Drop canvas.* tool ids that the loaded module does not export.
@@ -1064,6 +1250,17 @@ mod tests {
         assert!(ids.iter().any(|x| x == "canvas.stroke"));
         assert!(ids.iter().any(|x| x == "canvas.rect"));
         assert!(!ids.iter().any(|x| x == "canvas.path"));
+    }
+
+    #[test]
+    fn strip_canvas_blocked_runtime_tools_removes_user_ask() {
+        let spec = vec!["canvas.get".into(), "canvas.set_style".into()];
+        let mut tools = select_tools(&spec, &[]);
+        assert!(tools.iter().any(|t| t.name == "user.ask"));
+        strip_canvas_blocked_runtime_tools(&mut tools, &spec);
+        assert!(!tools.iter().any(|t| t.name == "user.ask"));
+        assert!(!tools.iter().any(|t| t.name == "agent.spawn"));
+        assert!(tools.iter().any(|t| t.name == "canvas.set_style"));
     }
 
     #[test]
