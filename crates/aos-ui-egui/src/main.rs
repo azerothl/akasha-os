@@ -33,6 +33,7 @@ mod notes_panel;
 mod prefs;
 mod schedule_act_phrase;
 mod schedule_card;
+mod schedule_event_controller;
 mod schedule_ui_state;
 mod session_nav;
 mod tasks_panel;
@@ -1933,18 +1934,12 @@ impl eframe::App for UiApp {
                 Evt::Caps { holder, caps } => {
                     self.security_ui.set_caps(holder, caps);
                 }
-                Evt::Schedules(s) => {
-                    self.schedule_ui.merge_entries(s);
-                    self.sync_schedule_cards();
-                }
+                Evt::Schedules(entries) => schedule_event_controller::on_schedules(self, entries),
                 Evt::ScheduleCreated(entry) => {
-                    self.upsert_schedule_entry(entry.clone());
-                    self.attach_schedule_card(&entry);
-                    self.sync_schedule_cards();
+                    schedule_event_controller::on_schedule_created(self, entry);
                 }
                 Evt::ScheduleUpdated(entry) => {
-                    self.upsert_schedule_entry(entry);
-                    self.sync_schedule_cards();
+                    schedule_event_controller::on_schedule_updated(self, entry);
                 }
                 Evt::TasksListed(tasks) => self.on_tasks_listed(tasks),
                 Evt::Confirms(c) => self.confirmations_ui.replace(c),
