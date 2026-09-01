@@ -225,15 +225,6 @@ fn pen_style_fields(state: &CanvasPanelState) -> (f32, Vec<f32>, Option<CanvasLi
     (state.pen_opacity, dash, gradient)
 }
 
-fn with_alpha(c: Color32, alpha: f32) -> Color32 {
-    Color32::from_rgba_unmultiplied(
-        c.r(),
-        c.g(),
-        c.b(),
-        (c.a() as f32 * alpha.clamp(0.0, 1.0)).round() as u8,
-    )
-}
-
 fn author_stroke_color(author_id: &str, stored: &str, dark: bool) -> Color32 {
     if stored.trim().is_empty() {
         let (r, g, b) = chat_room::speaker_color_rgb(author_id, dark);
@@ -1775,6 +1766,8 @@ mod routing_tests {
                 p1: CanvasPoint { x: 0.8, y: 0.2 },
                 color: "#f40009".into(),
                 width: 0.02,
+                opacity: 1.0,
+                dash: vec![],
             },
         }
     }
@@ -1791,6 +1784,8 @@ mod routing_tests {
                 points: vec![CanvasPoint { x: 0.1, y: 0.1 }, CanvasPoint { x: 0.2, y: 0.2 }],
                 color: "#3ee0c4".into(),
                 width: 0.01,
+                opacity: 1.0,
+                dash: vec![],
             },
         });
         state.apply_snapshot(vec![], 1, 0.0);

@@ -311,6 +311,8 @@ mod canvas_completion_tests {
                 points: vec![aos_proto::CanvasPoint { x: 0.1, y: 0.2 }],
                 color: "#3ee0c4".into(),
                 width: 0.01,
+                opacity: 1.0,
+                dash: vec![],
             },
         }];
         let text = agent_completion_chat_text(&ag, &t, Some(&ops), None);
