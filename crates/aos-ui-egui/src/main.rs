@@ -5,6 +5,7 @@
 
 mod agent_act_phrase;
 mod agent_controller;
+mod agent_event_controller;
 mod agent_panel;
 mod agent_ui_state;
 mod memory_controller;
@@ -88,7 +89,7 @@ mod ui_scenarios;
 mod ui_settings;
 mod ui_workspace;
 
-use chat_ask::{agent_display_title, chat_has_open_ask, pending_ask_ids};
+use chat_ask::pending_ask_ids;
 use chat_delegate::{
     chat_agent_kit, chat_delegate_agent_spec, session_has_running_canvas_agent,
     spawn_chat_delegate_agent, spawn_document_prep_agent,
@@ -97,7 +98,7 @@ use chat_delegate::{
 use chat_delegate::chat_delegate_kit;
 #[cfg(test)]
 use chat_bubble::chat_bubble_max_width;
-use cmd::{AgentNotice, ChatLine, Cmd, Evt};
+use cmd::{ChatLine, Cmd, Evt};
 use composer_layout::{estimate_composer_buttons_w, COMPOSER_MIN_INPUT_W};
 #[cfg(test)]
 use composer_layout::{chat_composer_wraps, COMPOSER_INPUT_ROW_H};
@@ -1966,282 +1967,7 @@ impl eframe::App for UiApp {
                         }
                     }
                 }
-                Evt::Agents(a) => {
-                    let t = i18n::strings(&self.prefs.language);
-                    if self.scenario_ui.pending_note_agent
-                        && a.iter().any(|ag| {
-                            matches!(
-                                ag.state,
-                                AgentState::Done | AgentState::Failed | AgentState::Killed
-                            )
-                        })
-                    {
-                        let _ = self.cmd_tx.send(Cmd::NotesList);
-                    }
-                    if self.scenario_ui.pending_module_agent
-                        && a.iter().any(|ag| {
-                            matches!(
-                                ag.state,
-                                AgentState::Done | AgentState::Failed | AgentState::Killed
-                            )
-                        })
-                    {
-                        let _ = self.cmd_tx.send(Cmd::ModuleList);
-                    }
-                    let seeding = self.agent_ui.prev_states_seeding();
-                    for ag in &a {
-                        let prev = self.agent_ui.prev_states.get(&ag.agent_id).cloned();
-                        let terminal = matches!(
-                            ag.state,
-                            AgentState::Done | AgentState::Failed | AgentState::Killed
-                        );
-                        let was_active = prev
-                            .as_ref()
-                            .map(|p| {
-                                !matches!(
-                                    p,
-                                    AgentState::Done | AgentState::Failed | AgentState::Killed
-                                )
-                            })
-                            .unwrap_or(false);
-                        if terminal {
-                            if self.agent_ui.document_prep_agents.contains_key(&ag.agent_id)
-                                && was_active
-                                && !seeding
-                            {
-                                if ag.state == AgentState::Done {
-                                    let _ = self.cmd_tx.send(Cmd::AgentTrace {
-                                        id: ag.agent_id.clone(),
-                                    });
-                                } else {
-                                    self.agent_ui.take_document_prep(&ag.agent_id);
-                                    self.agent_ui.mark_notified(&ag.agent_id);
-                                }
-                            } else if let Some(sid) = &ag.session_id {
-                                let on_this_session =
-                                    self.chat_state.active_session.as_deref() == Some(sid.as_str());
-                                let already = self.chat.iter().any(|l| {
-                                    l.attachments.iter().any(|a| {
-                                        matches!(
-                                            a,
-                                            ChatAttachment::AgentRef {
-                                                agent_id,
-                                                origin,
-                                                ..
-                                            } if agent_id == &ag.agent_id
-                                                && origin == "completion"
-                                        )
-                                    })
-                                });
-                                if on_this_session {
-                                    let session_ops = agent_canvas_session_ops(
-                                        ag,
-                                        self.chat_state.active_session.as_deref(),
-                                        &self.chat_state.view.canvas.ops,
-                                    );
-                                    let trace = self.agent_ui.traces.get(&ag.agent_id);
-                                    let content = agent_completion_chat_text(
-                                        ag,
-                                        &t,
-                                        session_ops,
-                                        trace,
-                                    );
-                                    if already {
-                                        if !ag.last_output.trim().is_empty() {
-                                            if let Some(line) =
-                                                self.chat.iter_mut().find(|l| {
-                                                    l.attachments.iter().any(|a| {
-                                                        matches!(
-                                                            a,
-                                                            ChatAttachment::AgentRef {
-                                                                agent_id,
-                                                                origin,
-                                                                ..
-                                                            } if agent_id == &ag.agent_id
-                                                                && origin == "completion"
-                                                        )
-                                                    })
-                                                })
-                                            {
-                                                if line.text != content {
-                                                    line.text = content;
-                                                }
-                                            }
-                                        }
-                                    } else if !seeding
-                                        && !self
-                                            .agent_ui
-                                            .document_prep_agents
-                                            .contains_key(&ag.agent_id)
-                                    {
-                                        if content.is_empty()
-                                            && !agent_panel::canvas_draw_step_cap_continue(
-                                                Some(ag),
-                                                session_ops,
-                                                trace,
-                                            )
-                                        {
-                                            self.agent_ui.mark_notified(&ag.agent_id);
-                                            continue;
-                                        }
-                                        self.chat.push(ChatLine {
-                                            role: "assistant".into(),
-                                            text: content,
-                                            attachments: vec![ChatAttachment::AgentRef {
-                                                agent_id: ag.agent_id.clone(),
-                                                title: ag.directive.clone(),
-                                                origin: "completion".into(),
-                                            }],
-                                            speaker_id: None,
-                                            speaker_name: None,
-                                            thinking: None,
-                                        });
-                                    }
-                                } else if !seeding
-                                    && !on_this_session
-                                    && !self.agent_ui.notified.contains(&ag.agent_id)
-                                    && was_active
-                                {
-                                    let session_ops = agent_canvas_session_ops(
-                                        ag,
-                                        self.chat_state.active_session.as_deref(),
-                                        &self.chat_state.view.canvas.ops,
-                                    );
-                                    let trace = self.agent_ui.traces.get(&ag.agent_id);
-                                    let summary = if agent_panel::canvas_draw_failure_muted(
-                                        Some(ag),
-                                        session_ops,
-                                        trace,
-                                    ) {
-                                        String::new()
-                                    } else {
-                                        match ag.state {
-                                        AgentState::Done => format!("{} terminé", ag.display_title()),
-                                        AgentState::Failed => {
-                                            if agent_panel::canvas_draw_fail_chrome(
-                                                Some(ag),
-                                                session_ops,
-                                                trace,
-                                            ) {
-                                                t.canvas_draw_failed.to_string()
-                                            } else if ag.fail_reason.as_deref()
-                                                == Some(aos_agent::actions::THREAD_FAIL_COULD_NOT_ACT)
-                                            {
-                                                i18n::agent_could_not_act_message(&t)
-                                            } else if ag.fail_reason.as_deref()
-                                                == Some(
-                                                    aos_agent::actions::THREAD_FAIL_COULD_NOT_CONTINUE,
-                                                )
-                                                || ag.fail_reason.as_deref().is_some_and(
-                                                    aos_agent::context_budget::is_overflow_fail_reason,
-                                                )
-                                            {
-                                                i18n::agent_could_not_continue_message(&t)
-                                            } else {
-                                                format!(
-                                                    "{} échoué — {}",
-                                                    ag.display_title(),
-                                                    i18n::resolve_agent_fail_reason(
-                                                        &t,
-                                                        ag.fail_reason.as_deref(),
-                                                    )
-                                                )
-                                            }
-                                        }
-                                        AgentState::Killed => format!("{} arrêté", ag.display_title()),
-                                        _ => format!("{} terminé", ag.display_title()),
-                                    }
-                                    };
-                                    if summary.is_empty() {
-                                        self.agent_ui.mark_notified(&ag.agent_id);
-                                        continue;
-                                    }
-                                    self.agent_ui.push_notice_once(AgentNotice {
-                                        agent_id: ag.agent_id.clone(),
-                                        session_id: sid.clone(),
-                                        summary,
-                                    });
-                                }
-                            }
-                        }
-                        if prev == Some(AgentState::Blocked) && ag.state != AgentState::Blocked {
-                            self.agent_ui.clear_ask_reply_if(&ag.agent_id);
-                            if let Some(sid) = &ag.session_id {
-                                let on_this_session =
-                                    self.chat_state.active_session.as_deref() == Some(sid.as_str());
-                                if on_this_session
-                                    && chat_has_open_ask(&self.chat, &ag.agent_id)
-                                {
-                                    let expired =
-                                        ag.last_output.starts_with("Question expirée");
-                                    let text = if expired {
-                                        "**Question expirée** — l'agent continue sans réponse."
-                                            .into()
-                                    } else {
-                                        "**Question close** — l'agent a repris.".into()
-                                    };
-                                    self.chat.push(ChatLine {
-                                        role: "assistant".into(),
-                                        text,
-                                        attachments: vec![ChatAttachment::AgentRef {
-                                            agent_id: ag.agent_id.clone(),
-                                            title: ag.directive.clone(),
-                                            origin: "ask-timeout".into(),
-                                        }],
-                                        speaker_id: None,
-                                        speaker_name: None,
-                                        thinking: None,
-                                    });
-                                }
-                            }
-                        }
-                        if ag.state == AgentState::Blocked {
-                            if let Some(sid) = &ag.session_id {
-                                let on_this_session =
-                                    self.chat_state.active_session.as_deref() == Some(sid.as_str());
-                                let already =
-                                    chat_has_open_ask(&self.chat, &ag.agent_id);
-                                if on_this_session
-                                    && !already
-                                    && !ag.last_output.trim().is_empty()
-                                    && !ag.last_output.starts_with("Question expirée")
-                                {
-                                    let title = agent_display_title(ag);
-                                    let body = format!(
-                                        "**Question — {title}**\n\n{}",
-                                        ag.last_output.trim()
-                                    );
-                                    self.chat.push(ChatLine {
-                                        role: "assistant".into(),
-                                        text: body,
-                                        attachments: vec![ChatAttachment::AgentRef {
-                                            agent_id: ag.agent_id.clone(),
-                                            title: ag.directive.clone(),
-                                            origin: "ask".into(),
-                                        }],
-                                        speaker_id: None,
-                                        speaker_name: None,
-                                        thinking: None,
-                                    });
-                                } else if !on_this_session
-                                    && !self.agent_ui.notified.contains(&ag.agent_id)
-                                {
-                                    self.agent_ui.push_notice_once(AgentNotice {
-                                        agent_id: ag.agent_id.clone(),
-                                        session_id: sid.clone(),
-                                        summary: format!(
-                                            "{} pose une question",
-                                            agent_display_title(ag)
-                                        ),
-                                    });
-                                }
-                            }
-                        }
-                        self.agent_ui
-                            .record_prev_state(ag.agent_id.clone(), ag.state.clone());
-                    }
-                    self.agents = a;
-                }
+                Evt::Agents(a) => agent_event_controller::on_agents(self, a),
                 Evt::Notes(s) => self.on_notes_raw(s),
                 Evt::NotesListed(notes) => self.on_notes_listed(notes),
                 Evt::NoteLoaded(detail) => self.on_note_loaded(detail),
