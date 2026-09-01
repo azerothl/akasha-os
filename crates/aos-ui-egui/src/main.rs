@@ -20,6 +20,7 @@ mod tasks_panel;
 mod chat_ask;
 mod chat_bubble;
 mod chat_canvas;
+mod chat_composer_state;
 mod chat_delegate;
 mod chat_media;
 mod chat_room;
@@ -480,15 +481,9 @@ struct UiApp {
     tab: Tab,
     chat: Vec<ChatLine>,
     streaming: String,
-    input: String,
+    chat_composer: chat_composer_state::ChatComposerState,
     chat_pending: bool,
     chat_inference_id: Option<u64>,
-    /// PNG/JPEG paths queued for the next chat turn (vision).
-    chat_pending_images: Vec<String>,
-    /// PDF/txt/md paths queued for the next chat turn (text extraction at send).
-    chat_pending_documents: Vec<DocumentRef>,
-    /// Last Create / canvas export image path in this session.
-    last_session_image: Option<String>,
     catalogue: Option<ModuleCatalogue>,
     installed_modules: Vec<ModuleInfo>,
     sessions: Vec<ChatSessionMeta>,
@@ -604,8 +599,6 @@ struct UiApp {
     model_download_restart: Option<String>,
     /// Agent visé pour la prochaine réponse `user.ask` (plusieurs bloqués).
     ask_reply_target: Option<String>,
-    /// Re-focus chat TextEdit after send (Enter clears focus).
-    chat_refocus: bool,
     decl_panels: HashMap<String, decl_ui::DeclUiPanelState>,
     decl_md_cache: CommonMarkCache,
     image_studio: image_studio::ImageStudioState,
@@ -803,12 +796,9 @@ impl UiApp {
             tab: Tab::Chat,
             chat: vec![ChatLine::plain("système", intro)],
             streaming: String::new(),
-            input: String::new(),
+            chat_composer: chat_composer_state::ChatComposerState::default(),
             chat_pending: false,
             chat_inference_id: None,
-            chat_pending_images: Vec::new(),
-            chat_pending_documents: Vec::new(),
-            last_session_image: None,
             catalogue: None,
             installed_modules: Vec::new(),
             sessions: Vec::new(),
@@ -929,7 +919,6 @@ impl UiApp {
             model_download: None,
             model_download_restart: None,
             ask_reply_target: None,
-            chat_refocus: false,
             decl_panels: HashMap::new(),
             decl_md_cache: CommonMarkCache::default(),
             image_studio: image_studio::ImageStudioState::default(),
@@ -1378,9 +1367,9 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
     }
 
     fn send_chat(&mut self) {
-        let text = self.input.trim().to_string();
-        let pending_images = self.chat_pending_images.clone();
-        let pending_documents = self.chat_pending_documents.clone();
+        let text = self.chat_composer.input.trim().to_string();
+        let pending_images = self.chat_composer.pending_images.clone();
+        let pending_documents = self.chat_composer.pending_documents.clone();
         if text.is_empty() && pending_images.is_empty() && pending_documents.is_empty() {
             return;
         }
@@ -1390,8 +1379,8 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         } else {
             text
         };
-        self.input.clear();
-        self.chat_refocus = true;
+        self.chat_composer.input.clear();
+        self.chat_composer.refocus = true;
         if text.starts_with('/')
             && pending_images.is_empty()
             && pending_documents.is_empty()
@@ -1497,8 +1486,8 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             speaker_name: None,
             thinking: None,
         });
-        self.chat_pending_images.clear();
-        self.chat_pending_documents.clear();
+        self.chat_composer.pending_images.clear();
+        self.chat_composer.pending_documents.clear();
         let room_content = aos_proto::chat_document::merge_documents_into_user_content(
             &text,
             &pending_documents,
@@ -1652,16 +1641,17 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         let label = aos_proto::chat_document::document_label_from_path(&path);
         let doc = DocumentRef { path, label };
         if !self
-            .chat_pending_documents
+            .chat_composer
+            .pending_documents
             .iter()
             .any(|d| d.path == doc.path)
         {
-            if self.chat_pending_documents.len()
+            if self.chat_composer.pending_documents.len()
                 >= aos_proto::chat_document::CHAT_MAX_PENDING_DOCUMENTS
             {
-                self.chat_pending_documents.remove(0);
+                self.chat_composer.pending_documents.remove(0);
             }
-            self.chat_pending_documents.push(doc);
+            self.chat_composer.pending_documents.push(doc);
         }
         self.status = i18n::strings(&self.prefs.language)
             .chat_attach_document
@@ -1672,13 +1662,13 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         if path.is_empty() {
             return;
         }
-        if !self.chat_pending_images.iter().any(|p| p == &path) {
-            if self.chat_pending_images.len() >= 4 {
-                self.chat_pending_images.remove(0);
+        if !self.chat_composer.pending_images.iter().any(|p| p == &path) {
+            if self.chat_composer.pending_images.len() >= 4 {
+                self.chat_composer.pending_images.remove(0);
             }
-            self.chat_pending_images.push(path.clone());
+            self.chat_composer.pending_images.push(path.clone());
         }
-        self.last_session_image = Some(path);
+        self.chat_composer.last_session_image = Some(path);
         self.status = i18n::strings(&self.prefs.language)
             .chat_attach_image
             .to_string();
@@ -3418,7 +3408,7 @@ impl eframe::App for UiApp {
                 Evt::CanvasExported { path, session_id } => {
                     if self.active_session.as_deref() == Some(session_id.as_str()) {
                         self.status = format!("Canvas → {path}");
-                        self.last_session_image = Some(path.clone());
+                        self.chat_composer.last_session_image = Some(path.clone());
                         self.chat.push(ChatLine {
                             role: "assistant".into(),
                             text: format!("Canvas exporté : {path}"),
@@ -3533,7 +3523,7 @@ impl eframe::App for UiApp {
                     };
                     if kind == "image" || kind == "video" {
                         if kind == "image" {
-                            self.last_session_image = Some(path.clone());
+                            self.chat_composer.last_session_image = Some(path.clone());
                             if prompt.is_empty() {
                                 self.image_studio.preview = Some(path.clone());
                                 self.image_studio.apply_history_for_path(&path);
@@ -4056,7 +4046,7 @@ impl eframe::App for UiApp {
                 let mut open_create_guide = false;
                 let gen = self.image_generating.as_ref();
                 let dl_busy = self.model_download.is_some();
-                let last_session = &mut self.last_session_image;
+                let last_session = &mut self.chat_composer.last_session_image;
                 self.image_studio.ui(
                     ui,
                     &t,

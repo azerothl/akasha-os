@@ -413,7 +413,7 @@ impl UiApp {
                 }
                 if let Some(id) = target_reply {
                     self.ask_reply_target = Some(id);
-                    self.chat_refocus = true;
+                    self.chat_composer.refocus = true;
                     self.status = "réponse destinée à cet agent".into();
                 }
                 if !self.streaming.is_empty() {

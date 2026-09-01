@@ -31,9 +31,9 @@ impl UiApp {
             show_vision_banner,
             chat_width: chat_w,
         } = context;
-        let completions = slash_completions(&self.input);
+        let completions = slash_completions(&self.chat_composer.input);
         let mention_hits = if room_mode {
-            chat_room::mention_completions(&self.input, room_members, t)
+            chat_room::mention_completions(&self.chat_composer.input, room_members, t)
         } else {
             Vec::new()
         };
@@ -74,7 +74,7 @@ impl UiApp {
 
                 let mut run_attach_menu = |ui: &mut egui::Ui| {
                     icons::attach_menu(ui, "chat_attach", t.chat_attach_image, |ui| {
-                        if self.last_session_image.is_some()
+                        if self.chat_composer.last_session_image.is_some()
                             && ui.button(t.chat_last_session_image).clicked()
                         {
                             reuse_last_image = true;
@@ -150,7 +150,7 @@ impl UiApp {
 
                         ui.set_width(field_w);
                         let r = ui.add(
-                            egui::TextEdit::singleline(&mut self.input)
+                            egui::TextEdit::singleline(&mut self.chat_composer.input)
                                 .id_salt("chat_input")
                                 .desired_width(field_w)
                                 .hint_text(&hint),
@@ -179,33 +179,35 @@ impl UiApp {
                         self.queue_chat_document(path.to_string_lossy().into_owned());
                     }
                 } else if reuse_last_image {
-                    if let Some(last) = self.last_session_image.clone() {
+                    if let Some(last) = self.chat_composer.last_session_image.clone() {
                         self.queue_chat_image(last);
                     }
                 }
 
                 if let Some(r) = input_response {
-                    if self.chat_refocus {
+                    if self.chat_composer.refocus {
                         r.request_focus();
-                        self.chat_refocus = false;
+                        self.chat_composer.refocus = false;
                     }
                     let send = send_clicked
                         || (r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)));
                     if send {
                         self.send_chat();
                         chat_sent_this_frame = true;
-                        self.chat_refocus = true;
+                        self.chat_composer.refocus = true;
                     }
                 }
 
                 let composer_input_rect = ui.min_rect();
-                if !self.chat_pending_images.is_empty() || !self.chat_pending_documents.is_empty() {
+                if !self.chat_composer.pending_images.is_empty()
+                    || !self.chat_composer.pending_documents.is_empty()
+                {
                     let ctx = ui.ctx().clone();
                     chat_media::render_pending_attachment_chips(
                         ui,
                         &ctx,
-                        &mut self.chat_pending_images,
-                        &mut self.chat_pending_documents,
+                        &mut self.chat_composer.pending_images,
+                        &mut self.chat_composer.pending_documents,
                     );
                 }
                 if show_vision_banner {
@@ -265,8 +267,8 @@ impl UiApp {
                 });
             if let Some(text) = picked {
                 if !chat_sent_this_frame {
-                    self.input = text;
-                    self.chat_refocus = true;
+                    self.chat_composer.input = text;
+                    self.chat_composer.refocus = true;
                 }
             }
         } else if !completions.is_empty() {
@@ -302,8 +304,8 @@ impl UiApp {
                 });
             if let Some(text) = picked {
                 if !chat_sent_this_frame {
-                    self.input = text;
-                    self.chat_refocus = true;
+                    self.chat_composer.input = text;
+                    self.chat_composer.refocus = true;
                 }
             }
         }
