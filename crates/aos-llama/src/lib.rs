@@ -471,9 +471,7 @@ impl LlamaContext {
                 .ok_or(LlamaError::InvalidPath)
                 .and_then(|s| CString::new(s).map_err(|_| LlamaError::InvalidPath))?;
             let mtmd_params = unsafe { sys::mtmd_context_params_default() };
-            let ctx = unsafe {
-                sys::mtmd_init_from_file(path.as_ptr(), model.ptr, mtmd_params)
-            };
+            let ctx = unsafe { sys::mtmd_init_from_file(path.as_ptr(), model.ptr, mtmd_params) };
             if ctx.is_null() {
                 unsafe { sys::llama_free(ptr) };
                 return Err(LlamaError::Vision(format!(
@@ -757,7 +755,10 @@ impl LlamaContext {
         })
     }
 
-    fn prefill_text_tokens(&mut self, prompt_tokens: &[sys::llama_token]) -> Result<(), LlamaError> {
+    fn prefill_text_tokens(
+        &mut self,
+        prompt_tokens: &[sys::llama_token],
+    ) -> Result<(), LlamaError> {
         let n_prompt = prompt_tokens.len();
         let mut batch = unsafe { sys::llama_batch_init(self.n_batch as i32, 0, 1) };
         let mut off = 0usize;
@@ -829,9 +830,8 @@ impl LlamaContext {
                 .to_str()
                 .ok_or(LlamaError::InvalidPath)
                 .and_then(|s| CString::new(s).map_err(|_| LlamaError::InvalidPath))?;
-            let wrap = unsafe {
-                sys::mtmd_helper_bitmap_init_from_file(mtmd, path_c.as_ptr(), false)
-            };
+            let wrap =
+                unsafe { sys::mtmd_helper_bitmap_init_from_file(mtmd, path_c.as_ptr(), false) };
             if wrap.bitmap.is_null() {
                 for b in bitmaps {
                     unsafe { sys::mtmd_bitmap_free(b) };
@@ -952,9 +952,8 @@ impl LlamaContext {
             return Err(LlamaError::StateIo);
         }
         let mut buf = vec![0u8; size];
-        let n = unsafe {
-            sys::llama_state_seq_get_data(self.ptr, buf.as_mut_ptr(), buf.len(), seq_id)
-        };
+        let n =
+            unsafe { sys::llama_state_seq_get_data(self.ptr, buf.as_mut_ptr(), buf.len(), seq_id) };
         if n == 0 || n > buf.len() {
             return Err(LlamaError::StateIo);
         }
@@ -968,9 +967,8 @@ impl LlamaContext {
         data: &[u8],
         seq_id: sys::llama_seq_id,
     ) -> Result<(), LlamaError> {
-        let n = unsafe {
-            sys::llama_state_seq_set_data(self.ptr, data.as_ptr(), data.len(), seq_id)
-        };
+        let n =
+            unsafe { sys::llama_state_seq_set_data(self.ptr, data.as_ptr(), data.len(), seq_id) };
         if n == 0 {
             return Err(LlamaError::StateIo);
         }
@@ -984,9 +982,7 @@ impl LlamaContext {
     /// avec ancrage sémantique aux frontières tour/outil/pensée (E21).
     /// Retourne le nombre de tokens déjà en cache (hit).
     fn prepare_seq0_prefix(&mut self, prompt_tokens: &[sys::llama_token]) -> usize {
-        let prev_i32: Vec<i32> = self.seq0_tokens.iter().map(|&t| t as i32).collect();
-        let next_i32: Vec<i32> = prompt_tokens.iter().map(|&t| t as i32).collect();
-        let l = semantic_prefix_len(&prev_i32, &next_i32, &self.seq0_anchors);
+        let l = semantic_prefix_len(&self.seq0_tokens, prompt_tokens, &self.seq0_anchors);
         let mem = unsafe { sys::llama_get_memory(self.ptr) };
         if l == 0 {
             unsafe { sys::llama_memory_clear(mem, true) };
@@ -1014,8 +1010,7 @@ impl LlamaContext {
             .iter()
             .map(|&t| self.token_to_piece(t))
             .collect();
-        self.seq0_anchors =
-            anchor_positions_from_pieces(&pieces, DEFAULT_BOUNDARY_MARKERS);
+        self.seq0_anchors = anchor_positions_from_pieces(&pieces, DEFAULT_BOUNDARY_MARKERS);
     }
 
     /// Prefill seq 0 à partir de `from` (suffixe seulement).
@@ -1194,13 +1189,7 @@ impl LlamaContext {
             }
             for (i, &d) in draft.iter().enumerate() {
                 unsafe {
-                    Self::batch_add(
-                        &mut batch,
-                        d,
-                        decode_pos + 1 + i as sys::llama_pos,
-                        0,
-                        true,
-                    );
+                    Self::batch_add(&mut batch, d, decode_pos + 1 + i as sys::llama_pos, 0, true);
                 }
             }
             let rc = unsafe { sys::llama_decode(self.ptr, batch) };
@@ -1268,9 +1257,8 @@ impl LlamaContext {
                 draft_accepted += 1;
                 accepted += 1;
                 if i + 1 == draft.len() {
-                    next_cur = unsafe {
-                        sys::llama_sampler_sample(smpl, self.ptr, draft.len() as i32)
-                    };
+                    next_cur =
+                        unsafe { sys::llama_sampler_sample(smpl, self.ptr, draft.len() as i32) };
                 }
             }
 
@@ -1372,16 +1360,13 @@ impl LlamaContext {
         mut on_delta: impl FnMut(usize, &str) -> bool,
     ) -> Vec<Result<GenStats, LlamaError>> {
         let n = items.len();
-        let mut out: Vec<Result<GenStats, LlamaError>> = (0..n)
-            .map(|_| Err(LlamaError::Decode(-1)))
-            .collect();
+        let mut out: Vec<Result<GenStats, LlamaError>> =
+            (0..n).map(|_| Err(LlamaError::Decode(-1))).collect();
         if n == 0 {
             return out;
         }
         if n as u32 > self.n_seq_max {
-            for slot in &mut out {
-                *slot = Err(LlamaError::Decode(-2));
-            }
+            out.fill(Err(LlamaError::Decode(-2)));
             return out;
         }
 
@@ -1420,7 +1405,8 @@ impl LlamaContext {
                 .and_then(|p| self.tokenize(&p, false))
             {
                 Ok(toks) => {
-                    if toks.len() + item.params.max_tokens as usize + 8 > self.n_ctx_seq() as usize {
+                    if toks.len() + item.params.max_tokens as usize + 8 > self.n_ctx_seq() as usize
+                    {
                         out[i] = Err(LlamaError::prompt_too_long(
                             toks.len(),
                             self.n_ctx_seq(),
@@ -1463,9 +1449,8 @@ impl LlamaContext {
         }
         self.seq0_tokens.clear();
 
-        let mut batch = unsafe {
-            sys::llama_batch_init(self.n_batch as i32, 0, self.n_seq_max as i32)
-        };
+        let mut batch =
+            unsafe { sys::llama_batch_init(self.n_batch as i32, 0, self.n_seq_max as i32) };
 
         let prefill_slot = |slf: &mut Self,
                             batch: &mut sys::llama_batch,
