@@ -64,6 +64,7 @@ mod research_document;
 mod runtime;
 mod scenarios_panel;
 mod session_chat;
+mod session_event_controller;
 mod skill_offer;
 mod slash;
 mod theme;
@@ -2335,94 +2336,24 @@ impl eframe::App for UiApp {
                     self.feedback_ui.diag_meta = Some(req.meta);
                     self.tab = Tab::Feedback;
                 }
-                Evt::Sessions(list) => self.chat_state.sessions = list,
+                Evt::Sessions(list) => session_event_controller::on_sessions(self, list),
                 Evt::SessionLoadIntent { id } => {
-                    session_nav::apply_session_load_intent(&mut self.pending_session_nav, &id);
+                    session_event_controller::on_load_intent(self, id);
                 }
                 Evt::SessionLoaded { id, messages, meta } => {
-                    let session_changed = self.chat_state.active_session.as_deref() != Some(id.as_str());
-                    if session_changed
-                        && !session_nav::should_switch_session_view(
-                            self.chat_state.active_session.as_deref(),
-                            &self.pending_session_nav,
-                            id.as_str(),
-                        )
-                    {
-                        if let Some(s) = self.chat_state.sessions.iter_mut().find(|s| s.id == meta.id) {
-                            *s = meta.clone();
-                        }
-                    } else if !session_changed
-                        && !session_nav::should_replace_chat_on_same_session_reload(
-                            self.schedule_ui.transcript_dirty,
-                        )
-                    {
-                        self.chat_state.sidebar.rename = meta.title.clone();
-                        if let Some(s) = self.chat_state.sessions.iter_mut().find(|s| s.id == meta.id) {
-                            *s = meta.clone();
-                        }
-                        self.sync_schedule_cards();
-                        self.pending_session_nav = session_nav::PendingSessionNav::None;
-                    } else {
-                        self.pending_session_nav = session_nav::PendingSessionNav::None;
-                        self.chat_state.active_session = Some(id.clone());
-                        self.chat_state.sidebar.rename = meta.title.clone();
-                        if let Some(s) = self.chat_state.sessions.iter_mut().find(|s| s.id == meta.id) {
-                            *s = meta.clone();
-                        }
-                        if session_changed {
-                            self.chat_state.view.room_members_open = false;
-                            let mut chat = Vec::new();
-                            if !designer_shot_mode() {
-                                chat.push(ChatLine::plain(
-                                    "système",
-                                    format!("Session {id} — historique rechargé."),
-                                ));
-                            }
-                            chat.extend(messages);
-                            self.chat = chat;
-                        } else {
-                            self.chat = messages;
-                        }
-                        self.sync_schedule_cards();
-                        let _ = self.cmd_tx.send(Cmd::SkillPassPending);
-                        self.chat_state.session_chat.clear_unread(&id);
-                        self.chat_state.session_chat.sync_active_view(
-                            self.chat_state.active_session.as_deref(),
-                            &mut self.chat_state.runtime.streaming,
-                            &mut self.chat_state.runtime.pending,
-                            &mut self.chat_state.runtime.inference_id,
-                        );
-                        self.chat_state.runtime.room_turn_text = None;
-                        if meta.canvas_open {
-                            let _ = self.cmd_tx.send(Cmd::CanvasPoll {
-                                session_id: id.clone(),
-                                after_seq: None,
-                            });
-                        } else {
-                            self.chat_state.view.canvas = chat_canvas::CanvasPanelState::default();
-                        }
-                    }
+                    session_event_controller::on_loaded(self, id, messages, meta);
                 }
                 Evt::RoomTurnDone {
                     session_id,
                     agent_turns,
                     cancelled,
                 } => {
-                    self.chat_state.session_chat.finish_turn(&session_id);
-                    if self.chat_state.active_session.as_deref() == Some(session_id.as_str()) {
-                        self.chat_state.runtime.pending = false;
-                        self.chat_state.runtime.inference_id = None;
-                        self.chat_state.runtime.room_turn_text = None;
-                        if let Some(status) =
-                            chat_room::room_turn_done_status(agent_turns, cancelled)
-                        {
-                            self.status = status;
-                        } else if self.status.starts_with("salon :") {
-                            self.status.clear();
-                        }
-                    } else if !cancelled && agent_turns > 0 {
-                        self.chat_state.session_chat.mark_unread(&session_id);
-                    }
+                    session_event_controller::on_room_turn_done(
+                        self,
+                        session_id,
+                        agent_turns,
+                        cancelled,
+                    );
                 }
                 Evt::CanvasMeta(meta) => {
                     canvas_event_controller::on_canvas_meta(self, meta);
