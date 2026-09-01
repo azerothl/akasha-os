@@ -27,6 +27,7 @@ mod chat_media;
 mod chat_room;
 mod chat_runtime_state;
 mod chat_sidebar_state;
+mod chat_view_state;
 mod cmd;
 mod composer_layout;
 mod image_composition;
@@ -602,11 +603,7 @@ struct UiApp {
     hf_download_status: String,
     show_go_to_palette: bool,
     agent_join_room_on_create: bool,
-    /// Expanded salon thinking blocks keyed by chat line index.
-    room_thinking_open: std::collections::HashSet<usize>,
-    /// Room: Members pane toggled from clickable session header.
-    room_members_pane_open: bool,
-    canvas_panel: chat_canvas::CanvasPanelState,
+    chat_view: chat_view_state::ChatViewState,
     roster_edit_drafts: HashMap<String, RosterEditDraft>,
     guide: guide::GuideState,
     /// Deferred normal chat after user picks Answer on a research choice card.
@@ -911,9 +908,7 @@ impl UiApp {
             hf_download_status: String::new(),
             show_go_to_palette: false,
             agent_join_room_on_create: false,
-            room_thinking_open: std::collections::HashSet::new(),
-            room_members_pane_open: false,
-            canvas_panel: chat_canvas::CanvasPanelState::default(),
+            chat_view: chat_view_state::ChatViewState::default(),
             roster_edit_drafts: HashMap::new(),
             guide: guide::GuideState::default(),
             research_pending_chat: None,
@@ -2602,7 +2597,7 @@ impl eframe::App for UiApp {
                                     let session_ops = agent_canvas_session_ops(
                                         ag,
                                         self.active_session.as_deref(),
-                                        &self.canvas_panel.ops,
+                                        &self.chat_view.canvas.ops,
                                     );
                                     let trace = self.agent_traces.get(&ag.agent_id);
                                     let content = agent_completion_chat_text(
@@ -2667,7 +2662,7 @@ impl eframe::App for UiApp {
                                     let session_ops = agent_canvas_session_ops(
                                         ag,
                                         self.active_session.as_deref(),
-                                        &self.canvas_panel.ops,
+                                        &self.chat_view.canvas.ops,
                                     );
                                     let trace = self.agent_traces.get(&ag.agent_id);
                                     let summary = if agent_panel::canvas_draw_failure_muted(
@@ -2965,7 +2960,7 @@ impl eframe::App for UiApp {
                             *s = meta.clone();
                         }
                         if session_changed {
-                            self.room_members_pane_open = false;
+                            self.chat_view.room_members_open = false;
                             let mut chat = Vec::new();
                             if !designer_shot_mode() {
                                 chat.push(ChatLine::plain(
@@ -2994,7 +2989,7 @@ impl eframe::App for UiApp {
                                 after_seq: None,
                             });
                         } else {
-                            self.canvas_panel = chat_canvas::CanvasPanelState::default();
+                            self.chat_view.canvas = chat_canvas::CanvasPanelState::default();
                         }
                     }
                 }
@@ -3042,13 +3037,13 @@ impl eframe::App for UiApp {
                     if self.active_session.as_deref() == Some(session_id.as_str()) {
                         let now = ctx.input(|i| i.time);
                         if delta {
-                            self.canvas_panel.merge_delta(ops, next_seq, now);
+                            self.chat_view.canvas.merge_delta(ops, next_seq, now);
                         } else {
-                            self.canvas_panel.apply_snapshot(ops, next_seq, now);
+                            self.chat_view.canvas.apply_snapshot(ops, next_seq, now);
                         }
-                        self.canvas_panel.sync_pen(&pen);
+                        self.chat_view.canvas.sync_pen(&pen);
                         if let Some(seeing) = canvas_seeing {
-                            self.canvas_panel.seeing = seeing;
+                            self.chat_view.canvas.seeing = seeing;
                         }
                     }
                 }

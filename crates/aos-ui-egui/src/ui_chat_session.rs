@@ -83,21 +83,22 @@ impl UiApp {
         match action {
             Some(chat_canvas::CanvasUiAction::Apply(op)) => {
                 match &op {
-                    aos_proto::CanvasOpBody::Clear => self.canvas_panel.ops.clear(),
+                    aos_proto::CanvasOpBody::Clear => self.chat_view.canvas.ops.clear(),
                     aos_proto::CanvasOpBody::Undo => {
                         if let Some(pos) = self
-                            .canvas_panel
+                            .chat_view
+                            .canvas
                             .ops
                             .iter()
                             .rposition(|o| o.author_id == "human")
                         {
-                            self.canvas_panel.ops.remove(pos);
+                            self.chat_view.canvas.ops.remove(pos);
                         }
                     }
                     // Apply optimistically so the stroke/shape is visible immediately without
                     // waiting for the server roundtrip snapshot.
                     _ => {
-                        self.canvas_panel.ops.push(aos_proto::CanvasOp {
+                        self.chat_view.canvas.ops.push(aos_proto::CanvasOp {
                             seq: 0,
                             author_id: "human".into(),
                             ts_ms: 0,
@@ -145,9 +146,9 @@ impl UiApp {
 
     pub(crate) fn canvas_poll_if_due(&mut self, ui: &egui::Ui, session_id: &str) {
         let now = ui.ctx().input(|i| i.time);
-        if now >= self.canvas_panel.poll_due {
-            self.canvas_panel.poll_due = now + 0.20;
-            let after = self.canvas_panel.poll_after_seq();
+        if now >= self.chat_view.canvas.poll_due {
+            self.chat_view.canvas.poll_due = now + 0.20;
+            let after = self.chat_view.canvas.poll_after_seq();
             let _ = self.cmd_tx.send(Cmd::CanvasPoll {
                 session_id: session_id.to_string(),
                 after_seq: after,
@@ -193,14 +194,14 @@ impl UiApp {
                         egui::Sense::hover()
                     }));
                     if room && title_resp.clicked() {
-                        self.room_members_pane_open = !self.room_members_pane_open;
+                        self.chat_view.room_members_open = !self.chat_view.room_members_open;
                     }
                     if room {
                         title_resp.on_hover_text(t.room_header_open_members);
                         if !members.is_empty() {
                             ui.weak(format!("· {count_line}"));
                         }
-                        icons::caret(ui, self.room_members_pane_open);
+                        icons::caret(ui, self.chat_view.room_members_open);
                     }
 
                     if guide::tab_help_button(ui, g.help_tooltip) {
@@ -241,8 +242,8 @@ impl UiApp {
             let mut open_canvas_guide = false;
             let toolbar_min_w = chat_canvas::toolbar_content_min_width(
                 t,
-                self.canvas_panel.seeing,
-                self.canvas_panel.clear_confirm_open,
+                self.chat_view.canvas.seeing,
+                self.chat_view.canvas.clear_confirm_open,
             );
             let track_w = ui.available_width();
             ui.allocate_ui_with_layout(
@@ -261,7 +262,7 @@ impl UiApp {
                                 toolbar_action = chat_canvas::ui_canvas_toolbar(
                                     ui,
                                     t,
-                                    &mut self.canvas_panel,
+                                    &mut self.chat_view.canvas,
                                     Some(g.help_tooltip),
                                     &mut open_canvas_guide,
                                 );
@@ -277,7 +278,7 @@ impl UiApp {
             }
         }
 
-        if room && self.room_members_pane_open {
+        if room && self.chat_view.room_members_open {
             egui::Frame::group(ui.style())
                 .inner_margin(egui::Margin::symmetric(8, 6))
                 .show(ui, |ui| {
@@ -299,7 +300,7 @@ impl UiApp {
                 });
         }
 
-        if room && !members.is_empty() && !self.room_members_pane_open {
+        if room && !members.is_empty() && !self.chat_view.room_members_open {
             ui.horizontal_wrapped(|ui| {
                 for mem in members {
                     self.ui_room_member_chip(ui, t, &sid, mem);

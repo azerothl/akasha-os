@@ -349,7 +349,7 @@ impl UiApp {
                 let session_ops = agent_canvas_session_ops(
                     a,
                     self.active_session.as_deref(),
-                    &self.canvas_panel.ops,
+                    &self.chat_view.canvas.ops,
                 );
                 let trace = self.agent_traces.get(&a.agent_id);
                 let visible = agent_panel::resolve_visible_fail_reason(
@@ -613,7 +613,7 @@ impl UiApp {
                             agent_canvas_session_ops(
                                 a,
                                 self.active_session.as_deref(),
-                                &self.canvas_panel.ops,
+                                &self.chat_view.canvas.ops,
                             )
                         });
                         let actions = agent_panel::draw_agent_detail(

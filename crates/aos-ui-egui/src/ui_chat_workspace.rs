@@ -111,7 +111,7 @@ impl UiApp {
                                                     );
                                                     let action = chat_canvas::ui_canvas_surface(
                                                         ui,
-                                                        &mut self.canvas_panel,
+                                                        &mut self.chat_view.canvas,
                                                         canvas_aspect,
                                                         t.canvas_empty_hint,
                                                     );
@@ -157,7 +157,7 @@ impl UiApp {
                                                 self.dispatch_canvas_ui_action(aspect_action, sid);
                                                 let action = chat_canvas::ui_canvas_surface(
                                                     ui,
-                                                    &mut self.canvas_panel,
+                                                    &mut self.chat_view.canvas,
                                                     canvas_aspect,
                                                     t.canvas_empty_hint,
                                                 );

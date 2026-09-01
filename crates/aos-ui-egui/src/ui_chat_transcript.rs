@@ -134,7 +134,7 @@ impl UiApp {
                                     t,
                                     i,
                                     th,
-                                    &mut self.room_thinking_open,
+                                    &mut self.chat_view.room_thinking_open,
                                 );
                             }
                         }
@@ -167,7 +167,7 @@ impl UiApp {
                                         agent_canvas_session_ops(
                                             ag,
                                             self.active_session.as_deref(),
-                                            &self.canvas_panel.ops,
+                                            &self.chat_view.canvas.ops,
                                         )
                                     });
                                     let trace = self.agent_traces.get(agent_id);

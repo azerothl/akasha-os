@@ -159,7 +159,7 @@ impl UiApp {
             .map(|s| s.canvas_open)
             .unwrap_or(false)
             || (self.active_session.as_deref() == Some(session_id.as_str())
-                && (!self.canvas_panel.ops.is_empty() || self.canvas_panel.next_seq > 1));
+                && (!self.chat_view.canvas.ops.is_empty() || self.chat_view.canvas.next_seq > 1));
         let canvas_aspect = self
             .sessions
             .iter()
