@@ -41,6 +41,7 @@ mod chat_canvas;
 mod chat_composer_state;
 mod chat_controller;
 mod chat_delegate;
+mod chat_event_controller;
 mod chat_media;
 mod chat_room;
 mod chat_runtime_state;
@@ -1848,61 +1849,22 @@ impl eframe::App for UiApp {
         while let Ok(ev) = self.evt_rx.try_recv() {
             match ev {
                 Evt::Delta { session_id, text } => {
-                    session_chat::on_delta(
-                        &mut self.chat_state.session_chat,
-                        self.chat_state.active_session.as_deref(),
-                        &session_id,
-                        &text,
-                        &mut self.chat_state.runtime.streaming,
-                    );
+                    chat_event_controller::on_delta(self, session_id, text);
                 }
                 Evt::Done {
                     text,
                     session_id,
                     attachments,
                 } => {
-                    session_chat::on_done(
-                        &mut self.chat_state.session_chat,
-                        self.chat_state.active_session.as_deref(),
-                        &session_id,
-                        &text,
-                        attachments,
-                        &mut self.chat,
-                        &mut self.chat_state.runtime.streaming,
-                        &mut self.chat_state.runtime.pending,
-                        &mut self.chat_state.runtime.inference_id,
-                    );
-                    if self.status.starts_with("assistant :") {
-                        self.status.clear();
-                    }
-                    self.mark_onboarding_chat_done();
+                    chat_event_controller::on_done(self, text, session_id, attachments);
                 }
                 Evt::Error(m) => {
-                    if aos_agent::context_budget::is_technical_vision_infer_error(&m) {
-                        self.chat_state.runtime.finish_turn();
-                        if self.status.starts_with("assistant :") {
-                            self.status.clear();
-                        }
+                    if chat_event_controller::on_error(self, m) {
                         break;
                     }
-                    if m.contains("media.image") || m.starts_with("Image:") {
-                        self.image_generating = None;
-                    }
-                    self.status = m.clone();
-                    self.chat.push(ChatLine::plain("système", m));
-                    self.chat_state.runtime.finish_turn();
                 }
                 Evt::Status(m) => {
-                    if let Some(id) = m.strip_prefix("model removed:") {
-                        self.on_model_removed(id.trim().to_string());
-                    }
-                    if m == format!("{} ok", aos_agent::intents::KILL)
-                        && self.agent_ui.consume_document_prep_kill_ok()
-                    {
-                        // swallow kill-ok banner for document-prep stop
-                    } else {
-                        self.status = m;
-                    }
+                    chat_event_controller::on_status(self, m);
                 }
                 Evt::ModelDownloadStarted { model_id } => {
                     self.on_model_download_started(model_id);
