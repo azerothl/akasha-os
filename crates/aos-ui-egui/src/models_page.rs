@@ -5,6 +5,7 @@ use crate::os_open::{aos_home, open_url};
 use aos_proto::ModelInfo;
 use eframe::egui;
 use serde::Deserialize;
+use std::path::Path;
 use std::sync::mpsc::Sender;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -134,14 +135,18 @@ pub fn first_catalog_vision_model_id() -> Option<String> {
 }
 
 pub fn load_catalog_models() -> Vec<CatalogModel> {
+    load_catalog_models_from(&aos_home())
+}
+
+fn load_catalog_models_from(home: &Path) -> Vec<CatalogModel> {
     let mut out = Vec::new();
-    let catalog = aos_home().join("share/models/catalog-offerings.json");
+    let catalog = home.join("share/models/catalog-offerings.json");
     if let Ok(raw) = std::fs::read_to_string(catalog) {
         if let Ok(v) = serde_json::from_str::<OfferingsRoot>(&raw) {
             out.extend(v.models);
         }
     }
-    let custom = aos_home().join("var/models/custom-offerings.json");
+    let custom = home.join("var/models/custom-offerings.json");
     if let Ok(raw) = std::fs::read_to_string(custom) {
         if let Ok(v) = serde_json::from_str::<CustomOfferingsRoot>(&raw) {
             for m in v.models {
@@ -477,14 +482,16 @@ fn human_gib(bytes: u64) -> String {
 
 #[cfg(test)]
 mod vision_catalog_tests {
-    use super::first_catalog_vision_model_id;
+    use super::load_catalog_models_from;
     use std::path::PathBuf;
 
     #[test]
     fn first_vision_model_follows_catalog_order() {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-        std::env::set_var("AOS_HOME", root);
-        let id = first_catalog_vision_model_id();
+        let id = load_catalog_models_from(&root)
+            .into_iter()
+            .find(|model| model.profiles.iter().any(|profile| profile == "vision"))
+            .map(|model| model.id);
         assert_eq!(id.as_deref(), Some("local:gemma-4-e4b"));
     }
 }
