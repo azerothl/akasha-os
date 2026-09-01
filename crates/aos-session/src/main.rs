@@ -893,23 +893,12 @@ fn ensure_layout(home: &Path) -> Vec<String> {
     // (sinon un ancien WASM reste en place après update Preview — issue #1).
     let notes_share = home.join("share/modules/notes.aospkg");
     let notes_installed = home.join("var/modules/notes");
-    if notes_share.exists() && bootstrap::sync_packaged_module(&notes_share, &notes_installed) {
+    if notes_share.exists() {
+        if bootstrap::sync_packaged_module(&notes_share, &notes_installed) {
             synced.push("notes".into());
-            let reg = home.join("var/modules/registry.yaml");
-            if !reg.exists() {
-                let _ = fs::write(
-                    &reg,
-                    r#"installed:
-  - name: notes
-    granted_caps:
-      - fs.read:/documents/notes/**
-      - fs.write:/documents/notes/**
-      - mem.write:module:notes
-      - mem.query:module:notes
-    quarantined: false
-"#,
-                );
-            }
+        }
+        let reg = home.join("var/modules/registry.yaml");
+        bootstrap::ensure_notes_registry_entry(&reg);
     }
 
     // Module tasks (Preview 0.3 / E3) — même resync au boot.
