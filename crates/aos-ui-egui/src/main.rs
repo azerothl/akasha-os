@@ -25,6 +25,7 @@ mod chat_controller;
 mod chat_delegate;
 mod chat_media;
 mod chat_room;
+mod chat_sidebar_state;
 mod cmd;
 mod composer_layout;
 mod image_composition;
@@ -100,7 +101,7 @@ use aos_proto::{
     McpServerInfo, MemHit, ModelInfo,
     ModuleCatalogue, ModuleInfo,
     PendingConfirmation, ProviderRecord,
-    SkillInfo, SystemMetrics, WebSearchHit,
+    SkillInfo, SystemMetrics,
 };
 use prefs::{load_preferences, save_preferences, Preferences};
 use eframe::egui;
@@ -489,17 +490,10 @@ struct UiApp {
     sessions: Vec<ChatSessionMeta>,
     active_session: Option<String>,
     session_chat: session_chat::SessionChatState,
-    rename_buf: String,
+    chat_sidebar: chat_sidebar_state::ChatSidebarState,
     network_online: bool,
-    web_query: String,
-    web_results: Vec<WebSearchHit>,
-    fetch_url: String,
-    browse_preview: String,
     prefs: Preferences,
     agent_timeout_secs: u64,
-    gen_format: String,
-    gen_content: String,
-    gen_path: String,
     mem_query: String,
     mem_note: String,
     mem_hits: Vec<MemHit>,
@@ -804,17 +798,10 @@ impl UiApp {
             sessions: Vec::new(),
             active_session: None,
             session_chat: session_chat::SessionChatState::default(),
-            rename_buf: String::new(),
+            chat_sidebar: chat_sidebar_state::ChatSidebarState::default(),
             network_online,
-            web_query: String::new(),
-            web_results: Vec::new(),
-            fetch_url: String::new(),
-            browse_preview: String::new(),
             prefs,
             agent_timeout_secs,
-            gen_format: "md".into(),
-            gen_content: String::new(),
-            gen_path: "/downloads/note.md".into(),
             mem_query: String::new(),
             mem_note: String::new(),
             mem_hits: Vec::new(),
@@ -2978,7 +2965,7 @@ impl eframe::App for UiApp {
                             self.schedule_transcript_dirty,
                         )
                     {
-                        self.rename_buf = meta.title.clone();
+                        self.chat_sidebar.rename = meta.title.clone();
                         if let Some(s) = self.sessions.iter_mut().find(|s| s.id == meta.id) {
                             *s = meta.clone();
                         }
@@ -2987,7 +2974,7 @@ impl eframe::App for UiApp {
                     } else {
                         self.pending_session_nav = session_nav::PendingSessionNav::None;
                         self.active_session = Some(id.clone());
-                        self.rename_buf = meta.title.clone();
+                        self.chat_sidebar.rename = meta.title.clone();
                         if let Some(s) = self.sessions.iter_mut().find(|s| s.id == meta.id) {
                             *s = meta.clone();
                         }
@@ -3113,8 +3100,8 @@ impl eframe::App for UiApp {
                     self.secret_names = names;
                     self.secret_vault_encrypted = encrypted;
                 }
-                Evt::WebResults(r) => self.web_results = r,
-                Evt::BrowsePreview(t) => self.browse_preview = t,
+                Evt::WebResults(r) => self.chat_sidebar.web_results = r,
+                Evt::BrowsePreview(t) => self.chat_sidebar.browse_preview = t,
                 Evt::NetMode(online) => {
                     self.network_online = online;
                     self.prefs.network_online = online;
