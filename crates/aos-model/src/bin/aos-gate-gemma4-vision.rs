@@ -363,7 +363,7 @@ async fn gate_bus(bus_addr: &str, image: &Path) -> Vec<Gate> {
                 detail: format!("prompt={} généré={} TTFT={:.0}ms", prompt, gen, ttft),
             });
         }
-        Ok((prompt, gen, _)) => {
+        Ok((prompt, _gen, _)) => {
             gates.push(Gate {
                 name: "G1 model.infer texte seul",
                 passed: false,

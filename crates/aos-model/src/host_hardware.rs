@@ -8,15 +8,18 @@ use std::path::Path;
 struct HardwareJson {
     gpu_name: String,
     #[serde(default)]
-    vram_mib: u64,
+    #[serde(rename = "vram_mib")]
+    _vram_mib: u64,
     #[serde(default)]
-    ram_mib: u64,
+    #[serde(rename = "ram_mib")]
+    _ram_mib: u64,
     disk_free_bytes: u64,
     #[serde(default)]
     bandwidth: Option<BandwidthSignals>,
 }
 
 /// Build a [`HardwareProfile`] from session probe output when present.
+#[allow(clippy::too_many_arguments)]
 pub fn hardware_profile_from_json(
     home: &Path,
     config_gpu: bool,

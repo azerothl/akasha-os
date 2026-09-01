@@ -187,6 +187,7 @@ impl HardwareProfile {
     }
 
     /// Build a host profile from first-run capacity + bandwidth signals (E21).
+    #[allow(clippy::too_many_arguments)]
     pub fn from_host_caps(
         name: impl Into<String>,
         has_gpu: bool,

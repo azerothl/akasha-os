@@ -1,3 +1,4 @@
+#![allow(clippy::items_after_test_module)]
 //! E16 media generate: cap check helpers + dest paths.
 
 use std::path::PathBuf;
@@ -105,6 +106,7 @@ fn engine_name(eng: aos_sd::MediaEngine) -> &'static str {
 /// Inline base64 IPC is capped (~8 MiB frames); larger media uses host file ingest.
 const INLINE_MEDIA_MAX: usize = 4 * 1024 * 1024;
 
+#[allow(clippy::too_many_arguments)]
 async fn persist_media_file(
     bus: &aos_ipc::BusClient,
     dest: &str,
@@ -161,6 +163,7 @@ async fn persist_media_file(
     Ok(resp.bytes.max(nbytes))
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn persist_media(
     bus: &aos_ipc::BusClient,
     dest: &str,
