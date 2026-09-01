@@ -826,6 +826,21 @@ pub fn probe_args_for_tool(tool: &str) -> serde_json::Value {
             "session_id": "__probe__",
             "points": [{"x": 0.1, "y": 0.1}, {"x": 0.2, "y": 0.2}]
         }),
+        "notes.create" => serde_json::json!({
+            "title": "__probe__",
+            "content": ""
+        }),
+        "notes.update" => serde_json::json!({
+            "title": "__probe__",
+            "content": ""
+        }),
+        "notes.read" | "notes.links" | "notes.related" => serde_json::json!({
+            "title": "__probe__"
+        }),
+        "notes.search" => serde_json::json!({
+            "query": "__probe__"
+        }),
+        "notes.list" => serde_json::json!({}),
         _ => serde_json::json!({"session_id": "__probe__"}),
     }
 }
@@ -1493,6 +1508,71 @@ min_os_api: 1
         let args = probe_args_for_tool("canvas.path");
         assert_eq!(args["session_id"], "__probe__");
         assert!(args["points"].as_array().is_some_and(|p| p.len() >= 3));
+    }
+
+    #[test]
+    fn probe_args_for_notes_create_includes_title() {
+        let args = probe_args_for_tool("notes.create");
+        assert_eq!(args["title"], "__probe__");
+        assert!(args.get("content").is_some());
+    }
+
+    /// Packaged notes WASM must export all manifest tools (issue #111).
+    #[test]
+    fn packaged_notes_wasm_exports_create_and_list() {
+        struct NotesHost;
+        impl HostServices for NotesHost {
+            fn call(
+                &self,
+                _ctx: &HostCallCtx,
+                service: &str,
+                _args: serde_json::Value,
+            ) -> Result<serde_json::Value, String> {
+                match service {
+                    "fs.read" => Ok(serde_json::json!({"content": ""})),
+                    "fs.write" => Ok(serde_json::json!({"version": 1u64})),
+                    "fs.list" => Ok(serde_json::json!({"entries": []})),
+                    "mem.episodic_write" => Ok(serde_json::json!({"id": 1u64})),
+                    "mem.episodic_query" => Ok(serde_json::json!({"hits": []})),
+                    "mem.episodic_delete" => Ok(serde_json::json!({"count": 0})),
+                    other => Err(format!("unexpected host_call: {other}")),
+                }
+            }
+        }
+
+        let share_pkg = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../share/modules/notes.aospkg");
+        if !share_pkg.join("module.wasm").is_file() {
+            eprintln!("skip packaged notes test: wasm missing");
+            return;
+        }
+
+        let base = tmpbase("notes-packaged");
+        let caps = vec![
+            "fs.read:/documents/notes/**".into(),
+            "fs.write:/documents/notes/**".into(),
+            "mem.write:module:notes".into(),
+            "mem.query:module:notes".into(),
+        ];
+        let mut rt = ModuleRuntime::open(base.join("modules"), Arc::new(NotesHost)).unwrap();
+        let info = rt.install(&share_pkg, Some(caps)).expect("install notes");
+        for tool in [
+            "notes.create",
+            "notes.list",
+            "notes.read",
+            "notes.search",
+            "notes.update",
+            "notes.links",
+            "notes.related",
+        ] {
+            assert!(
+                info.tools.iter().any(|t| t == tool),
+                "packaged notes must verify {tool}: {:?}",
+                info.tools
+            );
+        }
+
+        let _ = std::fs::remove_dir_all(&base);
     }
 }
 

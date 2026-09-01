@@ -139,6 +139,11 @@ pub(crate) async fn invoke_notes(
     tool: &str,
     args: serde_json::Value,
 ) {
+    let save_payload = if matches!(tool, "notes.create" | "notes.update") {
+        Some(notes_save_payload_from_args(&args))
+    } else {
+        None
+    };
     let req = ModuleInvokeRequest {
         module: "notes".into(),
         tool: tool.into(),
@@ -228,14 +233,48 @@ pub(crate) async fn invoke_notes(
             }
         }
         Ok(r) => {
-            let _ = evt_tx.send(Evt::Error(
-                r.error.unwrap_or_else(|| "notes: échec".into()),
-            ));
+            if let Some((title, content, path)) = save_payload {
+                let _ = evt_tx.send(Evt::NotesSaveFailed {
+                    title,
+                    content,
+                    path,
+                });
+            } else {
+                let _ = evt_tx.send(Evt::Error(
+                    r.error.unwrap_or_else(|| "notes: échec".into()),
+                ));
+            }
         }
-        Err(e) => {
-            let _ = evt_tx.send(Evt::Error(e.to_string()));
+        Err(_) => {
+            if let Some((title, content, path)) = save_payload {
+                let _ = evt_tx.send(Evt::NotesSaveFailed {
+                    title,
+                    content,
+                    path,
+                });
+            } else {
+                let _ = evt_tx.send(Evt::Error("notes: échec".into()));
+            }
         }
     }
+}
+
+fn notes_save_payload_from_args(args: &serde_json::Value) -> (String, String, Option<String>) {
+    let title = args
+        .get("title")
+        .and_then(|p| p.as_str())
+        .unwrap_or("")
+        .to_string();
+    let content = args
+        .get("content")
+        .and_then(|p| p.as_str())
+        .unwrap_or("")
+        .to_string();
+    let path = args
+        .get("path")
+        .and_then(|p| p.as_str())
+        .map(|s| s.to_string());
+    (title, content, path)
 }
 
 pub(crate) async fn invoke_tasks(

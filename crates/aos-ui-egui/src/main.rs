@@ -286,8 +286,13 @@ fn agent_completion_chat_text(
     t: &i18n::UiStrings,
     session_ops: Option<&[aos_proto::CanvasOp]>,
     trace: Option<&aos_proto::AgentTrace>,
+    pending_note_agent: bool,
+    notes_count: usize,
 ) -> String {
     let title = ag.display_title();
+    if agent_panel::notes_create_fail_chrome(Some(ag), pending_note_agent, notes_count) {
+        return t.notes_create_failed.to_string();
+    }
     if agent_panel::canvas_draw_failure_muted(Some(ag), session_ops, trace) {
         return String::new();
     }
@@ -1934,6 +1939,13 @@ impl eframe::App for UiApp {
                 Evt::UserLibraryListed(docs) => self.on_user_library_listed(docs),
                 Evt::NotesSaved { path, slug, title } => {
                     self.on_notes_saved(path, slug, title);
+                }
+                Evt::NotesSaveFailed {
+                    title,
+                    content,
+                    path,
+                } => {
+                    self.on_notes_save_failed(title, content, path);
                 }
                 Evt::Audit(a) => {
                     self.security_ui.set_audit(a);

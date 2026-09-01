@@ -545,6 +545,14 @@ pub struct UiStrings {
     pub notes_related: &'static str,
     pub notes_list: &'static str,
     pub notes_filter: &'static str,
+    pub notes_create_failed: &'static str,
+    pub notes_create_retry: &'static str,
+    pub notes_title_label: &'static str,
+    pub notes_title_hint: &'static str,
+    pub notes_editor_new: &'static str,
+    pub notes_editor_edit: &'static str,
+    pub notes_status_saved: &'static str,
+    pub notes_status_new: &'static str,
     pub agent_ask_user: &'static str,
     pub agent_ask_waiting: &'static str,
     pub agent_subagents: &'static str,
@@ -1275,6 +1283,14 @@ const EN: UiStrings = UiStrings {
     notes_related: "Related notes",
     notes_list: "List",
     notes_filter: "Filter",
+    notes_create_failed: "Couldn't create the note.",
+    notes_create_retry: "Try again",
+    notes_title_label: "Title",
+    notes_title_hint: "Note title",
+    notes_editor_new: "New note",
+    notes_editor_edit: "Edit",
+    notes_status_saved: "Saved",
+    notes_status_new: "New note",
     agent_ask_user: "Question for the user",
     agent_ask_waiting: "Waiting for a reply in chat.",
     agent_subagents: "Sub-agents",
@@ -2002,6 +2018,14 @@ const FR: UiStrings = UiStrings {
     notes_related: "Notes liées",
     notes_list: "Liste",
     notes_filter: "Filtrer",
+    notes_create_failed: "Impossible de créer la note.",
+    notes_create_retry: "Réessayer",
+    notes_title_label: "Titre",
+    notes_title_hint: "Titre de la note",
+    notes_editor_new: "Nouvelle note",
+    notes_editor_edit: "Édition",
+    notes_status_saved: "Enregistré",
+    notes_status_new: "Nouvelle note",
     agent_ask_user: "Question à l'utilisateur",
     agent_ask_waiting: "En attente d'une réponse dans le chat.",
     agent_subagents: "Sous-agents",
@@ -2314,6 +2338,18 @@ mod tests {
         assert!(!routing_label(&t, "balanced").starts_with("balanced ("));
         assert!(!routing_label(&t, "remote_only").contains("remote_only"));
         assert!(routing_technical(&t, "local_only").contains("local_only"));
+    }
+
+    #[test]
+    fn locked_notes_create_failure_copy_fr_en() {
+        let t_en = strings("en");
+        let t_fr = strings("fr");
+        assert_eq!(t_en.notes_create_failed, "Couldn't create the note.");
+        assert_eq!(t_fr.notes_create_failed, "Impossible de créer la note.");
+        assert_eq!(t_en.notes_create_retry, "Try again");
+        assert_eq!(t_fr.notes_create_retry, "Réessayer");
+        assert!(!t_en.notes_create_failed.contains("module"));
+        assert!(!t_fr.notes_create_failed.contains('/'));
     }
 
     #[test]

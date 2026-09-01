@@ -75,6 +75,7 @@ pub struct NotesActions {
     pub save_update: Option<(String, String, String)>, // title, path, body
     pub attach_path: Option<String>,
     pub related: Option<(String, String)>, // path, topic
+    pub retry_save: bool,
 }
 
 pub struct NotesPanelState {
@@ -94,6 +95,10 @@ pub struct NotesPanelState {
     pub incoming: Vec<NoteLink>,
     pub status: String,
     pub show_preview: bool,
+    /// Locked chrome when the last create/save failed.
+    pub create_failed: bool,
+    /// Last create/save payload for retry (title, body, optional path for update).
+    pub retry_payload: Option<(String, String, Option<String>)>,
     md_cache: CommonMarkCache,
 }
 
@@ -116,14 +121,24 @@ impl Default for NotesPanelState {
             incoming: Vec::new(),
             status: String::new(),
             show_preview: true,
+            create_failed: false,
+            retry_payload: None,
             md_cache: CommonMarkCache::default(),
         }
     }
 }
 
 impl NotesPanelState {
+    pub fn can_save(&self) -> bool {
+        !self.edit_title.trim().is_empty()
+    }
+
     pub fn apply_listed(&mut self, notes: Vec<NoteListItem>) {
         self.notes = notes;
+        if self.create_failed && !self.notes.is_empty() {
+            self.create_failed = false;
+            self.retry_payload = None;
+        }
         self.status = format!("{} note(s)", self.notes.len());
     }
 
@@ -144,7 +159,9 @@ impl NotesPanelState {
         self.is_new = false;
         self.dirty = false;
         self.related_hits.clear();
-        self.status = "Note chargée".into();
+        self.create_failed = false;
+        self.retry_payload = None;
+        self.status = String::new();
     }
 
     pub fn apply_search_hits(&mut self, hits: Vec<NoteSearchHit>) {
@@ -168,17 +185,44 @@ impl NotesPanelState {
         self.related_hits.clear();
         self.is_new = true;
         self.dirty = false;
-        self.status = "Nouvelle note".into();
+        self.create_failed = false;
+        self.retry_payload = None;
+        self.status.clear();
     }
 
-    pub fn mark_saved(&mut self, path: String, slug: String, title: String) {
+    pub fn mark_saved(&mut self, path: String, slug: String, title: String, saved_label: &str) {
         self.edit_path = Some(path.clone());
         self.edit_slug = Some(slug);
         self.selected_path = Some(path);
         self.edit_title = title;
         self.is_new = false;
         self.dirty = false;
-        self.status = "Enregistré".into();
+        self.create_failed = false;
+        self.retry_payload = None;
+        self.status = saved_label.to_string();
+    }
+
+    pub fn mark_save_failed(
+        &mut self,
+        title: String,
+        body: String,
+        path: Option<String>,
+    ) {
+        self.create_failed = true;
+        self.retry_payload = Some((title, body, path));
+        self.status.clear();
+    }
+
+    pub fn take_retry_action(&mut self) -> Option<NotesActions> {
+        let (title, body, path) = self.retry_payload.clone()?;
+        let mut actions = NotesActions::default();
+        if let Some(path) = path {
+            actions.save_update = Some((title, path, body));
+        } else {
+            actions.save_create = Some((title, body));
+        }
+        self.create_failed = false;
+        Some(actions)
     }
 }
 
@@ -319,18 +363,63 @@ pub fn show_notes_panel(
         cols[1].vertical(|ui| {
             let preview_h = (editor_h * 0.35).max(100.0);
             ui.label(RichText::new(if state.is_new {
-                "Nouvelle note"
+                t.notes_editor_new
             } else {
-                "Édition"
-            }).strong());
+                t.notes_editor_edit
+            })
+            .strong());
 
+            if state.create_failed {
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(t.notes_create_failed).strong());
+                    if ui.button(t.notes_create_retry).clicked() {
+                        actions.retry_save = true;
+                    }
+                });
+                ui.separator();
+            }
+
+            let can_save = state.can_save();
             ui.horizontal(|ui| {
-                ui.label("Titre");
+                ui.label(t.notes_title_label);
                 if ui
-                    .text_edit_singleline(&mut state.edit_title)
+                    .add(
+                        egui::TextEdit::singleline(&mut state.edit_title)
+                            .desired_width(180.0)
+                            .hint_text(t.notes_title_hint),
+                    )
                     .changed()
                 {
                     state.dirty = true;
+                }
+                if ui
+                    .add_enabled(can_save, egui::Button::new(if state.is_new {
+                        t.tasks_create
+                    } else {
+                        t.memory_btn_save
+                    }))
+                    .clicked()
+                {
+                    let title = state.edit_title.trim().to_string();
+                    let body = state.edit_body.clone();
+                    if state.is_new || state.edit_path.is_none() {
+                        actions.save_create = Some((title, body));
+                    } else {
+                        let path = state.edit_path.clone().unwrap_or_default();
+                        actions.save_update = Some((title, path, body));
+                    }
+                }
+                if let Some(path) = state.edit_path.clone() {
+                    if ui.button(t.notes_attach).clicked() {
+                        actions.attach_path = Some(path.clone());
+                    }
+                    if ui.button(t.notes_related).clicked() {
+                        let topic = state.search_query.clone();
+                        actions.related = Some((path, topic));
+                    }
+                }
+                if state.dirty {
+                    ui.weak("•");
                 }
             });
 
@@ -406,42 +495,6 @@ pub fn show_notes_panel(
                         CommonMarkViewer::new().show(ui, &mut state.md_cache, &preview);
                     });
             }
-
-            ui.horizontal(|ui| {
-                let can_save = !state.edit_title.trim().is_empty();
-                if ui
-                    .add_enabled(can_save, egui::Button::new(if state.is_new {
-                        t.tasks_create
-                    } else {
-                        t.memory_btn_save
-                    }))
-                    .clicked()
-                {
-                    let title = state.edit_title.trim().to_string();
-                    let body = state.edit_body.clone();
-                    if state.is_new || state.edit_path.is_none() {
-                        actions.save_create = Some((title, body));
-                    } else {
-                        let path = state.edit_path.clone().unwrap_or_default();
-                        actions.save_update = Some((title, path, body));
-                    }
-                }
-                if let Some(path) = state.edit_path.clone() {
-                    if ui.button(t.notes_attach).clicked() {
-                        actions.attach_path = Some(path);
-                    }
-                    if ui.button(t.notes_related).clicked() {
-                        let topic = state.search_query.clone();
-                        actions.related = Some((
-                            state.edit_path.clone().unwrap_or_default(),
-                            topic,
-                        ));
-                    }
-                }
-                if state.dirty {
-                    ui.weak("• modifié");
-                }
-            });
 
             // Liens
             if !state.outgoing.is_empty() || !state.incoming.is_empty() {
@@ -578,4 +631,26 @@ pub fn parse_related(v: &serde_json::Value) -> Vec<NoteRelatedHit> {
     v.get("related")
         .and_then(|r| serde_json::from_value::<Vec<NoteRelatedHit>>(r.clone()).ok())
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn can_save_requires_non_empty_title() {
+        let mut state = NotesPanelState::default();
+        assert!(!state.can_save());
+        state.edit_title = "  cohort  ".into();
+        assert!(state.can_save());
+    }
+
+    #[test]
+    fn mark_save_failed_stores_retry_payload() {
+        let mut state = NotesPanelState::default();
+        state.mark_save_failed("t".into(), "body".into(), None);
+        assert!(state.create_failed);
+        let retry = state.take_retry_action().expect("retry");
+        assert_eq!(retry.save_create.as_ref().map(|(t, _)| t.as_str()), Some("t"));
+    }
 }

@@ -7,16 +7,20 @@ use aos_proto::UserLibraryDoc;
 
 impl UiApp {
     pub(crate) fn on_notes_raw(&mut self, s: String) {
-        let is_new = self.workspace_ui.apply_notes_raw(s);
-        if self.scenario_ui.pending_note_agent && is_new {
-            self.scenario_ui.mark_note_agent();
-        }
-        self.scenario_ui.note_human = true;
+        self.workspace_ui.apply_notes_raw(s);
     }
 
     pub(crate) fn on_notes_listed(&mut self, notes: Vec<NoteListItem>) {
+        let had_pending_note = self.scenario_ui.pending_note_agent;
         self.workspace_ui.apply_notes_listed(notes);
-        self.scenario_ui.note_human = true;
+        if !self.workspace_ui.notes.notes.is_empty() {
+            self.scenario_ui.note_human = true;
+            if had_pending_note {
+                self.scenario_ui.mark_note_agent();
+            }
+        } else if had_pending_note {
+            self.scenario_ui.pending_note_agent = false;
+        }
     }
 
     pub(crate) fn on_note_loaded(&mut self, detail: NoteDetail) {
@@ -32,8 +36,21 @@ impl UiApp {
     }
 
     pub(crate) fn on_notes_saved(&mut self, path: String, slug: String, title: String) {
-        self.workspace_ui.mark_note_saved(path, slug, title);
-        self.scenario_ui.note_human = true;
+        let t = i18n::strings(&self.prefs.language);
+        self.workspace_ui.mark_note_saved(path, slug, title, t.notes_status_saved);
+        if !self.workspace_ui.notes.notes.is_empty() {
+            self.scenario_ui.note_human = true;
+        }
+    }
+
+    pub(crate) fn on_notes_save_failed(
+        &mut self,
+        title: String,
+        content: String,
+        path: Option<String>,
+    ) {
+        self.workspace_ui
+            .mark_note_save_failed(title, content, path);
     }
 
     pub(crate) fn on_user_library_listed(&mut self, docs: Vec<UserLibraryDoc>) {

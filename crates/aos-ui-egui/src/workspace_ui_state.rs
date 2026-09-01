@@ -39,8 +39,23 @@ impl WorkspaceUiState {
         self.notes.apply_related(hits);
     }
 
-    pub(crate) fn mark_note_saved(&mut self, path: String, slug: String, title: String) {
-        self.notes.mark_saved(path, slug, title);
+    pub(crate) fn mark_note_saved(
+        &mut self,
+        path: String,
+        slug: String,
+        title: String,
+        saved_label: &str,
+    ) {
+        self.notes.mark_saved(path, slug, title, saved_label);
+    }
+
+    pub(crate) fn mark_note_save_failed(
+        &mut self,
+        title: String,
+        content: String,
+        path: Option<String>,
+    ) {
+        self.notes.mark_save_failed(title, content, path);
     }
 
     pub(crate) fn set_library_docs(&mut self, docs: Vec<UserLibraryDoc>) {
