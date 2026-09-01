@@ -305,9 +305,9 @@ serde_json = "1"
             .args(["--print", "target-list"])
             .output()
             .ok()
-            .and_then(|o| {
+            .map(|o| {
                 let s = String::from_utf8_lossy(&o.stdout);
-                Some(s.contains("wasm32-unknown-unknown"))
+                s.contains("wasm32-unknown-unknown")
             })
             .unwrap_or(false);
         if !target_ok {

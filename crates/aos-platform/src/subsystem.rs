@@ -718,11 +718,7 @@ impl HostServices for PlatformSubsystem {
                     }
                     prompt_block.push_str(&user_doc_block);
                 }
-                if prompt_block.is_empty() {
-                    prompt_block.push_str("Contexte mémoire:\n");
-                } else {
-                    prompt_block.push_str("Contexte mémoire:\n");
-                }
+                prompt_block.push_str("Contexte mémoire:\n");
                 for h in &hits {
                     prompt_block.push_str(&format!("- {}\n", h.text));
                 }

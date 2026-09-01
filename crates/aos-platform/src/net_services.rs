@@ -455,7 +455,7 @@ fn strip_tag_blocks(html: &str, tag: &str) -> String {
     s
 }
 
-fn extract_between<'a>(s: &'a str, start: &str, end: &str) -> Option<String> {
+fn extract_between(s: &str, start: &str, end: &str) -> Option<String> {
     let i = s.find(start)? + start.len();
     let rest = &s[i..];
     let j = rest.find(end)?;

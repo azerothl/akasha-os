@@ -275,6 +275,7 @@ impl MemoryStore {
 
     /// Insert + auto-link vers un hit proche du même namespace.
     /// Retourne `(id, auto_relations)`.
+    #[allow(clippy::too_many_arguments)]
     pub fn episodic_write_auto_link(
         &mut self,
         namespace: &str,
@@ -926,7 +927,7 @@ mod tests {
         let hits = s.episodic_query(&v(0.91), 5, Some("ns"));
         assert!(hits.iter().any(|h| h.id == a && h.pinned));
         // beta may appear via similar expansion even if cosine is low
-        assert!(hits.iter().any(|h| h.id == b) || hits.len() >= 1);
+        assert!(hits.iter().any(|h| h.id == b) || !hits.is_empty());
         let neigh = s.neighbors(a, Some(MemRelationKind::Similar));
         assert_eq!(neigh.len(), 1);
         assert_eq!(neigh[0].id, b);

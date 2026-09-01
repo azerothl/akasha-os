@@ -626,6 +626,7 @@ impl ChatSessionStore {
         Ok((self.to_public(meta), messages))
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn append(
         &self,
         id: &str,
@@ -829,6 +830,7 @@ impl ChatSessionStore {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn restyle_op_body(
     body: &mut CanvasOpBody,
     color: Option<&str>,

@@ -641,7 +641,7 @@ fn protect_master(plain: &[u8]) -> Result<Vec<u8>, SecretError> {
         CryptProtectData, CRYPT_INTEGER_BLOB, CRYPTPROTECT_UI_FORBIDDEN,
     };
 
-    let mut in_blob = CRYPT_INTEGER_BLOB {
+    let in_blob = CRYPT_INTEGER_BLOB {
         cbData: plain.len() as u32,
         pbData: plain.as_ptr() as *mut u8,
     };
@@ -651,7 +651,7 @@ fn protect_master(plain: &[u8]) -> Result<Vec<u8>, SecretError> {
     };
     let ok = unsafe {
         CryptProtectData(
-            &mut in_blob,
+            &in_blob,
             PCWSTR::null(),
             None,
             None,
@@ -685,7 +685,7 @@ fn unprotect_master(raw: &[u8]) -> Result<Vec<u8>, SecretError> {
     };
 
     if let Some(rest) = raw.strip_prefix(b"DPA1") {
-        let mut in_blob = CRYPT_INTEGER_BLOB {
+        let in_blob = CRYPT_INTEGER_BLOB {
             cbData: rest.len() as u32,
             pbData: rest.as_ptr() as *mut u8,
         };
@@ -695,7 +695,7 @@ fn unprotect_master(raw: &[u8]) -> Result<Vec<u8>, SecretError> {
         };
         let ok = unsafe {
             CryptUnprotectData(
-                &mut in_blob,
+                &in_blob,
                 None,
                 None,
                 None,

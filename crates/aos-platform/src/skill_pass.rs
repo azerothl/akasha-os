@@ -95,7 +95,7 @@ pub fn local_day_key(now_ms: u64, offset_minutes: i32) -> String {
 /// True during the nightly analysis window (once per local day).
 pub fn in_night_pass_window(now_ms: u64, offset_minutes: i32) -> bool {
     let hour = local_hour(now_ms, offset_minutes);
-    hour >= NIGHT_PASS_HOUR_START && hour < NIGHT_PASS_HOUR_END
+    (NIGHT_PASS_HOUR_START..NIGHT_PASS_HOUR_END).contains(&hour)
 }
 
 /// True once local morning has started (card may surface).
@@ -326,10 +326,8 @@ fn slugify_label(label_en: &str) -> String {
     for ch in label_en.chars() {
         if ch.is_ascii_alphanumeric() {
             out.push(ch.to_ascii_lowercase());
-        } else if ch.is_whitespace() || ch == '-' || ch == '_' {
-            if !out.ends_with('-') {
-                out.push('-');
-            }
+        } else if (ch.is_whitespace() || ch == '-' || ch == '_') && !out.ends_with('-') {
+            out.push('-');
         }
     }
     while out.ends_with('-') {
@@ -471,11 +469,11 @@ pub fn surface_card_mute_line(lang: &str) -> String {
 }
 
 /// Returns the pending offer to surface in chat, if any.
-pub fn pending_surface_offer<'a>(
-    state: &'a SkillPassState,
+pub fn pending_surface_offer(
+    state: &SkillPassState,
     now_ms: u64,
     offset_minutes: i32,
-) -> Option<&'a SkillPassCandidate> {
+) -> Option<&SkillPassCandidate> {
     let candidate = state.pending.as_ref()?;
     let today = local_day_key(now_ms, offset_minutes);
     if state.last_pass_local_day_key != today {

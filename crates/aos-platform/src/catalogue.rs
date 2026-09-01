@@ -602,7 +602,7 @@ fn parse_sig(s: &str) -> Result<Signature, CatalogueError> {
 }
 
 fn hex_decode(s: &str) -> Option<Vec<u8>> {
-    if s.len() % 2 != 0 {
+    if !s.len().is_multiple_of(2) {
         return None;
     }
     (0..s.len())
@@ -732,7 +732,7 @@ mod tests {
         let dir = temp_dir("merge");
         let bundled_yaml = b"version: 1\nentries:\n  - name: notes\n    version: \"1\"\n    kind: module\n    path: share/modules/notes.aospkg\n    hash: sha256:aa\n    attested_caps: []\n";
         let extra_yaml = b"version: 1\nentries:\n  - name: morning-brief\n    version: \"1\"\n    kind: skill\n    path: community/skills/morning-brief/SKILL.md\n    hash: sha256:bb\n    license: MIT\n    attested_caps: []\n";
-        let bundled = SignedCatalogue::load(&write_signed(&dir.join("b"), bundled_yaml)).unwrap();
+        let bundled = SignedCatalogue::load(write_signed(&dir.join("b"), bundled_yaml)).unwrap();
         let extra_path = write_signed(&dir.join("e"), extra_yaml);
         let mut extra = ExtraCatalogueSource::open(&dir, dir.join("cache"));
         extra.enabled = true;

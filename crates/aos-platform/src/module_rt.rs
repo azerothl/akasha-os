@@ -1,3 +1,4 @@
+#![allow(clippy::items_after_test_module)]
 //! Module Runtime (§7) : sandbox WASM (wasmtime), injection de caps,
 //! introspection de schémas.
 //!
@@ -599,6 +600,7 @@ impl ModuleRuntime {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn guest_invoke_compiled(
         &self,
         module: &str,
@@ -947,9 +949,8 @@ min_os_api: 1
         make_package(&pkg);
         let wasm = std::fs::read(pkg.join("module.wasm")).unwrap();
         let real = sha256_hex(&wasm);
-        let yaml = format!(
-            "version: 1\nentries:\n  - name: echo-test\n    version: \"0.1.0\"\n    kind: module\n    path: pkg\n    hash: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n    attested_caps: []\n"
-        );
+        let yaml = "version: 1\nentries:\n  - name: echo-test\n    version: \"0.1.0\"\n    kind: module\n    path: pkg\n    hash: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n    attested_caps: []\n"
+            .to_string();
         let yaml_path = base.join("catalogue.yaml");
         std::fs::write(&yaml_path, &yaml).unwrap();
         let (pk, sig) = crate::catalogue::sign_preview_catalogue(yaml.as_bytes());
