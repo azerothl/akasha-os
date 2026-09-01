@@ -47,6 +47,7 @@ mod chat_state;
 mod chat_view_state;
 mod canvas_event_controller;
 mod cmd;
+mod confirmation_ui_state;
 mod composer_layout;
 mod image_composition;
 mod image_history;
@@ -120,7 +121,7 @@ use aos_ipc::BusClient;
 use aos_proto::{
     AgentInfo, AgentState, ChatAttachment, ChatSessionGetResponse,
     ChatSessionIdRequest,
-    PendingConfirmation, SystemMetrics,
+    SystemMetrics,
 };
 use prefs::{load_preferences, save_preferences, Preferences};
 use eframe::egui;
@@ -454,7 +455,7 @@ struct UiApp {
     metrics: Option<SystemMetrics>,
     /// Live agent roster (shared with chat / ask / room membership).
     agents: Vec<AgentInfo>,
-    confirms: Vec<PendingConfirmation>,
+    confirmations_ui: confirmation_ui_state::ConfirmationUiState,
     workspace_ui: workspace_ui_state::WorkspaceUiState,
     /// User-initiated session navigation intent for the next cross-session load.
     pending_session_nav: session_nav::PendingSessionNav,
@@ -618,7 +619,7 @@ impl UiApp {
             settings_ui: settings_ui_state::SettingsUiState::default(),
             metrics: None,
             agents: Vec::new(),
-            confirms: Vec::new(),
+            confirmations_ui: confirmation_ui_state::ConfirmationUiState::default(),
             workspace_ui: workspace_ui_state::WorkspaceUiState::default(),
             pending_session_nav: session_nav::PendingSessionNav::None,
             schedule_ui: schedule_ui_state::ScheduleUiState::default(),
@@ -2271,7 +2272,7 @@ impl eframe::App for UiApp {
                     self.sync_schedule_cards();
                 }
                 Evt::TasksListed(tasks) => self.on_tasks_listed(tasks),
-                Evt::Confirms(c) => self.confirms = c,
+                Evt::Confirms(c) => self.confirmations_ui.replace(c),
                 Evt::FeedbackOk(r) => {
                     let mut msg = format!(
                         "Enregistré localement : {}\nDossier : {}",
@@ -2748,14 +2749,15 @@ impl eframe::App for UiApp {
                 ui.label(&self.status);
             }
             // Confirmations en attente
-            if !self.confirms.is_empty() {
+            if !self.confirmations_ui.is_empty() {
                 ui.separator();
                 ui.colored_label(
                     egui::Color32::LIGHT_RED,
-                    t.confirm_pending.replace("{n}", &self.confirms.len().to_string()),
+                    t.confirm_pending
+                        .replace("{n}", &self.confirmations_ui.len().to_string()),
                 );
                 overflow_scroll_h(ui, "pending_confirms", 180.0, |ui| {
-                    for c in self.confirms.clone() {
+                    for c in self.confirmations_ui.pending.clone() {
                         ui.group(|ui| {
                             let rich = matches!(
                                 c.action.as_str(),
