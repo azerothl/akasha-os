@@ -29,13 +29,13 @@ Les builds macOS ne sont pas signés (Gatekeeper). Pas d’Intel Mac.
 À créer dans l’UI GitHub si elles manquent (Settings → General →
 Features → Discussions) :
 
-| Catégorie | Rôle |
-|-----------|------|
-| **Cohort** | Check-ins et l’appel public ci-dessous |
-| **Q&A** | Install, premier run, « est-ce que ça compte » |
-| **Show and tell** | Skills, modules, captures — pas une PR |
-| **Ideas** | Idées produit qui ne sont pas des bugs |
-| **Research** | Caps, seL4, placement — pas l’onboarding testeur |
+| Catégorie | Format | Description (à coller dans GitHub, EN — le dépôt est en anglais) |
+|-----------|--------|------------------------------------------------------------------|
+| **Cohort** | Open-ended | Preview tester check-ins and the cohort call. Walk the 15-minute path (Windows, Linux, or Mac Apple Silicon), then report here. Bugs go through in-app Feedback. EN or FR. |
+| **Q&A** | Question and answer | Install, premier run, « est-ce que ça compte » |
+| **Show and tell** | Open-ended | Skills, modules, captures — pas une PR |
+| **Ideas** | Open-ended | Idées produit qui ne sont pas des bugs |
+| **Research** | Open-ended | Caps, seL4, GPU placement, semantic IPC. Not first-run help — testers start in Cohort or Q&A. EN or FR. |
 
 Les catégories natives Q&A / Ideas / Show and tell suffisent tant que
 Cohort et Research n’existent pas.

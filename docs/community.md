@@ -27,13 +27,13 @@ macOS builds are unsigned (Gatekeeper). Intel Mac is not supported.
 Create these in the GitHub repo UI if they are missing (Settings →
 General → Features → Discussions):
 
-| Category | Purpose |
-|----------|---------|
-| **Cohort** | Check-ins and the public call below |
-| **Q&A** | Install, first run, “does this count” |
-| **Show and tell** | Skills, modules, screenshots — not a PR |
-| **Ideas** | Product ideas that are not bugs |
-| **Research** | Caps, seL4, placement — not tester onboarding |
+| Category | Format | Description (paste into GitHub) |
+|----------|--------|----------------------------------|
+| **Cohort** | Open-ended | Preview tester check-ins and the cohort call. Walk the 15-minute path (Windows, Linux, or Mac Apple Silicon), then report here. Bugs go through in-app Feedback. EN or FR. |
+| **Q&A** | Question and answer | Install, first run, “does this count” |
+| **Show and tell** | Open-ended | Skills, modules, screenshots — not a PR |
+| **Ideas** | Open-ended | Product ideas that are not bugs |
+| **Research** | Open-ended | Caps, seL4, GPU placement, semantic IPC. Not first-run help — testers start in Cohort or Q&A. EN or FR. |
 
 Built-in Q&A / Ideas / Show and tell are enough until Cohort and Research
 exist.
