@@ -56,8 +56,8 @@ impl UiApp {
                             .replace("{n}", &n.to_string())
                     }
                 };
-                let show_stop =
-                    self.chat_pending && (room_mode || self.chat_inference_id.is_some());
+                let show_stop = self.chat_runtime.pending
+                    && (room_mode || self.chat_runtime.inference_id.is_some());
                 let item_gap = ui.spacing().item_spacing.x;
                 let send_w = send_button_reserved_width(ui, &t);
                 let stop_w = if show_stop {
@@ -118,7 +118,7 @@ impl UiApp {
                                             .send(Cmd::RoomTurnCancel { session_id: sid });
                                     }
                                 }
-                            } else if let Some(id) = self.chat_inference_id {
+                            } else if let Some(id) = self.chat_runtime.inference_id {
                                 if ui
                                     .add_sized(
                                         egui::vec2(stop_w, input_h),

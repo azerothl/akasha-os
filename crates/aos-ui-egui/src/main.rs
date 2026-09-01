@@ -25,6 +25,7 @@ mod chat_controller;
 mod chat_delegate;
 mod chat_media;
 mod chat_room;
+mod chat_runtime_state;
 mod chat_sidebar_state;
 mod cmd;
 mod composer_layout;
@@ -481,10 +482,8 @@ struct UiApp {
     version: String,
     tab: Tab,
     chat: Vec<ChatLine>,
-    streaming: String,
+    chat_runtime: chat_runtime_state::ChatRuntimeState,
     chat_composer: chat_composer_state::ChatComposerState,
-    chat_pending: bool,
-    chat_inference_id: Option<u64>,
     catalogue: Option<ModuleCatalogue>,
     installed_modules: Vec<ModuleInfo>,
     sessions: Vec<ChatSessionMeta>,
@@ -605,8 +604,6 @@ struct UiApp {
     agent_join_room_on_create: bool,
     /// Expanded salon thinking blocks keyed by chat line index.
     room_thinking_open: std::collections::HashSet<usize>,
-    /// Last user message for an in-flight room turn (speaker queue in thinking UI).
-    room_turn_pending_text: Option<String>,
     /// Room: Members pane toggled from clickable session header.
     room_members_pane_open: bool,
     canvas_panel: chat_canvas::CanvasPanelState,
@@ -789,10 +786,8 @@ impl UiApp {
             version,
             tab: Tab::Chat,
             chat: vec![ChatLine::plain("système", intro)],
-            streaming: String::new(),
+            chat_runtime: chat_runtime_state::ChatRuntimeState::default(),
             chat_composer: chat_composer_state::ChatComposerState::default(),
-            chat_pending: false,
-            chat_inference_id: None,
             catalogue: None,
             installed_modules: Vec::new(),
             sessions: Vec::new(),
@@ -916,7 +911,6 @@ impl UiApp {
             hf_download_status: String::new(),
             show_go_to_palette: false,
             agent_join_room_on_create: false,
-            room_turn_pending_text: None,
             room_thinking_open: std::collections::HashSet::new(),
             room_members_pane_open: false,
             canvas_panel: chat_canvas::CanvasPanelState::default(),
@@ -1081,9 +1075,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
     }
 
     fn dispatch_pending_chat(&mut self, pending: ResearchPendingChat) {
-        self.streaming.clear();
-        self.chat_pending = true;
-        self.chat_inference_id = None;
+        self.chat_runtime.begin_turn(None);
         self.status = "assistant : génération…".into();
         let _ = self.cmd_tx.send(Cmd::Chat {
             session_id: pending.session_id,
@@ -2381,7 +2373,7 @@ impl eframe::App for UiApp {
                         self.active_session.as_deref(),
                         &session_id,
                         &text,
-                        &mut self.streaming,
+                        &mut self.chat_runtime.streaming,
                     );
                 }
                 Evt::Done {
@@ -2396,9 +2388,9 @@ impl eframe::App for UiApp {
                         &text,
                         attachments,
                         &mut self.chat,
-                        &mut self.streaming,
-                        &mut self.chat_pending,
-                        &mut self.chat_inference_id,
+                        &mut self.chat_runtime.streaming,
+                        &mut self.chat_runtime.pending,
+                        &mut self.chat_runtime.inference_id,
                     );
                     if self.status.starts_with("assistant :") {
                         self.status.clear();
@@ -2407,10 +2399,7 @@ impl eframe::App for UiApp {
                 }
                 Evt::Error(m) => {
                     if aos_agent::context_budget::is_technical_vision_infer_error(&m) {
-                        self.chat_pending = false;
-                        self.streaming.clear();
-                        self.chat_inference_id = None;
-                        self.room_turn_pending_text = None;
+                        self.chat_runtime.finish_turn();
                         if self.status.starts_with("assistant :") {
                             self.status.clear();
                         }
@@ -2421,10 +2410,7 @@ impl eframe::App for UiApp {
                     }
                     self.status = m.clone();
                     self.chat.push(ChatLine::plain("système", m));
-                    self.streaming.clear();
-                    self.chat_pending = false;
-                    self.chat_inference_id = None;
-                    self.room_turn_pending_text = None;
+                    self.chat_runtime.finish_turn();
                 }
                 Evt::Status(m) => {
                     if let Some(id) = m.strip_prefix("model removed:") {
@@ -2997,11 +2983,11 @@ impl eframe::App for UiApp {
                         self.session_chat.clear_unread(&id);
                         self.session_chat.sync_active_view(
                             self.active_session.as_deref(),
-                            &mut self.streaming,
-                            &mut self.chat_pending,
-                            &mut self.chat_inference_id,
+                            &mut self.chat_runtime.streaming,
+                            &mut self.chat_runtime.pending,
+                            &mut self.chat_runtime.inference_id,
                         );
-                        self.room_turn_pending_text = None;
+                        self.chat_runtime.room_turn_text = None;
                         if meta.canvas_open {
                             let _ = self.cmd_tx.send(Cmd::CanvasPoll {
                                 session_id: id.clone(),
@@ -3019,9 +3005,9 @@ impl eframe::App for UiApp {
                 } => {
                     self.session_chat.finish_turn(&session_id);
                     if self.active_session.as_deref() == Some(session_id.as_str()) {
-                        self.chat_pending = false;
-                        self.chat_inference_id = None;
-                        self.room_turn_pending_text = None;
+                        self.chat_runtime.pending = false;
+                        self.chat_runtime.inference_id = None;
+                        self.chat_runtime.room_turn_text = None;
                         if let Some(status) =
                             chat_room::room_turn_done_status(agent_turns, cancelled)
                         {
@@ -3291,7 +3277,7 @@ impl eframe::App for UiApp {
                         self.active_session.as_deref(),
                         &session_id,
                         inference_id,
-                        &mut self.chat_inference_id,
+                        &mut self.chat_runtime.inference_id,
                     );
                 }
                 Evt::ChatCancelled { session_id } => {
@@ -3299,13 +3285,13 @@ impl eframe::App for UiApp {
                         &mut self.session_chat,
                         self.active_session.as_deref(),
                         &session_id,
-                        &mut self.streaming,
-                        &mut self.chat_pending,
-                        &mut self.chat_inference_id,
+                        &mut self.chat_runtime.streaming,
+                        &mut self.chat_runtime.pending,
+                        &mut self.chat_runtime.inference_id,
                         &mut self.chat,
                     );
                     if on_active {
-                        self.room_turn_pending_text = None;
+                        self.chat_runtime.room_turn_text = None;
                         let t = i18n::strings(&self.prefs.language);
                         self.status = t.chat_stopped.into();
                     }

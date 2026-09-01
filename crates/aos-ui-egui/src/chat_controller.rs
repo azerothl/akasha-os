@@ -137,10 +137,7 @@ impl UiApp {
                 return;
             };
             self.session_chat.begin_turn(&session_id);
-            self.streaming.clear();
-            self.chat_pending = true;
-            self.chat_inference_id = None;
-            self.room_turn_pending_text = Some(text.clone());
+            self.chat_runtime.begin_turn(Some(text.clone()));
             let _ = self.cmd_tx.send(Cmd::RoomTurn {
                 session_id,
                 content: room_content,
@@ -253,9 +250,7 @@ impl UiApp {
             })
             .collect();
         self.session_chat.begin_turn(&session_id);
-        self.streaming.clear();
-        self.chat_pending = true;
-        self.chat_inference_id = None;
+        self.chat_runtime.begin_turn(None);
         self.status = "assistant : génération…".into();
         let _ = self.cmd_tx.send(Cmd::Chat {
             session_id,

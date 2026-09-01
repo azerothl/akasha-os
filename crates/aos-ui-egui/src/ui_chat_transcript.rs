@@ -416,7 +416,7 @@ impl UiApp {
                     self.chat_composer.refocus = true;
                     self.status = "réponse destinée à cet agent".into();
                 }
-                if !self.streaming.is_empty() {
+                if !self.chat_runtime.streaming.is_empty() {
                     let (_, _, role_color) =
                         chat_bubble_colors(ChatBubbleKind::Assistant, ui.visuals().dark_mode);
                     chat_message_frame(ui, ChatBubbleKind::Assistant, None, |ui| {
@@ -424,16 +424,19 @@ impl UiApp {
                             role_color,
                             egui::RichText::new(t.chat_assistant).strong().small(),
                         );
-                        let streaming = agent_panel::format_chat_streaming_preview(&self.streaming);
+                        let streaming = agent_panel::format_chat_streaming_preview(
+                            &self.chat_runtime.streaming,
+                        );
                         ui.push_id("chat_md_stream", |ui| {
                             chat_markdown_viewer(ui).show(ui, &mut self.chat_md_cache, &streaming);
                         });
                     });
-                } else if self.chat_pending {
+                } else if self.chat_runtime.pending {
                     let (_, _, role_color) =
                         chat_bubble_colors(ChatBubbleKind::Assistant, ui.visuals().dark_mode);
                     let thinking = if room_mode {
-                        self.room_turn_pending_text
+                        self.chat_runtime
+                            .room_turn_text
                             .as_deref()
                             .and_then(|msg| {
                                 chat_room::format_turn_speaker_queue(
