@@ -1913,32 +1913,9 @@ impl eframe::App for UiApp {
                     title,
                     origin,
                     ack,
-                } => {
-                    if origin == "document" {
-                        self.on_document_prep_spawned(agent_id.clone(), title.clone());
-                        if self.chat_state.active_session.as_deref() == Some(session_id.as_str()) {
-                            self.attach_document_progress_agent(&agent_id, &title);
-                        }
-                    } else {
-                        self.arm_pending_module_agent(&title);
-                        if self.chat_state.active_session.as_deref() == Some(session_id.as_str()) {
-                            self.chat.push(ChatLine {
-                                role: "assistant".into(),
-                                text: ack,
-                                attachments: vec![ChatAttachment::AgentRef {
-                                    agent_id,
-                                    title,
-                                    origin,
-                                }],
-                                speaker_id: None,
-                                speaker_name: None,
-                                thinking: None,
-                            });
-                        } else {
-                            self.status = format!("agent lancé : {agent_id}");
-                        }
-                    }
-                }
+                } => agent_event_controller::on_spawned(
+                    self, session_id, agent_id, title, origin, ack,
+                ),
                 Evt::Agents(a) => agent_event_controller::on_agents(self, a),
                 Evt::Notes(s) => self.on_notes_raw(s),
                 Evt::NotesListed(notes) => self.on_notes_listed(notes),

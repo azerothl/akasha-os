@@ -7,6 +7,40 @@ use crate::{
 };
 use aos_proto::{AgentInfo, AgentState, ChatAttachment};
 
+pub(crate) fn on_spawned(
+    app: &mut UiApp,
+    session_id: String,
+    agent_id: String,
+    title: String,
+    origin: String,
+    ack: String,
+) {
+    if origin == "document" {
+        app.on_document_prep_spawned(agent_id.clone(), title.clone());
+        if app.chat_state.active_session.as_deref() == Some(session_id.as_str()) {
+            app.attach_document_progress_agent(&agent_id, &title);
+        }
+    } else {
+        app.arm_pending_module_agent(&title);
+        if app.chat_state.active_session.as_deref() == Some(session_id.as_str()) {
+            app.chat.push(ChatLine {
+                role: "assistant".into(),
+                text: ack,
+                attachments: vec![ChatAttachment::AgentRef {
+                    agent_id,
+                    title,
+                    origin,
+                }],
+                speaker_id: None,
+                speaker_name: None,
+                thinking: None,
+            });
+        } else {
+            app.status = format!("agent lancé : {agent_id}");
+        }
+    }
+}
+
 pub(crate) fn on_agents(app: &mut UiApp, agents: Vec<AgentInfo>) {
     let t = i18n::strings(&app.prefs.language);
     if app.scenario_ui.pending_note_agent
