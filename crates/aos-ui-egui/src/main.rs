@@ -46,6 +46,7 @@ mod theme;
 mod troubleshoot;
 mod ui_format;
 mod ui_feedback;
+mod ui_models;
 mod ui_providers;
 mod ui_security;
 mod ui_scenarios;
@@ -71,7 +72,7 @@ use composer_layout::{
 };
 #[cfg(test)]
 use composer_layout::{chat_composer_wraps, COMPOSER_INPUT_ROW_H};
-use os_open::{aos_home, app_icon, bin_aos_session, native_path, open_in_browser, open_os_folder, open_url, request_preview_restart};
+use os_open::{aos_home, app_icon, bin_aos_session, native_path, open_in_browser, open_os_folder};
 use runtime::runtime_main;
 use module_actions::{
     agent_id_cmd, invoke_module_bind, invoke_module_tool, invoke_notes, invoke_tasks,
@@ -7227,194 +7228,6 @@ impl UiApp {
             });
     }
 
-    fn ui_model_download_restart(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        if self.model_download_restart.is_none() {
-            return;
-        }
-        let t = i18n::strings(&self.prefs.language);
-        ui.horizontal(|ui| {
-            ui.colored_label(
-                egui::Color32::from_rgb(120, 200, 140),
-                self.download_status.as_str(),
-            );
-            if ui.button(t.models_restart_preview).clicked() {
-                request_preview_restart(ctx);
-                self.model_download_restart = None;
-            }
-            if icons::close_button(ui).clicked() {
-                self.model_download_restart = None;
-                self.download_status.clear();
-            }
-        });
-    }
-
-    fn ui_models(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        let t = i18n::strings(&self.prefs.language);
-        ui.heading(t.tab_models);
-        ui.weak(t.tab_hint_models);
-        ui.horizontal(|ui| {
-            if ui.button("Refresh list").clicked() {
-                let _ = self.cmd_tx.send(Cmd::ModelsRefresh);
-            }
-        });
-        if !self.model_updates_msg.is_empty() {
-            ui.colored_label(
-                egui::Color32::from_rgb(180, 220, 120),
-                &self.model_updates_msg,
-            );
-        }
-        if !self.download_status.is_empty() && self.model_download_restart.is_none() {
-            ui.label(&self.download_status);
-        }
-        if let Some(dl) = &self.model_download {
-            let frac = (dl.percent as f32 / 100.0).clamp(0.0, 1.0);
-            let txt = if dl.total_bytes > 0 {
-                format!(
-                    "{} · {} / {}",
-                    dl.model_id,
-                    human_bytes(dl.done_bytes),
-                    human_bytes(dl.total_bytes)
-                )
-            } else {
-                format!("{} · {}%", dl.model_id, dl.percent)
-            };
-            ui.add(egui::ProgressBar::new(frac).text(txt));
-        }
-        self.ui_model_download_restart(ui, ctx);
-
-        models_page::ui_hf_import(
-            ui,
-            &mut self.hf_download_url,
-            &mut self.hf_download_name,
-            &mut self.hf_download_status,
-            self.model_download.is_some(),
-            &self.cmd_tx,
-            &t,
-        );
-
-        ui.separator();
-        models_page::ui_catalog_tab_bar(ui, &mut self.models_catalog_tab, &t);
-        if matches!(
-            self.models_catalog_tab,
-            models_page::ModelCatalogTab::Image | models_page::ModelCatalogTab::Audio
-        ) {
-            ui.weak(t.models_media_packs);
-        }
-
-        let catalog = models_page::load_catalog_models();
-        let installed_rows = models_page::load_installed_rows(&self.model_infos);
-        let busy = self.model_download.is_some();
-
-        egui::ScrollArea::vertical()
-            .auto_shrink([false, false])
-            .show(ui, |ui| {
-                match self.models_catalog_tab {
-                    models_page::ModelCatalogTab::Installed => {
-                        if installed_rows.is_empty() {
-                            ui.weak(t.models_catalog_empty);
-                        }
-                        for m in installed_rows {
-                            let id = m.id.clone();
-                            let mut load = false;
-                            let mut set_default = false;
-                            let mut redownload = false;
-                            let mut remove = false;
-                            models_page::ui_installed_card(
-                                ui,
-                                &m,
-                                busy,
-                                &t,
-                                &mut || load = true,
-                                &mut || set_default = true,
-                                &mut || redownload = true,
-                                &mut || remove = true,
-                            );
-                            if load {
-                                let _ = self.cmd_tx.send(Cmd::ModelLoad {
-                                    model_id: id.clone(),
-                                });
-                            }
-                            if set_default {
-                                if let Some(sid) = self.active_session.clone() {
-                                    let _ = self.cmd_tx.send(Cmd::SessionSetModel {
-                                        session_id: sid,
-                                        model_id: Some(id.clone()),
-                                    });
-                                }
-                            }
-                            if redownload {
-                                let _ = self.cmd_tx.send(Cmd::ModelRedownload {
-                                    model_id: id.clone(),
-                                });
-                            }
-                            if remove {
-                                let _ = self.cmd_tx.send(Cmd::ModelRemove {
-                                    model_id: id,
-                                });
-                            }
-                            ui.add_space(6.0);
-                        }
-                        ui.separator();
-                        ui.label(t.metrics_live);
-                        if let Some(m) = &self.metrics {
-                            for mm in &m.models {
-                                ui.group(|ui| {
-                                    ui.strong(format!("{} [{:?}]", mm.model_id, mm.state));
-                                    ui.label(format_model_infer_line(mm, &t));
-                                });
-                            }
-                        }
-                    }
-                    tab => {
-                        let filtered: Vec<_> = catalog
-                            .iter()
-                            .filter(|m| models_page::category_of(m) == tab)
-                            .collect();
-                        if filtered.is_empty() {
-                            ui.weak(t.models_catalog_empty);
-                        }
-                        for m in filtered {
-                            let installed = installed_rows.iter().any(|x| x.id == m.id);
-                            let id = m.id.clone();
-                            let mut download = false;
-                            let mut redownload = false;
-                            let mut remove = false;
-                            let mut open_hf = None;
-                            models_page::ui_model_card(
-                                ui,
-                                m,
-                                installed,
-                                busy,
-                                &t,
-                                &mut || download = true,
-                                &mut || redownload = true,
-                                &mut || remove = true,
-                                &mut |url| open_hf = Some(url.to_string()),
-                            );
-                            if download {
-                                let _ = self.cmd_tx.send(Cmd::ModelDownload {
-                                    model_id: id.clone(),
-                                });
-                            }
-                            if redownload {
-                                let _ = self.cmd_tx.send(Cmd::ModelRedownload {
-                                    model_id: id.clone(),
-                                });
-                            }
-                            if remove {
-                                let _ = self.cmd_tx.send(Cmd::ModelRemove {
-                                    model_id: id.clone(),
-                                });
-                            }
-                            if let Some(url) = open_hf {
-                                open_url(&url);
-                            }
-                            ui.add_space(6.0);
-                        }
-                    }
-                }
-            });
-    }
 }
 
 #[cfg(test)]
