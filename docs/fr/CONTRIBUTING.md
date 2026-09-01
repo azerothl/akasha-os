@@ -30,38 +30,45 @@ canal de messagerie) pour ce projet pour l’instant. Page communauté :
 
 ## Aider sans PR noyau
 
-| Chemin | Où | Licence aujourd’hui |
-|--------|----|---------------------|
+Politique de licence : [ADR 0006](../../adr/0006-license-split.md) (noyau vs
+extensions).
+
+| Chemin | Où | Licence / CLA |
+|--------|----|----------------|
 | Rapport testeur | Feedback in-app → issue GitHub | n/a |
 | Question / check-in cohorte | [Discussions](https://github.com/azerothl/akasha-os/discussions) | n/a |
-| Idée de skill ou de module | Discussions (Show and tell) | Publier dans une Discussion **n’accorde pas** la licence commerciale |
-| Typo / traduction de docs | Pull request | Licence de contribution ci-dessous |
-| Proposition d’ADR | Pull request sous `adr/` | Licence de contribution ci-dessous |
-| Changement noyau / crate | Pull request | Licence de contribution ci-dessous |
+| Idée de skill ou de module | Discussions (Show and tell) ou PR `community/` plus tard | **Pas** d’octroi commercial. Une Discussion est toujours sûre. `community/` défaut MIT (SPDX dans les fichiers). |
+| SDK guest / module WASM first-party | PR sous `modules/` | Apache-2.0 après relicence ; **pas** d’octroi commercial. Tant que le SPDX n’est pas posé, demander avant d’ouvrir la PR. |
+| Typo / traduction de docs | Pull request sous `docs/` | CLA hôte (AGPL + octroi commercial) |
+| Proposition d’ADR | Pull request sous `adr/` | CLA hôte |
+| Noyau / crate / UI hôte | Pull request sous `crates/`, `packaging/`, `website/` | CLA hôte |
 
-Jusqu’à un split de licence ultérieur, **tout fichier que tu PR dans ce
-dépôt** est couvert par la licence de contribution ci-dessous. Préfère une
-Discussion si tu veux partager un skill ou un module sans cet octroi.
+Ne **mélange pas** fichiers AGPL hôte et fichiers d’extension permissifs
+dans une même PR.
 
 ## Proposer un skill
 
 Les skills sont du Markdown sous `share/skills/` / `var/skills/` (exemple
 livré : [`skills/planner/SKILL.md`](../../skills/planner/SKILL.md)). Ouvre
-une Discussion Show and tell avec le corps du `SKILL.md`. N’ouvre une PR
-que si tu acceptes la licence de contribution.
+une Discussion Show and tell avec le corps du `SKILL.md`, ou une PR sous
+`community/` une fois l’arbre créé (défaut MIT, pas d’octroi commercial).
+Une PR qui change les `skills/` livrés dans le zip Preview est MIT après
+relicence — toujours sans octroi commercial.
 
 ## Scaffolder un module
 
 Dans la Preview : Settings → Modules, ou demande à un agent
-`module.scaffold` (TESTER étapes 14–15). Partage le `.aospkg` en Discussion.
-L’install fait toujours la revue de caps. SDK guest :
-[`modules/sdk`](../../modules/sdk).
+`module.scaffold` (TESTER étapes 14–15). Partage le `.aospkg` en Discussion
+(pas de CLA) ou sous `community/` plus tard. L’install fait toujours la
+revue de caps. SDK guest : [`modules/sdk`](../../modules/sdk) (Apache-2.0
+selon l’ADR 0006).
 
 ## Proposer une ADR
 
 Reprendre le style de
 [`adr/0001-microkernel.md`](../../adr/0001-microkernel.md). Ouvrir une PR
-titrée `adr: …`. La licence de contribution s’applique.
+titrée `adr: …`. Les ADR vivent avec les docs hôte : la licence de
+contribution des chemins AGPL s’applique.
 
 ## Labels
 
@@ -79,12 +86,12 @@ Voir [SECURITY.md](SECURITY.md). N’ouvre pas d’issue publique.
 
 ## Licence des contributions
 
-Le projet est en **double licence** (AGPL-3.0-only + licence commerciale).
-Pour que les deux voies restent possibles, chaque contribution **fusionnée
-dans ce dépôt** doit pouvoir être redistribuée sous les deux régimes.
+L’**OS hôte** est en double licence (AGPL-3.0-only + commerciale). Les
+extensions guest ne le sont pas. Voir l’[ADR 0006](../../adr/0006-license-split.md).
 
-En ouvrant une pull request ou en poussant du code dans ce dépôt, tu
-certifies que :
+En ouvrant une pull request qui touche des chemins **hôte** (`crates/`,
+`packaging/`, `website/`, `docs/`, `adr/`, `vm/`, `demo/` et autres arbres
+AGPL), tu certifies que :
 
 1. tu es titulaire des droits sur ta contribution, ou tu as le droit de
    la soumettre ;
@@ -93,9 +100,17 @@ certifies que :
    mondiale, gratuite, de redistribuer ta contribution aussi sous la
    **licence commerciale** décrite dans `LICENSE-COMMERCIAL.md`.
 
-Si tu ne peux pas accorder le point 3, ne soumets pas la contribution
-ici ; discute d’abord d’une exception écrite. Un post de Discussion n’est
-pas une contribution au sens de cette section.
+Si tu ne peux pas accorder le point 3, ne soumets pas de PR sur un chemin
+hôte ; discute d’abord d’une exception écrite.
+
+En ouvrant une pull request qui ne touche que des chemins **extension**
+(`modules/sdk`, modules guest first-party, `skills/`, `community/`), tu
+certifies que tu as le droit de soumettre et que tu places le travail sous
+la licence de cet arbre (Apache-2.0 ou MIT, ADR 0006). Cette PR **n’accorde
+pas** la licence commerciale.
+
+Un post de Discussion n’est jamais une contribution au sens de cette
+section.
 
 ## Marque
 

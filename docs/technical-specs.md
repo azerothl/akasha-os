@@ -1111,9 +1111,9 @@ Audit.append(infer_started/finished)
 - `docs/development-plan.md` — detailed plan by phase (deliverables, gates, risks)
 - `adr/0002-model-placement.md` — placement algorithm and cost model (P0)
 - `adr/0003-ui-framework.md` — choice of UI framework (accepted: egui)
+- `adr/0001-microkernel.md` — P4 host cap kernel + seL4 track
 - `adr/0005-offload-etat-de-l-art.md` — state of the art offload CPU/GPU/RAM/disk (pre-P1)
-- (futur) `adr/0001-microkernel.md`
-- (futur) `adr/0006-wasm-modules.md`
+- `adr/0006-license-split.md` — host AGPL+CLA vs guest Apache/MIT (accepted)
 - (futur) `adr/0004-scope-mono-vs-multi-utilisateur.md`
 
 ---

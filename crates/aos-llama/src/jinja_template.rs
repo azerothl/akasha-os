@@ -78,8 +78,8 @@ mod tests {
             ("assistant".to_string(), "Hello!".to_string()),
             ("user".to_string(), "Again".to_string()),
         ];
-        let rendered = apply_jinja_chat_template(&template, &messages, true)
-            .expect("multi-turn gemma4");
+        let rendered =
+            apply_jinja_chat_template(&template, &messages, true).expect("multi-turn gemma4");
         assert!(rendered.contains("<|turn>user"));
         assert!(rendered.contains("<|turn>model"));
         assert!(rendered.contains("Again"));

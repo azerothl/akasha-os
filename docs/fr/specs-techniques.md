@@ -1112,9 +1112,9 @@ Audit.append(infer_started/finished)
 - `plan-developpement-phases.md` — plan détaillé par phase (livrables, gates, risques)
 - `adr/0002-model-placement.md` — algorithme de placement et modèle de coût (P0)
 - `adr/0003-ui-framework.md` — choix du framework UI (accepté : egui)
+- `adr/0001-microkernel.md` — noyau de caps hôte P4 + piste seL4
 - `adr/0005-offload-etat-de-l-art.md` — état de l'art offload CPU/GPU/RAM/disque (pré-P1)
-- (futur) `adr/0001-microkernel.md`
-- (futur) `adr/0006-wasm-modules.md`
+- `adr/0006-license-split.md` — hôte AGPL+CLA vs guest Apache/MIT (acceptée)
 - (futur) `adr/0004-scope-mono-vs-multi-utilisateur.md`
 
 ---

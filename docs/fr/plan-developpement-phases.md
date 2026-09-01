@@ -635,4 +635,4 @@ Les exigences `Must` de `specs-fonctionnelles.md` doivent être **toutes couvert
 - `paysage-concurrentiel.md` — enquête OS / runtimes agentiques (août 2026)
 - `plan-evolutions.md` — priorités post-paysage E1–E19 (pas une gate P6)
 - `phases/phase-preview-03.md` … `phase-preview-09.md` — plans d’incréments Preview
-- (ADRs publiés) : `adr/0001-microkernel.md` (P4 hôte + **phase PV** seL4 VM), `adr/0002-model-placement.md` (P0), `adr/0003-ui-framework.md` (accepté : egui), `adr/0005-offload-etat-de-l-art.md` (pré-P1)
+- (ADRs publiés) : `adr/0001-microkernel.md` (P4 hôte + **phase PV** seL4 VM), `adr/0002-model-placement.md` (P0), `adr/0003-ui-framework.md` (accepté : egui), `adr/0005-offload-etat-de-l-art.md` (pré-P1), `adr/0006-license-split.md` (hôte AGPL+CLA vs guest Apache/MIT)

@@ -824,5 +824,5 @@ priorities on the host without waiting for remaining P5.2 / PV.4 / PC cohort.
 - `docs/competitive-landscape.md` — agentic OS / runtime survey (August 2026)
 - `docs/evolution-roadmap.md` — post-landscape priorities E1–E19 (not a P6 gate)
 - `docs/phases/phase-preview-03.md` … `phase-preview-09.md` — Preview increment plans
-- (published ADRs): `adr/0001-microkernel.md` (P4 host + **phase PV** seL4 VM), `adr/0002-model-placement.md` (P0), `adr/0003-ui-framework.md` (accepted: egui), `adr/0005-offload-etat-de-l-art.md` (pre-P1)
+- (published ADRs): `adr/0001-microkernel.md` (P4 host + **phase PV** seL4 VM), `adr/0002-model-placement.md` (P0), `adr/0003-ui-framework.md` (accepted: egui), `adr/0005-offload-etat-de-l-art.md` (pre-P1), `adr/0006-license-split.md` (host AGPL+CLA vs guest Apache/MIT)
 

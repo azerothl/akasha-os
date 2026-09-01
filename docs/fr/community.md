@@ -14,6 +14,11 @@ est pour les humains.
 Site public :
 [Community](https://azerothl.github.io/akasha-os/community.html?lang=fr).
 
+Split de licence (noyau AGPL + CLA vs extensions guest Apache/MIT, pas
+d’octroi commercial) : [ADR 0006](../../adr/0006-license-split.md). Une
+Discussion n’est jamais un événement CLA. Ne pas PR un skill dans
+`crates/`.
+
 ## Gate cohorte
 
 **3 Windows + 1 Linux + 1 macOS Apple Silicon** suivent le

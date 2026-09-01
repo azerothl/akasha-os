@@ -12,6 +12,10 @@ be empty rooms. Messaging channels are also **out of the OS core** (see
 
 Public site: [Community](https://azerothl.github.io/akasha-os/community.html).
 
+License split (kernel AGPL + CLA vs guest extensions Apache/MIT, no
+commercial grant): [ADR 0006](../adr/0006-license-split.md). A Discussion is
+never a CLA event. Do not PR a skill into `crates/`.
+
 ## Cohort gate
 
 **3 Windows + 1 Linux + 1 macOS Apple Silicon** testers complete the

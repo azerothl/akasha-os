@@ -18,10 +18,7 @@ pub const DEFAULT_BOUNDARY_MARKERS: &[&str] = &[
 ];
 
 /// Token indices where a new semantic segment starts (inclusive), always including `0`.
-pub fn anchor_positions_from_pieces(
-    pieces: &[String],
-    markers: &[&str],
-) -> Vec<usize> {
+pub fn anchor_positions_from_pieces(pieces: &[String], markers: &[&str]) -> Vec<usize> {
     let mut anchors = vec![0usize];
     let mut acc = String::new();
     for (i, piece) in pieces.iter().enumerate() {
@@ -50,11 +47,7 @@ pub fn snap_to_anchor(max_pos: usize, anchors: &[usize]) -> usize {
 
 /// Prefix length for KV reuse: common prefix, snapped to a semantic anchor when
 /// the raw match ends inside a segment (agent context edit).
-pub fn semantic_prefix_len(
-    prev: &[i32],
-    next: &[i32],
-    anchors_in_prev: &[usize],
-) -> usize {
+pub fn semantic_prefix_len(prev: &[i32], next: &[i32], anchors_in_prev: &[usize]) -> usize {
     let raw = common_prefix_len_tokens(prev, next);
     if raw == 0 || raw == prev.len() || raw == next.len() {
         return raw;

@@ -28,36 +28,41 @@ channel) for this project yet. Community page:
 
 ## Ways to help without a kernel PR
 
-| Path | Where | License today |
+License policy: [ADR 0006](adr/0006-license-split.md) (kernel vs extensions).
+
+| Path | Where | License / CLA |
 |------|-------|----------------|
 | Tester report | In-app Feedback → GitHub issue | n/a |
 | Question / cohort check-in | [Discussions](https://github.com/azerothl/akasha-os/discussions) | n/a |
-| Skill or module idea | Discussions (Show and tell) | Sharing in a Discussion does **not** grant the commercial license |
-| Docs typo / translation | Pull request | Contribution license below |
-| ADR proposal | Pull request under `adr/` | Contribution license below |
-| Kernel / crate change | Pull request | Contribution license below |
+| Skill or module idea | Discussions (Show and tell) or a later `community/` PR | **No** commercial grant. Discussion is always safe. `community/` default MIT (SPDX in the files). |
+| Guest SDK / first-party WASM module | PR under `modules/` | Apache-2.0 after relicense; **no** commercial grant. Until SPDX lands, ask before opening the PR. |
+| Docs typo / translation | Pull request under `docs/` | Host CLA (AGPL + commercial grant) |
+| ADR proposal | Pull request under `adr/` | Host CLA |
+| Kernel / crate / host UI | Pull request under `crates/`, `packaging/`, `website/` | Host CLA |
 
-Until a later license split, **any file you PR into this repository** is
-covered by the contribution license below. Prefer a Discussion if you want
-to share a skill or module without that grant.
+Do **not** mix AGPL host files and permissive extension files in one PR.
 
 ## How to propose a skill
 
 Skills are Markdown under `share/skills/` / `var/skills/` (see a shipped
 example such as [`skills/planner/SKILL.md`](skills/planner/SKILL.md)). Open a
-Show and tell Discussion with the `SKILL.md` body. Do not open a PR unless
-you accept the contribution license.
+Show and tell Discussion with the `SKILL.md` body, or a PR under `community/`
+once that tree exists (MIT default, no commercial grant). A PR that changes
+shipped `skills/` in the Preview zip is MIT after relicense — still no
+commercial grant.
 
 ## How to scaffold a module
 
 In Preview: Settings → Modules, or ask an agent to `module.scaffold` (TESTER
-steps 14–15). Share the `.aospkg` in a Discussion. Install still runs cap
-review. Guest SDK: [`modules/sdk`](modules/sdk).
+steps 14–15). Share the `.aospkg` in a Discussion (no CLA) or under
+`community/` later. Install still runs cap review. Guest SDK:
+[`modules/sdk`](modules/sdk) (Apache-2.0 per ADR 0006).
 
 ## How to propose an ADR
 
 Copy the style of [`adr/0001-microkernel.md`](adr/0001-microkernel.md). Open a
-PR titled `adr: …`. The contribution license applies.
+PR titled `adr: …`. ADRs live with the host docs: the contribution license
+for AGPL paths applies.
 
 ## Labels we use
 
@@ -75,12 +80,12 @@ See [SECURITY.md](SECURITY.md). Do not file a public issue.
 
 ## Contribution license
 
-The project is **dual-licensed** (AGPL-3.0-only + commercial). For both
-paths to remain viable, every contribution **merged into this repository**
-must be redistributable under both regimes.
+The **host OS** is dual-licensed (AGPL-3.0-only + commercial). Guest
+extensions are not. See [ADR 0006](adr/0006-license-split.md).
 
-By opening a pull request or pushing code to this repository, you certify
-that:
+By opening a pull request that touches **host** paths (`crates/`,
+`packaging/`, `website/`, `docs/`, `adr/`, `vm/`, `demo/`, and other AGPL
+trees), you certify that:
 
 1. you own the rights to your contribution, or you have permission to submit
    it;
@@ -89,9 +94,16 @@ that:
    royalty-free license to redistribute your contribution also under the
    **commercial license** described in `LICENSE-COMMERCIAL.md`.
 
-If you cannot grant point 3, do not submit the contribution here; discuss a
-written exception first. A Discussion post is not a contribution under this
-section.
+If you cannot grant point 3, do not submit a host-path PR; discuss a written
+exception first.
+
+By opening a pull request that only touches **extension** paths
+(`modules/sdk`, first-party guest modules, `skills/`, `community/`), you
+certify that you have the right to submit and that you place the work under
+the license of that tree (Apache-2.0 or MIT, as in ADR 0006). That PR does
+**not** grant the commercial license.
+
+A Discussion post is never a contribution under this section.
 
 ## Trademark
 
