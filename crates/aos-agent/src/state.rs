@@ -1,7 +1,7 @@
 //! État cognitif d'un agent (§4.2) — sérialisable (snapshot/restore).
 
 use crate::canvas_scene::{canvas_op_succeeded, canvas_tool_completes_plan_node};
-use aos_proto::{AgentGoal, AgentStepRecord, TaskNode, TaskNodeStatus};
+use aos_proto::{AgentGoal, AgentStepRecord, CanvasGetResponse, TaskNode, TaskNodeStatus};
 use serde::{Deserialize, Serialize};
 
 /// Successful canvas draw ops on one plan node before force-advance (safety cap).
@@ -159,6 +159,8 @@ impl CognitiveState {
     /// Advance a canvas plan only when its current stage has its required work.
     pub fn maybe_advance_plan_after_canvas_draw(&mut self, tool: &str, outcome: &str) -> bool {
         let succeeded = canvas_op_succeeded(outcome)
+            || (tool == "canvas.get"
+                && serde_json::from_str::<CanvasGetResponse>(outcome.trim()).is_ok())
             || (tool == "canvas.export" && outcome.contains("\"path\""));
         if !succeeded {
             return false;
@@ -437,6 +439,29 @@ mod tests {
         ]);
         assert!(st.maybe_advance_plan_after_canvas_draw("canvas.get", "ok canvas"));
         assert_eq!(st.current_task_title().as_deref(), Some("Dessiner la silhouette"));
+    }
+
+    #[test]
+    fn structured_canvas_get_completes_an_analysis_task_before_drawing() {
+        let mut st = CognitiveState::new("agent-121", vec![]);
+        st.set_plan(vec![
+            TaskNode { id: "1".into(), title: "Analyse (canvas.get)".into(), status: TaskNodeStatus::Pending, notes: String::new() },
+            TaskNode { id: "2".into(), title: "Dessiner la voiture".into(), status: TaskNodeStatus::Pending, notes: String::new() },
+        ]);
+        let outcome = r##"{"active_layer_id":"lyr-1","canvas_aspect":"square","canvas_open":true,"canvas_seeing":false,"layers":[],"next_seq":1,"ops":[],"pen":{"color":"#000000","dash":[],"opacity":1.0,"width":2.0},"session_id":"sess-agent-121"}"##;
+
+        assert!(st.maybe_advance_plan_after_canvas_draw("canvas.get", outcome));
+        assert_eq!(st.current_task_title().as_deref(), Some("Dessiner la voiture"));
+        assert!(st.canvas_preparation_action_block_reason("canvas.path").is_none());
+    }
+
+    #[test]
+    fn invalid_canvas_get_json_does_not_complete_analysis() {
+        let mut st = CognitiveState::new("agent-121", vec![]);
+        st.set_plan(vec![TaskNode { id: "1".into(), title: "Analyse (canvas.get)".into(), status: TaskNodeStatus::Pending, notes: String::new() }]);
+
+        assert!(!st.maybe_advance_plan_after_canvas_draw("canvas.get", r#"{"error":"session missing"}"#));
+        assert!(st.canvas_preparation_action_block_reason("canvas.path").is_some());
     }
 
     #[test]
