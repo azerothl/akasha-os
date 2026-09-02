@@ -238,6 +238,17 @@ fn to_norm(rect: eframe::egui::Rect, p: Pos2) -> CanvasPoint {
     }
 }
 
+/// `f32::clamp` panics when min > max. Empty-canvas hint text can be wider
+/// than the pane (unbreakable tokens), which inverts the padding range.
+fn clamp_in_range(value: f32, a: f32, b: f32) -> f32 {
+    let min = a.min(b);
+    let max = a.max(b);
+    if !value.is_finite() {
+        return min;
+    }
+    value.clamp(min, max)
+}
+
 const SNAP_STEP: f32 = 0.01;
 
 pub(crate) fn snap_unit(v: f32) -> f32 {
@@ -1591,12 +1602,16 @@ pub fn ui_canvas_surface(
             )
         });
         let mut pos = rect.center() - galley.size() * 0.5;
-        pos.x = pos
-            .x
-            .clamp(rect.left() + 8.0, rect.right() - galley.size().x - 8.0);
-        pos.y = pos
-            .y
-            .clamp(rect.top() + 8.0, rect.bottom() - galley.size().y - 8.0);
+        pos.x = clamp_in_range(
+            pos.x,
+            rect.left() + 8.0,
+            rect.right() - galley.size().x - 8.0,
+        );
+        pos.y = clamp_in_range(
+            pos.y,
+            rect.top() + 8.0,
+            rect.bottom() - galley.size().y - 8.0,
+        );
         ui.painter().galley(pos, galley, Color32::TRANSPARENT);
     }
 
@@ -1818,6 +1833,13 @@ pub fn canvas_agent_brief(user_text: &str, aspect: CanvasAspect, exported: &[Str
 mod routing_tests {
     use super::*;
     use crate::i18n;
+
+    #[test]
+    fn empty_hint_clamp_survives_inverted_bounds() {
+        let x = clamp_in_range(491.5, 493.27505, 489.72498);
+        assert!(x.is_finite());
+        assert!((489.72498..=493.27505).contains(&x));
+    }
 
     #[test]
     fn toolbar_min_width_covers_fr_clear_label() {
