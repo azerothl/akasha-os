@@ -47,7 +47,14 @@ pub(crate) fn on_canvas_snapshot(app: &mut UiApp, ctx: &egui::Context, event: Ca
     }
     let now = ctx.input(|i| i.time);
     if delta {
-        app.chat_state.view.canvas.merge_delta(ops, next_seq, now);
+        if ops.is_empty() && next_seq > app.chat_state.view.canvas.last_seen_seq {
+            // A clear advances the server cursor without producing a drawable
+            // op. Treat that empty delta as a reset instead of retaining the
+            // stale local scene until the canvas is reopened.
+            app.chat_state.view.canvas.apply_snapshot(Vec::new(), next_seq, now);
+        } else {
+            app.chat_state.view.canvas.merge_delta(ops, next_seq, now);
+        }
     } else {
         app.chat_state
             .view

@@ -188,6 +188,10 @@ impl ChatSessionStore {
             }
             CanvasOpBody::Clear => {
                 doc.ops.clear();
+                // Advance the document cursor even though clear has no
+                // drawable op. Delta consumers can then distinguish a clear
+                // from an empty poll and discard their local scene.
+                doc.next_seq = doc.next_seq.saturating_add(1);
                 None
             }
             _ => {
