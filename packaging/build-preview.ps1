@@ -286,9 +286,9 @@ if (Test-Path $engines) {
 }
 
 @"
-Akasha OS Preview $Version (Windows x64 + NVIDIA)
+Akasha OS Preview $Version (Windows x64 ; NVIDIA ou CPU)
 
-1. Prérequis : driver NVIDIA récent, nvidia-smi OK, ~4 Go disque
+1. Prérequis : ~8 Go disque ; si GPU, driver NVIDIA récent et nvidia-smi OK
 2. Installation : .\install.cmd
    (ou : powershell -ExecutionPolicy Bypass -File .\install.ps1)
    Données stables : %LOCALAPPDATA%\AgentOS-Preview (sessions, mémoire, notes).

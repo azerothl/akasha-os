@@ -10,15 +10,15 @@
 
 **Système d'exploitation agent-natif** — capacités, IPC sémantique, GPU
 first-class, offline-first. La Preview tourne sur hôte Windows/Linux
-(NVIDIA) ; la piste seL4 est séparée.
+(NVIDIA ou CPU) et macOS Apple Silicon ; la piste seL4 est séparée.
 
 <p align="center">
   <img src="../../branding/logo/tracks.svg" width="480" alt="MEMORY, CAPS, GPU, AGENTS">
 </p>
 
-> Ce n'est **pas** encore un OS bootable. La Preview 0.15.1 est une application
-> hôte installable pour testeurs (Windows/Linux ; NVIDIA optionnel via chemin CPU
-> dans le même zip).
+> Ce n'est **pas** encore un OS bootable. La Preview 0.16.0 est une application
+> hôte installable pour testeurs (Windows/Linux/macOS Apple Silicon ; NVIDIA
+> optionnel sur Win/Linux via le chemin CPU du même zip).
 
 ## Pourquoi Akasha OS
 
@@ -36,9 +36,10 @@ Catalogue : [FEATURES.md](FEATURES.md).
 | Mémoire | Faits long terme ; bootstrap mémoire d'abord |
 | Notes | Humaines + agents (module WASM) ; resync au boot après une update |
 | Tâches | Module dual-surface + onglet Tasks |
-| Agents | Goal, skills, outils, MCP, scheduler ; timeline |
+| Agents | Goal, skills, outils, MCP, scheduler ; timeline et export Markdown des traces |
 | Caps | Liste / révocation dans l'UI |
-| Modèles | Packs selon le matériel (dont CPU) ; packs image/TTS optionnels (Download installe aussi sd.cpp / piper) ; métriques TTFT / tok/s / VRAM |
+| Modèles | Packs selon le matériel (dont CPU) ; nouvelle tentative après erreur de chargement ; contrôles cache de préfixe/spéculation ; packs image/TTS optionnels ; métriques live TTFT / tok/s / VRAM |
+| Canvas | Dessin vectoriel avec calques, grille, édition, exports PNG/SVG/JSON et validation géométrique globale des agents |
 | Providers | Cloud OpenAI-compat + loopback (Ollama / vLLM / LM Studio) ; clés dans le vault |
 | Réseau | Recherche opt-in (Brave / DDG / Bing) + `web.browse` + fetch |
 | Settings | Langue, thème, trust, routage, gpu/cpu/auto, défauts agent, moteur |
@@ -48,8 +49,8 @@ Catalogue : [FEATURES.md](FEATURES.md).
 
 ## Prérequis
 
-Windows 10/11 x64 **ou** Linux x64 ; GPU NVIDIA **ou** mode CPU-only (plus lent) ;
-~4 Go disque. Pas de macOS en Preview 0.11.0.
+Windows 10/11 x64, Linux x64 **ou** macOS Apple Silicon (pas Intel) ; GPU NVIDIA
+recommandé sur Windows/Linux **ou** mode CPU-only (plus lent) ; ~8 Go libres recommandés.
 
 ## Démarrage rapide
 

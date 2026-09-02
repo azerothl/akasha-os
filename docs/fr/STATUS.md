@@ -7,11 +7,22 @@ Résumé des phases livrées. Détail : [plan-developpement-phases.md](plan-deve
 
 **En-tête :** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview :** 0.15.1 — guides in-app, planifications chat, documents
-recherche, bibliothèque utilisateur, offre skill matin. Pas un OS bootable.
+**Preview :** 0.16.0 — Canvas enrichi et validé, contrôles d’inférence,
+récupération des modèles, catalogue communautaire signé et exports de traces agent. Pas un OS bootable.
 Gate cohorte encore ouverte (**3 Windows + 1 Linux + 1 macOS Apple
 Silicon**, chemin de 15 minutes). **Suite :** fermeture cohorte PC ; Horizon C
 / PV.4+ quand planifié ; E9 hard-green après un run 2 GPU documenté.
+
+## P16 — Preview 0.16.0 (qualité Canvas + opérations modèles) — release candidate
+
+| # | Élément | État |
+|---|---------|------|
+| P16.1 | Grille, calques, édition et exports PNG/SVG/JSON du Canvas | fait |
+| P16.2 | Captures de scène agent, plans bornés et validation vectorielle globale | fait |
+| P16.3 | Contrôles d’optimisation d’inférence et métriques live | fait |
+| P16.4 | Récupération après erreur de chargement et catalogue vision étendu | fait |
+| P16.5 | Export de traces agent, catalogue communautaire signé et synchro des capacités | fait |
+| P16.6 | Version, documentation, site et packaging release | fait |
 
 ## P13 — Preview 0.13.0 (créer + documents chat) — fait
 

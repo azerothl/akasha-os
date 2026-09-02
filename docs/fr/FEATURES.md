@@ -1,4 +1,4 @@
-# Fonctionnalités Preview — Akasha OS 0.15.0
+# Fonctionnalités Preview — Akasha OS 0.16.0
 
 **Langue :** [English](../FEATURES.md) | Français
 
@@ -7,17 +7,20 @@ Ce n'est **pas** l'OS bootable. Les exigences v1 sont dans
 [specs-fonctionnelles.md](specs-fonctionnelles.md) ; les gates dans
 [STATUS.md](STATUS.md).
 
-> Date : 29/08/2026 · Preview **0.15.0**
+> Date : 03/09/2026 · Preview **0.16.0**
+
+### Nouveautés 0.16.0
+
+- **Espace Canvas** : grille et aimantation, calques, opérations déplacer/supprimer/aligner/rotation/restyle, styles d’opacité et de tirets, exports PNG/SVG/JSON avec sidecars
+- **Agents Canvas** : plans de composition bornés, captures de scène live, gardes anti-duplication/progression et validation déterministe de la géométrie/topologie globale, y compris avec un modèle texte seul
+- **Contrôles d’inférence** : cache de préfixe, spéculation prompt-lookup et batching adaptatif configurables, avec mode choisi affiché près du TTFT, du débit de tokens et des métriques de cache
+- **Récupération des modèles** : un chargement échoué ne bloque plus le sous-système ; relancer Charger repart d’un état propre sans redémarrer la Preview
+- **Catalogue modèles** : profils chat vision Qwen3-VL et LLaVA 1.6 ; le premier lancement exige les rôles chat et embedding avant de continuer
+- **Diagnostic agents** : export Markdown de la trace par agent, compaction plus sûre lors d’un dépassement de contexte, raisons techniques masquées et attribution des tours Salon fiabilisée
+- **Extensions et sécurité** : catalogue communautaire signé en opt-in, synchronisation logique des capacités, pièces jointes de feedback structurées et séparation explicite des licences hôte/extensions
+- **Fiabilité release** : lint strict du workspace CPU, vérification des archives Windows/Unix, packaging des WASM fraîchement compilés et contrôle des hashes/signatures du catalogue
 
 ### Nouveautés 0.15.0
-
-### Contrôles d’optimisation de l’inférence
-
-`modeld` accepte un bloc `inference_optimization` avec `prefix_cache` et `speculation`
-(`auto`/`on`/`off`), un budget configurable de drafts prompt-lookup,
-`min_spec_priority` et `adaptive_batching`. Les replis sûrs restent actifs et
-le dernier mode d’inférence est exposé avec les métriques `draft_accept` et
-`prefix_hit`.
 
 - **Guides in-app** : ? Chat à côté du nom de session ; ? Canvas après Tout effacer — Créer avait déjà un guide
 - **Planifications Chat** : en cours / pause (Reprendre | Arrêter) / arrêt sans quitter la session
@@ -385,7 +388,7 @@ Piste VM seL4 (PV.1–PV.3) séparée : [phases/phase-vm-sel4.md](phases/phase-v
 
 ---
 
-## 11. Hors Preview 0.15.1
+## 11. Hors Preview 0.16.0
 
 - Image bootable / fer nu
 - STT / voix permanente

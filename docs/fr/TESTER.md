@@ -1,8 +1,8 @@
-# Protocole testeur — Akasha OS Preview 0.15.1
+# Protocole testeur — Akasha OS Preview 0.16.0
 
 **Langue :** [English](../TESTER.md) | Français
 
-> Date : 01/09/2026 · Preview **0.15.1**
+> Date : 03/09/2026 · Preview **0.16.0**
 
 Merci de tester la Preview. Objectif : installer **sans** `cargo` ni clone du
 repo, exercer les parcours principaux, et envoyer un retour **depuis l'UI**.
@@ -305,6 +305,21 @@ Guide testeur (sans cargo) : [write-a-module.md](write-a-module.md).
 - Des métriques **draft** / **préfixe** optionnelles peuvent apparaître quand le prompt-lookup se déclenche.
 - Les tokens streamés restent exacts (même sampler). Batch / multi-agents N>1 stream encore.
 
+### 28. Canvas et contrôles d’inférence (0.16.0)
+
+- Ouvrir Canvas depuis Chat. Basculer la grille et l’aimantation ; créer deux
+  calques, en renommer un, le masquer/afficher, le verrouiller et changer son opacité.
+- Dessiner puis sélectionner des formes ; en déplacer, aligner, tourner,
+  restyler et supprimer une. Exporter en PNG, SVG et JSON, puis importer le
+  sidecar JSON et vérifier que la scène revient.
+- Avec un modèle de session texte seul, demander « dessine un cube sur le
+  canvas ». L’agent doit lire la scène d’abord, respecter son plan borné et
+  produire un retour géométrique global si la topologie du cube est incomplète.
+- Dans `etc/modeld.yaml`, tester `auto`/`on`/`off` pour le cache de préfixe et
+  la spéculation, ainsi que le batching adaptatif, en redémarrant la Preview
+  entre les configurations. Les métriques Modèles/barre doivent montrer le mode
+  réellement sélectionné ; rétablir `auto` après la comparaison.
+
 ## Critères de succès (équipe)
 
 - **Gate :** 3 testeurs Windows + 1 Linux + 1 macOS Apple Silicon suivent le
@@ -313,7 +328,7 @@ Guide testeur (sans cargo) : [write-a-module.md](write-a-module.md).
 - Gates PC.6–PC.9 et PC.11–PC.13 cochés sur au moins une machine (protocole
   long ; pas exigé de chaque testeur)
 
-## Hors scope Preview 0.15.1
+## Hors scope Preview 0.16.0
 
 - Boot seL4 / fer nu (tag interne `sel4-pv-*` seulement)
 - Intel Mac

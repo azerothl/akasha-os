@@ -418,9 +418,9 @@ cp -f "$(dirname "$0")/install-linux.sh" "${OUT}/install.sh"
 chmod +x "${OUT}/bin/"* "${OUT}/install.sh"
 
 cat > "${OUT}/README.txt" <<EOF
-Akasha OS Preview ${VERSION} (Linux x64 + NVIDIA)
+Akasha OS Preview ${VERSION} (Linux x64 ; NVIDIA ou CPU)
 
-1. Prérequis : driver NVIDIA, nvidia-smi OK, ~4 Go disque
+1. Prérequis : ~8 Go disque ; si GPU, driver NVIDIA récent et nvidia-smi OK
 2. ./install.sh
    Données stables : ~/.local/share/agentos-preview (sessions, mémoire, notes).
    Lancer bin/aos-session depuis cette archive synchronise aussi vers ce préfixe.

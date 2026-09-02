@@ -1,10 +1,10 @@
-# Installation — Akasha OS Preview 0.15.1
+# Installation — Akasha OS Preview 0.16.0
 
 **Langue :** [English](../INSTALL.md) | Français
 
-> Date : 26/08/2026 · Preview **0.13.0**
+> Date : 03/09/2026 · Preview **0.16.0**
 
-**Ce n'est pas un OS bootable.** La Preview 0.15.1 tourne **sur Windows, Linux x64 ou macOS Apple Silicon**
+**Ce n'est pas un OS bootable.** La Preview 0.16.0 tourne **sur Windows, Linux x64 ou macOS Apple Silicon**
 (échafaudage hôte, ADR 0001). **NVIDIA est recommandé sur Win/Linux** ; le **même zip**
 embarque `aos-modeld-cpu` (Réglages → Inférence). Les builds macOS sont non signés. seL4 = piste séparée.
 

@@ -1,4 +1,4 @@
-# Preview features — Akasha OS 0.15.0
+# Preview features — Akasha OS 0.16.0
 
 **Language:** English | [Français](fr/FEATURES.md)
 
@@ -7,17 +7,20 @@ This is **not** the bootable OS. Target v1 requirements live in
 [functional-specs.md](functional-specs.md); phase gates in
 [STATUS.md](STATUS.md).
 
-> Date: 29/08/2026 · Preview **0.15.0**
+> Date: 03/09/2026 · Preview **0.16.0**
+
+### What's new in 0.16.0
+
+- **Canvas workspace**: grid and snapping, layers, move/delete/align/rotate/restyle operations, opacity and dash styles, plus PNG/SVG/JSON export with sidecars
+- **Canvas agents**: bounded composition plans, live scene snapshots, duplicate/progress guards, and deterministic whole-scene geometry/topology validation that also works with text-only models
+- **Inference controls**: configurable prefix cache, prompt-lookup speculation and adaptive batching, with the selected mode exposed beside TTFT, token rate and cache metrics
+- **Model recovery**: failed loads no longer leave the subsystem stuck; selecting Load again retries from a clean state without restarting Preview
+- **Model catalogue**: Qwen3-VL and LLaVA 1.6 vision chat profiles join the local catalogue; first run requires both chat and embedding roles before continuing
+- **Agent diagnostics**: per-agent Markdown trace export, safer prompt-overflow compaction, hidden technical stop reasons, and more reliable salon turn attribution
+- **Extensions and security**: opt-in signed community catalogue, logical capability synchronization, structured feedback attachments, and explicit host/guest licensing boundaries
+- **Release reliability**: strict CPU workspace linting, archive verification on Windows and Unix, fresh WASM packaging and catalogue hash/signature checks
 
 ### What's new in 0.15.0
-
-### Inference optimization controls
-
-`modeld` supports an `inference_optimization` block with `prefix_cache` and `speculation`
-(`auto`/`on`/`off`), a configurable prompt-lookup draft budget,
-`min_spec_priority`, and `adaptive_batching`. The runtime keeps the existing
-safe fallback paths and exposes the last selected inference mode alongside
-`draft_accept` and `prefix_hit` metrics.
 
 - **In-app guides**: Chat ? beside the session name; Canvas ? after Clear all — Create already had a guide
 - **Chat schedules**: live / pause (Resume | Stop) / stop without leaving the session
@@ -385,7 +388,7 @@ seL4 VM track (PV.1–PV.3) is separate: see [phases/phase-vm-sel4.md](phases/ph
 
 ---
 
-## 11. Not in Preview 0.15.1
+## 11. Not in Preview 0.16.0
 
 - Bootable / bare-metal image
 - STT / always-on voice
