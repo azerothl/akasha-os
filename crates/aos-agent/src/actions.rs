@@ -21,10 +21,7 @@ pub struct AgentAction {
 pub fn split_reasoning(text: &str) -> (String, String) {
     let mut rest = text.to_string();
     let mut reasoning = String::new();
-    loop {
-        let Some(start) = find_ignore_ascii_case(&rest, "<think>") else {
-            break;
-        };
+    while let Some(start) = find_ignore_ascii_case(&rest, "<think>") {
         let open_len = "<think>".len();
         let after = start + open_len;
         if let Some(rel) = find_ignore_ascii_case(&rest[after..], "</think>") {
@@ -234,10 +231,7 @@ fn extract_tag_block_payloads(text: &str, tag: &str) -> Vec<String> {
     let close = format!("</{tag}>");
     let mut out = Vec::new();
     let mut rest = text;
-    loop {
-        let Some(start_rel) = find_ignore_ascii_case(rest, &open) else {
-            break;
-        };
+    while let Some(start_rel) = find_ignore_ascii_case(rest, &open) {
         let start = start_rel + open.len();
         let tail = &rest[start..];
         let Some(end_rel) = find_ignore_ascii_case(tail, &close) else {
