@@ -387,6 +387,11 @@ pub(crate) enum Evt {
         slug: String,
         title: String,
     },
+    NotesSaveFailed {
+        title: String,
+        content: String,
+        path: Option<String>,
+    },
     /// Payload brut (compat scénarios / debug).
     Notes(String),
     Audit(Vec<AuditEvent>),

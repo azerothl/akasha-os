@@ -97,7 +97,14 @@ pub(crate) fn on_agents(app: &mut UiApp, agents: Vec<AgentInfo>) {
                         &app.chat_state.view.canvas.ops,
                     );
                     let trace = app.agent_ui.traces.get(&ag.agent_id);
-                    let content = agent_completion_chat_text(ag, &t, session_ops, trace);
+                    let content = agent_completion_chat_text(
+                        ag,
+                        &t,
+                        session_ops,
+                        trace,
+                        app.scenario_ui.pending_note_agent,
+                        app.workspace_ui.notes.notes.len(),
+                    );
                     if already {
                         if !ag.last_output.trim().is_empty() {
                             if let Some(line) = app.chat.iter_mut().find(|l| {
@@ -151,7 +158,13 @@ pub(crate) fn on_agents(app: &mut UiApp, agents: Vec<AgentInfo>) {
                         &app.chat_state.view.canvas.ops,
                     );
                     let trace = app.agent_ui.traces.get(&ag.agent_id);
-                    let summary = if agent_panel::canvas_draw_failure_muted(
+                    let summary = if agent_panel::notes_create_fail_chrome(
+                        Some(ag),
+                        app.scenario_ui.pending_note_agent,
+                        app.workspace_ui.notes.notes.len(),
+                    ) {
+                        t.notes_create_failed.to_string()
+                    } else if agent_panel::canvas_draw_failure_muted(
                         Some(ag),
                         session_ops,
                         trace,

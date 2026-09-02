@@ -348,17 +348,31 @@ mod canvas_completion_tests {
                 dash: vec![],
             },
         }];
-        let text = agent_completion_chat_text(&ag, &t, Some(&ops), None);
+        let text = agent_completion_chat_text(&ag, &t, Some(&ops), None, false, 0);
         assert!(text.is_empty(), "expected mute, got: {text}");
         assert!(!text.contains("agent-102"));
         assert!(!text.contains("terminé"));
     }
 
     #[test]
+    fn completion_chat_note_agent_empty_list_shows_locked_fail_copy() {
+        let t = i18n::strings("en");
+        let mut ag = canvas_agent("note-agent");
+        ag.state = AgentState::Done;
+        ag.tools = vec!["notes.create".into()];
+        ag.skills = vec!["notes-writer".into()];
+        ag.last_output = "Note created successfully with title cohort.".into();
+        let text = agent_completion_chat_text(&ag, &t, None, None, true, 0);
+        assert_eq!(text, t.notes_create_failed);
+        assert!(!text.to_ascii_lowercase().contains("created"));
+        assert!(!text.contains("cohort"));
+    }
+
+    #[test]
     fn completion_chat_empty_canvas_shows_locked_fail_copy() {
         let t = i18n::strings("fr");
         let ag = canvas_agent("agent-90");
-        let text = agent_completion_chat_text(&ag, &t, None, None);
+        let text = agent_completion_chat_text(&ag, &t, None, None, false, 0);
         assert_eq!(text, t.canvas_draw_failed);
         assert!(!text.contains("max_steps"));
         assert!(!text.contains("agent-90"));
@@ -378,7 +392,7 @@ mod canvas_completion_tests {
             }],
             ..Default::default()
         };
-        let text = agent_completion_chat_text(&ag, &t, None, Some(&trace));
+        let text = agent_completion_chat_text(&ag, &t, None, Some(&trace), false, 0);
         assert!(text.is_empty());
     }
 }

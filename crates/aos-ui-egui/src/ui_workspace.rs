@@ -87,6 +87,19 @@ impl UiApp {
                 slug: None,
             });
         }
+        if actions.retry_save {
+            if let Some(retry) = self.workspace_ui.notes.take_retry_action() {
+                if let Some((title, content)) = retry.save_create {
+                    let _ = self.cmd_tx.send(Cmd::NotesCreate { title, content });
+                } else if let Some((title, path, content)) = retry.save_update {
+                    let _ = self.cmd_tx.send(Cmd::NotesUpdate {
+                        title,
+                        path,
+                        content,
+                    });
+                }
+            }
+        }
         if let Some((title, content)) = actions.save_create {
             let _ = self.cmd_tx.send(Cmd::NotesCreate { title, content });
         }

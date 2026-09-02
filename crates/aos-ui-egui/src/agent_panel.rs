@@ -367,6 +367,32 @@ pub fn resolve_visible_fail_reason(
     crate::i18n::resolve_agent_fail_reason(t, Some(reason))
 }
 
+pub fn agent_has_notes_create_tool(info: &AgentInfo) -> bool {
+    info.tools.iter().any(|t| t == "notes.create")
+        || info.skills.iter().any(|s| s == "notes-writer")
+}
+
+/// Note-creation agent finished but the Notes tab is still empty — locked chrome only.
+pub fn notes_create_fail_chrome(
+    info: Option<&AgentInfo>,
+    pending_note_agent: bool,
+    notes_count: usize,
+) -> bool {
+    if notes_count > 0 {
+        return false;
+    }
+    let Some(a) = info else {
+        return false;
+    };
+    if !pending_note_agent && !agent_has_notes_create_tool(a) {
+        return false;
+    }
+    matches!(
+        a.state,
+        AgentState::Done | AgentState::Failed | AgentState::Killed
+    )
+}
+
 /// True when the action is a mutating canvas tool (not get/export).
 pub fn is_canvas_draw_tool(action: &str) -> bool {
     action.starts_with("canvas.")
@@ -1851,6 +1877,41 @@ Je vais répondre de manière naturelle"#;
         assert_eq!(en, t_en.agent_could_not_continue);
         assert!(!en.contains("max_steps"));
         assert!(!en.contains("atteint"));
+    }
+
+    #[test]
+    fn notes_create_fail_chrome_when_list_empty() {
+        let ag = AgentInfo {
+            agent_id: "a1".into(),
+            directive: "create a note".into(),
+            state: AgentState::Done,
+            tools: vec!["notes.create".into()],
+            skills: vec!["notes-writer".into()],
+            caps: Vec::new(),
+            last_output: String::new(),
+            pid: None,
+            step: 0,
+            max_steps: 0,
+            current_task: None,
+            parent_id: None,
+            children: Vec::new(),
+            tokens_used: 0,
+            mcp_servers: Vec::new(),
+            fail_reason: None,
+            session_id: None,
+            title: String::new(),
+            kind: AgentKind::Task,
+            display_name: None,
+            persona_id: None,
+            origin: None,
+        };
+        assert!(notes_create_fail_chrome(Some(&ag), true, 0));
+        assert!(!notes_create_fail_chrome(Some(&ag), true, 2));
+        assert!(notes_create_fail_chrome(Some(&ag), false, 0));
+        let mut other = ag.clone();
+        other.tools.clear();
+        other.skills.clear();
+        assert!(!notes_create_fail_chrome(Some(&other), false, 0));
     }
 
     #[test]

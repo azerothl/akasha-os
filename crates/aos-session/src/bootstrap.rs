@@ -616,6 +616,44 @@ fn wasm_fingerprint(dir: &Path) -> Option<(u64, u64)> {
     Some((len, mtime))
 }
 
+const NOTES_REGISTRY_ENTRY: &str = r#"
+  - name: notes
+    granted_caps:
+      - fs.read:/documents/notes/**
+      - fs.write:/documents/notes/**
+      - mem.write:module:notes
+      - mem.query:module:notes
+    quarantined: false
+"#;
+
+/// Ensure the bundled notes module is registered when its WASM is on disk.
+/// Upgrades from early Preview builds may have synced `var/modules/notes` without
+/// adding a registry row (issue #111).
+pub fn ensure_notes_registry_entry(registry_path: &Path) {
+    if !registry_path
+        .parent()
+        .is_some_and(|p| p.join("notes/module.wasm").exists())
+    {
+        return;
+    }
+    if let Ok(raw) = fs::read_to_string(registry_path) {
+        if raw.contains("name: notes") {
+            return;
+        }
+        let mut updated = raw;
+        if !updated.ends_with('\n') {
+            updated.push('\n');
+        }
+        updated.push_str(NOTES_REGISTRY_ENTRY);
+        let _ = fs::write(registry_path, updated);
+        return;
+    }
+    let _ = fs::write(
+        registry_path,
+        format!("installed:{NOTES_REGISTRY_ENTRY}"),
+    );
+}
+
 /// Copie `share/.../*.aospkg` → `var/modules/<name>` si absent ou obsolète.
 /// Retourne `true` si une copie a été effectuée.
 pub fn sync_packaged_module(share_pkg: &Path, installed_dir: &Path) -> bool {
@@ -748,6 +786,29 @@ mod tests {
             "new ui"
         );
         assert!(!installed_dir.join("stale.txt").exists());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn ensure_notes_registry_entry_appends_when_tasks_only() {
+        let root = temp_dir("ensure-notes-registry");
+        let modules = root.join("var/modules");
+        let notes = modules.join("notes");
+        fs::create_dir_all(&notes).unwrap();
+        fs::write(notes.join("module.wasm"), b"notes wasm").unwrap();
+        let reg = modules.join("registry.yaml");
+        fs::write(
+            &reg,
+            "installed:\n  - name: tasks\n    granted_caps:\n      - fs.read:/documents/tasks/**\n    quarantined: false\n",
+        )
+        .unwrap();
+
+        super::ensure_notes_registry_entry(&reg);
+        let raw = fs::read_to_string(&reg).unwrap();
+        assert!(raw.contains("name: tasks"));
+        assert!(raw.contains("name: notes"));
+        assert!(raw.contains("mem.query:module:notes"));
 
         let _ = fs::remove_dir_all(root);
     }
