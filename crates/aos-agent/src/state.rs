@@ -237,13 +237,15 @@ impl CognitiveState {
             return 1;
         };
         let title = title.to_ascii_lowercase();
-        if ["détail", "detail", "roue", "vitre", "aileron"].iter().any(|word| title.contains(word)) {
+        if ["détail", "detail", "roue", "vitre", "aileron", "volume", "masse", "structure"]
+            .iter()
+            .any(|word| title.contains(word))
+        {
             3
-        } else if ["volume", "masse", "structure"].iter().any(|word| title.contains(word)) {
-            3
-        } else if ["composition", "ancrage"].iter().any(|word| title.contains(word)) {
-            2
-        } else if ["ombre", "shadow", "finition", "finish"].iter().any(|word| title.contains(word)) {
+        } else if ["composition", "ancrage", "ombre", "shadow", "finition", "finish"]
+            .iter()
+            .any(|word| title.contains(word))
+        {
             2
         } else {
             1
