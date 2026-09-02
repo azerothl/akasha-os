@@ -488,10 +488,17 @@ mod vision_catalog_tests {
     #[test]
     fn first_vision_model_follows_catalog_order() {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let id = load_catalog_models_from(&root)
+        let vision_ids: Vec<String> = load_catalog_models_from(&root)
             .into_iter()
-            .find(|model| model.profiles.iter().any(|profile| profile == "vision"))
-            .map(|model| model.id);
-        assert_eq!(id.as_deref(), Some("local:gemma-4-e4b"));
+            .filter(|model| model.profiles.iter().any(|profile| profile == "vision"))
+            .map(|model| model.id)
+            .collect();
+        assert_eq!(vision_ids.first().map(|s| s.as_str()), Some("local:gemma-4-e4b"));
+        for id in ["local:qwen3-vl-4b", "local:qwen3-vl-8b", "local:llava-1.6"] {
+            assert!(
+                vision_ids.iter().any(|v| v == id),
+                "missing vision model {id}"
+            );
+        }
     }
 }

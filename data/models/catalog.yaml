@@ -115,6 +115,69 @@ models:
     backends_compatible: [llamacpp]
     privacy_class: local
 
+  - id: local:qwen3-vl-4b
+    name: Qwen3-VL 4B
+    modality: text
+    format: gguf
+    source:
+      type: local_file
+      path: var/models/qwen3-vl-4b/Qwen3VL-4B-Instruct-Q4_K_M.gguf
+      sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+    architecture:
+      n_layers: 36
+      n_params: 4.0e9
+      context_length: 131072
+    resource_hints:
+      weights_bytes: 3333461920
+      embed_bytes: 200000000
+      kv_bytes_per_token: 35000
+      supports_layer_offload: true
+    capabilities: [chat, vision]
+    backends_compatible: [llamacpp]
+    privacy_class: local
+
+  - id: local:qwen3-vl-8b
+    name: Qwen3-VL 8B
+    modality: text
+    format: gguf
+    source:
+      type: local_file
+      path: var/models/qwen3-vl-8b/Qwen3VL-8B-Instruct-Q4_K_M.gguf
+      sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+    architecture:
+      n_layers: 36
+      n_params: 8.0e9
+      context_length: 131072
+    resource_hints:
+      weights_bytes: 6186814624
+      embed_bytes: 250000000
+      kv_bytes_per_token: 45000
+      supports_layer_offload: true
+    capabilities: [chat, vision]
+    backends_compatible: [llamacpp]
+    privacy_class: local
+
+  - id: local:llava-1.6
+    name: LLaVA 1.6
+    modality: text
+    format: gguf
+    source:
+      type: local_file
+      path: var/models/llava-1.6/llava-v1.6-mistral-7b.Q4_K_M.gguf
+      sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+    architecture:
+      n_layers: 32
+      n_params: 7.0e9
+      context_length: 32768
+    resource_hints:
+      weights_bytes: 4992890720
+      embed_bytes: 250000000
+      kv_bytes_per_token: 40000
+      supports_layer_offload: true
+    capabilities: [chat, vision]
+    backends_compatible: [llamacpp]
+    privacy_class: local
+
   # --- Backend distant (§3.2, exemple) ----------------------------------------
   - id: remote:openai:gpt-4.1
     name: GPT-4.1 (distant)

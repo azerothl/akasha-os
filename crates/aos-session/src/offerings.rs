@@ -863,6 +863,34 @@ mod vision_catalog_tests {
         assert!(mmproj.bytes > 0);
         assert_eq!(file.packs["low"].chat, "local:lfm2.5-8b-a1b");
         assert_eq!(file.packs["low"].alternatives[0], "local:gemma-4-e4b");
+        assert_eq!(file.packs["low"].alternatives[1], "local:qwen3-vl-4b");
+        assert_eq!(file.packs["low"].alternatives[2], "local:llava-1.6");
+        assert!(file.packs["cpu"].alternatives.contains(&"local:qwen3-vl-4b".into()));
+        assert!(file
+            .packs["mid"]
+            .alternatives
+            .contains(&"local:qwen3-vl-8b".into()));
+        assert!(file
+            .packs["mid"]
+            .alternatives
+            .contains(&"local:llava-1.6".into()));
+
+        for id in [
+            "local:qwen3-vl-4b",
+            "local:qwen3-vl-8b",
+            "local:llava-1.6",
+        ] {
+            let model = file.models.iter().find(|m| m.id == id).expect(id);
+            assert!(model.profiles.iter().any(|p| p == "vision"));
+            assert!(model.tags.iter().any(|t| t == "vision"));
+            let sidecar = model
+                .extra_files
+                .iter()
+                .find(|f| f.role.as_deref() == Some("mmproj"))
+                .unwrap_or_else(|| panic!("{id} mmproj"));
+            assert!(sidecar.filename.contains("mmproj"));
+            assert!(sidecar.bytes > 0);
+        }
     }
 
     #[test]
