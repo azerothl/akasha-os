@@ -344,6 +344,119 @@
       ]
     },
     {
+      "id": "local:qwen3-vl-4b",
+      "name": "Qwen3-VL 4B",
+      "profiles": [
+        "chat",
+        "vision"
+      ],
+      "filename": "Qwen3VL-4B-Instruct-Q4_K_M.gguf",
+      "url": "https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct-GGUF/resolve/main/Qwen3VL-4B-Instruct-Q4_K_M.gguf",
+      "bytes": 2497281664,
+      "sha256": "",
+      "min_vram_mib": 0,
+      "min_disk_bytes": 3600000000,
+      "quality_score": 78,
+      "speed_score": 92,
+      "n_layers": 36,
+      "n_params": 4000000000.0,
+      "weights_bytes": 3333461920,
+      "embed_bytes": 200000000,
+      "kv_bytes_per_token": 35000,
+      "replaces": [],
+      "optional": true,
+      "tags": [
+        "cpu",
+        "dense",
+        "vision"
+      ],
+      "description": "Qwen3-VL 4B Instruct — vision légère, alt chat low/CPU.",
+      "extra_files": [
+        {
+          "filename": "mmproj-qwen3-vl-4b-F16.gguf",
+          "url": "https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct-GGUF/resolve/main/mmproj-Qwen3VL-4B-Instruct-F16.gguf",
+          "bytes": 836180256,
+          "sha256": "",
+          "role": "mmproj"
+        }
+      ]
+    },
+    {
+      "id": "local:qwen3-vl-8b",
+      "name": "Qwen3-VL 8B",
+      "profiles": [
+        "chat",
+        "vision"
+      ],
+      "filename": "Qwen3VL-8B-Instruct-Q4_K_M.gguf",
+      "url": "https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct-GGUF/resolve/main/Qwen3VL-8B-Instruct-Q4_K_M.gguf",
+      "bytes": 5027784800,
+      "sha256": "",
+      "min_vram_mib": 0,
+      "min_disk_bytes": 6500000000,
+      "quality_score": 84,
+      "speed_score": 86,
+      "n_layers": 36,
+      "n_params": 8000000000.0,
+      "weights_bytes": 6186814624,
+      "embed_bytes": 250000000,
+      "kv_bytes_per_token": 45000,
+      "replaces": [],
+      "optional": true,
+      "tags": [
+        "dense",
+        "vision"
+      ],
+      "description": "Qwen3-VL 8B Instruct — vision mid (16 Go+).",
+      "extra_files": [
+        {
+          "filename": "mmproj-qwen3-vl-8b-F16.gguf",
+          "url": "https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct-GGUF/resolve/main/mmproj-Qwen3VL-8B-Instruct-F16.gguf",
+          "bytes": 1159029824,
+          "sha256": "",
+          "role": "mmproj"
+        }
+      ]
+    },
+    {
+      "id": "local:llava-1.6",
+      "name": "LLaVA 1.6",
+      "profiles": [
+        "chat",
+        "vision"
+      ],
+      "filename": "llava-v1.6-mistral-7b.Q4_K_M.gguf",
+      "url": "https://huggingface.co/cjpais/llava-1.6-mistral-7b-gguf/resolve/main/llava-v1.6-mistral-7b.Q4_K_M.gguf",
+      "bytes": 4368439552,
+      "sha256": "",
+      "min_vram_mib": 0,
+      "min_disk_bytes": 5400000000,
+      "quality_score": 76,
+      "speed_score": 84,
+      "n_layers": 32,
+      "n_params": 7000000000.0,
+      "weights_bytes": 4992890720,
+      "embed_bytes": 250000000,
+      "kv_bytes_per_token": 40000,
+      "replaces": [],
+      "optional": true,
+      "tags": [
+        "cpu",
+        "dense",
+        "vision"
+      ],
+      "description": "LLaVA 1.6 Mistral 7B — vision classique, alt low/mid.",
+      "extra_files": [
+        {
+          "filename": "mmproj-llava-1.6-F16.gguf",
+          "url": "https://huggingface.co/cjpais/llava-1.6-mistral-7b-gguf/resolve/main/mmproj-model-f16.gguf",
+          "bytes": 624451168,
+          "sha256": "",
+          "role": "mmproj"
+        }
+      ]
+    },
+    {
       "id": "local:granite-4.1-8b",
       "name": "Granite 4.1 8B Q4",
       "profiles": [
@@ -1263,6 +1376,7 @@
       "alternatives": [
         "local:lfm2.5-2.6b",
         "local:granite-4.1-3b",
+        "local:qwen3-vl-4b",
         "local:qwen3.5-4b-instruct",
         "local:qwen3-4b-instruct-2507"
       ]
@@ -1272,6 +1386,8 @@
       "chat": "local:lfm2.5-8b-a1b",
       "alternatives": [
         "local:gemma-4-e4b",
+        "local:qwen3-vl-4b",
+        "local:llava-1.6",
         "local:granite-4.1-8b",
         "local:lfm2.5-2.6b",
         "local:qwen3.5-4b-instruct",
@@ -1285,7 +1401,9 @@
         "local:ornith-1.5-9b",
         "local:gpt-oss-20b",
         "local:gemma-4-12b-qat",
+        "local:qwen3-vl-8b",
         "local:gemma-4-e4b",
+        "local:llava-1.6",
         "local:lfm2.5-8b-a1b",
         "local:qwen3.5-4b-instruct"
       ]
