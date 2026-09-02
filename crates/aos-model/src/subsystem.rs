@@ -309,6 +309,19 @@ impl ModelSubsystem {
                 match m.state {
                     ModelState::Loaded | ModelState::PartiallyOffloaded => LoadAction::Ready,
                     ModelState::Remote => LoadAction::Fail("modèle distant non servi en P1".into()),
+                    // A failed load is retryable.  Treat a subsequent load
+                    // request as an implicit unload/reload so the UI does not
+                    // need to restart modeld (or issue two commands).
+                    ModelState::Error if m.active == 0 && m.pending == 0 => {
+                        m.state = ModelState::OnDisk;
+                        m.load_error = None;
+                        m.plan = None;
+                        m.ctx = None;
+                        m.model = None;
+                        m.warm = None;
+                        m.loading = true;
+                        LoadAction::Start
+                    }
                     ModelState::Error => LoadAction::Fail(
                         m.load_error
                             .clone()
@@ -362,6 +375,10 @@ impl ModelSubsystem {
                     m.loading = false;
                     m.state = ModelState::Error;
                     m.load_error = Some(e.clone());
+                    m.ctx = None;
+                    m.model = None;
+                    m.plan = None;
+                    m.warm = None;
                 }
                 eprintln!("[modeld] échec chargement {model_id}: {e}");
             };
@@ -1350,6 +1367,7 @@ impl ModelSubsystem {
                     m.model = None;
                     m.ctx_abort = None;
                     m.state = ModelState::OnDisk;
+                    m.load_error = None;
                     m.plan = None;
                     m.warm = None;
                     m.last_draft_accept = None;

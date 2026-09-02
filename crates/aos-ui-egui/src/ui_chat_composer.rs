@@ -142,11 +142,10 @@ impl UiApp {
                             },
                         );
 
-                        ui.set_width(field_w);
-                        let r = ui.add(
+                        let r = ui.add_sized(
+                            egui::vec2(field_w, input_h),
                             egui::TextEdit::singleline(&mut self.chat_state.composer.input)
                                 .id_salt("chat_input")
-                                .desired_width(field_w)
                                 .hint_text(&hint),
                         );
                         input_response = Some(r);
