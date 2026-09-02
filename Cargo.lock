@@ -473,6 +473,8 @@ version = "0.15.1"
 dependencies = [
  "aos-agent",
  "aos-ipc",
+ "aos-model",
+ "aos-platform",
  "aos-proto",
  "eframe",
  "egui_commonmark",

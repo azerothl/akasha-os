@@ -12,6 +12,8 @@ winres = "0.1"
 aos-ipc = { path = "../aos-ipc" }
 aos-proto = { path = "../aos-proto" }
 aos-agent = { path = "../aos-agent" }
+aos-model = { path = "../aos-model", default-features = false }
+aos-platform = { path = "../aos-platform", default-features = false }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 tokio.workspace = true
