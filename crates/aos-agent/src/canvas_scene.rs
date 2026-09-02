@@ -27,14 +27,14 @@ fn canvas_empty_scene_hint(tool_ids: &[String]) -> String {
 /// Critic system prompt when the agent draws on the session canvas.
 pub fn canvas_critic_system_prompt() -> &'static str {
     "Tu es un critique pour un agent qui dessine sur le canvas vectoriel (coords 0..1, origine coin haut-gauche, y vers le bas). \
-     Une capture PNG du canvas actuel est jointe — REGARDE l'image : le dessin ressemble-t-il au goal, \
-     ou seulement des arches / traits empilés au même endroit ? \
-     Un trait vectoriel ne compte comme progrès que s'il rapproche visuellement du goal ; \
-     ne valide pas des répétitions identiques. Ne demande jamais media.image.generate. \
-     Ne demande jamais de tout effacer ni de recommencer le dessin (pas canvas.clear, pas « refais le moulin ») : \
-     conserve ce qui est déjà sur le canvas et indique seulement la pièce manquante à ajouter \
-     (ex. colline, corps, toit, voiles) — une silhouette canvas.path remplie par partie, pas une pile de splines. \
-     En 2 phrases en français : ce que tu vois vs le goal, et quelle pièce unique tracer ensuite (ou arrêter si c'est bon). \
+     Une capture PNG du canvas actuel est jointe — REGARDE l'image. \
+     Si des ops canvas sont déjà posées (digest ou capture), ne dis jamais vide/blank/aucune trace : décris la couverture, \
+     les couleurs visibles, et ce qui manque encore par rapport au goal. \
+     Si un gros remplissage occupe déjà le centre du cadre, nomme une seule pièce manquante (ex. oreilles, yeux, queue) \
+     ou arrête si c'est suffisant — ne redemande pas le corps ni une silhouette déjà remplie. \
+     Un trait ne compte comme progrès que s'il rapproche visuellement du goal ; ne valide pas des répétitions identiques. \
+     Ne demande jamais media.image.generate ni canvas.clear. \
+     En 2 phrases en français : ce que tu vois (couleurs + formes) vs le goal, et quelle pièce unique ajouter ensuite (ou arrêter). \
      Réponds directement, sans balises <think> ni monologue Thinking Process."
 }
 
@@ -75,8 +75,9 @@ pub fn canvas_reflect_user_content(
     } else {
         format!(
             "{base}\n[canvas ops récentes — capture PNG jointe : regarde si ça ressemble au goal, PAS media.image.generate]\n\
-             Politique : conserve les ops déjà sur le canvas ; ajoute seulement la pièce manquante (colline, corps, toit, voiles…) — \
-             jamais canvas.clear ni redessiner la tour/moulin depuis zéro ; préfère un canvas.path rempli par partie.\n{}",
+             Politique acteur : une seule pièce manquante hors des bbox déjà posées ; \
+             passe `color` ou `fill_color` (#RRGGBB) sur chaque op — pas le crayon par défaut ; \
+             jamais restack la même silhouette, jamais canvas.clear, jamais redessiner une forme déjà remplie.\n{}",
             canvas_lines.join("\n")
         )
     }
@@ -124,8 +125,9 @@ pub fn canvas_scene_prompt_block(digest: &str) -> String {
          Digest compact (compteurs + bbox par seq, pas le JSON brut). \
          Commence par `canvas.get` si tu dessines ; état au début du tour :\n\
          ```\n{digest}\n```\n\
-         Poursuis le dessin existant : ajoute la pièce manquante seulement — ne redémarre pas (pas canvas.clear). \
-         Silhouettes : un `canvas.path` rempli par partie lisible (colline, corps, toit, voiles), pas des dizaines de splines/rects empilés. \
+         Poursuis le dessin existant : ajoute une seule pièce manquante — ne restack pas la même bbox, pas canvas.clear. \
+         Chaque op canvas doit inclure `color` ou `fill_color` (#RRGGBB) pour la teinte voulue. \
+         Silhouettes : un `canvas.path` rempli par partie lisible, pas des dizaines de splines/rects empilés. \
          Après chaque op canvas réussie : une capture PNG du canvas actuel est jointe \
          au tour suivant (regarde l'image, pas seulement le digest). \
          Placement : coords 0..1 max=1.0 (pas de pixels). \
@@ -608,12 +610,55 @@ mod tests {
     }
 
     #[test]
+    fn canvas_critic_forbids_empty_when_ops_exist() {
+        let prompt = canvas_critic_system_prompt();
+        assert!(prompt.contains("REGARDE l'image"));
+        assert!(prompt.contains("ne dis jamais vide"));
+        assert!(prompt.contains("couleurs visibles"));
+        assert!(prompt.contains("oreilles"));
+        assert!(prompt.contains("canvas.clear"));
+        assert!(!prompt.contains("moulin"));
+        assert!(!prompt.contains("voiles"));
+    }
+
+    #[test]
+    fn canvas_actor_prompt_mentions_op_color() {
+        let block = canvas_scene_prompt_block("seq=3 ops=2");
+        assert!(block.contains("fill_color"));
+        assert!(block.contains("color"));
+        assert!(block.contains("restack"));
+        assert!(!block.contains("moulin"));
+    }
+
+    #[test]
+    fn canvas_reflect_forbids_restack_when_ops_exist() {
+        let trace = vec![AgentStepRecord {
+            step: 1,
+            action: "canvas.path".into(),
+            tool_result: "ok seq=1 path bbox=(0.2,0.3)-(0.8,0.7)".into(),
+            ..Default::default()
+        }];
+        let content = canvas_reflect_user_content(
+            2,
+            48,
+            "dessine un chat stylisé",
+            &[],
+            &trace,
+            &["canvas.path".into()],
+        );
+        assert!(content.contains("restack"));
+        assert!(content.contains("fill_color"));
+        assert!(content.contains("color"));
+        assert!(!content.contains("ne montre aucune trace"));
+        assert!(!content.contains("moulin"));
+    }
+
+    #[test]
     fn canvas_critic_mentions_visual_goal_check() {
         let prompt = canvas_critic_system_prompt();
         assert!(prompt.contains("REGARDE l'image"));
-        assert!(prompt.contains("ressemble"));
+        assert!(prompt.contains("pièce unique"));
         assert!(prompt.contains("canvas.clear"));
-        assert!(prompt.contains("pièce manquante"));
         assert!(!prompt.contains("comptent comme progrès dessin"));
     }
 
@@ -729,7 +774,7 @@ mod tests {
         assert!(content.contains("canvas.stroke"));
         assert!(content.contains("capture PNG jointe"));
         assert!(content.contains("PAS media.image.generate"));
-        assert!(content.contains("pièce manquante"));
+        assert!(content.contains("fill_color"));
         assert!(content.contains("jamais canvas.clear"));
     }
 
