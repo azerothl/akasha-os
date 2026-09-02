@@ -484,7 +484,8 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
                 "properties":{
                     "session_id": sid_schema(),
                     "points":{"type":"array","items":{"type":"object","properties":{"x":{"type":"number"},"y":{"type":"number"}},"required":["x","y"]}},
-                    "color":{"type":"string","description":"#RRGGBB"},
+                    "color":{"type":"string","description":"#RRGGBB (alias fill_color)"},
+                    "fill_color":{"type":"string","description":"alias de color"},
                     "width":{"type":"number","description":"épaisseur relative 0..1"}
                 },
                 "required":["points"]
@@ -499,7 +500,8 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
                     "session_id": sid_schema(),
                     "p0":{"type":"object","properties":{"x":{"type":"number"},"y":{"type":"number"}},"required":["x","y"]},
                     "p1":{"type":"object","properties":{"x":{"type":"number"},"y":{"type":"number"}},"required":["x","y"]},
-                    "color":{"type":"string"},
+                    "color":{"type":"string","description":"#RRGGBB (alias fill_color)"},
+                    "fill_color":{"type":"string","description":"alias de color"},
                     "width":{"type":"number"}
                 },
                 "required":["p0","p1"]
@@ -513,7 +515,8 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
                 "properties":{
                     "session_id": sid_schema(),
                     "points":{"type":"array","items":{"type":"object","properties":{"x":{"type":"number"},"y":{"type":"number"}},"required":["x","y"]}},
-                    "color":{"type":"string"},
+                    "color":{"type":"string","description":"#RRGGBB (alias fill_color)"},
+                    "fill_color":{"type":"string","description":"alias de color"},
                     "width":{"type":"number"}
                 },
                 "required":["points"]
@@ -521,13 +524,14 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
         ),
         (
             "canvas.path",
-            "Silhouette lisse : contour fermé rempli (fill:true par défaut) via points de contrôle — colline, corps, voiles. Préférer à empiler rect/spline.",
+            "Silhouette lisse : contour fermé rempli (fill:true par défaut) via points de contrôle. Préférer à empiler rect/spline. Passe color ou fill_color (#RRGGBB) sur chaque op.",
             serde_json::json!({
                 "type":"object",
                 "properties":{
                     "session_id": sid_schema(),
                     "points":{"type":"array","items":{"type":"object","properties":{"x":{"type":"number"},"y":{"type":"number"}},"required":["x","y"]}},
-                    "color":{"type":"string"},
+                    "color":{"type":"string","description":"#RRGGBB (alias fill_color)"},
+                    "fill_color":{"type":"string","description":"alias de color pour le remplissage"},
                     "width":{"type":"number","description":"épaisseur du contour ; 0 = remplissage seul"},
                     "fill":{"type":"boolean","description":"remplir la silhouette (défaut true)"},
                     "closed":{"type":"boolean","description":"fermer le contour (défaut true)"}
@@ -544,7 +548,8 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
                     "session_id": sid_schema(),
                     "x":{"type":"number"},"y":{"type":"number"},
                     "w":{"type":"number"},"h":{"type":"number"},
-                    "color":{"type":"string"},
+                    "color":{"type":"string","description":"#RRGGBB (alias fill_color)"},
+                    "fill_color":{"type":"string","description":"alias de color"},
                     "fill":{"type":"boolean"},
                     "width":{"type":"number"}
                 },
@@ -560,7 +565,8 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
                     "session_id": sid_schema(),
                     "x":{"type":"number"},"y":{"type":"number"},
                     "w":{"type":"number"},"h":{"type":"number"},
-                    "color":{"type":"string"},
+                    "color":{"type":"string","description":"#RRGGBB (alias fill_color)"},
+                    "fill_color":{"type":"string","description":"alias de color"},
                     "fill":{"type":"boolean"},
                     "width":{"type":"number"}
                 },
@@ -1135,12 +1141,17 @@ pub fn is_module_fallback_candidate(name: &str) -> bool {
     !reserved_tool_prefix(prefix)
 }
 
-/// Alias d'arguments LLM (`prompt` → `text` pour le TTS).
+/// Alias d'arguments LLM (`prompt` → `text` pour le TTS ; `fill_color` → `color` pour canvas).
 pub fn normalize_tool_args(name: &str, args: &serde_json::Value) -> serde_json::Value {
     let mut out = args.clone();
     let Some(obj) = out.as_object_mut() else {
         return out;
     };
+    if name.starts_with("canvas.") && !obj.contains_key("color") {
+        if let Some(v) = obj.get("fill_color").cloned() {
+            obj.insert("color".into(), v);
+        }
+    }
     if name == "media.audio.generate" && !obj.contains_key("text") {
         for k in ["prompt", "content", "message", "speech"] {
             if let Some(v) = obj.get(k).cloned() {
@@ -1275,6 +1286,20 @@ mod tests {
         assert!(!ids.iter().any(|x| x == "canvas.path"));
         assert!(ids.iter().any(|x| x == "canvas.stroke"));
         assert!(ids.iter().any(|x| x == "notes.create"));
+    }
+
+    #[test]
+    fn normalize_canvas_path_fill_color_alias_to_color() {
+        let args = normalize_tool_args(
+            "canvas.path",
+            &serde_json::json!({
+                "session_id": "s1",
+                "points": [{"x": 0.1, "y": 0.2}, {"x": 0.5, "y": 0.5}, {"x": 0.9, "y": 0.2}],
+                "fill_color": "#8B7355"
+            }),
+        );
+        assert_eq!(args["color"], "#8B7355");
+        assert_eq!(args["fill_color"], "#8B7355");
     }
 
     #[test]

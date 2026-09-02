@@ -35,7 +35,7 @@ pub fn load_research_documents(home: &Path) -> Vec<ResearchDocumentEntry> {
         Err(_) => return Vec::new(),
     };
     let mut index: ResearchDocumentIndex = serde_json::from_str(&raw).unwrap_or_default();
-    index.entries.sort_by(|a, b| b.created_ms.cmp(&a.created_ms));
+    index.entries.sort_by_key(|a| std::cmp::Reverse(a.created_ms));
     index.entries
 }
 
@@ -64,7 +64,7 @@ pub fn record_research_document(
         },
         created_ms,
     });
-    entries.sort_by(|a, b| b.created_ms.cmp(&a.created_ms));
+    entries.sort_by_key(|a| std::cmp::Reverse(a.created_ms));
     let index = ResearchDocumentIndex { entries };
     let json = serde_json::to_string_pretty(&index).map_err(|e| e.to_string())?;
     fs::write(index_path(home), json).map_err(|e| e.to_string())

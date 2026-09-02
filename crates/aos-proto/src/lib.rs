@@ -2839,7 +2839,7 @@ impl Default for CanvasPenStyle {
 pub fn normalize_canvas_color(s: &str) -> Option<String> {
     let t = s.trim().trim_start_matches('#');
     if t.len() >= 6 && t.chars().take(6).all(|c| c.is_ascii_hexdigit()) {
-        Some(format!("#{}", &t[..6].to_lowercase()))
+        Some(format!("#{}", t[..6].to_lowercase()))
     } else {
         None
     }
