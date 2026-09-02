@@ -593,7 +593,7 @@ mod tests {
             "/tmp/photo.jpg".into(),
         ];
         let stripped = strip_vision_image_paths(&refs);
-        assert_eq!(stripped, vec!["/documents/note.md".to_string());
+        assert_eq!(stripped, vec!["/documents/note.md".to_string()]);
     }
 
     #[test]

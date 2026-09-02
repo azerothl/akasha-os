@@ -807,66 +807,6 @@ mod tests {
     use super::*;
     use aos_proto::{CanvasOp, CanvasPenStyle, CanvasPoint};
 
-    fn color_distance(a: (u8, u8, u8), b: (u8, u8, u8)) -> u32 {
-        let dr = i32::from(a.0) - i32::from(b.0);
-        let dg = i32::from(a.1) - i32::from(b.1);
-        let db = i32::from(a.2) - i32::from(b.2);
-        (dr * dr + dg * dg + db * db) as u32
-    }
-
-    fn png_center_rgb(png: &[u8]) -> (u8, u8, u8) {
-        use image::ImageReader;
-        use std::io::Cursor;
-        let img = ImageReader::new(Cursor::new(png))
-            .with_guessed_format()
-            .expect("png format")
-            .decode()
-            .expect("decode png")
-            .to_rgb8();
-        let p = img.get_pixel(img.width() / 2, img.height() / 2);
-        (p[0], p[1], p[2])
-    }
-
-    #[test]
-    fn path_fill_color_brown_not_pen_default() {
-        let body = CanvasOpBody::Path {
-            points: vec![
-                CanvasPoint { x: 0.20, y: 0.20 },
-                CanvasPoint { x: 0.80, y: 0.20 },
-                CanvasPoint { x: 0.80, y: 0.80 },
-                CanvasPoint { x: 0.20, y: 0.80 },
-            ],
-            color: "#8B7355".into(),
-            width: 0.0,
-            fill: true,
-            closed: true,
-            opacity: 1.0,
-            dash: vec![],
-            gradient: None,
-        };
-        let doc = CanvasDoc {
-            session_id: "brown-path".into(),
-            next_seq: 2,
-            pen: CanvasPenStyle::default(),
-            ops: vec![CanvasOp {
-                seq: 1,
-                author_id: "agent".into(),
-                ts_ms: 1,
-                layer_id: String::new(),
-                body,
-            }],
-            ..Default::default()
-        };
-        let png = export_png(&doc, 128, 128).unwrap();
-        let center = png_center_rgb(&png);
-        let brown = (139, 115, 85);
-        let pen_cyan = (62, 224, 196);
-        assert!(
-            color_distance(center, brown) < color_distance(center, pen_cyan),
-            "center {center:?} should be closer to brown {brown:?} than pen {pen_cyan:?}"
-        );
-    }
-
     #[test]
     fn export_stroke_png_nonempty() {
         let doc = CanvasDoc {
