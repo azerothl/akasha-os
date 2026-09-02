@@ -5,7 +5,7 @@ use aos_proto::ProviderRecord;
 use eframe::egui;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct HardwareInfo {
@@ -62,7 +62,7 @@ fn remote_model_label(id: &str) -> &str {
     id.rsplit(':').next().unwrap_or(id)
 }
 
-fn save_provider_secret(home: &PathBuf, secret_name: &str, value: &str) -> Result<(), String> {
+fn save_provider_secret(home: &Path, secret_name: &str, value: &str) -> Result<(), String> {
     if secret_name.trim().is_empty() || value.is_empty() {
         return Ok(());
     }
@@ -75,14 +75,14 @@ fn save_provider_secret(home: &PathBuf, secret_name: &str, value: &str) -> Resul
 }
 
 fn test_provider(
-    home: &PathBuf,
+    home: &Path,
     provider: &ProviderRecord,
     secret_value: Option<&str>,
 ) -> Result<Vec<String>, String> {
     let key = if let Some(v) = secret_value.filter(|s| !s.is_empty()) {
         Some(v.to_string())
     } else if let Some(name) = provider.secret_name.as_deref().filter(|s| !s.is_empty()) {
-        aos_platform::SecretStore::open(&home.join("var/secrets"))
+        aos_platform::SecretStore::open(home.join("var/secrets"))
             .ok()
             .and_then(|store| store.get(name, "ui-egui").ok())
     } else {
@@ -338,10 +338,8 @@ impl SetupApp {
                     }
                 }
                 let test = ui.add_enabled(!self.provider_testing, egui::Button::new(t.providers_test));
-                if test.clicked() {
-                    if self.save_provider().is_ok() {
-                        self.test_saved_provider(t);
-                    }
+                if test.clicked() && self.save_provider().is_ok() {
+                    self.test_saved_provider(t);
                 }
             });
             if !self.provider_status.is_empty() {

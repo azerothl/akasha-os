@@ -124,7 +124,7 @@ pub(crate) fn chat_message_frame(
         ui.set_width(max_w);
         egui::Frame::NONE
             .fill(fill)
-            .stroke(egui::Stroke::new(1.0, stroke))
+            .stroke(egui::Stroke::new(1.0_f32, stroke))
             .corner_radius(6.0)
             .inner_margin(egui::Margin::symmetric(10, 8))
             .show(ui, |ui| {

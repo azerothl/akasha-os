@@ -2,10 +2,62 @@
 
 use aos_ipc::BusClient;
 use aos_proto::{
-    canvas_scene_digest, AgentStepRecord, AgentTrace, CanvasAspect, CanvasExportRequest,
-    CanvasGetRequest, CanvasGetResponse, CanvasOp, CanvasOpBody, CanvasSeeingRequest, ModelInfo,
+    canvas_op_bbox, canvas_scene_digest, AgentStepRecord, AgentTrace, CanvasAspect, CanvasDoc,
+    CanvasExportRequest, CanvasGetRequest, CanvasGetResponse, CanvasOp, CanvasOpBody, CanvasPoint,
+    CanvasSeeingRequest, ModelInfo,
 };
 use std::path::PathBuf;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CanvasValidationStatus {
+    Pass,
+    Review,
+    Modify,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct CanvasValidationIssue {
+    pub kind: String,
+    pub sequences: Vec<u64>,
+    pub severity: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct CanvasGlobalValidationReport {
+    pub scope: String,
+    pub score: f32,
+    pub status: CanvasValidationStatus,
+    pub issues: Vec<CanvasValidationIssue>,
+}
+
+impl CanvasGlobalValidationReport {
+    pub fn prompt_block(&self) -> String {
+        let issues = if self.issues.is_empty() {
+            "none".to_string()
+        } else {
+            self.issues
+                .iter()
+                .map(|issue| {
+                    format!(
+                        "{} severity={} sequences={:?}: {}",
+                        issue.kind, issue.severity, issue.sequences, issue.message
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+        format!(
+            "[canvas global validation]\nscope={} score={:.2} status={:?}\n{}",
+            self.scope, self.score, self.status, issues
+        )
+    }
+
+    pub fn requires_modification(&self) -> bool {
+        self.status == CanvasValidationStatus::Modify
+    }
+}
 
 /// Compact, local visual signal used alongside the vision-language critic.
 /// It deliberately does not try to name objects: it answers whether the
@@ -21,6 +73,291 @@ pub struct CanvasVisualProgress {
     pub hash_distance: u32,
     pub coverage_delta_per_mille: i32,
     pub meaningful_change: bool,
+}
+
+const GLOBAL_VALIDATION_INTERVAL: u32 = 3;
+const ENDPOINT_TOLERANCE: f32 = 0.025;
+
+pub fn global_canvas_validation_due(scene_changed: bool, step: u32) -> bool {
+    scene_changed && step.is_multiple_of(GLOBAL_VALIDATION_INTERVAL)
+}
+
+/// Deterministic whole-scene validation. It deliberately operates on vector
+/// operations instead of pixels, so it is available with text-only models and
+/// on CPU-only hosts.
+pub fn validate_canvas_global(
+    doc: &CanvasDoc,
+    goal: &str,
+    final_check: bool,
+) -> CanvasGlobalValidationReport {
+    let visible: Vec<&CanvasOp> = doc
+        .ops
+        .iter()
+        .filter(|op| !matches!(op.body, CanvasOpBody::Clear | CanvasOpBody::Undo))
+        .collect();
+    let mut issues = Vec::new();
+
+    if visible.is_empty() {
+        issues.push(validation_issue(
+            "empty_scene",
+            vec![],
+            "error",
+            "Le canvas ne contient aucune forme visible.",
+        ));
+    }
+
+    for op in &visible {
+        match &op.body {
+            CanvasOpBody::Line { p0, p1, .. } if point_distance(*p0, *p1) < 0.01 => {
+                issues.push(validation_issue(
+                    "degenerate_segment",
+                    vec![op.seq],
+                    "error",
+                    "Le segment est trop court pour contribuer au dessin.",
+                ));
+            }
+            CanvasOpBody::Path {
+                points,
+                fill: true,
+                closed: false,
+                ..
+            } if points.len() >= 3 => issues.push(validation_issue(
+                "open_filled_path",
+                vec![op.seq],
+                "error",
+                "Un chemin rempli doit être fermé.",
+            )),
+            CanvasOpBody::Stroke { points, .. }
+            | CanvasOpBody::Spline { points, .. }
+            | CanvasOpBody::Path { points, .. }
+                if points.len() < 2 =>
+            {
+                issues.push(validation_issue(
+                    "insufficient_points",
+                    vec![op.seq],
+                    "error",
+                    "La forme ne contient pas assez de points.",
+                ));
+            }
+            _ => {}
+        }
+    }
+
+    for (index, left) in visible.iter().enumerate() {
+        let Some(a) = canvas_op_bbox(&left.body) else {
+            continue;
+        };
+        for right in visible.iter().skip(index + 1) {
+            if std::mem::discriminant(&left.body) != std::mem::discriminant(&right.body) {
+                continue;
+            }
+            let Some(b) = canvas_op_bbox(&right.body) else {
+                continue;
+            };
+            if bbox_iou(a, b) >= 0.94 {
+                issues.push(validation_issue(
+                    "near_duplicate",
+                    vec![left.seq, right.seq],
+                    "warning",
+                    "Deux formes presque identiques occupent la même zone.",
+                ));
+            }
+        }
+    }
+
+    let normalized_goal = goal.to_lowercase();
+    if normalized_goal.contains("cube") {
+        validate_cube_structure(&visible, final_check, &mut issues);
+    }
+
+    let errors = issues
+        .iter()
+        .filter(|issue| issue.severity == "error")
+        .count();
+    let warnings = issues
+        .iter()
+        .filter(|issue| issue.severity == "warning")
+        .count();
+    let score = (1.0 - errors as f32 * 0.22 - warnings as f32 * 0.08).clamp(0.0, 1.0);
+    let status = if errors > 0 && final_check {
+        CanvasValidationStatus::Modify
+    } else if errors > 0 || warnings > 0 {
+        CanvasValidationStatus::Review
+    } else {
+        CanvasValidationStatus::Pass
+    };
+    CanvasGlobalValidationReport {
+        scope: if normalized_goal.contains("cube") {
+            "geometry+topology+cube"
+        } else {
+            "geometry+topology"
+        }
+        .into(),
+        score,
+        status,
+        issues,
+    }
+}
+
+pub async fn fetch_canvas_global_validation(
+    bus: &BusClient,
+    session_id: &str,
+    goal: &str,
+    final_check: bool,
+) -> Option<CanvasGlobalValidationReport> {
+    let response: CanvasGetResponse = bus
+        .call(
+            "canvas.get",
+            &CanvasGetRequest {
+                session_id: session_id.to_string(),
+                after_seq: None,
+            },
+            vec![],
+        )
+        .await
+        .ok()?;
+    let doc = CanvasDoc {
+        session_id: response.session_id,
+        next_seq: response.next_seq,
+        ops: response.ops,
+        pen: response.pen,
+        layers: response.layers,
+        active_layer_id: response.active_layer_id,
+        ..CanvasDoc::default()
+    };
+    Some(validate_canvas_global(&doc, goal, final_check))
+}
+
+fn validation_issue(
+    kind: &str,
+    sequences: Vec<u64>,
+    severity: &str,
+    message: &str,
+) -> CanvasValidationIssue {
+    CanvasValidationIssue {
+        kind: kind.into(),
+        sequences,
+        severity: severity.into(),
+        message: message.into(),
+    }
+}
+
+fn point_distance(a: CanvasPoint, b: CanvasPoint) -> f32 {
+    ((a.x - b.x).powi(2) + (a.y - b.y).powi(2)).sqrt()
+}
+
+fn bbox_iou(a: aos_proto::CanvasBBox, b: aos_proto::CanvasBBox) -> f32 {
+    let intersection_w = (a.x1.min(b.x1) - a.x0.max(b.x0)).max(0.0);
+    let intersection_h = (a.y1.min(b.y1) - a.y0.max(b.y0)).max(0.0);
+    let intersection = intersection_w * intersection_h;
+    let area_a = (a.x1 - a.x0).max(0.0) * (a.y1 - a.y0).max(0.0);
+    let area_b = (b.x1 - b.x0).max(0.0) * (b.y1 - b.y0).max(0.0);
+    let union = area_a + area_b - intersection;
+    if union <= f32::EPSILON {
+        0.0
+    } else {
+        intersection / union
+    }
+}
+
+fn validate_cube_structure(
+    ops: &[&CanvasOp],
+    final_check: bool,
+    issues: &mut Vec<CanvasValidationIssue>,
+) {
+    let segments = canvas_segments(ops);
+    let mut vertices: Vec<(CanvasPoint, u32)> = Vec::new();
+    for (a, b, _) in &segments {
+        add_endpoint(&mut vertices, *a);
+        add_endpoint(&mut vertices, *b);
+    }
+    let junctions = vertices.iter().filter(|(_, degree)| *degree >= 3).count();
+    let severity = if final_check { "error" } else { "warning" };
+    if segments.len() < 12 {
+        issues.push(validation_issue(
+            "cube_missing_edges",
+            ops.iter().map(|op| op.seq).collect(),
+            severity,
+            "Un cube cohérent nécessite deux faces et leurs arêtes de liaison.",
+        ));
+    }
+    if vertices.len() < 8 || junctions < 4 {
+        issues.push(validation_issue(
+            "cube_disconnected_vertices",
+            ops.iter().map(|op| op.seq).collect(),
+            severity,
+            "Les sommets ne forment pas encore une structure de cube connectée.",
+        ));
+    }
+    if direction_family_count(&segments) < 3 {
+        issues.push(validation_issue(
+            "cube_direction_structure",
+            ops.iter().map(|op| op.seq).collect(),
+            severity,
+            "Les arêtes du cube doivent former au moins trois directions cohérentes.",
+        ));
+    }
+}
+
+fn canvas_segments(ops: &[&CanvasOp]) -> Vec<(CanvasPoint, CanvasPoint, u64)> {
+    let mut segments = Vec::new();
+    for op in ops {
+        match &op.body {
+            CanvasOpBody::Line { p0, p1, .. } => segments.push((*p0, *p1, op.seq)),
+            CanvasOpBody::Rect { x, y, w, h, .. } => {
+                let corners = [
+                    CanvasPoint { x: *x, y: *y },
+                    CanvasPoint { x: x + w, y: *y },
+                    CanvasPoint { x: x + w, y: y + h },
+                    CanvasPoint { x: *x, y: y + h },
+                ];
+                for index in 0..4 {
+                    segments.push((corners[index], corners[(index + 1) % 4], op.seq));
+                }
+            }
+            CanvasOpBody::Stroke { points, .. }
+            | CanvasOpBody::Spline { points, .. }
+            | CanvasOpBody::Path { points, .. } => {
+                for pair in points.windows(2) {
+                    segments.push((pair[0], pair[1], op.seq));
+                }
+                if matches!(&op.body, CanvasOpBody::Path { closed: true, .. }) && points.len() > 2 {
+                    segments.push((points[points.len() - 1], points[0], op.seq));
+                }
+            }
+            _ => {}
+        }
+    }
+    segments.retain(|(a, b, _)| point_distance(*a, *b) >= 0.01);
+    segments
+}
+
+fn add_endpoint(vertices: &mut Vec<(CanvasPoint, u32)>, point: CanvasPoint) {
+    if let Some((_, degree)) = vertices
+        .iter_mut()
+        .find(|(known, _)| point_distance(*known, point) <= ENDPOINT_TOLERANCE)
+    {
+        *degree += 1;
+    } else {
+        vertices.push((point, 1));
+    }
+}
+
+fn direction_family_count(segments: &[(CanvasPoint, CanvasPoint, u64)]) -> usize {
+    let mut families: Vec<f32> = Vec::new();
+    for (a, b, _) in segments {
+        let mut angle = (b.y - a.y).atan2(b.x - a.x).to_degrees().abs();
+        if angle >= 180.0 {
+            angle -= 180.0;
+        }
+        if !families.iter().any(|known| {
+            let delta = (angle - *known).abs();
+            delta.min(180.0 - delta) <= 12.0
+        }) {
+            families.push(angle);
+        }
+    }
+    families.len()
 }
 
 pub fn canvas_visual_fingerprint(path: &str) -> Option<CanvasVisualFingerprint> {
@@ -737,6 +1074,95 @@ pub async fn fetch_canvas_aspect(bus: &BusClient, session_id: &str) -> CanvasAsp
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn line_op(seq: u64, p0: (f32, f32), p1: (f32, f32)) -> CanvasOp {
+        CanvasOp {
+            seq,
+            author_id: "agent".into(),
+            ts_ms: 0,
+            layer_id: "default".into(),
+            body: CanvasOpBody::Line {
+                p0: CanvasPoint { x: p0.0, y: p0.1 },
+                p1: CanvasPoint { x: p1.0, y: p1.1 },
+                color: "#ffffff".into(),
+                width: 0.01,
+                opacity: 1.0,
+                dash: vec![],
+            },
+        }
+    }
+
+    fn rect_op(seq: u64, x: f32, y: f32, w: f32, h: f32) -> CanvasOp {
+        CanvasOp {
+            seq,
+            author_id: "agent".into(),
+            ts_ms: 0,
+            layer_id: "default".into(),
+            body: CanvasOpBody::Rect {
+                x,
+                y,
+                w,
+                h,
+                color: "#ffffff".into(),
+                fill: false,
+                width: 0.01,
+                rotation: 0.0,
+                opacity: 1.0,
+                dash: vec![],
+                gradient: None,
+            },
+        }
+    }
+
+    #[test]
+    fn complete_cube_passes_global_validation() {
+        let doc = CanvasDoc {
+            ops: vec![
+                rect_op(1, 0.20, 0.30, 0.30, 0.30),
+                rect_op(2, 0.35, 0.20, 0.30, 0.30),
+                line_op(3, (0.20, 0.30), (0.35, 0.20)),
+                line_op(4, (0.50, 0.30), (0.65, 0.20)),
+                line_op(5, (0.50, 0.60), (0.65, 0.50)),
+                line_op(6, (0.20, 0.60), (0.35, 0.50)),
+            ],
+            ..CanvasDoc::default()
+        };
+        let report = validate_canvas_global(&doc, "dessine un cube", true);
+        assert_eq!(report.status, CanvasValidationStatus::Pass);
+        assert!(report.issues.is_empty());
+    }
+
+    #[test]
+    fn incomplete_cube_requires_final_modification() {
+        let doc = CanvasDoc {
+            ops: vec![rect_op(1, 0.20, 0.30, 0.30, 0.30)],
+            ..CanvasDoc::default()
+        };
+        let report = validate_canvas_global(&doc, "draw a cube", true);
+        assert_eq!(report.status, CanvasValidationStatus::Modify);
+        assert!(report
+            .issues
+            .iter()
+            .any(|issue| issue.kind == "cube_missing_edges"));
+    }
+
+    #[test]
+    fn incomplete_cube_is_advisory_during_periodic_check() {
+        let doc = CanvasDoc {
+            ops: vec![rect_op(1, 0.20, 0.30, 0.30, 0.30)],
+            ..CanvasDoc::default()
+        };
+        let report = validate_canvas_global(&doc, "draw a cube", false);
+        assert_eq!(report.status, CanvasValidationStatus::Review);
+        assert!(!report.requires_modification());
+    }
+
+    #[test]
+    fn global_validation_runs_every_three_changed_steps() {
+        assert!(!global_canvas_validation_due(true, 1));
+        assert!(global_canvas_validation_due(true, 3));
+        assert!(!global_canvas_validation_due(false, 3));
+    }
 
     #[test]
     fn visual_fingerprint_detects_a_meaningful_canvas_change() {

@@ -2427,7 +2427,7 @@ impl eframe::App for UiApp {
                 let r = ui.max_rect();
                 ui.painter().line_segment(
                     [r.left_top(), r.right_top()],
-                    egui::Stroke::new(1.0, theme::ICE_TRACK),
+                    egui::Stroke::new(1.0_f32, theme::ICE_TRACK),
                 );
                 self.ui_status_bar(ui, &t);
             });

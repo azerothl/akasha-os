@@ -136,7 +136,7 @@ pub fn list_image_history(limit: usize) -> Vec<ImageGenMeta> {
             png.is_file() || Path::new(&m.path).is_file()
         })
         .collect();
-    metas.sort_by(|a, b| b.created_unix.cmp(&a.created_unix));
+    metas.sort_by_key(|a| std::cmp::Reverse(a.created_unix));
     metas.truncate(limit.clamp(1, HISTORY_CAP));
     metas
 }

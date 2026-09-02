@@ -48,11 +48,11 @@ impl UiApp {
         });
         ui.text_edit_multiline(&mut self.feedback_ui.body);
         ui.horizontal(|ui| {
-            if ui.button("Ajouter un fichier").clicked() {
-                if self.feedback_ui.attachments.len() < 8 {
-                    if let Some(path) = pick_os_file("Ajouter un fichier au retour", &[], None) {
-                        self.feedback_ui.attachments.push(path);
-                    }
+            if ui.button("Ajouter un fichier").clicked()
+                && self.feedback_ui.attachments.len() < 8
+            {
+                if let Some(path) = pick_os_file("Ajouter un fichier au retour", &[], None) {
+                    self.feedback_ui.attachments.push(path);
                 }
             }
             ui.label(format!(

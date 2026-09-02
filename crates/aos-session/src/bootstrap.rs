@@ -465,8 +465,7 @@ fn download_file(url: &str, dest: &Path, expected: Option<u64>) -> Result<(), St
         file.write_all(&buf[..n]).map_err(|e| e.to_string())?;
         done += n as u64;
         if let Some(t) = total {
-            if t > 0 {
-                let pct = done * 100 / t;
+            if let Some(pct) = done.checked_mul(100).and_then(|n| n.checked_div(t)) {
                 if pct >= last_pct + 5 || pct == 100 {
                     emit_download_progress(pct.min(100), done, t);
                     last_pct = pct;

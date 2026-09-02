@@ -103,7 +103,7 @@ pub fn list_docs(memory_dir: &Path) -> Vec<UserLibraryDoc> {
         let _ = save_manifest(memory_dir, &manifest);
     }
     let mut docs = manifest.docs;
-    docs.sort_by(|a, b| b.added_ms.cmp(&a.added_ms));
+    docs.sort_by_key(|a| std::cmp::Reverse(a.added_ms));
     docs
 }
 

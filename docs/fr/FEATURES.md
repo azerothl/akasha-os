@@ -210,7 +210,7 @@ Commandes slash :
 | `/speak <texte>` | Générer un WAV (`media.audio.generate`) sous `/downloads` |
 | `/canvas` | Basculer le canvas de dessin vectoriel partagé de la session |
 
-**Canvas chat (traits vectoriels, live)** — surface de dessin liée à la session (humain + agents). Humain : Sélect. (déplacer / supprimer / aligner / rotation), crayon, ligne, courbe, silhouette (`path`), rectangle, ellipse ; calques nommés (masquer / verrouiller / opacité) ; grille et aimant 0.01 ; export PNG, SVG ou JSON. Agents : module WASM `canvas.*` (`stroke` / `path` / `rect` / `ellipse` / `move` / `delete` / `align` / `rotate` / `layer_*` / `get` / `export`). Le seau (`canvas.fill`) n’est pas dans la barre humaine — flood-fill PNG seulement. Document : `var/sessions/<id>/canvas.json`. Distinct du studio Image et de `/image`.
+**Canvas chat (traits vectoriels, live)** — surface de dessin liée à la session (humain + agents). Humain : Sélect. (déplacer / supprimer / aligner / rotation), crayon, ligne, courbe, silhouette (`path`), rectangle, ellipse ; calques nommés (masquer / verrouiller / opacité) ; grille et aimant 0.01 ; export PNG, SVG ou JSON. Agents : module WASM `canvas.*` (`stroke` / `path` / `rect` / `ellipse` / `move` / `delete` / `align` / `rotate` / `layer_*` / `get` / `export`). Un validateur vectoriel global CPU-only contrôle la géométrie et la topologie toutes les trois mutations et avant la fin ; la vision reste facultative. Le seau (`canvas.fill`) n’est pas dans la barre humaine — flood-fill PNG seulement. Document : `var/sessions/<id>/canvas.json`. Distinct du studio Image et de `/image`.
 
 ---
 

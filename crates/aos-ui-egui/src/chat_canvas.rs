@@ -562,7 +562,7 @@ fn paint_op(
             let c = stroke_color(&op.body, &op.author_id, color, dark, layer_opacity);
             let center = to_screen(rect, CanvasPoint { x: *x, y: *y });
             let arm = (rect.width().min(rect.height()) * 0.008 * progress).max(2.0);
-            painter.circle_stroke(center, arm, Stroke::new(1.2, c));
+            painter.circle_stroke(center, arm, Stroke::new(1.2_f32, c));
         }
         CanvasOpBody::Clear | CanvasOpBody::Undo => {}
     }
