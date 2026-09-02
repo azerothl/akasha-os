@@ -142,7 +142,7 @@ pub fn canvas_reflect_user_content(
         )
     } else {
         format!(
-            "{base}\n[canvas ops récentes — capture PNG jointe : regarde si ça ressemble au goal, PAS media.image.generate]\n\
+            "{base}\n[canvas ops récentes — la capture PNG est jointe seulement avec un modèle vision ; sinon le digest fait foi, PAS media.image.generate]\n\
              Politique acteur : une seule pièce manquante hors des bbox déjà posées ; \
              passe `color` (#RRGGBB) sur chaque op — `fill_color` est accepté comme alias mais sera normalisé ; pas le crayon par défaut ; \
              jamais restack la même silhouette, jamais canvas.clear, jamais redessiner une forme déjà remplie.\n{}",
@@ -197,12 +197,15 @@ pub fn canvas_scene_prompt_block(digest: &str) -> String {
          Chaque op canvas doit inclure `color` (#RRGGBB) pour la teinte voulue (`fill_color` est un alias normalisé). \
          Silhouettes : un `canvas.path` rempli par partie lisible, pas des dizaines de splines/rects empilés. \
          Après chaque op canvas réussie : une capture PNG du canvas actuel est jointe \
-         au tour suivant (regarde l'image, pas seulement le digest). \
+         au tour suivant seulement si le modèle chargé est vision ; sinon le digest est la source de vérité. \
          Placement : coords 0..1 max=1.0 (pas de pixels). \
          Pour créer une forme, ne passe jamais `seq`, `kind`, `path`, `points2` ni `style` : le serveur attribue seq ; \
-         utilise exactement `points`, `color`, `width`, `fill`, `closed` au niveau racine. Une forme par appel. \
+         utilise exactement `points`, `color`, `width`, `fill`, `closed` au niveau racine. Une forme par appel ; \
+         `canvas.fill` n'est pas un outil agent : utilise `fill:true` sur path/rect/ellipse. \
          Lis le `scene_bbox` et les bbox par seq ; place chaque nouvelle op dans `usable` \
          avec marge ≥0.08 — ne superpose pas au même centre. \
+         Si la tâche courante est Analyse, Palette, Style ou Préparation : n'ajoute aucune forme ; \
+         utilise seulement canvas.get/canvas.set_style puis avance explicitement le plan. \
          Chaque outil mutateur renvoie un digest rafraîchi dans `[canvas digest]` \
          et une capture `[canvas scene]` (export canvas.export, toujours jointe)."
     )
@@ -589,6 +592,81 @@ fn bbox_near_duplicate(a: &[f32; 4], b: &[f32; 4]) -> bool {
         && (a[3] - b[3]).abs() < EPS
 }
 
+/// Refuse a new draw operation before it reaches the canvas when its bbox is
+/// effectively the same as a recent successful operation of the same kind.
+/// The older repeat guard only reacted after three writes, so duplicated eyes
+/// and silhouettes were already baked into the image.
+pub fn canvas_action_near_duplicate_reason(
+    trace: &[AgentStepRecord],
+    action: &str,
+    args: &serde_json::Value,
+) -> Option<String> {
+    if !matches!(
+        action,
+        "canvas.stroke" | "canvas.line" | "canvas.spline" | "canvas.path" | "canvas.rect" | "canvas.ellipse"
+    ) {
+        return None;
+    }
+    let candidate = canvas_action_bbox(action, args)?;
+    let duplicated = trace
+        .iter()
+        .rev()
+        .filter(|record| record.action == action && canvas_op_succeeded(&record.tool_result))
+        .filter_map(|record| parse_outcome_bbox(&record.tool_result).map(|bbox| (record.step, bbox)))
+        .take(8)
+        .find(|(_, bbox)| bbox_near_duplicate(&candidate, bbox));
+    duplicated.map(|(step, _)| format!(
+        "opération canvas refusée : bbox quasi identique à la forme déjà appliquée au step {step}. \
+         Ajoute une pièce distincte à une autre position ou utilise canvas.move/delete/restyle ; ne redessine pas cette forme."
+    ))
+}
+
+fn canvas_action_bbox(action: &str, args: &serde_json::Value) -> Option<[f32; 4]> {
+    let points: Vec<(f32, f32)> = match action {
+        "canvas.stroke" | "canvas.spline" | "canvas.path" => args
+            .get("points")?
+            .as_array()?
+            .iter()
+            .filter_map(canvas_arg_point)
+            .collect(),
+        "canvas.line" => vec![
+            canvas_arg_point(args.get("p0")?)?,
+            canvas_arg_point(args.get("p1")?)?,
+        ],
+        "canvas.rect" | "canvas.ellipse" => {
+            let x = canvas_arg_number(args, "x")?;
+            let y = canvas_arg_number(args, "y")?;
+            let w = canvas_arg_number(args, "w").or_else(|| canvas_arg_number(args, "width"))?;
+            let h = canvas_arg_number(args, "h").or_else(|| canvas_arg_number(args, "height"))?;
+            vec![(x, y), (x + w, y + h)]
+        }
+        _ => return None,
+    };
+    if points.len() < 2 {
+        return None;
+    }
+    let (mut x0, mut y0) = (f32::INFINITY, f32::INFINITY);
+    let (mut x1, mut y1) = (f32::NEG_INFINITY, f32::NEG_INFINITY);
+    for (x, y) in points {
+        x0 = x0.min(x);
+        y0 = y0.min(y);
+        x1 = x1.max(x);
+        y1 = y1.max(y);
+    }
+    Some([x0, y0, x1, y1])
+}
+
+fn canvas_arg_point(value: &serde_json::Value) -> Option<(f32, f32)> {
+    Some((
+        value.get("x")?.as_f64()? as f32,
+        value.get("y")?.as_f64()? as f32,
+    ))
+}
+
+fn canvas_arg_number(args: &serde_json::Value, name: &str) -> Option<f32> {
+    args.get(name)?.as_f64().map(|value| value as f32)
+}
+
 /// The visual critic runs only after an actual canvas change. Calling it after
 /// planning or memory steps gives it a stale scene and can produce false stops.
 pub fn should_run_canvas_critic(canvas_agent: bool, canvas_scene_changed: bool, step: u32) -> bool {
@@ -597,6 +675,18 @@ pub fn should_run_canvas_critic(canvas_agent: bool, canvas_scene_changed: bool, 
     } else {
         step.is_multiple_of(3)
     }
+}
+
+/// Critic prompt used when the selected model is text-only. It must not make
+/// visual claims from an unavailable PNG.
+pub fn canvas_text_only_critic_system_prompt() -> &'static str {
+    "Tu es un critique textuel pour un agent qui dessine sur un canvas vectoriel. \
+     Aucune capture PNG n'est disponible : le digest et les résultats d'outils sont la seule source de vérité. \
+     Ne décris donc jamais des couleurs, une silhouette, une zone vide, ni une ressemblance visuelle que ces données ne prouvent pas. \
+     Vérifie seulement la progression structurée : une pièce par bbox, pas de répétition, et poursuite des tâches de dessin restantes. \
+     Ne demande jamais media.image.generate, canvas.clear, canvas.fill, ni ACTION: stop. \
+     Réponds exactement avec trois lignes : `ACTION: continue|modify`, `SEQUENCES: ...`, puis `NOTE: ...`. \
+     Réponds directement, sans balises <think> ni monologue Thinking Process."
 }
 
 /// Fetch canvas aspect for a session (for export dimensions).
@@ -706,6 +796,14 @@ mod tests {
         assert!(prompt.contains("canvas.clear"));
         assert!(!prompt.contains("moulin"));
         assert!(!prompt.contains("voiles"));
+    }
+
+    #[test]
+    fn text_only_critic_does_not_claim_to_see_a_canvas() {
+        let prompt = canvas_text_only_critic_system_prompt();
+        assert!(prompt.contains("Aucune capture PNG"));
+        assert!(prompt.contains("canvas.fill"));
+        assert!(prompt.contains("ni ACTION: stop"));
     }
 
     #[test]
@@ -849,6 +947,28 @@ mod tests {
     }
 
     #[test]
+    fn duplicate_canvas_action_is_rejected_before_a_second_write() {
+        let trace = vec![AgentStepRecord {
+            step: 4,
+            action: "canvas.ellipse".into(),
+            tool_result: "ok seq=4 ellipse bbox=(0.420,0.480)-(0.580,0.640)".into(),
+            ..Default::default()
+        }];
+        let duplicate = canvas_action_near_duplicate_reason(
+            &trace,
+            "canvas.ellipse",
+            &serde_json::json!({"x": 0.42, "y": 0.48, "w": 0.16, "h": 0.16}),
+        );
+        assert!(duplicate.is_some());
+        let distinct = canvas_action_near_duplicate_reason(
+            &trace,
+            "canvas.ellipse",
+            &serde_json::json!({"x": 0.62, "y": 0.48, "w": 0.12, "h": 0.12}),
+        );
+        assert!(distinct.is_none());
+    }
+
+    #[test]
     fn canvas_reflect_user_content_lists_recent_ops() {
         let trace = vec![
             AgentStepRecord {
@@ -873,7 +993,7 @@ mod tests {
             &["canvas.stroke".into()],
         );
         assert!(content.contains("canvas.stroke"));
-        assert!(content.contains("capture PNG jointe"));
+        assert!(content.contains("capture PNG est jointe seulement"));
         assert!(content.contains("PAS media.image.generate"));
         assert!(content.contains("fill_color"));
         assert!(content.contains("jamais canvas.clear"));

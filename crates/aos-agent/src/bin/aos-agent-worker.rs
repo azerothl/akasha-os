@@ -17,19 +17,21 @@ use aos_agent::context_budget::{
 };
 use aos_agent::persist;
 use aos_agent::canvas_scene::{
-    agent_has_canvas_tools, begin_canvas_vision, canvas_critic_system_prompt,
+    agent_has_canvas_tools, begin_canvas_vision, canvas_action_near_duplicate_reason, canvas_critic_system_prompt,
+    canvas_op_succeeded,
     canvas_visual_fingerprint, canvas_visual_progress, canvas_visual_progress_note,
     canvas_reflect_user_content, canvas_repeat_stroke_verdict, canvas_scene_prompt_block,
     canvas_tool_mutates_scene, end_canvas_vision, fetch_canvas_aspect,
     fetch_canvas_scene_digest, merge_canvas_vision_refs, refresh_canvas_scene_after_op,
     session_model_has_vision, strip_vision_image_paths, should_run_canvas_critic,
+    canvas_text_only_critic_system_prompt,
     CanvasRepeatVerdict,
 };
 use aos_agent::prompt::{compile_system_prompt, optimize_prompt_request, PromptCompileInput};
 use aos_agent::skills::{load_skills, match_skill_by_action, merge_skill_tools, skill_misuse_hint, SkillDoc};
 use aos_agent::tool_exec::format_module_invoke_result;
 use aos_agent::tools::{
-    canonicalize_tool_name, canvas_tools_from_module_list, caps_for_tools, caps_subset,
+    canonicalize_tool_name, canvas_tool_denied_by_allowlist, canvas_tools_from_module_list, caps_for_tools, caps_subset,
     classify_action, canvas_draw_strategy_hint, is_module_fallback_candidate,
     normalize_tool_args, resolve_tool_backend, restrict_canvas_tools, select_tools,
     strip_canvas_blocked_runtime_tools, ToolBackend,
@@ -836,7 +838,15 @@ async fn main() {
                 break;
             }
             action = step_action.clone();
-            let one = if should_gate_action(&spec, &action.action) {
+            // Reject exact replays before issuing them. A post-write warning is
+            // too late for a vector canvas because the duplicate is visible.
+            let duplicate_canvas_op = {
+                let st = shared.state.lock().await;
+                canvas_action_near_duplicate_reason(&st.trace, &action.action, &action.args)
+            };
+            let one = if let Some(reason) = duplicate_canvas_op {
+                ActResult::Continue(reason)
+            } else if should_gate_action(&spec, &action.action) {
                 match gate_action(
                     &bus, &shared, &mut cmd_rx, &spec, &action, &agent_id, timeout, started,
                 )
@@ -907,7 +917,7 @@ async fn main() {
                             action.action
                         ));
                     }
-                    if canvas_tool_mutates_scene(&action.action) {
+                    if canvas_tool_mutates_scene(&action.action) && canvas_op_succeeded(&outcome) {
                         if let Some(sid) = spec.session_id.as_deref().filter(|s| !s.is_empty()) {
                             let scene = refresh_canvas_scene_after_op(
                                 &bus,
@@ -1095,7 +1105,7 @@ async fn main() {
                         action.action
                     ));
                 }
-                if canvas_tool_mutates_scene(&action.action) {
+                if canvas_tool_mutates_scene(&action.action) && canvas_op_succeeded(&outcome) {
                     if let Some(sid) = spec.session_id.as_deref().filter(|s| !s.is_empty()) {
                         let scene = refresh_canvas_scene_after_op(
                             &bus,
@@ -1938,6 +1948,12 @@ async fn execute_action(
                     )
                     .await;
                     ActResult::Continue(outcome)
+                }
+                None if canvas_tool_denied_by_allowlist(other, tools) => {
+                    ActResult::Continue(format!(
+                        "outil canvas non autorisé: {other}. Utilise uniquement les outils fournis ; \
+                         pour remplir une silhouette, passe `fill:true` à canvas.path/rect/ellipse."
+                    ))
                 }
                 None if is_module_fallback_candidate(other) => {
                     let outcome = invoke_module(
@@ -3561,13 +3577,6 @@ async fn reflect(bus: &BusClient, shared: &Shared, spec: &AgentSpec) -> Option<S
         };
         (progress, canvas_sid, canvas_draw)
     };
-    let critic_system = if canvas_draw {
-        canvas_critic_system_prompt()
-    } else {
-        "Tu es un critique. En 2 phrases en français: est-ce que l'agent avance vers le goal ? Que faire ensuite ? \
-         Réponds directement, sans balises <think> ni monologue Thinking Process."
-    };
-
     let mut images: Vec<String> = Vec::new();
     let mut data_refs: Vec<String> = Vec::new();
     let canvas_active = if let Some(sid) = canvas_sid.as_deref().filter(|s| !s.is_empty()) {
@@ -3588,6 +3597,16 @@ async fn reflect(bus: &BusClient, shared: &Shared, spec: &AgentSpec) -> Option<S
         }
     } else {
         false
+    };
+    let critic_system = if canvas_draw {
+        if canvas_active {
+            canvas_critic_system_prompt()
+        } else {
+            canvas_text_only_critic_system_prompt()
+        }
+    } else {
+        "Tu es un critique. En 2 phrases en français: est-ce que l'agent avance vers le goal ? Que faire ensuite ? \
+         Réponds directement, sans balises <think> ni monologue Thinking Process."
     };
 
     let req = InferRequest {

@@ -7,7 +7,7 @@ use aos_proto::{
 };
 use crate::mcp::McpSession;
 use crate::tools::{
-    canonicalize_tool_name, is_module_fallback_candidate, normalize_tool_args, resolve_tool_backend,
+    canonicalize_tool_name, canvas_tool_denied_by_allowlist, is_module_fallback_candidate, normalize_tool_args, resolve_tool_backend,
     ToolBackend, ToolDesc,
 };
 use std::collections::HashMap;
@@ -228,6 +228,10 @@ pub async fn execute_room_tool(
         Some(ToolBackend::Module) => {
             invoke_module_tool(bus, agent_id, caps, name, args, trace_id, session_id).await
         }
+        None if canvas_tool_denied_by_allowlist(name, tools) => format!(
+            "outil canvas non autorisé: {name}. Utilise uniquement les outils fournis ; \
+             pour remplir une silhouette, passe `fill:true` à canvas.path/rect/ellipse."
+        ),
         None if is_module_fallback_candidate(name) => {
             invoke_module_tool(bus, agent_id, caps, name, args, trace_id, session_id).await
         }

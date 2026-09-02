@@ -137,6 +137,13 @@ impl CognitiveState {
         if !canvas_tool_completes_plan_node(tool) || !canvas_op_succeeded(outcome) {
             return false;
         }
+        // A model occasionally emits a drawing operation while it is still on
+        // its analysis/palette step. That must not mark the preparatory node
+        // complete: it skips the intended design pass and makes the remaining
+        // plan appear finished after one crude shape per node.
+        if self.current_task_is_canvas_preparation() {
+            return false;
+        }
         self.canvas_draw_ops_on_current_task = self
             .canvas_draw_ops_on_current_task
             .saturating_add(1);
@@ -158,6 +165,16 @@ impl CognitiveState {
                     .find(|n| n.status == TaskNodeStatus::Pending)
             })
             .map(|n| n.title.clone())
+    }
+
+    fn current_task_is_canvas_preparation(&self) -> bool {
+        let Some(title) = self.current_task_title() else {
+            return false;
+        };
+        let title = title.to_ascii_lowercase();
+        ["analyse", "analysis", "palette", "style", "prépar", "prepar", "planification"]
+            .iter()
+            .any(|word| title.contains(word))
     }
 
     /// Sérialise en JSON (snapshot disque, `var/agents/<id>/state.json`).
@@ -313,6 +330,18 @@ mod tests {
             st.current_task_title().as_deref(),
             Some("Dessiner la colline (sol)")
         );
+        assert_eq!(st.canvas_draw_ops_on_current_task, 0);
+    }
+
+    #[test]
+    fn canvas_draw_does_not_skip_an_analysis_task() {
+        let mut st = CognitiveState::new("agent-98", vec![]);
+        st.set_plan(vec![
+            TaskNode { id: "1".into(), title: "Analyse de la composition".into(), status: TaskNodeStatus::Pending, notes: String::new() },
+            TaskNode { id: "2".into(), title: "Dessiner la silhouette".into(), status: TaskNodeStatus::Pending, notes: String::new() },
+        ]);
+        assert!(!st.maybe_advance_plan_after_canvas_draw("canvas.path", "ok seq=1 path bbox=(0.1,0.1)-(0.8,0.8)"));
+        assert_eq!(st.task_graph[0].status, TaskNodeStatus::Pending);
         assert_eq!(st.canvas_draw_ops_on_current_task, 0);
     }
 

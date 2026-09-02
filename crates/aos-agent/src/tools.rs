@@ -1140,6 +1140,14 @@ pub fn is_module_fallback_candidate(name: &str) -> bool {
     !reserved_tool_prefix(prefix)
 }
 
+/// `canvas.*` must always be explicitly granted to an agent.  Unlike ordinary
+/// module names, accepting it through the generic module fallback lets a model
+/// invoke undocumented operations (notably the legacy `canvas.fill`) that were
+/// deliberately removed from the drawing kit.
+pub fn canvas_tool_denied_by_allowlist(name: &str, tools: &[ToolDesc]) -> bool {
+    name.starts_with("canvas.") && !tools.iter().any(|tool| tool.name == name)
+}
+
 /// Alias d'arguments LLM (`prompt` → `text` pour le TTS ; `fill_color` → `color` pour canvas).
 pub fn normalize_tool_args(name: &str, args: &serde_json::Value) -> serde_json::Value {
     let mut out = args.clone();
@@ -1405,5 +1413,13 @@ mod tests {
         assert!(is_module_fallback_candidate("notes.create"));
         let (kind, _, _) = classify_action("tool.invoke:audio.generate", &[], &[]);
         assert_eq!(kind, "native");
+    }
+
+    #[test]
+    fn canvas_tools_cannot_bypass_the_selected_toolkit() {
+        let tools = select_tools(&["canvas.path".into()], &[]);
+        assert!(!canvas_tool_denied_by_allowlist("canvas.path", &tools));
+        assert!(canvas_tool_denied_by_allowlist("canvas.fill", &tools));
+        assert!(!canvas_tool_denied_by_allowlist("notes.create", &tools));
     }
 }
