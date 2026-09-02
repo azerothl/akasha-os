@@ -9,14 +9,14 @@
 **Site:** [azerothl.github.io/akasha-os](https://azerothl.github.io/akasha-os/)
 
 **Agent-native operating system** — capability-based security, semantic IPC,
-first-class GPU, offline-first. Preview builds run on a Windows/Linux host
-(NVIDIA); a seL4 bare-metal track is separate.
+first-class GPU, offline-first. Preview builds run on Windows/Linux (NVIDIA or
+CPU) and macOS Apple Silicon; a seL4 bare-metal track is separate.
 
 <p align="center">
   <img src="branding/logo/tracks.svg" width="480" alt="MEMORY, CAPS, GPU, AGENTS">
 </p>
 
-> This is **not** a bootable OS image yet. Preview 0.15.1 is an installable host
+> This is **not** a bootable OS image yet. Preview 0.16.0 is an installable host
 > app for testers (Windows/Linux/Mac Apple Silicon; NVIDIA optional on Win/Linux
 > via CPU path in the same zip).
 
@@ -37,9 +37,10 @@ Full catalogue: [docs/FEATURES.md](docs/FEATURES.md).
 | Memory | Long-term facts; memory-first agent bootstrap |
 | Notes | Human + agent-authored notes (WASM); resyncs on boot after an update |
 | Tasks | Dual-surface tasks module + Tasks tab |
-| Agents | Goal loop, skills, tools, MCP, scheduler; transparency timeline |
+| Agents | Goal loop, skills, tools, MCP, scheduler; transparency timeline and Markdown trace export |
 | Caps | List / revoke capabilities in UI |
-| Models | Hardware-aware packs (incl. CPU); optional image/TTS packs (Download also installs sd.cpp / piper); metrics (TTFT / tok/s / VRAM) |
+| Models | Hardware-aware packs (incl. CPU); retryable failed loads; prefix-cache/speculation controls; optional image/TTS packs; live TTFT / tok/s / VRAM metrics |
+| Canvas | Layered vector drawing, grid and snapping, PNG/SVG/JSON export, agent scene checks and global geometry validation |
 | Providers | OpenAI-compat cloud + loopback (Ollama / vLLM / LM Studio); keys in the vault |
 | Network | Opt-in search (Brave / DDG / Bing) + `web.browse` + fetch |
 | Settings | Language, theme, trust, routing, gpu/cpu/auto, agent defaults, search engine |

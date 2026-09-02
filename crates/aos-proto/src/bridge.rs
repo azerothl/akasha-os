@@ -12,11 +12,10 @@ use crate::{
     MemContextRequest, MemContextResponse, MemEpisodicDeleteRequest, MemEpisodicQueryRequest,
     MemEpisodicWriteRequest, MemExtractOutcome, MemExtractOutcomeKind, MemExtractRequest,
     MemExtractResponse, MemExtractedFact, MemHit, MemListRequest, MemNeighborsRequest,
-    MemSweepRequest, MemSweepResponse, MemSweepStatus,
     MemRelateRequest, MemRelation, MemRelationKind, MemRememberResponse, MemSharedReadRequest,
-    MemSharedWriteRequest, MemStats, MemUnrelateRequest, MemUpdateRequest, MemUserRecallRequest,
-    MemUserRememberRequest, MemWorkingRequest, SecretGetRequest, SecretListRequest,
-    SecretListResponse, SecretSetRequest,
+    MemSharedWriteRequest, MemStats, MemSweepRequest, MemSweepResponse, MemSweepStatus,
+    MemUnrelateRequest, MemUpdateRequest, MemUserRecallRequest, MemUserRememberRequest,
+    MemWorkingRequest, SecretGetRequest, SecretListRequest, SecretListResponse, SecretSetRequest,
 };
 
 const SCHEMA_META: &str = "http://json-schema.org/draft-07/schema#";
@@ -40,11 +39,27 @@ fn defs(pairs: &[(&str, Value)]) -> Value {
 
 /// Pretty JSON with a trailing newline (stable for `docs/bridge/` commits).
 pub fn to_pretty(value: &Value) -> String {
-    let mut s = serde_json::to_string_pretty(value).expect("pretty json");
+    let mut s = serde_json::to_string_pretty(&canonicalize(value)).expect("pretty json");
     if !s.ends_with('\n') {
         s.push('\n');
     }
     s
+}
+
+fn canonicalize(value: &Value) -> Value {
+    match value {
+        Value::Array(values) => Value::Array(values.iter().map(canonicalize).collect()),
+        Value::Object(object) => {
+            let mut entries: Vec<_> = object.iter().collect();
+            entries.sort_by(|(left, _), (right, _)| left.cmp(right));
+            let mut sorted = Map::new();
+            for (key, value) in entries {
+                sorted.insert(key.clone(), canonicalize(value));
+            }
+            Value::Object(sorted)
+        }
+        scalar => scalar.clone(),
+    }
 }
 
 /// Combined JSON Schema for `mem.*` intent payloads.
@@ -156,5 +171,13 @@ mod tests {
             got_decl, decl,
             "docs/bridge/aos-proto-decl-ui.json is stale; rerun with UPDATE_BRIDGE_SCHEMAS=1"
         );
+    }
+
+    #[test]
+    fn pretty_schema_output_sorts_nested_object_keys() {
+        let value = json!({"z": {"b": 2, "a": 1}, "a": 0});
+        let pretty = to_pretty(&value);
+        assert!(pretty.find("\"a\": 0").unwrap() < pretty.find("\"z\"").unwrap());
+        assert!(pretty.find("\"a\": 1").unwrap() < pretty.find("\"b\": 2").unwrap());
     }
 }

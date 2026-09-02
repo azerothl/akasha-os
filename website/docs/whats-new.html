@@ -6,7 +6,7 @@
     <title>What's new — Akasha OS Preview</title>
     <meta
       name="description"
-      content="What each Akasha OS Preview version added, from 0.15.0 back to 0.1.0. Host app on Windows/Linux/Mac, not a bootable OS."
+      content="What each Akasha OS Preview version added, from 0.16.0 back to 0.1.0. Host app on Windows/Linux/Mac, not a bootable OS."
     />
     <link rel="stylesheet" href="../styles.css" />
     <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
@@ -51,12 +51,12 @@
           <span data-lang="en">
             What each Preview added, newest first. This is the version log,
             not the full feature catalogue. Preview
-            <span data-aos-version="0.15.1">0.15.1</span> is a host app, not a bootable OS.
+            <span data-aos-version="0.16.0">0.16.0</span> is a host app, not a bootable OS.
           </span>
           <span data-lang="fr">
             Ce que chaque Preview a ajouté, plus récent en premier. C’est le
             journal des versions, pas le catalogue complet. La Preview
-            <span data-aos-version="0.15.1">0.15.1</span> est une appli hôte, pas un OS
+            <span data-aos-version="0.16.0">0.16.0</span> est une appli hôte, pas un OS
             bootable.
           </span>
         </h1>
@@ -70,6 +70,7 @@
         </p>
 
         <nav class="log-toc" aria-label="Versions">
+          <a href="#v0-16-0">0.16.0</a>
           <a href="#v0-15-0">0.15.0</a>
           <a href="#v0-14-0">0.14.0</a>
           <a href="#v0-13-0">0.13.0</a>
@@ -90,6 +91,44 @@
           <a href="#v0-1-1">0.1.1</a>
           <a href="#v0-1-0">0.1.0</a>
         </nav>
+
+        <article class="grant" id="v0-16-0">
+          <h2>0.16.0</h2>
+          <p class="rev-when">03/09/2026</p>
+          <p class="hist" data-lang="en">
+            Canvas becomes a richer layered vector workspace with editing,
+            multiple export formats and whole-scene checks for text-only
+            agents. Model operations gain tunable local-inference controls,
+            clearer live metrics and recovery after a failed load. Agent trace
+            exports, a signed community catalogue and stricter release gates
+            improve diagnosis and distribution. Still a host app, not a
+            bootable OS.
+          </p>
+          <p class="hist" data-lang="fr">
+            Canvas devient un espace vectoriel enrichi avec calques, édition,
+            plusieurs formats d’export et contrôles de scène globale pour les
+            agents texte. Les modèles gagnent des réglages d’inférence locale,
+            des métriques live plus claires et la récupération après un
+            chargement échoué. Les exports de traces agent, le catalogue
+            communautaire signé et des gates release plus strictes améliorent
+            le diagnostic et la distribution. Toujours une appli hôte, pas un
+            OS bootable.
+          </p>
+          <ul class="ticks">
+            <li data-lang="en"><strong>Canvas</strong>: grid, snapping, layers, move/delete/align/rotate/restyle, opacity and dash styles, PNG/SVG/JSON export.</li>
+            <li data-lang="fr"><strong>Canvas</strong> : grille, aimantation, calques, déplacer/supprimer/aligner/rotation/restyle, opacité et tirets, exports PNG/SVG/JSON.</li>
+            <li data-lang="en"><strong>Canvas agents</strong>: live snapshots, bounded composition plans, duplicate/progress guards and deterministic global vector validation.</li>
+            <li data-lang="fr"><strong>Agents Canvas</strong> : captures live, plans de composition bornés, gardes anti-duplication/progression et validation vectorielle globale déterministe.</li>
+            <li data-lang="en"><strong>Inference</strong>: configurable prefix cache, prompt-lookup speculation and adaptive batching with live mode/cache metrics.</li>
+            <li data-lang="fr"><strong>Inférence</strong> : cache de préfixe, spéculation prompt-lookup et batching adaptatif configurables avec métriques live du mode et du cache.</li>
+            <li data-lang="en"><strong>Models</strong>: retry failed loads from a clean state without restarting Preview, require chat and embedding roles on first run, and add Qwen3-VL and LLaVA 1.6 profiles.</li>
+            <li data-lang="fr"><strong>Modèles</strong> : nouvelle tentative propre après erreur sans redémarrer la Preview, rôles chat et embedding requis au premier lancement, profils Qwen3-VL et LLaVA 1.6.</li>
+            <li data-lang="en"><strong>Agents and extensions</strong>: Markdown trace export, signed opt-in community catalogue, capability synchronization and structured feedback attachments.</li>
+            <li data-lang="fr"><strong>Agents et extensions</strong> : export Markdown des traces, catalogue communautaire signé en opt-in, synchronisation des capacités et pièces jointes de feedback structurées.</li>
+            <li data-lang="en"><strong>Release gates</strong>: strict CPU workspace linting, Windows/Unix archive verification, fresh WASM packaging and signed catalogue checks.</li>
+            <li data-lang="fr"><strong>Gates release</strong> : lint strict du workspace CPU, vérification des archives Windows/Unix, WASM fraîchement packagés et contrôles du catalogue signé.</li>
+          </ul>
+        </article>
 
         <article class="grant" id="v0-15-0">
           <h2>0.15.0</h2>

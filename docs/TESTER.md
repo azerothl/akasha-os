@@ -1,8 +1,8 @@
-# Tester protocol — Akasha OS Preview 0.15.1
+# Tester protocol — Akasha OS Preview 0.16.0
 
 **Language:** English | [Français](fr/TESTER.md)
 
-> Date: 01/09/2026 · Preview **0.15.1**
+> Date: 03/09/2026 · Preview **0.16.0**
 
 Thank you for testing Preview. Goal: install **without** `cargo` or cloning
 the repo, exercise the main paths, and send feedback **from the UI**.
@@ -65,6 +65,8 @@ Expected banner: Preview on the host OS — this is not the bootable OS yet.
 - Open **Models**: see installed entries, **Download** an alternative if offered.
 - Banner “Models: …” when newer offerings fit your VRAM tier.
 - Confirm live metrics for the loaded model.
+- If a model reaches **Error**, click **Load** again: the retry must start from
+  a clean state without restarting Preview or leaving the model permanently busy.
 
 ### 1c. CPU-only (optional)
 
@@ -331,6 +333,20 @@ Tester-facing write-up (no cargo): [write-a-module.md](write-a-module.md).
 - Optional **draft** / **prefix** metrics may appear on that line when prompt-lookup fires (quotes / RAG / repeated prefixes).
 - Streamed tokens must still match a non-speculative reply (exact sampler). Multi-agent / batch N>1 still streams.
 
+### 28. Canvas and inference controls (0.16.0)
+
+- Open Canvas from Chat. Toggle the grid and snapping; create two layers, rename
+  one, hide/show it, lock it, and change its opacity.
+- Draw and select shapes; move, align, rotate, restyle and delete one. Export
+  PNG, SVG and JSON, then import the JSON sidecar and verify the scene returns.
+- Ask a text-only session model to draw « un cube sur le canvas ». The agent
+  must read the scene first, stay within its bounded plan, and emit global
+  geometry feedback if the cube topology is incomplete.
+- In `etc/modeld.yaml`, exercise `auto`/`on`/`off` for prefix cache and
+  speculation plus adaptive batching, restarting Preview between configurations.
+  The Models/sidebar metrics must expose the selected runtime mode; restore
+  `auto` after the comparison.
+
 ### 23. One-liner install (0.8.0 / P08.9)
 
 - Windows: `irm https://azerothl.github.io/akasha-os/install.ps1 | iex`
@@ -346,7 +362,7 @@ Tester-facing write-up (no cargo): [write-a-module.md](write-a-module.md).
 - Gates PC.6–PC.9 and PC.11–PC.13 checked on at least one machine (long
   protocol; not required of every tester)
 
-## Out of scope Preview 0.15.1
+## Out of scope Preview 0.16.0
 
 - seL4 / bare-metal boot
 - Intel Mac
