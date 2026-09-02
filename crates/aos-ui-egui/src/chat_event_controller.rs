@@ -1,5 +1,6 @@
 //! Event handlers for the direct chat lifecycle.
 
+use crate::chat_error_copy;
 use crate::cmd::ChatLine;
 use crate::{session_chat, UiApp};
 use aos_proto::ChatAttachment;
@@ -31,6 +32,7 @@ pub(crate) fn on_done(
         &mut app.chat_state.runtime.pending,
         &mut app.chat_state.runtime.inference_id,
     );
+    app.chat_state.runtime.load_fail_retry = None;
     if app.status.starts_with("assistant :") {
         app.status.clear();
     }
@@ -45,23 +47,43 @@ pub(crate) fn on_error(app: &mut UiApp, message: String) -> bool {
     if message.contains("media.image") || message.starts_with("Image:") {
         app.image_generating = None;
     }
-    app.status = message.clone();
-    app.chat.push(ChatLine::plain("système", message));
+    let t = crate::i18n::strings(&app.prefs.language);
+    let visible = chat_error_copy::user_visible_chat_error(&t, &message);
+    app.status = visible.clone();
+    app.chat.push(ChatLine::plain("système", visible));
     false
 }
 
 /// Clear the chat turn that emitted the failure. Generic runtime failures
 /// (downloads, settings, etc.) must not unlock an unrelated chat.
 pub(crate) fn on_chat_error(app: &mut UiApp, session_id: String, message: String) {
+    let t = crate::i18n::strings(&app.prefs.language);
+    let load_fail = chat_error_copy::is_model_load_fail_error(&message);
+    let visible = chat_error_copy::user_visible_chat_error(&t, &message);
+
     app.chat_state.session_chat.finish_turn(&session_id);
     if app.chat_state.active_session.as_deref() == Some(session_id.as_str()) {
+        let retry_turn = app.chat_state.runtime.outgoing_turn.take();
         app.chat_state.runtime.finish_turn();
+        if load_fail {
+            app.chat_state.runtime.load_fail_retry = retry_turn;
+        } else {
+            app.chat_state.runtime.load_fail_retry = None;
+        }
         if app.status.starts_with("assistant :") {
             app.status.clear();
         }
-        app.status = message.clone();
-        app.chat.push(ChatLine::plain("système", message));
+        app.status = visible.clone();
+        if load_fail {
+            // Chrome card carries the user-visible copy + Retry.
+        } else {
+            app.chat.push(ChatLine::plain("système", visible));
+        }
     } else {
+        app.chat_state.runtime.outgoing_turn = None;
+        if !load_fail {
+            app.chat_state.runtime.load_fail_retry = None;
+        }
         app.chat_state.session_chat.mark_unread(&session_id);
     }
 }

@@ -402,38 +402,41 @@ async fn handle_cmd(
             language,
             canvas_open,
             canvas_aspect,
+            skip_session_append,
         } => {
             let _ = evt_tx.send(Evt::Status(
                 "assistant : génération en cours…".into(),
             ));
             let user_content =
                 aos_proto::chat_document::merge_documents_into_user_content(&user_text, &documents);
-            let mut attachments: Vec<ChatAttachment> = images
-                .iter()
-                .map(|path| ChatAttachment::Image {
-                    path: path.clone(),
-                    prompt: String::new(),
-                })
-                .collect();
-            attachments.extend(documents.iter().map(|doc| ChatAttachment::Document {
-                path: doc.path.clone(),
-                label: doc.label.clone(),
-            }));
-            let _ = bus
-                .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
-                    "chat.session.append",
-                    &ChatSessionAppendRequest {
-                        session_id: session_id.clone(),
-                        role: "user".into(),
-                        content: user_content.clone(),
-                        attachments,
-                        speaker_id: None,
-                        speaker_name: None,
-                        thinking: None,
-                    },
-                    vec![],
-                )
-                .await;
+            if !skip_session_append {
+                let mut attachments: Vec<ChatAttachment> = images
+                    .iter()
+                    .map(|path| ChatAttachment::Image {
+                        path: path.clone(),
+                        prompt: String::new(),
+                    })
+                    .collect();
+                attachments.extend(documents.iter().map(|doc| ChatAttachment::Document {
+                    path: doc.path.clone(),
+                    label: doc.label.clone(),
+                }));
+                let _ = bus
+                    .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
+                        "chat.session.append",
+                        &ChatSessionAppendRequest {
+                            session_id: session_id.clone(),
+                            role: "user".into(),
+                            content: user_content.clone(),
+                            attachments,
+                            speaker_id: None,
+                            speaker_name: None,
+                            thinking: None,
+                        },
+                        vec![],
+                    )
+                    .await;
+            }
 
             let mem_block = bus
                 .call::<MemContextRequest, MemContextResponse>(

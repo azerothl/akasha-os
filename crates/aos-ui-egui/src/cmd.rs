@@ -33,6 +33,8 @@ pub(crate) enum Cmd {
         /// Session canvas panel open — enables draw/revise agent delegation.
         canvas_open: bool,
         canvas_aspect: aos_proto::CanvasAspect,
+        /// When true, skip appending the user turn (chat retry after load fail).
+        skip_session_append: bool,
     },
     SessionBootstrap,
     SessionCreate { title: Option<String> },
@@ -535,6 +537,42 @@ pub(crate) enum Evt {
         result: serde_json::Value,
         error: Option<String>,
     },
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ChatRetryTurn {
+    pub(crate) session_id: String,
+    pub(crate) history: Vec<(String, String)>,
+    pub(crate) user_text: String,
+    pub(crate) model_id: Option<String>,
+    pub(crate) images: Vec<String>,
+    pub(crate) documents: Vec<DocumentRef>,
+    pub(crate) auto_remember: bool,
+    pub(crate) max_steps: u32,
+    pub(crate) routing: String,
+    pub(crate) language: String,
+    pub(crate) canvas_open: bool,
+    pub(crate) canvas_aspect: aos_proto::CanvasAspect,
+}
+
+impl ChatRetryTurn {
+    pub(crate) fn to_chat_cmd(&self, skip_session_append: bool) -> Cmd {
+        Cmd::Chat {
+            session_id: self.session_id.clone(),
+            history: self.history.clone(),
+            user_text: self.user_text.clone(),
+            model_id: self.model_id.clone(),
+            images: self.images.clone(),
+            documents: self.documents.clone(),
+            auto_remember: self.auto_remember,
+            max_steps: self.max_steps,
+            routing: self.routing.clone(),
+            language: self.language.clone(),
+            canvas_open: self.canvas_open,
+            canvas_aspect: self.canvas_aspect,
+            skip_session_append,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
