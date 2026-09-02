@@ -5,7 +5,8 @@ use super::*;
 #[cfg(test)]
 mod delegate_tests {
     use super::*;
-    use aos_proto::CanvasAspect;
+    use crate::chat_delegate::canvas_model_id;
+    use aos_proto::{CanvasAspect, ModelInfo, ModelState};
 
     const ASPECT: CanvasAspect = CanvasAspect::Square;
 
@@ -14,6 +15,35 @@ mod delegate_tests {
             .iter()
             .map(|s| (*s).to_string())
             .collect()
+    }
+
+    fn model(id: &str, state: ModelState, has_vision: bool) -> ModelInfo {
+        ModelInfo {
+            id: id.into(),
+            name: id.into(),
+            privacy_class: "local".into(),
+            state,
+            placement: None,
+            profile: None,
+            has_vision,
+        }
+    }
+
+    #[test]
+    fn canvas_uses_loaded_vision_model_only_when_chat_model_is_absent() {
+        let models = vec![
+            model("vision-on-disk", ModelState::OnDisk, true),
+            model("text-loaded", ModelState::Loaded, false),
+            model("vision-loaded", ModelState::PartiallyOffloaded, true),
+        ];
+        assert_eq!(
+            canvas_model_id(None, &models).as_deref(),
+            Some("vision-loaded")
+        );
+        assert_eq!(
+            canvas_model_id(Some("chosen-text".into()), &models).as_deref(),
+            Some("chosen-text")
+        );
     }
 
     #[test]
