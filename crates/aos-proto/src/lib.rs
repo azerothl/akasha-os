@@ -8,23 +8,24 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 pub mod bridge;
+mod canvas_layers;
+mod canvas_style;
 pub mod chat_document;
 pub mod decl_ui;
 pub mod mem_extract;
-mod canvas_layers;
-mod canvas_style;
 
 pub use canvas_layers::{
     align_canvas_op_body, canvas_hit_test, canvas_layer_by_id, canvas_layer_effective_locked,
     canvas_layer_effective_opacity, canvas_layer_effective_visible, canvas_rect_corners,
     canvas_rotate_point, default_canvas_layer_id, ensure_canvas_layers, set_canvas_op_rotation,
-    translate_canvas_op_body, usable_canvas_bbox, CanvasEdit, CanvasEditRequest, CanvasEditResponse,
-    CanvasLayer, DEFAULT_CANVAS_LAYER_ID,
+    translate_canvas_op_body, usable_canvas_bbox, CanvasEdit, CanvasEditRequest,
+    CanvasEditResponse, CanvasLayer, DEFAULT_CANVAS_LAYER_ID,
 };
 pub use canvas_style::{
     canvas_op_body_dash, canvas_op_body_gradient, canvas_op_body_opacity, default_canvas_opacity,
-    parse_rgb, parse_canvas_sidecar_json, resolve_canvas_op_style_ex, sample_linear_gradient, set_canvas_op_body_dash,
-    set_canvas_op_body_gradient, set_canvas_op_body_opacity, CanvasLinearGradient,
+    parse_canvas_sidecar_json, parse_rgb, resolve_canvas_op_style_ex, sample_linear_gradient,
+    set_canvas_op_body_dash, set_canvas_op_body_gradient, set_canvas_op_body_opacity,
+    CanvasLinearGradient,
 };
 
 // ---------------------------------------------------------------------------
@@ -115,10 +116,7 @@ mod infer_request_tests {
         req.ensure_image_data_refs();
         assert_eq!(
             req.data_refs,
-            vec![
-                "/tmp/doc.txt".to_string(),
-                "/tmp/a.png".to_string(),
-            ]
+            vec!["/tmp/doc.txt".to_string(), "/tmp/a.png".to_string(),]
         );
     }
 }
@@ -163,7 +161,11 @@ pub struct ProviderRecord {
 
 /// Shared presets: `(id, default endpoint, optional vault secret name)`.
 pub const PROVIDER_PRESETS: &[(&str, &str, Option<&str>)] = &[
-    ("openai", "https://api.openai.com/v1", Some("openai_api_key")),
+    (
+        "openai",
+        "https://api.openai.com/v1",
+        Some("openai_api_key"),
+    ),
     (
         "openrouter",
         "https://openrouter.ai/api/v1",
@@ -812,17 +814,16 @@ pub struct AgentInfo {
 impl AgentInfo {
     /// User-typed Agents tab label (`display_name`), not a built-in persona i18n key.
     pub fn uses_typed_display_name(&self) -> bool {
-        self.display_name.as_deref().is_some_and(|n| !n.trim().is_empty())
+        self.display_name
+            .as_deref()
+            .is_some_and(|n| !n.trim().is_empty())
             && self.persona_id.is_none()
             && matches!(self.origin.as_deref(), Some("library") | Some("form"))
     }
 
     /// Ephemeral chat spawn (`/agent`, delegate) — excluded from salon picker.
     pub fn is_ephemeral_chat_spawn(&self) -> bool {
-        matches!(
-            self.origin.as_deref(),
-            Some("assistant") | Some("slash")
-        )
+        matches!(self.origin.as_deref(), Some("assistant") | Some("slash"))
     }
 
     pub fn display_title(&self) -> &str {
@@ -941,19 +942,37 @@ pub struct AgentTrace {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(clippy::large_enum_variant)] // Stable protocol enum; boxing would change its public API.
 pub enum AgentOutputEvent {
-    Log { line: String },
-    Token { text: String },
-    StateChanged { state: AgentState },
-    Error { message: String },
+    Log {
+        line: String,
+    },
+    Token {
+        text: String,
+    },
+    StateChanged {
+        state: AgentState,
+    },
+    Error {
+        message: String,
+    },
     Progress {
         step: u32,
         max_steps: u32,
         current_task: Option<String>,
     },
-    ChildSpawned { child_id: String, brief: String },
-    ChildDone { child_id: String, result: String },
-    Reflection { text: String },
-    PlanUpdated { nodes: Vec<TaskNode> },
+    ChildSpawned {
+        child_id: String,
+        brief: String,
+    },
+    ChildDone {
+        child_id: String,
+        result: String,
+    },
+    Reflection {
+        text: String,
+    },
+    PlanUpdated {
+        nodes: Vec<TaskNode>,
+    },
     /// Tour agentic terminé.
     Step(AgentStepRecord),
 }
@@ -1331,8 +1350,7 @@ pub struct MemRememberResponse {
 
 /// Running Preview semver — same source as window chrome (`AOS_PREVIEW_VERSION` or crate).
 pub fn preview_version() -> String {
-    std::env::var("AOS_PREVIEW_VERSION")
-        .unwrap_or_else(|_| env!("CARGO_PKG_VERSION").to_string())
+    std::env::var("AOS_PREVIEW_VERSION").unwrap_or_else(|_| env!("CARGO_PKG_VERSION").to_string())
 }
 
 /// Corps du prompt système (architecture, capacités) — sans en-tête versionné.
@@ -1644,9 +1662,7 @@ fn extract_tts_spoken_text(text: &str) -> String {
     for marker in MARKERS {
         if let Some(idx) = lower.find(marker) {
             let after = text[idx + marker.len()..].trim();
-            let after = after
-                .trim_start_matches([':', '-', '—', '–'])
-                .trim();
+            let after = after.trim_start_matches([':', '-', '—', '–']).trim();
             if !after.is_empty() {
                 return strip_wrapping_quotes(after);
             }
@@ -1748,14 +1764,7 @@ fn strip_tts_preamble(text: &str) -> String {
     }
     if matches!(
         lower.as_str(),
-        "" | "un audio"
-            | "audio"
-            | "un wav"
-            | "wav"
-            | "tts"
-            | "la voix"
-            | "une voix"
-            | "speech"
+        "" | "un audio" | "audio" | "un wav" | "wav" | "tts" | "la voix" | "une voix" | "speech"
     ) {
         return String::new();
     }
@@ -1770,11 +1779,17 @@ mod chat_delegation_tests {
     fn create_module_spawns() {
         assert!(chat_user_wants_module_authoring("crée un module ping"));
         assert!(chat_user_wants_module_authoring("Créer un module cohorte"));
-        assert!(chat_user_wants_module_authoring("create a module named ping"));
-        assert!(chat_user_wants_module_authoring("scaffold un module ext-rt"));
+        assert!(chat_user_wants_module_authoring(
+            "create a module named ping"
+        ));
+        assert!(chat_user_wants_module_authoring(
+            "scaffold un module ext-rt"
+        ));
         assert!(chat_user_wants_module_authoring("installe un module"));
         assert!(chat_user_wants_module_authoring("ajoute une skill notes"));
-        assert!(chat_user_wants_module_authoring("création d'un module ping"));
+        assert!(chat_user_wants_module_authoring(
+            "création d'un module ping"
+        ));
     }
 
     #[test]
@@ -1782,7 +1797,9 @@ mod chat_delegation_tests {
         assert!(!chat_user_wants_module_authoring("c'est quoi un module"));
         assert!(!chat_user_wants_module_authoring("explique les modules"));
         assert!(!chat_user_wants_module_authoring("what is a skill"));
-        assert!(!chat_user_wants_module_authoring("quels sont les modules installés"));
+        assert!(!chat_user_wants_module_authoring(
+            "quels sont les modules installés"
+        ));
         assert!(!chat_user_wants_module_authoring("liste les modules"));
     }
 
@@ -1821,7 +1838,8 @@ mod chat_delegation_tests {
 mod preview_prompt_tests {
     use super::{
         format_chat_supervisor_lock, format_preview_surface_brief, format_system_assistant_prompt,
-        CHAT_DELEGATION_PROMPT, CHAT_SUPERVISOR_LOCK, PREVIEW_SURFACE_BRIEF, SYSTEM_ASSISTANT_PROMPT,
+        CHAT_DELEGATION_PROMPT, CHAT_SUPERVISOR_LOCK, PREVIEW_SURFACE_BRIEF,
+        SYSTEM_ASSISTANT_PROMPT,
     };
 
     fn chat_system_stack() -> String {
@@ -1861,7 +1879,8 @@ mod preview_prompt_tests {
             "brief must not globally forbid answering outside RAG"
         );
         assert!(
-            CHAT_DELEGATION_PROMPT.contains("ignore") || CHAT_DELEGATION_PROMPT.contains("hors index"),
+            CHAT_DELEGATION_PROMPT.contains("ignore")
+                || CHAT_DELEGATION_PROMPT.contains("hors index"),
             "chat path should ignore empty or off-topic indexes"
         );
     }
@@ -2505,6 +2524,9 @@ pub struct FeedbackSubmitRequest {
     /// low | medium | high
     pub severity: String,
     pub body: String,
+    /// Fichiers complémentaires sélectionnés explicitement par l'utilisateur.
+    #[serde(default)]
+    pub attachments: Vec<FeedbackAttachment>,
     /// Scénario cohorte coché (ex. `chat_offline`).
     #[serde(default)]
     pub scenario: Option<String>,
@@ -2514,6 +2536,12 @@ pub struct FeedbackSubmitRequest {
     /// Si vrai, tente de créer une issue sur le dépôt public.
     #[serde(default)]
     pub publish_github: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FeedbackAttachment {
+    /// Chemin local du fichier à joindre au retour.
+    pub path: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -4373,8 +4401,8 @@ mod media_option_tests {
 
     #[test]
     fn image_options_refuse_unknown_keys() {
-        let err = serde_json::from_str::<MediaImageOptions>(r#"{"steps":8,"argv":"--foo"}"#)
-            .unwrap_err();
+        let err =
+            serde_json::from_str::<MediaImageOptions>(r#"{"steps":8,"argv":"--foo"}"#).unwrap_err();
         let s = err.to_string();
         assert!(s.contains("unknown") || s.contains("argv"), "{s}");
     }
@@ -4410,8 +4438,8 @@ mod media_option_tests {
 mod chat_session_room_tests {
     use super::{
         AgentCreateRequest, AgentGoal, AgentInfo, AgentKind, AgentState, CanvasAspect,
-        ChatRoomMember, ChatSessionMessage, ChatSessionMeta, ChatSessionMode,
-        ChatRoomConductorPolicy,
+        ChatRoomConductorPolicy, ChatRoomMember, ChatSessionMessage, ChatSessionMeta,
+        ChatSessionMode,
     };
 
     #[test]
@@ -4480,9 +4508,18 @@ mod chat_session_room_tests {
     fn canvas_aspect_export_dimensions() {
         use super::CanvasAspect;
         assert_eq!(CanvasAspect::Square.export_dimensions(1024), (1024, 1024));
-        assert_eq!(CanvasAspect::Landscape16x9.export_dimensions(1024), (1024, 576));
-        assert_eq!(CanvasAspect::Portrait9x16.export_dimensions(1024), (576, 1024));
-        assert_eq!(CanvasAspect::Landscape3x2.export_dimensions(1024), (1024, 683));
+        assert_eq!(
+            CanvasAspect::Landscape16x9.export_dimensions(1024),
+            (1024, 576)
+        );
+        assert_eq!(
+            CanvasAspect::Portrait9x16.export_dimensions(1024),
+            (576, 1024)
+        );
+        assert_eq!(
+            CanvasAspect::Landscape3x2.export_dimensions(1024),
+            (1024, 683)
+        );
     }
 
     #[test]
@@ -4511,7 +4548,10 @@ mod chat_session_room_tests {
             ts_ms: 42,
             layer_id: String::new(),
             body: CanvasOpBody::Stroke {
-                points: vec![CanvasPoint { x: 0.1, y: 0.2 }, CanvasPoint { x: 0.3, y: 0.4 }],
+                points: vec![
+                    CanvasPoint { x: 0.1, y: 0.2 },
+                    CanvasPoint { x: 0.3, y: 0.4 },
+                ],
                 color: "#3ee0c4".into(),
                 width: 0.02,
                 opacity: 1.0,
@@ -4587,7 +4627,10 @@ mod chat_session_room_tests {
         };
         let fill_json = serde_json::to_string(&fill).unwrap();
         assert!(fill_json.contains("\"kind\":\"fill\""));
-        assert_eq!(serde_json::from_str::<CanvasOpBody>(&fill_json).unwrap(), fill);
+        assert_eq!(
+            serde_json::from_str::<CanvasOpBody>(&fill_json).unwrap(),
+            fill
+        );
     }
 
     #[test]
@@ -4600,7 +4643,10 @@ mod chat_session_room_tests {
             dash: vec![],
         };
         let mut stroke = CanvasOpBody::Stroke {
-            points: vec![CanvasPoint { x: 0.0, y: 0.0 }, CanvasPoint { x: 1.0, y: 1.0 }],
+            points: vec![
+                CanvasPoint { x: 0.0, y: 0.0 },
+                CanvasPoint { x: 1.0, y: 1.0 },
+            ],
             color: String::new(),
             width: 0.0,
             opacity: 1.0,
@@ -4680,9 +4726,7 @@ mod chat_session_room_tests {
 
     #[test]
     fn normalize_pixel_rect_spreads_on_board() {
-        use super::{
-            canvas_op_bbox, normalize_canvas_op_coords, CanvasOpBody,
-        };
+        use super::{canvas_op_bbox, normalize_canvas_op_coords, CanvasOpBody};
         let mut body = CanvasOpBody::Rect {
             x: 100.0,
             y: 50.0,
@@ -4705,7 +4749,9 @@ mod chat_session_room_tests {
 
     #[test]
     fn pixel_coords_do_not_pile_at_same_corner() {
-        use super::{canvas_bbox_overlaps, canvas_op_bbox, normalize_canvas_op_coords, CanvasOpBody};
+        use super::{
+            canvas_bbox_overlaps, canvas_op_bbox, normalize_canvas_op_coords, CanvasOpBody,
+        };
         let mut r1 = CanvasOpBody::Rect {
             x: 400.0,
             y: 300.0,
