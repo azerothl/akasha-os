@@ -191,18 +191,33 @@ jobs:
           chmod +x packaging/build-preview.sh
           bash packaging/build-preview.sh
           OUT="dist/AgentOS-Preview-${VERSION}-linux-x64"
-          test -x "${OUT}/bin/aos-session"
-          test -x "${OUT}/bin/aos-modeld-cpu"
+          for bin in \
+            aos-session aos-busd aos-modeld aos-modeld-cpu aos-agentd \
+            aos-agent-worker aos-platformd aos-capkd aos-auditd aos-ui-egui aos-bridged; do
+            test -x "${OUT}/bin/${bin}"
+          done
+          for module in notes tasks ext-rt canvas; do
+            test -s "${OUT}/share/modules/${module}.aospkg/manifest.yaml"
+            test -s "${OUT}/share/modules/${module}.aospkg/module.wasm"
+          done
           test -f "${OUT}/share/models/manifest.json"
           test -f "${OUT}/share/modules/catalogue.yaml"
           test -f "${OUT}/share/modules/catalogue.yaml.sig"
           test -f "${OUT}/share/modules/catalogue.pub"
-          ls "${OUT}/bin"/libcudart.so* >/dev/null
+          for cuda_lib in \
+            'libcudart.so*' 'libcublas.so*' 'libcublasLt.so*' \
+            'libnvJitLink.so*' 'libnvrtc.so*' 'libnvrtc-builtins.so*'; do
+            compgen -G "${OUT}/bin/${cuda_lib}" >/dev/null
+          done
           echo "== bin layout =="
           ls -lah "${OUT}/bin" | head -n 80
           du -sh "${OUT}" "${OUT}/bin"
-          tar -C dist -czf "dist/AgentOS-Preview-${VERSION}-linux-x64.tar.gz" "AgentOS-Preview-${VERSION}-linux-x64"
-          ls -lh "dist/AgentOS-Preview-${VERSION}-linux-x64.tar.gz"
+          ARCHIVE="dist/AgentOS-Preview-${VERSION}-linux-x64.tar.gz"
+          tar -C dist -czf "${ARCHIVE}" "AgentOS-Preview-${VERSION}-linux-x64"
+          tar -tzf "${ARCHIVE}" >/dev/null
+          gzip -t "${ARCHIVE}"
+          ls -lh "${ARCHIVE}"
+          sha256sum "${ARCHIVE}"
           sccache --show-stats
 
       - uses: actions/upload-artifact@v4
@@ -273,17 +288,21 @@ jobs:
           chmod +x packaging/build-preview-macos.sh
           ./packaging/build-preview-macos.sh
           OUT="dist/AgentOS-Preview-${VERSION}-macos-arm64"
-          test -x "${OUT}/bin/aos-session"
-          test -x "${OUT}/bin/aos-modeld-cpu"
+          for bin in \
+            aos-session aos-busd aos-modeld aos-modeld-cpu aos-agentd \
+            aos-agent-worker aos-platformd aos-capkd aos-auditd aos-ui-egui aos-bridged; do
+            test -x "${OUT}/bin/${bin}"
+          done
+          for module in notes tasks ext-rt canvas; do
+            test -s "${OUT}/share/modules/${module}.aospkg/manifest.yaml"
+            test -s "${OUT}/share/modules/${module}.aospkg/module.wasm"
+          done
           test -f "${OUT}/share/models/manifest.json"
           test -f "${OUT}/share/modules/catalogue.yaml"
           test -f "${OUT}/share/modules/catalogue.yaml.sig"
           test -f "${OUT}/share/modules/catalogue.pub"
           du -sh "${OUT}"
           # Mac Preview is slim without bundled GGUF or CUDA DLLs; verify real binaries.
-          test -x "${OUT}/bin/aos-modeld"
-          test -x "${OUT}/bin/aos-ui-egui"
-          test -d "${OUT}/share/modules/canvas.aospkg"
           modeld_bytes=$(stat -f%z "${OUT}/bin/aos-modeld")
           platformd_bytes=$(stat -f%z "${OUT}/bin/aos-platformd")
           if [ "${modeld_bytes}" -lt 5000000 ]; then
@@ -303,7 +322,9 @@ jobs:
             echo "::error::missing ${ZIP} (build-preview-macos.sh should create it)"
             exit 1
           fi
+          unzip -t "${ZIP}" >/dev/null
           ls -lh "${ZIP}"
+          shasum -a 256 "${ZIP}"
           sccache --show-stats
 
       - uses: actions/upload-artifact@v4
