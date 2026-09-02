@@ -22,7 +22,8 @@ use aos_agent::canvas_scene::{
     canvas_visual_fingerprint, canvas_visual_progress, canvas_visual_progress_note,
     canvas_reflect_user_content, canvas_repeat_stroke_verdict, canvas_scene_prompt_block,
     canvas_tool_mutates_scene, end_canvas_vision, fetch_canvas_aspect,
-    fetch_canvas_scene_digest, merge_canvas_vision_refs, refresh_canvas_scene_after_op,
+    fetch_canvas_global_validation, fetch_canvas_scene_digest, global_canvas_validation_due,
+    merge_canvas_vision_refs, refresh_canvas_scene_after_op,
     session_model_has_vision, strip_vision_image_paths, should_run_canvas_critic,
     canvas_text_only_critic_system_prompt,
     CanvasRepeatVerdict,
@@ -1304,13 +1305,50 @@ async fn main() {
             }
         }
 
+        // Independent whole-scene check every three canvas mutations. This is
+        // deterministic and remains available when the selected model is text-only.
+        let global_feedback = if terminal.is_none()
+            && canvas_agent
+            && global_canvas_validation_due(canvas_scene_changed, step)
+        {
+            if let Some(sid) = spec.session_id.as_deref().filter(|sid| !sid.is_empty()) {
+                fetch_canvas_global_validation(&bus, sid, &spec.goal.statement, false)
+                    .await
+                    .filter(|report| !report.issues.is_empty())
+                    .map(|report| report.prompt_block())
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        if let Some(feedback) = &global_feedback {
+            shared.state.lock().await.working_memory.push((
+                "system".into(),
+                format!("{feedback}\nCorrige les séquences signalées avant de poursuivre."),
+            ));
+            report(
+                &bus,
+                &agent_id,
+                AgentOutputEvent::Reflection {
+                    text: feedback.clone(),
+                },
+            )
+            .await;
+        }
+
         // Critic: after every canvas stroke (scene PNG) or every 3 steps otherwise.
-        let reflection = if terminal.is_none()
+        let model_reflection = if terminal.is_none()
             && should_run_canvas_critic(canvas_agent, canvas_scene_changed, step)
         {
             reflect(&bus, &shared, &spec).await
         } else {
             None
+        };
+        let reflection = match (global_feedback, model_reflection) {
+            (Some(global), Some(model)) => Some(format!("{global}\n\n{model}")),
+            (Some(global), None) => Some(global),
+            (None, model) => model,
         };
 
         let skill_pairs: Vec<(String, Vec<String>)> = skill_docs
@@ -1382,15 +1420,49 @@ async fn main() {
         {
             let plan_complete = shared.state.lock().await.canvas_plan_is_complete();
             if plan_complete {
-                report(
-                    &bus,
-                    &agent_id,
-                    AgentOutputEvent::Log {
-                        line: "plan canvas terminé : arrêt avant empilement de formes supplémentaires".into(),
-                    },
-                )
-                .await;
-                terminal = Some(AgentState::Done);
+                let final_validation = if let Some(sid) =
+                    spec.session_id.as_deref().filter(|sid| !sid.is_empty())
+                {
+                    fetch_canvas_global_validation(
+                        &bus,
+                        sid,
+                        &spec.goal.statement,
+                        true,
+                    )
+                    .await
+                } else {
+                    None
+                };
+                if let Some(validation) =
+                    final_validation.filter(|report| report.requires_modification())
+                {
+                    let feedback = format!(
+                        "{}\nLe plan est terminé mais la cohérence globale exige une correction ciblée.",
+                        validation.prompt_block()
+                    );
+                    shared
+                        .state
+                        .lock()
+                        .await
+                        .working_memory
+                        .push(("system".into(), feedback.clone()));
+                    report(
+                        &bus,
+                        &agent_id,
+                        AgentOutputEvent::Reflection { text: feedback },
+                    )
+                    .await;
+                } else {
+                    report(
+                        &bus,
+                        &agent_id,
+                        AgentOutputEvent::Log {
+                            line: "plan canvas terminé et validation globale acceptée".into(),
+                        },
+                    )
+                    .await;
+                    terminal = Some(AgentState::Done);
+                }
             }
         }
 
