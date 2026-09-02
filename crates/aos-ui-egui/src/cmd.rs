@@ -353,6 +353,12 @@ pub(crate) enum Evt {
         session_id: String,
         attachments: Vec<ChatAttachment>,
     },
+    /// A chat request failed before it could emit `Done`. Keep its session id
+    /// so the UI clears the matching in-flight turn.
+    ChatError {
+        session_id: String,
+        message: String,
+    },
     Error(String),
     Status(String),
     ChatSystem(String),

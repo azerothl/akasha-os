@@ -1868,6 +1868,12 @@ impl eframe::App for UiApp {
                 } => {
                     chat_event_controller::on_done(self, text, session_id, attachments);
                 }
+                Evt::ChatError {
+                    session_id,
+                    message,
+                } => {
+                    chat_event_controller::on_chat_error(self, session_id, message);
+                }
                 Evt::Error(m) => {
                     if chat_event_controller::on_error(self, m) {
                         break;

@@ -40,10 +40,6 @@ pub(crate) fn on_done(
 /// Handle an error and return whether the event loop should stop processing.
 pub(crate) fn on_error(app: &mut UiApp, message: String) -> bool {
     if aos_agent::context_budget::is_technical_vision_infer_error(&message) {
-        app.chat_state.runtime.finish_turn();
-        if app.status.starts_with("assistant :") {
-            app.status.clear();
-        }
         return true;
     }
     if message.contains("media.image") || message.starts_with("Image:") {
@@ -51,8 +47,23 @@ pub(crate) fn on_error(app: &mut UiApp, message: String) -> bool {
     }
     app.status = message.clone();
     app.chat.push(ChatLine::plain("système", message));
-    app.chat_state.runtime.finish_turn();
     false
+}
+
+/// Clear the chat turn that emitted the failure. Generic runtime failures
+/// (downloads, settings, etc.) must not unlock an unrelated chat.
+pub(crate) fn on_chat_error(app: &mut UiApp, session_id: String, message: String) {
+    app.chat_state.session_chat.finish_turn(&session_id);
+    if app.chat_state.active_session.as_deref() == Some(session_id.as_str()) {
+        app.chat_state.runtime.finish_turn();
+        if app.status.starts_with("assistant :") {
+            app.status.clear();
+        }
+        app.status = message.clone();
+        app.chat.push(ChatLine::plain("système", message));
+    } else {
+        app.chat_state.session_chat.mark_unread(&session_id);
+    }
 }
 
 pub(crate) fn on_status(app: &mut UiApp, message: String) {
