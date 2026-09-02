@@ -5,7 +5,8 @@ use super::*;
 #[cfg(test)]
 mod delegate_tests {
     use super::*;
-    use aos_proto::CanvasAspect;
+    use crate::chat_delegate::canvas_model_id;
+    use aos_proto::{CanvasAspect, ModelInfo, ModelState};
 
     const ASPECT: CanvasAspect = CanvasAspect::Square;
 
@@ -14,6 +15,35 @@ mod delegate_tests {
             .iter()
             .map(|s| (*s).to_string())
             .collect()
+    }
+
+    fn model(id: &str, state: ModelState, has_vision: bool) -> ModelInfo {
+        ModelInfo {
+            id: id.into(),
+            name: id.into(),
+            privacy_class: "local".into(),
+            state,
+            placement: None,
+            profile: None,
+            has_vision,
+        }
+    }
+
+    #[test]
+    fn canvas_uses_loaded_vision_model_only_when_chat_model_is_absent() {
+        let models = vec![
+            model("vision-on-disk", ModelState::OnDisk, true),
+            model("text-loaded", ModelState::Loaded, false),
+            model("vision-loaded", ModelState::PartiallyOffloaded, true),
+        ];
+        assert_eq!(
+            canvas_model_id(None, &models).as_deref(),
+            Some("vision-loaded")
+        );
+        assert_eq!(
+            canvas_model_id(Some("chosen-text".into()), &models).as_deref(),
+            Some("chosen-text")
+        );
     }
 
     #[test]
@@ -203,6 +233,9 @@ mod delegate_tests {
         ];
         let (_, tools) = chat_delegate_kit("dessine un moulin", true, true, &exported);
         assert!(tools.iter().any(|t| t == "canvas.path"));
+        assert!(tools.iter().any(|t| t == "plan.update"));
+        assert!(!tools.iter().any(|t| t.starts_with("notes.")));
+        assert!(!tools.iter().any(|t| t.starts_with("tasks.")));
         let brief = chat_canvas::canvas_agent_brief("dessine un moulin", ASPECT, &exported);
         assert!(brief.contains("canvas.path"));
         assert!(brief.contains("pièce manquante"));
@@ -355,7 +388,7 @@ mod layout_tests {
     use super::*;
     use crate::chat_bubble::ChatBubbleKind;
     use crate::composer_layout::{
-        chat_canvas_layout, chat_composer_reserve_height, chat_sessions_split,
+        bounded_chat_workspace_width, chat_canvas_layout, chat_composer_reserve_height, chat_sessions_split,
         composer_field_width, ChatCanvasLayout,
     };
 
@@ -371,6 +404,15 @@ mod layout_tests {
                 split.chat_w
             );
         }
+    }
+
+    #[test]
+    fn chat_workspace_is_bounded_after_wide_session_widget() {
+        // A long model id can make egui give the Sessions rail more than its
+        // planned split; the right pane must shrink rather than clip its canvas.
+        assert_eq!(bounded_chat_workspace_width(600.0, 520.0, 8.0), 512.0);
+        assert_eq!(bounded_chat_workspace_width(600.0, 900.0, 8.0), 592.0);
+        assert_eq!(bounded_chat_workspace_width(100.0, 4.0, 8.0), 0.0);
     }
 
     #[test]

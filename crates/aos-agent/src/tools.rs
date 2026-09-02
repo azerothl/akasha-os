@@ -1140,6 +1140,14 @@ pub fn is_module_fallback_candidate(name: &str) -> bool {
     !reserved_tool_prefix(prefix)
 }
 
+/// `canvas.*` must always be explicitly granted to an agent.  Unlike ordinary
+/// module names, accepting it through the generic module fallback lets a model
+/// invoke undocumented operations (notably the legacy `canvas.fill`) that were
+/// deliberately removed from the drawing kit.
+pub fn canvas_tool_denied_by_allowlist(name: &str, tools: &[ToolDesc]) -> bool {
+    name.starts_with("canvas.") && !tools.iter().any(|tool| tool.name == name)
+}
+
 /// Alias d'arguments LLM (`prompt` → `text` pour le TTS ; `fill_color` → `color` pour canvas).
 pub fn normalize_tool_args(name: &str, args: &serde_json::Value) -> serde_json::Value {
     let mut out = args.clone();
@@ -1147,6 +1155,21 @@ pub fn normalize_tool_args(name: &str, args: &serde_json::Value) -> serde_json::
         return out;
     };
     if name.starts_with("canvas.") {
+        // Some models nest drawing style even though the canvas module expects
+        // top-level fields. Flatten the common form before canonicalizing.
+        if let Some(style) = obj.get("style").and_then(|v| v.as_object()).cloned() {
+            if !obj.contains_key("color") {
+                if let Some(v) = style.get("color").cloned() {
+                    obj.insert("color".into(), v);
+                }
+            }
+            if !obj.contains_key("width") {
+                if let Some(v) = style.get("width").cloned() {
+                    obj.insert("width".into(), v);
+                }
+            }
+        }
+        obj.remove("style");
         // `fill_color` is a prompt-facing alias.  The WASM canvas schema
         // accepts the canonical `color` field; keeping both creates a
         // duplicate serde field and makes the module reject the operation.
@@ -1184,6 +1207,24 @@ pub fn normalize_tool_args(name: &str, args: &serde_json::Value) -> serde_json::
         }
         if let Some(v) = obj.get("height").cloned() {
             obj.insert("h".into(), v);
+        }
+        // Here width is the geometric alias for `w`, not the outline width.
+        // Keeping it also makes the renderer draw an enormous outline.
+        obj.remove("width");
+    }
+    if name.starts_with("canvas.") && name != "canvas.erase" {
+        // A local model often copies a shape's `w` into its stroke `width`.
+        // At 0.15 this means a 15%-of-canvas outline, which turns wheels into
+        // opaque rings. Keep agent outlines readable; human canvas edits and
+        // erasing are not routed through this normalizer.
+        const MAX_AGENT_CANVAS_STROKE_WIDTH: f64 = 0.04;
+        if let Some(width) = obj.get_mut("width") {
+            if width
+                .as_f64()
+                .is_some_and(|value| value > MAX_AGENT_CANVAS_STROKE_WIDTH)
+            {
+                *width = serde_json::json!(MAX_AGENT_CANVAS_STROKE_WIDTH);
+            }
         }
     }
     out
@@ -1308,6 +1349,20 @@ mod tests {
     }
 
     #[test]
+    fn normalize_canvas_style_object_to_top_level_fields() {
+        let args = normalize_tool_args(
+            "canvas.path",
+            &serde_json::json!({
+                "points": [{"x": 0.1, "y": 0.2}],
+                "style": {"color": "#333333", "width": 0.02}
+            }),
+        );
+        assert_eq!(args["color"], "#333333");
+        assert_eq!(args["width"], 0.02);
+        assert!(args.get("style").is_none());
+    }
+
+    #[test]
     fn normalize_rect_width_height_aliases_to_w_h() {
         let args = normalize_tool_args(
             "canvas.rect",
@@ -1322,6 +1377,24 @@ mod tests {
         );
         assert_eq!(args["w"], 0.3);
         assert_eq!(args["h"], 0.15);
+    }
+
+    #[test]
+    fn normalize_canvas_outline_width_prevents_opaque_wheels() {
+        let args = normalize_tool_args(
+            "canvas.ellipse",
+            &serde_json::json!({
+                "x": 0.25, "y": 0.65, "w": 0.15, "h": 0.08,
+                "width": 0.15, "fill": false
+            }),
+        );
+        assert_eq!(args["width"], 0.04);
+        let aliases = normalize_tool_args(
+            "canvas.ellipse",
+            &serde_json::json!({"x": 0.25, "y": 0.65, "width": 0.15, "height": 0.08}),
+        );
+        assert_eq!(aliases["w"], 0.15);
+        assert!(aliases.get("width").is_none());
     }
 
     #[test]
@@ -1376,5 +1449,13 @@ mod tests {
         assert!(is_module_fallback_candidate("notes.create"));
         let (kind, _, _) = classify_action("tool.invoke:audio.generate", &[], &[]);
         assert_eq!(kind, "native");
+    }
+
+    #[test]
+    fn canvas_tools_cannot_bypass_the_selected_toolkit() {
+        let tools = select_tools(&["canvas.path".into()], &[]);
+        assert!(!canvas_tool_denied_by_allowlist("canvas.path", &tools));
+        assert!(canvas_tool_denied_by_allowlist("canvas.fill", &tools));
+        assert!(!canvas_tool_denied_by_allowlist("notes.create", &tools));
     }
 }

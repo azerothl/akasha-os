@@ -1,6 +1,8 @@
 //! Conversation workspace, transcript, canvas, and composer.
 
-use crate::composer_layout::{chat_sessions_split, ChatSessionsSplit};
+use crate::composer_layout::{
+    bounded_chat_workspace_width, chat_sessions_split, ChatSessionsSplit,
+};
 use crate::{chat_room, i18n, UiApp};
 use eframe::egui;
 
@@ -21,7 +23,16 @@ impl UiApp {
 
             ui.add_space(gap);
 
-            self.ui_chat_workspace(ui, chat_w, full.y, &t);
+            // Widgets in the session rail may need more than their planned
+            // width (notably an unbroken model id). Use the remaining rect,
+            // not the old split estimate, so the canvas and composer stay
+            // inside the application viewport.
+            let workspace_w = bounded_chat_workspace_width(
+                chat_w,
+                ui.available_width(),
+                8.0,
+            );
+            self.ui_chat_workspace(ui, workspace_w, full.y, &t);
         });
     }
 }

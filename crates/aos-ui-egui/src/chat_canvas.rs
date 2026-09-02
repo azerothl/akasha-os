@@ -1734,9 +1734,11 @@ fn canvas_aspect_chip_labels(t: &UiStrings) -> [(&'static str, CanvasAspect); 5]
 }
 
 
-/// Designer copy for delegated canvas agents — only lists tools the loaded module exports.
+/// Designer copy for delegated canvas agents — only lists tools actually
+/// granted to an agent, not every low-level export of the canvas module.
 pub fn canvas_agent_designer_guide(exported: &[String]) -> String {
-    let has_path = exported.iter().any(|t| t == "canvas.path");
+    let allowed = aos_agent::tools::filter_canvas_tool_ids(exported);
+    let has_path = allowed.iter().any(|t| t == "canvas.path");
     let silhouette = if has_path {
         "Silhouettes (colline, corps, toit, voiles) : `canvas.path` avec 4–8 points et fill:true — \
 un path par forme lisible, pas 20 splines/rects empilés. Traits fins : canvas.stroke/line/spline. "
@@ -1750,10 +1752,10 @@ un shape par forme lisible. Traits fins : canvas.stroke/line. "
     } else {
         "Exemple moulin : spline/rect pour colline et corps, ellipse pour voiles — rect pour fenêtre/porte.\n"
     };
-    let tools_line = if exported.is_empty() {
+    let tools_line = if allowed.is_empty() {
         "Outils canvas : (module non chargé — commence par canvas.get si disponible).".to_string()
     } else {
-        let mut names: Vec<&str> = exported
+        let mut names: Vec<&str> = allowed
             .iter()
             .filter(|t| t.starts_with("canvas."))
             .map(|s| s.as_str())
@@ -1772,6 +1774,10 @@ Espace : coords normalisées 0..1 uniquement (max 1.0) sur le cadre visible (ori
 Règles : margin 0.08–0.12 ; sujet centré dans usable ; couches sol → volumes → détails → 2–3 ombres. \
 Lis `scene_bbox` dans le digest : ne superpose pas les nouvelles formes au même centre. \
 {silhouette}\
+Plan de composition imposé : Analyse (canvas.get seulement, aucun trait), Composition (2 formes d'ancrage), \
+Volumes principaux (3 formes distinctes), Détails distinctifs (3 formes), Finitions (2 accents/ombres), Export. \
+Chaque volume doit contribuer à la reconnaissance du sujet ; ne redessine jamais la silhouette aux étapes suivantes. \
+`width` est l'épaisseur du contour, pas la largeur géométrique : ≤0.04 ; pour rect/ellipse, la taille est `w`,`h`. \
 Commence par canvas.get. Couleur : canvas.set_style {{color:\"#RRGGBB\"}} ou color= sur chaque op — \
 le teal signal n'est pas la seule teinte ; après critique, change de teinte pour ombres/détails.\n\
 Après critique : ajoute la pièce manquante seulement — jamais canvas.clear ni redessiner le sujet depuis zéro sauf si l'humain dit effacer.\n\
@@ -2095,6 +2101,19 @@ fn fit_board_rect_letterboxes_wide_in_tall_pane() {
         assert!(prompt.contains("Pas agent.spawn"));
         assert!(prompt.contains("auteur unique"));
         assert!(!prompt.contains("agent.spawn : le brief"));
+    }
+
+    #[test]
+    fn canvas_agent_system_prompt_hides_low_level_fill_and_clear_tools() {
+        let exported = vec![
+            "canvas.get".into(),
+            "canvas.path".into(),
+            "canvas.fill".into(),
+            "canvas.clear".into(),
+        ];
+        let prompt = super::canvas_agent_system_prompt(CanvasAspect::Square, &exported);
+        assert!(prompt.contains("canvas.path"));
+        assert!(!prompt.contains("canvas.fill,"));
     }
 
     #[test]

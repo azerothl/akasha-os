@@ -17,18 +17,21 @@ use aos_agent::context_budget::{
 };
 use aos_agent::persist;
 use aos_agent::canvas_scene::{
-    agent_has_canvas_tools, begin_canvas_vision, canvas_critic_requests_stop, canvas_critic_system_prompt,
+    agent_has_canvas_tools, begin_canvas_vision, canvas_action_near_duplicate_reason, canvas_critic_system_prompt,
+    canvas_op_succeeded,
+    canvas_visual_fingerprint, canvas_visual_progress, canvas_visual_progress_note,
     canvas_reflect_user_content, canvas_repeat_stroke_verdict, canvas_scene_prompt_block,
     canvas_tool_mutates_scene, end_canvas_vision, fetch_canvas_aspect,
     fetch_canvas_scene_digest, merge_canvas_vision_refs, refresh_canvas_scene_after_op,
     session_model_has_vision, strip_vision_image_paths, should_run_canvas_critic,
+    canvas_text_only_critic_system_prompt,
     CanvasRepeatVerdict,
 };
 use aos_agent::prompt::{compile_system_prompt, optimize_prompt_request, PromptCompileInput};
 use aos_agent::skills::{load_skills, match_skill_by_action, merge_skill_tools, skill_misuse_hint, SkillDoc};
 use aos_agent::tool_exec::format_module_invoke_result;
 use aos_agent::tools::{
-    canonicalize_tool_name, canvas_tools_from_module_list, caps_for_tools, caps_subset,
+    canonicalize_tool_name, canvas_tool_denied_by_allowlist, canvas_tools_from_module_list, caps_for_tools, caps_subset,
     classify_action, canvas_draw_strategy_hint, is_module_fallback_candidate,
     normalize_tool_args, resolve_tool_backend, restrict_canvas_tools, select_tools,
     strip_canvas_blocked_runtime_tools, ToolBackend,
@@ -348,14 +351,14 @@ async fn main() {
             )
             .await;
         } else {
-            let assess = run_task_assess(
+            let assess = require_canvas_plan(run_task_assess(
                 &bus,
                 &shared,
                 &spec,
                 &spec.goal.statement,
                 "démarrage",
             )
-            .await;
+            .await, &spec);
             apply_assess_to_runtime(
                 &bus,
                 &shared,
@@ -423,6 +426,7 @@ async fn main() {
     let mut terminal: Option<AgentState> = None;
     let mut loop_guard = LoopGuard::default();
     let mut last_canvas_scene_png: Option<String> = None;
+    let mut last_canvas_visual = None;
     let mut n_ctx_hint = DEFAULT_N_CTX_HINT;
 
     while terminal.is_none() {
@@ -468,7 +472,10 @@ async fn main() {
             if is_child {
                 bootstrap_memory_recall(&bus, &shared, &agent_id, &d, "steer").await;
             } else {
-                let assess = run_task_assess(&bus, &shared, &spec, &d, "steer").await;
+                let assess = require_canvas_plan(
+                    run_task_assess(&bus, &shared, &spec, &d, "steer").await,
+                    &spec,
+                );
                 apply_assess_to_runtime(
                     &bus,
                     &shared,
@@ -834,7 +841,23 @@ async fn main() {
                 break;
             }
             action = step_action.clone();
-            let one = if should_gate_action(&spec, &action.action) {
+            // Reject exact replays before issuing them. A post-write warning is
+            // too late for a vector canvas because the duplicate is visible.
+            let canonical_action = canonicalize_tool_name(&action.action);
+            let canvas_stage_block = {
+                let st = shared.state.lock().await;
+                st.canvas_preparation_action_block_reason(&canonical_action)
+                    .map(str::to_string)
+            };
+            let duplicate_canvas_op = {
+                let st = shared.state.lock().await;
+                canvas_action_near_duplicate_reason(&st.trace, &canonical_action, &action.args)
+            };
+            let one = if let Some(reason) = canvas_stage_block {
+                ActResult::Continue(reason)
+            } else if let Some(reason) = duplicate_canvas_op {
+                ActResult::Continue(reason)
+            } else if should_gate_action(&spec, &action.action) {
                 match gate_action(
                     &bus, &shared, &mut cmd_rx, &spec, &action, &agent_id, timeout, started,
                 )
@@ -905,7 +928,7 @@ async fn main() {
                             action.action
                         ));
                     }
-                    if canvas_tool_mutates_scene(&action.action) {
+                    if canvas_tool_mutates_scene(&action.action) && canvas_op_succeeded(&outcome) {
                         if let Some(sid) = spec.session_id.as_deref().filter(|s| !s.is_empty()) {
                             let scene = refresh_canvas_scene_after_op(
                                 &bus,
@@ -915,6 +938,22 @@ async fn main() {
                             .await;
                             outcome = scene.text;
                             if let Some(png) = scene.png_path {
+                                if let Some(current) = canvas_visual_fingerprint(&png) {
+                                    if let Some(previous) = last_canvas_visual {
+                                        let progress = canvas_visual_progress(previous, current);
+                                        outcome.push_str(&format!("\n\n{}", canvas_visual_progress_note(progress)));
+                                        if !progress.meaningful_change {
+                                            shared.state.lock().await.push_user(
+                                                "[runtime] Le vérificateur visuel ne voit presque aucun changement. Ne répète pas cette forme : choisis une pièce distincte ou modifie une séquence existante.",
+                                            );
+                                        }
+                                    }
+                                    last_canvas_visual = Some(current);
+                                } else {
+                                    outcome.push_str(
+                                        "\n\n[canvas visual verifier] indisponible : PNG exporté inaccessible au worker.",
+                                    );
+                                }
                                 last_canvas_scene_png = Some(png);
                                 canvas_scene_changed = true;
                             }
@@ -1081,7 +1120,7 @@ async fn main() {
                         action.action
                     ));
                 }
-                if canvas_tool_mutates_scene(&action.action) {
+                if canvas_tool_mutates_scene(&action.action) && canvas_op_succeeded(&outcome) {
                     if let Some(sid) = spec.session_id.as_deref().filter(|s| !s.is_empty()) {
                         let scene = refresh_canvas_scene_after_op(
                             &bus,
@@ -1091,6 +1130,22 @@ async fn main() {
                         .await;
                         outcome = scene.text;
                         if let Some(png) = scene.png_path {
+                            if let Some(current) = canvas_visual_fingerprint(&png) {
+                                if let Some(previous) = last_canvas_visual {
+                                    let progress = canvas_visual_progress(previous, current);
+                                    outcome.push_str(&format!("\n\n{}", canvas_visual_progress_note(progress)));
+                                    if !progress.meaningful_change {
+                                        shared.state.lock().await.push_user(
+                                            "[runtime] Le vérificateur visuel ne voit presque aucun changement. Ne répète pas cette forme : choisis une pièce distincte ou modifie une séquence existante.",
+                                        );
+                                    }
+                                }
+                                last_canvas_visual = Some(current);
+                            } else {
+                                outcome.push_str(
+                                    "\n\n[canvas visual verifier] indisponible : PNG exporté inaccessible au worker.",
+                                );
+                            }
                             last_canvas_scene_png = Some(png);
                             canvas_scene_changed = true;
                         }
@@ -1257,13 +1312,6 @@ async fn main() {
         } else {
             None
         };
-        if canvas_agent
-            && reflection
-                .as_deref()
-                .is_some_and(canvas_critic_requests_stop)
-        {
-            terminal = Some(AgentState::Done);
-        }
 
         let skill_pairs: Vec<(String, Vec<String>)> = skill_docs
             .iter()
@@ -1324,6 +1372,27 @@ async fn main() {
             }
         }
         report(&bus, &agent_id, AgentOutputEvent::Step(record)).await;
+
+        // A canvas plan is a bounded composition contract. Once its final
+        // drawing stage is complete, stop before a text-only model starts
+        // adding speculative layers over the finished composition.
+        if terminal.is_none()
+            && canvas_agent
+            && (canvas_scene_changed || action.action == "canvas.export")
+        {
+            let plan_complete = shared.state.lock().await.canvas_plan_is_complete();
+            if plan_complete {
+                report(
+                    &bus,
+                    &agent_id,
+                    AgentOutputEvent::Log {
+                        line: "plan canvas terminé : arrêt avant empilement de formes supplémentaires".into(),
+                    },
+                )
+                .await;
+                terminal = Some(AgentState::Done);
+            }
+        }
 
         // Checkpoint
         {
@@ -1695,15 +1764,23 @@ async fn execute_action(
             }
         }
         "plan.update" => {
-            let nodes = parse_plan_nodes(args);
-            let need_mem = {
+            let requested_nodes = parse_plan_nodes(args);
+            let (nodes, need_mem) = {
                 let mut st = shared.state.lock().await;
+                // The author supplies geometry; the runtime supplies a stable
+                // composition budget. Do this only for the first canvas plan so
+                // an intentional later re-plan is still possible.
+                let nodes = if agent_has_canvas_tools(&spec.tools) && st.task_graph.is_empty() {
+                    CognitiveState::canonical_canvas_composition_plan()
+                } else {
+                    requested_nodes
+                };
                 st.set_plan(nodes.clone());
                 let need = st.needs_plan && !st.plan_memory_recalled;
                 if need {
                     st.plan_memory_recalled = true;
                 }
-                need
+                (nodes, need)
             };
             report(
                 bus,
@@ -1919,6 +1996,12 @@ async fn execute_action(
                     )
                     .await;
                     ActResult::Continue(outcome)
+                }
+                None if canvas_tool_denied_by_allowlist(other, tools) => {
+                    ActResult::Continue(format!(
+                        "outil canvas non autorisé: {other}. Utilise uniquement les outils fournis ; \
+                         pour remplir une silhouette, passe `fill:true` à canvas.path/rect/ellipse."
+                    ))
                 }
                 None if is_module_fallback_candidate(other) => {
                     let outcome = invoke_module(
@@ -3358,6 +3441,18 @@ async fn run_task_assess(
     assess
 }
 
+/// Canvas drawing is spatially complex even when its text goal is short. A
+/// bounded plan prevents a local chat model from treating every new stroke as
+/// an unstructured continuation.
+fn require_canvas_plan(assess: AssessResult, spec: &AgentSpec) -> AssessResult {
+    if assess.is_complex() || !agent_has_canvas_tools(&spec.tools) {
+        return assess;
+    }
+    AssessResult::complex(
+        "dessin canvas : plan de composition requis pour séparer analyse, silhouette, détails et finitions",
+    )
+}
+
 async fn recall_memory_bundle(
     bus: &BusClient,
     agent_id: &str,
@@ -3542,13 +3637,6 @@ async fn reflect(bus: &BusClient, shared: &Shared, spec: &AgentSpec) -> Option<S
         };
         (progress, canvas_sid, canvas_draw)
     };
-    let critic_system = if canvas_draw {
-        canvas_critic_system_prompt()
-    } else {
-        "Tu es un critique. En 2 phrases en français: est-ce que l'agent avance vers le goal ? Que faire ensuite ? \
-         Réponds directement, sans balises <think> ni monologue Thinking Process."
-    };
-
     let mut images: Vec<String> = Vec::new();
     let mut data_refs: Vec<String> = Vec::new();
     let canvas_active = if let Some(sid) = canvas_sid.as_deref().filter(|s| !s.is_empty()) {
@@ -3569,6 +3657,16 @@ async fn reflect(bus: &BusClient, shared: &Shared, spec: &AgentSpec) -> Option<S
         }
     } else {
         false
+    };
+    let critic_system = if canvas_draw {
+        if canvas_active {
+            canvas_critic_system_prompt()
+        } else {
+            canvas_text_only_critic_system_prompt()
+        }
+    } else {
+        "Tu es un critique. En 2 phrases en français: est-ce que l'agent avance vers le goal ? Que faire ensuite ? \
+         Réponds directement, sans balises <think> ni monologue Thinking Process."
     };
 
     let req = InferRequest {
@@ -3873,8 +3971,36 @@ fn collect_sources(
 
 #[cfg(test)]
 mod tests {
-    use super::{await_child_reject_reason, canvas_child_goal_statement};
+    use super::{await_child_reject_reason, canvas_child_goal_statement, require_canvas_plan};
+    use aos_agent::assess::AssessResult;
     use aos_proto::{AgentGoal, AgentSpec};
+
+    #[test]
+    fn canvas_goal_requires_a_bounded_composition_plan() {
+        let spec = AgentSpec {
+            agent_id: "canvas-agent".into(),
+            goal: AgentGoal::default(),
+            tools: vec!["canvas.path".into()],
+            kind: Default::default(),
+            display_name: None,
+            persona_id: None,
+            system_prompt: None,
+            skills: vec![],
+            mcp_servers: vec![],
+            documents: vec![],
+            caps: vec![],
+            model_id: None,
+            parent_id: None,
+            session_id: None,
+            budget: Default::default(),
+            optimize_prompt: false,
+            gate_mode: "autonomous".into(),
+            origin: None,
+        };
+        assert!(require_canvas_plan(AssessResult::simple("short goal"), &spec).is_complex());
+        let non_canvas = AgentSpec { tools: vec![], ..spec };
+        assert!(!require_canvas_plan(AssessResult::simple("short goal"), &non_canvas).is_complex());
+    }
 
     #[test]
     fn await_rejects_empty_child_id() {

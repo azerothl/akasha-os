@@ -5,7 +5,7 @@ use crate::{agent_panel, chat_canvas, CHAT_AGENT_MAX_SUBAGENTS};
 use aos_ipc::BusClient;
 use aos_proto::{
     chat_tts_request, chat_user_wants_module_authoring, AgentCreateRequest, AgentGoal,
-    ChatAttachment, ChatSessionAppendRequest,
+    ChatAttachment, ChatSessionAppendRequest, ModelInfo, ModelState,
 };
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
@@ -34,15 +34,33 @@ fn merge_named_args(dst: &mut Vec<String>, args: &serde_json::Value, key: &str) 
 fn strip_delegate_kit_tools(tools: &mut Vec<String>, skills: &mut Vec<String>, use_canvas: bool) {
     if use_canvas {
         tools.retain(|t| {
-            !t.starts_with("media.image")
-                && t != "user.ask"
-                && t != "agent.spawn"
-                && t != "agent.await"
+            t.starts_with("canvas.") || t == "plan.update"
         });
-        skills.retain(|s| s != "planner");
+        // A canvas author needs a compact geometric context. Notes/tasks and
+        // their long skill instructions caused the model to archive the
+        // drawing mid-run instead of continuing the composition.
+        skills.clear();
     } else {
         tools.retain(|t| !t.starts_with("canvas."));
     }
+}
+
+/// A canvas critic needs pixels, not merely a capable model installed on disk.
+/// Keep an explicitly selected chat model untouched; only fill an absent model
+/// with a vision-capable model that is already resident.
+pub(crate) fn canvas_model_id(
+    selected: Option<String>,
+    available: &[ModelInfo],
+) -> Option<String> {
+    selected.or_else(|| {
+        available
+            .iter()
+            .find(|model| {
+                model.has_vision
+                    && matches!(model.state, ModelState::Loaded | ModelState::PartiallyOffloaded)
+            })
+            .map(|model| model.id.clone())
+    })
 }
 
 pub(crate) fn chat_delegate_kit(
@@ -225,9 +243,17 @@ pub(crate) async fn spawn_chat_delegate_agent(
     req.skills = skills;
     req.tools = tools;
     req.session_id = Some(sid.clone());
-    // Bind the chat session model — null would make modeld use installed default_chat
-    // (often Qwen) instead of the model already selected/loaded for this session.
-    req.model_id = model_id.clone();
+    // Bind the chat session model. A canvas delegate without one must not silently
+    // fall back to the default text model when a loaded visual model can critique it.
+    req.model_id = if canvas_delegate {
+        let available: Vec<ModelInfo> = bus
+            .call("model.list", &(), vec![])
+            .await
+            .unwrap_or_default();
+        canvas_model_id(model_id.clone(), &available)
+    } else {
+        model_id.clone()
+    };
     if canvas_delegate {
         let exported: Vec<String> = bus
             .call::<(), Vec<aos_proto::ModuleInfo>>("module.list", &(), vec![])
@@ -247,7 +273,9 @@ pub(crate) async fn spawn_chat_delegate_agent(
         },
         timeout_secs: 3600,
     });
-    req.caps.push("tool.invoke:notes".into());
+    if !canvas_delegate {
+        req.caps.push("tool.invoke:notes".into());
+    }
     if req.skills.iter().any(|s| s.contains("task"))
         || req.tools.iter().any(|t| t.starts_with("tasks."))
     {

@@ -30,6 +30,17 @@ pub(crate) fn chat_sessions_split(
     ChatSessionsSplit { side_w, chat_w }
 }
 
+/// Actual horizontal space can be smaller than the planned split when a native
+/// widget (for example a long selected model id) imposes a larger minimum width.
+/// Never allocate a chat workspace beyond what remains in the parent UI.
+pub(crate) fn bounded_chat_workspace_width(
+    planned_w: f32,
+    remaining_w: f32,
+    trailing_gutter: f32,
+) -> f32 {
+    (planned_w.min(remaining_w) - trailing_gutter.max(0.0)).max(0.0)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum ChatCanvasLayout {
     SideBySide { transcript_w: f32, canvas_w: f32 },

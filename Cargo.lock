@@ -241,6 +241,7 @@ dependencies = [
  "aos-ipc",
  "aos-proto",
  "futures",
+ "image",
  "serde",
  "serde_json",
  "serde_yaml",

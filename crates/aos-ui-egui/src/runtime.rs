@@ -34,7 +34,7 @@ use aos_proto::{
     UserLibraryAddRequest, UserLibraryAddResponse, UserLibraryListResponse, UserLibraryRemoveRequest,
     UserLibraryRemoveResponse,
     MemRememberResponse, MemSweepStatus, MemUpdateRequest, MemUserRecallRequest, MemUserRememberRequest,
-    MemWorkingRequest, LoadRequest, ModelInfo, ModelState, ModuleCatalogue,
+    MemWorkingRequest, LoadRequest, LoadResponse, ModelInfo, ModelState, ModuleCatalogue,
     ModuleInfo, ModuleInstallRequest,
     ModuleUninstallRequest, CancelRequest, MediaAudioGenerateRequest, MediaGenerateResponse,
     MediaImageGenerateRequest, MediaImageUpscaleRequest, NetFetchRequest, NetFetchResponse, NetModeRequest,
@@ -2253,7 +2253,7 @@ async fn handle_cmd(
         }
         Cmd::ModelLoad { model_id } => {
             match bus
-                .call::<LoadRequest, ()>(
+                .call::<LoadRequest, LoadResponse>(
                     "model.load",
                     &LoadRequest {
                         model_id: model_id.clone(),
