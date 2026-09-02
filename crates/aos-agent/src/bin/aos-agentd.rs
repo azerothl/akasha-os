@@ -235,7 +235,6 @@ fn mcp_secrets_path(agent_id: &str) -> PathBuf {
 
 /// Résout `${secret:…}` pour les serveurs MCP de l'agent et écrit un fichier
 /// éphémère lu puis effacé par le worker.
-
 /// Droits émis pour chaque cap agent publiée dans `aos-capkd`.
 fn agent_cap_rights() -> Vec<String> {
     vec![
@@ -1498,7 +1497,7 @@ async fn main() {
                                 let _ = persist::write_spec(&spec);
                             }
                         }
-                        publish_caps_to_capkd(&bus, &req.agent_id, &[req.cap.clone()]).await;
+                        publish_caps_to_capkd(&bus, &req.agent_id, std::slice::from_ref(&req.cap)).await;
                         let _ = ctx.respond(aos_ipc::msg::Status::Ok, &true).await;
                     }
                     Err(_) => {
