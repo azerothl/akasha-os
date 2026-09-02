@@ -664,7 +664,7 @@ mod tests {
 
     #[test]
     fn canvas_reflect_mentions_top_left_placement() {
-        let content = canvas_reflect_user_content(1, 48, "dessine une canette", &[], &[], &["canvas.path".into()]); 
+        let content = canvas_reflect_user_content(1, 48, "dessine une canette", &[], &[], &["canvas.path".into()]);
         assert!(content.contains("coin haut-gauche"));
         assert!(content.contains("dernière bbox"));
     }
@@ -770,7 +770,7 @@ mod tests {
                 ..Default::default()
             },
         ];
-        let content = canvas_reflect_user_content(2, 48, "dessine une canette", &[], &trace, &["canvas.stroke".into()]); 
+        let content = canvas_reflect_user_content(2, 48, "dessine une canette", &[], &trace, &["canvas.stroke".into()]);
         assert!(content.contains("canvas.stroke"));
         assert!(content.contains("capture PNG jointe"));
         assert!(content.contains("PAS media.image.generate"));
