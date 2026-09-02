@@ -468,10 +468,9 @@ impl UiApp {
                 }
                 if self.chat_state.runtime.load_fail_retry.is_some()
                     && self.chat_state.active_session.is_some()
+                    && crate::chat_load_fail::render_load_fail_retry(ui, t)
                 {
-                    if crate::chat_load_fail::render_load_fail_retry(ui, t) {
-                        self.retry_load_failed_turn();
-                    }
+                    self.retry_load_failed_turn();
                 }
             });
     }

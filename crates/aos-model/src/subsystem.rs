@@ -1060,7 +1060,7 @@ impl ModelSubsystem {
             while results.len() < ios.len() {
                 results.push(Err(aos_llama::LlamaError::Decode(-5)));
             }
-            for (io, res) in ios.drain(..).zip(results.into_iter()) {
+            for (io, res) in ios.drain(..).zip(results) {
                 let paused = matches!(
                     &res,
                     Ok(stats) if stats.stopped == StopReason::Paused
