@@ -461,7 +461,7 @@ impl MemoryStore {
                 self.to_hit(e, if e.pinned { 1.0 } else { 0.5 }, is_super)
             })
             .collect();
-        hits.sort_by(|a, b| b.id.cmp(&a.id));
+        hits.sort_by_key(|a| std::cmp::Reverse(a.id));
         hits
     }
 
