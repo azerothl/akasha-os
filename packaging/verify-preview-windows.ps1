@@ -74,6 +74,27 @@ foreach ($relativePath in $requiredFiles) {
     Assert-PreviewFile $relativePath
 }
 
+$catalogueText = Get-Content -LiteralPath `
+    (Join-Path $resolvedOut "share\modules\catalogue.yaml") -Raw
+foreach ($module in @("notes", "tasks", "ext-rt", "canvas")) {
+    $moduleBase = Join-Path $resolvedOut "share\modules\$module.aospkg"
+    $wasmHash = (Get-FileHash -Algorithm SHA256 `
+        -LiteralPath (Join-Path $moduleBase "module.wasm")).Hash.ToLowerInvariant()
+    $manifestText = Get-Content -LiteralPath (Join-Path $moduleBase "manifest.yaml") -Raw
+    $manifestMatch = [regex]::Match($manifestText, '(?m)^hash:\s*(?:sha256:)?([a-f0-9]{64})\s*$')
+    if (-not $manifestMatch.Success -or $manifestMatch.Groups[1].Value -ne $wasmHash) {
+        throw "Module manifest hash mismatch: $module"
+    }
+    $escapedModule = [regex]::Escape($module)
+    $catalogueMatch = [regex]::Match(
+        $catalogueText,
+        "(?ms)^  - name: $escapedModule\r?\n.*?^    hash: sha256:([a-f0-9]{64})\s*$"
+    )
+    if (-not $catalogueMatch.Success -or $catalogueMatch.Groups[1].Value -ne $wasmHash) {
+        throw "Module catalogue hash mismatch: $module"
+    }
+}
+
 $packagedVersion = (Get-Content -LiteralPath (Join-Path $resolvedOut "VERSION") -Raw).Trim()
 if ($packagedVersion -ne $Version) {
     throw "Preview version mismatch: expected '$Version', found '$packagedVersion'"

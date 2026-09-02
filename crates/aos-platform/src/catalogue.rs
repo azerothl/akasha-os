@@ -846,27 +846,49 @@ mod tests {
     }
 
     #[test]
-    fn catalogue_canvas_hash_matches_packaged_wasm() {
+    fn catalogue_hashes_match_packaged_content() {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let wasm = std::fs::read(root.join("share/modules/canvas.aospkg/module.wasm"))
-            .expect("canvas module.wasm");
-        let mut hasher = Sha256::new();
-        hasher.update(&wasm);
-        let got = format!("{:x}", hasher.finalize());
-        let yaml = std::fs::read_to_string(root.join("share/modules/catalogue.yaml")).unwrap();
-        let want = format!("sha256:{got}");
-        assert!(
-            yaml.contains(&want),
-            "catalogue.yaml canvas hash must match packaged wasm ({want})"
-        );
-        let manifest =
-            std::fs::read_to_string(root.join("share/modules/canvas.aospkg/manifest.yaml"))
-                .unwrap();
-        assert!(
-            manifest.contains(&format!("hash: {got}"))
-                || manifest.contains(&format!("hash: sha256:{got}")),
-            "manifest.yaml hash must match packaged wasm"
-        );
+        let catalogue = SignedCatalogue::load(root.join("share/modules/catalogue.yaml"))
+            .expect("signed bundled catalogue");
+        assert!(!catalogue.inner.entries.is_empty());
+
+        for entry in &catalogue.inner.entries {
+            let package_path = root.join(&entry.path);
+            let content_path = if entry.kind == "module" {
+                package_path.join("module.wasm")
+            } else {
+                package_path.clone()
+            };
+            let content = std::fs::read(&content_path).unwrap_or_else(|err| {
+                panic!(
+                    "catalogue entry {} content missing at {}: {err}",
+                    entry.name,
+                    content_path.display()
+                )
+            });
+            let mut hasher = Sha256::new();
+            hasher.update(content);
+            let got = format!("{:x}", hasher.finalize());
+            assert_eq!(
+                entry.hash.trim_start_matches("sha256:"),
+                got,
+                "catalogue hash mismatch for {}",
+                entry.name
+            );
+
+            if entry.kind == "module" {
+                let manifest_path = package_path.join("manifest.yaml");
+                let manifest = std::fs::read_to_string(&manifest_path).unwrap_or_else(|err| {
+                    panic!("manifest missing at {}: {err}", manifest_path.display())
+                });
+                assert!(
+                    manifest.contains(&format!("hash: {got}"))
+                        || manifest.contains(&format!("hash: sha256:{got}")),
+                    "manifest hash mismatch for {}",
+                    entry.name
+                );
+            }
+        }
     }
 
     #[test]

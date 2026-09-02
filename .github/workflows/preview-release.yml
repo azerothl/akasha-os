@@ -199,6 +199,17 @@ jobs:
           for module in notes tasks ext-rt canvas; do
             test -s "${OUT}/share/modules/${module}.aospkg/manifest.yaml"
             test -s "${OUT}/share/modules/${module}.aospkg/module.wasm"
+            wasm_hash=$(sha256sum "${OUT}/share/modules/${module}.aospkg/module.wasm" | awk '{print $1}')
+            manifest_hash=$(awk '$1 == "hash:" { sub(/^sha256:/, "", $2); print $2; exit }' \
+              "${OUT}/share/modules/${module}.aospkg/manifest.yaml")
+            catalogue_hash=$(awk -v module="${module}" \
+              '$1 == "-" && $2 == "name:" { active = ($3 == module) }
+               active && $1 == "hash:" { sub(/^sha256:/, "", $2); print $2; exit }' \
+              "${OUT}/share/modules/catalogue.yaml")
+            if [ "${wasm_hash}" != "${manifest_hash}" ] || [ "${wasm_hash}" != "${catalogue_hash}" ]; then
+              echo "::error::module hash mismatch for ${module} (wasm=${wasm_hash}, manifest=${manifest_hash}, catalogue=${catalogue_hash})"
+              exit 1
+            fi
           done
           test -f "${OUT}/share/models/manifest.json"
           test -f "${OUT}/share/modules/catalogue.yaml"
@@ -296,6 +307,17 @@ jobs:
           for module in notes tasks ext-rt canvas; do
             test -s "${OUT}/share/modules/${module}.aospkg/manifest.yaml"
             test -s "${OUT}/share/modules/${module}.aospkg/module.wasm"
+            wasm_hash=$(shasum -a 256 "${OUT}/share/modules/${module}.aospkg/module.wasm" | awk '{print $1}')
+            manifest_hash=$(awk '$1 == "hash:" { sub(/^sha256:/, "", $2); print $2; exit }' \
+              "${OUT}/share/modules/${module}.aospkg/manifest.yaml")
+            catalogue_hash=$(awk -v module="${module}" \
+              '$1 == "-" && $2 == "name:" { active = ($3 == module) }
+               active && $1 == "hash:" { sub(/^sha256:/, "", $2); print $2; exit }' \
+              "${OUT}/share/modules/catalogue.yaml")
+            if [ "${wasm_hash}" != "${manifest_hash}" ] || [ "${wasm_hash}" != "${catalogue_hash}" ]; then
+              echo "::error::module hash mismatch for ${module} (wasm=${wasm_hash}, manifest=${manifest_hash}, catalogue=${catalogue_hash})"
+              exit 1
+            fi
           done
           test -f "${OUT}/share/models/manifest.json"
           test -f "${OUT}/share/modules/catalogue.yaml"
