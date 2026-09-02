@@ -34,7 +34,8 @@ pub fn canvas_critic_system_prompt() -> &'static str {
      ou arrête si c'est suffisant — ne redemande pas le corps ni une silhouette déjà remplie. \
      Un trait ne compte comme progrès que s'il rapproche visuellement du goal ; ne valide pas des répétitions identiques. \
      Ne demande jamais media.image.generate ni canvas.clear. \
-     En 2 phrases en français : ce que tu vois (couleurs + formes) vs le goal, et quelle pièce unique ajouter ensuite (ou arrêter). \
+     Indique une seule pièce unique à corriger si nécessaire. Réponds exactement avec trois lignes : `ACTION: continue|modify|stop`, `SEQUENCES: ...`, puis `NOTE: ...`. \
+     `stop` signifie que le goal est atteint ou qu'aucune correction sûre n'est possible. \
      Réponds directement, sans balises <think> ni monologue Thinking Process."
 }
 
@@ -76,7 +77,7 @@ pub fn canvas_reflect_user_content(
         format!(
             "{base}\n[canvas ops récentes — capture PNG jointe : regarde si ça ressemble au goal, PAS media.image.generate]\n\
              Politique acteur : une seule pièce manquante hors des bbox déjà posées ; \
-             passe `color` ou `fill_color` (#RRGGBB) sur chaque op — pas le crayon par défaut ; \
+             passe `color` (#RRGGBB) sur chaque op — `fill_color` est accepté comme alias mais sera normalisé ; pas le crayon par défaut ; \
              jamais restack la même silhouette, jamais canvas.clear, jamais redessiner une forme déjà remplie.\n{}",
             canvas_lines.join("\n")
         )
@@ -126,7 +127,7 @@ pub fn canvas_scene_prompt_block(digest: &str) -> String {
          Commence par `canvas.get` si tu dessines ; état au début du tour :\n\
          ```\n{digest}\n```\n\
          Poursuis le dessin existant : ajoute une seule pièce manquante — ne restack pas la même bbox, pas canvas.clear. \
-         Chaque op canvas doit inclure `color` ou `fill_color` (#RRGGBB) pour la teinte voulue. \
+         Chaque op canvas doit inclure `color` (#RRGGBB) pour la teinte voulue (`fill_color` est un alias normalisé). \
          Silhouettes : un `canvas.path` rempli par partie lisible, pas des dizaines de splines/rects empilés. \
          Après chaque op canvas réussie : une capture PNG du canvas actuel est jointe \
          au tour suivant (regarde l'image, pas seulement le digest). \
@@ -230,8 +231,7 @@ pub fn canvas_op_body_applies_trait(body: &CanvasOpBody) -> bool {
 
 /// True when the session canvas document already has at least one trait op.
 pub fn session_canvas_has_traits(ops: &[CanvasOp]) -> bool {
-    ops.iter()
-        .any(|op| canvas_op_body_applies_trait(&op.body))
+    ops.iter().any(|op| canvas_op_body_applies_trait(&op.body))
 }
 
 /// True when the agent trace records at least one successful trait apply.
@@ -327,8 +327,7 @@ pub fn catalog_model_supports_vision(model_id: Option<&str>) -> bool {
         .flatten()
         .any(|m| {
             m.get("id").and_then(|x| x.as_str()) == Some(id)
-                && m
-                    .get("profiles")
+                && m.get("profiles")
                     .and_then(|p| p.as_array())
                     .into_iter()
                     .flatten()
@@ -459,7 +458,7 @@ pub fn canvas_repeat_stroke_verdict(
     trace: &[AgentStepRecord],
     action: &str,
 ) -> Option<CanvasRepeatVerdict> {
-    if !matches!(action, "canvas.stroke" | "canvas.line" | "canvas.spline") {
+    if !matches!(action, "canvas.stroke" | "canvas.line" | "canvas.spline" | "canvas.path" | "canvas.rect" | "canvas.ellipse") {
         return None;
     }
     let bboxes: Vec<[f32; 4]> = trace
@@ -468,7 +467,7 @@ pub fn canvas_repeat_stroke_verdict(
         .filter(|r| {
             matches!(
                 r.action.as_str(),
-                "canvas.stroke" | "canvas.line" | "canvas.spline"
+                "canvas.stroke" | "canvas.line" | "canvas.spline" | "canvas.path" | "canvas.rect" | "canvas.ellipse"
             ) && canvas_op_succeeded(&r.tool_result)
         })
         .filter_map(|r| parse_outcome_bbox(&r.tool_result))
@@ -490,6 +489,13 @@ pub fn canvas_repeat_stroke_verdict(
         "Tu empiles des traits quasi identiques — regarde la capture canvas et change \
          couleur, position ou forme avant de continuer.",
     ))
+}
+
+pub fn canvas_critic_requests_stop(reflection: &str) -> bool {
+    reflection.lines().any(|line| {
+        line.trim().to_ascii_lowercase().starts_with("action:")
+            && line.to_ascii_lowercase().contains("stop")
+    })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -598,10 +604,7 @@ mod tests {
 
     #[test]
     fn merge_canvas_vision_refs_replaces_images() {
-        let base = vec![
-            "/downloads/old.png".into(),
-            "/documents/note.md".into(),
-        ];
+        let base = vec!["/downloads/old.png".into(), "/documents/note.md".into()];
         let merged = merge_canvas_vision_refs(&base, "/downloads/canvas-live.png");
         assert_eq!(merged.len(), 2);
         assert!(merged.contains(&"/documents/note.md".into()));
@@ -664,14 +667,23 @@ mod tests {
 
     #[test]
     fn canvas_reflect_mentions_top_left_placement() {
-        let content = canvas_reflect_user_content(1, 48, "dessine une canette", &[], &[], &["canvas.path".into()]);
+        let content = canvas_reflect_user_content(
+            1,
+            48,
+            "dessine une canette",
+            &[],
+            &[],
+            &["canvas.path".into()],
+        );
         assert!(content.contains("coin haut-gauche"));
         assert!(content.contains("dernière bbox"));
     }
 
     #[test]
     fn canvas_op_success_detected() {
-        assert!(canvas_op_succeeded("ok seq=3 stroke bbox=(0.1,0.2)-(0.3,0.4)"));
+        assert!(canvas_op_succeeded(
+            "ok seq=3 stroke bbox=(0.1,0.2)-(0.3,0.4)"
+        ));
         assert!(!canvas_op_succeeded("ERREUR outil: session"));
         assert!(!canvas_op_succeeded("err: invalid"));
     }
@@ -691,8 +703,8 @@ mod tests {
 
     #[test]
     fn parse_outcome_bbox_from_tool_result() {
-        let bbox = parse_outcome_bbox("ok seq=12 ellipse bbox=(0.350,0.150)-(0.650,0.270)")
-            .expect("bbox");
+        let bbox =
+            parse_outcome_bbox("ok seq=12 ellipse bbox=(0.350,0.150)-(0.650,0.270)").expect("bbox");
         assert!((bbox[0] - 0.35).abs() < 0.001);
         assert!((bbox[3] - 0.27).abs() < 0.001);
     }
@@ -712,9 +724,7 @@ mod tests {
             .map(|step| AgentStepRecord {
                 step,
                 action: "canvas.stroke".into(),
-                tool_result: format!(
-                    "ok seq={step} stroke bbox=(0.2,0.3)-(0.4,0.5)"
-                ),
+                tool_result: format!("ok seq={step} stroke bbox=(0.2,0.3)-(0.4,0.5)"),
                 ..Default::default()
             })
             .collect();
@@ -747,7 +757,7 @@ mod tests {
             },
         ];
         assert!(canvas_repeat_stroke_warning(&trace, "canvas.stroke").is_some());
-        assert!(canvas_repeat_stroke_warning(&trace, "canvas.rect").is_none());
+        assert!(canvas_repeat_stroke_warning(&trace, "canvas.rect").is_some());
         match canvas_repeat_stroke_verdict(&trace, "canvas.stroke") {
             Some(CanvasRepeatVerdict::Warn(_)) => {}
             other => panic!("expected warn at 3 strokes, got {other:?}"),
@@ -770,7 +780,14 @@ mod tests {
                 ..Default::default()
             },
         ];
-        let content = canvas_reflect_user_content(2, 48, "dessine une canette", &[], &trace, &["canvas.stroke".into()]);
+        let content = canvas_reflect_user_content(
+            2,
+            48,
+            "dessine une canette",
+            &[],
+            &trace,
+            &["canvas.stroke".into()],
+        );
         assert!(content.contains("canvas.stroke"));
         assert!(content.contains("capture PNG jointe"));
         assert!(content.contains("PAS media.image.generate"));

@@ -524,7 +524,7 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
         ),
         (
             "canvas.path",
-            "Silhouette lisse : contour fermé rempli (fill:true par défaut) via points de contrôle. Préférer à empiler rect/spline. Passe color ou fill_color (#RRGGBB) sur chaque op.",
+            "Silhouette lisse : contour fermé rempli (fill:true par défaut) via points de contrôle. Préférer à empiler rect/spline. Passe color (#RRGGBB) sur chaque op.",
             serde_json::json!({
                 "type":"object",
                 "properties":{
@@ -853,11 +853,7 @@ pub fn explicit_canvas_intent(text: &str) -> bool {
 /// Append canvas tools when `include` is true (deduped).
 /// `exported` = tool names from the installed `canvas` module (`module.list`);
 /// only tools both in the catalog and exported are added.
-pub fn merge_canvas_tools(
-    tool_ids: &mut Vec<String>,
-    include: bool,
-    exported: &[String],
-) {
+pub fn merge_canvas_tools(tool_ids: &mut Vec<String>, include: bool, exported: &[String]) {
     if !include {
         return;
     }
@@ -902,9 +898,8 @@ pub fn strip_canvas_blocked_runtime_tools(tools: &mut Vec<ToolDesc>, spec_tool_i
 
 /// Drop canvas.* tool ids that the loaded module does not export.
 pub fn restrict_canvas_tools(tool_ids: &mut Vec<String>, exported: &[String]) {
-    let allowed: std::collections::HashSet<String> = filter_canvas_tool_ids(exported)
-        .into_iter()
-        .collect();
+    let allowed: std::collections::HashSet<String> =
+        filter_canvas_tool_ids(exported).into_iter().collect();
     tool_ids.retain(|t| !t.starts_with("canvas.") || allowed.contains(t));
 }
 
@@ -969,7 +964,9 @@ pub fn select_tools(selected: &[String], extra: &[ToolDesc]) -> Vec<ToolDesc> {
     for t in catalog.iter().chain(extra.iter()) {
         let keep = always.contains(&t.name.as_str())
             || selected.is_empty()
-            || selected.iter().any(|s| s == &t.name || t.name.starts_with(&format!("{s}.")));
+            || selected
+                .iter()
+                .any(|s| s == &t.name || t.name.starts_with(&format!("{s}.")));
         // Si selected non vide : garder tools explicitement demandés + runtime always
         let keep = if selected.is_empty() {
             // Mode permissif : notes + tasks + runtime + fs + extensions
@@ -993,7 +990,9 @@ pub fn select_tools(selected: &[String], extra: &[ToolDesc]) -> Vec<ToolDesc> {
         }
     }
     // Toujours inclure agent.spawn/await si demandés ou en mode planner
-    if selected.iter().any(|s| s == "agent.spawn" || s == "agent.await")
+    if selected
+        .iter()
+        .any(|s| s == "agent.spawn" || s == "agent.await")
         || selected.is_empty()
     {
         for name in ["agent.spawn", "agent.await"] {
@@ -1147,10 +1146,16 @@ pub fn normalize_tool_args(name: &str, args: &serde_json::Value) -> serde_json::
     let Some(obj) = out.as_object_mut() else {
         return out;
     };
-    if name.starts_with("canvas.") && !obj.contains_key("color") {
-        if let Some(v) = obj.get("fill_color").cloned() {
-            obj.insert("color".into(), v);
+    if name.starts_with("canvas.") {
+        // `fill_color` is a prompt-facing alias.  The WASM canvas schema
+        // accepts the canonical `color` field; keeping both creates a
+        // duplicate serde field and makes the module reject the operation.
+        if !obj.contains_key("color") {
+            if let Some(v) = obj.get("fill_color").cloned() {
+                obj.insert("color".into(), v);
+            }
         }
+        obj.remove("fill_color");
     }
     if name == "media.audio.generate" && !obj.contains_key("text") {
         for k in ["prompt", "content", "message", "speech"] {
@@ -1299,7 +1304,7 @@ mod tests {
             }),
         );
         assert_eq!(args["color"], "#8B7355");
-        assert_eq!(args["fill_color"], "#8B7355");
+        assert!(args.get("fill_color").is_none());
     }
 
     #[test]
@@ -1337,10 +1342,7 @@ mod tests {
 
     #[test]
     fn canvas_shape_tool_descriptions_name_bbox_contract() {
-        let tools = select_tools(
-            &["canvas.rect".into(), "canvas.ellipse".into()],
-            &[],
-        );
+        let tools = select_tools(&["canvas.rect".into(), "canvas.ellipse".into()], &[]);
         let rect = tools.iter().find(|t| t.name == "canvas.rect").unwrap();
         let ellipse = tools.iter().find(|t| t.name == "canvas.ellipse").unwrap();
         assert!(rect.description.contains("coin haut-gauche"));
@@ -1355,8 +1357,14 @@ mod tests {
             canonicalize_tool_name("tool.invoke:audio.generate"),
             "media.audio.generate"
         );
-        assert_eq!(canonicalize_tool_name("audio.generate"), "media.audio.generate");
-        assert_eq!(canonicalize_tool_name("tts.generate"), "media.audio.generate");
+        assert_eq!(
+            canonicalize_tool_name("audio.generate"),
+            "media.audio.generate"
+        );
+        assert_eq!(
+            canonicalize_tool_name("tts.generate"),
+            "media.audio.generate"
+        );
         assert_eq!(canonicalize_tool_name("notes.create"), "notes.create");
         let args = normalize_tool_args(
             "media.audio.generate",
