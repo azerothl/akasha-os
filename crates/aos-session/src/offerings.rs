@@ -163,6 +163,20 @@ pub struct ModelSetupChoice {
     pub include_optional: bool,
 }
 
+/// Remote model ids use `provider:` / `remote:` prefixes (no local GGUF download).
+pub fn is_remote_model_id(id: &str) -> bool {
+    id.starts_with("provider:") || id.starts_with("remote:")
+}
+
+pub fn setup_defaults_complete(inst: &InstalledFile) -> bool {
+    inst.default_chat
+        .as_ref()
+        .is_some_and(|s| !s.is_empty())
+        && inst.default_embed
+            .as_ref()
+            .is_some_and(|s| !s.is_empty())
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelUpdateOffer {
     pub available: Vec<ModelOffering>,
@@ -311,6 +325,9 @@ pub fn read_setup_choice(home: &Path) -> Option<ModelSetupChoice> {
 pub fn setup_needed(home: &Path) -> bool {
     let inst = load_installed(home);
     if !inst.models.is_empty() {
+        return false;
+    }
+    if setup_defaults_complete(&inst) {
         return false;
     }
     // Legacy: already have old GGUFs without installed.json
@@ -483,7 +500,13 @@ pub fn apply_choice(home: &Path, choice: &ModelSetupChoice) -> Result<(), String
         ids.push(choice.default_embed.clone());
     }
     ids.dedup();
-    download_ids(home, &ids)?;
+    let local_ids: Vec<String> = ids
+        .into_iter()
+        .filter(|id| !is_remote_model_id(id))
+        .collect();
+    if !local_ids.is_empty() {
+        download_ids(home, &local_ids)?;
+    }
     let mut inst = load_installed(home);
     inst.default_chat = Some(choice.default_chat.clone());
     inst.default_embed = Some(choice.default_embed.clone());
@@ -508,6 +531,9 @@ fn validate_default_model(
 ) -> Result<(), String> {
     if id.trim().is_empty() {
         return Err(format!("modèle {required_profile} par défaut manquant"));
+    }
+    if is_remote_model_id(id) {
+        return Ok(());
     }
     let model = find_offering(offerings, id)
         .ok_or_else(|| format!("modèle {required_profile} inconnu: {id}"))?;
@@ -815,7 +841,7 @@ fn now_ms() -> u64 {
 
 #[cfg(test)]
 mod vision_catalog_tests {
-    use super::{validate_setup_choice, ModelSetupChoice, OfferingsFile};
+    use super::{is_remote_model_id, validate_setup_choice, ModelSetupChoice, OfferingsFile};
 
     #[test]
     fn catalog_parses_mmproj_role_and_vision_profile() {
@@ -859,8 +885,23 @@ mod vision_catalog_tests {
 
         let chat_as_embed = ModelSetupChoice {
             default_embed: valid.default_chat.clone(),
-            ..valid
+            ..valid.clone()
         };
         assert!(validate_setup_choice(&file, &chat_as_embed).is_err());
+
+        let remote_chat = ModelSetupChoice {
+            selected_ids: vec![],
+            default_chat: "provider:openai:gpt-4o".into(),
+            default_embed: "local:qwen3-embedding-0.6b".into(),
+            include_optional: false,
+        };
+        assert!(validate_setup_choice(&file, &remote_chat).is_ok());
+    }
+
+    #[test]
+    fn remote_model_ids_are_detected() {
+        assert!(is_remote_model_id("provider:openai:gpt-4o"));
+        assert!(is_remote_model_id("remote:mock:gpt-x"));
+        assert!(!is_remote_model_id("local:qwen-9b"));
     }
 }

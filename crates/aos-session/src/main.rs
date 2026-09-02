@@ -596,6 +596,9 @@ fn run_model_setup(home: &Path, hw: &hardware::HardwareInfo, version: &str) -> R
 fn ensure_installed_files_present(home: &Path) -> Result<(), String> {
     let inst = offerings::load_installed(home);
     if inst.models.is_empty() {
+        if offerings::setup_defaults_complete(&inst) {
+            return Ok(());
+        }
         // Fall back to legacy manifest download once.
         return bootstrap::ensure_models(home);
     }
