@@ -1208,6 +1208,24 @@ pub fn normalize_tool_args(name: &str, args: &serde_json::Value) -> serde_json::
         if let Some(v) = obj.get("height").cloned() {
             obj.insert("h".into(), v);
         }
+        // Here width is the geometric alias for `w`, not the outline width.
+        // Keeping it also makes the renderer draw an enormous outline.
+        obj.remove("width");
+    }
+    if name.starts_with("canvas.") && name != "canvas.erase" {
+        // A local model often copies a shape's `w` into its stroke `width`.
+        // At 0.15 this means a 15%-of-canvas outline, which turns wheels into
+        // opaque rings. Keep agent outlines readable; human canvas edits and
+        // erasing are not routed through this normalizer.
+        const MAX_AGENT_CANVAS_STROKE_WIDTH: f64 = 0.04;
+        if let Some(width) = obj.get_mut("width") {
+            if width
+                .as_f64()
+                .is_some_and(|value| value > MAX_AGENT_CANVAS_STROKE_WIDTH)
+            {
+                *width = serde_json::json!(MAX_AGENT_CANVAS_STROKE_WIDTH);
+            }
+        }
     }
     out
 }
@@ -1359,6 +1377,24 @@ mod tests {
         );
         assert_eq!(args["w"], 0.3);
         assert_eq!(args["h"], 0.15);
+    }
+
+    #[test]
+    fn normalize_canvas_outline_width_prevents_opaque_wheels() {
+        let args = normalize_tool_args(
+            "canvas.ellipse",
+            &serde_json::json!({
+                "x": 0.25, "y": 0.65, "w": 0.15, "h": 0.08,
+                "width": 0.15, "fill": false
+            }),
+        );
+        assert_eq!(args["width"], 0.04);
+        let aliases = normalize_tool_args(
+            "canvas.ellipse",
+            &serde_json::json!({"x": 0.25, "y": 0.65, "width": 0.15, "height": 0.08}),
+        );
+        assert_eq!(aliases["w"], 0.15);
+        assert!(aliases.get("width").is_none());
     }
 
     #[test]

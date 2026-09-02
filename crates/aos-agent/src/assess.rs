@@ -48,8 +48,14 @@ struct AssessJson {
 pub fn parse_assess_response(text: &str) -> AssessResult {
     let clean = crate::actions::strip_reasoning(text);
     if let Some(json) = extract_json(&clean) {
-        if let Ok(raw) = serde_json::from_str::<AssessJson>(&json) {
-            return normalize_assess(raw);
+        // Some local models repeat a key while streaming JSON (for example
+        // `"complexity":"simple","complexity":"simple"`). Deserializing
+        // directly into a struct rejects that otherwise usable answer; parse
+        // through Value so serde keeps the final equivalent value instead.
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(&json) {
+            if let Ok(raw) = serde_json::from_value::<AssessJson>(value) {
+                return normalize_assess(raw);
+            }
         }
     }
     AssessResult::complex("réponse task.assess illisible — plan requis par défaut")
@@ -168,5 +174,14 @@ mod tests {
 {"complexity":"simple","reason":"ok","needs_plan":false}"#,
         );
         assert_eq!(r.complexity, "simple");
+    }
+
+    #[test]
+    fn parse_accepts_a_repeated_equivalent_key_from_a_local_model() {
+        let r = parse_assess_response(
+            r#"{"complexity":"simple","complexity":"simple","reason":"un dessin","needs_plan":false}"#,
+        );
+        assert_eq!(r.complexity, "simple");
+        assert!(!r.needs_plan);
     }
 }

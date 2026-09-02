@@ -351,14 +351,14 @@ async fn main() {
             )
             .await;
         } else {
-            let assess = run_task_assess(
+            let assess = require_canvas_plan(run_task_assess(
                 &bus,
                 &shared,
                 &spec,
                 &spec.goal.statement,
                 "démarrage",
             )
-            .await;
+            .await, &spec);
             apply_assess_to_runtime(
                 &bus,
                 &shared,
@@ -472,7 +472,10 @@ async fn main() {
             if is_child {
                 bootstrap_memory_recall(&bus, &shared, &agent_id, &d, "steer").await;
             } else {
-                let assess = run_task_assess(&bus, &shared, &spec, &d, "steer").await;
+                let assess = require_canvas_plan(
+                    run_task_assess(&bus, &shared, &spec, &d, "steer").await,
+                    &spec,
+                );
                 apply_assess_to_runtime(
                     &bus,
                     &shared,
@@ -938,6 +941,10 @@ async fn main() {
                                         }
                                     }
                                     last_canvas_visual = Some(current);
+                                } else {
+                                    outcome.push_str(
+                                        "\n\n[canvas visual verifier] indisponible : PNG exporté inaccessible au worker.",
+                                    );
                                 }
                                 last_canvas_scene_png = Some(png);
                                 canvas_scene_changed = true;
@@ -1126,6 +1133,10 @@ async fn main() {
                                     }
                                 }
                                 last_canvas_visual = Some(current);
+                            } else {
+                                outcome.push_str(
+                                    "\n\n[canvas visual verifier] indisponible : PNG exporté inaccessible au worker.",
+                                );
                             }
                             last_canvas_scene_png = Some(png);
                             canvas_scene_changed = true;
@@ -1353,6 +1364,24 @@ async fn main() {
             }
         }
         report(&bus, &agent_id, AgentOutputEvent::Step(record)).await;
+
+        // A canvas plan is a bounded composition contract. Once its final
+        // drawing stage is complete, stop before a text-only model starts
+        // adding speculative layers over the finished composition.
+        if terminal.is_none() && canvas_agent && canvas_scene_changed {
+            let plan_complete = shared.state.lock().await.canvas_plan_is_complete();
+            if plan_complete {
+                report(
+                    &bus,
+                    &agent_id,
+                    AgentOutputEvent::Log {
+                        line: "plan canvas terminé : arrêt avant empilement de formes supplémentaires".into(),
+                    },
+                )
+                .await;
+                terminal = Some(AgentState::Done);
+            }
+        }
 
         // Checkpoint
         {
@@ -3393,6 +3422,18 @@ async fn run_task_assess(
     assess
 }
 
+/// Canvas drawing is spatially complex even when its text goal is short. A
+/// bounded plan prevents a local chat model from treating every new stroke as
+/// an unstructured continuation.
+fn require_canvas_plan(assess: AssessResult, spec: &AgentSpec) -> AssessResult {
+    if assess.is_complex() || !agent_has_canvas_tools(&spec.tools) {
+        return assess;
+    }
+    AssessResult::complex(
+        "dessin canvas : plan de composition requis pour séparer analyse, silhouette, détails et finitions",
+    )
+}
+
 async fn recall_memory_bundle(
     bus: &BusClient,
     agent_id: &str,
@@ -3911,8 +3952,36 @@ fn collect_sources(
 
 #[cfg(test)]
 mod tests {
-    use super::{await_child_reject_reason, canvas_child_goal_statement};
+    use super::{await_child_reject_reason, canvas_child_goal_statement, require_canvas_plan};
+    use aos_agent::assess::AssessResult;
     use aos_proto::{AgentGoal, AgentSpec};
+
+    #[test]
+    fn canvas_goal_requires_a_bounded_composition_plan() {
+        let spec = AgentSpec {
+            agent_id: "canvas-agent".into(),
+            goal: AgentGoal::default(),
+            tools: vec!["canvas.path".into()],
+            kind: Default::default(),
+            display_name: None,
+            persona_id: None,
+            system_prompt: None,
+            skills: vec![],
+            mcp_servers: vec![],
+            documents: vec![],
+            caps: vec![],
+            model_id: None,
+            parent_id: None,
+            session_id: None,
+            budget: Default::default(),
+            optimize_prompt: false,
+            gate_mode: "autonomous".into(),
+            origin: None,
+        };
+        assert!(require_canvas_plan(AssessResult::simple("short goal"), &spec).is_complex());
+        let non_canvas = AgentSpec { tools: vec![], ..spec };
+        assert!(!require_canvas_plan(AssessResult::simple("short goal"), &non_canvas).is_complex());
+    }
 
     #[test]
     fn await_rejects_empty_child_id() {

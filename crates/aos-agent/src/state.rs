@@ -132,23 +132,25 @@ impl CognitiveState {
         true
     }
 
-    /// After a successful canvas draw, advance the plan (not `canvas.set_style`).
+    /// Advance a canvas plan only when its current stage has its required work.
     pub fn maybe_advance_plan_after_canvas_draw(&mut self, tool: &str, outcome: &str) -> bool {
-        if !canvas_tool_completes_plan_node(tool) || !canvas_op_succeeded(outcome) {
+        if !canvas_op_succeeded(outcome) {
             return false;
         }
-        // A model occasionally emits a drawing operation while it is still on
-        // its analysis/palette step. That must not mark the preparatory node
-        // complete: it skips the intended design pass and makes the remaining
-        // plan appear finished after one crude shape per node.
         if self.current_task_is_canvas_preparation() {
+            // Analysis is a real stage, but it is complete as soon as the
+            // canvas has been read. Previously it could never advance, so all
+            // subsequent shapes were incorrectly made under "Analyse".
+            return tool == "canvas.get" && self.complete_current_plan_node();
+        }
+        if !canvas_tool_completes_plan_node(tool) {
             return false;
         }
         self.canvas_draw_ops_on_current_task = self
             .canvas_draw_ops_on_current_task
             .saturating_add(1);
-        if self.canvas_draw_ops_on_current_task == 1
-            || self.canvas_draw_ops_on_current_task >= CANVAS_DRAW_TASK_OP_CAP
+        if self.canvas_draw_ops_on_current_task
+            >= self.current_canvas_task_required_draw_ops().min(CANVAS_DRAW_TASK_OP_CAP)
         {
             return self.complete_current_plan_node();
         }
@@ -175,6 +177,28 @@ impl CognitiveState {
         ["analyse", "analysis", "palette", "style", "prépar", "prepar", "planification"]
             .iter()
             .any(|word| title.contains(word))
+    }
+
+    fn current_canvas_task_required_draw_ops(&self) -> u32 {
+        let Some(title) = self.current_task_title() else {
+            return 1;
+        };
+        let title = title.to_ascii_lowercase();
+        if ["détail", "detail", "roue", "vitre", "aileron"].iter().any(|word| title.contains(word)) {
+            3
+        } else if ["ombre", "shadow", "finition", "finish"].iter().any(|word| title.contains(word)) {
+            2
+        } else {
+            1
+        }
+    }
+
+    pub fn canvas_plan_is_complete(&self) -> bool {
+        !self.task_graph.is_empty()
+            && self
+                .task_graph
+                .iter()
+                .all(|node| node.status == TaskNodeStatus::Done)
     }
 
     /// Sérialise en JSON (snapshot disque, `var/agents/<id>/state.json`).
@@ -343,6 +367,27 @@ mod tests {
         assert!(!st.maybe_advance_plan_after_canvas_draw("canvas.path", "ok seq=1 path bbox=(0.1,0.1)-(0.8,0.8)"));
         assert_eq!(st.task_graph[0].status, TaskNodeStatus::Pending);
         assert_eq!(st.canvas_draw_ops_on_current_task, 0);
+    }
+
+    #[test]
+    fn canvas_get_completes_an_analysis_task_before_drawing() {
+        let mut st = CognitiveState::new("agent-98", vec![]);
+        st.set_plan(vec![
+            TaskNode { id: "1".into(), title: "Analyse de la composition".into(), status: TaskNodeStatus::Pending, notes: String::new() },
+            TaskNode { id: "2".into(), title: "Dessiner la silhouette".into(), status: TaskNodeStatus::Pending, notes: String::new() },
+        ]);
+        assert!(st.maybe_advance_plan_after_canvas_draw("canvas.get", "ok canvas"));
+        assert_eq!(st.current_task_title().as_deref(), Some("Dessiner la silhouette"));
+    }
+
+    #[test]
+    fn canvas_detail_stage_needs_three_distinct_draws() {
+        let mut st = CognitiveState::new("agent-98", vec![]);
+        st.set_plan(vec![TaskNode { id: "1".into(), title: "Ajout des détails (roues, vitres)".into(), status: TaskNodeStatus::Pending, notes: String::new() }]);
+        assert!(!st.maybe_advance_plan_after_canvas_draw("canvas.ellipse", "ok seq=1"));
+        assert!(!st.maybe_advance_plan_after_canvas_draw("canvas.path", "ok seq=2"));
+        assert!(st.maybe_advance_plan_after_canvas_draw("canvas.path", "ok seq=3"));
+        assert!(st.canvas_plan_is_complete());
     }
 
     #[test]
