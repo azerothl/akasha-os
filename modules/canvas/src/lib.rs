@@ -67,10 +67,21 @@ fn apply(session_id: &str, author_id: &str, op: Value) -> Result<Value, String> 
     )
 }
 
+fn parse_color_field(args: &Value) -> Option<String> {
+    ["color", "fill_color"]
+        .iter()
+        .find_map(|key| {
+            args.get(*key)
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+        })
+}
+
 #[derive(Deserialize)]
 struct StyleArgs {
     session_id: String,
-    #[serde(default)]
+    #[serde(default, alias = "fill_color")]
     color: Option<String>,
     #[serde(default)]
     width: Option<f32>,
@@ -94,7 +105,7 @@ struct StrokeArgs {
     #[serde(default)]
     author_id: Option<String>,
     points: Vec<Point>,
-    #[serde(default)]
+    #[serde(default, alias = "fill_color")]
     color: Option<String>,
     #[serde(default)]
     width: Option<f32>,
@@ -141,7 +152,7 @@ struct LineArgs {
     author_id: Option<String>,
     p0: Point,
     p1: Point,
-    #[serde(default)]
+    #[serde(default, alias = "fill_color")]
     color: Option<String>,
     #[serde(default)]
     width: Option<f32>,
@@ -197,7 +208,7 @@ struct PathArgs {
     #[serde(default)]
     author_id: Option<String>,
     points: Vec<Point>,
-    #[serde(default)]
+    #[serde(default, alias = "fill_color")]
     color: Option<String>,
     #[serde(default)]
     width: Option<f32>,
@@ -270,7 +281,7 @@ struct FillArgs {
     author_id: Option<String>,
     x: f32,
     y: f32,
-    #[serde(default)]
+    #[serde(default, alias = "fill_color")]
     color: Option<String>,
 }
 
@@ -412,11 +423,7 @@ fn parse_shape_args(args: &Value, tool: &str) -> Result<ShapeArgs, String> {
         }
     };
 
-    let color = args
-        .get("color")
-        .and_then(|v| v.as_str())
-        .filter(|s| !s.is_empty())
-        .map(str::to_string);
+    let color = parse_color_field(&args);
     let fill = args.get("fill").and_then(|v| v.as_bool()).unwrap_or(false);
     let width = parse_f32_field(&args, "width");
     let rotation = parse_f32_field(&args, "rotation").unwrap_or(0.0);
@@ -895,6 +902,36 @@ mod tests {
         assert!((op["w"].as_f64().unwrap() - 0.30).abs() < 1e-6);
         assert_eq!(op["fill"], true);
         assert_eq!(op["color"], "#c0c0c0");
+    }
+
+    #[test]
+    fn path_args_fill_color_alias() {
+        let args = json!({
+            "session_id": "s1",
+            "points": [
+                {"x": 0.1, "y": 0.8},
+                {"x": 0.5, "y": 0.5},
+                {"x": 0.9, "y": 0.8}
+            ],
+            "fill_color": "#8B7355"
+        });
+        let a: PathArgs = aos_module_sdk::parse_args(&args).expect("path args");
+        assert_eq!(a.color.as_deref(), Some("#8B7355"));
+    }
+
+    #[test]
+    fn shape_args_fill_color_alias() {
+        let args = json!({
+            "session_id": "s1",
+            "x": 0.35,
+            "y": 0.15,
+            "w": 0.30,
+            "h": 0.12,
+            "fill": true,
+            "fill_color": "#8B7355"
+        });
+        let a = parse_shape_args(&args, "canvas.rect").expect("fill_color alias");
+        assert_eq!(a.color.as_deref(), Some("#8B7355"));
     }
 
     #[test]
