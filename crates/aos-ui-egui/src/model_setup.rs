@@ -642,6 +642,12 @@ impl eframe::App for SetupApp {
                         total as f64 / (1 << 30) as f64
                     ));
 
+                    let can_continue = selection_valid(
+                        &self.offer,
+                        &self.selected,
+                        &self.default_chat,
+                        &self.default_embed,
+                    );
                     if let Some(err) = &self.validation_error {
                         ui.colored_label(egui::Color32::from_rgb(220, 80, 80), err);
                     } else if !can_continue {
@@ -651,12 +657,6 @@ impl eframe::App for SetupApp {
                         );
                     }
 
-                    let can_continue = selection_valid(
-                        &self.offer,
-                        &self.selected,
-                        &self.default_chat,
-                        &self.default_embed,
-                    );
                     ui.horizontal(|ui| {
                         if ui
                             .add_enabled(can_continue, egui::Button::new(t.model_setup_download_continue))
