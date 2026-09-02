@@ -388,7 +388,7 @@ mod layout_tests {
     use super::*;
     use crate::chat_bubble::ChatBubbleKind;
     use crate::composer_layout::{
-        chat_canvas_layout, chat_composer_reserve_height, chat_sessions_split,
+        bounded_chat_workspace_width, chat_canvas_layout, chat_composer_reserve_height, chat_sessions_split,
         composer_field_width, ChatCanvasLayout,
     };
 
@@ -404,6 +404,15 @@ mod layout_tests {
                 split.chat_w
             );
         }
+    }
+
+    #[test]
+    fn chat_workspace_is_bounded_after_wide_session_widget() {
+        // A long model id can make egui give the Sessions rail more than its
+        // planned split; the right pane must shrink rather than clip its canvas.
+        assert_eq!(bounded_chat_workspace_width(600.0, 520.0, 8.0), 512.0);
+        assert_eq!(bounded_chat_workspace_width(600.0, 900.0, 8.0), 592.0);
+        assert_eq!(bounded_chat_workspace_width(100.0, 4.0, 8.0), 0.0);
     }
 
     #[test]
