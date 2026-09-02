@@ -1,6 +1,6 @@
 name: notes
 version: 1.1.0
-hash: 796d1ab2256924939a298c8fab7ca1077618b9064cfdafa42a6389667054dbf5
+hash: c8a79724177c586e1cd8b23631f950f28f24d5e6a4ab25c3b46df39abee79205
 permissions:
   required_caps:
     - fs.read:/documents/notes/**

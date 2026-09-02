@@ -37,6 +37,30 @@ copy_tree() {
   cp -a "$src" "$dst"
 }
 
+sha256_file() {
+  shasum -a 256 "$1" | awk '{print $1}'
+}
+
+sync_module_wasm() {
+  local module="$1"
+  local wasm="$2"
+  local package="${ROOT}/share/modules/${module}.aospkg"
+  local manifest="${package}/manifest.yaml"
+  local catalogue="${ROOT}/share/modules/catalogue.yaml"
+  local hash tmp
+  if [ ! -f "${wasm}" ] || [ ! -f "${manifest}" ] || [ ! -f "${catalogue}" ]; then
+    echo "ERROR: cannot sync freshly built ${module} package" >&2
+    exit 1
+  fi
+  cp -f "${wasm}" "${package}/module.wasm"
+  hash="$(sha256_file "${package}/module.wasm")"
+  tmp="${manifest}.tmp"
+  sed -E "s/^hash:[[:space:]].*$/hash: ${hash}/" "${manifest}" > "${tmp}"
+  mv -f "${tmp}" "${manifest}"
+  perl -i -0pe "s/(  - name: ${module}\n(?:    .*\n)*?    hash: )sha256:[a-f0-9]+/\${1}sha256:${hash}/" "${catalogue}"
+  echo "  synced ${module} (hash ${hash})"
+}
+
 if [ "$SKIP_BUILD" != "1" ]; then
   echo "== cargo build --release (aos-auditd sans llama) =="
   cargo build --release -p aos-auditd
@@ -80,6 +104,7 @@ ui:
   mode: declarative_ui
 min_os_api: 1
 EOF
+  sync_module_wasm "notes" "${WASM_SRC}"
 
   echo "== tasks module =="
   env -u RUSTFLAGS \
@@ -112,12 +137,13 @@ min_os_api: 1
 EOF
   echo '{"type":"declarative_ui","title":"Tasks","commands":["tasks.create","tasks.list","tasks.update","tasks.complete"]}' \
     > "${ROOT}/modules/tasks.aospkg/ui/index.html"
+  sync_module_wasm "tasks" "${WASM_TASK}"
 
   if [ -f "${ROOT}/modules/ext-rt/Cargo.toml" ]; then
     echo "== ext-rt wasm =="
     env -u RUSTFLAGS \
       cargo build --manifest-path "${ROOT}/modules/ext-rt/Cargo.toml" \
-      --target wasm32-unknown-unknown --release || true
+      --target wasm32-unknown-unknown --release
     WASM_EXT=""
     for cand in \
       "${CARGO_TARGET_DIR}/wasm32-unknown-unknown/release/module_ext_rt.wasm" \
@@ -125,11 +151,15 @@ EOF
     do
       if [ -f "${cand}" ]; then WASM_EXT="${cand}"; break; fi
     done
-    if [ -n "${WASM_EXT}" ]; then
-      mkdir -p "${ROOT}/share/modules/ext-rt.aospkg/ui" "${ROOT}/share/modules/ext-rt.aospkg/assets"
-      cp -f "${WASM_EXT}" "${ROOT}/share/modules/ext-rt.aospkg/module.wasm"
+    if [ -z "${WASM_EXT}" ]; then
+      echo "ERROR: module_ext_rt.wasm introuvable" >&2
+      exit 1
     fi
+    sync_module_wasm "ext-rt" "${WASM_EXT}"
   fi
+  echo "== refresh bundled catalogue signature =="
+  (cd "${ROOT}" && UPDATE_CATALOGUE=1 cargo test -p aos-platform --no-default-features \
+    catalogue::tests::committed_catalogue_signature_matches -- --nocapture)
 fi
 
 mkdir -p "${OUT}/bin" "${OUT}/etc" "${OUT}/share/models" \

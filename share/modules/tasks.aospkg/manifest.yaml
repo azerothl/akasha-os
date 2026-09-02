@@ -1,6 +1,6 @@
 name: tasks
 version: 1.0.0
-hash: 25fcd075392220953454c1a70ad3ceaf6ef0125c101129bcc6b6b40d80993e48
+hash: 6f26a8e7edf7f589ad37b7d16f7db7dc268969c522df5c2f277ec652ca4a3364
 permissions:
   required_caps:
     - fs.read:/documents/tasks/**

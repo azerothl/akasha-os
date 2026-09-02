@@ -6,7 +6,7 @@ entries:
     version: "1.1.0"
     kind: module
     path: share/modules/notes.aospkg
-    hash: sha256:796d1ab2256924939a298c8fab7ca1077618b9064cfdafa42a6389667054dbf5
+    hash: sha256:c8a79724177c586e1cd8b23631f950f28f24d5e6a4ab25c3b46df39abee79205
     attested_caps:
       - fs.read:/documents/notes/**
       - fs.write:/documents/notes/**
@@ -16,7 +16,7 @@ entries:
     version: "1.0.0"
     kind: module
     path: share/modules/tasks.aospkg
-    hash: sha256:25fcd075392220953454c1a70ad3ceaf6ef0125c101129bcc6b6b40d80993e48
+    hash: sha256:6f26a8e7edf7f589ad37b7d16f7db7dc268969c522df5c2f277ec652ca4a3364
     attested_caps:
       - fs.read:/documents/tasks/**
       - fs.write:/documents/tasks/**
