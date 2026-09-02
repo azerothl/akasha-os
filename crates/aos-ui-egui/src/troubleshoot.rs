@@ -3,9 +3,7 @@
 use crate::cmd::Evt;
 use crate::os_open::aos_home;
 use aos_ipc::BusClient;
-use aos_proto::{
-    AgentInfo, AgentState, FeedbackSubmitRequest, FeedbackSubmitResponse, ModelInfo,
-};
+use aos_proto::{AgentInfo, AgentState, FeedbackSubmitRequest, FeedbackSubmitResponse, ModelInfo};
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
 
@@ -21,7 +19,11 @@ pub(crate) async fn run_troubleshoot(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>)
     let mut findings: Vec<String> = Vec::new();
     let mut sections: Vec<String> = Vec::new();
 
-    sections.push(format!("## Environnement\n- version: {version}\n- AOS_HOME: {}\n- os: {}", home.display(), std::env::consts::OS));
+    sections.push(format!(
+        "## Environnement\n- version: {version}\n- AOS_HOME: {}\n- os: {}",
+        home.display(),
+        std::env::consts::OS
+    ));
 
     // NVIDIA
     let nvidia = std::process::Command::new("nvidia-smi")
@@ -55,7 +57,9 @@ pub(crate) async fn run_troubleshoot(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>)
         files.sort_by_key(|e| e.file_name());
         for ent in files {
             let name = ent.file_name().to_string_lossy().to_string();
-            if !(name.ends_with(".stderr.log") || name.ends_with(".stdout.log") || name.ends_with(".log"))
+            if !(name.ends_with(".stderr.log")
+                || name.ends_with(".stdout.log")
+                || name.ends_with(".log"))
             {
                 continue;
             }
@@ -84,7 +88,9 @@ pub(crate) async fn run_troubleshoot(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>)
         findings.push("var/run inaccessible".into());
     }
     if log_errors > 0 {
-        findings.push(format!("{log_errors} ligne(s) d'erreur détectée(s) dans les logs récents"));
+        findings.push(format!(
+            "{log_errors} ligne(s) d'erreur détectée(s) dans les logs récents"
+        ));
     }
     sections.push(log_block);
 
@@ -111,7 +117,10 @@ pub(crate) async fn run_troubleshoot(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>)
             svc.push_str(&format!("- agent.list ERREUR : {e}\n"));
         }
     }
-    match bus.call::<(), Vec<ModelInfo>>("model.list", &(), vec![]).await {
+    match bus
+        .call::<(), Vec<ModelInfo>>("model.list", &(), vec![])
+        .await
+    {
         Ok(models) => {
             svc.push_str(&format!("- modèles : {}\n", models.len()));
             for m in models.iter().take(8) {
@@ -159,7 +168,10 @@ pub(crate) async fn run_troubleshoot(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>)
     let _ = evt_tx.send(Evt::Status(if healthy {
         "Dépannage : OK — aucune anomalie majeure".into()
     } else {
-        format!("Dépannage : {} anomalie(s) — rapport en cours…", findings.len())
+        format!(
+            "Dépannage : {} anomalie(s) — rapport en cours…",
+            findings.len()
+        )
     }));
 
     // Archive locale + brouillon dans l'onglet Retour (l'utilisateur publie l'issue).
@@ -167,9 +179,16 @@ pub(crate) async fn run_troubleshoot(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>)
         title: if healthy {
             format!("[Preview][diag] OK — v{version}")
         } else {
-            format!("[Preview][bug] Dépannage auto — {} anomalie(s)", findings.len())
+            format!(
+                "[Preview][bug] Dépannage auto — {} anomalie(s)",
+                findings.len()
+            )
         },
-        category: if healthy { "other".into() } else { "bug".into() },
+        category: if healthy {
+            "other".into()
+        } else {
+            "bug".into()
+        },
         severity: if healthy {
             "low".into()
         } else if findings.len() >= 3 {
@@ -178,6 +197,7 @@ pub(crate) async fn run_troubleshoot(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>)
             "medium".into()
         },
         body,
+        attachments: vec![],
         scenario: Some("troubleshooting".into()),
         meta: serde_json::json!({
             "preview_version": version,
@@ -193,11 +213,7 @@ pub(crate) async fn run_troubleshoot(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>)
     };
 
     match bus
-        .call::<FeedbackSubmitRequest, FeedbackSubmitResponse>(
-            "feedback.submit",
-            &req,
-            vec![],
-        )
+        .call::<FeedbackSubmitRequest, FeedbackSubmitResponse>("feedback.submit", &req, vec![])
         .await
     {
         Ok(r) => {
@@ -215,7 +231,9 @@ pub(crate) async fn run_troubleshoot(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>)
             }));
         }
         Err(e) => {
-            let _ = evt_tx.send(Evt::Error(format!("Dépannage : échec feedback.submit : {e}")));
+            let _ = evt_tx.send(Evt::Error(format!(
+                "Dépannage : échec feedback.submit : {e}"
+            )));
             // Même en cas d'échec de la sauvegarde locale, on pré-remplit le formulaire
             // Retour pour que l'utilisateur puisse quand même remonter l'issue avec le rapport.
             let mut draft = req;

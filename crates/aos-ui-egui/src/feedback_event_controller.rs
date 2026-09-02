@@ -5,16 +5,22 @@ use crate::UiApp;
 use aos_proto::{FeedbackSubmitRequest, FeedbackSubmitResponse};
 
 pub(crate) fn on_feedback_draft(app: &mut UiApp, request: FeedbackSubmitRequest) {
+    let category = request.category.clone();
     app.feedback_ui.title = request.title;
     app.feedback_ui.category = request.category;
     app.feedback_ui.severity = request.severity;
     app.feedback_ui.body = request.body;
+    app.feedback_ui.attachments = request
+        .attachments
+        .iter()
+        .map(|a| native_path(&a.path))
+        .collect();
+    app.feedback_ui.template_category = category;
+    app.feedback_ui.template_required =
+        request.meta.get("source").and_then(|v| v.as_str()) != Some("troubleshooting_button");
     app.feedback_ui.scenario = request.scenario.unwrap_or_default();
-    app.feedback_ui.publish_github = request.publish_github
-        && !app
-            .feedback_ui
-            .category
-            .eq_ignore_ascii_case("security");
+    app.feedback_ui.publish_github =
+        request.publish_github && !app.feedback_ui.category.eq_ignore_ascii_case("security");
     app.feedback_ui.diag_meta = Some(request.meta);
     app.tab = crate::Tab::Feedback;
 }

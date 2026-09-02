@@ -3,14 +3,19 @@
 //! Toujours écrit en local. Publication GitHub : explicite (`publish_github`),
 //! jamais pour `security` (rapport public interdit).
 
-use aos_proto::{FeedbackSubmitRequest, FeedbackSubmitResponse};
 use crate::net::EgressControl;
+use aos_proto::{FeedbackSubmitRequest, FeedbackSubmitResponse};
+use base64::Engine;
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Dépôt public des issues Preview.
 pub const GITHUB_REPO: &str = "azerothl/akasha-os";
+const MAX_ATTACHMENTS: usize = 8;
+const MAX_ATTACHMENT_BYTES: usize = 512 * 1024;
+const MAX_INLINE_ATTACHMENT_BYTES: usize = 32 * 1024;
 
 /// Écrit un retour dans `feedback_dir/<id>.json` (pas d'envoi réseau).
 pub fn submit(
@@ -27,12 +32,52 @@ pub fn submit(
     let id = format!("fb-{ts}");
     let path = dir.join(format!("{id}.json"));
 
+    if req.attachments.len() > MAX_ATTACHMENTS {
+        return Err(format!(
+            "maximum {MAX_ATTACHMENTS} fichiers complémentaires"
+        ));
+    }
+    let export_dir = dir.join(&id);
+    fs::create_dir_all(export_dir.join("attachments")).map_err(|e| e.to_string())?;
+    let mut attachment_docs = Vec::new();
+    for (index, attachment) in req.attachments.iter().enumerate() {
+        let source = PathBuf::from(&attachment.path);
+        let bytes = fs::read(&source)
+            .map_err(|e| format!("fichier complémentaire {}: {e}", attachment.path))?;
+        if bytes.len() > MAX_ATTACHMENT_BYTES {
+            return Err(format!(
+                "fichier complémentaire trop volumineux: maximum {} Ko",
+                MAX_ATTACHMENT_BYTES / 1024
+            ));
+        }
+        let name = source
+            .file_name()
+            .and_then(|n| n.to_str())
+            .filter(|n| !n.is_empty())
+            .unwrap_or("attachment");
+        let safe_name: String = name
+            .chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') {
+                    c
+                } else {
+                    '_'
+                }
+            })
+            .collect();
+        let stored_name = format!("{index:02}-{safe_name}");
+        fs::write(export_dir.join("attachments").join(&stored_name), &bytes)
+            .map_err(|e| e.to_string())?;
+        let hash = format!("{:x}", Sha256::digest(&bytes));
+        attachment_docs.push(serde_json::json!({"name": name, "bytes": bytes.len(), "sha256": hash, "stored": format!("attachments/{stored_name}")}));
+    }
     let mut doc = serde_json::json!({
         "id": id,
         "title": req.title,
         "category": req.category,
         "severity": req.severity,
         "body": req.body,
+        "attachments": attachment_docs,
         "scenario": req.scenario,
         "meta": req.meta,
         "ts_ms": ts,
@@ -48,8 +93,6 @@ pub fn submit(
     fs::write(&path, pretty).map_err(|e| e.to_string())?;
 
     // Dossier d'export (même contenu ; le zip est laissé à l'UI / OS).
-    let export_dir = dir.join(&id);
-    fs::create_dir_all(&export_dir).map_err(|e| e.to_string())?;
     let export_json = export_dir.join("feedback.json");
     fs::copy(&path, &export_json).map_err(|e| e.to_string())?;
     let _ = fs::write(
@@ -103,7 +146,7 @@ pub fn issue_title(req: &FeedbackSubmitRequest) -> String {
 pub fn issue_body(req: &FeedbackSubmitRequest, local_id: &str) -> String {
     let scenario = req.scenario.as_deref().unwrap_or("—");
     let meta = serde_json::to_string_pretty(&req.meta).unwrap_or_else(|_| "{}".into());
-    format!(
+    let base = format!(
         "## Rapport Preview\n\
          \n\
          - **Catégorie :** {cat}\n\
@@ -122,7 +165,53 @@ pub fn issue_body(req: &FeedbackSubmitRequest, local_id: &str) -> String {
         cat = req.category,
         sev = req.severity,
         body = req.body.trim(),
-    )
+    );
+    let attachments = attachment_issue_section(req);
+    if attachments.is_empty() {
+        base
+    } else {
+        format!("{base}\n{attachments}")
+    }
+}
+
+fn attachment_issue_section(req: &FeedbackSubmitRequest) -> String {
+    if req.attachments.is_empty() {
+        return String::new();
+    }
+    let mut out = String::from("## Attachments\n\n");
+    for attachment in req.attachments.iter().take(MAX_ATTACHMENTS) {
+        let path = PathBuf::from(&attachment.path);
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("attachment");
+        match fs::read(&path) {
+            Ok(bytes) => {
+                let hash = format!("{:x}", Sha256::digest(&bytes));
+                out.push_str(&format!(
+                    "- `{name}` — {} bytes — SHA-256 `{hash}`\n",
+                    bytes.len()
+                ));
+                let shown = &bytes[..bytes.len().min(MAX_INLINE_ATTACHMENT_BYTES)];
+                if let Ok(text) = std::str::from_utf8(shown) {
+                    let safe = text.replace("```", "''' ");
+                    out.push_str(&format!("\n<details><summary>Contenu de {name}</summary>\n\n```text\n{safe}\n```\n</details>\n"));
+                } else {
+                    let encoded = base64::engine::general_purpose::STANDARD.encode(shown);
+                    out.push_str(&format!("\n<details><summary>{name} (base64)</summary>\n\n```text\n{encoded}\n```\n</details>\n"));
+                }
+                if bytes.len() > MAX_INLINE_ATTACHMENT_BYTES {
+                    out.push_str(
+                        "\n_(contenu tronqué dans l'issue ; copie complète dans l'export local)_\n",
+                    );
+                }
+            }
+            Err(_) => out.push_str(&format!(
+                "- `{name}` — fichier indisponible au moment de la publication\n"
+            )),
+        }
+    }
+    out
 }
 
 fn percent_encode(s: &str) -> String {
@@ -250,10 +339,7 @@ fn try_gh_cli(req: &FeedbackSubmitRequest, local_id: &str) -> Result<GithubPubli
     if url.is_empty() {
         return Err("gh: pas d'URL d'issue dans la sortie".into());
     }
-    let number = url
-        .rsplit('/')
-        .next()
-        .and_then(|n| n.parse().ok());
+    let number = url.rsplit('/').next().and_then(|n| n.parse().ok());
     Ok(GithubPublish {
         issue_url: url,
         issue_number: number,
@@ -358,14 +444,11 @@ pub fn default_dir() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aos_proto::FeedbackSubmitRequest;
+    use aos_proto::{FeedbackAttachment, FeedbackSubmitRequest};
 
     #[test]
     fn submit_ecrit_json_sans_secret() {
-        let dir = std::env::temp_dir().join(format!(
-            "aos-fb-{}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("aos-fb-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         let resp = submit(
             &dir,
@@ -374,6 +457,7 @@ mod tests {
                 category: "ux".into(),
                 severity: "low".into(),
                 body: "hello".into(),
+                attachments: vec![],
                 scenario: Some("chat_offline".into()),
                 meta: serde_json::json!({ "api_key": "secret", "os": "win" }),
                 publish_github: false,
@@ -395,6 +479,7 @@ mod tests {
             category: "bug".into(),
             severity: "high".into(),
             body: "repro".into(),
+            attachments: vec![],
             scenario: None,
             meta: serde_json::json!({}),
             publish_github: true,
@@ -416,6 +501,7 @@ mod tests {
                 "## Résumé dépannage automatique\n\n{findings}\n\n{}",
                 "x".repeat(12_000)
             ),
+            attachments: vec![],
             scenario: Some("troubleshooting".into()),
             meta: serde_json::json!({}),
             publish_github: true,
@@ -437,6 +523,7 @@ mod tests {
             category: "ux".into(),
             severity: "low".into(),
             body: "é".repeat(4000),
+            attachments: vec![],
             scenario: None,
             meta: serde_json::json!({}),
             publish_github: true,
@@ -453,6 +540,7 @@ mod tests {
             category: "security".into(),
             severity: "high".into(),
             body: "x".into(),
+            attachments: vec![],
             scenario: None,
             meta: serde_json::json!({}),
             publish_github: true,
@@ -477,6 +565,7 @@ mod tests {
             category: "bug".into(),
             severity: "medium".into(),
             body: diag_body.clone(),
+            attachments: vec![],
             scenario: Some("troubleshooting".into()),
             meta: serde_json::json!({
                 "preview_version": "0.2.0",
@@ -519,5 +608,32 @@ mod tests {
             url.contains("nvidia-smi") || url.contains("anomalie"),
             "le résumé doit être dans l'URL: {url}"
         );
+    }
+
+    #[test]
+    fn submit_copie_les_fichiers_et_issue_body_les_decrit() {
+        let dir = std::env::temp_dir().join(format!("aos-fb-att-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let source = dir.join("capture.log");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(&source, "ligne importante").unwrap();
+        let req = FeedbackSubmitRequest {
+            title: "bug".into(),
+            category: "bug".into(),
+            severity: "high".into(),
+            body: "details".into(),
+            attachments: vec![FeedbackAttachment {
+                path: source.to_string_lossy().into_owned(),
+            }],
+            scenario: None,
+            meta: serde_json::json!({}),
+            publish_github: false,
+        };
+        let response = submit(&dir, req.clone()).unwrap();
+        let json = fs::read_to_string(&response.path).unwrap();
+        assert!(json.contains("capture.log"));
+        assert!(response.export_dir.replace('\\', "/").contains("fb-"));
+        assert!(issue_body(&req, "fb-att").contains("ligne importante"));
+        let _ = fs::remove_dir_all(&dir);
     }
 }
