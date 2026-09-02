@@ -34,7 +34,8 @@ pub fn canvas_critic_system_prompt() -> &'static str {
      ou arrête si c'est suffisant — ne redemande pas le corps ni une silhouette déjà remplie. \
      Un trait ne compte comme progrès que s'il rapproche visuellement du goal ; ne valide pas des répétitions identiques. \
      Ne demande jamais media.image.generate ni canvas.clear. \
-     En 2 phrases en français : ce que tu vois (couleurs + formes) vs le goal, et quelle pièce unique ajouter ensuite (ou arrêter). \
+     Indique une seule pièce unique à corriger si nécessaire. Réponds exactement avec trois lignes : `ACTION: continue|modify|stop`, `SEQUENCES: ...`, puis `NOTE: ...`. \
+     `stop` signifie que le goal est atteint ou qu'aucune correction sûre n'est possible. \
      Réponds directement, sans balises <think> ni monologue Thinking Process."
 }
 
@@ -457,7 +458,7 @@ pub fn canvas_repeat_stroke_verdict(
     trace: &[AgentStepRecord],
     action: &str,
 ) -> Option<CanvasRepeatVerdict> {
-    if !matches!(action, "canvas.stroke" | "canvas.line" | "canvas.spline") {
+    if !matches!(action, "canvas.stroke" | "canvas.line" | "canvas.spline" | "canvas.path" | "canvas.rect" | "canvas.ellipse") {
         return None;
     }
     let bboxes: Vec<[f32; 4]> = trace
@@ -466,7 +467,7 @@ pub fn canvas_repeat_stroke_verdict(
         .filter(|r| {
             matches!(
                 r.action.as_str(),
-                "canvas.stroke" | "canvas.line" | "canvas.spline"
+                "canvas.stroke" | "canvas.line" | "canvas.spline" | "canvas.path" | "canvas.rect" | "canvas.ellipse"
             ) && canvas_op_succeeded(&r.tool_result)
         })
         .filter_map(|r| parse_outcome_bbox(&r.tool_result))
@@ -488,6 +489,13 @@ pub fn canvas_repeat_stroke_verdict(
         "Tu empiles des traits quasi identiques — regarde la capture canvas et change \
          couleur, position ou forme avant de continuer.",
     ))
+}
+
+pub fn canvas_critic_requests_stop(reflection: &str) -> bool {
+    reflection.lines().any(|line| {
+        line.trim().to_ascii_lowercase().starts_with("action:")
+            && line.to_ascii_lowercase().contains("stop")
+    })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -749,7 +757,7 @@ mod tests {
             },
         ];
         assert!(canvas_repeat_stroke_warning(&trace, "canvas.stroke").is_some());
-        assert!(canvas_repeat_stroke_warning(&trace, "canvas.rect").is_none());
+        assert!(canvas_repeat_stroke_warning(&trace, "canvas.rect").is_some());
         match canvas_repeat_stroke_verdict(&trace, "canvas.stroke") {
             Some(CanvasRepeatVerdict::Warn(_)) => {}
             other => panic!("expected warn at 3 strokes, got {other:?}"),
