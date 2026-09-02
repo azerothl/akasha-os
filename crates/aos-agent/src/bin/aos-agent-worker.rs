@@ -18,6 +18,7 @@ use aos_agent::context_budget::{
 use aos_agent::persist;
 use aos_agent::canvas_scene::{
     agent_has_canvas_tools, begin_canvas_vision, canvas_critic_system_prompt,
+    canvas_visual_fingerprint, canvas_visual_progress, canvas_visual_progress_note,
     canvas_reflect_user_content, canvas_repeat_stroke_verdict, canvas_scene_prompt_block,
     canvas_tool_mutates_scene, end_canvas_vision, fetch_canvas_aspect,
     fetch_canvas_scene_digest, merge_canvas_vision_refs, refresh_canvas_scene_after_op,
@@ -423,6 +424,7 @@ async fn main() {
     let mut terminal: Option<AgentState> = None;
     let mut loop_guard = LoopGuard::default();
     let mut last_canvas_scene_png: Option<String> = None;
+    let mut last_canvas_visual = None;
     let mut n_ctx_hint = DEFAULT_N_CTX_HINT;
 
     while terminal.is_none() {
@@ -915,6 +917,18 @@ async fn main() {
                             .await;
                             outcome = scene.text;
                             if let Some(png) = scene.png_path {
+                                if let Some(current) = canvas_visual_fingerprint(&png) {
+                                    if let Some(previous) = last_canvas_visual {
+                                        let progress = canvas_visual_progress(previous, current);
+                                        outcome.push_str(&format!("\n\n{}", canvas_visual_progress_note(progress)));
+                                        if !progress.meaningful_change {
+                                            shared.state.lock().await.push_user(
+                                                "[runtime] Le vérificateur visuel ne voit presque aucun changement. Ne répète pas cette forme : choisis une pièce distincte ou modifie une séquence existante.",
+                                            );
+                                        }
+                                    }
+                                    last_canvas_visual = Some(current);
+                                }
                                 last_canvas_scene_png = Some(png);
                                 canvas_scene_changed = true;
                             }
@@ -1091,6 +1105,18 @@ async fn main() {
                         .await;
                         outcome = scene.text;
                         if let Some(png) = scene.png_path {
+                            if let Some(current) = canvas_visual_fingerprint(&png) {
+                                if let Some(previous) = last_canvas_visual {
+                                    let progress = canvas_visual_progress(previous, current);
+                                    outcome.push_str(&format!("\n\n{}", canvas_visual_progress_note(progress)));
+                                    if !progress.meaningful_change {
+                                        shared.state.lock().await.push_user(
+                                            "[runtime] Le vérificateur visuel ne voit presque aucun changement. Ne répète pas cette forme : choisis une pièce distincte ou modifie une séquence existante.",
+                                        );
+                                    }
+                                }
+                                last_canvas_visual = Some(current);
+                            }
                             last_canvas_scene_png = Some(png);
                             canvas_scene_changed = true;
                         }

@@ -7,6 +7,66 @@ use aos_proto::{
 };
 use std::path::PathBuf;
 
+/// Compact, local visual signal used alongside the vision-language critic.
+/// It deliberately does not try to name objects: it answers whether the
+/// rendered canvas visibly changed since the previous successful operation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CanvasVisualFingerprint {
+    pub perceptual_hash: u64,
+    pub coverage_per_mille: u16,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CanvasVisualProgress {
+    pub hash_distance: u32,
+    pub coverage_delta_per_mille: i32,
+    pub meaningful_change: bool,
+}
+
+pub fn canvas_visual_fingerprint(path: &str) -> Option<CanvasVisualFingerprint> {
+    let image = image::open(path).ok()?.to_luma8();
+    let (width, height) = image.dimensions();
+    if width == 0 || height == 0 {
+        return None;
+    }
+    // The board background is stable; pixels sufficiently different from the
+    // top-left background represent rendered strokes/fills and board chrome.
+    let background = image.get_pixel(0, 0)[0] as i16;
+    let covered = image
+        .pixels()
+        .filter(|pixel| (pixel[0] as i16 - background).unsigned_abs() > 18)
+        .count();
+    let coverage_per_mille = ((covered * 1000) / (width as usize * height as usize)) as u16;
+    let thumb = image::imageops::resize(&image, 8, 8, image::imageops::FilterType::Triangle);
+    let average = thumb.pixels().map(|pixel| pixel[0] as u32).sum::<u32>() / 64;
+    let perceptual_hash = thumb.pixels().enumerate().fold(0u64, |hash, (index, pixel)| {
+        hash | (u64::from((pixel[0] as u32 >= average) as u8) << index)
+    });
+    Some(CanvasVisualFingerprint { perceptual_hash, coverage_per_mille })
+}
+
+pub fn canvas_visual_progress(
+    previous: CanvasVisualFingerprint,
+    current: CanvasVisualFingerprint,
+) -> CanvasVisualProgress {
+    let hash_distance = (previous.perceptual_hash ^ current.perceptual_hash).count_ones();
+    let coverage_delta_per_mille = current.coverage_per_mille as i32 - previous.coverage_per_mille as i32;
+    CanvasVisualProgress {
+        hash_distance,
+        coverage_delta_per_mille,
+        meaningful_change: hash_distance >= 3 || coverage_delta_per_mille.unsigned_abs() >= 2,
+    }
+}
+
+pub fn canvas_visual_progress_note(progress: CanvasVisualProgress) -> String {
+    let state = if progress.meaningful_change { "changement visible" } else { "changement visuel faible" };
+    format!(
+        "[canvas visual verifier] {state}; distance image={} couverture Δ={}‰. \
+         Ne répète pas la forme si elle n'apporte pas une pièce distincte.",
+        progress.hash_distance, progress.coverage_delta_per_mille
+    )
+}
+
 /// True when the agent kit includes session canvas drawing tools.
 pub fn agent_has_canvas_tools(tool_ids: &[String]) -> bool {
     tool_ids.iter().any(|t| t.starts_with("canvas."))
@@ -58,12 +118,19 @@ pub fn canvas_reflect_user_content(
             let failed = rec.tool_result.contains("err:")
                 || rec.tool_result.contains("outil inconnu")
                 || rec.tool_result.contains("spawn err");
+            let visual = rec
+                .tool_result
+                .split("[canvas visual verifier]")
+                .nth(1)
+                .map(|note| format!(" visual={}", truncate_reflect(note.trim(), 120)))
+                .unwrap_or_default();
             canvas_lines.push(format!(
-                "step {} {} applied={} snippet={}",
+                "step {} {} applied={} snippet={}{}",
                 rec.step,
                 rec.action,
                 !failed,
-                truncate_reflect(&rec.tool_result, 100)
+                truncate_reflect(&rec.tool_result, 100),
+                visual,
             ));
         }
     }
@@ -561,6 +628,23 @@ pub async fn fetch_canvas_aspect(bus: &BusClient, session_id: &str) -> CanvasAsp
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn visual_fingerprint_detects_a_meaningful_canvas_change() {
+        let dir = std::env::temp_dir().join(format!("aos-canvas-vision-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let before_path = dir.join("before.png");
+        let after_path = dir.join("after.png");
+        let before = image::GrayImage::from_pixel(32, 32, image::Luma([8]));
+        before.save(&before_path).unwrap();
+        let mut after = before.clone();
+        for y in 8..24 { for x in 8..24 { after.put_pixel(x, y, image::Luma([240])); } }
+        after.save(&after_path).unwrap();
+        let before = canvas_visual_fingerprint(&before_path.to_string_lossy()).unwrap();
+        let after = canvas_visual_fingerprint(&after_path.to_string_lossy()).unwrap();
+        assert!(canvas_visual_progress(before, after).meaningful_change);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn mutating_tools_detected() {
