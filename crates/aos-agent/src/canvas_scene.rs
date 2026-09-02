@@ -35,7 +35,7 @@ pub fn canvas_critic_system_prompt() -> &'static str {
      Un trait ne compte comme progrès que s'il rapproche visuellement du goal ; ne valide pas des répétitions identiques. \
      Ne demande jamais media.image.generate ni canvas.clear. \
      Indique une seule pièce unique à corriger si nécessaire. Réponds exactement avec trois lignes : `ACTION: continue|modify|stop`, `SEQUENCES: ...`, puis `NOTE: ...`. \
-     `stop` signifie que le goal est atteint ou qu'aucune correction sûre n'est possible. \
+     `stop` signifie une recommandation : ne le propose jamais tant que le plan contient encore des étapes de dessin non réalisées. \
      Réponds directement, sans balises <think> ni monologue Thinking Process."
 }
 
@@ -132,6 +132,8 @@ pub fn canvas_scene_prompt_block(digest: &str) -> String {
          Après chaque op canvas réussie : une capture PNG du canvas actuel est jointe \
          au tour suivant (regarde l'image, pas seulement le digest). \
          Placement : coords 0..1 max=1.0 (pas de pixels). \
+         Pour créer une forme, ne passe jamais `seq`, `kind`, `path`, `points2` ni `style` : le serveur attribue seq ; \
+         utilise exactement `points`, `color`, `width`, `fill`, `closed` au niveau racine. Une forme par appel. \
          Lis le `scene_bbox` et les bbox par seq ; place chaque nouvelle op dans `usable` \
          avec marge ≥0.08 — ne superpose pas au même centre. \
          Chaque outil mutateur renvoie un digest rafraîchi dans `[canvas digest]` \
@@ -491,13 +493,6 @@ pub fn canvas_repeat_stroke_verdict(
     ))
 }
 
-pub fn canvas_critic_requests_stop(reflection: &str) -> bool {
-    reflection.lines().any(|line| {
-        line.trim().to_ascii_lowercase().starts_with("action:")
-            && line.to_ascii_lowercase().contains("stop")
-    })
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CanvasRepeatVerdict {
     Warn(&'static str),
@@ -527,9 +522,14 @@ fn bbox_near_duplicate(a: &[f32; 4], b: &[f32; 4]) -> bool {
         && (a[3] - b[3]).abs() < EPS
 }
 
-/// When to run the canvas critic (`reflect`): after each scene change, or every 3 steps.
+/// The visual critic runs only after an actual canvas change. Calling it after
+/// planning or memory steps gives it a stale scene and can produce false stops.
 pub fn should_run_canvas_critic(canvas_agent: bool, canvas_scene_changed: bool, step: u32) -> bool {
-    (canvas_agent && canvas_scene_changed) || step.is_multiple_of(3)
+    if canvas_agent {
+        canvas_scene_changed
+    } else {
+        step.is_multiple_of(3)
+    }
 }
 
 /// Fetch canvas aspect for a session (for export dimensions).
@@ -710,10 +710,10 @@ mod tests {
     }
 
     #[test]
-    fn should_run_canvas_critic_after_stroke_and_every_three_steps() {
+    fn canvas_critic_runs_only_after_scene_changes() {
         assert!(should_run_canvas_critic(true, true, 1));
         assert!(!should_run_canvas_critic(true, false, 1));
-        assert!(should_run_canvas_critic(true, false, 3));
+        assert!(!should_run_canvas_critic(true, false, 3));
         assert!(should_run_canvas_critic(false, false, 3));
         assert!(!should_run_canvas_critic(false, false, 2));
     }

@@ -17,7 +17,7 @@ use aos_agent::context_budget::{
 };
 use aos_agent::persist;
 use aos_agent::canvas_scene::{
-    agent_has_canvas_tools, begin_canvas_vision, canvas_critic_requests_stop, canvas_critic_system_prompt,
+    agent_has_canvas_tools, begin_canvas_vision, canvas_critic_system_prompt,
     canvas_reflect_user_content, canvas_repeat_stroke_verdict, canvas_scene_prompt_block,
     canvas_tool_mutates_scene, end_canvas_vision, fetch_canvas_aspect,
     fetch_canvas_scene_digest, merge_canvas_vision_refs, refresh_canvas_scene_after_op,
@@ -1257,13 +1257,6 @@ async fn main() {
         } else {
             None
         };
-        if canvas_agent
-            && reflection
-                .as_deref()
-                .is_some_and(canvas_critic_requests_stop)
-        {
-            terminal = Some(AgentState::Done);
-        }
 
         let skill_pairs: Vec<(String, Vec<String>)> = skill_docs
             .iter()

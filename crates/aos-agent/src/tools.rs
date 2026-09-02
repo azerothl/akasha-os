@@ -1147,6 +1147,21 @@ pub fn normalize_tool_args(name: &str, args: &serde_json::Value) -> serde_json::
         return out;
     };
     if name.starts_with("canvas.") {
+        // Some models nest drawing style even though the canvas module expects
+        // top-level fields. Flatten the common form before canonicalizing.
+        if let Some(style) = obj.get("style").and_then(|v| v.as_object()).cloned() {
+            if !obj.contains_key("color") {
+                if let Some(v) = style.get("color").cloned() {
+                    obj.insert("color".into(), v);
+                }
+            }
+            if !obj.contains_key("width") {
+                if let Some(v) = style.get("width").cloned() {
+                    obj.insert("width".into(), v);
+                }
+            }
+        }
+        obj.remove("style");
         // `fill_color` is a prompt-facing alias.  The WASM canvas schema
         // accepts the canonical `color` field; keeping both creates a
         // duplicate serde field and makes the module reject the operation.
@@ -1305,6 +1320,20 @@ mod tests {
         );
         assert_eq!(args["color"], "#8B7355");
         assert!(args.get("fill_color").is_none());
+    }
+
+    #[test]
+    fn normalize_canvas_style_object_to_top_level_fields() {
+        let args = normalize_tool_args(
+            "canvas.path",
+            &serde_json::json!({
+                "points": [{"x": 0.1, "y": 0.2}],
+                "style": {"color": "#333333", "width": 0.02}
+            }),
+        );
+        assert_eq!(args["color"], "#333333");
+        assert_eq!(args["width"], 0.02);
+        assert!(args.get("style").is_none());
     }
 
     #[test]

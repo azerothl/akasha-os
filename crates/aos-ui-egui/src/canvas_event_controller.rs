@@ -47,7 +47,9 @@ pub(crate) fn on_canvas_snapshot(app: &mut UiApp, ctx: &egui::Context, event: Ca
     }
     let now = ctx.input(|i| i.time);
     if delta {
-        if ops.is_empty() && next_seq > app.chat_state.view.canvas.last_seen_seq {
+        if ops.is_empty()
+            && next_seq > app.chat_state.view.canvas.last_seen_seq.saturating_add(1)
+        {
             // A clear advances the server cursor without producing a drawable
             // op. Treat that empty delta as a reset instead of retaining the
             // stale local scene until the canvas is reopened.
