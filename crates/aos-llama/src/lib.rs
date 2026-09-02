@@ -1099,9 +1099,10 @@ impl LlamaContext {
         params: &GenParams,
         abort: Arc<AtomicBool>,
         pause: Arc<AtomicBool>,
+        max_draft_tokens: usize,
         mut on_delta: impl FnMut(&str) -> bool,
     ) -> Result<GenStats, LlamaError> {
-        const N_DRAFT: usize = 12;
+        let n_draft = max_draft_tokens.max(1);
         const NGRAM_MIN: usize = 3;
         const NGRAM_MAX: usize = 8;
 
@@ -1158,7 +1159,7 @@ impl LlamaContext {
             let draft = if room < 2 {
                 Vec::new()
             } else {
-                let max_draft = (room - 1).min(N_DRAFT);
+                let max_draft = (room - 1).min(n_draft);
                 let d = prompt_lookup_draft(&haystack, max_draft, NGRAM_MIN, NGRAM_MAX);
                 if d.len() > max_draft {
                     d[..max_draft].to_vec()

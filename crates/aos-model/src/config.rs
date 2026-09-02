@@ -37,6 +37,40 @@ pub struct ModeldConfig {
     /// Fenêtre de rassemblement des jobs compatibles (µs → ms, §3.6).
     #[serde(default = "default_batch_window")]
     pub batch_window_ms: u64,
+    /// Politique d'optimisation de l'inférence (E22).
+    #[serde(default)]
+    pub inference_optimization: InferenceOptimizationConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct InferenceOptimizationConfig {
+    /// `auto`, `on` ou `off` pour la réutilisation du préfixe KV.
+    #[serde(default = "default_auto")]
+    pub prefix_cache: String,
+    /// `auto`, `on` ou `off`.
+    #[serde(default = "default_auto")]
+    pub speculation: String,
+    /// Nombre maximal de tokens proposés par le prompt-lookup.
+    #[serde(default = "default_draft_tokens")]
+    pub max_draft_tokens: usize,
+    /// Priorité minimale pour activer la spéculation en mode auto.
+    #[serde(default = "default_spec_priority")]
+    pub min_spec_priority: u8,
+    /// Active la fenêtre de rassemblement du continuous batching.
+    #[serde(default = "default_true")]
+    pub adaptive_batching: bool,
+}
+
+impl Default for InferenceOptimizationConfig {
+    fn default() -> Self {
+        Self {
+            prefix_cache: default_auto(),
+            speculation: default_auto(),
+            max_draft_tokens: default_draft_tokens(),
+            min_spec_priority: default_spec_priority(),
+            adaptive_batching: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -81,6 +115,15 @@ fn default_routing() -> String {
 fn default_seq_max() -> u32 {
     8
 }
+fn default_auto() -> String {
+    "auto".into()
+}
+fn default_draft_tokens() -> usize {
+    12
+}
+fn default_spec_priority() -> u8 {
+    2
+}
 fn default_batch_window() -> u64 {
     150
 }
@@ -88,5 +131,33 @@ fn default_batch_window() -> u64 {
 impl ModeldConfig {
     pub fn load(path: impl AsRef<Path>) -> Result<Self, Box<dyn std::error::Error>> {
         Ok(serde_yaml::from_str(&std::fs::read_to_string(path)?)?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn optimization_defaults_are_backward_compatible() {
+        let cfg: ModeldConfig = serde_yaml::from_str("{}").expect("config minimale");
+        assert_eq!(cfg.inference_optimization.prefix_cache, "auto");
+        assert_eq!(cfg.inference_optimization.speculation, "auto");
+        assert_eq!(cfg.inference_optimization.max_draft_tokens, 12);
+        assert_eq!(cfg.inference_optimization.min_spec_priority, 2);
+        assert!(cfg.inference_optimization.adaptive_batching);
+    }
+
+    #[test]
+    fn optimization_values_are_loaded() {
+        let cfg: ModeldConfig = serde_yaml::from_str(
+            "inference_optimization:\n  prefix_cache: off\n  speculation: off\n  max_draft_tokens: 4\n  min_spec_priority: 1\n  adaptive_batching: false\n",
+        )
+        .expect("config optimization");
+        assert_eq!(cfg.inference_optimization.speculation, "off");
+        assert_eq!(cfg.inference_optimization.prefix_cache, "off");
+        assert_eq!(cfg.inference_optimization.max_draft_tokens, 4);
+        assert_eq!(cfg.inference_optimization.min_spec_priority, 1);
+        assert!(!cfg.inference_optimization.adaptive_batching);
     }
 }

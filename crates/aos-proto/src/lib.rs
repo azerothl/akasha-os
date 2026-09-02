@@ -351,6 +351,9 @@ pub struct ModelMetrics {
     /// E20 : tokens de préfixe réutilisés au dernier C1.
     #[serde(default)]
     pub prefix_hit: Option<u32>,
+    /// Chemin d'inférence utilisé lors de la dernière requête.
+    #[serde(default)]
+    pub inference_mode: Option<String>,
 }
 
 /// Métriques système agrégées.

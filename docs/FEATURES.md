@@ -11,6 +11,14 @@ This is **not** the bootable OS. Target v1 requirements live in
 
 ### What's new in 0.15.0
 
+### Inference optimization controls
+
+`modeld` supports an `inference_optimization` block with `prefix_cache` and `speculation`
+(`auto`/`on`/`off`), a configurable prompt-lookup draft budget,
+`min_spec_priority`, and `adaptive_batching`. The runtime keeps the existing
+safe fallback paths and exposes the last selected inference mode alongside
+`draft_accept` and `prefix_hit` metrics.
+
 - **In-app guides**: Chat ? beside the session name; Canvas ? after Clear all — Create already had a guide
 - **Chat schedules**: live / pause (Resume | Stop) / stop without leaving the session
 - **Research document**: in-thread Reply | Prepare a document — progress, Ready, listed under More → Documents

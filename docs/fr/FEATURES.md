@@ -11,6 +11,14 @@ Ce n'est **pas** l'OS bootable. Les exigences v1 sont dans
 
 ### Nouveautés 0.15.0
 
+### Contrôles d’optimisation de l’inférence
+
+`modeld` accepte un bloc `inference_optimization` avec `prefix_cache` et `speculation`
+(`auto`/`on`/`off`), un budget configurable de drafts prompt-lookup,
+`min_spec_priority` et `adaptive_batching`. Les replis sûrs restent actifs et
+le dernier mode d’inférence est exposé avec les métriques `draft_accept` et
+`prefix_hit`.
+
 - **Guides in-app** : ? Chat à côté du nom de session ; ? Canvas après Tout effacer — Créer avait déjà un guide
 - **Planifications Chat** : en cours / pause (Reprendre | Arrêter) / arrêt sans quitter la session
 - **Document recherche** : dans le fil Répondre | Préparer un document — progression, Prêt, listé sous Plus → Documents

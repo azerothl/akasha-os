@@ -66,6 +66,8 @@ pub struct ModelRuntime {
     pub last_draft_accept: Option<f64>,
     /// E20 : tokens de préfixe réutilisés au dernier C1.
     pub last_prefix_hit: Option<u32>,
+    /// Chemin choisi pour la dernière inférence (`standard`, `speculative`, `batch`).
+    pub last_inference_mode: Option<String>,
     /// Dernier état KV après un C1 (prefix cache / migrate).
     warm: Option<WarmPrefix>,
     /// Image/video generation in flight (sd.cpp).
@@ -96,6 +98,7 @@ impl ModelRuntime {
             est_tok_s: None,
             last_draft_accept: None,
             last_prefix_hit: None,
+            last_inference_mode: None,
             warm: None,
             media_step: None,
             media_total_steps: None,
@@ -524,10 +527,16 @@ impl ModelSubsystem {
                 m.dispatch = Some(dtx);
                 let inner = self.inner.clone();
                 let mid = model_id.to_string();
-                let window = std::time::Duration::from_millis(self.config.batch_window_ms);
+                let window_ms = if self.config.inference_optimization.adaptive_batching {
+                    self.config.batch_window_ms
+                } else {
+                    0
+                };
+                let window = std::time::Duration::from_millis(window_ms);
                 let n_seq = self.config.n_seq_max.max(1) as usize;
+                let optim = self.config.inference_optimization.clone();
                 tokio::spawn(async move {
-                    Self::dispatch_loop(inner, mid, drx, window, n_seq).await;
+                    Self::dispatch_loop(inner, mid, drx, window, n_seq, optim).await;
                 });
             }
             let tx = m.dispatch.clone().unwrap();
@@ -576,6 +585,7 @@ impl ModelSubsystem {
         rx: mpsc::Receiver<DispatchJob>,
         window: std::time::Duration,
         n_seq: usize,
+        optim: crate::config::InferenceOptimizationConfig,
     ) {
         let rx = Arc::new(tokio::sync::Mutex::new(rx));
         loop {
@@ -683,11 +693,17 @@ impl ModelSubsystem {
                 let job_id = job.job_id;
                 let abort_flag = job.abort.clone();
                 let pause_flag = job.pause.clone();
+                let optim_c1 = optim.clone();
                 let result = match ctx {
                     Some(ctx) => {
                         tokio::task::spawn_blocking(move || {
                             let mut guard = ctx.lock().unwrap();
-                            let use_prefix_spec = job.priority >= PREFIX_SPEC_PRIORITY;
+                            let prefix_enabled = optim_c1.prefix_cache != "off";
+                            let use_prefix_spec = match optim_c1.speculation.as_str() {
+                                "off" => false,
+                                "on" => true,
+                                _ => job.priority >= optim_c1.min_spec_priority.max(PREFIX_SPEC_PRIORITY),
+                            } && prefix_enabled;
                             if use_prefix_spec && guard.seq0_tokens().is_empty() {
                                 if let Some(w) = warm {
                                     let _ = guard.state_set(&w.state, Some(w.tokens));
@@ -727,6 +743,7 @@ impl ModelSubsystem {
                                     &job.params,
                                     job.abort.clone(),
                                     job.pause.clone(),
+                                    optim_c1.max_draft_tokens,
                                     on_delta,
                                 )
                             } else {
@@ -809,6 +826,11 @@ impl ModelSubsystem {
                                         m.last_tok_s = Some(stats.tok_s);
                                         m.last_draft_accept = stats.draft_accept_avg();
                                         m.last_prefix_hit = Some(stats.prefix_hit_tokens);
+                                        m.last_inference_mode = Some(if stats.draft_steps > 0 {
+                                            "speculative".into()
+                                        } else {
+                                            "standard".into()
+                                        });
                                     }
                                     g.job_aborts.remove(&job.job_id);
                                     g.job_pauses.remove(&job.job_id);
@@ -1060,6 +1082,7 @@ impl ModelSubsystem {
                         if let Some(m) = g.models.get_mut(&model_id) {
                             m.last_ttft_ms = Some(stats.ttft_ms);
                             m.last_tok_s = Some(stats.tok_s);
+                            m.last_inference_mode = Some("batch".into());
                         }
                         g.job_aborts.remove(&io.job_id);
                         g.job_pauses.remove(&io.job_id);
@@ -1477,6 +1500,7 @@ impl ModelSubsystem {
                 last_step_s: m.last_step_s,
                 draft_accept: m.last_draft_accept,
                 prefix_hit: m.last_prefix_hit,
+                inference_mode: m.last_inference_mode.clone(),
             })
             .collect();
         SystemMetrics {
