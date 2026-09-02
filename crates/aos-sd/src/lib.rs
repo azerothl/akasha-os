@@ -659,10 +659,7 @@ fn sd_stream_lines<R: std::io::Read + Send + 'static>(
                 Ok(0) => break,
                 Ok(n) => {
                     carry.push_str(&String::from_utf8_lossy(&buf[..n]));
-                    loop {
-                        let Some(pos) = carry.find(['\n', '\r']) else {
-                            break;
-                        };
+                    while let Some(pos) = carry.find(['\n', '\r']) {
                         let line = carry[..pos].trim().to_string();
                         carry = carry[pos + 1..].to_string();
                         while carry.starts_with('\n') || carry.starts_with('\r') {
