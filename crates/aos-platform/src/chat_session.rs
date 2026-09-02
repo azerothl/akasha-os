@@ -606,7 +606,7 @@ impl ChatSessionStore {
                 }
             }
         }
-        out.sort_by(|a, b| b.updated_ms.cmp(&a.updated_ms));
+        out.sort_by_key(|a| std::cmp::Reverse(a.updated_ms));
         Ok(out)
     }
 
