@@ -120,6 +120,30 @@ impl CognitiveState {
         self.canvas_draw_ops_on_current_task = 0;
     }
 
+    /// Fixed composition budget for a canvas author. Letting a text model invent
+    /// a four-node plan resulted in one silhouette and a handful of details:
+    /// recognisable, but invariably too crude. The runtime owns the execution
+    /// budget while the model still chooses the subject, coordinates and palette.
+    pub fn canonical_canvas_composition_plan() -> Vec<TaskNode> {
+        [
+            "Analyse (canvas.get)",
+            "Composition (fond ou ancrage, 2 formes)",
+            "Volumes principaux (silhouette et masses, 3 formes)",
+            "Détails distinctifs (3 formes)",
+            "Finitions (ombres ou accents, 2 formes)",
+            "Export final (canvas.export)",
+        ]
+        .iter()
+        .enumerate()
+        .map(|(index, title)| TaskNode {
+            id: (index + 1).to_string(),
+            title: (*title).to_string(),
+            status: TaskNodeStatus::Pending,
+            notes: String::new(),
+        })
+        .collect()
+    }
+
     /// Mark the first Pending/Running plan node Done.
     pub fn complete_current_plan_node(&mut self) -> bool {
         let Some(idx) = self.task_graph.iter().position(|n| {
@@ -215,6 +239,10 @@ impl CognitiveState {
         let title = title.to_ascii_lowercase();
         if ["détail", "detail", "roue", "vitre", "aileron"].iter().any(|word| title.contains(word)) {
             3
+        } else if ["volume", "masse", "structure"].iter().any(|word| title.contains(word)) {
+            3
+        } else if ["composition", "ancrage"].iter().any(|word| title.contains(word)) {
+            2
         } else if ["ombre", "shadow", "finition", "finish"].iter().any(|word| title.contains(word)) {
             2
         } else {
@@ -433,6 +461,18 @@ mod tests {
         assert!(!st.maybe_advance_plan_after_canvas_draw("canvas.path", "ok seq=2"));
         assert!(st.maybe_advance_plan_after_canvas_draw("canvas.path", "ok seq=3"));
         assert!(st.canvas_plan_is_complete());
+    }
+
+    #[test]
+    fn canonical_canvas_plan_reserves_ten_distinct_visual_operations() {
+        let mut st = CognitiveState::new("agent-98", vec![]);
+        st.set_plan(CognitiveState::canonical_canvas_composition_plan());
+        assert_eq!(st.task_graph.len(), 6);
+        assert_eq!(st.current_task_title().as_deref(), Some("Analyse (canvas.get)"));
+        assert!(st.maybe_advance_plan_after_canvas_draw("canvas.get", "ok seq=0"));
+        assert_eq!(st.current_canvas_task_required_draw_ops(), 2);
+        st.complete_current_plan_node();
+        assert_eq!(st.current_canvas_task_required_draw_ops(), 3);
     }
 
     #[test]

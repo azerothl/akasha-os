@@ -1764,15 +1764,23 @@ async fn execute_action(
             }
         }
         "plan.update" => {
-            let nodes = parse_plan_nodes(args);
-            let need_mem = {
+            let requested_nodes = parse_plan_nodes(args);
+            let (nodes, need_mem) = {
                 let mut st = shared.state.lock().await;
+                // The author supplies geometry; the runtime supplies a stable
+                // composition budget. Do this only for the first canvas plan so
+                // an intentional later re-plan is still possible.
+                let nodes = if agent_has_canvas_tools(&spec.tools) && st.task_graph.is_empty() {
+                    CognitiveState::canonical_canvas_composition_plan()
+                } else {
+                    requested_nodes
+                };
                 st.set_plan(nodes.clone());
                 let need = st.needs_plan && !st.plan_memory_recalled;
                 if need {
                     st.plan_memory_recalled = true;
                 }
-                need
+                (nodes, need)
             };
             report(
                 bus,

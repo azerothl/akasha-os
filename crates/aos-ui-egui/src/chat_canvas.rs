@@ -1774,9 +1774,9 @@ Espace : coords normalisées 0..1 uniquement (max 1.0) sur le cadre visible (ori
 Règles : margin 0.08–0.12 ; sujet centré dans usable ; couches sol → volumes → détails → 2–3 ombres. \
 Lis `scene_bbox` dans le digest : ne superpose pas les nouvelles formes au même centre. \
 {silhouette}\
-Plan obligatoire en quatre nœuds, dans cet ordre : Analyse (canvas.get seulement, aucun trait), \
-Silhouette (une forme dominante), Détails (2–3 petites pièces distinctes), Finitions (1–2 traits/ombres fins). \
-Ne dessine jamais pendant Analyse et ne recommence jamais la silhouette aux étapes suivantes. \
+Plan de composition imposé : Analyse (canvas.get seulement, aucun trait), Composition (2 formes d'ancrage), \
+Volumes principaux (3 formes distinctes), Détails distinctifs (3 formes), Finitions (2 accents/ombres), Export. \
+Chaque volume doit contribuer à la reconnaissance du sujet ; ne redessine jamais la silhouette aux étapes suivantes. \
 `width` est l'épaisseur du contour, pas la largeur géométrique : ≤0.04 ; pour rect/ellipse, la taille est `w`,`h`. \
 Commence par canvas.get. Couleur : canvas.set_style {{color:\"#RRGGBB\"}} ou color= sur chaque op — \
 le teal signal n'est pas la seule teinte ; après critique, change de teinte pour ombres/détails.\n\
