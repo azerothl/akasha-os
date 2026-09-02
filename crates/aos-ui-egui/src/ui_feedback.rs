@@ -1,9 +1,9 @@
 //! Feedback form behavior and rendering.
 
 use crate::cmd::Cmd;
-use crate::os_open::{aos_home, open_os_folder};
+use crate::os_open::{aos_home, open_os_folder, pick_os_file};
 use crate::{i18n, UiApp};
-use aos_proto::FeedbackSubmitRequest;
+use aos_proto::{FeedbackAttachment, FeedbackSubmitRequest};
 use eframe::egui;
 
 impl UiApp {
@@ -15,10 +15,15 @@ impl UiApp {
         let t = i18n::strings(&self.prefs.language);
         ui.heading(t.feedback_heading);
         ui.label(t.feedback_blurb);
+        let previous_category = self.feedback_ui.category.clone();
         ui.horizontal(|ui| {
             ui.label(t.feedback_title);
             ui.text_edit_singleline(&mut self.feedback_ui.title);
         });
+        if self.feedback_ui.category != previous_category {
+            let category = self.feedback_ui.category.clone();
+            self.feedback_ui.select_category(&category);
+        }
         ui.horizontal(|ui| {
             ui.label(t.feedback_category);
             egui::ComboBox::from_id_salt("fb_cat")
@@ -42,6 +47,36 @@ impl UiApp {
             ui.text_edit_singleline(&mut self.feedback_ui.scenario);
         });
         ui.text_edit_multiline(&mut self.feedback_ui.body);
+        ui.horizontal(|ui| {
+            if ui.button("Ajouter un fichier").clicked() {
+                if self.feedback_ui.attachments.len() < 8 {
+                    if let Some(path) = pick_os_file("Ajouter un fichier au retour", &[], None) {
+                        self.feedback_ui.attachments.push(path);
+                    }
+                }
+            }
+            ui.label(format!(
+                "Fichiers complémentaires ({})",
+                self.feedback_ui.attachments.len()
+            ));
+        });
+        let mut remove = None;
+        for (index, path) in self.feedback_ui.attachments.iter().enumerate() {
+            ui.horizontal(|ui| {
+                ui.label(
+                    path.file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("fichier"),
+                );
+                if ui.small_button("Retirer").clicked() {
+                    remove = Some(index);
+                }
+            });
+        }
+        if let Some(index) = remove {
+            self.feedback_ui.attachments.remove(index);
+        }
+        ui.weak("N'ajoutez pas de secrets, clés API ou données personnelles.");
         let t = i18n::strings(&self.prefs.language);
         if ui.button(t.btn_copy).clicked() {
             ui.ctx().copy_text(self.feedback_ui.body.clone());
@@ -54,14 +89,24 @@ impl UiApp {
                 "Les rapports security restent locaux (pas d'issue publique). Utilisez GitHub Security Advisories.",
             );
         } else {
-            ui.checkbox(&mut self.feedback_ui.publish_github, "Créer une issue GitHub");
+            ui.checkbox(
+                &mut self.feedback_ui.publish_github,
+                "Créer une issue GitHub",
+            );
             if self.feedback_ui.publish_github && !self.network_online {
                 ui.weak(
                     "Réseau in-app coupé : le navigateur ouvrira le formulaire GitHub (compte GitHub requis).",
                 );
             }
         }
-        if ui.button("Envoyer le retour").clicked() && !self.feedback_ui.title.is_empty() {
+        let template_complete = self.feedback_ui.template_complete();
+        if !template_complete {
+            ui.weak("Complétez toutes les sections du modèle avant l'envoi.");
+        }
+        if ui.button("Envoyer le retour").clicked()
+            && !self.feedback_ui.title.is_empty()
+            && template_complete
+        {
             let mut meta = serde_json::json!({
                 "preview_version": self.version,
                 "os": std::env::consts::OS,
@@ -90,6 +135,14 @@ impl UiApp {
                 category: self.feedback_ui.category.clone(),
                 severity: self.feedback_ui.severity.clone(),
                 body: self.feedback_ui.body.clone(),
+                attachments: self
+                    .feedback_ui
+                    .attachments
+                    .iter()
+                    .map(|path| FeedbackAttachment {
+                        path: path.to_string_lossy().into_owned(),
+                    })
+                    .collect(),
                 scenario: if self.feedback_ui.scenario.is_empty() {
                     None
                 } else {
