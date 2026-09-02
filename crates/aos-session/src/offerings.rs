@@ -473,6 +473,8 @@ pub fn redownload_ids(home: &Path, ids: &[String]) -> Result<(), String> {
 }
 
 pub fn apply_choice(home: &Path, choice: &ModelSetupChoice) -> Result<(), String> {
+    let offerings = load_merged_offerings(home)?;
+    validate_setup_choice(&offerings, choice)?;
     let mut ids = choice.selected_ids.clone();
     if !ids.contains(&choice.default_chat) {
         ids.push(choice.default_chat.clone());
@@ -487,6 +489,33 @@ pub fn apply_choice(home: &Path, choice: &ModelSetupChoice) -> Result<(), String
     inst.default_embed = Some(choice.default_embed.clone());
     save_installed(home, &inst)?;
     let _ = fs::remove_file(home.join("var/run/model_setup_offer.json"));
+    Ok(())
+}
+
+/// A usable first-run choice always includes a chat model and an embedding
+/// model. Validate this at the session boundary too: the setup window may be
+/// outdated or its choice file may have been edited before it is applied.
+fn validate_setup_choice(offerings: &OfferingsFile, choice: &ModelSetupChoice) -> Result<(), String> {
+    validate_default_model(offerings, &choice.default_chat, "chat")?;
+    validate_default_model(offerings, &choice.default_embed, "embed")?;
+    Ok(())
+}
+
+fn validate_default_model(
+    offerings: &OfferingsFile,
+    id: &str,
+    required_profile: &str,
+) -> Result<(), String> {
+    if id.trim().is_empty() {
+        return Err(format!("modèle {required_profile} par défaut manquant"));
+    }
+    let model = find_offering(offerings, id)
+        .ok_or_else(|| format!("modèle {required_profile} inconnu: {id}"))?;
+    if !model.profiles.iter().any(|profile| profile == required_profile) {
+        return Err(format!(
+            "le modèle par défaut {id} ne prend pas en charge le profil {required_profile}"
+        ));
+    }
     Ok(())
 }
 
@@ -786,7 +815,7 @@ fn now_ms() -> u64 {
 
 #[cfg(test)]
 mod vision_catalog_tests {
-    use super::OfferingsFile;
+    use super::{validate_setup_choice, ModelSetupChoice, OfferingsFile};
 
     #[test]
     fn catalog_parses_mmproj_role_and_vision_profile() {
@@ -808,5 +837,30 @@ mod vision_catalog_tests {
         assert!(mmproj.bytes > 0);
         assert_eq!(file.packs["low"].chat, "local:lfm2.5-8b-a1b");
         assert_eq!(file.packs["low"].alternatives[0], "local:gemma-4-e4b");
+    }
+
+    #[test]
+    fn setup_choice_requires_chat_and_embed_defaults() {
+        let raw = include_str!("../../../share/models/catalog-offerings.json");
+        let file: OfferingsFile = serde_json::from_str(raw).expect("catalog json");
+        let valid = ModelSetupChoice {
+            selected_ids: vec![],
+            default_chat: "local:lfm2.5-8b-a1b".into(),
+            default_embed: "local:qwen3-embedding-0.6b".into(),
+            include_optional: false,
+        };
+        assert!(validate_setup_choice(&file, &valid).is_ok());
+
+        let missing_embed = ModelSetupChoice {
+            default_embed: String::new(),
+            ..valid.clone()
+        };
+        assert!(validate_setup_choice(&file, &missing_embed).is_err());
+
+        let chat_as_embed = ModelSetupChoice {
+            default_embed: valid.default_chat.clone(),
+            ..valid
+        };
+        assert!(validate_setup_choice(&file, &chat_as_embed).is_err());
     }
 }

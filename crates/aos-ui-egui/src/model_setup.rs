@@ -129,6 +129,7 @@ impl eframe::App for SetupApp {
             return;
         }
 
+        self.ensure_required_defaults_selected();
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::vertical()
                 .id_salt("model_setup")
@@ -162,8 +163,10 @@ impl eframe::App for SetupApp {
             for id in &self.offer.recommended_ids {
                 if let Some(m) = self.offer.models.iter().find(|x| x.id == *id) {
                     let mut on = self.selected.contains(id);
-                    if ui
-                        .checkbox(
+                    let required = self.is_required_default(id);
+                    let response = ui.add_enabled(
+                        !required,
+                        egui::Checkbox::new(
                             &mut on,
                             format!(
                                 "{} ({:.1} GiB) — {:?}",
@@ -171,9 +174,15 @@ impl eframe::App for SetupApp {
                                 m.bytes as f64 / (1 << 30) as f64,
                                 m.profiles
                             ),
-                        )
-                        .changed()
-                    {
+                        ),
+                    );
+                    if required {
+                        response.on_hover_text(if self.lang_fr {
+                            "Modèle requis pour terminer le premier lancement"
+                        } else {
+                            "Required to complete first-run setup"
+                        });
+                    } else if response.changed() {
                         if on {
                             self.selected.insert(id.clone());
                         } else {
@@ -277,10 +286,8 @@ impl eframe::App for SetupApp {
                 } else {
                     "Download and continue"
                 };
-                if ui.button(ok).clicked() {
-                    // Ensure defaults are selected.
-                    self.selected.insert(self.default_embed.clone());
-                    self.selected.insert(self.default_chat.clone());
+                let defaults_ready = self.required_defaults_are_available();
+                if ui.add_enabled(defaults_ready, egui::Button::new(ok)).clicked() {
                     let choice = ModelSetupChoice {
                         selected_ids: self.selected.iter().cloned().collect(),
                         default_chat: self.default_chat.clone(),
@@ -294,6 +301,16 @@ impl eframe::App for SetupApp {
                     }
                     self.confirmed = true;
                 }
+                if !defaults_ready {
+                    ui.colored_label(
+                        egui::Color32::from_rgb(220, 90, 90),
+                        if self.lang_fr {
+                            "Un modèle chat et un modèle d'embedding sont requis."
+                        } else {
+                            "A chat model and an embedding model are required."
+                        },
+                    );
+                }
                 let cancel = if self.lang_fr { "Annuler" } else { "Cancel" };
                 if ui.button(cancel).clicked() {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -301,5 +318,35 @@ impl eframe::App for SetupApp {
             });
             });
         });
+    }
+}
+
+impl SetupApp {
+    fn required_defaults_are_available(&self) -> bool {
+        self.model_supports(&self.default_chat, "chat")
+            && self.model_supports(&self.default_embed, "embed")
+    }
+
+    fn model_supports(&self, id: &str, profile: &str) -> bool {
+        !id.is_empty()
+            && self
+                .offer
+                .models
+                .iter()
+                .any(|model| model.id == id && model.profiles.iter().any(|p| p == profile))
+    }
+
+    fn is_required_default(&self, id: &str) -> bool {
+        (!self.default_chat.is_empty() && id == self.default_chat)
+            || (!self.default_embed.is_empty() && id == self.default_embed)
+    }
+
+    fn ensure_required_defaults_selected(&mut self) {
+        if self.model_supports(&self.default_chat, "chat") {
+            self.selected.insert(self.default_chat.clone());
+        }
+        if self.model_supports(&self.default_embed, "embed") {
+            self.selected.insert(self.default_embed.clone());
+        }
     }
 }
