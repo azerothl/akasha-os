@@ -34,12 +34,12 @@ fn merge_named_args(dst: &mut Vec<String>, args: &serde_json::Value, key: &str) 
 fn strip_delegate_kit_tools(tools: &mut Vec<String>, skills: &mut Vec<String>, use_canvas: bool) {
     if use_canvas {
         tools.retain(|t| {
-            !t.starts_with("media.image")
-                && t != "user.ask"
-                && t != "agent.spawn"
-                && t != "agent.await"
+            t.starts_with("canvas.") || t == "plan.update"
         });
-        skills.retain(|s| s != "planner");
+        // A canvas author needs a compact geometric context. Notes/tasks and
+        // their long skill instructions caused the model to archive the
+        // drawing mid-run instead of continuing the composition.
+        skills.clear();
     } else {
         tools.retain(|t| !t.starts_with("canvas."));
     }
@@ -247,7 +247,9 @@ pub(crate) async fn spawn_chat_delegate_agent(
         },
         timeout_secs: 3600,
     });
-    req.caps.push("tool.invoke:notes".into());
+    if !canvas_delegate {
+        req.caps.push("tool.invoke:notes".into());
+    }
     if req.skills.iter().any(|s| s.contains("task"))
         || req.tools.iter().any(|t| t.starts_with("tasks."))
     {

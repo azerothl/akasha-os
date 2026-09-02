@@ -203,6 +203,9 @@ mod delegate_tests {
         ];
         let (_, tools) = chat_delegate_kit("dessine un moulin", true, true, &exported);
         assert!(tools.iter().any(|t| t == "canvas.path"));
+        assert!(tools.iter().any(|t| t == "plan.update"));
+        assert!(!tools.iter().any(|t| t.starts_with("notes.")));
+        assert!(!tools.iter().any(|t| t.starts_with("tasks.")));
         let brief = chat_canvas::canvas_agent_brief("dessine un moulin", ASPECT, &exported);
         assert!(brief.contains("canvas.path"));
         assert!(brief.contains("pièce manquante"));
