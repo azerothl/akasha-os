@@ -57,7 +57,7 @@ impl UiApp {
                     }
                 };
                 let show_stop = self.chat_state.runtime.pending
-                    && (room_mode || self.chat_state.runtime.inference_id.is_some());
+                    && self.chat_state.active_session.is_some();
                 let item_gap = ui.spacing().item_spacing.x;
                 let send_w = send_button_reserved_width(ui, &t);
                 let stop_w = if show_stop {
@@ -70,6 +70,7 @@ impl UiApp {
                 let mut attach_document_from_menu = false;
                 let mut reuse_last_image = false;
                 let mut send_clicked = false;
+                let mut stop_clicked = false;
                 let mut input_response: Option<egui::Response> = None;
 
                 let mut run_attach_menu = |ui: &mut egui::Ui| {
@@ -118,21 +119,14 @@ impl UiApp {
                                             .send(Cmd::RoomTurnCancel { session_id: sid });
                                     }
                                 }
-                            } else if let Some(id) = self.chat_state.runtime.inference_id {
-                                if ui
-                                    .add_sized(
-                                        egui::vec2(stop_w, input_h),
-                                        egui::Button::new(t.chat_stop),
-                                    )
-                                    .clicked()
-                                {
-                                    if let Some(sid) = self.chat_state.active_session.clone() {
-                                        let _ = self.cmd_tx.send(Cmd::ChatCancel {
-                                            inference_id: id,
-                                            session_id: sid,
-                                        });
-                                    }
-                                }
+                            } else if ui
+                                .add_sized(
+                                    egui::vec2(stop_w, input_h),
+                                    egui::Button::new(t.chat_stop),
+                                )
+                                .clicked()
+                            {
+                                stop_clicked = true;
                             }
                         }
                         let send_btn = ui
@@ -182,6 +176,10 @@ impl UiApp {
                     if let Some(last) = self.chat_state.composer.last_session_image.clone() {
                         self.queue_chat_image(last);
                     }
+                }
+
+                if stop_clicked {
+                    self.cancel_pending_turn();
                 }
 
                 if let Some(r) = input_response {

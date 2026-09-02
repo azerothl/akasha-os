@@ -43,7 +43,9 @@ mod chat_canvas;
 mod chat_composer_state;
 mod chat_controller;
 mod chat_delegate;
+mod chat_error_copy;
 mod chat_event_controller;
+mod chat_load_fail;
 mod chat_media;
 mod chat_room;
 mod chat_runtime_state;
@@ -1867,6 +1869,12 @@ impl eframe::App for UiApp {
                     attachments,
                 } => {
                     chat_event_controller::on_done(self, text, session_id, attachments);
+                }
+                Evt::ChatError {
+                    session_id,
+                    message,
+                } => {
+                    chat_event_controller::on_chat_error(self, session_id, message);
                 }
                 Evt::Error(m) => {
                     if chat_event_controller::on_error(self, m) {

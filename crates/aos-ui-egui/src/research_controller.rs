@@ -8,7 +8,23 @@ use aos_proto::ChatAttachment;
 
 impl UiApp {
     pub(crate) fn dispatch_pending_chat(&mut self, pending: ResearchPendingChat) {
+        self.chat_state.session_chat.begin_turn(&pending.session_id);
         self.chat_state.runtime.begin_turn(None);
+        self.chat_state.runtime.load_fail_retry = None;
+        self.chat_state.runtime.outgoing_turn = Some(crate::cmd::ChatRetryTurn {
+            session_id: pending.session_id.clone(),
+            history: pending.history.clone(),
+            user_text: pending.user_text.clone(),
+            model_id: pending.model_id.clone(),
+            images: pending.images.clone(),
+            documents: pending.documents.clone(),
+            auto_remember: pending.auto_remember,
+            max_steps: pending.max_steps,
+            routing: pending.routing.clone(),
+            language: pending.language.clone(),
+            canvas_open: pending.canvas_open,
+            canvas_aspect: pending.canvas_aspect,
+        });
         self.status = "assistant : génération…".into();
         let _ = self.cmd_tx.send(Cmd::Chat {
             session_id: pending.session_id,
@@ -23,6 +39,7 @@ impl UiApp {
             language: pending.language,
             canvas_open: pending.canvas_open,
             canvas_aspect: pending.canvas_aspect,
+            skip_session_append: false,
         });
         self.mark_onboarding_chat_sent();
         self.scenario_ui.chat = true;

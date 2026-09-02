@@ -1,9 +1,9 @@
 //! Chat submission controller and composer-to-runtime transitions.
 
-use crate::cmd::{ChatLine, Cmd};
+use crate::cmd::{ChatLine, ChatRetryTurn, Cmd};
 use crate::{
     chat_agent_max_steps, chat_canvas, chat_room, chrono_like_stamp, i18n, local_tz_offset_minutes,
-    models_page, now_ms, session_model_supports_vision, UiApp,
+    models_page, now_ms, session_chat, session_model_supports_vision, UiApp,
 };
 use crate::research_ui_state::ResearchPendingChat;
 use aos_agent::schedule_parse;
@@ -63,12 +63,18 @@ impl UiApp {
             .as_deref()
             .is_some_and(|sid| self.chat_state.session_chat.is_pending(sid))
         {
-            self.chat.push(ChatLine::plain("user", text));
-            self.chat.push(ChatLine::plain(
-                "système",
-                "réponse précédente encore en cours — patientez.",
-            ));
-            return;
+            if self.chat_state.active_session.as_deref() == Some(session_id.as_str())
+                && !self.chat_state.runtime.pending
+            {
+                self.chat_state.session_chat.finish_turn(&session_id);
+            } else {
+                self.chat.push(ChatLine::plain("user", text));
+                self.chat.push(ChatLine::plain(
+                    "système",
+                    t.chat_previous_in_progress,
+                ));
+                return;
+            }
         }
         if let Some(spoken) = chat_tts_request(&text) {
             self.chat.push(ChatLine::plain("user", text.clone()));
@@ -258,6 +264,22 @@ impl UiApp {
             .collect();
         self.chat_state.session_chat.begin_turn(&session_id);
         self.chat_state.runtime.begin_turn(None);
+        self.chat_state.runtime.load_fail_retry = None;
+        let retry_turn = ChatRetryTurn {
+            session_id: session_id.clone(),
+            history: history.clone(),
+            user_text: text.clone(),
+            model_id: model_id.clone(),
+            images: pending_images.clone(),
+            documents: pending_documents.clone(),
+            auto_remember: self.prefs.auto_remember_chat,
+            max_steps: chat_agent_max_steps(self.prefs.default_max_steps),
+            routing: self.prefs.routing.clone(),
+            language: self.prefs.language.clone(),
+            canvas_open,
+            canvas_aspect,
+        };
+        self.chat_state.runtime.outgoing_turn = Some(retry_turn);
         self.status = "assistant : génération…".into();
         let _ = self.cmd_tx.send(Cmd::Chat {
             session_id,
@@ -272,6 +294,7 @@ impl UiApp {
             language: self.prefs.language.clone(),
             canvas_open,
             canvas_aspect,
+            skip_session_append: false,
         });
         self.mark_onboarding_chat_sent();
         self.scenario_ui.chat = true;
@@ -312,5 +335,66 @@ impl UiApp {
             model_id: model_id.clone(),
         });
         self.status = format!("vision: {model_id}");
+    }
+
+    pub(crate) fn retry_load_failed_turn(&mut self) {
+        let Some(retry) = self.chat_state.runtime.load_fail_retry.take() else {
+            return;
+        };
+        if self.chat_state.active_session.as_deref() != Some(retry.session_id.as_str()) {
+            self.chat_state.runtime.load_fail_retry = Some(retry);
+            return;
+        }
+        self.chat_state.session_chat.begin_turn(&retry.session_id);
+        self.chat_state.runtime.begin_turn(None);
+        self.chat_state.runtime.outgoing_turn = Some(ChatRetryTurn {
+            session_id: retry.session_id.clone(),
+            history: retry.history.clone(),
+            user_text: retry.user_text.clone(),
+            model_id: retry.model_id.clone(),
+            images: retry.images.clone(),
+            documents: retry.documents.clone(),
+            auto_remember: retry.auto_remember,
+            max_steps: retry.max_steps,
+            routing: retry.routing.clone(),
+            language: retry.language.clone(),
+            canvas_open: retry.canvas_open,
+            canvas_aspect: retry.canvas_aspect,
+        });
+        self.status = "assistant : génération…".into();
+        let _ = self.cmd_tx.send(retry.to_chat_cmd(true));
+        self.scenario_ui.chat = true;
+    }
+
+    pub(crate) fn cancel_pending_turn(&mut self) {
+        let Some(session_id) = self.chat_state.active_session.clone() else {
+            return;
+        };
+        if let Some(id) = self.chat_state.runtime.inference_id {
+            let _ = self.cmd_tx.send(Cmd::ChatCancel {
+                inference_id: id,
+                session_id,
+            });
+            return;
+        }
+        if !self.chat_state.runtime.pending {
+            return;
+        }
+        let on_active = session_chat::on_chat_cancelled(
+            &mut self.chat_state.session_chat,
+            self.chat_state.active_session.as_deref(),
+            &session_id,
+            &mut self.chat_state.runtime.streaming,
+            &mut self.chat_state.runtime.pending,
+            &mut self.chat_state.runtime.inference_id,
+            &mut self.chat,
+        );
+        if on_active {
+            self.chat_state.runtime.outgoing_turn = None;
+            self.chat_state.runtime.load_fail_retry = None;
+            self.chat_state.runtime.room_turn_text = None;
+            let t = i18n::strings(&self.prefs.language);
+            self.status = t.chat_stopped.into();
+        }
     }
 }

@@ -1,11 +1,17 @@
 //! Runtime state for the active chat or room turn.
 
+use crate::cmd::ChatRetryTurn;
+
 #[derive(Debug, Default)]
 pub(crate) struct ChatRuntimeState {
     pub(crate) streaming: String,
     pub(crate) pending: bool,
     pub(crate) inference_id: Option<u64>,
     pub(crate) room_turn_text: Option<String>,
+    /// Chat turn currently in flight (for load-fail Retry chrome).
+    pub(crate) outgoing_turn: Option<ChatRetryTurn>,
+    /// Last load-failed turn shown with Retry chrome.
+    pub(crate) load_fail_retry: Option<ChatRetryTurn>,
 }
 
 impl ChatRuntimeState {
@@ -21,6 +27,7 @@ impl ChatRuntimeState {
         self.pending = false;
         self.inference_id = None;
         self.room_turn_text = None;
+        self.outgoing_turn = None;
     }
 }
 
@@ -35,6 +42,8 @@ mod tests {
             pending: false,
             inference_id: Some(42),
             room_turn_text: None,
+            outgoing_turn: None,
+            load_fail_retry: None,
         };
 
         state.begin_turn(Some("question".into()));
