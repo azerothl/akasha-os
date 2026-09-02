@@ -134,7 +134,9 @@ impl CognitiveState {
 
     /// Advance a canvas plan only when its current stage has its required work.
     pub fn maybe_advance_plan_after_canvas_draw(&mut self, tool: &str, outcome: &str) -> bool {
-        if !canvas_op_succeeded(outcome) {
+        let succeeded = canvas_op_succeeded(outcome)
+            || (tool == "canvas.export" && outcome.contains("\"path\""));
+        if !succeeded {
             return false;
         }
         if self.current_task_is_canvas_preparation() {
@@ -142,6 +144,9 @@ impl CognitiveState {
             // canvas has been read. Previously it could never advance, so all
             // subsequent shapes were incorrectly made under "Analyse".
             return tool == "canvas.get" && self.complete_current_plan_node();
+        }
+        if self.current_task_is_canvas_export() {
+            return tool == "canvas.export" && self.complete_current_plan_node();
         }
         if !canvas_tool_completes_plan_node(tool) {
             return false;
@@ -177,6 +182,30 @@ impl CognitiveState {
         ["analyse", "analysis", "palette", "style", "prépar", "prepar", "planification"]
             .iter()
             .any(|word| title.contains(word))
+    }
+
+    /// A plan's analysis stage is a hard runtime boundary, not merely prompt
+    /// advice. The model must read the canvas before it can write any shape.
+    pub fn canvas_preparation_action_block_reason(&self, tool: &str) -> Option<&'static str> {
+        if self.current_task_is_canvas_preparation()
+            && tool.starts_with("canvas.")
+            && tool != "canvas.get"
+        {
+            Some(
+                "étape Analyse active : canvas.get est obligatoire avant toute forme, style ou export. \
+                 Aucun tracé ne sera appliqué tant que le canvas n'a pas été lu.",
+            )
+        } else {
+            None
+        }
+    }
+
+    fn current_task_is_canvas_export(&self) -> bool {
+        let Some(title) = self.current_task_title() else {
+            return false;
+        };
+        let title = title.to_ascii_lowercase();
+        title.contains("export") || title.contains("finaliser")
     }
 
     fn current_canvas_task_required_draw_ops(&self) -> u32 {
@@ -378,6 +407,22 @@ mod tests {
         ]);
         assert!(st.maybe_advance_plan_after_canvas_draw("canvas.get", "ok canvas"));
         assert_eq!(st.current_task_title().as_deref(), Some("Dessiner la silhouette"));
+    }
+
+    #[test]
+    fn analysis_hard_blocks_drawing_until_canvas_get() {
+        let mut st = CognitiveState::new("agent-98", vec![]);
+        st.set_plan(vec![TaskNode { id: "1".into(), title: "Analyse (canvas.get)".into(), status: TaskNodeStatus::Pending, notes: String::new() }]);
+        assert!(st.canvas_preparation_action_block_reason("canvas.path").is_some());
+        assert!(st.canvas_preparation_action_block_reason("canvas.get").is_none());
+    }
+
+    #[test]
+    fn canvas_export_completes_an_export_stage() {
+        let mut st = CognitiveState::new("agent-98", vec![]);
+        st.set_plan(vec![TaskNode { id: "1".into(), title: "Export (canvas.export)".into(), status: TaskNodeStatus::Pending, notes: String::new() }]);
+        assert!(st.maybe_advance_plan_after_canvas_draw("canvas.export", "ok path=/downloads/final.png"));
+        assert!(st.canvas_plan_is_complete());
     }
 
     #[test]

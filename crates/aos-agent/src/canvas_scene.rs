@@ -24,7 +24,10 @@ pub struct CanvasVisualProgress {
 }
 
 pub fn canvas_visual_fingerprint(path: &str) -> Option<CanvasVisualFingerprint> {
-    let image = image::open(path).ok()?.to_luma8();
+    // canvas.export returns a sandboxed virtual path (`/downloads/...`),
+    // whereas the worker needs the physical Preview storage path to inspect
+    // pixels locally.
+    let image = image::open(resolve_canvas_export_path(path)).ok()?.to_luma8();
     let (width, height) = image.dimensions();
     if width == 0 || height == 0 {
         return None;
@@ -43,6 +46,22 @@ pub fn canvas_visual_fingerprint(path: &str) -> Option<CanvasVisualFingerprint> 
         hash | (u64::from((pixel[0] as u32 >= average) as u8) << index)
     });
     Some(CanvasVisualFingerprint { perceptual_hash, coverage_per_mille })
+}
+
+fn resolve_canvas_export_path(path: &str) -> PathBuf {
+    let direct = PathBuf::from(path);
+    if direct.is_file() {
+        return direct;
+    }
+    if let Some(relative) = path.strip_prefix("/downloads/") {
+        return aos_home()
+            .join("var")
+            .join("storage")
+            .join("data")
+            .join("downloads")
+            .join(relative);
+    }
+    direct
 }
 
 pub fn canvas_visual_progress(
@@ -734,6 +753,13 @@ mod tests {
         let after = canvas_visual_fingerprint(&after_path.to_string_lossy()).unwrap();
         assert!(canvas_visual_progress(before, after).meaningful_change);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn virtual_canvas_export_path_resolves_to_preview_storage() {
+        let path = resolve_canvas_export_path("/downloads/canvas-session.png");
+        let normalized = path.to_string_lossy().replace('\\', "/");
+        assert!(normalized.ends_with("var/storage/data/downloads/canvas-session.png"));
     }
 
     #[test]

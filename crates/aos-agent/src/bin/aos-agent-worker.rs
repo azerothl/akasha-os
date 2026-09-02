@@ -843,11 +843,19 @@ async fn main() {
             action = step_action.clone();
             // Reject exact replays before issuing them. A post-write warning is
             // too late for a vector canvas because the duplicate is visible.
+            let canonical_action = canonicalize_tool_name(&action.action);
+            let canvas_stage_block = {
+                let st = shared.state.lock().await;
+                st.canvas_preparation_action_block_reason(&canonical_action)
+                    .map(str::to_string)
+            };
             let duplicate_canvas_op = {
                 let st = shared.state.lock().await;
-                canvas_action_near_duplicate_reason(&st.trace, &action.action, &action.args)
+                canvas_action_near_duplicate_reason(&st.trace, &canonical_action, &action.args)
             };
-            let one = if let Some(reason) = duplicate_canvas_op {
+            let one = if let Some(reason) = canvas_stage_block {
+                ActResult::Continue(reason)
+            } else if let Some(reason) = duplicate_canvas_op {
                 ActResult::Continue(reason)
             } else if should_gate_action(&spec, &action.action) {
                 match gate_action(
@@ -1368,7 +1376,10 @@ async fn main() {
         // A canvas plan is a bounded composition contract. Once its final
         // drawing stage is complete, stop before a text-only model starts
         // adding speculative layers over the finished composition.
-        if terminal.is_none() && canvas_agent && canvas_scene_changed {
+        if terminal.is_none()
+            && canvas_agent
+            && (canvas_scene_changed || action.action == "canvas.export")
+        {
             let plan_complete = shared.state.lock().await.canvas_plan_is_complete();
             if plan_complete {
                 report(
