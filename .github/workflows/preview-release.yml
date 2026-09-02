@@ -113,15 +113,11 @@ jobs:
           $ver = (Get-Content VERSION -Raw).Trim()
           .\packaging\build-preview.ps1 -SkipModels -RequireCuda -Version $ver
           $dir = "dist\AgentOS-Preview-$ver-windows-x64"
-          if (-not (Test-Path "$dir\bin\aos-session.exe")) { throw "missing aos-session" }
-          if (-not (Test-Path "$dir\share\models\manifest.json")) { throw "missing manifest" }
-          if (-not (Test-Path "$dir\share\modules\catalogue.yaml")) { throw "missing catalogue.yaml" }
-          if (-not (Test-Path "$dir\share\modules\catalogue.yaml.sig")) { throw "missing catalogue.yaml.sig" }
-          if (-not (Test-Path "$dir\share\modules\catalogue.pub")) { throw "missing catalogue.pub" }
-          $dll = Get-ChildItem "$dir\bin" -Filter "cudart64_*.dll"
-          if (-not $dll) { throw "missing CUDA cudart DLL" }
-          if (-not (Test-Path "$dir\bin\aos-modeld-cpu.exe")) { throw "missing aos-modeld-cpu" }
-          Compress-Archive -Path "$dir\*" -DestinationPath "dist\AgentOS-Preview-$ver-windows-x64.zip" -Force
+          $zip = "dist\AgentOS-Preview-$ver-windows-x64.zip"
+          Compress-Archive -Path "$dir\*" -DestinationPath $zip -Force
+          .\packaging\verify-preview-windows.ps1 `
+            -OutDir $dir -Version $ver -ArchivePath $zip -RequireCuda
+          Get-FileHash -Algorithm SHA256 $zip
           sccache --show-stats
 
       - uses: actions/upload-artifact@v4
