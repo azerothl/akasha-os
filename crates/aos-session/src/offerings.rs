@@ -163,6 +163,30 @@ pub struct ModelSetupChoice {
     pub include_optional: bool,
 }
 
+/// Remote model ids use `provider:` / `remote:` prefixes (no local GGUF download).
+pub fn is_remote_model_id(id: &str) -> bool {
+    id.starts_with("provider:") || id.starts_with("remote:")
+}
+
+pub fn validate_setup_choice(choice: &ModelSetupChoice) -> Result<(), String> {
+    if choice.default_chat.trim().is_empty() {
+        return Err("un modèle chat est requis".into());
+    }
+    if choice.default_embed.trim().is_empty() {
+        return Err("un modèle embedding est requis".into());
+    }
+    Ok(())
+}
+
+pub fn setup_defaults_complete(inst: &InstalledFile) -> bool {
+    inst.default_chat
+        .as_ref()
+        .is_some_and(|s| !s.is_empty())
+        && inst.default_embed
+            .as_ref()
+            .is_some_and(|s| !s.is_empty())
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelUpdateOffer {
     pub available: Vec<ModelOffering>,
@@ -311,6 +335,9 @@ pub fn read_setup_choice(home: &Path) -> Option<ModelSetupChoice> {
 pub fn setup_needed(home: &Path) -> bool {
     let inst = load_installed(home);
     if !inst.models.is_empty() {
+        return false;
+    }
+    if setup_defaults_complete(&inst) {
         return false;
     }
     // Legacy: already have old GGUFs without installed.json
@@ -473,6 +500,7 @@ pub fn redownload_ids(home: &Path, ids: &[String]) -> Result<(), String> {
 }
 
 pub fn apply_choice(home: &Path, choice: &ModelSetupChoice) -> Result<(), String> {
+    validate_setup_choice(choice)?;
     let mut ids = choice.selected_ids.clone();
     if !ids.contains(&choice.default_chat) {
         ids.push(choice.default_chat.clone());
@@ -481,7 +509,13 @@ pub fn apply_choice(home: &Path, choice: &ModelSetupChoice) -> Result<(), String
         ids.push(choice.default_embed.clone());
     }
     ids.dedup();
-    download_ids(home, &ids)?;
+    let local_ids: Vec<String> = ids
+        .into_iter()
+        .filter(|id| !is_remote_model_id(id))
+        .collect();
+    if !local_ids.is_empty() {
+        download_ids(home, &local_ids)?;
+    }
     let mut inst = load_installed(home);
     inst.default_chat = Some(choice.default_chat.clone());
     inst.default_embed = Some(choice.default_embed.clone());
@@ -808,5 +842,42 @@ mod vision_catalog_tests {
         assert!(mmproj.bytes > 0);
         assert_eq!(file.packs["low"].chat, "local:lfm2.5-8b-a1b");
         assert_eq!(file.packs["low"].alternatives[0], "local:gemma-4-e4b");
+    }
+}
+
+#[cfg(test)]
+mod setup_choice_tests {
+    use super::{is_remote_model_id, validate_setup_choice, ModelSetupChoice};
+
+    #[test]
+    fn remote_model_ids_are_detected() {
+        assert!(is_remote_model_id("provider:openai:gpt-4o"));
+        assert!(is_remote_model_id("remote:mock:gpt-x"));
+        assert!(!is_remote_model_id("local:qwen-9b"));
+    }
+
+    #[test]
+    fn validate_setup_choice_requires_chat_and_embed() {
+        assert!(validate_setup_choice(&ModelSetupChoice {
+            selected_ids: vec![],
+            default_chat: String::new(),
+            default_embed: "local:embed".into(),
+            include_optional: false,
+        })
+        .is_err());
+        assert!(validate_setup_choice(&ModelSetupChoice {
+            selected_ids: vec![],
+            default_chat: "local:chat".into(),
+            default_embed: String::new(),
+            include_optional: false,
+        })
+        .is_err());
+        assert!(validate_setup_choice(&ModelSetupChoice {
+            selected_ids: vec![],
+            default_chat: "provider:openai:gpt-4o".into(),
+            default_embed: "local:embed".into(),
+            include_optional: false,
+        })
+        .is_ok());
     }
 }
