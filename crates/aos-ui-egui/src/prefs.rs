@@ -34,6 +34,8 @@ impl UiDensity {
 /// use serde defaults so existing preference files remain valid.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UiLayoutPreferences {
+    #[serde(default = "default_chat_sidebar_width")]
+    pub chat_sidebar_width: f32,
     #[serde(default = "default_context_panel_width")]
     pub context_panel_width: f32,
     #[serde(default)]
@@ -50,9 +52,14 @@ fn default_context_panel_width() -> f32 {
     320.0
 }
 
+fn default_chat_sidebar_width() -> f32 {
+    112.0
+}
+
 impl Default for UiLayoutPreferences {
     fn default() -> Self {
         Self {
+            chat_sidebar_width: default_chat_sidebar_width(),
             context_panel_width: default_context_panel_width(),
             context_panel_open: false,
             activity_panel_open: false,

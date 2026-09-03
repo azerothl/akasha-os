@@ -2443,8 +2443,16 @@ impl eframe::App for UiApp {
             }
         });
 
-        egui::SidePanel::left("tabs")
-            .exact_width(self.prefs.ui_density.rail_width())
+        let sidebar_panel = egui::SidePanel::left("tabs")
+            .default_width(
+                self.prefs
+                    .ui_layout
+                    .chat_sidebar_width
+                    .clamp(self.prefs.ui_density.rail_width().max(88.0), 220.0),
+            )
+            .min_width(self.prefs.ui_density.rail_width().max(88.0))
+            .max_width(220.0)
+            .resizable(true)
             .show(ctx, |ui| {
                 overflow_scroll(ui, "nav_sidebar", |ui| {
                 ui.heading(if self.prefs.ui_density == prefs::UiDensity::Compact { "A" } else { "Akasha" });
@@ -2476,7 +2484,7 @@ impl eframe::App for UiApp {
                         ui.label(format!("{}: {}", t.tab_models, m.models.len()));
                         if ui
                             .button(if self.prefs.ui_density == prefs::UiDensity::Compact {
-                                "Modèles"
+                                "Mods"
                             } else {
                                 t.tab_models
                             })
@@ -2490,6 +2498,11 @@ impl eframe::App for UiApp {
                     }
                 });
             });
+        let sidebar_width = sidebar_panel.response.rect.width();
+        if (sidebar_width - self.prefs.ui_layout.chat_sidebar_width).abs() > 1.0 {
+            self.prefs.ui_layout.chat_sidebar_width = sidebar_width;
+            save_preferences(&self.prefs);
+        }
 
         egui::TopBottomPanel::bottom("status_bar")
             .exact_height(28.0)

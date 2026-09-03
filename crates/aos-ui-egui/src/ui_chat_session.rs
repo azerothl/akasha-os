@@ -586,6 +586,11 @@ impl UiApp {
                     if canvas_open
                         && ui
                             .button(if self.prefs.ui_layout.canvas_focus {
+                                "Focus ×"
+                            } else {
+                                "Focus"
+                            })
+                            .on_hover_text(if self.prefs.ui_layout.canvas_focus {
                                 t.canvas_focus_exit
                             } else {
                                 t.canvas_focus

@@ -95,11 +95,19 @@ pub struct NotesPanelState {
     pub incoming: Vec<NoteLink>,
     pub status: String,
     pub show_preview: bool,
+    pub preview_mode: NotesPreviewMode,
     /// Locked chrome when the last create/save failed.
     pub create_failed: bool,
     /// Last create/save payload for retry (title, body, optional path for update).
     pub retry_payload: Option<(String, String, Option<String>)>,
     md_cache: CommonMarkCache,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NotesPreviewMode {
+    Editor,
+    Preview,
+    Both,
 }
 
 impl Default for NotesPanelState {
@@ -121,6 +129,7 @@ impl Default for NotesPanelState {
             incoming: Vec::new(),
             status: String::new(),
             show_preview: true,
+            preview_mode: NotesPreviewMode::Both,
             create_failed: false,
             retry_payload: None,
             md_cache: CommonMarkCache::default(),
@@ -274,7 +283,17 @@ pub fn show_notes_panel(
         if ui.button(t.notes_new).clicked() {
             state.start_new();
         }
-        ui.checkbox(&mut state.show_preview, t.notes_preview);
+        ui.label("Vue :");
+        for (mode, label) in [
+            (NotesPreviewMode::Editor, "Éditeur"),
+            (NotesPreviewMode::Preview, "Preview"),
+            (NotesPreviewMode::Both, "Deux colonnes"),
+        ] {
+            if ui.selectable_label(state.preview_mode == mode, label).clicked() {
+                state.preview_mode = mode;
+                state.show_preview = mode != NotesPreviewMode::Editor;
+            }
+        }
     });
     if !state.status.is_empty() {
         ui.weak(&state.status);
@@ -369,6 +388,8 @@ pub fn show_notes_panel(
             })
             .strong());
 
+            let preview_only = state.preview_mode == NotesPreviewMode::Preview;
+            if !preview_only {
             if state.create_failed {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(t.notes_create_failed).strong());
@@ -478,8 +499,9 @@ pub fn show_notes_panel(
             if ui.add(editor).changed() {
                 state.dirty = true;
             }
+            }
 
-            if state.show_preview {
+            if state.preview_mode != NotesPreviewMode::Editor {
                 ui.separator();
                 ui.label(RichText::new(t.notes_preview).strong());
                 let preview = if state.edit_title.is_empty() {
