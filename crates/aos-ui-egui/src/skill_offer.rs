@@ -1,6 +1,6 @@
 //! Morning skill suggestion card in the Chat thread (Preview 0.15).
 
-use crate::cmd::Cmd;
+use crate::cmd::{ChatLine, Cmd};
 use crate::i18n::UiStrings;
 use aos_proto::ChatAttachment;
 use eframe::egui;
@@ -12,6 +12,27 @@ pub fn label_for_lang(label_en: &str, label_fr: &str, lang: &str) -> String {
     } else {
         label_en.to_string()
     }
+}
+
+/// Remove persisted pending cards that no longer match the platform's current offer.
+/// Resolved cards remain in the transcript as history.
+pub fn reconcile_pending_cards(chat: &mut Vec<ChatLine>, active_pattern_id: Option<&str>) {
+    chat.retain_mut(|line| {
+        let before = line.attachments.len();
+        line.attachments.retain(|att| {
+            !matches!(
+                att,
+                ChatAttachment::SkillOffer {
+                    pattern_id,
+                    state,
+                    ..
+                } if state == "pending" && Some(pattern_id.as_str()) != active_pattern_id
+            )
+        });
+        before == line.attachments.len()
+            || !line.text.trim().is_empty()
+            || !line.attachments.is_empty()
+    });
 }
 
 pub fn render_skill_offer_card(
@@ -102,6 +123,14 @@ mod tests {
         assert_eq!(fr.skill_offer_created, "Créée");
         assert_eq!(en.skill_offer_dismissed, "Later");
         assert_eq!(fr.skill_offer_dismissed, "Plus tard");
+        assert_eq!(
+            en.skill_offer_create_failed,
+            "The skill could not be created. You can try again."
+        );
+        assert_eq!(
+            fr.skill_offer_create_failed,
+            "La skill n’a pas pu être créée. Vous pouvez réessayer."
+        );
     }
 
     #[test]
@@ -112,5 +141,44 @@ mod tests {
         assert_eq!(en.skill_offer_later, "Later");
         assert_eq!(fr.skill_offer_create, "Créer");
         assert_eq!(fr.skill_offer_later, "Plus tard");
+    }
+
+    #[test]
+    fn stale_persisted_pending_card_is_removed() {
+        let mut chat = vec![ChatLine {
+            role: "assistant".into(),
+            text: String::new(),
+            attachments: vec![ChatAttachment::SkillOffer {
+                pattern_id: "pat-old".into(),
+                label_en: "create".into(),
+                label_fr: "crée".into(),
+                state: "pending".into(),
+            }],
+            speaker_id: None,
+            speaker_name: None,
+            thinking: None,
+        }];
+        reconcile_pending_cards(&mut chat, None);
+        assert!(chat.is_empty());
+    }
+
+    #[test]
+    fn current_pending_and_resolved_cards_are_preserved() {
+        let offer = |pattern_id: &str, state: &str| ChatLine {
+            role: "assistant".into(),
+            text: String::new(),
+            attachments: vec![ChatAttachment::SkillOffer {
+                pattern_id: pattern_id.into(),
+                label_en: "weather".into(),
+                label_fr: "météo".into(),
+                state: state.into(),
+            }],
+            speaker_id: None,
+            speaker_name: None,
+            thinking: None,
+        };
+        let mut chat = vec![offer("pat-current", "pending"), offer("pat-old", "created")];
+        reconcile_pending_cards(&mut chat, Some("pat-current"));
+        assert_eq!(chat.len(), 2);
     }
 }
