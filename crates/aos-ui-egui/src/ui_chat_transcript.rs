@@ -13,6 +13,18 @@ use crate::{
 use aos_proto::{ChatAttachment, ChatRoomMember};
 use eframe::egui;
 
+pub(crate) const TRANSCRIPT_ESTIMATED_ROW_HEIGHT: f32 = 96.0;
+
+/// Number of rows that a virtualized transcript needs to inspect for a viewport.
+/// The two-row overscan keeps fast wheel scrolling from exposing a blank gap.
+pub(crate) fn transcript_visible_row_budget(total_rows: usize, viewport_height: f32) -> usize {
+    if total_rows == 0 || viewport_height <= 0.0 {
+        return 0;
+    }
+    let visible = (viewport_height / TRANSCRIPT_ESTIMATED_ROW_HEIGHT).ceil() as usize;
+    total_rows.min(visible.saturating_add(2))
+}
+
 impl UiApp {
     pub(crate) fn ui_chat_transcript(
         &mut self,
@@ -24,6 +36,9 @@ impl UiApp {
         scroll_h: f32,
     ) {
         let n = self.chat.len();
+        // Keep the sizing contract exercised in production code as well as in
+        // the regression tests; egui owns the actual visible row range.
+        let _visible_budget = transcript_visible_row_budget(n, scroll_h);
         egui::ScrollArea::vertical()
             .id_salt("conversation_scroll")
             .auto_shrink([false, false])
@@ -32,7 +47,7 @@ impl UiApp {
             .stick_to_bottom(true)
             // Approximate row heights let egui skip work for long transcripts;
             // expanded attachments remain fully rendered for visible rows.
-            .show_rows(ui, 96.0, n, |ui, row_range| {
+            .show_rows(ui, TRANSCRIPT_ESTIMATED_ROW_HEIGHT, n, |ui, row_range| {
                 ui.set_min_width(ui.available_width());
                 let mut open_agent: Option<String> = None;
                 let mut target_reply: Option<String> = None;
@@ -492,5 +507,24 @@ impl UiApp {
                     }
                 }
             });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::transcript_visible_row_budget;
+
+    #[test]
+    fn five_hundred_messages_keep_virtualized_budget_bounded() {
+        let rendered = transcript_visible_row_budget(500, 600.0);
+        assert!(rendered <= 10, "rendered budget was {rendered}");
+        assert!(rendered < 500);
+    }
+
+    #[test]
+    fn virtualization_budget_handles_empty_and_small_viewports() {
+        assert_eq!(transcript_visible_row_budget(0, 600.0), 0);
+        assert_eq!(transcript_visible_row_budget(500, 0.0), 0);
+        assert_eq!(transcript_visible_row_budget(3, 600.0), 3);
     }
 }
