@@ -6,6 +6,7 @@ use aos_proto::WebSearchHit;
 pub(crate) struct ChatSidebarState {
     pub(crate) search: String,
     pub(crate) show_archived: bool,
+    pub(crate) delete_confirm: Option<String>,
     pub(crate) rename: String,
     pub(crate) web_query: String,
     pub(crate) web_results: Vec<WebSearchHit>,
@@ -21,6 +22,7 @@ impl Default for ChatSidebarState {
         Self {
             search: String::new(),
             show_archived: false,
+            delete_confirm: None,
             rename: String::new(),
             web_query: String::new(),
             web_results: Vec::new(),

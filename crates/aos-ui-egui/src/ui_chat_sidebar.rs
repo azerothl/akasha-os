@@ -123,7 +123,7 @@ impl UiApp {
                                 ui.close_menu();
                             }
                             if s.archived && ui.button(t.session_delete_permanently).clicked() {
-                                self.request_session_delete(s.id.clone());
+                                self.chat_state.sidebar.delete_confirm = Some(s.id.clone());
                                 ui.close_menu();
                             }
                         });
@@ -150,7 +150,7 @@ impl UiApp {
                     }
                     if ui.button("Supprimer").clicked() {
                         if let Some(id) = self.chat_state.active_session.clone() {
-                            self.request_session_delete(id);
+                            self.chat_state.sidebar.delete_confirm = Some(id);
                         }
                     }
                     ui.separator();
@@ -242,5 +242,49 @@ impl UiApp {
                 });
             },
         );
+        if let Some(id) = self.chat_state.sidebar.delete_confirm.clone() {
+            let title = self
+                .chat_state
+                .sessions
+                .iter()
+                .find(|session| session.id == id)
+                .map(|session| session.title.clone())
+                .unwrap_or_else(|| id.clone());
+            let is_fr = self.prefs.language == "fr";
+            let mut decision = None;
+            egui::Window::new(if is_fr {
+                "Confirmer la suppression"
+            } else {
+                "Confirm deletion"
+            })
+            .collapsible(false)
+            .resizable(false)
+            .show(ui.ctx(), |ui| {
+                ui.label(if is_fr {
+                    format!("Supprimer définitivement « {title} » ?")
+                } else {
+                    format!("Permanently delete “{title}”?")
+                });
+                ui.horizontal(|ui| {
+                    if ui.button(if is_fr { "Annuler" } else { "Cancel" }).clicked() {
+                        decision = Some(false);
+                    }
+                    if ui
+                        .button(if is_fr { "Supprimer" } else { "Delete" })
+                        .clicked()
+                    {
+                        decision = Some(true);
+                    }
+                });
+            });
+            if let Some(confirm) = decision {
+                self.chat_state.sidebar.delete_confirm = None;
+                if confirm {
+                    self.pending_session_nav = crate::session_nav::PendingSessionNav::AwaitingDelete;
+                    self.schedule_ui.clear_transcript_dirty();
+                    let _ = self.cmd_tx.send(Cmd::SessionDelete { id });
+                }
+            }
+        }
     }
 }
