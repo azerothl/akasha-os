@@ -430,6 +430,67 @@ impl UiApp {
         if self.agent_ui.open_tabs.is_empty() && !self.prefs.ui_layout.activity_panel_open {
             return;
         }
+        // At narrow widths the activity surface overlays the conversation so the
+        // composer and transcript keep their usable width. It remains opt-in and
+        // can be dismissed without changing the active session.
+        if ctx.screen_rect().width() < 900.0 {
+            let mut close = false;
+            egui::Area::new(egui::Id::new("agent_activity_drawer"))
+                .anchor(egui::Align2::RIGHT_TOP, egui::vec2(-12.0, 12.0))
+                .order(egui::Order::Foreground)
+                .show(ctx, |ui| {
+                    egui::Frame::popup(ui.style())
+                        .inner_margin(egui::Margin::same(12))
+                        .show(ui, |ui| {
+                            ui.set_max_width(390.0);
+                            ui.horizontal(|ui| {
+                                ui.heading(i18n::strings(&self.prefs.language).agent_detail);
+                                if ui.button("×").on_hover_text("Fermer Activité").clicked() {
+                                    close = true;
+                                }
+                            });
+                            ui.separator();
+                            let active = self.chat_state.active_session.as_deref();
+                            let agents: Vec<_> = self
+                                .agents
+                                .iter()
+                                .filter(|a| a.session_id.as_deref() == active)
+                                .cloned()
+                                .collect();
+                            if agents.is_empty() {
+                                ui.weak(if self.prefs.language == "fr" {
+                                    "Aucune activité dans cette conversation."
+                                } else {
+                                    "No activity in this conversation."
+                                });
+                            } else {
+                                for agent in agents {
+                                    let (icon, state) = match agent.state {
+                                        AgentState::Done => ("✓", "Terminé"),
+                                        AgentState::Failed => ("!", "Échec"),
+                                        AgentState::Blocked => ("?", "Bloqué"),
+                                        AgentState::Running => ("…", "En cours"),
+                                        _ => ("·", "En attente"),
+                                    };
+                                    ui.horizontal(|ui| {
+                                        ui.label(format!("{icon} {}", agent.display_title()));
+                                        ui.weak(state);
+                                        if ui.small_button("Détails").clicked() {
+                                            self.agent_ui.open_tab(&agent.agent_id);
+                                            self.agent_ui.select_tab(&agent.agent_id);
+                                        }
+                                    });
+                                }
+                            }
+                        });
+                });
+            if close {
+                self.prefs.ui_layout.activity_panel_open = false;
+                self.agent_ui.close_all_tabs();
+                crate::prefs::save_preferences(&self.prefs);
+            }
+            return;
+        }
         egui::SidePanel::right("agent_detail_tabs")
             .default_width(self.prefs.ui_layout.context_panel_width.max(280.0))
             .min_width(420.0)
