@@ -2388,22 +2388,8 @@ impl eframe::App for UiApp {
                     self.request_session_select(id);
                 }
             }
-            if !self.models_ui.model_updates_msg.is_empty() {
-                ui.horizontal(|ui| {
-                    ui.colored_label(
-                        egui::Color32::from_rgb(180, 220, 120),
-                        format!("Models: {}", self.models_ui.model_updates_msg),
-                    );
-                    if ui.button("Open Models").clicked() {
-                        self.tab = Tab::Models;
-                    }
-                });
-            }
             if self.models_ui.model_download_restart.is_some() {
                 self.ui_model_download_restart(ui, ctx);
-            }
-            if !self.status.is_empty() {
-                ui.label(&self.status);
             }
             // Confirmations en attente
             if !self.confirmations_ui.is_empty() {
@@ -2514,6 +2500,10 @@ impl eframe::App for UiApp {
                     egui::Stroke::new(1.0_f32, theme::ICE_TRACK),
                 );
                 self.ui_status_bar(ui, &t);
+                if !self.status.is_empty() {
+                    ui.separator();
+                    ui.weak(&self.status);
+                }
             });
 
         self.ui_go_to_palette(ctx, &t);
