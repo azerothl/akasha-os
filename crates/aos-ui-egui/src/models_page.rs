@@ -126,6 +126,17 @@ pub fn load_installed_rows(runtime: &[ModelInfo]) -> Vec<InstalledRow> {
         .collect()
 }
 
+/// Designer-locked vision chat offerings: human name + muted badge only in catalog UI.
+pub const DESIGNER_VISION_CATALOG_IDS: [&str; 3] = [
+    "local:qwen3-vl-4b",
+    "local:qwen3-vl-8b",
+    "local:llava-1.6",
+];
+
+pub fn is_designer_vision_catalog_model(id: &str) -> bool {
+    DESIGNER_VISION_CATALOG_IDS.contains(&id)
+}
+
 /// First catalog offering tagged with the `vision` profile (catalog order).
 pub fn first_catalog_vision_model_id() -> Option<String> {
     load_catalog_models()
@@ -340,7 +351,12 @@ pub fn ui_model_card(
     on_remove: &mut impl FnMut(),
     on_hf: &mut impl FnMut(&str),
 ) {
-    let badges = model_badges(m);
+    let designer_vision = is_designer_vision_catalog_model(&m.id);
+    let badges = if designer_vision {
+        Vec::new()
+    } else {
+        model_badges(m)
+    };
     egui::Frame::group(ui.style())
         .inner_margin(egui::Margin::same(10))
         .show(ui, |ui| {
@@ -355,35 +371,39 @@ pub fn ui_model_card(
                             );
                         }
                     });
-                    ui.weak(&m.id);
-                    if let Some(desc) = &m.description {
-                        ui.label(desc);
+                    if designer_vision {
+                        ui.weak(t.models_vision_sees_images);
+                    } else {
+                        ui.weak(&m.id);
+                        if let Some(desc) = &m.description {
+                            ui.label(desc);
+                        }
+                        ui.horizontal_wrapped(|ui| {
+                            for b in badges {
+                                ui.label(
+                                    egui::RichText::new(b)
+                                        .size(11.0)
+                                        .background_color(egui::Color32::from_rgb(40, 48, 64)),
+                                );
+                            }
+                            if !m.format.is_empty() {
+                                ui.weak(format!("[{}]", m.format));
+                            }
+                            if !m.profiles.is_empty() {
+                                ui.weak(m.profiles.join(" · "));
+                            }
+                        });
+                        ui.horizontal(|ui| {
+                            ui.weak(format!(
+                                "{} · Q{} / S{} · VRAM ≥ {} MiB · {}",
+                                human_gib(m.bytes),
+                                m.quality_score,
+                                m.speed_score,
+                                m.min_vram_mib,
+                                format_params(m.n_params),
+                            ));
+                        });
                     }
-                    ui.horizontal_wrapped(|ui| {
-                        for b in badges {
-                            ui.label(
-                                egui::RichText::new(b)
-                                    .size(11.0)
-                                    .background_color(egui::Color32::from_rgb(40, 48, 64)),
-                            );
-                        }
-                        if !m.format.is_empty() {
-                            ui.weak(format!("[{}]", m.format));
-                        }
-                        if !m.profiles.is_empty() {
-                            ui.weak(m.profiles.join(" · "));
-                        }
-                    });
-                    ui.horizontal(|ui| {
-                        ui.weak(format!(
-                            "{} · Q{} / S{} · VRAM ≥ {} MiB · {}",
-                            human_gib(m.bytes),
-                            m.quality_score,
-                            m.speed_score,
-                            m.min_vram_mib,
-                            format_params(m.n_params),
-                        ));
-                    });
                 });
                 ui.with_layout(egui::Layout::top_down(egui::Align::Max), |ui| {
                     if let Some(repo) = hf_repo_url(m) {
@@ -480,10 +500,89 @@ fn human_gib(bytes: u64) -> String {
     format!("{:.1} GiB", bytes as f64 / (1 << 30) as f64)
 }
 
+/// Plain-text lines rendered on a designer vision card (for regression tests).
+pub fn designer_vision_card_lines(m: &CatalogModel, t: &crate::i18n::UiStrings) -> Vec<String> {
+    assert!(is_designer_vision_catalog_model(&m.id));
+    vec![
+        m.name.clone(),
+        t.models_vision_sees_images.to_string(),
+    ]
+}
+
 #[cfg(test)]
 mod vision_catalog_tests {
-    use super::load_catalog_models_from;
+    use super::{
+        designer_vision_card_lines, is_designer_vision_catalog_model, load_catalog_models_from,
+        CatalogModel,
+    };
     use std::path::PathBuf;
+
+    fn sample_designer_vision() -> CatalogModel {
+        CatalogModel {
+            id: "local:qwen3-vl-4b".into(),
+            name: "Qwen3-VL 4B".into(),
+            profiles: vec!["chat".into(), "vision".into()],
+            bytes: 2_497_281_664,
+            modality: None,
+            format: "gguf".into(),
+            quality_score: 78,
+            speed_score: 92,
+            min_vram_mib: 0,
+            n_params: 4.0e9,
+            optional: true,
+            url: String::new(),
+            filename: "Qwen3VL-4B-Instruct-Q4_K_M.gguf".into(),
+            tags: vec!["cpu".into(), "vision".into()],
+            description: Some("Qwen3-VL 4B — vision légère, alt chat low/CPU.".into()),
+        }
+    }
+
+    #[test]
+    fn designer_vision_ids_are_locked() {
+        for id in [
+            "local:qwen3-vl-4b",
+            "local:qwen3-vl-8b",
+            "local:llava-1.6",
+        ] {
+            assert!(is_designer_vision_catalog_model(id));
+        }
+        assert!(!is_designer_vision_catalog_model("local:gemma-4-e4b"));
+    }
+
+    #[test]
+    fn designer_vision_card_copy_fr_en_and_no_technical_chrome() {
+        let m = sample_designer_vision();
+        let t_en = crate::i18n::strings("en");
+        let t_fr = crate::i18n::strings("fr");
+        let en_lines = designer_vision_card_lines(&m, &t_en);
+        let fr_lines = designer_vision_card_lines(&m, &t_fr);
+        assert_eq!(en_lines[0], "Qwen3-VL 4B");
+        assert_eq!(fr_lines[0], "Qwen3-VL 4B");
+        assert_eq!(en_lines[1], "sees images");
+        assert_eq!(fr_lines[1], "voit les images");
+        let hay = en_lines.join("\n").to_ascii_lowercase();
+        for forbidden in [
+            "cpu",
+            "vision",
+            "multimodal",
+            "optional",
+            "gguf",
+            "vram",
+            "q78",
+            "s92",
+            "local:",
+            "low",
+            "mid",
+            "gpu",
+            "4.0b",
+            "mib",
+        ] {
+            assert!(
+                !hay.contains(forbidden),
+                "forbidden {forbidden} in EN chrome: {hay}"
+            );
+        }
+    }
 
     #[test]
     fn first_vision_model_follows_catalog_order() {

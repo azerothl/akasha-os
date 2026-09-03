@@ -403,6 +403,8 @@ pub struct UiStrings {
     pub models_load: &'static str,
     pub models_set_default: &'static str,
     pub models_installed_badge: &'static str,
+    /// Muted badge on designer-locked vision catalog cards (Qwen3-VL, LLaVA 1.6).
+    pub models_vision_sees_images: &'static str,
     pub models_hf_import: &'static str,
     pub models_hf_import_hint: &'static str,
     pub models_hf_name: &'static str,
@@ -547,6 +549,8 @@ pub struct UiStrings {
     pub notes_filter: &'static str,
     pub notes_create_failed: &'static str,
     pub notes_create_retry: &'static str,
+    /// Open the created note from a chat completion card (same label EN/FR).
+    pub chat_note_open: &'static str,
     pub notes_title_label: &'static str,
     pub notes_title_hint: &'static str,
     pub notes_editor_new: &'static str,
@@ -1141,6 +1145,7 @@ const EN: UiStrings = UiStrings {
     models_load: "Load",
     models_set_default: "Set session default",
     models_installed_badge: "installed",
+    models_vision_sees_images: "sees images",
     models_hf_import: "Download from Hugging Face",
     models_hf_import_hint: "Paste a resolve URL (…/resolve/main/file.gguf). The model is added to your local catalog.",
     models_hf_name: "Display name",
@@ -1284,8 +1289,9 @@ const EN: UiStrings = UiStrings {
     notes_related: "Related notes",
     notes_list: "List",
     notes_filter: "Filter",
-    notes_create_failed: "Couldn't create the note.",
+    notes_create_failed: "Could not create the note.",
     notes_create_retry: "Try again",
+    chat_note_open: "Note",
     notes_title_label: "Title",
     notes_title_hint: "Note title",
     notes_editor_new: "New note",
@@ -1877,6 +1883,7 @@ const FR: UiStrings = UiStrings {
     models_load: "Charger",
     models_set_default: "Défaut session",
     models_installed_badge: "installé",
+    models_vision_sees_images: "voit les images",
     models_hf_import: "Télécharger depuis Hugging Face",
     models_hf_import_hint: "Collez une URL resolve (…/resolve/main/fichier.gguf). Le modèle est ajouté au catalogue local.",
     models_hf_name: "Nom affiché",
@@ -2022,6 +2029,7 @@ const FR: UiStrings = UiStrings {
     notes_filter: "Filtrer",
     notes_create_failed: "Impossible de créer la note.",
     notes_create_retry: "Réessayer",
+    chat_note_open: "Note",
     notes_title_label: "Titre",
     notes_title_hint: "Titre de la note",
     notes_editor_new: "Nouvelle note",
@@ -2347,12 +2355,22 @@ mod tests {
     fn locked_notes_create_failure_copy_fr_en() {
         let t_en = strings("en");
         let t_fr = strings("fr");
-        assert_eq!(t_en.notes_create_failed, "Couldn't create the note.");
+        assert_eq!(t_en.notes_create_failed, "Could not create the note.");
         assert_eq!(t_fr.notes_create_failed, "Impossible de créer la note.");
         assert_eq!(t_en.notes_create_retry, "Try again");
         assert_eq!(t_fr.notes_create_retry, "Réessayer");
+        assert_eq!(t_en.chat_note_open, "Note");
+        assert_eq!(t_fr.chat_note_open, "Note");
         assert!(!t_en.notes_create_failed.contains("module"));
         assert!(!t_fr.notes_create_failed.contains('/'));
+    }
+
+    #[test]
+    fn locked_vision_badge_copy_fr_en() {
+        let t_en = strings("en");
+        let t_fr = strings("fr");
+        assert_eq!(t_en.models_vision_sees_images, "sees images");
+        assert_eq!(t_fr.models_vision_sees_images, "voit les images");
     }
 
     #[test]

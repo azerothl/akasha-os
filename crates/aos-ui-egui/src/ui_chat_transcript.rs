@@ -47,6 +47,7 @@ impl UiApp {
                 )> = None;
                 let mut document_result_open: Option<(String, String)> = None;
                 let mut schedule_act: Option<(String, usize, bool)> = None;
+                let mut open_note_title: Option<String> = None;
                 let tz_offset = local_tz_offset_minutes();
                 let chat_now = now_ms();
                 let reply_id = self.blocked_ask_agent().map(|a| a.agent_id.clone());
@@ -185,6 +186,7 @@ impl UiApp {
                                                     session_ops,
                                                     trace,
                                                     t,
+                                                    self.workspace_ui.notes.notes.len(),
                                                 )
                                             },
                                         )
@@ -210,6 +212,20 @@ impl UiApp {
                                             let _ = self.cmd_tx.send(Cmd::AgentRetry {
                                                 id: agent_id.clone(),
                                             });
+                                        }
+                                        agent_panel::ChatCardAction::OpenNote => {
+                                            let title = info
+                                                .and_then(|a| {
+                                                    crate::notes_panel::note_title_from_directive(
+                                                        &a.directive,
+                                                    )
+                                                })
+                                                .or_else(|| {
+                                                    self.workspace_ui.notes.notes.last().map(|n| {
+                                                        n.title.clone()
+                                                    })
+                                                });
+                                            open_note_title = title;
                                         }
                                         agent_panel::ChatCardAction::None => {}
                                     }
@@ -413,6 +429,9 @@ impl UiApp {
                 }
                 if let Some(id) = open_agent {
                     self.open_agent_tab(&id);
+                }
+                if let Some(title) = open_note_title {
+                    self.open_note_tab(Some(title));
                 }
                 if let Some((prompt, path)) = open_studio {
                     self.image_studio.open_from_chat(&prompt, &path, None);

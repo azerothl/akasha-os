@@ -64,6 +64,26 @@ pub struct NoteRelatedHit {
     pub excerpt: String,
 }
 
+/// Extract note title from common agent/chat directives (EN/FR cohort phrasing).
+pub fn note_title_from_directive(directive: &str) -> Option<String> {
+    let lower = directive.to_ascii_lowercase();
+    for marker in ["titled ", "intitulée ", "intitulee ", "intitulé ", "intitule "] {
+        if let Some(idx) = lower.find(marker) {
+            let after = directive[idx + marker.len()..].trim_start();
+            let end = after
+                .to_ascii_lowercase()
+                .find(" with ")
+                .or_else(|| after.to_ascii_lowercase().find(" avec "))
+                .unwrap_or(after.len());
+            let title = after[..end].trim().trim_matches(['«', '»', '"', '\'']);
+            if !title.is_empty() {
+                return Some(title.to_string());
+            }
+        }
+    }
+    None
+}
+
 /// Actions demandées par le panneau (consommées par `UiApp`).
 #[derive(Debug, Default)]
 pub struct NotesActions {
@@ -95,6 +115,8 @@ pub struct NotesPanelState {
     pub incoming: Vec<NoteLink>,
     pub status: String,
     pub show_preview: bool,
+    /// When set, `apply_listed` opens this note title in the editor.
+    pub pending_open_title: Option<String>,
     /// Locked chrome when the last create/save failed.
     pub create_failed: bool,
     /// Last create/save payload for retry (title, body, optional path for update).
@@ -121,6 +143,7 @@ impl Default for NotesPanelState {
             incoming: Vec::new(),
             status: String::new(),
             show_preview: true,
+            pending_open_title: None,
             create_failed: false,
             retry_payload: None,
             md_cache: CommonMarkCache::default(),
@@ -133,13 +156,27 @@ impl NotesPanelState {
         !self.edit_title.trim().is_empty()
     }
 
-    pub fn apply_listed(&mut self, notes: Vec<NoteListItem>) {
+    pub fn apply_listed(&mut self, notes: Vec<NoteListItem>) -> Option<NoteListItem> {
+        let pending = self.pending_open_title.take();
         self.notes = notes;
         if self.create_failed && !self.notes.is_empty() {
             self.create_failed = false;
             self.retry_payload = None;
         }
         self.status = format!("{} note(s)", self.notes.len());
+        if let Some(want) = pending {
+            if let Some(hit) = self
+                .notes
+                .iter()
+                .find(|n| n.title.eq_ignore_ascii_case(want.trim()))
+            {
+                return Some(hit.clone());
+            }
+            self.start_new();
+            self.edit_title = want;
+            self.dirty = true;
+        }
+        None
     }
 
     pub fn apply_loaded(&mut self, detail: NoteDetail) {
@@ -636,6 +673,18 @@ pub fn parse_related(v: &serde_json::Value) -> Vec<NoteRelatedHit> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn note_title_from_directive_en_fr() {
+        assert_eq!(
+            note_title_from_directive("create a note titled cohort with content hello"),
+            Some("cohort".into())
+        );
+        assert_eq!(
+            note_title_from_directive("crée une note intitulée cohorte avec le contenu hello"),
+            Some("cohorte".into())
+        );
+    }
 
     #[test]
     fn can_save_requires_non_empty_title() {

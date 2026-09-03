@@ -23,8 +23,8 @@ impl WorkspaceUiState {
         is_new
     }
 
-    pub(crate) fn apply_notes_listed(&mut self, notes: Vec<NoteListItem>) {
-        self.notes.apply_listed(notes);
+    pub(crate) fn apply_notes_listed(&mut self, notes: Vec<NoteListItem>) -> Option<NoteListItem> {
+        self.notes.apply_listed(notes)
     }
 
     pub(crate) fn apply_note_loaded(&mut self, detail: NoteDetail) {

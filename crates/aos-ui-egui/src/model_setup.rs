@@ -116,6 +116,31 @@ fn collect_remote_model_ids(providers: &[ProviderRecord]) -> Vec<String> {
     out
 }
 
+fn model_setup_row_label(m: &ModelOffering, t: &crate::i18n::UiStrings) -> String {
+    if crate::models_page::is_designer_vision_catalog_model(&m.id) {
+        format!("{} — {}", m.name, t.models_vision_sees_images)
+    } else {
+        format!(
+            "{} ({:.1} GiB)",
+            m.name,
+            m.bytes as f64 / (1 << 30) as f64
+        )
+    }
+}
+
+fn model_setup_optional_label(m: &ModelOffering, t: &crate::i18n::UiStrings) -> String {
+    if crate::models_page::is_designer_vision_catalog_model(&m.id) {
+        format!("{} — {}", m.name, t.models_vision_sees_images)
+    } else {
+        format!(
+            "{} ({:.1} GiB) {:?}",
+            m.name,
+            m.bytes as f64 / (1 << 30) as f64,
+            m.profiles
+        )
+    }
+}
+
 pub fn run() -> eframe::Result<()> {
     let home = std::env::var("AOS_HOME")
         .map(PathBuf::from)
@@ -519,11 +544,7 @@ impl eframe::App for SetupApp {
                             if ui
                                 .checkbox(
                                     &mut on,
-                                    format!(
-                                        "{} ({:.1} GiB)",
-                                        m.name,
-                                        m.bytes as f64 / (1 << 30) as f64
-                                    ),
+                                    model_setup_row_label(m, &t),
                                 )
                                 .changed()
                             {
@@ -553,12 +574,7 @@ impl eframe::App for SetupApp {
                                 if ui
                                     .checkbox(
                                         &mut on,
-                                        format!(
-                                            "{} ({:.1} GiB) {:?}",
-                                            m.name,
-                                            m.bytes as f64 / (1 << 30) as f64,
-                                            m.profiles
-                                        ),
+                                        model_setup_optional_label(m, &t),
                                     )
                                     .changed()
                                 {

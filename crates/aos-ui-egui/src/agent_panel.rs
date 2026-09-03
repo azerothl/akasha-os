@@ -393,6 +393,26 @@ pub fn notes_create_fail_chrome(
     )
 }
 
+/// Successful note agent: hide raw goal.complete / English success from the thread.
+pub fn notes_create_success_muted(info: Option<&AgentInfo>, notes_count: usize) -> bool {
+    if notes_count == 0 {
+        return false;
+    }
+    let Some(a) = info else {
+        return false;
+    };
+    agent_has_notes_create_tool(a) && matches!(a.state, AgentState::Done)
+}
+
+/// Show the Note opener on a completion card when a note exists.
+pub fn notes_open_card_visible(info: Option<&AgentInfo>, origin: &str, notes_count: usize) -> bool {
+    origin == "completion"
+        && notes_count > 0
+        && info.is_some_and(|a| {
+            agent_has_notes_create_tool(a) && matches!(a.state, AgentState::Done)
+        })
+}
+
 /// True when the action is a mutating canvas tool (not get/export).
 pub fn is_canvas_draw_tool(action: &str) -> bool {
     action.starts_with("canvas.")
@@ -712,6 +732,7 @@ pub enum ChatCardAction {
     Export,
     Retry,
     Continue,
+    OpenNote,
 }
 
 #[allow(clippy::too_many_arguments)] // Card state remains explicit at this immediate-mode UI boundary.
@@ -725,6 +746,7 @@ pub fn chat_agent_card(
     session_ops: Option<&[aos_proto::CanvasOp]>,
     trace: Option<&aos_proto::AgentTrace>,
     t: &crate::i18n::UiStrings,
+    notes_count: usize,
 ) -> ChatCardAction {
     let mut action = ChatCardAction::None;
     let canvas_muted = canvas_draw_failure_muted(info, session_ops, trace);
@@ -795,6 +817,11 @@ pub fn chat_agent_card(
                     ui.label(format!("step {step}/{max_steps}"));
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if notes_open_card_visible(info, origin, notes_count) {
+                        if ui.add(egui::Button::new(t.chat_note_open).small()).clicked() {
+                            action = ChatCardAction::OpenNote;
+                        }
+                    }
                     if ui.add(egui::Button::new(t.agent_export).small()).clicked() {
                         action = ChatCardAction::Export;
                     }
@@ -1912,6 +1939,66 @@ Je vais répondre de manière naturelle"#;
         other.tools.clear();
         other.skills.clear();
         assert!(!notes_create_fail_chrome(Some(&other), false, 0));
+    }
+
+    #[test]
+    fn notes_open_card_visible_only_on_completion_with_notes() {
+        let ag = AgentInfo {
+            agent_id: "n1".into(),
+            directive: "create a note titled cohort with content hello".into(),
+            state: AgentState::Done,
+            tools: vec!["notes.create".into()],
+            skills: vec!["notes-writer".into()],
+            caps: Vec::new(),
+            last_output: String::new(),
+            pid: None,
+            step: 0,
+            max_steps: 0,
+            current_task: None,
+            parent_id: None,
+            children: Vec::new(),
+            tokens_used: 0,
+            mcp_servers: Vec::new(),
+            fail_reason: None,
+            session_id: None,
+            title: String::new(),
+            kind: AgentKind::Task,
+            display_name: None,
+            persona_id: None,
+            origin: None,
+        };
+        assert!(notes_open_card_visible(Some(&ag), "completion", 1));
+        assert!(!notes_open_card_visible(Some(&ag), "slash", 1));
+        assert!(!notes_open_card_visible(Some(&ag), "completion", 0));
+    }
+
+    #[test]
+    fn notes_create_success_muted_hides_goal_complete() {
+        let ag = AgentInfo {
+            agent_id: "n1".into(),
+            directive: String::new(),
+            state: AgentState::Done,
+            tools: vec!["notes.create".into()],
+            skills: Vec::new(),
+            caps: Vec::new(),
+            last_output: "Successfully created note".into(),
+            pid: None,
+            step: 0,
+            max_steps: 0,
+            current_task: None,
+            parent_id: None,
+            children: Vec::new(),
+            tokens_used: 0,
+            mcp_servers: Vec::new(),
+            fail_reason: None,
+            session_id: None,
+            title: String::new(),
+            kind: AgentKind::Task,
+            display_name: None,
+            persona_id: None,
+            origin: None,
+        };
+        assert!(notes_create_success_muted(Some(&ag), 2));
     }
 
     #[test]

@@ -293,6 +293,9 @@ fn agent_completion_chat_text(
     if agent_panel::notes_create_fail_chrome(Some(ag), pending_note_agent, notes_count) {
         return t.notes_create_failed.to_string();
     }
+    if agent_panel::notes_create_success_muted(Some(ag), notes_count) {
+        return String::new();
+    }
     if agent_panel::canvas_draw_failure_muted(Some(ag), session_ops, trace) {
         return String::new();
     }

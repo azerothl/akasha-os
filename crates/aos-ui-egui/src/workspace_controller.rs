@@ -1,8 +1,9 @@
 //! Workspace panel controller — notes / tasks / library event handlers.
 
+use crate::cmd::Cmd;
 use crate::notes_panel::{NoteDetail, NoteListItem, NoteRelatedHit, NoteSearchHit};
 use crate::tasks_panel::TaskItem;
-use crate::{i18n, UiApp};
+use crate::{i18n, Tab, UiApp};
 use aos_proto::UserLibraryDoc;
 
 impl UiApp {
@@ -12,7 +13,14 @@ impl UiApp {
 
     pub(crate) fn on_notes_listed(&mut self, notes: Vec<NoteListItem>) {
         let had_pending_note = self.scenario_ui.pending_note_agent;
-        self.workspace_ui.apply_notes_listed(notes);
+        let open = self.workspace_ui.apply_notes_listed(notes);
+        if let Some(note) = open {
+            let _ = self.cmd_tx.send(Cmd::NotesRead {
+                title: Some(note.title),
+                path: Some(note.path),
+                slug: Some(note.slug),
+            });
+        }
         if !self.workspace_ui.notes.notes.is_empty() {
             self.scenario_ui.note_human = true;
             if had_pending_note {
@@ -21,6 +29,12 @@ impl UiApp {
         } else if had_pending_note {
             self.scenario_ui.pending_note_agent = false;
         }
+    }
+
+    pub(crate) fn open_note_tab(&mut self, title: Option<String>) {
+        self.tab = Tab::Notes;
+        self.workspace_ui.notes.pending_open_title = title;
+        let _ = self.cmd_tx.send(Cmd::NotesList);
     }
 
     pub(crate) fn on_note_loaded(&mut self, detail: NoteDetail) {

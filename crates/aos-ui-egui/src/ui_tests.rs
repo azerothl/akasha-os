@@ -355,6 +355,20 @@ mod canvas_completion_tests {
     }
 
     #[test]
+    fn completion_chat_note_agent_success_mutes_english_body() {
+        let t = i18n::strings("fr");
+        let mut ag = canvas_agent("note-agent");
+        ag.state = AgentState::Done;
+        ag.tools = vec!["notes.create".into()];
+        ag.skills = vec!["notes-writer".into()];
+        ag.last_output = "Note created successfully with title cohort.".into();
+        let text = agent_completion_chat_text(&ag, &t, None, None, true, 1);
+        assert!(text.is_empty(), "expected mute, got: {text}");
+        assert!(!text.to_ascii_lowercase().contains("created"));
+        assert!(!text.contains("cohort"));
+    }
+
+    #[test]
     fn completion_chat_note_agent_empty_list_shows_locked_fail_copy() {
         let t = i18n::strings("en");
         let mut ag = canvas_agent("note-agent");
