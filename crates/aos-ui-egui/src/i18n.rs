@@ -1290,7 +1290,7 @@ const EN: UiStrings = UiStrings {
     notes_list: "List",
     notes_filter: "Filter",
     notes_create_failed: "Could not create the note.",
-    notes_create_retry: "Try again",
+    notes_create_retry: "Retry",
     chat_note_open: "Note",
     notes_title_label: "Title",
     notes_title_hint: "Note title",
@@ -2357,7 +2357,7 @@ mod tests {
         let t_fr = strings("fr");
         assert_eq!(t_en.notes_create_failed, "Could not create the note.");
         assert_eq!(t_fr.notes_create_failed, "Impossible de créer la note.");
-        assert_eq!(t_en.notes_create_retry, "Try again");
+        assert_eq!(t_en.notes_create_retry, "Retry");
         assert_eq!(t_fr.notes_create_retry, "Réessayer");
         assert_eq!(t_en.chat_note_open, "Note");
         assert_eq!(t_fr.chat_note_open, "Note");
