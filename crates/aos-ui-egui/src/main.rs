@@ -1912,6 +1912,10 @@ impl eframe::App for UiApp {
                     last_pass_label,
                 } => self.on_mem_sweep_status(last_pass_ms, last_pass_label),
                 Evt::SkillPassPending(offer) => {
+                    skill_offer::reconcile_pending_cards(
+                        &mut self.chat,
+                        offer.as_ref().map(|item| item.pattern_id.as_str()),
+                    );
                     if let Some(o) = offer {
                         self.offer_skill_card(&o);
                     }

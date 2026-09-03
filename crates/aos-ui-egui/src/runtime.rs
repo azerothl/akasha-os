@@ -822,7 +822,8 @@ async fn handle_cmd(
                     }
                 }
                 Err(_) => {
-                    // Silent — no status line, no système bubble (skill slugs stay out of chat).
+                    let t = i18n::strings(&crate::prefs::load_preferences().language);
+                    let _ = evt_tx.send(Evt::Error(t.skill_offer_create_failed.into()));
                 }
             }
         }

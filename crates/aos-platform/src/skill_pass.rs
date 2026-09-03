@@ -155,11 +155,19 @@ const STOP_WORDS: &[&str] = &[
     "du", "et", "ou", "pour", "dans", "sur", "avec", "est", "sont", "je", "tu", "il", "elle",
     "nous", "vous", "ils", "elles", "mon", "ma", "mes", "ton", "ta", "tes", "ce", "cette",
     "ces", "qui", "que", "quoi", "comment", "peux", "peut", "faire", "fait", "merci", "bonjour",
-    "salut", "svp", "stp",
+    "salut", "svp", "stp", "create", "creates", "creating", "make", "build", "generate",
+    "write", "draft", "crée", "créer", "cree", "creer", "fais", "génère", "générer",
+    "genere", "generer", "rédige", "rédiger", "redige", "rediger", "dessine", "dessiner",
+];
+
+const GENERIC_ACTION_LABELS: &[&str] = &[
+    "create", "creates", "creating", "make", "build", "generate", "write", "draft", "crée",
+    "créer", "cree", "creer", "fais", "génère", "générer", "genere", "generer", "rédige",
+    "rédiger", "redige", "rediger", "dessine", "dessiner",
 ];
 
 fn tokenize(text: &str) -> HashSet<String> {
-    text.to_ascii_lowercase()
+    text.to_lowercase()
         .split(|c: char| !c.is_alphanumeric())
         .filter(|w| w.len() >= 3)
         .filter(|w| !STOP_WORDS.contains(w))
@@ -183,7 +191,7 @@ struct MessageCluster {
 }
 
 fn domain_key(text: &str) -> Option<String> {
-    let lower = text.to_ascii_lowercase();
+    let lower = text.to_lowercase();
     if lower.contains("météo") || lower.contains("meteo") || lower.contains("weather") {
         return Some("weather".into());
     }
@@ -199,6 +207,9 @@ fn domain_key(text: &str) -> Option<String> {
     }
     if lower.contains("task") || lower.contains("tâche") || lower.contains("tache") {
         return Some("tasks".into());
+    }
+    if lower.contains("module") {
+        return Some("modules".into());
     }
     None
 }
@@ -264,7 +275,7 @@ fn looks_french(texts: &[String]) -> bool {
     ];
     let mut fr = 0usize;
     for t in texts {
-        let lower = t.to_ascii_lowercase();
+        let lower = t.to_lowercase();
         if fr_markers.iter().any(|m| lower.contains(m)) {
             fr += 1;
         }
@@ -273,7 +284,7 @@ fn looks_french(texts: &[String]) -> bool {
 }
 
 fn infer_labels(messages: &[String]) -> (String, String) {
-    let joined = messages.join(" ").to_ascii_lowercase();
+    let joined = messages.join(" ").to_lowercase();
     if joined.contains("météo")
         || joined.contains("meteo")
         || joined.contains("weather")
@@ -294,6 +305,19 @@ fn infer_labels(messages: &[String]) -> (String, String) {
     }
     if joined.contains("task") || joined.contains("tâche") || joined.contains("tache") {
         return ("tasks".into(), "tâches".into());
+    }
+    if joined.contains("module") {
+        let development = [
+            "create", "build", "develop", "code", "crée", "créer", "cree", "creer",
+            "développ", "developp",
+        ]
+        .iter()
+        .any(|marker| joined.contains(marker));
+        return if development {
+            ("module development".into(), "développement de modules".into())
+        } else {
+            ("modules".into(), "modules".into())
+        };
     }
     // Fallback: most frequent significant token.
     let mut freq: HashMap<String, usize> = HashMap::new();
@@ -344,7 +368,7 @@ fn slugify_label(label_en: &str) -> String {
 }
 
 fn infer_tools(messages: &[String]) -> Vec<String> {
-    let joined = messages.join(" ").to_ascii_lowercase();
+    let joined = messages.join(" ").to_lowercase();
     let mut tools = Vec::new();
     if joined.contains("note") {
         tools.push("notes.list".into());
@@ -356,6 +380,28 @@ fn infer_tools(messages: &[String]) -> Vec<String> {
     }
     if joined.contains("search") || joined.contains("recherche") || joined.contains("web") {
         tools.push("web.search".into());
+    }
+    if joined.contains("module") {
+        tools.push("module.list".into());
+        tools.push("module.describe".into());
+        if [
+            "create", "build", "develop", "code", "crée", "créer", "cree", "creer",
+            "développ", "developp",
+        ]
+        .iter()
+        .any(|marker| joined.contains(marker))
+        {
+            tools.push("module.scaffold".into());
+            tools.push("module.compile".into());
+            tools.push("module.package".into());
+            tools.push("module.install".into());
+        }
+        if ["uninstall", "remove", "désinstall", "desinstall", "supprim"]
+            .iter()
+            .any(|marker| joined.contains(marker))
+        {
+            tools.push("module.uninstall".into());
+        }
     }
     tools.sort();
     tools.dedup();
@@ -412,10 +458,9 @@ fn stable_pattern_id(messages: &[String]) -> String {
 }
 
 fn normalize_signature(text: &str) -> String {
-    tokenize(text)
-        .into_iter()
-        .collect::<Vec<_>>()
-        .join(" ")
+    let mut tokens: Vec<_> = tokenize(text).into_iter().collect();
+    tokens.sort();
+    tokens.join(" ")
 }
 
 fn fnv1a(s: &str) -> u64 {
@@ -449,10 +494,16 @@ pub fn pick_best_candidate(
     candidates
         .iter()
         .find(|c| {
-            !existing_skill_names.contains(&c.skill_name)
+            candidate_label_is_actionable(c)
+                && !existing_skill_names.contains(&c.skill_name)
                 && !created_pattern_ids.contains(&c.pattern_id)
         })
         .cloned()
+}
+
+fn candidate_label_is_actionable(candidate: &SkillPassCandidate) -> bool {
+    let label = candidate.label_en.trim().to_lowercase();
+    !label.is_empty() && !GENERIC_ACTION_LABELS.contains(&label.as_str())
 }
 
 /// Card copy for the chat thread — human label only, no draft body or analysis.
@@ -475,6 +526,9 @@ pub fn pending_surface_offer(
     offset_minutes: i32,
 ) -> Option<&SkillPassCandidate> {
     let candidate = state.pending.as_ref()?;
+    if !candidate_label_is_actionable(candidate) {
+        return None;
+    }
     let today = local_day_key(now_ms, offset_minutes);
     if state.last_pass_local_day_key != today {
         return None;
@@ -539,6 +593,9 @@ pub fn create_skill_from_candidate(
     candidate: &SkillPassCandidate,
     actor: &str,
 ) -> Result<aos_proto::SkillInfo, SkillError> {
+    if !candidate_label_is_actionable(candidate) {
+        return Err(SkillError::CandidateTooGeneric(candidate.label_en.clone()));
+    }
     let req = candidate_to_create_request(candidate, actor);
     match store.create(&req) {
         Ok(info) => Ok(info),
@@ -578,6 +635,65 @@ mod tests {
         assert_eq!(best.label_en, "weather");
         assert!(best.hit_count >= 3);
         assert!(!best.body.is_empty());
+    }
+
+    #[test]
+    fn module_creation_requests_do_not_create_a_cree_skill() {
+        let messages = vec![
+            "crée un module de développement".into(),
+            "crée un module de développement".into(),
+            "crée un module de code".into(),
+        ];
+        let candidates = find_pattern_candidates(&messages, MIN_PATTERN_HITS);
+        let best = candidates.first().expect("module candidate");
+        assert_eq!(best.label_en, "module development");
+        assert_eq!(best.label_fr, "développement de modules");
+        assert_eq!(best.skill_name, "user-module-development");
+        assert!(best.tools.iter().any(|tool| tool == "module.scaffold"));
+        assert!(best.tools.iter().any(|tool| tool == "module.compile"));
+        assert!(!best.tools.is_empty());
+    }
+
+    #[test]
+    fn legacy_generic_action_offer_is_not_surfaced() {
+        let now = 86_400_000u64 * 2 + 6 * 3_600_000;
+        let mut candidate = build_candidate(&MessageCluster {
+            messages: msgs_weather_fr(),
+            tokens: tokenize("météo paris lyon marseille"),
+        });
+        candidate.label_en = "crée".into();
+        candidate.label_fr = "crée".into();
+        candidate.skill_name = "user-cre".into();
+        let state = SkillPassState {
+            last_pass_local_day_key: local_day_key(now, 0),
+            pending: Some(candidate),
+            ..Default::default()
+        };
+        assert!(pending_surface_offer(&state, now, 0).is_none());
+
+        let dir = std::env::temp_dir().join(format!(
+            "aos-skill-pass-generic-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let store = SkillStore::open(&dir).unwrap();
+        let error = create_skill_from_candidate(
+            &store,
+            state.pending.as_ref().unwrap(),
+            "human:ui",
+        )
+        .unwrap_err();
+        assert!(matches!(error, SkillError::CandidateTooGeneric(_)));
+        assert!(store.list().is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn pattern_signature_is_stable_across_word_order() {
+        assert_eq!(
+            normalize_signature("module code rust"),
+            normalize_signature("rust module code")
+        );
     }
 
     #[test]

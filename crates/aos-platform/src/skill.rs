@@ -22,6 +22,8 @@ pub enum SkillError {
     Io(String),
     #[error("revue de caps requise: {0}")]
     CapReviewRequired(String),
+    #[error("candidat de skill trop générique: {0}")]
+    CandidateTooGeneric(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
