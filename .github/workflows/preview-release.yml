@@ -188,7 +188,7 @@ jobs:
           VERSION="$(tr -d '[:space:]' < VERSION)"
           export VERSION
           export LIBCLANG_PATH="$(dirname "$(ls -1 /usr/lib/llvm-*/lib/libclang.so* 2>/dev/null | head -n1)")"
-          chmod +x packaging/build-preview.sh
+          chmod +x packaging/build-preview.sh modules/build-canvas.sh
           bash packaging/build-preview.sh
           OUT="dist/AgentOS-Preview-${VERSION}-linux-x64"
           for bin in \
@@ -296,7 +296,7 @@ jobs:
         run: |
           sccache --show-stats
           export VERSION
-          chmod +x packaging/build-preview-macos.sh
+          chmod +x packaging/build-preview-macos.sh modules/build-canvas.sh
           ./packaging/build-preview-macos.sh
           OUT="dist/AgentOS-Preview-${VERSION}-macos-arm64"
           for bin in \

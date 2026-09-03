@@ -119,18 +119,44 @@ foreach ($rootCuda in $cudaCandidates) {
     if ($cudaBin) { break }
 }
 $cudaCopied = 0
+$copiedCudaDlls = [System.Collections.Generic.HashSet[string]]::new(
+    [System.StringComparer]::OrdinalIgnoreCase
+)
+function Copy-CudaDllPattern {
+    param(
+        [Parameter(Mandatory = $true)][string]$SearchDir,
+        [Parameter(Mandatory = $true)][string]$Pattern
+    )
+    if (-not (Test-Path -LiteralPath $SearchDir)) { return }
+    Get-ChildItem -LiteralPath $SearchDir -Filter $Pattern -ErrorAction SilentlyContinue |
+        ForEach-Object {
+            if ($copiedCudaDlls.Add($_.Name)) {
+                Copy-Item $_.FullName (Join-Path $OutDir "bin\$($_.Name)") -Force
+                Write-Host "  + $($_.Name)"
+                $script:cudaCopied++
+            }
+        }
+}
+$binPatterns = @(
+    "cudart64_*.dll", "cublas64_*.dll", "cublasLt64_*.dll",
+    "nvrtc64_*.dll", "nvrtc-builtins*.dll"
+)
 if ($cudaBin) {
     Write-Host "== CUDA runtime DLLs depuis $cudaBin =="
-    $patterns = @(
-        "cudart64_*.dll", "cublas64_*.dll", "cublasLt64_*.dll",
-        "nvJitLink*.dll", "nvrtc64_*.dll", "nvrtc-builtins*.dll"
-    )
-    foreach ($pat in $patterns) {
-        Get-ChildItem $cudaBin -Filter $pat -ErrorAction SilentlyContinue | ForEach-Object {
-            Copy-Item $_.FullName (Join-Path $OutDir "bin\$($_.Name)") -Force
-            Write-Host "  + $($_.Name)"
-            $cudaCopied++
-        }
+    foreach ($pat in $binPatterns) {
+        Copy-CudaDllPattern -SearchDir $cudaBin -Pattern $pat
+    }
+}
+# nvJitLink is under lib\x64 (or CUDA redist bin) on Windows, not next to cublas in bin.
+foreach ($rootCuda in $cudaCandidates) {
+    if (-not (Test-Path -LiteralPath $rootCuda)) { continue }
+    foreach ($sub in @("lib\x64", "lib", "bin\x64", "bin")) {
+        $searchDir = Join-Path $rootCuda $sub
+        if (-not (Test-Path -LiteralPath $searchDir)) { continue }
+        $jitMatches = @(Get-ChildItem -LiteralPath $searchDir -Filter "nvJitLink*.dll" -ErrorAction SilentlyContinue)
+        if ($jitMatches.Count -eq 0) { continue }
+        Write-Host "== CUDA nvJitLink depuis $searchDir =="
+        Copy-CudaDllPattern -SearchDir $searchDir -Pattern "nvJitLink*.dll"
     }
 }
 if ($cudaCopied -eq 0) {
