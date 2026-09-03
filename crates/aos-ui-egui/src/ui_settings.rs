@@ -7,6 +7,28 @@ use crate::prefs::{save_preferences, UiDensity, UI_SCALE_PRESETS};
 use crate::{i18n, Tab, UiApp};
 use eframe::egui;
 
+fn color_from_hex(value: &str) -> egui::Color32 {
+    let raw = value.trim().trim_start_matches('#');
+    if raw.len() != 6 {
+        return egui::Color32::WHITE;
+    }
+    let Ok(rgb) = u32::from_str_radix(raw, 16) else {
+        return egui::Color32::WHITE;
+    };
+    egui::Color32::from_rgb((rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8)
+}
+
+fn edit_theme_color(ui: &mut egui::Ui, label: &str, value: &mut String) -> bool {
+    let mut color = color_from_hex(value);
+    let changed = ui.color_edit_button_srgba(&mut color).changed();
+    ui.monospace(value.as_str());
+    if changed {
+        *value = format!("#{:02X}{:02X}{:02X}", color.r(), color.g(), color.b());
+    }
+    ui.label(label);
+    changed
+}
+
 impl UiApp {
     pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
         let t = i18n::strings(&self.prefs.language);
@@ -74,6 +96,7 @@ impl UiApp {
                     "light" => t.theme_light,
                     "soft" => t.theme_soft,
                     "high_contrast" => t.theme_high_contrast,
+                    "custom" => "Custom",
                     _ => t.theme_dark,
                 };
                 egui::ComboBox::from_id_salt("prefs_theme")
@@ -84,6 +107,7 @@ impl UiApp {
                             ("light", t.theme_light),
                             ("soft", t.theme_soft),
                             ("high_contrast", t.theme_high_contrast),
+                            ("custom", "Custom"),
                         ] {
                             if ui
                                 .selectable_label(self.prefs.theme == code, label)
@@ -96,6 +120,32 @@ impl UiApp {
                         }
                     });
                 ui.end_row();
+
+                if self.prefs.theme == "custom" {
+                    ui.end_row();
+                    ui.label("Custom colors");
+                    egui::Grid::new("custom_theme_colors")
+                        .num_columns(3)
+                        .spacing([12.0, 8.0])
+                        .show(ui, |ui| {
+                            let mut changed = false;
+                            changed |= edit_theme_color(ui, "Background", &mut self.prefs.custom_theme.background);
+                            ui.end_row();
+                            changed |= edit_theme_color(ui, "Panel", &mut self.prefs.custom_theme.panel);
+                            ui.end_row();
+                            changed |= edit_theme_color(ui, "Text", &mut self.prefs.custom_theme.text);
+                            ui.end_row();
+                            changed |= edit_theme_color(ui, "Accent", &mut self.prefs.custom_theme.accent);
+                            ui.end_row();
+                            changed |= edit_theme_color(ui, "Danger", &mut self.prefs.custom_theme.danger);
+                            ui.end_row();
+                            if changed {
+                                save_preferences(&self.prefs);
+                            }
+                        });
+                    ui.weak("Les couleurs sont appliquées immédiatement et restent compatibles avec les anciens réglages.");
+                    ui.end_row();
+                }
 
                 ui.label(t.settings_ui_scale);
                 let scale_label = format!("{}%", self.prefs.ui_scale_percent);

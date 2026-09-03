@@ -1902,7 +1902,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
 
 impl eframe::App for UiApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        theme::apply_theme(ctx, &self.prefs.theme);
+        theme::apply_theme(ctx, &self.prefs.theme, &self.prefs.custom_theme);
         theme::apply_ui_scale(ctx, self.prefs.ui_scale_percent);
         theme::apply_ui_density(ctx, self.prefs.ui_density);
         self.handle_keyboard_shortcuts(ctx);

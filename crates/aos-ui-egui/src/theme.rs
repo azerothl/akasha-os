@@ -80,11 +80,16 @@ fn base_widgets(v: &mut egui::Visuals, fg: egui::Color32, accent: egui::Color32)
     apply_focus_ring(v, accent);
 }
 
-pub fn apply_theme(ctx: &egui::Context, theme: &str) {
+pub fn apply_theme(
+    ctx: &egui::Context,
+    theme: &str,
+    custom: &crate::prefs::CustomThemePreferences,
+) {
     let visuals = match theme {
         "light" => chamber_light(),
         "soft" => chamber_soft(),
         "high_contrast" => chamber_high_contrast(),
+        "custom" => chamber_custom(custom),
         _ => chamber_dark(),
     };
     ctx.set_visuals(visuals);
@@ -97,6 +102,35 @@ pub fn apply_ui_scale(ctx: &egui::Context, scale_percent: u32) {
     if (ctx.zoom_factor() - factor).abs() > f32::EPSILON {
         ctx.set_zoom_factor(factor);
     }
+}
+
+fn parse_hex(value: &str, fallback: egui::Color32) -> egui::Color32 {
+    let raw = value.trim().trim_start_matches('#');
+    if raw.len() != 6 { return fallback; }
+    let Ok(rgb) = u32::from_str_radix(raw, 16) else { return fallback; };
+    egui::Color32::from_rgb((rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8)
+}
+
+fn chamber_custom(custom: &crate::prefs::CustomThemePreferences) -> egui::Visuals {
+    let background = parse_hex(&custom.background, VOID);
+    let panel = parse_hex(&custom.panel, mix(VOID, PAPER, 0.04));
+    let text = parse_hex(&custom.text, PAPER);
+    let accent = parse_hex(&custom.accent, SIGNAL);
+    let danger = parse_hex(&custom.danger, HYDROGEN);
+    let mut v = egui::Visuals::dark();
+    v.dark_mode = true;
+    v.extreme_bg_color = background;
+    v.panel_fill = background;
+    v.window_fill = panel;
+    v.faint_bg_color = panel;
+    v.widgets.noninteractive.bg_fill = panel;
+    v.widgets.inactive.bg_fill = mix(panel, accent, 0.10);
+    v.widgets.hovered.bg_fill = mix(panel, accent, 0.18);
+    v.widgets.active.bg_fill = mix(panel, accent, 0.28);
+    base_widgets(&mut v, text, accent);
+    v.warn_fg_color = danger;
+    v.error_fg_color = danger;
+    v
 }
 
 /// Apply the product-wide density without allowing compact mode to create

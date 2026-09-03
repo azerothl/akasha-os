@@ -48,6 +48,38 @@ pub struct UiLayoutPreferences {
     pub canvas_focus: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomThemePreferences {
+    #[serde(default = "default_custom_background")]
+    pub background: String,
+    #[serde(default = "default_custom_panel")]
+    pub panel: String,
+    #[serde(default = "default_custom_text")]
+    pub text: String,
+    #[serde(default = "default_custom_accent")]
+    pub accent: String,
+    #[serde(default = "default_custom_danger")]
+    pub danger: String,
+}
+
+impl Default for CustomThemePreferences {
+    fn default() -> Self {
+        Self {
+            background: default_custom_background(),
+            panel: default_custom_panel(),
+            text: default_custom_text(),
+            accent: default_custom_accent(),
+            danger: default_custom_danger(),
+        }
+    }
+}
+
+fn default_custom_background() -> String { "#070B14".into() }
+fn default_custom_panel() -> String { "#101622".into() }
+fn default_custom_text() -> String { "#E8EEF6".into() }
+fn default_custom_accent() -> String { "#2EF0C8".into() }
+fn default_custom_danger() -> String { "#FF5A48".into() }
+
 fn default_context_panel_width() -> f32 {
     320.0
 }
@@ -129,6 +161,8 @@ pub struct Preferences {
     pub ui_density: UiDensity,
     #[serde(default)]
     pub ui_layout: UiLayoutPreferences,
+    #[serde(default)]
+    pub custom_theme: CustomThemePreferences,
 }
 
 /// Preset scale steps exposed in Settings → Me.
@@ -242,6 +276,7 @@ impl Default for Preferences {
             community_catalogue_enabled: false,
             ui_density: UiDensity::default(),
             ui_layout: UiLayoutPreferences::default(),
+            custom_theme: CustomThemePreferences::default(),
         }
     }
 }
@@ -397,6 +432,7 @@ mod tests {
         assert_eq!(prefs.ui_density, UiDensity::Comfortable);
         assert_eq!(prefs.ui_layout.context_panel_width, 320.0);
         assert!(!prefs.ui_layout.activity_panel_open);
+        assert_eq!(prefs.custom_theme.accent, "#2EF0C8");
     }
 
     #[test]
