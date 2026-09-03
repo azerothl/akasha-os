@@ -3,8 +3,8 @@
 use crate::chat_ask::agent_display_title;
 use crate::cmd::Cmd;
 use crate::composer_layout::{
-    chat_composer_input_height, composer_field_width, send_button_reserved_width,
-    stop_button_reserved_width,
+    chat_composer_input_height, composer_enter_action, composer_field_width,
+    send_button_reserved_width, stop_button_reserved_width, ComposerEnterAction,
 };
 use crate::slash::{slash_completions, slash_insert_text};
 use crate::{chat_media, chat_room, i18n, icons, os_open, UiApp};
@@ -203,7 +203,11 @@ impl UiApp {
                             .collect::<Vec<_>>()
                             .join("\n");
                     }
-                    let send = send_clicked || (enter && !shift_enter);
+                    let send = send_clicked
+                        || matches!(
+                            composer_enter_action(enter, shift_enter),
+                            ComposerEnterAction::Send
+                        );
                     if send && self.chat_state.composer.input.ends_with('\n') {
                         self.chat_state.composer.input.pop();
                     }

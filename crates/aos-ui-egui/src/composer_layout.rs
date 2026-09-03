@@ -6,6 +6,21 @@ use eframe::egui;
 pub(crate) const COMPOSER_MIN_INPUT_W: f32 = 140.0;
 pub(crate) const COMPOSER_INPUT_ROW_H: f32 = 44.0;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ComposerEnterAction {
+    None,
+    Newline,
+    Send,
+}
+
+pub(crate) fn composer_enter_action(enter_pressed: bool, shift_pressed: bool) -> ComposerEnterAction {
+    match (enter_pressed, shift_pressed) {
+        (true, true) => ComposerEnterAction::Newline,
+        (true, false) => ComposerEnterAction::Send,
+        (false, _) => ComposerEnterAction::None,
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct ChatSessionsSplit {
     pub(crate) side_w: f32,
@@ -151,4 +166,16 @@ pub(crate) fn chat_composer_reserve_height(
 pub(crate) fn chat_composer_input_height(input: &str) -> f32 {
     let lines = input.lines().count().clamp(1, 5) as f32;
     (44.0 + (lines - 1.0) * 22.0).min(132.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{composer_enter_action, ComposerEnterAction};
+
+    #[test]
+    fn enter_sends_and_shift_enter_inserts_newline() {
+        assert_eq!(composer_enter_action(true, false), ComposerEnterAction::Send);
+        assert_eq!(composer_enter_action(true, true), ComposerEnterAction::Newline);
+        assert_eq!(composer_enter_action(false, false), ComposerEnterAction::None);
+    }
 }
