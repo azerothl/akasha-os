@@ -16,7 +16,7 @@ CPU) and macOS Apple Silicon; a seL4 bare-metal track is separate.
   <img src="branding/logo/tracks.svg" width="480" alt="MEMORY, CAPS, GPU, AGENTS">
 </p>
 
-> This is **not** a bootable OS image yet. Preview 0.17.0 is an installable host
+> This is **not** a bootable OS image yet. Preview 0.16.1 is an installable host
 > app for testers (Windows/Linux/Mac Apple Silicon; NVIDIA optional on Win/Linux
 > via CPU path in the same zip).
 

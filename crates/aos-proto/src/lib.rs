@@ -1923,7 +1923,7 @@ mod preview_prompt_tests {
 
     #[test]
     fn chat_supervisor_lock_bans_meta_in_visible_reply() {
-        let lock = format_chat_supervisor_lock("0.17.0");
+        let lock = format_chat_supervisor_lock("0.16.1");
         for term in [
             "RAG",
             "JSON",
@@ -1945,7 +1945,7 @@ mod preview_prompt_tests {
             );
         }
         assert!(
-            lock.contains("0.17.0"),
+            lock.contains("0.16.1"),
             "supervisor lock must name the running chrome version"
         );
         assert!(

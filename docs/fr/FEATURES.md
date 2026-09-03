@@ -1,4 +1,4 @@
-# Fonctionnalités Preview — Akasha OS 0.17.0
+# Fonctionnalités Preview — Akasha OS 0.16.1
 
 **Langue :** [English](../FEATURES.md) | Français
 
@@ -7,9 +7,9 @@ Ce n'est **pas** l'OS bootable. Les exigences v1 sont dans
 [specs-fonctionnelles.md](specs-fonctionnelles.md) ; les gates dans
 [STATUS.md](STATUS.md).
 
-> Date : 03/09/2026 · Preview **0.17.0**
+> Date : 03/09/2026 · Preview **0.16.1**
 
-### Nouveautés 0.17.0
+### Nouveautés 0.16.1
 
 - **Shell calme** : densité confortable par défaut (contrôles 36 px, compositeur 44 px, rail 88 px) ; la densité compacte reste disponible sans descendre sous 32 px
 - **Sessions chat** : recherche insensible à la casse ; groupes Aujourd’hui / Hier / 7 derniers jours / Plus ancien ; sessions épinglées en tête
@@ -398,7 +398,7 @@ Piste VM seL4 (PV.1–PV.3) séparée : [phases/phase-vm-sel4.md](phases/phase-v
 
 ---
 
-## 11. Hors Preview 0.17.0
+## 11. Hors Preview 0.16.1
 
 - Image bootable / fer nu
 - STT / voix permanente

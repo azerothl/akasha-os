@@ -1,8 +1,8 @@
-# Community — Akasha OS Preview 0.17.0
+# Community — Akasha OS Preview 0.16.1
 
 **Language:** English | [Français](fr/community.md)
 
-> Date: 03/09/2026 · Preview **0.17.0**
+> Date: 03/09/2026 · Preview **0.16.1**
 
 The hangout is **GitHub Discussions** on
 [azerothl/akasha-os](https://github.com/azerothl/akasha-os/discussions).
@@ -63,10 +63,10 @@ exist.
 
 ## Public call (paste into a Cohort Discussion)
 
-**Title:** Preview cohort 0.17.0 — looking for 3 Windows + 1 Linux + 1 Mac
+**Title:** Preview cohort 0.16.1 — looking for 3 Windows + 1 Linux + 1 Mac
 
 ```
-Akasha OS Preview 0.17.0 is an installable host app (Windows / Linux x64,
+Akasha OS Preview 0.16.1 is an installable host app (Windows / Linux x64,
 macOS Apple Silicon) — not a bootable OS.
 
 The cohort gate is: 3 Windows + 1 Linux + 1 macOS Apple Silicon testers
@@ -89,7 +89,7 @@ There is no Discord. This thread is the hangout.
 French body for a second post or a reply:
 
 ```
-La Preview 0.17.0 d’Akasha OS est une appli hôte installable (Windows /
+La Preview 0.16.1 d’Akasha OS est une appli hôte installable (Windows /
 Linux x64, macOS Apple Silicon) — pas un OS bootable.
 
 Gate cohorte : 3 testeurs Windows + 1 Linux + 1 macOS Apple Silicon

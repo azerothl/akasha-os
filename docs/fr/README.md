@@ -16,7 +16,7 @@ first-class, offline-first. La Preview tourne sur hôte Windows/Linux
   <img src="../../branding/logo/tracks.svg" width="480" alt="MEMORY, CAPS, GPU, AGENTS">
 </p>
 
-> Ce n'est **pas** encore un OS bootable. La Preview 0.17.0 est une application
+> Ce n'est **pas** encore un OS bootable. La Preview 0.16.1 est une application
 > hôte installable pour testeurs (Windows/Linux/macOS Apple Silicon ; NVIDIA
 > optionnel sur Win/Linux via le chemin CPU du même zip).
 

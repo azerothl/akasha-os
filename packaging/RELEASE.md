@@ -7,8 +7,8 @@
 Tag then push:
 
 ```bash
-git tag v0.17.0
-git push origin v0.17.0
+git tag v0.16.1
+git push origin v0.16.1
 ```
 
 The workflow [`.github/workflows/preview-release.yml`](../.github/workflows/preview-release.yml)
@@ -24,7 +24,7 @@ CPU-linked `aos-modeld-cpu` in the same zip; no GGUF) and publishes:
 
 Manual trigger: Actions → **preview-release** → Run workflow.
 
-- **macOS only on existing Release** (no retag): `macos_only` = true, `release_version` = `0.17.0`, `upload_release` = true — attaches the Apple Silicon zip and refreshes `latest.json` on that Release.
+- **macOS only on existing Release** (no retag): `macos_only` = true, `release_version` = `0.16.1`, `upload_release` = true — attaches the Apple Silicon zip and refreshes `latest.json` on that Release.
 - **Full rebuild**: `create_release` = true, `macos_only` = false.
 
 ### Internal seL4 gate (not a tester release)
@@ -49,7 +49,7 @@ GGUFs are downloaded on **first run** via `share/models/manifest.json`.
 ## Release notes (draft)
 
 ```
-Akasha OS Preview 0.17.0 — Calm shell + session navigation
+Akasha OS Preview 0.16.1 — Calm shell + session navigation
 
 - Chat: search, date groups, pin, reversible archive
 - Composer: multiline Enter/Shift+Enter; comfortable density by default

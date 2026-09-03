@@ -34,7 +34,6 @@ impl UiApp {
             // expanded attachments remain fully rendered for visible rows.
             .show_rows(ui, 96.0, n, |ui, row_range| {
                 ui.set_min_width(ui.available_width());
-                ui.set_min_height(scroll_h);
                 let mut open_agent: Option<String> = None;
                 let mut target_reply: Option<String> = None;
                 let mut open_studio: Option<(String, String)> = None;

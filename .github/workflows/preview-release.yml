@@ -13,9 +13,9 @@ on:
         type: boolean
         default: true
       release_version:
-        description: "Release version to attach (e.g. 0.17.0). Empty = VERSION file in checkout."
+        description: "Release version to attach (e.g. 0.16.1). Empty = VERSION file in checkout."
         type: string
-        default: "0.17.0"
+        default: "0.16.1"
       upload_release:
         description: "Upload macOS zip + refresh latest.json on the GitHub Release"
         type: boolean
