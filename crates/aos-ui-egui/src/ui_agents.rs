@@ -430,6 +430,13 @@ impl UiApp {
         if self.agent_ui.open_tabs.is_empty() && !self.prefs.ui_layout.activity_panel_open {
             return;
         }
+        let escape_pressed = ctx.input(|input| input.key_pressed(egui::Key::Escape));
+        if escape_pressed {
+            self.prefs.ui_layout.activity_panel_open = false;
+            self.agent_ui.close_all_tabs();
+            crate::prefs::save_preferences(&self.prefs);
+            return;
+        }
         // At narrow widths the activity surface overlays the conversation so the
         // composer and transcript keep their usable width. It remains opt-in and
         // can be dismissed without changing the active session.
