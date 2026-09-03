@@ -114,11 +114,13 @@ if ($platformdBytes -lt 5MB) {
 }
 
 if ($RequireCuda) {
+    # ggml-cuda (llama.cpp via aos-llama) imports only cudart/cublas/nvcuda on Windows;
+    # nvJitLink is not in the PE import table (dumpbin /dependents equivalent on
+    # llama-b9500 ggml-cuda.dll: cudart64_12.dll, cublas64_12.dll, nvcuda.dll only).
     $cudaPatterns = @(
         "cudart64_*.dll",
         "cublas64_*.dll",
         "cublasLt64_*.dll",
-        "nvJitLink*.dll",
         "nvrtc64_*.dll",
         "nvrtc-builtins*.dll"
     )
