@@ -218,7 +218,11 @@ jobs:
           for cuda_lib in \
             'libcudart.so*' 'libcublas.so*' 'libcublasLt.so*' \
             'libnvJitLink.so*' 'libnvrtc.so*' 'libnvrtc-builtins.so*'; do
-            compgen -G "${OUT}/bin/${cuda_lib}" >/dev/null
+            set -- ${OUT}/bin/${cuda_lib}
+            if [ ! -e "$1" ]; then
+              echo "::error::missing CUDA library matching ${OUT}/bin/${cuda_lib}"
+              exit 1
+            fi
           done
           echo "== bin layout =="
           ls -lah "${OUT}/bin" | head -n 80
