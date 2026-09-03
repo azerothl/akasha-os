@@ -42,9 +42,18 @@ if (-not $SkipBuild) {
         cargo build --release -p aos-platform --no-default-features --features embeddings
         if ($LASTEXITCODE -ne 0) { throw "build aos-platform cpu failed" }
     } else {
-        cargo build --release -p aos-session -p aos-ipc -p aos-model -p aos-agent `
-            -p aos-platform -p aos-capkd -p aos-ui-egui -p aos-bridge
-        if ($LASTEXITCODE -ne 0) { throw "build failed" }
+        # Separate resolve so aos-ui-egui / aos-platformd do not feature-unify
+        # CUDA/llama from aos-model (GitHub Release 2 GiB limit).
+        Write-Host "  (chrome bins sans aos-model)"
+        cargo build --release -p aos-session -p aos-ipc -p aos-agent `
+            -p aos-capkd -p aos-ui-egui -p aos-bridge
+        if ($LASTEXITCODE -ne 0) { throw "build chrome bins failed" }
+        Write-Host "== cargo build --release (aos-modeld CUDA/llama) =="
+        cargo build --release -p aos-model
+        if ($LASTEXITCODE -ne 0) { throw "build aos-model failed" }
+        Write-Host "== cargo build --release (aos-platformd sans embeddings) =="
+        cargo build --release -p aos-platform --bin aos-platformd --no-default-features
+        if ($LASTEXITCODE -ne 0) { throw "build aos-platformd failed" }
     }
 
     Write-Host "== package notes module =="

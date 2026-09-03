@@ -57,9 +57,13 @@ if [ "$SKIP_BUILD" != "1" ]; then
     cargo build --release -p aos-model --no-default-features
     cargo build --release -p aos-platform --no-default-features --features embeddings
   else
-    echo "== cargo build --release =="
-    cargo build --release -p aos-session -p aos-ipc -p aos-model -p aos-agent \
+    # Separate resolve so aos-ui-egui does not feature-unify CUDA/llama from
+    # aos-model (GitHub Release 2 GiB limit).
+    echo "== cargo build --release (chrome bins sans aos-model) =="
+    cargo build --release -p aos-session -p aos-ipc -p aos-agent \
       -p aos-capkd -p aos-ui-egui -p aos-bridge
+    echo "== cargo build --release (aos-modeld CUDA/llama) =="
+    cargo build --release -p aos-model
     # Build the preview's platform daemon without optional embeddings so Linux
     # release assets keep a single CUDA/llama-linked binary (aos-modeld) and stay
     # under GitHub's 2 GiB artifact limit.
