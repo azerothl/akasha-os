@@ -1,50 +1,46 @@
 //! Background bus runtime: poll + `handle_cmd`.
 
-use crate::cmd::{Cmd, Evt};
 use crate::chat_room;
+use crate::cmd::{Cmd, Evt};
 use crate::i18n;
 use crate::os_open::{aos_home, bin_aos_session};
 use crate::{
-    agent_id_cmd, agent_panel, chat_delegate_agent_spec, chrono_like_stamp, format_local_time_hm,
-    invoke_module_bind,
-    invoke_module_tool, invoke_notes, invoke_tasks, load_module_ui, load_session,
-    announce_and_load_session, run_troubleshoot,
-    session_has_running_canvas_agent, spawn_chat_delegate_agent, spawn_document_prep_agent,
-    CHAT_AGENT_MAX_SUBAGENTS,
+    agent_id_cmd, agent_panel, announce_and_load_session, chat_delegate_agent_spec,
+    chrono_like_stamp, format_local_time_hm, invoke_module_bind, invoke_module_tool, invoke_notes,
+    invoke_tasks, load_module_ui, load_session, run_troubleshoot, session_has_running_canvas_agent,
+    spawn_chat_delegate_agent, spawn_document_prep_agent, CHAT_AGENT_MAX_SUBAGENTS,
 };
 use aos_agent::intents as agent_intents;
-use aos_agent::{ControlCmd, ControlResp};
 use aos_agent::schedule::{
     ScheduleCreateRequest, ScheduleEntry, ScheduleIdRequest, ScheduleListResponse,
 };
+use aos_agent::{ControlCmd, ControlResp};
 use aos_ipc::BusClient;
 use aos_proto::{
-    AgentCreateRequest, AgentGoal, AgentIdRequest, AgentInfo, AgentKind, AgentPromptOptimizeRequest,
-    AgentPromptOptimizeResponse, AgentRosterUpdateRequest, AgentSpecResponse, AgentState, AgentSteerRequest,
-    AgentTrace, AuditEvent, AuditQueryRequest,
-    CapInfo, CapListRequest, CapRevokeRequest, ChatAttachment, ChatMessage, ChatRoomMember,
-    ChatSessionAppendRequest, ChatSessionCreateRequest, ChatSessionGetResponse,
-    ChatSessionIdRequest, ChatSessionMembersAddRequest, ChatSessionMembersRemoveRequest,
-    ChatSessionMeta, ChatSessionRoomTurnCancelRequest,
-    ChatSessionRoomTurnRequest, ChatSessionRoomTurnResponse, ChatSessionSetModeRequest,
-    ChatSessionRenameRequest, ChatSessionSetModelRequest, ConfirmResponseRequest,
+    format_chat_supervisor_lock, format_system_assistant_prompt, AgentCreateRequest, AgentGoal,
+    AgentIdRequest, AgentInfo, AgentKind, AgentPromptOptimizeRequest, AgentPromptOptimizeResponse,
+    AgentRosterUpdateRequest, AgentSpecResponse, AgentState, AgentSteerRequest, AgentTrace,
+    AuditEvent, AuditQueryRequest, CancelRequest, CapInfo, CapListRequest, CapRevokeRequest,
+    ChatAttachment, ChatMessage, ChatRoomMember, ChatSessionAppendRequest,
+    ChatSessionCreateRequest, ChatSessionGetResponse, ChatSessionIdRequest,
+    ChatSessionMembersAddRequest, ChatSessionMembersRemoveRequest, ChatSessionMeta,
+    ChatSessionRenameRequest, ChatSessionRoomTurnCancelRequest, ChatSessionRoomTurnRequest,
+    ChatSessionRoomTurnResponse, ChatSessionSetArchivedRequest, ChatSessionSetModeRequest,
+    ChatSessionSetModelRequest, ChatSessionSetPinnedRequest, ConfirmResponseRequest,
     FeedbackSubmitRequest, FeedbackSubmitResponse, FilesGenerateRequest, FilesGenerateResponse,
-    InferParams, InferRequest, McpServerInfo, MemContextRequest, MemContextResponse,
-    MemEpisodicDeleteRequest, MemExtractRequest, MemExtractResponse, MemHit, MemListRequest,
-    UserLibraryAddRequest, UserLibraryAddResponse, UserLibraryListResponse, UserLibraryRemoveRequest,
-    UserLibraryRemoveResponse,
-    MemRememberResponse, MemSweepStatus, MemUpdateRequest, MemUserRecallRequest, MemUserRememberRequest,
-    MemWorkingRequest, LoadRequest, LoadResponse, ModelInfo, ModelState, ModuleCatalogue,
-    ModuleInfo, ModuleInstallRequest,
-    ModuleUninstallRequest, CancelRequest, MediaAudioGenerateRequest, MediaGenerateResponse,
-    MediaImageGenerateRequest, MediaImageUpscaleRequest, NetFetchRequest, NetFetchResponse, NetModeRequest,
-    PendingConfirmation, ProviderIdRequest, ProviderListResponse, ProviderRecord,
-    ProviderTestResponse, ProviderUpsertRequest, SecretListRequest, SecretListResponse,
-    SecretSetRequest, SetRoutingRequest, SkillInfo, SkillPassPendingOffer, SkillPassRequest,
-    SystemMetrics, TokenEvent, WebBrowseRequest,
-    WebBrowseResponse, WebSearchRequest, WebSearchResponse,
-    CHAT_DELEGATION_PROMPT, format_chat_supervisor_lock,
-    format_system_assistant_prompt, MigrateRequest, MigrateResponse,
+    InferParams, InferRequest, LoadRequest, LoadResponse, McpServerInfo, MediaAudioGenerateRequest,
+    MediaGenerateResponse, MediaImageGenerateRequest, MediaImageUpscaleRequest, MemContextRequest,
+    MemContextResponse, MemEpisodicDeleteRequest, MemExtractRequest, MemExtractResponse, MemHit,
+    MemListRequest, MemRememberResponse, MemSweepStatus, MemUpdateRequest, MemUserRecallRequest,
+    MemUserRememberRequest, MemWorkingRequest, MigrateRequest, MigrateResponse, ModelInfo,
+    ModelState, ModuleCatalogue, ModuleInfo, ModuleInstallRequest, ModuleUninstallRequest,
+    NetFetchRequest, NetFetchResponse, NetModeRequest, PendingConfirmation, ProviderIdRequest,
+    ProviderListResponse, ProviderRecord, ProviderTestResponse, ProviderUpsertRequest,
+    SecretListRequest, SecretListResponse, SecretSetRequest, SetRoutingRequest, SkillInfo,
+    SkillPassPendingOffer, SkillPassRequest, SystemMetrics, TokenEvent, UnloadRequest,
+    UserLibraryAddRequest, UserLibraryAddResponse, UserLibraryListResponse,
+    UserLibraryRemoveRequest, UserLibraryRemoveResponse, WebBrowseRequest, WebBrowseResponse,
+    WebSearchRequest, WebSearchResponse, CHAT_DELEGATION_PROMPT,
 };
 use eframe::egui;
 use std::process::Stdio;
@@ -56,7 +52,11 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 /// Coalesce : un seul `mem.extract` à la fois (fire-and-forget).
 static MEM_EXTRACT_BUSY: AtomicBool = AtomicBool::new(false);
 
-pub(crate) async fn runtime_main(cmd_rx: Receiver<Cmd>, evt_tx: Sender<Evt>, egui_ctx: egui::Context) {
+pub(crate) async fn runtime_main(
+    cmd_rx: Receiver<Cmd>,
+    evt_tx: Sender<Evt>,
+    egui_ctx: egui::Context,
+) {
     let bus = match BusClient::connect("127.0.0.1:24701", "ui-egui").await {
         Ok(b) => b,
         Err(e) => {
@@ -174,12 +174,7 @@ fn push_evt(evt_tx: &Sender<Evt>, egui_ctx: &egui::Context, evt: Evt) {
     egui_ctx.request_repaint();
 }
 
-async fn handle_cmd(
-    bus: Arc<BusClient>,
-    evt_tx: Sender<Evt>,
-    egui_ctx: egui::Context,
-    cmd: Cmd,
-) {
+async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Context, cmd: Cmd) {
     match cmd {
         Cmd::SessionBootstrap => {
             let list: Vec<ChatSessionMeta> = bus
@@ -300,11 +295,63 @@ async fn handle_cmd(
                 announce_and_load_session(&bus, &evt_tx, &id).await;
             }
         }
+        Cmd::SessionSetPinned { id, pinned } => {
+            if let Ok(meta) = bus
+                .call::<ChatSessionSetPinnedRequest, ChatSessionMeta>(
+                    "chat.session.set_pinned",
+                    &ChatSessionSetPinnedRequest {
+                        session_id: id,
+                        pinned,
+                    },
+                    vec![],
+                )
+                .await
+            {
+                let _ = evt_tx.send(Evt::SessionMetaUpdated(meta));
+            }
+            if let Ok(list) = bus
+                .call::<(), Vec<ChatSessionMeta>>("chat.session.list", &(), vec![])
+                .await
+            {
+                let _ = evt_tx.send(Evt::Sessions(list));
+            }
+        }
+        Cmd::SessionListArchived => {
+            if let Ok(list) = bus
+                .call::<(), Vec<ChatSessionMeta>>("chat.session.list_all", &(), vec![])
+                .await
+            {
+                let _ = evt_tx.send(Evt::Sessions(list));
+            }
+        }
+        Cmd::SessionSetArchived { id, archived } => {
+            if let Ok(meta) = bus
+                .call::<ChatSessionSetArchivedRequest, ChatSessionMeta>(
+                    "chat.session.set_archived",
+                    &ChatSessionSetArchivedRequest {
+                        session_id: id,
+                        archived,
+                    },
+                    vec![],
+                )
+                .await
+            {
+                let _ = evt_tx.send(Evt::SessionMetaUpdated(meta));
+            }
+            if let Ok(list) = bus
+                .call::<(), Vec<ChatSessionMeta>>("chat.session.list", &(), vec![])
+                .await
+            {
+                let _ = evt_tx.send(Evt::Sessions(list));
+            }
+        }
         Cmd::SessionExport { id } => {
             match bus
                 .call::<ChatSessionIdRequest, String>(
                     "chat.session.export",
-                    &ChatSessionIdRequest { session_id: id.clone() },
+                    &ChatSessionIdRequest {
+                        session_id: id.clone(),
+                    },
                     vec![],
                 )
                 .await
@@ -334,7 +381,9 @@ async fn handle_cmd(
             match bus
                 .call::<AgentIdRequest, AgentTrace>(
                     aos_agent::intents::TRACE,
-                    &AgentIdRequest { agent_id: id.clone() },
+                    &AgentIdRequest {
+                        agent_id: id.clone(),
+                    },
                     vec![],
                 )
                 .await
@@ -404,9 +453,7 @@ async fn handle_cmd(
             canvas_aspect,
             skip_session_append,
         } => {
-            let _ = evt_tx.send(Evt::Status(
-                "assistant : génération en cours…".into(),
-            ));
+            let _ = evt_tx.send(Evt::Status("assistant : génération en cours…".into()));
             let user_content =
                 aos_proto::chat_document::merge_documents_into_user_content(&user_text, &documents);
             if !skip_session_append {
@@ -565,8 +612,7 @@ async fn handle_cmd(
                             &canvas_exported,
                         ) {
                             let canvas_delegate = tools.iter().any(|t| t.starts_with("canvas."));
-                            if canvas_delegate
-                                && session_has_running_canvas_agent(&bus, &sid).await
+                            if canvas_delegate && session_has_running_canvas_agent(&bus, &sid).await
                             {
                                 let _ = bus
                                     .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
@@ -621,8 +667,8 @@ async fn handle_cmd(
                                     attachments: vec![],
                                     speaker_id: None,
                                     speaker_name: None,
-                        thinking: None,
-                    },
+                                    thinking: None,
+                                },
                                 vec![],
                             )
                             .await;
@@ -813,10 +859,10 @@ async fn handle_cmd(
                 .await
             {
                 Ok(_info) => {
-                    let _ = evt_tx.send(Evt::SkillPassCreated {
-                        pattern_id,
-                    });
-                    if let Ok(list) = bus.call::<(), Vec<SkillInfo>>("skill.list", &(), vec![]).await
+                    let _ = evt_tx.send(Evt::SkillPassCreated { pattern_id });
+                    if let Ok(list) = bus
+                        .call::<(), Vec<SkillInfo>>("skill.list", &(), vec![])
+                        .await
                     {
                         let _ = evt_tx.send(Evt::Skills(list));
                     }
@@ -962,13 +1008,17 @@ async fn handle_cmd(
             match bus
                 .call::<SecretSetRequest, bool>(
                     "secrets.set",
-                    &SecretSetRequest { name: name.clone(), value },
+                    &SecretSetRequest {
+                        name: name.clone(),
+                        value,
+                    },
                     vec![],
                 )
                 .await
             {
                 Ok(_) => {
-                    let _ = evt_tx.send(Evt::Status(format!("secret `{name}` enregistré (chiffré)")));
+                    let _ =
+                        evt_tx.send(Evt::Status(format!("secret `{name}` enregistré (chiffré)")));
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));
@@ -988,9 +1038,7 @@ async fn handle_cmd(
                 .await
             {
                 Ok(_) => {
-                    let _ = evt_tx.send(Evt::ChatCancelled {
-                        session_id,
-                    });
+                    let _ = evt_tx.send(Evt::ChatCancelled { session_id });
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));
@@ -1194,11 +1242,7 @@ async fn handle_cmd(
         Cmd::ModuleUiBind { module, tool } => {
             invoke_module_bind(&bus, &evt_tx, &module, &tool).await;
         }
-        Cmd::ModuleUiInvoke {
-            module,
-            tool,
-            args,
-        } => {
+        Cmd::ModuleUiInvoke { module, tool, args } => {
             invoke_module_tool(&bus, &evt_tx, &module, &tool, args).await;
         }
         Cmd::DocumentPrepSpawn {
@@ -1344,10 +1388,7 @@ async fn handle_cmd(
                 url,
                 dest_path: None,
                 max_bytes,
-                caps: vec![
-                    "net.connect:*:*".into(),
-                    "fs.write:/downloads/**".into(),
-                ],
+                caps: vec!["net.connect:*:*".into(), "fs.write:/downloads/**".into()],
                 actor: "human:ui".into(),
             };
             match bus
@@ -1380,11 +1421,7 @@ async fn handle_cmd(
                 actor: "human:ui".into(),
             };
             match bus
-                .call::<FilesGenerateRequest, FilesGenerateResponse>(
-                    "files.generate",
-                    &req,
-                    vec![],
-                )
+                .call::<FilesGenerateRequest, FilesGenerateResponse>("files.generate", &req, vec![])
                 .await
             {
                 Ok(r) => {
@@ -1604,11 +1641,8 @@ async fn handle_cmd(
                 return;
             }
             let has_goal = !library && !task.trim().is_empty();
-            let mut req = AgentCreateRequest::simple(if library {
-                String::new()
-            } else {
-                task.clone()
-            });
+            let mut req =
+                AgentCreateRequest::simple(if library { String::new() } else { task.clone() });
             req.kind = if library || !has_goal {
                 AgentKind::Roster
             } else {
@@ -1651,9 +1685,10 @@ async fn handle_cmd(
                 req.caps.push("tool.invoke:notes".into());
             }
             if req.tools.iter().any(|t| t.starts_with("module."))
-                && !req.caps.iter().any(|c| c == "module.install") {
-                    req.caps.push("module.install".into());
-                }
+                && !req.caps.iter().any(|c| c == "module.install")
+            {
+                req.caps.push("module.install".into());
+            }
             match bus
                 .call::<AgentCreateRequest, aos_proto::AgentCreateResponse>(
                     aos_agent::intents::CREATE,
@@ -1748,8 +1783,8 @@ async fn handle_cmd(
                                     attachments: vec![att],
                                     speaker_id: None,
                                     speaker_name: None,
-                        thinking: None,
-                    },
+                                    thinking: None,
+                                },
                                 vec![],
                             )
                             .await;
@@ -2289,6 +2324,80 @@ async fn handle_cmd(
                 }
             }
         }
+        Cmd::ModelUnload { model_id } => {
+            match bus
+                .call::<UnloadRequest, bool>(
+                    "model.unload",
+                    &UnloadRequest {
+                        model_id: model_id.clone(),
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(_) => {
+                    let _ = evt_tx.send(Evt::Status(format!("model unload: {model_id}")));
+                    if let Ok(models) = bus
+                        .call::<(), Vec<ModelInfo>>("model.list", &(), vec![])
+                        .await
+                    {
+                        let _ = evt_tx.send(Evt::Models(models));
+                    }
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::ModelOperationFailed {
+                        model_id,
+                        error: e.to_string(),
+                    });
+                }
+            }
+        }
+        Cmd::ModelReload { model_id } => {
+            let unload = bus
+                .call::<UnloadRequest, bool>(
+                    "model.unload",
+                    &UnloadRequest {
+                        model_id: model_id.clone(),
+                    },
+                    vec![],
+                )
+                .await;
+            if let Err(e) = unload {
+                let _ = evt_tx.send(Evt::ModelOperationFailed {
+                    model_id: model_id.clone(),
+                    error: e.to_string(),
+                });
+            } else {
+                match bus
+                    .call::<LoadRequest, LoadResponse>(
+                        "model.load",
+                        &LoadRequest {
+                            model_id: model_id.clone(),
+                            profile: "balanced".into(),
+                            kv_tokens: 8192,
+                        },
+                        vec![],
+                    )
+                    .await
+                {
+                    Ok(_) => {
+                        let _ = evt_tx.send(Evt::Status(format!("model reload: {model_id}")));
+                        if let Ok(models) = bus
+                            .call::<(), Vec<ModelInfo>>("model.list", &(), vec![])
+                            .await
+                        {
+                            let _ = evt_tx.send(Evt::Models(models));
+                        }
+                    }
+                    Err(e) => {
+                        let _ = evt_tx.send(Evt::ModelOperationFailed {
+                            model_id,
+                            error: e.to_string(),
+                        });
+                    }
+                }
+            }
+        }
         Cmd::ModelDownload { model_id } => {
             push_evt(
                 &evt_tx,
@@ -2353,7 +2462,10 @@ async fn handle_cmd(
                             model_id: model_id.clone(),
                         },
                     );
-                    if let Ok(models) = bus.call::<(), Vec<ModelInfo>>("model.list", &(), vec![]).await {
+                    if let Ok(models) = bus
+                        .call::<(), Vec<ModelInfo>>("model.list", &(), vec![])
+                        .await
+                    {
                         push_evt(&evt_tx, &egui_ctx, Evt::Models(models));
                     }
                 }
@@ -2380,9 +2492,9 @@ async fn handle_cmd(
             }
         }
         Cmd::ModelDownloadHf { url, name } => {
-            let label = name.clone().unwrap_or_else(|| {
-                url.rsplit('/').next().unwrap_or("huggingface").to_string()
-            });
+            let label = name
+                .clone()
+                .unwrap_or_else(|| url.rsplit('/').next().unwrap_or("huggingface").to_string());
             push_evt(
                 &evt_tx,
                 &egui_ctx,
@@ -2447,11 +2559,12 @@ async fn handle_cmd(
                     push_evt(
                         &evt_tx,
                         &egui_ctx,
-                        Evt::ModelDownloadFinished {
-                            model_id: label,
-                        },
+                        Evt::ModelDownloadFinished { model_id: label },
                     );
-                    if let Ok(models) = bus.call::<(), Vec<ModelInfo>>("model.list", &(), vec![]).await {
+                    if let Ok(models) = bus
+                        .call::<(), Vec<ModelInfo>>("model.list", &(), vec![])
+                        .await
+                    {
                         push_evt(&evt_tx, &egui_ctx, Evt::Models(models));
                     }
                 }
@@ -2491,7 +2604,10 @@ async fn handle_cmd(
                         &egui_ctx,
                         Evt::Status(format!("model removed: {model_id}")),
                     );
-                    if let Ok(models) = bus.call::<(), Vec<ModelInfo>>("model.list", &(), vec![]).await {
+                    if let Ok(models) = bus
+                        .call::<(), Vec<ModelInfo>>("model.list", &(), vec![])
+                        .await
+                    {
                         push_evt(&evt_tx, &egui_ctx, Evt::Models(models));
                     }
                 }
@@ -2582,7 +2698,10 @@ async fn handle_cmd(
                             model_id: model_id.clone(),
                         },
                     );
-                    if let Ok(models) = bus.call::<(), Vec<ModelInfo>>("model.list", &(), vec![]).await {
+                    if let Ok(models) = bus
+                        .call::<(), Vec<ModelInfo>>("model.list", &(), vec![])
+                        .await
+                    {
                         push_evt(&evt_tx, &egui_ctx, Evt::Models(models));
                     }
                 }
@@ -2630,10 +2749,7 @@ async fn handle_cmd(
                     let _ = bus
                         .call::<SecretSetRequest, bool>(
                             "secrets.set",
-                            &SecretSetRequest {
-                                name,
-                                value: val,
-                            },
+                            &SecretSetRequest { name, value: val },
                             vec![],
                         )
                         .await;
@@ -2815,10 +2931,7 @@ async fn handle_cmd(
                             model_id,
                             options,
                             actor: "human:ui".into(),
-                            caps: vec![
-                                "media.generate".into(),
-                                "fs.write:/downloads/**".into(),
-                            ],
+                            caps: vec!["media.generate".into(), "fs.write:/downloads/**".into()],
                             trace_id: String::new(),
                         },
                         vec![],
@@ -2833,8 +2946,7 @@ async fn handle_cmd(
                     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                     let elapsed = start.elapsed().as_secs();
                     let (step, total) = read_image_gen_progress_file().unwrap_or((0, steps));
-                    let upscaling =
-                        upscale_enabled && total > 0 && step >= total && step > 0;
+                    let upscaling = upscale_enabled && total > 0 && step >= total && step > 0;
                     push_evt(
                         &ticker_evt,
                         &ticker_ctx,
@@ -2941,10 +3053,7 @@ async fn handle_cmd(
                         upscale_repeats: Some(upscale_repeats),
                         upscale_tile_size: Some(upscale_tile_size),
                         actor: "human:ui".into(),
-                        caps: vec![
-                            "media.generate".into(),
-                            "fs.write:/downloads/**".into(),
-                        ],
+                        caps: vec!["media.generate".into(), "fs.write:/downloads/**".into()],
                         trace_id: String::new(),
                     },
                     vec![],
@@ -3074,7 +3183,10 @@ async fn handle_cmd(
             match bus
                 .call::<ChatSessionSetModeRequest, ChatSessionMeta>(
                     "chat.session.set_mode",
-                    &ChatSessionSetModeRequest { session_id: session_id.clone(), mode },
+                    &ChatSessionSetModeRequest {
+                        session_id: session_id.clone(),
+                        mode,
+                    },
                     vec![],
                 )
                 .await
@@ -3127,9 +3239,7 @@ async fn handle_cmd(
                 Ok(_) => {
                     refresh_sessions(&bus, &evt_tx).await;
                     load_session(&bus, &evt_tx, &session_id).await;
-                    let _ = evt_tx.send(Evt::Status(format!(
-                        "retiré du salon : {agent_id}"
-                    )));
+                    let _ = evt_tx.send(Evt::Status(format!("retiré du salon : {agent_id}")));
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));
@@ -3177,9 +3287,8 @@ async fn handle_cmd(
                         Ok(_) => {
                             refresh_sessions(&bus, &evt_tx).await;
                             load_session(&bus, &evt_tx, &session_id).await;
-                            let _ = evt_tx.send(Evt::Status(format!(
-                                "« {canonical_name} » ajouté au salon"
-                            )));
+                            let _ = evt_tx
+                                .send(Evt::Status(format!("« {canonical_name} » ajouté au salon")));
                         }
                         Err(e) => {
                             let _ = evt_tx.send(Evt::Error(e.to_string()));
@@ -3233,9 +3342,7 @@ async fn handle_cmd(
                 .await
             {
                 Ok(_) => {
-                    let _ = evt_tx.send(Evt::ChatCancelled {
-                        session_id,
-                    });
+                    let _ = evt_tx.send(Evt::ChatCancelled { session_id });
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));
@@ -3378,7 +3485,8 @@ async fn handle_cmd(
                     },
                     vec![],
                 )
-                .await {
+                .await
+            {
                 let delta = after_seq.is_some();
                 let _ = evt_tx.send(Evt::CanvasSnapshot {
                     session_id: resp.session_id,
@@ -3511,7 +3619,11 @@ async fn handle_cmd(
                 }
             }
         }
-        Cmd::CanvasExport { session_id, aspect, format } => {
+        Cmd::CanvasExport {
+            session_id,
+            aspect,
+            format,
+        } => {
             let (width, height) = aspect.export_dimensions(1024);
             let format = if format.trim().is_empty() {
                 "png".into()
@@ -3561,8 +3673,7 @@ async fn handle_cmd(
                                     attachments: vec![att],
                                     speaker_id: None,
                                     speaker_name: None,
-                                thinking: None,
-
+                                    thinking: None,
                                 },
                                 vec![],
                             )
@@ -3603,12 +3714,8 @@ fn parse_tz_offset_minutes(raw: &str) -> Option<i32> {
     if digits.len() < 3 {
         return None;
     }
-    let hours: i32 = digits[..digits.len().saturating_sub(2)]
-        .parse()
-        .ok()?;
-    let mins: i32 = digits[digits.len().saturating_sub(2)..]
-        .parse()
-        .ok()?;
+    let hours: i32 = digits[..digits.len().saturating_sub(2)].parse().ok()?;
+    let mins: i32 = digits[digits.len().saturating_sub(2)..].parse().ok()?;
     Some(sign * (hours * 60 + mins))
 }
 
@@ -3656,11 +3763,7 @@ fn parse_download_progress_line(line: &str) -> Option<(u8, u64, u64)> {
 
 async fn handle_restart_modeld(bus: &BusClient, evt_tx: &Sender<Evt>) {
     let _ = bus
-        .call::<CancelRequest, bool>(
-            "model.cancel",
-            &CancelRequest { inference_id: 0 },
-            vec![],
-        )
+        .call::<CancelRequest, bool>("model.cancel", &CancelRequest { inference_id: 0 }, vec![])
         .await;
     #[cfg(windows)]
     {
@@ -3765,14 +3868,8 @@ async fn enhance_image_prompt_chat(
     user_prompt: &str,
 ) -> Result<String, String> {
     use crate::image_prompt::CHAT_ENHANCE_SYSTEM_PROMPT;
-    let out = infer_llm_rewrite(
-        bus,
-        evt_tx,
-        "Chat",
-        CHAT_ENHANCE_SYSTEM_PROMPT,
-        user_prompt,
-    )
-    .await?;
+    let out =
+        infer_llm_rewrite(bus, evt_tx, "Chat", CHAT_ENHANCE_SYSTEM_PROMPT, user_prompt).await?;
     Ok(normalize_prose_prompt(&out))
 }
 
@@ -3837,9 +3934,7 @@ async fn infer_llm_rewrite(
     while let Some(ev) = rx.recv().await {
         match ev {
             Ok(TokenEvent::Started { .. }) => {
-                let _ = evt_tx.send(Evt::Status(format!(
-                    "{label}: LLM rewriting prompt…"
-                )));
+                let _ = evt_tx.send(Evt::Status(format!("{label}: LLM rewriting prompt…")));
             }
             Ok(TokenEvent::Queued { position }) => {
                 let _ = evt_tx.send(Evt::Status(format!(
@@ -3886,9 +3981,8 @@ async fn enrich_image_prompt(
     use crate::image_prompt::{
         enrichment_status_label, enrichment_system_prompt, prompt_enrichment_kind,
     };
-    let kind = prompt_enrichment_kind(model_id.unwrap_or("")).ok_or_else(|| {
-        "prompt enrichment not supported for this model".to_string()
-    })?;
+    let kind = prompt_enrichment_kind(model_id.unwrap_or(""))
+        .ok_or_else(|| "prompt enrichment not supported for this model".to_string())?;
     let label = enrichment_status_label(kind);
     let system_prompt = enrichment_system_prompt(kind);
     let out = infer_llm_rewrite(bus, evt_tx, label, system_prompt, user_prompt).await?;

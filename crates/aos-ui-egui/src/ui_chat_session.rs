@@ -6,10 +6,9 @@ use crate::{
     UiApp, CANVAS_TOOLBAR_ROW_H,
 };
 use aos_proto::{
-    align_canvas_op_body, canvas_op_bbox, set_canvas_op_body_dash, set_canvas_op_body_gradient,
-    set_canvas_op_body_opacity, set_canvas_op_rotation,
-    usable_canvas_bbox, normalize_canvas_color, AgentInfo, CanvasLayer, CanvasOpBody,
-    ChatRoomMember, ChatSessionMode,
+    align_canvas_op_body, canvas_op_bbox, normalize_canvas_color, set_canvas_op_body_dash,
+    set_canvas_op_body_gradient, set_canvas_op_body_opacity, set_canvas_op_rotation,
+    usable_canvas_bbox, AgentInfo, CanvasLayer, CanvasOpBody, ChatRoomMember, ChatSessionMode,
 };
 use eframe::egui;
 
@@ -242,11 +241,7 @@ impl UiApp {
                             }
                         }
                     }
-                    aos_proto::CanvasEdit::Align {
-                        seq,
-                        to_seq,
-                        edges,
-                    } => {
+                    aos_proto::CanvasEdit::Align { seq, to_seq, edges } => {
                         let canvas = &mut self.chat_state.view.canvas;
                         if let Some(src_idx) = canvas.ops.iter().position(|o| o.seq == *seq) {
                             if let Some(src_bbox) = canvas_op_bbox(&canvas.ops[src_idx].body) {
@@ -456,6 +451,9 @@ impl UiApp {
     }
 
     pub(crate) fn canvas_poll_if_due(&mut self, ui: &egui::Ui, session_id: &str) {
+        if !ui.ctx().input(|i| i.focused) {
+            return;
+        }
         let now = ui.ctx().input(|i| i.time);
         if now >= self.chat_state.view.canvas.poll_due {
             self.chat_state.view.canvas.poll_due = now + 0.20;
@@ -499,6 +497,42 @@ impl UiApp {
                 egui::vec2(left_w, ui.available_height()),
                 egui::Layout::left_to_right(egui::Align::Center),
                 |ui| {
+                    let mut selected_model = model_id.clone().unwrap_or_default();
+                    let model_label = if selected_model.is_empty() {
+                        "default".to_string()
+                    } else {
+                        selected_model.clone()
+                    };
+                    egui::ComboBox::from_id_salt("chat_model_picker")
+                        .selected_text(model_label)
+                        .width(150.0)
+                        .show_ui(ui, |ui| {
+                            if ui
+                                .selectable_value(&mut selected_model, String::new(), "default")
+                                .changed()
+                            {
+                                let _ = self.cmd_tx.send(Cmd::SessionSetModel {
+                                    session_id: sid.clone(),
+                                    model_id: None,
+                                });
+                            }
+                            for m in self
+                                .models_ui
+                                .model_infos
+                                .iter()
+                                .filter(|m| !m.id.starts_with("provider:"))
+                            {
+                                if ui
+                                    .selectable_value(&mut selected_model, m.id.clone(), &m.name)
+                                    .changed()
+                                {
+                                    let _ = self.cmd_tx.send(Cmd::SessionSetModel {
+                                        session_id: sid.clone(),
+                                        model_id: Some(m.id.clone()),
+                                    });
+                                }
+                            }
+                        });
                     let header = egui::RichText::new(&session_title).strong();
                     let title_resp = ui.add(egui::Label::new(header).sense(if room {
                         egui::Sense::click()
@@ -520,6 +554,20 @@ impl UiApp {
                     if guide::tab_help_button(ui, g.help_tooltip) {
                         self.guide.open_topic(guide::GuideTopic::Chat);
                     }
+                    let activity_label = if self.prefs.ui_layout.activity_panel_open {
+                        format!("× {}", t.activity_open)
+                    } else {
+                        t.activity_open.to_string()
+                    };
+                    if ui
+                        .button(activity_label)
+                        .on_hover_text(t.activity_open)
+                        .clicked()
+                    {
+                        self.prefs.ui_layout.activity_panel_open =
+                            !self.prefs.ui_layout.activity_panel_open;
+                        crate::prefs::save_preferences(&self.prefs);
+                    }
                 },
             );
 
@@ -534,6 +582,18 @@ impl UiApp {
                             session_id: sid.clone(),
                             open: new_open,
                         });
+                    }
+                    if canvas_open
+                        && ui
+                            .button(if self.prefs.ui_layout.canvas_focus {
+                                t.canvas_focus_exit
+                            } else {
+                                t.canvas_focus
+                            })
+                            .clicked()
+                    {
+                        self.prefs.ui_layout.canvas_focus = !self.prefs.ui_layout.canvas_focus;
+                        crate::prefs::save_preferences(&self.prefs);
                     }
                     if session_toggle_chip(ui, room, t.session_toggle_salon) {
                         let mode = if room {

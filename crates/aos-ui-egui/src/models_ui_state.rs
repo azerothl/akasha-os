@@ -2,6 +2,7 @@
 
 use crate::models_page::ModelCatalogTab;
 use aos_proto::{ModelInfo, ProviderRecord};
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone)]
 pub(crate) struct ModelDownloadUiState {
@@ -30,6 +31,10 @@ pub(crate) struct ModelsUiState {
     pub(crate) hf_download_url: String,
     pub(crate) hf_download_name: String,
     pub(crate) hf_download_status: String,
+    /// Last actionable error per model, retained until the next successful
+    /// refresh so recovery guidance is not lost between frames.
+    pub(crate) last_errors: HashMap<String, String>,
+    pub(crate) transitions: HashSet<String>,
 }
 
 impl Default for ModelsUiState {
@@ -52,6 +57,8 @@ impl Default for ModelsUiState {
             hf_download_url: String::new(),
             hf_download_name: String::new(),
             hf_download_status: String::new(),
+            last_errors: HashMap::new(),
+            transitions: HashSet::new(),
         }
     }
 }
@@ -66,6 +73,26 @@ impl ModelsUiState {
 
     pub(crate) fn set_model_infos(&mut self, list: Vec<ModelInfo>) {
         self.model_infos = list;
+        for model in &self.model_infos {
+            if !matches!(model.state, aos_proto::ModelState::Error) {
+                self.last_errors.remove(&model.id);
+            }
+            if !matches!(model.state, aos_proto::ModelState::Loading) {
+                self.transitions.remove(&model.id);
+            }
+        }
+    }
+
+    pub(crate) fn begin_transition(&mut self, model_id: &str) {
+        self.transitions.insert(model_id.to_string());
+    }
+
+    pub(crate) fn record_error(&mut self, model_id: impl Into<String>, error: impl Into<String>) {
+        self.last_errors.insert(model_id.into(), error.into());
+    }
+
+    pub(crate) fn is_transitioning(&self, model_id: &str) -> bool {
+        self.transitions.contains(model_id)
     }
 
     pub(crate) fn set_providers(&mut self, list: Vec<ProviderRecord>) {
@@ -98,12 +125,7 @@ impl ModelsUiState {
         }
     }
 
-    pub(crate) fn apply_provider_tested(
-        &mut self,
-        ok: bool,
-        message: String,
-        models: Vec<String>,
-    ) {
+    pub(crate) fn apply_provider_tested(&mut self, ok: bool, message: String, models: Vec<String>) {
         self.provider_test_msg = if ok {
             format!("ok — {message}")
         } else {

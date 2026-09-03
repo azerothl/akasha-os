@@ -89,110 +89,177 @@ impl UiApp {
 
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
-            .show(ui, |ui| {
-                match self.models_ui.catalog_tab {
-                    models_page::ModelCatalogTab::Installed => {
-                        if installed_rows.is_empty() {
-                            ui.weak(t.models_catalog_empty);
+            .show(ui, |ui| match self.models_ui.catalog_tab {
+                models_page::ModelCatalogTab::Installed => {
+                    if installed_rows.is_empty() {
+                        ui.weak(t.models_catalog_empty);
+                    }
+                    for m in installed_rows {
+                        let id = m.id.clone();
+                        let mut load = false;
+                        let mut set_default = false;
+                        let mut redownload = false;
+                        let mut remove = false;
+                        models_page::ui_installed_card(
+                            ui,
+                            &m,
+                            busy,
+                            &t,
+                            &mut || load = true,
+                            &mut || set_default = true,
+                            &mut || redownload = true,
+                            &mut || remove = true,
+                        );
+                        if load {
+                            self.models_ui.begin_transition(&id);
+                            let _ = self.cmd_tx.send(Cmd::ModelLoad {
+                                model_id: id.clone(),
+                            });
                         }
-                        for m in installed_rows {
-                            let id = m.id.clone();
-                            let mut load = false;
-                            let mut set_default = false;
-                            let mut redownload = false;
-                            let mut remove = false;
-                            models_page::ui_installed_card(
-                                ui,
-                                &m,
-                                busy,
-                                &t,
-                                &mut || load = true,
-                                &mut || set_default = true,
-                                &mut || redownload = true,
-                                &mut || remove = true,
-                            );
-                            if load {
-                                let _ = self.cmd_tx.send(Cmd::ModelLoad {
-                                    model_id: id.clone(),
+                        if set_default {
+                            if let Some(sid) = self.chat_state.active_session.clone() {
+                                let _ = self.cmd_tx.send(Cmd::SessionSetModel {
+                                    session_id: sid,
+                                    model_id: Some(id.clone()),
                                 });
                             }
-                            if set_default {
-                                if let Some(sid) = self.chat_state.active_session.clone() {
-                                    let _ = self.cmd_tx.send(Cmd::SessionSetModel {
-                                        session_id: sid,
-                                        model_id: Some(id.clone()),
-                                    });
+                        }
+                        if redownload {
+                            let _ = self.cmd_tx.send(Cmd::ModelRedownload {
+                                model_id: id.clone(),
+                            });
+                        }
+                        if remove {
+                            let _ = self.cmd_tx.send(Cmd::ModelRemove {
+                                model_id: id.clone(),
+                            });
+                        }
+                        if let Some(rt) = &m.runtime {
+                            let transitioning = self.models_ui.is_transitioning(&id) || busy;
+                            ui.horizontal(|ui| {
+                                let state_label = models_page::model_state_human(
+                                    &rt.state,
+                                    t.models_tab_installed == "Installés",
+                                );
+                                ui.label(format!("{} : {state_label}", t.models_state_prefix));
+                                match &rt.state {
+                                    aos_proto::ModelState::Loaded
+                                    | aos_proto::ModelState::PartiallyOffloaded => {
+                                        if ui
+                                            .add_enabled(
+                                                !transitioning,
+                                                egui::Button::new(t.models_unload),
+                                            )
+                                            .clicked()
+                                        {
+                                            self.models_ui.begin_transition(&id);
+                                            let _ = self.cmd_tx.send(Cmd::ModelUnload {
+                                                model_id: id.clone(),
+                                            });
+                                        }
+                                    }
+                                    aos_proto::ModelState::Error => {
+                                        if ui
+                                            .add_enabled(
+                                                !transitioning,
+                                                egui::Button::new(t.models_retry),
+                                            )
+                                            .clicked()
+                                        {
+                                            self.models_ui.begin_transition(&id);
+                                            let _ = self.cmd_tx.send(Cmd::ModelLoad {
+                                                model_id: id.clone(),
+                                            });
+                                        }
+                                        if ui
+                                            .add_enabled(
+                                                !transitioning,
+                                                egui::Button::new(t.models_reload_clean),
+                                            )
+                                            .clicked()
+                                        {
+                                            self.models_ui.begin_transition(&id);
+                                            let _ = self.cmd_tx.send(Cmd::ModelReload {
+                                                model_id: id.clone(),
+                                            });
+                                        }
+                                    }
+                                    _ => {}
                                 }
+                            });
+                            if let Some(error) = self.models_ui.last_errors.get(&id) {
+                                ui.colored_label(
+                                    egui::Color32::from_rgb(255, 130, 110),
+                                    format!("{} : {error}", t.models_state_prefix),
+                                );
+                                ui.weak(t.models_error_detail);
                             }
-                            if redownload {
-                                let _ = self.cmd_tx.send(Cmd::ModelRedownload {
-                                    model_id: id.clone(),
-                                });
-                            }
-                            if remove {
-                                let _ = self.cmd_tx.send(Cmd::ModelRemove {
-                                    model_id: id,
-                                });
-                            }
-                            ui.add_space(6.0);
                         }
-                        ui.separator();
-                        ui.label(t.metrics_live);
-                        if let Some(m) = &self.metrics {
-                            for mm in &m.models {
-                                ui.group(|ui| {
-                                    ui.strong(format!("{} [{:?}]", mm.model_id, mm.state));
-                                    ui.label(format_model_infer_line(mm, &t));
-                                });
-                            }
+                        ui.add_space(6.0);
+                    }
+                    ui.separator();
+                    ui.label(t.metrics_live);
+                    if let Some(m) = &self.metrics {
+                        for mm in &m.models {
+                            ui.group(|ui| {
+                                ui.strong(format!(
+                                    "{} · {}",
+                                    mm.model_id,
+                                    models_page::model_state_human(
+                                        &mm.state,
+                                        t.models_tab_installed == "Installés",
+                                    )
+                                ));
+                                ui.label(format_model_infer_line(mm, &t));
+                            });
                         }
                     }
-                    tab => {
-                        let filtered: Vec<_> = catalog
-                            .iter()
-                            .filter(|m| models_page::category_of(m) == tab)
-                            .collect();
-                        if filtered.is_empty() {
-                            ui.weak(t.models_catalog_empty);
+                }
+                tab => {
+                    let filtered: Vec<_> = catalog
+                        .iter()
+                        .filter(|m| models_page::category_of(m) == tab)
+                        .collect();
+                    if filtered.is_empty() {
+                        ui.weak(t.models_catalog_empty);
+                    }
+                    for m in filtered {
+                        let installed = installed_rows.iter().any(|x| x.id == m.id);
+                        let id = m.id.clone();
+                        let mut download = false;
+                        let mut redownload = false;
+                        let mut remove = false;
+                        let mut open_hf = None;
+                        models_page::ui_model_card(
+                            ui,
+                            m,
+                            installed,
+                            busy,
+                            &t,
+                            &mut || download = true,
+                            &mut || redownload = true,
+                            &mut || remove = true,
+                            &mut |url| open_hf = Some(url.to_string()),
+                        );
+                        if download {
+                            let _ = self.cmd_tx.send(Cmd::ModelDownload {
+                                model_id: id.clone(),
+                            });
                         }
-                        for m in filtered {
-                            let installed = installed_rows.iter().any(|x| x.id == m.id);
-                            let id = m.id.clone();
-                            let mut download = false;
-                            let mut redownload = false;
-                            let mut remove = false;
-                            let mut open_hf = None;
-                            models_page::ui_model_card(
-                                ui,
-                                m,
-                                installed,
-                                busy,
-                                &t,
-                                &mut || download = true,
-                                &mut || redownload = true,
-                                &mut || remove = true,
-                                &mut |url| open_hf = Some(url.to_string()),
-                            );
-                            if download {
-                                let _ = self.cmd_tx.send(Cmd::ModelDownload {
-                                    model_id: id.clone(),
-                                });
-                            }
-                            if redownload {
-                                let _ = self.cmd_tx.send(Cmd::ModelRedownload {
-                                    model_id: id.clone(),
-                                });
-                            }
-                            if remove {
-                                let _ = self.cmd_tx.send(Cmd::ModelRemove {
-                                    model_id: id.clone(),
-                                });
-                            }
-                            if let Some(url) = open_hf {
-                                open_url(&url);
-                            }
-                            ui.add_space(6.0);
+                        if redownload {
+                            let _ = self.cmd_tx.send(Cmd::ModelRedownload {
+                                model_id: id.clone(),
+                            });
                         }
+                        if remove {
+                            let _ = self.cmd_tx.send(Cmd::ModelRemove {
+                                model_id: id.clone(),
+                            });
+                        }
+                        if let Some(url) = open_hf {
+                            open_url(&url);
+                        }
+                        ui.add_space(6.0);
                     }
                 }
             });

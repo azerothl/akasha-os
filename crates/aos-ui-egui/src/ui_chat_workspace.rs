@@ -1,6 +1,8 @@
 //! Central conversation workspace: transcript, canvas, and composer sizing.
 
-use crate::composer_layout::{chat_canvas_layout, chat_composer_reserve_height, ChatCanvasLayout};
+use crate::composer_layout::{
+    chat_canvas_layout, chat_composer_input_height, chat_composer_reserve_height, ChatCanvasLayout,
+};
 use crate::ui_chat_composer::ChatComposerContext;
 use crate::{chat_canvas, chat_room, i18n, session_model_supports_vision, UiApp};
 use aos_proto::ChatRoomMember;
@@ -63,7 +65,8 @@ impl UiApp {
                     self.chat_state.composer.pending_images.len(),
                     self.chat_state.composer.pending_documents.len(),
                     show_vision_banner,
-                );
+                ) + (chat_composer_input_height(&self.chat_state.composer.input)
+                    - 44.0);
                 let pane_h = ui.available_height();
                 let body_h = (pane_h - composer_h).max(120.0);
 
@@ -116,12 +119,16 @@ impl UiApp {
                                                         aspect_action,
                                                         sid,
                                                     );
-                                                    let layer_action = chat_canvas::ui_canvas_layers(
-                                                        ui,
-                                                        t,
-                                                        &mut self.chat_state.view.canvas,
+                                                    let layer_action =
+                                                        chat_canvas::ui_canvas_layers(
+                                                            ui,
+                                                            t,
+                                                            &mut self.chat_state.view.canvas,
+                                                        );
+                                                    self.dispatch_canvas_ui_action(
+                                                        layer_action,
+                                                        sid,
                                                     );
-                                                    self.dispatch_canvas_ui_action(layer_action, sid);
                                                     let action = chat_canvas::ui_canvas_surface(
                                                         ui,
                                                         &mut self.chat_state.view.canvas,

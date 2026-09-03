@@ -3,7 +3,8 @@
 use crate::chat_ask::agent_display_title;
 use crate::cmd::Cmd;
 use crate::composer_layout::{
-    composer_field_width, send_button_reserved_width, stop_button_reserved_width,
+    chat_composer_input_height, composer_field_width, send_button_reserved_width,
+    stop_button_reserved_width,
 };
 use crate::slash::{slash_completions, slash_insert_text};
 use crate::{chat_media, chat_room, i18n, icons, os_open, UiApp};
@@ -56,8 +57,8 @@ impl UiApp {
                             .replace("{n}", &n.to_string())
                     }
                 };
-                let show_stop = self.chat_state.runtime.pending
-                    && self.chat_state.active_session.is_some();
+                let show_stop =
+                    self.chat_state.runtime.pending && self.chat_state.active_session.is_some();
                 let item_gap = ui.spacing().item_spacing.x;
                 let send_w = send_button_reserved_width(ui, &t);
                 let stop_w = if show_stop {
@@ -90,7 +91,7 @@ impl UiApp {
                 };
 
                 let row_w = ui.available_width();
-                let input_h = ui.spacing().interact_size.y;
+                let input_h = chat_composer_input_height(&self.chat_state.composer.input);
                 let field_w = composer_field_width(
                     row_w,
                     send_w,
@@ -144,8 +145,9 @@ impl UiApp {
 
                         let r = ui.add_sized(
                             egui::vec2(field_w, input_h),
-                            egui::TextEdit::singleline(&mut self.chat_state.composer.input)
+                            egui::TextEdit::multiline(&mut self.chat_state.composer.input)
                                 .id_salt("chat_input")
+                                .desired_rows(2)
                                 .hint_text(&hint),
                         );
                         input_response = Some(r);
@@ -186,8 +188,25 @@ impl UiApp {
                         r.request_focus();
                         self.chat_state.composer.refocus = false;
                     }
-                    let send = send_clicked
-                        || (r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)));
+                    // Enter sends; Shift+Enter remains a newline. Keep the
+                    // editor intentionally bounded so the transcript retains
+                    // visual priority even for pasted text.
+                    let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
+                    let shift_enter = ui.input(|i| i.modifiers.shift);
+                    if self.chat_state.composer.input.lines().count() > 5 {
+                        self.chat_state.composer.input = self
+                            .chat_state
+                            .composer
+                            .input
+                            .lines()
+                            .take(5)
+                            .collect::<Vec<_>>()
+                            .join("\n");
+                    }
+                    let send = send_clicked || (enter && !shift_enter);
+                    if send && self.chat_state.composer.input.ends_with('\n') {
+                        self.chat_state.composer.input.pop();
+                    }
                     if send {
                         self.send_chat();
                         chat_sent_this_frame = true;

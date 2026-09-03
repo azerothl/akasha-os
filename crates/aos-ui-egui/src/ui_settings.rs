@@ -1,16 +1,21 @@
 //! Application settings panel.
 
 use crate::cmd::Cmd;
-use crate::os_open::aos_home;
-use crate::prefs::{save_preferences, UI_SCALE_PRESETS};
 use crate::onboarding::save_onboarding;
+use crate::os_open::aos_home;
+use crate::prefs::{save_preferences, UiDensity, UI_SCALE_PRESETS};
 use crate::{i18n, Tab, UiApp};
 use eframe::egui;
 
 impl UiApp {
-pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
         let t = i18n::strings(&self.prefs.language);
         ui.heading(t.settings_title);
+        ui.add_sized(
+            egui::vec2(ui.available_width().min(420.0), 36.0),
+            egui::TextEdit::singleline(&mut self.settings_ui.search)
+                .hint_text("Rechercher dans les réglages…"),
+        );
         ui.separator();
 
         let label_w = 160.0_f32;
@@ -84,6 +89,24 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                             }
                         }
                     });
+                ui.end_row();
+
+                ui.label("Densité");
+                ui.horizontal(|ui| {
+                    for (density, label) in [
+                        (UiDensity::Comfortable, "Confortable"),
+                        (UiDensity::Compact, "Compact"),
+                    ] {
+                        if ui
+                            .selectable_label(self.prefs.ui_density == density, label)
+                            .clicked()
+                        {
+                            self.prefs.ui_density = density;
+                            save_preferences(&self.prefs);
+                            self.status = t.settings_saved.into();
+                        }
+                    }
+                });
                 ui.end_row();
 
                 ui.label(t.settings_auto_download_updates);
@@ -273,11 +296,13 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                                 egui::DragValue::new(&mut self.prefs.image_width).range(64..=2048),
                             );
                             ui.add(
-                                egui::DragValue::new(&mut self.prefs.image_height)
-                                    .range(64..=2048),
+                                egui::DragValue::new(&mut self.prefs.image_height).range(64..=2048),
                             );
                             if ui
-                                .add(egui::DragValue::new(&mut self.prefs.image_steps).range(1..=150))
+                                .add(
+                                    egui::DragValue::new(&mut self.prefs.image_steps)
+                                        .range(1..=150),
+                                )
                                 .changed()
                             {
                                 save_preferences(&self.prefs);
@@ -347,7 +372,10 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                     .show(ui, |ui| {
                         ui.label(t.settings_max_steps);
                         if ui
-                            .add(egui::DragValue::new(&mut self.prefs.default_max_steps).range(1..=128))
+                            .add(
+                                egui::DragValue::new(&mut self.prefs.default_max_steps)
+                                    .range(1..=128),
+                            )
                             .changed()
                         {
                             self.agent_ui.max_steps = self.prefs.default_max_steps;
@@ -384,10 +412,7 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                             .show_ui(ui, |ui| {
                                 for eng in ["auto", "brave", "duckduckgo", "bing"] {
                                     if ui
-                                        .selectable_label(
-                                            self.prefs.web_search_engine == eng,
-                                            eng,
-                                        )
+                                        .selectable_label(self.prefs.web_search_engine == eng, eng)
                                         .clicked()
                                     {
                                         self.prefs.web_search_engine = eng.into();
@@ -533,7 +558,10 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                         ui.weak(t.settings_catalogue_community_cached);
                     }
                     if cat.extra_enabled && !cat.extra_error.is_empty() {
-                        ui.weak(format!("{} ({})", t.settings_catalogue_community_unsigned, cat.extra_error));
+                        ui.weak(format!(
+                            "{} ({})",
+                            t.settings_catalogue_community_unsigned, cat.extra_error
+                        ));
                     } else if cat.extra_enabled && !cat.extra_signature_ok {
                         ui.weak(t.settings_catalogue_community_unsigned);
                     }
@@ -552,8 +580,11 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                                 .iter()
                                 .find(|m| m.name == e.name)
                                 .cloned();
-                            let skill_installed =
-                                self.settings_ui.installed_skills.iter().any(|n| n == &e.name);
+                            let skill_installed = self
+                                .settings_ui
+                                .installed_skills
+                                .iter()
+                                .any(|n| n == &e.name);
                             ui.horizontal(|ui| {
                                 let mut label = format!(
                                     "{} {} ({}) [{}]",
@@ -581,8 +612,7 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                                         if aos_proto::decl_ui::is_bundled_module(&e.name) {
                                             ui.weak(t.settings_bundled_locked);
                                         } else if installed_mod.is_some() {
-                                            if ui.button(t.settings_catalogue_uninstall).clicked()
-                                            {
+                                            if ui.button(t.settings_catalogue_uninstall).clicked() {
                                                 let _ = self.cmd_tx.send(Cmd::ModuleUninstall {
                                                     name: e.name.clone(),
                                                 });
@@ -604,8 +634,7 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                                     }
                                     "skill" => {
                                         if skill_installed {
-                                            if ui.button(t.settings_catalogue_uninstall).clicked()
-                                            {
+                                            if ui.button(t.settings_catalogue_uninstall).clicked() {
                                                 let _ = self.cmd_tx.send(Cmd::SkillUninstall {
                                                     name: e.name.clone(),
                                                 });
@@ -713,5 +742,4 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                 }
             });
     }
-
 }

@@ -8,6 +8,18 @@ pub const SIGNAL: egui::Color32 = egui::Color32::from_rgb(46, 240, 200);
 pub const HYDROGEN: egui::Color32 = egui::Color32::from_rgb(255, 90, 72);
 pub const PAPER: egui::Color32 = egui::Color32::from_rgb(232, 238, 246);
 
+/// Shared UI tokens.  Keeping these here prevents individual panels from
+/// inventing their own hit targets and makes accessibility regressions easy to
+/// test.
+pub const CONTROL_MIN_H_COMFORTABLE: f32 = 36.0;
+#[allow(dead_code)]
+pub const CONTROL_MIN_H_COMPACT: f32 = 32.0;
+#[allow(dead_code)]
+pub const COMPOSER_MIN_H: f32 = 44.0;
+#[allow(dead_code)]
+pub const CARD_RADIUS: u8 = 8;
+pub const SPACE_UNIT: f32 = 8.0;
+
 const FOCUS_STROKE_WIDTH: f32 = 2.0;
 
 fn mix(a: egui::Color32, b: egui::Color32, t: f32) -> egui::Color32 {
@@ -85,6 +97,17 @@ pub fn apply_ui_scale(ctx: &egui::Context, scale_percent: u32) {
     if (ctx.zoom_factor() - factor).abs() > f32::EPSILON {
         ctx.set_zoom_factor(factor);
     }
+}
+
+/// Apply the product-wide density without allowing compact mode to create
+/// touch targets smaller than 32 px.
+pub fn apply_ui_density(ctx: &egui::Context, density: crate::prefs::UiDensity) {
+    let mut style = (*ctx.style()).clone();
+    let h = density.control_height();
+    style.spacing.interact_size.y = h;
+    style.spacing.button_padding.y = ((h - 20.0) / 2.0).max(6.0);
+    style.spacing.item_spacing = egui::vec2(SPACE_UNIT, SPACE_UNIT);
+    ctx.set_style(style);
 }
 
 fn chamber_dark() -> egui::Visuals {

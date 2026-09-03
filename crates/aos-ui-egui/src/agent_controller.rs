@@ -49,6 +49,8 @@ impl UiApp {
     }
 
     pub(crate) fn open_agent_tab(&mut self, id: &str) {
+        self.prefs.ui_layout.activity_panel_open = true;
+        crate::prefs::save_preferences(&self.prefs);
         self.agent_ui.open_tab(id);
         let _ = self.cmd_tx.send(Cmd::AgentTrace { id: id.to_string() });
         let holder = agent_cap_holder(id);
@@ -66,6 +68,10 @@ impl UiApp {
 
     pub(crate) fn close_agent_tab(&mut self, id: &str) {
         self.agent_ui.close_tab(id);
+        if self.agent_ui.open_tabs.is_empty() {
+            self.prefs.ui_layout.activity_panel_open = false;
+            crate::prefs::save_preferences(&self.prefs);
+        }
     }
 
     pub(crate) fn poll_agent_trace(&mut self, ctx: &egui::Context) {

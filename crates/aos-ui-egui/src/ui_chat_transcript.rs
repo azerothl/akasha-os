@@ -23,13 +23,16 @@ impl UiApp {
         room_conductor_policy: Option<&aos_proto::ChatRoomConductorPolicy>,
         scroll_h: f32,
     ) {
+        let n = self.chat.len();
         egui::ScrollArea::vertical()
             .id_salt("conversation_scroll")
             .auto_shrink([false, false])
             .max_height(scroll_h)
             .min_scrolled_height(scroll_h)
             .stick_to_bottom(true)
-            .show(ui, |ui| {
+            // Approximate row heights let egui skip work for long transcripts;
+            // expanded attachments remain fully rendered for visible rows.
+            .show_rows(ui, 96.0, n, |ui, row_range| {
                 ui.set_min_width(ui.available_width());
                 ui.set_min_height(scroll_h);
                 let mut open_agent: Option<String> = None;
@@ -50,8 +53,7 @@ impl UiApp {
                 let tz_offset = local_tz_offset_minutes();
                 let chat_now = now_ms();
                 let reply_id = self.blocked_ask_agent().map(|a| a.agent_id.clone());
-                let n = self.chat.len();
-                for i in 0..n {
+                for i in row_range {
                     let role = self.chat[i].role.clone();
                     let mut text = self.chat[i].text.clone();
                     let attachments = self.chat[i].attachments.clone();
@@ -443,7 +445,8 @@ impl UiApp {
                     let (_, _, role_color) =
                         chat_bubble_colors(ChatBubbleKind::Assistant, ui.visuals().dark_mode);
                     let thinking = if room_mode {
-                        self.chat_state.runtime
+                        self.chat_state
+                            .runtime
                             .room_turn_text
                             .as_deref()
                             .and_then(|msg| {
@@ -468,9 +471,26 @@ impl UiApp {
                 }
                 if self.chat_state.runtime.load_fail_retry.is_some()
                     && self.chat_state.active_session.is_some()
-                    && crate::chat_load_fail::render_load_fail_retry(ui, t)
                 {
-                    self.retry_load_failed_turn();
+                    let recovery = crate::chat_load_fail::render_load_fail_recovery(ui, t);
+                    match recovery {
+                        crate::chat_load_fail::RecoveryAction::Retry => self.retry_load_failed_turn(),
+                        crate::chat_load_fail::RecoveryAction::Unload => {
+                            if let Some(model_id) = self.chat_state.sessions.iter()
+                                .find(|s| self.chat_state.active_session.as_deref() == Some(s.id.as_str()))
+                                .and_then(|s| s.model_id.clone()) {
+                                let _ = self.cmd_tx.send(Cmd::ModelUnload { model_id });
+                            }
+                        }
+                        crate::chat_load_fail::RecoveryAction::Reload => {
+                            if let Some(model_id) = self.chat_state.sessions.iter()
+                                .find(|s| self.chat_state.active_session.as_deref() == Some(s.id.as_str()))
+                                .and_then(|s| s.model_id.clone()) {
+                                let _ = self.cmd_tx.send(Cmd::ModelReload { model_id });
+                            }
+                        }
+                        crate::chat_load_fail::RecoveryAction::None => {}
+                    }
                 }
             });
     }

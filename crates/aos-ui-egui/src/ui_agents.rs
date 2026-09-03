@@ -427,11 +427,11 @@ impl UiApp {
     }
 
     pub(crate) fn ui_agent_detail_panel(&mut self, ctx: &egui::Context) {
-        if self.agent_ui.open_tabs.is_empty() {
+        if self.agent_ui.open_tabs.is_empty() && !self.prefs.ui_layout.activity_panel_open {
             return;
         }
         egui::SidePanel::right("agent_detail_tabs")
-            .default_width(520.0)
+            .default_width(self.prefs.ui_layout.context_panel_width.max(280.0))
             .min_width(420.0)
             .resizable(true)
             .show(ctx, |ui| {
@@ -439,6 +439,11 @@ impl UiApp {
                 ui.horizontal(|ui| {
                     ui.heading(t.agent_detail);
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.button("×").on_hover_text("Fermer Activité").clicked() {
+                            self.prefs.ui_layout.activity_panel_open = false;
+                            self.agent_ui.close_all_tabs();
+                            crate::prefs::save_preferences(&self.prefs);
+                        }
                         if ui.small_button(t.agent_close_all).clicked() {
                             self.agent_ui.close_all_tabs();
                         }
@@ -491,6 +496,38 @@ impl UiApp {
                     }
                 });
                 ui.separator();
+
+                if self.agent_ui.open_tabs.is_empty() {
+                    let active = self.chat_state.active_session.as_deref();
+                    let mut shown = 0usize;
+                    let activity_agents: Vec<_> = self
+                        .agents
+                        .iter()
+                        .filter(|a| a.session_id.as_deref() == active)
+                        .cloned()
+                        .collect();
+                    for agent in activity_agents {
+                        shown += 1;
+                        let icon = match agent.state {
+                            AgentState::Done => "✓",
+                            AgentState::Failed => "!",
+                            AgentState::Blocked => "?",
+                            AgentState::Running => "…",
+                            _ => "·",
+                        };
+                        ui.horizontal(|ui| {
+                            ui.label(format!("{icon} {}", agent.display_title()));
+                            ui.weak(format!("{:?}", agent.state));
+                            if ui.small_button("Détails").clicked() {
+                                self.agent_ui.open_tab(&agent.agent_id);
+                                self.agent_ui.select_tab(&agent.agent_id);
+                            }
+                        });
+                    }
+                    if shown == 0 {
+                        ui.weak("Aucune activité d’agent dans cette conversation.");
+                    }
+                }
 
                 overflow_scroll(ui, "agent_detail_body", |ui| {
                     let active = self.agent_ui.active_tab.clone();
@@ -548,7 +585,9 @@ impl UiApp {
                                     .and_then(|a| a.session_id.clone())
                                     .or_else(|| self.chat_state.active_session.clone())
                                 {
-                                    if self.chat_state.active_session.as_deref() == Some(sid.as_str()) {
+                                    if self.chat_state.active_session.as_deref()
+                                        == Some(sid.as_str())
+                                    {
                                         let title = info
                                             .as_ref()
                                             .map(|a| a.directive.clone())

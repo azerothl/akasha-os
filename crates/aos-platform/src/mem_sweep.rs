@@ -97,12 +97,8 @@ fn parse_tz_offset_minutes(raw: &str) -> Option<i32> {
     if digits.len() < 3 {
         return None;
     }
-    let hours: i32 = digits[..digits.len().saturating_sub(2)]
-        .parse()
-        .ok()?;
-    let mins: i32 = digits[digits.len().saturating_sub(2)..]
-        .parse()
-        .ok()?;
+    let hours: i32 = digits[..digits.len().saturating_sub(2)].parse().ok()?;
+    let mins: i32 = digits[digits.len().saturating_sub(2)..].parse().ok()?;
     Some(sign * (hours * 60 + mins))
 }
 
@@ -282,10 +278,7 @@ pub fn persist_classified_fact(
 }
 
 /// Relie par `similar` les hits proches entre eux (évite les skip muets).
-fn link_similar_cluster(
-    mem: &mut MemoryStore,
-    hits: &[aos_proto::MemHit],
-) -> Vec<MemRelation> {
+fn link_similar_cluster(mem: &mut MemoryStore, hits: &[aos_proto::MemHit]) -> Vec<MemRelation> {
     let mut out = Vec::new();
     let ids: Vec<u64> = hits
         .iter()
@@ -367,6 +360,7 @@ mod tests {
             created_ms: 0,
             updated_ms: 100,
             archived: false,
+            pinned: false,
             message_count: 1,
             model_id: None,
             mode: aos_proto::ChatSessionMode::Direct,
@@ -382,8 +376,8 @@ mod tests {
             attachments: vec![],
             speaker_id: None,
             speaker_name: None,
-                        thinking: None,
-                    }];
+            thinking: None,
+        }];
         assert!(session_active_on_day(&meta, &msgs, 40_000, 60_000));
         assert!(!session_active_on_day(&meta, &msgs, 60_000, 80_000));
     }
@@ -398,8 +392,8 @@ mod tests {
                 attachments: vec![],
                 speaker_id: None,
                 speaker_name: None,
-                        thinking: None,
-                    },
+                thinking: None,
+            },
             ChatSessionMessage {
                 role: "assistant".into(),
                 content: "Bonjour Alice".into(),
@@ -407,8 +401,8 @@ mod tests {
                 attachments: vec![],
                 speaker_id: None,
                 speaker_name: None,
-                        thinking: None,
-                    },
+                thinking: None,
+            },
         ];
         let pairs = pair_turns(&msgs);
         assert_eq!(pairs.len(), 1);
@@ -494,9 +488,10 @@ mod tests {
             vec![0.8, 0.6, 0.0],
         );
         assert_eq!(r.kind, PersistFactKind::Stored);
-        assert!(r.relations.iter().any(|rel| {
-            rel.rel == MemRelationKind::Similar && rel.to == anchor
-        }));
+        assert!(r
+            .relations
+            .iter()
+            .any(|rel| { rel.rel == MemRelationKind::Similar && rel.to == anchor }));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

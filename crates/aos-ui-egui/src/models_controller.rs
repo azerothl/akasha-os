@@ -9,6 +9,16 @@ impl UiApp {
         self.models_ui.set_model_infos(list);
     }
 
+    pub(crate) fn on_model_operation_failed(&mut self, model_id: String, error: String) {
+        let t = i18n::strings(&self.prefs.language);
+        self.models_ui.record_error(model_id.clone(), error.clone());
+        self.models_ui.transitions.remove(&model_id);
+        self.status = format!(
+            "{}: {error}",
+            t.models_download_failed.replace("{}", &model_id)
+        );
+    }
+
     pub(crate) fn on_providers(&mut self, list: Vec<ProviderRecord>) {
         self.models_ui.set_providers(list);
     }

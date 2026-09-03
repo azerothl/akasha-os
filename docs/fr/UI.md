@@ -4,7 +4,7 @@
 
 Spécification produit durable pour l’**application hôte Preview** (`crates/aos-ui-egui`). Le site public (`website/`) conserve le design system chambre à brouillard dans [DESIGN.md](../DESIGN.md) ; ce document régit le chrome in-app, la navigation et les libellés sur Preview Windows/Linux.
 
-> Périmètre : shell hôte Preview 0.11.x. Pas l’image seL4 bootable.
+> Périmètre : shell hôte Preview 0.16.x. Pas l’image seL4 bootable.
 
 ## Objectifs
 
@@ -13,6 +13,27 @@ Spécification produit durable pour l’**application hôte Preview** (`crates/a
 3. **Honnêteté sans bruit** — les limites Preview restent visibles sans dominer le chrome.
 4. **Langage humain d’abord** — confirmations et libellés primaires expliquent l’intention ; les identifiants techniques restent en infobulles ou replis expert.
 5. **Palette chambre partout** — réutiliser void / ice-track / signal / hydrogen / paper du site public ; pas de nouvelle marque couleur.
+
+## Shell calme et accessibilité
+
+La densité confortable est la valeur par défaut : les contrôles principaux font
+au moins 36 px et le compositeur de chat au moins 44 px. La densité compacte est
+persistée pour les utilisateurs experts sans descendre sous 32 px. Le rail fait
+88 px en mode confortable et 64 px en mode compact. Chat reste l’accueil ; la
+RAM, le CPU et le nombre de modèles actifs forment un résumé Ressources, tandis
+que les métriques détaillées s’ouvrent dans Modèles.
+
+Le compositeur est multiligne (cinq lignes visibles maximum) : Entrée envoie et
+Maj+Entrée insère un retour. Les documents et images en attente restent visibles
+comme chips supprimables. La recherche des sessions est insensible à la casse ;
+elles sont regroupées par Aujourd’hui, Hier, 7 derniers jours et Plus ancien,
+avec les sessions épinglées en tête. L’archivage est réversible et la suppression
+définitive n’est proposée que depuis Archives.
+
+Les traces et identifiants d’agents vivent dans le volet Activité, fermé par
+défaut et redimensionnable. Le centre de notifications s’ouvre via la cloche
+de la barre supérieure stable. Le Canvas possède un mode focalisé qui masque
+temporairement les panneaux voisins.
 
 ## Architecture de l’information
 

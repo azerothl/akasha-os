@@ -2677,6 +2677,9 @@ pub struct ChatSessionMeta {
     pub created_ms: u64,
     pub updated_ms: u64,
     pub archived: bool,
+    /// User-pinned session, shown before the chronological groups.
+    #[serde(default)]
+    pub pinned: bool,
     pub message_count: usize,
     /// Modèle instruct pour cette session (`None` = default_model).
     #[serde(default)]
@@ -3683,6 +3686,18 @@ pub struct ChatSessionSetModelRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatSessionSetPinnedRequest {
+    pub session_id: String,
+    pub pinned: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatSessionSetArchivedRequest {
+    pub session_id: String,
+    pub archived: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatSessionAppendRequest {
     pub session_id: String,
     pub role: String,
@@ -4472,6 +4487,7 @@ mod chat_session_room_tests {
             created_ms: 10,
             updated_ms: 20,
             archived: false,
+            pinned: false,
             message_count: 3,
             model_id: None,
             mode: ChatSessionMode::Room,

@@ -22,122 +22,111 @@ impl UiApp {
                 ui.set_width(side_w);
                 overflow_scroll(ui, "chat_side", |ui| {
                     ui.set_width(side_w);
-                    ui.heading("Sessions");
-                    ui.label("Model");
-                    {
-                        let sid = self.chat_state.active_session.clone();
-                        let mut current = self
-                            .chat_state
-                            .sessions
-                            .iter()
-                            .find(|s| Some(s.id.as_str()) == sid.as_deref())
-                            .and_then(|s| s.model_id.clone())
-                            .unwrap_or_default();
-                        egui::ComboBox::from_id_salt("session_model")
-                            .selected_text(if current.is_empty() {
-                                "default".to_string()
-                            } else {
-                                current.clone()
-                            })
-                            .width(side_w - 12.0)
-                            .show_ui(ui, |ui| {
-                                if ui
-                                    .selectable_value(&mut current, String::new(), "default")
-                                    .changed()
-                                {
-                                    if let Some(id) = sid.clone() {
-                                        let _ = self.cmd_tx.send(Cmd::SessionSetModel {
-                                            session_id: id,
-                                            model_id: None,
-                                        });
-                                    }
-                                }
-                                let local_only = self.prefs.routing == "local_only";
-                                ui.weak("Local");
-                                for m in &self.models_ui.model_infos {
-                                    if m.id.starts_with("provider:") {
-                                        continue;
-                                    }
-                                    if ui
-                                        .selectable_value(
-                                            &mut current,
-                                            m.id.clone(),
-                                            format!("{} [{:?}]", m.id, m.state),
-                                        )
-                                        .changed()
-                                    {
-                                        if let Some(id) = sid.clone() {
-                                            let _ = self.cmd_tx.send(Cmd::SessionSetModel {
-                                                session_id: id,
-                                                model_id: Some(m.id.clone()),
-                                            });
-                                        }
-                                    }
-                                }
-                                ui.weak("Providers");
-                                for m in &self.models_ui.model_infos {
-                                    if !m.id.starts_with("provider:") {
-                                        continue;
-                                    }
-                                    let pid = m.id.split(':').nth(1).unwrap_or("");
-                                    let loopback = self
-                                        .models_ui
-                                        .providers
-                                        .iter()
-                                        .find(|p| p.id == pid)
-                                        .map(|p| {
-                                            let h = p
-                                                .endpoint
-                                                .trim_start_matches("https://")
-                                                .trim_start_matches("http://")
-                                                .split(['/', ':'])
-                                                .next()
-                                                .unwrap_or("");
-                                            matches!(h, "127.0.0.1" | "localhost" | "::1" | "[::1]")
-                                        })
-                                        .unwrap_or(false);
-                                    if local_only && !loopback {
-                                        continue;
-                                    }
-                                    if ui
-                                        .selectable_value(
-                                            &mut current,
-                                            m.id.clone(),
-                                            format!("{} [{:?}]", m.id, m.state),
-                                        )
-                                        .changed()
-                                    {
-                                        if let Some(id) = sid.clone() {
-                                            let _ = self.cmd_tx.send(Cmd::SessionSetModel {
-                                                session_id: id,
-                                                model_id: Some(m.id.clone()),
-                                            });
-                                        }
-                                    }
-                                }
-                            });
-                    }
+                    ui.heading(t.tab_chat);
+                    ui.horizontal(|ui| {
+                        ui.add_sized(
+                            egui::vec2((side_w - 44.0).max(80.0), theme::CONTROL_MIN_H_COMFORTABLE),
+                            egui::TextEdit::singleline(&mut self.chat_state.sidebar.search)
+                                .hint_text(t.session_search),
+                        );
+                        if ui.button("⋯").on_hover_text(t.session_archived).clicked() {
+                            self.chat_state.sidebar.show_archived =
+                                !self.chat_state.sidebar.show_archived;
+                            if self.chat_state.sidebar.show_archived {
+                                let _ = self.cmd_tx.send(Cmd::SessionListArchived);
+                            }
+                        }
+                    });
                     if ui.button("+ Nouvelle").clicked() {
                         let n = self.chat_state.sessions.len() + 1;
                         self.request_session_create(Some(format!("Session {n}")));
                     }
-                    for s in self.chat_state.sessions.clone() {
+                    let now = crate::ui_format::now_ms();
+                    let sessions: Vec<_> = crate::session_nav::filter_and_sort(
+                        &self.chat_state.sessions,
+                        &self.chat_state.sidebar.search,
+                    )
+                    .into_iter()
+                    .cloned()
+                    .collect();
+                    let mut last_group = None;
+                    for s in sessions {
+                        if !self.chat_state.sidebar.show_archived && s.archived {
+                            continue;
+                        }
+                        let group = crate::session_nav::group_for(s.updated_ms, now);
+                        if last_group != Some(group) {
+                            let label = match group {
+                                crate::session_nav::SessionGroup::Today => t.session_today,
+                                crate::session_nav::SessionGroup::Yesterday => t.session_yesterday,
+                                crate::session_nav::SessionGroup::LastSevenDays => {
+                                    t.session_last_seven_days
+                                }
+                                crate::session_nav::SessionGroup::Older => t.session_older,
+                            };
+                            ui.add_space(4.0);
+                            ui.weak(label);
+                            last_group = Some(group);
+                        }
                         let selected =
                             self.chat_state.active_session.as_deref() == Some(s.id.as_str());
                         let unread = self.chat_state.session_chat.is_unread(&s.id);
                         let row = ui.horizontal(|ui| {
+                            let pin = if s.pinned { "★ " } else { "" };
                             if unread {
                                 let t = i18n::strings(&self.prefs.language);
                                 icons::status_dot(ui, theme::SIGNAL)
                                     .on_hover_text(t.session_unread_reply);
                             }
-                            let title = ui.selectable_label(selected, &s.title);
+                            let title = ui.selectable_label(selected, format!("{pin}{}", s.title));
                             ui.label(egui::RichText::new(format!("({})", s.message_count)).weak());
+                            if s.archived {
+                                ui.weak(t.session_archived);
+                            }
                             title
                         });
                         if row.inner.clicked() || row.response.clicked() {
                             self.request_session_select(s.id.clone());
                         }
+                        row.response.context_menu(|ui| {
+                            if ui
+                                .button(if s.pinned {
+                                    t.session_unpin
+                                } else {
+                                    t.session_pin
+                                })
+                                .clicked()
+                            {
+                                let _ = self.cmd_tx.send(Cmd::SessionSetPinned {
+                                    id: s.id.clone(),
+                                    pinned: !s.pinned,
+                                });
+                                ui.close_menu();
+                            }
+                            if s.archived {
+                                if ui.button(t.session_restore).clicked() {
+                                    let _ = self.cmd_tx.send(Cmd::SessionSetArchived {
+                                        id: s.id.clone(),
+                                        archived: false,
+                                    });
+                                    ui.close_menu();
+                                }
+                            } else if ui.button(t.session_archive).clicked() {
+                                let _ = self.cmd_tx.send(Cmd::SessionSetArchived {
+                                    id: s.id.clone(),
+                                    archived: true,
+                                });
+                                ui.close_menu();
+                            }
+                            if ui.button(t.session_export).clicked() {
+                                let _ = self.cmd_tx.send(Cmd::SessionExport { id: s.id.clone() });
+                                ui.close_menu();
+                            }
+                            if s.archived && ui.button(t.session_delete_permanently).clicked() {
+                                self.request_session_delete(s.id.clone());
+                                ui.close_menu();
+                            }
+                        });
                     }
                     ui.horizontal(|ui| {
                         ui.add(

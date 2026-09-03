@@ -1,5 +1,48 @@
 //! Guard session view changes so background reloads do not hijack the active chat.
 
+use aos_proto::ChatSessionMeta;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SessionGroup {
+    Today,
+    Yesterday,
+    LastSevenDays,
+    Older,
+}
+
+/// Local, deterministic grouping used by the sidebar. Timestamps are epoch ms
+/// and are compared against the current local day boundaries supplied by the UI.
+pub fn group_for(updated_ms: u64, now_ms: u64) -> SessionGroup {
+    const DAY: u64 = 86_400_000;
+    let age = now_ms.saturating_sub(updated_ms);
+    if age < DAY {
+        SessionGroup::Today
+    } else if age < DAY * 2 {
+        SessionGroup::Yesterday
+    } else if age < DAY * 7 {
+        SessionGroup::LastSevenDays
+    } else {
+        SessionGroup::Older
+    }
+}
+
+pub fn filter_and_sort<'a>(
+    sessions: &'a [ChatSessionMeta],
+    query: &str,
+) -> Vec<&'a ChatSessionMeta> {
+    let needle = query.trim().to_lowercase();
+    let mut out: Vec<_> = sessions
+        .iter()
+        .filter(|s| {
+            needle.is_empty()
+                || s.title.to_lowercase().contains(&needle)
+                || s.id.to_lowercase().contains(&needle)
+        })
+        .collect();
+    out.sort_by_key(|s| (!s.pinned, std::cmp::Reverse(s.updated_ms)));
+    out
+}
+
 /// User-initiated session navigation intent.
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub enum PendingSessionNav {
@@ -150,5 +193,44 @@ mod tests {
         ));
         assert_eq!(active.as_deref(), Some("session-12"));
         assert_eq!(pending, PendingSessionNav::None);
+    }
+
+    #[test]
+    fn session_search_is_case_insensitive_and_pinned_first() {
+        let sessions = vec![
+            ChatSessionMeta {
+                id: "a".into(),
+                title: "Project Alpha".into(),
+                created_ms: 1,
+                updated_ms: 10,
+                archived: false,
+                pinned: false,
+                message_count: 1,
+                model_id: None,
+                mode: Default::default(),
+                members: vec![],
+                conductor_policy: Default::default(),
+                canvas_open: false,
+                canvas_aspect: Default::default(),
+            },
+            ChatSessionMeta {
+                id: "b".into(),
+                title: "ALPHA notes".into(),
+                created_ms: 1,
+                updated_ms: 5,
+                archived: false,
+                pinned: true,
+                message_count: 1,
+                model_id: None,
+                mode: Default::default(),
+                members: vec![],
+                conductor_policy: Default::default(),
+                canvas_open: false,
+                canvas_aspect: Default::default(),
+            },
+        ];
+        let result = filter_and_sort(&sessions, "alpha");
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].id, "b");
     }
 }

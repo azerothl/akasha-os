@@ -38,6 +38,8 @@ struct MetaFile {
     updated_ms: u64,
     archived: bool,
     #[serde(default)]
+    pinned: bool,
+    #[serde(default)]
     model_id: Option<String>,
     #[serde(default)]
     mode: ChatSessionMode,
@@ -102,6 +104,7 @@ impl ChatSessionStore {
             created_ms: m.created_ms,
             updated_ms: m.updated_ms,
             archived: m.archived,
+            pinned: m.pinned,
             message_count,
             model_id: m.model_id,
             mode: m.mode,
@@ -146,7 +149,8 @@ impl ChatSessionStore {
         let dir = self.dir(&doc.session_id);
         fs::create_dir_all(&dir).map_err(|e| SessionError::Io(e.to_string()))?;
         let raw = serde_json::to_string_pretty(doc).map_err(|e| SessionError::Io(e.to_string()))?;
-        fs::write(self.canvas_path(&doc.session_id), raw).map_err(|e| SessionError::Io(e.to_string()))
+        fs::write(self.canvas_path(&doc.session_id), raw)
+            .map_err(|e| SessionError::Io(e.to_string()))
     }
 
     /// Lecture du document canvas (+ filtre optionnel `after_seq`).
@@ -233,7 +237,13 @@ impl ChatSessionStore {
         doc.session_id = id.into();
         ensure_canvas_layers(&mut doc);
         if doc.next_seq == 0 {
-            doc.next_seq = doc.ops.iter().map(|o| o.seq).max().unwrap_or(0).saturating_add(1);
+            doc.next_seq = doc
+                .ops
+                .iter()
+                .map(|o| o.seq)
+                .max()
+                .unwrap_or(0)
+                .saturating_add(1);
         }
         for op in &mut doc.ops {
             normalize_canvas_op_coords(&mut op.body);
@@ -279,11 +289,7 @@ impl ChatSessionStore {
                 if canvas_layer_effective_locked(&doc, &layer_id) {
                     return Err(SessionError::BadRequest("calque verrouillé".into()));
                 }
-                let op = doc
-                    .ops
-                    .iter_mut()
-                    .find(|o| o.seq == seq)
-                    .expect("seq");
+                let op = doc.ops.iter_mut().find(|o| o.seq == seq).expect("seq");
                 translate_canvas_op_body(&mut op.body, dx, dy);
             }
             CanvasEdit::Reorder { seq, z } => {
@@ -316,11 +322,7 @@ impl ChatSessionStore {
                 if canvas_layer_effective_locked(&doc, &layer_id) {
                     return Err(SessionError::BadRequest("calque verrouillé".into()));
                 }
-                let op = doc
-                    .ops
-                    .iter_mut()
-                    .find(|o| o.seq == seq)
-                    .expect("seq");
+                let op = doc.ops.iter_mut().find(|o| o.seq == seq).expect("seq");
                 restyle_op_body(
                     &mut op.body,
                     color.as_deref(),
@@ -342,19 +344,10 @@ impl ChatSessionStore {
                 if canvas_layer_effective_locked(&doc, &layer_id) {
                     return Err(SessionError::BadRequest("calque verrouillé".into()));
                 }
-                let op = doc
-                    .ops
-                    .iter_mut()
-                    .find(|o| o.seq == seq)
-                    .expect("seq");
-                set_canvas_op_rotation(&mut op.body, rotation)
-                    .map_err(SessionError::BadRequest)?;
+                let op = doc.ops.iter_mut().find(|o| o.seq == seq).expect("seq");
+                set_canvas_op_rotation(&mut op.body, rotation).map_err(SessionError::BadRequest)?;
             }
-            CanvasEdit::Align {
-                seq,
-                to_seq,
-                edges,
-            } => {
+            CanvasEdit::Align { seq, to_seq, edges } => {
                 if edges.is_empty() {
                     return Err(SessionError::BadRequest("edges requis".into()));
                 }
@@ -469,7 +462,10 @@ impl ChatSessionStore {
                     .clone()
                     .filter(|p| doc.layers.iter().any(|l| l.id == *p))
                     .unwrap_or_else(|| doc.layers[0].id.clone());
-                for child in doc.layers.iter_mut().filter(|l| l.parent_id.as_deref() == Some(layer_id.as_str()))
+                for child in doc
+                    .layers
+                    .iter_mut()
+                    .filter(|l| l.parent_id.as_deref() == Some(layer_id.as_str()))
                 {
                     child.parent_id = removed.parent_id.clone();
                 }
@@ -535,11 +531,7 @@ impl ChatSessionStore {
         Ok((self.to_public(meta), doc))
     }
 
-    pub fn canvas_set_open(
-        &self,
-        id: &str,
-        open: bool,
-    ) -> Result<ChatSessionMeta, SessionError> {
+    pub fn canvas_set_open(&self, id: &str, open: bool) -> Result<ChatSessionMeta, SessionError> {
         let mut meta = self.load_meta(id)?;
         meta.canvas_open = open;
         meta.updated_ms = Self::now_ms();
@@ -580,6 +572,7 @@ impl ChatSessionStore {
             created_ms: ts,
             updated_ms: ts,
             archived: false,
+            pinned: false,
             model_id,
             mode: ChatSessionMode::Direct,
             members: vec![],
@@ -746,8 +739,20 @@ impl ChatSessionStore {
     }
 
     pub fn archive(&self, id: &str) -> Result<ChatSessionMeta, SessionError> {
+        self.set_archived(id, true)
+    }
+
+    pub fn set_archived(&self, id: &str, archived: bool) -> Result<ChatSessionMeta, SessionError> {
         let mut meta = self.load_meta(id)?;
-        meta.archived = true;
+        meta.archived = archived;
+        meta.updated_ms = Self::now_ms();
+        self.save_meta(&meta)?;
+        Ok(self.to_public(meta))
+    }
+
+    pub fn set_pinned(&self, id: &str, pinned: bool) -> Result<ChatSessionMeta, SessionError> {
+        let mut meta = self.load_meta(id)?;
+        meta.pinned = pinned;
         meta.updated_ms = Self::now_ms();
         self.save_meta(&meta)?;
         Ok(self.to_public(meta))
@@ -784,9 +789,7 @@ impl ChatSessionStore {
                         title,
                         origin,
                     } => {
-                        out.push_str(&format!(
-                            "_agent: {agent_id} ({origin}) — {title}_\n\n"
-                        ));
+                        out.push_str(&format!("_agent: {agent_id} ({origin}) — {title}_\n\n"));
                     }
                     ChatAttachment::Image { path, prompt } => {
                         out.push_str(&format!("_image: {path}_\n\n"));
@@ -820,9 +823,7 @@ impl ChatSessionStore {
                         }
                     }
                     ChatAttachment::SkillOffer {
-                        label_en,
-                        label_fr,
-                        ..
+                        label_en, label_fr, ..
                     } => {
                         out.push_str(&format!("_skill offer: {label_en} / {label_fr}_\n\n"));
                     }
@@ -905,8 +906,10 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         let s = ChatSessionStore::open(&dir).unwrap();
         let m = s.create(Some("Test".into()), None).unwrap();
-        s.append(&m.id, "user", "bonjour", vec![], None, None, None).unwrap();
-        s.append(&m.id, "assistant", "salut", vec![], None, None, None).unwrap();
+        s.append(&m.id, "user", "bonjour", vec![], None, None, None)
+            .unwrap();
+        s.append(&m.id, "assistant", "salut", vec![], None, None, None)
+            .unwrap();
         let (meta, msgs) = s.get(&m.id).unwrap();
         assert_eq!(meta.message_count, 2);
         assert_eq!(msgs.len(), 2);
@@ -983,9 +986,7 @@ archived: false
         let _ = fs::remove_dir_all(&dir);
         let s = ChatSessionStore::open(&dir).unwrap();
         let m = s.create(Some("Room".into()), None).unwrap();
-        let meta = s
-            .set_mode(&m.id, ChatSessionMode::Room)
-            .expect("set_mode");
+        let meta = s.set_mode(&m.id, ChatSessionMode::Room).expect("set_mode");
         assert_eq!(meta.mode, ChatSessionMode::Room);
         s.members_add(
             &m.id,
@@ -1091,13 +1092,13 @@ archived: false
         assert_eq!(doc.ops.len(), 1);
         let (_, _, delta) = s.canvas_get(&m.id, Some(0)).unwrap();
         assert_eq!(delta.len(), 1);
-        let (_, doc2, _) = s
-            .canvas_apply(&m.id, "human", CanvasOpBody::Undo)
-            .unwrap();
+        let (_, doc2, _) = s.canvas_apply(&m.id, "human", CanvasOpBody::Undo).unwrap();
         assert!(doc2.ops.is_empty());
         let meta = s.canvas_set_open(&m.id, false).unwrap();
         assert!(!meta.canvas_open);
-        let meta = s.canvas_set_aspect(&m.id, CanvasAspect::Landscape16x9).unwrap();
+        let meta = s
+            .canvas_set_aspect(&m.id, CanvasAspect::Landscape16x9)
+            .unwrap();
         assert_eq!(meta.canvas_aspect, CanvasAspect::Landscape16x9);
         let _ = fs::remove_dir_all(&dir);
     }
@@ -1144,7 +1145,9 @@ archived: false
         };
         s.canvas_apply(&m.id, "human", stroke.clone()).unwrap();
         s.canvas_apply(&m.id, "agent-a", stroke).unwrap();
-        let (_, doc, _) = s.canvas_apply(&m.id, "agent-a", CanvasOpBody::Undo).unwrap();
+        let (_, doc, _) = s
+            .canvas_apply(&m.id, "agent-a", CanvasOpBody::Undo)
+            .unwrap();
         assert_eq!(doc.ops.len(), 1);
         assert_eq!(doc.ops[0].author_id, "human");
         let _ = fs::remove_dir_all(&dir);
@@ -1203,7 +1206,13 @@ archived: false
             )
             .unwrap();
         assert_eq!(doc.layers.len(), 2);
-        let roof = doc.layers.iter().find(|l| l.name == "Roof").unwrap().id.clone();
+        let roof = doc
+            .layers
+            .iter()
+            .find(|l| l.name == "Roof")
+            .unwrap()
+            .id
+            .clone();
         let (_, doc) = s
             .canvas_edit(
                 &m.id,

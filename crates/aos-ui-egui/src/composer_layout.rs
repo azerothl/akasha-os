@@ -13,11 +13,7 @@ pub(crate) struct ChatSessionsSplit {
 }
 
 /// Sidebar and main-chat widths that never exceed `full_w`.
-pub(crate) fn chat_sessions_split(
-    full_w: f32,
-    gap: f32,
-    canvas_open: bool,
-) -> ChatSessionsSplit {
+pub(crate) fn chat_sessions_split(full_w: f32, gap: f32, canvas_open: bool) -> ChatSessionsSplit {
     let min_main = if canvas_open { 240.0_f32 } else { 200.0_f32 };
     let max_side = if canvas_open { 160.0_f32 } else { 220.0_f32 };
     let min_side = if canvas_open { 80.0_f32 } else { 120.0_f32 };
@@ -48,11 +44,7 @@ pub(crate) enum ChatCanvasLayout {
 }
 
 /// Transcript and canvas layout that fits in the available dimensions.
-pub(crate) fn chat_canvas_layout(
-    total_w: f32,
-    content_h: f32,
-    split_gap: f32,
-) -> ChatCanvasLayout {
+pub(crate) fn chat_canvas_layout(total_w: f32, content_h: f32, split_gap: f32) -> ChatCanvasLayout {
     const CANVAS_MIN: f32 = 96.0;
     const TRANSCRIPT_MIN: f32 = 140.0;
     const STACK_BELOW: f32 = 360.0;
@@ -65,8 +57,7 @@ pub(crate) fn chat_canvas_layout(
         }
     } else {
         let max_canvas = (total_w - TRANSCRIPT_MIN - split_gap).max(0.0);
-        let canvas_w = ((total_w - split_gap) * 0.40)
-            .clamp(CANVAS_MIN.min(max_canvas), max_canvas);
+        let canvas_w = ((total_w - split_gap) * 0.40).clamp(CANVAS_MIN.min(max_canvas), max_canvas);
         let transcript_w = (total_w - canvas_w - split_gap).max(0.0);
         ChatCanvasLayout::SideBySide {
             transcript_w,
@@ -90,9 +81,8 @@ pub(crate) fn estimate_composer_buttons_w(send: &str, show_stop: bool, stop: &st
 fn ui_button_width(ui: &egui::Ui, label: &str) -> f32 {
     let padding = ui.style().spacing.button_padding;
     let font_id = ui.style().text_styles[&egui::TextStyle::Button].clone();
-    let galley = ui.fonts(|fonts| {
-        fonts.layout_no_wrap(label.to_owned(), font_id, egui::Color32::PLACEHOLDER)
-    });
+    let galley = ui
+        .fonts(|fonts| fonts.layout_no_wrap(label.to_owned(), font_id, egui::Color32::PLACEHOLDER));
     galley.size().x + padding.x * 2.0
 }
 
@@ -123,11 +113,7 @@ pub(crate) fn composer_field_width(
 }
 
 #[cfg(test)]
-pub(crate) fn chat_composer_wraps(
-    available_w: f32,
-    attach_w: f32,
-    buttons_w: f32,
-) -> bool {
+pub(crate) fn chat_composer_wraps(available_w: f32, attach_w: f32, buttons_w: f32) -> bool {
     available_w - attach_w - buttons_w < COMPOSER_MIN_INPUT_W
 }
 
@@ -158,4 +144,11 @@ pub(crate) fn chat_composer_reserve_height(
         height += (rows as f32) * CHIP_ROW_H;
     }
     height
+}
+
+/// Height of the multiline composer, capped at five visible lines.  The first
+/// line keeps the 44 px minimum target from the original single-line control.
+pub(crate) fn chat_composer_input_height(input: &str) -> f32 {
+    let lines = input.lines().count().clamp(1, 5) as f32;
+    (44.0 + (lines - 1.0) * 22.0).min(132.0)
 }

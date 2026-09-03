@@ -2,7 +2,9 @@
 
 use crate::i18n::{self, UiStrings};
 use aos_agent::room_conductor::{build_initial_queue, effective_max_turns};
-use aos_proto::{AgentInfo, AgentKind, AgentState, ChatRoomMember, ChatSessionMode, ChatSessionMeta};
+use aos_proto::{
+    AgentInfo, AgentKind, AgentState, ChatRoomMember, ChatSessionMeta, ChatSessionMode,
+};
 use eframe::egui;
 
 pub use aos_agent::room_personas::{persona_agent_id, persona_by_id, ROOM_PERSONAS};
@@ -117,7 +119,11 @@ pub fn roster_agent_label(t: &UiStrings, agent: &AgentInfo) -> String {
     if let Some(pid) = agent.persona_id.as_deref() {
         return persona_label(t, pid).to_string();
     }
-    if let Some(n) = agent.display_name.as_deref().filter(|n| !n.trim().is_empty()) {
+    if let Some(n) = agent
+        .display_name
+        .as_deref()
+        .filter(|n| !n.trim().is_empty())
+    {
         return n.to_string();
     }
     agent.display_title().to_string()
@@ -349,10 +355,9 @@ pub fn mention_completions(
     let mut out = Vec::new();
     for m in members {
         let label = member_display_label(t, m);
-        let name_match =
-            !needle.is_empty() && label.to_ascii_lowercase().starts_with(&needle);
-        let stored_name_match = !needle.is_empty()
-            && m.display_name.to_ascii_lowercase().starts_with(&needle);
+        let name_match = !needle.is_empty() && label.to_ascii_lowercase().starts_with(&needle);
+        let stored_name_match =
+            !needle.is_empty() && m.display_name.to_ascii_lowercase().starts_with(&needle);
         let id_match = !needle.is_empty() && m.agent_id.to_ascii_lowercase().starts_with(&needle);
         let persona_match = m
             .persona_id
@@ -364,7 +369,6 @@ pub fn mention_completions(
     }
     out
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -387,8 +391,12 @@ mod tests {
         m1.persona_id = Some("coder".into());
         let members = vec![m1];
         let candidates = library_add_candidates(&[], &members, &t);
-        assert!(!candidates.iter().any(|a| a.persona_id.as_deref() == Some("coder")));
-        assert!(candidates.iter().any(|a| a.persona_id.as_deref() == Some("researcher")));
+        assert!(!candidates
+            .iter()
+            .any(|a| a.persona_id.as_deref() == Some("coder")));
+        assert!(candidates
+            .iter()
+            .any(|a| a.persona_id.as_deref() == Some("researcher")));
     }
 
     #[test]
@@ -485,10 +493,7 @@ mod tests {
 
     #[test]
     fn mention_completions_prefix() {
-        let members = vec![
-            member("a1", "Researcher"),
-            member("a2", "Coder"),
-        ];
+        let members = vec![member("a1", "Researcher"), member("a2", "Coder")];
         let hits = mention_completions("hello @Res", &members, &i18n::strings("en"));
         assert_eq!(hits.len(), 1);
         assert!(hits[0].0.contains("@Researcher"));
@@ -502,6 +507,7 @@ mod tests {
             created_ms: 0,
             updated_ms: 0,
             archived: false,
+            pinned: false,
             message_count: 0,
             model_id: None,
             mode: ChatSessionMode::Room,
@@ -518,7 +524,9 @@ mod tests {
         let t = i18n::strings("fr");
         let list = agents_with_library_placeholders(&[], &t);
         assert_eq!(list.len(), 4);
-        assert!(list.iter().any(|a| a.persona_id.as_deref() == Some("coder")));
+        assert!(list
+            .iter()
+            .any(|a| a.persona_id.as_deref() == Some("coder")));
         assert_eq!(
             list.iter()
                 .find(|a| a.persona_id.as_deref() == Some("coder"))
@@ -559,7 +567,8 @@ mod tests {
         let mut m1 = member("persona-critic", "Critic");
         m1.persona_id = Some("critic".into());
         let members = vec![m1];
-        let q = format_turn_speaker_queue(&t, "Mets à jour le dessin", &members, None).expect("queue");
+        let q =
+            format_turn_speaker_queue(&t, "Mets à jour le dessin", &members, None).expect("queue");
         assert!(q.contains(t.persona_critic));
     }
 
@@ -571,8 +580,7 @@ mod tests {
         let mut m2 = member("a2", "Critic");
         m2.persona_id = Some("critic".into());
         let members = vec![m1, m2];
-        let q =
-            format_turn_speaker_queue(&t, "Review this sketch", &members, None).expect("queue");
+        let q = format_turn_speaker_queue(&t, "Review this sketch", &members, None).expect("queue");
         assert!(q.contains(t.room_queue_joiner));
         assert!(q.contains(t.persona_researcher));
         assert!(q.contains(t.persona_critic));
@@ -708,7 +716,10 @@ mod tests {
         let candidates = library_add_candidates(&agents, &[], &t);
         assert!(candidates.iter().any(|a| a.agent_id == "agent-7"));
         assert_eq!(
-            roster_agent_label(&t, candidates.iter().find(|a| a.agent_id == "agent-7").unwrap()),
+            roster_agent_label(
+                &t,
+                candidates.iter().find(|a| a.agent_id == "agent-7").unwrap()
+            ),
             "Skills Auditor"
         );
     }
@@ -722,7 +733,10 @@ mod tests {
         assert_eq!(
             roster_agent_label(
                 &t,
-                candidates.iter().find(|a| a.agent_id == "agent-10").unwrap(),
+                candidates
+                    .iter()
+                    .find(|a| a.agent_id == "agent-10")
+                    .unwrap(),
             ),
             "Module Author"
         );

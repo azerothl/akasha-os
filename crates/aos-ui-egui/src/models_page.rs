@@ -70,6 +70,24 @@ pub struct InstalledRow {
     pub runtime: Option<ModelInfo>,
 }
 
+/// User-facing residence state; never expose internal enum/debug names in UI.
+pub fn model_state_human(state: &aos_proto::ModelState, french: bool) -> &'static str {
+    match (state, french) {
+        (aos_proto::ModelState::OnDisk, true) => "Disponible",
+        (aos_proto::ModelState::OnDisk, false) => "Available",
+        (aos_proto::ModelState::Loading, true) => "Chargement",
+        (aos_proto::ModelState::Loading, false) => "Loading",
+        (aos_proto::ModelState::Loaded, true) => "Chargé",
+        (aos_proto::ModelState::Loaded, false) => "Loaded",
+        (aos_proto::ModelState::PartiallyOffloaded, true) => "Partiellement déchargé",
+        (aos_proto::ModelState::PartiallyOffloaded, false) => "Partially offloaded",
+        (aos_proto::ModelState::Error, true) => "Erreur",
+        (aos_proto::ModelState::Error, false) => "Error",
+        (aos_proto::ModelState::Remote, true) => "Distant",
+        (aos_proto::ModelState::Remote, false) => "Remote",
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 struct InstalledRegistry {
     #[serde(default)]
@@ -441,8 +459,8 @@ pub fn ui_installed_card(
                     }
                     if let Some(rt) = &m.runtime {
                         ui.weak(format!(
-                            "{:?} · profile {}",
-                            rt.state,
+                            "{} · profile {}",
+                            model_state_human(&rt.state, t.models_tab_installed == "Installés"),
                             rt.profile.as_deref().unwrap_or("—")
                         ));
                     }

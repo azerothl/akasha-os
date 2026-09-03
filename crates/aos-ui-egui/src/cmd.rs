@@ -1,16 +1,17 @@
 //! Bus commands (UI → runtime) and events (runtime → UI).
 
-use aos_agent::schedule::ScheduleEntry;
-use aos_proto::{
-    AgentInfo, AgentTrace, AuditEvent, CapInfo, ChatAttachment, ChatRoomMember, ChatSessionMeta,
-    ChatSessionMode, CanvasOp, CanvasOpBody, CanvasPenStyle, DocumentRef, FeedbackSubmitRequest,
-    FeedbackSubmitResponse, MemHit, ModelInfo, ModuleCatalogue, ModuleInfo, PendingConfirmation,
-    ProviderRecord, SkillInfo, SkillPassPendingOffer, SystemMetrics, WebSearchHit,
-};
-use aos_proto::decl_ui::ModuleUiResponse;
-use aos_proto::{McpServerInfo};
 use crate::notes_panel;
 use crate::tasks_panel;
+use aos_agent::schedule::ScheduleEntry;
+use aos_proto::decl_ui::ModuleUiResponse;
+use aos_proto::McpServerInfo;
+use aos_proto::{
+    AgentInfo, AgentTrace, AuditEvent, CanvasOp, CanvasOpBody, CanvasPenStyle, CapInfo,
+    ChatAttachment, ChatRoomMember, ChatSessionMeta, ChatSessionMode, DocumentRef,
+    FeedbackSubmitRequest, FeedbackSubmitResponse, MemHit, ModelInfo, ModuleCatalogue, ModuleInfo,
+    PendingConfirmation, ProviderRecord, SkillInfo, SkillPassPendingOffer, SystemMetrics,
+    WebSearchHit,
+};
 
 #[allow(clippy::large_enum_variant)] // Boxing command payloads would complicate every UI dispatch site.
 pub(crate) enum Cmd {
@@ -37,29 +38,84 @@ pub(crate) enum Cmd {
         skip_session_append: bool,
     },
     SessionBootstrap,
-    SessionCreate { title: Option<String> },
-    SessionSelect { id: String },
-    SessionRename { id: String, title: String },
-    SessionDelete { id: String },
-    SessionExport { id: String },
-    MemRecall { query: String },
-    MemRemember { text: String, pinned: bool },
-    MemList { include_superseded: bool },
+    SessionListArchived,
+    SessionCreate {
+        title: Option<String>,
+    },
+    SessionSelect {
+        id: String,
+    },
+    SessionRename {
+        id: String,
+        title: String,
+    },
+    SessionDelete {
+        id: String,
+    },
+    SessionExport {
+        id: String,
+    },
+    SessionSetPinned {
+        id: String,
+        pinned: bool,
+    },
+    SessionSetArchived {
+        id: String,
+        archived: bool,
+    },
+    MemRecall {
+        query: String,
+    },
+    MemRemember {
+        text: String,
+        pinned: bool,
+    },
+    MemList {
+        include_superseded: bool,
+    },
     MemSweepStatus,
-    MemDelete { id: u64 },
+    MemDelete {
+        id: u64,
+    },
     MemWipeUser,
-    MemSupersede { id: u64, text: String },
-    MemEdit { id: u64, text: String },
+    MemSupersede {
+        id: u64,
+        text: String,
+    },
+    MemEdit {
+        id: u64,
+        text: String,
+    },
     SkillPassPending,
-    SkillPassCreate { pattern_id: String },
-    SkillPassDismiss { pattern_id: String },
-    SecretSet { name: String, value: String },
+    SkillPassCreate {
+        pattern_id: String,
+    },
+    SkillPassDismiss {
+        pattern_id: String,
+    },
+    SecretSet {
+        name: String,
+        value: String,
+    },
     SecretList,
-    NetSetMode { online: bool },
-    SetRouting { mode: String },
-    WebSearch { query: String, engine: String },
-    WebBrowse { url: String, max_chars: usize },
-    NetFetch { url: String, max_bytes: u64 },
+    NetSetMode {
+        online: bool,
+    },
+    SetRouting {
+        mode: String,
+    },
+    WebSearch {
+        query: String,
+        engine: String,
+    },
+    WebBrowse {
+        url: String,
+        max_chars: usize,
+    },
+    NetFetch {
+        url: String,
+        max_bytes: u64,
+    },
     FilesGenerate {
         format: String,
         path: String,
@@ -68,7 +124,10 @@ pub(crate) enum Cmd {
     },
     Help,
     NotesList,
-    NotesCreate { title: String, content: String },
+    NotesCreate {
+        title: String,
+        content: String,
+    },
     NotesUpdate {
         title: String,
         path: String,
@@ -79,15 +138,24 @@ pub(crate) enum Cmd {
         path: Option<String>,
         slug: Option<String>,
     },
-    NotesSearch { query: String },
+    NotesSearch {
+        query: String,
+    },
     NotesRelated {
         path: String,
         topic: String,
     },
     UserLibraryList,
-    UserLibraryAdd { path: String },
-    UserLibraryRemove { id: String },
-    Confirm { id: String, approved: bool },
+    UserLibraryAdd {
+        path: String,
+    },
+    UserLibraryRemove {
+        id: String,
+    },
+    Confirm {
+        id: String,
+        approved: bool,
+    },
     AgentCreate {
         display_name: String,
         task: String,
@@ -108,18 +176,33 @@ pub(crate) enum Cmd {
         /// Agents-tab library entry: persist roster spec only, never spawn a worker.
         library: bool,
     },
-    AgentKill { id: String },
-    AgentPause { id: String },
-    AgentResume { id: String },
-    AgentRetry { id: String },
-    AgentSteer { id: String, text: String },
+    AgentKill {
+        id: String,
+    },
+    AgentPause {
+        id: String,
+    },
+    AgentResume {
+        id: String,
+    },
+    AgentRetry {
+        id: String,
+    },
+    AgentSteer {
+        id: String,
+        text: String,
+    },
     AgentActDecision {
         agent_id: String,
         act_id: String,
         approved: bool,
     },
-    AgentTrace { id: String },
-    AgentExport { id: String },
+    AgentTrace {
+        id: String,
+    },
+    AgentExport {
+        id: String,
+    },
     #[allow(dead_code)] // Runtime support is kept for the prompt-optimizer UI integration.
     AgentPromptOptimize {
         goal: String,
@@ -142,8 +225,12 @@ pub(crate) enum Cmd {
         model_id: Option<String>,
     },
     Troubleshoot,
-    Audit { last: usize },
-    CapList { holder: String },
+    Audit {
+        last: usize,
+    },
+    CapList {
+        holder: String,
+    },
     CapRevoke {
         holder: String,
         cap_id: u64,
@@ -178,24 +265,44 @@ pub(crate) enum Cmd {
     KillAuditd,
     #[allow(dead_code)]
     RestartModeld,
-    MigrateModeld { target: String },
+    MigrateModeld {
+        target: String,
+    },
     RefreshConfirms,
     ModelsRefresh,
-    ModelLoad { model_id: String },
-    ModelDownload { model_id: String },
+    ModelLoad {
+        model_id: String,
+    },
+    ModelUnload {
+        model_id: String,
+    },
+    ModelReload {
+        model_id: String,
+    },
+    ModelDownload {
+        model_id: String,
+    },
     ModelDownloadHf {
         url: String,
         name: Option<String>,
     },
-    ModelRemove { model_id: String },
-    ModelRedownload { model_id: String },
+    ModelRemove {
+        model_id: String,
+    },
+    ModelRedownload {
+        model_id: String,
+    },
     ProviderList,
     ProviderUpsert {
         provider: ProviderRecord,
         secret_value: Option<String>,
     },
-    ProviderRemove { id: String },
-    ProviderTest { id: String },
+    ProviderRemove {
+        id: String,
+    },
+    ProviderTest {
+        id: String,
+    },
     MediaImage {
         prompt: String,
         model_id: Option<String>,
@@ -408,8 +515,11 @@ pub(crate) enum Evt {
     /// Préremplit le formulaire Retour (dépannage) sans publier tout de suite.
     FeedbackDraft(FeedbackSubmitRequest),
     Sessions(Vec<ChatSessionMeta>),
+    SessionMetaUpdated(ChatSessionMeta),
     /// Runtime names the session about to be loaded (create/delete/bootstrap).
-    SessionLoadIntent { id: String },
+    SessionLoadIntent {
+        id: String,
+    },
     SessionLoaded {
         id: String,
         messages: Vec<ChatLine>,
@@ -439,7 +549,9 @@ pub(crate) enum Evt {
         session_id: String,
     },
     MemHits(Vec<MemHit>),
-    MemExtracted { n: usize },
+    MemExtracted {
+        n: usize,
+    },
     MemSweepStatus {
         last_pass_ms: u64,
         last_pass_label: String,
@@ -495,15 +607,23 @@ pub(crate) enum Evt {
     McpServers(Vec<McpServerInfo>),
     PromptOptimized(String),
     Models(Vec<ModelInfo>),
-    ModelDownloadStarted { model_id: String },
+    ModelDownloadStarted {
+        model_id: String,
+    },
     ModelDownloadProgress {
         model_id: String,
         done_bytes: u64,
         total_bytes: u64,
         percent: u8,
     },
-    ModelDownloadFinished { model_id: String },
+    ModelDownloadFinished {
+        model_id: String,
+    },
     ModelDownloadFailed {
+        model_id: String,
+        error: String,
+    },
+    ModelOperationFailed {
         model_id: String,
         error: String,
     },
@@ -518,7 +638,9 @@ pub(crate) enum Evt {
         session_id: String,
         inference_id: u64,
     },
-    ChatCancelled { session_id: String },
+    ChatCancelled {
+        session_id: String,
+    },
     Catalogue(ModuleCatalogue),
     InstalledSkills(Vec<aos_proto::SkillInfo>),
     InstalledModules(Vec<ModuleInfo>),
@@ -601,7 +723,6 @@ impl ChatLine {
             thinking: None,
         }
     }
-
 }
 
 #[derive(Debug, Clone)]
