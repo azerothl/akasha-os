@@ -2,7 +2,7 @@
 
 **Langue :** [English](../write-a-skill.md) | Français
 
-> Date : 03/09/2026 · Preview **0.16.0**
+> Date : 03/09/2026 · Preview **0.17.0**
 
 Un skill est une recette Markdown. Vous pouvez en copier une dans la
 Preview sans cargo, sans pull request noyau, et sans accorder la licence

@@ -4,7 +4,7 @@
 
 Durable product spec for the **Preview host app** (`crates/aos-ui-egui`). The public marketing site (`website/`) keeps the cloud-chamber design system in [DESIGN.md](DESIGN.md); this document governs in-app chrome, navigation, and copy on Windows/Linux Preview.
 
-> Scope: Preview 0.16.x host shell. Not the bootable seL4 image.
+> Scope: Preview 0.17.x host shell. Not the bootable seL4 image.
 
 ## Goals
 

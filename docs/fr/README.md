@@ -16,7 +16,7 @@ first-class, offline-first. La Preview tourne sur hôte Windows/Linux
   <img src="../../branding/logo/tracks.svg" width="480" alt="MEMORY, CAPS, GPU, AGENTS">
 </p>
 
-> Ce n'est **pas** encore un OS bootable. La Preview 0.16.0 est une application
+> Ce n'est **pas** encore un OS bootable. La Preview 0.17.0 est une application
 > hôte installable pour testeurs (Windows/Linux/macOS Apple Silicon ; NVIDIA
 > optionnel sur Win/Linux via le chemin CPU du même zip).
 
@@ -32,7 +32,7 @@ Catalogue : [FEATURES.md](FEATURES.md).
 
 | Domaine | Contenu |
 |---------|---------|
-| Chat / Sessions | Conversations persistées ; slash (`/image`, `/speak`) ; modèle par session |
+| Chat / Sessions | Conversations persistées ; recherche, épingle, archive réversible ; slash (`/image`, `/speak`) ; modèle par session |
 | Mémoire | Faits long terme ; bootstrap mémoire d'abord |
 | Notes | Humaines + agents (module WASM) ; resync au boot après une update |
 | Tâches | Module dual-surface + onglet Tasks |
@@ -42,7 +42,7 @@ Catalogue : [FEATURES.md](FEATURES.md).
 | Canvas | Dessin vectoriel avec calques, grille, édition, exports PNG/SVG/JSON et validation géométrique globale des agents |
 | Providers | Cloud OpenAI-compat + loopback (Ollama / vLLM / LM Studio) ; clés dans le vault |
 | Réseau | Recherche opt-in (Brave / DDG / Bing) + `web.browse` + fetch |
-| Settings | Langue, thème, trust, routage, gpu/cpu/auto, défauts agent, moteur |
+| Settings | Langue, thème, densité, trust, routage, gpu/cpu/auto, défauts agent, moteur |
 | Retour | Rapport local + issue GitHub |
 | Dépannage | Diagnostic in-app ; rapport GitHub s'il y a des anomalies |
 | Mises à jour | Overlay non destructif depuis GitHub Releases |

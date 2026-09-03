@@ -1,8 +1,8 @@
-# Protocole testeur — Akasha OS Preview 0.16.0
+# Protocole testeur — Akasha OS Preview 0.17.0
 
 **Langue :** [English](../TESTER.md) | Français
 
-> Date : 03/09/2026 · Preview **0.16.0**
+> Date : 03/09/2026 · Preview **0.17.0**
 
 Merci de tester la Preview. Objectif : installer **sans** `cargo` ni clone du
 repo, exercer les parcours principaux, et envoyer un retour **depuis l'UI**.
@@ -305,6 +305,18 @@ Guide testeur (sans cargo) : [write-a-module.md](write-a-module.md).
 - Des métriques **draft** / **préfixe** optionnelles peuvent apparaître quand le prompt-lookup se déclenche.
 - Les tokens streamés restent exacts (même sampler). Batch / multi-agents N>1 stream encore.
 
+### 29. Shell calme et navigation des sessions (0.17.0)
+
+- Dans Paramètres → Moi, basculer Confortable / Compact : les contrôles restent
+  au moins 36 px / 32 px et la largeur du rail change. Revenir à Confortable.
+- Dans Chat, rechercher une session par titre (casse mixte). Vérifier les groupes
+  Aujourd’hui / Hier / 7 derniers jours / Plus ancien, épingler une session,
+  l’archiver, la restaurer depuis Archives, et confirmer que la suppression
+  définitive n’est proposée que là.
+- Saisir un prompt sur deux lignes avec Maj+Entrée puis Entrée pour envoyer.
+  Basculer le focus Canvas ; ouvrir Activité et le centre de notifications
+  depuis la cloche.
+
 ### 28. Canvas et contrôles d’inférence (0.16.0)
 
 - Ouvrir Canvas depuis Chat. Basculer la grille et l’aimantation ; créer deux
@@ -328,7 +340,7 @@ Guide testeur (sans cargo) : [write-a-module.md](write-a-module.md).
 - Gates PC.6–PC.9 et PC.11–PC.13 cochés sur au moins une machine (protocole
   long ; pas exigé de chaque testeur)
 
-## Hors scope Preview 0.16.0
+## Hors scope Preview 0.17.0
 
 - Boot seL4 / fer nu (tag interne `sel4-pv-*` seulement)
 - Intel Mac

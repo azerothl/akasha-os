@@ -4,7 +4,7 @@
 
 Spécification produit durable pour l’**application hôte Preview** (`crates/aos-ui-egui`). Le site public (`website/`) conserve le design system chambre à brouillard dans [DESIGN.md](../DESIGN.md) ; ce document régit le chrome in-app, la navigation et les libellés sur Preview Windows/Linux.
 
-> Périmètre : shell hôte Preview 0.16.x. Pas l’image seL4 bootable.
+> Périmètre : shell hôte Preview 0.17.x. Pas l’image seL4 bootable.
 
 ## Objectifs
 

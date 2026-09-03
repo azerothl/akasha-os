@@ -1,8 +1,8 @@
-# Tester protocol — Akasha OS Preview 0.16.0
+# Tester protocol — Akasha OS Preview 0.17.0
 
 **Language:** English | [Français](fr/TESTER.md)
 
-> Date: 03/09/2026 · Preview **0.16.0**
+> Date: 03/09/2026 · Preview **0.17.0**
 
 Thank you for testing Preview. Goal: install **without** `cargo` or cloning
 the repo, exercise the main paths, and send feedback **from the UI**.
@@ -333,6 +333,16 @@ Tester-facing write-up (no cargo): [write-a-module.md](write-a-module.md).
 - Optional **draft** / **prefix** metrics may appear on that line when prompt-lookup fires (quotes / RAG / repeated prefixes).
 - Streamed tokens must still match a non-speculative reply (exact sampler). Multi-agent / batch N>1 still streams.
 
+### 29. Calm shell and session navigation (0.17.0)
+
+- In Settings → Me, switch density Comfortable / Compact: primary controls stay
+  at least 36 px / 32 px and the rail width changes. Restore Comfortable.
+- In Chat, search sessions by title (mixed case). Confirm Today / Yesterday /
+  Last 7 days / Older groups, pin one session to the top, archive it, restore
+  it from Archives, and verify permanent delete is only offered there.
+- Type a two-line prompt with Shift+Enter then Enter to send. Toggle Canvas
+  focus; open Activity from the panel and the notification centre from the bell.
+
 ### 28. Canvas and inference controls (0.16.0)
 
 - Open Canvas from Chat. Toggle the grid and snapping; create two layers, rename
@@ -362,7 +372,7 @@ Tester-facing write-up (no cargo): [write-a-module.md](write-a-module.md).
 - Gates PC.6–PC.9 and PC.11–PC.13 checked on at least one machine (long
   protocol; not required of every tester)
 
-## Out of scope Preview 0.16.0
+## Out of scope Preview 0.17.0
 
 - seL4 / bare-metal boot
 - Intel Mac

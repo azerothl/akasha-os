@@ -16,7 +16,7 @@ CPU) and macOS Apple Silicon; a seL4 bare-metal track is separate.
   <img src="branding/logo/tracks.svg" width="480" alt="MEMORY, CAPS, GPU, AGENTS">
 </p>
 
-> This is **not** a bootable OS image yet. Preview 0.16.0 is an installable host
+> This is **not** a bootable OS image yet. Preview 0.17.0 is an installable host
 > app for testers (Windows/Linux/Mac Apple Silicon; NVIDIA optional on Win/Linux
 > via CPU path in the same zip).
 
@@ -33,7 +33,7 @@ Full catalogue: [docs/FEATURES.md](docs/FEATURES.md).
 
 | Area | What you get |
 |------|----------------|
-| Chat / Sessions | Parallel persisted conversations; slash commands (`/image`, `/speak`); per-session model |
+| Chat / Sessions | Parallel persisted conversations; search, pin, reversible archive; slash commands (`/image`, `/speak`); per-session model |
 | Memory | Long-term facts; memory-first agent bootstrap |
 | Notes | Human + agent-authored notes (WASM); resyncs on boot after an update |
 | Tasks | Dual-surface tasks module + Tasks tab |
@@ -43,7 +43,7 @@ Full catalogue: [docs/FEATURES.md](docs/FEATURES.md).
 | Canvas | Layered vector drawing, grid and snapping, PNG/SVG/JSON export, agent scene checks and global geometry validation |
 | Providers | OpenAI-compat cloud + loopback (Ollama / vLLM / LM Studio); keys in the vault |
 | Network | Opt-in search (Brave / DDG / Bing) + `web.browse` + fetch |
-| Settings | Language, theme, trust, routing, gpu/cpu/auto, agent defaults, search engine |
+| Settings | Language, theme, density, trust, routing, gpu/cpu/auto, agent defaults, search engine |
 | Feedback | Local report + GitHub issue on this repo |
 | Troubleshoot | In-app diagnostics; GitHub report when findings exist |
 | Updates | Non-destructive overlays from GitHub Releases |

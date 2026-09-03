@@ -19,7 +19,33 @@ impl UiApp {
         ui.separator();
 
         let label_w = 160.0_f32;
+        let query = self.settings_ui.search.trim().to_ascii_lowercase();
+        let section_visible = |terms: &[&str]| {
+            query.is_empty() || terms.iter().any(|term| query.contains(term))
+        };
+        if !query.is_empty()
+            && ![
+                ["utilisateur", "user", "langue", "language", "thème", "theme", "densité", "density", "échelle", "scale"].as_slice(),
+                ["modèle", "model", "inference", "routage", "routing", "image", "audio"].as_slice(),
+                ["confidentialité", "privacy", "confiance", "trust", "réseau", "network", "mémoire", "remember"].as_slice(),
+                ["agent", "expert", "étapes", "steps", "timeout"].as_slice(),
+                ["web", "recherche", "search", "navigation", "browse"].as_slice(),
+                ["secret", "clé", "token", "api"].as_slice(),
+                ["catalogue", "catalog", "module", "community", "communauté"].as_slice(),
+                ["planification", "schedule", "tâche", "task"].as_slice(),
+            ]
+            .iter()
+            .any(|terms| terms.iter().any(|term| query.contains(term)))
+        {
+            ui.weak(if self.prefs.language == "fr" {
+                "Aucun réglage ne correspond à cette recherche."
+            } else {
+                "No settings match this search."
+            });
+            return;
+        }
 
+        if section_visible(&["utilisateur", "user", "langue", "language", "thème", "theme", "densité", "density", "échelle", "scale"]) {
         ui.heading(t.settings_me);
         egui::Grid::new("settings_me")
             .num_columns(2)
@@ -122,8 +148,10 @@ impl UiApp {
                 }
                 ui.end_row();
             });
+        }
 
         ui.add_space(12.0);
+        if section_visible(&["modèle", "model", "inference", "routage", "routing", "image", "audio"]) {
         ui.heading(t.settings_models);
         egui::Grid::new("settings_models")
             .num_columns(2)
@@ -281,7 +309,9 @@ impl UiApp {
                 });
                 ui.end_row();
             });
+        }
 
+        if section_visible(&["image", "expert", "steps", "taille", "size"]) {
         egui::CollapsingHeader::new(t.settings_expert_image_defaults)
             .default_open(false)
             .show(ui, |ui| {
@@ -314,8 +344,10 @@ impl UiApp {
                         ui.end_row();
                     });
             });
+        }
 
         ui.add_space(12.0);
+        if section_visible(&["confidentialité", "privacy", "confiance", "trust", "réseau", "network", "mémoire", "remember"]) {
         ui.heading(t.settings_trust);
         egui::Grid::new("settings_trust")
             .num_columns(2)
@@ -361,7 +393,9 @@ impl UiApp {
                 }
                 ui.end_row();
             });
+        }
 
+        if section_visible(&["agent", "expert", "étapes", "steps", "timeout"]) {
         egui::CollapsingHeader::new(t.settings_expert_agent)
             .default_open(false)
             .show(ui, |ui| {
@@ -397,7 +431,9 @@ impl UiApp {
                         ui.end_row();
                     });
             });
+        }
 
+        if section_visible(&["web", "recherche", "search", "navigation", "browse"]) {
         egui::CollapsingHeader::new(t.settings_expert_web)
             .default_open(false)
             .show(ui, |ui| {
@@ -447,7 +483,9 @@ impl UiApp {
                         ui.end_row();
                     });
             });
+        }
 
+        if section_visible(&["secret", "clé", "token", "api"]) {
         egui::CollapsingHeader::new(t.settings_secrets)
             .default_open(false)
             .show(ui, |ui| {
@@ -528,7 +566,9 @@ impl UiApp {
                 });
                 ui.weak(t.settings_brave_hint);
             });
+        }
 
+        if section_visible(&["catalogue", "catalog", "module", "community", "communauté"]) {
         egui::CollapsingHeader::new(t.settings_catalogue)
             .default_open(false)
             .show(ui, |ui| {
@@ -681,7 +721,9 @@ impl UiApp {
                     });
                 }
             });
+        }
 
+        if section_visible(&["planification", "schedule", "tâche", "task"]) {
         egui::CollapsingHeader::new(t.schedule_heading)
             .default_open(false)
             .show(ui, |ui| {
@@ -741,5 +783,6 @@ impl UiApp {
                     }
                 }
             });
+        }
     }
 }

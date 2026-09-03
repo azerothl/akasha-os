@@ -7,13 +7,24 @@ Résumé des phases livrées. Détail : [plan-developpement-phases.md](plan-deve
 
 **En-tête :** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview :** 0.16.0 — Canvas enrichi et validé, contrôles d’inférence,
-récupération des modèles, catalogue communautaire signé et exports de traces agent. Pas un OS bootable.
+**Preview :** 0.17.0 — shell hôte calme, recherche/épingle/archive des
+sessions, compositeur multiligne, focus Canvas et volet Activité. Pas un OS bootable.
 Gate cohorte encore ouverte (**3 Windows + 1 Linux + 1 macOS Apple
 Silicon**, chemin de 15 minutes). **Suite :** fermeture cohorte PC ; Horizon C
 / PV.4+ quand planifié ; E9 hard-green après un run 2 GPU documenté.
 
-## P16 — Preview 0.16.0 (qualité Canvas + opérations modèles) — release candidate
+## P17 — Preview 0.17.0 (shell calme + navigation des sessions) — release candidate
+
+| # | Élément | État |
+|---|---------|------|
+| P17.1 | Densité confortable/compacte et compositeur multiligne | fait |
+| P17.2 | Recherche de sessions, groupes de dates et épingle | fait |
+| P17.3 | Archivage réversible ; suppression définitive seulement depuis Archives | fait |
+| P17.4 | Volet Activité, centre de notifications et focus Canvas | fait |
+| P17.5 | Garde du chat actif contre les rechargements en arrière-plan | fait |
+| P17.6 | Version, documentation, site et packaging release | fait |
+
+## P16 — Preview 0.16.0 (qualité Canvas + opérations modèles) — fait
 
 | # | Élément | État |
 |---|---------|------|
