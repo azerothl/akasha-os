@@ -918,6 +918,27 @@ mod tests {
     }
 
     #[test]
+    fn pinned_and_archived_flags_round_trip_and_restore() {
+        let dir = std::env::temp_dir().join(format!("aos-sess-flags-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let s = ChatSessionStore::open(&dir).unwrap();
+        let created = s.create(Some("Flags".into()), None).unwrap();
+
+        let pinned = s.set_pinned(&created.id, true).unwrap();
+        assert!(pinned.pinned);
+        let archived = s.set_archived(&created.id, true).unwrap();
+        assert!(archived.archived);
+        assert!(s.list(false).unwrap().is_empty());
+        assert_eq!(s.list(true).unwrap()[0].id, created.id);
+
+        let restored = s.set_archived(&created.id, false).unwrap();
+        assert!(!restored.archived);
+        assert!(restored.pinned);
+        assert_eq!(s.list(false).unwrap()[0].id, created.id);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn legacy_jsonl_without_attachments() {
         let dir = std::env::temp_dir().join(format!("aos-sess-leg-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
