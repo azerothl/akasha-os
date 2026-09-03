@@ -294,4 +294,47 @@ mod tests {
         assert!(!state.provider_enabled);
         assert_eq!(state.provider_secret_name, "openrouter_api_key");
     }
+
+    #[test]
+    fn model_transition_lifecycle_clears_on_refresh_and_retains_error_copy() {
+        let mut state = ModelsUiState::default();
+        state.begin_transition("m1");
+        assert!(state.is_transitioning("m1"));
+
+        state.set_model_infos(vec![ModelInfo {
+            id: "m1".into(),
+            name: "Model 1".into(),
+            privacy_class: "local".into(),
+            state: aos_proto::ModelState::Loading,
+            placement: None,
+            profile: None,
+            has_vision: false,
+        }]);
+        assert!(state.is_transitioning("m1"));
+
+        state.record_error("m1", "Mémoire insuffisante");
+        state.set_model_infos(vec![ModelInfo {
+            id: "m1".into(),
+            name: "Model 1".into(),
+            privacy_class: "local".into(),
+            state: aos_proto::ModelState::Error,
+            placement: None,
+            profile: None,
+            has_vision: false,
+        }]);
+        assert!(!state.is_transitioning("m1"));
+        assert_eq!(state.last_errors.get("m1").map(String::as_str), Some("Mémoire insuffisante"));
+
+        state.set_model_infos(vec![ModelInfo {
+            id: "m1".into(),
+            name: "Model 1".into(),
+            privacy_class: "local".into(),
+            state: aos_proto::ModelState::Loaded,
+            placement: None,
+            profile: None,
+            has_vision: false,
+        }]);
+        assert!(!state.is_transitioning("m1"));
+        assert!(!state.last_errors.contains_key("m1"));
+    }
 }
