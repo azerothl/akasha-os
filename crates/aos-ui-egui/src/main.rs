@@ -1406,12 +1406,6 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         let _ = self.cmd_tx.send(Cmd::SessionCreate { title });
     }
 
-    fn request_session_delete(&mut self, id: String) {
-        self.pending_session_nav = session_nav::PendingSessionNav::AwaitingDelete;
-        self.schedule_ui.clear_transcript_dirty();
-        let _ = self.cmd_tx.send(Cmd::SessionDelete { id });
-    }
-
     fn sync_schedule_cards(&mut self) {
         let now = now_ms();
         for line in &mut self.chat {
@@ -1559,10 +1553,21 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         ];
         for (idx, (tab, label, hint)) in primary.into_iter().enumerate() {
             let icon = ["◉", "✦", "✧", "◇"][idx];
+            let compact_label = match idx {
+                0 => "Chat",
+                1 => "Agents",
+                2 => "Cré",
+                _ => "Mem",
+            };
+            let visible_label = if self.prefs.ui_density == prefs::UiDensity::Compact {
+                compact_label
+            } else {
+                label
+            };
             if ui
                 .add_sized(
                     egui::vec2(ui.available_width().max(1.0), theme::CONTROL_MIN_H_COMFORTABLE),
-                    egui::SelectableLabel::new(self.tab == tab, format!("{icon} {label}")),
+                    egui::SelectableLabel::new(self.tab == tab, format!("{icon} {visible_label}")),
                 )
                 .on_hover_text(hint)
                 .clicked()
@@ -2339,6 +2344,19 @@ impl eframe::App for UiApp {
                     save_preferences(&self.prefs);
                 }
                 ui.weak(format!("Preview {} — {}", self.version, t.preview_tagline));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.small_button(t.report).clicked() {
+                        self.on_tab_open(Tab::Feedback);
+                    }
+                    if ui.small_button(t.tutorial).clicked() {
+                        self.guide.open_topic(guide::GuideTopic::Overview);
+                    }
+                    if ui.small_button(t.troubleshooting).clicked() {
+                        let _ = self.cmd_tx.send(Cmd::Troubleshoot);
+                        self.on_tab_open(Tab::Feedback);
+                        self.status = t.troubleshooting_status.into();
+                    }
+                });
             });
             if self.prefs.ui_layout.notifications_open && !self.agent_ui.notices.is_empty() {
                 let notices = self.agent_ui.notices.clone();
@@ -2370,22 +2388,6 @@ impl eframe::App for UiApp {
                     self.request_session_select(id);
                 }
             }
-            ui.horizontal(|ui| {
-                ui.weak(format!("Preview {} — {}", self.version, t.preview_tagline));
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.small_button(t.report).clicked() {
-                        self.on_tab_open(Tab::Feedback);
-                    }
-                    if ui.small_button(t.tutorial).clicked() {
-                        self.guide.open_topic(guide::GuideTopic::Overview);
-                    }
-                    if ui.small_button(t.troubleshooting).clicked() {
-                        let _ = self.cmd_tx.send(Cmd::Troubleshoot);
-                        self.on_tab_open(Tab::Feedback);
-                        self.status = t.troubleshooting_status.into();
-                    }
-                });
-            });
             if !self.models_ui.model_updates_msg.is_empty() {
                 ui.horizontal(|ui| {
                     ui.colored_label(
@@ -2462,22 +2464,36 @@ impl eframe::App for UiApp {
                 ui.heading(if self.prefs.ui_density == prefs::UiDensity::Compact { "A" } else { "Akasha" });
                     self.ui_nav_rail(ui, &t);
                     ui.separator();
-                    ui.heading(t.resources_heading);
+                    ui.heading(if self.prefs.ui_density == prefs::UiDensity::Compact {
+                        "RAM / CPU"
+                    } else {
+                        t.resources_heading
+                    });
                     if let Some(m) = &self.metrics {
-                        let ratio = m.ram_used as f32 / m.ram_total.max(1) as f32;
-                        ui.add(egui::ProgressBar::new(ratio).text(format!(
-                            "{} {:.1}/{:.1} GiB",
-                            t.metrics_ram,
-                            m.ram_used as f64 / (1 << 30) as f64,
-                            m.ram_total as f64 / (1 << 30) as f64
-                        )));
+                        if self.prefs.ui_density != prefs::UiDensity::Compact {
+                            let ratio = m.ram_used as f32 / m.ram_total.max(1) as f32;
+                            ui.add(egui::ProgressBar::new(ratio).text(format!(
+                                "{} {:.1}/{:.1} GiB",
+                                t.metrics_ram,
+                                m.ram_used as f64 / (1 << 30) as f64,
+                                m.ram_total as f64 / (1 << 30) as f64
+                            )));
+                        } else {
+                            ui.label(format!("RAM {:.0}%", 100.0 * m.ram_used as f32 / m.ram_total.max(1) as f32));
+                        }
                         ui.label(format!("CPU {:.0}%", m.cpu_percent));
-                        ui.label(format!("{}: {}", t.metrics_live, m.live_inferences()));
+                        if self.prefs.ui_density != prefs::UiDensity::Compact {
+                            ui.label(format!("{}: {}", t.metrics_live, m.live_inferences()));
+                        }
                         // Keep technical model details progressive: the rail shows
                         // only a compact resource summary and Models owns the list.
                         ui.label(format!("{}: {}", t.tab_models, m.models.len()));
                         if ui
-                            .button(t.tab_models)
+                            .button(if self.prefs.ui_density == prefs::UiDensity::Compact {
+                                "Modèles"
+                            } else {
+                                t.tab_models
+                            })
                             .on_hover_text(t.tab_hint_models)
                             .clicked()
                         {
