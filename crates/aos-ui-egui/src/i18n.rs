@@ -331,6 +331,8 @@ pub struct UiStrings {
     pub session_archive: &'static str,
     pub session_restore: &'static str,
     pub session_delete_permanently: &'static str,
+    pub session_delete_confirm_title: &'static str,
+    pub session_delete_confirm_body: &'static str,
     pub activity_open: &'static str,
     pub activity_close: &'static str,
     pub activity_short: &'static str,
@@ -1164,6 +1166,8 @@ const EN: UiStrings = UiStrings {
     session_archive: "Archive",
     session_restore: "Restore",
     session_delete_permanently: "Delete permanently",
+    session_delete_confirm_title: "Confirm deletion",
+    session_delete_confirm_body: "Permanently delete “{title}”?",
     activity_open: "Activity",
     activity_close: "Close Activity",
     activity_short: "Act.",
@@ -1995,6 +1999,8 @@ const FR: UiStrings = UiStrings {
     session_archive: "Archiver",
     session_restore: "Restaurer",
     session_delete_permanently: "Supprimer définitivement",
+    session_delete_confirm_title: "Confirmer la suppression",
+    session_delete_confirm_body: "Supprimer définitivement « {title} » ?",
     activity_open: "Activité",
     activity_close: "Fermer Activité",
     activity_short: "Act.",
@@ -2628,6 +2634,7 @@ mod tests {
         assert!(routing_technical(&t, "local_only").contains("local_only"));
     }
 
+    #[test]
     fn locked_notes_view_modes_fr_en() {
         let en = strings("en");
         let fr = strings("fr");

@@ -250,33 +250,21 @@ impl UiApp {
                 .find(|session| session.id == id)
                 .map(|session| session.title.clone())
                 .unwrap_or_else(|| id.clone());
-            let is_fr = self.prefs.language == "fr";
             let mut decision = None;
-            egui::Window::new(if is_fr {
-                "Confirmer la suppression"
-            } else {
-                "Confirm deletion"
-            })
-            .collapsible(false)
-            .resizable(false)
-            .show(ui.ctx(), |ui| {
-                ui.label(if is_fr {
-                    format!("Supprimer définitivement « {title} » ?")
-                } else {
-                    format!("Permanently delete “{title}”?")
+            egui::Window::new(t.session_delete_confirm_title)
+                .collapsible(false)
+                .resizable(false)
+                .show(ui.ctx(), |ui| {
+                    ui.label(t.session_delete_confirm_body.replace("{title}", &title));
+                    ui.horizontal(|ui| {
+                        if ui.button(t.memory_btn_cancel).clicked() {
+                            decision = Some(false);
+                        }
+                        if ui.button(t.sidebar_delete).clicked() {
+                            decision = Some(true);
+                        }
+                    });
                 });
-                ui.horizontal(|ui| {
-                    if ui.button(if is_fr { "Annuler" } else { "Cancel" }).clicked() {
-                        decision = Some(false);
-                    }
-                    if ui
-                        .button(if is_fr { "Supprimer" } else { "Delete" })
-                        .clicked()
-                    {
-                        decision = Some(true);
-                    }
-                });
-            });
             if let Some(confirm) = decision {
                 self.chat_state.sidebar.delete_confirm = None;
                 if confirm {
