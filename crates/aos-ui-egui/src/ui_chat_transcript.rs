@@ -406,6 +406,25 @@ impl UiApp {
                                     }
                                     schedule_card::send_schedule_action(&self.cmd_tx, action);
                                 }
+                                ChatAttachment::DeepPlan {
+                                    title,
+                                    version,
+                                    steps,
+                                    expand_step_ids,
+                                    show_logs_step_id,
+                                    ..
+                                } => {
+                                    crate::deep_plan_ui::deep_plan_toggle(
+                                        ui,
+                                        i,
+                                        title,
+                                        *version,
+                                        steps,
+                                        expand_step_ids,
+                                        show_logs_step_id.as_deref(),
+                                        &mut self.chat_state.view.deep_plan_open,
+                                    );
+                                }
                             }
                         }
                     });
