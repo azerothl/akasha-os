@@ -5,7 +5,7 @@ use super::*;
 #[cfg(test)]
 mod delegate_tests {
     use super::*;
-    use crate::chat_delegate::canvas_model_id;
+    use crate::chat_delegate::{canvas_model_id, user_wants_deep_thinking};
     use aos_proto::{CanvasAspect, ModelInfo, ModelState};
 
     const ASPECT: CanvasAspect = CanvasAspect::Square;
@@ -27,6 +27,18 @@ mod delegate_tests {
             profile: None,
             has_vision,
         }
+    }
+
+    #[test]
+    fn detects_deep_thinking_activation() {
+        assert!(user_wants_deep_thinking(
+            r#"{"mode":"deep_thinking","task":"résume le dépôt"}"#
+        ));
+        assert!(user_wants_deep_thinking(
+            "Active le deep thinking pour cette tâche. Résume le dépôt."
+        ));
+        assert!(user_wants_deep_thinking("Enable deep thinking for this task."));
+        assert!(!user_wants_deep_thinking("juste un résumé du dépôt"));
     }
 
     #[test]
@@ -328,6 +340,8 @@ mod canvas_completion_tests {
             display_name: None,
             persona_id: None,
             origin: None,
+            deep_plan: None,
+            cognitive_mode: aos_proto::CognitiveMode::Normal,
         }
     }
 
