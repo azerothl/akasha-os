@@ -1679,6 +1679,19 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             }
             req.model_id = model_id;
             req.gate_mode = crate::prefs::load_preferences().agent_gate_mode.clone();
+            if has_goal && crate::chat_delegate::user_wants_deep_thinking(&task) {
+                req.cognitive_mode = aos_proto::CognitiveMode::DeepThinking;
+                if !req.skills.iter().any(|s| s == "deep-thinking" || s == "planner") {
+                    req.skills.push("deep-thinking".into());
+                }
+                let cleaned = crate::chat_delegate::strip_deep_thinking_activation(&task);
+                if !cleaned.is_empty() {
+                    req.directive = cleaned.clone();
+                    if let Some(g) = req.goal.as_mut() {
+                        g.statement = cleaned;
+                    }
+                }
+            }
             if req.skills.iter().any(|s| s.contains("notes"))
                 || req.tools.iter().any(|t| t.starts_with("notes."))
             {

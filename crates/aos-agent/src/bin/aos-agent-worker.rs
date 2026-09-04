@@ -35,7 +35,7 @@ use aos_agent::tools::{
     canonicalize_tool_name, canvas_tool_denied_by_allowlist, canvas_tools_from_module_list, caps_for_tools, caps_subset,
     classify_action, canvas_draw_strategy_hint, is_module_fallback_candidate,
     normalize_tool_args, resolve_tool_backend, restrict_canvas_tools, select_tools,
-    strip_canvas_blocked_runtime_tools, ToolBackend,
+    select_tools_mode, strip_canvas_blocked_runtime_tools, ToolBackend,
     ToolDesc,
 };
 use aos_agent::{intents, CognitiveState, ControlCmd, ControlResp, ReportPayload};
@@ -43,13 +43,15 @@ use aos_ipc::{BusClient, BusService};
 use aos_proto::{
     AgentCreateRequest, AgentCreateResponse, AgentGoal, AgentInfo, AgentOutputEvent, AgentSpec,
     AgentSource, AgentState, AgentStepRecord, CancelRequest, ChatAttachment, ChatMessage,
-    ChatSessionAppendRequest, ChatSessionGetResponse, ChatSessionIdRequest, DocumentRef,
-    FilesGenerateRequest, FsListRequest, FsReadRequest, FsReadResponse, FsWriteRequest,
+    ChatSessionAppendRequest, ChatSessionGetResponse, ChatSessionIdRequest, DeepPlanStepPatch,
+    DocumentRef, FilesGenerateRequest, FsListRequest, FsReadRequest, FsReadResponse, FsWriteRequest,
     InferParams, InferRequest, MemContextRequest, MemContextResponse, MemEpisodicQueryRequest,
     MemEpisodicWriteRequest, MemHit, MemRememberResponse, MemSharedReadRequest,
-    MemSharedWriteRequest, ModuleInfo, ModuleInvokeRequest, ModuleInvokeResponse, NetFetchRequest, TaskNode,
-    TaskNodeStatus, TokenEvent, WebBrowseRequest, WebBrowseResponse, WebSearchHit,
-    WebSearchRequest, WebSearchResponse,
+    MemSharedWriteRequest, ModuleInfo, ModuleInvokeRequest, ModuleInvokeResponse, NetFetchRequest,
+    PlanAppendLogRequest, PlanCreateRequest, PlanDelegateStepRequest, PlanGetRequest,
+    PlanReplaceTreeRequest, PlanResponse, PlanStep, PlanStepStatus, PlanUpdateStepRequest, TaskNode,
+    TaskNodeStatus, TokenEvent, WebBrowseRequest, WebBrowseResponse, WebSearchHit, WebSearchRequest,
+    WebSearchResponse,
 };
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -204,6 +206,11 @@ async fn main() {
     state.goal = Some(spec.goal.clone());
     state.parent_id = spec.parent_id.clone();
     state.cap_set_snapshot = spec.caps.clone();
+    let deep = spec.cognitive_mode.is_deep_thinking();
+    state.deep_thinking = deep;
+    if deep {
+        state.needs_plan = true;
+    }
 
     let shared = Arc::new(Shared {
         state: Mutex::new(state),
@@ -220,7 +227,7 @@ async fn main() {
         open_mcp_tools_with_secrets(&spec.mcp_servers, &mcp_secrets).await;
     let mut module_tools = discover_module_tools(&bus).await;
     module_tools.extend(mcp_tools);
-    let mut tools = select_tools(&tool_ids, &module_tools);
+    let mut tools = select_tools_mode(&tool_ids, &module_tools, deep);
     strip_canvas_blocked_runtime_tools(&mut tools, &spec.tools);
     // Enrich caps from tools if create didn't set them all
     let derived = caps_for_tools(&tools, &spec.mcp_servers);
@@ -1736,16 +1743,20 @@ async fn execute_action(
         }
     }
 
-    // Gate : plan obligatoire tant que task_graph vide
+    // Gate : plan obligatoire tant que task_graph / deep plan vide
     {
         let st = shared.state.lock().await;
         if st.blocks_action(name) {
-            return ActResult::Continue(
+            let msg = if st.deep_thinking {
+                "plan requis: appelle plan.create avec un arbre d'étapes avant toute autre action \
+                 (mode Deep Thinking). goal.fail reste autorisé. \
+                 Exemple: {\"thought\":\"découper\",\"action\":\"plan.create\",\"args\":{\"steps\":[{\"id\":\"1\",\"label\":\"…\"}]}}"
+            } else {
                 "plan requis: appelle plan.update avec des nœuds atomiques avant toute autre action \
                  (task.assess = complex). goal.fail reste autorisé. \
                  Exemple: {\"thought\":\"découper\",\"action\":\"plan.update\",\"args\":{\"nodes\":[{\"id\":\"1\",\"title\":\"…\",\"status\":\"Pending\"}]}}"
-                    .into(),
-            );
+            };
+            return ActResult::Continue(msg.into());
         }
     }
 
@@ -1872,6 +1883,22 @@ async fn execute_action(
                 bootstrap_memory_recall(bus, shared, &agent_id, &query, "après plan.update").await;
             }
             ActResult::Continue(format!("plan mis à jour ({} nœuds)", nodes.len()))
+        }
+        "plan.create" => {
+            handle_deep_plan_create(bus, shared, spec, args).await
+        }
+        "plan.update_step" => {
+            handle_deep_plan_update_step(bus, shared, spec, args).await
+        }
+        "plan.replace_tree" => {
+            handle_deep_plan_replace_tree(bus, shared, spec, args).await
+        }
+        "plan.delegate_step" => {
+            handle_deep_plan_delegate(bus, shared, spec, args).await
+        }
+        "plan.get" => handle_deep_plan_get(bus, shared, spec, args).await,
+        "plan.append_log" => {
+            handle_deep_plan_append_log(bus, shared, spec, args).await
         }
         "docs.read" => {
             let path = args
@@ -2459,6 +2486,7 @@ async fn spawn_child(
         optimize_prompt: false,
         gate_mode: parent.gate_mode.clone(),
         origin: None,
+    cognitive_mode: aos_proto::CognitiveMode::Normal,
     };
     match bus
         .call::<AgentCreateRequest, AgentCreateResponse>("agent.create", &req, vec![])
@@ -2539,6 +2567,410 @@ fn parse_plan_nodes(args: &serde_json::Value) -> Vec<TaskNode> {
             .collect();
     }
     Vec::new()
+}
+
+fn parse_plan_step_status(raw: &str) -> PlanStepStatus {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "in_progress" | "inprogress" | "running" => PlanStepStatus::InProgress,
+        "done" | "complete" | "completed" => PlanStepStatus::Done,
+        "delegated" => PlanStepStatus::Delegated,
+        "blocked" => PlanStepStatus::Blocked,
+        _ => PlanStepStatus::Pending,
+    }
+}
+
+fn parse_deep_steps(args: &serde_json::Value) -> Vec<PlanStep> {
+    let Some(arr) = args.get("steps").and_then(|n| n.as_array()) else {
+        return Vec::new();
+    };
+    arr.iter()
+        .enumerate()
+        .map(|(i, n)| parse_deep_step(n, &format!("{}", i + 1)))
+        .collect()
+}
+
+fn parse_deep_step(n: &serde_json::Value, fallback_id: &str) -> PlanStep {
+    let id = n
+        .get("id")
+        .and_then(|v| v.as_str())
+        .unwrap_or(fallback_id)
+        .to_string();
+    let label = n
+        .get("label")
+        .or_else(|| n.get("title"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("étape")
+        .to_string();
+    let children = n
+        .get("children")
+        .and_then(|c| c.as_array())
+        .map(|arr| {
+            arr.iter()
+                .enumerate()
+                .map(|(j, c)| parse_deep_step(c, &format!("{id}.{}", j + 1)))
+                .collect()
+        })
+        .unwrap_or_default();
+    PlanStep {
+        id,
+        label,
+        description: n
+            .get("description")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        status: n
+            .get("status")
+            .and_then(|v| v.as_str())
+            .map(parse_plan_step_status)
+            .unwrap_or_default(),
+        agent_id: n
+            .get("agent_id")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        children,
+        logs: n
+            .get("logs")
+            .and_then(|v| v.as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default(),
+    }
+}
+
+async fn report_deep_plan(
+    bus: &BusClient,
+    agent_id: &str,
+    plan: aos_proto::DeepPlan,
+    trace: &str,
+) {
+    report(
+        bus,
+        agent_id,
+        AgentOutputEvent::DeepPlanUpdated {
+            plan: plan.clone(),
+        },
+    )
+    .await;
+    if !trace.trim().is_empty() {
+        report(
+            bus,
+            agent_id,
+            AgentOutputEvent::DeepTrace {
+                message: trace.to_string(),
+            },
+        )
+        .await;
+    }
+}
+
+async fn resolve_plan_id(shared: &Shared, args: &serde_json::Value) -> Option<String> {
+    if let Some(pid) = args.get("plan_id").and_then(|v| v.as_str()).filter(|s| !s.is_empty()) {
+        return Some(pid.to_string());
+    }
+    let st = shared.state.lock().await;
+    st.deep_plan_id.clone()
+}
+
+async fn handle_deep_plan_create(
+    bus: &BusClient,
+    shared: &Shared,
+    spec: &AgentSpec,
+    args: &serde_json::Value,
+) -> ActResult {
+    let steps = parse_deep_steps(args);
+    let task = args
+        .get("task")
+        .and_then(|v| v.as_str())
+        .unwrap_or(spec.goal.statement.as_str())
+        .to_string();
+    let title = args
+        .get("title")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let req = PlanCreateRequest {
+        agent_id: spec.agent_id.clone(),
+        task,
+        title,
+        steps,
+    };
+    match bus
+        .call::<PlanCreateRequest, PlanResponse>("plan.create", &req, vec![])
+        .await
+    {
+        Ok(resp) => {
+            {
+                let mut st = shared.state.lock().await;
+                st.deep_plan_id = Some(resp.plan.id.clone());
+                st.deep_thinking = true;
+                if !st.plan_memory_recalled {
+                    st.plan_memory_recalled = true;
+                }
+            }
+            let trace = format!(
+                "Deep Thinking : plan créé (v{}, {} étapes racines).",
+                resp.plan.version,
+                resp.plan.steps.len()
+            );
+            report_deep_plan(bus, &spec.agent_id, resp.plan.clone(), &trace).await;
+            bootstrap_memory_recall(
+                bus,
+                shared,
+                &spec.agent_id,
+                &spec.goal.statement,
+                "après plan.create",
+            )
+            .await;
+            ActResult::Continue(format!(
+                "plan créé id={} v{} ({} racines)",
+                resp.plan.id,
+                resp.plan.version,
+                resp.plan.steps.len()
+            ))
+        }
+        Err(e) => ActResult::Continue(format!("plan.create err: {e}")),
+    }
+}
+
+async fn handle_deep_plan_update_step(
+    bus: &BusClient,
+    shared: &Shared,
+    spec: &AgentSpec,
+    args: &serde_json::Value,
+) -> ActResult {
+    let Some(plan_id) = resolve_plan_id(shared, args).await else {
+        return ActResult::Continue("plan.update_step : plan_id manquant (appelle plan.create d'abord)".into());
+    };
+    let step_id = args
+        .get("step_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    if step_id.is_empty() {
+        return ActResult::Continue("plan.update_step : step_id requis".into());
+    }
+    let patch = DeepPlanStepPatch {
+        status: args
+            .get("status")
+            .and_then(|v| v.as_str())
+            .map(parse_plan_step_status),
+        label: args
+            .get("label")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        description: args
+            .get("description")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        logs: args
+            .get("logs")
+            .and_then(|v| v.as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default(),
+        agent_id: None,
+    };
+    let req = PlanUpdateStepRequest {
+        plan_id,
+        step_id,
+        patch,
+    };
+    match bus
+        .call::<PlanUpdateStepRequest, PlanResponse>("plan.update_step", &req, vec![])
+        .await
+    {
+        Ok(resp) => {
+            let trace = format!(
+                "Deep Thinking : plan mis à jour (v{}).",
+                resp.plan.version
+            );
+            report_deep_plan(bus, &spec.agent_id, resp.plan, &trace).await;
+            ActResult::Continue(trace)
+        }
+        Err(e) => ActResult::Continue(format!("plan.update_step err: {e}")),
+    }
+}
+
+async fn handle_deep_plan_replace_tree(
+    bus: &BusClient,
+    shared: &Shared,
+    spec: &AgentSpec,
+    args: &serde_json::Value,
+) -> ActResult {
+    let Some(plan_id) = resolve_plan_id(shared, args).await else {
+        return ActResult::Continue("plan.replace_tree : plan_id manquant".into());
+    };
+    let steps = parse_deep_steps(args);
+    if steps.is_empty() {
+        return ActResult::Continue("plan.replace_tree : steps requis".into());
+    }
+    let req = PlanReplaceTreeRequest {
+        plan_id,
+        steps,
+        title: args
+            .get("title")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        status: None,
+    };
+    match bus
+        .call::<PlanReplaceTreeRequest, PlanResponse>("plan.replace_tree", &req, vec![])
+        .await
+    {
+        Ok(resp) => {
+            let trace = format!(
+                "Deep Thinking : plan révisé (v{}, {} racines).",
+                resp.plan.version,
+                resp.plan.steps.len()
+            );
+            report_deep_plan(bus, &spec.agent_id, resp.plan, &trace).await;
+            ActResult::Continue(trace)
+        }
+        Err(e) => ActResult::Continue(format!("plan.replace_tree err: {e}")),
+    }
+}
+
+async fn handle_deep_plan_delegate(
+    bus: &BusClient,
+    shared: &Shared,
+    spec: &mut AgentSpec,
+    args: &serde_json::Value,
+) -> ActResult {
+    let Some(plan_id) = resolve_plan_id(shared, args).await else {
+        return ActResult::Continue("plan.delegate_step : plan_id manquant".into());
+    };
+    let step_id = args
+        .get("step_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let brief = args
+        .get("brief")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    if step_id.is_empty() || brief.is_empty() {
+        return ActResult::Continue("plan.delegate_step : step_id et brief requis".into());
+    }
+    let skills: Vec<String> = args
+        .get("skills")
+        .and_then(|v| v.as_array())
+        .map(|a| {
+            a.iter()
+                .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default();
+    let tools: Vec<String> = args
+        .get("tools")
+        .and_then(|v| v.as_array())
+        .map(|a| {
+            a.iter()
+                .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default();
+    let documents: Vec<DocumentRef> = args
+        .get("documents")
+        .cloned()
+        .and_then(|v| serde_json::from_value(v).ok())
+        .unwrap_or_default();
+    let spawn = spawn_child(bus, shared, spec, &brief, &skills, &tools, &documents, &[]).await;
+    let ActResult::Continue(msg) = &spawn else {
+        return spawn;
+    };
+    let Some(child_id) = msg.strip_prefix("sous-agent créé: ").map(|s| s.trim().to_string()) else {
+        return ActResult::Continue(format!("délégation : spawn a échoué ({msg})"));
+    };
+    let req = PlanDelegateStepRequest {
+        plan_id,
+        step_id: step_id.clone(),
+        child_id: child_id.clone(),
+        brief: Some(brief),
+    };
+    match bus
+        .call::<PlanDelegateStepRequest, PlanResponse>("plan.delegate_step", &req, vec![])
+        .await
+    {
+        Ok(resp) => {
+            let trace = format!("Sous-agent lancé pour l'étape {step_id} ({child_id}).");
+            report_deep_plan(bus, &spec.agent_id, resp.plan, &trace).await;
+            ActResult::Continue(format!("{msg} ; étape {step_id} déléguée"))
+        }
+        Err(e) => ActResult::Continue(format!("{msg} ; plan.delegate_step err: {e}")),
+    }
+}
+
+async fn handle_deep_plan_get(
+    bus: &BusClient,
+    shared: &Shared,
+    spec: &AgentSpec,
+    args: &serde_json::Value,
+) -> ActResult {
+    let plan_id = resolve_plan_id(shared, args).await;
+    let req = PlanGetRequest {
+        plan_id,
+        agent_id: Some(spec.agent_id.clone()),
+    };
+    match bus
+        .call::<PlanGetRequest, PlanResponse>("plan.get", &req, vec![])
+        .await
+    {
+        Ok(resp) => {
+            let summary = aos_agent::deep_thinking::light_plan_summary(&resp.plan);
+            ActResult::Continue(truncate(&summary, 4000))
+        }
+        Err(e) => ActResult::Continue(format!("plan.get err: {e}")),
+    }
+}
+
+async fn handle_deep_plan_append_log(
+    bus: &BusClient,
+    shared: &Shared,
+    spec: &AgentSpec,
+    args: &serde_json::Value,
+) -> ActResult {
+    let Some(plan_id) = resolve_plan_id(shared, args).await else {
+        return ActResult::Continue("plan.append_log : plan_id manquant".into());
+    };
+    let step_id = args
+        .get("step_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let line = args
+        .get("line")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    if step_id.is_empty() || line.is_empty() {
+        return ActResult::Continue("plan.append_log : step_id et line requis".into());
+    }
+    let req = PlanAppendLogRequest {
+        plan_id,
+        step_id,
+        line,
+    };
+    match bus
+        .call::<PlanAppendLogRequest, PlanResponse>("plan.append_log", &req, vec![])
+        .await
+    {
+        Ok(resp) => {
+            report(
+                bus,
+                &spec.agent_id,
+                AgentOutputEvent::DeepPlanUpdated { plan: resp.plan },
+            )
+            .await;
+            ActResult::Continue("log interne ajouté".into())
+        }
+        Err(e) => ActResult::Continue(format!("plan.append_log err: {e}")),
+    }
 }
 
 async fn invoke_module(
@@ -3358,27 +3790,41 @@ async fn apply_assess_to_runtime(
     {
         let mut st = shared.state.lock().await;
         st.complexity = Some(assess.complexity.clone());
-        st.needs_plan = assess.needs_plan;
-        if !assess.needs_plan {
+        if st.deep_thinking {
+            st.needs_plan = true;
+        } else {
+            st.needs_plan = assess.needs_plan;
+        }
+        if !st.needs_plan {
             // Steer vers simple : lever le gate même si un ancien plan existe
             // (needs_plan=false suffit via plan_gate_active).
         } else {
             // Nouveau besoin de plan : reset le flag mémoire-après-plan
-            if st.task_graph.is_empty() {
+            if st.task_graph.is_empty() && st.deep_plan_id.is_none() {
                 st.plan_memory_recalled = false;
             }
         }
     }
 
-    if assess.is_complex() && !spec.skills.iter().any(|s| s == "planner") {
+    if assess.is_complex() && !spec.skills.iter().any(|s| s == "planner" || s == "deep-thinking") {
         if agent_has_canvas_tools(&spec.tools) {
             install_system_prompt(bus, shared, spec, skill_docs, tools).await;
             return;
         }
-        spec.skills.push("planner".into());
+        if spec.cognitive_mode.is_deep_thinking() {
+            if !spec.skills.iter().any(|s| s == "deep-thinking") {
+                spec.skills.push("deep-thinking".into());
+            }
+        } else {
+            spec.skills.push("planner".into());
+        }
         *skill_docs = load_skills(&spec.skills);
         let tool_ids = merge_skill_tools(&spec.tools, skill_docs);
-        *tools = select_tools(&tool_ids, module_tools);
+        *tools = select_tools_mode(
+            &tool_ids,
+            module_tools,
+            spec.cognitive_mode.is_deep_thinking(),
+        );
         strip_canvas_blocked_runtime_tools(tools, &spec.tools);
         let derived = caps_for_tools(tools, &spec.mcp_servers);
         for c in derived {
@@ -4068,6 +4514,7 @@ mod tests {
             optimize_prompt: false,
             gate_mode: "autonomous".into(),
             origin: None,
+        cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
         assert!(require_canvas_plan(AssessResult::simple("short goal"), &spec).is_complex());
         let non_canvas = AgentSpec { tools: vec![], ..spec };
@@ -4115,6 +4562,7 @@ mod tests {
             optimize_prompt: false,
             gate_mode: "ask".into(),
             origin: None,
+        cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
         let child_goal = canvas_child_goal_statement(
             &parent,
@@ -4147,6 +4595,7 @@ mod tests {
             optimize_prompt: false,
             gate_mode: "ask".into(),
             origin: None,
+        cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
         let child_goal = canvas_child_goal_statement(&parent, "résumer les sources A et B");
         assert_eq!(child_goal, "résumer les sources A et B");
