@@ -23,6 +23,28 @@ fn transcript_near_bottom(offset_y: f32, content_h: f32, viewport_h: f32) -> boo
     offset_y >= max_offset - TRANSCRIPT_NEAR_BOTTOM_PX
 }
 
+/// Keep following when already latched and live content is still growing (streaming rows,
+/// pending chrome). Prevents stick_to_bottom from toggling off due to row-height jitter.
+fn transcript_should_follow_bottom(
+    was_following: bool,
+    near_bottom: bool,
+    row_count: usize,
+    prev_row_count: usize,
+    streaming_len: usize,
+    prev_streaming_len: usize,
+    streaming_active: bool,
+    pending: bool,
+) -> bool {
+    if near_bottom {
+        return true;
+    }
+    was_following
+        && (row_count > prev_row_count
+            || streaming_len > prev_streaming_len
+            || streaming_active
+            || pending)
+}
+
 /// Number of rows that a virtualized transcript needs to inspect for a viewport.
 /// The two-row overscan keeps fast wheel scrolling from exposing a blank gap.
 pub(crate) fn transcript_visible_row_budget(total_rows: usize, viewport_height: f32) -> usize {
@@ -45,7 +67,11 @@ impl UiApp {
     ) {
         let n = self.chat.len();
         let streaming_len = self.chat_state.runtime.streaming.len();
+        let pending = self.chat_state.runtime.pending;
+        let streaming_active = !self.chat_state.runtime.streaming.is_empty();
         let follow_bottom = self.chat_state.view.follow_bottom;
+        let prev_row_count = self.chat_state.view.transcript_row_count;
+        let prev_streaming_len = self.chat_state.view.transcript_streaming_len;
         // Keep the sizing contract exercised in production code as well as in
         // the regression tests; egui owns the actual visible row range.
         let _visible_budget = transcript_visible_row_budget(n, scroll_h);
@@ -517,10 +543,20 @@ impl UiApp {
                 }
             });
         let view = &mut self.chat_state.view;
-        view.follow_bottom = transcript_near_bottom(
+        let near_bottom = transcript_near_bottom(
             scroll.state.offset.y,
             scroll.content_size.y,
             scroll.inner_rect.height(),
+        );
+        view.follow_bottom = transcript_should_follow_bottom(
+            follow_bottom,
+            near_bottom,
+            n,
+            prev_row_count,
+            streaming_len,
+            prev_streaming_len,
+            streaming_active,
+            pending,
         );
         view.transcript_row_count = n;
         view.transcript_streaming_len = streaming_len;
@@ -549,5 +585,29 @@ mod tests {
     fn near_bottom_detects_follow_threshold() {
         assert!(super::transcript_near_bottom(952.0, 1000.0, 600.0));
         assert!(!super::transcript_near_bottom(0.0, 1000.0, 600.0));
+    }
+
+    #[test]
+    fn follow_bottom_stays_latched_while_streaming_grows() {
+        assert!(super::transcript_should_follow_bottom(
+            true,
+            false,
+            10,
+            10,
+            120,
+            100,
+            true,
+            false,
+        ));
+        assert!(!super::transcript_should_follow_bottom(
+            true,
+            false,
+            10,
+            10,
+            100,
+            100,
+            false,
+            false,
+        ));
     }
 }
