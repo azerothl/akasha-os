@@ -1653,35 +1653,26 @@ async fn infer_turn(
                         },
                     )
                     .await;
-                    match cmd_rx.recv().await {
-                        Some(WorkerCmd::Resume) => return InferOutcome::Aborted,
-                        Some(WorkerCmd::Steer(d)) => return InferOutcome::Steer(d),
-                        Some(WorkerCmd::ActDecision { .. }) => return InferOutcome::Aborted,
-                        Some(WorkerCmd::ChildFinished {
-                            child_id,
-                            result,
-                            ok,
-                        }) => {
-                            record_child_finished(shared, child_id, result, ok).await;
-                            loop {
-                                match cmd_rx.recv().await {
-                                    Some(WorkerCmd::Resume) => return InferOutcome::Aborted,
-                                    Some(WorkerCmd::Steer(d)) => return InferOutcome::Steer(d),
-                                    Some(WorkerCmd::ActDecision { .. }) => {
-                                        return InferOutcome::Aborted
-                                    }
-                                    Some(WorkerCmd::ChildFinished {
-                                        child_id,
-                                        result,
-                                        ok,
-                                    }) => {
-                                        record_child_finished(shared, child_id, result, ok).await;
-                                    }
-                                    None => return InferOutcome::Fatal("control fermé".into()),
-                                }
+                    loop {
+                        match cmd_rx.recv().await {
+                            Some(WorkerCmd::Resume) => return InferOutcome::Aborted,
+                            Some(WorkerCmd::Steer(d)) => return InferOutcome::Steer(d),
+                            Some(WorkerCmd::ActDecision { .. }) => {
+                                return InferOutcome::Aborted
                             }
+                            Some(WorkerCmd::ChildFinished {
+                                child_id,
+                                result,
+                                ok,
+                            }) => {
+                                record_child_finished(shared, child_id, result, ok).await;
+                                // Return to the token stream. Remaining ChildFinished
+                                // stay queued; the next paused token or the step
+                                // drain will pick them up. Do not wait here forever.
+                                break;
+                            }
+                            None => return InferOutcome::Fatal("control fermé".into()),
                         }
-                        None => return InferOutcome::Fatal("control fermé".into()),
                     }
                 }
                 full_text.push_str(&text);
@@ -4435,12 +4426,11 @@ async fn drain_child_finished_into_memory(bus: &BusClient, agent_id: &str, share
         map.drain().collect()
     };
     for (child_id, (result, ok)) in pending {
-        if !shared
-            .consumed_child_results
-            .lock()
-            .await
-            .insert(child_id.clone())
-        {
+        let first_observation = {
+            let mut consumed = shared.consumed_child_results.lock().await;
+            consume_child_result(&mut consumed, &child_id)
+        };
+        if !first_observation {
             continue;
         }
         let injected = {
@@ -4519,21 +4509,26 @@ async fn finish_agent_await(
     child_id: String,
     result: String,
 ) -> String {
-    shared
-        .consumed_child_results
-        .lock()
-        .await
-        .insert(child_id.clone());
-    report(
-        bus,
-        agent_id,
-        AgentOutputEvent::ChildDone {
-            child_id,
-            result: result.clone(),
-        },
-    )
-    .await;
+    let first_observation = {
+        let mut consumed = shared.consumed_child_results.lock().await;
+        consume_child_result(&mut consumed, &child_id)
+    };
+    if first_observation {
+        report(
+            bus,
+            agent_id,
+            AgentOutputEvent::ChildDone {
+                child_id,
+                result: result.clone(),
+            },
+        )
+        .await;
+    }
     result
+}
+
+fn consume_child_result(consumed: &mut HashSet<String>, child_id: &str) -> bool {
+    consumed.insert(child_id.to_string())
 }
 
 /// Refuse d'attendre un id vide ou un agent que ce parent n'a pas spawn.
@@ -4671,11 +4666,12 @@ fn collect_sources(
 mod tests {
     use super::{
         await_child_reject_reason, canvas_child_goal_statement, child_terminal_result,
-        require_canvas_plan,
+        consume_child_result, require_canvas_plan,
     };
     use aos_agent::assess::AssessResult;
     use aos_agent::CognitiveState;
     use aos_proto::{AgentGoal, AgentSpec, AgentState};
+    use std::collections::HashSet;
 
     #[test]
     fn canvas_goal_requires_a_bounded_composition_plan() {
@@ -4732,6 +4728,14 @@ mod tests {
         );
         let empty = CognitiveState::new("child", vec![]);
         assert_eq!(child_terminal_result(&empty, &AgentState::Failed), "Failed");
+    }
+
+    #[test]
+    fn consume_child_result_reports_only_the_first_observation() {
+        let mut consumed = HashSet::new();
+        assert!(consume_child_result(&mut consumed, "agent-2"));
+        assert!(!consume_child_result(&mut consumed, "agent-2"));
+        assert!(consume_child_result(&mut consumed, "agent-3"));
     }
 
     #[test]

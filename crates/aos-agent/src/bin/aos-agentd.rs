@@ -104,6 +104,16 @@ async fn notify_parent_child_terminal(
     .await;
 }
 
+/// Exit without a worker `StateChanged` report is a failure, never a successful Done.
+fn unexpected_child_exit_terminal(last_output: &str) -> (AgentState, String, bool) {
+    let result = if last_output.trim().is_empty() {
+        "sous-agent arrêté sans rapport de fin".into()
+    } else {
+        last_output.to_string()
+    };
+    (AgentState::Failed, result, false)
+}
+
 fn worker_exe_path() -> std::path::PathBuf {
     let exe = std::env::current_exe().expect("current_exe");
     let dir = exe.parent().expect("dir du binaire");
@@ -527,18 +537,16 @@ async fn spawn_worker(
                     AgentState::Killed | AgentState::Done | AgentState::Failed
                 ) {
                     let parent_id = entry.info.parent_id.clone();
-                    let result = if !entry.info.last_output.trim().is_empty() {
-                        entry.info.last_output.clone()
-                    } else {
-                        "sous-agent arrêté sans rapport de fin".into()
-                    };
-                    entry.info.state = AgentState::Done;
-                    let ev = AgentOutputEvent::StateChanged {
-                        state: AgentState::Done,
-                    };
+                    let (state, result, ok) =
+                        unexpected_child_exit_terminal(&entry.info.last_output);
+                    entry.info.state = state.clone();
+                    if !ok {
+                        entry.info.fail_reason = Some(result.clone());
+                    }
+                    let ev = AgentOutputEvent::StateChanged { state };
                     broadcast(entry, &ev).await;
                     if let Some(parent_id) = parent_id {
-                        unexpected_parent = Some((parent_id, result, true));
+                        unexpected_parent = Some((parent_id, result, ok));
                     }
                 }
                 persist::update_info_sidecar(&entry.info);
@@ -2418,5 +2426,24 @@ fn kill_pid(pid: u32) {
         let _ = std::process::Command::new("kill")
             .args(["-9", &pid.to_string()])
             .output();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::unexpected_child_exit_terminal;
+    use aos_proto::AgentState;
+
+    #[test]
+    fn unexpected_child_exit_is_a_failure_not_success() {
+        let (state, result, ok) = unexpected_child_exit_terminal("");
+        assert_eq!(state, AgentState::Failed);
+        assert!(!ok);
+        assert!(result.contains("sans rapport de fin"));
+
+        let (state, result, ok) = unexpected_child_exit_terminal("partial output");
+        assert_eq!(state, AgentState::Failed);
+        assert!(!ok);
+        assert_eq!(result, "partial output");
     }
 }
