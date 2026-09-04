@@ -3,7 +3,7 @@
 use crate::cmd::Cmd;
 use crate::{
     agent_canvas_session_ops, agent_cap_holder, agent_panel, agent_shown_in_tab, chat_room, guide,
-    i18n, icons, open_in_browser, overflow_scroll, overflow_scroll_h, ui_roster_tool_checkboxes,
+    i18n, icons, open_in_browser, overflow_scroll, overflow_scroll_h, theme, ui_roster_tool_checkboxes,
     ChatLine, UiApp,
 };
 use aos_proto::{AgentInfo, AgentState, ChatAttachment};
@@ -42,7 +42,12 @@ fn ui_activity_agent_row(ui: &mut egui::Ui, t: &i18n::UiStrings, agent: &AgentIn
     ui.horizontal(|ui| {
         icons::agent_activity_icon(ui, agent_activity_icon(&agent.state));
         ui.label(agent.display_title());
-        ui.weak(agent_state_label(t, &agent.state));
+        let state_label = agent_state_label(t, &agent.state);
+        if agent.state == AgentState::Failed {
+            ui.colored_label(theme::HYDROGEN, state_label);
+        } else {
+            ui.weak(state_label);
+        }
         if ui.small_button(t.activity_details).clicked() {
             details = true;
         }
