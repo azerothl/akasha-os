@@ -106,6 +106,8 @@ pub fn agents_with_library_placeholders(agents: &[AgentInfo], _t: &UiStrings) ->
             display_name: Some(label.to_string()),
             persona_id: Some(persona.id.to_string()),
             origin: None,
+            deep_plan: None,
+            cognitive_mode: aos_proto::CognitiveMode::Normal,
         });
     }
     out
@@ -624,6 +626,8 @@ mod tests {
             display_name: Some(label.into()),
             persona_id: None,
             origin: Some("library".into()),
+            deep_plan: None,
+            cognitive_mode: aos_proto::CognitiveMode::Normal,
         }
     }
 
@@ -651,6 +655,8 @@ mod tests {
             display_name: Some(label.into()),
             persona_id: None,
             origin: Some("form".into()),
+            deep_plan: None,
+            cognitive_mode: aos_proto::CognitiveMode::Normal,
         }
     }
 
@@ -678,6 +684,8 @@ mod tests {
             display_name: Some(label.into()),
             persona_id: None,
             origin: Some("assistant".into()),
+            deep_plan: None,
+            cognitive_mode: aos_proto::CognitiveMode::Normal,
         }
     }
 

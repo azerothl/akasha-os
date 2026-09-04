@@ -452,6 +452,7 @@ mod tests {
             optimize_prompt: false,
             gate_mode: "ask".into(),
             origin: None,
+        cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
         state.upsert_roster_draft_from_spec(&spec);
         let draft = state.roster_edit_drafts.get("roster-1").expect("draft");

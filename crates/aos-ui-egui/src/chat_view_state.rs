@@ -7,6 +7,7 @@ use std::collections::HashSet;
 pub(crate) struct ChatViewState {
     pub(crate) canvas: CanvasPanelState,
     pub(crate) room_thinking_open: HashSet<usize>,
+    pub(crate) deep_plan_open: HashSet<usize>,
     pub(crate) room_members_open: bool,
     /// When true, the transcript ScrollArea sticks to the latest messages.
     pub(crate) follow_bottom: bool,
@@ -21,6 +22,7 @@ impl Default for ChatViewState {
         Self {
             canvas: CanvasPanelState::default(),
             room_thinking_open: HashSet::new(),
+            deep_plan_open: HashSet::new(),
             room_members_open: false,
             follow_bottom: true,
             transcript_row_count: 0,

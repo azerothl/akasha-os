@@ -123,7 +123,11 @@ pub fn compile_system_prompt(input: &PromptCompileInput<'_>) -> String {
     }
 
     // 8. Protocole d'actions
-    parts.push(ACTION_PROTOCOL.to_string());
+    if input.spec.cognitive_mode.is_deep_thinking() {
+        parts.push(DEEP_THINKING_PROTOCOL.to_string());
+    } else {
+        parts.push(ACTION_PROTOCOL.to_string());
+    }
 
     parts.join("\n\n")
 }
@@ -190,6 +194,26 @@ Compat : une ligne `TOOL: <outil> <args json>` est aussi acceptée.
 
 Ne termine qu'avec goal.complete quand les critères sont remplis."#;
 
+const DEEP_THINKING_PROTOCOL: &str = r#"## Protocole Deep Thinking
+
+Réponds par un objet JSON unique : {"thought":"…","action":"<outil>","args":{…}}
+
+Règles :
+- Première action obligatoire : `plan.create` avec un arbre hiérarchique complet (`steps` avec `children` si besoin).
+- Ensuite exécute, révise (`plan.replace_tree` / `plan.update_step`), délègue (`plan.delegate_step`) selon la complexité.
+- Les logs internes (`plan.append_log`) ne doivent PAS être dumpés dans la réponse utilisateur.
+- Traces utilisateur : le runtime publie des lignes légères ; ta réponse finale reste concise.
+- `plan.delegate_step` : brief COURT auto-suffisant ; le runtime spawn + lie l'étape.
+- N'utilise PAS `plan.update` (mode normal) — uniquement les outils `plan.*` deep.
+- Fin : `goal.complete` quand le plan est Done.
+
+Exemples :
+- plan.create : {"action":"plan.create","args":{"task":"…","steps":[{"id":"1","label":"Analyse","children":[{"id":"1.1","label":"Contexte"}]}]}}
+- plan.update_step : {"action":"plan.update_step","args":{"step_id":"1","status":"done"}}
+- plan.delegate_step : {"action":"plan.delegate_step","args":{"step_id":"2.1","brief":"Extraire README et Cargo.toml","tools":["fs.read","fs.list"]}}
+- goal.complete : {"summary":"…"}
+"#;
+
 /// Prompt court pour optimiser le system prompt.
 pub fn optimize_prompt_request(
     goal: &str,
@@ -239,6 +263,7 @@ mod tests {
             optimize_prompt: false,
             gate_mode: "ask".into(),
             origin: None,
+        cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
         let tools = vec![ToolDesc {
             name: "notes.create".into(),
@@ -286,6 +311,7 @@ mod tests {
             optimize_prompt: false,
             gate_mode: "ask".into(),
             origin: None,
+        cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
         let tools = vec![ToolDesc {
             name: "canvas.stroke".into(),

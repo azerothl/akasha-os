@@ -5,7 +5,7 @@ use crate::{agent_panel, chat_canvas, CHAT_AGENT_MAX_SUBAGENTS};
 use aos_ipc::BusClient;
 use aos_proto::{
     chat_tts_request, chat_user_wants_module_authoring, AgentCreateRequest, AgentGoal,
-    ChatAttachment, ChatSessionAppendRequest, ModelInfo, ModelState,
+    ChatAttachment, ChatSessionAppendRequest, CognitiveMode, ModelInfo, ModelState,
 };
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
@@ -15,6 +15,68 @@ fn chat_action_is_self_tool(action: &str) -> bool {
         action,
         "module.scaffold" | "module.package" | "module.install" | "module.uninstall" | "skill.create"
     )
+}
+
+/// Détecte l'activation Deep Thinking (JSON `mode` ou phrase FR/EN).
+pub(crate) fn user_wants_deep_thinking(text: &str) -> bool {
+    let t = text.trim();
+    if t.is_empty() {
+        return false;
+    }
+    if let Ok(v) = serde_json::from_str::<serde_json::Value>(t) {
+        if let Some(mode) = v.get("mode").and_then(|m| m.as_str()) {
+            if mode.eq_ignore_ascii_case("deep_thinking") || mode.eq_ignore_ascii_case("deep-thinking")
+            {
+                return true;
+            }
+        }
+    }
+    // Embedded JSON fragment
+    if t.contains("\"mode\"") {
+        if let Some(start) = t.find('{') {
+            if let Some(end) = t.rfind('}') {
+                if end > start {
+                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&t[start..=end]) {
+                        if v.get("mode")
+                            .and_then(|m| m.as_str())
+                            .is_some_and(|m| {
+                                m.eq_ignore_ascii_case("deep_thinking")
+                                    || m.eq_ignore_ascii_case("deep-thinking")
+                            })
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let lower = t.to_ascii_lowercase();
+    lower.contains("deep thinking")
+        || lower.contains("deep_thinking")
+        || lower.contains("deep-thinking")
+        || lower.contains("active le deep thinking")
+        || lower.contains("active deep thinking")
+        || lower.contains("activer le deep thinking")
+        || lower.contains("enable deep thinking")
+        || lower.contains("mode deep thinking")
+}
+
+/// Retire la consigne d'activation du brief (garde le reste de la tâche).
+pub(crate) fn strip_deep_thinking_activation(text: &str) -> String {
+    let mut out = text.to_string();
+    for phrase in [
+        "Active le deep thinking pour cette tâche.",
+        "Active le deep thinking pour cette tâche",
+        "Activer le deep thinking pour cette tâche.",
+        "Enable deep thinking for this task.",
+        "Enable deep thinking for this task",
+        "Active deep thinking.",
+        "Active le deep thinking.",
+    ] {
+        out = out.replace(phrase, "");
+    }
+    out.trim().to_string()
 }
 
 fn merge_named_args(dst: &mut Vec<String>, args: &serde_json::Value, key: &str) {
@@ -293,6 +355,19 @@ pub(crate) async fn spawn_chat_delegate_agent(
         req.caps.push("fs.write:/downloads/**".into());
     }
     req.gate_mode = crate::prefs::load_preferences().agent_gate_mode.clone();
+    if user_wants_deep_thinking(&user_text) || user_wants_deep_thinking(&brief) {
+        req.cognitive_mode = CognitiveMode::DeepThinking;
+        if !req.skills.iter().any(|s| s == "deep-thinking" || s == "planner") {
+            req.skills.push("deep-thinking".into());
+        }
+        let cleaned = strip_deep_thinking_activation(&goal_statement);
+        if !cleaned.is_empty() {
+            req.directive = cleaned.clone();
+            if let Some(g) = req.goal.as_mut() {
+                g.statement = cleaned;
+            }
+        }
+    }
     match bus
         .call::<AgentCreateRequest, aos_proto::AgentCreateResponse>(
             aos_agent::intents::CREATE,

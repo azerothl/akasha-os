@@ -42,6 +42,10 @@ impl UiApp {
                 self.handle_schedule_phrase(&session_id, &text, parsed);
                 return;
             }
+            if let Some(cmd) = crate::deep_plan_ui::parse_deep_plan_command(&text) {
+                self.handle_deep_plan_command(&session_id, &text, cmd);
+                return;
+            }
         }
         let explicit_canvas = chat_canvas::chat_should_open_canvas_face(&text);
         if explicit_canvas {
@@ -396,5 +400,102 @@ impl UiApp {
             let t = i18n::strings(&self.prefs.language);
             self.status = t.chat_stopped.into();
         }
+    }
+
+    fn handle_deep_plan_command(
+        &mut self,
+        session_id: &str,
+        user_text: &str,
+        cmd: crate::deep_plan_ui::DeepPlanCommand,
+    ) {
+        self.chat.push(ChatLine::plain("user", user_text));
+        let _ = self.cmd_tx.send(Cmd::SessionAppend {
+            session_id: session_id.to_string(),
+            role: "user".into(),
+            content: user_text.to_string(),
+            attachments: vec![],
+        });
+        // Prefer latest DeepPlan attachment in transcript; else build from AgentInfo.
+        let mut applied = false;
+        let mut open_idx = None;
+        let chat_len = self.chat.len();
+        for (idx, line) in self.chat.iter_mut().enumerate().rev() {
+            for att in line.attachments.iter_mut() {
+                if crate::deep_plan_ui::apply_command_to_attachment(att, &cmd) {
+                    applied = true;
+                    open_idx = Some(idx.min(chat_len.saturating_sub(1)));
+                    break;
+                }
+            }
+            if applied {
+                break;
+            }
+        }
+        if let Some(idx) = open_idx {
+            self.chat_state.view.deep_plan_open.insert(idx);
+        }
+        if !applied {
+            if let Some(info) = self.agents.iter().find(|a| {
+                a.session_id.as_deref() == Some(session_id) && a.deep_plan.is_some()
+            }) {
+                if let Some(plan) = info.deep_plan.clone() {
+                    let mut att = ChatAttachment::DeepPlan {
+                        agent_id: info.agent_id.clone(),
+                        plan_id: plan.id.clone(),
+                        title: plan.title.clone(),
+                        version: plan.version,
+                        steps: plan.steps.clone(),
+                        expand_step_ids: vec![],
+                        show_logs_step_id: None,
+                    };
+                    crate::deep_plan_ui::apply_command_to_attachment(&mut att, &cmd);
+                    let reply = match &cmd {
+                        crate::deep_plan_ui::DeepPlanCommand::ShowFull => {
+                            "Plan Deep Thinking affiché.".to_string()
+                        }
+                        crate::deep_plan_ui::DeepPlanCommand::ExpandStep { step_id } => {
+                            format!("Étape {step_id} dépliée.")
+                        }
+                        crate::deep_plan_ui::DeepPlanCommand::ShowLogs { step_id } => {
+                            format!("Logs internes de l'étape {step_id}.")
+                        }
+                    };
+                    let idx = self.chat.len();
+                    self.chat.push(ChatLine {
+                        role: "assistant".into(),
+                        text: reply.clone(),
+                        attachments: vec![att],
+                        speaker_id: None,
+                        speaker_name: None,
+                        thinking: None,
+                    });
+                    self.chat_state.view.deep_plan_open.insert(idx);
+                    let _ = self.cmd_tx.send(Cmd::SessionAppend {
+                        session_id: session_id.to_string(),
+                        role: "assistant".into(),
+                        content: reply,
+                        attachments: self.chat.last().map(|l| l.attachments.clone()).unwrap_or_default(),
+                    });
+                    return;
+                }
+            }
+            self.chat.push(ChatLine::plain(
+                "système",
+                "Aucun plan Deep Thinking dans cette session.",
+            ));
+            return;
+        }
+        let reply = match &cmd {
+            crate::deep_plan_ui::DeepPlanCommand::ShowFull => {
+                "Plan Deep Thinking déplié.".to_string()
+            }
+            crate::deep_plan_ui::DeepPlanCommand::ExpandStep { step_id } => {
+                format!("Étape {step_id} dépliée.")
+            }
+            crate::deep_plan_ui::DeepPlanCommand::ShowLogs { step_id } => {
+                format!("Logs internes de l'étape {step_id}.")
+            }
+        };
+        self.chat.push(ChatLine::plain("assistant", reply));
     }
 }

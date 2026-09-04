@@ -15,7 +15,9 @@ tools:
 **Language:** English | [Français](../../docs/fr/skills/planner/SKILL.md)
 
 Activated automatically when `task.assess` classifies the goal as **complex**
-(also selectable manually).
+(also selectable manually). For hierarchical Deep Thinking mode
+(`cognitive_mode: deep_thinking`), prefer the **deep-thinking** skill and
+`plan.create` / `plan.delegate_step` instead of flat `plan.update`.
 
 1. Call `plan.update` first with atomic nodes — required before any side effect.
 2. Mark independence: if two nodes do not need each other's output, they are **parallel**.

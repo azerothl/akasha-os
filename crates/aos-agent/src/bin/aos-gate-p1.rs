@@ -13,8 +13,9 @@
 use aos_agent::intents as agent_intents;
 use aos_ipc::BusClient;
 use aos_proto::{
-    AgentCreateRequest, AgentCreateResponse, AgentIdRequest, AgentInfo, ChatMessage, InferParams,
-    InferRequest, LoadRequest, LoadResponse, TokenEvent,
+    AgentCreateRequest, AgentCreateResponse, AgentIdRequest, AgentInfo, ChatMessage, CognitiveMode,
+    InferParams, InferRequest, LoadRequest, LoadResponse, PlanCreateRequest, PlanGetRequest,
+    PlanResponse, PlanStep, TokenEvent,
 };
 use std::time::{Duration, Instant};
 
@@ -351,6 +352,109 @@ async fn main() {
             Err(e) => {
                 gates.push(Gate {
                     name: "agent multi-steps (progress / terminal)",
+                    passed: false,
+                    detail: e.to_string(),
+                });
+            }
+        }
+    }
+
+    // --- Deep Thinking plan.create / plan.get smoke ---
+    {
+        let mut req = AgentCreateRequest::simple(
+            "Deep Thinking smoke — plan hiérarchique uniquement",
+        );
+        req.cognitive_mode = CognitiveMode::DeepThinking;
+        req.skills = vec!["deep-thinking".into()];
+        req.tools = vec!["goal.complete".into()];
+        req.caps = vec!["tool.invoke:notes".into()];
+        req.goal = Some(aos_proto::AgentGoal {
+            statement: req.directive.clone(),
+            success_criteria: vec![],
+            max_steps: 2,
+            max_subagents: 0,
+            timeout_secs: 60,
+        });
+        req.model_id = Some("local:embedded-instruct".into());
+        match bus
+            .call::<_, AgentCreateResponse>(agent_intents::CREATE, &req, vec![])
+            .await
+        {
+            Ok(r) => {
+                let create = PlanCreateRequest {
+                    agent_id: r.agent_id.clone(),
+                    task: "smoke deep plan".into(),
+                    title: Some("Smoke".into()),
+                    steps: vec![PlanStep {
+                        id: "1".into(),
+                        label: "Analyse".into(),
+                        description: None,
+                        status: Default::default(),
+                        agent_id: None,
+                        children: vec![PlanStep {
+                            id: "1.1".into(),
+                            label: "Contexte".into(),
+                            ..Default::default()
+                        }],
+                        logs: vec![],
+                    }],
+                };
+                let created = bus
+                    .call::<PlanCreateRequest, PlanResponse>(
+                        agent_intents::PLAN_CREATE,
+                        &create,
+                        vec![],
+                    )
+                    .await;
+                let got = match &created {
+                    Ok(resp) => {
+                        bus.call::<PlanGetRequest, PlanResponse>(
+                            agent_intents::PLAN_GET,
+                            &PlanGetRequest {
+                                plan_id: Some(resp.plan.id.clone()),
+                                agent_id: Some(r.agent_id.clone()),
+                            },
+                            vec![],
+                        )
+                        .await
+                        .ok()
+                    }
+                    Err(_) => None,
+                };
+                let _ = bus
+                    .call::<AgentIdRequest, bool>(
+                        agent_intents::KILL,
+                        &AgentIdRequest {
+                            agent_id: r.agent_id.clone(),
+                        },
+                        vec![],
+                    )
+                    .await;
+                let ok = created
+                    .as_ref()
+                    .ok()
+                    .map(|p| p.plan.version >= 1 && !p.plan.steps.is_empty())
+                    .unwrap_or(false)
+                    && got
+                        .as_ref()
+                        .map(|p| !p.plan.steps[0].children.is_empty())
+                        .unwrap_or(false);
+                gates.push(Gate {
+                    name: "deep thinking plan.create/get",
+                    passed: ok,
+                    detail: format!(
+                        "id={} create={:?} children={}",
+                        r.agent_id,
+                        created.as_ref().map(|p| p.plan.version).ok(),
+                        got.as_ref()
+                            .map(|p| p.plan.steps[0].children.len())
+                            .unwrap_or(0)
+                    ),
+                });
+            }
+            Err(e) => {
+                gates.push(Gate {
+                    name: "deep thinking plan.create/get",
                     passed: false,
                     detail: e.to_string(),
                 });

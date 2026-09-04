@@ -46,6 +46,12 @@ pub struct CognitiveState {
     /// Recall mémoire déjà fait après le premier `plan.update` (tâches complexes).
     #[serde(default)]
     pub plan_memory_recalled: bool,
+    /// Id du plan Deep Thinking courant (store externe).
+    #[serde(default)]
+    pub deep_plan_id: Option<String>,
+    /// Mode Deep Thinking actif (gate `plan.create` au lieu de `plan.update`).
+    #[serde(default)]
+    pub deep_thinking: bool,
     /// Successful canvas draw ops on the current pending plan node (for cap-based advance).
     #[serde(default)]
     pub canvas_draw_ops_on_current_task: u32,
@@ -72,6 +78,8 @@ impl CognitiveState {
             complexity: None,
             needs_plan: false,
             plan_memory_recalled: false,
+            deep_plan_id: None,
+            deep_thinking: false,
             canvas_draw_ops_on_current_task: 0,
             version: 2,
         }
@@ -79,11 +87,24 @@ impl CognitiveState {
 
     /// Vrai si un plan est encore requis avant toute autre action.
     pub fn plan_gate_active(&self) -> bool {
+        if self.deep_thinking {
+            return false;
+        }
         self.needs_plan && self.task_graph.is_empty()
+    }
+
+    /// Gate Deep Thinking : `plan.create` obligatoire tant qu'aucun plan n'existe.
+    pub fn deep_plan_gate_active(&self) -> bool {
+        self.deep_thinking && self.needs_plan && self.deep_plan_id.is_none()
     }
 
     /// Actions autorisées sous le gate : `plan.update` et `goal.fail` uniquement.
     pub fn blocks_action(&self, action: &str) -> bool {
+        if self.deep_plan_gate_active() {
+            return action != "plan.create"
+                && action != "goal.fail"
+                && action != "user.ask";
+        }
         self.plan_gate_active()
             && action != "plan.update"
             && action != "goal.fail"
@@ -338,6 +359,22 @@ mod tests {
             notes: String::new(),
         }]);
         assert!(!st.plan_gate_active());
+        assert!(!st.blocks_action("web.search"));
+    }
+
+    #[test]
+    fn deep_plan_gate_requires_plan_create() {
+        let mut st = CognitiveState::new("a", vec![]);
+        st.deep_thinking = true;
+        st.needs_plan = true;
+        assert!(st.deep_plan_gate_active());
+        assert!(!st.plan_gate_active());
+        assert!(st.blocks_action("web.search"));
+        assert!(st.blocks_action("plan.update"));
+        assert!(!st.blocks_action("plan.create"));
+        assert!(!st.blocks_action("goal.fail"));
+        st.deep_plan_id = Some("dplan-1".into());
+        assert!(!st.deep_plan_gate_active());
         assert!(!st.blocks_action("web.search"));
     }
 

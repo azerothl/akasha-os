@@ -29,6 +29,7 @@ mod cmd;
 mod composer_layout;
 mod confirmation_ui_state;
 mod decl_ui;
+mod deep_plan_ui;
 mod feedback_event_controller;
 mod feedback_ui_state;
 mod guide;

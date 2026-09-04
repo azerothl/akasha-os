@@ -153,6 +153,96 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
             required_caps: vec![],
         },
         ToolDesc {
+            name: "plan.create".into(),
+            description: "Deep Thinking : créer un plan hiérarchique versionné (première action obligatoire en mode deep)".into(),
+            input_schema: serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "title":{"type":"string"},
+                    "task":{"type":"string"},
+                    "steps":{"type":"array","description":"arbre d'étapes {id,label,description?,status?,children?}"}
+                }
+            }),
+            backend: ToolBackend::Runtime,
+            required_caps: vec![],
+        },
+        ToolDesc {
+            name: "plan.update_step".into(),
+            description: "Deep Thinking : patcher une étape (status, label, logs)".into(),
+            input_schema: serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "plan_id":{"type":"string"},
+                    "step_id":{"type":"string"},
+                    "status":{"type":"string"},
+                    "label":{"type":"string"},
+                    "description":{"type":"string"},
+                    "logs":{"type":"array","items":{"type":"string"}}
+                },
+                "required":["step_id"]
+            }),
+            backend: ToolBackend::Runtime,
+            required_caps: vec![],
+        },
+        ToolDesc {
+            name: "plan.replace_tree".into(),
+            description: "Deep Thinking : réviser l'arbre du plan (ajout/suppression/réorg)".into(),
+            input_schema: serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "plan_id":{"type":"string"},
+                    "title":{"type":"string"},
+                    "steps":{"type":"array"}
+                },
+                "required":["steps"]
+            }),
+            backend: ToolBackend::Runtime,
+            required_caps: vec![],
+        },
+        ToolDesc {
+            name: "plan.delegate_step".into(),
+            description: "Deep Thinking : déléguer une étape via sous-agent (spawn + bind)".into(),
+            input_schema: serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "plan_id":{"type":"string"},
+                    "step_id":{"type":"string"},
+                    "brief":{"type":"string"},
+                    "skills":{"type":"array","items":{"type":"string"}},
+                    "tools":{"type":"array","items":{"type":"string"}},
+                    "documents":{"type":"array"}
+                },
+                "required":["step_id","brief"]
+            }),
+            backend: ToolBackend::Runtime,
+            required_caps: vec![],
+        },
+        ToolDesc {
+            name: "plan.get".into(),
+            description: "Deep Thinking : lire le plan courant".into(),
+            input_schema: serde_json::json!({
+                "type":"object",
+                "properties":{"plan_id":{"type":"string"}}
+            }),
+            backend: ToolBackend::Runtime,
+            required_caps: vec![],
+        },
+        ToolDesc {
+            name: "plan.append_log".into(),
+            description: "Deep Thinking : ajouter un log interne à une étape".into(),
+            input_schema: serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "plan_id":{"type":"string"},
+                    "step_id":{"type":"string"},
+                    "line":{"type":"string"}
+                },
+                "required":["step_id","line"]
+            }),
+            backend: ToolBackend::Runtime,
+            required_caps: vec![],
+        },
+        ToolDesc {
             name: "agent.spawn".into(),
             description: "Déléguer à un sous-agent (brief COURT auto-suffisant ; tools/docs minimaux)"
                 .into(),
@@ -939,10 +1029,22 @@ pub fn default_agent_tools() -> Vec<String> {
 
 /// Filtre le catalogue selon les ids sélectionnés (+ toujours les runtime de base).
 pub fn select_tools(selected: &[String], extra: &[ToolDesc]) -> Vec<ToolDesc> {
+    select_tools_mode(selected, extra, false)
+}
+
+/// Comme [`select_tools`], avec outils Deep Thinking si `deep`.
+pub fn select_tools_mode(selected: &[String], extra: &[ToolDesc], deep: bool) -> Vec<ToolDesc> {
     let catalog = builtin_catalog();
     let mut out: Vec<ToolDesc> = Vec::new();
-    let always = [
-        "plan.update",
+    let deep_always = [
+        "plan.create",
+        "plan.update_step",
+        "plan.replace_tree",
+        "plan.delegate_step",
+        "plan.get",
+        "plan.append_log",
+    ];
+    let always_base = [
         "goal.complete",
         "goal.fail",
         "user.ask",
@@ -961,13 +1063,20 @@ pub fn select_tools(selected: &[String], extra: &[ToolDesc]) -> Vec<ToolDesc> {
         "module.list",
         "module.describe",
     ];
+    let mut always: Vec<&str> = always_base.to_vec();
+    if deep {
+        always.extend_from_slice(&deep_always);
+    } else {
+        always.push("plan.update");
+    }
     for t in catalog.iter().chain(extra.iter()) {
-        let keep = always.contains(&t.name.as_str())
-            || selected.is_empty()
-            || selected
-                .iter()
-                .any(|s| s == &t.name || t.name.starts_with(&format!("{s}.")));
-        // Si selected non vide : garder tools explicitement demandés + runtime always
+        // Hors mode deep : ne pas exposer les outils plan.* deep
+        if !deep && deep_always.contains(&t.name.as_str()) {
+            continue;
+        }
+        if deep && t.name == "plan.update" {
+            continue;
+        }
         let keep = if selected.is_empty() {
             // Mode permissif : notes + tasks + runtime + fs + extensions
             matches!(t.backend, ToolBackend::Runtime)
@@ -983,17 +1092,19 @@ pub fn select_tools(selected: &[String], extra: &[ToolDesc]) -> Vec<ToolDesc> {
                 || t.name == "media.image.generate"
                 || t.name == "media.audio.generate"
         } else {
-            keep || selected.iter().any(|s| &t.name == s) || always.contains(&t.name.as_str())
+            // Mode restreint : always + ids / préfixes explicitement demandés
+            always.contains(&t.name.as_str())
+                || selected.iter().any(|s| s == &t.name || t.name.starts_with(&format!("{s}.")))
         };
         if keep && !out.iter().any(|x| x.name == t.name) {
             out.push(t.clone());
         }
     }
-    // Toujours inclure agent.spawn/await si demandés ou en mode planner
     if selected
         .iter()
         .any(|s| s == "agent.spawn" || s == "agent.await")
         || selected.is_empty()
+        || deep
     {
         for name in ["agent.spawn", "agent.await"] {
             if let Some(t) = catalog.iter().find(|t| t.name == name) {

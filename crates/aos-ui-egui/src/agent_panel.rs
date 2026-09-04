@@ -1668,6 +1668,8 @@ Je vais répondre de manière naturelle"#;
             display_name: None,
             persona_id: None,
             origin: None,
+            deep_plan: None,
+            cognitive_mode: aos_proto::CognitiveMode::Normal,
         }
     }
 
@@ -1730,6 +1732,8 @@ Je vais répondre de manière naturelle"#;
             display_name: None,
             persona_id: None,
             origin: None,
+            deep_plan: None,
+            cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
         assert!(canvas_draw_fail_chrome(Some(&info), None, None));
         let raw = "max_steps (64) atteint";
@@ -1768,6 +1772,8 @@ Je vais répondre de manière naturelle"#;
             display_name: None,
             persona_id: None,
             origin: None,
+            deep_plan: None,
+            cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
         let ops = vec![aos_proto::CanvasOp {
             seq: 1,
@@ -1823,6 +1829,8 @@ Je vais répondre de manière naturelle"#;
             display_name: None,
             persona_id: None,
             origin: None,
+            deep_plan: None,
+            cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
         let trace = AgentTrace {
             agent_id: "agent-99".into(),
@@ -1871,6 +1879,8 @@ Je vais répondre de manière naturelle"#;
             display_name: None,
             persona_id: None,
             origin: None,
+            deep_plan: None,
+            cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
         let raw = "max_steps (64) atteint";
         let en = resolve_visible_fail_reason(&t_en, Some(&info), raw, None, None);
@@ -1904,6 +1914,8 @@ Je vais répondre de manière naturelle"#;
             display_name: None,
             persona_id: None,
             origin: None,
+            deep_plan: None,
+            cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
         assert!(notes_create_fail_chrome(Some(&ag), true, 0));
         assert!(!notes_create_fail_chrome(Some(&ag), true, 2));

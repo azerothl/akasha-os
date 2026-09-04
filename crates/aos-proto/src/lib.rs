@@ -476,6 +476,9 @@ pub struct AgentSpec {
     /// `library` | `form` | `slash` | `assistant` | `room` — provenance de création.
     #[serde(default)]
     pub origin: Option<String>,
+    /// Profil cognitif : normal (défaut) ou deep thinking (plan hiérarchique dédié).
+    #[serde(default)]
+    pub cognitive_mode: CognitiveMode,
 }
 
 fn default_agent_gate_mode() -> String {
@@ -544,6 +547,9 @@ pub struct AgentCreateRequest {
     /// `library` | `form` | `slash` | `assistant` | `room` — provenance de création.
     #[serde(default)]
     pub origin: Option<String>,
+    /// Profil cognitif : normal (défaut) ou deep thinking.
+    #[serde(default)]
+    pub cognitive_mode: CognitiveMode,
 }
 
 impl AgentCreateRequest {
@@ -580,6 +586,7 @@ impl AgentCreateRequest {
             optimize_prompt: false,
             gate_mode: default_agent_gate_mode(),
             origin: None,
+            cognitive_mode: CognitiveMode::default(),
         }
     }
 
@@ -767,6 +774,181 @@ pub struct TaskNode {
     pub notes: String,
 }
 
+/// Profil cognitif d'un agent worker.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum CognitiveMode {
+    #[default]
+    Normal,
+    DeepThinking,
+}
+
+impl CognitiveMode {
+    pub fn is_deep_thinking(self) -> bool {
+        matches!(self, Self::DeepThinking)
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Normal => "normal",
+            Self::DeepThinking => "deep_thinking",
+        }
+    }
+}
+
+/// Statut d'une étape du plan Deep Thinking.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum PlanStepStatus {
+    #[default]
+    Pending,
+    InProgress,
+    Done,
+    Delegated,
+    Blocked,
+}
+
+/// Statut global d'un plan Deep Thinking.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum DeepPlanStatus {
+    #[default]
+    Pending,
+    InProgress,
+    Done,
+    Blocked,
+}
+
+/// Étape hiérarchique d'un plan Deep Thinking.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct PlanStep {
+    pub id: String,
+    pub label: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub status: PlanStepStatus,
+    /// Sous-agent si l'étape est déléguée.
+    #[serde(default)]
+    pub agent_id: Option<String>,
+    #[serde(default)]
+    pub children: Vec<PlanStep>,
+    /// Traces internes (pas affichées dans le chat par défaut).
+    #[serde(default)]
+    pub logs: Vec<String>,
+}
+
+/// Plan hiérarchique versionné (Deep Thinking).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct DeepPlan {
+    pub id: String,
+    pub agent_id: String,
+    pub title: String,
+    #[serde(default)]
+    pub status: DeepPlanStatus,
+    #[serde(default)]
+    pub steps: Vec<PlanStep>,
+    #[serde(default)]
+    pub version: u32,
+    #[serde(default)]
+    pub created_at_ms: u64,
+    #[serde(default)]
+    pub updated_at_ms: u64,
+}
+
+/// Patch partiel d'une étape (`plan.update_step`).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct DeepPlanStepPatch {
+    #[serde(default)]
+    pub status: Option<PlanStepStatus>,
+    #[serde(default)]
+    pub label: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    /// Logs à ajouter (append).
+    #[serde(default)]
+    pub logs: Vec<String>,
+    #[serde(default)]
+    pub agent_id: Option<String>,
+}
+
+/// Spec légère pour déléguer une étape (`plan.delegate_step`).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct DeepDelegateSpec {
+    pub brief: String,
+    #[serde(default)]
+    pub skills: Vec<String>,
+    #[serde(default)]
+    pub tools: Vec<String>,
+    #[serde(default)]
+    pub documents: Vec<DocumentRef>,
+    #[serde(default)]
+    pub caps: Vec<String>,
+}
+
+/// `plan.create`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlanCreateRequest {
+    pub agent_id: String,
+    pub task: String,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub steps: Vec<PlanStep>,
+}
+
+/// `plan.get`.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct PlanGetRequest {
+    #[serde(default)]
+    pub plan_id: Option<String>,
+    #[serde(default)]
+    pub agent_id: Option<String>,
+}
+
+/// `plan.update_step`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlanUpdateStepRequest {
+    pub plan_id: String,
+    pub step_id: String,
+    pub patch: DeepPlanStepPatch,
+}
+
+/// `plan.replace_tree`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlanReplaceTreeRequest {
+    pub plan_id: String,
+    pub steps: Vec<PlanStep>,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub status: Option<DeepPlanStatus>,
+}
+
+/// `plan.delegate_step` — enregistre la délégation après spawn (child_id fourni).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlanDelegateStepRequest {
+    pub plan_id: String,
+    pub step_id: String,
+    pub child_id: String,
+    #[serde(default)]
+    pub brief: Option<String>,
+}
+
+/// `plan.append_log`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlanAppendLogRequest {
+    pub plan_id: String,
+    pub step_id: String,
+    pub line: String,
+}
+
+/// Réponse générique plan.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlanResponse {
+    pub plan: DeepPlan,
+}
+
 /// Information sur un agent (`agent.list`, `agent.state`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentInfo {
@@ -812,6 +994,11 @@ pub struct AgentInfo {
     /// `library` | `form` | `slash` | `assistant` | `room` — provenance de création.
     #[serde(default)]
     pub origin: Option<String>,
+    /// Snapshot du plan Deep Thinking courant (si mode deep).
+    #[serde(default)]
+    pub deep_plan: Option<DeepPlan>,
+    #[serde(default)]
+    pub cognitive_mode: CognitiveMode,
 }
 
 impl AgentInfo {
@@ -975,6 +1162,14 @@ pub enum AgentOutputEvent {
     },
     PlanUpdated {
         nodes: Vec<TaskNode>,
+    },
+    /// Plan Deep Thinking mis à jour (arbre hiérarchique versionné).
+    DeepPlanUpdated {
+        plan: DeepPlan,
+    },
+    /// Trace légère Deep Thinking pour le chat (une ligne).
+    DeepTrace {
+        message: String,
     },
     /// Tour agentic terminé.
     Step(AgentStepRecord),
@@ -3586,6 +3781,23 @@ pub enum ChatAttachment {
         #[serde(default = "default_schedule_card_state")]
         state: String,
     },
+    /// Plan Deep Thinking pliable dans le fil chat.
+    DeepPlan {
+        agent_id: String,
+        plan_id: String,
+        #[serde(default)]
+        title: String,
+        #[serde(default)]
+        version: u32,
+        #[serde(default)]
+        steps: Vec<PlanStep>,
+        /// Step ids the UI should expand by default (e.g. user asked for step 2).
+        #[serde(default)]
+        expand_step_ids: Vec<String>,
+        /// When set, show internal logs for this step id.
+        #[serde(default)]
+        show_logs_step_id: Option<String>,
+    },
 }
 
 fn default_skill_offer_state() -> String {
@@ -3626,7 +3838,8 @@ impl ChatAttachment {
             | Self::DocumentResult { .. }
             | Self::DocumentProgress { .. }
             | Self::ScheduleAct { .. }
-            | Self::ScheduleCard { .. } => None,
+            | Self::ScheduleCard { .. }
+            | Self::DeepPlan { .. } => None,
         }
     }
 
@@ -4894,6 +5107,8 @@ mod chat_session_room_tests {
             display_name: Some("Coder".into()),
             persona_id: Some("coder".into()),
             origin: None,
+            deep_plan: None,
+            cognitive_mode: CognitiveMode::Normal,
         };
         assert_eq!(info.display_title(), "Coder");
         assert!(info.is_roster());
@@ -4938,6 +5153,8 @@ mod chat_session_room_tests {
             display_name: Some("Skills Auditor".into()),
             persona_id: None,
             origin: Some("library".into()),
+            deep_plan: None,
+            cognitive_mode: CognitiveMode::Normal,
         };
         assert!(custom.uses_typed_display_name());
         assert!(!custom.is_ephemeral_chat_spawn());
