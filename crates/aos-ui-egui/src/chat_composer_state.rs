@@ -15,6 +15,8 @@ pub(crate) struct ChatComposerState {
     pub(crate) last_session_image: Option<String>,
     /// Re-focus chat TextEdit after send (Enter clears focus).
     pub(crate) refocus: bool,
+    /// Session-header chip: spawn agents in Deep Thinking (hierarchical plan) mode.
+    pub(crate) deep_thinking: bool,
 }
 
 impl ChatComposerState {

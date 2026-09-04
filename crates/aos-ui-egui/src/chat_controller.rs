@@ -217,6 +217,7 @@ impl UiApp {
                     language: self.prefs.language.clone(),
                     canvas_open,
                     canvas_aspect,
+                    deep_thinking: self.chat_state.composer.deep_thinking,
                     choice_id,
                 };
                 let _ = self.cmd_tx.send(Cmd::SessionAppend {
@@ -246,6 +247,7 @@ impl UiApp {
                 language: self.prefs.language.clone(),
                 canvas_open,
                 canvas_aspect,
+                deep_thinking: self.chat_state.composer.deep_thinking,
                 choice_id,
             };
             self.offer_research_choice(&session_id, &text, pending);
@@ -282,6 +284,7 @@ impl UiApp {
             language: self.prefs.language.clone(),
             canvas_open,
             canvas_aspect,
+            deep_thinking: self.chat_state.composer.deep_thinking,
         };
         self.chat_state.runtime.outgoing_turn = Some(retry_turn);
         self.status = t.status_assistant_generating.into();
@@ -298,6 +301,7 @@ impl UiApp {
             language: self.prefs.language.clone(),
             canvas_open,
             canvas_aspect,
+            deep_thinking: self.chat_state.composer.deep_thinking,
             skip_session_append: false,
         });
         self.mark_onboarding_chat_sent();
@@ -364,6 +368,7 @@ impl UiApp {
             language: retry.language.clone(),
             canvas_open: retry.canvas_open,
             canvas_aspect: retry.canvas_aspect,
+            deep_thinking: retry.deep_thinking,
         });
         let t = i18n::strings(&retry.language);
         self.status = t.status_assistant_generating.into();

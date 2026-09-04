@@ -24,6 +24,7 @@ impl UiApp {
             language: pending.language.clone(),
             canvas_open: pending.canvas_open,
             canvas_aspect: pending.canvas_aspect,
+            deep_thinking: pending.deep_thinking,
         });
         let t = i18n::strings(&pending.language);
         self.status = t.status_assistant_generating.into();
@@ -40,6 +41,7 @@ impl UiApp {
             language: pending.language,
             canvas_open: pending.canvas_open,
             canvas_aspect: pending.canvas_aspect,
+            deep_thinking: pending.deep_thinking,
             skip_session_append: false,
         });
         self.mark_onboarding_chat_sent();

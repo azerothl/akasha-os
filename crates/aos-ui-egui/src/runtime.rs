@@ -451,6 +451,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             language,
             canvas_open,
             canvas_aspect,
+            deep_thinking,
             skip_session_append,
         } => {
             let t = i18n::strings(&language);
@@ -605,13 +606,21 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                             .unwrap_or_default();
 
                         // Délégation : agent.spawn / filet module → worker en fond
-                        if let Some((brief, skills, tools, prose)) = chat_delegate_agent_spec(
+                        let mut delegate = chat_delegate_agent_spec(
                             &user_text,
                             &full,
                             canvas_open,
                             canvas_aspect,
                             &canvas_exported,
-                        ) {
+                        );
+                        if deep_thinking && delegate.is_none() {
+                            delegate = Some(crate::chat_delegate::deep_thinking_force_delegate(
+                                &user_text,
+                                canvas_open,
+                                &canvas_exported,
+                            ));
+                        }
+                        if let Some((brief, skills, tools, prose)) = delegate {
                             let canvas_delegate = tools.iter().any(|t| t.starts_with("canvas."));
                             if canvas_delegate && session_has_running_canvas_agent(&bus, &sid).await
                             {
@@ -652,6 +661,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                                 model_id,
                                 max_steps,
                                 canvas_aspect,
+                                deep_thinking,
                             )
                             .await;
                             return;
@@ -1681,17 +1691,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             req.model_id = model_id;
             req.gate_mode = crate::prefs::load_preferences().agent_gate_mode.clone();
             if has_goal && crate::chat_delegate::user_wants_deep_thinking(&task) {
-                req.cognitive_mode = aos_proto::CognitiveMode::DeepThinking;
-                if !req.skills.iter().any(|s| s == "deep-thinking" || s == "planner") {
-                    req.skills.push("deep-thinking".into());
-                }
-                let cleaned = crate::chat_delegate::strip_deep_thinking_activation(&task);
-                if !cleaned.is_empty() {
-                    req.directive = cleaned.clone();
-                    if let Some(g) = req.goal.as_mut() {
-                        g.statement = cleaned;
-                    }
-                }
+                crate::chat_delegate::apply_deep_thinking_mode(&mut req, &task);
             }
             if req.skills.iter().any(|s| s.contains("notes"))
                 || req.tools.iter().any(|t| t.starts_with("notes."))

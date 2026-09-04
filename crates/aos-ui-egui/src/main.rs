@@ -421,6 +421,8 @@ fn session_toggle_reserve_width(t: &i18n::UiStrings, canvas_open: bool) -> f32 {
         + 6.0
         + estimate_label_chip_w(t.session_toggle_canvas)
         + 6.0
+        + estimate_label_chip_w(t.session_toggle_deep)
+        + 6.0
         + icons::SESSION_ICON_SZ;
     if canvas_open {
         w += 6.0 + estimate_label_chip_w(t.session_focus);
@@ -428,13 +430,12 @@ fn session_toggle_reserve_width(t: &i18n::UiStrings, canvas_open: bool) -> f32 {
     w
 }
 
-fn session_toggle_chip(ui: &mut egui::Ui, selected: bool, label: &str) -> bool {
+fn session_toggle_chip(ui: &mut egui::Ui, selected: bool, label: &str) -> egui::Response {
     let w = estimate_label_chip_w(label);
     ui.add_sized(
         egui::vec2(w, ui.spacing().interact_size.y),
         egui::SelectableLabel::new(selected, egui::RichText::new(label)),
     )
-    .clicked()
 }
 
 fn composer_row_reserved_width(t: &i18n::UiStrings, show_stop: bool) -> f32 {

@@ -42,6 +42,15 @@ mod delegate_tests {
     }
 
     #[test]
+    fn deep_thinking_force_delegate_adds_skill() {
+        let (brief, skills, _tools, prose) =
+            crate::chat_delegate::deep_thinking_force_delegate("planifie le déploiement", false, &[]);
+        assert_eq!(brief, "planifie le déploiement");
+        assert!(skills.iter().any(|s| s == "deep-thinking"));
+        assert!(prose.to_ascii_lowercase().contains("deep"));
+    }
+
+    #[test]
     fn canvas_uses_loaded_vision_model_only_when_chat_model_is_absent() {
         let models = vec![
             model("vision-on-disk", ModelState::OnDisk, true),

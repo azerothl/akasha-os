@@ -624,7 +624,7 @@ impl UiApp {
                             crate::prefs::save_preferences(&self.prefs);
                         }
                     }
-                    if session_toggle_chip(ui, canvas_open, t.session_toggle_canvas) {
+                    if session_toggle_chip(ui, canvas_open, t.session_toggle_canvas).clicked() {
                         let new_open = !canvas_open;
                         self.set_canvas_open_local(&sid, new_open);
                         let _ = self.cmd_tx.send(Cmd::CanvasSetOpen {
@@ -649,7 +649,18 @@ impl UiApp {
                         self.prefs.ui_layout.canvas_focus = !self.prefs.ui_layout.canvas_focus;
                         crate::prefs::save_preferences(&self.prefs);
                     }
-                    if session_toggle_chip(ui, room, t.session_toggle_salon) {
+                    if session_toggle_chip(
+                        ui,
+                        self.chat_state.composer.deep_thinking,
+                        t.session_toggle_deep,
+                    )
+                    .on_hover_text(t.tip_session_deep_thinking)
+                    .clicked()
+                    {
+                        self.chat_state.composer.deep_thinking =
+                            !self.chat_state.composer.deep_thinking;
+                    }
+                    if session_toggle_chip(ui, room, t.session_toggle_salon).clicked() {
                         let mode = if room {
                             ChatSessionMode::Direct
                         } else {

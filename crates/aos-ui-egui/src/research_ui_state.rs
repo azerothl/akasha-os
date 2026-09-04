@@ -18,6 +18,7 @@ pub(crate) struct ResearchPendingChat {
     pub(crate) language: String,
     pub(crate) canvas_open: bool,
     pub(crate) canvas_aspect: aos_proto::CanvasAspect,
+    pub(crate) deep_thinking: bool,
     pub(crate) choice_id: String,
 }
 
@@ -87,6 +88,7 @@ mod tests {
             language: "en".into(),
             canvas_open: false,
             canvas_aspect: aos_proto::CanvasAspect::Square,
+            deep_thinking: false,
             choice_id: choice_id.into(),
         }
     }

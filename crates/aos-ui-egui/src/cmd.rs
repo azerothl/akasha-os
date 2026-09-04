@@ -34,6 +34,8 @@ pub(crate) enum Cmd {
         /// Session canvas panel open — enables draw/revise agent delegation.
         canvas_open: bool,
         canvas_aspect: aos_proto::CanvasAspect,
+        /// Composer chip: force Deep Thinking cognitive mode on delegated agents.
+        deep_thinking: bool,
         /// When true, skip appending the user turn (chat retry after load fail).
         skip_session_append: bool,
     },
@@ -680,6 +682,7 @@ pub(crate) struct ChatRetryTurn {
     pub(crate) language: String,
     pub(crate) canvas_open: bool,
     pub(crate) canvas_aspect: aos_proto::CanvasAspect,
+    pub(crate) deep_thinking: bool,
 }
 
 impl ChatRetryTurn {
@@ -697,6 +700,7 @@ impl ChatRetryTurn {
             language: self.language.clone(),
             canvas_open: self.canvas_open,
             canvas_aspect: self.canvas_aspect,
+            deep_thinking: self.deep_thinking,
             skip_session_append,
         }
     }

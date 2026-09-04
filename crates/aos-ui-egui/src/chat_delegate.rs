@@ -79,6 +79,41 @@ pub(crate) fn strip_deep_thinking_activation(text: &str) -> String {
     out.trim().to_string()
 }
 
+/// Applique le mode Deep Thinking sur une requête de création d'agent.
+pub(crate) fn apply_deep_thinking_mode(req: &mut AgentCreateRequest, goal: &str) {
+    req.cognitive_mode = CognitiveMode::DeepThinking;
+    req.skills.retain(|s| s != "planner");
+    if !req.skills.iter().any(|s| s == "deep-thinking") {
+        req.skills.push("deep-thinking".into());
+    }
+    let cleaned = strip_deep_thinking_activation(goal);
+    if !cleaned.is_empty() && cleaned != goal {
+        req.directive = cleaned.clone();
+        if let Some(g) = req.goal.as_mut() {
+            g.statement = cleaned;
+        }
+    }
+}
+
+/// Spec de délégation forcée (chip Deep ou phrase) quand le superviseur n'a pas spawn.
+pub(crate) fn deep_thinking_force_delegate(
+    user_text: &str,
+    canvas_open: bool,
+    canvas_exported: &[String],
+) -> (String, Vec<String>, Vec<String>, String) {
+    let (mut skills, tools) = chat_delegate_kit(user_text, canvas_open, false, canvas_exported);
+    skills.retain(|s| s != "planner");
+    if !skills.iter().any(|s| s == "deep-thinking") {
+        skills.push("deep-thinking".into());
+    }
+    (
+        user_text.to_string(),
+        skills,
+        tools,
+        "Je lance un agent Deep Thinking.".into(),
+    )
+}
+
 fn merge_named_args(dst: &mut Vec<String>, args: &serde_json::Value, key: &str) {
     let Some(arr) = args.get(key).and_then(|v| v.as_array()) else {
         return;
@@ -292,6 +327,7 @@ pub(crate) async fn spawn_chat_delegate_agent(
     model_id: Option<String>,
     max_steps: u32,
     canvas_aspect: aos_proto::CanvasAspect,
+    deep_thinking: bool,
 ) {
     let canvas_delegate = tools.iter().any(|t| t.starts_with("canvas."));
     let goal_statement = if canvas_delegate {
@@ -355,18 +391,11 @@ pub(crate) async fn spawn_chat_delegate_agent(
         req.caps.push("fs.write:/downloads/**".into());
     }
     req.gate_mode = crate::prefs::load_preferences().agent_gate_mode.clone();
-    if user_wants_deep_thinking(&user_text) || user_wants_deep_thinking(&brief) {
-        req.cognitive_mode = CognitiveMode::DeepThinking;
-        if !req.skills.iter().any(|s| s == "deep-thinking" || s == "planner") {
-            req.skills.push("deep-thinking".into());
-        }
-        let cleaned = strip_deep_thinking_activation(&goal_statement);
-        if !cleaned.is_empty() {
-            req.directive = cleaned.clone();
-            if let Some(g) = req.goal.as_mut() {
-                g.statement = cleaned;
-            }
-        }
+    let wants_deep = deep_thinking
+        || user_wants_deep_thinking(&user_text)
+        || user_wants_deep_thinking(&brief);
+    if wants_deep {
+        apply_deep_thinking_mode(&mut req, &goal_statement);
     }
     match bus
         .call::<AgentCreateRequest, aos_proto::AgentCreateResponse>(
