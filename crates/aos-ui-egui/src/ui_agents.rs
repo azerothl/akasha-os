@@ -24,6 +24,32 @@ fn agent_state_label(t: &i18n::UiStrings, state: &AgentState) -> &'static str {
     }
 }
 
+fn agent_activity_icon(state: &AgentState) -> icons::AgentActivityIcon {
+    match state {
+        AgentState::Done => icons::AgentActivityIcon::Done,
+        AgentState::Failed => icons::AgentActivityIcon::Failed,
+        AgentState::Blocked => icons::AgentActivityIcon::Blocked,
+        AgentState::Running => icons::AgentActivityIcon::Running,
+        AgentState::Created
+        | AgentState::Paused
+        | AgentState::Killed
+        | AgentState::Roster => icons::AgentActivityIcon::Pending,
+    }
+}
+
+fn ui_activity_agent_row(ui: &mut egui::Ui, t: &i18n::UiStrings, agent: &AgentInfo) -> bool {
+    let mut details = false;
+    ui.horizontal(|ui| {
+        icons::agent_activity_icon(ui, agent_activity_icon(&agent.state));
+        ui.label(agent.display_title());
+        ui.weak(agent_state_label(t, &agent.state));
+        if ui.small_button(t.activity_details).clicked() {
+            details = true;
+        }
+    });
+    details
+}
+
 impl UiApp {
     pub(crate) fn ui_agents(&mut self, ui: &mut egui::Ui) {
         let t = i18n::strings(&self.prefs.language);
@@ -517,24 +543,10 @@ impl UiApp {
                                         ui.weak(t.activity_empty);
                                     } else {
                                         for agent in agents {
-                                            let icon = match agent.state {
-                                                AgentState::Done => "✓",
-                                                AgentState::Failed => "!",
-                                                AgentState::Blocked => "?",
-                                                AgentState::Running => "…",
-                                                _ => "·",
-                                            };
-                                            ui.horizontal(|ui| {
-                                                ui.label(format!("{icon} {}", agent.display_title()));
-                                                ui.weak(agent_state_label(&t, &agent.state));
-                                                if ui
-                                                    .small_button(t.activity_details)
-                                                    .clicked()
-                                                {
-                                                    self.agent_ui.open_tab(&agent.agent_id);
-                                                    self.agent_ui.select_tab(&agent.agent_id);
-                                                }
-                                            });
+                                            if ui_activity_agent_row(ui, &t, &agent) {
+                                                self.agent_ui.open_tab(&agent.agent_id);
+                                                self.agent_ui.select_tab(&agent.agent_id);
+                                            }
                                         }
                                     }
                                 });
@@ -625,21 +637,10 @@ impl UiApp {
                         .collect();
                     for agent in activity_agents {
                         shown += 1;
-                        let icon = match agent.state {
-                            AgentState::Done => "✓",
-                            AgentState::Failed => "!",
-                            AgentState::Blocked => "?",
-                            AgentState::Running => "…",
-                            _ => "·",
-                        };
-                        ui.horizontal(|ui| {
-                            ui.label(format!("{icon} {}", agent.display_title()));
-                            ui.weak(agent_state_label(&t, &agent.state));
-                            if ui.small_button(t.activity_details).clicked() {
-                                self.agent_ui.open_tab(&agent.agent_id);
-                                self.agent_ui.select_tab(&agent.agent_id);
-                            }
-                        });
+                        if ui_activity_agent_row(ui, &t, &agent) {
+                            self.agent_ui.open_tab(&agent.agent_id);
+                            self.agent_ui.select_tab(&agent.agent_id);
+                        }
                     }
                     if shown == 0 {
                         ui.weak(t.activity_empty);
