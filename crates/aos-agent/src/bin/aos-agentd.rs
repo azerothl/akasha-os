@@ -3,6 +3,7 @@
 //! Lifecycle : crée un `AgentSpec` persisté, spawn `aos-agent-worker` avec
 //! `--spec-path`. Skills, MCP catalogue, prompt optimize.
 
+use aos_agent::deep_thinking::{self, deep_thinking_caps, DeepThinkingEngine};
 use aos_agent::mcp::{list_mcp_servers, load_servers_config, resolve_secret_placeholder};
 use aos_agent::room_personas::{self, persona_agent_id, ROOM_PERSONAS};
 use aos_agent::persist::{self, registry_add};
@@ -21,8 +22,10 @@ use aos_proto::{
     AgentSpecResponse, AgentStartRequest, AgentState, AgentSteerRequest, AgentStepRecord,
     AgentTrace, CapInfo, CapListRequest, CapMintRequest, CapMintResponse, ChatAttachment,
     ChatMessage, ChatSessionAppendRequest, ChatSessionGetResponse, ChatSessionIdRequest,
-    ChatSessionRoomTurnCancelRequest, CancelRequest, InferParams, InferRequest, McpServerInfo,
-    SecretGetRequest, SkillInfo, TokenEvent,
+    ChatSessionRoomTurnCancelRequest, CancelRequest, CognitiveMode, InferParams, InferRequest,
+    McpServerInfo, PlanAppendLogRequest, PlanCreateRequest, PlanDelegateStepRequest,
+    PlanGetRequest, PlanReplaceTreeRequest, PlanResponse, PlanUpdateStepRequest, SecretGetRequest,
+    SkillInfo, TokenEvent,
 };
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -40,6 +43,7 @@ struct Runtime {
     agents: HashMap<String, AgentEntry>,
     caps: CapStore,
     room_rounds: HashMap<String, Arc<RoomRoundState>>,
+    deep_thinking: DeepThinkingEngine,
 }
 
 type Shared = Arc<Mutex<Runtime>>;
@@ -102,6 +106,16 @@ fn build_spec(agent_id: &str, req: &AgentCreateRequest) -> AgentSpec {
     // Default notes cap for simple /agent flows with empty tools
     if caps.is_empty() && req.spawns_worker() {
         caps.push("tool.invoke:notes".into());
+    }
+    if req.cognitive_mode.is_deep_thinking() {
+        for c in deep_thinking_caps(&spec.agent_id) {
+            if !caps.contains(&c) {
+                caps.push(c);
+            }
+        }
+        if !spec.skills.iter().any(|s| s == "deep-thinking" || s == "planner") {
+            spec.skills.push("deep-thinking".into());
+        }
     }
     spec.tools = tool_ids;
     spec.caps = caps;
@@ -188,6 +202,8 @@ fn roster_info_from_spec(spec: &AgentSpec) -> AgentInfo {
         display_name: spec.display_name.clone(),
         persona_id: spec.persona_id.clone(),
         origin: spec.origin.clone(),
+        deep_plan: None,
+        cognitive_mode: spec.cognitive_mode,
     }
 }
 
@@ -433,6 +449,8 @@ async fn spawn_worker(
                     display_name: spec.display_name.clone(),
                     persona_id: spec.persona_id.clone(),
                     origin: spec.origin.clone(),
+                    deep_plan: None,
+                    cognitive_mode: spec.cognitive_mode,
                 },
                 subscribers: Vec::new(),
                 trace: restored_trace,
@@ -515,6 +533,7 @@ async fn main() {
         agents: HashMap::new(),
         caps: CapStore::new(),
         room_rounds: HashMap::new(),
+        deep_thinking: DeepThinkingEngine::open(persist::agents_root()),
     }));
     {
         let mut rt = shared.lock().await;
@@ -1183,8 +1202,19 @@ async fn main() {
                     Ok(rep) => {
                         let mut chat_summary: Option<(String, String, String, String, String)> =
                             None;
+                        let mut deep_trace_chat: Option<(String, String)> = None;
                         {
                             let mut rt = shared.lock().await;
+                            if let AgentOutputEvent::ChildDone { child_id, result } = &rep.event {
+                                if let Ok(Some((plan, _))) = rt
+                                    .deep_thinking
+                                    .complete_delegated_child(&rep.agent_id, child_id, result)
+                                {
+                                    if let Some(entry) = rt.agents.get_mut(&rep.agent_id) {
+                                        entry.info.deep_plan = Some(plan);
+                                    }
+                                }
+                            }
                             if let Some(entry) = rt.agents.get_mut(&rep.agent_id) {
                                 match &rep.event {
                                     AgentOutputEvent::Token { text } => {
@@ -1332,6 +1362,31 @@ async fn main() {
                                             entry.info.children.push(child_id.clone());
                                         }
                                     }
+                                    AgentOutputEvent::DeepPlanUpdated { plan } => {
+                                        entry.info.deep_plan = Some(plan.clone());
+                                        if let Some(cur) = plan
+                                            .steps
+                                            .iter()
+                                            .find(|s| {
+                                                matches!(
+                                                    s.status,
+                                                    aos_proto::PlanStepStatus::InProgress
+                                                        | aos_proto::PlanStepStatus::Delegated
+                                                )
+                                            })
+                                            .map(|s| s.label.clone())
+                                        {
+                                            entry.info.current_task = Some(cur);
+                                        }
+                                    }
+                                    AgentOutputEvent::DeepTrace { message } => {
+                                        if entry.info.last_output.is_empty() {
+                                            entry.info.last_output = message.clone();
+                                        }
+                                        if let Some(sid) = entry.info.session_id.clone() {
+                                            deep_trace_chat = Some((sid, message.clone()));
+                                        }
+                                    }
                                     AgentOutputEvent::Step(rec) => {
                                         if rec.action == "goal.complete"
                                             && !rec.tool_result.trim().is_empty()
@@ -1390,6 +1445,40 @@ async fn main() {
                                             title,
                                             origin: "completion".into(),
                                         }],
+                                        speaker_id: None,
+                                        speaker_name: None,
+                                        thinking: None,
+                                    },
+                                    vec![],
+                                )
+                                .await;
+                        }
+                        if let Some((session_id, message)) = deep_trace_chat {
+                            let mut attachments = Vec::new();
+                            {
+                                let rt = shared.lock().await;
+                                if let Some(entry) = rt.agents.get(&rep.agent_id) {
+                                    if let Some(plan) = entry.info.deep_plan.as_ref() {
+                                        attachments.push(ChatAttachment::DeepPlan {
+                                            agent_id: entry.info.agent_id.clone(),
+                                            plan_id: plan.id.clone(),
+                                            title: plan.title.clone(),
+                                            version: plan.version,
+                                            steps: plan.steps.clone(),
+                                            expand_step_ids: vec![],
+                                            show_logs_step_id: None,
+                                        });
+                                    }
+                                }
+                            }
+                            let _ = bus
+                                .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
+                                    "chat.session.append",
+                                    &ChatSessionAppendRequest {
+                                        session_id,
+                                        role: "system".into(),
+                                        content: format!("🧠 {message}"),
+                                        attachments,
                                         speaker_id: None,
                                         speaker_name: None,
                                         thinking: None,
@@ -1846,6 +1935,154 @@ async fn main() {
         });
     }
 
+    // --- Deep Thinking plan.* ---
+    {
+        let shared2 = shared.clone();
+        svc.on(intents::PLAN_CREATE, move |ctx| {
+            let shared = shared2.clone();
+            async move {
+                let req: PlanCreateRequest = match ctx.payload() {
+                    Ok(r) => r,
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                        return;
+                    }
+                };
+                let caps = agent_caps_snapshot(&shared, &req.agent_id).await;
+                let result = {
+                    let rt = shared.lock().await;
+                    rt.deep_thinking.create(req, &caps)
+                };
+                respond_plan(ctx, &shared, result).await;
+            }
+        });
+    }
+    {
+        let shared2 = shared.clone();
+        svc.on(intents::PLAN_GET, move |ctx| {
+            let shared = shared2.clone();
+            async move {
+                let req: PlanGetRequest = match ctx.payload() {
+                    Ok(r) => r,
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                        return;
+                    }
+                };
+                let caps = if let Some(aid) = req.agent_id.as_deref().filter(|s| !s.is_empty()) {
+                    agent_caps_snapshot(&shared, aid).await
+                } else if let Some(pid) = req.plan_id.as_deref() {
+                    caps_for_plan_id(&shared, pid).await
+                } else {
+                    Vec::new()
+                };
+                let result = {
+                    let rt = shared.lock().await;
+                    rt.deep_thinking
+                        .get(req.plan_id.as_deref(), req.agent_id.as_deref(), &caps)
+                        .map(|plan| (plan, String::new()))
+                };
+                respond_plan(ctx, &shared, result).await;
+            }
+        });
+    }
+    {
+        let shared2 = shared.clone();
+        svc.on(intents::PLAN_UPDATE_STEP, move |ctx| {
+            let shared = shared2.clone();
+            async move {
+                let req: PlanUpdateStepRequest = match ctx.payload() {
+                    Ok(r) => r,
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                        return;
+                    }
+                };
+                let caps = caps_for_plan_id(&shared, &req.plan_id).await;
+                let result = {
+                    let rt = shared.lock().await;
+                    rt.deep_thinking.update_step(req, &caps)
+                };
+                respond_plan(ctx, &shared, result).await;
+            }
+        });
+    }
+    {
+        let shared2 = shared.clone();
+        svc.on(intents::PLAN_REPLACE_TREE, move |ctx| {
+            let shared = shared2.clone();
+            async move {
+                let req: PlanReplaceTreeRequest = match ctx.payload() {
+                    Ok(r) => r,
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                        return;
+                    }
+                };
+                let caps = caps_for_plan_id(&shared, &req.plan_id).await;
+                let result = {
+                    let rt = shared.lock().await;
+                    rt.deep_thinking.replace_tree(req, &caps)
+                };
+                respond_plan(ctx, &shared, result).await;
+            }
+        });
+    }
+    {
+        let shared2 = shared.clone();
+        svc.on(intents::PLAN_DELEGATE_STEP, move |ctx| {
+            let shared = shared2.clone();
+            async move {
+                let req: PlanDelegateStepRequest = match ctx.payload() {
+                    Ok(r) => r,
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                        return;
+                    }
+                };
+                let caps = caps_for_plan_id(&shared, &req.plan_id).await;
+                let result = {
+                    let rt = shared.lock().await;
+                    rt.deep_thinking.delegate_step(req, &caps)
+                };
+                respond_plan(ctx, &shared, result).await;
+            }
+        });
+    }
+    {
+        let shared2 = shared.clone();
+        svc.on(intents::PLAN_APPEND_LOG, move |ctx| {
+            let shared = shared2.clone();
+            async move {
+                let req: PlanAppendLogRequest = match ctx.payload() {
+                    Ok(r) => r,
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                        return;
+                    }
+                };
+                let caps = caps_for_plan_id(&shared, &req.plan_id).await;
+                let result = {
+                    let rt = shared.lock().await;
+                    rt.deep_thinking.append_log(req, &caps)
+                };
+                respond_plan(ctx, &shared, result).await;
+            }
+        });
+    }
+
     // --- schedule.create / list / cancel ---
     {
         svc.on(intents::SCHEDULE_CREATE, move |ctx| async move {
@@ -1960,6 +2197,54 @@ async fn main() {
     }
 
     let _ = svc.serve(&bus_addr).await;
+}
+
+fn agent_caps_blocking(rt: &Runtime, agent_id: &str) -> Vec<String> {
+    rt.agents
+        .get(agent_id)
+        .map(|e| e.info.caps.clone())
+        .or_else(|| persist::read_spec(agent_id).map(|s| s.caps))
+        .unwrap_or_default()
+}
+
+async fn agent_caps_snapshot(shared: &Shared, agent_id: &str) -> Vec<String> {
+    let rt = shared.lock().await;
+    agent_caps_blocking(&rt, agent_id)
+}
+
+async fn caps_for_plan_id(shared: &Shared, plan_id: &str) -> Vec<String> {
+    let rt = shared.lock().await;
+    match rt.deep_thinking.get(Some(plan_id), None, &["plan.read:*".into()]) {
+        Ok(plan) => agent_caps_blocking(&rt, &plan.agent_id),
+        Err(_) => Vec::new(),
+    }
+}
+
+async fn respond_plan(
+    ctx: aos_ipc::IntentCtx,
+    shared: &Shared,
+    result: Result<(aos_proto::DeepPlan, String), deep_thinking::EngineError>,
+) {
+    match result {
+        Ok((plan, trace)) => {
+            {
+                let mut rt = shared.lock().await;
+                if let Some(entry) = rt.agents.get_mut(&plan.agent_id) {
+                    entry.info.deep_plan = Some(plan.clone());
+                    entry.info.cognitive_mode = CognitiveMode::DeepThinking;
+                }
+            }
+            let _ = ctx
+                .respond(aos_ipc::msg::Status::Ok, &PlanResponse { plan })
+                .await;
+            let _ = trace;
+        }
+        Err(e) => {
+            let _ = ctx
+                .respond_error(aos_ipc::msg::Status::InternalError, &e.to_string())
+                .await;
+        }
+    }
 }
 
 fn hydrate_persisted_agents(rt: &mut Runtime) {
