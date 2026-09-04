@@ -453,7 +453,8 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             canvas_aspect,
             skip_session_append,
         } => {
-            let _ = evt_tx.send(Evt::Status("assistant : génération en cours…".into()));
+            let t = i18n::strings(&language);
+            let _ = evt_tx.send(Evt::Status(t.status_assistant_generating_progress.into()));
             let user_content =
                 aos_proto::chat_document::merge_documents_into_user_content(&user_text, &documents);
             if !skip_session_append {

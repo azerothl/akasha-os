@@ -295,7 +295,7 @@ impl UiApp {
                                         &mut self.chat[i].attachments[j],
                                         &piper,
                                     ) {
-                                        self.status = "audio : génération…".into();
+                                        self.status = t.status_audio_generating.into();
                                     }
                                 }
                                 ChatAttachment::AgentAct {
@@ -485,7 +485,7 @@ impl UiApp {
                 if let Some(id) = target_reply {
                     self.agent_ui.set_ask_reply_target(id);
                     self.chat_state.composer.refocus = true;
-                    self.status = "réponse destinée à cet agent".into();
+                    self.status = t.status_agent_reply_target.into();
                 }
                 if !self.chat_state.runtime.streaming.is_empty() {
                     let (_, _, role_color) =

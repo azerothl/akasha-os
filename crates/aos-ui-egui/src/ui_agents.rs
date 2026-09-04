@@ -3,26 +3,14 @@
 use crate::cmd::Cmd;
 use crate::{
     agent_canvas_session_ops, agent_cap_holder, agent_panel, agent_shown_in_tab, chat_room, guide,
-    i18n, icons, open_in_browser, overflow_scroll, overflow_scroll_h, theme, ui_roster_tool_checkboxes,
-    ChatLine, UiApp,
+    i18n, icons, models_page, open_in_browser, overflow_scroll, overflow_scroll_h, theme,
+    ui_roster_tool_checkboxes, ChatLine, UiApp,
 };
 use aos_proto::{AgentInfo, AgentState, ChatAttachment};
 use eframe::egui;
 
 const ACTIVITY_NARROW_BREAK: f32 = 900.0;
 const ACTIVITY_SHEET_COMPOSER_RESERVE: f32 = 150.0;
-
-fn agent_state_label(t: &i18n::UiStrings, state: &AgentState) -> &'static str {
-    match state {
-        AgentState::Done => t.agent_state_done,
-        AgentState::Failed => t.agent_state_failed,
-        AgentState::Blocked => t.agent_state_blocked,
-        AgentState::Running => t.agent_state_running,
-        AgentState::Created | AgentState::Paused | AgentState::Killed | AgentState::Roster => {
-            t.agent_state_pending
-        }
-    }
-}
 
 fn agent_activity_icon(state: &AgentState) -> icons::AgentActivityIcon {
     match state {
@@ -42,7 +30,7 @@ fn ui_activity_agent_row(ui: &mut egui::Ui, t: &i18n::UiStrings, agent: &AgentIn
     ui.horizontal(|ui| {
         icons::agent_activity_icon(ui, agent_activity_icon(&agent.state));
         ui.label(agent.display_title());
-        let state_label = agent_state_label(t, &agent.state);
+        let state_label = agent_panel::agent_state_label(t, &agent.state);
         if agent.state == AgentState::Failed {
             ui.colored_label(theme::HYDROGEN, state_label);
         } else {
@@ -90,10 +78,12 @@ impl UiApp {
                 .show_ui(ui, |ui| {
                     ui.selectable_value(&mut self.agent_ui.model_id, String::new(), "default");
                     for m in &self.models_ui.model_infos {
+                        let state_label =
+                            models_page::model_state_human(&m.state, self.prefs.language == "fr");
                         ui.selectable_value(
                             &mut self.agent_ui.model_id,
                             m.id.clone(),
-                            format!("{} [{:?}]", m.id, m.state),
+                            format!("{} [{state_label}]", m.id),
                         );
                     }
                 });
@@ -320,9 +310,9 @@ impl UiApp {
             ui.colored_label(
                 agent_panel::state_color(&a.state),
                 if a.is_roster() {
-                    "Roster".to_string()
+                    t.agents_status_roster.to_string()
                 } else {
-                    format!("{:?}", a.state)
+                    agent_panel::agent_state_label(&t, &a.state).to_string()
                 },
             );
             if !a.is_roster() {
@@ -362,7 +352,7 @@ impl UiApp {
                 );
                 if !visible.is_empty() {
                     ui.colored_label(
-                        egui::Color32::from_rgb(220, 120, 100),
+                        theme::HYDROGEN,
                         agent_panel::truncate(&visible, 40),
                     );
                 }
@@ -592,9 +582,9 @@ impl UiApp {
                         let selected = self.agent_ui.active_tab.as_deref() == Some(id.as_str());
                         let label = if let Some(a) = self.agents.iter().find(|x| x.agent_id == id) {
                             format!(
-                                "{} [{:?}]",
+                                "{} [{}]",
                                 agent_panel::truncate(a.display_title(), 28),
-                                a.state
+                                agent_panel::agent_state_label(&t, &a.state)
                             )
                         } else {
                             id.clone()
