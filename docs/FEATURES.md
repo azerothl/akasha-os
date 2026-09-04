@@ -1,4 +1,4 @@
-# Preview features — Akasha OS 0.16.0
+# Preview features — Akasha OS 0.16.1
 
 **Language:** English | [Français](fr/FEATURES.md)
 
@@ -7,7 +7,17 @@ This is **not** the bootable OS. Target v1 requirements live in
 [functional-specs.md](functional-specs.md); phase gates in
 [STATUS.md](STATUS.md).
 
-> Date: 03/09/2026 · Preview **0.16.0**
+> Date: 03/09/2026 · Preview **0.16.1**
+
+### What's new in 0.16.1
+
+- **Calm shell**: comfortable density is the default (36 px controls, 44 px composer, 88 px rail); compact density stays available without dropping below 32 px
+- **Chat sessions**: case-insensitive search; Today / Yesterday / Last 7 days / Older groups; pinned sessions stay first
+- **Archive and pin**: pinning and reversible archive from the session list; permanent delete only from Archives
+- **Composer**: multiline up to five visible lines — Enter sends, Shift+Enter inserts a line break; pending files stay as removable chips
+- **Focus and activity**: Canvas focus mode hides neighbouring panels; agent traces live in a resizable Activity panel; the bell opens the notification centre
+- **Session navigation**: background reloads no longer steal the active chat; `chat.session.set_pinned` / `set_archived` / `list_all` back the new chrome
+- **Settings search**: typing in Settings filters Me / Models / Trust and the expert folds
 
 ### What's new in 0.16.0
 
@@ -388,7 +398,7 @@ seL4 VM track (PV.1–PV.3) is separate: see [phases/phase-vm-sel4.md](phases/ph
 
 ---
 
-## 11. Not in Preview 0.16.0
+## 11. Not in Preview 0.16.1
 
 - Bootable / bare-metal image
 - STT / always-on voice

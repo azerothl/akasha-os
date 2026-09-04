@@ -7,12 +7,13 @@ Summary of delivered phases. Detail: [development-plan.md](development-plan.md),
 
 **Headline:** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview:** 0.16.0 — richer validated canvas, inference controls, model recovery, signed community catalogue, and agent trace exports. Not a bootable OS. Cohort gate
+**Preview:** 0.16.1 — calm host shell, session search/pin/archive, multiline
+composer, Canvas focus and an Activity panel. Not a bootable OS. Cohort gate
 still open (**3 Windows + 1 Linux + 1 macOS Apple Silicon**, 15-minute
 path). **Next:** PC cohort close; Horizon C / PV.4+ when scheduled; E9
 hard-green after a documented 2-GPU run.
 
-## P16 — Preview 0.16.0 (canvas quality + model operations) — release candidate
+## P16 — Preview 0.16.0 (canvas quality + model operations) — done
 
 | # | Item | Status |
 |---|------|--------|
@@ -22,6 +23,7 @@ hard-green after a documented 2-GPU run.
 | P16.4 | Model load-error recovery and expanded vision catalogue | done |
 | P16.5 | Agent trace export, signed community catalogue and capability sync | done |
 | P16.6 | Version, docs, website and release packaging | done |
+| P16.7 | 0.16.1 patch — calm shell, session search/pin/archive | done |
 
 ## P13 — Preview 0.13.0 (create + chat documents) — done
 

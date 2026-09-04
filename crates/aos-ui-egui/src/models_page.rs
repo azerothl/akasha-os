@@ -70,6 +70,24 @@ pub struct InstalledRow {
     pub runtime: Option<ModelInfo>,
 }
 
+/// User-facing residence state; never expose internal enum/debug names in UI.
+pub fn model_state_human(state: &aos_proto::ModelState, french: bool) -> &'static str {
+    match (state, french) {
+        (aos_proto::ModelState::OnDisk, true) => "Disponible",
+        (aos_proto::ModelState::OnDisk, false) => "Available",
+        (aos_proto::ModelState::Loading, true) => "Chargement",
+        (aos_proto::ModelState::Loading, false) => "Loading",
+        (aos_proto::ModelState::Loaded, true) => "Chargé",
+        (aos_proto::ModelState::Loaded, false) => "Loaded",
+        (aos_proto::ModelState::PartiallyOffloaded, true) => "Partiellement déchargé",
+        (aos_proto::ModelState::PartiallyOffloaded, false) => "Partially offloaded",
+        (aos_proto::ModelState::Error, true) => "Erreur",
+        (aos_proto::ModelState::Error, false) => "Error",
+        (aos_proto::ModelState::Remote, true) => "Distant",
+        (aos_proto::ModelState::Remote, false) => "Remote",
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 struct InstalledRegistry {
     #[serde(default)]
@@ -192,6 +210,19 @@ pub fn category_of(m: &CatalogModel) -> ModelCatalogTab {
     ModelCatalogTab::Llm
 }
 
+pub fn catalog_has_vision(m: &CatalogModel) -> bool {
+    m.profiles.iter().any(|p| p == "vision")
+}
+
+/// Picker surface only: vision hint in the session model combo (no cpu/gpu/quant chips).
+pub fn picker_surface_badges(m: &CatalogModel, t: &crate::i18n::UiStrings) -> Vec<&'static str> {
+    if catalog_has_vision(m) {
+        vec![t.models_sees_images]
+    } else {
+        vec![]
+    }
+}
+
 pub fn model_badges(m: &CatalogModel) -> Vec<String> {
     let mut tags: Vec<String> = m.tags.clone();
     let hay = format!(
@@ -243,6 +274,29 @@ pub fn model_badges(m: &CatalogModel) -> Vec<String> {
         tags.push("large".into());
     }
     tags
+}
+
+fn ui_capability_badge(ui: &mut egui::Ui, label: &str) {
+    egui::Frame::new()
+        .fill(egui::Color32::from_rgb(40, 48, 64))
+        .corner_radius(crate::theme::CARD_RADIUS)
+        .inner_margin(egui::Margin::symmetric(6, 2))
+        .show(ui, |ui| {
+            ui.label(egui::RichText::new(label).size(11.0).color(egui::Color32::from_rgb(200, 210, 225)));
+        });
+}
+
+/// Polished vision chip for catalog cards (localized « sees images » / « voit les images »).
+pub fn ui_catalog_vision_chip(ui: &mut egui::Ui, label: &str) {
+    use crate::theme::SIGNAL;
+    egui::Frame::new()
+        .fill(egui::Color32::from_rgba_unmultiplied(SIGNAL.r(), SIGNAL.g(), SIGNAL.b(), 36))
+        .stroke(egui::Stroke::new(1.0, SIGNAL))
+        .corner_radius(crate::theme::CARD_RADIUS)
+        .inner_margin(egui::Margin::symmetric(6, 2))
+        .show(ui, |ui| {
+            ui.label(egui::RichText::new(label).size(11.0).color(SIGNAL));
+        });
 }
 
 fn hf_repo_url(m: &CatalogModel) -> Option<String> {
@@ -341,6 +395,7 @@ pub fn ui_model_card(
     on_hf: &mut impl FnMut(&str),
 ) {
     let badges = model_badges(m);
+    let show_vision = catalog_has_vision(m);
     egui::Frame::group(ui.style())
         .inner_margin(egui::Margin::same(10))
         .show(ui, |ui| {
@@ -360,18 +415,14 @@ pub fn ui_model_card(
                         ui.label(desc);
                     }
                     ui.horizontal_wrapped(|ui| {
-                        for b in badges {
-                            ui.label(
-                                egui::RichText::new(b)
-                                    .size(11.0)
-                                    .background_color(egui::Color32::from_rgb(40, 48, 64)),
-                            );
+                        for b in &badges {
+                            ui_capability_badge(ui, b);
+                        }
+                        if show_vision {
+                            ui_catalog_vision_chip(ui, t.models_sees_images);
                         }
                         if !m.format.is_empty() {
                             ui.weak(format!("[{}]", m.format));
-                        }
-                        if !m.profiles.is_empty() {
-                            ui.weak(m.profiles.join(" · "));
                         }
                     });
                     ui.horizontal(|ui| {
@@ -441,8 +492,8 @@ pub fn ui_installed_card(
                     }
                     if let Some(rt) = &m.runtime {
                         ui.weak(format!(
-                            "{:?} · profile {}",
-                            rt.state,
+                            "{} · profile {}",
+                            model_state_human(&rt.state, t.models_tab_installed == "Installés"),
                             rt.profile.as_deref().unwrap_or("—")
                         ));
                     }

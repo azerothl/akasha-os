@@ -1,8 +1,8 @@
-# Communauté — Akasha OS Preview 0.16.0
+# Communauté — Akasha OS Preview 0.16.1
 
 **Langue :** [English](../community.md) | Français
 
-> Date : 03/09/2026 · Preview **0.16.0**
+> Date : 03/09/2026 · Preview **0.16.1**
 
 Le lieu de rencontre est **GitHub Discussions** sur
 [azerothl/akasha-os](https://github.com/azerothl/akasha-os/discussions).

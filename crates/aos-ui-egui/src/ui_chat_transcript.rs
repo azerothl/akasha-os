@@ -13,6 +13,44 @@ use crate::{
 use aos_proto::{ChatAttachment, ChatRoomMember};
 use eframe::egui;
 
+/// Comfortable gap between the last bubble and the composer when scrolled to the end.
+pub(crate) const TRANSCRIPT_BOTTOM_PADDING: f32 = 16.0;
+/// Pixels from the bottom still treated as "following" the latest messages.
+const TRANSCRIPT_NEAR_BOTTOM_PX: f32 = 48.0;
+
+/// Whether the scroll offset is close enough to the bottom to keep following.
+fn transcript_near_bottom(offset_y: f32, content_h: f32, viewport_h: f32) -> bool {
+    let max_offset = (content_h - viewport_h).max(0.0);
+    offset_y >= max_offset - TRANSCRIPT_NEAR_BOTTOM_PX
+}
+
+/// Keep following when already latched and live content is still growing (streaming rows,
+/// pending chrome). Prevents stick_to_bottom from toggling off due to row-height jitter.
+fn transcript_should_follow_bottom(
+    was_following: bool,
+    near_bottom: bool,
+    row_count: usize,
+    prev_row_count: usize,
+    streaming_len: usize,
+    prev_streaming_len: usize,
+    streaming_active: bool,
+    pending: bool,
+) -> bool {
+    if near_bottom {
+        return true;
+    }
+    was_following
+        && (row_count > prev_row_count
+            || streaming_len > prev_streaming_len
+            || streaming_active
+            || pending)
+}
+
+/// Viewport height for the transcript scroll area from the pane's live budget.
+pub(crate) fn transcript_viewport_height(available_h: f32) -> f32 {
+    available_h.max(1.0)
+}
+
 impl UiApp {
     pub(crate) fn ui_chat_transcript(
         &mut self,
@@ -21,17 +59,24 @@ impl UiApp {
         room_mode: bool,
         room_members: &[ChatRoomMember],
         room_conductor_policy: Option<&aos_proto::ChatRoomConductorPolicy>,
-        scroll_h: f32,
     ) {
-        egui::ScrollArea::vertical()
+        let n = self.chat.len();
+        let streaming_len = self.chat_state.runtime.streaming.len();
+        let pending = self.chat_state.runtime.pending;
+        let streaming_active = !self.chat_state.runtime.streaming.is_empty();
+        let follow_bottom = self.chat_state.view.follow_bottom;
+        let prev_row_count = self.chat_state.view.transcript_row_count;
+        let prev_streaming_len = self.chat_state.view.transcript_streaming_len;
+        let viewport_h = transcript_viewport_height(ui.available_height());
+        let scroll = egui::ScrollArea::vertical()
             .id_salt("conversation_scroll")
             .auto_shrink([false, false])
-            .max_height(scroll_h)
-            .min_scrolled_height(scroll_h)
-            .stick_to_bottom(true)
+            .max_height(viewport_h)
+            .stick_to_bottom(follow_bottom)
+            // Variable-height bubbles (attachments, agent cards) need natural layout;
+            // show_rows' fixed row estimate clipped the tail when the canvas was open.
             .show(ui, |ui| {
                 ui.set_min_width(ui.available_width());
-                ui.set_min_height(scroll_h);
                 let mut open_agent: Option<String> = None;
                 let mut target_reply: Option<String> = None;
                 let mut open_studio: Option<(String, String)> = None;
@@ -50,7 +95,6 @@ impl UiApp {
                 let tz_offset = local_tz_offset_minutes();
                 let chat_now = now_ms();
                 let reply_id = self.blocked_ask_agent().map(|a| a.agent_id.clone());
-                let n = self.chat.len();
                 for i in 0..n {
                     let role = self.chat[i].role.clone();
                     let mut text = self.chat[i].text.clone();
@@ -443,7 +487,8 @@ impl UiApp {
                     let (_, _, role_color) =
                         chat_bubble_colors(ChatBubbleKind::Assistant, ui.visuals().dark_mode);
                     let thinking = if room_mode {
-                        self.chat_state.runtime
+                        self.chat_state
+                            .runtime
                             .room_turn_text
                             .as_deref()
                             .and_then(|msg| {
@@ -468,10 +513,95 @@ impl UiApp {
                 }
                 if self.chat_state.runtime.load_fail_retry.is_some()
                     && self.chat_state.active_session.is_some()
-                    && crate::chat_load_fail::render_load_fail_retry(ui, t)
                 {
-                    self.retry_load_failed_turn();
+                    let recovery = crate::chat_load_fail::render_load_fail_recovery(ui, t);
+                    match recovery {
+                        crate::chat_load_fail::RecoveryAction::Retry => self.retry_load_failed_turn(),
+                        crate::chat_load_fail::RecoveryAction::Unload => {
+                            if let Some(model_id) = self.chat_state.sessions.iter()
+                                .find(|s| self.chat_state.active_session.as_deref() == Some(s.id.as_str()))
+                                .and_then(|s| s.model_id.clone()) {
+                                let _ = self.cmd_tx.send(Cmd::ModelUnload { model_id });
+                            }
+                        }
+                        crate::chat_load_fail::RecoveryAction::Reload => {
+                            if let Some(model_id) = self.chat_state.sessions.iter()
+                                .find(|s| self.chat_state.active_session.as_deref() == Some(s.id.as_str()))
+                                .and_then(|s| s.model_id.clone()) {
+                                let _ = self.cmd_tx.send(Cmd::ModelReload { model_id });
+                            }
+                        }
+                        crate::chat_load_fail::RecoveryAction::None => {}
+                    }
                 }
+                ui.add_space(TRANSCRIPT_BOTTOM_PADDING);
             });
+        let view = &mut self.chat_state.view;
+        let near_bottom = transcript_near_bottom(
+            scroll.state.offset.y,
+            scroll.content_size.y,
+            scroll.inner_rect.height(),
+        );
+        view.follow_bottom = transcript_should_follow_bottom(
+            follow_bottom,
+            near_bottom,
+            n,
+            prev_row_count,
+            streaming_len,
+            prev_streaming_len,
+            streaming_active,
+            pending,
+        );
+        view.transcript_row_count = n;
+        view.transcript_streaming_len = streaming_len;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        transcript_near_bottom, transcript_should_follow_bottom, transcript_viewport_height,
+        TRANSCRIPT_BOTTOM_PADDING,
+    };
+
+    #[test]
+    fn viewport_height_never_zero() {
+        assert_eq!(transcript_viewport_height(0.0), 1.0);
+        assert_eq!(transcript_viewport_height(400.0), 400.0);
+    }
+
+    #[test]
+    fn bottom_padding_is_comfortable_gap() {
+        assert!(TRANSCRIPT_BOTTOM_PADDING >= 8.0);
+    }
+
+    #[test]
+    fn near_bottom_detects_follow_threshold() {
+        assert!(transcript_near_bottom(952.0, 1000.0, 600.0));
+        assert!(!transcript_near_bottom(0.0, 1000.0, 600.0));
+    }
+
+    #[test]
+    fn follow_bottom_stays_latched_while_streaming_grows() {
+        assert!(transcript_should_follow_bottom(
+            true,
+            false,
+            10,
+            10,
+            120,
+            100,
+            true,
+            false,
+        ));
+        assert!(!transcript_should_follow_bottom(
+            true,
+            false,
+            10,
+            10,
+            100,
+            100,
+            false,
+            false,
+        ));
     }
 }

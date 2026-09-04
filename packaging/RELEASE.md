@@ -7,8 +7,8 @@
 Tag then push:
 
 ```bash
-git tag v0.16.0
-git push origin v0.16.0
+git tag v0.16.1
+git push origin v0.16.1
 ```
 
 The workflow [`.github/workflows/preview-release.yml`](../.github/workflows/preview-release.yml)
@@ -24,7 +24,7 @@ CPU-linked `aos-modeld-cpu` in the same zip; no GGUF) and publishes:
 
 Manual trigger: Actions → **preview-release** → Run workflow.
 
-- **macOS only on existing Release** (no retag): `macos_only` = true, `release_version` = `0.16.0`, `upload_release` = true — attaches the Apple Silicon zip and refreshes `latest.json` on that Release.
+- **macOS only on existing Release** (no retag): `macos_only` = true, `release_version` = `0.16.1`, `upload_release` = true — attaches the Apple Silicon zip and refreshes `latest.json` on that Release.
 - **Full rebuild**: `create_release` = true, `macos_only` = false.
 
 ### Internal seL4 gate (not a tester release)
@@ -49,15 +49,13 @@ GGUFs are downloaded on **first run** via `share/models/manifest.json`.
 ## Release notes (draft)
 
 ```
-Akasha OS Preview 0.16.0 — Canvas quality + model operations
+Akasha OS Preview 0.16.1 — Calm shell + session navigation
 
-- Canvas: grid, layers, vector editing, styles and PNG/SVG/JSON export
-- Canvas agents: bounded plans, live snapshots and global vector validation
-- Inference: configurable prefix cache, prompt-lookup and adaptive batching
-- Models: retry failed loads cleanly; Qwen3-VL and LLaVA 1.6 profiles
-- Agents/extensions: trace export, signed community catalogue and capability sync
-- Release: strict CPU lint, archive verification and fresh signed WASM packages
-- Same Win/Linux/Mac mill bands as 0.15.x
+- Chat: search, date groups, pin, reversible archive
+- Composer: multiline Enter/Shift+Enter; comfortable density by default
+- Canvas focus mode; Activity panel and notification centre
+- Sessions: background reloads no longer steal the active chat
+- Same Win/Linux/Mac mill bands as 0.16.x
 
 Not a bootable OS. See FIRST-RUN.md / INSTALL.md / TESTER.md
 ```

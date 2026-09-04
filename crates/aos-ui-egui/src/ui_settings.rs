@@ -1,20 +1,69 @@
 //! Application settings panel.
 
 use crate::cmd::Cmd;
-use crate::os_open::aos_home;
-use crate::prefs::{save_preferences, UI_SCALE_PRESETS};
 use crate::onboarding::save_onboarding;
+use crate::os_open::aos_home;
+use crate::prefs::{save_preferences, UiDensity, UI_SCALE_PRESETS};
 use crate::{i18n, Tab, UiApp};
 use eframe::egui;
 
+fn color_from_hex(value: &str) -> egui::Color32 {
+    let raw = value.trim().trim_start_matches('#');
+    if raw.len() != 6 {
+        return egui::Color32::WHITE;
+    }
+    let Ok(rgb) = u32::from_str_radix(raw, 16) else {
+        return egui::Color32::WHITE;
+    };
+    egui::Color32::from_rgb((rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8)
+}
+
+fn edit_theme_color(ui: &mut egui::Ui, label: &str, value: &mut String) -> bool {
+    let mut color = color_from_hex(value);
+    let changed = ui.color_edit_button_srgba(&mut color).changed();
+    ui.monospace(value.as_str());
+    if changed {
+        *value = format!("#{:02X}{:02X}{:02X}", color.r(), color.g(), color.b());
+    }
+    ui.label(label);
+    changed
+}
+
 impl UiApp {
-pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
         let t = i18n::strings(&self.prefs.language);
         ui.heading(t.settings_title);
+        ui.add_sized(
+            egui::vec2(ui.available_width().min(420.0), 36.0),
+            egui::TextEdit::singleline(&mut self.settings_ui.search)
+                .hint_text(t.settings_search_hint),
+        );
         ui.separator();
 
         let label_w = 160.0_f32;
+        let query = self.settings_ui.search.trim().to_ascii_lowercase();
+        let section_visible = |terms: &[&str]| {
+            query.is_empty() || terms.iter().any(|term| query.contains(term))
+        };
+        if !query.is_empty()
+            && ![
+                ["utilisateur", "user", "langue", "language", "thème", "theme", "densité", "density", "échelle", "scale"].as_slice(),
+                ["modèle", "model", "inference", "routage", "routing", "image", "audio"].as_slice(),
+                ["confidentialité", "privacy", "confiance", "trust", "réseau", "network", "mémoire", "remember"].as_slice(),
+                ["agent", "expert", "étapes", "steps", "timeout"].as_slice(),
+                ["web", "recherche", "search", "navigation", "browse"].as_slice(),
+                ["secret", "clé", "token", "api"].as_slice(),
+                ["catalogue", "catalog", "module", "community", "communauté"].as_slice(),
+                ["planification", "schedule", "tâche", "task"].as_slice(),
+            ]
+            .iter()
+            .any(|terms| terms.iter().any(|term| query.contains(term)))
+        {
+            ui.weak(t.settings_search_empty);
+            return;
+        }
 
+        if section_visible(&["utilisateur", "user", "langue", "language", "thème", "theme", "densité", "density", "échelle", "scale"]) {
         ui.heading(t.settings_me);
         egui::Grid::new("settings_me")
             .num_columns(2)
@@ -43,6 +92,7 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                     "light" => t.theme_light,
                     "soft" => t.theme_soft,
                     "high_contrast" => t.theme_high_contrast,
+                    "custom" => t.settings_theme_custom,
                     _ => t.theme_dark,
                 };
                 egui::ComboBox::from_id_salt("prefs_theme")
@@ -53,6 +103,7 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                             ("light", t.theme_light),
                             ("soft", t.theme_soft),
                             ("high_contrast", t.theme_high_contrast),
+                            ("custom", t.settings_theme_custom),
                         ] {
                             if ui
                                 .selectable_label(self.prefs.theme == code, label)
@@ -65,6 +116,32 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                         }
                     });
                 ui.end_row();
+
+                if self.prefs.theme == "custom" {
+                    ui.end_row();
+                    ui.label(t.settings_custom_colors);
+                    egui::Grid::new("custom_theme_colors")
+                        .num_columns(3)
+                        .spacing([12.0, 8.0])
+                        .show(ui, |ui| {
+                            let mut changed = false;
+                            changed |= edit_theme_color(ui, t.settings_color_background, &mut self.prefs.custom_theme.background);
+                            ui.end_row();
+                            changed |= edit_theme_color(ui, t.settings_color_panel, &mut self.prefs.custom_theme.panel);
+                            ui.end_row();
+                            changed |= edit_theme_color(ui, t.settings_color_text, &mut self.prefs.custom_theme.text);
+                            ui.end_row();
+                            changed |= edit_theme_color(ui, t.settings_color_accent, &mut self.prefs.custom_theme.accent);
+                            ui.end_row();
+                            changed |= edit_theme_color(ui, t.settings_color_danger, &mut self.prefs.custom_theme.danger);
+                            ui.end_row();
+                            if changed {
+                                save_preferences(&self.prefs);
+                            }
+                        });
+                    ui.weak(t.settings_colors_applied);
+                    ui.end_row();
+                }
 
                 ui.label(t.settings_ui_scale);
                 let scale_label = format!("{}%", self.prefs.ui_scale_percent);
@@ -86,6 +163,24 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                     });
                 ui.end_row();
 
+                ui.label(t.settings_density);
+                ui.horizontal(|ui| {
+                    for (density, label) in [
+                        (UiDensity::Comfortable, t.settings_density_comfortable),
+                        (UiDensity::Compact, t.settings_density_compact),
+                    ] {
+                        if ui
+                            .selectable_label(self.prefs.ui_density == density, label)
+                            .clicked()
+                        {
+                            self.prefs.ui_density = density;
+                            save_preferences(&self.prefs);
+                            self.status = t.settings_saved.into();
+                        }
+                    }
+                });
+                ui.end_row();
+
                 ui.label(t.settings_auto_download_updates);
                 let mut auto_upd = self.prefs.auto_download_updates;
                 if ui
@@ -99,8 +194,10 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                 }
                 ui.end_row();
             });
+        }
 
         ui.add_space(12.0);
+        if section_visible(&["modèle", "model", "inference", "routage", "routing", "image", "audio"]) {
         ui.heading(t.settings_models);
         egui::Grid::new("settings_models")
             .num_columns(2)
@@ -258,7 +355,9 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                 });
                 ui.end_row();
             });
+        }
 
+        if section_visible(&["image", "expert", "steps", "taille", "size"]) {
         egui::CollapsingHeader::new(t.settings_expert_image_defaults)
             .default_open(false)
             .show(ui, |ui| {
@@ -273,11 +372,13 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                                 egui::DragValue::new(&mut self.prefs.image_width).range(64..=2048),
                             );
                             ui.add(
-                                egui::DragValue::new(&mut self.prefs.image_height)
-                                    .range(64..=2048),
+                                egui::DragValue::new(&mut self.prefs.image_height).range(64..=2048),
                             );
                             if ui
-                                .add(egui::DragValue::new(&mut self.prefs.image_steps).range(1..=150))
+                                .add(
+                                    egui::DragValue::new(&mut self.prefs.image_steps)
+                                        .range(1..=150),
+                                )
                                 .changed()
                             {
                                 save_preferences(&self.prefs);
@@ -289,8 +390,10 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                         ui.end_row();
                     });
             });
+        }
 
         ui.add_space(12.0);
+        if section_visible(&["confidentialité", "privacy", "confiance", "trust", "réseau", "network", "mémoire", "remember"]) {
         ui.heading(t.settings_trust);
         egui::Grid::new("settings_trust")
             .num_columns(2)
@@ -336,7 +439,9 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                 }
                 ui.end_row();
             });
+        }
 
+        if section_visible(&["agent", "expert", "étapes", "steps", "timeout"]) {
         egui::CollapsingHeader::new(t.settings_expert_agent)
             .default_open(false)
             .show(ui, |ui| {
@@ -347,7 +452,10 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                     .show(ui, |ui| {
                         ui.label(t.settings_max_steps);
                         if ui
-                            .add(egui::DragValue::new(&mut self.prefs.default_max_steps).range(1..=128))
+                            .add(
+                                egui::DragValue::new(&mut self.prefs.default_max_steps)
+                                    .range(1..=128),
+                            )
                             .changed()
                         {
                             self.agent_ui.max_steps = self.prefs.default_max_steps;
@@ -369,7 +477,9 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                         ui.end_row();
                     });
             });
+        }
 
+        if section_visible(&["web", "recherche", "search", "navigation", "browse"]) {
         egui::CollapsingHeader::new(t.settings_expert_web)
             .default_open(false)
             .show(ui, |ui| {
@@ -384,10 +494,7 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                             .show_ui(ui, |ui| {
                                 for eng in ["auto", "brave", "duckduckgo", "bing"] {
                                     if ui
-                                        .selectable_label(
-                                            self.prefs.web_search_engine == eng,
-                                            eng,
-                                        )
+                                        .selectable_label(self.prefs.web_search_engine == eng, eng)
                                         .clicked()
                                     {
                                         self.prefs.web_search_engine = eng.into();
@@ -422,7 +529,9 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                         ui.end_row();
                     });
             });
+        }
 
+        if section_visible(&["secret", "clé", "token", "api"]) {
         egui::CollapsingHeader::new(t.settings_secrets)
             .default_open(false)
             .show(ui, |ui| {
@@ -503,7 +612,9 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                 });
                 ui.weak(t.settings_brave_hint);
             });
+        }
 
+        if section_visible(&["catalogue", "catalog", "module", "community", "communauté"]) {
         egui::CollapsingHeader::new(t.settings_catalogue)
             .default_open(false)
             .show(ui, |ui| {
@@ -533,7 +644,10 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                         ui.weak(t.settings_catalogue_community_cached);
                     }
                     if cat.extra_enabled && !cat.extra_error.is_empty() {
-                        ui.weak(format!("{} ({})", t.settings_catalogue_community_unsigned, cat.extra_error));
+                        ui.weak(format!(
+                            "{} ({})",
+                            t.settings_catalogue_community_unsigned, cat.extra_error
+                        ));
                     } else if cat.extra_enabled && !cat.extra_signature_ok {
                         ui.weak(t.settings_catalogue_community_unsigned);
                     }
@@ -552,8 +666,11 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                                 .iter()
                                 .find(|m| m.name == e.name)
                                 .cloned();
-                            let skill_installed =
-                                self.settings_ui.installed_skills.iter().any(|n| n == &e.name);
+                            let skill_installed = self
+                                .settings_ui
+                                .installed_skills
+                                .iter()
+                                .any(|n| n == &e.name);
                             ui.horizontal(|ui| {
                                 let mut label = format!(
                                     "{} {} ({}) [{}]",
@@ -581,8 +698,7 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                                         if aos_proto::decl_ui::is_bundled_module(&e.name) {
                                             ui.weak(t.settings_bundled_locked);
                                         } else if installed_mod.is_some() {
-                                            if ui.button(t.settings_catalogue_uninstall).clicked()
-                                            {
+                                            if ui.button(t.settings_catalogue_uninstall).clicked() {
                                                 let _ = self.cmd_tx.send(Cmd::ModuleUninstall {
                                                     name: e.name.clone(),
                                                 });
@@ -604,8 +720,7 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                                     }
                                     "skill" => {
                                         if skill_installed {
-                                            if ui.button(t.settings_catalogue_uninstall).clicked()
-                                            {
+                                            if ui.button(t.settings_catalogue_uninstall).clicked() {
                                                 let _ = self.cmd_tx.send(Cmd::SkillUninstall {
                                                     name: e.name.clone(),
                                                 });
@@ -652,7 +767,9 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                     });
                 }
             });
+        }
 
+        if section_visible(&["planification", "schedule", "tâche", "task"]) {
         egui::CollapsingHeader::new(t.schedule_heading)
             .default_open(false)
             .show(ui, |ui| {
@@ -712,6 +829,6 @@ pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
                     }
                 }
             });
+        }
     }
-
 }

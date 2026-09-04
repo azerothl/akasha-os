@@ -8,6 +8,18 @@ pub const SIGNAL: egui::Color32 = egui::Color32::from_rgb(46, 240, 200);
 pub const HYDROGEN: egui::Color32 = egui::Color32::from_rgb(255, 90, 72);
 pub const PAPER: egui::Color32 = egui::Color32::from_rgb(232, 238, 246);
 
+/// Shared UI tokens.  Keeping these here prevents individual panels from
+/// inventing their own hit targets and makes accessibility regressions easy to
+/// test.
+pub const CONTROL_MIN_H_COMFORTABLE: f32 = 36.0;
+#[allow(dead_code)]
+pub const CONTROL_MIN_H_COMPACT: f32 = 32.0;
+#[allow(dead_code)]
+pub const COMPOSER_MIN_H: f32 = 44.0;
+#[allow(dead_code)]
+pub const CARD_RADIUS: u8 = 8;
+pub const SPACE_UNIT: f32 = 8.0;
+
 const FOCUS_STROKE_WIDTH: f32 = 2.0;
 
 fn mix(a: egui::Color32, b: egui::Color32, t: f32) -> egui::Color32 {
@@ -68,11 +80,16 @@ fn base_widgets(v: &mut egui::Visuals, fg: egui::Color32, accent: egui::Color32)
     apply_focus_ring(v, accent);
 }
 
-pub fn apply_theme(ctx: &egui::Context, theme: &str) {
+pub fn apply_theme(
+    ctx: &egui::Context,
+    theme: &str,
+    custom: &crate::prefs::CustomThemePreferences,
+) {
     let visuals = match theme {
         "light" => chamber_light(),
         "soft" => chamber_soft(),
         "high_contrast" => chamber_high_contrast(),
+        "custom" => chamber_custom(custom),
         _ => chamber_dark(),
     };
     ctx.set_visuals(visuals);
@@ -85,6 +102,46 @@ pub fn apply_ui_scale(ctx: &egui::Context, scale_percent: u32) {
     if (ctx.zoom_factor() - factor).abs() > f32::EPSILON {
         ctx.set_zoom_factor(factor);
     }
+}
+
+fn parse_hex(value: &str, fallback: egui::Color32) -> egui::Color32 {
+    let raw = value.trim().trim_start_matches('#');
+    if raw.len() != 6 { return fallback; }
+    let Ok(rgb) = u32::from_str_radix(raw, 16) else { return fallback; };
+    egui::Color32::from_rgb((rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8)
+}
+
+fn chamber_custom(custom: &crate::prefs::CustomThemePreferences) -> egui::Visuals {
+    let background = parse_hex(&custom.background, VOID);
+    let panel = parse_hex(&custom.panel, mix(VOID, PAPER, 0.04));
+    let text = parse_hex(&custom.text, PAPER);
+    let accent = parse_hex(&custom.accent, SIGNAL);
+    let danger = parse_hex(&custom.danger, HYDROGEN);
+    let mut v = egui::Visuals::dark();
+    v.dark_mode = true;
+    v.extreme_bg_color = background;
+    v.panel_fill = background;
+    v.window_fill = panel;
+    v.faint_bg_color = panel;
+    v.widgets.noninteractive.bg_fill = panel;
+    v.widgets.inactive.bg_fill = mix(panel, accent, 0.10);
+    v.widgets.hovered.bg_fill = mix(panel, accent, 0.18);
+    v.widgets.active.bg_fill = mix(panel, accent, 0.28);
+    base_widgets(&mut v, text, accent);
+    v.warn_fg_color = danger;
+    v.error_fg_color = danger;
+    v
+}
+
+/// Apply the product-wide density without allowing compact mode to create
+/// touch targets smaller than 32 px.
+pub fn apply_ui_density(ctx: &egui::Context, density: crate::prefs::UiDensity) {
+    let mut style = (*ctx.style()).clone();
+    let h = density.control_height();
+    style.spacing.interact_size.y = h;
+    style.spacing.button_padding.y = ((h - 20.0) / 2.0).max(6.0);
+    style.spacing.item_spacing = egui::vec2(SPACE_UNIT, SPACE_UNIT);
+    ctx.set_style(style);
 }
 
 fn chamber_dark() -> egui::Visuals {

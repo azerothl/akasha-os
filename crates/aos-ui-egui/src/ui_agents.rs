@@ -3,11 +3,57 @@
 use crate::cmd::Cmd;
 use crate::{
     agent_canvas_session_ops, agent_cap_holder, agent_panel, agent_shown_in_tab, chat_room, guide,
-    i18n, icons, open_in_browser, overflow_scroll, overflow_scroll_h, ui_roster_tool_checkboxes,
+    i18n, icons, open_in_browser, overflow_scroll, overflow_scroll_h, theme, ui_roster_tool_checkboxes,
     ChatLine, UiApp,
 };
 use aos_proto::{AgentInfo, AgentState, ChatAttachment};
 use eframe::egui;
+
+const ACTIVITY_NARROW_BREAK: f32 = 900.0;
+const ACTIVITY_SHEET_COMPOSER_RESERVE: f32 = 150.0;
+
+fn agent_state_label(t: &i18n::UiStrings, state: &AgentState) -> &'static str {
+    match state {
+        AgentState::Done => t.agent_state_done,
+        AgentState::Failed => t.agent_state_failed,
+        AgentState::Blocked => t.agent_state_blocked,
+        AgentState::Running => t.agent_state_running,
+        AgentState::Created | AgentState::Paused | AgentState::Killed | AgentState::Roster => {
+            t.agent_state_pending
+        }
+    }
+}
+
+fn agent_activity_icon(state: &AgentState) -> icons::AgentActivityIcon {
+    match state {
+        AgentState::Done => icons::AgentActivityIcon::Done,
+        AgentState::Failed => icons::AgentActivityIcon::Failed,
+        AgentState::Blocked => icons::AgentActivityIcon::Blocked,
+        AgentState::Running => icons::AgentActivityIcon::Running,
+        AgentState::Created
+        | AgentState::Paused
+        | AgentState::Killed
+        | AgentState::Roster => icons::AgentActivityIcon::Pending,
+    }
+}
+
+fn ui_activity_agent_row(ui: &mut egui::Ui, t: &i18n::UiStrings, agent: &AgentInfo) -> bool {
+    let mut details = false;
+    ui.horizontal(|ui| {
+        icons::agent_activity_icon(ui, agent_activity_icon(&agent.state));
+        ui.label(agent.display_title());
+        let state_label = agent_state_label(t, &agent.state);
+        if agent.state == AgentState::Failed {
+            ui.colored_label(theme::HYDROGEN, state_label);
+        } else {
+            ui.weak(state_label);
+        }
+        if ui.small_button(t.activity_details).clicked() {
+            details = true;
+        }
+    });
+    details
+}
 
 impl UiApp {
     pub(crate) fn ui_agents(&mut self, ui: &mut egui::Ui) {
@@ -427,11 +473,99 @@ impl UiApp {
     }
 
     pub(crate) fn ui_agent_detail_panel(&mut self, ctx: &egui::Context) {
-        if self.agent_ui.open_tabs.is_empty() {
+        if self.agent_ui.open_tabs.is_empty() && !self.prefs.ui_layout.activity_panel_open {
+            return;
+        }
+        let escape_pressed = ctx.input(|input| input.key_pressed(egui::Key::Escape));
+        if escape_pressed {
+            self.prefs.ui_layout.activity_panel_open = false;
+            self.agent_ui.close_all_tabs();
+            crate::prefs::save_preferences(&self.prefs);
+            return;
+        }
+        // Below ACTIVITY_NARROW_BREAK the activity surface is a bottom sheet so the
+        // chat column keeps full width; Escape or backdrop tap dismisses it.
+        if ctx.screen_rect().width() < ACTIVITY_NARROW_BREAK {
+            let t = i18n::strings(&self.prefs.language);
+            let mut close = false;
+            let screen = ctx.screen_rect();
+            let sheet_h = (screen.height() * 0.5)
+                .min(screen.height() - ACTIVITY_SHEET_COMPOSER_RESERVE - 36.0)
+                .max(180.0);
+
+            egui::Area::new(egui::Id::new("agent_activity_backdrop"))
+                .fixed_pos(screen.left_top())
+                .order(egui::Order::Background)
+                .interactable(true)
+                .show(ctx, |ui| {
+                    let resp = ui.allocate_rect(screen, egui::Sense::click());
+                    if resp.clicked() {
+                        close = true;
+                    }
+                    ui.painter().rect_filled(
+                        screen,
+                        0.0,
+                        egui::Color32::from_black_alpha(80),
+                    );
+                });
+
+            egui::Area::new(egui::Id::new("agent_activity_sheet"))
+                .anchor(egui::Align2::LEFT_BOTTOM, egui::vec2(0.0, 0.0))
+                .order(egui::Order::Foreground)
+                .show(ctx, |ui| {
+                    ui.set_width(screen.width());
+                    egui::Frame::popup(ui.style())
+                        .inner_margin(egui::Margin::same(12))
+                        .show(ui, |ui| {
+                            ui.set_max_height(sheet_h);
+                            ui.horizontal(|ui| {
+                                ui.heading(t.agent_detail);
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        if icons::close_button(ui)
+                                            .on_hover_text(t.activity_close)
+                                            .clicked()
+                                        {
+                                            close = true;
+                                        }
+                                    },
+                                );
+                            });
+                            ui.separator();
+                            egui::ScrollArea::vertical()
+                                .auto_shrink([false, false])
+                                .max_height(sheet_h - 48.0)
+                                .show(ui, |ui| {
+                                    let active = self.chat_state.active_session.as_deref();
+                                    let agents: Vec<_> = self
+                                        .agents
+                                        .iter()
+                                        .filter(|a| a.session_id.as_deref() == active)
+                                        .cloned()
+                                        .collect();
+                                    if agents.is_empty() {
+                                        ui.weak(t.activity_empty);
+                                    } else {
+                                        for agent in agents {
+                                            if ui_activity_agent_row(ui, &t, &agent) {
+                                                self.agent_ui.open_tab(&agent.agent_id);
+                                                self.agent_ui.select_tab(&agent.agent_id);
+                                            }
+                                        }
+                                    }
+                                });
+                        });
+                });
+            if close {
+                self.prefs.ui_layout.activity_panel_open = false;
+                self.agent_ui.close_all_tabs();
+                crate::prefs::save_preferences(&self.prefs);
+            }
             return;
         }
         egui::SidePanel::right("agent_detail_tabs")
-            .default_width(520.0)
+            .default_width(self.prefs.ui_layout.context_panel_width.max(280.0))
             .min_width(420.0)
             .resizable(true)
             .show(ctx, |ui| {
@@ -439,7 +573,15 @@ impl UiApp {
                 ui.horizontal(|ui| {
                     ui.heading(t.agent_detail);
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.small_button(t.agent_close_all).clicked() {
+                        if icons::close_button(ui).on_hover_text(t.activity_close).clicked() {
+                            self.prefs.ui_layout.activity_panel_open = false;
+                            self.agent_ui.close_all_tabs();
+                            crate::prefs::save_preferences(&self.prefs);
+                        }
+                        if icons::close_all_button(ui, t.agent_close_all_label)
+                            .on_hover_text(t.agent_close_all)
+                            .clicked()
+                        {
                             self.agent_ui.close_all_tabs();
                         }
                     });
@@ -491,6 +633,27 @@ impl UiApp {
                     }
                 });
                 ui.separator();
+
+                if self.agent_ui.open_tabs.is_empty() {
+                    let active = self.chat_state.active_session.as_deref();
+                    let mut shown = 0usize;
+                    let activity_agents: Vec<_> = self
+                        .agents
+                        .iter()
+                        .filter(|a| a.session_id.as_deref() == active)
+                        .cloned()
+                        .collect();
+                    for agent in activity_agents {
+                        shown += 1;
+                        if ui_activity_agent_row(ui, &t, &agent) {
+                            self.agent_ui.open_tab(&agent.agent_id);
+                            self.agent_ui.select_tab(&agent.agent_id);
+                        }
+                    }
+                    if shown == 0 {
+                        ui.weak(t.activity_empty);
+                    }
+                }
 
                 overflow_scroll(ui, "agent_detail_body", |ui| {
                     let active = self.agent_ui.active_tab.clone();
@@ -548,7 +711,9 @@ impl UiApp {
                                     .and_then(|a| a.session_id.clone())
                                     .or_else(|| self.chat_state.active_session.clone())
                                 {
-                                    if self.chat_state.active_session.as_deref() == Some(sid.as_str()) {
+                                    if self.chat_state.active_session.as_deref()
+                                        == Some(sid.as_str())
+                                    {
                                         let title = info
                                             .as_ref()
                                             .map(|a| a.directive.clone())

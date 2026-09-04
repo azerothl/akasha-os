@@ -2,7 +2,7 @@
 
 **Language:** English | [Français](fr/write-a-module.md)
 
-> Date: 03/09/2026 · Preview **0.16.0**
+> Date: 03/09/2026 · Preview **0.16.1**
 
 A module is dual-surface: tools for agents, a closed widget tree for the
 human. Preview can scaffold, package, and install a **script** module

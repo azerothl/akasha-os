@@ -4,6 +4,7 @@ use aos_proto::{ModuleCatalogue, ModuleInfo};
 
 #[derive(Debug)]
 pub(crate) struct SettingsUiState {
+    pub(crate) search: String,
     pub(crate) secret_brave: String,
     pub(crate) secret_github: String,
     pub(crate) secret_openai: String,
@@ -19,6 +20,7 @@ pub(crate) struct SettingsUiState {
 impl Default for SettingsUiState {
     fn default() -> Self {
         Self {
+            search: String::new(),
             secret_brave: String::new(),
             secret_github: String::new(),
             secret_openai: String::new(),

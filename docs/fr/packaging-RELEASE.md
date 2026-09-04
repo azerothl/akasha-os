@@ -7,8 +7,8 @@
 Tag puis push :
 
 ```bash
-git tag v0.16.0
-git push origin v0.16.0
+git tag v0.16.1
+git push origin v0.16.1
 ```
 
 Le workflow [`.github/workflows/preview-release.yml`](../../.github/workflows/preview-release.yml)
@@ -24,7 +24,7 @@ dans le même zip ; sans GGUF), publie :
 
 Déclenchement manuel : Actions → **preview-release** → Run workflow.
 
-- **macOS seul sur une Release existante** (sans retag) : `macos_only` = true, `release_version` = `0.16.0`, `upload_release` = true — attache le zip Apple Silicon et met à jour `latest.json` sur cette Release.
+- **macOS seul sur une Release existante** (sans retag) : `macos_only` = true, `release_version` = `0.16.1`, `upload_release` = true — attache le zip Apple Silicon et met à jour `latest.json` sur cette Release.
 - **Rebuild complet** : `create_release` = true, `macos_only` = false.
 
 ## Manuel
@@ -42,15 +42,13 @@ Les GGUF sont téléchargés au **premier run** via `share/models/manifest.json`
 ## Notes de version (brouillon)
 
 ```
-Akasha OS Preview 0.16.0 — Qualité Canvas + opérations modèles
+Akasha OS Preview 0.16.1 — Shell calme + navigation des sessions
 
-- Canvas : grille, calques, édition vectorielle, styles et exports PNG/SVG/JSON
-- Agents Canvas : plans bornés, captures live et validation vectorielle globale
-- Inférence : cache de préfixe, prompt-lookup et batching adaptatif configurables
-- Modèles : nouvelle tentative propre après erreur ; profils Qwen3-VL et LLaVA 1.6
-- Agents/extensions : export de traces, catalogue communautaire signé et synchro des capacités
-- Release : lint CPU strict, vérification des archives et packages WASM frais et signés
-- Mêmes bandes mill Win/Linux/Mac qu'en 0.15.x
+- Chat : recherche, groupes de dates, épingle, archivage réversible
+- Compositeur : multiligne Entrée/Maj+Entrée ; densité confortable par défaut
+- Mode focus Canvas ; volet Activité et centre de notifications
+- Sessions : un rechargement en arrière-plan n’enlève plus le chat actif
+- Mêmes bandes mill Win/Linux/Mac qu'en 0.16.x
 
 Pas un OS bootable. Voir FIRST-RUN.md / INSTALL.md / TESTER.md
 ```

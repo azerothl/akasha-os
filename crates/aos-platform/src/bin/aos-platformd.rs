@@ -363,11 +363,11 @@ async fn main() {
                 match ctx.payload::<MemUserRecallRequest>() {
                     Ok(req) => {
                         let emb = s.embed_text(&req.query).unwrap_or_default();
-                        let hits = s.mem.lock().unwrap().episodic_query(
-                            &emb,
-                            req.k,
-                            Some("user:default"),
-                        );
+                        let hits =
+                            s.mem
+                                .lock()
+                                .unwrap()
+                                .episodic_query(&emb, req.k, Some("user:default"));
                         let _ = ctx.respond(aos_ipc::msg::Status::Ok, &hits).await;
                     }
                     Err(_) => {
@@ -387,12 +387,13 @@ async fn main() {
                 match ctx.payload::<MemContextRequest>() {
                     Ok(req) => {
                         let emb = s.embed_text(&req.query).unwrap_or_default();
-                        let sess_ns = req
-                            .session_id
-                            .as_ref()
-                            .map(|id| format!("session:{id}"));
+                        let sess_ns = req.session_id.as_ref().map(|id| format!("session:{id}"));
                         let product_k = if req.product_k == 0 { 4 } else { req.product_k };
-                        let user_doc_k = if req.user_doc_k == 0 { 3 } else { req.user_doc_k };
+                        let user_doc_k = if req.user_doc_k == 0 {
+                            3
+                        } else {
+                            req.user_doc_k
+                        };
                         let (session_hits, user_hits, product_hits, user_doc_hits) = {
                             let mem = s.mem.lock().unwrap();
                             let session_hits = if let Some(ref ns) = sess_ns {
@@ -400,8 +401,7 @@ async fn main() {
                             } else {
                                 Vec::new()
                             };
-                            let user_hits =
-                                mem.context_user_hits(&emb, req.k);
+                            let user_hits = mem.context_user_hits(&emb, req.k);
                             let product_hits =
                                 aos_platform::product_rag::recall(&mem, &emb, product_k);
                             let user_doc_hits =
@@ -474,10 +474,7 @@ async fn main() {
             async move {
                 let docs = aos_platform::user_docs::list_docs(std::path::Path::new(&memory_dir));
                 let _ = ctx
-                    .respond(
-                        aos_ipc::msg::Status::Ok,
-                        &UserLibraryListResponse { docs },
-                    )
+                    .respond(aos_ipc::msg::Status::Ok, &UserLibraryListResponse { docs })
                     .await;
             }
         });
@@ -696,14 +693,13 @@ async fn main() {
                         let now = sweep_now_ms();
                         let skills_dir = s.skills.lock().unwrap().dir().to_path_buf();
                         let state = aos_platform::skill_pass::SkillPassState::load(&skills_dir);
-                        let offer = aos_platform::skill_pass::pending_surface_offer(
-                            &state, now, offset,
-                        )
-                        .map(|c| SkillPassPendingOffer {
-                            pattern_id: c.pattern_id.clone(),
-                            label_en: c.label_en.clone(),
-                            label_fr: c.label_fr.clone(),
-                        });
+                        let offer =
+                            aos_platform::skill_pass::pending_surface_offer(&state, now, offset)
+                                .map(|c| SkillPassPendingOffer {
+                                    pattern_id: c.pattern_id.clone(),
+                                    label_en: c.label_en.clone(),
+                                    label_fr: c.label_fr.clone(),
+                                });
                         let _ = ctx.respond(aos_ipc::msg::Status::Ok, &offer).await;
                     }
                     Err(_) => {
@@ -727,8 +723,7 @@ async fn main() {
                             .unwrap_or_else(aos_platform::mem_sweep::system_tz_offset_minutes);
                         let now = sweep_now_ms();
                         let skills_dir = s.skills.lock().unwrap().dir().to_path_buf();
-                        let mut state =
-                            aos_platform::skill_pass::SkillPassState::load(&skills_dir);
+                        let mut state = aos_platform::skill_pass::SkillPassState::load(&skills_dir);
                         aos_platform::skill_pass::dismiss_for_today(
                             &mut state,
                             &req.pattern_id,
@@ -755,8 +750,7 @@ async fn main() {
                 match ctx.payload::<SkillPassCreateRequest>() {
                     Ok(req) => {
                         let skills_dir = s.skills.lock().unwrap().dir().to_path_buf();
-                        let mut state =
-                            aos_platform::skill_pass::SkillPassState::load(&skills_dir);
+                        let mut state = aos_platform::skill_pass::SkillPassState::load(&skills_dir);
                         let candidate = state
                             .pending
                             .as_ref()
@@ -779,17 +773,12 @@ async fn main() {
                         let create_result = {
                             let skills = s.skills.lock().unwrap();
                             aos_platform::skill_pass::create_skill_from_candidate(
-                                &skills,
-                                &candidate,
-                                &actor,
+                                &skills, &candidate, &actor,
                             )
                         };
                         match create_result {
                             Ok(info) => {
-                                aos_platform::skill_pass::mark_created(
-                                    &mut state,
-                                    &req.pattern_id,
-                                );
+                                aos_platform::skill_pass::mark_created(&mut state, &req.pattern_id);
                                 let _ = state.save(&skills_dir);
                                 s.audit(AuditAppendRequest {
                                     trace_id: String::new(),
@@ -805,10 +794,7 @@ async fn main() {
                             }
                             Err(e) => {
                                 let _ = ctx
-                                    .respond_error(
-                                        aos_ipc::msg::Status::BadRequest,
-                                        &e.to_string(),
-                                    )
+                                    .respond_error(aos_ipc::msg::Status::BadRequest, &e.to_string())
                                     .await;
                             }
                         }
@@ -971,11 +957,7 @@ async fn main() {
             async move {
                 match ctx.payload::<ChatSessionCreateRequest>() {
                     Ok(req) => {
-                        let result = s
-                            .sessions
-                            .lock()
-                            .unwrap()
-                            .create(req.title, req.model_id);
+                        let result = s.sessions.lock().unwrap().create(req.title, req.model_id);
                         match result {
                             Ok(m) => {
                                 let _ = ctx.respond(aos_ipc::msg::Status::Ok, &m).await;
@@ -1037,10 +1019,7 @@ async fn main() {
                             }
                             Err(e) => {
                                 let _ = ctx
-                                    .respond_error(
-                                        aos_ipc::msg::Status::NotFound,
-                                        &e.to_string(),
-                                    )
+                                    .respond_error(aos_ipc::msg::Status::NotFound, &e.to_string())
                                     .await;
                             }
                         }
@@ -1085,16 +1064,15 @@ async fn main() {
                                     })
                                 };
                                 if let Some(wm) = wm {
-                                    s.mem.lock().unwrap().working_set(
-                                        &format!("session:{}", req.session_id),
-                                        wm,
-                                    );
+                                    s.mem
+                                        .lock()
+                                        .unwrap()
+                                        .working_set(&format!("session:{}", req.session_id), wm);
                                 }
                                 // Faits épisodiques de session (assistant) pour recall.
                                 if req.role == "assistant" && req.content.len() > 40 {
                                     let emb = s.embed_text(&req.content).unwrap_or_default();
-                                    let excerpt: String =
-                                        req.content.chars().take(400).collect();
+                                    let excerpt: String = req.content.chars().take(400).collect();
                                     s.mem.lock().unwrap().episodic_write(
                                         &format!("session:{}", req.session_id),
                                         &excerpt,
@@ -1142,10 +1120,7 @@ async fn main() {
                             }
                             Err(e) => {
                                 let _ = ctx
-                                    .respond_error(
-                                        aos_ipc::msg::Status::NotFound,
-                                        &e.to_string(),
-                                    )
+                                    .respond_error(aos_ipc::msg::Status::NotFound, &e.to_string())
                                     .await;
                             }
                         }
@@ -1177,10 +1152,7 @@ async fn main() {
                             }
                             Err(e) => {
                                 let _ = ctx
-                                    .respond_error(
-                                        aos_ipc::msg::Status::NotFound,
-                                        &e.to_string(),
-                                    )
+                                    .respond_error(aos_ipc::msg::Status::NotFound, &e.to_string())
                                     .await;
                             }
                         }
@@ -1212,10 +1184,7 @@ async fn main() {
                             }
                             Err(e) => {
                                 let _ = ctx
-                                    .respond_error(
-                                        aos_ipc::msg::Status::NotFound,
-                                        &e.to_string(),
-                                    )
+                                    .respond_error(aos_ipc::msg::Status::NotFound, &e.to_string())
                                     .await;
                             }
                         }
@@ -1318,10 +1287,7 @@ async fn main() {
                             }
                             Err(e) => {
                                 let _ = ctx
-                                    .respond_error(
-                                        aos_ipc::msg::Status::NotFound,
-                                        &e.to_string(),
-                                    )
+                                    .respond_error(aos_ipc::msg::Status::NotFound, &e.to_string())
                                     .await;
                             }
                         }
@@ -1345,10 +1311,7 @@ async fn main() {
                     Ok(req) => {
                         if req.content.trim().is_empty() {
                             let _ = ctx
-                                .respond_error(
-                                    aos_ipc::msg::Status::BadRequest,
-                                    "contenu vide",
-                                )
+                                .respond_error(aos_ipc::msg::Status::BadRequest, "contenu vide")
                                 .await;
                             return;
                         }
@@ -1358,10 +1321,7 @@ async fn main() {
                         };
                         let Ok((meta, _)) = session else {
                             let _ = ctx
-                                .respond_error(
-                                    aos_ipc::msg::Status::NotFound,
-                                    "session inconnue",
-                                )
+                                .respond_error(aos_ipc::msg::Status::NotFound, "session inconnue")
                                 .await;
                             return;
                         };
@@ -1402,10 +1362,7 @@ async fn main() {
                         );
                         if append.is_err() {
                             let _ = ctx
-                                .respond_error(
-                                    aos_ipc::msg::Status::NotFound,
-                                    "session inconnue",
-                                )
+                                .respond_error(aos_ipc::msg::Status::NotFound, "session inconnue")
                                 .await;
                             return;
                         }
@@ -1520,10 +1477,94 @@ async fn main() {
                             }
                             Err(e) => {
                                 let _ = ctx
-                                    .respond_error(
-                                        aos_ipc::msg::Status::NotFound,
-                                        &e.to_string(),
-                                    )
+                                    .respond_error(aos_ipc::msg::Status::NotFound, &e.to_string())
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("chat.session.list_all", move |ctx| {
+            let s = s.clone();
+            async move {
+                let result = { s.sessions.lock().unwrap().list(true) };
+                match result {
+                    Ok(list) => {
+                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &list).await;
+                    }
+                    Err(e) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::InternalError, &e.to_string())
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    // New explicit, reversible session mutations. The legacy archive endpoint
+    // above remains available for older clients.
+    {
+        let s = sub.clone();
+        svc.on("chat.session.set_pinned", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<ChatSessionSetPinnedRequest>() {
+                    Ok(req) => {
+                        let result = {
+                            s.sessions
+                                .lock()
+                                .unwrap()
+                                .set_pinned(&req.session_id, req.pinned)
+                        };
+                        match result {
+                            Ok(m) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &m).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(aos_ipc::msg::Status::NotFound, &e.to_string())
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("chat.session.set_archived", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<ChatSessionSetArchivedRequest>() {
+                    Ok(req) => {
+                        let result = {
+                            s.sessions
+                                .lock()
+                                .unwrap()
+                                .set_archived(&req.session_id, req.archived)
+                        };
+                        match result {
+                            Ok(m) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &m).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(aos_ipc::msg::Status::NotFound, &e.to_string())
                                     .await;
                             }
                         }
@@ -1551,10 +1592,7 @@ async fn main() {
                             }
                             Err(e) => {
                                 let _ = ctx
-                                    .respond_error(
-                                        aos_ipc::msg::Status::NotFound,
-                                        &e.to_string(),
-                                    )
+                                    .respond_error(aos_ipc::msg::Status::NotFound, &e.to_string())
                                     .await;
                             }
                         }
@@ -1575,18 +1613,14 @@ async fn main() {
             async move {
                 match ctx.payload::<ChatSessionIdRequest>() {
                     Ok(req) => {
-                        let result =
-                            s.sessions.lock().unwrap().export_markdown(&req.session_id);
+                        let result = s.sessions.lock().unwrap().export_markdown(&req.session_id);
                         match result {
                             Ok(md) => {
                                 let _ = ctx.respond(aos_ipc::msg::Status::Ok, &md).await;
                             }
                             Err(e) => {
                                 let _ = ctx
-                                    .respond_error(
-                                        aos_ipc::msg::Status::NotFound,
-                                        &e.to_string(),
-                                    )
+                                    .respond_error(aos_ipc::msg::Status::NotFound, &e.to_string())
                                     .await;
                             }
                         }
@@ -1636,10 +1670,7 @@ async fn main() {
                             }
                             Err(e) => {
                                 let _ = ctx
-                                    .respond_error(
-                                        aos_ipc::msg::Status::NotFound,
-                                        &e.to_string(),
-                                    )
+                                    .respond_error(aos_ipc::msg::Status::NotFound, &e.to_string())
                                     .await;
                             }
                         }
@@ -1852,10 +1883,7 @@ async fn main() {
                             }
                             Err(e) => {
                                 let _ = ctx
-                                    .respond_error(
-                                        aos_ipc::msg::Status::NotFound,
-                                        &e.to_string(),
-                                    )
+                                    .respond_error(aos_ipc::msg::Status::NotFound, &e.to_string())
                                     .await;
                             }
                         }
@@ -1887,10 +1915,7 @@ async fn main() {
                             }
                             Err(e) => {
                                 let _ = ctx
-                                    .respond_error(
-                                        aos_ipc::msg::Status::NotFound,
-                                        &e.to_string(),
-                                    )
+                                    .respond_error(aos_ipc::msg::Status::NotFound, &e.to_string())
                                     .await;
                             }
                         }
@@ -2065,17 +2090,14 @@ async fn main() {
                         };
                         match fetch_res {
                             Ok((bytes, ctype)) => {
-                                let name =
-                                    aos_platform::net_services::safe_download_name(&req.url);
+                                let name = aos_platform::net_services::safe_download_name(&req.url);
                                 let path = req
                                     .dest_path
                                     .unwrap_or_else(|| format!("/downloads/{name}"));
-                                let write_res = s.fs.lock().unwrap().write_bytes(
-                                    &path,
-                                    &bytes,
-                                    &actor,
-                                    &caps,
-                                );
+                                let write_res =
+                                    s.fs.lock()
+                                        .unwrap()
+                                        .write_bytes(&path, &bytes, &actor, &caps);
                                 match write_res {
                                     Ok(_) => {
                                         s.audit(AuditAppendRequest {
@@ -2206,12 +2228,10 @@ async fn main() {
                             req.title.as_deref(),
                         ) {
                             Ok(bytes) => {
-                                let write_res = s.fs.lock().unwrap().write_bytes(
-                                    &req.path,
-                                    &bytes,
-                                    &actor,
-                                    &caps,
-                                );
+                                let write_res =
+                                    s.fs.lock()
+                                        .unwrap()
+                                        .write_bytes(&req.path, &bytes, &actor, &caps);
                                 match write_res {
                                     Ok(_) => {
                                         s.audit(AuditAppendRequest {
@@ -2274,10 +2294,7 @@ async fn main() {
                             Ok(b) => b,
                             Err(e) => {
                                 let _ = ctx
-                                    .respond_error(
-                                        aos_ipc::msg::Status::BadRequest,
-                                        &e.to_string(),
-                                    )
+                                    .respond_error(aos_ipc::msg::Status::BadRequest, &e.to_string())
                                     .await;
                                 return;
                             }
@@ -2633,7 +2650,9 @@ async fn main() {
                 })
                 .await
                 .unwrap_or_else(|e| {
-                    Err(aos_platform::catalogue::CatalogueError::Fetch(e.to_string()))
+                    Err(aos_platform::catalogue::CatalogueError::Fetch(
+                        e.to_string(),
+                    ))
                 });
                 match r {
                     Ok(()) => {
@@ -3049,10 +3068,7 @@ async fn main() {
                             }
                             Err(e) => {
                                 let _ = ctx
-                                    .respond_error(
-                                        aos_ipc::msg::Status::BadRequest,
-                                        &e.to_string(),
-                                    )
+                                    .respond_error(aos_ipc::msg::Status::BadRequest, &e.to_string())
                                     .await;
                             }
                         }
@@ -3187,7 +3203,9 @@ async fn main() {
                         })
                         .await
                         .unwrap_or_else(|e| {
-                            Err(aos_platform::module_compile::CompileError::Other(e.to_string()))
+                            Err(aos_platform::module_compile::CompileError::Other(
+                                e.to_string(),
+                            ))
                         });
                         match r {
                             Ok(resp) => {
@@ -3289,10 +3307,7 @@ async fn main() {
                             }
                             Err(e) => {
                                 let _ = ctx
-                                    .respond_error(
-                                        aos_ipc::msg::Status::BadRequest,
-                                        &e.to_string(),
-                                    )
+                                    .respond_error(aos_ipc::msg::Status::BadRequest, &e.to_string())
                                     .await;
                             }
                         }
@@ -3380,10 +3395,7 @@ async fn main() {
                             }
                             Err(e) => {
                                 let _ = ctx
-                                    .respond_error(
-                                        aos_ipc::msg::Status::NotFound,
-                                        &e.to_string(),
-                                    )
+                                    .respond_error(aos_ipc::msg::Status::NotFound, &e.to_string())
                                     .await;
                             }
                         }
@@ -3835,10 +3847,7 @@ async fn main() {
                     }
                     Err(e) => {
                         let _ = ctx
-                            .respond_error(
-                                aos_ipc::msg::Status::PermissionDenied,
-                                &e.to_string(),
-                            )
+                            .respond_error(aos_ipc::msg::Status::PermissionDenied, &e.to_string())
                             .await;
                     }
                 }
@@ -3910,8 +3919,7 @@ async fn main() {
                             req,
                         ) {
                             Ok(mut resp) => {
-                                if aos_platform::feedback::is_security_category(&req_gh.category)
-                                {
+                                if aos_platform::feedback::is_security_category(&req_gh.category) {
                                     resp.github_status = "skipped_security".into();
                                 } else if publish {
                                     let token = s
@@ -3938,11 +3946,10 @@ async fn main() {
                                             resp.github_status = p.via.into();
                                         }
                                         Err(e) => {
-                                            resp.github_issue_url = Some(
-                                                aos_platform::feedback::new_issue_form_url(
+                                            resp.github_issue_url =
+                                                Some(aos_platform::feedback::new_issue_form_url(
                                                     &req_gh, &resp.id,
-                                                ),
-                                            );
+                                                ));
                                             resp.github_status = format!("form ({e})");
                                         }
                                     }
@@ -4077,51 +4084,50 @@ fn export_canvas_png(
     let h = req
         .height
         .unwrap_or_else(|| meta.canvas_aspect.export_dimensions(1024).1);
-    let format = req
-        .format
-        .as_deref()
-        .unwrap_or("png")
-        .to_ascii_lowercase();
+    let format = req.format.as_deref().unwrap_or("png").to_ascii_lowercase();
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis())
         .unwrap_or(0);
     let (bytes, path, write_sidecar) = if format == "svg" {
         let bytes = aos_platform::canvas_raster::export_svg(&doc, w, h)?;
-        let path = req.path.clone().unwrap_or_else(|| {
-            format!("/downloads/canvas-{}-{}.svg", meta.id, stamp)
-        });
+        let path = req
+            .path
+            .clone()
+            .unwrap_or_else(|| format!("/downloads/canvas-{}-{}.svg", meta.id, stamp));
         (bytes, path, true)
     } else if format == "json" {
         let bytes = aos_platform::canvas_raster::export_sidecar_json(&doc, meta.canvas_aspect)?;
-        let path = req.path.clone().unwrap_or_else(|| {
-            format!("/downloads/canvas-{}-{}.json", meta.id, stamp)
-        });
+        let path = req
+            .path
+            .clone()
+            .unwrap_or_else(|| format!("/downloads/canvas-{}-{}.json", meta.id, stamp));
         (bytes, path, false)
     } else {
         let bytes = aos_platform::canvas_raster::export_png(&doc, w, h)?;
-        let path = req.path.clone().unwrap_or_else(|| {
-            format!("/downloads/canvas-{}-{}.png", meta.id, stamp)
-        });
+        let path = req
+            .path
+            .clone()
+            .unwrap_or_else(|| format!("/downloads/canvas-{}-{}.png", meta.id, stamp));
         (bytes, path, true)
     };
     let caps = vec!["fs.write:/downloads/**".to_string()];
-    let version = s
-        .fs
-        .lock()
-        .unwrap()
-        .write_bytes(&path, &bytes, "service:platformd", &caps)
-        .map_err(|e| e.to_string())?;
+    let version =
+        s.fs.lock()
+            .unwrap()
+            .write_bytes(&path, &bytes, "service:platformd", &caps)
+            .map_err(|e| e.to_string())?;
     let sidecar_path = if write_sidecar {
         let sidecar_path = aos_platform::canvas_raster::sidecar_path_for_export(&path);
         if let Ok(sidecar) =
             aos_platform::canvas_raster::export_sidecar_json(&doc, meta.canvas_aspect)
         {
-            let _ = s
-                .fs
-                .lock()
-                .unwrap()
-                .write_bytes(&sidecar_path, &sidecar, "service:platformd", &caps);
+            let _ = s.fs.lock().unwrap().write_bytes(
+                &sidecar_path,
+                &sidecar,
+                "service:platformd",
+                &caps,
+            );
         }
         sidecar_path
     } else {
@@ -4539,10 +4545,11 @@ async fn run_skill_pass(
             loaded.push(pair);
         }
     }
-    let messages =
-        aos_platform::skill_pass::collect_user_messages(&loaded, since_ms, now);
-    let candidates =
-        aos_platform::skill_pass::find_pattern_candidates(&messages, aos_platform::skill_pass::MIN_PATTERN_HITS);
+    let messages = aos_platform::skill_pass::collect_user_messages(&loaded, since_ms, now);
+    let candidates = aos_platform::skill_pass::find_pattern_candidates(
+        &messages,
+        aos_platform::skill_pass::MIN_PATTERN_HITS,
+    );
     let existing = aos_platform::skill_pass::existing_skill_names(&s.skills.lock().unwrap());
     let created: std::collections::HashSet<String> =
         state.created_pattern_ids.iter().cloned().collect();
@@ -4644,4 +4651,3 @@ fn install_catalogue_entry(
         }
     }
 }
-

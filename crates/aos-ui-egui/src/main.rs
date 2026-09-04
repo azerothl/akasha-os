@@ -8,35 +8,8 @@ mod agent_controller;
 mod agent_event_controller;
 mod agent_panel;
 mod agent_ui_state;
-mod memory_controller;
-mod memory_ui_state;
-mod models_controller;
-mod models_ui_state;
-mod research_controller;
-mod research_ui_state;
-mod security_ui_state;
-mod scenario_ui_state;
-mod settings_controller;
-mod settings_ui_state;
-mod workspace_controller;
-mod workspace_ui_state;
-mod decl_ui;
-mod feedback_ui_state;
-mod feedback_event_controller;
-mod guide;
-mod i18n;
-mod model_setup;
-mod models_page;
-mod module_actions;
-mod module_event_controller;
-mod notes_panel;
-mod prefs;
-mod schedule_act_phrase;
-mod schedule_card;
-mod schedule_event_controller;
-mod schedule_ui_state;
-mod session_nav;
-mod tasks_panel;
+mod canvas_event_controller;
+mod canvas_paint;
 mod chat_ask;
 mod chat_bubble;
 mod chat_canvas;
@@ -52,34 +25,57 @@ mod chat_runtime_state;
 mod chat_sidebar_state;
 mod chat_state;
 mod chat_view_state;
-mod canvas_event_controller;
-mod canvas_paint;
 mod cmd;
-mod confirmation_ui_state;
 mod composer_layout;
+mod confirmation_ui_state;
+mod decl_ui;
+mod feedback_event_controller;
+mod feedback_ui_state;
+mod guide;
+mod i18n;
+mod icons;
 mod image_composition;
 mod image_history;
 mod image_prompt;
-mod icons;
 mod image_studio;
 mod library_panel;
 mod media_event_controller;
+mod memory_controller;
+mod memory_ui_state;
+mod model_setup;
+mod models_controller;
+mod models_page;
+mod models_ui_state;
+mod module_actions;
+mod module_event_controller;
 mod nav;
+mod notes_panel;
 mod onboarding;
 mod os_open;
+mod prefs;
 mod product_context;
 mod research_choice;
+mod research_controller;
 mod research_document;
+mod research_ui_state;
 mod runtime;
+mod scenario_ui_state;
 mod scenarios_panel;
+mod schedule_act_phrase;
+mod schedule_card;
+mod schedule_event_controller;
+mod schedule_ui_state;
+mod security_ui_state;
 mod session_chat;
 mod session_event_controller;
+mod session_nav;
+mod settings_controller;
+mod settings_ui_state;
 mod skill_offer;
 mod slash;
+mod tasks_panel;
 mod theme;
 mod troubleshoot;
-mod ui_format;
-mod ui_feedback;
 mod ui_agents;
 mod ui_chat;
 mod ui_chat_composer;
@@ -88,56 +84,58 @@ mod ui_chat_sidebar;
 mod ui_chat_transcript;
 mod ui_chat_workspace;
 mod ui_decl_module;
-mod ui_models;
+mod ui_feedback;
+mod ui_format;
 mod ui_memory;
+mod ui_models;
 mod ui_providers;
-mod ui_security;
 mod ui_scenarios;
+mod ui_security;
 mod ui_settings;
 mod ui_workspace;
+mod workspace_controller;
+mod workspace_ui_state;
 
+use aos_agent::schedule::ScheduleEntry;
+use aos_agent::schedule_parse::ParsedSchedule;
+use aos_ipc::BusClient;
+use aos_proto::{
+    AgentInfo, AgentState, ChatAttachment, ChatSessionGetResponse, ChatSessionIdRequest,
+    SystemMetrics,
+};
 use chat_ask::pending_ask_ids;
+#[cfg(test)]
+use chat_bubble::chat_bubble_max_width;
+#[cfg(test)]
+use chat_delegate::chat_delegate_kit;
 use chat_delegate::{
     chat_agent_kit, chat_delegate_agent_spec, session_has_running_canvas_agent,
     spawn_chat_delegate_agent, spawn_document_prep_agent,
 };
-#[cfg(test)]
-use chat_delegate::chat_delegate_kit;
-#[cfg(test)]
-use chat_bubble::chat_bubble_max_width;
 use cmd::{ChatLine, Cmd, Evt};
-use composer_layout::{estimate_composer_buttons_w, COMPOSER_MIN_INPUT_W};
 #[cfg(test)]
 use composer_layout::{chat_composer_wraps, COMPOSER_INPUT_ROW_H};
-use os_open::{aos_home, app_icon, bin_aos_session, open_in_browser};
-use runtime::runtime_main;
+use composer_layout::{estimate_composer_buttons_w, COMPOSER_MIN_INPUT_W};
+use eframe::egui;
+use egui_commonmark::CommonMarkCache;
 use module_actions::{
     agent_id_cmd, invoke_module_bind, invoke_module_tool, invoke_notes, invoke_tasks,
     load_module_ui,
 };
 use onboarding::{load_onboarding, save_onboarding, OnboardingState};
-use troubleshoot::run_troubleshoot;
-use ui_format::{
-    chrono_like_stamp, format_local_time_hm, format_model_infer_line,
-    format_schedule_next_label, human_bytes, local_tz_offset_minutes, memory_relation_lines,
-    now_ms,
-};
-use slash::SLASH_COMMANDS;
-use aos_agent::schedule::ScheduleEntry;
-use aos_agent::schedule_parse::ParsedSchedule;
-use aos_ipc::BusClient;
-use aos_proto::{
-    AgentInfo, AgentState, ChatAttachment, ChatSessionGetResponse,
-    ChatSessionIdRequest,
-    SystemMetrics,
-};
+use os_open::{aos_home, app_icon, bin_aos_session, open_in_browser};
 use prefs::{load_preferences, save_preferences, Preferences};
-use eframe::egui;
-use egui_commonmark::CommonMarkCache;
+use runtime::runtime_main;
 use serde::{Deserialize, Serialize};
+use slash::SLASH_COMMANDS;
 use std::collections::HashMap;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
+use troubleshoot::run_troubleshoot;
+use ui_format::{
+    chrono_like_stamp, format_local_time_hm, format_schedule_next_label, local_tz_offset_minutes,
+    memory_relation_lines, now_ms,
+};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct UpdateOffer {
     version: String,
@@ -214,7 +212,6 @@ fn overflow_scroll_h(
         .show(ui, add_contents);
 }
 
-
 fn designer_shot_mode() -> bool {
     matches!(
         std::env::var("AOS_DESIGNER_SHOT").ok().as_deref(),
@@ -229,8 +226,8 @@ fn main() -> eframe::Result<()> {
 
     let (cmd_tx, cmd_rx) = channel::<Cmd>();
     let (evt_tx, evt_rx) = channel::<Evt>();
-    let version = std::env::var("AOS_PREVIEW_VERSION")
-        .unwrap_or_else(|_| env!("CARGO_PKG_VERSION").into());
+    let version =
+        std::env::var("AOS_PREVIEW_VERSION").unwrap_or_else(|_| env!("CARGO_PKG_VERSION").into());
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -313,8 +310,7 @@ fn agent_completion_chat_text(
             if ag.fail_reason.as_deref() == Some(aos_agent::actions::THREAD_FAIL_COULD_NOT_ACT) {
                 return i18n::agent_could_not_act_message(t);
             }
-            if ag.fail_reason.as_deref()
-                == Some(aos_agent::actions::THREAD_FAIL_COULD_NOT_CONTINUE)
+            if ag.fail_reason.as_deref() == Some(aos_agent::actions::THREAD_FAIL_COULD_NOT_CONTINUE)
                 || ag
                     .fail_reason
                     .as_deref()
@@ -380,9 +376,7 @@ pub(crate) async fn announce_and_load_session(
     evt_tx: &Sender<Evt>,
     id: &str,
 ) {
-    let _ = evt_tx.send(Evt::SessionLoadIntent {
-        id: id.to_string(),
-    });
+    let _ = evt_tx.send(Evt::SessionLoadIntent { id: id.to_string() });
     load_session(bus, evt_tx, id).await;
 }
 
@@ -403,16 +397,14 @@ fn session_model_supports_vision(model_id: Option<&str>) -> bool {
         .any(|m| m.id == id && m.profiles.iter().any(|p| p == "vision"))
 }
 
-/// One-row height for the canvas tool strip (session bar row 2).
-const CANVAS_TOOLBAR_ROW_H: f32 = 112.0;
-
+/// Legacy constant — canvas toolbar height is now dynamic via `chat_canvas::toolbar_max_height`.
 /// Minimum inner window size (width × height) for a usable Preview layout.
 fn preview_min_inner_size() -> [f32; 2] {
     let fr = i18n::strings("fr");
     [preview_min_inner_width(&fr), 600.0]
 }
 
-const LEFT_NAV_W: f32 = 148.0;
+const LEFT_NAV_W: f32 = 88.0;
 const CHAT_SIDE_MIN_W: f32 = 120.0;
 const CHAT_SPLIT_GAP: f32 = 8.0;
 const CHAT_MAIN_MARGIN: f32 = 16.0;
@@ -423,8 +415,16 @@ fn estimate_label_chip_w(label: &str) -> f32 {
     label.len() as f32 * CHAR_W + PAD
 }
 
-fn session_toggle_reserve_width(t: &i18n::UiStrings) -> f32 {
-    estimate_label_chip_w(t.session_toggle_salon) + 6.0 + estimate_label_chip_w(t.session_toggle_canvas)
+fn session_toggle_reserve_width(t: &i18n::UiStrings, canvas_open: bool) -> f32 {
+    let mut w = estimate_label_chip_w(t.session_toggle_salon)
+        + 6.0
+        + estimate_label_chip_w(t.session_toggle_canvas)
+        + 6.0
+        + icons::SESSION_ICON_SZ;
+    if canvas_open {
+        w += 6.0 + estimate_label_chip_w(t.session_focus);
+    }
+    w
 }
 
 fn session_toggle_chip(ui: &mut egui::Ui, selected: bool, label: &str) -> bool {
@@ -437,22 +437,17 @@ fn session_toggle_chip(ui: &mut egui::Ui, selected: bool, label: &str) -> bool {
 }
 
 fn composer_row_reserved_width(t: &i18n::UiStrings, show_stop: bool) -> f32 {
-    icons::ATTACH_BTN_W
-        + 4.0
-        + estimate_composer_buttons_w(t.agent_send, show_stop, t.chat_stop)
+    icons::ATTACH_BTN_W + 4.0 + estimate_composer_buttons_w(t.agent_send, show_stop, t.chat_stop)
 }
 
 /// Minimum central chat pane width so composer + session toggles fit (FR labels).
 fn preview_min_inner_width(t: &i18n::UiStrings) -> f32 {
     let composer = composer_row_reserved_width(t, true) + COMPOSER_MIN_INPUT_W;
-    let session_bar = session_toggle_reserve_width(t) + 160.0;
+    let session_bar = session_toggle_reserve_width(t, true) + 160.0;
     let canvas_split_min = 180.0 + CHAT_SPLIT_GAP + 200.0;
     let main_min = composer.max(session_bar).max(canvas_split_min);
     LEFT_NAV_W + CHAT_SIDE_MIN_W + CHAT_SPLIT_GAP + main_min + CHAT_MAIN_MARGIN
 }
-
-
-
 
 struct UiApp {
     cmd_tx: Sender<Cmd>,
@@ -519,10 +514,7 @@ const ROSTER_TOOL_GROUPS: &[(&str, &[&str])] = &[
         "files",
         &["fs.read", "fs.write", "fs.list", "files.generate"],
     ),
-    (
-        "web",
-        &["web.search", "web.browse", "net.fetch"],
-    ),
+    ("web", &["web.search", "web.browse", "net.fetch"]),
     (
         "canvas",
         &[
@@ -536,10 +528,7 @@ const ROSTER_TOOL_GROUPS: &[(&str, &[&str])] = &[
             "canvas.export",
         ],
     ),
-    (
-        "agents",
-        &["agent.spawn", "agent.await", "plan.update"],
-    ),
+    ("agents", &["agent.spawn", "agent.await", "plan.update"]),
 ];
 
 fn roster_tool_family_label(t: &i18n::UiStrings, family: &str) -> &'static str {
@@ -561,11 +550,7 @@ fn ui_roster_tool_checkboxes(ui: &mut egui::Ui, t: &i18n::UiStrings, selected: &
             for name in *tools {
                 let label = i18n::roster_tool_label(t, name);
                 let mut on = selected.iter().any(|t| t == name);
-                if ui
-                    .checkbox(&mut on, label)
-                    .on_hover_text(*name)
-                    .changed()
-                {
+                if ui.checkbox(&mut on, label).on_hover_text(*name).changed() {
                     if on {
                         selected.push((*name).into());
                     } else {
@@ -601,14 +586,19 @@ impl UiApp {
         if prefs.network_online {
             let _ = cmd_tx.send(Cmd::NetSetMode { online: true });
         }
-        let model_updates_msg = std::fs::read_to_string(aos_home().join("var/run/model_updates.json"))
-            .ok()
-            .and_then(|s| {
-                serde_json::from_str::<serde_json::Value>(&s)
-                    .ok()
-                    .and_then(|v| v.get("reason").and_then(|r| r.as_str()).map(|s| s.to_string()))
-            })
-            .unwrap_or_default();
+        let model_updates_msg =
+            std::fs::read_to_string(aos_home().join("var/run/model_updates.json"))
+                .ok()
+                .and_then(|s| {
+                    serde_json::from_str::<serde_json::Value>(&s)
+                        .ok()
+                        .and_then(|v| {
+                            v.get("reason")
+                                .and_then(|r| r.as_str())
+                                .map(|s| s.to_string())
+                        })
+                })
+                .unwrap_or_default();
         let default_model = prefs.default_agent_model.clone().unwrap_or_default();
         let agent_max_steps = prefs.default_max_steps;
         let agent_timeout_secs = prefs.default_timeout_secs;
@@ -689,7 +679,12 @@ impl UiApp {
     }
 
     fn set_canvas_open_local(&mut self, session_id: &str, open: bool) {
-        if let Some(s) = self.chat_state.sessions.iter_mut().find(|s| s.id == session_id) {
+        if let Some(s) = self
+            .chat_state
+            .sessions
+            .iter_mut()
+            .find(|s| s.id == session_id)
+        {
             s.canvas_open = open;
         }
     }
@@ -798,7 +793,13 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         self.status = t.scen_module_agent_launched.into();
     }
 
-    fn send_ask_reply(&mut self, session_id: String, agent_id: String, title: String, text: String) {
+    fn send_ask_reply(
+        &mut self,
+        session_id: String,
+        agent_id: String,
+        title: String,
+        text: String,
+    ) {
         self.chat.push(ChatLine {
             role: "user".into(),
             text: text.clone(),
@@ -829,7 +830,6 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         self.status = "réponse envoyée à l'agent".into();
     }
 
-
     fn apply_onboarding_prefs(&mut self) {
         self.prefs.language = self.onboarding.language.clone();
         self.prefs.routing = self.onboarding.routing.clone();
@@ -858,13 +858,16 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
     }
 
     fn mark_onboarding_chat_done(&mut self) {
-        if !self.show_onboarding || self.onboarding.tutorial_step != 1 || !self.onboarding.chat_sent {
+        if !self.show_onboarding || self.onboarding.tutorial_step != 1 || !self.onboarding.chat_sent
+        {
             return;
         }
         self.onboarding.first_chat_done = true;
         save_onboarding(&self.onboarding);
-        if onboarding::chat_step_can_advance(self.onboarding.chat_sent, self.onboarding.first_chat_done)
-        {
+        if onboarding::chat_step_can_advance(
+            self.onboarding.chat_sent,
+            self.onboarding.first_chat_done,
+        ) {
             self.onboarding.tutorial_step = 2;
             save_onboarding(&self.onboarding);
             if let Some(id) = self.chat_state.active_session.as_deref() {
@@ -952,10 +955,8 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             }
             "/notesearch" => {
                 if rest.is_empty() {
-                    self.chat.push(ChatLine::plain(
-                        "système",
-                        "usage : /notesearch <requête>",
-                    ));
+                    self.chat
+                        .push(ChatLine::plain("système", "usage : /notesearch <requête>"));
                     return;
                 }
                 let _ = self.cmd_tx.send(Cmd::NotesSearch {
@@ -965,7 +966,8 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             }
             "/agent" => {
                 if rest.is_empty() {
-                    self.chat.push(ChatLine::plain("système", "usage : /agent <tâche>"));
+                    self.chat
+                        .push(ChatLine::plain("système", "usage : /agent <tâche>"));
                     return;
                 }
                 let Some(session_id) = self.chat_state.active_session.clone() else {
@@ -1046,9 +1048,8 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                         attachments: vec![],
                     });
                 }
-                let enrich = image_prompt::default_enrich_prompt(
-                    self.prefs.default_image_model.as_deref(),
-                );
+                let enrich =
+                    image_prompt::default_enrich_prompt(self.prefs.default_image_model.as_deref());
                 let _ = self.cmd_tx.send(Cmd::MediaImage {
                     prompt: rest.to_string(),
                     model_id: self.prefs.default_image_model.clone(),
@@ -1078,9 +1079,10 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                         .push(ChatLine::plain("système", t.canvas_no_active_session));
                     return;
                 };
-                let open = chat_room::active_session_meta(&self.chat_state.sessions, Some(sid.as_str()))
-                    .map(|m| m.canvas_open)
-                    .unwrap_or(false);
+                let open =
+                    chat_room::active_session_meta(&self.chat_state.sessions, Some(sid.as_str()))
+                        .map(|m| m.canvas_open)
+                        .unwrap_or(false);
                 let new_open = !open;
                 self.set_canvas_open_local(&sid, new_open);
                 let _ = self.cmd_tx.send(Cmd::CanvasSetOpen {
@@ -1159,9 +1161,15 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         }
     }
 
-    fn handle_schedule_phrase(&mut self, session_id: &str, user_phrase: &str, parsed: ParsedSchedule) {
+    fn handle_schedule_phrase(
+        &mut self,
+        session_id: &str,
+        user_phrase: &str,
+        parsed: ParsedSchedule,
+    ) {
         let t = i18n::strings(&self.prefs.language);
-        let act_text = schedule_act_phrase::act_phrase_from_parsed(&t, &parsed, &self.prefs.language);
+        let act_text =
+            schedule_act_phrase::act_phrase_from_parsed(&t, &parsed, &self.prefs.language);
         self.chat.push(ChatLine {
             role: "user".into(),
             text: user_phrase.to_string(),
@@ -1176,7 +1184,10 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             content: user_phrase.to_string(),
             attachments: vec![],
         });
-        let gate_ask = !self.prefs.agent_gate_mode.eq_ignore_ascii_case("autonomous");
+        let gate_ask = !self
+            .prefs
+            .agent_gate_mode
+            .eq_ignore_ascii_case("autonomous");
         if gate_ask {
             let act_id = format!("sched-act-{}", chrono_like_stamp());
             let att = ChatAttachment::ScheduleAct {
@@ -1293,9 +1304,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             return;
         };
         let ChatAttachment::ScheduleAct {
-            goal,
-            when_label,
-            ..
+            goal, when_label, ..
         } = self.chat[msg_idx].attachments[att_idx].clone()
         else {
             return;
@@ -1399,12 +1408,6 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         self.pending_session_nav = session_nav::PendingSessionNav::AwaitingCreate;
         self.schedule_ui.clear_transcript_dirty();
         let _ = self.cmd_tx.send(Cmd::SessionCreate { title });
-    }
-
-    fn request_session_delete(&mut self, id: String) {
-        self.pending_session_nav = session_nav::PendingSessionNav::AwaitingDelete;
-        self.schedule_ui.clear_transcript_dirty();
-        let _ = self.cmd_tx.send(Cmd::SessionDelete { id });
     }
 
     fn sync_schedule_cards(&mut self) {
@@ -1552,9 +1555,20 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             (Tab::Image, t.tab_create, t.tab_hint_image),
             (Tab::Memory, t.tab_memory, t.tab_hint_memory),
         ];
-        for (tab, label, hint) in primary {
+        for (idx, (tab, label, hint)) in primary.into_iter().enumerate() {
+            // These glyphs are covered by egui's bundled emoji font (monochrome
+            // in egui), unlike arbitrary geometric Unicode symbols.
+            let icon = ['🔘', '⛃', '🖼', '🗀'][idx];
+            let label_text = if self.prefs.ui_density == prefs::UiDensity::Compact {
+                icon.to_string()
+            } else {
+                format!("{icon} {label}")
+            };
             if ui
-                .selectable_label(self.tab == tab, label)
+                .add_sized(
+                    egui::vec2(ui.available_width().max(1.0), theme::CONTROL_MIN_H_COMFORTABLE),
+                    egui::SelectableLabel::new(self.tab == tab, label_text),
+                )
                 .on_hover_text(hint)
                 .clicked()
             {
@@ -1602,7 +1616,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                         self.on_tab_open(tab);
                     }
                 }
-                ui.weak("— tester —");
+                ui.weak(t.nav_tester);
                 for (tab, label, hint) in [
                     (Tab::Scenarios, t.tab_scenarios, t.tab_hint_scenarios),
                     (Tab::Feedback, t.tab_feedback, t.tab_hint_feedback),
@@ -1620,23 +1634,18 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                     .installed_modules
                     .iter()
                     .filter(|m| {
-                        aos_proto::decl_ui::sidebar_decl_ui_module(
-                            &m.name,
-                            m.ui_mode.as_deref(),
-                        )
+                        aos_proto::decl_ui::sidebar_decl_ui_module(&m.name, m.ui_mode.as_deref())
                     })
                     .map(|m| {
                         (
                             m.name.clone(),
-                            m.ui_title
-                                .clone()
-                                .unwrap_or_else(|| m.name.clone()),
+                            m.ui_title.clone().unwrap_or_else(|| m.name.clone()),
                         )
                     })
                     .collect();
                 if !decl_mods.is_empty() {
                     ui.separator();
-                    ui.weak("Modules");
+                    ui.weak(t.nav_modules);
                     for (name, label) in decl_mods {
                         let tab = Tab::Module(name.clone());
                         if ui.selectable_label(self.tab == tab, &label).clicked() {
@@ -1698,17 +1707,39 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             } else {
                 t.status_network_off
             };
-            if ui.small_button(net_label).clicked() {
-                self.network_online = !self.network_online;
-                self.prefs.network_online = self.network_online;
-                save_preferences(&self.prefs);
-                let _ = self.cmd_tx.send(Cmd::NetSetMode {
-                    online: self.network_online,
+            let net_response = ui
+                .small_button(net_label)
+                .on_hover_text("Ouvrir les détails du réseau");
+            net_response.context_menu(|ui| {
+                ui.label(if self.network_online {
+                    "Le réseau est autorisé pour les outils configurés."
+                } else {
+                    "Le réseau est bloqué par défaut."
                 });
-            }
+                if ui
+                    .button(if self.network_online {
+                        "Désactiver le réseau"
+                    } else {
+                        "Autoriser le réseau"
+                    })
+                    .clicked()
+                {
+                    self.network_online = !self.network_online;
+                    self.prefs.network_online = self.network_online;
+                    save_preferences(&self.prefs);
+                    let _ = self.cmd_tx.send(Cmd::NetSetMode {
+                        online: self.network_online,
+                    });
+                    ui.close_menu();
+                }
+            });
             ui.separator();
             if ui
-                .small_button(format!("{}: {}", t.status_model_label, self.status_model_name()))
+                .small_button(format!(
+                    "{}: {}",
+                    t.status_model_label,
+                    self.status_model_name()
+                ))
                 .clicked()
             {
                 self.on_tab_open(Tab::Models);
@@ -1728,23 +1759,35 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 self.on_tab_open(Tab::Caps);
             }
             ui.separator();
-            let gate_ask = !self.prefs.agent_gate_mode.eq_ignore_ascii_case("autonomous");
+            let gate_ask = !self
+                .prefs
+                .agent_gate_mode
+                .eq_ignore_ascii_case("autonomous");
             let gate_label = if gate_ask {
                 t.status_gate_ask
             } else {
                 t.status_gate_autonomous
             };
-            if ui
-                .small_button(format!("{}: {}", t.status_gate_label, gate_label))
-                .clicked()
-            {
-                self.prefs.agent_gate_mode = if gate_ask {
-                    "autonomous".into()
-                } else {
-                    "ask".into()
-                };
-                save_preferences(&self.prefs);
-            }
+            let gate_response = ui.small_button(format!("{}: {}", t.status_gate_label, gate_label));
+            gate_response.context_menu(|ui| {
+                ui.label("Les demandes d’autorisation restent explicites dans la conversation.");
+                if ui
+                    .button(if gate_ask {
+                        "Toujours autoriser"
+                    } else {
+                        "Demander à chaque fois"
+                    })
+                    .clicked()
+                {
+                    self.prefs.agent_gate_mode = if gate_ask {
+                        "autonomous".into()
+                    } else {
+                        "ask".into()
+                    };
+                    save_preferences(&self.prefs);
+                    ui.close_menu();
+                }
+            });
             ui.separator();
             if let Some(pending_ver) = load_pending_update_version() {
                 ui.label(t.status_update_pending.replace("{version}", &pending_ver));
@@ -1859,8 +1902,9 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
 
 impl eframe::App for UiApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        theme::apply_theme(ctx, &self.prefs.theme);
+        theme::apply_theme(ctx, &self.prefs.theme, &self.prefs.custom_theme);
         theme::apply_ui_scale(ctx, self.prefs.ui_scale_percent);
+        theme::apply_ui_density(ctx, self.prefs.ui_density);
         self.handle_keyboard_shortcuts(ctx);
         self.poll_update_download();
         while let Ok(ev) = self.evt_rx.try_recv() {
@@ -1972,6 +2016,16 @@ impl eframe::App for UiApp {
                 }
                 Evt::FeedbackDraft(req) => feedback_event_controller::on_feedback_draft(self, req),
                 Evt::Sessions(list) => session_event_controller::on_sessions(self, list),
+                Evt::SessionMetaUpdated(meta) => {
+                    if let Some(existing) = self
+                        .chat_state
+                        .sessions
+                        .iter_mut()
+                        .find(|s| s.id == meta.id)
+                    {
+                        *existing = meta;
+                    }
+                }
                 Evt::SessionLoadIntent { id } => {
                     session_event_controller::on_load_intent(self, id);
                 }
@@ -2045,7 +2099,7 @@ impl eframe::App for UiApp {
                     self.network_online = online;
                     self.prefs.network_online = online;
                     save_preferences(&self.prefs);
-                },
+                }
                 Evt::FileOk(msg) => {
                     self.status = msg.clone();
                     self.chat.push(ChatLine::plain("système", msg));
@@ -2108,6 +2162,9 @@ impl eframe::App for UiApp {
                 Evt::McpServers(list) => self.on_agent_mcp_servers(list),
                 Evt::PromptOptimized(p) => self.on_agent_prompt_optimized(p),
                 Evt::Models(list) => self.on_models(list),
+                Evt::ModelOperationFailed { model_id, error } => {
+                    self.on_model_operation_failed(model_id, error);
+                }
                 Evt::Providers(list) => self.on_providers(list),
                 Evt::ProviderTested {
                     ok,
@@ -2149,8 +2206,12 @@ impl eframe::App for UiApp {
                     }
                 }
                 Evt::Catalogue(c) => module_event_controller::on_catalogue(self, c),
-                Evt::InstalledSkills(list) => module_event_controller::on_installed_skills(self, list),
-                Evt::InstalledModules(list) => module_event_controller::on_installed_modules(self, list),
+                Evt::InstalledSkills(list) => {
+                    module_event_controller::on_installed_skills(self, list)
+                }
+                Evt::InstalledModules(list) => {
+                    module_event_controller::on_installed_modules(self, list)
+                }
                 Evt::ModuleInstalled(msg) => module_event_controller::on_installed(self, msg),
                 Evt::ModuleUninstalled(name) => module_event_controller::on_uninstalled(self, name),
                 Evt::ModuleUiLoaded(resp) => module_event_controller::on_ui_loaded(self, resp),
@@ -2172,7 +2233,9 @@ impl eframe::App for UiApp {
                     result,
                     error,
                 } => {
-                    module_event_controller::on_ui_invoke_done(self, module, tool, ok, result, error);
+                    module_event_controller::on_ui_invoke_done(
+                        self, module, tool, ok, result, error,
+                    );
                 }
             }
         }
@@ -2207,8 +2270,16 @@ impl eframe::App for UiApp {
                             ui.add_space(8.0);
                             ui.label(onboard_t.language);
                             ui.horizontal(|ui| {
-                                ui.radio_value(&mut self.onboarding.language, "fr".into(), "Français");
-                                ui.radio_value(&mut self.onboarding.language, "en".into(), "English");
+                                ui.radio_value(
+                                    &mut self.onboarding.language,
+                                    "fr".into(),
+                                    "Français",
+                                );
+                                ui.radio_value(
+                                    &mut self.onboarding.language,
+                                    "en".into(),
+                                    "English",
+                                );
                             });
                         }
                         1 => {
@@ -2261,16 +2332,39 @@ impl eframe::App for UiApp {
         }
 
         egui::TopBottomPanel::top("banner").show(ctx, |ui| {
-            if !self.agent_ui.notices.is_empty() {
+            ui.horizontal(|ui| {
+                let count = self.agent_ui.notices.len();
+                if ui
+                    .button(format!("🔔 {count}"))
+                    .on_hover_text("Centre de notifications")
+                    .clicked()
+                {
+                    self.prefs.ui_layout.notifications_open =
+                        !self.prefs.ui_layout.notifications_open;
+                    save_preferences(&self.prefs);
+                }
+                ui.weak(format!("Preview {} — {}", self.version, t.preview_tagline));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.small_button(t.report).clicked() {
+                        self.on_tab_open(Tab::Feedback);
+                    }
+                    if ui.small_button(t.tutorial).clicked() {
+                        self.guide.open_topic(guide::GuideTopic::Overview);
+                    }
+                    if ui.small_button(t.troubleshooting).clicked() {
+                        let _ = self.cmd_tx.send(Cmd::Troubleshoot);
+                        self.on_tab_open(Tab::Feedback);
+                        self.status = t.troubleshooting_status.into();
+                    }
+                });
+            });
+            if self.prefs.ui_layout.notifications_open && !self.agent_ui.notices.is_empty() {
                 let notices = self.agent_ui.notices.clone();
                 let mut dismiss: Vec<String> = Vec::new();
                 let mut open_sess: Option<String> = None;
                 for n in &notices {
                     ui.horizontal(|ui| {
-                        ui.colored_label(
-                            egui::Color32::from_rgb(120, 180, 230),
-                            &n.summary,
-                        );
+                        ui.colored_label(egui::Color32::from_rgb(120, 180, 230), &n.summary);
                         let sess_title = self
                             .chat_state
                             .sessions
@@ -2294,41 +2388,8 @@ impl eframe::App for UiApp {
                     self.request_session_select(id);
                 }
             }
-            ui.horizontal(|ui| {
-                ui.weak(format!(
-                    "Preview {} — {}",
-                    self.version, t.preview_tagline
-                ));
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.small_button(t.report).clicked() {
-                        self.on_tab_open(Tab::Feedback);
-                    }
-                    if ui.small_button(t.tutorial).clicked() {
-                        self.guide.open_topic(guide::GuideTopic::Overview);
-                    }
-                    if ui.small_button(t.troubleshooting).clicked() {
-                        let _ = self.cmd_tx.send(Cmd::Troubleshoot);
-                        self.on_tab_open(Tab::Feedback);
-                        self.status = t.troubleshooting_status.into();
-                    }
-                });
-            });
-            if !self.models_ui.model_updates_msg.is_empty() {
-                ui.horizontal(|ui| {
-                    ui.colored_label(
-                        egui::Color32::from_rgb(180, 220, 120),
-                        format!("Models: {}", self.models_ui.model_updates_msg),
-                    );
-                    if ui.button("Open Models").clicked() {
-                        self.tab = Tab::Models;
-                    }
-                });
-            }
             if self.models_ui.model_download_restart.is_some() {
                 self.ui_model_download_restart(ui, ctx);
-            }
-            if !self.status.is_empty() {
-                ui.label(&self.status);
             }
             // Confirmations en attente
             if !self.confirmations_ui.is_empty() {
@@ -2352,9 +2413,7 @@ impl eframe::App for UiApp {
                                     | "media.image.generate"
                                     | "media.audio.generate"
                             );
-                            ui.label(
-                                t.confirm_wants_action.replace("{action}", &c.action),
-                            );
+                            ui.label(t.confirm_wants_action.replace("{action}", &c.action));
                             ui.monospace(format!("{} → {}", c.target, c.reason));
                             if rich {
                                 ui.colored_label(
@@ -2384,46 +2443,62 @@ impl eframe::App for UiApp {
             }
         });
 
-        egui::SidePanel::left("tabs").exact_width(148.0).show(ctx, |ui| {
-            overflow_scroll(ui, "nav_sidebar", |ui| {
-                ui.heading("Akasha");
-                self.ui_nav_rail(ui, &t);
-                ui.separator();
-                ui.heading(t.resources_heading);
-                if let Some(m) = &self.metrics {
-                    let ratio = m.ram_used as f32 / m.ram_total.max(1) as f32;
-                    ui.add(egui::ProgressBar::new(ratio).text(format!(
-                        "{} {:.1}/{:.1} GiB",
-                        t.metrics_ram,
-                        m.ram_used as f64 / (1 << 30) as f64,
-                        m.ram_total as f64 / (1 << 30) as f64
-                    )));
-                    ui.label(format!("CPU {:.0}%", m.cpu_percent));
-                    ui.label(format!("{}: {}", t.metrics_live, m.live_inferences()));
-                    for mm in &m.models {
-                        ui.group(|ui| {
-                            ui.label(format!("{} [{:?}]", mm.model_id, mm.state));
-                            ui.monospace(format_model_infer_line(mm, &t));
-                            if mm.disk_bytes > 0 {
-                                ui.weak(format!(
-                                    "{} {}",
-                                    t.metrics_disk,
-                                    human_bytes(mm.disk_bytes)
-                                ));
-                            }
-                            if mm.queued > 0 || mm.active_inferences > 0 {
-                                ui.weak(format!(
-                                    "inf={} {}={}",
-                                    mm.active_inferences, t.metrics_queued, mm.queued
-                                ));
-                            }
-                        });
+        let sidebar_panel = egui::SidePanel::left("tabs")
+            .default_width(
+                self.prefs
+                    .ui_layout
+                    .chat_sidebar_width
+                    .clamp(self.prefs.ui_density.rail_width().max(88.0), 220.0),
+            )
+            .min_width(self.prefs.ui_density.rail_width().max(88.0))
+            .max_width(220.0)
+            .resizable(true)
+            .show(ctx, |ui| {
+                overflow_scroll(ui, "nav_sidebar", |ui| {
+                ui.heading(if self.prefs.ui_density == prefs::UiDensity::Compact { "A" } else { "Akasha" });
+                    self.ui_nav_rail(ui, &t);
+                    ui.separator();
+                    ui.heading(if self.prefs.ui_density == prefs::UiDensity::Compact {
+                        "RAM / CPU"
+                    } else {
+                        t.resources_heading
+                    });
+                    if let Some(m) = &self.metrics {
+                        if self.prefs.ui_density != prefs::UiDensity::Compact {
+                            let ratio = m.ram_used as f32 / m.ram_total.max(1) as f32;
+                            ui.add(egui::ProgressBar::new(ratio).text(format!(
+                                "{} {:.1}/{:.1} GiB",
+                                t.metrics_ram,
+                                m.ram_used as f64 / (1 << 30) as f64,
+                                m.ram_total as f64 / (1 << 30) as f64
+                            )));
+                        } else {
+                            ui.label(format!("RAM {:.0}%", 100.0 * m.ram_used as f32 / m.ram_total.max(1) as f32));
+                        }
+                        ui.label(format!("CPU {:.0}%", m.cpu_percent));
+                        if self.prefs.ui_density != prefs::UiDensity::Compact {
+                            ui.label(format!("{}: {}", t.metrics_live, m.live_inferences()));
+                        }
+                        // Keep technical model details progressive: the rail shows
+                        // only a compact resource summary and Models owns the list.
+                        ui.label(format!("{}: {}", t.tab_models, m.models.len()));
+                        if ui
+                            .button(t.tab_models)
+                            .on_hover_text(t.tab_hint_models)
+                            .clicked()
+                        {
+                            self.on_tab_open(Tab::Models);
+                        }
+                    } else {
+                        ui.label("…");
                     }
-                } else {
-                    ui.label("…");
-                }
+                });
             });
-        });
+        let sidebar_width = sidebar_panel.response.rect.width();
+        if (sidebar_width - self.prefs.ui_layout.chat_sidebar_width).abs() > 1.0 {
+            self.prefs.ui_layout.chat_sidebar_width = sidebar_width;
+            save_preferences(&self.prefs);
+        }
 
         egui::TopBottomPanel::bottom("status_bar")
             .exact_height(28.0)
@@ -2434,12 +2509,21 @@ impl eframe::App for UiApp {
                     egui::Stroke::new(1.0_f32, theme::ICE_TRACK),
                 );
                 self.ui_status_bar(ui, &t);
+                if !self.status.is_empty() {
+                    ui.separator();
+                    ui.weak(&self.status);
+                }
             });
 
         self.ui_go_to_palette(ctx, &t);
 
         let mut restart_onboarding = false;
-        guide::show_window(ctx, &mut self.guide, &self.prefs.language, &mut restart_onboarding);
+        guide::show_window(
+            ctx,
+            &mut self.guide,
+            &self.prefs.language,
+            &mut restart_onboarding,
+        );
         research_document::show_documents_list(
             ctx,
             &mut self.research_ui.documents_list,
@@ -2463,7 +2547,7 @@ impl eframe::App for UiApp {
         }
 
         self.poll_agent_trace(ctx);
-        if !self.agent_ui.open_tabs.is_empty() {
+        if !self.agent_ui.open_tabs.is_empty() || self.prefs.ui_layout.activity_panel_open {
             self.ui_agent_detail_panel(ctx);
         }
 
@@ -2503,13 +2587,12 @@ impl eframe::App for UiApp {
             Tab::Scenarios => overflow_scroll(ui, "scenarios", |ui| self.ui_scenarios(ui)),
             Tab::Feedback => overflow_scroll(ui, "feedback", |ui| self.ui_feedback(ui)),
             Tab::Settings => overflow_scroll(ui, "settings", |ui| self.ui_settings(ui)),
-            Tab::Module(name) => {
-                overflow_scroll(ui, ("decl-mod", name.as_str()), |ui| self.ui_decl_module(ui, &name))
-            }
+            Tab::Module(name) => overflow_scroll(ui, ("decl-mod", name.as_str()), |ui| {
+                self.ui_decl_module(ui, &name)
+            }),
         });
     }
 }
-
 
 #[cfg(test)]
 mod ui_tests;

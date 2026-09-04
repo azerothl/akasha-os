@@ -14,7 +14,7 @@ Other audiences (systems/security/AI researchers, commercial-license evaluators)
 
 ## Product Purpose
 
-Akasha OS is an agent-native operating system: agents, models, tools, and memory are first-class system services with explicit capabilities, audit, and policy. Preview 0.16.0 is an installable host app on Windows/Linux (NVIDIA optional via CPU path in the same zip) and macOS Apple Silicon (unsigned), not a bootable OS image. A seL4 bare-metal track is separate.
+Akasha OS is an agent-native operating system: agents, models, tools, and memory are first-class system services with explicit capabilities, audit, and policy. Preview 0.16.1 is an installable host app on Windows/Linux (NVIDIA optional via CPU path in the same zip) and macOS Apple Silicon (unsigned), not a bootable OS image. A seL4 bare-metal track is separate.
 
 Success for the public site: a tester understands, in full sentences, what Preview can do and how it differs from a chat wrapper; then installs and follows the 15-minute path. Cohort gate: 3 Windows + 1 Linux + 1 macOS Apple Silicon, each with a usable `var/feedback/` report.
 
@@ -36,12 +36,12 @@ A neighboring chat wrapper or “AI desktop” cannot truthfully claim that agen
 
 ## Capabilities and Constraints
 
-Confirmed Preview surfaces: parallel persisted chat sessions; long-term memory (remember / recall); human- and agent-authored notes and tasks (WASM modules); agent goal loop with skills, tools, scheduler, optional MCP and Markdown trace export; layered vector Canvas with edit operations, PNG/SVG/JSON export and global geometry checks; declarative module UI host; caps list/revoke; configurable local-inference optimizations, retryable failed model loads and live metrics; Image Studio and optional local image/TTS packs via Models; Providers tab (OpenAI-compat cloud + loopback); mid-token migrate; module uninstall (non-bundled); opt-in signed community catalogue; opt-in web search/fetch (offline by default); themes; structured local feedback report plus GitHub issue; non-destructive update overlays from GitHub Releases.
+Confirmed Preview surfaces: parallel persisted chat sessions with search, date groups, pin and reversible archive; long-term memory (remember / recall); human- and agent-authored notes and tasks (WASM modules); agent goal loop with skills, tools, scheduler, optional MCP and Markdown trace export; layered vector Canvas with edit operations, PNG/SVG/JSON export, global geometry checks and focus mode; declarative module UI host; caps list/revoke; configurable local-inference optimizations, retryable failed model loads and live metrics; Image Studio and optional local image/TTS packs via Models; Providers tab (OpenAI-compat cloud + loopback); mid-token migrate; module uninstall (non-bundled); opt-in signed community catalogue; opt-in web search/fetch (offline by default); themes and comfortable/compact density; structured local feedback report plus GitHub issue; non-destructive update overlays from GitHub Releases.
 
 Constraints:
 
 - This is not a bootable OS image yet. Future work must never imply otherwise.
-- Preview 0.16.0: Windows/Linux x64; macOS Apple Silicon (unsigned); NVIDIA GPU recommended on Win/Linux; CPU-only path in the same Win/Linux artefact; ~8 GB disk recommended. No Intel Mac.
+- Preview 0.16.1: Windows/Linux x64; macOS Apple Silicon (unsigned); NVIDIA GPU recommended on Win/Linux; CPU-only path in the same Win/Linux artefact; ~8 GB disk recommended. No Intel Mac.
 - Dual licensing: AGPL-3.0-only and a commercial license (attribution + royalty). The Akasha OS trademark is reserved.
 - Site and product copy are bilingual EN / FR with equivalent content.
 - Stack for the public site is already decided: static HTML / CSS / JS in `website/`.

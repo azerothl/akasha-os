@@ -95,11 +95,19 @@ pub struct NotesPanelState {
     pub incoming: Vec<NoteLink>,
     pub status: String,
     pub show_preview: bool,
+    pub preview_mode: NotesPreviewMode,
     /// Locked chrome when the last create/save failed.
     pub create_failed: bool,
     /// Last create/save payload for retry (title, body, optional path for update).
     pub retry_payload: Option<(String, String, Option<String>)>,
     md_cache: CommonMarkCache,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NotesPreviewMode {
+    Editor,
+    Preview,
+    Both,
 }
 
 impl Default for NotesPanelState {
@@ -121,6 +129,7 @@ impl Default for NotesPanelState {
             incoming: Vec::new(),
             status: String::new(),
             show_preview: true,
+            preview_mode: NotesPreviewMode::Both,
             create_failed: false,
             retry_payload: None,
             md_cache: CommonMarkCache::default(),
@@ -274,19 +283,34 @@ pub fn show_notes_panel(
         if ui.button(t.notes_new).clicked() {
             state.start_new();
         }
-        ui.checkbox(&mut state.show_preview, t.notes_preview);
+        ui.label(t.notes_view_label);
+        for (mode, label) in [
+            (NotesPreviewMode::Editor, t.notes_view_editor),
+            (NotesPreviewMode::Preview, t.notes_view_preview),
+            (NotesPreviewMode::Both, t.notes_view_both),
+        ] {
+            if ui.selectable_label(state.preview_mode == mode, label).clicked() {
+                state.preview_mode = mode;
+                state.show_preview = mode != NotesPreviewMode::Editor;
+            }
+        }
     });
     if !state.status.is_empty() {
         ui.weak(&state.status);
     }
     ui.separator();
 
-    ui.columns(2, |cols| {
-        let list_h = cols[0].available_height() * 0.55;
-        let search_h = cols[0].available_height() * 0.25;
-        let editor_h = cols[1].available_height();
+    let editor_h = ui.available_height();
+    let list_h = editor_h * 0.55;
+    let search_h = editor_h * 0.25;
+    egui::SidePanel::left("notes_list_panel")
+        .default_width((ui.available_width() * 0.34).clamp(280.0, 520.0))
+        .min_width(240.0)
+        .max_width(560.0)
+        .resizable(true)
+        .show_inside(ui, |list_ui| {
         // --- Liste ---
-        cols[0].vertical(|ui| {
+        list_ui.vertical(|ui| {
             ui.label(RichText::new(t.notes_list).strong());
             ui.horizontal(|ui| {
                 ui.label(t.notes_filter);
@@ -359,8 +383,10 @@ pub fn show_notes_panel(
             }
         });
 
+        });
+
         // --- Éditeur ---
-        cols[1].vertical(|ui| {
+        ui.vertical(|ui| {
             let preview_h = (editor_h * 0.35).max(100.0);
             ui.label(RichText::new(if state.is_new {
                 t.notes_editor_new
@@ -369,6 +395,8 @@ pub fn show_notes_panel(
             })
             .strong());
 
+            let preview_only = state.preview_mode == NotesPreviewMode::Preview;
+            if !preview_only {
             if state.create_failed {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(t.notes_create_failed).strong());
@@ -424,39 +452,39 @@ pub fn show_notes_panel(
             });
 
             ui.horizontal_wrapped(|ui| {
-                if ui.small_button("H1").clicked() {
+                if ui.small_button(t.notes_md_h1).clicked() {
                     insert_wrap(&mut state.edit_body, "# ", "\n", "Titre");
                     state.dirty = true;
                 }
-                if ui.small_button("H2").clicked() {
+                if ui.small_button(t.notes_md_h2).clicked() {
                     insert_wrap(&mut state.edit_body, "## ", "\n", "Sous-titre");
                     state.dirty = true;
                 }
-                if ui.small_button("H3").clicked() {
+                if ui.small_button(t.notes_md_h3).clicked() {
                     insert_wrap(&mut state.edit_body, "### ", "\n", "Section");
                     state.dirty = true;
                 }
-                if ui.small_button("Gras").clicked() {
+                if ui.small_button(t.notes_md_bold).clicked() {
                     insert_wrap(&mut state.edit_body, "**", "**", "texte");
                     state.dirty = true;
                 }
-                if ui.small_button("Italique").clicked() {
+                if ui.small_button(t.notes_md_italic).clicked() {
                     insert_wrap(&mut state.edit_body, "*", "*", "texte");
                     state.dirty = true;
                 }
-                if ui.small_button("Liste").clicked() {
+                if ui.small_button(t.notes_md_list).clicked() {
                     insert_wrap(&mut state.edit_body, "- ", "\n", "élément");
                     state.dirty = true;
                 }
-                if ui.small_button("Quote").clicked() {
+                if ui.small_button(t.notes_md_quote).clicked() {
                     insert_wrap(&mut state.edit_body, "> ", "\n", "citation");
                     state.dirty = true;
                 }
-                if ui.small_button("Code").clicked() {
+                if ui.small_button(t.notes_md_code).clicked() {
                     insert_wrap(&mut state.edit_body, "```\n", "\n```\n", "code");
                     state.dirty = true;
                 }
-                if ui.small_button("Tableau").clicked() {
+                if ui.small_button(t.notes_md_table).clicked() {
                     insert_wrap(
                         &mut state.edit_body,
                         "| A | B |\n| --- | --- |\n| ",
@@ -465,7 +493,7 @@ pub fn show_notes_panel(
                     );
                     state.dirty = true;
                 }
-                if ui.small_button("[[lien]]").clicked() {
+                if ui.small_button(t.notes_md_link).clicked() {
                     insert_wrap(&mut state.edit_body, "[[", "]]", "Titre note");
                     state.dirty = true;
                 }
@@ -478,8 +506,9 @@ pub fn show_notes_panel(
             if ui.add(editor).changed() {
                 state.dirty = true;
             }
+            }
 
-            if state.show_preview {
+            if state.preview_mode != NotesPreviewMode::Editor {
                 ui.separator();
                 ui.label(RichText::new(t.notes_preview).strong());
                 let preview = if state.edit_title.is_empty() {
@@ -552,8 +581,6 @@ pub fn show_notes_panel(
                     });
             }
         });
-    });
-
     actions
 }
 

@@ -4,7 +4,7 @@
 
 Durable product spec for the **Preview host app** (`crates/aos-ui-egui`). The public marketing site (`website/`) keeps the cloud-chamber design system in [DESIGN.md](DESIGN.md); this document governs in-app chrome, navigation, and copy on Windows/Linux Preview.
 
-> Scope: Preview 0.11.x host shell. Not the bootable seL4 image.
+> Scope: Preview 0.16.x host shell. Not the bootable seL4 image.
 
 ## Goals
 
@@ -13,6 +13,25 @@ Durable product spec for the **Preview host app** (`crates/aos-ui-egui`). The pu
 3. **Honesty without noise** — Preview limits stay visible but do not dominate chrome.
 4. **Human language first** — confirmations and primary labels explain intent; technical ids stay in tooltips or expert folds.
 5. **Chamber palette everywhere** — reuse void / ice-track / signal / hydrogen / paper from the public site; no new brand colors.
+
+## Calm shell and accessibility
+
+The comfortable density is the default: primary controls are at least 36 px
+high and the chat composer is at least 44 px. Compact density is persisted for
+expert users but never drops below 32 px. The rail is 88 px in comfortable
+density and 64 px in compact density. Chat remains the home surface; RAM, CPU,
+and active-model count are shown as a Resources summary and detailed metrics
+are opened from Models.
+
+The composer is multiline (up to five visible lines): Enter sends and
+Shift+Enter inserts a line break. Pending documents and images remain visible
+as removable chips. Session search is case-insensitive; sessions are grouped by
+Today, Yesterday, Last 7 days, and Older, with pinned sessions first. Archiving
+is reversible and permanent deletion is only offered from Archives.
+
+Agent traces and identifiers live in the Activity panel, closed by default and
+resizable. The notification centre is opened from the bell in the stable top
+bar. Canvas has a focus mode that temporarily hides the surrounding panels.
 
 ## Information architecture
 

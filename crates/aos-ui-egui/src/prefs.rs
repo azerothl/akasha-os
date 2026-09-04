@@ -3,6 +3,104 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+/// Density of the application chrome.  `comfortable` is the default and keeps
+/// every interactive target at least 36 px high; `compact` is intended for
+/// experienced users and never goes below 32 px.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum UiDensity {
+    #[default]
+    Comfortable,
+    Compact,
+}
+
+impl UiDensity {
+    pub fn control_height(self) -> f32 {
+        match self {
+            Self::Comfortable => 36.0,
+            Self::Compact => 32.0,
+        }
+    }
+
+    pub fn rail_width(self) -> f32 {
+        match self {
+            Self::Comfortable => 88.0,
+            Self::Compact => 64.0,
+        }
+    }
+}
+
+/// Persisted panel geometry and open/closed states.  New fields deliberately
+/// use serde defaults so existing preference files remain valid.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UiLayoutPreferences {
+    #[serde(default = "default_chat_sidebar_width")]
+    pub chat_sidebar_width: f32,
+    #[serde(default = "default_context_panel_width")]
+    pub context_panel_width: f32,
+    #[serde(default)]
+    pub context_panel_open: bool,
+    #[serde(default)]
+    pub activity_panel_open: bool,
+    #[serde(default)]
+    pub notifications_open: bool,
+    #[serde(default)]
+    pub canvas_focus: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomThemePreferences {
+    #[serde(default = "default_custom_background")]
+    pub background: String,
+    #[serde(default = "default_custom_panel")]
+    pub panel: String,
+    #[serde(default = "default_custom_text")]
+    pub text: String,
+    #[serde(default = "default_custom_accent")]
+    pub accent: String,
+    #[serde(default = "default_custom_danger")]
+    pub danger: String,
+}
+
+impl Default for CustomThemePreferences {
+    fn default() -> Self {
+        Self {
+            background: default_custom_background(),
+            panel: default_custom_panel(),
+            text: default_custom_text(),
+            accent: default_custom_accent(),
+            danger: default_custom_danger(),
+        }
+    }
+}
+
+fn default_custom_background() -> String { "#070B14".into() }
+fn default_custom_panel() -> String { "#101622".into() }
+fn default_custom_text() -> String { "#E8EEF6".into() }
+fn default_custom_accent() -> String { "#2EF0C8".into() }
+fn default_custom_danger() -> String { "#FF5A48".into() }
+
+fn default_context_panel_width() -> f32 {
+    320.0
+}
+
+fn default_chat_sidebar_width() -> f32 {
+    112.0
+}
+
+impl Default for UiLayoutPreferences {
+    fn default() -> Self {
+        Self {
+            chat_sidebar_width: default_chat_sidebar_width(),
+            context_panel_width: default_context_panel_width(),
+            context_panel_open: false,
+            activity_panel_open: false,
+            notifications_open: false,
+            canvas_focus: false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Preferences {
     #[serde(default = "default_language")]
@@ -59,6 +157,12 @@ pub struct Preferences {
     /// Opt-in extra signed Git catalogue (community/). Off by default.
     #[serde(default)]
     pub community_catalogue_enabled: bool,
+    #[serde(default)]
+    pub ui_density: UiDensity,
+    #[serde(default)]
+    pub ui_layout: UiLayoutPreferences,
+    #[serde(default)]
+    pub custom_theme: CustomThemePreferences,
 }
 
 /// Preset scale steps exposed in Settings → Me.
@@ -170,6 +274,9 @@ impl Default for Preferences {
             ui_scale_percent: default_ui_scale_percent(),
             agent_gate_mode: default_agent_gate_mode(),
             community_catalogue_enabled: false,
+            ui_density: UiDensity::default(),
+            ui_layout: UiLayoutPreferences::default(),
+            custom_theme: CustomThemePreferences::default(),
         }
     }
 }
@@ -316,5 +423,22 @@ mod tests {
         assert!(raw.contains("\"ui_scale_percent\":110"));
         let loaded: Preferences = serde_json::from_str(&raw).expect("deserialize prefs");
         assert_eq!(loaded.ui_scale_percent, 110);
+    }
+
+    #[test]
+    fn new_layout_fields_migrate_from_legacy_json() {
+        let raw = r#"{"language":"en","theme":"dark","ui_scale_percent":100}"#;
+        let prefs: Preferences = serde_json::from_str(raw).expect("legacy preferences");
+        assert_eq!(prefs.ui_density, UiDensity::Comfortable);
+        assert_eq!(prefs.ui_layout.context_panel_width, 320.0);
+        assert!(!prefs.ui_layout.activity_panel_open);
+        assert_eq!(prefs.custom_theme.accent, "#2EF0C8");
+    }
+
+    #[test]
+    fn compact_density_keeps_minimum_targets() {
+        assert!(UiDensity::Compact.control_height() >= 32.0);
+        assert!(UiDensity::Comfortable.control_height() >= 36.0);
+        assert!(UiDensity::Comfortable.rail_width() > UiDensity::Compact.rail_width());
     }
 }

@@ -2,6 +2,7 @@
 
 use crate::models_page::ModelCatalogTab;
 use aos_proto::{ModelInfo, ProviderRecord};
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone)]
 pub(crate) struct ModelDownloadUiState {
@@ -30,6 +31,10 @@ pub(crate) struct ModelsUiState {
     pub(crate) hf_download_url: String,
     pub(crate) hf_download_name: String,
     pub(crate) hf_download_status: String,
+    /// Last actionable error per model, retained until the next successful
+    /// refresh so recovery guidance is not lost between frames.
+    pub(crate) last_errors: HashMap<String, String>,
+    pub(crate) transitions: HashSet<String>,
 }
 
 impl Default for ModelsUiState {
@@ -52,6 +57,8 @@ impl Default for ModelsUiState {
             hf_download_url: String::new(),
             hf_download_name: String::new(),
             hf_download_status: String::new(),
+            last_errors: HashMap::new(),
+            transitions: HashSet::new(),
         }
     }
 }
@@ -66,6 +73,26 @@ impl ModelsUiState {
 
     pub(crate) fn set_model_infos(&mut self, list: Vec<ModelInfo>) {
         self.model_infos = list;
+        for model in &self.model_infos {
+            if !matches!(model.state, aos_proto::ModelState::Error) {
+                self.last_errors.remove(&model.id);
+            }
+            if !matches!(model.state, aos_proto::ModelState::Loading) {
+                self.transitions.remove(&model.id);
+            }
+        }
+    }
+
+    pub(crate) fn begin_transition(&mut self, model_id: &str) {
+        self.transitions.insert(model_id.to_string());
+    }
+
+    pub(crate) fn record_error(&mut self, model_id: impl Into<String>, error: impl Into<String>) {
+        self.last_errors.insert(model_id.into(), error.into());
+    }
+
+    pub(crate) fn is_transitioning(&self, model_id: &str) -> bool {
+        self.transitions.contains(model_id)
     }
 
     pub(crate) fn set_providers(&mut self, list: Vec<ProviderRecord>) {
@@ -98,12 +125,7 @@ impl ModelsUiState {
         }
     }
 
-    pub(crate) fn apply_provider_tested(
-        &mut self,
-        ok: bool,
-        message: String,
-        models: Vec<String>,
-    ) {
+    pub(crate) fn apply_provider_tested(&mut self, ok: bool, message: String, models: Vec<String>) {
         self.provider_test_msg = if ok {
             format!("ok — {message}")
         } else {
@@ -271,5 +293,48 @@ mod tests {
         assert_eq!(state.provider_preset, "openrouter");
         assert!(!state.provider_enabled);
         assert_eq!(state.provider_secret_name, "openrouter_api_key");
+    }
+
+    #[test]
+    fn model_transition_lifecycle_clears_on_refresh_and_retains_error_copy() {
+        let mut state = ModelsUiState::default();
+        state.begin_transition("m1");
+        assert!(state.is_transitioning("m1"));
+
+        state.set_model_infos(vec![ModelInfo {
+            id: "m1".into(),
+            name: "Model 1".into(),
+            privacy_class: "local".into(),
+            state: aos_proto::ModelState::Loading,
+            placement: None,
+            profile: None,
+            has_vision: false,
+        }]);
+        assert!(state.is_transitioning("m1"));
+
+        state.record_error("m1", "Mémoire insuffisante");
+        state.set_model_infos(vec![ModelInfo {
+            id: "m1".into(),
+            name: "Model 1".into(),
+            privacy_class: "local".into(),
+            state: aos_proto::ModelState::Error,
+            placement: None,
+            profile: None,
+            has_vision: false,
+        }]);
+        assert!(!state.is_transitioning("m1"));
+        assert_eq!(state.last_errors.get("m1").map(String::as_str), Some("Mémoire insuffisante"));
+
+        state.set_model_infos(vec![ModelInfo {
+            id: "m1".into(),
+            name: "Model 1".into(),
+            privacy_class: "local".into(),
+            state: aos_proto::ModelState::Loaded,
+            placement: None,
+            profile: None,
+            has_vision: false,
+        }]);
+        assert!(!state.is_transitioning("m1"));
+        assert!(!state.last_errors.contains_key("m1"));
     }
 }

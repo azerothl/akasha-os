@@ -4,7 +4,7 @@
 # GGUF optional (SKIP_MODELS=1) — downloaded on first run.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="${VERSION:-$(tr -d '[:space:]' < "${ROOT}/VERSION" 2>/dev/null || echo 0.16.0)}"
+VERSION="${VERSION:-$(tr -d '[:space:]' < "${ROOT}/VERSION" 2>/dev/null || echo 0.16.1)}"
 OUT="${OUT:-${ROOT}/dist/AgentOS-Preview-${VERSION}-macos-arm64}"
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-${ROOT}/target}"
 

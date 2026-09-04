@@ -12,6 +12,7 @@ use eframe::egui::{Align2, Color32, FontId, Pos2, Sense, Stroke, Ui, Vec2};
 use crate::canvas_paint::{
     self, body_dash, fill_color, layer_effective_opacity, paint_polyline, path_stroke, stroke_color,
 };
+use crate::icons::{self, CanvasToolIcon, ToolbarActionIcon};
 use crate::i18n::UiStrings;
 use crate::theme::{PAPER, SIGNAL, VOID};
 
@@ -501,7 +502,13 @@ fn paint_op(
                 }));
             }
         }
-        CanvasOpBody::Line { p0, p1, color, width, .. } => {
+        CanvasOpBody::Line {
+            p0,
+            p1,
+            color,
+            width,
+            ..
+        } => {
             let c = stroke_color(&op.body, &op.author_id, color, dark, layer_opacity);
             let end = CanvasPoint {
                 x: p0.x + (p1.x - p0.x) * progress,
@@ -509,7 +516,12 @@ fn paint_op(
             };
             paint_polyline(painter, rect, &[*p0, end], *width, c, dash);
         }
-        CanvasOpBody::Spline { points, color, width, .. } => {
+        CanvasOpBody::Spline {
+            points,
+            color,
+            width,
+            ..
+        } => {
             if points.len() < 2 {
                 return;
             }
@@ -569,7 +581,11 @@ fn paint_op(
 }
 
 fn canvas_bg(dark: bool) -> Color32 {
-    if dark { VOID } else { PAPER }
+    if dark {
+        VOID
+    } else {
+        PAPER
+    }
 }
 
 fn ellipse_points(r: eframe::egui::Rect, n: usize) -> Vec<Pos2> {
@@ -594,7 +610,11 @@ fn sample_spline_points(points: &[CanvasPoint], segments_per_span: usize) -> Vec
         let p0 = if i == 0 { points[0] } else { points[i - 1] };
         let p1 = points[i];
         let p2 = points[i + 1];
-        let p3 = if i + 2 < n { points[i + 2] } else { points[i + 1] };
+        let p3 = if i + 2 < n {
+            points[i + 2]
+        } else {
+            points[i + 1]
+        };
         let steps = segments_per_span.max(4);
         let start_j = if i == 0 { 0 } else { 1 };
         for j in start_j..=steps {
@@ -648,66 +668,59 @@ fn view_board_rect(
 /// SIGNAL pastille shown while a vision model reads the live canvas board.
 fn ui_canvas_seeing_pill(ui: &mut Ui, label: &str) {
     eframe::egui::Frame::new()
-        .fill(Color32::from_rgba_unmultiplied(SIGNAL.r(), SIGNAL.g(), SIGNAL.b(), 28))
+        .fill(Color32::from_rgba_unmultiplied(
+            SIGNAL.r(),
+            SIGNAL.g(),
+            SIGNAL.b(),
+            28,
+        ))
         .stroke(Stroke::new(1.0_f32, SIGNAL))
         .corner_radius(0.0)
         .inner_margin(eframe::egui::Margin::symmetric(6, 3))
         .show(ui, |ui| {
-            ui.label(
-                eframe::egui::RichText::new(label)
-                    .color(SIGNAL)
-                    .size(11.0),
-            );
+            ui.label(eframe::egui::RichText::new(label).color(SIGNAL).size(11.0));
         });
 }
 
-/// Drawing tools for the unified session bar (pen, eraser, shapes, tint, thickness).
-pub fn toolbar_content_min_width(t: &UiStrings, seeing: bool, clear_confirm: bool) -> f32 {
-    const CHAR_W: f32 = 8.5;
-    const BTN_PAD: f32 = 18.0;
-    const GAP: f32 = 4.0;
-    let mut w = 0.0;
-    if seeing {
-        w += t.canvas_seeing_now.len() as f32 * CHAR_W + 24.0 + GAP;
-    }
-    for label in [
-        t.canvas_tool_select,
-        t.canvas_tool_pan,
-        t.canvas_tool_pen,
-        t.canvas_tool_eraser,
-        t.canvas_tool_line,
-        t.canvas_tool_spline,
-        t.canvas_tool_path,
-        t.canvas_tool_rect,
-        t.canvas_tool_ellipse,
-    ] {
-        w += label.len() as f32 * CHAR_W + BTN_PAD + GAP;
-    }
-    w += t.canvas_fill_toggle.len() as f32 * CHAR_W + BTN_PAD + GAP;
-    w += t.canvas_tint.len() as f32 * CHAR_W + 28.0 + GAP;
-    w += 88.0; // color picker + width slider
-    w += t.canvas_undo.len() as f32 * CHAR_W + BTN_PAD + GAP;
-    w += t.canvas_export.len() as f32 * CHAR_W + BTN_PAD + GAP;
-    w += t.canvas_export_json.len() as f32 * CHAR_W + BTN_PAD + GAP;
-    w += t.canvas_grid.len() as f32 * CHAR_W + BTN_PAD + GAP;
-    w += t.canvas_snap.len() as f32 * CHAR_W + BTN_PAD + GAP;
-    if clear_confirm {
-        w += t.canvas_clear_confirm.len() as f32 * CHAR_W
-            + t.canvas_clear_confirm_yes.len() as f32 * CHAR_W
-            + t.canvas_clear_confirm_no.len() as f32 * CHAR_W
-            + BTN_PAD * 2.0
-            + GAP * 2.0;
+const TOOLBAR_GAP: f32 = 3.0;
+const TOOLBAR_ROW_H: f32 = 22.0;
+const TOOLBAR_CTRL_H: f32 = 20.0;
+const TOOLBAR_MAX_H: f32 = 48.0;
+const TOOLBAR_SLIDER_W: f32 = 56.0;
+
+/// Per-row height for the canvas tool strip.
+pub fn toolbar_row_height() -> f32 {
+    TOOLBAR_ROW_H
+}
+
+/// Max height for the canvas tool strip (scroll when content exceeds this).
+pub fn toolbar_max_height() -> f32 {
+    TOOLBAR_MAX_H
+}
+
+/// Estimated row count for dynamic layout (1–2 icon rows).
+pub fn toolbar_row_count(select_active: bool) -> usize {
+    if select_active {
+        2
     } else {
-        w += t.canvas_clear.len() as f32 * CHAR_W + BTN_PAD;
+        1
     }
-    w
+}
+
+/// Horizontal scroll extent for the icon-only toolbar.
+pub fn toolbar_content_min_width(seeing: bool, clear_confirm: bool) -> f32 {
+    let mut n = 18usize;
+    if seeing {
+        n += 2;
+    }
+    if clear_confirm {
+        n += 3;
+    }
+    n as f32 * (icons::TOOLBAR_ICON_SZ + TOOLBAR_GAP) + 140.0
 }
 
 /// True when a running agent on this session is using canvas tools.
-pub fn canvas_agent_drawing_on_session(
-    agents: &[aos_proto::AgentInfo],
-    session_id: &str,
-) -> bool {
+pub fn canvas_agent_drawing_on_session(agents: &[aos_proto::AgentInfo], session_id: &str) -> bool {
     use aos_proto::AgentState;
     agents.iter().any(|a| {
         a.session_id.as_deref() == Some(session_id)
@@ -724,7 +737,24 @@ fn pen_dash_vec(dashed: bool) -> Vec<f32> {
     }
 }
 
-/// Drawing tools for the unified session bar (pen, eraser, shapes, tint, thickness).
+fn toolbar_color_button(ui: &mut Ui, rgba: &mut [f32; 4]) -> eframe::egui::Response {
+    ui.scope(|ui| {
+        ui.style_mut().spacing.interact_size = Vec2::splat(TOOLBAR_CTRL_H);
+        ui.set_min_size(Vec2::splat(TOOLBAR_CTRL_H));
+        ui.set_max_size(Vec2::splat(TOOLBAR_CTRL_H));
+        ui.color_edit_button_rgba_unmultiplied(rgba)
+    })
+    .inner
+}
+
+fn toolbar_slider(ui: &mut Ui, value: &mut f32, range: std::ops::RangeInclusive<f32>) -> eframe::egui::Response {
+    ui.add_sized(
+        Vec2::new(TOOLBAR_SLIDER_W, TOOLBAR_CTRL_H),
+        eframe::egui::Slider::new(value, range).show_value(false),
+    )
+}
+
+/// Drawing tools for the unified session bar — icon-only with i18n tooltips.
 pub fn ui_canvas_toolbar(
     ui: &mut Ui,
     t: &UiStrings,
@@ -734,277 +764,245 @@ pub fn ui_canvas_toolbar(
     help_clicked: &mut bool,
 ) -> Option<CanvasUiAction> {
     let mut action: Option<CanvasUiAction> = None;
-    let compact = ui.spacing().item_spacing;
-    ui.spacing_mut().item_spacing = eframe::egui::vec2(4.0, compact.y);
-    ui.vertical(|ui| {
-        ui.horizontal(|ui| {
-            if state.seeing {
-                ui_canvas_seeing_pill(ui, t.canvas_seeing_now);
+    ui.spacing_mut().item_spacing = Vec2::splat(TOOLBAR_GAP);
+    ui.set_min_height(TOOLBAR_ROW_H);
+
+    ui.horizontal(|ui| {
+        ui.set_min_width(ui.available_width());
+        if state.seeing {
+            ui_canvas_seeing_pill(ui, t.canvas_seeing_now);
+        }
+        if canvas_agent_drawing {
+            ui.weak(t.canvas_thinking);
+        }
+        for (tool, icon, tip) in [
+            (CanvasTool::Select, CanvasToolIcon::Select, t.canvas_tool_select),
+            (CanvasTool::Pan, CanvasToolIcon::Pan, t.canvas_tool_pan),
+            (CanvasTool::Pen, CanvasToolIcon::Pen, t.canvas_tool_pen),
+            (CanvasTool::Eraser, CanvasToolIcon::Eraser, t.canvas_tool_eraser),
+            (CanvasTool::Line, CanvasToolIcon::Line, t.canvas_tool_line),
+            (CanvasTool::Spline, CanvasToolIcon::Spline, t.canvas_tool_spline),
+            (CanvasTool::Path, CanvasToolIcon::Path, t.canvas_tool_path),
+            (CanvasTool::Rect, CanvasToolIcon::Rect, t.canvas_tool_rect),
+            (CanvasTool::Ellipse, CanvasToolIcon::Ellipse, t.canvas_tool_ellipse),
+        ] {
+            if icons::toolbar_selectable(ui, state.tool == tool, icon, tip) {
+                state.tool = tool;
             }
-            if canvas_agent_drawing {
-                ui.weak(t.canvas_thinking);
-            }
-            ui.selectable_value(&mut state.tool, CanvasTool::Select, t.canvas_tool_select);
-            ui.selectable_value(&mut state.tool, CanvasTool::Pan, t.canvas_tool_pan);
-            ui.selectable_value(&mut state.tool, CanvasTool::Pen, t.canvas_tool_pen);
-            ui.selectable_value(&mut state.tool, CanvasTool::Eraser, t.canvas_tool_eraser);
-            ui.selectable_value(&mut state.tool, CanvasTool::Line, t.canvas_tool_line);
-            ui.selectable_value(&mut state.tool, CanvasTool::Spline, t.canvas_tool_spline);
-            ui.selectable_value(&mut state.tool, CanvasTool::Path, t.canvas_tool_path);
-            ui.selectable_value(&mut state.tool, CanvasTool::Rect, t.canvas_tool_rect);
-            ui.selectable_value(&mut state.tool, CanvasTool::Ellipse, t.canvas_tool_ellipse);
-            ui.label(t.canvas_tint);
-            let mut rgba = [
-                state.color.r() as f32 / 255.0,
-                state.color.g() as f32 / 255.0,
-                state.color.b() as f32 / 255.0,
-                1.0,
-            ];
-            if ui.color_edit_button_rgba_unmultiplied(&mut rgba).changed() {
-                state.color = Color32::from_rgb(
-                    (rgba[0] * 255.0) as u8,
-                    (rgba[1] * 255.0) as u8,
-                    (rgba[2] * 255.0) as u8,
-                );
-                action = Some(CanvasUiAction::SetStyle {
-                    color: Some(color_to_hex(state.color)),
-                    width: None,
-                    opacity: None,
-                    dash: None,
-                });
-            }
-            let width_resp = ui.add(
-                eframe::egui::Slider::new(&mut state.width, 0.005..=0.06).text(t.canvas_width),
+        }
+        let mut rgba = [
+            state.color.r() as f32 / 255.0,
+            state.color.g() as f32 / 255.0,
+            state.color.b() as f32 / 255.0,
+            1.0,
+        ];
+        if toolbar_color_button(ui, &mut rgba)
+            .on_hover_text(t.canvas_tint)
+            .changed()
+        {
+            state.color = Color32::from_rgb(
+                (rgba[0] * 255.0) as u8,
+                (rgba[1] * 255.0) as u8,
+                (rgba[2] * 255.0) as u8,
             );
-            if width_resp.changed() {
-                action = Some(CanvasUiAction::SetStyle {
-                    color: None,
-                    width: Some(state.width),
-                    opacity: None,
-                    dash: None,
-                });
+            action = Some(CanvasUiAction::SetStyle {
+                color: Some(color_to_hex(state.color)),
+                width: None,
+                opacity: None,
+                dash: None,
+            });
+        }
+        if toolbar_slider(ui, &mut state.width, 0.005..=0.06)
+            .on_hover_text(t.canvas_width)
+            .changed()
+        {
+            action = Some(CanvasUiAction::SetStyle {
+                color: None,
+                width: Some(state.width),
+                opacity: None,
+                dash: None,
+            });
+        }
+        if matches!(
+            state.tool,
+            CanvasTool::Rect | CanvasTool::Ellipse | CanvasTool::Path
+        ) {
+            let fill_on = state.shape_fill;
+            if icons::toolbar_text_selectable(ui, fill_on, "F", t.canvas_fill_toggle) {
+                state.shape_fill = !fill_on;
             }
-            if let Some(tip) = help_tooltip {
-                if crate::guide::tab_help_button(ui, tip) {
-                    *help_clicked = true;
+        }
+        if toolbar_slider(ui, &mut state.pen_opacity, 0.05..=1.0)
+            .on_hover_text(t.canvas_opacity)
+            .changed()
+        {
+            action = Some(CanvasUiAction::SetStyle {
+                color: None,
+                width: None,
+                opacity: Some(state.pen_opacity),
+                dash: None,
+            });
+        }
+        let dashed_on = state.pen_dashed;
+        if icons::toolbar_action_selectable(ui, dashed_on, ToolbarActionIcon::Dashed, t.canvas_dashed) {
+            state.pen_dashed = !dashed_on;
+            action = Some(CanvasUiAction::SetStyle {
+                color: None,
+                width: None,
+                opacity: None,
+                dash: Some(pen_dash_vec(state.pen_dashed)),
+            });
+        }
+        if matches!(
+            state.tool,
+            CanvasTool::Rect | CanvasTool::Ellipse | CanvasTool::Path
+        ) && state.shape_fill
+        {
+            let grad_on = state.use_gradient;
+            if icons::toolbar_text_selectable(ui, grad_on, "G", t.canvas_gradient) {
+                state.use_gradient = !grad_on;
+            }
+            if state.use_gradient {
+                let mut grad_rgba = [
+                    state.gradient_color2.r() as f32 / 255.0,
+                    state.gradient_color2.g() as f32 / 255.0,
+                    state.gradient_color2.b() as f32 / 255.0,
+                    1.0,
+                ];
+                if toolbar_color_button(ui, &mut grad_rgba)
+                    .on_hover_text(t.canvas_gradient)
+                    .changed()
+                {
+                    state.gradient_color2 = Color32::from_rgb(
+                        (grad_rgba[0] * 255.0) as u8,
+                        (grad_rgba[1] * 255.0) as u8,
+                        (grad_rgba[2] * 255.0) as u8,
+                    );
                 }
             }
-        });
+        }
+        if icons::toolbar_action_button(ui, ToolbarActionIcon::Undo, t.canvas_undo) {
+            action = Some(CanvasUiAction::Apply(CanvasOpBody::Undo));
+        }
+        if icons::toolbar_text_button(ui, "P", t.canvas_export) {
+            action = Some(CanvasUiAction::ExportPng);
+        }
+        if icons::toolbar_text_button(ui, "S", t.canvas_export_svg) {
+            action = Some(CanvasUiAction::ExportSvg);
+        }
+        if icons::toolbar_text_button(ui, "J", t.canvas_export_json) {
+            action = Some(CanvasUiAction::ExportJson);
+        }
+        if icons::toolbar_text_button(ui, "I", t.canvas_import) {
+            action = Some(CanvasUiAction::ImportJson);
+        }
+        if icons::toolbar_action_button(ui, ToolbarActionIcon::ResetView, t.canvas_reset_view) {
+            action = Some(CanvasUiAction::ResetView);
+        }
+        let grid_on = state.show_grid;
+        if icons::toolbar_action_selectable(ui, grid_on, ToolbarActionIcon::Grid, t.canvas_grid) {
+            state.show_grid = !grid_on;
+        }
+        let snap_on = state.snap;
+        if icons::toolbar_action_selectable(ui, snap_on, ToolbarActionIcon::Snap, t.canvas_snap) {
+            state.snap = !snap_on;
+        }
+        if state.clear_confirm_open {
+            if icons::toolbar_action_button(ui, ToolbarActionIcon::ConfirmYes, t.canvas_clear_confirm_yes) {
+                state.clear_confirm_open = false;
+                action = Some(CanvasUiAction::Apply(CanvasOpBody::Clear));
+            }
+            if icons::toolbar_action_button(ui, ToolbarActionIcon::ConfirmNo, t.canvas_clear_confirm_no) {
+                state.clear_confirm_open = false;
+            }
+        } else if icons::toolbar_action_button(ui, ToolbarActionIcon::Clear, t.canvas_clear) {
+            state.clear_confirm_open = true;
+        }
+        if let Some(tip) = help_tooltip {
+            if crate::guide::tab_help_button(ui, tip) {
+                *help_clicked = true;
+            }
+        }
+    });
 
-        if state.tool == CanvasTool::Select {
+    if state.tool == CanvasTool::Select {
+        if let Some(seq) = state.selected_seq {
             ui.horizontal(|ui| {
-                if let Some(seq) = state.selected_seq {
-                    for (label, edge) in [
-                        (t.canvas_align_left, "left"),
-                        (t.canvas_align_right, "right"),
-                        (t.canvas_align_top, "top"),
-                        (t.canvas_align_bottom, "bottom"),
-                        (t.canvas_align_cx, "center_x"),
-                        (t.canvas_align_cy, "center_y"),
-                    ] {
-                        if ui
-                            .button(eframe::egui::RichText::new(label).weak())
-                            .on_hover_text(t.canvas_align_to_margin)
-                            .clicked()
-                        {
-                            action = Some(CanvasUiAction::Edit(CanvasEdit::Align {
+                ui.set_min_width(ui.available_width());
+                for (label, edge) in [
+                    (t.canvas_align_left, "left"),
+                    (t.canvas_align_right, "right"),
+                    (t.canvas_align_top, "top"),
+                    (t.canvas_align_bottom, "bottom"),
+                    (t.canvas_align_cx, "center_x"),
+                    (t.canvas_align_cy, "center_y"),
+                ] {
+                    if icons::toolbar_text_button(ui, label, t.canvas_align_to_margin) {
+                        action = Some(CanvasUiAction::Edit(CanvasEdit::Align {
+                            seq,
+                            to_seq: None,
+                            edges: vec![edge.into()],
+                        }));
+                    }
+                }
+                if let Some(idx) = state.ops.iter().position(|o| o.seq == seq) {
+                    if icons::toolbar_action_button(ui, ToolbarActionIcon::ArrowDown, t.canvas_z_back)
+                        && idx > 0
+                    {
+                        action = Some(CanvasUiAction::Edit(CanvasEdit::Reorder {
+                            seq,
+                            z: (idx as i64) - 1,
+                        }));
+                    }
+                    if icons::toolbar_action_button(ui, ToolbarActionIcon::ArrowUp, t.canvas_z_forward)
+                        && idx + 1 < state.ops.len()
+                    {
+                        action = Some(CanvasUiAction::Edit(CanvasEdit::Reorder {
+                            seq,
+                            z: (idx as i64) + 1,
+                        }));
+                    }
+                }
+                if let Some(op) = state.ops.iter_mut().find(|o| o.seq == seq) {
+                    if let CanvasOpBody::Rect { rotation, .. }
+                    | CanvasOpBody::Ellipse { rotation, .. } = &mut op.body
+                    {
+                        let mut rot = *rotation;
+                        let rot_resp = ui.add_sized(
+                            Vec2::new(48.0, TOOLBAR_CTRL_H),
+                            eframe::egui::DragValue::new(&mut rot)
+                                .suffix("°")
+                                .range(-180.0..=180.0)
+                                .speed(1.0),
+                        );
+                        if rot_resp.on_hover_text(t.canvas_rotation).changed() {
+                            *rotation = rot;
+                            action = Some(CanvasUiAction::Edit(CanvasEdit::Rotate {
                                 seq,
-                                to_seq: None,
-                                edges: vec![edge.into()],
+                                rotation: rot,
                             }));
                         }
                     }
-                    if let Some(idx) = state.ops.iter().position(|o| o.seq == seq) {
-                        if ui.small_button(t.canvas_z_back).clicked() && idx > 0 {
-                            action = Some(CanvasUiAction::Edit(CanvasEdit::Reorder {
-                                seq,
-                                z: (idx as i64) - 1,
-                            }));
-                        }
-                        if ui.small_button(t.canvas_z_forward).clicked()
-                            && idx + 1 < state.ops.len()
-                        {
-                            action = Some(CanvasUiAction::Edit(CanvasEdit::Reorder {
-                                seq,
-                                z: (idx as i64) + 1,
-                            }));
-                        }
-                    }
-                    if let Some(op) = state.ops.iter_mut().find(|o| o.seq == seq) {
-                        if let CanvasOpBody::Rect { rotation, .. }
-                        | CanvasOpBody::Ellipse { rotation, .. } = &mut op.body
-                        {
-                            let mut rot = *rotation;
-                            let rot_resp = ui.add(
-                                eframe::egui::DragValue::new(&mut rot)
-                                    .suffix("°")
-                                    .range(-180.0..=180.0)
-                                    .speed(1.0),
-                            );
-                            rot_resp.clone().on_hover_text(t.canvas_rotation);
-                            if rot_resp.changed() {
-                                *rotation = rot;
-                                action = Some(CanvasUiAction::Edit(CanvasEdit::Rotate {
-                                    seq,
-                                    rotation: rot,
-                                }));
-                            }
-                        }
-                        let mut restyle_opacity =
-                            aos_proto::canvas_op_body_opacity(&op.body);
-                        if ui
-                            .add(
-                                eframe::egui::Slider::new(&mut restyle_opacity, 0.05..=1.0)
-                                    .text(t.canvas_opacity),
-                            )
-                            .changed()
-                        {
-                            action = Some(CanvasUiAction::Edit(CanvasEdit::Restyle {
-                                seq,
-                                color: None,
-                                width: None,
-                                fill: None,
-                                rotation: None,
-                                opacity: Some(restyle_opacity),
-                                dash: None,
-                                gradient: None,
-                            }));
-                        }
+                    let mut restyle_opacity = aos_proto::canvas_op_body_opacity(&op.body);
+                    if toolbar_slider(ui, &mut restyle_opacity, 0.05..=1.0)
+                        .on_hover_text(t.canvas_opacity)
+                        .changed()
+                    {
+                        action = Some(CanvasUiAction::Edit(CanvasEdit::Restyle {
+                            seq,
+                            color: None,
+                            width: None,
+                            fill: None,
+                            rotation: None,
+                            opacity: Some(restyle_opacity),
+                            dash: None,
+                            gradient: None,
+                        }));
                     }
                 }
             });
         }
-
-        ui.horizontal(|ui| {
-            if matches!(
-                state.tool,
-                CanvasTool::Rect | CanvasTool::Ellipse | CanvasTool::Path
-            ) {
-                ui.toggle_value(
-                    &mut state.shape_fill,
-                    eframe::egui::RichText::new(t.canvas_fill_toggle).weak(),
-                );
-            }
-            let opacity_resp = ui.add(
-                eframe::egui::Slider::new(&mut state.pen_opacity, 0.05..=1.0).text(t.canvas_opacity),
-            );
-            if opacity_resp.changed() {
-                action = Some(CanvasUiAction::SetStyle {
-                    color: None,
-                    width: None,
-                    opacity: Some(state.pen_opacity),
-                    dash: None,
-                });
-            }
-            if ui
-                .toggle_value(
-                    &mut state.pen_dashed,
-                    eframe::egui::RichText::new(t.canvas_dashed).weak(),
-                )
-                .changed()
-            {
-                action = Some(CanvasUiAction::SetStyle {
-                    color: None,
-                    width: None,
-                    opacity: None,
-                    dash: Some(pen_dash_vec(state.pen_dashed)),
-                });
-            }
-            if matches!(
-                state.tool,
-                CanvasTool::Rect | CanvasTool::Ellipse | CanvasTool::Path
-            ) && state.shape_fill
-            {
-                ui.toggle_value(
-                    &mut state.use_gradient,
-                    eframe::egui::RichText::new(t.canvas_gradient).weak(),
-                );
-                if state.use_gradient {
-                    let mut rgba = [
-                        state.gradient_color2.r() as f32 / 255.0,
-                        state.gradient_color2.g() as f32 / 255.0,
-                        state.gradient_color2.b() as f32 / 255.0,
-                        1.0,
-                    ];
-                    if ui.color_edit_button_rgba_unmultiplied(&mut rgba).changed() {
-                        state.gradient_color2 = Color32::from_rgb(
-                            (rgba[0] * 255.0) as u8,
-                            (rgba[1] * 255.0) as u8,
-                            (rgba[2] * 255.0) as u8,
-                        );
-                    }
-                }
-            }
-        });
-
-        ui.horizontal(|ui| {
-            if ui
-                .button(eframe::egui::RichText::new(t.canvas_undo).weak())
-                .clicked()
-            {
-                action = Some(CanvasUiAction::Apply(CanvasOpBody::Undo));
-            }
-            if ui
-                .button(eframe::egui::RichText::new(t.canvas_export).weak())
-                .clicked()
-            {
-                action = Some(CanvasUiAction::ExportPng);
-            }
-            if ui
-                .button(eframe::egui::RichText::new(t.canvas_export_svg).weak())
-                .clicked()
-            {
-                action = Some(CanvasUiAction::ExportSvg);
-            }
-            if ui
-                .button(eframe::egui::RichText::new(t.canvas_export_json).weak())
-                .clicked()
-            {
-                action = Some(CanvasUiAction::ExportJson);
-            }
-            if ui
-                .button(eframe::egui::RichText::new(t.canvas_import).weak())
-                .clicked()
-            {
-                action = Some(CanvasUiAction::ImportJson);
-            }
-            if ui
-                .button(eframe::egui::RichText::new(t.canvas_reset_view).weak())
-                .clicked()
-            {
-                action = Some(CanvasUiAction::ResetView);
-            }
-            ui.toggle_value(
-                &mut state.show_grid,
-                eframe::egui::RichText::new(t.canvas_grid).weak(),
-            );
-            ui.toggle_value(
-                &mut state.snap,
-                eframe::egui::RichText::new(t.canvas_snap).weak(),
-            );
-            if state.clear_confirm_open {
-                ui.label(eframe::egui::RichText::new(t.canvas_clear_confirm).small());
-                if ui
-                    .button(
-                        eframe::egui::RichText::new(t.canvas_clear_confirm_yes)
-                            .color(crate::theme::HYDROGEN),
-                    )
-                    .clicked()
-                {
-                    state.clear_confirm_open = false;
-                    action = Some(CanvasUiAction::Apply(CanvasOpBody::Clear));
-                }
-                if ui.button(t.canvas_clear_confirm_no).clicked() {
-                    state.clear_confirm_open = false;
-                }
-            } else if ui
-                .button(eframe::egui::RichText::new(t.canvas_clear).color(crate::theme::HYDROGEN))
-                .clicked()
-            {
-                state.clear_confirm_open = true;
-            }
-        });
-    });
+    }
 
     action
 }
@@ -1061,7 +1059,10 @@ pub fn ui_canvas_layers(
                     state.layer_rename_text = layer.name.clone();
                 }
                 if layer_idx > 0
-                    && ui.small_button("↑").on_hover_text(t.canvas_z_forward).clicked()
+                    && ui
+                        .small_button("↑")
+                        .on_hover_text(t.canvas_z_forward)
+                        .clicked()
                 {
                     action = Some(CanvasUiAction::Edit(CanvasEdit::LayerReorder {
                         id: layer.id.clone(),
@@ -1070,7 +1071,10 @@ pub fn ui_canvas_layers(
                     }));
                 }
                 if layer_idx + 1 < layer_count
-                    && ui.small_button("↓").on_hover_text(t.canvas_z_back).clicked()
+                    && ui
+                        .small_button("↓")
+                        .on_hover_text(t.canvas_z_back)
+                        .clicked()
                 {
                     action = Some(CanvasUiAction::Edit(CanvasEdit::LayerReorder {
                         id: layer.id.clone(),
@@ -1123,7 +1127,11 @@ pub fn ui_canvas_layers(
             opacity_resp.on_hover_text(t.canvas_layer_opacity);
             if layer_count > 1
                 && ui
-                    .button(eframe::egui::RichText::new(t.canvas_layer_delete).small().weak())
+                    .button(
+                        eframe::egui::RichText::new(t.canvas_layer_delete)
+                            .small()
+                            .weak(),
+                    )
                     .clicked()
             {
                 action = Some(CanvasUiAction::Edit(CanvasEdit::LayerDelete {
@@ -1203,12 +1211,7 @@ pub fn ui_canvas_surface(
                     to_screen(rect, CanvasPoint { x: b.x0, y: b.y0 }),
                     to_screen(rect, CanvasPoint { x: b.x1, y: b.y1 }),
                 );
-                painter.rect_stroke(
-                    sel,
-                    0.0,
-                    Stroke::new(1.5_f32, SIGNAL),
-                    StrokeKind::Outside,
-                );
+                painter.rect_stroke(sel, 0.0, Stroke::new(1.5_f32, SIGNAL), StrokeKind::Outside);
             }
         }
     }
@@ -1294,7 +1297,12 @@ pub fn ui_canvas_surface(
                 if state.shape_fill {
                     painter.rect_filled(r, 0.0, state.color);
                 } else {
-                    painter.rect_stroke(r, 0.0, Stroke::new(2.0_f32, state.color), StrokeKind::Inside);
+                    painter.rect_stroke(
+                        r,
+                        0.0,
+                        Stroke::new(2.0_f32, state.color),
+                        StrokeKind::Inside,
+                    );
                 }
             }
             CanvasTool::Ellipse => {
@@ -1402,155 +1410,162 @@ pub fn ui_canvas_surface(
             state.drag_origin = None;
             state.drag_current = None;
         } else {
-        match state.tool {
-            CanvasTool::Pan => {
-                state.drag_origin = None;
-                state.drag_current = None;
-            }
-            CanvasTool::Pen => {
-                if state.draft_points.len() >= 2 {
-                    let (opacity, dash, _) = pen_style_fields(state);
-                    action = Some(CanvasUiAction::Apply(CanvasOpBody::Stroke {
-                        points: std::mem::take(&mut state.draft_points),
-                        color: color_to_hex(state.color),
-                        width: state.width,
-                        opacity,
-                        dash,
-                    }));
-                } else {
-                    state.draft_points.clear();
+            match state.tool {
+                CanvasTool::Pan => {
+                    state.drag_origin = None;
+                    state.drag_current = None;
                 }
-            }
-            CanvasTool::Eraser => {
-                if !state.draft_points.is_empty() {
-                    action = Some(CanvasUiAction::Apply(CanvasOpBody::Erase {
-                        points: std::mem::take(&mut state.draft_points),
-                        width: state.width.max(0.03),
-                    }));
+                CanvasTool::Pen => {
+                    if state.draft_points.len() >= 2 {
+                        let (opacity, dash, _) = pen_style_fields(state);
+                        action = Some(CanvasUiAction::Apply(CanvasOpBody::Stroke {
+                            points: std::mem::take(&mut state.draft_points),
+                            color: color_to_hex(state.color),
+                            width: state.width,
+                            opacity,
+                            dash,
+                        }));
+                    } else {
+                        state.draft_points.clear();
+                    }
                 }
-            }
-            CanvasTool::Spline => {
-                if state.draft_points.len() >= 2 {
-                    let (opacity, dash, _) = pen_style_fields(state);
-                    action = Some(CanvasUiAction::Apply(CanvasOpBody::Spline {
-                        points: std::mem::take(&mut state.draft_points),
-                        color: color_to_hex(state.color),
-                        width: state.width,
-                        opacity,
-                        dash,
-                    }));
-                } else {
-                    state.draft_points.clear();
+                CanvasTool::Eraser => {
+                    if !state.draft_points.is_empty() {
+                        action = Some(CanvasUiAction::Apply(CanvasOpBody::Erase {
+                            points: std::mem::take(&mut state.draft_points),
+                            width: state.width.max(0.03),
+                        }));
+                    }
                 }
-            }
-            CanvasTool::Line => {
-                if let (Some(a), Some(b)) = (state.drag_origin.take(), state.drag_current.take()) {
-                    let (opacity, dash, _) = pen_style_fields(state);
-                    action = Some(CanvasUiAction::Apply(CanvasOpBody::Line {
-                        p0: a,
-                        p1: b,
-                        color: color_to_hex(state.color),
-                        width: state.width,
-                        opacity,
-                        dash,
-                    }));
+                CanvasTool::Spline => {
+                    if state.draft_points.len() >= 2 {
+                        let (opacity, dash, _) = pen_style_fields(state);
+                        action = Some(CanvasUiAction::Apply(CanvasOpBody::Spline {
+                            points: std::mem::take(&mut state.draft_points),
+                            color: color_to_hex(state.color),
+                            width: state.width,
+                            opacity,
+                            dash,
+                        }));
+                    } else {
+                        state.draft_points.clear();
+                    }
                 }
-            }
-            CanvasTool::Rect => {
-                if let (Some(a), Some(b)) = (state.drag_origin.take(), state.drag_current.take()) {
-                    let x = a.x.min(b.x);
-                    let y = a.y.min(b.y);
-                    let w = (a.x - b.x).abs().max(0.01);
-                    let h = (a.y - b.y).abs().max(0.01);
-                    let (opacity, dash, gradient) = pen_style_fields(state);
-                    action = Some(CanvasUiAction::Apply(CanvasOpBody::Rect {
-                        x,
-                        y,
-                        w,
-                        h,
-                        color: color_to_hex(state.color),
-                        fill: state.shape_fill,
-                        width: state.width,
-                        rotation: 0.0,
-                        opacity,
-                        dash,
-                        gradient,
-                    }));
+                CanvasTool::Line => {
+                    if let (Some(a), Some(b)) =
+                        (state.drag_origin.take(), state.drag_current.take())
+                    {
+                        let (opacity, dash, _) = pen_style_fields(state);
+                        action = Some(CanvasUiAction::Apply(CanvasOpBody::Line {
+                            p0: a,
+                            p1: b,
+                            color: color_to_hex(state.color),
+                            width: state.width,
+                            opacity,
+                            dash,
+                        }));
+                    }
                 }
-            }
-            CanvasTool::Ellipse => {
-                if let (Some(a), Some(b)) = (state.drag_origin.take(), state.drag_current.take()) {
-                    let x = a.x.min(b.x);
-                    let y = a.y.min(b.y);
-                    let w = (a.x - b.x).abs().max(0.01);
-                    let h = (a.y - b.y).abs().max(0.01);
-                    let (opacity, dash, gradient) = pen_style_fields(state);
-                    action = Some(CanvasUiAction::Apply(CanvasOpBody::Ellipse {
-                        x,
-                        y,
-                        w,
-                        h,
-                        color: color_to_hex(state.color),
-                        fill: state.shape_fill,
-                        width: state.width,
-                        rotation: 0.0,
-                        opacity,
-                        dash,
-                        gradient,
-                    }));
+                CanvasTool::Rect => {
+                    if let (Some(a), Some(b)) =
+                        (state.drag_origin.take(), state.drag_current.take())
+                    {
+                        let x = a.x.min(b.x);
+                        let y = a.y.min(b.y);
+                        let w = (a.x - b.x).abs().max(0.01);
+                        let h = (a.y - b.y).abs().max(0.01);
+                        let (opacity, dash, gradient) = pen_style_fields(state);
+                        action = Some(CanvasUiAction::Apply(CanvasOpBody::Rect {
+                            x,
+                            y,
+                            w,
+                            h,
+                            color: color_to_hex(state.color),
+                            fill: state.shape_fill,
+                            width: state.width,
+                            rotation: 0.0,
+                            opacity,
+                            dash,
+                            gradient,
+                        }));
+                    }
                 }
-            }
-            CanvasTool::Path => {
-                if state.draft_points.len() >= 3 {
-                    let (opacity, dash, gradient) = pen_style_fields(state);
-                    action = Some(CanvasUiAction::Apply(CanvasOpBody::Path {
-                        points: std::mem::take(&mut state.draft_points),
-                        color: color_to_hex(state.color),
-                        width: state.width,
-                        fill: state.shape_fill,
-                        closed: true,
-                        opacity,
-                        dash,
-                        gradient,
-                    }));
-                } else {
-                    state.draft_points.clear();
+                CanvasTool::Ellipse => {
+                    if let (Some(a), Some(b)) =
+                        (state.drag_origin.take(), state.drag_current.take())
+                    {
+                        let x = a.x.min(b.x);
+                        let y = a.y.min(b.y);
+                        let w = (a.x - b.x).abs().max(0.01);
+                        let h = (a.y - b.y).abs().max(0.01);
+                        let (opacity, dash, gradient) = pen_style_fields(state);
+                        action = Some(CanvasUiAction::Apply(CanvasOpBody::Ellipse {
+                            x,
+                            y,
+                            w,
+                            h,
+                            color: color_to_hex(state.color),
+                            fill: state.shape_fill,
+                            width: state.width,
+                            rotation: 0.0,
+                            opacity,
+                            dash,
+                            gradient,
+                        }));
+                    }
                 }
-            }
-            CanvasTool::Select => {
-                if let (Some(a), Some(b), Some(seq)) = (
-                    state.drag_origin.take(),
-                    state.drag_current.take(),
-                    state.selected_seq,
-                ) {
-                    let dx = b.x - a.x;
-                    let dy = b.y - a.y;
-                    if dx.abs() + dy.abs() > 0.002 {
-                        let locked = state
-                            .ops
-                            .iter()
-                            .find(|o| o.seq == seq)
-                            .map(|o| {
-                                canvas_layer_effective_locked(
-                                    &aos_proto::CanvasDoc {
-                                        layers: state.layers.clone(),
-                                        active_layer_id: state.active_layer_id.clone(),
-                                        ..Default::default()
-                                    },
-                                    &o.layer_id,
-                                )
-                            })
-                            .unwrap_or(false);
-                        if !locked {
-                            if let Some(op) = state.ops.iter_mut().find(|o| o.seq == seq) {
-                                translate_canvas_op_body(&mut op.body, dx, dy);
+                CanvasTool::Path => {
+                    if state.draft_points.len() >= 3 {
+                        let (opacity, dash, gradient) = pen_style_fields(state);
+                        action = Some(CanvasUiAction::Apply(CanvasOpBody::Path {
+                            points: std::mem::take(&mut state.draft_points),
+                            color: color_to_hex(state.color),
+                            width: state.width,
+                            fill: state.shape_fill,
+                            closed: true,
+                            opacity,
+                            dash,
+                            gradient,
+                        }));
+                    } else {
+                        state.draft_points.clear();
+                    }
+                }
+                CanvasTool::Select => {
+                    if let (Some(a), Some(b), Some(seq)) = (
+                        state.drag_origin.take(),
+                        state.drag_current.take(),
+                        state.selected_seq,
+                    ) {
+                        let dx = b.x - a.x;
+                        let dy = b.y - a.y;
+                        if dx.abs() + dy.abs() > 0.002 {
+                            let locked = state
+                                .ops
+                                .iter()
+                                .find(|o| o.seq == seq)
+                                .map(|o| {
+                                    canvas_layer_effective_locked(
+                                        &aos_proto::CanvasDoc {
+                                            layers: state.layers.clone(),
+                                            active_layer_id: state.active_layer_id.clone(),
+                                            ..Default::default()
+                                        },
+                                        &o.layer_id,
+                                    )
+                                })
+                                .unwrap_or(false);
+                            if !locked {
+                                if let Some(op) = state.ops.iter_mut().find(|o| o.seq == seq) {
+                                    translate_canvas_op_body(&mut op.body, dx, dy);
+                                }
+                                action =
+                                    Some(CanvasUiAction::Edit(CanvasEdit::Move { seq, dx, dy }));
                             }
-                            action = Some(CanvasUiAction::Edit(CanvasEdit::Move { seq, dx, dy }));
                         }
                     }
                 }
             }
-        }
         }
     }
 
@@ -1561,15 +1576,17 @@ pub fn ui_canvas_surface(
                     i.key_pressed(eframe::egui::Key::Delete)
                         || i.key_pressed(eframe::egui::Key::Backspace)
                 });
-                if delete && !layer_is_locked(
-                    &state.layers,
-                    state
-                        .ops
-                        .iter()
-                        .find(|o| o.seq == seq)
-                        .map(|o| o.layer_id.as_str())
-                        .unwrap_or(""),
-                ) {
+                if delete
+                    && !layer_is_locked(
+                        &state.layers,
+                        state
+                            .ops
+                            .iter()
+                            .find(|o| o.seq == seq)
+                            .map(|o| o.layer_id.as_str())
+                            .unwrap_or(""),
+                    )
+                {
                     action = Some(CanvasUiAction::Edit(CanvasEdit::Delete { seq }));
                     state.ops.retain(|o| o.seq != seq);
                     state.selected_seq = None;
@@ -1748,7 +1765,6 @@ fn canvas_aspect_chip_labels(t: &UiStrings) -> [(&'static str, CanvasAspect); 5]
     ]
 }
 
-
 /// Designer copy for delegated canvas agents — only lists tools actually
 /// granted to an agent, not every low-level export of the canvas module.
 pub fn canvas_agent_designer_guide(exported: &[String]) -> String {
@@ -1832,7 +1848,6 @@ pub fn canvas_agent_brief(user_text: &str, aspect: CanvasAspect, exported: &[Str
 #[cfg(test)]
 mod routing_tests {
     use super::*;
-    use crate::i18n;
 
     #[test]
     fn empty_hint_clamp_survives_inverted_bounds() {
@@ -1842,10 +1857,9 @@ mod routing_tests {
     }
 
     #[test]
-    fn toolbar_min_width_covers_fr_clear_label() {
-        let fr = i18n::strings("fr");
-        let w = toolbar_content_min_width(&fr, false, false);
-        assert!(w > 700.0, "toolbar scroll extent should cover FR labels, got {w}");
+    fn toolbar_min_width_covers_icon_row() {
+        let w = toolbar_content_min_width(false, false);
+        assert!(w > 400.0, "icon toolbar scroll extent, got {w}");
     }
 
     #[test]
@@ -1912,14 +1926,7 @@ mod routing_tests {
 
     #[test]
     fn followup_keywords_do_not_steal_canvas() {
-        for msg in [
-            "encore",
-            "vas-y",
-            "vas y",
-            "lance",
-            "améliore",
-            "go ahead",
-        ] {
+        for msg in ["encore", "vas-y", "vas y", "lance", "améliore", "go ahead"] {
             assert!(
                 !chat_wants_canvas_agent(msg, true),
                 "follow-up {msg} must not route to canvas"
@@ -1958,7 +1965,10 @@ mod routing_tests {
             ts_ms: 0,
             layer_id: String::new(),
             body: CanvasOpBody::Stroke {
-                points: vec![CanvasPoint { x: 0.1, y: 0.1 }, CanvasPoint { x: 0.2, y: 0.2 }],
+                points: vec![
+                    CanvasPoint { x: 0.1, y: 0.1 },
+                    CanvasPoint { x: 0.2, y: 0.2 },
+                ],
                 color: "#3ee0c4".into(),
                 width: 0.01,
                 opacity: 1.0,
@@ -1980,7 +1990,11 @@ mod routing_tests {
         assert_eq!(state.last_seen_seq, 8);
 
         state.apply_snapshot(vec![], 1, 2.0);
-        assert_eq!(state.ops.len(), 8, "late empty poll must not wipe agent strokes");
+        assert_eq!(
+            state.ops.len(),
+            8,
+            "late empty poll must not wipe agent strokes"
+        );
         assert_eq!(state.next_seq, 9);
         assert_eq!(state.last_seen_seq, 8);
     }
@@ -2022,7 +2036,7 @@ mod routing_tests {
     }
 
     #[test]
-fn fit_board_rect_letterboxes_wide_in_tall_pane() {
+    fn fit_board_rect_letterboxes_wide_in_tall_pane() {
         let outer = eframe::egui::Rect::from_min_size(Pos2::ZERO, Vec2::new(400.0, 600.0));
         let board = fit_board_rect(outer, CanvasAspect::Landscape16x9);
         assert!(board.width() <= outer.width());
@@ -2050,20 +2064,38 @@ fn fit_board_rect_letterboxes_wide_in_tall_pane() {
             "/canvas une maison",
         ] {
             assert!(chat_user_wants_explicit_canvas(msg), "explicit: {msg}");
-            assert!(chat_should_open_canvas_face(msg), "explicit opens face: {msg}");
-            assert!(chat_wants_canvas_agent(msg, false), "explicit routes canvas: {msg}");
-            assert!(!chat_user_wants_pixel_draw(msg, false), "explicit not image: {msg}");
+            assert!(
+                chat_should_open_canvas_face(msg),
+                "explicit opens face: {msg}"
+            );
+            assert!(
+                chat_wants_canvas_agent(msg, false),
+                "explicit routes canvas: {msg}"
+            );
+            assert!(
+                !chat_user_wants_pixel_draw(msg, false),
+                "explicit not image: {msg}"
+            );
         }
         // encore / vas-y → not enough (open or closed).
         for msg in ["encore", "vas-y", "vas y"] {
             assert!(!chat_wants_canvas_agent(msg, true), "follow-up open: {msg}");
-            assert!(!chat_wants_canvas_agent(msg, false), "follow-up closed: {msg}");
-            assert!(!chat_should_open_canvas_face(msg), "follow-up no face: {msg}");
+            assert!(
+                !chat_wants_canvas_agent(msg, false),
+                "follow-up closed: {msg}"
+            );
+            assert!(
+                !chat_should_open_canvas_face(msg),
+                "follow-up no face: {msg}"
+            );
         }
         // Lone « canvas » → not enough.
         for msg in ["canvas", "le canvas", "dessine sur canvas"] {
             assert!(!chat_user_wants_explicit_canvas(msg), "lone canvas: {msg}");
-            assert!(!chat_should_open_canvas_face(msg), "lone canvas no face: {msg}");
+            assert!(
+                !chat_should_open_canvas_face(msg),
+                "lone canvas no face: {msg}"
+            );
         }
     }
 

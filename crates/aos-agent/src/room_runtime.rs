@@ -1,15 +1,16 @@
 //! Runtime bus pour tours de salon (`agent.room_turn` / `agent.room_conduct`).
 
-use crate::actions::{parse_actions, strip_tool_markup, AgentAction, THREAD_FAIL_COULD_NOT_CONTINUE};
+use crate::actions::{
+    parse_actions, strip_tool_markup, AgentAction, THREAD_FAIL_COULD_NOT_CONTINUE,
+};
 use crate::canvas_scene::{
-    begin_canvas_vision, canvas_scene_prompt_block, canvas_tool_mutates_scene,
-    end_canvas_vision, fetch_canvas_aspect,
-    fetch_canvas_scene_digest, merge_canvas_vision_refs, refresh_canvas_scene_after_op,
-    session_model_has_vision,
+    begin_canvas_vision, canvas_scene_prompt_block, canvas_tool_mutates_scene, end_canvas_vision,
+    fetch_canvas_aspect, fetch_canvas_scene_digest, merge_canvas_vision_refs,
+    refresh_canvas_scene_after_op, session_model_has_vision,
 };
 use crate::context_budget::{
-    compact_after_prompt_overflow, enforce_prompt_budget, is_prompt_too_long_error,
-    prompt_budget, DEFAULT_N_CTX_HINT, MAX_OVERFLOW_INFER_RETRIES,
+    compact_after_prompt_overflow, enforce_prompt_budget, is_prompt_too_long_error, prompt_budget,
+    DEFAULT_N_CTX_HINT, MAX_OVERFLOW_INFER_RETRIES,
 };
 use crate::mcp::open_mcp_tools_with_secrets;
 use crate::persist;
@@ -25,10 +26,10 @@ use crate::tools::{
 };
 use aos_ipc::BusClient;
 use aos_proto::{
-    AgentRoomConductRequest, AgentRoomConductResponse, AgentRoomTurnRequest,
-    AgentRoomTurnResponse, AgentSpec, CancelRequest, ChatAttachment, ChatMessage,
-    ChatRoomMember, ChatSessionAppendRequest, ChatSessionGetResponse, ChatSessionIdRequest,
-    ChatSessionMessage, ChatSessionMode, InferParams, InferRequest, ModuleInfo, TokenEvent,
+    AgentRoomConductRequest, AgentRoomConductResponse, AgentRoomTurnRequest, AgentRoomTurnResponse,
+    AgentSpec, CancelRequest, ChatAttachment, ChatMessage, ChatRoomMember,
+    ChatSessionAppendRequest, ChatSessionGetResponse, ChatSessionIdRequest, ChatSessionMessage,
+    ChatSessionMode, InferParams, InferRequest, ModuleInfo, TokenEvent,
 };
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -112,7 +113,9 @@ pub fn format_transcript_messages(
                 role: "user".into(),
                 content: msg.content.clone(),
             });
-        } else if msg.speaker_id.is_some() || msg.speaker_name.as_deref().is_some_and(|n| !n.is_empty()) {
+        } else if msg.speaker_id.is_some()
+            || msg.speaker_name.as_deref().is_some_and(|n| !n.is_empty())
+        {
             let label = msg
                 .speaker_name
                 .as_deref()
@@ -250,7 +253,10 @@ pub fn build_room_system_prompt(
     out
 }
 
-async fn fetch_session(bus: &BusClient, session_id: &str) -> Result<ChatSessionGetResponse, String> {
+async fn fetch_session(
+    bus: &BusClient,
+    session_id: &str,
+) -> Result<ChatSessionGetResponse, String> {
     bus.call::<ChatSessionIdRequest, ChatSessionGetResponse>(
         "chat.session.get",
         &ChatSessionIdRequest {
@@ -326,7 +332,11 @@ fn sync_pairs_to_chat_messages(pairs: &[(String, String)], messages: &mut Vec<Ch
     }));
 }
 
-fn enforce_room_prompt_budget(messages: &mut Vec<ChatMessage>, n_ctx: usize, max_gen: u32) -> Option<String> {
+fn enforce_room_prompt_budget(
+    messages: &mut Vec<ChatMessage>,
+    n_ctx: usize,
+    max_gen: u32,
+) -> Option<String> {
     let mut pairs = chat_messages_as_pairs(messages);
     let budget = prompt_budget(n_ctx, max_gen);
     let note = enforce_prompt_budget(&mut pairs, budget, 6)?;
@@ -433,16 +443,17 @@ async fn run_infer(
         {
             Ok(text) => return Ok(text),
             Err(e) if e == "tour annulé" => return Err(e),
-            Err(e) if is_prompt_too_long_error(&e) && prompt_retries < MAX_OVERFLOW_INFER_RETRIES => {
+            Err(e)
+                if is_prompt_too_long_error(&e) && prompt_retries < MAX_OVERFLOW_INFER_RETRIES =>
+            {
                 prompt_retries += 1;
                 let mut pairs = chat_messages_as_pairs(messages);
-                let _ = compact_after_prompt_overflow(&mut pairs, &mut n_ctx_hint, &mut gen_tokens, &e);
+                let _ =
+                    compact_after_prompt_overflow(&mut pairs, &mut n_ctx_hint, &mut gen_tokens, &e);
                 sync_pairs_to_chat_messages(&pairs, messages);
             }
             Err(e) if is_prompt_too_long_error(&e) => {
-                eprintln!(
-                    "room infer prompt overflow après {prompt_retries} retries : {e}"
-                );
+                eprintln!("room infer prompt overflow après {prompt_retries} retries : {e}");
                 return Err(THREAD_FAIL_COULD_NOT_CONTINUE.into());
             }
             Err(e) => return Err(e),
@@ -450,7 +461,10 @@ async fn run_infer(
     }
 }
 
-fn room_reply_from_model(text: &str, parsed: Option<&AgentAction>) -> Option<(String, Option<String>)> {
+fn room_reply_from_model(
+    text: &str,
+    parsed: Option<&AgentAction>,
+) -> Option<(String, Option<String>)> {
     if parsed.is_some() {
         return None;
     }
@@ -487,11 +501,7 @@ async fn run_room_tool_loop(
 
     for step in 0..MAX_ROOM_TOOL_STEPS {
         let has_canvas = tool_descs.iter().any(|t| t.name.starts_with("canvas."));
-        let mut step_refs: Vec<String> = if step == 0 {
-            images.to_vec()
-        } else {
-            vec![]
-        };
+        let mut step_refs: Vec<String> = if step == 0 { images.to_vec() } else { vec![] };
         if let Some(ref png) = pending_canvas_png.take() {
             if session_model_has_vision(bus, model_id.as_deref()).await {
                 step_refs = merge_canvas_vision_refs(&step_refs, png);
@@ -504,10 +514,11 @@ async fn run_room_tool_loop(
                 step_refs = merge_canvas_vision_refs(&step_refs, &png);
             }
         }
-        let canvas_active = has_canvas && step_refs.iter().any(|p| {
-            let lower = p.to_ascii_lowercase();
-            lower.ends_with(".png") || lower.ends_with(".jpg") || lower.ends_with(".jpeg")
-        });
+        let canvas_active = has_canvas
+            && step_refs.iter().any(|p| {
+                let lower = p.to_ascii_lowercase();
+                lower.ends_with(".png") || lower.ends_with(".jpg") || lower.ends_with(".jpeg")
+            });
         let raw_result = run_infer(
             bus,
             round,
@@ -540,8 +551,9 @@ async fn run_room_tool_loop(
             });
             messages.push(ChatMessage {
                 role: "user".into(),
-                content: "Réponds par un outil JSON valide ou un message texte final pour le salon."
-                    .into(),
+                content:
+                    "Réponds par un outil JSON valide ou un message texte final pour le salon."
+                        .into(),
             });
             continue;
         }
@@ -572,8 +584,7 @@ async fn run_room_tool_loop(
             .await;
 
             if canvas_tool_mutates_scene(&action.action) {
-                let scene =
-                    refresh_canvas_scene_after_op(bus, session_id, &outcome).await;
+                let scene = refresh_canvas_scene_after_op(bus, session_id, &outcome).await;
                 outcome = scene.text;
                 if let Some(png) = scene.png_path {
                     pending_canvas_png = Some(png);
@@ -601,9 +612,8 @@ pub async fn execute_room_turn(
         return Err("session n'est pas en mode salon".into());
     }
     let display_name = member_display_name(&session, &req.agent_id)?;
-    let mut spec = persist::read_spec(&req.agent_id).ok_or_else(|| {
-        format!("spec introuvable pour le membre {}", req.agent_id)
-    })?;
+    let mut spec = persist::read_spec(&req.agent_id)
+        .ok_or_else(|| format!("spec introuvable pour le membre {}", req.agent_id))?;
     spec.session_id = Some(req.session_id.clone());
 
     let canvas_exported = if session.meta.canvas_open {
@@ -721,8 +731,10 @@ pub async fn execute_room_conduct(
     }
 
     let max = effective_max_turns(&session.meta.conductor_policy) as usize;
-    let mut queue =
-        sanitize_member_queue(build_initial_queue(&req.content, &session.meta.members), &session.meta.members);
+    let mut queue = sanitize_member_queue(
+        build_initial_queue(&req.content, &session.meta.members),
+        &session.meta.members,
+    );
     queue.truncate(max);
     if queue.is_empty() {
         return Ok(AgentRoomConductResponse {
@@ -787,11 +799,9 @@ pub async fn execute_room_conduct(
         }
 
         if session.meta.conductor_policy.allow_peer_debate {
-            for peer_id in detect_peer_addresses(
-                &reply.content,
-                &session.meta.members,
-                &member.agent_id,
-            ) {
+            for peer_id in
+                detect_peer_addresses(&reply.content, &session.meta.members, &member.agent_id)
+            {
                 if spoken.contains(&peer_id) {
                     continue;
                 }
@@ -823,6 +833,7 @@ mod tests {
                 created_ms: 1,
                 updated_ms: 2,
                 archived: false,
+                pinned: false,
                 message_count: 1,
                 model_id: None,
                 mode: ChatSessionMode::Room,
@@ -843,8 +854,8 @@ mod tests {
                 attachments: vec![],
                 speaker_id: None,
                 speaker_name: None,
-                        thinking: None,
-                    }],
+                thinking: None,
+            }],
         }
     }
 
@@ -952,7 +963,8 @@ mod tests {
             gate_mode: "ask".into(),
             origin: None,
         };
-        let prompt = build_room_system_prompt(&spec, "Critic", &members, false, &[], "sess-1", None);
+        let prompt =
+            build_room_system_prompt(&spec, "Critic", &members, false, &[], "sess-1", None);
         assert!(prompt.contains("Ne recopie pas"));
         assert!(prompt.contains("Critic"));
     }
