@@ -1851,7 +1851,6 @@ pub fn canvas_agent_brief(user_text: &str, aspect: CanvasAspect, exported: &[Str
 #[cfg(test)]
 mod routing_tests {
     use super::*;
-    use crate::i18n;
 
     #[test]
     fn empty_hint_clamp_survives_inverted_bounds() {
