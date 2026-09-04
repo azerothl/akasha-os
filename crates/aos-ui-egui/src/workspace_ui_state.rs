@@ -23,20 +23,20 @@ impl WorkspaceUiState {
         is_new
     }
 
-    pub(crate) fn apply_notes_listed(&mut self, notes: Vec<NoteListItem>) {
-        self.notes.apply_listed(notes);
+    pub(crate) fn apply_notes_listed(&mut self, notes: Vec<NoteListItem>, count_tpl: &str) {
+        self.notes.apply_listed(notes, count_tpl);
     }
 
     pub(crate) fn apply_note_loaded(&mut self, detail: NoteDetail) {
         self.notes.apply_loaded(detail);
     }
 
-    pub(crate) fn apply_notes_search_hits(&mut self, hits: Vec<NoteSearchHit>) {
-        self.notes.apply_search_hits(hits);
+    pub(crate) fn apply_notes_search_hits(&mut self, hits: Vec<NoteSearchHit>, count_tpl: &str) {
+        self.notes.apply_search_hits(hits, count_tpl);
     }
 
-    pub(crate) fn apply_notes_related(&mut self, hits: Vec<NoteRelatedHit>) {
-        self.notes.apply_related(hits);
+    pub(crate) fn apply_notes_related(&mut self, hits: Vec<NoteRelatedHit>, count_tpl: &str) {
+        self.notes.apply_related(hits, count_tpl);
     }
 
     pub(crate) fn mark_note_saved(

@@ -7,6 +7,8 @@ use eframe::egui::{self, Color32, RichText, Ui};
 use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
 
 use crate::icons;
+use crate::i18n;
+use crate::theme;
 
 #[derive(Default)]
 pub struct PanelActions {
@@ -21,9 +23,21 @@ pub struct PanelActions {
 }
 
 
+pub fn agent_state_label(t: &i18n::UiStrings, state: &AgentState) -> &'static str {
+    match state {
+        AgentState::Done => t.agent_state_done,
+        AgentState::Failed => t.agent_state_failed,
+        AgentState::Blocked => t.agent_state_blocked,
+        AgentState::Running => t.agent_state_running,
+        AgentState::Created | AgentState::Paused | AgentState::Killed | AgentState::Roster => {
+            t.agent_state_pending
+        }
+    }
+}
+
 pub fn state_color(state: &AgentState) -> Color32 {
     match state {
-        AgentState::Failed | AgentState::Killed => Color32::from_rgb(220, 90, 90),
+        AgentState::Failed | AgentState::Killed => theme::HYDROGEN,
         AgentState::Blocked => Color32::from_rgb(230, 160, 60),
         AgentState::Done => Color32::from_rgb(100, 190, 120),
         AgentState::Paused => Color32::from_rgb(160, 160, 180),
@@ -735,7 +749,7 @@ pub fn chat_agent_card(
             if canvas_fail || canvas_muted {
                 String::new()
             } else {
-                format!("{:?}", a.state)
+                agent_state_label(t, &a.state).to_string()
             },
             state_color(&a.state),
             a.step,
@@ -826,7 +840,7 @@ pub fn chat_agent_card(
             }
             if canvas_fail {
                 ui.colored_label(
-                    Color32::from_rgb(220, 90, 90),
+                    theme::HYDROGEN,
                     RichText::new(t.canvas_draw_failed).strong(),
                 );
                 if ui.add(egui::Button::new(t.canvas_draw_retry).small()).clicked() {
@@ -839,7 +853,7 @@ pub fn chat_agent_card(
             } else if let Some(reason) = fail {
                 let visible = resolve_visible_fail_reason(t, info, reason.as_str(), session_ops, trace);
                 if !visible.is_empty() {
-                    ui.colored_label(Color32::from_rgb(220, 90, 90), truncate(&visible, 100));
+                    ui.colored_label(theme::HYDROGEN, truncate(&visible, 100));
                 }
             }
         });
@@ -929,7 +943,7 @@ pub fn draw_agent_detail(
         let canvas_muted = canvas_draw_failure_muted(Some(a), session_ops, trace);
         ui.horizontal(|ui| {
             if !canvas_muted {
-                ui.colored_label(state_color(&a.state), format!("{:?}", a.state));
+                ui.colored_label(state_color(&a.state), agent_state_label(t, &a.state));
                 ui.separator();
             }
             if canvas_muted {
@@ -985,19 +999,19 @@ pub fn draw_agent_detail(
                     if overflow {
                         ui.label(
                             RichText::new(t.agent_could_not_continue)
-                                .color(Color32::from_rgb(240, 140, 120))
+                                .color(theme::HYDROGEN)
                                 .strong(),
                         );
                     } else if canvas_draw {
                         ui.label(
                             RichText::new(t.canvas_draw_failed)
-                                .color(Color32::from_rgb(240, 140, 120))
+                                .color(theme::HYDROGEN)
                                 .strong(),
                         );
                     } else {
                         ui.label(
                             RichText::new(t.agent_failure)
-                                .color(Color32::from_rgb(240, 140, 120))
+                                .color(theme::HYDROGEN)
                                 .strong(),
                         );
                         ui.label(
@@ -1249,7 +1263,7 @@ fn draw_step(
                         } else {
                             format!("{} {}", t.agent_failure, text)
                         })
-                        .color(Color32::from_rgb(240, 140, 120)),
+                        .color(theme::HYDROGEN),
                     );
                 });
             }
@@ -1341,9 +1355,9 @@ fn draw_step(
                 };
                 card_frame(if spawn_ok {
                     Color32::from_rgb(30, 45, 60)
-                } else {
-                    Color32::from_rgb(55, 32, 32)
-                })
+                        } else {
+                            Color32::from_rgb(55, 32, 32)
+                        })
                 .show(ui, |ui| {
                     ui.label(
                         RichText::new(if spawn_ok {
@@ -1354,7 +1368,7 @@ fn draw_step(
                         .color(if spawn_ok {
                             Color32::from_rgb(140, 190, 255)
                         } else {
-                            Color32::from_rgb(240, 140, 140)
+                            theme::HYDROGEN
                         })
                         .strong(),
                     );
@@ -1362,7 +1376,7 @@ fn draw_step(
                         ui.small(&brief);
                     }
                     if let Some(msg) = fail_msg {
-                        ui.small(RichText::new(truncate(&msg, 240)).color(Color32::from_rgb(220, 160, 160)));
+                        ui.small(RichText::new(truncate(&msg, 240)).color(theme::HYDROGEN));
                     }
                     if let Some(child) = child.filter(|c| !c.is_empty() && c != "?") {
                         if ui

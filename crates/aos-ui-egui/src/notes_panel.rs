@@ -142,13 +142,13 @@ impl NotesPanelState {
         !self.edit_title.trim().is_empty()
     }
 
-    pub fn apply_listed(&mut self, notes: Vec<NoteListItem>) {
+    pub fn apply_listed(&mut self, notes: Vec<NoteListItem>, count_tpl: &str) {
         self.notes = notes;
         if self.create_failed && !self.notes.is_empty() {
             self.create_failed = false;
             self.retry_payload = None;
         }
-        self.status = format!("{} note(s)", self.notes.len());
+        self.status = count_tpl.replace("{n}", &self.notes.len().to_string());
     }
 
     pub fn apply_loaded(&mut self, detail: NoteDetail) {
@@ -173,14 +173,14 @@ impl NotesPanelState {
         self.status = String::new();
     }
 
-    pub fn apply_search_hits(&mut self, hits: Vec<NoteSearchHit>) {
+    pub fn apply_search_hits(&mut self, hits: Vec<NoteSearchHit>, count_tpl: &str) {
         self.search_hits = hits;
-        self.status = format!("{} résultat(s)", self.search_hits.len());
+        self.status = count_tpl.replace("{n}", &self.search_hits.len().to_string());
     }
 
-    pub fn apply_related(&mut self, hits: Vec<NoteRelatedHit>) {
+    pub fn apply_related(&mut self, hits: Vec<NoteRelatedHit>, count_tpl: &str) {
         self.related_hits = hits;
-        self.status = format!("{} note(s) liée(s)", self.related_hits.len());
+        self.status = count_tpl.replace("{n}", &self.related_hits.len().to_string());
     }
 
     pub fn start_new(&mut self) {

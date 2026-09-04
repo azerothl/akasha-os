@@ -1039,7 +1039,8 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                         .push(ChatLine::plain("système", "usage : /image <prompt>"));
                     return;
                 }
-                self.status = "image : génération…".into();
+                let t = i18n::strings(&self.prefs.language);
+                self.status = t.status_image_generating.into();
                 if let Some(sid) = self.chat_state.active_session.clone() {
                     let _ = self.cmd_tx.send(Cmd::SessionAppend {
                         session_id: sid,

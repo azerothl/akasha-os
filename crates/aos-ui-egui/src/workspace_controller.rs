@@ -12,7 +12,8 @@ impl UiApp {
 
     pub(crate) fn on_notes_listed(&mut self, notes: Vec<NoteListItem>) {
         let had_pending_note = self.scenario_ui.pending_note_agent;
-        self.workspace_ui.apply_notes_listed(notes);
+        let t = i18n::strings(&self.prefs.language);
+        self.workspace_ui.apply_notes_listed(notes, t.notes_count);
         if !self.workspace_ui.notes.notes.is_empty() {
             self.scenario_ui.note_human = true;
             if had_pending_note {
@@ -28,11 +29,15 @@ impl UiApp {
     }
 
     pub(crate) fn on_notes_search_hits(&mut self, hits: Vec<NoteSearchHit>) {
-        self.workspace_ui.apply_notes_search_hits(hits);
+        let t = i18n::strings(&self.prefs.language);
+        self.workspace_ui
+            .apply_notes_search_hits(hits, t.notes_search_count);
     }
 
     pub(crate) fn on_notes_related(&mut self, hits: Vec<NoteRelatedHit>) {
-        self.workspace_ui.apply_notes_related(hits);
+        let t = i18n::strings(&self.prefs.language);
+        self.workspace_ui
+            .apply_notes_related(hits, t.notes_related_count);
     }
 
     pub(crate) fn on_notes_saved(&mut self, path: String, slug: String, title: String) {

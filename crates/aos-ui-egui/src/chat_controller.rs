@@ -280,7 +280,7 @@ impl UiApp {
             canvas_aspect,
         };
         self.chat_state.runtime.outgoing_turn = Some(retry_turn);
-        self.status = "assistant : génération…".into();
+        self.status = t.status_assistant_generating.into();
         let _ = self.cmd_tx.send(Cmd::Chat {
             session_id,
             history,
@@ -361,7 +361,8 @@ impl UiApp {
             canvas_open: retry.canvas_open,
             canvas_aspect: retry.canvas_aspect,
         });
-        self.status = "assistant : génération…".into();
+        let t = i18n::strings(&retry.language);
+        self.status = t.status_assistant_generating.into();
         let _ = self.cmd_tx.send(retry.to_chat_cmd(true));
         self.scenario_ui.chat = true;
     }

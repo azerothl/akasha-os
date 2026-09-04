@@ -2,6 +2,7 @@
 
 use aos_model::RemoteOpenAiBackend;
 use aos_proto::ProviderRecord;
+use crate::theme;
 use eframe::egui;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -591,10 +592,7 @@ impl eframe::App for SetupApp {
 
                     let can_continue = self.can_continue();
                     if !can_continue {
-                        ui.colored_label(
-                            egui::Color32::from_rgb(220, 90, 90),
-                            t.model_setup_validation_need_both,
-                        );
+                        ui.colored_label(theme::HYDROGEN, t.model_setup_validation_need_both);
                     }
 
                     ui.horizontal(|ui| {

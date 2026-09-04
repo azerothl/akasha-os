@@ -25,7 +25,8 @@ impl UiApp {
             canvas_open: pending.canvas_open,
             canvas_aspect: pending.canvas_aspect,
         });
-        self.status = "assistant : génération…".into();
+        let t = i18n::strings(&pending.language);
+        self.status = t.status_assistant_generating.into();
         let _ = self.cmd_tx.send(Cmd::Chat {
             session_id: pending.session_id,
             history: pending.history,
