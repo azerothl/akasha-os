@@ -1512,10 +1512,13 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             Tab::Audit => {
                 let _ = self.cmd_tx.send(Cmd::Audit { last: 40 });
             }
-            Tab::Caps if !self.security_ui.caps_holder.is_empty() => {
-                let _ = self.cmd_tx.send(Cmd::CapList {
-                    holder: self.security_ui.caps_holder.clone(),
-                });
+            Tab::Caps => {
+                if !self.security_ui.caps_holder.is_empty() {
+                    let _ = self.cmd_tx.send(Cmd::CapList {
+                        holder: self.security_ui.caps_holder.clone(),
+                    });
+                }
+                let _ = self.cmd_tx.send(Cmd::DevicePermissionsList);
             }
             Tab::Notes => {
                 let _ = self.cmd_tx.send(Cmd::NotesList);
@@ -2005,6 +2008,12 @@ impl eframe::App for UiApp {
                 Evt::Caps { holder, caps } => {
                     self.security_ui.set_caps(holder, caps);
                 }
+                Evt::DevicePermissions(permissions) => {
+                    self.security_ui.set_device_permissions(permissions);
+                }
+                Evt::DeviceActive(active) => {
+                    self.security_ui.set_device_active(active);
+                }
                 Evt::Schedules(entries) => schedule_event_controller::on_schedules(self, entries),
                 Evt::ScheduleCreated(entry) => {
                     schedule_event_controller::on_schedule_created(self, entry);
@@ -2405,7 +2414,9 @@ impl eframe::App for UiApp {
                 overflow_scroll_h(ui, "pending_confirms", 180.0, |ui| {
                     for c in self.confirmations_ui.pending.clone() {
                         ui.group(|ui| {
-                            let rich = matches!(
+                            let device_capture = c.action.starts_with("device.camera.")
+                                || c.action.starts_with("device.mic.");
+                            let rich = device_capture || matches!(
                                 c.action.as_str(),
                                 "module.install"
                                     | "module.uninstall"
@@ -2418,21 +2429,38 @@ impl eframe::App for UiApp {
                             );
                             ui.label(t.confirm_wants_action.replace("{action}", &c.action));
                             ui.monospace(format!("{} → {}", c.target, c.reason));
-                            if rich {
+                            if device_capture {
+                                ui.colored_label(
+                                    egui::Color32::from_rgb(220, 180, 80),
+                                    format!("{} · {}", t.device_camera, t.device_microphone),
+                                );
+                            } else if rich {
                                 ui.colored_label(
                                     egui::Color32::from_rgb(220, 180, 80),
                                     "Extension OS : revue des caps / manifeste requise",
                                 );
                             }
                             ui.horizontal(|ui| {
-                                if ui.button(t.confirm_grant).clicked() {
+                                if (!device_capture && ui.button(t.confirm_grant).clicked())
+                                    || (device_capture && ui.button(t.device_allow_once).clicked())
+                                {
                                     let _ = self.cmd_tx.send(Cmd::Confirm {
                                         id: c.id.clone(),
                                         approved: true,
                                     });
                                     self.scenario_ui.confirm = true;
                                 }
-                                if ui.button(t.confirm_deny).clicked() {
+                                if device_capture && ui.button(t.device_always).clicked() {
+                                    // La durée de permission est portée par la
+                                    // requête device ; ce clic ne demande jamais
+                                    // directement la permission Windows.
+                                    let _ = self.cmd_tx.send(Cmd::Confirm {
+                                        id: c.id.clone(),
+                                        approved: true,
+                                    });
+                                    self.scenario_ui.confirm = true;
+                                }
+                                if ui.button(if device_capture { t.device_deny } else { t.confirm_deny }).clicked() {
                                     let _ = self.cmd_tx.send(Cmd::Confirm {
                                         id: c.id.clone(),
                                         approved: false,

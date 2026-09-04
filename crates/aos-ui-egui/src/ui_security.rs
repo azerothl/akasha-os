@@ -64,6 +64,44 @@ pub(crate) fn ui_audit(&mut self, ui: &mut egui::Ui) {
         ui.separator();
         let holder = self.security_ui.caps_holder.clone();
         self.draw_caps_list(ui, &holder);
+        if !self.security_ui.device_active.is_empty() {
+            ui.separator();
+            ui.heading(t.device_active_heading);
+            for capture in self.security_ui.device_active.clone() {
+                ui.horizontal(|ui| {
+                    ui.label(format!("{} · {} · {} ms", capture.agent_id, capture.device_id, capture.duration_ms));
+                    if ui.button(t.device_stop).clicked() {
+                        let _ = self.cmd_tx.send(Cmd::DeviceCaptureStop {
+                            agent_id: capture.agent_id.clone(),
+                            capture_id: capture.capture_id.clone(),
+                        });
+                    }
+                });
+            }
+        }
+        if !self.security_ui.device_permissions.is_empty() {
+            ui.separator();
+            ui.heading(t.device_permissions_heading);
+            ui.weak(t.device_permissions_blurb);
+            for permission in self.security_ui.device_permissions.clone() {
+                ui.group(|ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(format!(
+                            "{} · {} · {}",
+                            permission.agent_id, permission.device_id, permission.capability
+                        ));
+                        if ui.small_button(t.caps_revoke).clicked() {
+                            let _ = self.cmd_tx.send(Cmd::DevicePermissionRevoke {
+                                agent_id: permission.agent_id.clone(),
+                                device_id: permission.device_id.clone(),
+                                kind: permission.kind,
+                                mode: permission.mode,
+                            });
+                        }
+                    });
+                });
+            }
+        }
     }
 
     pub(crate) fn draw_caps_list(&mut self, ui: &mut egui::Ui, holder: &str) {

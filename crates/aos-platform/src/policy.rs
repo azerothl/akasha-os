@@ -88,6 +88,20 @@ impl PolicyEngine {
                 effect: PolicyEffect::RequireConfirmation,
                 timeout_sec: Some(confirm_timeout_sec),
             },
+            PolicyRule {
+                name: "confirm_device_capture".into(),
+                matches: vec![(
+                    "action.kind".into(),
+                    serde_json::json!([
+                        "device.camera.capture",
+                        "device.camera.stream",
+                        "device.mic.capture",
+                        "device.mic.stream"
+                    ]),
+                )],
+                effect: PolicyEffect::RequireConfirmation,
+                timeout_sec: Some(confirm_timeout_sec),
+            },
         ]
     }
 
@@ -183,5 +197,13 @@ mod tests {
         let (eff, rule) = e.evaluate(&ctx(&[("action.kind", "fs.read")]));
         assert_eq!(eff, PolicyEffect::Allow);
         assert!(rule.is_none());
+    }
+
+    #[test]
+    fn capture_peripherique_exige_confirmation() {
+        let e = engine();
+        let (eff, rule) = e.evaluate(&ctx(&[("action.kind", "device.camera.stream")]));
+        assert_eq!(eff, PolicyEffect::RequireConfirmation);
+        assert_eq!(rule.unwrap().name, "confirm_device_capture");
     }
 }

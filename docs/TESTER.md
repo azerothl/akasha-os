@@ -380,3 +380,15 @@ Tester-facing write-up (no cargo): [write-a-module.md](write-a-module.md).
 - Product video UI / STT / always-on voice
 - Public marketplace / messaging channels / multi-GPU hard-green
 - `webview` widget kind
+### Device capture (issue #137)
+
+- On Windows 10/11, verify `device.enumerate` shows a camera and a microphone.
+- Confirm in Akasha before accepting the Windows permission prompt; test
+  `Allow once`, `Always`, `Refuse`, and exact-device revocation in Caps.
+- Start a stream, use the visible **Stop** control, then verify the stream is
+  gone and Audit contains request/open/stop/error/revocation events without
+  media bytes.
+- Verify the artifact is under `var/sessions/<session>/devices/` and that
+  absent, busy, denied, and quota errors are human-readable.
+- On Linux/macOS CI, verify the fake backend tests pass and the production
+  backend returns `UnsupportedPlatform`.

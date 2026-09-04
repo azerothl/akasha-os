@@ -238,6 +238,17 @@ pub(crate) enum Cmd {
         cap_id: u64,
         tree: bool,
     },
+    DevicePermissionsList,
+    DeviceCaptureStop {
+        agent_id: String,
+        capture_id: String,
+    },
+    DevicePermissionRevoke {
+        agent_id: String,
+        device_id: String,
+        kind: aos_proto::DeviceKind,
+        mode: aos_proto::CaptureMode,
+    },
     ScheduleList,
     ScheduleCreate {
         goal: String,
@@ -508,6 +519,8 @@ pub(crate) enum Evt {
         holder: String,
         caps: Vec<CapInfo>,
     },
+    DevicePermissions(Vec<aos_proto::DevicePermissionInfo>),
+    DeviceActive(Vec<aos_proto::DeviceActiveCapture>),
     Schedules(Vec<ScheduleEntry>),
     ScheduleCreated(ScheduleEntry),
     ScheduleUpdated(ScheduleEntry),

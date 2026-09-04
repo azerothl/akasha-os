@@ -348,3 +348,16 @@ Guide testeur (sans cargo) : [write-a-module.md](write-a-module.md).
 - UI vidéo produit / STT / voix permanente
 - Marketplace public / canaux messagerie / hard-green multi-GPU sans 2e GPU
 - kind `webview`
+### Capture caméra / micro (issue #137)
+
+- Sous Windows 10/11, vérifier que `device.enumerate` détecte une caméra et un
+  micro.
+- Confirmer dans Akasha avant d’accepter la permission Windows ; tester
+  `Autoriser une fois`, `Toujours`, `Refuser` et la révocation du périphérique
+  exact dans Caps.
+- Démarrer un flux, utiliser le contrôle visible **Arrêter**, puis vérifier
+  l’arrêt et les événements Audit sans octets média.
+- Vérifier que l’artefact reste sous
+  `var/sessions/<session>/devices/` et que les erreurs absent/occupé/refus/quota
+  sont lisibles.
+- Sous Linux/macOS CI, vérifier le backend factice et `UnsupportedPlatform`.

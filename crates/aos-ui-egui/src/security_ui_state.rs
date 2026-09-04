@@ -7,6 +7,8 @@ pub(crate) struct SecurityUiState {
     pub(crate) audit: Vec<AuditEvent>,
     pub(crate) caps: Vec<CapInfo>,
     pub(crate) caps_holder: String,
+    pub(crate) device_permissions: Vec<aos_proto::DevicePermissionInfo>,
+    pub(crate) device_active: Vec<aos_proto::DeviceActiveCapture>,
 }
 
 impl SecurityUiState {
@@ -21,6 +23,14 @@ impl SecurityUiState {
 
     pub(crate) fn select_holder(&mut self, holder: String) {
         self.caps_holder = holder;
+    }
+
+    pub(crate) fn set_device_permissions(&mut self, permissions: Vec<aos_proto::DevicePermissionInfo>) {
+        self.device_permissions = permissions;
+    }
+
+    pub(crate) fn set_device_active(&mut self, active: Vec<aos_proto::DeviceActiveCapture>) {
+        self.device_active = active;
     }
 }
 

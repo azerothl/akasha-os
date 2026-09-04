@@ -12,6 +12,7 @@ pub mod canvas_raster;
 pub mod catalogue;
 pub mod chat_session;
 pub mod confirm;
+pub mod device_capture;
 pub mod extract;
 pub mod mem_sweep;
 pub mod skill_pass;

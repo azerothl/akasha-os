@@ -12,7 +12,18 @@ mod canvas_layers;
 mod canvas_style;
 pub mod chat_document;
 pub mod decl_ui;
+pub mod device_capture;
 pub mod mem_extract;
+
+pub use device_capture::{
+    capability_for as device_capability_for, CaptureMetadata, CaptureMode, CapturePermission,
+    CaptureId, CaptureRequest, CaptureResponse,
+    CaptureState, DeviceArtifact, DeviceCapability, DeviceCaptureMetadata, DeviceCaptureRequest,
+    DeviceCaptureResponse,
+    DeviceActiveCapture, DeviceCaptureStopRequest, DeviceCaptureStopResponse, DeviceDescriptor,
+    DeviceEnumerateResponse, DeviceKind, DevicePermissionInfo, DevicePermissionRevokeRequest,
+    OsPermissionState,
+};
 
 pub use canvas_layers::{
     align_canvas_op_body, canvas_hit_test, canvas_layer_by_id, canvas_layer_effective_locked,
@@ -4670,7 +4681,7 @@ mod chat_session_room_tests {
     use super::{
         AgentCreateRequest, AgentGoal, AgentInfo, AgentKind, AgentState, CanvasAspect,
         ChatRoomConductorPolicy, ChatRoomMember, ChatSessionMessage, ChatSessionMeta,
-        ChatSessionMode,
+        ChatSessionMode, CognitiveMode,
     };
 
     #[test]

@@ -132,6 +132,8 @@ pub struct PlatformSubsystem {
     pub policy: Mutex<PolicyEngine>,
     pub confirm: Arc<ConfirmManager>,
     pub trust: Mutex<TrustManager>,
+    /// Capture caméra/microphone et permissions liées à agent+périphérique.
+    pub devices: Mutex<crate::device_capture::DeviceCaptureManager>,
     pub net: Mutex<EgressControl>,
     pub secrets: Mutex<SecretStore>,
     /// Caps accordées par `cap.request` (registre logique par agent).
@@ -205,6 +207,8 @@ impl PlatformSubsystem {
         )
         .map_err(|e| e.to_string())?;
         let secrets = SecretStore::open(&config.secrets_file).map_err(|e| e.to_string())?;
+        let devices = crate::device_capture::DeviceCaptureManager::open(&config.sessions_dir)
+            .map_err(|e| e.to_string())?;
         let secrets_backend = secrets.master_backend().as_str().to_string();
         let mut net = EgressControl::new();
         if config.net_mode == "offline_strict" {
@@ -227,6 +231,7 @@ impl PlatformSubsystem {
             policy: Mutex::new(policy),
             confirm: ConfirmManager::new(config.confirm_timeout_sec),
             trust: Mutex::new(TrustManager::new()),
+            devices: Mutex::new(devices),
             net: Mutex::new(net),
             secrets: Mutex::new(secrets),
             granted_caps: Mutex::new(std::collections::HashMap::new()),
@@ -460,6 +465,8 @@ impl PlatformSubsystem {
             "module.compile",
             "module.uninstall",
             "media.generate",
+            "device.camera",
+            "device.mic",
         ];
         let tier = self.trust.lock().unwrap().tier(agent_id);
         let critical = CRITICAL.iter().any(|c| cap.starts_with(c));
