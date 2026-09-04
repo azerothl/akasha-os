@@ -754,7 +754,7 @@ pub fn ui_canvas_toolbar(
     let compact = ui.spacing().item_spacing;
     ui.spacing_mut().item_spacing = eframe::egui::vec2(4.0, compact.y);
     ui.vertical(|ui| {
-        ui.strong("Dessiner");
+        ui.strong("✎ Dessiner");
         ui.horizontal(|ui| {
             if state.seeing {
                 ui_canvas_seeing_pill(ui, t.canvas_seeing_now);
@@ -810,7 +810,7 @@ pub fn ui_canvas_toolbar(
         });
 
         if state.tool == CanvasTool::Select {
-            ui.strong("Sélectionner");
+            ui.strong("☑ Sélectionner");
             ui.horizontal(|ui| {
                 if let Some(seq) = state.selected_seq {
                     for (label, edge) in [
@@ -893,7 +893,7 @@ pub fn ui_canvas_toolbar(
             });
         }
 
-        ui.strong("Vue");
+        ui.strong("⛶ Vue");
         ui.horizontal(|ui| {
             if matches!(
                 state.tool,

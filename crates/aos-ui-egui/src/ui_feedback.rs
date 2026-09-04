@@ -46,9 +46,13 @@ impl UiApp {
             ui.label(t.feedback_scenario);
             ui.text_edit_singleline(&mut self.feedback_ui.scenario);
         });
-        ui.text_edit_multiline(&mut self.feedback_ui.body);
+        ui.add(
+            egui::TextEdit::multiline(&mut self.feedback_ui.body)
+                .desired_width(f32::INFINITY)
+                .desired_rows(18),
+        );
         ui.horizontal(|ui| {
-            if ui.button("Ajouter un fichier").clicked()
+            if ui.button("📎 Ajouter un fichier").clicked()
                 && self.feedback_ui.attachments.len() < 8
             {
                 if let Some(path) = pick_os_file("Ajouter un fichier au retour", &[], None) {
@@ -78,7 +82,7 @@ impl UiApp {
         }
         ui.weak("N'ajoutez pas de secrets, clés API ou données personnelles.");
         let t = i18n::strings(&self.prefs.language);
-        if ui.button(t.btn_copy).clicked() {
+        if ui.button(format!("⎙ {}", t.btn_copy)).clicked() {
             ui.ctx().copy_text(self.feedback_ui.body.clone());
             self.status = t.copied.into();
         }
@@ -103,7 +107,7 @@ impl UiApp {
         if !template_complete {
             ui.weak("Complétez toutes les sections du modèle avant l'envoi.");
         }
-        if ui.button("Envoyer le retour").clicked()
+        if ui.button("⏏ Envoyer le retour").clicked()
             && !self.feedback_ui.title.is_empty()
             && template_complete
         {

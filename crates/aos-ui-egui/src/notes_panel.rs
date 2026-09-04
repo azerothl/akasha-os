@@ -300,16 +300,17 @@ pub fn show_notes_panel(
     }
     ui.separator();
 
-    let notes_total_width = ui.available_width();
-    let notes_list_width = (notes_total_width * 0.34).clamp(280.0, 520.0);
-    ui.columns(2, |cols| {
-        cols[0].set_width(notes_list_width);
-        cols[1].set_width((notes_total_width - notes_list_width - 12.0).max(320.0));
-        let list_h = cols[0].available_height() * 0.55;
-        let search_h = cols[0].available_height() * 0.25;
-        let editor_h = cols[1].available_height();
+    let editor_h = ui.available_height();
+    let list_h = editor_h * 0.55;
+    let search_h = editor_h * 0.25;
+    egui::SidePanel::left("notes_list_panel")
+        .default_width((ui.available_width() * 0.34).clamp(280.0, 520.0))
+        .min_width(240.0)
+        .max_width(560.0)
+        .resizable(true)
+        .show_inside(ui, |list_ui| {
         // --- Liste ---
-        cols[0].vertical(|ui| {
+        list_ui.vertical(|ui| {
             ui.label(RichText::new(t.notes_list).strong());
             ui.horizontal(|ui| {
                 ui.label(t.notes_filter);
@@ -382,8 +383,10 @@ pub fn show_notes_panel(
             }
         });
 
+        });
+
         // --- Éditeur ---
-        cols[1].vertical(|ui| {
+        ui.vertical(|ui| {
             let preview_h = (editor_h * 0.35).max(100.0);
             ui.label(RichText::new(if state.is_new {
                 t.notes_editor_new
@@ -578,8 +581,6 @@ pub fn show_notes_panel(
                     });
             }
         });
-    });
-
     actions
 }
 
