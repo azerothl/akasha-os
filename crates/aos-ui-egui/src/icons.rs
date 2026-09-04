@@ -6,6 +6,12 @@ use eframe::egui::{
 
 const BTN: f32 = 18.0;
 
+/// Session-bar icon-only control size (activity toggle, etc.).
+pub const SESSION_ICON_SZ: f32 = BTN;
+
+/// Fixed slot for activity-list status glyphs (Done / Failed / …).
+pub const AGENT_STATUS_ICON_SZ: f32 = 14.0;
+
 /// Width reserved for the chat attach control (icon + spacing).
 pub const ATTACH_BTN_W: f32 = BTN + 4.0;
 
@@ -238,12 +244,82 @@ pub fn external_arrow(ui: &mut Ui) {
 
 /// Done-task check (replaces `✓`).
 pub fn done_check(ui: &mut Ui) {
-    let size = Vec2::splat(14.0);
+    let size = Vec2::splat(AGENT_STATUS_ICON_SZ);
     let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
     if !ui.is_rect_visible(rect) {
         return;
     }
     paint_done_check(ui, rect, ui.visuals().weak_text_color());
+}
+
+/// Close-all control for the activity detail header (painted × + label, no Unicode).
+pub fn close_all_button(ui: &mut Ui, label: &str) -> Response {
+    let text_w = ui.fonts(|f| {
+        f.layout_no_wrap(
+            label.to_owned(),
+            egui::FontId::proportional(12.0),
+            Color32::PLACEHOLDER,
+        )
+        .size()
+        .x
+    });
+    let size = Vec2::new(BTN + text_w + 6.0, BTN);
+    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+    if ui.is_rect_visible(rect) {
+        let icon_rect = Rect::from_min_size(rect.min, Vec2::splat(BTN));
+        paint_close_mark(ui, icon_rect, hover_color(ui, &response));
+        ui.painter().text(
+            Pos2::new(icon_rect.right() + 2.0, rect.center().y),
+            egui::Align2::LEFT_CENTER,
+            label,
+            egui::FontId::proportional(12.0),
+            hover_color(ui, &response),
+        );
+    }
+    response
+}
+
+/// Archived-session filter toggle beside the session search field.
+pub fn archived_toggle_button(ui: &mut Ui, selected: bool) -> Response {
+    let size = Vec2::splat(BTN);
+    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+    if ui.is_rect_visible(rect) {
+        let color = if selected {
+            ui.visuals().strong_text_color()
+        } else {
+            hover_color(ui, &response)
+        };
+        paint_archived_filter(ui, rect, color, selected);
+    }
+    response
+}
+
+/// Activity panel toggle for the session bar (icon-only when canvas is open).
+pub fn activity_toggle_button(ui: &mut Ui, open: bool) -> Response {
+    let size = Vec2::splat(BTN);
+    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+    if ui.is_rect_visible(rect) {
+        if open {
+            ui.painter().rect_filled(
+                rect,
+                3.0,
+                ui.visuals().selection.bg_fill,
+            );
+        } else if response.hovered() {
+            ui.painter().rect_filled(
+                rect,
+                3.0,
+                ui.visuals().widgets.hovered.bg_fill,
+            );
+        }
+        let color = if open {
+            ui.visuals().strong_text_color()
+        } else {
+            hover_color(ui, &response)
+        };
+        paint_activity_list(ui, rect, color);
+    }
+    response
 }
 
 /// Outgoing note link (replaces `->`).
@@ -279,8 +355,8 @@ pub fn link_broken(ui: &mut Ui) {
     );
 }
 
-/// Canvas toolbar hit target (matches `chat_canvas::TOOLBAR_ICON`).
-pub const TOOLBAR_ICON_SZ: f32 = 26.0;
+/// Canvas toolbar hit target (matches `chat_canvas::TOOLBAR_CTRL_H`).
+pub const TOOLBAR_ICON_SZ: f32 = 20.0;
 
 /// Drawing-tool glyphs for the session canvas toolbar.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -358,7 +434,7 @@ pub fn toolbar_text_selectable(ui: &mut Ui, selected: bool, label: &str, tooltip
 
 /// Leading status icon for activity / agent lists.
 pub fn agent_activity_icon(ui: &mut Ui, icon: AgentActivityIcon) {
-    let size = Vec2::splat(14.0);
+    let size = Vec2::splat(AGENT_STATUS_ICON_SZ);
     let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
     if !ui.is_rect_visible(rect) {
         return;
@@ -649,25 +725,61 @@ fn paint_chevron(
 }
 
 fn paint_done_check(ui: &mut Ui, rect: Rect, color: Color32) {
+    let c = rect.center();
+    let s = rect.width() * 0.30;
+    let stroke = Stroke::new(1.6_f32, color);
+    let painter = ui.painter();
+    painter.line_segment(
+        [c + Vec2::new(-s * 0.95, s * 0.05), c + Vec2::new(-s * 0.15, s * 0.75)],
+        stroke,
+    );
+    painter.line_segment(
+        [c + Vec2::new(-s * 0.15, s * 0.75), c + Vec2::new(s * 0.95, -s * 0.70)],
+        stroke,
+    );
+}
+
+fn paint_close_mark(ui: &mut Ui, rect: Rect, color: Color32) {
+    let c = rect.center();
+    let r = rect.width() * 0.22;
     let stroke = Stroke::new(1.5_f32, color);
-    let l = rect.left();
-    let r = rect.right();
-    let b = rect.bottom();
-    let t = rect.top();
-    ui.painter().line_segment(
-        [
-            Pos2::new(l + 2.0, (b + t) * 0.55),
-            Pos2::new((l + r) * 0.45, b - 2.0),
-        ],
+    let painter = ui.painter();
+    painter.line_segment([c + Vec2::new(-r, -r), c + Vec2::new(r, r)], stroke);
+    painter.line_segment([c + Vec2::new(-r, r), c + Vec2::new(r, -r)], stroke);
+}
+
+fn paint_archived_filter(ui: &mut Ui, rect: Rect, color: Color32, selected: bool) {
+    let stroke = Stroke::new(1.4_f32, color);
+    let painter = ui.painter();
+    let c = rect.center();
+    let w = rect.width() * 0.34;
+    let top = c.y - rect.height() * 0.22;
+    let bot = c.y + rect.height() * 0.24;
+    painter.line_segment([Pos2::new(c.x - w, top), Pos2::new(c.x + w, top)], stroke);
+    painter.line_segment(
+        [Pos2::new(c.x - w * 0.72, (top + bot) * 0.5), Pos2::new(c.x + w * 0.72, (top + bot) * 0.5)],
         stroke,
     );
-    ui.painter().line_segment(
-        [
-            Pos2::new((l + r) * 0.45, b - 2.0),
-            Pos2::new(r - 2.0, t + 3.0),
-        ],
-        stroke,
-    );
+    painter.line_segment([Pos2::new(c.x - w * 0.44, bot), Pos2::new(c.x + w * 0.44, bot)], stroke);
+    if selected {
+        painter.circle_filled(c + Vec2::new(w * 0.82, -rect.height() * 0.18), rect.width() * 0.09, color);
+    }
+}
+
+fn paint_activity_list(ui: &mut Ui, rect: Rect, color: Color32) {
+    let stroke = Stroke::new(1.4_f32, color);
+    let painter = ui.painter();
+    let c = rect.center();
+    let w = rect.width() * 0.30;
+    let gap = rect.height() * 0.22;
+    for dy in [-gap, 0.0, gap] {
+        let y = c.y + dy;
+        let half = if dy < 0.0 { w * 0.85 } else if dy > 0.0 { w * 0.65 } else { w };
+        painter.line_segment(
+            [Pos2::new(c.x - half, y), Pos2::new(c.x + half, y)],
+            stroke,
+        );
+    }
 }
 
 fn paint_failed_mark(ui: &mut Ui, rect: Rect, color: Color32) {

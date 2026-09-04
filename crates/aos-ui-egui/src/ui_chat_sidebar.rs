@@ -29,7 +29,10 @@ impl UiApp {
                             egui::TextEdit::singleline(&mut self.chat_state.sidebar.search)
                                 .hint_text(t.session_search),
                         );
-                        if ui.button("⋯").on_hover_text(t.session_archived).clicked() {
+                        if icons::archived_toggle_button(ui, self.chat_state.sidebar.show_archived)
+                            .on_hover_text(t.session_archived)
+                            .clicked()
+                        {
                             self.chat_state.sidebar.show_archived =
                                 !self.chat_state.sidebar.show_archived;
                             if self.chat_state.sidebar.show_archived {

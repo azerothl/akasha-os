@@ -490,22 +490,24 @@ impl UiApp {
 
         ui.horizontal(|ui| {
             let full_w = ui.available_width();
-            let toggle_w = session_toggle_reserve_width(t);
+            let toggle_w = session_toggle_reserve_width(t, canvas_open);
             let left_w = (full_w - toggle_w).max(0.0);
 
             ui.allocate_ui_with_layout(
                 egui::vec2(left_w, ui.available_height()),
                 egui::Layout::left_to_right(egui::Align::Center),
                 |ui| {
+                    ui.set_max_width(left_w);
                     let mut selected_model = model_id.clone().unwrap_or_default();
                     let model_label = if selected_model.is_empty() {
                         "default".to_string()
                     } else {
                         selected_model.clone()
                     };
+                    let model_w = if canvas_open { 120.0 } else { 150.0 };
                     egui::ComboBox::from_id_salt("chat_model_picker")
                         .selected_text(model_label)
-                        .width(150.0)
+                        .width(model_w)
                         .show_ui(ui, |ui| {
                             if ui
                                 .selectable_value(&mut selected_model, String::new(), "default")
@@ -547,8 +549,9 @@ impl UiApp {
                                 }
                             }
                         });
+                    let title_max = if canvas_open { 24 } else { 42 };
                     let header =
-                        egui::RichText::new(crate::agent_panel::truncate(&session_title, 42))
+                        egui::RichText::new(crate::agent_panel::truncate(&session_title, title_max))
                             .strong();
                     let title_resp = ui.add(egui::Label::new(header).sense(if room {
                         egui::Sense::click()
@@ -556,7 +559,7 @@ impl UiApp {
                         egui::Sense::hover()
                     }));
                     let title_clicked = title_resp.clicked();
-                    let title_hover = match (room, session_title.len() > 42) {
+                    let title_hover = match (room, session_title.len() > title_max) {
                         (true, true) => {
                             format!("{}\n{}", t.room_header_open_members, session_title)
                         }
@@ -581,25 +584,21 @@ impl UiApp {
                     if guide::tab_help_button(ui, g.help_tooltip) {
                         self.guide.open_topic(guide::GuideTopic::Chat);
                     }
-                    let activity_label = if canvas_open {
-                        if self.prefs.ui_layout.activity_panel_open {
-                            t.activity_short_close.to_string()
+                    if !canvas_open {
+                        let activity_label = if self.prefs.ui_layout.activity_panel_open {
+                            t.activity_close.to_string()
                         } else {
-                            t.activity_short.to_string()
+                            t.activity_open.to_string()
+                        };
+                        if ui
+                            .button(activity_label)
+                            .on_hover_text(t.activity_open)
+                            .clicked()
+                        {
+                            self.prefs.ui_layout.activity_panel_open =
+                                !self.prefs.ui_layout.activity_panel_open;
+                            crate::prefs::save_preferences(&self.prefs);
                         }
-                    } else if self.prefs.ui_layout.activity_panel_open {
-                        format!("× {}", t.activity_open)
-                    } else {
-                        t.activity_open.to_string()
-                    };
-                    if ui
-                        .button(activity_label)
-                        .on_hover_text(t.activity_open)
-                        .clicked()
-                    {
-                        self.prefs.ui_layout.activity_panel_open =
-                            !self.prefs.ui_layout.activity_panel_open;
-                        crate::prefs::save_preferences(&self.prefs);
                     }
                 },
             );
@@ -608,6 +607,23 @@ impl UiApp {
                 egui::vec2(toggle_w.min(full_w), ui.available_height()),
                 egui::Layout::right_to_left(egui::Align::Center),
                 |ui| {
+                    if canvas_open {
+                        if icons::activity_toggle_button(
+                            ui,
+                            self.prefs.ui_layout.activity_panel_open,
+                        )
+                        .on_hover_text(if self.prefs.ui_layout.activity_panel_open {
+                            t.activity_close
+                        } else {
+                            t.activity_open
+                        })
+                        .clicked()
+                        {
+                            self.prefs.ui_layout.activity_panel_open =
+                                !self.prefs.ui_layout.activity_panel_open;
+                            crate::prefs::save_preferences(&self.prefs);
+                        }
+                    }
                     if session_toggle_chip(ui, canvas_open, t.session_toggle_canvas) {
                         let new_open = !canvas_open;
                         self.set_canvas_open_local(&sid, new_open);
@@ -651,42 +667,32 @@ impl UiApp {
         if canvas_open {
             let mut toolbar_action: Option<chat_canvas::CanvasUiAction> = None;
             let mut open_canvas_guide = false;
-            let toolbar_min_w = chat_canvas::toolbar_content_min_width(
-                self.chat_state.view.canvas.seeing,
-                self.chat_state.view.canvas.clear_confirm_open,
-            );
-            let toolbar_rows =
-                chat_canvas::toolbar_row_count(self.chat_state.view.canvas.tool == chat_canvas::CanvasTool::Select);
-            let toolbar_h = (toolbar_rows as f32 * chat_canvas::toolbar_max_height() / 3.0)
-                .clamp(34.0, chat_canvas::toolbar_max_height());
+            let select_active = self.chat_state.view.canvas.tool == chat_canvas::CanvasTool::Select
+                && self.chat_state.view.canvas.selected_seq.is_some();
+            let toolbar_rows = chat_canvas::toolbar_row_count(select_active);
+            let toolbar_h = toolbar_rows as f32 * chat_canvas::toolbar_row_height() + 4.0;
             let track_w = ui.available_width();
             ui.allocate_ui_with_layout(
                 egui::vec2(track_w, toolbar_h),
                 egui::Layout::top_down(egui::Align::Min),
                 |ui| {
                     ui.set_width(track_w);
-                    egui::ScrollArea::vertical()
-                        .id_salt("canvas_toolbar_vscroll")
+                    egui::ScrollArea::horizontal()
+                        .id_salt("canvas_toolbar_scroll")
                         .auto_shrink([false, false])
-                        .max_height(toolbar_h)
                         .show(ui, |ui| {
-                            egui::ScrollArea::horizontal()
-                                .id_salt("canvas_toolbar_scroll")
-                                .auto_shrink([false, false])
-                                .show(ui, |ui| {
-                                    ui.set_min_width(toolbar_min_w);
-                                        toolbar_action = chat_canvas::ui_canvas_toolbar(
-                                        ui,
-                                        t,
-                                        &mut self.chat_state.view.canvas,
-                                        chat_canvas::canvas_agent_drawing_on_session(
-                                            &self.agents,
-                                            &sid,
-                                        ),
-                                        Some(g.help_tooltip),
-                                        &mut open_canvas_guide,
-                                    );
-                                });
+                            ui.set_min_width(track_w);
+                            toolbar_action = chat_canvas::ui_canvas_toolbar(
+                                ui,
+                                t,
+                                &mut self.chat_state.view.canvas,
+                                chat_canvas::canvas_agent_drawing_on_session(
+                                    &self.agents,
+                                    &sid,
+                                ),
+                                Some(g.help_tooltip),
+                                &mut open_canvas_guide,
+                            );
                         });
                 },
             );

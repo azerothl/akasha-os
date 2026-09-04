@@ -415,10 +415,16 @@ fn estimate_label_chip_w(label: &str) -> f32 {
     label.len() as f32 * CHAR_W + PAD
 }
 
-fn session_toggle_reserve_width(t: &i18n::UiStrings) -> f32 {
-    estimate_label_chip_w(t.session_toggle_salon)
+fn session_toggle_reserve_width(t: &i18n::UiStrings, canvas_open: bool) -> f32 {
+    let mut w = estimate_label_chip_w(t.session_toggle_salon)
         + 6.0
         + estimate_label_chip_w(t.session_toggle_canvas)
+        + 6.0
+        + icons::SESSION_ICON_SZ;
+    if canvas_open {
+        w += 6.0 + estimate_label_chip_w(t.session_focus);
+    }
+    w
 }
 
 fn session_toggle_chip(ui: &mut egui::Ui, selected: bool, label: &str) -> bool {
@@ -437,7 +443,7 @@ fn composer_row_reserved_width(t: &i18n::UiStrings, show_stop: bool) -> f32 {
 /// Minimum central chat pane width so composer + session toggles fit (FR labels).
 fn preview_min_inner_width(t: &i18n::UiStrings) -> f32 {
     let composer = composer_row_reserved_width(t, true) + COMPOSER_MIN_INPUT_W;
-    let session_bar = session_toggle_reserve_width(t) + 160.0;
+    let session_bar = session_toggle_reserve_width(t, true) + 160.0;
     let canvas_split_min = 180.0 + CHAT_SPLIT_GAP + 200.0;
     let main_min = composer.max(session_bar).max(canvas_split_min);
     LEFT_NAV_W + CHAT_SIDE_MIN_W + CHAT_SPLIT_GAP + main_min + CHAT_MAIN_MARGIN

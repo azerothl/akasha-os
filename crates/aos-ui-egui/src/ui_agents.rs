@@ -573,7 +573,10 @@ impl UiApp {
                             self.agent_ui.close_all_tabs();
                             crate::prefs::save_preferences(&self.prefs);
                         }
-                        if ui.small_button(t.agent_close_all).clicked() {
+                        if icons::close_all_button(ui, t.agent_close_all_label)
+                            .on_hover_text(t.agent_close_all)
+                            .clicked()
+                        {
                             self.agent_ui.close_all_tabs();
                         }
                     });

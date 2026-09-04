@@ -682,21 +682,28 @@ fn ui_canvas_seeing_pill(ui: &mut Ui, label: &str) {
         });
 }
 
-const TOOLBAR_GAP: f32 = 4.0;
-const TOOLBAR_ROW_H: f32 = 30.0;
-const TOOLBAR_MAX_H: f32 = 72.0;
+const TOOLBAR_GAP: f32 = 3.0;
+const TOOLBAR_ROW_H: f32 = 22.0;
+const TOOLBAR_CTRL_H: f32 = 20.0;
+const TOOLBAR_MAX_H: f32 = 48.0;
+const TOOLBAR_SLIDER_W: f32 = 56.0;
+
+/// Per-row height for the canvas tool strip.
+pub fn toolbar_row_height() -> f32 {
+    TOOLBAR_ROW_H
+}
 
 /// Max height for the canvas tool strip (scroll when content exceeds this).
 pub fn toolbar_max_height() -> f32 {
     TOOLBAR_MAX_H
 }
 
-/// Estimated row count for dynamic layout (1–3 icon rows).
+/// Estimated row count for dynamic layout (1–2 icon rows).
 pub fn toolbar_row_count(select_active: bool) -> usize {
     if select_active {
-        3
-    } else {
         2
+    } else {
+        1
     }
 }
 
@@ -730,6 +737,23 @@ fn pen_dash_vec(dashed: bool) -> Vec<f32> {
     }
 }
 
+fn toolbar_color_button(ui: &mut Ui, rgba: &mut [f32; 4]) -> eframe::egui::Response {
+    ui.scope(|ui| {
+        ui.style_mut().spacing.interact_size = Vec2::splat(TOOLBAR_CTRL_H);
+        ui.set_min_size(Vec2::splat(TOOLBAR_CTRL_H));
+        ui.set_max_size(Vec2::splat(TOOLBAR_CTRL_H));
+        ui.color_edit_button_rgba_unmultiplied(rgba)
+    })
+    .inner
+}
+
+fn toolbar_slider(ui: &mut Ui, value: &mut f32, range: std::ops::RangeInclusive<f32>) -> eframe::egui::Response {
+    ui.add_sized(
+        Vec2::new(TOOLBAR_SLIDER_W, TOOLBAR_CTRL_H),
+        eframe::egui::Slider::new(value, range).show_value(false),
+    )
+}
+
 /// Drawing tools for the unified session bar — icon-only with i18n tooltips.
 pub fn ui_canvas_toolbar(
     ui: &mut Ui,
@@ -740,253 +764,245 @@ pub fn ui_canvas_toolbar(
     help_clicked: &mut bool,
 ) -> Option<CanvasUiAction> {
     let mut action: Option<CanvasUiAction> = None;
-    let compact = ui.spacing().item_spacing;
-    ui.spacing_mut().item_spacing = Vec2::new(TOOLBAR_GAP, compact.y);
+    ui.spacing_mut().item_spacing = Vec2::splat(TOOLBAR_GAP);
     ui.set_min_height(TOOLBAR_ROW_H);
 
-    ui.vertical(|ui| {
-        ui.horizontal(|ui| {
-            if state.seeing {
-                ui_canvas_seeing_pill(ui, t.canvas_seeing_now);
+    ui.horizontal(|ui| {
+        ui.set_min_width(ui.available_width());
+        if state.seeing {
+            ui_canvas_seeing_pill(ui, t.canvas_seeing_now);
+        }
+        if canvas_agent_drawing {
+            ui.weak(t.canvas_thinking);
+        }
+        for (tool, icon, tip) in [
+            (CanvasTool::Select, CanvasToolIcon::Select, t.canvas_tool_select),
+            (CanvasTool::Pan, CanvasToolIcon::Pan, t.canvas_tool_pan),
+            (CanvasTool::Pen, CanvasToolIcon::Pen, t.canvas_tool_pen),
+            (CanvasTool::Eraser, CanvasToolIcon::Eraser, t.canvas_tool_eraser),
+            (CanvasTool::Line, CanvasToolIcon::Line, t.canvas_tool_line),
+            (CanvasTool::Spline, CanvasToolIcon::Spline, t.canvas_tool_spline),
+            (CanvasTool::Path, CanvasToolIcon::Path, t.canvas_tool_path),
+            (CanvasTool::Rect, CanvasToolIcon::Rect, t.canvas_tool_rect),
+            (CanvasTool::Ellipse, CanvasToolIcon::Ellipse, t.canvas_tool_ellipse),
+        ] {
+            if icons::toolbar_selectable(ui, state.tool == tool, icon, tip) {
+                state.tool = tool;
             }
-            if canvas_agent_drawing {
-                ui.weak(t.canvas_thinking);
-            }
-            for (tool, icon, tip) in [
-                (CanvasTool::Select, CanvasToolIcon::Select, t.canvas_tool_select),
-                (CanvasTool::Pan, CanvasToolIcon::Pan, t.canvas_tool_pan),
-                (CanvasTool::Pen, CanvasToolIcon::Pen, t.canvas_tool_pen),
-                (CanvasTool::Eraser, CanvasToolIcon::Eraser, t.canvas_tool_eraser),
-                (CanvasTool::Line, CanvasToolIcon::Line, t.canvas_tool_line),
-                (CanvasTool::Spline, CanvasToolIcon::Spline, t.canvas_tool_spline),
-                (CanvasTool::Path, CanvasToolIcon::Path, t.canvas_tool_path),
-                (CanvasTool::Rect, CanvasToolIcon::Rect, t.canvas_tool_rect),
-                (CanvasTool::Ellipse, CanvasToolIcon::Ellipse, t.canvas_tool_ellipse),
-            ] {
-                if icons::toolbar_selectable(ui, state.tool == tool, icon, tip) {
-                    state.tool = tool;
-                }
-            }
-            let mut rgba = [
-                state.color.r() as f32 / 255.0,
-                state.color.g() as f32 / 255.0,
-                state.color.b() as f32 / 255.0,
-                1.0,
-            ];
-            if ui
-                .color_edit_button_rgba_unmultiplied(&mut rgba)
-                .on_hover_text(t.canvas_tint)
-                .changed()
-            {
-                state.color = Color32::from_rgb(
-                    (rgba[0] * 255.0) as u8,
-                    (rgba[1] * 255.0) as u8,
-                    (rgba[2] * 255.0) as u8,
-                );
-                action = Some(CanvasUiAction::SetStyle {
-                    color: Some(color_to_hex(state.color)),
-                    width: None,
-                    opacity: None,
-                    dash: None,
-                });
-            }
-            let width_resp = ui.add(
-                eframe::egui::Slider::new(&mut state.width, 0.005..=0.06)
-                    .show_value(false)
-                    .custom_formatter(|n, _| format!("{n:.3}")),
+        }
+        let mut rgba = [
+            state.color.r() as f32 / 255.0,
+            state.color.g() as f32 / 255.0,
+            state.color.b() as f32 / 255.0,
+            1.0,
+        ];
+        if toolbar_color_button(ui, &mut rgba)
+            .on_hover_text(t.canvas_tint)
+            .changed()
+        {
+            state.color = Color32::from_rgb(
+                (rgba[0] * 255.0) as u8,
+                (rgba[1] * 255.0) as u8,
+                (rgba[2] * 255.0) as u8,
             );
-            if width_resp.on_hover_text(t.canvas_width).changed() {
-                action = Some(CanvasUiAction::SetStyle {
-                    color: None,
-                    width: Some(state.width),
-                    opacity: None,
-                    dash: None,
-                });
+            action = Some(CanvasUiAction::SetStyle {
+                color: Some(color_to_hex(state.color)),
+                width: None,
+                opacity: None,
+                dash: None,
+            });
+        }
+        if toolbar_slider(ui, &mut state.width, 0.005..=0.06)
+            .on_hover_text(t.canvas_width)
+            .changed()
+        {
+            action = Some(CanvasUiAction::SetStyle {
+                color: None,
+                width: Some(state.width),
+                opacity: None,
+                dash: None,
+            });
+        }
+        if matches!(
+            state.tool,
+            CanvasTool::Rect | CanvasTool::Ellipse | CanvasTool::Path
+        ) {
+            let fill_on = state.shape_fill;
+            if icons::toolbar_text_selectable(ui, fill_on, "F", t.canvas_fill_toggle) {
+                state.shape_fill = !fill_on;
             }
-            if let Some(tip) = help_tooltip {
-                if crate::guide::tab_help_button(ui, tip) {
-                    *help_clicked = true;
+        }
+        if toolbar_slider(ui, &mut state.pen_opacity, 0.05..=1.0)
+            .on_hover_text(t.canvas_opacity)
+            .changed()
+        {
+            action = Some(CanvasUiAction::SetStyle {
+                color: None,
+                width: None,
+                opacity: Some(state.pen_opacity),
+                dash: None,
+            });
+        }
+        let dashed_on = state.pen_dashed;
+        if icons::toolbar_action_selectable(ui, dashed_on, ToolbarActionIcon::Dashed, t.canvas_dashed) {
+            state.pen_dashed = !dashed_on;
+            action = Some(CanvasUiAction::SetStyle {
+                color: None,
+                width: None,
+                opacity: None,
+                dash: Some(pen_dash_vec(state.pen_dashed)),
+            });
+        }
+        if matches!(
+            state.tool,
+            CanvasTool::Rect | CanvasTool::Ellipse | CanvasTool::Path
+        ) && state.shape_fill
+        {
+            let grad_on = state.use_gradient;
+            if icons::toolbar_text_selectable(ui, grad_on, "G", t.canvas_gradient) {
+                state.use_gradient = !grad_on;
+            }
+            if state.use_gradient {
+                let mut grad_rgba = [
+                    state.gradient_color2.r() as f32 / 255.0,
+                    state.gradient_color2.g() as f32 / 255.0,
+                    state.gradient_color2.b() as f32 / 255.0,
+                    1.0,
+                ];
+                if toolbar_color_button(ui, &mut grad_rgba)
+                    .on_hover_text(t.canvas_gradient)
+                    .changed()
+                {
+                    state.gradient_color2 = Color32::from_rgb(
+                        (grad_rgba[0] * 255.0) as u8,
+                        (grad_rgba[1] * 255.0) as u8,
+                        (grad_rgba[2] * 255.0) as u8,
+                    );
                 }
             }
-        });
+        }
+        if icons::toolbar_action_button(ui, ToolbarActionIcon::Undo, t.canvas_undo) {
+            action = Some(CanvasUiAction::Apply(CanvasOpBody::Undo));
+        }
+        if icons::toolbar_text_button(ui, "P", t.canvas_export) {
+            action = Some(CanvasUiAction::ExportPng);
+        }
+        if icons::toolbar_text_button(ui, "S", t.canvas_export_svg) {
+            action = Some(CanvasUiAction::ExportSvg);
+        }
+        if icons::toolbar_text_button(ui, "J", t.canvas_export_json) {
+            action = Some(CanvasUiAction::ExportJson);
+        }
+        if icons::toolbar_text_button(ui, "I", t.canvas_import) {
+            action = Some(CanvasUiAction::ImportJson);
+        }
+        if icons::toolbar_action_button(ui, ToolbarActionIcon::ResetView, t.canvas_reset_view) {
+            action = Some(CanvasUiAction::ResetView);
+        }
+        let grid_on = state.show_grid;
+        if icons::toolbar_action_selectable(ui, grid_on, ToolbarActionIcon::Grid, t.canvas_grid) {
+            state.show_grid = !grid_on;
+        }
+        let snap_on = state.snap;
+        if icons::toolbar_action_selectable(ui, snap_on, ToolbarActionIcon::Snap, t.canvas_snap) {
+            state.snap = !snap_on;
+        }
+        if state.clear_confirm_open {
+            if icons::toolbar_action_button(ui, ToolbarActionIcon::ConfirmYes, t.canvas_clear_confirm_yes) {
+                state.clear_confirm_open = false;
+                action = Some(CanvasUiAction::Apply(CanvasOpBody::Clear));
+            }
+            if icons::toolbar_action_button(ui, ToolbarActionIcon::ConfirmNo, t.canvas_clear_confirm_no) {
+                state.clear_confirm_open = false;
+            }
+        } else if icons::toolbar_action_button(ui, ToolbarActionIcon::Clear, t.canvas_clear) {
+            state.clear_confirm_open = true;
+        }
+        if let Some(tip) = help_tooltip {
+            if crate::guide::tab_help_button(ui, tip) {
+                *help_clicked = true;
+            }
+        }
+    });
 
-        if state.tool == CanvasTool::Select {
+    if state.tool == CanvasTool::Select {
+        if let Some(seq) = state.selected_seq {
             ui.horizontal(|ui| {
-                if let Some(seq) = state.selected_seq {
-                    for (label, edge) in [
-                        (t.canvas_align_left, "left"),
-                        (t.canvas_align_right, "right"),
-                        (t.canvas_align_top, "top"),
-                        (t.canvas_align_bottom, "bottom"),
-                        (t.canvas_align_cx, "center_x"),
-                        (t.canvas_align_cy, "center_y"),
-                    ] {
-                        if icons::toolbar_text_button(ui, label, t.canvas_align_to_margin) {
-                            action = Some(CanvasUiAction::Edit(CanvasEdit::Align {
-                                seq,
-                                to_seq: None,
-                                edges: vec![edge.into()],
-                            }));
-                        }
+                ui.set_min_width(ui.available_width());
+                for (label, edge) in [
+                    (t.canvas_align_left, "left"),
+                    (t.canvas_align_right, "right"),
+                    (t.canvas_align_top, "top"),
+                    (t.canvas_align_bottom, "bottom"),
+                    (t.canvas_align_cx, "center_x"),
+                    (t.canvas_align_cy, "center_y"),
+                ] {
+                    if icons::toolbar_text_button(ui, label, t.canvas_align_to_margin) {
+                        action = Some(CanvasUiAction::Edit(CanvasEdit::Align {
+                            seq,
+                            to_seq: None,
+                            edges: vec![edge.into()],
+                        }));
                     }
-                    if let Some(idx) = state.ops.iter().position(|o| o.seq == seq) {
-                        if icons::toolbar_action_button(ui, ToolbarActionIcon::ArrowDown, t.canvas_z_back)
-                            && idx > 0
-                        {
-                            action = Some(CanvasUiAction::Edit(CanvasEdit::Reorder {
-                                seq,
-                                z: (idx as i64) - 1,
-                            }));
-                        }
-                        if icons::toolbar_action_button(ui, ToolbarActionIcon::ArrowUp, t.canvas_z_forward)
-                            && idx + 1 < state.ops.len()
-                        {
-                            action = Some(CanvasUiAction::Edit(CanvasEdit::Reorder {
-                                seq,
-                                z: (idx as i64) + 1,
-                            }));
-                        }
+                }
+                if let Some(idx) = state.ops.iter().position(|o| o.seq == seq) {
+                    if icons::toolbar_action_button(ui, ToolbarActionIcon::ArrowDown, t.canvas_z_back)
+                        && idx > 0
+                    {
+                        action = Some(CanvasUiAction::Edit(CanvasEdit::Reorder {
+                            seq,
+                            z: (idx as i64) - 1,
+                        }));
                     }
-                    if let Some(op) = state.ops.iter_mut().find(|o| o.seq == seq) {
-                        if let CanvasOpBody::Rect { rotation, .. }
-                        | CanvasOpBody::Ellipse { rotation, .. } = &mut op.body
-                        {
-                            let mut rot = *rotation;
-                            let rot_resp = ui.add(
-                                eframe::egui::DragValue::new(&mut rot)
-                                    .suffix("°")
-                                    .range(-180.0..=180.0)
-                                    .speed(1.0),
-                            );
-                            if rot_resp.on_hover_text(t.canvas_rotation).changed() {
-                                *rotation = rot;
-                                action = Some(CanvasUiAction::Edit(CanvasEdit::Rotate {
-                                    seq,
-                                    rotation: rot,
-                                }));
-                            }
-                        }
-                        let mut restyle_opacity = aos_proto::canvas_op_body_opacity(&op.body);
-                        let opacity_resp = ui.add(
-                            eframe::egui::Slider::new(&mut restyle_opacity, 0.05..=1.0)
-                                .show_value(false),
+                    if icons::toolbar_action_button(ui, ToolbarActionIcon::ArrowUp, t.canvas_z_forward)
+                        && idx + 1 < state.ops.len()
+                    {
+                        action = Some(CanvasUiAction::Edit(CanvasEdit::Reorder {
+                            seq,
+                            z: (idx as i64) + 1,
+                        }));
+                    }
+                }
+                if let Some(op) = state.ops.iter_mut().find(|o| o.seq == seq) {
+                    if let CanvasOpBody::Rect { rotation, .. }
+                    | CanvasOpBody::Ellipse { rotation, .. } = &mut op.body
+                    {
+                        let mut rot = *rotation;
+                        let rot_resp = ui.add_sized(
+                            Vec2::new(48.0, TOOLBAR_CTRL_H),
+                            eframe::egui::DragValue::new(&mut rot)
+                                .suffix("°")
+                                .range(-180.0..=180.0)
+                                .speed(1.0),
                         );
-                        if opacity_resp.on_hover_text(t.canvas_opacity).changed() {
-                            action = Some(CanvasUiAction::Edit(CanvasEdit::Restyle {
+                        if rot_resp.on_hover_text(t.canvas_rotation).changed() {
+                            *rotation = rot;
+                            action = Some(CanvasUiAction::Edit(CanvasEdit::Rotate {
                                 seq,
-                                color: None,
-                                width: None,
-                                fill: None,
-                                rotation: None,
-                                opacity: Some(restyle_opacity),
-                                dash: None,
-                                gradient: None,
+                                rotation: rot,
                             }));
                         }
+                    }
+                    let mut restyle_opacity = aos_proto::canvas_op_body_opacity(&op.body);
+                    if toolbar_slider(ui, &mut restyle_opacity, 0.05..=1.0)
+                        .on_hover_text(t.canvas_opacity)
+                        .changed()
+                    {
+                        action = Some(CanvasUiAction::Edit(CanvasEdit::Restyle {
+                            seq,
+                            color: None,
+                            width: None,
+                            fill: None,
+                            rotation: None,
+                            opacity: Some(restyle_opacity),
+                            dash: None,
+                            gradient: None,
+                        }));
                     }
                 }
             });
         }
-
-        ui.horizontal(|ui| {
-            if matches!(
-                state.tool,
-                CanvasTool::Rect | CanvasTool::Ellipse | CanvasTool::Path
-            ) {
-                let fill_on = state.shape_fill;
-                if icons::toolbar_text_selectable(ui, fill_on, "F", t.canvas_fill_toggle) {
-                    state.shape_fill = !fill_on;
-                }
-            }
-            let opacity_resp = ui.add(
-                eframe::egui::Slider::new(&mut state.pen_opacity, 0.05..=1.0).show_value(false),
-            );
-            if opacity_resp.on_hover_text(t.canvas_opacity).changed() {
-                action = Some(CanvasUiAction::SetStyle {
-                    color: None,
-                    width: None,
-                    opacity: Some(state.pen_opacity),
-                    dash: None,
-                });
-            }
-            let dashed_on = state.pen_dashed;
-            if icons::toolbar_action_selectable(ui, dashed_on, ToolbarActionIcon::Dashed, t.canvas_dashed) {
-                state.pen_dashed = !dashed_on;
-                action = Some(CanvasUiAction::SetStyle {
-                    color: None,
-                    width: None,
-                    opacity: None,
-                    dash: Some(pen_dash_vec(state.pen_dashed)),
-                });
-            }
-            if matches!(
-                state.tool,
-                CanvasTool::Rect | CanvasTool::Ellipse | CanvasTool::Path
-            ) && state.shape_fill
-            {
-                let grad_on = state.use_gradient;
-                if icons::toolbar_text_selectable(ui, grad_on, "G", t.canvas_gradient) {
-                    state.use_gradient = !grad_on;
-                }
-                if state.use_gradient {
-                    let mut rgba = [
-                        state.gradient_color2.r() as f32 / 255.0,
-                        state.gradient_color2.g() as f32 / 255.0,
-                        state.gradient_color2.b() as f32 / 255.0,
-                        1.0,
-                    ];
-                    if ui
-                        .color_edit_button_rgba_unmultiplied(&mut rgba)
-                        .on_hover_text(t.canvas_gradient)
-                        .changed()
-                    {
-                        state.gradient_color2 = Color32::from_rgb(
-                            (rgba[0] * 255.0) as u8,
-                            (rgba[1] * 255.0) as u8,
-                            (rgba[2] * 255.0) as u8,
-                        );
-                    }
-                }
-            }
-            if icons::toolbar_action_button(ui, ToolbarActionIcon::Undo, t.canvas_undo) {
-                action = Some(CanvasUiAction::Apply(CanvasOpBody::Undo));
-            }
-            if icons::toolbar_text_button(ui, "P", t.canvas_export) {
-                action = Some(CanvasUiAction::ExportPng);
-            }
-            if icons::toolbar_text_button(ui, "S", t.canvas_export_svg) {
-                action = Some(CanvasUiAction::ExportSvg);
-            }
-            if icons::toolbar_text_button(ui, "J", t.canvas_export_json) {
-                action = Some(CanvasUiAction::ExportJson);
-            }
-            if icons::toolbar_text_button(ui, "I", t.canvas_import) {
-                action = Some(CanvasUiAction::ImportJson);
-            }
-            if icons::toolbar_action_button(ui, ToolbarActionIcon::ResetView, t.canvas_reset_view) {
-                action = Some(CanvasUiAction::ResetView);
-            }
-            let grid_on = state.show_grid;
-            if icons::toolbar_action_selectable(ui, grid_on, ToolbarActionIcon::Grid, t.canvas_grid) {
-                state.show_grid = !grid_on;
-            }
-            let snap_on = state.snap;
-            if icons::toolbar_action_selectable(ui, snap_on, ToolbarActionIcon::Snap, t.canvas_snap) {
-                state.snap = !snap_on;
-            }
-            if state.clear_confirm_open {
-                if icons::toolbar_action_button(ui, ToolbarActionIcon::ConfirmYes, t.canvas_clear_confirm_yes) {
-                    state.clear_confirm_open = false;
-                    action = Some(CanvasUiAction::Apply(CanvasOpBody::Clear));
-                }
-                if icons::toolbar_action_button(ui, ToolbarActionIcon::ConfirmNo, t.canvas_clear_confirm_no) {
-                    state.clear_confirm_open = false;
-                }
-            } else if icons::toolbar_action_button(ui, ToolbarActionIcon::Clear, t.canvas_clear) {
-                state.clear_confirm_open = true;
-            }
-        });
-    });
+    }
 
     action
 }
