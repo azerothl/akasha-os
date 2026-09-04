@@ -962,6 +962,7 @@ mod tests {
             optimize_prompt: false,
             gate_mode: "ask".into(),
             origin: None,
+        cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
         let prompt =
             build_room_system_prompt(&spec, "Critic", &members, false, &[], "sess-1", None);
@@ -1004,6 +1005,7 @@ mod tests {
             optimize_prompt: false,
             gate_mode: "ask".into(),
             origin: None,
+        cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
         let prompt = build_room_system_prompt(&spec, "Critic", &members, true, &[], "sess-1", None);
         assert!(prompt.contains("Critic"));
@@ -1039,6 +1041,7 @@ mod tests {
             optimize_prompt: false,
             gate_mode: "ask".into(),
             origin: None,
+        cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
         let tools = select_tools(&spec.tools, &[]);
         let digest = "next_seq=2 aspect=square 1:1 ops=1\ncounts: stroke=1\nseq=1 stroke (0.1,0.1)-(0.2,0.2)";
@@ -1076,6 +1079,7 @@ mod tests {
             optimize_prompt: false,
             gate_mode: "ask".into(),
             origin: None,
+        cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
         use crate::tools::CANVAS_TOOL_IDS;
         let exported: Vec<String> = CANVAS_TOOL_IDS.iter().map(|s| (*s).to_string()).collect();
@@ -1111,6 +1115,7 @@ mod tests {
             optimize_prompt: false,
             gate_mode: "ask".into(),
             origin: None,
+        cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
         let (ids, caps) = room_member_kit(&spec, false, &[]);
         assert!(!ids.iter().any(|x| x.starts_with("canvas.")));

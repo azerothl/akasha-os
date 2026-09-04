@@ -93,6 +93,7 @@ pub fn roster_spec_from_request(agent_id: &str, req: &AgentCreateRequest) -> Age
         optimize_prompt: req.optimize_prompt,
         gate_mode: req.gate_mode.clone(),
         origin: req.origin.clone(),
+        cognitive_mode: req.cognitive_mode,
     }
 }
 

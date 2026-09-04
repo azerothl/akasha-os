@@ -8,6 +8,7 @@ pub mod agent_act;
 pub mod assess;
 pub mod canvas_scene;
 pub mod context_budget;
+pub mod deep_thinking;
 pub mod document_index;
 pub mod document_prep;
 pub mod mcp;
@@ -26,6 +27,7 @@ pub mod tool_exec;
 pub mod tools;
 
 pub use assess::{parse_assess_response, AssessResult};
+pub use deep_thinking::DeepThinkingEngine;
 pub use state::CognitiveState;
 
 /// Intents exposés par `aos-agentd`.
@@ -60,6 +62,12 @@ pub mod intents {
     pub const ROOM_CONDUCT_CANCEL: &str = "agent.room_conduct.cancel";
     pub const SPEC_GET: &str = "agent.spec.get";
     pub const ROSTER_UPDATE: &str = "agent.roster.update";
+    pub const PLAN_CREATE: &str = "plan.create";
+    pub const PLAN_GET: &str = "plan.get";
+    pub const PLAN_UPDATE_STEP: &str = "plan.update_step";
+    pub const PLAN_REPLACE_TREE: &str = "plan.replace_tree";
+    pub const PLAN_DELEGATE_STEP: &str = "plan.delegate_step";
+    pub const PLAN_APPEND_LOG: &str = "plan.append_log";
 }
 
 /// Payload de contrôle worker → intent `agent.<id>.control`.
