@@ -2,7 +2,7 @@
 
 use crate::cmd::Cmd;
 use crate::os_open::{aos_home, open_os_folder};
-use crate::{i18n, icons, overflow_scroll, theme, UiApp};
+use crate::{i18n, icons, overflow_scroll_h, theme, UiApp};
 use eframe::egui;
 
 impl UiApp {
@@ -17,33 +17,127 @@ impl UiApp {
         let full_y = height;
         ui.allocate_ui_with_layout(
             egui::vec2(side_w, full_y),
-            egui::Layout::top_down(egui::Align::Min).with_cross_justify(true),
+            egui::Layout::bottom_up(egui::Align::Min).with_cross_justify(true),
             |ui| {
                 ui.set_width(side_w);
-                overflow_scroll(ui, "chat_side", |ui| {
-                    ui.set_width(side_w);
-                    ui.heading(t.tab_chat);
-                    ui.horizontal(|ui| {
-                        ui.add_sized(
-                            egui::vec2((side_w - 44.0).max(80.0), theme::CONTROL_MIN_H_COMFORTABLE),
-                            egui::TextEdit::singleline(&mut self.chat_state.sidebar.search)
-                                .hint_text(t.session_search),
-                        );
-                        if icons::archived_toggle_button(ui, self.chat_state.sidebar.show_archived)
-                            .on_hover_text(t.session_archived)
-                            .clicked()
-                        {
-                            self.chat_state.sidebar.show_archived =
-                                !self.chat_state.sidebar.show_archived;
-                            if self.chat_state.sidebar.show_archived {
-                                let _ = self.cmd_tx.send(Cmd::SessionListArchived);
-                            }
-                        }
+                // Footer (web/files + session actions) is laid out from the bottom so it
+                // stays reachable without scrolling through every session row.
+                ui.set_min_width(side_w - 16.0);
+                ui.heading(t.sidebar_web_files);
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.chat_state.sidebar.web_query)
+                        .desired_width(side_w - 20.0)
+                        .hint_text(t.sidebar_web_search_hint),
+                );
+                if ui.button(t.sidebar_search).clicked()
+                    && !self.chat_state.sidebar.web_query.is_empty()
+                {
+                    let _ = self.cmd_tx.send(Cmd::WebSearch {
+                        query: self.chat_state.sidebar.web_query.clone(),
+                        engine: self.prefs.web_search_engine.clone(),
                     });
-                    if ui.button(t.session_new).clicked() {
-                        let n = self.chat_state.sessions.len() + 1;
-                        self.request_session_create(Some(format!("Session {n}")));
+                }
+                for hit in &self.chat_state.sidebar.web_results {
+                    ui.small(format!("• {} — {}", hit.title, hit.url));
+                }
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.chat_state.sidebar.fetch_url)
+                        .desired_width(side_w - 20.0)
+                        .hint_text(t.sidebar_url_hint),
+                );
+                ui.horizontal(|ui| {
+                    if ui.button(t.sidebar_fetch_url).clicked()
+                        && !self.chat_state.sidebar.fetch_url.is_empty()
+                    {
+                        let _ = self.cmd_tx.send(Cmd::NetFetch {
+                            url: self.chat_state.sidebar.fetch_url.clone(),
+                            max_bytes: self.prefs.web_fetch_max_bytes,
+                        });
                     }
+                    let t = i18n::strings(&self.prefs.language);
+                    if ui.button(t.web_browse_btn).clicked()
+                        && !self.chat_state.sidebar.fetch_url.is_empty()
+                    {
+                        let _ = self.cmd_tx.send(Cmd::WebBrowse {
+                            url: self.chat_state.sidebar.fetch_url.clone(),
+                            max_chars: self.prefs.web_browse_max_chars,
+                        });
+                    }
+                });
+                if !self.chat_state.sidebar.browse_preview.is_empty() {
+                    ui.collapsing(t.sidebar_preview_page, |ui| {
+                        ui.small(&self.chat_state.sidebar.browse_preview);
+                    });
+                }
+                ui.horizontal(|ui| {
+                    egui::ComboBox::from_id_salt("gen_fmt")
+                        .selected_text(&self.chat_state.sidebar.generated_format)
+                        .show_ui(ui, |ui| {
+                            for f in ["md", "txt", "json", "csv", "png", "pdf"] {
+                                ui.selectable_value(
+                                    &mut self.chat_state.sidebar.generated_format,
+                                    f.into(),
+                                    f,
+                                );
+                            }
+                        });
+                });
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.chat_state.sidebar.generated_path)
+                        .desired_width(side_w - 20.0)
+                        .hint_text(t.sidebar_gen_path_hint),
+                );
+                ui.add(
+                    egui::TextEdit::multiline(&mut self.chat_state.sidebar.generated_content)
+                        .desired_width(side_w - 20.0)
+                        .desired_rows(3)
+                        .hint_text(t.sidebar_gen_content_hint),
+                );
+                if ui.button(t.sidebar_gen_file).clicked()
+                    && !self.chat_state.sidebar.generated_path.is_empty()
+                {
+                    let _ = self.cmd_tx.send(Cmd::FilesGenerate {
+                        format: self.chat_state.sidebar.generated_format.clone(),
+                        path: self.chat_state.sidebar.generated_path.clone(),
+                        content: self.chat_state.sidebar.generated_content.clone(),
+                        title: Some("Akasha OS".into()),
+                    });
+                }
+                if ui.button(t.sidebar_open_downloads).clicked() {
+                    let dir = aos_home().join("var/storage/data/downloads");
+                    open_os_folder(&dir);
+                }
+                ui.separator();
+                if ui.button(t.sidebar_delete).clicked() {
+                    if let Some(id) = self.chat_state.active_session.clone() {
+                        self.chat_state.sidebar.delete_confirm = Some(id);
+                    }
+                }
+                if ui.button(t.session_export).clicked() {
+                    if let Some(id) = self.chat_state.active_session.clone() {
+                        let _ = self.cmd_tx.send(Cmd::SessionExport { id });
+                    }
+                }
+                ui.horizontal(|ui| {
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.chat_state.sidebar.rename)
+                            .desired_width(120.0)
+                            .hint_text(t.sidebar_rename_hint),
+                    );
+                    if ui.button(t.sidebar_rename).clicked() {
+                        if let Some(id) = self.chat_state.active_session.clone() {
+                            let _ = self.cmd_tx.send(Cmd::SessionRename {
+                                id,
+                                title: self.chat_state.sidebar.rename.clone(),
+                            });
+                        }
+                    }
+                });
+
+                // Session list scroll height = sidebar height minus fixed header/footer chrome.
+                let session_h = ui.available_height().max(80.0);
+                overflow_scroll_h(ui, "chat_sessions", session_h, |ui| {
+                    ui.set_width(side_w);
                     let now = crate::ui_format::now_ms();
                     let sessions: Vec<_> = crate::session_nav::filter_and_sort(
                         &self.chat_state.sessions,
@@ -131,118 +225,31 @@ impl UiApp {
                             }
                         });
                     }
-                    ui.horizontal(|ui| {
-                        ui.add(
-                            egui::TextEdit::singleline(&mut self.chat_state.sidebar.rename)
-                                .desired_width(120.0)
-                                .hint_text(t.sidebar_rename_hint),
-                        );
-                        if ui.button(t.sidebar_rename).clicked() {
-                            if let Some(id) = self.chat_state.active_session.clone() {
-                                let _ = self.cmd_tx.send(Cmd::SessionRename {
-                                    id,
-                                    title: self.chat_state.sidebar.rename.clone(),
-                                });
-                            }
-                        }
-                    });
-                    if ui.button(t.session_export).clicked() {
-                        if let Some(id) = self.chat_state.active_session.clone() {
-                            let _ = self.cmd_tx.send(Cmd::SessionExport { id });
-                        }
-                    }
-                    if ui.button(t.sidebar_delete).clicked() {
-                        if let Some(id) = self.chat_state.active_session.clone() {
-                            self.chat_state.sidebar.delete_confirm = Some(id);
-                        }
-                    }
-                    ui.separator();
-                    ui.heading(t.sidebar_web_files);
-                    ui.set_min_width(side_w - 16.0);
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.chat_state.sidebar.web_query)
-                            .desired_width(side_w - 20.0)
-                            .hint_text(t.sidebar_web_search_hint),
+                });
+
+                // Fixed header chrome at the top of the sidebar.
+                ui.heading(t.tab_chat);
+                ui.horizontal(|ui| {
+                    ui.add_sized(
+                        egui::vec2((side_w - 44.0).max(80.0), theme::CONTROL_MIN_H_COMFORTABLE),
+                        egui::TextEdit::singleline(&mut self.chat_state.sidebar.search)
+                            .hint_text(t.session_search),
                     );
-                    if ui.button(t.sidebar_search).clicked()
-                        && !self.chat_state.sidebar.web_query.is_empty()
+                    if icons::archived_toggle_button(ui, self.chat_state.sidebar.show_archived)
+                        .on_hover_text(t.session_archived)
+                        .clicked()
                     {
-                        let _ = self.cmd_tx.send(Cmd::WebSearch {
-                            query: self.chat_state.sidebar.web_query.clone(),
-                            engine: self.prefs.web_search_engine.clone(),
-                        });
-                    }
-                    for hit in &self.chat_state.sidebar.web_results {
-                        ui.small(format!("• {} — {}", hit.title, hit.url));
-                    }
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.chat_state.sidebar.fetch_url)
-                            .desired_width(side_w - 20.0)
-                            .hint_text(t.sidebar_url_hint),
-                    );
-                    ui.horizontal(|ui| {
-                        if ui.button(t.sidebar_fetch_url).clicked()
-                            && !self.chat_state.sidebar.fetch_url.is_empty()
-                        {
-                            let _ = self.cmd_tx.send(Cmd::NetFetch {
-                                url: self.chat_state.sidebar.fetch_url.clone(),
-                                max_bytes: self.prefs.web_fetch_max_bytes,
-                            });
+                        self.chat_state.sidebar.show_archived =
+                            !self.chat_state.sidebar.show_archived;
+                        if self.chat_state.sidebar.show_archived {
+                            let _ = self.cmd_tx.send(Cmd::SessionListArchived);
                         }
-                        let t = i18n::strings(&self.prefs.language);
-                        if ui.button(t.web_browse_btn).clicked()
-                            && !self.chat_state.sidebar.fetch_url.is_empty()
-                        {
-                            let _ = self.cmd_tx.send(Cmd::WebBrowse {
-                                url: self.chat_state.sidebar.fetch_url.clone(),
-                                max_chars: self.prefs.web_browse_max_chars,
-                            });
-                        }
-                    });
-                    if !self.chat_state.sidebar.browse_preview.is_empty() {
-                        ui.collapsing(t.sidebar_preview_page, |ui| {
-                            ui.small(&self.chat_state.sidebar.browse_preview);
-                        });
-                    }
-                    ui.horizontal(|ui| {
-                        egui::ComboBox::from_id_salt("gen_fmt")
-                            .selected_text(&self.chat_state.sidebar.generated_format)
-                            .show_ui(ui, |ui| {
-                                for f in ["md", "txt", "json", "csv", "png", "pdf"] {
-                                    ui.selectable_value(
-                                        &mut self.chat_state.sidebar.generated_format,
-                                        f.into(),
-                                        f,
-                                    );
-                                }
-                            });
-                    });
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.chat_state.sidebar.generated_path)
-                            .desired_width(side_w - 20.0)
-                            .hint_text(t.sidebar_gen_path_hint),
-                    );
-                    ui.add(
-                        egui::TextEdit::multiline(&mut self.chat_state.sidebar.generated_content)
-                            .desired_width(side_w - 20.0)
-                            .desired_rows(3)
-                            .hint_text(t.sidebar_gen_content_hint),
-                    );
-                    if ui.button(t.sidebar_gen_file).clicked()
-                        && !self.chat_state.sidebar.generated_path.is_empty()
-                    {
-                        let _ = self.cmd_tx.send(Cmd::FilesGenerate {
-                            format: self.chat_state.sidebar.generated_format.clone(),
-                            path: self.chat_state.sidebar.generated_path.clone(),
-                            content: self.chat_state.sidebar.generated_content.clone(),
-                            title: Some("Akasha OS".into()),
-                        });
-                    }
-                    if ui.button(t.sidebar_open_downloads).clicked() {
-                        let dir = aos_home().join("var/storage/data/downloads");
-                        open_os_folder(&dir);
                     }
                 });
+                if ui.button(t.session_new).clicked() {
+                    let n = self.chat_state.sessions.len() + 1;
+                    self.request_session_create(Some(format!("Session {n}")));
+                }
             },
         );
         if let Some(id) = self.chat_state.sidebar.delete_confirm.clone() {
