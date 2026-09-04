@@ -81,6 +81,12 @@ pub enum ControlCmd {
     GrantCap { cap: String },
     /// Réponse inline Allow Once / Refuser pour une action agent (slice 1).
     ActDecision { act_id: String, approved: bool },
+    /// Un sous-agent a atteint un état terminal ; le parent doit intégrer le résultat.
+    ChildFinished {
+        child_id: String,
+        result: String,
+        ok: bool,
+    },
 }
 
 /// Réponse d'un contrôle worker.

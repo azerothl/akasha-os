@@ -163,6 +163,7 @@ IMPORTANT :
 - `agent.spawn` : brief **court** (≤ 3 phrases, auto-suffisant), tools/docs **minimaux** — ne dump pas le contexte parent ni les résultats d'outils.
 - Notes / documents longs : `notes.create` avec titre + **outline court**, puis `notes.update` **section par section** (≤ ~1200 caractères de `content` par appel). Ne mets jamais un guide entier dans un seul JSON.
 - `memory.recall` sert à accélérer le nœud / brief courant — pas à relire tout le goal.
+- Après `agent.spawn`, le runtime injecte `[child-done]` quand le sous-agent termine. Tu peux `agent.await` ou poursuivre dès que tu vois ce résultat — ne reste pas bloqué à attendre.
 - Après une découverte utile : `memory.remember`.
 - Avant une recherche web ou un fetch : `memory.recall` sur la requête courante si le contexte mémoire n'est pas déjà suffisant.
 - Pour lire une page HTML utilise `web.browse` (texte). `net.fetch` ne fait que télécharger un fichier.
@@ -204,6 +205,7 @@ Règles :
 - Les logs internes (`plan.append_log`) ne doivent PAS être dumpés dans la réponse utilisateur.
 - Traces utilisateur : le runtime publie des lignes légères ; ta réponse finale reste concise.
 - `plan.delegate_step` : brief COURT auto-suffisant ; le runtime spawn + lie l'étape.
+- Quand le sous-agent termine, le runtime injecte `[child-done]` et passe l'étape en Done. N'attends pas indéfiniment : intègre le résultat (ou `agent.await`) puis `plan.update_step`.
 - N'utilise PAS `plan.update` (mode normal) — uniquement les outils `plan.*` deep.
 - Fin : `goal.complete` quand le plan est Done.
 

@@ -53,7 +53,7 @@ use aos_proto::{
     TaskNodeStatus, TokenEvent, WebBrowseRequest, WebBrowseResponse, WebSearchHit, WebSearchRequest,
     WebSearchResponse,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -64,6 +64,11 @@ enum WorkerCmd {
     Resume,
     Steer(String),
     ActDecision { act_id: String, approved: bool },
+    ChildFinished {
+        child_id: String,
+        result: String,
+        ok: bool,
+    },
 }
 
 /// Attente max d'une réponse `user.ask` (bornée aussi par le timeout du goal).
@@ -80,6 +85,10 @@ struct Shared {
     paused: AtomicBool,
     current_inference: Mutex<Option<u64>>,
     cmd_tx: mpsc::Sender<WorkerCmd>,
+    /// Résultats poussés par agentd quand un sous-agent atteint un état terminal.
+    child_results: Mutex<HashMap<String, (String, bool)>>,
+    /// Sous-agents déjà intégrés (évite un double inject après `agent.await`).
+    consumed_child_results: Mutex<HashSet<String>>,
 }
 
 fn parse_args() -> (String, String, PathBuf, bool) {
@@ -217,6 +226,8 @@ async fn main() {
         paused: AtomicBool::new(false),
         current_inference: Mutex::new(None),
         cmd_tx: cmd_tx.clone(),
+        child_results: Mutex::new(HashMap::new()),
+        consumed_child_results: Mutex::new(HashSet::new()),
     });
 
     // Skills + tools + MCP + modules installés (catalogue dynamique)
@@ -293,6 +304,22 @@ async fn main() {
                     }
                     ControlCmd::Steer { directive } => {
                         let _ = shared.cmd_tx.send(WorkerCmd::Steer(directive)).await;
+                        ControlResp::Ack
+                    }
+                    ControlCmd::ChildFinished {
+                        child_id,
+                        result,
+                        ok,
+                    } => {
+                        record_child_finished(&shared, child_id.clone(), result.clone(), ok).await;
+                        let _ = shared
+                            .cmd_tx
+                            .send(WorkerCmd::ChildFinished {
+                                child_id,
+                                result,
+                                ok,
+                            })
+                            .await;
                         ControlResp::Ack
                     }
                     ControlCmd::Snapshot => ControlResp::State(shared.state.lock().await.clone()),
@@ -457,6 +484,13 @@ async fn main() {
                     shared.paused.store(false, Ordering::SeqCst);
                 }
                 Some(WorkerCmd::ActDecision { .. }) => {}
+                Some(WorkerCmd::ChildFinished {
+                    child_id,
+                    result,
+                    ok,
+                }) => {
+                    record_child_finished(&shared, child_id, result, ok).await;
+                }
                 None => {
                     terminal = Some(AgentState::Killed);
                     break;
@@ -515,15 +549,23 @@ async fn main() {
             }
         }
 
-        // Non-blocking drain of steer while running
+        // Non-blocking drain of steer / child-done while running
         while let Ok(cmd) = cmd_rx.try_recv() {
             match cmd {
                 WorkerCmd::Steer(d) => {
                     shared.state.lock().await.push_user(&format!("[steer] {d}"));
                 }
+                WorkerCmd::ChildFinished {
+                    child_id,
+                    result,
+                    ok,
+                } => {
+                    record_child_finished(&shared, child_id, result, ok).await;
+                }
                 WorkerCmd::Resume | WorkerCmd::ActDecision { .. } => {}
             }
         }
+        drain_child_finished_into_memory(&bus, &agent_id, &shared).await;
 
         let step = {
             let mut st = shared.state.lock().await;
@@ -533,6 +575,7 @@ async fn main() {
 
         if step > max_steps {
             let reason = format!("max_steps ({max_steps}) atteint");
+            shared.state.lock().await.artifacts.push(reason.clone());
             report(
                 &bus,
                 &agent_id,
@@ -554,6 +597,7 @@ async fn main() {
         }
         if started.elapsed() > timeout {
             let reason = "timeout goal atteint".to_string();
+            shared.state.lock().await.artifacts.push(reason.clone());
             report(
                 &bus,
                 &agent_id,
@@ -577,6 +621,7 @@ async fn main() {
             let used = shared.state.lock().await.tokens_used;
             if used >= max_tok {
                 let reason = format!("budget tokens atteint ({used}/{max_tok})");
+                shared.state.lock().await.artifacts.push(reason.clone());
                 report(
                     &bus,
                     &agent_id,
@@ -1211,20 +1256,6 @@ async fn main() {
                         },
                     )
                     .await;
-                    // Notify parent via mem.shared
-                    if let Some(parent) = &spec.parent_id {
-                        let key = format!("agent:{parent}/child:{agent_id}");
-                        let _ = bus
-                            .call::<MemSharedWriteRequest, bool>(
-                                "mem.shared_write",
-                                &MemSharedWriteRequest {
-                                    name: key,
-                                    value: serde_json::json!({"result": summary, "ok": true}),
-                                },
-                                vec![],
-                            )
-                            .await;
-                    }
                     terminal = Some(AgentState::Done);
                 } else {
                     shared.state.lock().await.push_user(
@@ -1251,19 +1282,6 @@ async fn main() {
                     },
                 )
                 .await;
-                if let Some(parent) = &spec.parent_id {
-                    let key = format!("agent:{parent}/child:{agent_id}");
-                    let _ = bus
-                        .call::<MemSharedWriteRequest, bool>(
-                            "mem.shared_write",
-                            &MemSharedWriteRequest {
-                                name: key,
-                                value: serde_json::json!({"result": reason, "ok": false}),
-                            },
-                            vec![],
-                        )
-                        .await;
-                }
                 terminal = Some(AgentState::Failed);
             }
         }
@@ -1287,6 +1305,12 @@ async fn main() {
             }
             LoopVerdict::Abort(reason) => {
                 step_fail_reason = Some(THREAD_FAIL_COULD_NOT_ACT.into());
+                shared
+                    .state
+                    .lock()
+                    .await
+                    .artifacts
+                    .push(THREAD_FAIL_COULD_NOT_ACT.into());
                 report(
                     &bus,
                     &agent_id,
@@ -1402,6 +1426,7 @@ async fn main() {
                     }
                     CanvasRepeatVerdict::Abort(msg) => {
                         st.push_user(&format!("[runtime] {msg}"));
+                        st.artifacts.push(msg.to_string());
                         drop(st);
                         report(
                             &bus,
@@ -1468,6 +1493,12 @@ async fn main() {
                         },
                     )
                     .await;
+                    shared
+                        .state
+                        .lock()
+                        .await
+                        .artifacts
+                        .push("plan canvas terminé et validation globale acceptée".into());
                     terminal = Some(AgentState::Done);
                 }
             }
@@ -1485,6 +1516,7 @@ async fn main() {
     }
 
     let final_state = terminal.unwrap_or(AgentState::Done);
+    notify_parent_if_child(&bus, &spec, &shared, &final_state).await;
     report(
         &bus,
         &agent_id,
@@ -1625,6 +1657,30 @@ async fn infer_turn(
                         Some(WorkerCmd::Resume) => return InferOutcome::Aborted,
                         Some(WorkerCmd::Steer(d)) => return InferOutcome::Steer(d),
                         Some(WorkerCmd::ActDecision { .. }) => return InferOutcome::Aborted,
+                        Some(WorkerCmd::ChildFinished {
+                            child_id,
+                            result,
+                            ok,
+                        }) => {
+                            record_child_finished(shared, child_id, result, ok).await;
+                            loop {
+                                match cmd_rx.recv().await {
+                                    Some(WorkerCmd::Resume) => return InferOutcome::Aborted,
+                                    Some(WorkerCmd::Steer(d)) => return InferOutcome::Steer(d),
+                                    Some(WorkerCmd::ActDecision { .. }) => {
+                                        return InferOutcome::Aborted
+                                    }
+                                    Some(WorkerCmd::ChildFinished {
+                                        child_id,
+                                        result,
+                                        ok,
+                                    }) => {
+                                        record_child_finished(shared, child_id, result, ok).await;
+                                    }
+                                    None => return InferOutcome::Fatal("control fermé".into()),
+                                }
+                            }
+                        }
                         None => return InferOutcome::Fatal("control fermé".into()),
                     }
                 }
@@ -2015,11 +2071,20 @@ async fn execute_action(
             if let Some(msg) = await_child_reject_reason(&child_id, &my_children) {
                 return ActResult::Continue(msg);
             }
-            let key = format!("agent:{}/child:{}", agent_id, child_id);
+            let key = CognitiveState::child_shared_mem_key(&agent_id, &child_id);
+            if let Some(result) = take_awaited_child_result(shared, bus, &agent_id, &child_id).await
+            {
+                return ActResult::Continue(result);
+            }
             let mut seen_in_list = false;
             // Poll shared mem / agent state (~30s). Never Block: a missing or
             // crashed child must not freeze the parent for a human Resume.
             for i in 0..60 {
+                if let Some(result) =
+                    take_awaited_child_result(shared, bus, &agent_id, &child_id).await
+                {
+                    return ActResult::Continue(result);
+                }
                 if let Ok(Some(val)) = bus
                     .call::<MemSharedReadRequest, Option<serde_json::Value>>(
                         "mem.shared_read",
@@ -2028,17 +2093,10 @@ async fn execute_action(
                     )
                     .await
                 {
-                    let result = val.to_string();
-                    report(
-                        bus,
-                        &agent_id,
-                        AgentOutputEvent::ChildDone {
-                            child_id: child_id.clone(),
-                            result: result.clone(),
-                        },
-                    )
-                    .await;
-                    return ActResult::Continue(result);
+                    return ActResult::Continue(
+                        finish_agent_await(bus, shared, &agent_id, child_id, val.to_string())
+                            .await,
+                    );
                 }
                 if let Ok(list) = bus
                     .call::<(), Vec<AgentInfo>>("agent.list", &(), vec![])
@@ -2055,16 +2113,9 @@ async fn execute_action(
                             } else {
                                 info.last_output.clone()
                             };
-                            report(
-                                bus,
-                                &agent_id,
-                                AgentOutputEvent::ChildDone {
-                                    child_id: child_id.clone(),
-                                    result: result.clone(),
-                                },
-                            )
-                            .await;
-                            return ActResult::Continue(result);
+                            return ActResult::Continue(
+                                finish_agent_await(bus, shared, &agent_id, child_id, result).await,
+                            );
                         }
                     } else if i >= 3 && !seen_in_list {
                         return ActResult::Continue(format!(
@@ -2250,6 +2301,13 @@ async fn wait_user_answer(
                 );
             }
             Ok(Some(WorkerCmd::ActDecision { .. })) => {}
+            Ok(Some(WorkerCmd::ChildFinished {
+                child_id,
+                result,
+                ok,
+            })) => {
+                record_child_finished(shared, child_id, result, ok).await;
+            }
             Ok(None) => return AskWait::Killed,
             Err(_) => {
                 shared.paused.store(false, Ordering::SeqCst);
@@ -2373,6 +2431,13 @@ async fn wait_act_decision(
                 return GateWait::Denied;
             }
             Ok(Some(WorkerCmd::Steer(_))) => {}
+            Ok(Some(WorkerCmd::ChildFinished {
+                child_id,
+                result,
+                ok,
+            })) => {
+                record_child_finished(shared, child_id, result, ok).await;
+            }
             Ok(None) => return GateWait::Killed,
             Err(_) => {
                 shared.paused.store(false, Ordering::SeqCst);
@@ -4356,6 +4421,121 @@ fn truncate(s: &str, n: usize) -> String {
     }
 }
 
+async fn record_child_finished(shared: &Shared, child_id: String, result: String, ok: bool) {
+    shared
+        .child_results
+        .lock()
+        .await
+        .insert(child_id, (result, ok));
+}
+
+async fn drain_child_finished_into_memory(bus: &BusClient, agent_id: &str, shared: &Shared) {
+    let pending: Vec<(String, (String, bool))> = {
+        let mut map = shared.child_results.lock().await;
+        map.drain().collect()
+    };
+    for (child_id, (result, ok)) in pending {
+        if !shared
+            .consumed_child_results
+            .lock()
+            .await
+            .insert(child_id.clone())
+        {
+            continue;
+        }
+        let injected = {
+            let mut st = shared.state.lock().await;
+            st.inject_child_done_memory(&child_id, &result, ok)
+        };
+        if injected {
+            report(
+                bus,
+                agent_id,
+                AgentOutputEvent::Log {
+                    line: format!("sous-agent {child_id} terminé"),
+                },
+            )
+            .await;
+        }
+    }
+}
+
+fn child_terminal_result(st: &CognitiveState, state: &AgentState) -> String {
+    if let Some(artifact) = st.artifacts.last().filter(|s| !s.trim().is_empty()) {
+        return artifact.clone();
+    }
+    if let Some(rec) = st
+        .trace
+        .last()
+        .filter(|r| !r.tool_result.trim().is_empty())
+    {
+        return rec.tool_result.clone();
+    }
+    format!("{state:?}")
+}
+
+async fn notify_parent_if_child(
+    bus: &BusClient,
+    spec: &AgentSpec,
+    shared: &Shared,
+    state: &AgentState,
+) {
+    let Some(parent) = spec.parent_id.as_ref() else {
+        return;
+    };
+    let result = {
+        let st = shared.state.lock().await;
+        child_terminal_result(&st, state)
+    };
+    let ok = matches!(state, AgentState::Done);
+    let key = CognitiveState::child_shared_mem_key(parent, &spec.agent_id);
+    let _ = bus
+        .call::<MemSharedWriteRequest, bool>(
+            "mem.shared_write",
+            &MemSharedWriteRequest {
+                name: key,
+                value: serde_json::json!({"result": result, "ok": ok}),
+            },
+            vec![],
+        )
+        .await;
+}
+
+async fn take_awaited_child_result(
+    shared: &Shared,
+    bus: &BusClient,
+    agent_id: &str,
+    child_id: &str,
+) -> Option<String> {
+    let (result, ok) = shared.child_results.lock().await.remove(child_id)?;
+    let payload = serde_json::json!({"result": result, "ok": ok}).to_string();
+    Some(finish_agent_await(bus, shared, agent_id, child_id.to_string(), payload).await)
+}
+
+async fn finish_agent_await(
+    bus: &BusClient,
+    shared: &Shared,
+    agent_id: &str,
+    child_id: String,
+    result: String,
+) -> String {
+    shared
+        .consumed_child_results
+        .lock()
+        .await
+        .insert(child_id.clone());
+    report(
+        bus,
+        agent_id,
+        AgentOutputEvent::ChildDone {
+            child_id,
+            result: result.clone(),
+        },
+    )
+    .await;
+    result
+}
+
 /// Refuse d'attendre un id vide ou un agent que ce parent n'a pas spawn.
 fn await_child_reject_reason(child_id: &str, my_children: &[String]) -> Option<String> {
     if child_id.is_empty() {
@@ -4489,9 +4669,13 @@ fn collect_sources(
 
 #[cfg(test)]
 mod tests {
-    use super::{await_child_reject_reason, canvas_child_goal_statement, require_canvas_plan};
+    use super::{
+        await_child_reject_reason, canvas_child_goal_statement, child_terminal_result,
+        require_canvas_plan,
+    };
     use aos_agent::assess::AssessResult;
-    use aos_proto::{AgentGoal, AgentSpec};
+    use aos_agent::CognitiveState;
+    use aos_proto::{AgentGoal, AgentSpec, AgentState};
 
     #[test]
     fn canvas_goal_requires_a_bounded_composition_plan() {
@@ -4536,6 +4720,18 @@ mod tests {
     #[test]
     fn await_accepts_own_child() {
         assert!(await_child_reject_reason("agent-2", &["agent-2".into()]).is_none());
+    }
+
+    #[test]
+    fn child_terminal_result_prefers_artifacts() {
+        let mut st = CognitiveState::new("child", vec![]);
+        st.artifacts.push("résumé du sous-agent".into());
+        assert_eq!(
+            child_terminal_result(&st, &AgentState::Done),
+            "résumé du sous-agent"
+        );
+        let empty = CognitiveState::new("child", vec![]);
+        assert_eq!(child_terminal_result(&empty, &AgentState::Failed), "Failed");
     }
 
     #[test]

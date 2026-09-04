@@ -21,6 +21,6 @@ Activé quand `cognitive_mode` vaut `deep_thinking` (flag de requête ou phrase 
 
 1. Appeler d'abord `plan.create` avec un **arbre hiérarchique complet**.
 2. Déléguer les nœuds lourds via `plan.delegate_step` (brief court auto-suffisant).
-3. Après chaque résultat : `plan.update_step` ou `plan.replace_tree`.
+3. Quand un sous-agent délégué termine, le runtime injecte `[child-done]` et passe l'étape en Done. Ensuite `plan.update_step` ou `plan.replace_tree` si le plan doit changer. Ne pas attendre indéfiniment.
 4. Logs internes via `plan.append_log` — ne pas les dumper à l'utilisateur.
 5. Terminer avec `goal.complete` quand les étapes critiques sont Done.

@@ -116,6 +116,35 @@ impl CognitiveState {
             .push(("user".to_string(), content.to_string()));
     }
 
+    /// Clé `mem.shared` utilisée pour signaler le résultat d'un sous-agent à son parent.
+    pub fn child_shared_mem_key(parent_id: &str, child_id: &str) -> String {
+        format!("agent:{parent_id}/child:{child_id}")
+    }
+
+    /// Injecte la fin d'un sous-agent dans le contexte parent. Idempotent par `child_id`.
+    pub fn inject_child_done_memory(
+        &mut self,
+        child_id: &str,
+        result: &str,
+        ok: bool,
+    ) -> bool {
+        let marker = format!("[child-done] {child_id}");
+        if self
+            .working_memory
+            .iter()
+            .any(|(_, message)| message.contains(&marker))
+        {
+            return false;
+        }
+        let clipped: String = result.chars().take(2000).collect();
+        let status = if ok { "terminé" } else { "échoué" };
+        self.push_user(&format!(
+            "{marker} a {status} : {clipped}\n\
+             Intègre ce résultat. agent.await n'est plus nécessaire pour cet id."
+        ));
+        true
+    }
+
     pub fn push_assistant(&mut self, content: &str) {
         self.working_memory
             .push(("assistant".to_string(), content.to_string()));
@@ -307,6 +336,26 @@ fn clip_working_memory_outcome(outcome: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn inject_child_done_memory_is_idempotent() {
+        let mut st = CognitiveState::new("parent", vec![]);
+        assert!(st.inject_child_done_memory("agent-2", "ok résumé", true));
+        assert!(st.working_memory[0].1.contains("[child-done] agent-2"));
+        assert!(st.working_memory[0].1.contains("ok résumé"));
+        assert!(!st.inject_child_done_memory("agent-2", "autre", true));
+        assert_eq!(st.working_memory.len(), 1);
+        assert!(st.inject_child_done_memory("agent-3", "fail", false));
+        assert!(st.working_memory[1].1.contains("échoué"));
+    }
+
+    #[test]
+    fn child_shared_mem_key_is_scoped_to_parent_and_child() {
+        assert_eq!(
+            CognitiveState::child_shared_mem_key("agent-1", "agent-2"),
+            "agent:agent-1/child:agent-2"
+        );
+    }
 
     #[test]
     fn push_canvas_tool_uses_user_role() {

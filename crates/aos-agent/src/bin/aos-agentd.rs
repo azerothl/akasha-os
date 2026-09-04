@@ -56,6 +56,54 @@ async fn broadcast(entry: &mut AgentEntry, event: &AgentOutputEvent) {
     }
 }
 
+/// Pousse la fin d'un sous-agent vers le parent (plan deep, UI, worker).
+async fn notify_parent_child_terminal(
+    shared: &Shared,
+    bus: &BusClient,
+    parent_id: &str,
+    child_id: &str,
+    result: &str,
+    ok: bool,
+) {
+    {
+        let mut rt = shared.lock().await;
+        if let Ok(Some((plan, _))) = rt
+            .deep_thinking
+            .complete_delegated_child(parent_id, child_id, result)
+        {
+            if let Some(entry) = rt.agents.get_mut(parent_id) {
+                entry.info.deep_plan = Some(plan.clone());
+                persist::update_info_sidecar(&entry.info);
+                broadcast(
+                    entry,
+                    &AgentOutputEvent::DeepPlanUpdated { plan },
+                )
+                .await;
+            }
+        }
+        if let Some(entry) = rt.agents.get_mut(parent_id) {
+            broadcast(
+                entry,
+                &AgentOutputEvent::ChildDone {
+                    child_id: child_id.to_string(),
+                    result: result.to_string(),
+                },
+            )
+            .await;
+        }
+    }
+    let _ = send_control(
+        bus,
+        parent_id,
+        &ControlCmd::ChildFinished {
+            child_id: child_id.to_string(),
+            result: result.to_string(),
+            ok,
+        },
+    )
+    .await;
+}
+
 fn worker_exe_path() -> std::path::PathBuf {
     let exe = std::env::current_exe().expect("current_exe");
     let dir = exe.parent().expect("dir du binaire");
@@ -370,13 +418,13 @@ async fn spawn_worker(
     agent_id: &str,
     spec: &AgentSpec,
     restore: bool,
-    bus: Option<&BusClient>,
+    bus: Option<Arc<BusClient>>,
 ) -> Result<u32, String> {
     let spec_path = persist::write_spec(spec).map_err(|e| e.to_string())?;
     registry_add(agent_id);
 
     // Pré-résout les secrets MCP (agentd = service ; le worker est agent:*).
-    if let Some(bus) = bus {
+    if let Some(bus) = bus.as_ref() {
         if let Err(e) = prepare_mcp_secrets(bus, agent_id, &spec.mcp_servers).await {
             eprintln!("[aos-agentd] mcp secrets {agent_id}: {e}");
         }
@@ -459,31 +507,54 @@ async fn spawn_worker(
         persist::update_info_sidecar(&rt.agents[agent_id].info);
     }
 
-    if let Some(bus) = bus {
+    if let Some(bus) = bus.as_ref() {
         publish_caps_to_capkd(bus, agent_id, &spec.caps).await;
     }
 
+    let bus_for_wait = bus.clone();
     let shared2 = shared.clone();
     let agent_id2 = agent_id.to_string();
     let mut child = child;
     tokio::spawn(async move {
         let _ = child.wait().await;
-        let mut rt = shared2.lock().await;
-        if let Some(entry) = rt.agents.get_mut(&agent_id2) {
-            entry.info.pid = None;
-            if !matches!(
-                entry.info.state,
-                AgentState::Killed | AgentState::Done | AgentState::Failed
-            ) {
-                entry.info.state = AgentState::Done;
-                let ev = AgentOutputEvent::StateChanged {
-                    state: AgentState::Done,
-                };
-                broadcast(entry, &ev).await;
+        let mut unexpected_parent: Option<(String, String, bool)> = None;
+        {
+            let mut rt = shared2.lock().await;
+            if let Some(entry) = rt.agents.get_mut(&agent_id2) {
+                entry.info.pid = None;
+                if !matches!(
+                    entry.info.state,
+                    AgentState::Killed | AgentState::Done | AgentState::Failed
+                ) {
+                    let parent_id = entry.info.parent_id.clone();
+                    let result = if !entry.info.last_output.trim().is_empty() {
+                        entry.info.last_output.clone()
+                    } else {
+                        "sous-agent arrêté sans rapport de fin".into()
+                    };
+                    entry.info.state = AgentState::Done;
+                    let ev = AgentOutputEvent::StateChanged {
+                        state: AgentState::Done,
+                    };
+                    broadcast(entry, &ev).await;
+                    if let Some(parent_id) = parent_id {
+                        unexpected_parent = Some((parent_id, result, true));
+                    }
+                }
+                persist::update_info_sidecar(&entry.info);
             }
-            persist::update_info_sidecar(&entry.info);
         }
-        drop(rt);
+        if let (Some(bus), Some((parent_id, result, ok))) = (bus_for_wait, unexpected_parent) {
+            notify_parent_child_terminal(
+                &shared2,
+                &bus,
+                &parent_id,
+                &agent_id2,
+                &result,
+                ok,
+            )
+            .await;
+        }
         if let Err(e) = schedule::release_agent(&agent_id2) {
             eprintln!("[aos-agentd] schedule release {agent_id2}: {e}");
         }
@@ -642,7 +713,7 @@ async fn main() {
                     }
                     return;
                 }
-                match spawn_worker(&shared, &bus_addr, &agent_id, &spec, false, Some(&bus)).await {
+                match spawn_worker(&shared, &bus_addr, &agent_id, &spec, false, Some(bus.clone())).await {
                     Ok(pid) => {
                         eprintln!("[aos-agentd] {agent_id} créé (pid {pid})");
                         let _ = ctx
@@ -787,7 +858,7 @@ async fn main() {
                         }
                     }
                 }
-                match spawn_worker(&shared, &bus_addr, &req.agent_id, &spec, true, Some(&bus)).await {
+                match spawn_worker(&shared, &bus_addr, &req.agent_id, &spec, true, Some(bus.clone())).await {
                     Ok(_) => {
                         let _ = ctx.respond(aos_ipc::msg::Status::Ok, &true).await;
                     }
@@ -951,7 +1022,7 @@ async fn main() {
                                     &req.agent_id,
                                     &spec,
                                     true,
-                                    Some(&bus),
+                                    Some(bus.clone()),
                                 )
                                 .await
                                 {
@@ -1203,6 +1274,7 @@ async fn main() {
                         let mut chat_summary: Option<(String, String, String, String, String)> =
                             None;
                         let mut deep_trace_chat: Option<(String, String)> = None;
+                        let mut parent_notify: Option<(String, String, String, bool)> = None;
                         {
                             let mut rt = shared.lock().await;
                             if let AgentOutputEvent::ChildDone { child_id, result } = &rep.event {
@@ -1226,6 +1298,15 @@ async fn main() {
                                     }
                                     AgentOutputEvent::StateChanged { state } => {
                                         let prev = entry.info.state.clone();
+                                        let parent_id = entry.info.parent_id.clone();
+                                        let result_text = if !entry.info.last_output.trim().is_empty()
+                                        {
+                                            entry.info.last_output.clone()
+                                        } else {
+                                            entry.info.fail_reason.clone().unwrap_or_else(|| {
+                                                format!("{state:?}")
+                                            })
+                                        };
                                         entry.info.state = state.clone();
                                         if matches!(
                                             state,
@@ -1246,6 +1327,14 @@ async fn main() {
                                                 | AgentState::Killed
                                         );
                                         if terminal && was_active {
+                                            if let Some(parent_id) = parent_id {
+                                                parent_notify = Some((
+                                                    parent_id,
+                                                    entry.info.agent_id.clone(),
+                                                    result_text.chars().take(4000).collect(),
+                                                    matches!(state, AgentState::Done),
+                                                ));
+                                            }
                                             if let Some(sid) = entry.info.session_id.clone() {
                                                 let summary = match state {
                                                     AgentState::Done => agent_done_chat_message(
@@ -1431,6 +1520,17 @@ async fn main() {
                                 persist::update_info_sidecar(&entry.info);
                                 broadcast(entry, &rep.event).await;
                             }
+                        }
+                        if let Some((parent_id, child_id, result, ok)) = parent_notify {
+                            notify_parent_child_terminal(
+                                &shared,
+                                &bus,
+                                &parent_id,
+                                &child_id,
+                                &result,
+                                ok,
+                            )
+                            .await;
                         }
                         if let Some((session_id, agent_id, title, content, _state)) = chat_summary {
                             let _ = bus
@@ -1910,7 +2010,7 @@ async fn main() {
                         &agent_id,
                         &spec,
                         false,
-                        Some(&bus_tick),
+                        Some(bus_tick.clone()),
                     )
                     .await
                     {

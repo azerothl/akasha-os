@@ -237,6 +237,9 @@ impl DeepThinkingEngine {
             return Ok(None);
         };
         if let Some(step) = find_step_mut(&mut plan.steps, &step_id) {
+            if matches!(step.status, aos_proto::PlanStepStatus::Done) {
+                return Ok(None);
+            }
             step.status = aos_proto::PlanStepStatus::Done;
             let clipped: String = result.chars().take(400).collect();
             step.logs.push(format!("child_done: {clipped}"));
@@ -379,6 +382,21 @@ mod tests {
             .unwrap();
         assert_eq!(got.id, plan.id);
         assert_eq!(eng.store.version_count("agent-x", &plan.id).unwrap(), 3);
+
+        let (plan, _) = eng
+            .complete_delegated_child("agent-x", "child-1", "extrait README")
+            .unwrap()
+            .expect("delegated child should complete the bound step");
+        assert_eq!(
+            super::super::delegate::find_step(&plan.steps, "2.1")
+                .unwrap()
+                .status,
+            PlanStepStatus::Done
+        );
+        assert!(eng
+            .complete_delegated_child("agent-x", "child-1", "encore")
+            .unwrap()
+            .is_none());
 
         let _ = fs::remove_dir_all(&dir);
     }
