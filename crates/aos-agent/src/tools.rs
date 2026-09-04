@@ -1077,12 +1077,8 @@ pub fn select_tools_mode(selected: &[String], extra: &[ToolDesc], deep: bool) ->
         if deep && t.name == "plan.update" {
             continue;
         }
-        let keep = always.contains(&t.name.as_str())
-            || selected.is_empty()
-            || selected
-                .iter()
-                .any(|s| s == &t.name || t.name.starts_with(&format!("{s}.")));
         let keep = if selected.is_empty() {
+            // Mode permissif : notes + tasks + runtime + fs + extensions
             matches!(t.backend, ToolBackend::Runtime)
                 || t.name.starts_with("notes.")
                 || t.name.starts_with("tasks.")
@@ -1096,7 +1092,9 @@ pub fn select_tools_mode(selected: &[String], extra: &[ToolDesc], deep: bool) ->
                 || t.name == "media.image.generate"
                 || t.name == "media.audio.generate"
         } else {
-            keep || selected.iter().any(|s| &t.name == s) || always.contains(&t.name.as_str())
+            // Mode restreint : always + ids / préfixes explicitement demandés
+            always.contains(&t.name.as_str())
+                || selected.iter().any(|s| s == &t.name || t.name.starts_with(&format!("{s}.")))
         };
         if keep && !out.iter().any(|x| x.name == t.name) {
             out.push(t.clone());
