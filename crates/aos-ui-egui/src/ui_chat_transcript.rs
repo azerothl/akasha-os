@@ -13,7 +13,6 @@ use crate::{
 use aos_proto::{ChatAttachment, ChatRoomMember};
 use eframe::egui;
 
-pub(crate) const TRANSCRIPT_ESTIMATED_ROW_HEIGHT: f32 = 96.0;
 /// Comfortable gap between the last bubble and the composer when scrolled to the end.
 pub(crate) const TRANSCRIPT_BOTTOM_PADDING: f32 = 16.0;
 /// Pixels from the bottom still treated as "following" the latest messages.
@@ -50,16 +49,6 @@ fn transcript_should_follow_bottom(
 /// Viewport height for the transcript scroll area from the pane's live budget.
 pub(crate) fn transcript_viewport_height(available_h: f32) -> f32 {
     available_h.max(1.0)
-}
-
-/// Number of rows that a virtualized transcript needs to inspect for a viewport.
-/// The two-row overscan keeps fast wheel scrolling from exposing a blank gap.
-pub(crate) fn transcript_visible_row_budget(total_rows: usize, viewport_height: f32) -> usize {
-    if total_rows == 0 || viewport_height <= 0.0 {
-        return 0;
-    }
-    let visible = (viewport_height / TRANSCRIPT_ESTIMATED_ROW_HEIGHT).ceil() as usize;
-    total_rows.min(visible.saturating_add(2))
 }
 
 impl UiApp {
@@ -572,7 +561,7 @@ impl UiApp {
 mod tests {
     use super::{
         transcript_near_bottom, transcript_should_follow_bottom, transcript_viewport_height,
-        transcript_visible_row_budget, TRANSCRIPT_BOTTOM_PADDING,
+        TRANSCRIPT_BOTTOM_PADDING,
     };
 
     #[test]
@@ -584,20 +573,6 @@ mod tests {
     #[test]
     fn bottom_padding_is_comfortable_gap() {
         assert!(TRANSCRIPT_BOTTOM_PADDING >= 8.0);
-    }
-
-    #[test]
-    fn five_hundred_messages_keep_virtualized_budget_bounded() {
-        let rendered = transcript_visible_row_budget(500, 600.0);
-        assert!(rendered <= 10, "rendered budget was {rendered}");
-        assert!(rendered < 500);
-    }
-
-    #[test]
-    fn virtualization_budget_handles_empty_and_small_viewports() {
-        assert_eq!(transcript_visible_row_budget(0, 600.0), 0);
-        assert_eq!(transcript_visible_row_budget(500, 0.0), 0);
-        assert_eq!(transcript_visible_row_budget(3, 600.0), 3);
     }
 
     #[test]
