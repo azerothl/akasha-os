@@ -300,7 +300,11 @@ pub fn show_notes_panel(
     }
     ui.separator();
 
+    let notes_total_width = ui.available_width();
+    let notes_list_width = (notes_total_width * 0.34).clamp(280.0, 520.0);
     ui.columns(2, |cols| {
+        cols[0].set_width(notes_list_width);
+        cols[1].set_width((notes_total_width - notes_list_width - 12.0).max(320.0));
         let list_h = cols[0].available_height() * 0.55;
         let search_h = cols[0].available_height() * 0.25;
         let editor_h = cols[1].available_height();

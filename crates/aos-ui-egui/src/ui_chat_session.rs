@@ -554,7 +554,13 @@ impl UiApp {
                     if guide::tab_help_button(ui, g.help_tooltip) {
                         self.guide.open_topic(guide::GuideTopic::Chat);
                     }
-                    let activity_label = if self.prefs.ui_layout.activity_panel_open {
+                    let activity_label = if canvas_open {
+                        if self.prefs.ui_layout.activity_panel_open {
+                            "× Act.".to_string()
+                        } else {
+                            "Act.".to_string()
+                        }
+                    } else if self.prefs.ui_layout.activity_panel_open {
                         format!("× {}", t.activity_open)
                     } else {
                         t.activity_open.to_string()

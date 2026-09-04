@@ -1552,7 +1552,9 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             (Tab::Memory, t.tab_memory, t.tab_hint_memory),
         ];
         for (idx, (tab, label, hint)) in primary.into_iter().enumerate() {
-            let icon = ["◉", "✦", "✧", "◇"][idx];
+            // Keep rail marks in the ASCII subset: the bundled fallback fonts
+            // do not contain every geometric Unicode glyph.
+            let icon = ["C", "A", "+", "M"][idx];
             let compact_label = match idx {
                 0 => "Chat",
                 1 => "Agents",
