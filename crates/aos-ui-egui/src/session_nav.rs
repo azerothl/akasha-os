@@ -26,21 +26,31 @@ pub fn group_for(updated_ms: u64, now_ms: u64) -> SessionGroup {
     }
 }
 
+pub const GROUP_ORDER: [SessionGroup; 4] = [
+    SessionGroup::Today,
+    SessionGroup::Yesterday,
+    SessionGroup::LastSevenDays,
+    SessionGroup::Older,
+];
+
 pub fn filter_and_sort<'a>(
     sessions: &'a [ChatSessionMeta],
     query: &str,
 ) -> Vec<&'a ChatSessionMeta> {
     let needle = query.trim().to_lowercase();
-    let mut out: Vec<_> = sessions
+    sessions
         .iter()
         .filter(|s| {
             needle.is_empty()
                 || s.title.to_lowercase().contains(&needle)
                 || s.id.to_lowercase().contains(&needle)
         })
-        .collect();
-    out.sort_by_key(|s| (!s.pinned, std::cmp::Reverse(s.updated_ms)));
-    out
+        .collect()
+}
+
+/// Newest-first within a group; pinned rows stay above unpinned peers.
+pub fn sort_within_group<'a>(sessions: &mut [&'a ChatSessionMeta]) {
+    sessions.sort_by_key(|s| (!s.pinned, std::cmp::Reverse(s.updated_ms)));
 }
 
 /// User-initiated session navigation intent.
@@ -196,7 +206,7 @@ mod tests {
     }
 
     #[test]
-    fn session_search_is_case_insensitive_and_pinned_first() {
+    fn session_search_is_case_insensitive() {
         let sessions = vec![
             ChatSessionMeta {
                 id: "a".into(),
@@ -231,6 +241,67 @@ mod tests {
         ];
         let result = filter_and_sort(&sessions, "alpha");
         assert_eq!(result.len(), 2);
-        assert_eq!(result[0].id, "b");
+    }
+
+    #[test]
+    fn sort_within_group_is_newest_first_with_pinned_first() {
+        let sessions = vec![
+            ChatSessionMeta {
+                id: "old".into(),
+                title: "Old".into(),
+                created_ms: 1,
+                updated_ms: 1,
+                archived: false,
+                pinned: false,
+                message_count: 1,
+                model_id: None,
+                mode: Default::default(),
+                members: vec![],
+                conductor_policy: Default::default(),
+                canvas_open: false,
+                canvas_aspect: Default::default(),
+            },
+            ChatSessionMeta {
+                id: "new".into(),
+                title: "New".into(),
+                created_ms: 1,
+                updated_ms: 100,
+                archived: false,
+                pinned: false,
+                message_count: 1,
+                model_id: None,
+                mode: Default::default(),
+                members: vec![],
+                conductor_policy: Default::default(),
+                canvas_open: false,
+                canvas_aspect: Default::default(),
+            },
+            ChatSessionMeta {
+                id: "pin".into(),
+                title: "Pinned".into(),
+                created_ms: 1,
+                updated_ms: 50,
+                archived: false,
+                pinned: true,
+                message_count: 1,
+                model_id: None,
+                mode: Default::default(),
+                members: vec![],
+                conductor_policy: Default::default(),
+                canvas_open: false,
+                canvas_aspect: Default::default(),
+            },
+        ];
+        let mut group = filter_and_sort(&sessions, "");
+        sort_within_group(&mut group);
+        assert_eq!(group[0].id, "pin");
+        assert_eq!(group[1].id, "new");
+        assert_eq!(group[2].id, "old");
+    }
+
+    #[test]
+    fn group_order_puts_today_before_older() {
+        assert_eq!(GROUP_ORDER[0], SessionGroup::Today);
+        assert_eq!(GROUP_ORDER[3], SessionGroup::Older);
     }
 }

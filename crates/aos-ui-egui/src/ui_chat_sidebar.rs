@@ -167,100 +167,109 @@ impl UiApp {
                         overflow_scroll_h(ui, "chat_sessions", session_h, |ui| {
                             ui.set_width(side_w);
                             let now = crate::ui_format::now_ms();
+                            let show_archived = self.chat_state.sidebar.show_archived;
                             let sessions: Vec<_> = crate::session_nav::filter_and_sort(
                                 &self.chat_state.sessions,
                                 &self.chat_state.sidebar.search,
                             )
                             .into_iter()
+                            .filter(|s| show_archived || !s.archived)
                             .cloned()
                             .collect();
-                            let mut last_group = None;
-                            for s in sessions {
-                                if !self.chat_state.sidebar.show_archived && s.archived {
+                            for group in crate::session_nav::GROUP_ORDER {
+                                let mut group_sessions: Vec<_> = sessions
+                                    .iter()
+                                    .filter(|s| {
+                                        crate::session_nav::group_for(s.updated_ms, now) == group
+                                    })
+                                    .collect();
+                                if group_sessions.is_empty() {
                                     continue;
                                 }
-                                let group = crate::session_nav::group_for(s.updated_ms, now);
-                                if last_group != Some(group) {
-                                    let label = match group {
-                                        crate::session_nav::SessionGroup::Today => t.session_today,
-                                        crate::session_nav::SessionGroup::Yesterday => {
-                                            t.session_yesterday
+                                crate::session_nav::sort_within_group(&mut group_sessions);
+                                let label = match group {
+                                    crate::session_nav::SessionGroup::Today => t.session_today,
+                                    crate::session_nav::SessionGroup::Yesterday => {
+                                        t.session_yesterday
+                                    }
+                                    crate::session_nav::SessionGroup::LastSevenDays => {
+                                        t.session_last_seven_days
+                                    }
+                                    crate::session_nav::SessionGroup::Older => t.session_older,
+                                };
+                                ui.add_space(4.0);
+                                ui.weak(label);
+                                for s in group_sessions {
+                                    let s = s.clone();
+                                    let selected = self.chat_state.active_session.as_deref()
+                                        == Some(s.id.as_str());
+                                    let unread = self.chat_state.session_chat.is_unread(&s.id);
+                                    let row = ui.horizontal(|ui| {
+                                        let pin = if s.pinned { "★ " } else { "" };
+                                        if unread {
+                                            let t = i18n::strings(&self.prefs.language);
+                                            icons::status_dot(ui, theme::SIGNAL)
+                                                .on_hover_text(t.session_unread_reply);
                                         }
-                                        crate::session_nav::SessionGroup::LastSevenDays => {
-                                            t.session_last_seven_days
+                                        let title = ui
+                                            .selectable_label(selected, format!("{pin}{}", s.title));
+                                        ui.label(
+                                            egui::RichText::new(format!("({})", s.message_count))
+                                                .weak(),
+                                        );
+                                        if s.archived {
+                                            ui.weak(t.session_archived);
                                         }
-                                        crate::session_nav::SessionGroup::Older => t.session_older,
-                                    };
-                                    ui.add_space(4.0);
-                                    ui.weak(label);
-                                    last_group = Some(group);
-                                }
-                                let selected = self.chat_state.active_session.as_deref()
-                                    == Some(s.id.as_str());
-                                let unread = self.chat_state.session_chat.is_unread(&s.id);
-                                let row = ui.horizontal(|ui| {
-                                    let pin = if s.pinned { "★ " } else { "" };
-                                    if unread {
-                                        let t = i18n::strings(&self.prefs.language);
-                                        icons::status_dot(ui, theme::SIGNAL)
-                                            .on_hover_text(t.session_unread_reply);
+                                        title
+                                    });
+                                    if row.inner.clicked() || row.response.clicked() {
+                                        self.request_session_select(s.id.clone());
                                     }
-                                    let title =
-                                        ui.selectable_label(selected, format!("{pin}{}", s.title));
-                                    ui.label(
-                                        egui::RichText::new(format!("({})", s.message_count))
-                                            .weak(),
-                                    );
-                                    if s.archived {
-                                        ui.weak(t.session_archived);
-                                    }
-                                    title
-                                });
-                                if row.inner.clicked() || row.response.clicked() {
-                                    self.request_session_select(s.id.clone());
-                                }
-                                row.response.context_menu(|ui| {
-                                    if ui
-                                        .button(if s.pinned {
-                                            t.session_unpin
-                                        } else {
-                                            t.session_pin
-                                        })
-                                        .clicked()
-                                    {
-                                        let _ = self.cmd_tx.send(Cmd::SessionSetPinned {
-                                            id: s.id.clone(),
-                                            pinned: !s.pinned,
-                                        });
-                                        ui.close_menu();
-                                    }
-                                    if s.archived {
-                                        if ui.button(t.session_restore).clicked() {
-                                            let _ = self.cmd_tx.send(Cmd::SessionSetArchived {
+                                    row.response.context_menu(|ui| {
+                                        if ui
+                                            .button(if s.pinned {
+                                                t.session_unpin
+                                            } else {
+                                                t.session_pin
+                                            })
+                                            .clicked()
+                                        {
+                                            let _ = self.cmd_tx.send(Cmd::SessionSetPinned {
                                                 id: s.id.clone(),
-                                                archived: false,
+                                                pinned: !s.pinned,
                                             });
                                             ui.close_menu();
                                         }
-                                    } else if ui.button(t.session_archive).clicked() {
-                                        let _ = self.cmd_tx.send(Cmd::SessionSetArchived {
-                                            id: s.id.clone(),
-                                            archived: true,
-                                        });
-                                        ui.close_menu();
-                                    }
-                                    if ui.button(t.session_export).clicked() {
-                                        let _ =
-                                            self.cmd_tx.send(Cmd::SessionExport { id: s.id.clone() });
-                                        ui.close_menu();
-                                    }
-                                    if s.archived
-                                        && ui.button(t.session_delete_permanently).clicked()
-                                    {
-                                        self.chat_state.sidebar.delete_confirm = Some(s.id.clone());
-                                        ui.close_menu();
-                                    }
-                                });
+                                        if s.archived {
+                                            if ui.button(t.session_restore).clicked() {
+                                                let _ = self.cmd_tx.send(Cmd::SessionSetArchived {
+                                                    id: s.id.clone(),
+                                                    archived: false,
+                                                });
+                                                ui.close_menu();
+                                            }
+                                        } else if ui.button(t.session_archive).clicked() {
+                                            let _ = self.cmd_tx.send(Cmd::SessionSetArchived {
+                                                id: s.id.clone(),
+                                                archived: true,
+                                            });
+                                            ui.close_menu();
+                                        }
+                                        if ui.button(t.session_export).clicked() {
+                                            let _ = self
+                                                .cmd_tx
+                                                .send(Cmd::SessionExport { id: s.id.clone() });
+                                            ui.close_menu();
+                                        }
+                                        if s.archived
+                                            && ui.button(t.session_delete_permanently).clicked()
+                                        {
+                                            self.chat_state.sidebar.delete_confirm =
+                                                Some(s.id.clone());
+                                            ui.close_menu();
+                                        }
+                                    });
+                                }
                             }
                         });
                     },

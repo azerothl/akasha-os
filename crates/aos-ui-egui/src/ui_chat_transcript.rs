@@ -14,6 +14,14 @@ use aos_proto::{ChatAttachment, ChatRoomMember};
 use eframe::egui;
 
 pub(crate) const TRANSCRIPT_ESTIMATED_ROW_HEIGHT: f32 = 96.0;
+/// Pixels from the bottom still treated as "following" the latest messages.
+const TRANSCRIPT_NEAR_BOTTOM_PX: f32 = 48.0;
+
+/// Whether the scroll offset is close enough to the bottom to keep following.
+fn transcript_near_bottom(offset_y: f32, content_h: f32, viewport_h: f32) -> bool {
+    let max_offset = (content_h - viewport_h).max(0.0);
+    offset_y >= max_offset - TRANSCRIPT_NEAR_BOTTOM_PX
+}
 
 /// Number of rows that a virtualized transcript needs to inspect for a viewport.
 /// The two-row overscan keeps fast wheel scrolling from exposing a blank gap.
@@ -36,15 +44,16 @@ impl UiApp {
         scroll_h: f32,
     ) {
         let n = self.chat.len();
+        let streaming_len = self.chat_state.runtime.streaming.len();
+        let follow_bottom = self.chat_state.view.follow_bottom;
         // Keep the sizing contract exercised in production code as well as in
         // the regression tests; egui owns the actual visible row range.
         let _visible_budget = transcript_visible_row_budget(n, scroll_h);
-        egui::ScrollArea::vertical()
+        let scroll = egui::ScrollArea::vertical()
             .id_salt("conversation_scroll")
             .auto_shrink([false, false])
             .max_height(scroll_h)
-            .min_scrolled_height(scroll_h)
-            .stick_to_bottom(true)
+            .stick_to_bottom(follow_bottom)
             // Approximate row heights let egui skip work for long transcripts;
             // expanded attachments remain fully rendered for visible rows.
             .show_rows(ui, TRANSCRIPT_ESTIMATED_ROW_HEIGHT, n, |ui, row_range| {
@@ -507,6 +516,14 @@ impl UiApp {
                     }
                 }
             });
+        let view = &mut self.chat_state.view;
+        view.follow_bottom = transcript_near_bottom(
+            scroll.state.offset.y,
+            scroll.content_size.y,
+            scroll.inner_rect.height(),
+        );
+        view.transcript_row_count = n;
+        view.transcript_streaming_len = streaming_len;
     }
 }
 
@@ -526,5 +543,11 @@ mod tests {
         assert_eq!(transcript_visible_row_budget(0, 600.0), 0);
         assert_eq!(transcript_visible_row_budget(500, 0.0), 0);
         assert_eq!(transcript_visible_row_budget(3, 600.0), 3);
+    }
+
+    #[test]
+    fn near_bottom_detects_follow_threshold() {
+        assert!(super::transcript_near_bottom(952.0, 1000.0, 600.0));
+        assert!(!super::transcript_near_bottom(0.0, 1000.0, 600.0));
     }
 }
