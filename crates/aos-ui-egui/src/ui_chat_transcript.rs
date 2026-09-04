@@ -14,6 +14,8 @@ use aos_proto::{ChatAttachment, ChatRoomMember};
 use eframe::egui;
 
 pub(crate) const TRANSCRIPT_ESTIMATED_ROW_HEIGHT: f32 = 96.0;
+/// Comfortable gap between the last bubble and the composer when scrolled to the end.
+pub(crate) const TRANSCRIPT_BOTTOM_PADDING: f32 = 16.0;
 /// Pixels from the bottom still treated as "following" the latest messages.
 const TRANSCRIPT_NEAR_BOTTOM_PX: f32 = 48.0;
 
@@ -45,6 +47,11 @@ fn transcript_should_follow_bottom(
             || pending)
 }
 
+/// Viewport height for the transcript scroll area from the pane's live budget.
+pub(crate) fn transcript_viewport_height(available_h: f32) -> f32 {
+    available_h.max(1.0)
+}
+
 /// Number of rows that a virtualized transcript needs to inspect for a viewport.
 /// The two-row overscan keeps fast wheel scrolling from exposing a blank gap.
 pub(crate) fn transcript_visible_row_budget(total_rows: usize, viewport_height: f32) -> usize {
@@ -63,7 +70,6 @@ impl UiApp {
         room_mode: bool,
         room_members: &[ChatRoomMember],
         room_conductor_policy: Option<&aos_proto::ChatRoomConductorPolicy>,
-        scroll_h: f32,
     ) {
         let n = self.chat.len();
         let streaming_len = self.chat_state.runtime.streaming.len();
@@ -72,17 +78,15 @@ impl UiApp {
         let follow_bottom = self.chat_state.view.follow_bottom;
         let prev_row_count = self.chat_state.view.transcript_row_count;
         let prev_streaming_len = self.chat_state.view.transcript_streaming_len;
-        // Keep the sizing contract exercised in production code as well as in
-        // the regression tests; egui owns the actual visible row range.
-        let _visible_budget = transcript_visible_row_budget(n, scroll_h);
+        let viewport_h = transcript_viewport_height(ui.available_height());
         let scroll = egui::ScrollArea::vertical()
             .id_salt("conversation_scroll")
             .auto_shrink([false, false])
-            .max_height(scroll_h)
+            .max_height(viewport_h)
             .stick_to_bottom(follow_bottom)
-            // Approximate row heights let egui skip work for long transcripts;
-            // expanded attachments remain fully rendered for visible rows.
-            .show_rows(ui, TRANSCRIPT_ESTIMATED_ROW_HEIGHT, n, |ui, row_range| {
+            // Variable-height bubbles (attachments, agent cards) need natural layout;
+            // show_rows' fixed row estimate clipped the tail when the canvas was open.
+            .show(ui, |ui| {
                 ui.set_min_width(ui.available_width());
                 let mut open_agent: Option<String> = None;
                 let mut target_reply: Option<String> = None;
@@ -102,7 +106,7 @@ impl UiApp {
                 let tz_offset = local_tz_offset_minutes();
                 let chat_now = now_ms();
                 let reply_id = self.blocked_ask_agent().map(|a| a.agent_id.clone());
-                for i in row_range {
+                for i in 0..n {
                     let role = self.chat[i].role.clone();
                     let mut text = self.chat[i].text.clone();
                     let attachments = self.chat[i].attachments.clone();
@@ -541,6 +545,7 @@ impl UiApp {
                         crate::chat_load_fail::RecoveryAction::None => {}
                     }
                 }
+                ui.add_space(TRANSCRIPT_BOTTOM_PADDING);
             });
         let view = &mut self.chat_state.view;
         let near_bottom = transcript_near_bottom(
@@ -565,7 +570,21 @@ impl UiApp {
 
 #[cfg(test)]
 mod tests {
-    use super::transcript_visible_row_budget;
+    use super::{
+        transcript_near_bottom, transcript_should_follow_bottom, transcript_viewport_height,
+        transcript_visible_row_budget, TRANSCRIPT_BOTTOM_PADDING,
+    };
+
+    #[test]
+    fn viewport_height_never_zero() {
+        assert_eq!(transcript_viewport_height(0.0), 1.0);
+        assert_eq!(transcript_viewport_height(400.0), 400.0);
+    }
+
+    #[test]
+    fn bottom_padding_is_comfortable_gap() {
+        assert!(TRANSCRIPT_BOTTOM_PADDING >= 8.0);
+    }
 
     #[test]
     fn five_hundred_messages_keep_virtualized_budget_bounded() {
@@ -583,13 +602,13 @@ mod tests {
 
     #[test]
     fn near_bottom_detects_follow_threshold() {
-        assert!(super::transcript_near_bottom(952.0, 1000.0, 600.0));
-        assert!(!super::transcript_near_bottom(0.0, 1000.0, 600.0));
+        assert!(transcript_near_bottom(952.0, 1000.0, 600.0));
+        assert!(!transcript_near_bottom(0.0, 1000.0, 600.0));
     }
 
     #[test]
     fn follow_bottom_stays_latched_while_streaming_grows() {
-        assert!(super::transcript_should_follow_bottom(
+        assert!(transcript_should_follow_bottom(
             true,
             false,
             10,
@@ -599,7 +618,7 @@ mod tests {
             true,
             false,
         ));
-        assert!(!super::transcript_should_follow_bottom(
+        assert!(!transcript_should_follow_bottom(
             true,
             false,
             10,

@@ -98,7 +98,6 @@ impl UiApp {
                                                     room_mode,
                                                     &room_members,
                                                     room_conductor_policy.as_ref(),
-                                                    content_h,
                                                 );
                                             },
                                         );
@@ -157,7 +156,6 @@ impl UiApp {
                                                 room_mode,
                                                 &room_members,
                                                 room_conductor_policy.as_ref(),
-                                                transcript_h,
                                             );
                                         },
                                     );
@@ -201,7 +199,6 @@ impl UiApp {
                                 room_mode,
                                 &room_members,
                                 room_conductor_policy.as_ref(),
-                                content_h,
                             );
                         }
                     },
