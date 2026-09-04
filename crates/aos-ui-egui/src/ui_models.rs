@@ -32,7 +32,7 @@ impl UiApp {
         ui.heading(t.tab_models);
         ui.weak(t.tab_hint_models);
         ui.horizontal(|ui| {
-            if ui.button("Refresh list").clicked() {
+            if ui.button(t.models_refresh_list).clicked() {
                 let _ = self.cmd_tx.send(Cmd::ModelsRefresh);
             }
         });

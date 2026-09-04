@@ -283,11 +283,11 @@ pub fn show_notes_panel(
         if ui.button(t.notes_new).clicked() {
             state.start_new();
         }
-        ui.label("Vue :");
+        ui.label(t.notes_view_label);
         for (mode, label) in [
-            (NotesPreviewMode::Editor, "Éditeur"),
-            (NotesPreviewMode::Preview, "Preview"),
-            (NotesPreviewMode::Both, "Deux colonnes"),
+            (NotesPreviewMode::Editor, t.notes_view_editor),
+            (NotesPreviewMode::Preview, t.notes_view_preview),
+            (NotesPreviewMode::Both, t.notes_view_both),
         ] {
             if ui.selectable_label(state.preview_mode == mode, label).clicked() {
                 state.preview_mode = mode;
@@ -452,39 +452,39 @@ pub fn show_notes_panel(
             });
 
             ui.horizontal_wrapped(|ui| {
-                if ui.small_button("H1").clicked() {
+                if ui.small_button(t.notes_md_h1).clicked() {
                     insert_wrap(&mut state.edit_body, "# ", "\n", "Titre");
                     state.dirty = true;
                 }
-                if ui.small_button("H2").clicked() {
+                if ui.small_button(t.notes_md_h2).clicked() {
                     insert_wrap(&mut state.edit_body, "## ", "\n", "Sous-titre");
                     state.dirty = true;
                 }
-                if ui.small_button("H3").clicked() {
+                if ui.small_button(t.notes_md_h3).clicked() {
                     insert_wrap(&mut state.edit_body, "### ", "\n", "Section");
                     state.dirty = true;
                 }
-                if ui.small_button("Gras").clicked() {
+                if ui.small_button(t.notes_md_bold).clicked() {
                     insert_wrap(&mut state.edit_body, "**", "**", "texte");
                     state.dirty = true;
                 }
-                if ui.small_button("Italique").clicked() {
+                if ui.small_button(t.notes_md_italic).clicked() {
                     insert_wrap(&mut state.edit_body, "*", "*", "texte");
                     state.dirty = true;
                 }
-                if ui.small_button("Liste").clicked() {
+                if ui.small_button(t.notes_md_list).clicked() {
                     insert_wrap(&mut state.edit_body, "- ", "\n", "élément");
                     state.dirty = true;
                 }
-                if ui.small_button("Quote").clicked() {
+                if ui.small_button(t.notes_md_quote).clicked() {
                     insert_wrap(&mut state.edit_body, "> ", "\n", "citation");
                     state.dirty = true;
                 }
-                if ui.small_button("Code").clicked() {
+                if ui.small_button(t.notes_md_code).clicked() {
                     insert_wrap(&mut state.edit_body, "```\n", "\n```\n", "code");
                     state.dirty = true;
                 }
-                if ui.small_button("Tableau").clicked() {
+                if ui.small_button(t.notes_md_table).clicked() {
                     insert_wrap(
                         &mut state.edit_body,
                         "| A | B |\n| --- | --- |\n| ",
@@ -493,7 +493,7 @@ pub fn show_notes_panel(
                     );
                     state.dirty = true;
                 }
-                if ui.small_button("[[lien]]").clicked() {
+                if ui.small_button(t.notes_md_link).clicked() {
                     insert_wrap(&mut state.edit_body, "[[", "]]", "Titre note");
                     state.dirty = true;
                 }

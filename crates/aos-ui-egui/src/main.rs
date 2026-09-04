@@ -397,9 +397,7 @@ fn session_model_supports_vision(model_id: Option<&str>) -> bool {
         .any(|m| m.id == id && m.profiles.iter().any(|p| p == "vision"))
 }
 
-/// One-row height for the canvas tool strip (session bar row 2).
-const CANVAS_TOOLBAR_ROW_H: f32 = 112.0;
-
+/// Legacy constant — canvas toolbar height is now dynamic via `chat_canvas::toolbar_max_height`.
 /// Minimum inner window size (width × height) for a usable Preview layout.
 fn preview_min_inner_size() -> [f32; 2] {
     let fr = i18n::strings("fr");
@@ -1555,21 +1553,15 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             // These glyphs are covered by egui's bundled emoji font (monochrome
             // in egui), unlike arbitrary geometric Unicode symbols.
             let icon = ['🔘', '⛃', '🖼', '🗀'][idx];
-            let compact_label = match idx {
-                0 => "Chat",
-                1 => "Agents",
-                2 => "Cré",
-                _ => "Mem",
-            };
-            let visible_label = if self.prefs.ui_density == prefs::UiDensity::Compact {
-                compact_label
+            let label_text = if self.prefs.ui_density == prefs::UiDensity::Compact {
+                icon.to_string()
             } else {
-                label
+                format!("{icon} {label}")
             };
             if ui
                 .add_sized(
                     egui::vec2(ui.available_width().max(1.0), theme::CONTROL_MIN_H_COMFORTABLE),
-                    egui::SelectableLabel::new(self.tab == tab, format!("{icon} {visible_label}")),
+                    egui::SelectableLabel::new(self.tab == tab, label_text),
                 )
                 .on_hover_text(hint)
                 .clicked()
@@ -1618,7 +1610,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                         self.on_tab_open(tab);
                     }
                 }
-                ui.weak("— tester —");
+                ui.weak(t.nav_tester);
                 for (tab, label, hint) in [
                     (Tab::Scenarios, t.tab_scenarios, t.tab_hint_scenarios),
                     (Tab::Feedback, t.tab_feedback, t.tab_hint_feedback),
@@ -1647,7 +1639,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                     .collect();
                 if !decl_mods.is_empty() {
                     ui.separator();
-                    ui.weak("Modules");
+                    ui.weak(t.nav_modules);
                     for (name, label) in decl_mods {
                         let tab = Tab::Module(name.clone());
                         if ui.selectable_label(self.tab == tab, &label).clicked() {
@@ -2485,11 +2477,7 @@ impl eframe::App for UiApp {
                         // only a compact resource summary and Models owns the list.
                         ui.label(format!("{}: {}", t.tab_models, m.models.len()));
                         if ui
-                            .button(if self.prefs.ui_density == prefs::UiDensity::Compact {
-                                "Mods"
-                            } else {
-                                t.tab_models
-                            })
+                            .button(t.tab_models)
                             .on_hover_text(t.tab_hint_models)
                             .clicked()
                         {

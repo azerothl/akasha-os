@@ -37,7 +37,7 @@ impl UiApp {
                             }
                         }
                     });
-                    if ui.button("+ Nouvelle").clicked() {
+                    if ui.button(t.session_new).clicked() {
                         let n = self.chat_state.sessions.len() + 1;
                         self.request_session_create(Some(format!("Session {n}")));
                     }
@@ -132,9 +132,9 @@ impl UiApp {
                         ui.add(
                             egui::TextEdit::singleline(&mut self.chat_state.sidebar.rename)
                                 .desired_width(120.0)
-                                .hint_text("titre"),
+                                .hint_text(t.sidebar_rename_hint),
                         );
-                        if ui.button("Renommer").clicked() {
+                        if ui.button(t.sidebar_rename).clicked() {
                             if let Some(id) = self.chat_state.active_session.clone() {
                                 let _ = self.cmd_tx.send(Cmd::SessionRename {
                                     id,
@@ -148,20 +148,20 @@ impl UiApp {
                             let _ = self.cmd_tx.send(Cmd::SessionExport { id });
                         }
                     }
-                    if ui.button("Supprimer").clicked() {
+                    if ui.button(t.sidebar_delete).clicked() {
                         if let Some(id) = self.chat_state.active_session.clone() {
                             self.chat_state.sidebar.delete_confirm = Some(id);
                         }
                     }
                     ui.separator();
-                    ui.heading("Web / fichiers");
+                    ui.heading(t.sidebar_web_files);
                     ui.set_min_width(side_w - 16.0);
                     ui.add(
                         egui::TextEdit::singleline(&mut self.chat_state.sidebar.web_query)
                             .desired_width(side_w - 20.0)
-                            .hint_text("recherche web"),
+                            .hint_text(t.sidebar_web_search_hint),
                     );
-                    if ui.button("Rechercher").clicked()
+                    if ui.button(t.sidebar_search).clicked()
                         && !self.chat_state.sidebar.web_query.is_empty()
                     {
                         let _ = self.cmd_tx.send(Cmd::WebSearch {
@@ -175,10 +175,10 @@ impl UiApp {
                     ui.add(
                         egui::TextEdit::singleline(&mut self.chat_state.sidebar.fetch_url)
                             .desired_width(side_w - 20.0)
-                            .hint_text("https://…"),
+                            .hint_text(t.sidebar_url_hint),
                     );
                     ui.horizontal(|ui| {
-                        if ui.button("Télécharger URL").clicked()
+                        if ui.button(t.sidebar_fetch_url).clicked()
                             && !self.chat_state.sidebar.fetch_url.is_empty()
                         {
                             let _ = self.cmd_tx.send(Cmd::NetFetch {
@@ -197,7 +197,7 @@ impl UiApp {
                         }
                     });
                     if !self.chat_state.sidebar.browse_preview.is_empty() {
-                        ui.collapsing("Aperçu page", |ui| {
+                        ui.collapsing(t.sidebar_preview_page, |ui| {
                             ui.small(&self.chat_state.sidebar.browse_preview);
                         });
                     }
@@ -217,15 +217,15 @@ impl UiApp {
                     ui.add(
                         egui::TextEdit::singleline(&mut self.chat_state.sidebar.generated_path)
                             .desired_width(side_w - 20.0)
-                            .hint_text("/downloads/…"),
+                            .hint_text(t.sidebar_gen_path_hint),
                     );
                     ui.add(
                         egui::TextEdit::multiline(&mut self.chat_state.sidebar.generated_content)
                             .desired_width(side_w - 20.0)
                             .desired_rows(3)
-                            .hint_text("contenu"),
+                            .hint_text(t.sidebar_gen_content_hint),
                     );
-                    if ui.button("Générer fichier").clicked()
+                    if ui.button(t.sidebar_gen_file).clicked()
                         && !self.chat_state.sidebar.generated_path.is_empty()
                     {
                         let _ = self.cmd_tx.send(Cmd::FilesGenerate {
@@ -235,7 +235,7 @@ impl UiApp {
                             title: Some("Akasha OS".into()),
                         });
                     }
-                    if ui.button("Ouvrir downloads").clicked() {
+                    if ui.button(t.sidebar_open_downloads).clicked() {
                         let dir = aos_home().join("var/storage/data/downloads");
                         open_os_folder(&dir);
                     }

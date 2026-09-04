@@ -210,6 +210,19 @@ pub fn category_of(m: &CatalogModel) -> ModelCatalogTab {
     ModelCatalogTab::Llm
 }
 
+pub fn catalog_has_vision(m: &CatalogModel) -> bool {
+    m.profiles.iter().any(|p| p == "vision")
+}
+
+/// Picker/catalog surface: vision badge only (no cpu/gpu/quant chips).
+pub fn picker_surface_badges(m: &CatalogModel, t: &crate::i18n::UiStrings) -> Vec<&'static str> {
+    if catalog_has_vision(m) {
+        vec![t.models_sees_images]
+    } else {
+        vec![]
+    }
+}
+
 pub fn model_badges(m: &CatalogModel) -> Vec<String> {
     let mut tags: Vec<String> = m.tags.clone();
     let hay = format!(
@@ -358,7 +371,7 @@ pub fn ui_model_card(
     on_remove: &mut impl FnMut(),
     on_hf: &mut impl FnMut(&str),
 ) {
-    let badges = model_badges(m);
+    let badges = picker_surface_badges(m, t);
     egui::Frame::group(ui.style())
         .inner_margin(egui::Margin::same(10))
         .show(ui, |ui| {
@@ -387,9 +400,6 @@ pub fn ui_model_card(
                         }
                         if !m.format.is_empty() {
                             ui.weak(format!("[{}]", m.format));
-                        }
-                        if !m.profiles.is_empty() {
-                            ui.weak(m.profiles.join(" · "));
                         }
                     });
                     ui.horizontal(|ui| {

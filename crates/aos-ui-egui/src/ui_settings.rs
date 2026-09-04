@@ -36,7 +36,7 @@ impl UiApp {
         ui.add_sized(
             egui::vec2(ui.available_width().min(420.0), 36.0),
             egui::TextEdit::singleline(&mut self.settings_ui.search)
-                .hint_text("Rechercher dans les réglages…"),
+                .hint_text(t.settings_search_hint),
         );
         ui.separator();
 
@@ -59,11 +59,7 @@ impl UiApp {
             .iter()
             .any(|terms| terms.iter().any(|term| query.contains(term)))
         {
-            ui.weak(if self.prefs.language == "fr" {
-                "Aucun réglage ne correspond à cette recherche."
-            } else {
-                "No settings match this search."
-            });
+            ui.weak(t.settings_search_empty);
             return;
         }
 
@@ -96,7 +92,7 @@ impl UiApp {
                     "light" => t.theme_light,
                     "soft" => t.theme_soft,
                     "high_contrast" => t.theme_high_contrast,
-                    "custom" => "Custom",
+                    "custom" => t.settings_theme_custom,
                     _ => t.theme_dark,
                 };
                 egui::ComboBox::from_id_salt("prefs_theme")
@@ -107,7 +103,7 @@ impl UiApp {
                             ("light", t.theme_light),
                             ("soft", t.theme_soft),
                             ("high_contrast", t.theme_high_contrast),
-                            ("custom", "Custom"),
+                            ("custom", t.settings_theme_custom),
                         ] {
                             if ui
                                 .selectable_label(self.prefs.theme == code, label)
@@ -123,27 +119,27 @@ impl UiApp {
 
                 if self.prefs.theme == "custom" {
                     ui.end_row();
-                    ui.label("Custom colors");
+                    ui.label(t.settings_custom_colors);
                     egui::Grid::new("custom_theme_colors")
                         .num_columns(3)
                         .spacing([12.0, 8.0])
                         .show(ui, |ui| {
                             let mut changed = false;
-                            changed |= edit_theme_color(ui, "Background", &mut self.prefs.custom_theme.background);
+                            changed |= edit_theme_color(ui, t.settings_color_background, &mut self.prefs.custom_theme.background);
                             ui.end_row();
-                            changed |= edit_theme_color(ui, "Panel", &mut self.prefs.custom_theme.panel);
+                            changed |= edit_theme_color(ui, t.settings_color_panel, &mut self.prefs.custom_theme.panel);
                             ui.end_row();
-                            changed |= edit_theme_color(ui, "Text", &mut self.prefs.custom_theme.text);
+                            changed |= edit_theme_color(ui, t.settings_color_text, &mut self.prefs.custom_theme.text);
                             ui.end_row();
-                            changed |= edit_theme_color(ui, "Accent", &mut self.prefs.custom_theme.accent);
+                            changed |= edit_theme_color(ui, t.settings_color_accent, &mut self.prefs.custom_theme.accent);
                             ui.end_row();
-                            changed |= edit_theme_color(ui, "Danger", &mut self.prefs.custom_theme.danger);
+                            changed |= edit_theme_color(ui, t.settings_color_danger, &mut self.prefs.custom_theme.danger);
                             ui.end_row();
                             if changed {
                                 save_preferences(&self.prefs);
                             }
                         });
-                    ui.weak("Les couleurs sont appliquées immédiatement et restent compatibles avec les anciens réglages.");
+                    ui.weak(t.settings_colors_applied);
                     ui.end_row();
                 }
 
@@ -167,11 +163,11 @@ impl UiApp {
                     });
                 ui.end_row();
 
-                ui.label("Densité");
+                ui.label(t.settings_density);
                 ui.horizontal(|ui| {
                     for (density, label) in [
-                        (UiDensity::Comfortable, "Confortable"),
-                        (UiDensity::Compact, "Compact"),
+                        (UiDensity::Comfortable, t.settings_density_comfortable),
+                        (UiDensity::Compact, t.settings_density_compact),
                     ] {
                         if ui
                             .selectable_label(self.prefs.ui_density == density, label)

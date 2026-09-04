@@ -9,6 +9,21 @@ use crate::{
 use aos_proto::{AgentInfo, AgentState, ChatAttachment};
 use eframe::egui;
 
+const ACTIVITY_NARROW_BREAK: f32 = 900.0;
+const ACTIVITY_SHEET_COMPOSER_RESERVE: f32 = 150.0;
+
+fn agent_state_label(t: &i18n::UiStrings, state: &AgentState) -> &'static str {
+    match state {
+        AgentState::Done => t.agent_state_done,
+        AgentState::Failed => t.agent_state_failed,
+        AgentState::Blocked => t.agent_state_blocked,
+        AgentState::Running => t.agent_state_running,
+        AgentState::Created | AgentState::Paused | AgentState::Killed | AgentState::Roster => {
+            t.agent_state_pending
+        }
+    }
+}
+
 impl UiApp {
     pub(crate) fn ui_agents(&mut self, ui: &mut egui::Ui) {
         let t = i18n::strings(&self.prefs.language);
@@ -437,58 +452,92 @@ impl UiApp {
             crate::prefs::save_preferences(&self.prefs);
             return;
         }
-        // At narrow widths the activity surface overlays the conversation so the
-        // composer and transcript keep their usable width. It remains opt-in and
-        // can be dismissed without changing the active session.
-        if ctx.screen_rect().width() < 900.0 {
+        // Below ACTIVITY_NARROW_BREAK the activity surface is a bottom sheet so the
+        // chat column keeps full width; Escape or backdrop tap dismisses it.
+        if ctx.screen_rect().width() < ACTIVITY_NARROW_BREAK {
+            let t = i18n::strings(&self.prefs.language);
             let mut close = false;
-            egui::Area::new(egui::Id::new("agent_activity_drawer"))
-                .anchor(egui::Align2::RIGHT_TOP, egui::vec2(-12.0, 12.0))
+            let screen = ctx.screen_rect();
+            let sheet_h = (screen.height() * 0.5)
+                .min(screen.height() - ACTIVITY_SHEET_COMPOSER_RESERVE - 36.0)
+                .max(180.0);
+
+            egui::Area::new(egui::Id::new("agent_activity_backdrop"))
+                .fixed_pos(screen.left_top())
+                .order(egui::Order::Background)
+                .interactable(true)
+                .show(ctx, |ui| {
+                    let resp = ui.allocate_rect(screen, egui::Sense::click());
+                    if resp.clicked() {
+                        close = true;
+                    }
+                    ui.painter().rect_filled(
+                        screen,
+                        0.0,
+                        egui::Color32::from_black_alpha(80),
+                    );
+                });
+
+            egui::Area::new(egui::Id::new("agent_activity_sheet"))
+                .anchor(egui::Align2::LEFT_BOTTOM, egui::vec2(0.0, 0.0))
                 .order(egui::Order::Foreground)
                 .show(ctx, |ui| {
+                    ui.set_width(screen.width());
                     egui::Frame::popup(ui.style())
                         .inner_margin(egui::Margin::same(12))
                         .show(ui, |ui| {
-                            ui.set_max_width(390.0);
+                            ui.set_max_height(sheet_h);
                             ui.horizontal(|ui| {
-                                ui.heading(i18n::strings(&self.prefs.language).agent_detail);
-                                if ui.button("×").on_hover_text("Fermer Activité").clicked() {
-                                    close = true;
-                                }
+                                ui.heading(t.agent_detail);
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        if icons::close_button(ui)
+                                            .on_hover_text(t.activity_close)
+                                            .clicked()
+                                        {
+                                            close = true;
+                                        }
+                                    },
+                                );
                             });
                             ui.separator();
-                            let active = self.chat_state.active_session.as_deref();
-                            let agents: Vec<_> = self
-                                .agents
-                                .iter()
-                                .filter(|a| a.session_id.as_deref() == active)
-                                .cloned()
-                                .collect();
-                            if agents.is_empty() {
-                                ui.weak(if self.prefs.language == "fr" {
-                                    "Aucune activité dans cette conversation."
-                                } else {
-                                    "No activity in this conversation."
-                                });
-                            } else {
-                                for agent in agents {
-                                    let (icon, state) = match agent.state {
-                                        AgentState::Done => ("✓", "Terminé"),
-                                        AgentState::Failed => ("!", "Échec"),
-                                        AgentState::Blocked => ("?", "Bloqué"),
-                                        AgentState::Running => ("…", "En cours"),
-                                        _ => ("·", "En attente"),
-                                    };
-                                    ui.horizontal(|ui| {
-                                        ui.label(format!("{icon} {}", agent.display_title()));
-                                        ui.weak(state);
-                                        if ui.small_button("Détails").clicked() {
-                                            self.agent_ui.open_tab(&agent.agent_id);
-                                            self.agent_ui.select_tab(&agent.agent_id);
+                            egui::ScrollArea::vertical()
+                                .auto_shrink([false, false])
+                                .max_height(sheet_h - 48.0)
+                                .show(ui, |ui| {
+                                    let active = self.chat_state.active_session.as_deref();
+                                    let agents: Vec<_> = self
+                                        .agents
+                                        .iter()
+                                        .filter(|a| a.session_id.as_deref() == active)
+                                        .cloned()
+                                        .collect();
+                                    if agents.is_empty() {
+                                        ui.weak(t.activity_empty);
+                                    } else {
+                                        for agent in agents {
+                                            let icon = match agent.state {
+                                                AgentState::Done => "✓",
+                                                AgentState::Failed => "!",
+                                                AgentState::Blocked => "?",
+                                                AgentState::Running => "…",
+                                                _ => "·",
+                                            };
+                                            ui.horizontal(|ui| {
+                                                ui.label(format!("{icon} {}", agent.display_title()));
+                                                ui.weak(agent_state_label(&t, &agent.state));
+                                                if ui
+                                                    .small_button(t.activity_details)
+                                                    .clicked()
+                                                {
+                                                    self.agent_ui.open_tab(&agent.agent_id);
+                                                    self.agent_ui.select_tab(&agent.agent_id);
+                                                }
+                                            });
                                         }
-                                    });
-                                }
-                            }
+                                    }
+                                });
                         });
                 });
             if close {
@@ -507,7 +556,7 @@ impl UiApp {
                 ui.horizontal(|ui| {
                     ui.heading(t.agent_detail);
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.button("×").on_hover_text("Fermer Activité").clicked() {
+                        if icons::close_button(ui).on_hover_text(t.activity_close).clicked() {
                             self.prefs.ui_layout.activity_panel_open = false;
                             self.agent_ui.close_all_tabs();
                             crate::prefs::save_preferences(&self.prefs);
@@ -585,15 +634,15 @@ impl UiApp {
                         };
                         ui.horizontal(|ui| {
                             ui.label(format!("{icon} {}", agent.display_title()));
-                            ui.weak(format!("{:?}", agent.state));
-                            if ui.small_button("Détails").clicked() {
+                            ui.weak(agent_state_label(&t, &agent.state));
+                            if ui.small_button(t.activity_details).clicked() {
                                 self.agent_ui.open_tab(&agent.agent_id);
                                 self.agent_ui.select_tab(&agent.agent_id);
                             }
                         });
                     }
                     if shown == 0 {
-                        ui.weak("Aucune activité d’agent dans cette conversation.");
+                        ui.weak(t.activity_empty);
                     }
                 }
 

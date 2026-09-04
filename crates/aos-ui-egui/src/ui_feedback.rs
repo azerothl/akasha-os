@@ -29,16 +29,26 @@ impl UiApp {
             egui::ComboBox::from_id_salt("fb_cat")
                 .selected_text(&self.feedback_ui.category)
                 .show_ui(ui, |ui| {
-                    for c in ["bug", "ux", "perf", "security", "other"] {
-                        ui.selectable_value(&mut self.feedback_ui.category, c.into(), c);
+                    for (code, label) in [
+                        ("bug", t.feedback_cat_bug),
+                        ("ux", t.feedback_cat_ux),
+                        ("perf", t.feedback_cat_perf),
+                        ("security", t.feedback_cat_security),
+                        ("other", t.feedback_cat_other),
+                    ] {
+                        ui.selectable_value(&mut self.feedback_ui.category, code.into(), label);
                     }
                 });
             ui.label(t.feedback_severity);
             egui::ComboBox::from_id_salt("fb_sev")
                 .selected_text(&self.feedback_ui.severity)
                 .show_ui(ui, |ui| {
-                    for s in ["low", "medium", "high"] {
-                        ui.selectable_value(&mut self.feedback_ui.severity, s.into(), s);
+                    for (code, label) in [
+                        ("low", t.feedback_sev_low),
+                        ("medium", t.feedback_sev_medium),
+                        ("high", t.feedback_sev_high),
+                    ] {
+                        ui.selectable_value(&mut self.feedback_ui.severity, code.into(), label);
                     }
                 });
         });
@@ -49,20 +59,20 @@ impl UiApp {
         ui.add(
             egui::TextEdit::multiline(&mut self.feedback_ui.body)
                 .desired_width(f32::INFINITY)
-                .desired_rows(18),
+                .desired_rows(10),
         );
         ui.horizontal(|ui| {
-            if ui.button("📎 Ajouter un fichier").clicked()
+            if ui.button(t.feedback_add_file).clicked()
                 && self.feedback_ui.attachments.len() < 8
             {
-                if let Some(path) = pick_os_file("Ajouter un fichier au retour", &[], None) {
+                if let Some(path) = pick_os_file(t.feedback_add_file_dialog, &[], None) {
                     self.feedback_ui.attachments.push(path);
                 }
             }
-            ui.label(format!(
-                "Fichiers complémentaires ({})",
-                self.feedback_ui.attachments.len()
-            ));
+            ui.label(
+                t.feedback_attachments
+                    .replace("{n}", &self.feedback_ui.attachments.len().to_string()),
+            );
         });
         let mut remove = None;
         for (index, path) in self.feedback_ui.attachments.iter().enumerate() {
@@ -70,9 +80,9 @@ impl UiApp {
                 ui.label(
                     path.file_name()
                         .and_then(|n| n.to_str())
-                        .unwrap_or("fichier"),
+                        .unwrap_or(t.feedback_file_fallback),
                 );
-                if ui.small_button("Retirer").clicked() {
+                if ui.small_button(t.feedback_remove).clicked() {
                     remove = Some(index);
                 }
             });
@@ -80,8 +90,7 @@ impl UiApp {
         if let Some(index) = remove {
             self.feedback_ui.attachments.remove(index);
         }
-        ui.weak("N'ajoutez pas de secrets, clés API ou données personnelles.");
-        let t = i18n::strings(&self.prefs.language);
+        ui.weak(t.feedback_no_secrets);
         if ui.button(format!("⎙ {}", t.btn_copy)).clicked() {
             ui.ctx().copy_text(self.feedback_ui.body.clone());
             self.status = t.copied.into();
@@ -89,25 +98,21 @@ impl UiApp {
         let security = self.feedback_ui.category.eq_ignore_ascii_case("security");
         if security {
             self.feedback_ui.publish_github = false;
-            ui.weak(
-                "Les rapports security restent locaux (pas d'issue publique). Utilisez GitHub Security Advisories.",
-            );
+            ui.weak(t.feedback_security_local);
         } else {
             ui.checkbox(
                 &mut self.feedback_ui.publish_github,
-                "Créer une issue GitHub",
+                t.feedback_github_issue,
             );
             if self.feedback_ui.publish_github && !self.network_online {
-                ui.weak(
-                    "Réseau in-app coupé : le navigateur ouvrira le formulaire GitHub (compte GitHub requis).",
-                );
+                ui.weak(t.feedback_network_off_github);
             }
         }
         let template_complete = self.feedback_ui.template_complete();
         if !template_complete {
-            ui.weak("Complétez toutes les sections du modèle avant l'envoi.");
+            ui.weak(t.feedback_complete_template);
         }
-        if ui.button("⏏ Envoyer le retour").clicked()
+        if ui.button(t.feedback_send).clicked()
             && !self.feedback_ui.title.is_empty()
             && template_complete
         {
@@ -125,8 +130,6 @@ impl UiApp {
                 },
                 "onboarding": self.onboarding,
             });
-            // Fusionner les champs du rapport de dépannage (source, findings, healthy)
-            // pour qu'ils figurent dans l'issue GitHub remontée.
             if let Some(diag) = &self.feedback_ui.diag_meta {
                 if let (Some(m), Some(d)) = (meta.as_object_mut(), diag.as_object()) {
                     for (k, v) in d {
