@@ -16,6 +16,8 @@
 
 pub mod bandwidth;
 pub mod cost;
+pub mod distributed;
+pub mod adaptive;
 pub mod hardware;
 pub mod manager;
 pub mod model;
@@ -26,9 +28,14 @@ pub use bandwidth::{
     probe_host_bandwidth, probe_ram_read_bw, BandwidthSignal, BandwidthSignals, BandwidthSource,
 };
 pub use cost::{Bound, CostModel, Estimate};
-pub use hardware::{GpuDevice, HardwareProfile};
+pub use distributed::{DistributedWork, LanNode, LanPairingRegistry, NodeTrust};
+pub use adaptive::{AdaptivePlanner, BackendDescriptor, BackendKind, BackendRegistry, InferencePlan,
+    InferencePlanDiagnostic, PlannerOptions, Quantization, SpeculativeStrategy, ThermalAction,
+    ThermalController, ThermalPolicy, WorkloadKind};
+pub use hardware::{CpuIsa, CpuTopology, GpuBackend, GpuDevice, HardwareProfile,
+    NpuCapabilities, ThermalSnapshot, WebGpuCapabilities};
 pub use manager::{Budgets, PlacementError, PlacementManager};
-pub use model::{KvCacheType, ModelDesc, PrivacyClass};
+pub use model::{KvCacheType, ModelDesc, PrivacyClass, QuantizationMetadata};
 pub use plan::{PlacementPlan, PlacementProfile, Priority, Shard, ShardKind, Tier};
 pub use sim::{PlacedModel, PlacementSim, PressureReport, ReprofileReport, RunState, SimEvent};
 
@@ -52,6 +59,8 @@ pub(crate) mod testutil {
             context_length: 131072,
             supports_layer_offload: true,
             privacy_class: PrivacyClass::Local,
+            quantization: Default::default(),
+            backends_compatible: vec![],
         }
     }
 
@@ -68,6 +77,8 @@ pub(crate) mod testutil {
             context_length: 8192,
             supports_layer_offload: true,
             privacy_class: PrivacyClass::Local,
+            quantization: Default::default(),
+            backends_compatible: vec![],
         }
     }
 
@@ -84,6 +95,8 @@ pub(crate) mod testutil {
             context_length: 0,
             supports_layer_offload: false,
             privacy_class: PrivacyClass::Local,
+            quantization: Default::default(),
+            backends_compatible: vec![],
         }
     }
 
@@ -100,6 +113,8 @@ pub(crate) mod testutil {
             context_length: 0,
             supports_layer_offload: false,
             privacy_class: PrivacyClass::Local,
+            quantization: Default::default(),
+            backends_compatible: vec![],
         }
     }
 
@@ -116,6 +131,8 @@ pub(crate) mod testutil {
             context_length: 131072,
             supports_layer_offload: true,
             privacy_class: PrivacyClass::Local,
+            quantization: Default::default(),
+            backends_compatible: vec![],
         }
     }
 }

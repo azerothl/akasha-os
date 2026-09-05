@@ -263,6 +263,8 @@ mod tests {
             context_length: 8192,
             supports_layer_offload: true,
             privacy_class: PrivacyClass::Local,
+            quantization: Default::default(),
+            backends_compatible: vec![],
         };
         let mut sim = PlacementSim::new(HardwareProfile::reference_v1(), CostModel::default());
         sim.place(&m, PlacementProfile::Latency, Priority::Interactive, 2048)

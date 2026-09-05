@@ -23,6 +23,30 @@ pub enum KvCacheType {
     Q8_0,
 }
 
+/// Optional catalogue metadata for adaptive quantization selection.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct QuantizationMetadata {
+    /// GGUF name such as `Q4_K_M`, `Q5_K_M` or `Q6_K`.
+    #[serde(default)]
+    pub format: Option<String>,
+    /// Estimated quality on a normalized 0..1 scale, if calibrated.
+    #[serde(default)]
+    pub quality_score: Option<f32>,
+    /// Estimated resident memory for this quantized variant.
+    #[serde(default)]
+    pub memory_bytes: Option<u64>,
+    /// Estimated prefill and decode costs relative to the catalogue default.
+    #[serde(default)]
+    pub prefill_cost: Option<f32>,
+    #[serde(default)]
+    pub decode_cost: Option<f32>,
+    /// Backends/ISAs known to support this variant.
+    #[serde(default)]
+    pub compatible_backends: Vec<String>,
+    #[serde(default)]
+    pub compatible_isas: Vec<String>,
+}
+
 impl KvCacheType {
     /// Facteur octets vs métadonnées catalogue (supposées F16).
     pub fn bytes_factor(self) -> f64 {
@@ -51,6 +75,11 @@ pub struct ModelDesc {
     pub context_length: u32,
     pub supports_layer_offload: bool,
     pub privacy_class: PrivacyClass,
+    #[serde(default)]
+    pub quantization: QuantizationMetadata,
+    /// Backend identifiers accepted by the model pack (empty = unknown/all).
+    #[serde(default)]
+    pub backends_compatible: Vec<String>,
 }
 
 impl ModelDesc {
@@ -101,6 +130,8 @@ mod tests {
             context_length: 4096,
             supports_layer_offload: true,
             privacy_class: PrivacyClass::Local,
+            quantization: QuantizationMetadata::default(),
+            backends_compatible: vec![],
         };
         assert_eq!(m.layer_bytes(), 90_000_000);
         assert_eq!(m.kv_bytes(2048), 204_800_000);

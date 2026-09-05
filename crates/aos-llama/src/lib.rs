@@ -347,6 +347,10 @@ pub struct GenStats {
     pub draft_accepted: u32,
     /// Pas de vérification speculative (0 si pas de draft).
     pub draft_steps: u32,
+    /// True when adaptive speculation stopped itself after poor acceptance.
+    pub draft_disabled: bool,
+    /// Time spent verifying drafted tokens (diagnostic only).
+    pub draft_verify_ms: f64,
 }
 
 impl GenStats {
@@ -752,6 +756,8 @@ impl LlamaContext {
             prefix_hit_tokens: 0,
             draft_accepted: 0,
             draft_steps: 0,
+            draft_disabled: false,
+            draft_verify_ms: 0.0,
         })
     }
 
@@ -1129,6 +1135,9 @@ impl LlamaContext {
         let mut ttft_ms = f64::MAX;
         let mut draft_accepted = 0u32;
         let mut draft_steps = 0u32;
+        let mut draft_disabled = false;
+        let mut draft_verify_ms = 0.0;
+        let mut speculation_enabled = true;
         let mut haystack = prompt_tokens.clone();
 
         let mut cur = unsafe { sys::llama_sampler_sample(smpl, self.ptr, -1) };
@@ -1156,7 +1165,7 @@ impl LlamaContext {
             haystack.push(cur);
 
             let room = self.n_ctx_seq() as usize - self.seq0_tokens.len();
-            let draft = if room < 2 {
+            let draft = if !speculation_enabled || room < 2 {
                 Vec::new()
             } else {
                 let max_draft = (room - 1).min(n_draft);
@@ -1193,7 +1202,9 @@ impl LlamaContext {
                     Self::batch_add(&mut batch, d, decode_pos + 1 + i as sys::llama_pos, 0, true);
                 }
             }
+            let verify_start = Instant::now();
             let rc = unsafe { sys::llama_decode(self.ptr, batch) };
+            draft_verify_ms += verify_start.elapsed().as_secs_f64() * 1000.0;
             unsafe { sys::llama_batch_free(batch) };
             if rc != 0 {
                 // Fallback : un token sans speculative (évite échec dur sur batch multi-logits).
@@ -1279,6 +1290,15 @@ impl LlamaContext {
             if pause.load(Ordering::SeqCst) {
                 break StopReason::Paused;
             }
+            // A draft that rarely matches adds verification work and can be
+            // slower than standard decoding. Stop it for the remainder of
+            // this request; the next request gets a clean decision.
+            if draft_steps >= 4
+                && (draft_accepted as f64 / draft_steps as f64) < 0.25
+            {
+                speculation_enabled = false;
+                draft_disabled = true;
+            }
         };
 
         unsafe { sys::llama_sampler_free(smpl) };
@@ -1300,6 +1320,8 @@ impl LlamaContext {
             prefix_hit_tokens: prefix_hit,
             draft_accepted,
             draft_steps,
+            draft_disabled,
+            draft_verify_ms,
         })
     }
 
@@ -1702,6 +1724,8 @@ impl LlamaContext {
                     prefix_hit_tokens: 0,
                     draft_accepted: 0,
                     draft_steps: 0,
+                    draft_disabled: false,
+                    draft_verify_ms: 0.0,
                 });
             }
             unsafe { sys::llama_sampler_free(slot.smpl) };

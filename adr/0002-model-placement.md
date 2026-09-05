@@ -24,6 +24,9 @@ disk) while respecting latency and bandwidth constraints.
 - **Placement plan**: layer assignment to buffers (CPU, GPU, RAM, NVMe)
 - **Performance estimate**: tokens/s (TTFT), memory use, I/O latency
 - **Validation**: comparison with real llama.cpp measurements
+- **Adaptive decision**: `InferencePlan` selects a registered local backend,
+  safe quantization, KV policy, thermal policy and explicit fallback chain.
+  Experimental NPU/WebGPU/LAN adapters are disabled by default.
 
 ### Success metrics
 - TTFT estimate < 2s for models > 32B parameters

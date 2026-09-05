@@ -365,6 +365,19 @@ pub struct ModelMetrics {
     /// Chemin d'inférence utilisé lors de la dernière requête.
     #[serde(default)]
     pub inference_mode: Option<String>,
+    /// Adaptive planner decision (diagnostic, never contains prompt data).
+    #[serde(default)]
+    pub adaptive_backend: Option<String>,
+    #[serde(default)]
+    pub quantization: Option<String>,
+    #[serde(default)]
+    pub plan_reason: Option<String>,
+    #[serde(default)]
+    pub thermal_policy: Option<String>,
+    #[serde(default)]
+    pub draft_disabled: bool,
+    #[serde(default)]
+    pub draft_verify_ms: Option<f64>,
 }
 
 /// Métriques système agrégées.

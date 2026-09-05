@@ -130,6 +130,33 @@ async fn main() {
         });
     }
 
+    // --- model.plan (diagnostic, read-only) ---
+    {
+        let sub = subsystem.clone();
+        svc.on("model.plan", move |ctx| {
+            let sub = sub.clone();
+            async move {
+                match ctx.payload::<ModelIdRequest>() {
+                    Ok(req) => match sub.diagnose(&req.model_id, sub.config.default_kv_tokens) {
+                        Ok(plans) => {
+                            let _ = ctx.respond(aos_ipc::msg::Status::Ok, &plans).await;
+                        }
+                        Err(e) => {
+                            let _ = ctx
+                                .respond_error(aos_ipc::msg::Status::NotFound, &e)
+                                .await;
+                        }
+                    },
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+
     // --- model.unload ---
     {
         let sub = subsystem.clone();

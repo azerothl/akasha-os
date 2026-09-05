@@ -10,6 +10,88 @@ use serde::{Deserialize, Serialize};
 
 use crate::bandwidth::{BandwidthSignals, signals_to_profile_fields};
 
+/// CPU instruction sets relevant to quantized inference.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CpuIsa {
+    pub avx2: bool,
+    pub avx512: bool,
+    pub neon: bool,
+}
+
+impl CpuIsa {
+    /// Best-effort runtime probe. Unknown platforms simply report no optional ISA.
+    pub fn detect() -> Self {
+        Self {
+            avx2: cfg!(any(target_arch = "x86", target_arch = "x86_64"))
+                && std::is_x86_feature_detected!("avx2"),
+            avx512: cfg!(any(target_arch = "x86", target_arch = "x86_64"))
+                && std::is_x86_feature_detected!("avx512f"),
+            neon: cfg!(target_arch = "aarch64")
+                || cfg!(all(target_arch = "arm", target_feature = "neon")),
+        }
+    }
+}
+
+/// CPU topology. Core classes are optional because most OS probes do not expose them.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CpuTopology {
+    pub logical_cores: u32,
+    pub performance_cores: u32,
+    pub efficiency_cores: u32,
+}
+
+impl CpuTopology {
+    pub fn detect() -> Self {
+        let logical = std::thread::available_parallelism()
+            .map(|n| n.get() as u32)
+            .unwrap_or(1);
+        Self {
+            logical_cores: logical,
+            // OS-neutral fallback: topology probes can replace these values.
+            performance_cores: logical,
+            efficiency_cores: 0,
+        }
+    }
+}
+
+/// Runtime thermal/power signal used by the adaptive planner.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq)]
+pub struct ThermalSnapshot {
+    pub temperature_c: Option<f32>,
+    pub sustained_temperature_c: Option<f32>,
+    pub throttling: bool,
+    pub power_w: Option<f32>,
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub enum GpuBackend {
+    #[default]
+    Unknown,
+    Cuda,
+    Metal,
+    Vulkan,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct NpuCapabilities {
+    pub name: String,
+    pub memory_bytes: u64,
+    #[serde(default)]
+    pub int8: bool,
+    #[serde(default)]
+    pub experimental: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct WebGpuCapabilities {
+    pub adapter: String,
+    pub memory_bytes: u64,
+    #[serde(default)]
+    pub shader_f16: bool,
+    #[serde(default)]
+    pub experimental: bool,
+}
+
 /// Un GPU physique (E9 / P5.2 — partition pipeline inter-GPU).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GpuDevice {
@@ -49,6 +131,23 @@ pub struct HardwareProfile {
     /// Inventaire multi-GPU (E9). Vide ⇒ pool unique via [`Self::vram_total`].
     #[serde(default)]
     pub gpus: Vec<GpuDevice>,
+
+    /// Optional capabilities used by the adaptive planner. Defaults preserve
+    /// compatibility with old hardware.json and hand-written profiles.
+    #[serde(default)]
+    pub cpu_isa: CpuIsa,
+    #[serde(default)]
+    pub cpu_topology: CpuTopology,
+    #[serde(default)]
+    pub gpu_backend: GpuBackend,
+    #[serde(default)]
+    pub npu: Option<NpuCapabilities>,
+    #[serde(default)]
+    pub webgpu: Option<WebGpuCapabilities>,
+    #[serde(default)]
+    pub remote_nodes: u32,
+    #[serde(default)]
+    pub thermal: ThermalSnapshot,
 }
 
 impl HardwareProfile {
@@ -120,6 +219,13 @@ impl HardwareProfile {
             gpu_flops: 20e12,
             cpu_flops: 0.8e12,
             gpus: vec![],
+            cpu_isa: CpuIsa::detect(),
+            cpu_topology: CpuTopology::detect(),
+            gpu_backend: GpuBackend::Cuda,
+            npu: None,
+            webgpu: None,
+            remote_nodes: 0,
+            thermal: ThermalSnapshot::default(),
         }
     }
 
@@ -141,6 +247,13 @@ impl HardwareProfile {
             gpu_flops: 0.0,
             cpu_flops: 0.5e12,
             gpus: vec![],
+            cpu_isa: CpuIsa::detect(),
+            cpu_topology: CpuTopology::detect(),
+            gpu_backend: GpuBackend::Unknown,
+            npu: None,
+            webgpu: None,
+            remote_nodes: 0,
+            thermal: ThermalSnapshot::default(),
         }
     }
 
@@ -162,6 +275,13 @@ impl HardwareProfile {
             gpu_flops: 60e12,
             cpu_flops: 1.5e12,
             gpus: vec![],
+            cpu_isa: CpuIsa::detect(),
+            cpu_topology: CpuTopology::detect(),
+            gpu_backend: GpuBackend::Cuda,
+            npu: None,
+            webgpu: None,
+            remote_nodes: 0,
+            thermal: ThermalSnapshot::default(),
         }
     }
 
@@ -186,6 +306,17 @@ impl HardwareProfile {
         hw
     }
 
+    /// Reference Apple/Metal profile used by cross-platform tests and tuning.
+    pub fn metal_reference() -> Self {
+        let mut hw = Self::reference_v1();
+        hw.name = "metal-reference".into();
+        hw.gpu_backend = GpuBackend::Metal;
+        hw.gpu_mem_bw = 200e9;
+        hw.host_to_device_bw = hw.ram_mem_bw;
+        hw.cpu_isa = CpuIsa { avx2: false, avx512: false, neon: true };
+        hw
+    }
+
     /// Build a host profile from first-run capacity + bandwidth signals (E21).
     #[allow(clippy::too_many_arguments)]
     pub fn from_host_caps(
@@ -199,10 +330,12 @@ impl HardwareProfile {
         gpus: Vec<GpuDevice>,
         bandwidth: &BandwidthSignals,
     ) -> Self {
+        let name = name.into();
+        let gpu_backend = infer_gpu_backend(&name);
         let (ram_mem_bw, gpu_mem_bw, host_to_device_bw, disk_seq_bw) =
             signals_to_profile_fields(bandwidth);
         let mut hw = Self {
-            name: name.into(),
+            name,
             has_gpu,
             vram_total,
             ram_total,
@@ -217,6 +350,13 @@ impl HardwareProfile {
             gpu_flops: if has_gpu { 20e12 } else { 0.0 },
             cpu_flops: 0.8e12,
             gpus,
+            cpu_isa: CpuIsa::detect(),
+            cpu_topology: CpuTopology::detect(),
+            gpu_backend,
+            npu: None,
+            webgpu: None,
+            remote_nodes: 0,
+            thermal: ThermalSnapshot::default(),
         };
         if !has_gpu {
             hw.gpu_mem_bw = 0.0;
@@ -229,5 +369,18 @@ impl HardwareProfile {
             hw.host_to_device_bw = Self::reference_v1().host_to_device_bw;
         }
         hw
+    }
+}
+
+fn infer_gpu_backend(name: &str) -> GpuBackend {
+    let name = name.to_ascii_lowercase();
+    if name.contains("apple") || name.contains("metal") || cfg!(target_os = "macos") {
+        GpuBackend::Metal
+    } else if name.contains("amd") || name.contains("radeon") {
+        GpuBackend::Vulkan
+    } else if !name.is_empty() {
+        GpuBackend::Cuda
+    } else {
+        GpuBackend::Unknown
     }
 }

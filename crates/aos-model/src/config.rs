@@ -1,6 +1,7 @@
 //! Configuration de `aos-modeld` (fichier YAML dev, chemins réels des poids).
 
 use serde::Deserialize;
+use aos_placement::QuantizationMetadata;
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -40,6 +41,17 @@ pub struct ModeldConfig {
     /// Politique d'optimisation de l'inférence (E22).
     #[serde(default)]
     pub inference_optimization: InferenceOptimizationConfig,
+    /// Adaptive backend/quantization planner. Enabled by default; experimental
+    /// adapters remain opt-in independently.
+    #[serde(default = "default_true")]
+    pub adaptive_planner: bool,
+    #[serde(default)]
+    pub experimental_backends: bool,
+    #[serde(default = "default_min_quality")]
+    pub min_quantization_quality: f32,
+    /// `performance`, `balanced`, `quiet` or `always-on`.
+    #[serde(default = "default_thermal_policy")]
+    pub thermal_policy: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -86,6 +98,8 @@ pub struct ModelOverride {
     pub kv_bytes_per_token: Option<u64>,
     #[serde(default)]
     pub n_params: Option<f64>,
+    #[serde(default)]
+    pub quantization: Option<QuantizationMetadata>,
 }
 
 fn default_bus() -> String {
@@ -127,6 +141,12 @@ fn default_spec_priority() -> u8 {
 fn default_batch_window() -> u64 {
     150
 }
+fn default_min_quality() -> f32 {
+    0.85
+}
+fn default_thermal_policy() -> String {
+    "balanced".into()
+}
 
 impl ModeldConfig {
     pub fn load(path: impl AsRef<Path>) -> Result<Self, Box<dyn std::error::Error>> {
@@ -146,6 +166,8 @@ mod tests {
         assert_eq!(cfg.inference_optimization.max_draft_tokens, 12);
         assert_eq!(cfg.inference_optimization.min_spec_priority, 2);
         assert!(cfg.inference_optimization.adaptive_batching);
+        assert!(cfg.adaptive_planner);
+        assert!(!cfg.experimental_backends);
     }
 
     #[test]

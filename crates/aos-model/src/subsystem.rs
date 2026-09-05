@@ -6,8 +6,9 @@ use aos_llama::{
     BatchItem, GenParams, KvType, LlamaContext, LlamaModel, LoadMode, LoadOptions, StopReason,
 };
 use aos_placement::{
-    CostModel, ModelDesc, PlacementPlan, PlacementProfile, PlacementSim,
-    Priority, Tier,
+    AdaptivePlanner, BackendKind, CostModel, InferencePlan, InferencePlanDiagnostic, ModelDesc,
+    PlacementManager, PlacementPlan, PlacementProfile, PlacementSim, PlannerOptions, Priority,
+    SpeculativeStrategy, ThermalPolicy, Tier, WorkloadKind,
 };
 use aos_proto::{
     InferRequest, LoadResponse, ModelInfo, ModelMetrics, ModelState, SystemMetrics, TokenEvent,
@@ -48,6 +49,8 @@ pub struct ModelRuntime {
     pub path: Option<PathBuf>,
     pub state: ModelState,
     pub plan: Option<PlacementPlan>,
+    /// Adaptive policy decision that produced the concrete placement plan.
+    pub inference_plan: Option<InferencePlan>,
     pub profile: PlacementProfile,
     pub model: Option<Arc<LlamaModel>>,
     pub ctx: Option<Arc<StdMutex<LlamaContext>>>,
@@ -64,6 +67,8 @@ pub struct ModelRuntime {
     pub est_tok_s: Option<f64>,
     /// E20 : moyenne tokens acceptés / pas speculative.
     pub last_draft_accept: Option<f64>,
+    pub last_draft_disabled: bool,
+    pub last_draft_verify_ms: Option<f64>,
     /// E20 : tokens de préfixe réutilisés au dernier C1.
     pub last_prefix_hit: Option<u32>,
     /// Chemin choisi pour la dernière inférence (`standard`, `speculative`, `batch`).
@@ -84,6 +89,7 @@ impl ModelRuntime {
             path,
             state: ModelState::OnDisk,
             plan: None,
+            inference_plan: None,
             profile: PlacementProfile::Balanced,
             model: None,
             ctx: None,
@@ -97,6 +103,8 @@ impl ModelRuntime {
             last_tok_s: None,
             est_tok_s: None,
             last_draft_accept: None,
+            last_draft_disabled: false,
+            last_draft_verify_ms: None,
             last_prefix_hit: None,
             last_inference_mode: None,
             warm: None,
@@ -225,6 +233,9 @@ impl ModelSubsystem {
                     if let Some(v) = ov.n_params {
                         desc.n_params = v;
                     }
+                    if let Some(v) = &ov.quantization {
+                        desc.quantization = v.clone();
+                    }
                 }
                 let path = ov.map(|o| PathBuf::from(&o.path));
                 models.insert(entry.id.clone(), ModelRuntime::new(desc, path));
@@ -241,6 +252,8 @@ impl ModelSubsystem {
                     context_length: 0,
                     supports_layer_offload: false,
                     privacy_class: aos_placement::PrivacyClass::Remote,
+                    quantization: Default::default(),
+                    backends_compatible: vec![],
                 };
                 let mut rt = ModelRuntime::new(desc, None);
                 rt.state = ModelState::Remote;
@@ -291,6 +304,59 @@ impl ModelSubsystem {
         inner.models.get(model_id).map(Self::info_of)
     }
 
+    /// Compare the adaptive decision for all supported operator profiles.
+    /// This is diagnostic-only: it does not load weights or mutate placement.
+    pub fn diagnose(&self, model_id: &str, kv_tokens: u32) -> Result<Vec<InferencePlanDiagnostic>, String> {
+        let desc = {
+            let g = self.inner.lock().unwrap();
+            g.models
+                .get(model_id)
+                .map(|m| m.desc.clone())
+                .ok_or_else(|| format!("modèle inconnu: {model_id}"))?
+        };
+        let (hw, cost) = {
+            let sim = self.sim.lock().unwrap();
+            (sim.hw.clone(), sim.cost.clone())
+        };
+        let thermal_policy = match self.config.thermal_policy.as_str() {
+            "performance" => ThermalPolicy::Performance,
+            "quiet" => ThermalPolicy::Quiet,
+            "always-on" => ThermalPolicy::AlwaysOn,
+            _ => ThermalPolicy::Balanced,
+        };
+        let options = PlannerOptions {
+            allow_experimental: self.config.experimental_backends,
+            min_quality: self.config.min_quantization_quality,
+            speculation: self.config.inference_optimization.speculation != "off",
+            thermal_policy,
+        };
+        let planner = AdaptivePlanner::new(hw.clone(), options);
+        Ok(planner
+            .compare_profiles(&desc, kv_tokens)
+            .into_iter()
+            .map(|plan| {
+                let requested_profile = plan.placement;
+                let manager = PlacementManager::new(hw.clone(), cost.clone());
+                match manager.place_model(&desc, requested_profile, Priority::Interactive, kv_tokens) {
+                    Ok(placement) => InferencePlanDiagnostic {
+                        requested_profile,
+                        plan,
+                        feasible: Some(true),
+                        placement_summary: Some(placement.summary()),
+                        error: None,
+                    },
+                    Err(error) => InferencePlanDiagnostic {
+                        requested_profile,
+                        plan,
+                        feasible: Some(false),
+                        placement_summary: None,
+                        error: Some(error.to_string()),
+                    },
+                }
+            })
+            .collect())
+    }
+
     /// Charge un modèle : calcule le plan réel (P1.2) puis pilote llama.cpp.
     /// Attend (asynchrone) la fin du chargement ou l'erreur.
     pub async fn ensure_loaded(
@@ -316,6 +382,7 @@ impl ModelSubsystem {
                         m.state = ModelState::OnDisk;
                         m.load_error = None;
                         m.plan = None;
+                        m.inference_plan = None;
                         m.ctx = None;
                         m.model = None;
                         m.warm = None;
@@ -378,6 +445,7 @@ impl ModelSubsystem {
                     m.ctx = None;
                     m.model = None;
                     m.plan = None;
+                    m.inference_plan = None;
                     m.warm = None;
                 }
                 eprintln!("[modeld] échec chargement {model_id}: {e}");
@@ -390,7 +458,7 @@ impl ModelSubsystem {
                 apply_err(format!("poids introuvables: {}", path.display()));
                 return;
             }
-            let plan = {
+            let selected_placement = {
                 let mut sim = sim.lock().unwrap();
                 if sim.get(&model_id).is_some() {
                     sim.unload(&model_id);
@@ -406,13 +474,70 @@ impl ModelSubsystem {
                         pin
                     }
                 };
-                let effective_profile = match inference.as_str() {
-                    "cpu" => PlacementProfile::CpuOnly,
-                    "auto" => sim.auto_hysteresis_profile(),
-                    _ => profile,
+                let requested_backend = match inference.as_str() {
+                    "cpu" => Some(BackendKind::Cpu),
+                    _ => std::env::var("AOS_BACKEND").ok().and_then(|value| match value.to_ascii_lowercase().as_str() {
+                        "cpu" => Some(BackendKind::Cpu),
+                        "cuda" | "nvidia" => Some(BackendKind::Cuda),
+                        "metal" | "apple" => Some(BackendKind::Metal),
+                        "npu" => Some(BackendKind::Npu),
+                        "webgpu" => Some(BackendKind::WebGpu),
+                        _ => None,
+                    }),
                 };
-                match sim.place(&desc, effective_profile, Priority::Interactive, kv_tokens) {
-                    Ok(()) => sim.get(&model_id).map(|p| p.plan.clone()),
+                let selected = if config.adaptive_planner {
+                    let thermal_policy = match config.thermal_policy.as_str() {
+                        "performance" => ThermalPolicy::Performance,
+                        "quiet" => ThermalPolicy::Quiet,
+                        "always-on" => ThermalPolicy::AlwaysOn,
+                        _ => ThermalPolicy::Balanced,
+                    };
+                    let options = PlannerOptions {
+                        allow_experimental: config.experimental_backends,
+                        min_quality: config.min_quantization_quality,
+                        speculation: config.inference_optimization.speculation != "off",
+                        thermal_policy,
+                    };
+                    let planner = AdaptivePlanner::new(sim.hw.clone(), options);
+                    planner.select(&desc, profile, WorkloadKind::Chat, kv_tokens, requested_backend)
+                } else {
+                    // Compatibility path for operators that explicitly disable
+                    // the adaptive planner.
+                    let effective_profile = match inference.as_str() {
+                        "cpu" => PlacementProfile::CpuOnly,
+                        "auto" => sim.auto_hysteresis_profile(),
+                        _ => profile,
+                    };
+                    InferencePlan {
+                        backend: if matches!(effective_profile, PlacementProfile::CpuOnly) {
+                            BackendKind::Cpu
+                        } else {
+                            BackendKind::Cuda
+                        },
+                        quantization: aos_placement::Quantization::Q4,
+                        placement: effective_profile,
+                        kv_cache: if matches!(effective_profile, PlacementProfile::CpuOnly) {
+                            aos_placement::KvCacheType::F16
+                        } else {
+                            aos_placement::KvCacheType::Q8_0
+                        },
+                        kv_tokens,
+                        speculative: SpeculativeStrategy::Disabled,
+                        thermal_policy: ThermalPolicy::Balanced,
+                        power_budget_w: None,
+                        reason: "adaptive planner désactivé".into(),
+                        fallback: vec![BackendKind::Cpu],
+                        experimental: false,
+                    }
+                };
+                let mut selected = selected;
+                match sim.place(&desc, selected.placement, Priority::Interactive, kv_tokens) {
+                    Ok(()) => sim.get(&model_id).map(|p| {
+                        // PlacementSim may have applied a pressure fallback;
+                        // expose the effective profile, never the request.
+                        selected.placement = p.plan.profile;
+                        (p.plan.clone(), selected)
+                    }),
                     Err(e) => {
                         drop(sim);
                         apply_err(e.to_string());
@@ -420,7 +545,7 @@ impl ModelSubsystem {
                     }
                 }
             };
-            let Some(plan) = plan else {
+            let Some((plan, adaptive_plan)) = selected_placement else {
                 apply_err("placement disparu".into());
                 return;
             };
@@ -431,6 +556,8 @@ impl ModelSubsystem {
                 m.loading = false;
                 m.state = ModelState::Loaded;
                 m.plan = Some(plan);
+                m.profile = adaptive_plan.placement;
+                m.inference_plan = Some(adaptive_plan);
                 m.est_tok_s = None;
                 eprintln!("[modeld] {model_id} média placé (Placement Manager)");
                 return;
@@ -438,8 +565,10 @@ impl ModelSubsystem {
 
             let ngl = plan.n_layers_on(Tier::Vram) as i32;
             let flash_attn = true;
-            let gpu_offload = ngl > 0 && plan.kv_bytes_on(Tier::Vram) > 0;
-            let kv_type = KvType::default_for(gpu_offload, flash_attn);
+            let kv_type = match adaptive_plan.kv_cache {
+                aos_placement::KvCacheType::F16 => KvType::F16,
+                aos_placement::KvCacheType::Q8_0 => KvType::Q8_0,
+            };
             let opts = LoadOptions {
                 n_gpu_layers: ngl,
                 load_mode: LoadMode::Mmap,
@@ -493,6 +622,8 @@ impl ModelSubsystem {
                 ModelState::Loaded
             };
             m.plan = Some(plan);
+            m.profile = adaptive_plan.placement;
+            m.inference_plan = Some(adaptive_plan);
             m.model = Some(model);
             m.ctx = Some(Arc::new(StdMutex::new(ctx)));
             m.ctx_abort = Some(abort);
@@ -842,6 +973,8 @@ impl ModelSubsystem {
                                         m.last_ttft_ms = Some(stats.ttft_ms);
                                         m.last_tok_s = Some(stats.tok_s);
                                         m.last_draft_accept = stats.draft_accept_avg();
+                                        m.last_draft_disabled = stats.draft_disabled;
+                                        m.last_draft_verify_ms = Some(stats.draft_verify_ms);
                                         m.last_prefix_hit = Some(stats.prefix_hit_tokens);
                                         m.last_inference_mode = Some(if stats.draft_steps > 0 {
                                             "speculative".into()
@@ -1302,6 +1435,7 @@ impl ModelSubsystem {
             m.ctx_abort = None;
             m.state = ModelState::OnDisk;
             m.plan = None;
+            m.inference_plan = None;
             m.loading = false;
         }
         self.sim.lock().unwrap().unload(model_id);
@@ -1369,6 +1503,7 @@ impl ModelSubsystem {
                     m.state = ModelState::OnDisk;
                     m.load_error = None;
                     m.plan = None;
+                    m.inference_plan = None;
                     m.warm = None;
                     m.last_draft_accept = None;
                     m.last_prefix_hit = None;
@@ -1430,6 +1565,8 @@ impl ModelSubsystem {
                 context_length: 0,
                 supports_layer_offload: false,
                 privacy_class: aos_placement::PrivacyClass::Remote,
+                quantization: Default::default(),
+                backends_compatible: vec![],
             };
             let mut rt = ModelRuntime::new(desc, None);
             rt.state = ModelState::Remote;
@@ -1519,6 +1656,12 @@ impl ModelSubsystem {
                 draft_accept: m.last_draft_accept,
                 prefix_hit: m.last_prefix_hit,
                 inference_mode: m.last_inference_mode.clone(),
+                adaptive_backend: m.inference_plan.as_ref().map(|p| format!("{:?}", p.backend).to_lowercase()),
+                quantization: m.inference_plan.as_ref().map(|p| p.quantization.as_str().into()),
+                plan_reason: m.inference_plan.as_ref().map(|p| p.reason.clone()),
+                thermal_policy: m.inference_plan.as_ref().map(|p| format!("{:?}", p.thermal_policy).to_lowercase()),
+                draft_disabled: m.last_draft_disabled,
+                draft_verify_ms: m.last_draft_verify_ms,
             })
             .collect();
         SystemMetrics {

@@ -1,6 +1,6 @@
 //! Catalogue de modèles YAML (specs-techniques §3.2).
 
-use aos_placement::{ModelDesc, PrivacyClass};
+use aos_placement::{ModelDesc, PrivacyClass, QuantizationMetadata};
 use serde::Deserialize;
 use std::path::Path;
 use thiserror::Error;
@@ -72,6 +72,9 @@ pub struct ResourceHints {
     pub kv_bytes_per_token: u64,
     #[serde(default)]
     pub supports_layer_offload: bool,
+    /// Optional adaptive planner metadata. Old catalogues remain valid.
+    #[serde(default)]
+    pub quantization: QuantizationMetadata,
 }
 
 impl CatalogEntry {
@@ -97,6 +100,8 @@ impl CatalogEntry {
             context_length: arch.context_length,
             supports_layer_offload: hints.supports_layer_offload,
             privacy_class: self.privacy_class,
+            quantization: hints.quantization.clone(),
+            backends_compatible: self.backends_compatible.clone(),
         })
     }
 }

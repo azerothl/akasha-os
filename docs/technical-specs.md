@@ -366,6 +366,23 @@ Actions (in order):
 - Integrity: hash by shard, lazy or load verification
 - Optional runtime quantization (downgrade Q6→Q4 under pressure) — Could
 
+#### 3.5.9 Adaptive inference plan (local, opt-in extensions)
+
+`aos-placement` derives an `InferencePlan` from the hardware profile, model
+metadata and workload. It records the selected backend (CPU/CUDA/Metal), the
+declared quantization, memory placement profile, KV type, speculative strategy,
+thermal policy, reason and ordered fallbacks. CPU, CUDA and Metal reuse the
+existing llama.cpp path; NPU, WebGPU and LAN adapters are experimental and are
+registered only when explicitly enabled, then remain non-executable until their
+adapter gate is implemented. An unavailable adapter falls back to CPU without
+sending prompts or model data elsewhere.
+
+The read-only `model.plan` service compares the four placement profiles. The
+`model.metrics` response exposes backend, quantization, thermal policy and the
+non-sensitive planning reason. `INT2`/`MXFP4` metadata can be represented, but
+the default quality gate and backend registry prevent them from being selected
+without a compatible, measured kernel.
+
 ### 3.6 Inference Scheduler
 
 Features :
@@ -843,6 +860,7 @@ If step 3 partially fails → degraded mode with clear messages; direct shell re
 |---------|-------------|
 | `model.list` | List of registry models |
 | `model.inspect` | Metadata + current placement |
+| `model.plan` | Read-only comparison of automatic and explicit placement profiles |
 | `model.load` | Charge with investment profile |
 | `model.unload` | Frees resources |
 | `model.set_placement` | Plan manuel / profil |
