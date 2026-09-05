@@ -16,7 +16,9 @@ use aos_agent::context_budget::{
     LoopVerdict, DEFAULT_N_CTX_HINT, MAX_INFER_STALL_RETRIES, MAX_OVERFLOW_INFER_RETRIES,
 };
 use aos_agent::persist;
-use aos_agent::device_tools::{capture_png_path_from_tool_result, invoke_device_tool};
+use aos_agent::device_tools::{
+    capture_png_path_from_tool_result, invoke_device_tool,
+};
 use aos_agent::canvas_scene::{
     agent_has_canvas_tools, begin_canvas_vision, canvas_action_near_duplicate_reason, canvas_critic_system_prompt,
     canvas_op_succeeded,
@@ -24,7 +26,7 @@ use aos_agent::canvas_scene::{
     canvas_reflect_user_content, canvas_repeat_stroke_verdict, canvas_scene_prompt_block,
     canvas_tool_mutates_scene, end_canvas_vision, fetch_canvas_aspect,
     fetch_canvas_global_validation, fetch_canvas_scene_digest, global_canvas_validation_due,
-    merge_canvas_vision_refs, refresh_canvas_scene_after_op,
+    merge_canvas_vision_refs, refresh_canvas_scene_after_op, resolve_resident_vision_model,
     session_model_has_vision, strip_vision_image_paths, should_run_canvas_critic,
     canvas_text_only_critic_system_prompt,
     CanvasRepeatVerdict,
@@ -47,6 +49,7 @@ use aos_proto::{
     ChatSessionAppendRequest, ChatSessionGetResponse, ChatSessionIdRequest, DeepPlanStepPatch,
     DocumentRef, FilesGenerateRequest, FsListRequest, FsReadRequest, FsReadResponse, FsWriteRequest,
     InferParams, InferRequest, MemContextRequest, MemContextResponse, MemEpisodicQueryRequest,
+    ModelInfo,
     MemEpisodicWriteRequest, MemHit, MemRememberResponse, MemSharedReadRequest,
     MemSharedWriteRequest, ModuleInfo, ModuleInvokeRequest, ModuleInvokeResponse, NetFetchRequest,
     PlanAppendLogRequest, PlanCreateRequest, PlanDelegateStepRequest, PlanGetRequest,
@@ -183,6 +186,46 @@ async fn inherit_session_model(bus: &BusClient, spec: &mut AgentSpec) {
     }
 }
 
+/// Webcam describe needs an mmproj. Bind a resident vision model when the
+/// chat session default is text-only or unspecified (`model_id: null`).
+async fn inherit_device_vision_model(bus: &BusClient, spec: &mut AgentSpec) {
+    if !spec.tools.iter().any(|t| t == "device.camera.capture") {
+        return;
+    }
+    let Ok(models) = bus
+        .call::<(), Vec<ModelInfo>>("model.list", &(), vec![])
+        .await
+    else {
+        return;
+    };
+    let Some(vid) = aos_agent::canvas_scene::resident_vision_model_id(
+        spec.model_id.as_deref(),
+        &models,
+    ) else {
+        return;
+    };
+    if spec.model_id.as_deref() != Some(vid.as_str()) {
+        spec.model_id = Some(vid);
+        let _ = persist::write_spec(spec);
+    }
+}
+
+/// True for ActorDenied / PermissionDenied — not JSON fields like `os_permission`.
+fn outcome_looks_like_missing_cap(outcome: &str) -> bool {
+    let lower = outcome.to_ascii_lowercase();
+    lower.contains("permissiondenied")
+        || lower.contains("actordenied")
+        || lower.contains("permission refus")
+        || lower.contains("capacité requise")
+        || lower.contains("capacité manquante")
+        || lower.contains("confiance trop faible")
+        || lower.contains("confiance faible")
+}
+
+fn agent_has_device_capture_tools(tools: &[String]) -> bool {
+    tools.iter().any(|t| t.starts_with("device."))
+}
+
 #[tokio::main]
 async fn main() {
     let (agent_id, bus_addr, spec_path, restore) = parse_args();
@@ -197,6 +240,7 @@ async fn main() {
         .expect("connexion au bus");
 
     inherit_session_model(&bus, &mut spec).await;
+    inherit_device_vision_model(&bus, &mut spec).await;
 
     let canvas_exported: Vec<String> = bus
         .call::<(), Vec<ModuleInfo>>("module.list", &(), vec![])
@@ -465,6 +509,8 @@ async fn main() {
     let mut loop_guard = LoopGuard::default();
     let mut last_canvas_scene_png: Option<String> = None;
     let mut last_device_capture_png: Option<String> = None;
+    let mut device_describe_hinted = false;
+    let mut device_no_vision_hinted = false;
     let mut last_canvas_visual = None;
     let mut n_ctx_hint = DEFAULT_N_CTX_HINT;
 
@@ -714,11 +760,30 @@ async fn main() {
                 }
             }
         }
+        let mut infer_spec = spec.clone();
         if let Some(ref png) = last_device_capture_png {
-            if session_model_has_vision(&bus, spec.model_id.as_deref()).await
-                && !step_refs.iter().any(|p| p == png)
+            if let Some(vid) =
+                resolve_resident_vision_model(&bus, infer_spec.model_id.as_deref()).await
             {
-                step_refs.push(png.clone());
+                infer_spec.model_id = Some(vid.clone());
+                if spec.model_id.as_deref() != Some(vid.as_str()) {
+                    spec.model_id = Some(vid);
+                    let _ = persist::write_spec(&spec);
+                }
+                if !step_refs.iter().any(|p| p == png) {
+                    step_refs.push(png.clone());
+                }
+                if !device_describe_hinted {
+                    shared.state.lock().await.push_user(
+                        "[runtime] PNG webcam jointe à ce tour. Décris uniquement le contenu visible de l'image. N'invente pas un bureau Windows. N'appelle pas describe_image. Ensuite {\"thought\":\"…\",\"action\":\"goal.complete\",\"args\":{\"summary\":\"…\"}}.",
+                    );
+                    device_describe_hinted = true;
+                }
+            } else if !device_no_vision_hinted {
+                shared.state.lock().await.push_user(
+                    "[runtime] Photo webcam enregistrée, mais aucun modèle vision (projecteur d'image) n'est chargé. Interdit d'inventer le contenu. Appelle goal.complete : capture OK ; charge Gemma 4 / LLaVA dans Modèles pour l'analyse.",
+                );
+                device_no_vision_hinted = true;
             }
         }
         let canvas_active = canvas_agent
@@ -730,7 +795,7 @@ async fn main() {
             match infer_turn(
                 &bus,
                 &shared,
-                &spec,
+                &infer_spec,
                 &step_refs,
                 &mut cmd_rx,
                 gen_tokens,
@@ -865,15 +930,38 @@ async fn main() {
         let mut batch_actions = parse_actions(&infer.text);
         let parsed_ok = !batch_actions.is_empty();
         if batch_actions.is_empty() {
-            batch_actions.push(AgentAction {
-                thought: if reasoning.is_empty() {
-                    String::new()
-                } else {
-                    reasoning.chars().take(400).collect()
-                },
-                action: "noop".into(),
-                args: serde_json::json!({}),
-            });
+            let prose = full_text.trim();
+            let device_png_attached = last_device_capture_png
+                .as_ref()
+                .is_some_and(|png| step_refs.iter().any(|p| p == png));
+            if device_png_attached && prose.chars().count() >= 24 {
+                batch_actions.push(AgentAction {
+                    thought: "description de la capture webcam".into(),
+                    action: "goal.complete".into(),
+                    args: serde_json::json!({ "summary": prose }),
+                });
+            } else if last_device_capture_png.is_some()
+                && !device_png_attached
+                && (device_no_vision_hinted || device_describe_hinted)
+            {
+                batch_actions.push(AgentAction {
+                    thought: "capture sans analyse vision".into(),
+                    action: "goal.complete".into(),
+                    args: serde_json::json!({
+                        "summary": "Capture webcam enregistrée. Analyse visuelle impossible : aucun modèle vision (projecteur d'image) n'est chargé. Charge Gemma 4 ou LLaVA dans Modèles, puis redemande ce que montre la photo."
+                    }),
+                });
+            } else {
+                batch_actions.push(AgentAction {
+                    thought: if reasoning.is_empty() {
+                        String::new()
+                    } else {
+                        reasoning.chars().take(400).collect()
+                    },
+                    action: "noop".into(),
+                    args: serde_json::json!({}),
+                });
+            }
         }
         let memory_text = if parsed_ok {
             strip_tool_markup(&full_text)
@@ -980,12 +1068,7 @@ async fn main() {
             match one {
                 ActResult::Continue(outcome) => {
                     let mut outcome = outcome;
-                    if outcome.contains("permission")
-                        || outcome.contains("PermissionDenied")
-                        || outcome.contains("ActorDenied")
-                        || outcome.contains("capacité requise")
-                        || outcome.contains("capacité manquante")
-                    {
+                    if outcome_looks_like_missing_cap(&outcome) {
                         let canonical = canonicalize_tool_name(&action.action);
                         let hint = if canonical.starts_with("module.install") {
                             "module.install".to_string()
@@ -1181,12 +1264,7 @@ async fn main() {
             }
             ActResult::Continue(outcome) if !multi_continue => {
                 let mut outcome = outcome;
-                if outcome.contains("permission")
-                    || outcome.contains("PermissionDenied")
-                    || outcome.contains("ActorDenied")
-                    || outcome.contains("capacité requise")
-                    || outcome.contains("capacité manquante")
-                {
+                if outcome_looks_like_missing_cap(&outcome) {
                     let canonical = canonicalize_tool_name(&action.action);
                     let hint = if canonical.starts_with("module.install") {
                         "module.install".to_string()
@@ -1414,8 +1492,13 @@ async fn main() {
             .await;
         }
 
-        // Critic: after every canvas stroke (scene PNG) or every 3 steps otherwise.
+        // Critic: after every canvas stroke (scene PNG). Skip the periodic
+        // generic critic on device-capture agents — it prefixes canvas advice
+        // and loops webcam goals after a successful snap.
+        let skip_device_critic =
+            !canvas_agent && agent_has_device_capture_tools(&spec.tools);
         let model_reflection = if terminal.is_none()
+            && !skip_device_critic
             && should_run_canvas_critic(canvas_agent, canvas_scene_changed, step)
         {
             reflect(&bus, &shared, &spec).await
@@ -4379,7 +4462,11 @@ async fn reflect(bus: &BusClient, shared: &Shared, spec: &AgentSpec) -> Option<S
                 .working_memory
                 .push((
                     "system".into(),
-                    format!("[canvas critic — consigne prioritaire au prochain tour]\n{text}"),
+                    if canvas_draw {
+                        format!("[canvas critic — consigne prioritaire au prochain tour]\n{text}")
+                    } else {
+                        format!("[critic — consigne prioritaire au prochain tour]\n{text}")
+                    },
                 ));
             Some(text)
         } else {
@@ -4887,5 +4974,18 @@ mod tests {
         };
         let child_goal = canvas_child_goal_statement(&parent, "résumer les sources A et B");
         assert_eq!(child_goal, "résumer les sources A et B");
+    }
+
+    #[test]
+    fn os_permission_json_is_not_a_missing_cap() {
+        let json = r#"{"devices":[{"id":"windows:Camera:0","os_permission":"unknown"}]}"#;
+        assert!(!super::outcome_looks_like_missing_cap(json));
+        assert!(super::outcome_looks_like_missing_cap(
+            "PermissionDenied: device.camera.capture"
+        ));
+        assert!(super::outcome_looks_like_missing_cap("capacité manquante"));
+        assert!(!super::outcome_looks_like_missing_cap(
+            "PNG webcam capturé. path=foo.png"
+        ));
     }
 }

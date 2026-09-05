@@ -4,7 +4,7 @@ use aos_ipc::BusClient;
 use aos_proto::{
     canvas_op_bbox, canvas_scene_digest, AgentStepRecord, AgentTrace, CanvasAspect, CanvasDoc,
     CanvasExportRequest, CanvasGetRequest, CanvasGetResponse, CanvasOp, CanvasOpBody, CanvasPoint,
-    CanvasSeeingRequest, ModelInfo,
+    CanvasSeeingRequest, ModelInfo, ModelState,
 };
 use std::path::PathBuf;
 
@@ -827,19 +827,49 @@ pub fn strip_vision_image_paths(refs: &[String]) -> Vec<String> {
         .collect()
 }
 
-/// Whether the session model context has a loaded mmproj projector.
+fn model_is_resident(m: &ModelInfo) -> bool {
+    matches!(
+        m.state,
+        ModelState::Loaded | ModelState::PartiallyOffloaded
+    )
+}
+
+/// Prefer `preferred` when it has a loaded mmproj; otherwise any resident vision model.
+/// Does not pick an on-disk vision GGUF (loading it would surprise VRAM).
+pub fn resident_vision_model_id(preferred: Option<&str>, models: &[ModelInfo]) -> Option<String> {
+    if let Some(id) = preferred.filter(|s| !s.is_empty()) {
+        if models.iter().any(|m| m.id == id && m.has_vision) {
+            return Some(id.to_string());
+        }
+    }
+    models
+        .iter()
+        .find(|m| m.has_vision && model_is_resident(m))
+        .map(|m| m.id.clone())
+}
+
+pub async fn resolve_resident_vision_model(
+    bus: &BusClient,
+    preferred: Option<&str>,
+) -> Option<String> {
+    let models: Vec<ModelInfo> = bus.call("model.list", &(), vec![]).await.ok()?;
+    resident_vision_model_id(preferred, &models)
+}
+
+/// Whether this infer target can consume image refs (loaded mmproj).
+/// `None` only matches a resident vision model — the default chat model is unknown.
 pub async fn session_model_has_vision(bus: &BusClient, model_id: Option<&str>) -> bool {
-    let Some(id) = model_id.filter(|s| !s.is_empty()) else {
-        return false;
-    };
     let models: Vec<ModelInfo> = match bus.call("model.list", &(), vec![]).await {
         Ok(m) => m,
         Err(_) => return false,
     };
-    models
-        .iter()
-        .find(|m| m.id == id)
-        .is_some_and(|m| m.has_vision)
+    if let Some(id) = model_id.filter(|s| !s.is_empty()) {
+        return models
+            .iter()
+            .find(|m| m.id == id)
+            .is_some_and(|m| m.has_vision);
+    }
+    models.iter().any(|m| m.has_vision && model_is_resident(m))
 }
 
 fn is_vision_image_path(path: &str) -> bool {
@@ -1350,6 +1380,41 @@ mod tests {
         assert!(!should_run_canvas_critic(true, false, 3));
         assert!(should_run_canvas_critic(false, false, 3));
         assert!(!should_run_canvas_critic(false, false, 2));
+    }
+
+    fn model_info(id: &str, state: ModelState, has_vision: bool) -> ModelInfo {
+        ModelInfo {
+            id: id.into(),
+            name: id.into(),
+            privacy_class: "local".into(),
+            state,
+            placement: None,
+            profile: None,
+            has_vision,
+        }
+    }
+
+    #[test]
+    fn resident_vision_prefers_named_model_then_loaded_mmproj() {
+        let models = vec![
+            model_info("text", ModelState::Loaded, false),
+            model_info("vision-disk", ModelState::OnDisk, true),
+            model_info("vision-ram", ModelState::PartiallyOffloaded, true),
+        ];
+        assert_eq!(
+            resident_vision_model_id(Some("vision-ram"), &models).as_deref(),
+            Some("vision-ram")
+        );
+        assert_eq!(
+            resident_vision_model_id(Some("text"), &models).as_deref(),
+            Some("vision-ram")
+        );
+        assert_eq!(
+            resident_vision_model_id(None, &models).as_deref(),
+            Some("vision-ram")
+        );
+        assert!(resident_vision_model_id(Some("text"), &models[..1]).is_none());
+        assert!(resident_vision_model_id(None, &models[..2]).is_none());
     }
 
     #[test]

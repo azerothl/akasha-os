@@ -412,6 +412,16 @@ pub fn encode_bgra_png(
             );
         }
     }
+    // Cap the long edge so mtmd/vision infer stays bounded (webcam frames can be 1080p+).
+    const MAX_VISION_EDGE: u32 = 1280;
+    let img = if width.max(height) > MAX_VISION_EDGE {
+        let scale = MAX_VISION_EDGE as f32 / width.max(height) as f32;
+        let nw = ((width as f32) * scale).round().max(1.0) as u32;
+        let nh = ((height as f32) * scale).round().max(1.0) as u32;
+        image::imageops::resize(&img, nw, nh, image::imageops::FilterType::Triangle)
+    } else {
+        img
+    };
     let mut out = Vec::new();
     img.write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png)
         .map_err(|e| DeviceCaptureError::Backend(e.to_string()))?;
@@ -586,6 +596,16 @@ pub struct DeviceCaptureManager {
 // serde is deliberately private to the persistence record above.
 use serde::{Deserialize, Serialize};
 
+fn absolute_path(path: PathBuf) -> PathBuf {
+    if path.is_absolute() {
+        path
+    } else {
+        std::env::current_dir()
+            .map(|cwd| cwd.join(&path))
+            .unwrap_or(path)
+    }
+}
+
 impl DeviceCaptureManager {
     pub fn open(sessions_root: impl Into<PathBuf>) -> Result<Self, DeviceCaptureError> {
         Self::with_backend(sessions_root, default_backend())
@@ -595,7 +615,7 @@ impl DeviceCaptureManager {
         sessions_root: impl Into<PathBuf>,
         backend: Arc<dyn DeviceCaptureBackend>,
     ) -> Result<Self, DeviceCaptureError> {
-        let sessions_root = sessions_root.into();
+        let sessions_root = absolute_path(sessions_root.into());
         fs::create_dir_all(&sessions_root)
             .map_err(|e| DeviceCaptureError::Artifact(e.to_string()))?;
         let permissions_path = sessions_root.join("device-permissions.json");
@@ -962,7 +982,9 @@ fn artifact_for(
     }
     Ok(DeviceArtifact {
         artifact_id: id.into(),
-        path: path.to_string_lossy().into_owned(),
+        path: absolute_path(path.to_path_buf())
+            .to_string_lossy()
+            .into_owned(),
         size_bytes: size,
         mime_type: mime.into(),
     })
@@ -1120,6 +1142,7 @@ mod tests {
             .unwrap();
         assert!(r.artifact.path.contains("devices"));
         assert!(r.artifact.path.ends_with(".png"));
+        assert!(std::path::Path::new(&r.artifact.path).is_absolute());
         assert_eq!(r.artifact.mime_type, "image/png");
         assert_eq!(r.metadata.size_bytes, r.artifact.size_bytes);
         assert!(!serde_json::to_string(&r).unwrap().contains("A5"));

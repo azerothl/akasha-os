@@ -6,12 +6,13 @@ use crate::actions::{
 use crate::canvas_scene::{
     begin_canvas_vision, canvas_scene_prompt_block, canvas_tool_mutates_scene, end_canvas_vision,
     fetch_canvas_aspect, fetch_canvas_scene_digest, merge_canvas_vision_refs,
-    refresh_canvas_scene_after_op, session_model_has_vision,
+    refresh_canvas_scene_after_op, resolve_resident_vision_model, session_model_has_vision,
 };
 use crate::context_budget::{
     compact_after_prompt_overflow, enforce_prompt_budget, is_prompt_too_long_error, prompt_budget,
     DEFAULT_N_CTX_HINT, MAX_OVERFLOW_INFER_RETRIES,
 };
+use crate::device_tools::capture_png_path_from_tool_result;
 use crate::mcp::open_mcp_tools_with_secrets;
 use crate::persist;
 use crate::room_conductor::{
@@ -22,7 +23,8 @@ use crate::room_reply::split_room_reply;
 use crate::skills::{load_skills, merge_skill_tools};
 use crate::tool_exec::execute_room_tool;
 use crate::tools::{
-    canvas_tools_from_module_list, caps_for_tools, merge_canvas_tools, select_tools, ToolDesc,
+    canvas_tools_from_module_list, caps_for_tools, canonicalize_tool_name, merge_canvas_tools,
+    select_tools, ToolDesc,
 };
 use aos_ipc::BusClient;
 use aos_proto::{
@@ -498,20 +500,30 @@ async fn run_room_tool_loop(
             .unwrap_or(0)
     );
     let mut pending_canvas_png: Option<String> = None;
+    let mut pending_device_png: Option<String> = None;
+    let mut infer_model = model_id.clone();
 
     for step in 0..MAX_ROOM_TOOL_STEPS {
         let has_canvas = tool_descs.iter().any(|t| t.name.starts_with("canvas."));
         let mut step_refs: Vec<String> = if step == 0 { images.to_vec() } else { vec![] };
         if let Some(ref png) = pending_canvas_png.take() {
-            if session_model_has_vision(bus, model_id.as_deref()).await {
+            if session_model_has_vision(bus, infer_model.as_deref()).await {
                 step_refs = merge_canvas_vision_refs(&step_refs, png);
             }
         } else if has_canvas {
             let aspect = fetch_canvas_aspect(bus, session_id).await;
             if let Some(png) =
-                begin_canvas_vision(bus, session_id, aspect, model_id.as_deref()).await
+                begin_canvas_vision(bus, session_id, aspect, infer_model.as_deref()).await
             {
                 step_refs = merge_canvas_vision_refs(&step_refs, &png);
+            }
+        }
+        if let Some(ref png) = pending_device_png {
+            if let Some(vid) = resolve_resident_vision_model(bus, infer_model.as_deref()).await {
+                infer_model = Some(vid);
+                if !step_refs.iter().any(|p| p == png) {
+                    step_refs.push(png.clone());
+                }
             }
         }
         let canvas_active = has_canvas
@@ -522,7 +534,7 @@ async fn run_room_tool_loop(
         let raw_result = run_infer(
             bus,
             round,
-            model_id.clone(),
+            infer_model.clone(),
             &mut messages,
             caps,
             &step_refs,
@@ -588,6 +600,11 @@ async fn run_room_tool_loop(
                 outcome = scene.text;
                 if let Some(png) = scene.png_path {
                     pending_canvas_png = Some(png);
+                }
+            }
+            if canonicalize_tool_name(&action.action).starts_with("device.camera") {
+                if let Some(path) = capture_png_path_from_tool_result(&outcome) {
+                    pending_device_png = Some(path);
                 }
             }
 

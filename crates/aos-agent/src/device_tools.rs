@@ -5,6 +5,7 @@ use aos_proto::{
     CaptureMode, CapturePermission, DeviceCaptureRequest, DeviceCaptureResponse,
     DeviceCaptureStopRequest, DeviceEnumerateResponse, DeviceKind,
 };
+use std::path::PathBuf;
 
 fn first_json_value(s: &str) -> Option<serde_json::Value> {
     let start = s.find('{')?;
@@ -22,10 +23,25 @@ pub fn capture_png_path_from_tool_result(outcome: &str) -> Option<String> {
         .or_else(|| v.get("path").and_then(|p| p.as_str()))?;
     let lower = path.to_ascii_lowercase();
     if lower.ends_with(".png") || lower.ends_with(".jpg") || lower.ends_with(".jpeg") {
-        Some(path.to_string())
+        Some(canonicalize_capture_image_path(path))
     } else {
         None
     }
+}
+
+/// Make a capture artifact path loadable by modeld (absolute, under AOS_HOME if relative).
+pub fn canonicalize_capture_image_path(path: &str) -> String {
+    let p = PathBuf::from(path);
+    if p.is_file() {
+        return p.to_string_lossy().into_owned();
+    }
+    if let Ok(home) = std::env::var("AOS_HOME") {
+        let joined = PathBuf::from(home).join(path);
+        if joined.is_file() {
+            return joined.to_string_lossy().into_owned();
+        }
+    }
+    path.to_string()
 }
 
 fn parse_capture_mode(args: &serde_json::Value) -> CaptureMode {
@@ -134,7 +150,7 @@ pub async fn invoke_device_tool(
                     let json = serde_json::to_string(&resp).unwrap_or_default();
                     if kind == DeviceKind::Camera && resp.artifact.mime_type == "image/png" {
                         format!(
-                            "{json}\nPNG webcam capturé. L'image est jointe au prochain tour vision — décris ce que tu vois. N'invente pas que la webcam est indisponible."
+                            "{json}\nPNG webcam capturé. L'image est jointe au prochain tour vision — décris uniquement ce que tu vois, puis goal.complete. Interdit : tool:describe_image, inventer un bureau Windows, dire que la webcam est indisponible."
                         )
                     } else if kind == DeviceKind::Microphone {
                         format!(
@@ -192,5 +208,25 @@ PNG webcam capturé."#;
             r#"{"artifact":{"path":"clip.pcm"}}"#
         )
         .is_none());
+    }
+
+    #[test]
+    fn canonicalize_keeps_existing_absolute_png() {
+        let p = std::env::temp_dir().join(format!(
+            "aos-cap-abs-{}.png",
+            std::process::id()
+        ));
+        std::fs::write(&p, b"x").unwrap();
+        let got = canonicalize_capture_image_path(p.to_str().unwrap());
+        let _ = std::fs::remove_file(&p);
+        assert_eq!(std::path::Path::new(&got), p.as_path());
+    }
+
+    #[test]
+    fn canonicalize_leaves_missing_path_unchanged() {
+        assert_eq!(
+            canonicalize_capture_image_path("missing-capture.png"),
+            "missing-capture.png"
+        );
     }
 }

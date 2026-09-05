@@ -63,9 +63,12 @@ pub fn compile_system_prompt(input: &PromptCompileInput<'_>) -> String {
                 "## Capture caméra / micro\n\
                  Session liée : `{sid}`. Omets `session_id` (le runtime le force).\n\
                  Webcam : `device.enumerate` si besoin, puis `device.camera.capture` (mode once). \
-                 Une PNG est jointe au tour suivant — décris ce que tu vois. \
-                 **Interdit** de dire que la webcam ou l'analyse d'image est indisponible : \
-                 ces outils existent. Confirmation utilisateur (Allow once / Always / Deny).\n\
+                 Une PNG est jointe au tour suivant — décris **uniquement** le contenu visible, \
+                 puis `goal.complete`. **Interdit** `describe_image` (cet outil n'existe pas), \
+                 inventer un bureau Windows, recapturer, ou dire que la webcam / l'analyse \
+                 d'image est indisponible : ces outils existent. Confirmation utilisateur \
+                 (Allow once / Always / Deny). Sans modèle vision chargé, `goal.complete` \
+                 en le disant clairement — n'invente pas l'image.\n\
                  Micro : `device.mic.capture` enregistre un extrait ; pas de STT dans Preview \
                  — n'affirme pas transcrire la voix."
             ));
