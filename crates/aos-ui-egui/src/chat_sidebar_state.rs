@@ -8,6 +8,9 @@ pub(crate) struct ChatSidebarState {
     pub(crate) show_archived: bool,
     pub(crate) delete_confirm: Option<String>,
     pub(crate) rename: String,
+    /// Tiroir Web/fichiers ouvert. État explicite (pas de CollapsingHeader)
+    /// pour partager la hauteur avec la liste en connaissance de cause.
+    pub(crate) tools_open: bool,
     /// Popup de renommage ouverte (plus de champ inline 120px qui débordait).
     #[allow(dead_code)]
     pub(crate) rename_open: bool,
@@ -27,6 +30,7 @@ impl Default for ChatSidebarState {
             show_archived: false,
             delete_confirm: None,
             rename: String::new(),
+            tools_open: false,
             rename_open: false,
             web_query: String::new(),
             web_results: Vec::new(),

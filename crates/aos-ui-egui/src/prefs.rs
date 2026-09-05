@@ -122,6 +122,9 @@ pub struct Preferences {
     /// `auto` | `gpu` | `cpu` — applied on next session boot.
     #[serde(default = "default_inference")]
     pub inference_mode: String,
+    /// Applied by modeld when a model is next loaded.
+    #[serde(default = "default_adaptive_planner")]
+    pub adaptive_planner: bool,
     /// `light` | `dark` | `soft` | `high_contrast`
     #[serde(default = "default_theme")]
     pub theme: String,
@@ -213,6 +216,10 @@ fn default_trust() -> String {
 fn default_inference() -> String {
     "auto".into()
 }
+
+fn default_adaptive_planner() -> bool {
+    true
+}
 fn default_theme() -> String {
     "dark".into()
 }
@@ -269,6 +276,7 @@ impl Default for Preferences {
             routing: default_routing(),
             trust_default: default_trust(),
             inference_mode: default_inference(),
+            adaptive_planner: default_adaptive_planner(),
             theme: default_theme(),
             network_online: false,
             auto_remember_chat: default_auto_remember_chat(),

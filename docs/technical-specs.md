@@ -368,6 +368,12 @@ Actions (in order):
 
 #### 3.5.9 Adaptive inference plan (local, opt-in extensions)
 
+The native UI exposes **Settings → Models → Adaptive inference (experimental)**.
+The choice is saved in `var/run/preferences.json` and overrides the YAML
+`adaptive_planner` value on the next model load, without restarting modeld.
+Unload and reload an already resident model to apply a changed choice.
+Missing or invalid preference values preserve the YAML setting.
+
 `aos-placement` derives an `InferencePlan` from the hardware profile, model
 metadata and workload. It records the selected backend (CPU/CUDA/Metal), the
 declared quantization, memory placement profile, KV type, speculative strategy,

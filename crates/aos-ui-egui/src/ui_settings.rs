@@ -73,7 +73,7 @@ impl UiApp {
         if !query.is_empty()
             && ![
                 ["utilisateur", "user", "langue", "language", "thème", "theme", "densité", "density", "échelle", "scale"].as_slice(),
-                ["modèle", "model", "inference", "routage", "routing", "image", "audio"].as_slice(),
+                ["modèle", "model", "inference", "inférence", "adaptive", "adaptative", "routage", "routing", "image", "audio"].as_slice(),
                 ["confidentialité", "privacy", "confiance", "trust", "réseau", "network", "mémoire", "remember"].as_slice(),
                 ["agent", "expert", "étapes", "steps", "timeout"].as_slice(),
                 ["web", "recherche", "search", "navigation", "browse"].as_slice(),
@@ -226,7 +226,7 @@ impl UiApp {
         }
 
         ui.add_space(12.0);
-        if section_visible("models", &["modèle", "model", "inference", "routage", "routing", "image", "audio"]) {
+        if section_visible("models", &["modèle", "model", "inference", "inférence", "adaptive", "adaptative", "routage", "routing", "image", "audio"]) {
         ui.heading(t.settings_models);
         egui::Grid::new("settings_models")
             .num_columns(2)
@@ -252,6 +252,16 @@ impl UiApp {
                             self.status = format!("{} — migrate ({code})", t.settings_saved);
                         }
                     }
+                });
+                ui.end_row();
+
+                ui.label(t.adaptive_planner);
+                ui.vertical(|ui| {
+                    if ui.checkbox(&mut self.prefs.adaptive_planner, t.providers_enabled).changed() {
+                        save_preferences(&self.prefs);
+                        self.status = format!("{} — {}", t.settings_saved, t.adaptive_planner_hint);
+                    }
+                    ui.label(t.adaptive_planner_hint);
                 });
                 ui.end_row();
 

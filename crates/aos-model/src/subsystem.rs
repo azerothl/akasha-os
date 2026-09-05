@@ -485,7 +485,10 @@ impl ModelSubsystem {
                         _ => None,
                     }),
                 };
-                let selected = if config.adaptive_planner {
+                let preference_home = std::env::var_os("AOS_HOME")
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|| PathBuf::from("."));
+                let selected = if config.adaptive_planner_at(&preference_home) {
                     let thermal_policy = match config.thermal_policy.as_str() {
                         "performance" => ThermalPolicy::Performance,
                         "quiet" => ThermalPolicy::Quiet,

@@ -75,12 +75,16 @@ impl UiApp {
                     });
                 }
 
-                // Liste en scroll dédié + tiroir outils épinglé en bas : même
-                // avec 5000 sessions, le tiroir reste visible sans scroller
-                // toute la liste ; ouvert, son corps scrolle en interne sans
-                // manger la liste.
-                let footer_reserve = 64.0;
-                let sessions_h = (ui.available_height() - footer_reserve).max(120.0);
+                // Partage vertical explicite : fermé, la liste prend tout
+                // moins 64px ; ouvert, ~45% liste / ~55% outils (min 120px
+                // chacun), chaque zone scrolle en interne.
+                let avail = ui.available_height();
+                let (sessions_h, tools_max) = if self.chat_state.sidebar.tools_open {
+                    let sh = (avail * 0.45).max(120.0);
+                    (sh, (avail - sh - 48.0).max(120.0))
+                } else {
+                    ((avail - 64.0).max(120.0), 0.0)
+                };
                 egui::ScrollArea::vertical()
                     .id_salt("chat_sessions")
                     .auto_shrink([false, false])
@@ -214,24 +218,23 @@ impl UiApp {
                                 }
                             }
                     });
-                // Tiroir épinglé en bas (un seul enfant dans le scope : aucun
-                // chevauchement possible, toujours visible).
-                ui.with_layout(
-                    egui::Layout::bottom_up(egui::Align::Min).with_cross_justify(true),
-                    |ui| {
-                        ui.separator();
-                        // Outils Web/fichiers repliés par défaut, APRÈS la liste.
-                        egui::CollapsingHeader::new(t.sidebar_web_files)
-                            .default_open(false)
-                            .show(ui, |ui| {
-                                // Corps borné en scroll interne : ouvert avec des
-                                // résultats, il ne repousse rien hors de vue.
-                                let body_h = (ui.available_height() - 8.0).max(80.0);
-                                egui::ScrollArea::vertical()
-                                    .id_salt("chat_sidebar_tools")
-                                    .auto_shrink([false, false])
-                                    .max_height(body_h)
-                                    .show(ui, |ui| {
+                ui.separator();
+                // Tiroir à état explicite (pas de CollapsingHeader) : le bouton
+                // reste visible, le corps ouvert est borné en scroll interne.
+                let tools_open = self.chat_state.sidebar.tools_open;
+                let marker = if tools_open { "▾" } else { "▸" };
+                if ui
+                    .selectable_label(tools_open, format!("{marker} {}", t.sidebar_web_files))
+                    .clicked()
+                {
+                    self.chat_state.sidebar.tools_open = !tools_open;
+                }
+                if self.chat_state.sidebar.tools_open {
+                    egui::ScrollArea::vertical()
+                        .id_salt("chat_sidebar_tools")
+                        .auto_shrink([false, false])
+                        .max_height(tools_max)
+                        .show(ui, |ui| {
                                 ui.add(
                                     egui::TextEdit::singleline(
                                         &mut self.chat_state.sidebar.web_query,
@@ -330,11 +333,9 @@ impl UiApp {
                                     open_os_folder(&dir);
                                 }
                                     });
-                            });
+                        }
                     },
                 );
-            },
-        );
         // Popup de renommage : champ pleine largeur du popup, plus de
         // TextEdit 120px qui débordait de la sidebar.
         if self.chat_state.sidebar.rename_open {

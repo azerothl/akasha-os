@@ -149,6 +149,16 @@ fn default_thermal_policy() -> String {
 }
 
 impl ModeldConfig {
+    /// UI preferences take effect on the next load, without restarting modeld.
+    /// Missing/legacy/invalid preferences preserve the YAML configuration.
+    pub fn adaptive_planner_at(&self, home: &Path) -> bool {
+        std::fs::read_to_string(home.join("var/run/preferences.json"))
+            .ok()
+            .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+            .and_then(|v| v.get("adaptive_planner").and_then(|v| v.as_bool()))
+            .unwrap_or(self.adaptive_planner)
+    }
+
     pub fn load(path: impl AsRef<Path>) -> Result<Self, Box<dyn std::error::Error>> {
         Ok(serde_yaml::from_str(&std::fs::read_to_string(path)?)?)
     }
@@ -157,6 +167,29 @@ impl ModeldConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn adaptive_preference_is_reread_and_legacy_preserves_config() {
+        let root = std::env::temp_dir().join(format!(
+            "aos-adaptive-pref-{}-{}", std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        std::fs::create_dir_all(root.join("var/run")).unwrap();
+        let path = root.join("var/run/preferences.json");
+        let cfg: ModeldConfig = serde_yaml::from_str("adaptive_planner: false").unwrap();
+        assert!(!cfg.adaptive_planner_at(&root));
+        for (raw, expected) in [
+            (r#"{"adaptive_planner":true}"#, true),
+            (r#"{"adaptive_planner":false}"#, false),
+            (r#"{"inference_mode":"auto"}"#, false),
+            (r#"{"adaptive_planner":"true"}"#, false),
+            ("invalid", false),
+        ] {
+            std::fs::write(&path, raw).unwrap();
+            assert_eq!(cfg.adaptive_planner_at(&root), expected);
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn optimization_defaults_are_backward_compatible() {
