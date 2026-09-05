@@ -10,12 +10,31 @@ Write-Host "Installation / mise à jour vers $Prefix"
 New-Item -ItemType Directory -Force -Path $Prefix | Out-Null
 
 # Overlay programme uniquement — ne pas écraser var/ ni etc/ utilisateur.
+# Copy-Item -Recurse into an existing dest dir nests same-named folders
+# (share/modules/canvas.aospkg/canvas.aospkg). robocopy /E merges instead.
+function Overlay-Dir([string]$Src, [string]$Dst) {
+    New-Item -ItemType Directory -Force -Path $Dst | Out-Null
+    & robocopy $Src $Dst /E /NFL /NDL /NJH /NJS /NP /IS /IT | Out-Null
+    if ($LASTEXITCODE -ge 8) {
+        throw "robocopy failed $Src -> $Dst (exit $LASTEXITCODE)"
+    }
+    $global:LASTEXITCODE = 0
+}
+
+$modules = Join-Path $Prefix "share\modules"
+if (Test-Path $modules) {
+    Get-ChildItem $modules -Directory -Filter "*.aospkg" | ForEach-Object {
+        $nested = Join-Path $_.FullName $_.Name
+        if (Test-Path -LiteralPath $nested) {
+            Remove-Item -LiteralPath $nested -Recurse -Force
+        }
+    }
+}
+
 foreach ($dir in @("bin", "share", "data", "docs")) {
     $src = Join-Path $here $dir
     if (Test-Path $src) {
-        $dst = Join-Path $Prefix $dir
-        New-Item -ItemType Directory -Force -Path $dst | Out-Null
-        Copy-Item "$src\*" $dst -Recurse -Force
+        Overlay-Dir $src (Join-Path $Prefix $dir)
     }
 }
 foreach ($f in @("VERSION", "INSTALL.md", "TESTER.md", "FIRST-RUN.md", "README.txt",

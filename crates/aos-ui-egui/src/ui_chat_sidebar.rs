@@ -2,7 +2,7 @@
 
 use crate::cmd::Cmd;
 use crate::os_open::{aos_home, open_os_folder};
-use crate::{agent_panel, i18n, icons, overflow_scroll_h, theme, UiApp};
+use crate::{agent_panel, i18n, icons, theme, UiApp};
 use eframe::egui;
 
 impl UiApp {
@@ -75,123 +75,18 @@ impl UiApp {
                     });
                 }
 
-                // Footer is laid out bottom-up so session scroll height = remaining space
-                // after fixed header and fixed footer chrome.
-                ui.with_layout(
-                    egui::Layout::bottom_up(egui::Align::Min).with_cross_justify(true),
-                    |ui| {
+                // Un seul scroll vertical en pur top_down : l'ordre visuel est
+                // l'ordre de déclaration (liste, séparateur, outils), hauteurs
+                // naturelles, aucun chevauchement possible. L'ancien montage
+                // bottom_up + hauteur calculée peignait le footer sur la liste,
+                // la raccourcissait au minimum et inversait l'ordre perçu.
+                let list_h = ui.available_height().max(80.0);
+                egui::ScrollArea::vertical()
+                    .id_salt("chat_sidebar_scroll")
+                    .auto_shrink([false, false])
+                    .max_height(list_h)
+                    .show(ui, |ui| {
                         ui.set_width(side_w);
-                        ui.set_min_width(side_w - 16.0);
-                        // Outils Web/fichiers repliés par défaut : la liste des
-                        // sessions garde l'espace, les utilitaires restent à un clic.
-                        egui::CollapsingHeader::new(t.sidebar_web_files)
-                            .default_open(false)
-                            .show(ui, |ui| {
-                                ui.add(
-                                    egui::TextEdit::singleline(
-                                        &mut self.chat_state.sidebar.web_query,
-                                    )
-                                    .desired_width(side_w - 20.0)
-                                    .hint_text(t.sidebar_web_search_hint),
-                                );
-                                if ui.button(t.sidebar_search).clicked()
-                                    && !self.chat_state.sidebar.web_query.is_empty()
-                                {
-                                    let _ = self.cmd_tx.send(Cmd::WebSearch {
-                                        query: self.chat_state.sidebar.web_query.clone(),
-                                        engine: self.prefs.web_search_engine.clone(),
-                                    });
-                                }
-                                for hit in &self.chat_state.sidebar.web_results {
-                                    ui.small(format!("• {} — {}", hit.title, hit.url));
-                                }
-                                ui.add(
-                                    egui::TextEdit::singleline(
-                                        &mut self.chat_state.sidebar.fetch_url,
-                                    )
-                                    .desired_width(side_w - 20.0)
-                                    .hint_text(t.sidebar_url_hint),
-                                );
-                                ui.horizontal(|ui| {
-                                    if ui.button(t.sidebar_fetch_url).clicked()
-                                        && !self.chat_state.sidebar.fetch_url.is_empty()
-                                    {
-                                        let _ = self.cmd_tx.send(Cmd::NetFetch {
-                                            url: self.chat_state.sidebar.fetch_url.clone(),
-                                            max_bytes: self.prefs.web_fetch_max_bytes,
-                                        });
-                                    }
-                                    let t = i18n::strings(&self.prefs.language);
-                                    if ui.button(t.web_browse_btn).clicked()
-                                        && !self.chat_state.sidebar.fetch_url.is_empty()
-                                    {
-                                        let _ = self.cmd_tx.send(Cmd::WebBrowse {
-                                            url: self.chat_state.sidebar.fetch_url.clone(),
-                                            max_chars: self.prefs.web_browse_max_chars,
-                                        });
-                                    }
-                                });
-                                if !self.chat_state.sidebar.browse_preview.is_empty() {
-                                    ui.collapsing(t.sidebar_preview_page, |ui| {
-                                        ui.small(&self.chat_state.sidebar.browse_preview);
-                                    });
-                                }
-                                ui.horizontal(|ui| {
-                                    egui::ComboBox::from_id_salt("gen_fmt")
-                                        .selected_text(
-                                            &self.chat_state.sidebar.generated_format,
-                                        )
-                                        .show_ui(ui, |ui| {
-                                            for f in ["md", "txt", "json", "csv", "png", "pdf"] {
-                                                ui.selectable_value(
-                                                    &mut self.chat_state.sidebar.generated_format,
-                                                    f.into(),
-                                                    f,
-                                                );
-                                            }
-                                        });
-                                });
-                                ui.add(
-                                    egui::TextEdit::singleline(
-                                        &mut self.chat_state.sidebar.generated_path,
-                                    )
-                                    .desired_width(side_w - 20.0)
-                                    .hint_text(t.sidebar_gen_path_hint),
-                                );
-                                ui.add(
-                                    egui::TextEdit::multiline(
-                                        &mut self.chat_state.sidebar.generated_content,
-                                    )
-                                    .desired_width(side_w - 20.0)
-                                    .desired_rows(3)
-                                    .hint_text(t.sidebar_gen_content_hint),
-                                );
-                                if ui.button(t.sidebar_gen_file).clicked()
-                                    && !self.chat_state.sidebar.generated_path.is_empty()
-                                {
-                                    let _ = self.cmd_tx.send(Cmd::FilesGenerate {
-                                        format: self.chat_state.sidebar.generated_format.clone(),
-                                        path: self.chat_state.sidebar.generated_path.clone(),
-                                        content: self
-                                            .chat_state
-                                            .sidebar
-                                            .generated_content
-                                            .clone(),
-                                        title: Some("Akasha OS".into()),
-                                    });
-                                }
-                                if ui.button(t.sidebar_open_downloads).clicked() {
-                                    let dir = aos_home().join("var/storage/data/downloads");
-                                    open_os_folder(&dir);
-                                }
-                            });
-                        ui.separator();
-                        // Les actions Delete/Export/Renommage vivent dans la
-                        // barre sous + New et dans le menu contextuel des
-                        // lignes : plus de blocs intercalés avec la liste.
-                        let session_h = ui.available_height().max(80.0);
-                        overflow_scroll_h(ui, "chat_sessions", session_h, |ui| {
-                            ui.set_width(side_w);
                             let now = crate::ui_format::now_ms();
                             let show_archived = self.chat_state.sidebar.show_archived;
                             let sessions: Vec<_> = crate::session_nav::filter_and_sort(
@@ -318,9 +213,111 @@ impl UiApp {
                                     });
                                 }
                             }
-                        });
-                    },
-                );
+                        ui.separator();
+                        // Outils Web/fichiers repliés par défaut, APRÈS la liste :
+                        // sessions garde l'espace, les utilitaires restent à un clic.
+                        egui::CollapsingHeader::new(t.sidebar_web_files)
+                            .default_open(false)
+                            .show(ui, |ui| {
+                                ui.add(
+                                    egui::TextEdit::singleline(
+                                        &mut self.chat_state.sidebar.web_query,
+                                    )
+                                    .desired_width(side_w - 20.0)
+                                    .hint_text(t.sidebar_web_search_hint),
+                                );
+                                if ui.button(t.sidebar_search).clicked()
+                                    && !self.chat_state.sidebar.web_query.is_empty()
+                                {
+                                    let _ = self.cmd_tx.send(Cmd::WebSearch {
+                                        query: self.chat_state.sidebar.web_query.clone(),
+                                        engine: self.prefs.web_search_engine.clone(),
+                                    });
+                                }
+                                for hit in &self.chat_state.sidebar.web_results {
+                                    ui.small(format!("• {} — {}", hit.title, hit.url));
+                                }
+                                ui.add(
+                                    egui::TextEdit::singleline(
+                                        &mut self.chat_state.sidebar.fetch_url,
+                                    )
+                                    .desired_width(side_w - 20.0)
+                                    .hint_text(t.sidebar_url_hint),
+                                );
+                                ui.horizontal(|ui| {
+                                    if ui.button(t.sidebar_fetch_url).clicked()
+                                        && !self.chat_state.sidebar.fetch_url.is_empty()
+                                    {
+                                        let _ = self.cmd_tx.send(Cmd::NetFetch {
+                                            url: self.chat_state.sidebar.fetch_url.clone(),
+                                            max_bytes: self.prefs.web_fetch_max_bytes,
+                                        });
+                                    }
+                                    let t = i18n::strings(&self.prefs.language);
+                                    if ui.button(t.web_browse_btn).clicked()
+                                        && !self.chat_state.sidebar.fetch_url.is_empty()
+                                    {
+                                        let _ = self.cmd_tx.send(Cmd::WebBrowse {
+                                            url: self.chat_state.sidebar.fetch_url.clone(),
+                                            max_chars: self.prefs.web_browse_max_chars,
+                                        });
+                                    }
+                                });
+                                if !self.chat_state.sidebar.browse_preview.is_empty() {
+                                    ui.collapsing(t.sidebar_preview_page, |ui| {
+                                        ui.small(&self.chat_state.sidebar.browse_preview);
+                                    });
+                                }
+                                ui.horizontal(|ui| {
+                                    egui::ComboBox::from_id_salt("gen_fmt")
+                                        .selected_text(
+                                            &self.chat_state.sidebar.generated_format,
+                                        )
+                                        .show_ui(ui, |ui| {
+                                            for f in ["md", "txt", "json", "csv", "png", "pdf"] {
+                                                ui.selectable_value(
+                                                    &mut self.chat_state.sidebar.generated_format,
+                                                    f.into(),
+                                                    f,
+                                                );
+                                            }
+                                        });
+                                });
+                                ui.add(
+                                    egui::TextEdit::singleline(
+                                        &mut self.chat_state.sidebar.generated_path,
+                                    )
+                                    .desired_width(side_w - 20.0)
+                                    .hint_text(t.sidebar_gen_path_hint),
+                                );
+                                ui.add(
+                                    egui::TextEdit::multiline(
+                                        &mut self.chat_state.sidebar.generated_content,
+                                    )
+                                    .desired_width(side_w - 20.0)
+                                    .desired_rows(3)
+                                    .hint_text(t.sidebar_gen_content_hint),
+                                );
+                                if ui.button(t.sidebar_gen_file).clicked()
+                                    && !self.chat_state.sidebar.generated_path.is_empty()
+                                {
+                                    let _ = self.cmd_tx.send(Cmd::FilesGenerate {
+                                        format: self.chat_state.sidebar.generated_format.clone(),
+                                        path: self.chat_state.sidebar.generated_path.clone(),
+                                        content: self
+                                            .chat_state
+                                            .sidebar
+                                            .generated_content
+                                            .clone(),
+                                        title: Some("Akasha OS".into()),
+                                    });
+                                }
+                                if ui.button(t.sidebar_open_downloads).clicked() {
+                                    let dir = aos_home().join("var/storage/data/downloads");
+                                    open_os_folder(&dir);
+                                }
+                            });
+                    });
             },
         );
         // Popup de renommage : champ pleine largeur du popup, plus de

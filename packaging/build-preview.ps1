@@ -185,12 +185,25 @@ if (Test-Path (Join-Path $root "share\models\catalog-offerings.json")) {
     Copy-Item (Join-Path $root "share\models\catalog-offerings.json") "$OutDir\share\models\catalog-offerings.json" -Force
 }
 
+# Copy-Item -Recurse into an existing dest dir nests the source folder
+# (canvas.aospkg/canvas.aospkg). Replace the dest tree instead.
+function Copy-ReplaceDir([string]$Src, [string]$Dest) {
+    if (Test-Path -LiteralPath $Dest) {
+        Remove-Item -LiteralPath $Dest -Recurse -Force
+    }
+    $parent = Split-Path -Parent $Dest
+    if (-not (Test-Path -LiteralPath $parent)) {
+        New-Item -ItemType Directory -Force -Path $parent | Out-Null
+    }
+    Copy-Item -LiteralPath $Src -Destination $Dest -Recurse -Force
+}
+
 $notesShare = Join-Path $root "share\modules\notes.aospkg"
 $notes = Join-Path $root "modules\notes.aospkg"
 if (Test-Path $notesShare) {
-    Copy-Item $notesShare "$OutDir\share\modules\notes.aospkg" -Recurse -Force
+    Copy-ReplaceDir $notesShare (Join-Path $OutDir "share\modules\notes.aospkg")
 } elseif (Test-Path $notes) {
-    Copy-Item $notes "$OutDir\share\modules\notes.aospkg" -Recurse -Force
+    Copy-ReplaceDir $notes (Join-Path $OutDir "share\modules\notes.aospkg")
 } else {
     Write-Warning "notes.aospkg absent — lancer modules\build-notes.ps1"
 }
@@ -198,9 +211,9 @@ if (Test-Path $notesShare) {
 $tasksShare = Join-Path $root "share\modules\tasks.aospkg"
 $tasks = Join-Path $root "modules\tasks.aospkg"
 if (Test-Path $tasksShare) {
-    Copy-Item $tasksShare "$OutDir\share\modules\tasks.aospkg" -Recurse -Force
+    Copy-ReplaceDir $tasksShare (Join-Path $OutDir "share\modules\tasks.aospkg")
 } elseif (Test-Path $tasks) {
-    Copy-Item $tasks "$OutDir\share\modules\tasks.aospkg" -Recurse -Force
+    Copy-ReplaceDir $tasks (Join-Path $OutDir "share\modules\tasks.aospkg")
 } else {
     Write-Warning "tasks.aospkg absent — lancer modules\build-tasks.ps1"
 }
@@ -208,7 +221,7 @@ if (Test-Path $tasksShare) {
 $extrt = Join-Path $root "share\modules\ext-rt.aospkg"
 if (-not (Test-Path $extrt)) { $extrt = Join-Path $root "modules\ext-rt.aospkg" }
 if (Test-Path $extrt) {
-    Copy-Item $extrt "$OutDir\share\modules\ext-rt.aospkg" -Recurse -Force
+    Copy-ReplaceDir $extrt (Join-Path $OutDir "share\modules\ext-rt.aospkg")
 } else {
     Write-Warning "ext-rt.aospkg absent — lancer modules\build-ext-rt.ps1"
 }
@@ -216,9 +229,9 @@ if (Test-Path $extrt) {
 $canvasShare = Join-Path $root "share\modules\canvas.aospkg"
 $canvas = Join-Path $root "modules\canvas.aospkg"
 if (Test-Path $canvasShare) {
-    Copy-Item $canvasShare "$OutDir\share\modules\canvas.aospkg" -Recurse -Force
+    Copy-ReplaceDir $canvasShare (Join-Path $OutDir "share\modules\canvas.aospkg")
 } elseif (Test-Path $canvas) {
-    Copy-Item $canvas "$OutDir\share\modules\canvas.aospkg" -Recurse -Force
+    Copy-ReplaceDir $canvas (Join-Path $OutDir "share\modules\canvas.aospkg")
 } else {
     Write-Warning "canvas.aospkg absent — lancer modules\build-canvas.ps1"
 }
