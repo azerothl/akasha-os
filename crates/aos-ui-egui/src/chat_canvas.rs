@@ -303,6 +303,86 @@ fn maybe_snap_point(p: CanvasPoint, snap: bool) -> CanvasPoint {
     }
 }
 
+/// Commit du tracé à main levée en cours (crayon/gomme/courbe/silhouette).
+/// Même logique au relâché, au double-clic (courbe/silhouette en mode pointé)
+/// et au changement d'outil avec des ancres en attente : le commit utilise
+/// toujours l'outil qui a tracé, jamais le nouvel outil.
+fn commit_freehand_draft(state: &mut CanvasPanelState) -> Option<CanvasUiAction> {
+    match state.tool {
+        CanvasTool::Pen => {
+            if state.draft_points.len() >= 2 {
+                let (opacity, dash, _) = pen_style_fields(state);
+                Some(CanvasUiAction::Apply(CanvasOpBody::Stroke {
+                    points: std::mem::take(&mut state.draft_points),
+                    color: color_to_hex(state.color),
+                    width: state.width,
+                    opacity,
+                    dash,
+                }))
+            } else {
+                state.draft_points.clear();
+                None
+            }
+        }
+        CanvasTool::Eraser => {
+            if !state.draft_points.is_empty() {
+                Some(CanvasUiAction::Apply(CanvasOpBody::Erase {
+                    points: std::mem::take(&mut state.draft_points),
+                    width: state.width.max(0.03),
+                }))
+            } else {
+                None
+            }
+        }
+        CanvasTool::Spline => {
+            if state.draft_points.len() >= 2 {
+                let (opacity, dash, _) = pen_style_fields(state);
+                Some(CanvasUiAction::Apply(CanvasOpBody::Spline {
+                    points: std::mem::take(&mut state.draft_points),
+                    color: color_to_hex(state.color),
+                    width: state.width,
+                    opacity,
+                    dash,
+                }))
+            } else {
+                state.draft_points.clear();
+                None
+            }
+        }
+        CanvasTool::Path => {
+            if state.draft_points.len() >= 3 {
+                let (opacity, dash, gradient) = pen_style_fields(state);
+                Some(CanvasUiAction::Apply(CanvasOpBody::Path {
+                    points: std::mem::take(&mut state.draft_points),
+                    color: color_to_hex(state.color),
+                    width: state.width,
+                    fill: state.shape_fill,
+                    closed: true,
+                    opacity,
+                    dash,
+                    gradient,
+                }))
+            } else {
+                state.draft_points.clear();
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Le 2e clic d'un double-clic ajoute une ancre quasi-identique : la retirer
+/// avant de commiter pour ne pas créer de micro-segment.
+fn pop_near_duplicate_anchor(points: &mut Vec<CanvasPoint>) {
+    if points.len() >= 2 {
+        let n = points.len();
+        let (a, b) = (points[n - 2], points[n - 1]);
+        if (a.x - b.x).abs() + (a.y - b.y).abs() < 0.008 {
+            points.pop();
+        }
+    }
+}
+
 fn layer_is_visible(layers: &[CanvasLayer], layer_id: &str) -> bool {
     if layers.is_empty() {
         return true;
@@ -810,7 +890,14 @@ pub fn ui_canvas_toolbar(
             ),
         ] {
             if icons::toolbar_selectable(ui, state.tool == tool, icon, tip) {
-                state.tool = tool;
+                // Valide les ancres en attente avec l'ANCIEN outil plutôt que
+                // de les commiter sous le nouvel outil au prochain relâché.
+                if state.tool != tool {
+                    if let Some(commit) = commit_freehand_draft(state) {
+                        action = Some(commit);
+                    }
+                    state.tool = tool;
+                }
             }
         }
         let mut rgba = [
@@ -1469,6 +1556,62 @@ pub fn ui_canvas_surface(
         }
     }
 
+    // Mode pointé façon bézier (courbe/silhouette) : chaque clic pose une
+    // ancre, la courbe lissée est prévisualisée, double-clic pour terminer,
+    // clic droit pour annuler. Le tracé glissé reste possible en complément.
+    // `double_clicked()` est testé en premier : sur la frame du 2e relâché,
+    // `clicked()` est aussi vrai et ne doit pas ajouter d'ancre parasite.
+    if matches!(state.tool, CanvasTool::Spline | CanvasTool::Path) {
+        if response.double_clicked() {
+            pop_near_duplicate_anchor(&mut state.draft_points);
+            action = commit_freehand_draft(state);
+            ui.ctx().request_repaint();
+        } else if response.clicked() {
+            if let Some(pos) = response.interact_pointer_pos() {
+                if rect.contains(pos) {
+                    let p = maybe_snap_point(to_norm(rect, pos), state.snap);
+                    if state
+                        .draft_points
+                        .last()
+                        .map(|q| (q.x - p.x).abs() + (q.y - p.y).abs() > 0.002)
+                        .unwrap_or(true)
+                    {
+                        state.draft_points.push(p);
+                        ui.ctx().request_repaint();
+                    }
+                }
+            }
+        } else if response.secondary_clicked() && !state.draft_points.is_empty() {
+            state.draft_points.clear();
+            ui.ctx().request_repaint();
+        }
+    }
+
+    // Élastique + ancres du mode pointé : segment live vers le curseur.
+    if matches!(state.tool, CanvasTool::Spline | CanvasTool::Path)
+        && !state.draft_points.is_empty()
+    {
+        if let Some(cur) = response.hover_pos() {
+            if rect.contains(cur) {
+                let anchors: Vec<Pos2> = state
+                    .draft_points
+                    .iter()
+                    .map(|p| to_screen(rect, *p))
+                    .collect();
+                for a in &anchors {
+                    painter.circle_filled(*a, 3.0, state.color);
+                }
+                let thin = Stroke::new(1.0_f32, state.color);
+                if let Some(last) = anchors.last() {
+                    painter.line_segment([*last, cur], thin);
+                    if state.tool == CanvasTool::Path && anchors.len() >= 2 {
+                        painter.line_segment([cur, anchors[0]], thin);
+                    }
+                }
+            }
+        }
+    }
+
     if response.drag_stopped() && action.is_none() {
         let pointer_in_board = response
             .interact_pointer_pos()
@@ -1484,41 +1627,11 @@ pub fn ui_canvas_surface(
                     state.drag_origin = None;
                     state.drag_current = None;
                 }
-                CanvasTool::Pen => {
-                    if state.draft_points.len() >= 2 {
-                        let (opacity, dash, _) = pen_style_fields(state);
-                        action = Some(CanvasUiAction::Apply(CanvasOpBody::Stroke {
-                            points: std::mem::take(&mut state.draft_points),
-                            color: color_to_hex(state.color),
-                            width: state.width,
-                            opacity,
-                            dash,
-                        }));
-                    } else {
-                        state.draft_points.clear();
-                    }
-                }
-                CanvasTool::Eraser => {
-                    if !state.draft_points.is_empty() {
-                        action = Some(CanvasUiAction::Apply(CanvasOpBody::Erase {
-                            points: std::mem::take(&mut state.draft_points),
-                            width: state.width.max(0.03),
-                        }));
-                    }
-                }
-                CanvasTool::Spline => {
-                    if state.draft_points.len() >= 2 {
-                        let (opacity, dash, _) = pen_style_fields(state);
-                        action = Some(CanvasUiAction::Apply(CanvasOpBody::Spline {
-                            points: std::mem::take(&mut state.draft_points),
-                            color: color_to_hex(state.color),
-                            width: state.width,
-                            opacity,
-                            dash,
-                        }));
-                    } else {
-                        state.draft_points.clear();
-                    }
+                CanvasTool::Pen
+                | CanvasTool::Eraser
+                | CanvasTool::Spline
+                | CanvasTool::Path => {
+                    action = commit_freehand_draft(state);
                 }
                 CanvasTool::Line => {
                     if let (Some(a), Some(b)) =
@@ -1581,23 +1694,6 @@ pub fn ui_canvas_surface(
                             dash,
                             gradient,
                         }));
-                    }
-                }
-                CanvasTool::Path => {
-                    if state.draft_points.len() >= 3 {
-                        let (opacity, dash, gradient) = pen_style_fields(state);
-                        action = Some(CanvasUiAction::Apply(CanvasOpBody::Path {
-                            points: std::mem::take(&mut state.draft_points),
-                            color: color_to_hex(state.color),
-                            width: state.width,
-                            fill: state.shape_fill,
-                            closed: true,
-                            opacity,
-                            dash,
-                            gradient,
-                        }));
-                    } else {
-                        state.draft_points.clear();
                     }
                 }
                 CanvasTool::Select => {
@@ -1938,6 +2034,50 @@ mod routing_tests {
         assert_eq!(TOOLBAR_CTRL_H, crate::icons::TOOLBAR_ICON_SZ);
         assert!(TOOLBAR_ROW_H >= TOOLBAR_CTRL_H + 2.0);
         assert!(TOOLBAR_SLIDER_W >= 96.0, "slider must fit its value");
+    }
+
+    #[test]
+    fn spline_commit_needs_two_anchors() {
+        let mut state = CanvasPanelState::default();
+        state.tool = CanvasTool::Spline;
+        state.draft_points = vec![CanvasPoint { x: 0.1, y: 0.1 }];
+        assert!(commit_freehand_draft(&mut state).is_none());
+        assert!(state.draft_points.is_empty());
+        state.draft_points = vec![
+            CanvasPoint { x: 0.1, y: 0.1 },
+            CanvasPoint { x: 0.5, y: 0.5 },
+        ];
+        let action = commit_freehand_draft(&mut state).expect("2 anchors commit");
+        assert!(matches!(
+            action,
+            CanvasUiAction::Apply(CanvasOpBody::Spline { .. })
+        ));
+        assert!(state.draft_points.is_empty());
+    }
+
+    #[test]
+    fn path_commit_needs_three_anchors() {
+        let mut state = CanvasPanelState::default();
+        state.tool = CanvasTool::Path;
+        state.draft_points = vec![
+            CanvasPoint { x: 0.1, y: 0.1 },
+            CanvasPoint { x: 0.5, y: 0.5 },
+        ];
+        assert!(commit_freehand_draft(&mut state).is_none());
+        assert!(state.draft_points.is_empty());
+    }
+
+    #[test]
+    fn double_click_cleans_near_duplicate_anchor() {
+        let mut pts = vec![
+            CanvasPoint { x: 0.1, y: 0.1 },
+            CanvasPoint { x: 0.5, y: 0.5 },
+            CanvasPoint { x: 0.501, y: 0.501 },
+        ];
+        pop_near_duplicate_anchor(&mut pts);
+        assert_eq!(pts.len(), 2);
+        pop_near_duplicate_anchor(&mut pts);
+        assert_eq!(pts.len(), 2, "distant anchors are kept");
     }
 
     #[test]
