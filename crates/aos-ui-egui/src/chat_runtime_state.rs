@@ -12,6 +12,8 @@ pub(crate) struct ChatRuntimeState {
     pub(crate) outgoing_turn: Option<ChatRetryTurn>,
     /// Last load-failed turn shown with Retry chrome.
     pub(crate) load_fail_retry: Option<ChatRetryTurn>,
+    /// Unix ms when the current pending/streaming turn started.
+    pub(crate) started_ms: u64,
 }
 
 impl ChatRuntimeState {
@@ -20,6 +22,7 @@ impl ChatRuntimeState {
         self.pending = true;
         self.inference_id = None;
         self.room_turn_text = room_turn_text;
+        self.started_ms = crate::now_ms();
     }
 
     pub(crate) fn finish_turn(&mut self) {
@@ -28,6 +31,7 @@ impl ChatRuntimeState {
         self.inference_id = None;
         self.room_turn_text = None;
         self.outgoing_turn = None;
+        self.started_ms = 0;
     }
 }
 
@@ -44,6 +48,7 @@ mod tests {
             room_turn_text: None,
             outgoing_turn: None,
             load_fail_retry: None,
+            started_ms: 0,
         };
 
         state.begin_turn(Some("question".into()));
@@ -51,6 +56,7 @@ mod tests {
         assert!(state.streaming.is_empty());
         assert_eq!(state.inference_id, None);
         assert_eq!(state.room_turn_text.as_deref(), Some("question"));
+        assert!(state.started_ms > 0);
 
         state.inference_id = Some(7);
         state.streaming = "answer".into();
@@ -59,5 +65,6 @@ mod tests {
         assert!(state.streaming.is_empty());
         assert_eq!(state.inference_id, None);
         assert_eq!(state.room_turn_text, None);
+        assert_eq!(state.started_ms, 0);
     }
 }

@@ -57,6 +57,27 @@ pub fn fmt_ms(ms: u64) -> String {
     }
 }
 
+pub fn step_header(rec: &AgentStepRecord, tz_offset_min: i32) -> String {
+    let mut parts = vec![format!("Tour {}", rec.step)];
+    if rec.ts_ms > 0 {
+        parts.push(crate::ui_format::format_local_time_hms(
+            rec.ts_ms,
+            tz_offset_min,
+        ));
+    }
+    if rec.duration_ms > 0 {
+        parts.push(fmt_ms(rec.duration_ms));
+    }
+    if !rec.action.is_empty() {
+        parts.push(rec.action.clone());
+    }
+    let toks = rec.prompt_tokens + rec.generated_tokens;
+    if toks > 0 {
+        parts.push(format!("{toks} tok"));
+    }
+    parts.join(" · ")
+}
+
 pub fn truncate(s: &str, n: usize) -> String {
     if s.chars().count() > n {
         format!("{}…", s.chars().take(n).collect::<String>())
@@ -964,8 +985,15 @@ pub fn draw_agent_detail(
                 ui.colored_label(color, complexity);
             }
             if let Some(t) = trace {
-                ui.separator();
-                ui.label(fmt_ms(t.total_duration_ms));
+                let total = if t.total_duration_ms > 0 {
+                    t.total_duration_ms
+                } else {
+                    t.steps.iter().map(|s| s.duration_ms).sum()
+                };
+                if total > 0 {
+                    ui.separator();
+                    ui.label(fmt_ms(total));
+                }
             }
         });
 
@@ -1231,20 +1259,27 @@ fn draw_step(
     t: &crate::i18n::UiStrings,
     actions: &mut PanelActions,
 ) {
-    let header = format!(
-        "Tour {} · {} · {} · {} tok",
-        rec.step,
-        fmt_ms(rec.duration_ms),
-        rec.action,
-        rec.prompt_tokens + rec.generated_tokens,
-    );
+    let header = step_header(rec, crate::local_tz_offset_minutes());
     egui::CollapsingHeader::new(header)
         .id_salt(format!("step-{agent_id}-{}", rec.step))
         .default_open(default_open)
         .show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.small(format!("inférence {}", fmt_ms(rec.infer_ms)));
-                ui.small(format!("outil {}", fmt_ms(rec.tool_ms)));
+                if rec.ts_ms > 0 {
+                    ui.small(crate::ui_format::format_local_datetime(
+                        rec.ts_ms,
+                        crate::local_tz_offset_minutes(),
+                    ));
+                }
+                if rec.duration_ms > 0 {
+                    ui.small(fmt_ms(rec.duration_ms));
+                }
+                if rec.infer_ms > 0 {
+                    ui.small(format!("inférence {}", fmt_ms(rec.infer_ms)));
+                }
+                if rec.tool_ms > 0 {
+                    ui.small(format!("outil {}", fmt_ms(rec.tool_ms)));
+                }
                 if rec.tok_s > 0.0 {
                     ui.small(format!("{:.1} tok/s", rec.tok_s));
                 }
@@ -1488,6 +1523,25 @@ fn draw_step(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn step_header_includes_clock_duration_and_tokens() {
+        let rec = AgentStepRecord {
+            step: 3,
+            action: "web.search".into(),
+            ts_ms: 1_704_067_200_000,
+            duration_ms: 1200,
+            prompt_tokens: 80,
+            generated_tokens: 40,
+            ..AgentStepRecord::default()
+        };
+        let header = step_header(&rec, 0);
+        assert!(header.contains("Tour 3"), "{header}");
+        assert!(header.contains("00:00:00"), "{header}");
+        assert!(header.contains("1.2 s"), "{header}");
+        assert!(header.contains("web.search"), "{header}");
+        assert!(header.contains("120 tok"), "{header}");
+    }
 
     #[test]
     fn formats_notes_create_json_as_markdown() {

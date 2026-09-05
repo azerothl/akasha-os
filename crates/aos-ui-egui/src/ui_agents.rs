@@ -719,6 +719,7 @@ impl UiApp {
                                             speaker_id: None,
                                             speaker_name: None,
                                             thinking: None,
+                                            ..Default::default()
                                         });
                                     }
                                 }

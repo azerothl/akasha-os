@@ -15,6 +15,7 @@ pub(crate) struct SessionInflight {
     pub pending: bool,
     pub streaming: String,
     pub inference_id: Option<u64>,
+    pub started_ms: u64,
 }
 
 #[derive(Debug, Default)]
@@ -29,6 +30,7 @@ impl SessionChatState {
         inf.pending = true;
         inf.streaming.clear();
         inf.inference_id = None;
+        inf.started_ms = crate::now_ms();
     }
 
     pub fn push_delta(&mut self, session_id: &str, text: &str) {
@@ -122,9 +124,19 @@ pub(crate) fn on_done(
     chat_pending: &mut bool,
     chat_inference_id: &mut Option<u64>,
 ) {
+    let started_ms = state
+        .inflight(session_id)
+        .map(|inf| inf.started_ms)
+        .unwrap_or(0);
     state.finish_turn(session_id);
     if active_session == Some(session_id) {
         if !text.is_empty() {
+            let ts_ms = crate::now_ms();
+            let duration_ms = if started_ms > 0 && ts_ms >= started_ms {
+                ts_ms - started_ms
+            } else {
+                0
+            };
             chat.push(ChatLine {
                 role: "assistant".into(),
                 text: text.to_string(),
@@ -132,6 +144,8 @@ pub(crate) fn on_done(
                 speaker_id: None,
                 speaker_name: None,
                 thinking: None,
+                ts_ms,
+                duration_ms,
             });
         }
         streaming.clear();
@@ -182,6 +196,23 @@ pub(crate) fn on_chat_cancelled(
         streaming.clear();
     }
     on_active
+}
+
+/// Fill assistant `duration_ms` from the previous timestamped message when missing.
+pub(crate) fn infer_reply_durations(chat: &mut [ChatLine]) {
+    let mut prev_ts = 0u64;
+    for line in chat.iter_mut() {
+        if line.duration_ms == 0
+            && line.ts_ms > prev_ts
+            && prev_ts > 0
+            && line.role == "assistant"
+        {
+            line.duration_ms = line.ts_ms - prev_ts;
+        }
+        if line.ts_ms > 0 {
+            prev_ts = line.ts_ms;
+        }
+    }
 }
 
 #[cfg(test)]
@@ -296,6 +327,7 @@ mod tests {
         assert_eq!(chat.len(), 2);
         assert_eq!(chat[1].role, "assistant");
         assert_eq!(chat[1].text, "reply");
+        assert!(chat[1].ts_ms > 0);
         assert!(!state.is_unread(session_a()));
         assert!(!pending);
     }
@@ -436,5 +468,26 @@ mod tests {
         );
         assert!(pending);
         assert_eq!(streaming, "hidden");
+    }
+
+    #[test]
+    fn infer_reply_durations_from_previous_stamp() {
+        let mut chat = vec![
+            ChatLine {
+                role: "user".into(),
+                text: "q".into(),
+                ts_ms: 1_000,
+                ..Default::default()
+            },
+            ChatLine {
+                role: "assistant".into(),
+                text: "a".into(),
+                ts_ms: 4_200,
+                ..Default::default()
+            },
+        ];
+        infer_reply_durations(&mut chat);
+        assert_eq!(chat[1].duration_ms, 3_200);
+        assert_eq!(chat[0].duration_ms, 0);
     }
 }

@@ -138,6 +138,7 @@ impl UiApp {
             speaker_id: None,
             speaker_name: None,
             thinking: None,
+            ..Default::default()
         });
         self.chat_state.composer.clear_attachments();
         let room_content =
@@ -474,6 +475,7 @@ impl UiApp {
                         speaker_id: None,
                         speaker_name: None,
                         thinking: None,
+                        ..Default::default()
                     });
                     self.chat_state.view.deep_plan_open.insert(idx);
                     let _ = self.cmd_tx.send(Cmd::SessionAppend {

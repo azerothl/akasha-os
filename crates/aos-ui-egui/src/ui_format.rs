@@ -12,11 +12,35 @@ pub(crate) fn chrono_like_stamp() -> String {
 }
 
 pub(crate) fn format_local_time_hm(ts_ms: u64, offset_minutes: i32) -> String {
+    let (hours, mins, _) = local_hms(ts_ms, offset_minutes);
+    format!("{hours:02}:{mins:02}")
+}
+
+pub(crate) fn format_local_time_hms(ts_ms: u64, offset_minutes: i32) -> String {
+    let (hours, mins, secs) = local_hms(ts_ms, offset_minutes);
+    format!("{hours:02}:{mins:02}:{secs:02}")
+}
+
+fn local_hms(ts_ms: u64, offset_minutes: i32) -> (i64, i64, i64) {
     let local_ms = ts_ms as i64 + (offset_minutes as i64) * 60_000;
     let secs = local_ms.div_euclid(1000);
-    let mins = (secs / 60) % 60;
     let hours = (secs / 3600) % 24;
-    format!("{hours:02}:{mins:02}")
+    let mins = (secs / 60) % 60;
+    let sec = secs % 60;
+    (hours, mins, sec)
+}
+
+/// Clock for a chat bubble: `HH:MM:SS`, or `dd/mm/yyyy HH:MM:SS` when not today.
+pub(crate) fn format_chat_stamp(ts_ms: u64, now_ms: u64, offset_minutes: i32) -> String {
+    if ts_ms == 0 {
+        return String::new();
+    }
+    let time = format_local_time_hms(ts_ms, offset_minutes);
+    if local_day_index(ts_ms, offset_minutes) == local_day_index(now_ms, offset_minutes) {
+        time
+    } else {
+        format!("{} {time}", format_local_date_short(ts_ms, offset_minutes))
+    }
 }
 
 pub(crate) fn local_tz_offset_minutes() -> i32 {
@@ -76,6 +100,17 @@ pub(crate) fn format_local_date_short(ts_ms: u64, tz_offset_min: i32) -> String 
     let days = local_day_index(ts_ms, tz_offset_min);
     let (y, m, d) = civil_from_day_index(days);
     format!("{d:02}/{m:02}/{y}")
+}
+
+pub(crate) fn format_local_datetime(ts_ms: u64, offset_minutes: i32) -> String {
+    if ts_ms == 0 {
+        return String::new();
+    }
+    format!(
+        "{} {}",
+        format_local_date_short(ts_ms, offset_minutes),
+        format_local_time_hms(ts_ms, offset_minutes)
+    )
 }
 
 pub(crate) fn format_schedule_next_label(
@@ -194,5 +229,40 @@ pub(crate) fn format_model_infer_line(mm: &ModelMetrics, t: &UiStrings) -> Strin
             }
         }
         line
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const UTC_2024_01_01: u64 = 1_704_067_200_000;
+
+    #[test]
+    fn chat_stamp_same_day_is_hms_only() {
+        let now = UTC_2024_01_01 + 3_600_000;
+        assert_eq!(format_chat_stamp(UTC_2024_01_01, now, 0), "00:00:00");
+    }
+
+    #[test]
+    fn chat_stamp_other_day_includes_date() {
+        let now = UTC_2024_01_01 + 86_400_000;
+        assert_eq!(
+            format_chat_stamp(UTC_2024_01_01, now, 0),
+            "01/01/2024 00:00:00"
+        );
+    }
+
+    #[test]
+    fn local_datetime_joins_date_and_clock() {
+        assert_eq!(
+            format_local_datetime(UTC_2024_01_01, 0),
+            "01/01/2024 00:00:00"
+        );
+        assert_eq!(
+            format_local_datetime(UTC_2024_01_01, 60),
+            "01/01/2024 01:00:00"
+        );
+        assert!(format_local_datetime(0, 0).is_empty());
     }
 }

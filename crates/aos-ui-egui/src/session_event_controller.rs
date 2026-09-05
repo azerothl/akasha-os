@@ -59,10 +59,12 @@ pub(crate) fn on_loaded(app: &mut UiApp, id: String, messages: Vec<ChatLine>, me
             ));
         }
         chat.extend(messages);
+        crate::session_chat::infer_reply_durations(&mut chat);
         crate::deep_plan_ui::collapse_duplicate_deep_plans(&mut chat);
         app.chat = chat;
     } else {
         let mut chat = messages;
+        crate::session_chat::infer_reply_durations(&mut chat);
         crate::deep_plan_ui::collapse_duplicate_deep_plans(&mut chat);
         app.chat = chat;
     }

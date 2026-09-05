@@ -223,6 +223,7 @@ pub(crate) fn upsert_deep_plan_line(
             speaker_id: None,
             speaker_name: None,
             thinking: None,
+            ..Default::default()
         });
         chat.len() - 1
     }
@@ -391,6 +392,7 @@ mod tests {
                 speaker_id: None,
                 speaker_name: None,
                 thinking: None,
+                ..Default::default()
             },
             ChatLine {
                 role: "system".into(),
@@ -407,6 +409,7 @@ mod tests {
                 speaker_id: None,
                 speaker_name: None,
                 thinking: None,
+                ..Default::default()
             },
         ];
         collapse_duplicate_deep_plans(&mut chat);

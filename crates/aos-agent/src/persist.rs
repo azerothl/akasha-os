@@ -191,6 +191,17 @@ pub fn export_trace_markdown(
     if let Some(goal) = directive {
         out.push_str(&format!("_{goal}_\n\n"));
     }
+    let total_ms = if trace.total_duration_ms > 0 {
+        trace.total_duration_ms
+    } else {
+        trace.steps.iter().map(|s| s.duration_ms).sum()
+    };
+    if total_ms > 0 {
+        out.push_str(&format!(
+            "_Total duration: {}_\n\n",
+            format_duration_ms(total_ms)
+        ));
+    }
     if let Some(reason) = trace
         .fail_reason
         .as_deref()
@@ -214,6 +225,22 @@ pub fn export_trace_markdown(
 
     for rec in &trace.steps {
         out.push_str(&format!("## Step {}\n\n", rec.step));
+        let mut meta: Vec<String> = Vec::new();
+        if let Some(when) = format_unix_stamp(rec.ts_ms) {
+            meta.push(when);
+        }
+        if rec.duration_ms > 0 {
+            meta.push(format_duration_ms(rec.duration_ms));
+        }
+        if rec.infer_ms > 0 {
+            meta.push(format!("infer {}", format_duration_ms(rec.infer_ms)));
+        }
+        if rec.tool_ms > 0 {
+            meta.push(format!("tool {}", format_duration_ms(rec.tool_ms)));
+        }
+        if !meta.is_empty() {
+            out.push_str(&format!("_{}_\n\n", meta.join(" · ")));
+        }
         if let Some(task) = rec.current_task.as_deref().filter(|s| !s.is_empty()) {
             out.push_str(&format!("_Task: {task}_\n\n"));
         }
@@ -291,6 +318,44 @@ fn export_step_args(args: &serde_json::Value) -> Vec<String> {
         }
     }
     lines
+}
+
+fn format_duration_ms(ms: u64) -> String {
+    if ms < 1000 {
+        format!("{ms} ms")
+    } else if ms < 60_000 {
+        format!("{:.1} s", ms as f64 / 1000.0)
+    } else {
+        format!("{} min {:02} s", ms / 60_000, (ms % 60_000) / 1000)
+    }
+}
+
+fn format_unix_stamp(ts_ms: u64) -> Option<String> {
+    if ts_ms == 0 {
+        return None;
+    }
+    let secs = (ts_ms / 1000) as i64;
+    let days = secs.div_euclid(86_400);
+    let tod = secs.rem_euclid(86_400) as u64;
+    let h = tod / 3600;
+    let m = (tod % 3600) / 60;
+    let s = tod % 60;
+    let (y, mo, d) = civil_from_unix_days(days);
+    Some(format!("{y:04}-{mo:02}-{d:02} {h:02}:{m:02}:{s:02} UTC"))
+}
+
+fn civil_from_unix_days(days: i64) -> (i32, u32, u32) {
+    let z = days + 719468;
+    let era = if z >= 0 { z / 146097 } else { (z - 146096) / 146097 };
+    let doe = z - era * 146097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = (yoe + era * 400) as i32;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    let y = if mp < 10 { y } else { y + 1 };
+    (y, month, d)
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
@@ -527,6 +592,10 @@ mod tests {
                 tool_result: "ok".into(),
                 child_id: Some("agent-8".into()),
                 fail_reason: None,
+                ts_ms: 1_704_067_200_000,
+                duration_ms: 1500,
+                infer_ms: 800,
+                tool_ms: 700,
                 ..AgentStepRecord::default()
             }],
             ..AgentTrace::default()
@@ -569,6 +638,11 @@ mod tests {
         assert!(md.contains("### Tool result"));
         assert!(md.contains("### Child agent"));
         assert!(md.contains("`agent-8`"));
+        assert!(md.contains("2024-01-01 00:00:00 UTC"));
+        assert!(md.contains("_Total duration: 1.5 s_"));
+        assert!(md.contains("1.5 s"));
+        assert!(md.contains("infer 800 ms"));
+        assert!(md.contains("tool 700 ms"));
 
         let overflow = "le prompt ne tient pas dans le contexte (prompt=8749 + réserve_gen=520 = 9269 tokens > ctx=9216)";
         let trace_overflow = AgentTrace {

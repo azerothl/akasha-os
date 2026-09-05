@@ -92,5 +92,6 @@ pub(crate) fn on_canvas_exported(app: &mut UiApp, path: String, session_id: Stri
         speaker_id: None,
         speaker_name: None,
         thinking: None,
+        ..Default::default()
     });
 }

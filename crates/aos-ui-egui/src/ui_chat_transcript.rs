@@ -5,6 +5,7 @@ use crate::chat_bubble::{
     chat_role_label, ChatBubbleKind,
 };
 use crate::cmd::Cmd;
+use crate::ui_format::{format_chat_stamp, format_local_date_short, local_day_index};
 use crate::{
     agent_act_phrase, agent_canvas_session_ops, agent_panel, chat_media, chat_room, i18n,
     local_tz_offset_minutes, now_ms, research_choice, research_document, schedule_card,
@@ -95,6 +96,7 @@ impl UiApp {
                 let tz_offset = local_tz_offset_minutes();
                 let chat_now = now_ms();
                 let reply_id = self.blocked_ask_agent().map(|a| a.agent_id.clone());
+                let mut last_day: Option<i64> = None;
                 for i in 0..n {
                     let role = self.chat[i].role.clone();
                     let mut text = self.chat[i].text.clone();
@@ -102,6 +104,23 @@ impl UiApp {
                     let speaker_id = self.chat[i].speaker_id.clone();
                     let speaker_name = self.chat[i].speaker_name.clone();
                     let thinking = self.chat[i].thinking.clone();
+                    let ts_ms = self.chat[i].ts_ms;
+                    let duration_ms = self.chat[i].duration_ms;
+                    if ts_ms > 0 {
+                        let day = local_day_index(ts_ms, tz_offset);
+                        if last_day != Some(day) {
+                            ui.add_space(8.0);
+                            ui.vertical_centered(|ui| {
+                                ui.weak(
+                                    egui::RichText::new(format_local_date_short(ts_ms, tz_offset))
+                                        .small()
+                                        .italics(),
+                                );
+                            });
+                            ui.add_space(4.0);
+                            last_day = Some(day);
+                        }
+                    }
                     let is_completion = attachments.iter().any(|a| {
                         matches!(
                             a,
@@ -166,6 +185,21 @@ impl UiApp {
                                 role_color,
                                 egui::RichText::new(&shown_role).strong().small(),
                             );
+                            if ts_ms > 0 {
+                                ui.weak(
+                                    egui::RichText::new(format_chat_stamp(
+                                        ts_ms, chat_now, tz_offset,
+                                    ))
+                                    .small(),
+                                );
+                            }
+                            if duration_ms > 0
+                                && (role == "assistant" || kind == ChatBubbleKind::RoomSpeaker)
+                            {
+                                ui.weak(
+                                    egui::RichText::new(agent_panel::fmt_ms(duration_ms)).small(),
+                                );
+                            }
                             if ui.small_button(t.btn_copy).clicked() {
                                 ui.ctx().copy_text(text.clone());
                                 self.status = t.copied.into();
@@ -491,10 +525,22 @@ impl UiApp {
                     let (_, _, role_color) =
                         chat_bubble_colors(ChatBubbleKind::Assistant, ui.visuals().dark_mode);
                     chat_message_frame(ui, ChatBubbleKind::Assistant, None, |ui| {
-                        ui.colored_label(
-                            role_color,
-                            egui::RichText::new(t.chat_assistant).strong().small(),
-                        );
+                        ui.horizontal(|ui| {
+                            ui.colored_label(
+                                role_color,
+                                egui::RichText::new(t.chat_assistant).strong().small(),
+                            );
+                            let started = self.chat_state.runtime.started_ms;
+                            if started > 0 {
+                                ui.weak(
+                                    egui::RichText::new(agent_panel::fmt_ms(
+                                        chat_now.saturating_sub(started),
+                                    ))
+                                    .small(),
+                                );
+                                ui.ctx().request_repaint();
+                            }
+                        });
                         let streaming = agent_panel::format_chat_streaming_preview(
                             &self.chat_state.runtime.streaming,
                         );
@@ -523,10 +569,22 @@ impl UiApp {
                         t.chat_assistant.to_string()
                     };
                     chat_message_frame(ui, ChatBubbleKind::Assistant, None, |ui| {
-                        ui.colored_label(
-                            role_color,
-                            egui::RichText::new(&thinking).strong().small(),
-                        );
+                        ui.horizontal(|ui| {
+                            ui.colored_label(
+                                role_color,
+                                egui::RichText::new(&thinking).strong().small(),
+                            );
+                            let started = self.chat_state.runtime.started_ms;
+                            if started > 0 {
+                                ui.weak(
+                                    egui::RichText::new(agent_panel::fmt_ms(
+                                        chat_now.saturating_sub(started),
+                                    ))
+                                    .small(),
+                                );
+                                ui.ctx().request_repaint();
+                            }
+                        });
                         ui.weak("…");
                     });
                 }

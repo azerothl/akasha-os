@@ -120,6 +120,7 @@ pub(crate) fn on_media_ok(app: &mut UiApp, event: MediaOkEvent) {
         speaker_id: None,
         speaker_name: None,
         thinking: None,
+        ..Default::default()
     });
     if let Some(sid) = app.chat_state.active_session.clone() {
         let _ = app.cmd_tx.send(crate::cmd::Cmd::SessionAppend {

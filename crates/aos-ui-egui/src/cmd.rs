@@ -727,6 +727,23 @@ pub(crate) struct ChatLine {
     pub(crate) speaker_id: Option<String>,
     pub(crate) speaker_name: Option<String>,
     pub(crate) thinking: Option<String>,
+    pub(crate) ts_ms: u64,
+    pub(crate) duration_ms: u64,
+}
+
+impl Default for ChatLine {
+    fn default() -> Self {
+        Self {
+            role: String::new(),
+            text: String::new(),
+            attachments: Vec::new(),
+            speaker_id: None,
+            speaker_name: None,
+            thinking: None,
+            ts_ms: now_epoch_ms(),
+            duration_ms: 0,
+        }
+    }
 }
 
 impl ChatLine {
@@ -734,12 +751,17 @@ impl ChatLine {
         Self {
             role: role.into(),
             text: text.into(),
-            attachments: Vec::new(),
-            speaker_id: None,
-            speaker_name: None,
-            thinking: None,
+            ts_ms: now_epoch_ms(),
+            ..Self::default()
         }
     }
+}
+
+fn now_epoch_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 #[derive(Debug, Clone)]

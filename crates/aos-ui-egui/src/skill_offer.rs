@@ -157,6 +157,7 @@ mod tests {
             speaker_id: None,
             speaker_name: None,
             thinking: None,
+            ..Default::default()
         }];
         reconcile_pending_cards(&mut chat, None);
         assert!(chat.is_empty());
@@ -176,6 +177,7 @@ mod tests {
             speaker_id: None,
             speaker_name: None,
             thinking: None,
+            ..Default::default()
         };
         let mut chat = vec![offer("pat-current", "pending"), offer("pat-old", "created")];
         reconcile_pending_cards(&mut chat, Some("pat-current"));

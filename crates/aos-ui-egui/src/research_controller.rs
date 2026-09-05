@@ -62,6 +62,7 @@ impl UiApp {
             speaker_id: None,
             speaker_name: None,
             thinking: None,
+            ..Default::default()
         });
         let _ = self.cmd_tx.send(Cmd::SessionAppend {
             session_id: session_id.to_string(),
@@ -86,6 +87,7 @@ impl UiApp {
             speaker_id: None,
             speaker_name: None,
             thinking: None,
+            ..Default::default()
         });
         let _ = self.cmd_tx.send(Cmd::SessionAppend {
             session_id: session_id.to_string(),
@@ -137,6 +139,7 @@ impl UiApp {
             speaker_id: None,
             speaker_name: None,
             thinking: None,
+            ..Default::default()
         });
     }
 
@@ -165,6 +168,7 @@ impl UiApp {
                 speaker_id: None,
                 speaker_name: None,
                 thinking: None,
+                ..Default::default()
             });
         }
         if let Some(sid) = self.chat_state.active_session.clone() {

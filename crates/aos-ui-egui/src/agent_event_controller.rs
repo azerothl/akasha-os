@@ -34,6 +34,7 @@ pub(crate) fn on_spawned(
                 speaker_id: None,
                 speaker_name: None,
                 thinking: None,
+                ..Default::default()
             });
         } else {
             app.status = format!("agent lancé : {agent_id}");
@@ -173,6 +174,7 @@ pub(crate) fn on_agents(app: &mut UiApp, agents: Vec<AgentInfo>) {
                             speaker_id: None,
                             speaker_name: None,
                             thinking: None,
+                            ..Default::default()
                         });
                     }
                 } else if !seeding
@@ -269,6 +271,7 @@ pub(crate) fn on_agents(app: &mut UiApp, agents: Vec<AgentInfo>) {
                         speaker_id: None,
                         speaker_name: None,
                         thinking: None,
+                        ..Default::default()
                     });
                 }
             }
@@ -296,6 +299,7 @@ pub(crate) fn on_agents(app: &mut UiApp, agents: Vec<AgentInfo>) {
                         speaker_id: None,
                         speaker_name: None,
                         thinking: None,
+                        ..Default::default()
                     });
                 } else if !on_this_session && !app.agent_ui.notified.contains(&ag.agent_id) {
                     app.agent_ui.push_notice_once(AgentNotice {

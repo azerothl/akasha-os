@@ -356,6 +356,8 @@ pub(crate) async fn load_session(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>, id:
                         speaker_id: m.speaker_id,
                         speaker_name: m.speaker_name,
                         thinking: m.thinking,
+                        ts_ms: m.ts_ms,
+                        duration_ms: 0,
                     }
                 })
                 .collect();
@@ -734,6 +736,7 @@ impl UiApp {
                 speaker_id: None,
                 speaker_name: None,
                 thinking: None,
+                ..Default::default()
             });
             let _ = self.cmd_tx.send(Cmd::AgentKill { id: agent_id });
         }
@@ -813,6 +816,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             speaker_id: None,
             speaker_name: None,
             thinking: None,
+            ..Default::default()
         });
         let _ = self.cmd_tx.send(Cmd::SessionAppend {
             session_id,
@@ -1136,6 +1140,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             speaker_id: None,
             speaker_name: None,
             thinking: None,
+            ..Default::default()
         });
         if let Some(sid) = self.chat_state.active_session.clone() {
             let _ = self.cmd_tx.send(Cmd::SessionAppend {
@@ -1180,6 +1185,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             speaker_id: None,
             speaker_name: None,
             thinking: None,
+            ..Default::default()
         });
         let _ = self.cmd_tx.send(Cmd::SessionAppend {
             session_id: session_id.to_string(),
@@ -1210,6 +1216,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 speaker_id: None,
                 speaker_name: None,
                 thinking: None,
+                ..Default::default()
             });
             let _ = self.cmd_tx.send(Cmd::SessionAppend {
                 session_id: session_id.to_string(),
@@ -1233,6 +1240,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 speaker_id: None,
                 speaker_name: None,
                 thinking: None,
+                ..Default::default()
             });
             let _ = self.cmd_tx.send(Cmd::ScheduleCreate {
                 goal: parsed.goal,
@@ -1390,6 +1398,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             speaker_id: None,
             speaker_name: None,
             thinking: None,
+            ..Default::default()
         });
         if let Some(session_id) = self.chat_state.active_session.clone() {
             let _ = self.cmd_tx.send(Cmd::SessionAppend {
@@ -1485,6 +1494,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             speaker_id: None,
             speaker_name: None,
             thinking: None,
+            ..Default::default()
         });
         if let Some(sid) = self.chat_state.active_session.clone() {
             let _ = self.cmd_tx.send(Cmd::SessionAppend {
