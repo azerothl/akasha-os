@@ -102,7 +102,7 @@ impl PlacementManager {
         };
         // E20 : Preview charge en Q8_0 sur GPU (flash-attn) — le plan doit
         // refléter ~½ des octets catalogue (base F16).
-        let kv_type = if self.hw.has_gpu {
+        let kv_type = if self.hw.has_gpu && effective_profile != PlacementProfile::CpuOnly {
             crate::model::KvCacheType::Q8_0
         } else {
             crate::model::KvCacheType::F16
@@ -289,10 +289,7 @@ impl PlacementManager {
             Tier::Disk
         } else {
             return Err(PlacementError::Impossible {
-                reason: format!(
-                    "poids média {} ({size} o) ne tiennent nulle part",
-                    model.id
-                ),
+                reason: format!("poids média {} ({size} o) ne tiennent nulle part", model.id),
                 suggestion: "pack plus petit, TTS CPU, ou décharger le LLM".into(),
             });
         };
@@ -351,9 +348,7 @@ impl PlacementManager {
             .shards
             .iter()
             .enumerate()
-            .filter(|(_, s)| {
-                matches!(s.kind, ShardKind::Layer(_)) && s.residency == Tier::Vram
-            })
+            .filter(|(_, s)| matches!(s.kind, ShardKind::Layer(_)) && s.residency == Tier::Vram)
             .map(|(i, _)| i)
             .collect();
         layer_idxs.sort_by_key(|&i| match plan.shards[i].kind {

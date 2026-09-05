@@ -16,11 +16,10 @@ pub mod device_capture;
 pub mod mem_extract;
 
 pub use device_capture::{
-    capability_for as device_capability_for, CaptureMetadata, CaptureMode, CapturePermission,
-    CaptureId, CaptureRequest, CaptureResponse,
-    CaptureState, DeviceArtifact, DeviceCapability, DeviceCaptureMetadata, DeviceCaptureRequest,
-    DeviceCaptureResponse,
-    DeviceActiveCapture, DeviceCaptureStopRequest, DeviceCaptureStopResponse, DeviceDescriptor,
+    capability_for as device_capability_for, CaptureId, CaptureMetadata, CaptureMode,
+    CapturePermission, CaptureRequest, CaptureResponse, CaptureState, DeviceActiveCapture,
+    DeviceArtifact, DeviceCapability, DeviceCaptureMetadata, DeviceCaptureRequest,
+    DeviceCaptureResponse, DeviceCaptureStopRequest, DeviceCaptureStopResponse, DeviceDescriptor,
     DeviceEnumerateResponse, DeviceKind, DevicePermissionInfo, DevicePermissionRevokeRequest,
     OsPermissionState,
 };
@@ -374,6 +373,15 @@ pub struct ModelMetrics {
     pub plan_reason: Option<String>,
     #[serde(default)]
     pub thermal_policy: Option<String>,
+    /// Effective placement after pressure handling or a backend fallback.
+    #[serde(default)]
+    pub effective_profile: Option<String>,
+    #[serde(default)]
+    pub kv_cache: Option<String>,
+    #[serde(default)]
+    pub kv_tokens: Option<u32>,
+    #[serde(default)]
+    pub fallback_used: bool,
     #[serde(default)]
     pub draft_disabled: bool,
     #[serde(default)]

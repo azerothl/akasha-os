@@ -249,6 +249,10 @@ pub struct LlamaModel {
     ptr: *mut sys::llama_model,
     pub n_layer: i32,
     pub size_bytes: u64,
+    /// Effective GGUF file type reported by llama.cpp after the file opened.
+    /// This is deliberately a stable name rather than a raw llama enum so
+    /// callers do not couple their public metrics to a llama.cpp version.
+    pub quantization: Option<&'static str>,
     chat_template: Option<CString>,
 }
 
@@ -291,6 +295,7 @@ impl LlamaModel {
         }
         let n_layer = unsafe { sys::llama_model_n_layer(ptr) };
         let size_bytes = unsafe { sys::llama_model_size(ptr) };
+        let quantization = gguf_quantization_name(unsafe { sys::llama_model_ftype(ptr) });
         let chat_template = unsafe {
             let t = sys::llama_model_chat_template(ptr, std::ptr::null());
             if t.is_null() {
@@ -303,8 +308,47 @@ impl LlamaModel {
             ptr,
             n_layer,
             size_bytes,
+            quantization,
             chat_template,
         })
+    }
+}
+
+/// Normalise les types GGUF utiles au planner. Les types plus fins (K, IQ,
+/// etc.) gardent leur niveau de bits : le planner ne prétend pas pouvoir les
+/// convertir à chaud.
+fn gguf_quantization_name(ftype: sys::llama_ftype) -> Option<&'static str> {
+    match ftype {
+        sys::LLAMA_FTYPE_MOSTLY_F16 | sys::LLAMA_FTYPE_MOSTLY_BF16 => Some("f16"),
+        sys::LLAMA_FTYPE_MOSTLY_Q8_0 => Some("q8"),
+        sys::LLAMA_FTYPE_MOSTLY_Q6_K => Some("q6"),
+        sys::LLAMA_FTYPE_MOSTLY_Q5_0
+        | sys::LLAMA_FTYPE_MOSTLY_Q5_1
+        | sys::LLAMA_FTYPE_MOSTLY_Q5_K_S
+        | sys::LLAMA_FTYPE_MOSTLY_Q5_K_M => Some("q5"),
+        sys::LLAMA_FTYPE_MOSTLY_Q4_0
+        | sys::LLAMA_FTYPE_MOSTLY_Q4_1
+        | sys::LLAMA_FTYPE_MOSTLY_Q4_K_S
+        | sys::LLAMA_FTYPE_MOSTLY_Q4_K_M
+        | sys::LLAMA_FTYPE_MOSTLY_IQ4_NL
+        | sys::LLAMA_FTYPE_MOSTLY_IQ4_XS => Some("q4"),
+        sys::LLAMA_FTYPE_MOSTLY_Q3_K_S
+        | sys::LLAMA_FTYPE_MOSTLY_Q3_K_M
+        | sys::LLAMA_FTYPE_MOSTLY_Q3_K_L
+        | sys::LLAMA_FTYPE_MOSTLY_IQ3_XS
+        | sys::LLAMA_FTYPE_MOSTLY_IQ3_XXS
+        | sys::LLAMA_FTYPE_MOSTLY_IQ3_S
+        | sys::LLAMA_FTYPE_MOSTLY_IQ3_M => Some("q3"),
+        sys::LLAMA_FTYPE_MOSTLY_Q2_K
+        | sys::LLAMA_FTYPE_MOSTLY_IQ2_XXS
+        | sys::LLAMA_FTYPE_MOSTLY_IQ2_XS
+        | sys::LLAMA_FTYPE_MOSTLY_Q2_K_S
+        | sys::LLAMA_FTYPE_MOSTLY_IQ2_S
+        | sys::LLAMA_FTYPE_MOSTLY_IQ2_M
+        | sys::LLAMA_FTYPE_MOSTLY_Q2_0
+        | sys::LLAMA_FTYPE_MOSTLY_TQ2_0 => Some("q2"),
+        sys::LLAMA_FTYPE_MOSTLY_MXFP4_MOE | sys::LLAMA_FTYPE_MOSTLY_NVFP4 => Some("mxfp4"),
+        _ => None,
     }
 }
 
@@ -1293,9 +1337,7 @@ impl LlamaContext {
             // A draft that rarely matches adds verification work and can be
             // slower than standard decoding. Stop it for the remainder of
             // this request; the next request gets a clean decision.
-            if draft_steps >= 4
-                && (draft_accepted as f64 / draft_steps as f64) < 0.25
-            {
+            if draft_steps >= 4 && (draft_accepted as f64 / draft_steps as f64) < 0.25 {
                 speculation_enabled = false;
                 draft_disabled = true;
             }

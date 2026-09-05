@@ -100,6 +100,9 @@ pub struct ModelOverride {
     pub n_params: Option<f64>,
     #[serde(default)]
     pub quantization: Option<QuantizationMetadata>,
+    /// Explicitly calibrated, installed alternatives for the same architecture.
+    #[serde(default)]
+    pub variants: Vec<crate::variants::ModelVariant>,
 }
 
 fn default_bus() -> String {

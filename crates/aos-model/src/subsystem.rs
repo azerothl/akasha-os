@@ -162,10 +162,7 @@ pub struct ModelSubsystem {
 }
 
 /// Prefix already streamed so a new llama context continues the same turn (E18).
-pub fn resume_messages(
-    messages: &[(String, String)],
-    generated: &str,
-) -> Vec<(String, String)> {
+pub fn resume_messages(messages: &[(String, String)], generated: &str) -> Vec<(String, String)> {
     let mut out = messages.to_vec();
     if !generated.is_empty() {
         out.push(("assistant".into(), generated.to_string()));
@@ -209,10 +206,7 @@ impl ModelSubsystem {
                 gpus,
             )
         };
-        let sim = Arc::new(StdMutex::new(PlacementSim::new(
-            hw,
-            CostModel::default(),
-        )));
+        let sim = Arc::new(StdMutex::new(PlacementSim::new(hw, CostModel::default())));
         let mut models = HashMap::new();
         for entry in registry.entries() {
             if let Some(mut desc) = entry.to_model_desc() {
@@ -306,7 +300,11 @@ impl ModelSubsystem {
 
     /// Compare the adaptive decision for all supported operator profiles.
     /// This is diagnostic-only: it does not load weights or mutate placement.
-    pub fn diagnose(&self, model_id: &str, kv_tokens: u32) -> Result<Vec<InferencePlanDiagnostic>, String> {
+    pub fn diagnose(
+        &self,
+        model_id: &str,
+        kv_tokens: u32,
+    ) -> Result<Vec<InferencePlanDiagnostic>, String> {
         let desc = {
             let g = self.inner.lock().unwrap();
             g.models
@@ -337,7 +335,12 @@ impl ModelSubsystem {
             .map(|plan| {
                 let requested_profile = plan.placement;
                 let manager = PlacementManager::new(hw.clone(), cost.clone());
-                match manager.place_model(&desc, requested_profile, Priority::Interactive, kv_tokens) {
+                match manager.place_model(
+                    &desc,
+                    requested_profile,
+                    Priority::Interactive,
+                    kv_tokens,
+                ) {
                     Ok(placement) => InferencePlanDiagnostic {
                         requested_profile,
                         plan,
@@ -427,7 +430,7 @@ impl ModelSubsystem {
         let config = self.config.clone();
         let model_id = model_id.to_string();
         tokio::task::spawn_blocking(move || {
-            let (desc, path) = {
+            let (mut desc, mut path) = {
                 let g = inner.lock().unwrap();
                 match g.models.get(&model_id) {
                     Some(m) => (m.desc.clone(), m.path.clone()),
@@ -450,6 +453,47 @@ impl ModelSubsystem {
                 }
                 eprintln!("[modeld] échec chargement {model_id}: {e}");
             };
+            let preference_home = std::env::var_os("AOS_HOME")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from("."));
+            let adaptive_enabled = config.adaptive_planner_at(&preference_home);
+            if adaptive_enabled && !desc.is_media() {
+                if let Some(overrides) = config.models.get(&model_id) {
+                    let selection = {
+                        let placement = sim.lock().unwrap();
+                        let mut hw = placement.hw.clone();
+                        let pin = inner.lock().unwrap().inference_pin.clone();
+                        if pin == "cpu"
+                            || profile == PlacementProfile::CpuOnly
+                            || std::env::var("AOS_BACKEND").as_deref() == Ok("cpu")
+                        {
+                            hw.has_gpu = false;
+                        }
+                        let free = placement.free();
+                        let budget =
+                            free.ram
+                                .saturating_add(if hw.has_gpu { free.vram } else { 0 });
+                        crate::variants::select(
+                            &overrides.variants,
+                            &desc,
+                            &hw,
+                            budget,
+                            config.min_quantization_quality,
+                        )
+                    };
+                    match selection {
+                        Ok(Some((selected, file))) => {
+                            desc = selected;
+                            path = Some(file);
+                        }
+                        Ok(None) => {}
+                        Err(error) => {
+                            apply_err(error);
+                            return;
+                        }
+                    }
+                }
+            }
             let Some(path) = path else {
                 apply_err("aucun chemin de poids configuré".into());
                 return;
@@ -476,13 +520,15 @@ impl ModelSubsystem {
                 };
                 let requested_backend = match inference.as_str() {
                     "cpu" => Some(BackendKind::Cpu),
-                    _ => std::env::var("AOS_BACKEND").ok().and_then(|value| match value.to_ascii_lowercase().as_str() {
-                        "cpu" => Some(BackendKind::Cpu),
-                        "cuda" | "nvidia" => Some(BackendKind::Cuda),
-                        "metal" | "apple" => Some(BackendKind::Metal),
-                        "npu" => Some(BackendKind::Npu),
-                        "webgpu" => Some(BackendKind::WebGpu),
-                        _ => None,
+                    _ => std::env::var("AOS_BACKEND").ok().and_then(|value| {
+                        match value.to_ascii_lowercase().as_str() {
+                            "cpu" => Some(BackendKind::Cpu),
+                            "cuda" | "nvidia" => Some(BackendKind::Cuda),
+                            "metal" | "apple" => Some(BackendKind::Metal),
+                            "npu" => Some(BackendKind::Npu),
+                            "webgpu" => Some(BackendKind::WebGpu),
+                            _ => None,
+                        }
                     }),
                 };
                 let preference_home = std::env::var_os("AOS_HOME")
@@ -502,7 +548,13 @@ impl ModelSubsystem {
                         thermal_policy,
                     };
                     let planner = AdaptivePlanner::new(sim.hw.clone(), options);
-                    planner.select(&desc, profile, WorkloadKind::Chat, kv_tokens, requested_backend)
+                    planner.select(
+                        &desc,
+                        profile,
+                        WorkloadKind::Chat,
+                        kv_tokens,
+                        requested_backend,
+                    )
                 } else {
                     // Compatibility path for operators that explicitly disable
                     // the adaptive planner.
@@ -517,7 +569,12 @@ impl ModelSubsystem {
                         } else {
                             BackendKind::Cuda
                         },
-                        quantization: aos_placement::Quantization::Q4,
+                        quantization: desc
+                            .quantization
+                            .format
+                            .as_deref()
+                            .and_then(aos_placement::Quantization::parse)
+                            .unwrap_or(aos_placement::Quantization::Unknown),
                         placement: effective_profile,
                         kv_cache: if matches!(effective_profile, PlacementProfile::CpuOnly) {
                             aos_placement::KvCacheType::F16
@@ -530,6 +587,7 @@ impl ModelSubsystem {
                         power_budget_w: None,
                         reason: "adaptive planner désactivé".into(),
                         fallback: vec![BackendKind::Cpu],
+                        fallback_used: false,
                         experimental: false,
                     }
                 };
@@ -548,7 +606,7 @@ impl ModelSubsystem {
                     }
                 }
             };
-            let Some((plan, adaptive_plan)) = selected_placement else {
+            let Some((mut plan, mut adaptive_plan)) = selected_placement else {
                 apply_err("placement disparu".into());
                 return;
             };
@@ -568,11 +626,9 @@ impl ModelSubsystem {
 
             let ngl = plan.n_layers_on(Tier::Vram) as i32;
             let flash_attn = true;
-            let kv_type = match adaptive_plan.kv_cache {
-                aos_placement::KvCacheType::F16 => KvType::F16,
-                aos_placement::KvCacheType::Q8_0 => KvType::Q8_0,
-            };
-            let opts = LoadOptions {
+            let kv_type =
+                KvType::default_for(ngl > 0 && plan.kv_bytes_on(Tier::Vram) > 0, flash_attn);
+            let mut opts = LoadOptions {
                 n_gpu_layers: ngl,
                 load_mode: LoadMode::Mmap,
                 offload_kqv: plan.kv_bytes_on(Tier::Vram) > 0,
@@ -588,22 +644,78 @@ impl ModelSubsystem {
                 main_gpu: plan.main_gpu,
                 mmproj_path: resolve_mmproj_for_model(&model_id, &path),
             };
-            let model = match LlamaModel::load(&path, &opts) {
-                Ok(m) => Arc::new(m),
+            let loaded = crate::load_retry::load_with_cpu_fallback(
+                opts.n_gpu_layers > 0 || opts.offload_kqv,
+                |cpu_retry| {
+                    if cpu_retry {
+                        {
+                            let mut placement = sim.lock().unwrap();
+                            placement.unload(&model_id);
+                            placement
+                                .place(
+                                    &desc,
+                                    PlacementProfile::CpuOnly,
+                                    Priority::Interactive,
+                                    kv_tokens,
+                                )
+                                .map_err(|e| e.to_string())?;
+                            plan = placement
+                                .get(&model_id)
+                                .ok_or_else(|| "placement CPU disparu".to_string())?
+                                .plan
+                                .clone();
+                        }
+                        opts.n_gpu_layers = 0;
+                        opts.offload_kqv = false;
+                        opts.kv_type = KvType::F16;
+                        opts.tensor_split.clear();
+                        opts.main_gpu = 0;
+                    }
+                    let model =
+                        Arc::new(LlamaModel::load(&path, &opts).map_err(|e| e.to_string())?);
+                    let ctx = LlamaContext::new(model.clone(), &opts).map_err(|e| e.to_string())?;
+                    Ok((model, ctx))
+                },
+            );
+            let ((model, ctx), retried) = match loaded {
+                Ok(result) => result,
                 Err(e) => {
                     sim.lock().unwrap().unload(&model_id);
                     apply_err(e.to_string());
                     return;
                 }
             };
-            let ctx = match LlamaContext::new(model.clone(), &opts) {
-                Ok(c) => c,
-                Err(e) => {
-                    sim.lock().unwrap().unload(&model_id);
-                    apply_err(e.to_string());
-                    return;
-                }
+            adaptive_plan.placement = plan.profile;
+            adaptive_plan.kv_tokens = kv_tokens;
+            adaptive_plan.kv_cache = match opts.kv_type {
+                KvType::F16 => aos_placement::KvCacheType::F16,
+                KvType::Q8_0 => aos_placement::KvCacheType::Q8_0,
             };
+            adaptive_plan.backend = if opts.n_gpu_layers == 0 && !opts.offload_kqv {
+                BackendKind::Cpu
+            } else {
+                adaptive_plan.backend
+            };
+            if let Some(format) = model.quantization {
+                adaptive_plan.quantization = aos_placement::Quantization::parse(format)
+                    .unwrap_or(aos_placement::Quantization::Unknown);
+            }
+            adaptive_plan.fallback = if adaptive_plan.backend == BackendKind::Cpu {
+                vec![]
+            } else {
+                vec![BackendKind::Cpu]
+            };
+            adaptive_plan.fallback_used = retried;
+            adaptive_plan.reason = format!(
+                "{}; effectif: {:?}, {:?}, KV {:?}/{}; repli CPU: {}",
+                adaptive_plan.reason,
+                adaptive_plan.backend,
+                plan.profile,
+                adaptive_plan.kv_cache,
+                kv_tokens,
+                retried
+            );
+            eprintln!("[modeld] plan: {}", adaptive_plan.reason);
             let abort = ctx.abort_handle();
             let est = sim
                 .lock()
@@ -616,6 +728,9 @@ impl ModelSubsystem {
             m.loading = false;
             m.desc.weights_bytes = model.size_bytes;
             m.desc.n_layers = model.n_layer as u32;
+            if let Some(format) = model.quantization {
+                m.desc.quantization.format = Some(format.into());
+            }
             m.est_tok_s = Some(est);
             let offloaded =
                 plan.layer_bytes_on(Tier::Ram) > 0 || plan.layer_bytes_on(Tier::Disk) > 0;
@@ -853,7 +968,10 @@ impl ModelSubsystem {
                             let use_prefix_spec = match optim_c1.speculation.as_str() {
                                 "off" => false,
                                 "on" => true,
-                                _ => job.priority >= optim_c1.min_spec_priority.max(PREFIX_SPEC_PRIORITY),
+                                _ => {
+                                    job.priority
+                                        >= optim_c1.min_spec_priority.max(PREFIX_SPEC_PRIORITY)
+                                }
                             } && prefix_enabled;
                             if use_prefix_spec && guard.seq0_tokens().is_empty() {
                                 if let Some(w) = warm {
@@ -874,9 +992,7 @@ impl ModelSubsystem {
                                     Err(tokio::sync::mpsc::error::TrySendError::Full(ev)) => {
                                         delta_tx.blocking_send(ev).is_ok()
                                     }
-                                    Err(
-                                        tokio::sync::mpsc::error::TrySendError::Closed(_),
-                                    ) => false,
+                                    Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => false,
                                 }
                             };
                             let res = if should_use_vision_infer(guard.has_vision(), &job.images) {
@@ -1154,9 +1270,9 @@ impl ModelSubsystem {
                                             text: piece.to_string(),
                                         }) {
                                             Ok(()) => true,
-                                            Err(
-                                                tokio::sync::mpsc::error::TrySendError::Full(ev),
-                                            ) => tx.blocking_send(ev).is_ok(),
+                                            Err(tokio::sync::mpsc::error::TrySendError::Full(
+                                                ev,
+                                            )) => tx.blocking_send(ev).is_ok(),
                                             Err(
                                                 tokio::sync::mpsc::error::TrySendError::Closed(_),
                                             ) => false,
@@ -1265,10 +1381,7 @@ impl ModelSubsystem {
     }
 
     /// Prefix already shown so a new context can continue the same turn (E18).
-    pub fn resume_prefix(
-        messages: &[(String, String)],
-        generated: &str,
-    ) -> Vec<(String, String)> {
+    pub fn resume_prefix(messages: &[(String, String)], generated: &str) -> Vec<(String, String)> {
         resume_messages(messages, generated)
     }
 
@@ -1296,9 +1409,9 @@ impl ModelSubsystem {
         loop {
             let busy = {
                 let g = self.inner.lock().unwrap();
-                g.models.values().any(|m| {
-                    !m.desc.is_media() && (m.active > 0 || m.pending > 0 || m.loading)
-                })
+                g.models
+                    .values()
+                    .any(|m| !m.desc.is_media() && (m.active > 0 || m.pending > 0 || m.loading))
             };
             if !busy {
                 break;
@@ -1659,10 +1772,29 @@ impl ModelSubsystem {
                 draft_accept: m.last_draft_accept,
                 prefix_hit: m.last_prefix_hit,
                 inference_mode: m.last_inference_mode.clone(),
-                adaptive_backend: m.inference_plan.as_ref().map(|p| format!("{:?}", p.backend).to_lowercase()),
-                quantization: m.inference_plan.as_ref().map(|p| p.quantization.as_str().into()),
+                adaptive_backend: m
+                    .inference_plan
+                    .as_ref()
+                    .map(|p| format!("{:?}", p.backend).to_lowercase()),
+                quantization: m
+                    .inference_plan
+                    .as_ref()
+                    .map(|p| p.quantization.as_str().into()),
                 plan_reason: m.inference_plan.as_ref().map(|p| p.reason.clone()),
-                thermal_policy: m.inference_plan.as_ref().map(|p| format!("{:?}", p.thermal_policy).to_lowercase()),
+                thermal_policy: m
+                    .inference_plan
+                    .as_ref()
+                    .map(|p| format!("{:?}", p.thermal_policy).to_lowercase()),
+                effective_profile: m
+                    .inference_plan
+                    .as_ref()
+                    .map(|p| format!("{:?}", p.placement).to_lowercase()),
+                kv_cache: m
+                    .inference_plan
+                    .as_ref()
+                    .map(|p| format!("{:?}", p.kv_cache).to_lowercase()),
+                kv_tokens: m.inference_plan.as_ref().map(|p| p.kv_tokens),
+                fallback_used: m.inference_plan.as_ref().is_some_and(|p| p.fallback_used),
                 draft_disabled: m.last_draft_disabled,
                 draft_verify_ms: m.last_draft_verify_ms,
             })
@@ -1714,10 +1846,7 @@ impl ModelSubsystem {
             };
             let matches = match kind {
                 "image" => {
-                    let ext = path
-                        .extension()
-                        .and_then(|e| e.to_str())
-                        .unwrap_or("");
+                    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
                     matches!(ext, "safetensors" | "gguf" | "ckpt") || id.contains("sd-")
                 }
                 "tts" => {
@@ -1784,16 +1913,15 @@ impl ModelSubsystem {
 
     pub fn has_live_infer(&self) -> bool {
         let g = self.inner.lock().unwrap();
-        g.models
-            .values()
-            .any(|m| m.active > 0 || m.pending > 0)
+        g.models.values().any(|m| m.active > 0 || m.pending > 0)
     }
 }
 
 fn preferred_media_id(kind: &str) -> Option<String> {
     let home = std::env::var("AOS_HOME").ok()?;
-    let raw = std::fs::read_to_string(std::path::PathBuf::from(home).join("var/run/preferences.json"))
-        .ok()?;
+    let raw =
+        std::fs::read_to_string(std::path::PathBuf::from(home).join("var/run/preferences.json"))
+            .ok()?;
     let v: serde_json::Value = serde_json::from_str(&raw).ok()?;
     let key = match kind {
         "image" => "default_image_model",
@@ -1879,10 +2007,7 @@ mod tests {
 
     #[test]
     fn resolve_mmproj_ignores_generic_mmproj_beside_weights() {
-        let dir = std::env::temp_dir().join(format!(
-            "aos-mmproj-test-{}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("aos-mmproj-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let weights = dir.join("gemma-4-E4B-it-Q4_K_M.gguf");
@@ -1900,8 +2025,14 @@ mod tests {
 
     #[test]
     fn text_only_infer_when_images_without_mmproj() {
-        assert!(!should_use_vision_infer(false, &["/downloads/canvas.png".into()]));
-        assert!(should_use_vision_infer(true, &["/downloads/canvas.png".into()]));
+        assert!(!should_use_vision_infer(
+            false,
+            &["/downloads/canvas.png".into()]
+        ));
+        assert!(should_use_vision_infer(
+            true,
+            &["/downloads/canvas.png".into()]
+        ));
         assert!(!should_use_vision_infer(true, &[]));
     }
 

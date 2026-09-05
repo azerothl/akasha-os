@@ -58,10 +58,13 @@ impl LanPairingRegistry {
     }
 
     pub fn revoke(&mut self, node_id: &str) -> bool {
-        self.nodes.get_mut(node_id).map(|node| {
-            node.trust = NodeTrust::Revoked;
-            true
-        }).unwrap_or(false)
+        self.nodes
+            .get_mut(node_id)
+            .map(|node| {
+                node.trust = NodeTrust::Revoked;
+                true
+            })
+            .unwrap_or(false)
     }
 
     pub fn authorize(&self, node_id: &str, work: &DistributedWork) -> Result<(), String> {
@@ -88,7 +91,8 @@ impl LanPairingRegistry {
         if !work.encrypted_transport {
             return Err("transport chiffré obligatoire".into());
         }
-        if work.allow_sensitive_data && !node.capabilities.iter().any(|cap| cap == "sensitive-data") {
+        if work.allow_sensitive_data && !node.capabilities.iter().any(|cap| cap == "sensitive-data")
+        {
             return Err("politique sensible non autorisée pour ce nœud".into());
         }
         Ok(())
@@ -118,7 +122,13 @@ mod tests {
     fn discovery_ne_authorise_pas_le_routage() {
         let mut registry = LanPairingRegistry::default();
         registry.discover(node());
-        let work = DistributedWork { work_id: "w".into(), model_id: "m".into(), shard_ids: vec![1], allow_sensitive_data: false, encrypted_transport: true };
+        let work = DistributedWork {
+            work_id: "w".into(),
+            model_id: "m".into(),
+            shard_ids: vec![1],
+            allow_sensitive_data: false,
+            encrypted_transport: true,
+        };
         assert!(registry.authorize("n1", &work).is_err());
         registry.pair("n1", "abc").unwrap();
         assert!(registry.authorize("n1", &work).is_ok());

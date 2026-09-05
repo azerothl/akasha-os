@@ -389,6 +389,26 @@ non-sensitive planning reason. `INT2`/`MXFP4` metadata can be represented, but
 the default quality gate and backend registry prevent them from being selected
 without a compatible, measured kernel.
 
+For an installed model, the plan reports the GGUF file type returned by
+llama.cpp after the file is opened; it never infers a quantization from the
+model name. Optional `models.<id>.variants` entries select only an existing
+local file with a common explicit calibration, compatible ISA/backend, enough
+memory and measured prefill/decode costs. If no variant passes, modeld keeps
+the configured base file. A failed accelerated model/context load retries once
+with the CPU plan; `model.metrics` records the effective profile, KV settings
+and whether that fallback was used.
+
+The deterministic planning baseline can be run in CI or locally with:
+
+```powershell
+cargo run -p aos-placement --example adaptive_benchmark --release
+```
+
+It emits CSV for fixed CPU, CUDA-like and Metal-like profiles (TTFT estimate,
+decode tok/s estimate and RAM/VRAM/disk placement). It is not a substitute for
+a real-device benchmark: production calibration must separately collect real
+TTFT, p50/p95, sustained throughput, temperature and power on the target host.
+
 ### 3.6 Inference Scheduler
 
 Features :

@@ -783,7 +783,10 @@ mod tests {
             .place(&img, PlacementProfile::Latency, Priority::Interactive, 0)
             .unwrap_err();
         assert!(matches!(err, PlacementError::Impossible { .. }));
-        assert!(s.events().iter().any(|e| matches!(e, SimEvent::Refused { .. })));
+        assert!(s
+            .events()
+            .iter()
+            .any(|e| matches!(e, SimEvent::Refused { .. })));
     }
 
     #[test]

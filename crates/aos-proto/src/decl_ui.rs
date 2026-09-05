@@ -188,10 +188,7 @@ impl DeclUiWidget {
                 }
             }
             "select" | "radio" => {
-                let has_items = self
-                    .items
-                    .as_ref()
-                    .is_some_and(|i| !i.is_empty());
+                let has_items = self.items.as_ref().is_some_and(|i| !i.is_empty());
                 let has_bind = self.bind.as_ref().is_some_and(|b| !b.is_empty());
                 if !has_items && !has_bind {
                     return Err(DeclUiError::MissingField("items"));
@@ -257,7 +254,11 @@ pub fn sidebar_decl_ui_module(name: &str, ui_mode: Option<&str>) -> bool {
 }
 
 /// Build a minimal default UI tree for scaffold/package (P07.4).
-pub fn default_document(title: &str, primary_tool: &str, input_schema: &serde_json::Value) -> DeclUiDocument {
+pub fn default_document(
+    title: &str,
+    primary_tool: &str,
+    input_schema: &serde_json::Value,
+) -> DeclUiDocument {
     let mut children = vec![
         DeclUiWidget {
             kind: "heading".into(),

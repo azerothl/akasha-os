@@ -14,26 +14,34 @@
 //! Les hypothèses du modèle de coût sont documentées dans
 //! `adr/0002-model-placement.md`.
 
+pub mod adaptive;
 pub mod bandwidth;
+pub mod benchmark;
 pub mod cost;
 pub mod distributed;
-pub mod adaptive;
 pub mod hardware;
 pub mod manager;
 pub mod model;
 pub mod plan;
 pub mod sim;
 
+pub use adaptive::{
+    AdaptivePlanner, BackendDescriptor, BackendKind, BackendRegistry, InferencePlan,
+    InferencePlanDiagnostic, PlannerOptions, Quantization, SpeculativeStrategy, ThermalAction,
+    ThermalController, ThermalPolicy, WorkloadKind,
+};
 pub use bandwidth::{
     probe_host_bandwidth, probe_ram_read_bw, BandwidthSignal, BandwidthSignals, BandwidthSource,
 };
+pub use benchmark::{
+    reference_scenarios, run_reference_matrix, run_scenario, BenchmarkResult, BenchmarkScenario,
+};
 pub use cost::{Bound, CostModel, Estimate};
 pub use distributed::{DistributedWork, LanNode, LanPairingRegistry, NodeTrust};
-pub use adaptive::{AdaptivePlanner, BackendDescriptor, BackendKind, BackendRegistry, InferencePlan,
-    InferencePlanDiagnostic, PlannerOptions, Quantization, SpeculativeStrategy, ThermalAction,
-    ThermalController, ThermalPolicy, WorkloadKind};
-pub use hardware::{CpuIsa, CpuTopology, GpuBackend, GpuDevice, HardwareProfile,
-    NpuCapabilities, ThermalSnapshot, WebGpuCapabilities};
+pub use hardware::{
+    CpuIsa, CpuTopology, GpuBackend, GpuDevice, HardwareProfile, NpuCapabilities, ThermalSnapshot,
+    WebGpuCapabilities,
+};
 pub use manager::{Budgets, PlacementError, PlacementManager};
 pub use model::{KvCacheType, ModelDesc, PrivacyClass, QuantizationMetadata};
 pub use plan::{PlacementPlan, PlacementProfile, Priority, Shard, ShardKind, Tier};

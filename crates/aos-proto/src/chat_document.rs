@@ -53,8 +53,9 @@ pub fn extract_document_text(path: &str) -> Result<String, String> {
         .unwrap_or("")
         .to_ascii_lowercase();
     match ext.as_str() {
-        "txt" | "md" | "markdown" | "text" => std::fs::read_to_string(path)
-            .map_err(|e| format!("read failed: {e}")),
+        "txt" | "md" | "markdown" | "text" => {
+            std::fs::read_to_string(path).map_err(|e| format!("read failed: {e}"))
+        }
         "pdf" => extract_pdf_text(path),
         other => Err(format!("unsupported document type: {other}")),
     }
@@ -118,11 +119,7 @@ pub fn apply_documents_to_infer_messages(
     if documents.is_empty() {
         return;
     }
-    let Some(last_user) = messages
-        .iter_mut()
-        .rev()
-        .find(|m| m.role == "user")
-    else {
+    let Some(last_user) = messages.iter_mut().rev().find(|m| m.role == "user") else {
         return;
     };
     last_user.content = merge_documents_into_user_content(&last_user.content, documents);
@@ -199,9 +196,7 @@ mod tests {
             path: path.clone(),
             label: "infer.txt".into(),
         }];
-        let history = vec![
-            ("user".into(), "What does the file say?".into()),
-        ];
+        let history = vec![("user".into(), "What does the file say?".into())];
         let content = chat_infer_user_content(&history, "What does the file say?", &docs);
         assert!(content.contains("SECRET_PHRASE_FOR_INFER_TEST"));
         assert!(content.contains("What does the file say?"));
@@ -229,8 +224,7 @@ mod tests {
             "quarterly.pdf"
         );
         assert_eq!(document_label_from_path("notes.md"), "notes.md");
-        assert!(!document_label_from_path("/home/user/Downloads/quarterly.pdf")
-            .contains("/home/"));
+        assert!(!document_label_from_path("/home/user/Downloads/quarterly.pdf").contains("/home/"));
     }
 
     #[test]

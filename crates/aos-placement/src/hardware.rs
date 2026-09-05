@@ -8,7 +8,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::bandwidth::{BandwidthSignals, signals_to_profile_fields};
+use crate::bandwidth::{signals_to_profile_fields, BandwidthSignals};
 
 /// CPU instruction sets relevant to quantized inference.
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -21,11 +21,16 @@ pub struct CpuIsa {
 impl CpuIsa {
     /// Best-effort runtime probe. Unknown platforms simply report no optional ISA.
     pub fn detect() -> Self {
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        let (avx2, avx512) = (
+            std::is_x86_feature_detected!("avx2"),
+            std::is_x86_feature_detected!("avx512f"),
+        );
+        #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
+        let (avx2, avx512) = (false, false);
         Self {
-            avx2: cfg!(any(target_arch = "x86", target_arch = "x86_64"))
-                && std::is_x86_feature_detected!("avx2"),
-            avx512: cfg!(any(target_arch = "x86", target_arch = "x86_64"))
-                && std::is_x86_feature_detected!("avx512f"),
+            avx2,
+            avx512,
             neon: cfg!(target_arch = "aarch64")
                 || cfg!(all(target_arch = "arm", target_feature = "neon")),
         }
@@ -313,7 +318,11 @@ impl HardwareProfile {
         hw.gpu_backend = GpuBackend::Metal;
         hw.gpu_mem_bw = 200e9;
         hw.host_to_device_bw = hw.ram_mem_bw;
-        hw.cpu_isa = CpuIsa { avx2: false, avx512: false, neon: true };
+        hw.cpu_isa = CpuIsa {
+            avx2: false,
+            avx512: false,
+            neon: true,
+        };
         hw
     }
 
