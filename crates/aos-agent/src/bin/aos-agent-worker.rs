@@ -11,9 +11,9 @@ use aos_agent::assess::{parse_assess_response, AssessResult};
 use aos_agent::mcp::{open_mcp_tools_with_secrets, McpSession};
 use aos_agent::context_budget::{
     choose_agent_max_tokens, clamp_spawn_brief, compact_after_prompt_overflow,
-    enforce_prompt_budget, is_prompt_too_long_error, is_technical_vision_infer_error,
-    prompt_budget, sanitize_assistant_for_memory, LoopGuard, LoopVerdict, DEFAULT_N_CTX_HINT,
-    MAX_OVERFLOW_INFER_RETRIES,
+    enforce_prompt_budget, is_infer_stall_error, is_prompt_too_long_error,
+    is_technical_vision_infer_error, prompt_budget, sanitize_assistant_for_memory, LoopGuard,
+    LoopVerdict, DEFAULT_N_CTX_HINT, MAX_INFER_STALL_RETRIES, MAX_OVERFLOW_INFER_RETRIES,
 };
 use aos_agent::persist;
 use aos_agent::canvas_scene::{
@@ -73,6 +73,8 @@ enum WorkerCmd {
 
 /// Attente max d'une réponse `user.ask` (bornée aussi par le timeout du goal).
 const USER_ASK_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+/// Silence max sur le flux d'inférence (horloge remise à zéro à chaque token).
+const INFER_STALL_IDLE: Duration = Duration::from_secs(180);
 
 enum AskWait {
     Answer(String),
@@ -686,6 +688,7 @@ async fn main() {
         let infer_t0 = Instant::now();
         // Think (+ retry PromptTooLong : trim + réduction max_tokens)
         let mut prompt_retries = 0u32;
+        let mut stall_retries = 0u32;
         let mut gen_tokens = gen_tokens;
         let canvas_agent = agent_has_canvas_tools(&spec.tools);
         let mut step_refs = data_refs.clone();
@@ -761,6 +764,22 @@ async fn main() {
                                 .await;
                         }
                     }
+                }
+                InferOutcome::Fatal(e)
+                    if is_infer_stall_error(&e) && stall_retries < MAX_INFER_STALL_RETRIES =>
+                {
+                    stall_retries += 1;
+                    report(
+                        &bus,
+                        &agent_id,
+                        AgentOutputEvent::Log {
+                            line: format!(
+                                "timeout inférence — nouvel essai ({stall_retries}/{MAX_INFER_STALL_RETRIES})"
+                            ),
+                        },
+                    )
+                    .await;
+                    continue;
                 }
                 InferOutcome::Fatal(e) if is_technical_vision_infer_error(&e) => {
                     eprintln!("vision refs ignorées (pas de mmproj) : {e}");
@@ -1552,6 +1571,37 @@ struct InferTurn {
     tok_s: f64,
 }
 
+async fn infer_stall_fatal(
+    bus: &BusClient,
+    shared: &Shared,
+    spec: &AgentSpec,
+    token_buf: &mut String,
+) -> InferOutcome {
+    if !token_buf.is_empty() {
+        report(
+            bus,
+            &spec.agent_id,
+            AgentOutputEvent::Token {
+                text: std::mem::take(token_buf),
+            },
+        )
+        .await;
+    }
+    if let Some(id) = shared.current_inference.lock().await.take() {
+        let _ = bus
+            .call::<CancelRequest, bool>(
+                "model.cancel",
+                &CancelRequest { inference_id: id },
+                vec![],
+            )
+            .await;
+    }
+    InferOutcome::Fatal(format!(
+        "timeout inférence ({} s) — le modèle ou le bus ne répond plus",
+        INFER_STALL_IDLE.as_secs()
+    ))
+}
+
 async fn infer_turn(
     bus: &BusClient,
     shared: &Shared,
@@ -1608,52 +1658,27 @@ async fn infer_turn(
     let mut done_stats: Option<(u32, u32, f64, f64)> = None;
     let mut token_buf = String::new();
     let mut last_token_flush = Instant::now();
-    let infer_deadline = Duration::from_secs(180);
-    let started_infer = Instant::now();
+    let mut last_stream_event = Instant::now();
 
     loop {
-        let remaining = infer_deadline.saturating_sub(started_infer.elapsed());
+        let remaining = INFER_STALL_IDLE.saturating_sub(last_stream_event.elapsed());
         if remaining.is_zero() {
-            if !token_buf.is_empty() {
-                report(
-                    bus,
-                    &spec.agent_id,
-                    AgentOutputEvent::Token {
-                        text: std::mem::take(&mut token_buf),
-                    },
-                )
-                .await;
-            }
-            return InferOutcome::Fatal(format!(
-                "timeout inférence ({} s) — le modèle ou le bus ne répond plus",
-                infer_deadline.as_secs()
-            ));
+            return infer_stall_fatal(bus, shared, spec, &mut token_buf).await;
         }
         let ev = match tokio::time::timeout(remaining, rx.recv()).await {
             Ok(Some(ev)) => ev,
             Ok(None) => break,
             Err(_) => {
-                if !token_buf.is_empty() {
-                    report(
-                        bus,
-                        &spec.agent_id,
-                        AgentOutputEvent::Token {
-                            text: std::mem::take(&mut token_buf),
-                        },
-                    )
-                    .await;
-                }
-                return InferOutcome::Fatal(format!(
-                    "timeout inférence ({} s) — le modèle ou le bus ne répond plus",
-                    infer_deadline.as_secs()
-                ));
+                return infer_stall_fatal(bus, shared, spec, &mut token_buf).await;
             }
         };
         match ev {
             Ok(TokenEvent::Started { inference_id }) => {
+                last_stream_event = Instant::now();
                 *shared.current_inference.lock().await = Some(inference_id);
             }
             Ok(TokenEvent::Delta { text }) => {
+                last_stream_event = Instant::now();
                 if shared.paused.load(Ordering::SeqCst) {
                     if !token_buf.is_empty() {
                         report(
@@ -1718,6 +1743,7 @@ async fn infer_turn(
                 ttft_ms,
                 tok_s,
             }) => {
+                last_stream_event = Instant::now();
                 done_stats = Some((prompt_tokens, generated_tokens, ttft_ms, tok_s));
             }
             Ok(TokenEvent::Error { message }) => {
@@ -1747,6 +1773,7 @@ async fn infer_turn(
                 return InferOutcome::Fatal(e.to_string());
             }
             Ok(TokenEvent::Queued { position }) => {
+                last_stream_event = Instant::now();
                 report(
                     bus,
                     &spec.agent_id,

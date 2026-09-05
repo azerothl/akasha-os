@@ -4,6 +4,7 @@
 //! get a longer window than a Running worker that has gone silent.
 
 use crate::agent_act::requires_act_gate;
+use crate::context_budget::is_infer_stall_error;
 use aos_proto::{AgentKind, AgentOutputEvent, AgentState};
 use std::time::Duration;
 
@@ -26,6 +27,7 @@ pub struct HealthSample {
     pub kind: AgentKind,
     pub pid: Option<u32>,
     pub last_action: String,
+    pub fail_reason: Option<String>,
     pub idle: Duration,
     pub recoveries: u32,
 }
@@ -71,6 +73,16 @@ pub fn blocked_wait_limit(last_action: &str) -> Duration {
 pub fn evaluate(sample: &HealthSample) -> HealthAction {
     if sample.kind == AgentKind::Roster || sample.state == AgentState::Roster {
         return HealthAction::None;
+    }
+    if sample.state == AgentState::Failed {
+        // Infer/bus stall is transient: restore the worker instead of leaving it dead.
+        return if sample.fail_reason.as_deref().is_some_and(is_infer_stall_error)
+            && sample.recoveries < MAX_RECOVERIES
+        {
+            HealthAction::Restart
+        } else {
+            HealthAction::None
+        };
     }
     let live = matches!(
         sample.state,
@@ -144,6 +156,7 @@ mod tests {
             kind: AgentKind::Task,
             pid,
             last_action: last_action.into(),
+            fail_reason: None,
             idle,
             recoveries,
         }
@@ -222,6 +235,26 @@ mod tests {
         assert_eq!(evaluate(&running), HealthAction::Restart);
         let paused = sample(AgentState::Paused, None, "fs.read", Duration::from_secs(1), 0);
         assert_eq!(evaluate(&paused), HealthAction::MarkFailed);
+    }
+
+    #[test]
+    fn infer_stall_failed_is_restarted() {
+        let mut s = sample(
+            AgentState::Failed,
+            None,
+            "fs.read",
+            Duration::from_secs(1),
+            0,
+        );
+        s.fail_reason = Some(
+            "timeout inférence (180 s) — le modèle ou le bus ne répond plus".into(),
+        );
+        assert_eq!(evaluate(&s), HealthAction::Restart);
+        s.recoveries = MAX_RECOVERIES;
+        assert_eq!(evaluate(&s), HealthAction::None);
+        s.recoveries = 0;
+        s.fail_reason = Some("Impossible de continuer.".into());
+        assert_eq!(evaluate(&s), HealthAction::None);
     }
 
     #[test]

@@ -159,6 +159,7 @@ async fn run_health_pass(shared: &Shared, bus: &Arc<BusClient>, bus_addr: &str) 
                         .last()
                         .map(|s| s.action.clone())
                         .unwrap_or_default(),
+                    fail_reason: entry.info.fail_reason.clone(),
                     idle: entry.last_activity.elapsed(),
                     recoveries: entry.health_recoveries,
                 });

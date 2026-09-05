@@ -14,6 +14,8 @@ pub const GEN_SAFETY_TOKENS: usize = 64;
 pub const MAX_SPAWN_BRIEF_CHARS: usize = 600;
 /// Retries inférence après PromptTooLong (trim + réduction max_tokens).
 pub const MAX_OVERFLOW_INFER_RETRIES: u32 = 2;
+/// Retries when the model/bus stream goes silent (then the agent fails and health restarts).
+pub const MAX_INFER_STALL_RETRIES: u32 = 1;
 /// noop / JSON invalide consécutifs avant fail.
 pub const MAX_NOOP_STREAK: u32 = 3;
 /// Même action en échec répété avant fail.
@@ -58,6 +60,12 @@ pub fn is_prompt_too_long_error(msg: &str) -> bool {
 /// Erreur runtime avec détails token (ne pas afficher tel quel à l'utilisateur).
 pub fn is_technical_prompt_overflow_message(msg: &str) -> bool {
     is_prompt_too_long_error(msg) || msg.contains("ctx=") || msg.contains("réserve_gen=")
+}
+
+/// Stream went silent: model or bus stopped producing tokens.
+pub fn is_infer_stall_error(msg: &str) -> bool {
+    let m = msg.to_ascii_lowercase();
+    m.contains("timeout inférence") || m.contains("le modèle ou le bus ne répond plus")
 }
 
 /// Erreur vision/mmproj (ne jamais afficher tel quel dans le fil humain).
@@ -478,6 +486,10 @@ mod tests {
             9216
         );
         assert!(!is_prompt_too_long_error("timeout inférence"));
+        assert!(is_infer_stall_error(
+            "timeout inférence (180 s) — le modèle ou le bus ne répond plus"
+        ));
+        assert!(!is_infer_stall_error("Impossible de continuer."));
     }
 
     #[test]
