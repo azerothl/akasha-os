@@ -2295,6 +2295,11 @@ impl eframe::App for UiApp {
                 Evt::ModelPlanFailed { model_id, error } => {
                     self.on_model_plan_failed(model_id, error)
                 }
+                Evt::ModelClusterNodes(response) => self.on_model_cluster_nodes(response),
+                Evt::ModelClusterRefresh => {
+                    let _ = self.cmd_tx.send(Cmd::ModelClusterNodes);
+                }
+                Evt::ModelClusterOperationFailed(error) => self.on_model_cluster_error(error),
                 Evt::Providers(list) => self.on_providers(list),
                 Evt::ProviderTested {
                     ok,

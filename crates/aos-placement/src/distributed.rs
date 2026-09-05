@@ -7,6 +7,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use chacha20poly1305::aead::{Aead, KeyInit, Payload};
+use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum NodeTrust {
@@ -76,14 +79,33 @@ pub struct LanRecovery {
     pub cancelled_nodes: Vec<String>,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct LanPairingRegistry {
     nodes: HashMap<String, LanNode>,
 }
 
 impl LanPairingRegistry {
     pub fn discover(&mut self, node: LanNode) {
-        self.nodes.entry(node.node_id.clone()).or_insert(node);
+        let _ = self.try_discover(node);
+    }
+
+    /// Observe a LAN advertisement without allowing identity replacement.
+    ///
+    /// A changed fingerprint is rejected, including when the node was already
+    /// paired. Endpoint/capability changes are accepted only for the same
+    /// persistent identity and retain the current trust state.
+    pub fn try_discover(&mut self, node: LanNode) -> Result<(), String> {
+        if let Some(existing) = self.nodes.get_mut(&node.node_id) {
+            if existing.public_key_fingerprint != node.public_key_fingerprint {
+                return Err("empreinte de clé modifiée pour un nœud connu".into());
+            }
+            let trust = existing.trust;
+            *existing = node;
+            existing.trust = trust;
+        } else {
+            self.nodes.insert(node.node_id.clone(), node);
+        }
+        Ok(())
     }
 
     pub fn pair(&mut self, node_id: &str, fingerprint: &str) -> Result<(), String> {
@@ -149,6 +171,147 @@ impl LanPairingRegistry {
             .values()
             .filter(|node| node.trust == NodeTrust::Paired)
     }
+
+    pub fn snapshot(&self) -> Vec<LanNode> {
+        self.nodes.values().cloned().collect()
+    }
+
+    pub fn from_nodes(nodes: impl IntoIterator<Item = LanNode>) -> Result<Self, String> {
+        let mut registry = Self::default();
+        for node in nodes {
+            registry.try_discover(node)?;
+        }
+        Ok(registry)
+    }
+}
+
+/// Encrypted, authenticated application frame for a future LAN transport.
+///
+/// The nonce is derived from the monotonically increasing sequence number and
+/// the session key. The node/job binding is authenticated as associated data,
+/// so a frame cannot be moved to another paired node or job.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LanSecureFrame {
+    pub node_id: String,
+    pub work_id: String,
+    pub sequence: u64,
+    pub nonce: [u8; 12],
+    pub ciphertext: Vec<u8>,
+}
+
+#[derive(Clone)]
+pub struct LanSessionKey([u8; 32]);
+
+impl LanSessionKey {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, String> {
+        if bytes.len() != 32 {
+            return Err("clé de session LAN : 32 octets requis".into());
+        }
+        let mut key = [0; 32];
+        key.copy_from_slice(bytes);
+        Ok(Self(key))
+    }
+
+    pub fn encrypt(
+        &self,
+        node_id: &str,
+        work_id: &str,
+        sequence: u64,
+        plaintext: &[u8],
+    ) -> Result<LanSecureFrame, String> {
+        let nonce = nonce_for(sequence);
+        let cipher = ChaCha20Poly1305::new(Key::from_slice(&self.0));
+        let ciphertext = cipher
+            .encrypt(
+                Nonce::from_slice(&nonce),
+                Payload {
+                    msg: plaintext,
+                    aad: frame_aad(node_id, work_id, sequence).as_slice(),
+                },
+            )
+            .map_err(|_| "chiffrement LAN impossible".to_string())?;
+        Ok(LanSecureFrame {
+            node_id: node_id.into(),
+            work_id: work_id.into(),
+            sequence,
+            nonce,
+            ciphertext,
+        })
+    }
+
+    pub fn decrypt(&self, frame: &LanSecureFrame) -> Result<Vec<u8>, String> {
+        let expected_nonce = nonce_for(frame.sequence);
+        if frame.nonce != expected_nonce {
+            return Err("nonce LAN invalide".into());
+        }
+        let cipher = ChaCha20Poly1305::new(Key::from_slice(&self.0));
+        cipher
+            .decrypt(
+                Nonce::from_slice(&frame.nonce),
+                Payload {
+                    msg: &frame.ciphertext,
+                    aad: frame_aad(&frame.node_id, &frame.work_id, frame.sequence).as_slice(),
+                },
+            )
+            .map_err(|_| "authentification LAN échouée".to_string())
+    }
+}
+
+/// Sequenced channel wrapper for a transport adapter. It rejects stale or
+/// replayed frames before handing plaintext to the caller.
+pub struct LanSecureChannel {
+    key: LanSessionKey,
+    node_id: String,
+    work_id: String,
+    next_send: u64,
+    last_received: Option<u64>,
+}
+
+impl LanSecureChannel {
+    pub fn new(key: LanSessionKey, node_id: impl Into<String>, work_id: impl Into<String>) -> Self {
+        Self {
+            key,
+            node_id: node_id.into(),
+            work_id: work_id.into(),
+            next_send: 0,
+            last_received: None,
+        }
+    }
+
+    pub fn send(&mut self, plaintext: &[u8]) -> Result<LanSecureFrame, String> {
+        let sequence = self.next_send;
+        self.next_send = self
+            .next_send
+            .checked_add(1)
+            .ok_or("séquence LAN épuisée")?;
+        self.key
+            .encrypt(&self.node_id, &self.work_id, sequence, plaintext)
+    }
+
+    pub fn receive(&mut self, frame: &LanSecureFrame) -> Result<Vec<u8>, String> {
+        if frame.node_id != self.node_id || frame.work_id != self.work_id {
+            return Err("frame LAN liée à une autre identité ou un autre travail".into());
+        }
+        if self
+            .last_received
+            .is_some_and(|last| frame.sequence <= last)
+        {
+            return Err("frame LAN rejouée ou hors séquence".into());
+        }
+        let plaintext = self.key.decrypt(frame)?;
+        self.last_received = Some(frame.sequence);
+        Ok(plaintext)
+    }
+}
+
+fn nonce_for(sequence: u64) -> [u8; 12] {
+    let mut nonce = [0; 12];
+    nonce[4..].copy_from_slice(&sequence.to_be_bytes());
+    nonce
+}
+
+fn frame_aad(node_id: &str, work_id: &str, sequence: u64) -> Vec<u8> {
+    format!("aos-lan-v1\0{node_id}\0{work_id}\0{sequence}").into_bytes()
 }
 
 /// In-process LAN scheduler policy.
@@ -381,5 +544,36 @@ mod tests {
         let cancelled = cluster.cancel("w1").unwrap();
         assert_eq!(cancelled.state, LanJobState::Cancelled);
         assert_eq!(cancelled.cancelled_nodes, vec!["n2"]);
+    }
+
+    #[test]
+    fn identite_changee_est_refusee_et_etat_paire_est_conserve() {
+        let mut registry = LanPairingRegistry::default();
+        registry.discover(node());
+        registry.pair("n1", "abc").unwrap();
+        let mut changed = node();
+        changed.address = "192.168.1.9:9000".into();
+        changed.public_key_fingerprint = "evil".into();
+        assert!(registry.try_discover(changed).is_err());
+        let mut moved = node();
+        moved.address = "192.168.1.9:9000".into();
+        registry.try_discover(moved).unwrap();
+        assert_eq!(registry.get("n1").unwrap().trust, NodeTrust::Paired);
+        assert_eq!(registry.snapshot().len(), 1);
+    }
+
+    #[test]
+    fn canal_chiffre_verifie_le_job_et_rejette_le_rejeu() {
+        let key = LanSessionKey::from_bytes(&[7; 32]).unwrap();
+        let mut sender = LanSecureChannel::new(key.clone(), "n1", "work");
+        let mut receiver = LanSecureChannel::new(key, "n1", "work");
+        let frame = sender.send(b"shard payload").unwrap();
+        assert_eq!(receiver.receive(&frame).unwrap(), b"shard payload");
+        assert!(receiver.receive(&frame).is_err());
+
+        let mut wrong_job = frame.clone();
+        wrong_job.work_id = "other-work".into();
+        assert!(receiver.receive(&wrong_job).is_err());
+        assert!(LanSessionKey::from_bytes(&[0; 31]).is_err());
     }
 }

@@ -290,6 +290,14 @@ pub(crate) enum Cmd {
         model_id: String,
         kv_tokens: u32,
     },
+    ModelClusterNodes,
+    ModelClusterPair {
+        node_id: String,
+        public_key_fingerprint: String,
+    },
+    ModelClusterRevoke {
+        node_id: String,
+    },
     ModelUnload {
         model_id: String,
     },
@@ -654,6 +662,9 @@ pub(crate) enum Evt {
         model_id: String,
         error: String,
     },
+    ModelClusterNodes(aos_proto::LanClusterNodesResponse),
+    ModelClusterRefresh,
+    ModelClusterOperationFailed(String),
     Providers(Vec<ProviderRecord>),
     ProviderTested {
         ok: bool,

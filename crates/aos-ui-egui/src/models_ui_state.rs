@@ -1,7 +1,7 @@
 //! Mutable state owned by the Models / Providers panels (catalog, downloads, HF import).
 
 use crate::models_page::ModelCatalogTab;
-use aos_proto::{ModelInfo, ModelPlanDiagnostic, ProviderRecord};
+use aos_proto::{LanClusterNodesResponse, ModelInfo, ModelPlanDiagnostic, ProviderRecord};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone)]
@@ -38,6 +38,7 @@ pub(crate) struct ModelsUiState {
     pub(crate) plan_diagnostics: HashMap<String, Vec<ModelPlanDiagnostic>>,
     pub(crate) plan_errors: HashMap<String, String>,
     pub(crate) plan_loading: HashSet<String>,
+    pub(crate) lan_cluster: Option<LanClusterNodesResponse>,
 }
 
 impl Default for ModelsUiState {
@@ -65,6 +66,7 @@ impl Default for ModelsUiState {
             plan_diagnostics: HashMap::new(),
             plan_errors: HashMap::new(),
             plan_loading: HashSet::new(),
+            lan_cluster: None,
         }
     }
 }
@@ -119,6 +121,10 @@ impl ModelsUiState {
 
     pub(crate) fn plan_loading(&self, model_id: &str) -> bool {
         self.plan_loading.contains(model_id)
+    }
+
+    pub(crate) fn set_lan_cluster(&mut self, response: LanClusterNodesResponse) {
+        self.lan_cluster = Some(response);
     }
 
     pub(crate) fn set_providers(&mut self, list: Vec<ProviderRecord>) {

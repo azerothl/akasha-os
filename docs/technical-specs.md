@@ -434,6 +434,12 @@ fingerprint. The UI toggle **Settings → Models → LAN cluster (experimental)*
 is persisted in `var/run/preferences.json` and gates the configured inventory.
 It is disabled by default.
 
+The model daemon exposes `model.cluster.nodes` for the current inventory,
+`model.cluster.pair` for a user-confirmed fingerprint match and
+`model.cluster.revoke` for immediate exclusion. The trust inventory is saved
+in `var/run/lan-pairing.json`; a changed fingerprint is never merged into an
+existing identity.
+
 `aos-placement::LanCluster` partitions declared weight shards across paired
 nodes and retains a job state. The model daemon exposes the internal
 `model.cluster.plan`, `model.cluster.recover` and `model.cluster.cancel`
@@ -448,6 +454,11 @@ LAN listener, discover peers, copy weights, route tokens or transmit KV data.
 An authenticated LAN transport must be added before enabling execution, and
 must consume only the coordinator's assignments. There is no Internet
 fallback and no automatic sharing of prompts or model data.
+
+The transport contract includes `LanSecureFrame` and `LanSecureChannel` using
+ChaCha20-Poly1305 with node/job associated data and a monotonic sequence. It
+rejects a wrong nonce, altered ciphertext, cross-job frame or replay. The
+codec is ready for the adapter, but no listener consumes it yet.
 
 ### 3.6 Inference Scheduler
 
@@ -930,6 +941,9 @@ If step 3 partially fails → degraded mode with clear messages; direct shell re
 | `model.cluster.plan` | Experimental paired-LAN shard plan; encrypted transport required |
 | `model.cluster.recover` | Reassign shards after an explicitly reported node loss |
 | `model.cluster.cancel` | Mark a LAN job cancelled and return cancellation targets |
+| `model.cluster.nodes` | List configured nodes and their trust state |
+| `model.cluster.pair` | Persist an explicit fingerprint-confirmed pairing |
+| `model.cluster.revoke` | Persist immediate node revocation |
 | `model.load` | Charge with investment profile |
 | `model.unload` | Frees resources |
 | `model.set_placement` | Plan manuel / profil |

@@ -5,11 +5,12 @@
 use aos_ipc::{BusClient, BusService, StreamHandle};
 use aos_model::{media, providers, ModelSubsystem, ModeldConfig};
 use aos_placement::{
-    BackendKind, DistributedWork, InferencePlanDiagnostic, LanCluster, LanPairingRegistry,
+    BackendKind, DistributedWork, InferencePlanDiagnostic, LanCluster, LanNode, LanPairingRegistry,
     LanWorkPlan, PlacementProfile, ThermalPolicy,
 };
 use aos_proto::{
-    CancelRequest, InferRequest, LanClusterAssignment, LanClusterJobRequest, LanClusterPlanRequest,
+    CancelRequest, InferRequest, LanClusterAssignment, LanClusterJobRequest, LanClusterNode,
+    LanClusterNodeRequest, LanClusterNodesResponse, LanClusterPairRequest, LanClusterPlanRequest,
     LanClusterPlanResponse, LoadRequest, MediaAudioGenerateRequest, MediaImageGenerateRequest,
     MediaImageUpscaleRequest, MigrateRequest, ModelIdRequest, ModelPlanDiagnostic,
     ModelPlanRequest, TokenEvent, UnloadRequest,
@@ -100,6 +101,45 @@ fn lan_plan_response(
     }
 }
 
+fn lan_registry_path(home: &std::path::Path) -> std::path::PathBuf {
+    home.join("var/run/lan-pairing.json")
+}
+
+fn load_lan_registry(config: &ModeldConfig, home: &std::path::Path) -> LanPairingRegistry {
+    if let Ok(raw) = std::fs::read_to_string(lan_registry_path(home)) {
+        if let Ok(mut registry) = serde_json::from_str::<LanPairingRegistry>(&raw) {
+            for node in config.lan_cluster.nodes.clone() {
+                let _ = registry.try_discover(node);
+            }
+            return registry;
+        }
+    }
+    LanPairingRegistry::from_nodes(config.lan_cluster.nodes.clone()).unwrap_or_default()
+}
+
+fn persist_lan_registry(
+    registry: &LanPairingRegistry,
+    home: &std::path::Path,
+) -> Result<(), String> {
+    let path = lan_registry_path(home);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("création du répertoire LAN: {e}"))?;
+    }
+    let raw = serde_json::to_vec_pretty(registry).map_err(|e| format!("sérialisation LAN: {e}"))?;
+    std::fs::write(&path, raw).map_err(|e| format!("écriture de l’état LAN: {e}"))
+}
+
+fn lan_node_info(node: &LanNode) -> LanClusterNode {
+    LanClusterNode {
+        node_id: node.node_id.clone(),
+        display_name: node.display_name.clone(),
+        address: node.address.clone(),
+        public_key_fingerprint: node.public_key_fingerprint.clone(),
+        trust: format!("{:?}", node.trust).to_ascii_lowercase(),
+        capabilities: node.capabilities.clone(),
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let config_path = std::env::args()
@@ -121,16 +161,13 @@ async fn main() {
     let ram_total = sysinfo.total_memory();
 
     let subsystem = Arc::new(ModelSubsystem::new(config.clone(), &registry, ram_total));
-    let lan_cluster = {
-        let mut registry = LanPairingRegistry::default();
-        for node in config.lan_cluster.nodes.clone() {
-            registry.discover(node);
-        }
-        Arc::new(Mutex::new(LanCluster::new(registry)))
-    };
     let preference_home = std::env::var_os("AOS_HOME")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| std::path::PathBuf::from("."));
+    let lan_cluster = {
+        let registry = load_lan_registry(&config, &preference_home);
+        Arc::new(Mutex::new(LanCluster::new(registry)))
+    };
     eprintln!(
         "[aos-modeld] {} modèles au registry, bus {}",
         registry.len(),
@@ -252,6 +289,112 @@ async fn main() {
     }
 
     // --- model.cluster.* (experimental LAN policy; no socket side effect) ---
+    {
+        let cluster = lan_cluster.clone();
+        let model_config = config.clone();
+        let preference_home = preference_home.clone();
+        svc.on("model.cluster.nodes", move |ctx| {
+            let cluster = cluster.clone();
+            let model_config = model_config.clone();
+            let preference_home = preference_home.clone();
+            async move {
+                let enabled = model_config.lan_cluster_enabled_at(&preference_home);
+                let response = cluster
+                    .lock()
+                    .map(|cluster| LanClusterNodesResponse {
+                        enabled,
+                        nodes: cluster.registry().nodes().map(lan_node_info).collect(),
+                    })
+                    .map_err(|_| "verrou cluster indisponible".to_string());
+                match response {
+                    Ok(response) => {
+                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &response).await;
+                    }
+                    Err(error) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::InternalError, &error)
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let cluster = lan_cluster.clone();
+        let preference_home = preference_home.clone();
+        svc.on("model.cluster.pair", move |ctx| {
+            let cluster = cluster.clone();
+            let preference_home = preference_home.clone();
+            async move {
+                match ctx.payload::<LanClusterPairRequest>() {
+                    Ok(req) => {
+                        let result = cluster
+                            .lock()
+                            .map_err(|_| "verrou cluster indisponible".to_string())
+                            .and_then(|mut cluster| {
+                                cluster
+                                    .registry_mut()
+                                    .pair(&req.node_id, &req.public_key_fingerprint)?;
+                                persist_lan_registry(cluster.registry(), &preference_home)
+                            });
+                        match result {
+                            Ok(()) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &true).await;
+                            }
+                            Err(error) => {
+                                let _ = ctx
+                                    .respond_error(aos_ipc::msg::Status::BadRequest, &error)
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let cluster = lan_cluster.clone();
+        let preference_home = preference_home.clone();
+        svc.on("model.cluster.revoke", move |ctx| {
+            let cluster = cluster.clone();
+            let preference_home = preference_home.clone();
+            async move {
+                match ctx.payload::<LanClusterNodeRequest>() {
+                    Ok(req) => {
+                        let result = cluster
+                            .lock()
+                            .map_err(|_| "verrou cluster indisponible".to_string())
+                            .and_then(|mut cluster| {
+                                if !cluster.registry_mut().revoke(&req.node_id) {
+                                    return Err("nœud inconnu".into());
+                                }
+                                persist_lan_registry(cluster.registry(), &preference_home)
+                            });
+                        match result {
+                            Ok(()) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &true).await;
+                            }
+                            Err(error) => {
+                                let _ = ctx
+                                    .respond_error(aos_ipc::msg::Status::BadRequest, &error)
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
     {
         let cluster = lan_cluster.clone();
         let model_config = config.clone();

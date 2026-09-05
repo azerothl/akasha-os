@@ -409,6 +409,34 @@ pub struct LanClusterPlanResponse {
     pub cancelled_nodes: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanClusterNode {
+    pub node_id: String,
+    pub display_name: String,
+    pub address: String,
+    pub public_key_fingerprint: String,
+    pub trust: String,
+    #[serde(default)]
+    pub capabilities: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanClusterNodesResponse {
+    pub enabled: bool,
+    pub nodes: Vec<LanClusterNode>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanClusterPairRequest {
+    pub node_id: String,
+    pub public_key_fingerprint: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanClusterNodeRequest {
+    pub node_id: String,
+}
+
 /// Métriques live d'un modèle (`model.metrics`, F-PLC-08, F-OBS-02).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelMetrics {

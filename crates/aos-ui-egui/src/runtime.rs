@@ -2495,6 +2495,61 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 }
             }
         }
+        Cmd::ModelClusterNodes => {
+            match bus
+                .call::<(), aos_proto::LanClusterNodesResponse>("model.cluster.nodes", &(), vec![])
+                .await
+            {
+                Ok(nodes) => {
+                    let _ = evt_tx.send(Evt::ModelClusterNodes(nodes));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::ModelClusterOperationFailed(e.to_string()));
+                }
+            }
+        }
+        Cmd::ModelClusterPair {
+            node_id,
+            public_key_fingerprint,
+        } => {
+            match bus
+                .call::<aos_proto::LanClusterPairRequest, bool>(
+                    "model.cluster.pair",
+                    &aos_proto::LanClusterPairRequest {
+                        node_id,
+                        public_key_fingerprint,
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(_) => {
+                    let _ = evt_tx.send(Evt::Status("LAN node paired".into()));
+                    let _ = evt_tx.send(Evt::ModelClusterRefresh);
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::ModelClusterOperationFailed(e.to_string()));
+                }
+            }
+        }
+        Cmd::ModelClusterRevoke { node_id } => {
+            match bus
+                .call::<aos_proto::LanClusterNodeRequest, bool>(
+                    "model.cluster.revoke",
+                    &aos_proto::LanClusterNodeRequest { node_id },
+                    vec![],
+                )
+                .await
+            {
+                Ok(_) => {
+                    let _ = evt_tx.send(Evt::Status("LAN node revoked".into()));
+                    let _ = evt_tx.send(Evt::ModelClusterRefresh);
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::ModelClusterOperationFailed(e.to_string()));
+                }
+            }
+        }
         Cmd::ModelUnload { model_id } => {
             match bus
                 .call::<UnloadRequest, bool>(
@@ -3476,6 +3531,20 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             content,
             images,
         } => {
+            let poll_bus = bus.clone();
+            let poll_evt = evt_tx.clone();
+            let poll_ctx = egui_ctx.clone();
+            let poll_sid = session_id.clone();
+            let poll = tokio::spawn(async move {
+                let mut interval = tokio::time::interval(std::time::Duration::from_millis(400));
+                interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+                interval.tick().await;
+                loop {
+                    interval.tick().await;
+                    load_session(&poll_bus, &poll_evt, &poll_sid).await;
+                    poll_ctx.request_repaint();
+                }
+            });
             match bus
                 .call::<ChatSessionRoomTurnRequest, ChatSessionRoomTurnResponse>(
                     "chat.session.room.turn",
@@ -3489,6 +3558,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 .await
             {
                 Ok(resp) => {
+                    poll.abort();
                     load_session(&bus, &evt_tx, &session_id).await;
                     let _ = evt_tx.send(Evt::RoomTurnDone {
                         session_id,
@@ -3497,7 +3567,12 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                     });
                 }
                 Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                    poll.abort();
+                    load_session(&bus, &evt_tx, &session_id).await;
+                    let _ = evt_tx.send(Evt::ChatError {
+                        session_id,
+                        message: e.to_string(),
+                    });
                 }
             }
         }
