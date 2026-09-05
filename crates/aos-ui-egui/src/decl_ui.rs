@@ -132,7 +132,13 @@ impl DeclUiPanelState {
                             if let Some(children) = &w.children {
                                 for c in children {
                                     Self::render_widget(
-                                        ui, md_cache, c, cache, form_fields, tool_schemas, actions,
+                                        ui,
+                                        md_cache,
+                                        c,
+                                        cache,
+                                        form_fields,
+                                        tool_schemas,
+                                        actions,
                                     );
                                 }
                             }
@@ -144,7 +150,13 @@ impl DeclUiPanelState {
                     if let Some(children) = &w.children {
                         for c in children {
                             Self::render_widget(
-                                ui, md_cache, c, cache, form_fields, tool_schemas, actions,
+                                ui,
+                                md_cache,
+                                c,
+                                cache,
+                                form_fields,
+                                tool_schemas,
+                                actions,
                             );
                         }
                     }
@@ -215,19 +227,13 @@ impl DeclUiPanelState {
                     .clone()
                     .or_else(|| w.text.clone())
                     .unwrap_or_else(|| "flag".into());
-                let mut on = form_fields
-                    .get(&key)
-                    .map(|s| s == "true")
-                    .unwrap_or(false);
+                let mut on = form_fields.get(&key).map(|s| s == "true").unwrap_or(false);
                 if ui.checkbox(&mut on, &key).changed() {
                     form_fields.insert(key, if on { "true".into() } else { "false".into() });
                 }
             }
             "textarea" => {
-                let key = w
-                    .label
-                    .clone()
-                    .unwrap_or_else(|| "text".into());
+                let key = w.label.clone().unwrap_or_else(|| "text".into());
                 form_fields.entry(key.clone()).or_default();
                 ui.label(&key);
                 ui.text_edit_multiline(form_fields.get_mut(&key).unwrap());
@@ -249,14 +255,13 @@ impl DeclUiPanelState {
                 });
             }
             "button" => {
-                let label = w
-                    .label
-                    .as_deref()
-                    .or(w.text.as_deref())
-                    .unwrap_or("Run");
+                let label = w.label.as_deref().or(w.text.as_deref()).unwrap_or("Run");
                 if ui.button(label).clicked() {
                     if let Some(tool) = &w.tool {
-                        let args = w.args.clone().unwrap_or_else(|| Value::Object(Default::default()));
+                        let args = w
+                            .args
+                            .clone()
+                            .unwrap_or_else(|| Value::Object(Default::default()));
                         actions.invoke = Some((tool.clone(), args));
                     }
                 }
@@ -278,7 +283,10 @@ impl DeclUiPanelState {
                                 ui.label(&field.label);
                                 match &field.kind {
                                     FieldKind::Bool => {
-                                        let mut on = form_fields.get(&field.key).map(|s| s == "true").unwrap_or(false);
+                                        let mut on = form_fields
+                                            .get(&field.key)
+                                            .map(|s| s == "true")
+                                            .unwrap_or(false);
                                         if ui.checkbox(&mut on, "").changed() {
                                             form_fields.insert(
                                                 field.key.clone(),
@@ -304,10 +312,14 @@ impl DeclUiPanelState {
                                             });
                                     }
                                     FieldKind::Textarea => {
-                                        ui.text_edit_multiline(form_fields.get_mut(&field.key).unwrap());
+                                        ui.text_edit_multiline(
+                                            form_fields.get_mut(&field.key).unwrap(),
+                                        );
                                     }
                                     FieldKind::Number | FieldKind::Text => {
-                                        ui.text_edit_singleline(form_fields.get_mut(&field.key).unwrap());
+                                        ui.text_edit_singleline(
+                                            form_fields.get_mut(&field.key).unwrap(),
+                                        );
                                     }
                                 }
                             });
@@ -418,11 +430,7 @@ impl FieldKind {
             Some("integer") | Some("number") => FieldKind::Number,
             Some("string") => {
                 let fmt = v.get("format").and_then(|f| f.as_str()).unwrap_or("");
-                let long = v
-                    .get("maxLength")
-                    .and_then(|m| m.as_u64())
-                    .unwrap_or(0)
-                    > 120;
+                let long = v.get("maxLength").and_then(|m| m.as_u64()).unwrap_or(0) > 120;
                 if fmt == "textarea" || long {
                     FieldKind::Textarea
                 } else {
@@ -524,34 +532,39 @@ fn render_table(ui: &mut Ui, val: &Value, columns: Option<&[String]>) {
     } else {
         vec!["value".into()]
     };
-    egui::Grid::new("decl_ui_table").striped(true).show(ui, |ui| {
-        for c in &cols {
-            ui.strong(c);
-        }
-        ui.end_row();
-        for row in &rows {
-            match row {
-                Value::Object(map) => {
-                    for c in &cols {
-                        ui.label(map.get(c).map(value_display).unwrap_or_else(|| "—".into()));
-                    }
-                }
-                Value::Array(cells) => {
-                    for c in cols.iter().enumerate() {
-                        let cell = cells.get(c.0).map(value_display).unwrap_or_else(|| "—".into());
-                        ui.label(cell);
-                    }
-                }
-                other => {
-                    ui.label(value_display(other));
-                    for _ in 1..cols.len() {
-                        ui.label("");
-                    }
-                }
+    egui::Grid::new("decl_ui_table")
+        .striped(true)
+        .show(ui, |ui| {
+            for c in &cols {
+                ui.strong(c);
             }
             ui.end_row();
-        }
-    });
+            for row in &rows {
+                match row {
+                    Value::Object(map) => {
+                        for c in &cols {
+                            ui.label(map.get(c).map(value_display).unwrap_or_else(|| "—".into()));
+                        }
+                    }
+                    Value::Array(cells) => {
+                        for c in cols.iter().enumerate() {
+                            let cell = cells
+                                .get(c.0)
+                                .map(value_display)
+                                .unwrap_or_else(|| "—".into());
+                            ui.label(cell);
+                        }
+                    }
+                    other => {
+                        ui.label(value_display(other));
+                        for _ in 1..cols.len() {
+                            ui.label("");
+                        }
+                    }
+                }
+                ui.end_row();
+            }
+        });
 }
 
 fn render_line_chart(ui: &mut Ui, val: &Value, series_key: Option<&str>) {
@@ -560,16 +573,14 @@ fn render_line_chart(ui: &mut Ui, val: &Value, series_key: Option<&str>) {
         ui.weak("—");
         return;
     }
-    Plot::new("decl_ui_plot")
-        .height(160.0)
-        .show(ui, |plot_ui| {
-            plot_ui.line(
-                Line::new(PlotPoints::from_iter(
-                    points.iter().enumerate().map(|(i, y)| [i as f64, *y]),
-                ))
-                .name(series_key.unwrap_or("series")),
-            );
-        });
+    Plot::new("decl_ui_plot").height(160.0).show(ui, |plot_ui| {
+        plot_ui.line(
+            Line::new(PlotPoints::from_iter(
+                points.iter().enumerate().map(|(i, y)| [i as f64, *y]),
+            ))
+            .name(series_key.unwrap_or("series")),
+        );
+    });
 }
 
 fn render_bar_chart(ui: &mut Ui, val: &Value, series_key: Option<&str>) {
@@ -578,16 +589,14 @@ fn render_bar_chart(ui: &mut Ui, val: &Value, series_key: Option<&str>) {
         ui.weak("—");
         return;
     }
-    Plot::new("decl_ui_bar")
-        .height(160.0)
-        .show(ui, |plot_ui| {
-            let bars: Vec<Bar> = points
-                .iter()
-                .enumerate()
-                .map(|(i, y)| Bar::new(i as f64, *y))
-                .collect();
-            plot_ui.bar_chart(BarChart::new(bars).name(series_key.unwrap_or("series")));
-        });
+    Plot::new("decl_ui_bar").height(160.0).show(ui, |plot_ui| {
+        let bars: Vec<Bar> = points
+            .iter()
+            .enumerate()
+            .map(|(i, y)| Bar::new(i as f64, *y))
+            .collect();
+        plot_ui.bar_chart(BarChart::new(bars).name(series_key.unwrap_or("series")));
+    });
 }
 
 fn extract_pie_slices(val: &Value) -> Vec<(String, f64)> {

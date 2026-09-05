@@ -89,11 +89,11 @@ mod ui_feedback;
 mod ui_format;
 mod ui_memory;
 mod ui_models;
+mod ui_primitives;
 mod ui_providers;
 mod ui_scenarios;
 mod ui_security;
 mod ui_settings;
-mod ui_primitives;
 mod ui_workspace;
 mod workspace_controller;
 mod workspace_ui_state;
@@ -438,9 +438,10 @@ fn session_toggle_reserve_width(t: &i18n::UiStrings, canvas_open: bool) -> f32 {
 fn session_toggle_chip(ui: &mut egui::Ui, selected: bool, label: &str) -> egui::Response {
     // Taille naturelle au contenu : l'ancienne largeur forcée par estimation
     // (octets, pas glyphes) faisait déborder le texte sur les voisins.
-    ui.add(
-        egui::SelectableLabel::new(selected, egui::RichText::new(label)),
-    )
+    ui.add(egui::SelectableLabel::new(
+        selected,
+        egui::RichText::new(label),
+    ))
 }
 
 fn composer_row_reserved_width(t: &i18n::UiStrings, show_stop: bool) -> f32 {
@@ -936,10 +937,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         } else {
             self.security_ui.caps.len().to_string()
         };
-        ui.label(
-            t.onboard_allowance_caps
-                .replace("{n}", &caps_label),
-        );
+        ui.label(t.onboard_allowance_caps.replace("{n}", &caps_label));
         ui.label(t.onboard_allowance_no_agent_tools);
         ui.add_space(8.0);
         ui.weak(t.onboard_allowance_scenarios);
@@ -1610,7 +1608,10 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             };
             if ui
                 .add_sized(
-                    egui::vec2(ui.available_width().max(1.0), theme::CONTROL_MIN_H_COMFORTABLE),
+                    egui::vec2(
+                        ui.available_width().max(1.0),
+                        theme::CONTROL_MIN_H_COMFORTABLE,
+                    ),
                     egui::SelectableLabel::new(self.tab == tab, label_text),
                 )
                 .on_hover_text(hint)
@@ -1998,7 +1999,9 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 // Enter ouvre le 1er résultat, comme spotlight.
                 if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
                     let labels: Vec<&str> = destinations.iter().map(|(l, _)| *l).collect();
-                    if let Some(first) = ui_primitives::filter_labels(&self.spotlight_query, &labels).first() {
+                    if let Some(first) =
+                        ui_primitives::filter_labels(&self.spotlight_query, &labels).first()
+                    {
                         let (_, tab) = &destinations[*first];
                         self.on_tab_open(tab.clone());
                         self.show_go_to_palette = false;
@@ -2288,6 +2291,15 @@ impl eframe::App for UiApp {
                 Evt::ModelOperationFailed { model_id, error } => {
                     self.on_model_operation_failed(model_id, error);
                 }
+                Evt::ModelPlan { model_id, plans } => self.on_model_plan(model_id, plans),
+                Evt::ModelPlanFailed { model_id, error } => {
+                    self.on_model_plan_failed(model_id, error)
+                }
+                Evt::ModelClusterNodes(response) => self.on_model_cluster_nodes(response),
+                Evt::ModelClusterRefresh => {
+                    let _ = self.cmd_tx.send(Cmd::ModelClusterNodes);
+                }
+                Evt::ModelClusterOperationFailed(error) => self.on_model_cluster_error(error),
                 Evt::Providers(list) => self.on_providers(list),
                 Evt::ProviderTested {
                     ok,
@@ -2553,17 +2565,18 @@ impl eframe::App for UiApp {
                         ui.group(|ui| {
                             let device_capture = c.action.starts_with("device.camera.")
                                 || c.action.starts_with("device.mic.");
-                            let rich = device_capture || matches!(
-                                c.action.as_str(),
-                                "module.install"
-                                    | "module.uninstall"
-                                    | "module.compile"
-                                    | "skill.create"
-                                    | "cap.request"
-                                    | "media.generate"
-                                    | "media.image.generate"
-                                    | "media.audio.generate"
-                            );
+                            let rich = device_capture
+                                || matches!(
+                                    c.action.as_str(),
+                                    "module.install"
+                                        | "module.uninstall"
+                                        | "module.compile"
+                                        | "skill.create"
+                                        | "cap.request"
+                                        | "media.generate"
+                                        | "media.image.generate"
+                                        | "media.audio.generate"
+                                );
                             ui.label(t.confirm_wants_action.replace("{action}", &c.action));
                             ui.monospace(format!("{} → {}", c.target, c.reason));
                             if device_capture {
@@ -2597,7 +2610,14 @@ impl eframe::App for UiApp {
                                     });
                                     self.scenario_ui.confirm = true;
                                 }
-                                if ui.button(if device_capture { t.device_deny } else { t.confirm_deny }).clicked() {
+                                if ui
+                                    .button(if device_capture {
+                                        t.device_deny
+                                    } else {
+                                        t.confirm_deny
+                                    })
+                                    .clicked()
+                                {
                                     let _ = self.cmd_tx.send(Cmd::Confirm {
                                         id: c.id.clone(),
                                         approved: false,
@@ -2623,7 +2643,11 @@ impl eframe::App for UiApp {
             .resizable(true)
             .show(ctx, |ui| {
                 overflow_scroll(ui, "nav_sidebar", |ui| {
-                ui.heading(if self.prefs.ui_density == prefs::UiDensity::Compact { "A" } else { "Akasha" });
+                    ui.heading(if self.prefs.ui_density == prefs::UiDensity::Compact {
+                        "A"
+                    } else {
+                        "Akasha"
+                    });
                     self.ui_nav_rail(ui, &t);
                     ui.separator();
                     ui.heading(if self.prefs.ui_density == prefs::UiDensity::Compact {
@@ -2641,7 +2665,10 @@ impl eframe::App for UiApp {
                                 m.ram_total as f64 / (1 << 30) as f64
                             )));
                         } else {
-                            ui.label(format!("RAM {:.0}%", 100.0 * m.ram_used as f32 / m.ram_total.max(1) as f32));
+                            ui.label(format!(
+                                "RAM {:.0}%",
+                                100.0 * m.ram_used as f32 / m.ram_total.max(1) as f32
+                            ));
                         }
                         ui.label(format!("CPU {:.0}%", m.cpu_percent));
                         if self.prefs.ui_density != prefs::UiDensity::Compact {
@@ -2679,8 +2706,7 @@ impl eframe::App for UiApp {
                 self.ui_status_bar(ui, &t);
                 if !self.status.is_empty() {
                     ui.separator();
-                    let history: Vec<String> =
-                        self.status_history.iter().cloned().collect();
+                    let history: Vec<String> = self.status_history.iter().cloned().collect();
                     let tip = if history.is_empty() {
                         String::new()
                     } else {

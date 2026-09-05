@@ -1,5 +1,6 @@
 //! Configuration de `aos-modeld` (fichier YAML dev, chemins réels des poids).
 
+use aos_placement::{LanNode, QuantizationMetadata};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::Path;
@@ -40,6 +41,29 @@ pub struct ModeldConfig {
     /// Politique d'optimisation de l'inférence (E22).
     #[serde(default)]
     pub inference_optimization: InferenceOptimizationConfig,
+    /// Adaptive backend/quantization planner. Enabled by default; experimental
+    /// adapters remain opt-in independently.
+    #[serde(default = "default_true")]
+    pub adaptive_planner: bool,
+    #[serde(default)]
+    pub experimental_backends: bool,
+    #[serde(default = "default_min_quality")]
+    pub min_quantization_quality: f32,
+    /// `performance`, `balanced`, `quiet` or `always-on`.
+    #[serde(default = "default_thermal_policy")]
+    pub thermal_policy: String,
+    /// Explicitly configured, already paired LAN nodes. No discovery or
+    /// network listener is enabled by this configuration alone.
+    #[serde(default)]
+    pub lan_cluster: LanClusterConfig,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct LanClusterConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub nodes: Vec<LanNode>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -86,6 +110,11 @@ pub struct ModelOverride {
     pub kv_bytes_per_token: Option<u64>,
     #[serde(default)]
     pub n_params: Option<f64>,
+    #[serde(default)]
+    pub quantization: Option<QuantizationMetadata>,
+    /// Explicitly calibrated, installed alternatives for the same architecture.
+    #[serde(default)]
+    pub variants: Vec<crate::variants::ModelVariant>,
 }
 
 fn default_bus() -> String {
@@ -127,8 +156,34 @@ fn default_spec_priority() -> u8 {
 fn default_batch_window() -> u64 {
     150
 }
+fn default_min_quality() -> f32 {
+    0.85
+}
+fn default_thermal_policy() -> String {
+    "balanced".into()
+}
 
 impl ModeldConfig {
+    /// UI preferences take effect on the next load, without restarting modeld.
+    /// Missing/legacy/invalid preferences preserve the YAML configuration.
+    pub fn adaptive_planner_at(&self, home: &Path) -> bool {
+        std::fs::read_to_string(home.join("var/run/preferences.json"))
+            .ok()
+            .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+            .and_then(|v| v.get("adaptive_planner").and_then(|v| v.as_bool()))
+            .unwrap_or(self.adaptive_planner)
+    }
+
+    /// UI preferences can gate the configured LAN adapter without changing
+    /// the YAML node inventory. Missing preferences preserve YAML behavior.
+    pub fn lan_cluster_enabled_at(&self, home: &Path) -> bool {
+        std::fs::read_to_string(home.join("var/run/preferences.json"))
+            .ok()
+            .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+            .and_then(|v| v.get("lan_cluster").and_then(|v| v.as_bool()))
+            .unwrap_or(self.lan_cluster.enabled)
+    }
+
     pub fn load(path: impl AsRef<Path>) -> Result<Self, Box<dyn std::error::Error>> {
         Ok(serde_yaml::from_str(&std::fs::read_to_string(path)?)?)
     }
@@ -139,6 +194,33 @@ mod tests {
     use super::*;
 
     #[test]
+    fn adaptive_preference_is_reread_and_legacy_preserves_config() {
+        let root = std::env::temp_dir().join(format!(
+            "aos-adaptive-pref-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(root.join("var/run")).unwrap();
+        let path = root.join("var/run/preferences.json");
+        let cfg: ModeldConfig = serde_yaml::from_str("adaptive_planner: false").unwrap();
+        assert!(!cfg.adaptive_planner_at(&root));
+        for (raw, expected) in [
+            (r#"{"adaptive_planner":true}"#, true),
+            (r#"{"adaptive_planner":false}"#, false),
+            (r#"{"inference_mode":"auto"}"#, false),
+            (r#"{"adaptive_planner":"true"}"#, false),
+            ("invalid", false),
+        ] {
+            std::fs::write(&path, raw).unwrap();
+            assert_eq!(cfg.adaptive_planner_at(&root), expected);
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn optimization_defaults_are_backward_compatible() {
         let cfg: ModeldConfig = serde_yaml::from_str("{}").expect("config minimale");
         assert_eq!(cfg.inference_optimization.prefix_cache, "auto");
@@ -146,6 +228,8 @@ mod tests {
         assert_eq!(cfg.inference_optimization.max_draft_tokens, 12);
         assert_eq!(cfg.inference_optimization.min_spec_priority, 2);
         assert!(cfg.inference_optimization.adaptive_batching);
+        assert!(cfg.adaptive_planner);
+        assert!(!cfg.experimental_backends);
     }
 
     #[test]

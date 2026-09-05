@@ -5,8 +5,8 @@ use aos_proto::ChatAttachment;
 use eframe::egui;
 
 use crate::cmd::Cmd;
-use crate::i18n::UiStrings;
 use crate::format_schedule_next_label;
+use crate::i18n::UiStrings;
 
 #[derive(Clone)]
 pub enum ScheduleCardAction {
@@ -111,9 +111,7 @@ pub fn resolved_card_state<'a>(
     entry: Option<&'a ScheduleEntry>,
     attachment_state: &'a str,
 ) -> &'a str {
-    entry
-        .map(card_state_from_entry)
-        .unwrap_or(attachment_state)
+    entry.map(card_state_from_entry).unwrap_or(attachment_state)
 }
 
 pub fn upsert_schedule_entry(schedules: &mut Vec<ScheduleEntry>, entry: ScheduleEntry) {
@@ -287,10 +285,7 @@ mod tests {
         let next_ms = now_ms + 3 * 86_400_000; // three local days later
         let label = crate::format_schedule_next_label(&t_en, next_ms, now_ms, tz);
         let time = crate::format_local_time_hm(next_ms, tz);
-        assert!(
-            label.contains(&time),
-            "expected time {time} in {label}"
-        );
+        assert!(label.contains(&time), "expected time {time} in {label}");
         assert_eq!(
             label.matches(&time).count(),
             1,

@@ -1,11 +1,11 @@
 //! Chat submission controller and composer-to-runtime transitions.
 
 use crate::cmd::{ChatLine, ChatRetryTurn, Cmd};
+use crate::research_ui_state::ResearchPendingChat;
 use crate::{
     chat_agent_max_steps, chat_canvas, chat_room, chrono_like_stamp, i18n, local_tz_offset_minutes,
     models_page, now_ms, session_chat, session_model_supports_vision, UiApp,
 };
-use crate::research_ui_state::ResearchPendingChat;
 use aos_agent::schedule_parse;
 use aos_proto::{chat_tts_request, ChatAttachment};
 
@@ -73,10 +73,8 @@ impl UiApp {
                 self.chat_state.session_chat.finish_turn(&session_id);
             } else {
                 self.chat.push(ChatLine::plain("user", text));
-                self.chat.push(ChatLine::plain(
-                    "système",
-                    t.chat_previous_in_progress,
-                ));
+                self.chat
+                    .push(ChatLine::plain("système", t.chat_previous_in_progress));
                 return;
             }
         }
@@ -442,9 +440,11 @@ impl UiApp {
             self.chat_state.view.deep_plan_open.insert(idx);
         }
         if !applied {
-            if let Some(info) = self.agents.iter().find(|a| {
-                a.session_id.as_deref() == Some(session_id) && a.deep_plan.is_some()
-            }) {
+            if let Some(info) = self
+                .agents
+                .iter()
+                .find(|a| a.session_id.as_deref() == Some(session_id) && a.deep_plan.is_some())
+            {
                 if let Some(plan) = info.deep_plan.clone() {
                     let mut att = ChatAttachment::DeepPlan {
                         agent_id: info.agent_id.clone(),
@@ -482,7 +482,11 @@ impl UiApp {
                         session_id: session_id.to_string(),
                         role: "assistant".into(),
                         content: reply,
-                        attachments: self.chat.last().map(|l| l.attachments.clone()).unwrap_or_default(),
+                        attachments: self
+                            .chat
+                            .last()
+                            .map(|l| l.attachments.clone())
+                            .unwrap_or_default(),
                     });
                     return;
                 }

@@ -5,7 +5,7 @@ use crate::{i18n, scenarios_panel, UiApp};
 use eframe::egui;
 
 impl UiApp {
-pub(crate) fn ui_scenarios(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn ui_scenarios(&mut self, ui: &mut egui::Ui) {
         let t = i18n::strings(&self.prefs.language);
         let mut flags = scenarios_panel::ScenarioFlags {
             chat: self.scenario_ui.chat,
@@ -17,13 +17,7 @@ pub(crate) fn ui_scenarios(&mut self, ui: &mut egui::Ui) {
         };
         let mut launch = false;
         let mut test_confirm = false;
-        scenarios_panel::ui(
-            ui,
-            &t,
-            &mut flags,
-            || launch = true,
-            || test_confirm = true,
-        );
+        scenarios_panel::ui(ui, &t, &mut flags, || launch = true, || test_confirm = true);
         self.scenario_ui.chat = flags.chat;
         self.scenario_ui.note_human = flags.note_human;
         self.scenario_ui.note_agent = flags.note_agent;
@@ -40,5 +34,4 @@ pub(crate) fn ui_scenarios(&mut self, ui: &mut egui::Ui) {
             let _ = self.cmd_tx.send(Cmd::RefreshConfirms);
         }
     }
-
 }

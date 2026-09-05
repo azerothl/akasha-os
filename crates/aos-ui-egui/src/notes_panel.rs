@@ -211,12 +211,7 @@ impl NotesPanelState {
         self.status = saved_label.to_string();
     }
 
-    pub fn mark_save_failed(
-        &mut self,
-        title: String,
-        body: String,
-        path: Option<String>,
-    ) {
+    pub fn mark_save_failed(&mut self, title: String, body: String, path: Option<String>) {
         self.create_failed = true;
         self.retry_payload = Some((title, body, path));
         self.status.clear();
@@ -264,11 +259,7 @@ fn insert_wrap(buf: &mut String, before: &str, after: &str, placeholder: &str) {
 }
 
 /// Dessine l'onglet Notes. Retourne les actions à exécuter.
-pub fn show_notes_panel(
-    ui: &mut Ui,
-    state: &mut NotesPanelState,
-    t: &UiStrings,
-) -> NotesActions {
+pub fn show_notes_panel(ui: &mut Ui, state: &mut NotesPanelState, t: &UiStrings) -> NotesActions {
     let mut actions = NotesActions::default();
 
     ui.heading(t.tab_notes);
@@ -289,7 +280,10 @@ pub fn show_notes_panel(
             (NotesPreviewMode::Preview, t.notes_view_preview),
             (NotesPreviewMode::Both, t.notes_view_both),
         ] {
-            if ui.selectable_label(state.preview_mode == mode, label).clicked() {
+            if ui
+                .selectable_label(state.preview_mode == mode, label)
+                .clicked()
+            {
                 state.preview_mode = mode;
                 state.show_preview = mode != NotesPreviewMode::Editor;
             }
@@ -309,94 +303,95 @@ pub fn show_notes_panel(
         .max_width(560.0)
         .resizable(true)
         .show_inside(ui, |list_ui| {
-        // --- Liste ---
-        list_ui.vertical(|ui| {
-            ui.label(RichText::new(t.notes_list).strong());
-            ui.horizontal(|ui| {
-                ui.label(t.notes_filter);
-                ui.text_edit_singleline(&mut state.filter);
-            });
-            egui::ScrollArea::vertical()
-                .id_salt("notes_list")
-                .max_height(list_h.max(120.0))
-                .auto_shrink([false, false])
-                .show(ui, |ui| {
-                    let filter = state.filter.to_lowercase();
-                    let items: Vec<_> = state
-                        .notes
-                        .iter()
-                        .filter(|n| {
-                            filter.is_empty()
-                                || n.title.to_lowercase().contains(&filter)
-                                || n.excerpt.to_lowercase().contains(&filter)
-                        })
-                        .cloned()
-                        .collect();
-                    if items.is_empty() {
-                        ui.weak(t.notes_empty);
-                    }
-                    for n in items {
-                        let selected = state.selected_path.as_deref() == Some(n.path.as_str());
-                        let label = if n.excerpt.is_empty() {
-                            n.title.clone()
-                        } else {
-                            format!("{}\n{}", n.title, n.excerpt)
-                        };
-                        if ui.selectable_label(selected, label).clicked() {
-                            actions.read_path = Some(n.path.clone());
-                            // Toujours envoyer aussi le titre : évite les anciens
-                            // WASM notes.read qui exigeaient `title` (issue #1).
-                            if !n.title.is_empty() {
-                                actions.read_title = Some(n.title.clone());
-                            }
-                        }
-                    }
+            // --- Liste ---
+            list_ui.vertical(|ui| {
+                ui.label(RichText::new(t.notes_list).strong());
+                ui.horizontal(|ui| {
+                    ui.label(t.notes_filter);
+                    ui.text_edit_singleline(&mut state.filter);
                 });
-
-            if !state.search_hits.is_empty() {
-                ui.separator();
-                ui.label(RichText::new(t.notes_search).strong());
                 egui::ScrollArea::vertical()
-                    .id_salt("notes_search")
-                    .max_height(search_h.max(80.0))
+                    .id_salt("notes_list")
+                    .max_height(list_h.max(120.0))
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
-                        for h in state.search_hits.clone() {
-                            let title = if h.title.is_empty() {
-                                h.text.chars().take(60).collect::<String>()
+                        let filter = state.filter.to_lowercase();
+                        let items: Vec<_> = state
+                            .notes
+                            .iter()
+                            .filter(|n| {
+                                filter.is_empty()
+                                    || n.title.to_lowercase().contains(&filter)
+                                    || n.excerpt.to_lowercase().contains(&filter)
+                            })
+                            .cloned()
+                            .collect();
+                        if items.is_empty() {
+                            ui.weak(t.notes_empty);
+                        }
+                        for n in items {
+                            let selected = state.selected_path.as_deref() == Some(n.path.as_str());
+                            let label = if n.excerpt.is_empty() {
+                                n.title.clone()
                             } else {
-                                h.title.clone()
+                                format!("{}\n{}", n.title, n.excerpt)
                             };
-                            if ui
-                                .button(format!("{title} ({:.2})", h.score))
-                                .on_hover_text(&h.text)
-                                .clicked()
-                            {
-                                if !h.path.is_empty() {
-                                    actions.read_path = Some(h.path);
-                                } else if !h.title.is_empty() {
-                                    actions.read_title = Some(h.title);
+                            if ui.selectable_label(selected, label).clicked() {
+                                actions.read_path = Some(n.path.clone());
+                                // Toujours envoyer aussi le titre : évite les anciens
+                                // WASM notes.read qui exigeaient `title` (issue #1).
+                                if !n.title.is_empty() {
+                                    actions.read_title = Some(n.title.clone());
                                 }
                             }
                         }
                     });
-            }
+
+                if !state.search_hits.is_empty() {
+                    ui.separator();
+                    ui.label(RichText::new(t.notes_search).strong());
+                    egui::ScrollArea::vertical()
+                        .id_salt("notes_search")
+                        .max_height(search_h.max(80.0))
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| {
+                            for h in state.search_hits.clone() {
+                                let title = if h.title.is_empty() {
+                                    h.text.chars().take(60).collect::<String>()
+                                } else {
+                                    h.title.clone()
+                                };
+                                if ui
+                                    .button(format!("{title} ({:.2})", h.score))
+                                    .on_hover_text(&h.text)
+                                    .clicked()
+                                {
+                                    if !h.path.is_empty() {
+                                        actions.read_path = Some(h.path);
+                                    } else if !h.title.is_empty() {
+                                        actions.read_title = Some(h.title);
+                                    }
+                                }
+                            }
+                        });
+                }
+            });
         });
 
-        });
-
-        // --- Éditeur ---
-        ui.vertical(|ui| {
-            let preview_h = (editor_h * 0.35).max(100.0);
-            ui.label(RichText::new(if state.is_new {
+    // --- Éditeur ---
+    ui.vertical(|ui| {
+        let preview_h = (editor_h * 0.35).max(100.0);
+        ui.label(
+            RichText::new(if state.is_new {
                 t.notes_editor_new
             } else {
                 t.notes_editor_edit
             })
-            .strong());
+            .strong(),
+        );
 
-            let preview_only = state.preview_mode == NotesPreviewMode::Preview;
-            if !preview_only {
+        let preview_only = state.preview_mode == NotesPreviewMode::Preview;
+        if !preview_only {
             if state.create_failed {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(t.notes_create_failed).strong());
@@ -421,11 +416,14 @@ pub fn show_notes_panel(
                     state.dirty = true;
                 }
                 if ui
-                    .add_enabled(can_save, egui::Button::new(if state.is_new {
-                        t.tasks_create
-                    } else {
-                        t.memory_btn_save
-                    }))
+                    .add_enabled(
+                        can_save,
+                        egui::Button::new(if state.is_new {
+                            t.tasks_create
+                        } else {
+                            t.memory_btn_save
+                        }),
+                    )
                     .clicked()
                 {
                     let title = state.edit_title.trim().to_string();
@@ -506,81 +504,81 @@ pub fn show_notes_panel(
             if ui.add(editor).changed() {
                 state.dirty = true;
             }
-            }
+        }
 
-            if state.preview_mode != NotesPreviewMode::Editor {
-                ui.separator();
-                ui.label(RichText::new(t.notes_preview).strong());
-                let preview = if state.edit_title.is_empty() {
-                    state.edit_body.clone()
-                } else {
-                    format!("# {}\n\n{}", state.edit_title, state.edit_body)
-                };
-                egui::ScrollArea::vertical()
-                    .id_salt("notes_preview")
-                    .max_height(preview_h)
-                    .auto_shrink([false, false])
-                    .show(ui, |ui| {
-                        CommonMarkViewer::new().show(ui, &mut state.md_cache, &preview);
-                    });
-            }
+        if state.preview_mode != NotesPreviewMode::Editor {
+            ui.separator();
+            ui.label(RichText::new(t.notes_preview).strong());
+            let preview = if state.edit_title.is_empty() {
+                state.edit_body.clone()
+            } else {
+                format!("# {}\n\n{}", state.edit_title, state.edit_body)
+            };
+            egui::ScrollArea::vertical()
+                .id_salt("notes_preview")
+                .max_height(preview_h)
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    CommonMarkViewer::new().show(ui, &mut state.md_cache, &preview);
+                });
+        }
 
-            // Liens
-            if !state.outgoing.is_empty() || !state.incoming.is_empty() {
-                ui.separator();
-                ui.label(RichText::new("Liens").strong());
-                if !state.outgoing.is_empty() {
-                    ui.label("Sortants");
-                    for l in state.outgoing.clone() {
-                        ui.horizontal(|ui| {
-                            if l.exists {
-                                icons::link_outgoing(ui);
-                            } else {
-                                icons::link_broken(ui);
-                            }
-                            if ui.button(&l.title).clicked() && l.exists {
-                                actions.read_path = Some(l.path);
-                            }
-                        });
-                    }
-                }
-                if !state.incoming.is_empty() {
-                    ui.label("Backlinks");
-                    for l in state.incoming.clone() {
-                        ui.horizontal(|ui| {
-                            icons::link_backlink(ui);
-                            if ui.button(&l.title).clicked() {
-                                actions.read_path = Some(l.path);
-                            }
-                        });
-                    }
-                }
-            }
-
-            if !state.related_hits.is_empty() {
-                ui.separator();
-                ui.label(RichText::new("Liées (pertinence)").strong());
-                let related_h = ui.available_height().max(80.0);
-                egui::ScrollArea::vertical()
-                    .id_salt("notes_related")
-                    .max_height(related_h)
-                    .auto_shrink([false, false])
-                    .show(ui, |ui| {
-                        for h in state.related_hits.clone() {
-                            if ui
-                                .button(format!(
-                                    "{} [{}] hop{} score {:.2}",
-                                    h.title, h.relation, h.hops, h.score
-                                ))
-                                .on_hover_text(&h.excerpt)
-                                .clicked()
-                            {
-                                actions.read_path = Some(h.path);
-                            }
+        // Liens
+        if !state.outgoing.is_empty() || !state.incoming.is_empty() {
+            ui.separator();
+            ui.label(RichText::new("Liens").strong());
+            if !state.outgoing.is_empty() {
+                ui.label("Sortants");
+                for l in state.outgoing.clone() {
+                    ui.horizontal(|ui| {
+                        if l.exists {
+                            icons::link_outgoing(ui);
+                        } else {
+                            icons::link_broken(ui);
+                        }
+                        if ui.button(&l.title).clicked() && l.exists {
+                            actions.read_path = Some(l.path);
                         }
                     });
+                }
             }
-        });
+            if !state.incoming.is_empty() {
+                ui.label("Backlinks");
+                for l in state.incoming.clone() {
+                    ui.horizontal(|ui| {
+                        icons::link_backlink(ui);
+                        if ui.button(&l.title).clicked() {
+                            actions.read_path = Some(l.path);
+                        }
+                    });
+                }
+            }
+        }
+
+        if !state.related_hits.is_empty() {
+            ui.separator();
+            ui.label(RichText::new("Liées (pertinence)").strong());
+            let related_h = ui.available_height().max(80.0);
+            egui::ScrollArea::vertical()
+                .id_salt("notes_related")
+                .max_height(related_h)
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    for h in state.related_hits.clone() {
+                        if ui
+                            .button(format!(
+                                "{} [{}] hop{} score {:.2}",
+                                h.title, h.relation, h.hops, h.score
+                            ))
+                            .on_hover_text(&h.excerpt)
+                            .clicked()
+                        {
+                            actions.read_path = Some(h.path);
+                        }
+                    }
+                });
+        }
+    });
     actions
 }
 
@@ -678,6 +676,9 @@ mod tests {
         state.mark_save_failed("t".into(), "body".into(), None);
         assert!(state.create_failed);
         let retry = state.take_retry_action().expect("retry");
-        assert_eq!(retry.save_create.as_ref().map(|(t, _)| t.as_str()), Some("t"));
+        assert_eq!(
+            retry.save_create.as_ref().map(|(t, _)| t.as_str()),
+            Some("t")
+        );
     }
 }

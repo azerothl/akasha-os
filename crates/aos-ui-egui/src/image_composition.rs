@@ -425,7 +425,10 @@ pub fn ui_composition_canvas(
             }
         }
         if ui
-            .add_enabled(!blocks.is_empty(), egui::Button::new(t.studio_composition_clear))
+            .add_enabled(
+                !blocks.is_empty(),
+                egui::Button::new(t.studio_composition_clear),
+            )
             .clicked()
         {
             blocks.clear();
@@ -492,8 +495,10 @@ pub fn ui_composition_canvas(
     } else {
         (avail * aspect, avail)
     };
-    let (rect, response) =
-        ui.allocate_exact_size(egui::vec2(canvas_w, canvas_h), egui::Sense::click_and_drag());
+    let (rect, response) = ui.allocate_exact_size(
+        egui::vec2(canvas_w, canvas_h),
+        egui::Sense::click_and_drag(),
+    );
 
     let painter = ui.painter_at(rect);
     painter.rect_filled(rect, 4.0, egui::Color32::from_gray(28));
@@ -506,7 +511,10 @@ pub fn ui_composition_canvas(
 
     let to_screen = |x: f32, y: f32, w: f32, h: f32| -> egui::Rect {
         egui::Rect::from_min_size(
-            egui::pos2(rect.left() + x * rect.width(), rect.top() + y * rect.height()),
+            egui::pos2(
+                rect.left() + x * rect.width(),
+                rect.top() + y * rect.height(),
+            ),
             egui::vec2(w * rect.width(), h * rect.height()),
         )
     };
@@ -645,7 +653,10 @@ pub fn ui_composition_canvas(
         let stroke = if selected_here {
             egui::Stroke::new(2.0_f32, egui::Color32::from_rgb(120, 190, 255))
         } else {
-            egui::Stroke::new(1.0_f32, egui::Color32::from_rgba_unmultiplied(200, 200, 220, 160))
+            egui::Stroke::new(
+                1.0_f32,
+                egui::Color32::from_rgba_unmultiplied(200, 200, 220, 160),
+            )
         };
         painter.rect_filled(r, 3.0, fill);
         painter.rect_stroke(r, 3.0, stroke, egui::StrokeKind::Inside);
@@ -737,10 +748,7 @@ fn paint_mask_overlay(painter: &egui::Painter, rect: egui::Rect, mask: &InpaintM
 
 fn resize_handle_rect(r: egui::Rect) -> egui::Rect {
     let s = 12.0_f32;
-    egui::Rect::from_min_size(
-        egui::pos2(r.right() - s, r.bottom() - s),
-        egui::vec2(s, s),
-    )
+    egui::Rect::from_min_size(egui::pos2(r.right() - s, r.bottom() - s), egui::vec2(s, s))
 }
 
 fn bring_to_front(blocks: &mut Vec<CompositionBlock>, id: u64) {

@@ -769,6 +769,13 @@ mod tests {
             gpu_flops: 1e12,
             cpu_flops: 1e11,
             gpus: vec![],
+            cpu_isa: Default::default(),
+            cpu_topology: Default::default(),
+            gpu_backend: Default::default(),
+            npu: None,
+            webgpu: None,
+            remote_nodes: 0,
+            thermal: Default::default(),
         };
         let mut s = PlacementSim::new(tiny, CostModel::default());
         let img = crate::testutil::model_sd15();
@@ -776,7 +783,10 @@ mod tests {
             .place(&img, PlacementProfile::Latency, Priority::Interactive, 0)
             .unwrap_err();
         assert!(matches!(err, PlacementError::Impossible { .. }));
-        assert!(s.events().iter().any(|e| matches!(e, SimEvent::Refused { .. })));
+        assert!(s
+            .events()
+            .iter()
+            .any(|e| matches!(e, SimEvent::Refused { .. })));
     }
 
     #[test]

@@ -13,7 +13,10 @@ pub(crate) enum ComposerEnterAction {
     Send,
 }
 
-pub(crate) fn composer_enter_action(enter_pressed: bool, shift_pressed: bool) -> ComposerEnterAction {
+pub(crate) fn composer_enter_action(
+    enter_pressed: bool,
+    shift_pressed: bool,
+) -> ComposerEnterAction {
     match (enter_pressed, shift_pressed) {
         (true, true) => ComposerEnterAction::Newline,
         (true, false) => ComposerEnterAction::Send,
@@ -174,8 +177,17 @@ mod tests {
 
     #[test]
     fn enter_sends_and_shift_enter_inserts_newline() {
-        assert_eq!(composer_enter_action(true, false), ComposerEnterAction::Send);
-        assert_eq!(composer_enter_action(true, true), ComposerEnterAction::Newline);
-        assert_eq!(composer_enter_action(false, false), ComposerEnterAction::None);
+        assert_eq!(
+            composer_enter_action(true, false),
+            ComposerEnterAction::Send
+        );
+        assert_eq!(
+            composer_enter_action(true, true),
+            ComposerEnterAction::Newline
+        );
+        assert_eq!(
+            composer_enter_action(false, false),
+            ComposerEnterAction::None
+        );
     }
 }

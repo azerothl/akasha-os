@@ -496,17 +496,22 @@ impl UiApp {
         let narrow = (bar_w - session_toggle_reserve_width(t, canvas_open)) < 200.0;
         if narrow {
             self.ui_session_bar_left(
-                ui, t, &g, &sid, room, canvas_open,
-                model_id.clone(), session_title.clone(), &count_line,
-                !members.is_empty(), true,
+                ui,
+                t,
+                &g,
+                &sid,
+                room,
+                canvas_open,
+                model_id.clone(),
+                session_title.clone(),
+                &count_line,
+                !members.is_empty(),
+                true,
             );
             ui.horizontal(|ui| {
-                ui.with_layout(
-                    egui::Layout::right_to_left(egui::Align::Center),
-                    |ui| {
-                        self.ui_session_bar_toggles(ui, t, &sid, room, canvas_open);
-                    },
-                );
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    self.ui_session_bar_toggles(ui, t, &sid, room, canvas_open);
+                });
             });
         } else {
             ui.horizontal(|ui| {
@@ -519,9 +524,17 @@ impl UiApp {
                     |ui| {
                         ui.set_max_width(left_w);
                         self.ui_session_bar_left(
-                            ui, t, &g, &sid, room, canvas_open,
-                            model_id.clone(), session_title.clone(), &count_line,
-                            !members.is_empty(), false,
+                            ui,
+                            t,
+                            &g,
+                            &sid,
+                            room,
+                            canvas_open,
+                            model_id.clone(),
+                            session_title.clone(),
+                            &count_line,
+                            !members.is_empty(),
+                            false,
                         );
                     },
                 );
@@ -557,10 +570,7 @@ impl UiApp {
                                 ui,
                                 t,
                                 &mut self.chat_state.view.canvas,
-                                chat_canvas::canvas_agent_drawing_on_session(
-                                    &self.agents,
-                                    &sid,
-                                ),
+                                chat_canvas::canvas_agent_drawing_on_session(&self.agents, &sid),
                                 Some(g.help_tooltip),
                                 &mut open_canvas_guide,
                             );
@@ -626,108 +636,101 @@ impl UiApp {
         has_members: bool,
         compact: bool,
     ) {
-                    let mut selected_model = model_id.clone().unwrap_or_default();
-                    let model_label = if selected_model.is_empty() {
-                        "default".to_string()
+        let mut selected_model = model_id.clone().unwrap_or_default();
+        let model_label = if selected_model.is_empty() {
+            "default".to_string()
+        } else {
+            selected_model.clone()
+        };
+        let model_w = if canvas_open || compact { 120.0 } else { 150.0 };
+        egui::ComboBox::from_id_salt("chat_model_picker")
+            .selected_text(model_label)
+            .width(model_w)
+            .show_ui(ui, |ui| {
+                if ui
+                    .selectable_value(&mut selected_model, String::new(), "default")
+                    .changed()
+                {
+                    let _ = self.cmd_tx.send(Cmd::SessionSetModel {
+                        session_id: sid.to_string(),
+                        model_id: None,
+                    });
+                }
+                for m in self
+                    .models_ui
+                    .model_infos
+                    .iter()
+                    .filter(|m| !m.id.starts_with("provider:"))
+                {
+                    let picker_label = if models_page::load_catalog_models()
+                        .iter()
+                        .find(|c| c.id == m.id)
+                        .is_some_and(models_page::catalog_has_vision)
+                    {
+                        format!("{} · {}", m.name, t.models_sees_images)
                     } else {
-                        selected_model.clone()
+                        m.name.clone()
                     };
-                    let model_w = if canvas_open || compact { 120.0 } else { 150.0 };
-                    egui::ComboBox::from_id_salt("chat_model_picker")
-                        .selected_text(model_label)
-                        .width(model_w)
-                        .show_ui(ui, |ui| {
-                            if ui
-                                .selectable_value(&mut selected_model, String::new(), "default")
-                                .changed()
-                            {
-                                let _ = self.cmd_tx.send(Cmd::SessionSetModel {
-                                    session_id: sid.to_string(),
-                                    model_id: None,
-                                });
-                            }
-                            for m in self
-                                .models_ui
-                                .model_infos
-                                .iter()
-                                .filter(|m| !m.id.starts_with("provider:"))
-                            {
-                                let picker_label =
-                                    if models_page::load_catalog_models()
-                                        .iter()
-                                        .find(|c| c.id == m.id)
-                                        .is_some_and(models_page::catalog_has_vision)
-                                    {
-                                        format!("{} · {}", m.name, t.models_sees_images)
-                                    } else {
-                                        m.name.clone()
-                                    };
-                                if ui
-                                    .selectable_value(
-                                        &mut selected_model,
-                                        m.id.clone(),
-                                        picker_label,
-                                    )
-                                    .changed()
-                                {
-                                    let _ = self.cmd_tx.send(Cmd::SessionSetModel {
-                                        session_id: sid.to_string(),
-                                        model_id: Some(m.id.clone()),
-                                    });
-                                }
-                            }
+                    if ui
+                        .selectable_value(&mut selected_model, m.id.clone(), picker_label)
+                        .changed()
+                    {
+                        let _ = self.cmd_tx.send(Cmd::SessionSetModel {
+                            session_id: sid.to_string(),
+                            model_id: Some(m.id.clone()),
                         });
-                    let title_max = if canvas_open || compact { 24 } else { 42 };
-                    let header =
-                        egui::RichText::new(crate::agent_panel::truncate(&session_title, title_max))
-                            .strong();
-                    let title_resp = ui.add(egui::Label::new(header).sense(if room {
-                        egui::Sense::click()
-                    } else {
-                        egui::Sense::hover()
-                    }));
-                    let title_clicked = title_resp.clicked();
-                    let title_hover = match (room, session_title.len() > title_max) {
-                        (true, true) => {
-                            format!("{}\n{}", t.room_header_open_members, session_title)
-                        }
-                        (true, false) => t.room_header_open_members.to_string(),
-                        (false, true) => session_title.clone(),
-                        (false, false) => String::new(),
-                    };
-                    if !title_hover.is_empty() {
-                        title_resp.on_hover_text(title_hover);
                     }
-                    if room && title_clicked {
-                        self.chat_state.view.room_members_open =
-                            !self.chat_state.view.room_members_open;
-                    }
-                    if room {
-                        if has_members {
-                            ui.weak(format!("· {count_line}"));
-                        }
-                        icons::caret(ui, self.chat_state.view.room_members_open);
-                    }
+                }
+            });
+        let title_max = if canvas_open || compact { 24 } else { 42 };
+        let header =
+            egui::RichText::new(crate::agent_panel::truncate(&session_title, title_max)).strong();
+        let title_resp = ui.add(egui::Label::new(header).sense(if room {
+            egui::Sense::click()
+        } else {
+            egui::Sense::hover()
+        }));
+        let title_clicked = title_resp.clicked();
+        let title_hover = match (room, session_title.len() > title_max) {
+            (true, true) => {
+                format!("{}\n{}", t.room_header_open_members, session_title)
+            }
+            (true, false) => t.room_header_open_members.to_string(),
+            (false, true) => session_title.clone(),
+            (false, false) => String::new(),
+        };
+        if !title_hover.is_empty() {
+            title_resp.on_hover_text(title_hover);
+        }
+        if room && title_clicked {
+            self.chat_state.view.room_members_open = !self.chat_state.view.room_members_open;
+        }
+        if room {
+            if has_members {
+                ui.weak(format!("· {count_line}"));
+            }
+            icons::caret(ui, self.chat_state.view.room_members_open);
+        }
 
-                    if guide::tab_help_button(ui, g.help_tooltip) {
-                        self.guide.open_topic(guide::GuideTopic::Chat);
-                    }
-                    if !canvas_open {
-                        let activity_label = if self.prefs.ui_layout.activity_panel_open {
-                            t.activity_close.to_string()
-                        } else {
-                            t.activity_open.to_string()
-                        };
-                        if ui
-                            .button(activity_label)
-                            .on_hover_text(t.activity_open)
-                            .clicked()
-                        {
-                            self.prefs.ui_layout.activity_panel_open =
-                                !self.prefs.ui_layout.activity_panel_open;
-                            crate::prefs::save_preferences(&self.prefs);
-                        }
-                    }
+        if guide::tab_help_button(ui, g.help_tooltip) {
+            self.guide.open_topic(guide::GuideTopic::Chat);
+        }
+        if !canvas_open {
+            let activity_label = if self.prefs.ui_layout.activity_panel_open {
+                t.activity_close.to_string()
+            } else {
+                t.activity_open.to_string()
+            };
+            if ui
+                .button(activity_label)
+                .on_hover_text(t.activity_open)
+                .clicked()
+            {
+                self.prefs.ui_layout.activity_panel_open =
+                    !self.prefs.ui_layout.activity_panel_open;
+                crate::prefs::save_preferences(&self.prefs);
+            }
+        }
     }
 
     /// Moitié droite de la barre : toggles Salon/Deep/Canvas (+Focus).
@@ -740,69 +743,65 @@ impl UiApp {
         room: bool,
         canvas_open: bool,
     ) {
-                    if canvas_open {
-                        if icons::activity_toggle_button(
-                            ui,
-                            self.prefs.ui_layout.activity_panel_open,
-                        )
-                        .on_hover_text(if self.prefs.ui_layout.activity_panel_open {
-                            t.activity_close
-                        } else {
-                            t.activity_open
-                        })
-                        .clicked()
-                        {
-                            self.prefs.ui_layout.activity_panel_open =
-                                !self.prefs.ui_layout.activity_panel_open;
-                            crate::prefs::save_preferences(&self.prefs);
-                        }
-                    }
-                    if session_toggle_chip(ui, canvas_open, t.session_toggle_canvas).clicked() {
-                        let new_open = !canvas_open;
-                        self.set_canvas_open_local(&sid, new_open);
-                        let _ = self.cmd_tx.send(Cmd::CanvasSetOpen {
-                            session_id: sid.to_string(),
-                            open: new_open,
-                        });
-                    }
-                    if canvas_open
-                        && ui
-                            .button(if self.prefs.ui_layout.canvas_focus {
-                                t.session_focus_exit
-                            } else {
-                                t.session_focus
-                            })
-                            .on_hover_text(if self.prefs.ui_layout.canvas_focus {
-                                t.canvas_focus_exit
-                            } else {
-                                t.canvas_focus
-                            })
-                            .clicked()
-                    {
-                        self.prefs.ui_layout.canvas_focus = !self.prefs.ui_layout.canvas_focus;
-                        crate::prefs::save_preferences(&self.prefs);
-                    }
-                    if session_toggle_chip(
-                        ui,
-                        self.chat_state.composer.deep_thinking,
-                        t.session_toggle_deep,
-                    )
-                    .on_hover_text(t.tip_session_deep_thinking)
-                    .clicked()
-                    {
-                        self.chat_state.composer.deep_thinking =
-                            !self.chat_state.composer.deep_thinking;
-                    }
-                    if session_toggle_chip(ui, room, t.session_toggle_salon).clicked() {
-                        let mode = if room {
-                            ChatSessionMode::Direct
-                        } else {
-                            ChatSessionMode::Room
-                        };
-                        let _ = self.cmd_tx.send(Cmd::SessionSetMode {
-                            session_id: sid.to_string(),
-                            mode,
-                        });
-                    }
+        if canvas_open {
+            if icons::activity_toggle_button(ui, self.prefs.ui_layout.activity_panel_open)
+                .on_hover_text(if self.prefs.ui_layout.activity_panel_open {
+                    t.activity_close
+                } else {
+                    t.activity_open
+                })
+                .clicked()
+            {
+                self.prefs.ui_layout.activity_panel_open =
+                    !self.prefs.ui_layout.activity_panel_open;
+                crate::prefs::save_preferences(&self.prefs);
+            }
+        }
+        if session_toggle_chip(ui, canvas_open, t.session_toggle_canvas).clicked() {
+            let new_open = !canvas_open;
+            self.set_canvas_open_local(&sid, new_open);
+            let _ = self.cmd_tx.send(Cmd::CanvasSetOpen {
+                session_id: sid.to_string(),
+                open: new_open,
+            });
+        }
+        if canvas_open
+            && ui
+                .button(if self.prefs.ui_layout.canvas_focus {
+                    t.session_focus_exit
+                } else {
+                    t.session_focus
+                })
+                .on_hover_text(if self.prefs.ui_layout.canvas_focus {
+                    t.canvas_focus_exit
+                } else {
+                    t.canvas_focus
+                })
+                .clicked()
+        {
+            self.prefs.ui_layout.canvas_focus = !self.prefs.ui_layout.canvas_focus;
+            crate::prefs::save_preferences(&self.prefs);
+        }
+        if session_toggle_chip(
+            ui,
+            self.chat_state.composer.deep_thinking,
+            t.session_toggle_deep,
+        )
+        .on_hover_text(t.tip_session_deep_thinking)
+        .clicked()
+        {
+            self.chat_state.composer.deep_thinking = !self.chat_state.composer.deep_thinking;
+        }
+        if session_toggle_chip(ui, room, t.session_toggle_salon).clicked() {
+            let mode = if room {
+                ChatSessionMode::Direct
+            } else {
+                ChatSessionMode::Room
+            };
+            let _ = self.cmd_tx.send(Cmd::SessionSetMode {
+                session_id: sid.to_string(),
+                mode,
+            });
+        }
     }
 }

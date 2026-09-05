@@ -59,9 +59,7 @@ pub(crate) fn on_image_progress(
     } else if step > 0 && total_steps > 0 {
         app.status = format!("Image: step {step}/{total_steps} ({elapsed_secs}s)");
     } else {
-        app.status = format!(
-            "Image: generating ({total_steps} steps, {elapsed_secs}s)…"
-        );
+        app.status = format!("Image: generating ({total_steps} steps, {elapsed_secs}s)…");
     }
 }
 
@@ -92,11 +90,8 @@ pub(crate) fn on_media_ok(app: &mut UiApp, event: MediaOkEvent) {
                 app.image_studio.preview = Some(path.clone());
                 app.image_studio.apply_history_for_path(&path);
             } else {
-                app.image_studio.open_from_chat(
-                    &prompt,
-                    &path,
-                    generation_prompt.as_deref(),
-                );
+                app.image_studio
+                    .open_from_chat(&prompt, &path, generation_prompt.as_deref());
                 if !composition_blocks.is_empty() {
                     app.image_studio.set_composition_blocks(composition_blocks);
                 } else {

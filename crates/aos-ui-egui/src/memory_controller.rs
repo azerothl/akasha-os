@@ -32,9 +32,6 @@ impl UiApp {
         let Some(text) = self.memory_ui.take_remember_note() else {
             return;
         };
-        let _ = self.cmd_tx.send(Cmd::MemRemember {
-            text,
-            pinned: true,
-        });
+        let _ = self.cmd_tx.send(Cmd::MemRemember { text, pinned: true });
     }
 }

@@ -55,10 +55,7 @@ mod tests {
         )
         .unwrap();
         let phrase = act_phrase_from_parsed(&t, &parsed, "en");
-        assert_eq!(
-            phrase,
-            "Schedule: summarize my notes, every morning."
-        );
+        assert_eq!(phrase, "Schedule: summarize my notes, every morning.");
         assert!(!phrase.contains("interval"));
         assert!(!phrase.contains("86400"));
         assert!(!phrase.contains("E2"));
@@ -74,10 +71,7 @@ mod tests {
         )
         .unwrap();
         let phrase = act_phrase_from_parsed(&t, &parsed, "fr");
-        assert_eq!(
-            phrase,
-            "Planifier : résume mes notes, chaque matin."
-        );
+        assert_eq!(phrase, "Planifier : résume mes notes, chaque matin.");
         assert_ne!(phrase, crate::i18n::strings("en").schedule_act_phrase);
     }
 

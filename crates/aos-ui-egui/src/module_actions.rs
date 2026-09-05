@@ -4,9 +4,7 @@ use crate::cmd::Evt;
 use crate::{notes_panel, tasks_panel};
 use aos_ipc::BusClient;
 use aos_proto::decl_ui::ModuleUiResponse;
-use aos_proto::{
-    AgentIdRequest, ModuleIdRequest, ModuleInvokeRequest, ModuleInvokeResponse,
-};
+use aos_proto::{AgentIdRequest, ModuleIdRequest, ModuleInvokeRequest, ModuleInvokeResponse};
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
 
@@ -240,9 +238,7 @@ pub(crate) async fn invoke_notes(
                     path,
                 });
             } else {
-                let _ = evt_tx.send(Evt::Error(
-                    r.error.unwrap_or_else(|| "notes: échec".into()),
-                ));
+                let _ = evt_tx.send(Evt::Error(r.error.unwrap_or_else(|| "notes: échec".into())));
             }
         }
         Err(_) => {
@@ -299,46 +295,42 @@ pub(crate) async fn invoke_tasks(
         .call::<ModuleInvokeRequest, ModuleInvokeResponse>("module.invoke", &req, vec![])
         .await
     {
-        Ok(r) if r.ok => {
-            match tool {
-                "tasks.list" => {
-                    let tasks = tasks_panel::parse_list_result(&r.result);
-                    let _ = evt_tx.send(Evt::TasksListed(tasks));
-                }
-                "tasks.create" | "tasks.update" | "tasks.complete" => {
-                    let _ = evt_tx.send(Evt::Status(format!("{tool} OK")));
-                    let list_req = ModuleInvokeRequest {
-                        module: "tasks".into(),
-                        tool: "tasks.list".into(),
-                        args: serde_json::json!({}),
-                        actor: "human:ui".into(),
-                        actor_caps: vec![
-                            "fs.read:/documents/tasks/**".into(),
-                            "tool.invoke:tasks".into(),
-                        ],
-                        trace_id: "ui-tasks-list-after".into(),
-                    };
-                    if let Ok(lr) = bus
-                        .call::<ModuleInvokeRequest, ModuleInvokeResponse>(
-                            "module.invoke",
-                            &list_req,
-                            vec![],
-                        )
-                        .await
-                    {
-                        if lr.ok {
-                            let tasks = tasks_panel::parse_list_result(&lr.result);
-                            let _ = evt_tx.send(Evt::TasksListed(tasks));
-                        }
+        Ok(r) if r.ok => match tool {
+            "tasks.list" => {
+                let tasks = tasks_panel::parse_list_result(&r.result);
+                let _ = evt_tx.send(Evt::TasksListed(tasks));
+            }
+            "tasks.create" | "tasks.update" | "tasks.complete" => {
+                let _ = evt_tx.send(Evt::Status(format!("{tool} OK")));
+                let list_req = ModuleInvokeRequest {
+                    module: "tasks".into(),
+                    tool: "tasks.list".into(),
+                    args: serde_json::json!({}),
+                    actor: "human:ui".into(),
+                    actor_caps: vec![
+                        "fs.read:/documents/tasks/**".into(),
+                        "tool.invoke:tasks".into(),
+                    ],
+                    trace_id: "ui-tasks-list-after".into(),
+                };
+                if let Ok(lr) = bus
+                    .call::<ModuleInvokeRequest, ModuleInvokeResponse>(
+                        "module.invoke",
+                        &list_req,
+                        vec![],
+                    )
+                    .await
+                {
+                    if lr.ok {
+                        let tasks = tasks_panel::parse_list_result(&lr.result);
+                        let _ = evt_tx.send(Evt::TasksListed(tasks));
                     }
                 }
-                _ => {}
             }
-        }
+            _ => {}
+        },
         Ok(r) => {
-            let _ = evt_tx.send(Evt::Error(
-                r.error.unwrap_or_else(|| "tasks: échec".into()),
-            ));
+            let _ = evt_tx.send(Evt::Error(r.error.unwrap_or_else(|| "tasks: échec".into())));
         }
         Err(e) => {
             let _ = evt_tx.send(Evt::Error(e.to_string()));
@@ -346,7 +338,12 @@ pub(crate) async fn invoke_tasks(
     }
 }
 
-pub(crate) async fn agent_id_cmd(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>, intent: &str, id: String) {
+pub(crate) async fn agent_id_cmd(
+    bus: &Arc<BusClient>,
+    evt_tx: &Sender<Evt>,
+    intent: &str,
+    id: String,
+) {
     match bus
         .call::<AgentIdRequest, bool>(intent, &AgentIdRequest { agent_id: id }, vec![])
         .await

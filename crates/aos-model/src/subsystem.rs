@@ -6,8 +6,9 @@ use aos_llama::{
     BatchItem, GenParams, KvType, LlamaContext, LlamaModel, LoadMode, LoadOptions, StopReason,
 };
 use aos_placement::{
-    CostModel, ModelDesc, PlacementPlan, PlacementProfile, PlacementSim,
-    Priority, Tier,
+    AdaptivePlanner, BackendKind, CostModel, InferencePlan, InferencePlanDiagnostic, ModelDesc,
+    PlacementManager, PlacementPlan, PlacementProfile, PlacementSim, PlannerOptions, Priority,
+    SpeculativeStrategy, ThermalPolicy, Tier, WorkloadKind,
 };
 use aos_proto::{
     InferRequest, LoadResponse, ModelInfo, ModelMetrics, ModelState, SystemMetrics, TokenEvent,
@@ -19,7 +20,54 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex as StdMutex};
 use tokio::sync::{mpsc, oneshot};
 
-const PREFIX_SPEC_PRIORITY: u8 = 2;
+const LONG_REASONING_MIN_TOKENS: u32 = 384;
+
+fn classify_workload(messages: &[(String, String)], priority: u8, max_tokens: u32) -> WorkloadKind {
+    if priority == 0 {
+        WorkloadKind::Batch
+    } else if messages
+        .iter()
+        .any(|(role, _)| matches!(role.as_str(), "tool" | "function"))
+    {
+        WorkloadKind::AgentTools
+    } else if max_tokens >= LONG_REASONING_MIN_TOKENS {
+        WorkloadKind::LongReasoning
+    } else {
+        WorkloadKind::Chat
+    }
+}
+
+fn should_use_lookup_speculation(
+    configured: &str,
+    prefix_enabled: bool,
+    workload: WorkloadKind,
+    priority: u8,
+    min_priority: u8,
+    has_vision: bool,
+) -> bool {
+    if !prefix_enabled || has_vision {
+        return false;
+    }
+    match configured {
+        "off" => false,
+        "on" => !matches!(workload, WorkloadKind::Batch),
+        _ => {
+            priority >= min_priority
+                && matches!(
+                    workload,
+                    WorkloadKind::LongReasoning | WorkloadKind::AgentTools
+                )
+        }
+    }
+}
+
+fn speculative_mode_name(workload: WorkloadKind) -> &'static str {
+    match workload {
+        WorkloadKind::LongReasoning => "speculative-long-reasoning",
+        WorkloadKind::AgentTools => "speculative-agent-tools",
+        _ => "speculative",
+    }
+}
 
 /// Snapshot KV chaud pour prefix cache / migrate E18 (E20).
 struct WarmPrefix {
@@ -48,6 +96,8 @@ pub struct ModelRuntime {
     pub path: Option<PathBuf>,
     pub state: ModelState,
     pub plan: Option<PlacementPlan>,
+    /// Adaptive policy decision that produced the concrete placement plan.
+    pub inference_plan: Option<InferencePlan>,
     pub profile: PlacementProfile,
     pub model: Option<Arc<LlamaModel>>,
     pub ctx: Option<Arc<StdMutex<LlamaContext>>>,
@@ -64,6 +114,11 @@ pub struct ModelRuntime {
     pub est_tok_s: Option<f64>,
     /// E20 : moyenne tokens acceptés / pas speculative.
     pub last_draft_accept: Option<f64>,
+    pub last_draft_acceptance_rate: Option<f64>,
+    pub last_draft_tokens_per_step: Option<f64>,
+    pub last_draft_disabled: bool,
+    pub last_draft_disable_reason: Option<String>,
+    pub last_draft_verify_ms: Option<f64>,
     /// E20 : tokens de préfixe réutilisés au dernier C1.
     pub last_prefix_hit: Option<u32>,
     /// Chemin choisi pour la dernière inférence (`standard`, `speculative`, `batch`).
@@ -84,6 +139,7 @@ impl ModelRuntime {
             path,
             state: ModelState::OnDisk,
             plan: None,
+            inference_plan: None,
             profile: PlacementProfile::Balanced,
             model: None,
             ctx: None,
@@ -97,6 +153,11 @@ impl ModelRuntime {
             last_tok_s: None,
             est_tok_s: None,
             last_draft_accept: None,
+            last_draft_acceptance_rate: None,
+            last_draft_tokens_per_step: None,
+            last_draft_disabled: false,
+            last_draft_disable_reason: None,
+            last_draft_verify_ms: None,
             last_prefix_hit: None,
             last_inference_mode: None,
             warm: None,
@@ -154,10 +215,7 @@ pub struct ModelSubsystem {
 }
 
 /// Prefix already streamed so a new llama context continues the same turn (E18).
-pub fn resume_messages(
-    messages: &[(String, String)],
-    generated: &str,
-) -> Vec<(String, String)> {
+pub fn resume_messages(messages: &[(String, String)], generated: &str) -> Vec<(String, String)> {
     let mut out = messages.to_vec();
     if !generated.is_empty() {
         out.push(("assistant".into(), generated.to_string()));
@@ -186,7 +244,7 @@ impl ModelSubsystem {
                 })
                 .collect()
         };
-        let hw = {
+        let mut hw = {
             let home = std::env::var("AOS_HOME")
                 .map(std::path::PathBuf::from)
                 .unwrap_or_else(|_| std::path::PathBuf::from("."));
@@ -201,10 +259,16 @@ impl ModelSubsystem {
                 gpus,
             )
         };
-        let sim = Arc::new(StdMutex::new(PlacementSim::new(
-            hw,
-            CostModel::default(),
-        )));
+        // Make the configured paired-node inventory visible to the planner
+        // without making LAN execution selectable: the adapter remains
+        // experimental/non-executable until authenticated transport exists.
+        hw.remote_nodes = config
+            .lan_cluster
+            .nodes
+            .iter()
+            .filter(|node| node.trust == aos_placement::NodeTrust::Paired)
+            .count() as u32;
+        let sim = Arc::new(StdMutex::new(PlacementSim::new(hw, CostModel::default())));
         let mut models = HashMap::new();
         for entry in registry.entries() {
             if let Some(mut desc) = entry.to_model_desc() {
@@ -225,6 +289,9 @@ impl ModelSubsystem {
                     if let Some(v) = ov.n_params {
                         desc.n_params = v;
                     }
+                    if let Some(v) = &ov.quantization {
+                        desc.quantization = v.clone();
+                    }
                 }
                 let path = ov.map(|o| PathBuf::from(&o.path));
                 models.insert(entry.id.clone(), ModelRuntime::new(desc, path));
@@ -241,6 +308,8 @@ impl ModelSubsystem {
                     context_length: 0,
                     supports_layer_offload: false,
                     privacy_class: aos_placement::PrivacyClass::Remote,
+                    quantization: Default::default(),
+                    backends_compatible: vec![],
                 };
                 let mut rt = ModelRuntime::new(desc, None);
                 rt.state = ModelState::Remote;
@@ -291,6 +360,68 @@ impl ModelSubsystem {
         inner.models.get(model_id).map(Self::info_of)
     }
 
+    /// Compare the adaptive decision for all supported operator profiles.
+    /// This is diagnostic-only: it does not load weights or mutate placement.
+    pub fn diagnose(
+        &self,
+        model_id: &str,
+        kv_tokens: u32,
+    ) -> Result<Vec<InferencePlanDiagnostic>, String> {
+        let desc = {
+            let g = self.inner.lock().unwrap();
+            g.models
+                .get(model_id)
+                .map(|m| m.desc.clone())
+                .ok_or_else(|| format!("modèle inconnu: {model_id}"))?
+        };
+        let (hw, cost) = {
+            let sim = self.sim.lock().unwrap();
+            (sim.hw.clone(), sim.cost.clone())
+        };
+        let thermal_policy = match self.config.thermal_policy.as_str() {
+            "performance" => ThermalPolicy::Performance,
+            "quiet" => ThermalPolicy::Quiet,
+            "always-on" => ThermalPolicy::AlwaysOn,
+            _ => ThermalPolicy::Balanced,
+        };
+        let options = PlannerOptions {
+            allow_experimental: self.config.experimental_backends,
+            min_quality: self.config.min_quantization_quality,
+            speculation: self.config.inference_optimization.speculation != "off",
+            thermal_policy,
+        };
+        let planner = AdaptivePlanner::new(hw.clone(), options);
+        Ok(planner
+            .compare_profiles(&desc, kv_tokens)
+            .into_iter()
+            .map(|plan| {
+                let requested_profile = plan.placement;
+                let manager = PlacementManager::new(hw.clone(), cost.clone());
+                match manager.place_model(
+                    &desc,
+                    requested_profile,
+                    Priority::Interactive,
+                    kv_tokens,
+                ) {
+                    Ok(placement) => InferencePlanDiagnostic {
+                        requested_profile,
+                        plan,
+                        feasible: Some(true),
+                        placement_summary: Some(placement.summary()),
+                        error: None,
+                    },
+                    Err(error) => InferencePlanDiagnostic {
+                        requested_profile,
+                        plan,
+                        feasible: Some(false),
+                        placement_summary: None,
+                        error: Some(error.to_string()),
+                    },
+                }
+            })
+            .collect())
+    }
+
     /// Charge un modèle : calcule le plan réel (P1.2) puis pilote llama.cpp.
     /// Attend (asynchrone) la fin du chargement ou l'erreur.
     pub async fn ensure_loaded(
@@ -316,6 +447,7 @@ impl ModelSubsystem {
                         m.state = ModelState::OnDisk;
                         m.load_error = None;
                         m.plan = None;
+                        m.inference_plan = None;
                         m.ctx = None;
                         m.model = None;
                         m.warm = None;
@@ -360,7 +492,7 @@ impl ModelSubsystem {
         let config = self.config.clone();
         let model_id = model_id.to_string();
         tokio::task::spawn_blocking(move || {
-            let (desc, path) = {
+            let (mut desc, mut path) = {
                 let g = inner.lock().unwrap();
                 match g.models.get(&model_id) {
                     Some(m) => (m.desc.clone(), m.path.clone()),
@@ -378,10 +510,52 @@ impl ModelSubsystem {
                     m.ctx = None;
                     m.model = None;
                     m.plan = None;
+                    m.inference_plan = None;
                     m.warm = None;
                 }
                 eprintln!("[modeld] échec chargement {model_id}: {e}");
             };
+            let preference_home = std::env::var_os("AOS_HOME")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from("."));
+            let adaptive_enabled = config.adaptive_planner_at(&preference_home);
+            if adaptive_enabled && !desc.is_media() {
+                if let Some(overrides) = config.models.get(&model_id) {
+                    let selection = {
+                        let placement = sim.lock().unwrap();
+                        let mut hw = placement.hw.clone();
+                        let pin = inner.lock().unwrap().inference_pin.clone();
+                        if pin == "cpu"
+                            || profile == PlacementProfile::CpuOnly
+                            || std::env::var("AOS_BACKEND").as_deref() == Ok("cpu")
+                        {
+                            hw.has_gpu = false;
+                        }
+                        let free = placement.free();
+                        let budget =
+                            free.ram
+                                .saturating_add(if hw.has_gpu { free.vram } else { 0 });
+                        crate::variants::select(
+                            &overrides.variants,
+                            &desc,
+                            &hw,
+                            budget,
+                            config.min_quantization_quality,
+                        )
+                    };
+                    match selection {
+                        Ok(Some((selected, file))) => {
+                            desc = selected;
+                            path = Some(file);
+                        }
+                        Ok(None) => {}
+                        Err(error) => {
+                            apply_err(error);
+                            return;
+                        }
+                    }
+                }
+            }
             let Some(path) = path else {
                 apply_err("aucun chemin de poids configuré".into());
                 return;
@@ -390,7 +564,7 @@ impl ModelSubsystem {
                 apply_err(format!("poids introuvables: {}", path.display()));
                 return;
             }
-            let plan = {
+            let selected_placement = {
                 let mut sim = sim.lock().unwrap();
                 if sim.get(&model_id).is_some() {
                     sim.unload(&model_id);
@@ -406,13 +580,87 @@ impl ModelSubsystem {
                         pin
                     }
                 };
-                let effective_profile = match inference.as_str() {
-                    "cpu" => PlacementProfile::CpuOnly,
-                    "auto" => sim.auto_hysteresis_profile(),
-                    _ => profile,
+                let requested_backend = match inference.as_str() {
+                    "cpu" => Some(BackendKind::Cpu),
+                    _ => std::env::var("AOS_BACKEND").ok().and_then(|value| {
+                        match value.to_ascii_lowercase().as_str() {
+                            "cpu" => Some(BackendKind::Cpu),
+                            "cuda" | "nvidia" => Some(BackendKind::Cuda),
+                            "metal" | "apple" => Some(BackendKind::Metal),
+                            "npu" => Some(BackendKind::Npu),
+                            "webgpu" => Some(BackendKind::WebGpu),
+                            _ => None,
+                        }
+                    }),
                 };
-                match sim.place(&desc, effective_profile, Priority::Interactive, kv_tokens) {
-                    Ok(()) => sim.get(&model_id).map(|p| p.plan.clone()),
+                let preference_home = std::env::var_os("AOS_HOME")
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|| PathBuf::from("."));
+                let selected = if config.adaptive_planner_at(&preference_home) {
+                    let thermal_policy = match config.thermal_policy.as_str() {
+                        "performance" => ThermalPolicy::Performance,
+                        "quiet" => ThermalPolicy::Quiet,
+                        "always-on" => ThermalPolicy::AlwaysOn,
+                        _ => ThermalPolicy::Balanced,
+                    };
+                    let options = PlannerOptions {
+                        allow_experimental: config.experimental_backends,
+                        min_quality: config.min_quantization_quality,
+                        speculation: config.inference_optimization.speculation != "off",
+                        thermal_policy,
+                    };
+                    let planner = AdaptivePlanner::new(sim.hw.clone(), options);
+                    planner.select(
+                        &desc,
+                        profile,
+                        WorkloadKind::Chat,
+                        kv_tokens,
+                        requested_backend,
+                    )
+                } else {
+                    // Compatibility path for operators that explicitly disable
+                    // the adaptive planner.
+                    let effective_profile = match inference.as_str() {
+                        "cpu" => PlacementProfile::CpuOnly,
+                        "auto" => sim.auto_hysteresis_profile(),
+                        _ => profile,
+                    };
+                    InferencePlan {
+                        backend: if matches!(effective_profile, PlacementProfile::CpuOnly) {
+                            BackendKind::Cpu
+                        } else {
+                            BackendKind::Cuda
+                        },
+                        quantization: desc
+                            .quantization
+                            .format
+                            .as_deref()
+                            .and_then(aos_placement::Quantization::parse)
+                            .unwrap_or(aos_placement::Quantization::Unknown),
+                        placement: effective_profile,
+                        kv_cache: if matches!(effective_profile, PlacementProfile::CpuOnly) {
+                            aos_placement::KvCacheType::F16
+                        } else {
+                            aos_placement::KvCacheType::Q8_0
+                        },
+                        kv_tokens,
+                        speculative: SpeculativeStrategy::Disabled,
+                        thermal_policy: ThermalPolicy::Balanced,
+                        power_budget_w: None,
+                        reason: "adaptive planner désactivé".into(),
+                        fallback: vec![BackendKind::Cpu],
+                        fallback_used: false,
+                        experimental: false,
+                    }
+                };
+                let mut selected = selected;
+                match sim.place(&desc, selected.placement, Priority::Interactive, kv_tokens) {
+                    Ok(()) => sim.get(&model_id).map(|p| {
+                        // PlacementSim may have applied a pressure fallback;
+                        // expose the effective profile, never the request.
+                        selected.placement = p.plan.profile;
+                        (p.plan.clone(), selected)
+                    }),
                     Err(e) => {
                         drop(sim);
                         apply_err(e.to_string());
@@ -420,7 +668,7 @@ impl ModelSubsystem {
                     }
                 }
             };
-            let Some(plan) = plan else {
+            let Some((mut plan, mut adaptive_plan)) = selected_placement else {
                 apply_err("placement disparu".into());
                 return;
             };
@@ -431,6 +679,8 @@ impl ModelSubsystem {
                 m.loading = false;
                 m.state = ModelState::Loaded;
                 m.plan = Some(plan);
+                m.profile = adaptive_plan.placement;
+                m.inference_plan = Some(adaptive_plan);
                 m.est_tok_s = None;
                 eprintln!("[modeld] {model_id} média placé (Placement Manager)");
                 return;
@@ -438,9 +688,9 @@ impl ModelSubsystem {
 
             let ngl = plan.n_layers_on(Tier::Vram) as i32;
             let flash_attn = true;
-            let gpu_offload = ngl > 0 && plan.kv_bytes_on(Tier::Vram) > 0;
-            let kv_type = KvType::default_for(gpu_offload, flash_attn);
-            let opts = LoadOptions {
+            let kv_type =
+                KvType::default_for(ngl > 0 && plan.kv_bytes_on(Tier::Vram) > 0, flash_attn);
+            let mut opts = LoadOptions {
                 n_gpu_layers: ngl,
                 load_mode: LoadMode::Mmap,
                 offload_kqv: plan.kv_bytes_on(Tier::Vram) > 0,
@@ -456,22 +706,78 @@ impl ModelSubsystem {
                 main_gpu: plan.main_gpu,
                 mmproj_path: resolve_mmproj_for_model(&model_id, &path),
             };
-            let model = match LlamaModel::load(&path, &opts) {
-                Ok(m) => Arc::new(m),
+            let loaded = crate::load_retry::load_with_cpu_fallback(
+                opts.n_gpu_layers > 0 || opts.offload_kqv,
+                |cpu_retry| {
+                    if cpu_retry {
+                        {
+                            let mut placement = sim.lock().unwrap();
+                            placement.unload(&model_id);
+                            placement
+                                .place(
+                                    &desc,
+                                    PlacementProfile::CpuOnly,
+                                    Priority::Interactive,
+                                    kv_tokens,
+                                )
+                                .map_err(|e| e.to_string())?;
+                            plan = placement
+                                .get(&model_id)
+                                .ok_or_else(|| "placement CPU disparu".to_string())?
+                                .plan
+                                .clone();
+                        }
+                        opts.n_gpu_layers = 0;
+                        opts.offload_kqv = false;
+                        opts.kv_type = KvType::F16;
+                        opts.tensor_split.clear();
+                        opts.main_gpu = 0;
+                    }
+                    let model =
+                        Arc::new(LlamaModel::load(&path, &opts).map_err(|e| e.to_string())?);
+                    let ctx = LlamaContext::new(model.clone(), &opts).map_err(|e| e.to_string())?;
+                    Ok((model, ctx))
+                },
+            );
+            let ((model, ctx), retried) = match loaded {
+                Ok(result) => result,
                 Err(e) => {
                     sim.lock().unwrap().unload(&model_id);
                     apply_err(e.to_string());
                     return;
                 }
             };
-            let ctx = match LlamaContext::new(model.clone(), &opts) {
-                Ok(c) => c,
-                Err(e) => {
-                    sim.lock().unwrap().unload(&model_id);
-                    apply_err(e.to_string());
-                    return;
-                }
+            adaptive_plan.placement = plan.profile;
+            adaptive_plan.kv_tokens = kv_tokens;
+            adaptive_plan.kv_cache = match opts.kv_type {
+                KvType::F16 => aos_placement::KvCacheType::F16,
+                KvType::Q8_0 => aos_placement::KvCacheType::Q8_0,
             };
+            adaptive_plan.backend = if opts.n_gpu_layers == 0 && !opts.offload_kqv {
+                BackendKind::Cpu
+            } else {
+                adaptive_plan.backend
+            };
+            if let Some(format) = model.quantization {
+                adaptive_plan.quantization = aos_placement::Quantization::parse(format)
+                    .unwrap_or(aos_placement::Quantization::Unknown);
+            }
+            adaptive_plan.fallback = if adaptive_plan.backend == BackendKind::Cpu {
+                vec![]
+            } else {
+                vec![BackendKind::Cpu]
+            };
+            adaptive_plan.fallback_used = retried;
+            adaptive_plan.reason = format!(
+                "{}; effectif: {:?}, {:?}, KV {:?}/{}; repli CPU: {}",
+                adaptive_plan.reason,
+                adaptive_plan.backend,
+                plan.profile,
+                adaptive_plan.kv_cache,
+                kv_tokens,
+                retried
+            );
+            eprintln!("[modeld] plan: {}", adaptive_plan.reason);
             let abort = ctx.abort_handle();
             let est = sim
                 .lock()
@@ -484,6 +790,9 @@ impl ModelSubsystem {
             m.loading = false;
             m.desc.weights_bytes = model.size_bytes;
             m.desc.n_layers = model.n_layer as u32;
+            if let Some(format) = model.quantization {
+                m.desc.quantization.format = Some(format.into());
+            }
             m.est_tok_s = Some(est);
             let offloaded =
                 plan.layer_bytes_on(Tier::Ram) > 0 || plan.layer_bytes_on(Tier::Disk) > 0;
@@ -493,6 +802,8 @@ impl ModelSubsystem {
                 ModelState::Loaded
             };
             m.plan = Some(plan);
+            m.profile = adaptive_plan.placement;
+            m.inference_plan = Some(adaptive_plan);
             m.model = Some(model);
             m.ctx = Some(Arc::new(StdMutex::new(ctx)));
             m.ctx_abort = Some(abort);
@@ -711,16 +1022,21 @@ impl ModelSubsystem {
                 let abort_flag = job.abort.clone();
                 let pause_flag = job.pause.clone();
                 let optim_c1 = optim.clone();
+                let workload =
+                    classify_workload(&job.messages, job.priority, job.params.max_tokens);
                 let result = match ctx {
                     Some(ctx) => {
                         tokio::task::spawn_blocking(move || {
                             let mut guard = ctx.lock().unwrap();
                             let prefix_enabled = optim_c1.prefix_cache != "off";
-                            let use_prefix_spec = match optim_c1.speculation.as_str() {
-                                "off" => false,
-                                "on" => true,
-                                _ => job.priority >= optim_c1.min_spec_priority.max(PREFIX_SPEC_PRIORITY),
-                            } && prefix_enabled;
+                            let use_prefix_spec = should_use_lookup_speculation(
+                                &optim_c1.speculation,
+                                prefix_enabled,
+                                workload,
+                                job.priority,
+                                optim_c1.min_spec_priority,
+                                guard.has_vision() || !job.images.is_empty(),
+                            );
                             if use_prefix_spec && guard.seq0_tokens().is_empty() {
                                 if let Some(w) = warm {
                                     let _ = guard.state_set(&w.state, Some(w.tokens));
@@ -740,9 +1056,7 @@ impl ModelSubsystem {
                                     Err(tokio::sync::mpsc::error::TrySendError::Full(ev)) => {
                                         delta_tx.blocking_send(ev).is_ok()
                                     }
-                                    Err(
-                                        tokio::sync::mpsc::error::TrySendError::Closed(_),
-                                    ) => false,
+                                    Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => false,
                                 }
                             };
                             let res = if should_use_vision_infer(guard.has_vision(), &job.images) {
@@ -782,7 +1096,7 @@ impl ModelSubsystem {
                             } else {
                                 None
                             };
-                            (res, job, warm_out, gen_text)
+                            (res, job, warm_out, gen_text, workload)
                         })
                         .await
                     }
@@ -791,6 +1105,7 @@ impl ModelSubsystem {
                         job,
                         None,
                         String::new(),
+                        workload,
                     )),
                 };
                 {
@@ -800,7 +1115,7 @@ impl ModelSubsystem {
                     }
                 }
                 match result {
-                    Ok((res, job, warm_out, gen_text)) => {
+                    Ok((res, job, warm_out, gen_text, workload)) => {
                         if let Some(w) = warm_out {
                             let mut g = inner_c1.lock().unwrap();
                             if let Some(m) = g.models.get_mut(&mid) {
@@ -842,9 +1157,18 @@ impl ModelSubsystem {
                                         m.last_ttft_ms = Some(stats.ttft_ms);
                                         m.last_tok_s = Some(stats.tok_s);
                                         m.last_draft_accept = stats.draft_accept_avg();
+                                        m.last_draft_acceptance_rate =
+                                            stats.draft_acceptance_rate();
+                                        m.last_draft_tokens_per_step =
+                                            stats.draft_tokens_per_step();
+                                        m.last_draft_disabled = stats.draft_disabled;
+                                        m.last_draft_disable_reason = stats
+                                            .draft_disable_reason
+                                            .map(|reason| reason.as_str().to_string());
+                                        m.last_draft_verify_ms = Some(stats.draft_verify_ms);
                                         m.last_prefix_hit = Some(stats.prefix_hit_tokens);
                                         m.last_inference_mode = Some(if stats.draft_steps > 0 {
-                                            "speculative".into()
+                                            speculative_mode_name(workload).into()
                                         } else {
                                             "standard".into()
                                         });
@@ -1018,9 +1342,9 @@ impl ModelSubsystem {
                                             text: piece.to_string(),
                                         }) {
                                             Ok(()) => true,
-                                            Err(
-                                                tokio::sync::mpsc::error::TrySendError::Full(ev),
-                                            ) => tx.blocking_send(ev).is_ok(),
+                                            Err(tokio::sync::mpsc::error::TrySendError::Full(
+                                                ev,
+                                            )) => tx.blocking_send(ev).is_ok(),
                                             Err(
                                                 tokio::sync::mpsc::error::TrySendError::Closed(_),
                                             ) => false,
@@ -1129,10 +1453,7 @@ impl ModelSubsystem {
     }
 
     /// Prefix already shown so a new context can continue the same turn (E18).
-    pub fn resume_prefix(
-        messages: &[(String, String)],
-        generated: &str,
-    ) -> Vec<(String, String)> {
+    pub fn resume_prefix(messages: &[(String, String)], generated: &str) -> Vec<(String, String)> {
         resume_messages(messages, generated)
     }
 
@@ -1160,9 +1481,9 @@ impl ModelSubsystem {
         loop {
             let busy = {
                 let g = self.inner.lock().unwrap();
-                g.models.values().any(|m| {
-                    !m.desc.is_media() && (m.active > 0 || m.pending > 0 || m.loading)
-                })
+                g.models
+                    .values()
+                    .any(|m| !m.desc.is_media() && (m.active > 0 || m.pending > 0 || m.loading))
             };
             if !busy {
                 break;
@@ -1302,6 +1623,7 @@ impl ModelSubsystem {
             m.ctx_abort = None;
             m.state = ModelState::OnDisk;
             m.plan = None;
+            m.inference_plan = None;
             m.loading = false;
         }
         self.sim.lock().unwrap().unload(model_id);
@@ -1369,8 +1691,14 @@ impl ModelSubsystem {
                     m.state = ModelState::OnDisk;
                     m.load_error = None;
                     m.plan = None;
+                    m.inference_plan = None;
                     m.warm = None;
                     m.last_draft_accept = None;
+                    m.last_draft_acceptance_rate = None;
+                    m.last_draft_tokens_per_step = None;
+                    m.last_draft_disabled = false;
+                    m.last_draft_disable_reason = None;
+                    m.last_draft_verify_ms = None;
                     m.last_prefix_hit = None;
                     // Block a concurrent ensure_loaded from placing until sim is updated.
                     m.loading = true;
@@ -1430,6 +1758,8 @@ impl ModelSubsystem {
                 context_length: 0,
                 supports_layer_offload: false,
                 privacy_class: aos_placement::PrivacyClass::Remote,
+                quantization: Default::default(),
+                backends_compatible: vec![],
             };
             let mut rt = ModelRuntime::new(desc, None);
             rt.state = ModelState::Remote;
@@ -1517,8 +1847,36 @@ impl ModelSubsystem {
                 media_total_steps: m.media_total_steps,
                 last_step_s: m.last_step_s,
                 draft_accept: m.last_draft_accept,
+                draft_acceptance_rate: m.last_draft_acceptance_rate,
+                draft_tokens_per_step: m.last_draft_tokens_per_step,
                 prefix_hit: m.last_prefix_hit,
                 inference_mode: m.last_inference_mode.clone(),
+                adaptive_backend: m
+                    .inference_plan
+                    .as_ref()
+                    .map(|p| format!("{:?}", p.backend).to_lowercase()),
+                quantization: m
+                    .inference_plan
+                    .as_ref()
+                    .map(|p| p.quantization.as_str().into()),
+                plan_reason: m.inference_plan.as_ref().map(|p| p.reason.clone()),
+                thermal_policy: m
+                    .inference_plan
+                    .as_ref()
+                    .map(|p| format!("{:?}", p.thermal_policy).to_lowercase()),
+                effective_profile: m
+                    .inference_plan
+                    .as_ref()
+                    .map(|p| format!("{:?}", p.placement).to_lowercase()),
+                kv_cache: m
+                    .inference_plan
+                    .as_ref()
+                    .map(|p| format!("{:?}", p.kv_cache).to_lowercase()),
+                kv_tokens: m.inference_plan.as_ref().map(|p| p.kv_tokens),
+                fallback_used: m.inference_plan.as_ref().is_some_and(|p| p.fallback_used),
+                draft_disabled: m.last_draft_disabled,
+                draft_disable_reason: m.last_draft_disable_reason.clone(),
+                draft_verify_ms: m.last_draft_verify_ms,
             })
             .collect();
         SystemMetrics {
@@ -1568,10 +1926,7 @@ impl ModelSubsystem {
             };
             let matches = match kind {
                 "image" => {
-                    let ext = path
-                        .extension()
-                        .and_then(|e| e.to_str())
-                        .unwrap_or("");
+                    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
                     matches!(ext, "safetensors" | "gguf" | "ckpt") || id.contains("sd-")
                 }
                 "tts" => {
@@ -1638,16 +1993,15 @@ impl ModelSubsystem {
 
     pub fn has_live_infer(&self) -> bool {
         let g = self.inner.lock().unwrap();
-        g.models
-            .values()
-            .any(|m| m.active > 0 || m.pending > 0)
+        g.models.values().any(|m| m.active > 0 || m.pending > 0)
     }
 }
 
 fn preferred_media_id(kind: &str) -> Option<String> {
     let home = std::env::var("AOS_HOME").ok()?;
-    let raw = std::fs::read_to_string(std::path::PathBuf::from(home).join("var/run/preferences.json"))
-        .ok()?;
+    let raw =
+        std::fs::read_to_string(std::path::PathBuf::from(home).join("var/run/preferences.json"))
+            .ok()?;
     let v: serde_json::Value = serde_json::from_str(&raw).ok()?;
     let key = match kind {
         "image" => "default_image_model",
@@ -1699,8 +2053,12 @@ fn resolve_mmproj_for_model(model_id: &str, weights_path: &std::path::Path) -> O
 
 #[cfg(test)]
 mod tests {
-    use super::{resolve_mmproj_for_model, resume_messages, should_use_vision_infer};
+    use super::{
+        classify_workload, resolve_mmproj_for_model, resume_messages,
+        should_use_lookup_speculation, should_use_vision_infer,
+    };
     use aos_llama::StopReason;
+    use aos_placement::WorkloadKind;
     use std::path::PathBuf;
 
     #[test]
@@ -1733,10 +2091,7 @@ mod tests {
 
     #[test]
     fn resolve_mmproj_ignores_generic_mmproj_beside_weights() {
-        let dir = std::env::temp_dir().join(format!(
-            "aos-mmproj-test-{}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("aos-mmproj-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let weights = dir.join("gemma-4-E4B-it-Q4_K_M.gguf");
@@ -1754,8 +2109,14 @@ mod tests {
 
     #[test]
     fn text_only_infer_when_images_without_mmproj() {
-        assert!(!should_use_vision_infer(false, &["/downloads/canvas.png".into()]));
-        assert!(should_use_vision_infer(true, &["/downloads/canvas.png".into()]));
+        assert!(!should_use_vision_infer(
+            false,
+            &["/downloads/canvas.png".into()]
+        ));
+        assert!(should_use_vision_infer(
+            true,
+            &["/downloads/canvas.png".into()]
+        ));
         assert!(!should_use_vision_infer(true, &[]));
     }
 
@@ -1772,5 +2133,60 @@ mod tests {
         ];
         let same = resume_messages(&msgs, "");
         assert_eq!(same, msgs);
+    }
+
+    #[test]
+    fn auto_speculation_is_reserved_for_long_or_tool_workloads() {
+        let chat = vec![("user".into(), "bonjour".into())];
+        let tools = vec![
+            ("user".into(), "cherche".into()),
+            ("tool".into(), "résultat".into()),
+        ];
+        assert_eq!(classify_workload(&chat, 1, 64), WorkloadKind::Chat);
+        assert_eq!(
+            classify_workload(&chat, 2, 512),
+            WorkloadKind::LongReasoning
+        );
+        assert_eq!(classify_workload(&tools, 2, 64), WorkloadKind::AgentTools);
+        assert!(!should_use_lookup_speculation(
+            "auto",
+            true,
+            WorkloadKind::Chat,
+            4,
+            2,
+            false
+        ));
+        assert!(should_use_lookup_speculation(
+            "auto",
+            true,
+            WorkloadKind::LongReasoning,
+            2,
+            2,
+            false
+        ));
+        assert!(should_use_lookup_speculation(
+            "auto",
+            true,
+            WorkloadKind::AgentTools,
+            2,
+            2,
+            false
+        ));
+        assert!(!should_use_lookup_speculation(
+            "auto",
+            true,
+            WorkloadKind::AgentTools,
+            1,
+            2,
+            false
+        ));
+        assert!(!should_use_lookup_speculation(
+            "on",
+            true,
+            WorkloadKind::LongReasoning,
+            4,
+            2,
+            true
+        ));
     }
 }

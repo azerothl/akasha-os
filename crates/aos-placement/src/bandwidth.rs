@@ -103,7 +103,10 @@ pub fn probe_host_bandwidth(cpu_only: bool) -> BandwidthSignals {
         .as_deref()
         .and_then(gpu_mem_bw_from_name)
         .map(|(bps, note)| {
-            BandwidthSignal::gpu_spec(bps, format!("{}: {note}", gpu_name.as_deref().unwrap_or("gpu")))
+            BandwidthSignal::gpu_spec(
+                bps,
+                format!("{}: {note}", gpu_name.as_deref().unwrap_or("gpu")),
+            )
         });
     let h2d = pcie.map(|(gen, width, bps)| {
         BandwidthSignal::pcie_estimate(

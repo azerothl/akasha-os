@@ -12,6 +12,8 @@
 
 pub mod backend;
 pub mod config;
+pub mod load_retry;
+pub mod variants;
 pub mod host_hardware;
 pub mod media;
 pub mod providers;

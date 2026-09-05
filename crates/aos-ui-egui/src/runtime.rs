@@ -27,11 +27,12 @@ use aos_proto::{
     ChatSessionRenameRequest, ChatSessionRoomTurnCancelRequest, ChatSessionRoomTurnRequest,
     ChatSessionRoomTurnResponse, ChatSessionSetArchivedRequest, ChatSessionSetModeRequest,
     ChatSessionSetModelRequest, ChatSessionSetPinnedRequest, ConfirmResponseRequest,
-    FeedbackSubmitRequest, FeedbackSubmitResponse, FilesGenerateRequest, FilesGenerateResponse,
-    InferParams, InferRequest, LoadRequest, LoadResponse, McpServerInfo, MediaAudioGenerateRequest,
-    MediaGenerateResponse, MediaImageGenerateRequest, MediaImageUpscaleRequest, MemContextRequest,
-    MemContextResponse, MemEpisodicDeleteRequest, MemExtractRequest, MemExtractResponse, MemHit,
-    MemListRequest, MemRememberResponse, MemSweepStatus, MemUpdateRequest, MemUserRecallRequest,
+    DeviceCaptureStopRequest, DevicePermissionRevokeRequest, FeedbackSubmitRequest,
+    FeedbackSubmitResponse, FilesGenerateRequest, FilesGenerateResponse, InferParams, InferRequest,
+    LoadRequest, LoadResponse, McpServerInfo, MediaAudioGenerateRequest, MediaGenerateResponse,
+    MediaImageGenerateRequest, MediaImageUpscaleRequest, MemContextRequest, MemContextResponse,
+    MemEpisodicDeleteRequest, MemExtractRequest, MemExtractResponse, MemHit, MemListRequest,
+    MemRememberResponse, MemSweepStatus, MemUpdateRequest, MemUserRecallRequest,
     MemUserRememberRequest, MemWorkingRequest, MigrateRequest, MigrateResponse, ModelInfo,
     ModelState, ModuleCatalogue, ModuleInfo, ModuleInstallRequest, ModuleUninstallRequest,
     NetFetchRequest, NetFetchResponse, NetModeRequest, PendingConfirmation, ProviderIdRequest,
@@ -41,8 +42,6 @@ use aos_proto::{
     UserLibraryAddRequest, UserLibraryAddResponse, UserLibraryListResponse,
     UserLibraryRemoveRequest, UserLibraryRemoveResponse, WebBrowseRequest, WebBrowseResponse,
     WebSearchRequest, WebSearchResponse, CHAT_DELEGATION_PROMPT,
-    DevicePermissionRevokeRequest,
-    DeviceCaptureStopRequest,
 };
 use eframe::egui;
 use std::process::Stdio;
@@ -2056,13 +2055,21 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 Ok(caps) => {
                     let _ = evt_tx.send(Evt::Caps { holder, caps });
                     if let Ok(permissions) = bus
-                        .call::<(), Vec<aos_proto::DevicePermissionInfo>>("device.permission.list", &(), vec![])
+                        .call::<(), Vec<aos_proto::DevicePermissionInfo>>(
+                            "device.permission.list",
+                            &(),
+                            vec![],
+                        )
                         .await
                     {
-                let _ = evt_tx.send(Evt::DevicePermissions(permissions));
+                        let _ = evt_tx.send(Evt::DevicePermissions(permissions));
                     }
                     if let Ok(active) = bus
-                        .call::<(), Vec<aos_proto::DeviceActiveCapture>>(aos_proto::device_capture::intents::CAPTURE_ACTIVE, &(), vec![])
+                        .call::<(), Vec<aos_proto::DeviceActiveCapture>>(
+                            aos_proto::device_capture::intents::CAPTURE_ACTIVE,
+                            &(),
+                            vec![],
+                        )
                         .await
                     {
                         let _ = evt_tx.send(Evt::DeviceActive(active));
@@ -2118,49 +2125,113 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             }
         }
         Cmd::DevicePermissionsList => {
-            match bus.call::<(), Vec<aos_proto::DevicePermissionInfo>>("device.permission.list", &(), vec![]).await {
-                Ok(permissions) => { let _ = evt_tx.send(Evt::DevicePermissions(permissions)); }
-                Err(e) => { let _ = evt_tx.send(Evt::Error(format!("device.permission.list: {e}"))); }
+            match bus
+                .call::<(), Vec<aos_proto::DevicePermissionInfo>>(
+                    "device.permission.list",
+                    &(),
+                    vec![],
+                )
+                .await
+            {
+                Ok(permissions) => {
+                    let _ = evt_tx.send(Evt::DevicePermissions(permissions));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(format!("device.permission.list: {e}")));
+                }
             }
-            if let Ok(active) = bus.call::<(), Vec<aos_proto::DeviceActiveCapture>>(aos_proto::device_capture::intents::CAPTURE_ACTIVE, &(), vec![]).await {
+            if let Ok(active) = bus
+                .call::<(), Vec<aos_proto::DeviceActiveCapture>>(
+                    aos_proto::device_capture::intents::CAPTURE_ACTIVE,
+                    &(),
+                    vec![],
+                )
+                .await
+            {
                 let _ = evt_tx.send(Evt::DeviceActive(active));
             }
         }
-        Cmd::DeviceCaptureStop { agent_id, capture_id } => {
-            match bus.call::<DeviceCaptureStopRequest, aos_proto::DeviceCaptureStopResponse>(
-                aos_proto::device_capture::intents::CAPTURE_STOP,
-                &DeviceCaptureStopRequest { agent_id, capture_id },
-                vec![],
-            ).await {
+        Cmd::DeviceCaptureStop {
+            agent_id,
+            capture_id,
+        } => {
+            match bus
+                .call::<DeviceCaptureStopRequest, aos_proto::DeviceCaptureStopResponse>(
+                    aos_proto::device_capture::intents::CAPTURE_STOP,
+                    &DeviceCaptureStopRequest {
+                        agent_id,
+                        capture_id,
+                    },
+                    vec![],
+                )
+                .await
+            {
                 Ok(_) => {
                     let _ = evt_tx.send(Evt::Status("device.capture.stop: flux arrêté".into()));
-                    if let Ok(active) = bus.call::<(), Vec<aos_proto::DeviceActiveCapture>>(
-                        aos_proto::device_capture::intents::CAPTURE_ACTIVE, &(), vec![]
-                    ).await {
+                    if let Ok(active) = bus
+                        .call::<(), Vec<aos_proto::DeviceActiveCapture>>(
+                            aos_proto::device_capture::intents::CAPTURE_ACTIVE,
+                            &(),
+                            vec![],
+                        )
+                        .await
+                    {
                         let _ = evt_tx.send(Evt::DeviceActive(active));
                     }
                 }
-                Err(e) => { let _ = evt_tx.send(Evt::Error(format!("device.capture.stop: {e}"))); }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(format!("device.capture.stop: {e}")));
+                }
             }
         }
-        Cmd::DevicePermissionRevoke { agent_id, device_id, kind, mode } => {
-            match bus.call::<DevicePermissionRevokeRequest, Vec<String>>(
-                "device.permission.revoke",
-                &DevicePermissionRevokeRequest { agent_id, device_id, kind, mode },
-                vec![],
-            ).await {
+        Cmd::DevicePermissionRevoke {
+            agent_id,
+            device_id,
+            kind,
+            mode,
+        } => {
+            match bus
+                .call::<DevicePermissionRevokeRequest, Vec<String>>(
+                    "device.permission.revoke",
+                    &DevicePermissionRevokeRequest {
+                        agent_id,
+                        device_id,
+                        kind,
+                        mode,
+                    },
+                    vec![],
+                )
+                .await
+            {
                 Ok(stopped) => {
-                    let _ = evt_tx.send(Evt::Status(format!("device.permission.revoke: {} flux arrêté(s)", stopped.len())));
-                    if let Ok(permissions) = bus.call::<(), Vec<aos_proto::DevicePermissionInfo>>("device.permission.list", &(), vec![]).await {
+                    let _ = evt_tx.send(Evt::Status(format!(
+                        "device.permission.revoke: {} flux arrêté(s)",
+                        stopped.len()
+                    )));
+                    if let Ok(permissions) = bus
+                        .call::<(), Vec<aos_proto::DevicePermissionInfo>>(
+                            "device.permission.list",
+                            &(),
+                            vec![],
+                        )
+                        .await
+                    {
                         let _ = evt_tx.send(Evt::DevicePermissions(permissions));
                     }
-                    if let Ok(active) = bus.call::<(), Vec<aos_proto::DeviceActiveCapture>>(
-                        aos_proto::device_capture::intents::CAPTURE_ACTIVE, &(), vec![]
-                    ).await {
+                    if let Ok(active) = bus
+                        .call::<(), Vec<aos_proto::DeviceActiveCapture>>(
+                            aos_proto::device_capture::intents::CAPTURE_ACTIVE,
+                            &(),
+                            vec![],
+                        )
+                        .await
+                    {
                         let _ = evt_tx.send(Evt::DeviceActive(active));
                     }
                 }
-                Err(e) => { let _ = evt_tx.send(Evt::Error(format!("device.permission.revoke: {e}"))); }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(format!("device.permission.revoke: {e}")));
+                }
             }
         }
         Cmd::ScheduleList => {
@@ -2395,6 +2466,87 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::ModelPlan {
+            model_id,
+            kv_tokens,
+        } => {
+            match bus
+                .call::<aos_proto::ModelPlanRequest, Vec<aos_proto::ModelPlanDiagnostic>>(
+                    "model.plan",
+                    &aos_proto::ModelPlanRequest {
+                        model_id: model_id.clone(),
+                        kv_tokens,
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(plans) => {
+                    let _ = evt_tx.send(Evt::ModelPlan { model_id, plans });
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::ModelPlanFailed {
+                        model_id,
+                        error: e.to_string(),
+                    });
+                }
+            }
+        }
+        Cmd::ModelClusterNodes => {
+            match bus
+                .call::<(), aos_proto::LanClusterNodesResponse>("model.cluster.nodes", &(), vec![])
+                .await
+            {
+                Ok(nodes) => {
+                    let _ = evt_tx.send(Evt::ModelClusterNodes(nodes));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::ModelClusterOperationFailed(e.to_string()));
+                }
+            }
+        }
+        Cmd::ModelClusterPair {
+            node_id,
+            public_key_fingerprint,
+        } => {
+            match bus
+                .call::<aos_proto::LanClusterPairRequest, bool>(
+                    "model.cluster.pair",
+                    &aos_proto::LanClusterPairRequest {
+                        node_id,
+                        public_key_fingerprint,
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(_) => {
+                    let _ = evt_tx.send(Evt::Status("LAN node paired".into()));
+                    let _ = evt_tx.send(Evt::ModelClusterRefresh);
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::ModelClusterOperationFailed(e.to_string()));
+                }
+            }
+        }
+        Cmd::ModelClusterRevoke { node_id } => {
+            match bus
+                .call::<aos_proto::LanClusterNodeRequest, bool>(
+                    "model.cluster.revoke",
+                    &aos_proto::LanClusterNodeRequest { node_id },
+                    vec![],
+                )
+                .await
+            {
+                Ok(_) => {
+                    let _ = evt_tx.send(Evt::Status("LAN node revoked".into()));
+                    let _ = evt_tx.send(Evt::ModelClusterRefresh);
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::ModelClusterOperationFailed(e.to_string()));
                 }
             }
         }
@@ -3379,6 +3531,20 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             content,
             images,
         } => {
+            let poll_bus = bus.clone();
+            let poll_evt = evt_tx.clone();
+            let poll_ctx = egui_ctx.clone();
+            let poll_sid = session_id.clone();
+            let poll = tokio::spawn(async move {
+                let mut interval = tokio::time::interval(std::time::Duration::from_millis(400));
+                interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+                interval.tick().await;
+                loop {
+                    interval.tick().await;
+                    load_session(&poll_bus, &poll_evt, &poll_sid).await;
+                    poll_ctx.request_repaint();
+                }
+            });
             match bus
                 .call::<ChatSessionRoomTurnRequest, ChatSessionRoomTurnResponse>(
                     "chat.session.room.turn",
@@ -3392,6 +3558,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 .await
             {
                 Ok(resp) => {
+                    poll.abort();
                     load_session(&bus, &evt_tx, &session_id).await;
                     let _ = evt_tx.send(Evt::RoomTurnDone {
                         session_id,
@@ -3400,7 +3567,12 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                     });
                 }
                 Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                    poll.abort();
+                    load_session(&bus, &evt_tx, &session_id).await;
+                    let _ = evt_tx.send(Evt::ChatError {
+                        session_id,
+                        message: e.to_string(),
+                    });
                 }
             }
         }

@@ -16,11 +16,10 @@ pub mod device_capture;
 pub mod mem_extract;
 
 pub use device_capture::{
-    capability_for as device_capability_for, CaptureMetadata, CaptureMode, CapturePermission,
-    CaptureId, CaptureRequest, CaptureResponse,
-    CaptureState, DeviceArtifact, DeviceCapability, DeviceCaptureMetadata, DeviceCaptureRequest,
-    DeviceCaptureResponse,
-    DeviceActiveCapture, DeviceCaptureStopRequest, DeviceCaptureStopResponse, DeviceDescriptor,
+    capability_for as device_capability_for, CaptureId, CaptureMetadata, CaptureMode,
+    CapturePermission, CaptureRequest, CaptureResponse, CaptureState, DeviceActiveCapture,
+    DeviceArtifact, DeviceCapability, DeviceCaptureMetadata, DeviceCaptureRequest,
+    DeviceCaptureResponse, DeviceCaptureStopRequest, DeviceCaptureStopResponse, DeviceDescriptor,
     DeviceEnumerateResponse, DeviceKind, DevicePermissionInfo, DevicePermissionRevokeRequest,
     OsPermissionState,
 };
@@ -337,6 +336,107 @@ pub struct ModelIdRequest {
     pub model_id: String,
 }
 
+/// Read-only request for comparing the adaptive planner profiles.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelPlanRequest {
+    pub model_id: String,
+    /// Zero lets modeld use its configured default context.
+    #[serde(default)]
+    pub kv_tokens: u32,
+}
+
+/// Transport-neutral diagnostic row returned by `model.plan`.
+///
+/// The model daemon maps its internal placement enums to strings here so UI
+/// clients do not need a dependency on the planner crate.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelPlanDiagnostic {
+    pub requested_profile: String,
+    pub backend: String,
+    pub quantization: String,
+    pub placement: String,
+    pub kv_cache: String,
+    pub kv_tokens: u32,
+    pub speculative: String,
+    pub thermal_policy: String,
+    pub experimental: bool,
+    #[serde(default)]
+    pub feasible: Option<bool>,
+    #[serde(default)]
+    pub placement_summary: Option<String>,
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
+/// Experimental LAN cluster controls are explicit and disabled by default.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanClusterPlanRequest {
+    pub work_id: String,
+    pub model_id: String,
+    pub shard_ids: Vec<u32>,
+    #[serde(default)]
+    pub kv_tokens: u32,
+    #[serde(default)]
+    pub allow_sensitive_data: bool,
+    pub encrypted_transport: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanClusterJobRequest {
+    pub work_id: String,
+    #[serde(default)]
+    pub node_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanClusterAssignment {
+    pub node_id: String,
+    pub shard_ids: Vec<u32>,
+    pub kv_tokens: u32,
+    pub encrypted_transport: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanClusterPlanResponse {
+    pub work_id: String,
+    pub state: String,
+    pub assignments: Vec<LanClusterAssignment>,
+    #[serde(default)]
+    pub unassigned_shards: Vec<u32>,
+    #[serde(default)]
+    pub reassigned_shards: Vec<u32>,
+    #[serde(default)]
+    pub cancelled_nodes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanClusterNode {
+    pub node_id: String,
+    pub display_name: String,
+    pub address: String,
+    pub public_key_fingerprint: String,
+    pub trust: String,
+    #[serde(default)]
+    pub capabilities: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanClusterNodesResponse {
+    pub enabled: bool,
+    pub nodes: Vec<LanClusterNode>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanClusterPairRequest {
+    pub node_id: String,
+    pub public_key_fingerprint: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanClusterNodeRequest {
+    pub node_id: String,
+}
+
 /// Métriques live d'un modèle (`model.metrics`, F-PLC-08, F-OBS-02).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelMetrics {
@@ -359,12 +459,42 @@ pub struct ModelMetrics {
     /// E20 : moyenne tokens acceptés / pas de verify speculative (C1).
     #[serde(default)]
     pub draft_accept: Option<f64>,
+    /// E20 : part des tokens draft acceptés par le modèle principal.
+    #[serde(default)]
+    pub draft_acceptance_rate: Option<f64>,
+    /// E20 : tokens draft acceptés par vérification.
+    #[serde(default)]
+    pub draft_tokens_per_step: Option<f64>,
     /// E20 : tokens de préfixe réutilisés au dernier C1.
     #[serde(default)]
     pub prefix_hit: Option<u32>,
     /// Chemin d'inférence utilisé lors de la dernière requête.
     #[serde(default)]
     pub inference_mode: Option<String>,
+    /// Adaptive planner decision (diagnostic, never contains prompt data).
+    #[serde(default)]
+    pub adaptive_backend: Option<String>,
+    #[serde(default)]
+    pub quantization: Option<String>,
+    #[serde(default)]
+    pub plan_reason: Option<String>,
+    #[serde(default)]
+    pub thermal_policy: Option<String>,
+    /// Effective placement after pressure handling or a backend fallback.
+    #[serde(default)]
+    pub effective_profile: Option<String>,
+    #[serde(default)]
+    pub kv_cache: Option<String>,
+    #[serde(default)]
+    pub kv_tokens: Option<u32>,
+    #[serde(default)]
+    pub fallback_used: bool,
+    #[serde(default)]
+    pub draft_disabled: bool,
+    #[serde(default)]
+    pub draft_disable_reason: Option<String>,
+    #[serde(default)]
+    pub draft_verify_ms: Option<f64>,
 }
 
 /// Métriques système agrégées.

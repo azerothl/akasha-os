@@ -194,10 +194,7 @@ pub fn is_model_installed(model_id: &str) -> bool {
     if m.filename.is_empty() {
         return false;
     }
-    aos_home()
-        .join("share/models")
-        .join(&m.filename)
-        .is_file()
+    aos_home().join("share/models").join(&m.filename).is_file()
 }
 
 pub fn category_of(m: &CatalogModel) -> ModelCatalogTab {
@@ -230,7 +227,10 @@ pub fn model_badges(m: &CatalogModel) -> Vec<String> {
         m.id.to_ascii_lowercase(),
         m.name.to_ascii_lowercase(),
         m.profiles.join(" "),
-        m.description.clone().unwrap_or_default().to_ascii_lowercase(),
+        m.description
+            .clone()
+            .unwrap_or_default()
+            .to_ascii_lowercase(),
     );
     fn has_tag(tags: &[String], label: &str) -> bool {
         tags.iter().any(|x| x.eq_ignore_ascii_case(label))
@@ -282,7 +282,11 @@ fn ui_capability_badge(ui: &mut egui::Ui, label: &str) {
         .corner_radius(crate::theme::CARD_RADIUS)
         .inner_margin(egui::Margin::symmetric(6, 2))
         .show(ui, |ui| {
-            ui.label(egui::RichText::new(label).size(11.0).color(egui::Color32::from_rgb(200, 210, 225)));
+            ui.label(
+                egui::RichText::new(label)
+                    .size(11.0)
+                    .color(egui::Color32::from_rgb(200, 210, 225)),
+            );
         });
 }
 
@@ -291,7 +295,12 @@ pub fn ui_catalog_vision_chip(ui: &mut egui::Ui, label: &str) {
     // Surchargable : accent du thème courant, pas SIGNAL en dur.
     let accent = crate::theme::button_colors(ui).accent;
     egui::Frame::new()
-        .fill(egui::Color32::from_rgba_unmultiplied(accent.r(), accent.g(), accent.b(), 36))
+        .fill(egui::Color32::from_rgba_unmultiplied(
+            accent.r(),
+            accent.g(),
+            accent.b(),
+            36,
+        ))
         .stroke(egui::Stroke::new(1.0, accent))
         .corner_radius(crate::theme::CARD_RADIUS)
         .inner_margin(egui::Margin::symmetric(6, 2))
@@ -323,7 +332,11 @@ fn format_params(n: f64) -> String {
     }
 }
 
-pub fn ui_catalog_tab_bar(ui: &mut egui::Ui, tab: &mut ModelCatalogTab, t: &crate::i18n::UiStrings) {
+pub fn ui_catalog_tab_bar(
+    ui: &mut egui::Ui,
+    tab: &mut ModelCatalogTab,
+    t: &crate::i18n::UiStrings,
+) {
     ui.horizontal(|ui| {
         ui.selectable_value(tab, ModelCatalogTab::Llm, t.models_tab_llm);
         ui.selectable_value(tab, ModelCatalogTab::Image, t.models_tab_image);
@@ -359,7 +372,10 @@ pub fn ui_hf_import(
                     .desired_width(280.0),
             );
             if ui
-                .add_enabled(!busy && !hf_url.trim().is_empty(), egui::Button::new(t.models_hf_download))
+                .add_enabled(
+                    !busy && !hf_url.trim().is_empty(),
+                    egui::Button::new(t.models_hf_download),
+                )
                 .clicked()
             {
                 let name = hf_name.trim();
@@ -551,7 +567,10 @@ mod vision_catalog_tests {
             .filter(|model| model.profiles.iter().any(|profile| profile == "vision"))
             .map(|model| model.id)
             .collect();
-        assert_eq!(vision_ids.first().map(|s| s.as_str()), Some("local:gemma-4-e4b"));
+        assert_eq!(
+            vision_ids.first().map(|s| s.as_str()),
+            Some("local:gemma-4-e4b")
+        );
         for id in ["local:qwen3-vl-4b", "local:qwen3-vl-8b", "local:llava-1.6"] {
             assert!(
                 vision_ids.iter().any(|v| v == id),

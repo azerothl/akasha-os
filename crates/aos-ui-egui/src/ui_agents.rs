@@ -18,10 +18,9 @@ fn agent_activity_icon(state: &AgentState) -> icons::AgentActivityIcon {
         AgentState::Failed => icons::AgentActivityIcon::Failed,
         AgentState::Blocked => icons::AgentActivityIcon::Blocked,
         AgentState::Running => icons::AgentActivityIcon::Running,
-        AgentState::Created
-        | AgentState::Paused
-        | AgentState::Killed
-        | AgentState::Roster => icons::AgentActivityIcon::Pending,
+        AgentState::Created | AgentState::Paused | AgentState::Killed | AgentState::Roster => {
+            icons::AgentActivityIcon::Pending
+        }
     }
 }
 
@@ -351,10 +350,7 @@ impl UiApp {
                     trace,
                 );
                 if !visible.is_empty() {
-                    ui.colored_label(
-                        theme::HYDROGEN,
-                        agent_panel::truncate(&visible, 40),
-                    );
+                    ui.colored_label(theme::HYDROGEN, agent_panel::truncate(&visible, 40));
                 }
             }
             if !a.is_roster() {
@@ -492,11 +488,8 @@ impl UiApp {
                     if resp.clicked() {
                         close = true;
                     }
-                    ui.painter().rect_filled(
-                        screen,
-                        0.0,
-                        egui::Color32::from_black_alpha(80),
-                    );
+                    ui.painter()
+                        .rect_filled(screen, 0.0, egui::Color32::from_black_alpha(80));
                 });
 
             egui::Area::new(egui::Id::new("agent_activity_sheet"))
@@ -563,7 +556,10 @@ impl UiApp {
                 ui.horizontal(|ui| {
                     ui.heading(t.agent_detail);
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if icons::close_button(ui).on_hover_text(t.activity_close).clicked() {
+                        if icons::close_button(ui)
+                            .on_hover_text(t.activity_close)
+                            .clicked()
+                        {
                             self.prefs.ui_layout.activity_panel_open = false;
                             self.agent_ui.close_all_tabs();
                             crate::prefs::save_preferences(&self.prefs);

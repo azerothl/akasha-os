@@ -66,6 +66,13 @@ pub fn host_profile() -> HardwareProfile {
         // (médiane des mesures pp 0,5B/3B : 1,0 / 1,7 TFLOPS).
         cpu_flops: 2.5e12,
         gpus: vec![],
+        cpu_isa: Default::default(),
+        cpu_topology: aos_placement::CpuTopology { logical_cores: 16, performance_cores: 8, efficiency_cores: 0 },
+        gpu_backend: Default::default(),
+        npu: None,
+        webgpu: None,
+        remote_nodes: 0,
+        thermal: Default::default(),
     }
 }
 
@@ -84,6 +91,8 @@ pub fn measurements() -> Vec<Measurement> {
                 context_length: 32768,
                 supports_layer_offload: true,
                 privacy_class: PrivacyClass::Local,
+                quantization: Default::default(),
+                backends_compatible: vec![],
             },
             tg_tok_s: 112.04,
             pp_tok_s: 808.16,
@@ -100,6 +109,8 @@ pub fn measurements() -> Vec<Measurement> {
                 context_length: 32768,
                 supports_layer_offload: true,
                 privacy_class: PrivacyClass::Local,
+                quantization: Default::default(),
+                backends_compatible: vec![],
             },
             tg_tok_s: 21.22,
             pp_tok_s: 246.93,

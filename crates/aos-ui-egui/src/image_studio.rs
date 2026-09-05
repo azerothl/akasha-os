@@ -1,7 +1,7 @@
 //! First-class Image studio page (P09.8) — closed sd.cpp options, no webview.
 
-use crate::cmd::Cmd;
 use crate::chat_media;
+use crate::cmd::Cmd;
 use crate::decl_ui;
 use crate::i18n::UiStrings;
 use crate::models_page;
@@ -621,11 +621,7 @@ impl ImageStudioState {
         if key == self.last_preset_key {
             return;
         }
-        let prev_model = self
-            .last_preset_key
-            .split("::")
-            .next()
-            .unwrap_or("");
+        let prev_model = self.last_preset_key.split("::").next().unwrap_or("");
         let model_changed = prev_model != self.model_id;
         let preset = pick_preset(&self.model_id, &self.profile);
         let large = crate::image_prompt::is_heavy_image_model(&self.model_id);
@@ -640,8 +636,7 @@ impl ImageStudioState {
         self.max_vram = if large { "-1".into() } else { String::new() };
         self.last_preset_key = key;
         if model_changed {
-            self.enrich_prompt =
-                crate::image_prompt::default_enrich_prompt(Some(&self.model_id));
+            self.enrich_prompt = crate::image_prompt::default_enrich_prompt(Some(&self.model_id));
             self.load_expert_defaults_from_catalog();
         }
     }
@@ -702,8 +697,7 @@ impl ImageStudioState {
                 .unwrap_or(false)
                 || m.get("modality").and_then(|x| x.as_str()) == Some("video");
             if image && !id.is_empty() {
-                self.catalog_packs
-                    .push((id.to_string(), name.to_string()));
+                self.catalog_packs.push((id.to_string(), name.to_string()));
                 if models_page::is_model_installed(id) {
                     self.packs.push((id.to_string(), name.to_string()));
                 }
@@ -747,14 +741,8 @@ impl ImageStudioState {
         }
         if self.model_id.is_empty()
             || !match self.create_mode {
-                CreateMode::Image => self
-                    .packs
-                    .iter()
-                    .any(|(id, _)| id == &self.model_id),
-                CreateMode::Video => self
-                    .video_packs
-                    .iter()
-                    .any(|(id, _)| id == &self.model_id),
+                CreateMode::Image => self.packs.iter().any(|(id, _)| id == &self.model_id),
+                CreateMode::Video => self.video_packs.iter().any(|(id, _)| id == &self.model_id),
             }
             || !models_page::is_model_installed(&self.model_id)
         {
@@ -916,12 +904,7 @@ impl ImageStudioState {
         Ok(())
     }
 
-    pub fn open_from_chat(
-        &mut self,
-        prompt: &str,
-        path: &str,
-        generation_prompt: Option<&str>,
-    ) {
+    pub fn open_from_chat(&mut self, prompt: &str, path: &str, generation_prompt: Option<&str>) {
         if !prompt.is_empty() {
             self.prompt = prompt.to_string();
         }
@@ -945,11 +928,7 @@ impl ImageStudioState {
         if !meta.prompt.is_empty() {
             self.prompt = meta.prompt.clone();
         }
-        if let Some(gen) = meta
-            .generation_prompt
-            .as_deref()
-            .filter(|s| !s.is_empty())
-        {
+        if let Some(gen) = meta.generation_prompt.as_deref().filter(|s| !s.is_empty()) {
             self.enriched_prompt = format_enriched_display(gen);
             self.show_enriched_prompt = true;
             self.use_edited_enriched = true;
@@ -970,7 +949,12 @@ impl ImageStudioState {
         &mut self,
         blocks: Vec<crate::image_composition::CompositionBlock>,
     ) {
-        self.composition_next_id = blocks.iter().map(|b| b.id).max().unwrap_or(0).saturating_add(1);
+        self.composition_next_id = blocks
+            .iter()
+            .map(|b| b.id)
+            .max()
+            .unwrap_or(0)
+            .saturating_add(1);
         if self.composition_next_id == 0 {
             self.composition_next_id = 1;
         }
@@ -1181,10 +1165,7 @@ impl ImageStudioState {
         ui.horizontal(|ui| {
             ui.heading(t.tab_create);
             if let Some(tip) = help_tooltip {
-                if crate::icons::help_button(ui)
-                    .on_hover_text(tip)
-                    .clicked()
-                {
+                if crate::icons::help_button(ui).on_hover_text(tip).clicked() {
                     *help_clicked = true;
                 }
             }
@@ -1397,15 +1378,13 @@ impl ImageStudioState {
             let mut attach_from_menu = false;
             let mut reuse_last_image = false;
             crate::icons::attach_menu(ui, "studio_attach", t.chat_attach_image, |ui| {
-                    if last_session_image.is_some()
-                        && ui.button(t.chat_last_session_image).clicked()
-                    {
-                        reuse_last_image = true;
-                    }
-                    if ui.button(t.chat_attach_image).clicked() {
-                        attach_from_menu = true;
-                    }
-                });
+                if last_session_image.is_some() && ui.button(t.chat_last_session_image).clicked() {
+                    reuse_last_image = true;
+                }
+                if ui.button(t.chat_attach_image).clicked() {
+                    attach_from_menu = true;
+                }
+            });
             if attach_from_menu {
                 if let Some(path) = pick_os_file(
                     t.chat_attach_image,
@@ -1527,9 +1506,7 @@ impl ImageStudioState {
         egui::CollapsingHeader::new(t.studio_negative)
             .default_open(false)
             .show(ui, |ui| {
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.negative).desired_width(f32::INFINITY),
-                );
+                ui.add(egui::TextEdit::singleline(&mut self.negative).desired_width(f32::INFINITY));
             });
 
         egui::CollapsingHeader::new(t.studio_section_enrichment)
@@ -1562,10 +1539,7 @@ impl ImageStudioState {
                     || !self.enriched_prompt.trim().is_empty();
                 if show_enriched_panel {
                     ui.horizontal(|ui| {
-                        ui.checkbox(
-                            &mut self.use_edited_enriched,
-                            t.studio_use_edited_enriched,
-                        );
+                        ui.checkbox(&mut self.use_edited_enriched, t.studio_use_edited_enriched);
                         help_icon(ui, t.studio_use_edited_enriched_help);
                     })
                     .response
@@ -1910,10 +1884,9 @@ impl ImageStudioState {
                     if expert_toggled && self.expert_mode {
                         self.load_expert_defaults_from_catalog();
                     }
-                    if self.expert_mode
-                        && ui.button(t.studio_expert_reset).clicked() {
-                            self.load_expert_defaults_from_catalog();
-                        }
+                    if self.expert_mode && ui.button(t.studio_expert_reset).clicked() {
+                        self.load_expert_defaults_from_catalog();
+                    }
                 });
                 if self.expert_mode {
                     ui.horizontal(|ui| {
@@ -1962,7 +1935,11 @@ impl ImageStudioState {
                         );
                         ui.label(t.studio_expert_threads);
                         help_icon(ui, t.studio_expert_threads_help);
-                        ui.add(egui::DragValue::new(&mut self.threads).range(0..=64).speed(1));
+                        ui.add(
+                            egui::DragValue::new(&mut self.threads)
+                                .range(0..=64)
+                                .speed(1),
+                        );
                     });
                     ui.horizontal(|ui| {
                         ui.checkbox(&mut self.offload_to_cpu, t.studio_expert_offload);
@@ -1984,7 +1961,11 @@ impl ImageStudioState {
                             .selected_text(max_vram_label(&self.max_vram))
                             .show_ui(ui, |ui| {
                                 ui.selectable_value(&mut self.max_vram, String::new(), "off");
-                                ui.selectable_value(&mut self.max_vram, "-1".to_string(), "auto (−1)");
+                                ui.selectable_value(
+                                    &mut self.max_vram,
+                                    "-1".to_string(),
+                                    "auto (−1)",
+                                );
                                 ui.selectable_value(&mut self.max_vram, "4".to_string(), "4 GiB");
                                 ui.selectable_value(&mut self.max_vram, "6".to_string(), "6 GiB");
                                 ui.selectable_value(&mut self.max_vram, "8".to_string(), "8 GiB");
@@ -2104,7 +2085,10 @@ fn ui_image_history(ui: &mut egui::Ui, t: &UiStrings, studio: &mut ImageStudioSt
                     .as_deref()
                     .is_some_and(|s| !s.is_empty());
                 let badges = match (has_enriched, has_comp) {
-                    (true, true) => format!(" · {} · {}", t.studio_history_badge_enriched, t.studio_history_badge_composition),
+                    (true, true) => format!(
+                        " · {} · {}",
+                        t.studio_history_badge_enriched, t.studio_history_badge_composition
+                    ),
                     (true, false) => format!(" · {}", t.studio_history_badge_enriched),
                     (false, true) => format!(" · {}", t.studio_history_badge_composition),
                     (false, false) => String::new(),
@@ -2283,10 +2267,7 @@ const STUDIO_BACKEND_CHOICES: &[(&str, &str)] = &[
     ("cpu", "cpu"),
     ("gpu", "gpu"),
     ("cuda0", "cuda0"),
-    (
-        "te=cpu,llm=cpu,diffusion=gpu,vae=cpu",
-        "mixed DiT+LLM",
-    ),
+    ("te=cpu,llm=cpu,diffusion=gpu,vae=cpu", "mixed DiT+LLM"),
     ("te=cpu,diffusion=gpu,vae=cpu", "mixed TE+diff"),
 ];
 
@@ -2436,10 +2417,7 @@ fn pick_import_destination(preferred: &Path) -> PathBuf {
 }
 
 fn unique_name_in_dir(dir: &Path, path: &Path) -> PathBuf {
-    let stem = path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("asset");
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("asset");
     let ext = path
         .extension()
         .and_then(|e| e.to_str())
@@ -2595,7 +2573,10 @@ mod tests {
         studio.inpaint_mask_path = Some("/downloads/inpaint-mask-test.png".into());
         let opts = studio.to_options();
         assert_eq!(opts.init_image.as_deref(), Some("/downloads/result.png"));
-        assert_eq!(opts.mask_image.as_deref(), Some("/downloads/inpaint-mask-test.png"));
+        assert_eq!(
+            opts.mask_image.as_deref(),
+            Some("/downloads/inpaint-mask-test.png")
+        );
         assert_eq!(opts.strength, Some(1.0));
     }
 
@@ -2611,7 +2592,10 @@ mod tests {
         studio.inpaint_mask_path = Some("/downloads/inpaint-mask-test.png".into());
         let opts = studio.to_options();
         assert_eq!(opts.init_image.as_deref(), Some("/downloads/result.png"));
-        assert_eq!(opts.mask_image.as_deref(), Some("/downloads/inpaint-mask-test.png"));
+        assert_eq!(
+            opts.mask_image.as_deref(),
+            Some("/downloads/inpaint-mask-test.png")
+        );
     }
 
     #[test]

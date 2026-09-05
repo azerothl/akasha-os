@@ -249,6 +249,10 @@ pub struct LlamaModel {
     ptr: *mut sys::llama_model,
     pub n_layer: i32,
     pub size_bytes: u64,
+    /// Effective GGUF file type reported by llama.cpp after the file opened.
+    /// This is deliberately a stable name rather than a raw llama enum so
+    /// callers do not couple their public metrics to a llama.cpp version.
+    pub quantization: Option<&'static str>,
     chat_template: Option<CString>,
 }
 
@@ -291,6 +295,7 @@ impl LlamaModel {
         }
         let n_layer = unsafe { sys::llama_model_n_layer(ptr) };
         let size_bytes = unsafe { sys::llama_model_size(ptr) };
+        let quantization = gguf_quantization_name(unsafe { sys::llama_model_ftype(ptr) });
         let chat_template = unsafe {
             let t = sys::llama_model_chat_template(ptr, std::ptr::null());
             if t.is_null() {
@@ -303,8 +308,47 @@ impl LlamaModel {
             ptr,
             n_layer,
             size_bytes,
+            quantization,
             chat_template,
         })
+    }
+}
+
+/// Normalise les types GGUF utiles au planner. Les types plus fins (K, IQ,
+/// etc.) gardent leur niveau de bits : le planner ne prétend pas pouvoir les
+/// convertir à chaud.
+fn gguf_quantization_name(ftype: sys::llama_ftype) -> Option<&'static str> {
+    match ftype {
+        sys::LLAMA_FTYPE_MOSTLY_F16 | sys::LLAMA_FTYPE_MOSTLY_BF16 => Some("f16"),
+        sys::LLAMA_FTYPE_MOSTLY_Q8_0 => Some("q8"),
+        sys::LLAMA_FTYPE_MOSTLY_Q6_K => Some("q6"),
+        sys::LLAMA_FTYPE_MOSTLY_Q5_0
+        | sys::LLAMA_FTYPE_MOSTLY_Q5_1
+        | sys::LLAMA_FTYPE_MOSTLY_Q5_K_S
+        | sys::LLAMA_FTYPE_MOSTLY_Q5_K_M => Some("q5"),
+        sys::LLAMA_FTYPE_MOSTLY_Q4_0
+        | sys::LLAMA_FTYPE_MOSTLY_Q4_1
+        | sys::LLAMA_FTYPE_MOSTLY_Q4_K_S
+        | sys::LLAMA_FTYPE_MOSTLY_Q4_K_M
+        | sys::LLAMA_FTYPE_MOSTLY_IQ4_NL
+        | sys::LLAMA_FTYPE_MOSTLY_IQ4_XS => Some("q4"),
+        sys::LLAMA_FTYPE_MOSTLY_Q3_K_S
+        | sys::LLAMA_FTYPE_MOSTLY_Q3_K_M
+        | sys::LLAMA_FTYPE_MOSTLY_Q3_K_L
+        | sys::LLAMA_FTYPE_MOSTLY_IQ3_XS
+        | sys::LLAMA_FTYPE_MOSTLY_IQ3_XXS
+        | sys::LLAMA_FTYPE_MOSTLY_IQ3_S
+        | sys::LLAMA_FTYPE_MOSTLY_IQ3_M => Some("q3"),
+        sys::LLAMA_FTYPE_MOSTLY_Q2_K
+        | sys::LLAMA_FTYPE_MOSTLY_IQ2_XXS
+        | sys::LLAMA_FTYPE_MOSTLY_IQ2_XS
+        | sys::LLAMA_FTYPE_MOSTLY_Q2_K_S
+        | sys::LLAMA_FTYPE_MOSTLY_IQ2_S
+        | sys::LLAMA_FTYPE_MOSTLY_IQ2_M
+        | sys::LLAMA_FTYPE_MOSTLY_Q2_0
+        | sys::LLAMA_FTYPE_MOSTLY_TQ2_0 => Some("q2"),
+        sys::LLAMA_FTYPE_MOSTLY_MXFP4_MOE | sys::LLAMA_FTYPE_MOSTLY_NVFP4 => Some("mxfp4"),
+        _ => None,
     }
 }
 
@@ -345,8 +389,16 @@ pub struct GenStats {
     pub prefix_hit_tokens: u32,
     /// Tokens draft acceptés (lookup speculative).
     pub draft_accepted: u32,
+    /// Tokens proposés par le draft et effectivement vérifiés.
+    pub draft_proposed: u32,
     /// Pas de vérification speculative (0 si pas de draft).
     pub draft_steps: u32,
+    /// True when adaptive speculation stopped itself after poor acceptance.
+    pub draft_disabled: bool,
+    /// Cause locale d'arrêt du spéculatif, sans contenu de prompt.
+    pub draft_disable_reason: Option<DraftDisableReason>,
+    /// Time spent verifying drafted tokens (diagnostic only).
+    pub draft_verify_ms: f64,
 }
 
 impl GenStats {
@@ -358,6 +410,54 @@ impl GenStats {
             Some(self.draft_accepted as f64 / self.draft_steps as f64)
         }
     }
+
+    /// Part des tokens proposés qui ont été acceptés par le modèle principal.
+    pub fn draft_acceptance_rate(&self) -> Option<f64> {
+        (self.draft_proposed > 0).then(|| self.draft_accepted as f64 / self.draft_proposed as f64)
+    }
+
+    /// Nombre moyen de tokens draft acceptés à chaque vérification.
+    pub fn draft_tokens_per_step(&self) -> Option<f64> {
+        self.draft_accept_avg()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DraftDisableReason {
+    LowAcceptance,
+    SlowerThanStandard,
+}
+
+impl DraftDisableReason {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::LowAcceptance => "low-acceptance",
+            Self::SlowerThanStandard => "slower-than-standard",
+        }
+    }
+}
+
+/// Stops lookup speculation only after enough evidence. `plain_ms_per_token`
+/// is optional because a prompt can match immediately and leave no standard
+/// decode sample for comparison.
+fn speculation_disable_reason(
+    steps: u32,
+    accepted: u32,
+    proposed: u32,
+    verify_ms: f64,
+    committed_tokens: u32,
+    plain_ms_per_token: Option<f64>,
+) -> Option<DraftDisableReason> {
+    if steps < 4 || proposed == 0 {
+        return None;
+    }
+    if accepted as f64 / (proposed as f64) < 0.25 {
+        return Some(DraftDisableReason::LowAcceptance);
+    }
+    let speculative_ms_per_token = verify_ms / f64::from(committed_tokens.max(1));
+    plain_ms_per_token
+        .filter(|plain| *plain > 0.0 && speculative_ms_per_token > plain * 1.10)
+        .map(|_| DraftDisableReason::SlowerThanStandard)
 }
 
 /// Longueur du préfixe commun (E20 prefix cache).
@@ -751,7 +851,11 @@ impl LlamaContext {
             stopped,
             prefix_hit_tokens: 0,
             draft_accepted: 0,
+            draft_proposed: 0,
             draft_steps: 0,
+            draft_disabled: false,
+            draft_disable_reason: None,
+            draft_verify_ms: 0.0,
         })
     }
 
@@ -1128,7 +1232,15 @@ impl LlamaContext {
         let mut generated = 0u32;
         let mut ttft_ms = f64::MAX;
         let mut draft_accepted = 0u32;
+        let mut draft_proposed = 0u32;
         let mut draft_steps = 0u32;
+        let mut draft_disabled = false;
+        let mut draft_disable_reason = None;
+        let mut draft_verify_ms = 0.0;
+        let mut draft_committed_tokens = 0u32;
+        let mut plain_decode_ms = 0.0;
+        let mut plain_decode_tokens = 0u32;
+        let mut speculation_enabled = true;
         let mut haystack = prompt_tokens.clone();
 
         let mut cur = unsafe { sys::llama_sampler_sample(smpl, self.ptr, -1) };
@@ -1156,7 +1268,7 @@ impl LlamaContext {
             haystack.push(cur);
 
             let room = self.n_ctx_seq() as usize - self.seq0_tokens.len();
-            let draft = if room < 2 {
+            let draft = if !speculation_enabled || room < 2 {
                 Vec::new()
             } else {
                 let max_draft = (room - 1).min(n_draft);
@@ -1171,7 +1283,10 @@ impl LlamaContext {
             if draft.is_empty() {
                 let mut tok = cur;
                 let batch = unsafe { sys::llama_batch_get_one(&mut tok, 1) };
+                let decode_start = Instant::now();
                 let rc = unsafe { sys::llama_decode(self.ptr, batch) };
+                plain_decode_ms += decode_start.elapsed().as_secs_f64() * 1000.0;
+                plain_decode_tokens += 1;
                 if rc != 0 {
                     unsafe { sys::llama_sampler_free(smpl) };
                     return Err(LlamaError::Decode(rc));
@@ -1182,6 +1297,7 @@ impl LlamaContext {
             }
 
             // Decode : token courant + drafts (logits sur chaque position).
+            draft_proposed += draft.len() as u32;
             let decode_pos = self.seq0_tokens.len() as sys::llama_pos;
             let n_batch_toks = 1 + draft.len();
             let mut batch = unsafe { sys::llama_batch_init(n_batch_toks as i32, 0, 1) };
@@ -1193,7 +1309,9 @@ impl LlamaContext {
                     Self::batch_add(&mut batch, d, decode_pos + 1 + i as sys::llama_pos, 0, true);
                 }
             }
+            let verify_start = Instant::now();
             let rc = unsafe { sys::llama_decode(self.ptr, batch) };
+            draft_verify_ms += verify_start.elapsed().as_secs_f64() * 1000.0;
             unsafe { sys::llama_batch_free(batch) };
             if rc != 0 {
                 // Fallback : un token sans speculative (évite échec dur sur batch multi-logits).
@@ -1279,6 +1397,21 @@ impl LlamaContext {
             if pause.load(Ordering::SeqCst) {
                 break StopReason::Paused;
             }
+            draft_committed_tokens += accepted as u32 + 1;
+            let plain_ms_per_token =
+                (plain_decode_tokens > 0).then(|| plain_decode_ms / f64::from(plain_decode_tokens));
+            if let Some(reason) = speculation_disable_reason(
+                draft_steps,
+                draft_accepted,
+                draft_proposed,
+                draft_verify_ms,
+                draft_committed_tokens,
+                plain_ms_per_token,
+            ) {
+                speculation_enabled = false;
+                draft_disabled = true;
+                draft_disable_reason = Some(reason);
+            }
         };
 
         unsafe { sys::llama_sampler_free(smpl) };
@@ -1299,7 +1432,11 @@ impl LlamaContext {
             stopped,
             prefix_hit_tokens: prefix_hit,
             draft_accepted,
+            draft_proposed,
             draft_steps,
+            draft_disabled,
+            draft_disable_reason,
+            draft_verify_ms,
         })
     }
 
@@ -1701,7 +1838,11 @@ impl LlamaContext {
                     stopped: slot.done.unwrap_or(StopReason::Eog),
                     prefix_hit_tokens: 0,
                     draft_accepted: 0,
+                    draft_proposed: 0,
                     draft_steps: 0,
+                    draft_disabled: false,
+                    draft_disable_reason: None,
+                    draft_verify_ms: 0.0,
                 });
             }
             unsafe { sys::llama_sampler_free(slot.smpl) };
@@ -1918,6 +2059,22 @@ mod tests {
     fn prompt_lookup_empty_without_match() {
         let hay = vec![1, 2, 3, 4, 5];
         assert!(prompt_lookup_draft(&hay, 8, 3, 5).is_empty());
+    }
+
+    #[test]
+    fn speculation_health_requires_evidence_and_reports_its_cause() {
+        assert_eq!(
+            speculation_disable_reason(3, 0, 12, 10.0, 3, Some(1.0)),
+            None
+        );
+        assert_eq!(
+            speculation_disable_reason(4, 1, 12, 10.0, 5, Some(1.0)),
+            Some(DraftDisableReason::LowAcceptance)
+        );
+        assert_eq!(
+            speculation_disable_reason(4, 12, 12, 100.0, 12, Some(5.0)),
+            Some(DraftDisableReason::SlowerThanStandard)
+        );
     }
 
     #[test]

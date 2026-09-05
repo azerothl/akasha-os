@@ -6,7 +6,7 @@ use aos_proto::CapInfo;
 use eframe::egui;
 
 impl UiApp {
-pub(crate) fn ui_audit(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn ui_audit(&mut self, ui: &mut egui::Ui) {
         let t = i18n::strings(&self.prefs.language);
         ui.heading(t.audit_heading);
         if self.security_ui.audit.is_empty() {
@@ -83,7 +83,10 @@ pub(crate) fn ui_audit(&mut self, ui: &mut egui::Ui) {
             ui.heading(t.device_active_heading);
             for capture in self.security_ui.device_active.clone() {
                 ui.horizontal(|ui| {
-                    ui.label(format!("{} · {} · {} ms", capture.agent_id, capture.device_id, capture.duration_ms));
+                    ui.label(format!(
+                        "{} · {} · {} ms",
+                        capture.agent_id, capture.device_id, capture.duration_ms
+                    ));
                     if ui.button(t.device_stop).clicked() {
                         let _ = self.cmd_tx.send(Cmd::DeviceCaptureStop {
                             agent_id: capture.agent_id.clone(),
@@ -169,5 +172,4 @@ pub(crate) fn ui_audit(&mut self, ui: &mut egui::Ui) {
             }
         });
     }
-
 }

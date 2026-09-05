@@ -32,9 +32,15 @@ pub(crate) fn render_load_fail_recovery(ui: &mut egui::Ui, t: &UiStrings) -> Rec
     ui.group(|ui| {
         ui.label(t.chat_load_fail_message);
         ui.horizontal(|ui| {
-            if ui.button(t.chat_load_fail_retry).clicked() { action = RecoveryAction::Retry; }
-            if ui.button(t.models_unload).clicked() { action = RecoveryAction::Unload; }
-            if ui.button(t.models_reload_clean).clicked() { action = RecoveryAction::Reload; }
+            if ui.button(t.chat_load_fail_retry).clicked() {
+                action = RecoveryAction::Retry;
+            }
+            if ui.button(t.models_unload).clicked() {
+                action = RecoveryAction::Unload;
+            }
+            if ui.button(t.models_reload_clean).clicked() {
+                action = RecoveryAction::Reload;
+            }
         });
     });
     action

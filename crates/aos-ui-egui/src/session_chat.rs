@@ -198,14 +198,24 @@ pub(crate) fn on_chat_cancelled(
     on_active
 }
 
+fn content_message_count(lines: &[ChatLine]) -> usize {
+    lines
+        .iter()
+        .filter(|line| line.role != "système" && line.role != "system")
+        .count()
+}
+
+/// A mid-turn salon snapshot may replace the painted transcript once disk has
+/// caught up with the optimistic user line (and any later speaker bubbles).
+pub(crate) fn should_apply_room_snapshot(local: &[ChatLine], loaded: &[ChatLine]) -> bool {
+    content_message_count(loaded) >= content_message_count(local)
+}
+
 /// Fill assistant `duration_ms` from the previous timestamped message when missing.
 pub(crate) fn infer_reply_durations(chat: &mut [ChatLine]) {
     let mut prev_ts = 0u64;
     for line in chat.iter_mut() {
-        if line.duration_ms == 0
-            && line.ts_ms > prev_ts
-            && prev_ts > 0
-            && line.role == "assistant"
+        if line.duration_ms == 0 && line.ts_ms > prev_ts && prev_ts > 0 && line.role == "assistant"
         {
             line.duration_ms = line.ts_ms - prev_ts;
         }
@@ -292,8 +302,7 @@ mod tests {
         );
 
         assert!(
-            chat
-                .iter()
+            chat.iter()
                 .all(|l| l.role != "assistant" || l.text != "assistant reply for A"),
             "B's transcript must not receive A's assistant turn"
         );
@@ -420,8 +429,10 @@ mod tests {
 
         // Returning to A clears unread and restores inflight view (completed).
         state.clear_unread(session_a());
-        let chat_a = [ChatLine::plain("user", "question in A"),
-            ChatLine::plain("assistant", "reply text")];
+        let chat_a = [
+            ChatLine::plain("user", "question in A"),
+            ChatLine::plain("assistant", "reply text"),
+        ];
         state.sync_active_view(
             Some(session_a()),
             &mut streaming,
@@ -489,5 +500,32 @@ mod tests {
         infer_reply_durations(&mut chat);
         assert_eq!(chat[1].duration_ms, 3_200);
         assert_eq!(chat[0].duration_ms, 0);
+    }
+
+    #[test]
+    fn room_snapshot_waits_for_optimistic_user_then_accepts_new_speakers() {
+        let local = vec![
+            ChatLine::plain("système", "Session s — historique rechargé."),
+            ChatLine::plain("user", "hello everyone"),
+        ];
+        let disk_user_only = vec![ChatLine::plain("user", "hello everyone")];
+        assert!(should_apply_room_snapshot(&local, &disk_user_only));
+
+        let mut first_agent = disk_user_only.clone();
+        first_agent.push(ChatLine {
+            role: "assistant".into(),
+            text: "first".into(),
+            speaker_id: Some("persona-researcher".into()),
+            speaker_name: Some("Researcher".into()),
+            ..Default::default()
+        });
+        assert!(should_apply_room_snapshot(&local, &first_agent));
+
+        let stale = vec![ChatLine::plain("user", "older")];
+        let optimistic = vec![
+            ChatLine::plain("user", "older"),
+            ChatLine::plain("user", "just typed"),
+        ];
+        assert!(!should_apply_room_snapshot(&optimistic, &stale));
     }
 }

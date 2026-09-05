@@ -25,8 +25,9 @@ pub const PRIMARY_MIN_H: f32 = 44.0;
 /// Accessible hit target for icon-only controls. Glyph stays 18px centered.
 pub const ICON_HIT: f32 = 28.0;
 pub const ICON_GLYPH: f32 = 18.0;
-/// Toolbar hit target (canvas tools, session bar toggles).
-pub const TOOLBAR_HIT: f32 = 32.0;
+/// Toolbar hit target (canvas tools, session bar toggles). Même taille que
+/// les icônes (28px) pour des lignes de toolbar homogènes.
+pub const TOOLBAR_HIT: f32 = 28.0;
 #[allow(dead_code)]
 pub const COMPOSER_MIN_H: f32 = 44.0;
 #[allow(dead_code)]
@@ -71,10 +72,7 @@ fn theme_colors_id() -> egui::Id {
     egui::Id::new("aos_theme_colors")
 }
 
-pub fn theme_colors(
-    theme: &str,
-    custom: &crate::prefs::CustomThemePreferences,
-) -> ThemeColors {
+pub fn theme_colors(theme: &str, custom: &crate::prefs::CustomThemePreferences) -> ThemeColors {
     match theme {
         "light" => ThemeColors {
             accent: mix(VOID, SIGNAL, 0.85),
@@ -210,8 +208,12 @@ pub fn apply_ui_scale(ctx: &egui::Context, scale_percent: u32) {
 
 fn parse_hex(value: &str, fallback: egui::Color32) -> egui::Color32 {
     let raw = value.trim().trim_start_matches('#');
-    if raw.len() != 6 { return fallback; }
-    let Ok(rgb) = u32::from_str_radix(raw, 16) else { return fallback; };
+    if raw.len() != 6 {
+        return fallback;
+    }
+    let Ok(rgb) = u32::from_str_radix(raw, 16) else {
+        return fallback;
+    };
     egui::Color32::from_rgb((rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8)
 }
 

@@ -206,7 +206,9 @@ mod tests {
     fn human_memory_fact_gate() {
         assert!(is_human_memory_fact("L'utilisateur s'appelle Alice"));
         assert!(is_human_memory_fact("L'utilisateur préfère le français"));
-        assert!(!is_human_memory_fact("L'utilisateur veut dessiner une maison"));
+        assert!(!is_human_memory_fact(
+            "L'utilisateur veut dessiner une maison"
+        ));
         assert!(!is_human_memory_fact("✓ `notes.create` → `todo.md`"));
     }
 

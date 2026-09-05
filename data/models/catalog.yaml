@@ -26,6 +26,11 @@ models:
       embed_bytes: 200000000
       kv_bytes_per_token: 120000
       supports_layer_offload: true
+      quantization:
+        format: Q4_K_M
+        quality_score: 0.90
+        prefill_cost: 1.0
+        decode_cost: 1.0
     capabilities: [chat, tools]
     backends_compatible: [llamacpp, candle]
     privacy_class: local
@@ -47,6 +52,9 @@ models:
       embed_bytes: 80000000
       kv_bytes_per_token: 50000
       supports_layer_offload: true
+      quantization:
+        format: Q4_K_M
+        quality_score: 0.90
     capabilities: [embed]
     backends_compatible: [llamacpp, candle]
     privacy_class: local
@@ -69,6 +77,11 @@ models:
       embed_bytes: 800000000
       kv_bytes_per_token: 400000
       supports_layer_offload: true
+      quantization:
+        format: Q6_K
+        quality_score: 0.97
+        prefill_cost: 1.15
+        decode_cost: 1.20
     capabilities: [chat, tools]
     backends_compatible: [llamacpp]
     privacy_class: local
@@ -90,6 +103,9 @@ models:
       embed_bytes: 1200000000
       kv_bytes_per_token: 640000
       supports_layer_offload: true
+      quantization:
+        format: Q4_K_M
+        quality_score: 0.90
     capabilities: [chat, tools]
     backends_compatible: [llamacpp]
     privacy_class: local

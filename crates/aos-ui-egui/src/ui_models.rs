@@ -2,7 +2,7 @@
 
 use crate::cmd::Cmd;
 use crate::os_open::{open_url, request_preview_restart};
-use crate::ui_format::{format_model_infer_line, human_bytes};
+use crate::ui_format::human_bytes;
 use crate::{i18n, icons, models_page, UiApp};
 use eframe::egui;
 
@@ -97,6 +97,7 @@ impl UiApp {
                     for m in installed_rows {
                         let id = m.id.clone();
                         let mut load = false;
+                        let mut inspect_plan = false;
                         let mut set_default = false;
                         let mut redownload = false;
                         let mut remove = false;
@@ -110,6 +111,27 @@ impl UiApp {
                             &mut || redownload = true,
                             &mut || remove = true,
                         );
+                        let plan_busy = self.models_ui.plan_loading(&id);
+                        if ui
+                            .add_enabled(
+                                !plan_busy,
+                                egui::Button::new(if plan_busy {
+                                    t.models_plan_loading
+                                } else {
+                                    t.models_plan_button
+                                }),
+                            )
+                            .clicked()
+                        {
+                            inspect_plan = true;
+                        }
+                        if inspect_plan {
+                            self.models_ui.begin_plan(&id);
+                            let _ = self.cmd_tx.send(Cmd::ModelPlan {
+                                model_id: id.clone(),
+                                kv_tokens: 0,
+                            });
+                        }
                         if load {
                             self.models_ui.begin_transition(&id);
                             let _ = self.cmd_tx.send(Cmd::ModelLoad {
@@ -195,25 +217,18 @@ impl UiApp {
                                 ui.weak(t.models_error_detail);
                             }
                         }
+                        if let Some(plans) = self.models_ui.plan_diagnostics.get(&id).cloned() {
+                            ui_model_plan_diagnostic(ui, &plans, &t);
+                        }
+                        if let Some(error) = self.models_ui.plan_errors.get(&id) {
+                            ui.colored_label(
+                                crate::theme::button_colors(ui).warning,
+                                format!("{}: {error}", t.models_plan_error),
+                            );
+                        }
                         ui.add_space(6.0);
                     }
-                    ui.separator();
-                    ui.label(t.metrics_live);
-                    if let Some(m) = &self.metrics {
-                        for mm in &m.models {
-                            ui.group(|ui| {
-                                ui.strong(format!(
-                                    "{} · {}",
-                                    mm.model_id,
-                                    models_page::model_state_human(
-                                        &mm.state,
-                                        t.models_tab_installed == "Installés",
-                                    )
-                                ));
-                                ui.label(format_model_infer_line(mm, &t));
-                            });
-                        }
-                    }
+                    self.ui_model_metrics(ui, &t);
                 }
                 tab => {
                     let filtered: Vec<_> = catalog
@@ -264,4 +279,225 @@ impl UiApp {
                 }
             });
     }
+
+    /// Live metrics deliberately follow the loader's effective state, not the
+    /// requested setting: a CPU fallback or a pressure-reduced KV cache must
+    /// be visible where users decide whether to retry a model load.
+    fn ui_model_metrics(&self, ui: &mut egui::Ui, t: &i18n::UiStrings) {
+        ui.add_space(crate::theme::SPACE_UNIT * 2.0);
+        ui.separator();
+        ui.add_space(crate::theme::SPACE_UNIT);
+        ui.heading(t.metrics_live);
+        ui.weak(t.metrics_hint);
+        let Some(system) = &self.metrics else {
+            ui.add_space(crate::theme::SPACE_UNIT);
+            ui.weak(t.metrics_empty);
+            return;
+        };
+        if system.models.is_empty() {
+            ui.add_space(crate::theme::SPACE_UNIT);
+            ui.weak(t.metrics_empty);
+            return;
+        }
+
+        for mm in &system.models {
+            ui.add_space(crate::theme::SPACE_UNIT);
+            let colors = crate::theme::button_colors(ui);
+            egui::Frame::group(ui.style())
+                .stroke(egui::Stroke::new(
+                    crate::theme::STROKE_SUBTLE,
+                    colors.accent,
+                ))
+                .inner_margin(egui::Margin::same(10))
+                .show(ui, |ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.strong(&mm.model_id);
+                        ui.weak(models_page::model_state_human(
+                            &mm.state,
+                            t.models_tab_installed == "Installés",
+                        ));
+                        if mm.fallback_used {
+                            ui.colored_label(colors.warning, t.metrics_fallback_used);
+                        }
+                    });
+
+                    if mm.media_total_steps.is_some() || mm.media_step.is_some() {
+                        ui.label(media_metrics_line(mm, t));
+                    } else {
+                        ui.horizontal_wrapped(|ui| {
+                            metric_reading(
+                                ui,
+                                t.metrics_ttft,
+                                mm.last_ttft_ms.map(|v| format!("{v:.0} ms")),
+                            );
+                            metric_reading(
+                                ui,
+                                t.metrics_tok_s,
+                                mm.last_tok_s.map(|v| format!("{v:.1}")),
+                            );
+                            metric_reading(
+                                ui,
+                                t.metrics_active,
+                                Some(mm.active_inferences.to_string()),
+                            );
+                            metric_reading(ui, t.metrics_queued, Some(mm.queued.to_string()));
+                            if let Some(draft) = mm.draft_accept {
+                                metric_reading(ui, t.metrics_draft, Some(format!("{draft:.1}")));
+                            }
+                            if let Some(rate) = mm.draft_acceptance_rate {
+                                metric_reading(
+                                    ui,
+                                    t.metrics_draft_rate,
+                                    Some(format!("{:.0}%", rate * 100.0)),
+                                );
+                            }
+                            if let Some(prefix) = mm.prefix_hit.filter(|tokens| *tokens > 0) {
+                                metric_reading(ui, t.metrics_prefix, Some(prefix.to_string()));
+                            }
+                        });
+                        if mm.draft_disabled {
+                            let reason = mm.draft_disable_reason.as_deref().unwrap_or("adaptive");
+                            ui.colored_label(
+                                colors.warning,
+                                format!("{}: {reason}", t.metrics_draft_disabled),
+                            );
+                        }
+                    }
+
+                    ui.horizontal_wrapped(|ui| {
+                        metric_reading(ui, t.metrics_vram, Some(human_bytes(mm.vram_bytes)));
+                        metric_reading(ui, t.metrics_ram, Some(human_bytes(mm.ram_bytes)));
+                        metric_reading(ui, t.metrics_disk, Some(human_bytes(mm.disk_bytes)));
+                    });
+
+                    if mm.adaptive_backend.is_some()
+                        || mm.quantization.is_some()
+                        || mm.effective_profile.is_some()
+                        || mm.kv_cache.is_some()
+                    {
+                        ui.add_space(4.0);
+                        ui.separator();
+                        ui.add_space(4.0);
+                        ui.strong(t.metrics_effective_plan);
+                        ui.horizontal_wrapped(|ui| {
+                            metric_reading(ui, t.metrics_backend, mm.adaptive_backend.clone());
+                            metric_reading(ui, t.metrics_quantization, mm.quantization.clone());
+                            metric_reading(ui, t.metrics_profile, mm.effective_profile.clone());
+                            let kv = mm.kv_cache.as_ref().map(|kind| match mm.kv_tokens {
+                                Some(tokens) => format!("{kind} · {tokens}"),
+                                None => kind.clone(),
+                            });
+                            metric_reading(ui, t.metrics_kv, kv);
+                        });
+                        if let Some(reason) = mm
+                            .plan_reason
+                            .as_deref()
+                            .filter(|reason| !reason.is_empty())
+                        {
+                            ui.add_space(2.0);
+                            ui.horizontal_wrapped(|ui| {
+                                ui.weak(format!("{}:", t.metrics_plan_reason));
+                                ui.label(reason);
+                            });
+                        }
+                    }
+                });
+        }
+    }
+}
+
+fn ui_model_plan_diagnostic(
+    ui: &mut egui::Ui,
+    plans: &[aos_proto::ModelPlanDiagnostic],
+    t: &i18n::UiStrings,
+) {
+    ui.add_space(crate::theme::SPACE_UNIT);
+    ui.separator();
+    ui.add_space(crate::theme::SPACE_UNIT * 0.5);
+    ui.strong(t.models_plan_title);
+    ui.weak(t.models_plan_hint);
+    if plans.is_empty() {
+        ui.weak(t.models_plan_empty);
+        return;
+    }
+    for plan in plans {
+        let feasible = plan.feasible.unwrap_or(false);
+        let colors = crate::theme::button_colors(ui);
+        egui::CollapsingHeader::new(format!(
+            "{} · {} · {}",
+            plan.requested_profile, plan.backend, plan.quantization
+        ))
+        .default_open(feasible)
+        .show(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.weak(format!("{}:", t.models_plan_title));
+                ui.monospace(&plan.placement);
+                ui.colored_label(
+                    if feasible {
+                        colors.success
+                    } else {
+                        colors.warning
+                    },
+                    if feasible {
+                        t.models_plan_feasible
+                    } else {
+                        t.models_plan_infeasible
+                    },
+                );
+                if plan.experimental {
+                    ui.colored_label(colors.warning, t.models_plan_experimental);
+                }
+            });
+            ui.horizontal_wrapped(|ui| {
+                metric_reading(ui, t.metrics_backend, Some(plan.backend.clone()));
+                metric_reading(ui, t.metrics_quantization, Some(plan.quantization.clone()));
+                metric_reading(ui, t.metrics_profile, Some(plan.requested_profile.clone()));
+                metric_reading(
+                    ui,
+                    t.metrics_kv,
+                    Some(format!("{} · {}", plan.kv_cache, plan.kv_tokens)),
+                );
+                metric_reading(ui, t.metrics_plan_reason, Some(plan.speculative.clone()));
+            });
+            ui.weak(format!(
+                "{}: {}",
+                t.metrics_plan_reason, plan.thermal_policy
+            ));
+            if let Some(summary) = &plan.placement_summary {
+                ui.label(summary);
+            }
+            if let Some(error) = &plan.error {
+                ui.colored_label(colors.warning, format!("{}: {error}", t.models_plan_error));
+            }
+        });
+    }
+}
+
+fn metric_reading(ui: &mut egui::Ui, label: &str, value: Option<String>) {
+    let Some(value) = value else {
+        return;
+    };
+    ui.horizontal(|ui| {
+        ui.weak(format!("{label}:"));
+        ui.monospace(value);
+    });
+}
+
+fn media_metrics_line(mm: &aos_proto::ModelMetrics, t: &i18n::UiStrings) -> String {
+    let step = mm
+        .media_step
+        .map(|v| v.to_string())
+        .unwrap_or_else(|| "—".into());
+    let total = mm
+        .media_total_steps
+        .map(|v| v.to_string())
+        .unwrap_or_else(|| "—".into());
+    let step_s = mm
+        .last_step_s
+        .map(|v| format!("{v:.2}"))
+        .unwrap_or_else(|| "—".into());
+    format!(
+        "{} {}/{} · {} {}",
+        t.metrics_step, step, total, t.metrics_step_s, step_s
+    )
 }

@@ -23,6 +23,8 @@ fn model_32b() -> ModelDesc {
         context_length: 131072,
         supports_layer_offload: true,
         privacy_class: PrivacyClass::Local,
+        quantization: Default::default(),
+        backends_compatible: vec![],
     }
 }
 

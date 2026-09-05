@@ -156,7 +156,10 @@ pub fn ensure_canvas_layers(doc: &mut CanvasDoc) {
         }
     }
     if doc.active_layer_id.is_empty()
-        || !doc.layers.iter().any(|layer| layer.id == doc.active_layer_id)
+        || !doc
+            .layers
+            .iter()
+            .any(|layer| layer.id == doc.active_layer_id)
     {
         doc.active_layer_id = doc.layers[0].id.clone();
     }
@@ -191,7 +194,9 @@ fn walk_ancestors<'a>(doc: &'a CanvasDoc, layer_id: &str) -> Vec<&'a CanvasLayer
 }
 
 pub fn canvas_layer_effective_visible(doc: &CanvasDoc, layer_id: &str) -> bool {
-    walk_ancestors(doc, layer_id).iter().all(|layer| layer.visible)
+    walk_ancestors(doc, layer_id)
+        .iter()
+        .all(|layer| layer.visible)
 }
 
 pub fn canvas_layer_effective_locked(doc: &CanvasDoc, layer_id: &str) -> bool {
@@ -265,14 +270,8 @@ pub fn canvas_rect_corners(x: f32, y: f32, w: f32, h: f32, rotation: f32) -> [(f
 
 pub fn set_canvas_op_rotation(body: &mut CanvasOpBody, rotation: f32) -> Result<(), String> {
     match body {
-        CanvasOpBody::Rect {
-            rotation: slot,
-            ..
-        }
-        | CanvasOpBody::Ellipse {
-            rotation: slot,
-            ..
-        } => {
+        CanvasOpBody::Rect { rotation: slot, .. }
+        | CanvasOpBody::Ellipse { rotation: slot, .. } => {
             *slot = rotation;
             Ok(())
         }
@@ -289,7 +288,12 @@ pub fn usable_canvas_bbox() -> CanvasBBox {
     }
 }
 
-pub fn align_canvas_op_body(body: &mut CanvasOpBody, src: CanvasBBox, target: CanvasBBox, edges: &[String]) {
+pub fn align_canvas_op_body(
+    body: &mut CanvasOpBody,
+    src: CanvasBBox,
+    target: CanvasBBox,
+    edges: &[String],
+) {
     let mut dx = 0.0;
     let mut dy = 0.0;
     for edge in edges {

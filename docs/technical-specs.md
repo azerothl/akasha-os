@@ -366,6 +366,100 @@ Actions (in order):
 - Integrity: hash by shard, lazy or load verification
 - Optional runtime quantization (downgrade Q6→Q4 under pressure) — Could
 
+#### 3.5.9 Adaptive inference plan (local, opt-in extensions)
+
+The native UI exposes **Settings → Models → Adaptive inference (experimental)**.
+The choice is saved in `var/run/preferences.json` and overrides the YAML
+`adaptive_planner` value on the next model load, without restarting modeld.
+Unload and reload an already resident model to apply a changed choice.
+Missing or invalid preference values preserve the YAML setting.
+
+`aos-placement` derives an `InferencePlan` from the hardware profile, model
+metadata and workload. It records the selected backend (CPU/CUDA/Metal), the
+declared quantization, memory placement profile, KV type, speculative strategy,
+thermal policy, reason and ordered fallbacks. CPU, CUDA and Metal reuse the
+existing llama.cpp path; NPU, WebGPU and LAN adapters are experimental and are
+registered only when explicitly enabled, then remain non-executable until their
+adapter gate is implemented. An unavailable adapter falls back to CPU without
+sending prompts or model data elsewhere.
+
+The read-only `model.plan` service compares the four placement profiles. The
+`model.metrics` response exposes backend, quantization, thermal policy and the
+non-sensitive planning reason. `INT2`/`MXFP4` metadata can be represented, but
+the default quality gate and backend registry prevent them from being selected
+without a compatible, measured kernel.
+
+For an installed model, the plan reports the GGUF file type returned by
+llama.cpp after the file is opened; it never infers a quantization from the
+model name. Optional `models.<id>.variants` entries select only an existing
+local file with a common explicit calibration, compatible ISA/backend, enough
+memory and measured prefill/decode costs. If no variant passes, modeld keeps
+the configured base file. A failed accelerated model/context load retries once
+with the CPU plan; `model.metrics` records the effective profile, KV settings
+and whether that fallback was used.
+
+The deterministic planning baseline can be run in CI or locally with:
+
+```powershell
+cargo run -p aos-placement --example adaptive_benchmark --release
+```
+
+It emits CSV for fixed CPU, CUDA-like and Metal-like profiles (TTFT estimate,
+decode tok/s estimate and RAM/VRAM/disk placement). It is not a substitute for
+a real-device benchmark: production calibration must separately collect real
+TTFT, p50/p95, sustained throughput, temperature and power on the target host.
+
+#### 3.5.10 Speculative decode policy
+
+The existing local prompt-lookup path is selected per request, without adding
+or changing a public intent. In `auto`, short chat stays on standard decoding;
+single long-reasoning and tool-loop requests may use lookup speculation when
+their priority meets `min_spec_priority`. Concurrent batches and vision remain
+on their existing paths. The prefix state is restored only for a compatible
+single request, so a tool result changes the rendered prefix before reuse.
+
+Each speculative request records proposed and accepted draft tokens, acceptance
+rate, accepted tokens per verification, verification time and its stop reason.
+After four verification steps, speculation is disabled for the rest of that
+request on either low acceptance (<25%) or an observed per-token verification
+cost more than 10% above sampled standard decoding. This is a local,
+reversible safeguard; no draft weights or prompts are sent elsewhere.
+
+#### 3.5.11 LAN cluster gate (experimental)
+
+The first LAN tranche is a fail-closed coordinator, not an implicit discovery
+service. `ModeldConfig.lan_cluster` contains an explicit node inventory; each
+node must already have `trust: paired`, a private/link-local address and a
+fingerprint. The UI toggle **Settings → Models → LAN cluster (experimental)**
+is persisted in `var/run/preferences.json` and gates the configured inventory.
+It is disabled by default.
+
+The model daemon exposes `model.cluster.nodes` for the current inventory,
+`model.cluster.pair` for a user-confirmed fingerprint match and
+`model.cluster.revoke` for immediate exclusion. The trust inventory is saved
+in `var/run/lan-pairing.json`; a changed fingerprint is never merged into an
+existing identity.
+
+`aos-placement::LanCluster` partitions declared weight shards across paired
+nodes and retains a job state. The model daemon exposes the internal
+`model.cluster.plan`, `model.cluster.recover` and `model.cluster.cancel`
+services. Every plan requires encrypted transport; sensitive work additionally
+requires the node capability `sensitive-data`. A lost node moves the job to
+`degraded` and redistributes its shards to surviving paired nodes, or marks it
+`failed` when none remain. Cancellation returns every node that must receive a
+cancel signal.
+
+This tranche performs policy and state transitions only: it does not open a
+LAN listener, discover peers, copy weights, route tokens or transmit KV data.
+An authenticated LAN transport must be added before enabling execution, and
+must consume only the coordinator's assignments. There is no Internet
+fallback and no automatic sharing of prompts or model data.
+
+The transport contract includes `LanSecureFrame` and `LanSecureChannel` using
+ChaCha20-Poly1305 with node/job associated data and a monotonic sequence. It
+rejects a wrong nonce, altered ciphertext, cross-job frame or replay. The
+codec is ready for the adapter, but no listener consumes it yet.
+
 ### 3.6 Inference Scheduler
 
 Features :
@@ -843,6 +937,13 @@ If step 3 partially fails → degraded mode with clear messages; direct shell re
 |---------|-------------|
 | `model.list` | List of registry models |
 | `model.inspect` | Metadata + current placement |
+| `model.plan` | Read-only comparison of automatic and explicit placement profiles |
+| `model.cluster.plan` | Experimental paired-LAN shard plan; encrypted transport required |
+| `model.cluster.recover` | Reassign shards after an explicitly reported node loss |
+| `model.cluster.cancel` | Mark a LAN job cancelled and return cancellation targets |
+| `model.cluster.nodes` | List configured nodes and their trust state |
+| `model.cluster.pair` | Persist an explicit fingerprint-confirmed pairing |
+| `model.cluster.revoke` | Persist immediate node revocation |
 | `model.load` | Charge with investment profile |
 | `model.unload` | Frees resources |
 | `model.set_placement` | Plan manuel / profil |

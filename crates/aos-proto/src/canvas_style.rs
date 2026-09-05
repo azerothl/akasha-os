@@ -2,7 +2,10 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{normalize_canvas_color, CanvasAspect, CanvasDoc, CanvasLayer, CanvasOp, CanvasOpBody, CanvasPenStyle};
+use crate::{
+    normalize_canvas_color, CanvasAspect, CanvasDoc, CanvasLayer, CanvasOp, CanvasOpBody,
+    CanvasPenStyle,
+};
 
 /// Linear fill gradient in normalized board space (angle in degrees, 0 = left→right).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -105,7 +108,10 @@ pub fn resolve_canvas_op_style_ex(body: &mut CanvasOpBody, pen: &CanvasPenStyle)
                 *dash = pen.dash.clone();
             }
         }
-        CanvasOpBody::Fill { .. } | CanvasOpBody::Erase { .. } | CanvasOpBody::Clear | CanvasOpBody::Undo => {}
+        CanvasOpBody::Fill { .. }
+        | CanvasOpBody::Erase { .. }
+        | CanvasOpBody::Clear
+        | CanvasOpBody::Undo => {}
     }
 }
 

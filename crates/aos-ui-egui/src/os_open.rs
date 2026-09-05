@@ -1,7 +1,7 @@
 //! OS helpers: home prefix, folder / browser open, native file picker.
 
-use std::path::{Path, PathBuf};
 use eframe::egui;
+use std::path::{Path, PathBuf};
 
 pub(crate) fn app_icon() -> egui::IconData {
     eframe::icon_data::from_png_bytes(include_bytes!("../assets/icon.png")).expect("app icon")

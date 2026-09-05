@@ -495,8 +495,7 @@ pub fn show_window(
     let g = strings(lang);
     let mut close = false;
     let avail = ctx.available_rect();
-    let (default_size, max_size, min_size) =
-        guide_window_sizes(avail.width(), avail.height());
+    let (default_size, max_size, min_size) = guide_window_sizes(avail.width(), avail.height());
     const NAV_W: f32 = 148.0;
     const FOOTER_H: f32 = 34.0;
 
@@ -524,10 +523,7 @@ pub fn show_window(
                                 ui.set_width(NAV_W);
                                 for topic in GuideTopic::ALL {
                                     let label = nav_label(&g, topic);
-                                    if ui
-                                        .selectable_label(state.topic == topic, label)
-                                        .clicked()
-                                    {
+                                    if ui.selectable_label(state.topic == topic, label).clicked() {
                                         state.topic = topic;
                                     }
                                 }
@@ -981,7 +977,10 @@ fn paint_figure(ui: &mut egui::Ui, kind: FigureKind) {
         FigureKind::Format => 48.0,
         _ => 64.0,
     };
-    let (rect, _) = ui.allocate_exact_size(Vec2::new(ui.available_width().min(520.0), h), egui::Sense::hover());
+    let (rect, _) = ui.allocate_exact_size(
+        Vec2::new(ui.available_width().min(520.0), h),
+        egui::Sense::hover(),
+    );
     if !ui.is_rect_visible(rect) {
         return;
     }
@@ -994,11 +993,24 @@ fn paint_figure(ui: &mut egui::Ui, kind: FigureKind) {
         FigureKind::CreateFlow => {
             let box_w = rect.width() * 0.22;
             let img_w = rect.width() * 0.28;
-            let prompt = Rect::from_min_size(rect.left_top() + Vec2::new(8.0, 16.0), Vec2::new(box_w, 40.0));
-            let arrow1 = [prompt.right_center(), prompt.right_center() + Vec2::new(24.0, 0.0)];
-            let engine = Rect::from_min_size(arrow1[1] + Vec2::new(4.0, -18.0), Vec2::new(box_w * 0.9, 36.0));
-            let arrow2 = [engine.right_center(), engine.right_center() + Vec2::new(24.0, 0.0)];
-            let out = Rect::from_min_size(arrow2[1] + Vec2::new(4.0, -22.0), Vec2::new(img_w, 44.0));
+            let prompt = Rect::from_min_size(
+                rect.left_top() + Vec2::new(8.0, 16.0),
+                Vec2::new(box_w, 40.0),
+            );
+            let arrow1 = [
+                prompt.right_center(),
+                prompt.right_center() + Vec2::new(24.0, 0.0),
+            ];
+            let engine = Rect::from_min_size(
+                arrow1[1] + Vec2::new(4.0, -18.0),
+                Vec2::new(box_w * 0.9, 36.0),
+            );
+            let arrow2 = [
+                engine.right_center(),
+                engine.right_center() + Vec2::new(24.0, 0.0),
+            ];
+            let out =
+                Rect::from_min_size(arrow2[1] + Vec2::new(4.0, -22.0), Vec2::new(img_w, 44.0));
             p.rect_stroke(prompt, 2.0, stroke, egui::StrokeKind::Inside);
             p.rect_stroke(engine, 2.0, faint, egui::StrokeKind::Inside);
             p.rect_filled(out, 2.0, Color32::from_rgba_unmultiplied(62, 224, 196, 28));
@@ -1007,50 +1019,96 @@ fn paint_figure(ui: &mut egui::Ui, kind: FigureKind) {
             p.line_segment(arrow2, faint);
         }
         FigureKind::Negative => {
-            let field = Rect::from_min_size(rect.left_top() + Vec2::new(8.0, 18.0), Vec2::new(140.0, 28.0));
+            let field = Rect::from_min_size(
+                rect.left_top() + Vec2::new(8.0, 18.0),
+                Vec2::new(140.0, 28.0),
+            );
             p.rect_stroke(field, 2.0, faint, egui::StrokeKind::Inside);
             let c = field.center();
             let r = field.width() * 0.28;
-            p.line_segment([c + Vec2::new(-r, -r * 0.2), c + Vec2::new(r, r * 0.2)], Stroke::new(1.4_f32, Color32::from_rgb(232, 93, 76)));
+            p.line_segment(
+                [c + Vec2::new(-r, -r * 0.2), c + Vec2::new(r, r * 0.2)],
+                Stroke::new(1.4_f32, Color32::from_rgb(232, 93, 76)),
+            );
         }
         FigureKind::Lora => {
-            let base = Rect::from_min_size(rect.left_top() + Vec2::new(8.0, 12.0), Vec2::new(72.0, 40.0));
-            let addon = Rect::from_min_size(base.right_top() + Vec2::new(6.0, 8.0), Vec2::new(36.0, 24.0));
+            let base = Rect::from_min_size(
+                rect.left_top() + Vec2::new(8.0, 12.0),
+                Vec2::new(72.0, 40.0),
+            );
+            let addon = Rect::from_min_size(
+                base.right_top() + Vec2::new(6.0, 8.0),
+                Vec2::new(36.0, 24.0),
+            );
             p.rect_stroke(base, 2.0, faint, egui::StrokeKind::Inside);
-            p.rect_filled(addon, 2.0, Color32::from_rgba_unmultiplied(62, 224, 196, 45));
+            p.rect_filled(
+                addon,
+                2.0,
+                Color32::from_rgba_unmultiplied(62, 224, 196, 45),
+            );
             p.rect_stroke(addon, 2.0, stroke, egui::StrokeKind::Inside);
         }
         FigureKind::Vae => {
-            let block = Rect::from_min_size(rect.left_top() + Vec2::new(8.0, 14.0), Vec2::new(52.0, 36.0));
-            let out = Rect::from_min_size(block.right_top() + Vec2::new(16.0, -4.0), Vec2::new(64.0, 44.0));
+            let block = Rect::from_min_size(
+                rect.left_top() + Vec2::new(8.0, 14.0),
+                Vec2::new(52.0, 36.0),
+            );
+            let out = Rect::from_min_size(
+                block.right_top() + Vec2::new(16.0, -4.0),
+                Vec2::new(64.0, 44.0),
+            );
             p.rect_stroke(block, 2.0, faint, egui::StrokeKind::Inside);
             p.rect_filled(out, 2.0, Color32::from_rgba_unmultiplied(62, 224, 196, 35));
             p.rect_stroke(out, 2.0, stroke, egui::StrokeKind::Inside);
             p.line_segment([block.right_center(), out.left_center()], faint);
         }
         FigureKind::Composition => {
-            let b1 = Rect::from_min_size(rect.left_top() + Vec2::new(10.0, 24.0), Vec2::new(56.0, 36.0));
-            let b2 = Rect::from_min_size(rect.left_top() + Vec2::new(34.0, 8.0), Vec2::new(48.0, 28.0));
-            let b3 = Rect::from_min_size(rect.left_top() + Vec2::new(78.0, 18.0), Vec2::new(40.0, 22.0));
+            let b1 = Rect::from_min_size(
+                rect.left_top() + Vec2::new(10.0, 24.0),
+                Vec2::new(56.0, 36.0),
+            );
+            let b2 = Rect::from_min_size(
+                rect.left_top() + Vec2::new(34.0, 8.0),
+                Vec2::new(48.0, 28.0),
+            );
+            let b3 = Rect::from_min_size(
+                rect.left_top() + Vec2::new(78.0, 18.0),
+                Vec2::new(40.0, 22.0),
+            );
             p.rect_stroke(b1, 2.0, faint, egui::StrokeKind::Inside);
             p.rect_filled(b2, 2.0, Color32::from_rgba_unmultiplied(62, 224, 196, 40));
             p.rect_stroke(b2, 2.0, stroke, egui::StrokeKind::Inside);
             p.rect_stroke(b3, 2.0, faint, egui::StrokeKind::Inside);
         }
         FigureKind::Reference => {
-            let src = Rect::from_min_size(rect.left_top() + Vec2::new(8.0, 10.0), Vec2::new(56.0, 44.0));
-            let dst = Rect::from_min_size(rect.left_top() + Vec2::new(120.0, 8.0), Vec2::new(72.0, 48.0));
+            let src = Rect::from_min_size(
+                rect.left_top() + Vec2::new(8.0, 10.0),
+                Vec2::new(56.0, 44.0),
+            );
+            let dst = Rect::from_min_size(
+                rect.left_top() + Vec2::new(120.0, 8.0),
+                Vec2::new(72.0, 48.0),
+            );
             p.rect_stroke(src, 2.0, faint, egui::StrokeKind::Inside);
             p.rect_filled(dst, 2.0, Color32::from_rgba_unmultiplied(62, 224, 196, 40));
             p.rect_stroke(dst, 2.0, stroke, egui::StrokeKind::Inside);
             p.line_segment([src.right_center(), dst.left_center()], stroke);
         }
         FigureKind::Inpaint => {
-            let img = Rect::from_min_size(rect.center() - Vec2::new(60.0, 28.0), Vec2::new(120.0, 56.0));
+            let img = Rect::from_min_size(
+                rect.center() - Vec2::new(60.0, 28.0),
+                Vec2::new(120.0, 56.0),
+            );
             p.rect_stroke(img, 2.0, faint, egui::StrokeKind::Inside);
-            let mask = Rect::from_min_size(img.left_top() + Vec2::new(70.0, 4.0), Vec2::new(44.0, 22.0));
+            let mask =
+                Rect::from_min_size(img.left_top() + Vec2::new(70.0, 4.0), Vec2::new(44.0, 22.0));
             p.rect_filled(mask, 2.0, Color32::from_rgba_unmultiplied(232, 93, 76, 90));
-            p.rect_stroke(mask, 2.0, Stroke::new(1.5_f32, Color32::from_rgb(232, 93, 76)), egui::StrokeKind::Inside);
+            p.rect_stroke(
+                mask,
+                2.0,
+                Stroke::new(1.5_f32, Color32::from_rgb(232, 93, 76)),
+                egui::StrokeKind::Inside,
+            );
         }
         FigureKind::Video => {
             let mut x = rect.left() + 12.0;
@@ -1064,32 +1122,60 @@ fn paint_figure(ui: &mut egui::Ui, kind: FigureKind) {
             }
         }
         FigureKind::Format => {
-            let small = Rect::from_min_size(rect.left_top() + Vec2::new(10.0, 14.0), Vec2::new(36.0, 36.0));
-            let large = Rect::from_min_size(rect.left_top() + Vec2::new(60.0, 8.0), Vec2::new(52.0, 52.0));
+            let small = Rect::from_min_size(
+                rect.left_top() + Vec2::new(10.0, 14.0),
+                Vec2::new(36.0, 36.0),
+            );
+            let large = Rect::from_min_size(
+                rect.left_top() + Vec2::new(60.0, 8.0),
+                Vec2::new(52.0, 52.0),
+            );
             p.rect_stroke(small, 2.0, faint, egui::StrokeKind::Inside);
             p.rect_stroke(large, 2.0, stroke, egui::StrokeKind::Inside);
         }
         FigureKind::Generate => {
-            let btn = Rect::from_min_size(rect.left_top() + Vec2::new(8.0, 20.0), Vec2::new(72.0, 28.0));
+            let btn = Rect::from_min_size(
+                rect.left_top() + Vec2::new(8.0, 20.0),
+                Vec2::new(72.0, 28.0),
+            );
             p.rect_filled(btn, 3.0, Color32::from_rgba_unmultiplied(62, 224, 196, 50));
             p.rect_stroke(btn, 3.0, stroke, egui::StrokeKind::Inside);
-            let preview = Rect::from_min_size(btn.right_top() + Vec2::new(20.0, -8.0), Vec2::new(64.0, 44.0));
-            p.rect_filled(preview, 2.0, Color32::from_rgba_unmultiplied(62, 224, 196, 30));
+            let preview = Rect::from_min_size(
+                btn.right_top() + Vec2::new(20.0, -8.0),
+                Vec2::new(64.0, 44.0),
+            );
+            p.rect_filled(
+                preview,
+                2.0,
+                Color32::from_rgba_unmultiplied(62, 224, 196, 30),
+            );
             p.rect_stroke(preview, 2.0, stroke, egui::StrokeKind::Inside);
             p.line_segment([btn.right_center(), preview.left_center()], faint);
         }
         FigureKind::Chat => {
-            let b1 = Rect::from_min_size(rect.left_top() + Vec2::new(8.0, 8.0), Vec2::new(100.0, 22.0));
-            let b2 = Rect::from_min_size(rect.left_top() + Vec2::new(24.0, 36.0), Vec2::new(120.0, 22.0));
+            let b1 = Rect::from_min_size(
+                rect.left_top() + Vec2::new(8.0, 8.0),
+                Vec2::new(100.0, 22.0),
+            );
+            let b2 = Rect::from_min_size(
+                rect.left_top() + Vec2::new(24.0, 36.0),
+                Vec2::new(120.0, 22.0),
+            );
             p.rect_stroke(b1, 3.0, faint, egui::StrokeKind::Inside);
             p.rect_filled(b2, 3.0, Color32::from_rgba_unmultiplied(62, 224, 196, 35));
             p.rect_stroke(b2, 3.0, stroke, egui::StrokeKind::Inside);
         }
         FigureKind::Canvas => {
-            let board = Rect::from_min_size(rect.center() - Vec2::new(70.0, 30.0), Vec2::new(140.0, 60.0));
+            let board = Rect::from_min_size(
+                rect.center() - Vec2::new(70.0, 30.0),
+                Vec2::new(140.0, 60.0),
+            );
             p.rect_stroke(board, 2.0, faint, egui::StrokeKind::Inside);
             p.line_segment(
-                [board.left_top() + Vec2::new(12.0, 40.0), board.left_top() + Vec2::new(90.0, 18.0)],
+                [
+                    board.left_top() + Vec2::new(12.0, 40.0),
+                    board.left_top() + Vec2::new(90.0, 18.0),
+                ],
                 stroke,
             );
             p.circle_stroke(board.left_top() + Vec2::new(100.0, 38.0), 10.0, stroke);
@@ -1102,7 +1188,10 @@ fn paint_figure(ui: &mut egui::Ui, kind: FigureKind) {
             }
         }
         FigureKind::Memory => {
-            let chip = Rect::from_min_size(rect.left_top() + Vec2::new(12.0, 18.0), Vec2::new(88.0, 24.0));
+            let chip = Rect::from_min_size(
+                rect.left_top() + Vec2::new(12.0, 18.0),
+                Vec2::new(88.0, 24.0),
+            );
             p.rect_filled(chip, 4.0, Color32::from_rgba_unmultiplied(62, 224, 196, 40));
             p.rect_stroke(chip, 4.0, stroke, egui::StrokeKind::Inside);
             let chip2 = chip.translate(Vec2::new(0.0, 30.0));
@@ -1112,11 +1201,19 @@ fn paint_figure(ui: &mut egui::Ui, kind: FigureKind) {
             let y = rect.center().y;
             for (i, dx) in [0.0_f32, 36.0, 72.0].iter().enumerate() {
                 let w = if i == 1 { 100.0 } else { 72.0 };
-                let r = Rect::from_min_size(Pos2::new(rect.left() + 10.0 + dx, y - 12.0), Vec2::new(w, 24.0));
+                let r = Rect::from_min_size(
+                    Pos2::new(rect.left() + 10.0 + dx, y - 12.0),
+                    Vec2::new(w, 24.0),
+                );
                 if i == 1 {
                     p.rect_filled(r, 3.0, Color32::from_rgba_unmultiplied(62, 224, 196, 35));
                 }
-                p.rect_stroke(r, 3.0, if i == 1 { stroke } else { faint }, egui::StrokeKind::Inside);
+                p.rect_stroke(
+                    r,
+                    3.0,
+                    if i == 1 { stroke } else { faint },
+                    egui::StrokeKind::Inside,
+                );
             }
         }
     }
@@ -1182,7 +1279,10 @@ mod tests {
         assert!(!fr.create_composition_impact.is_empty());
         assert!(en.create_lora_what.contains("model's list"));
         assert!(!en.create_lora_what.contains("share/models"));
-        assert!(!fr.create_composition_impact.to_lowercase().contains("inpaint"));
+        assert!(!fr
+            .create_composition_impact
+            .to_lowercase()
+            .contains("inpaint"));
     }
 
     #[test]
@@ -1221,11 +1321,16 @@ mod tests {
         assert!(!en.canvas_opt_export_body.contains("/downloads"));
         assert!(!fr.canvas_opt_export_body.contains("/downloads"));
         assert!(!en.canvas_opt_export_body.contains("media.image.generate"));
-        assert!(!en.memory_opt_recall_body.to_lowercase().contains("semantic"));
+        assert!(!en
+            .memory_opt_recall_body
+            .to_lowercase()
+            .contains("semantic"));
         assert!(!en.salon_opt_turn_body.contains("conductor"));
         assert!(!en.salon_opt_turn_body.contains("Your message runs a turn"));
         assert!(en.salon_opt_turn_body.contains("up to 4"));
-        assert!(!fr.salon_opt_turn_body.contains("Votre message lance un tour"));
+        assert!(!fr
+            .salon_opt_turn_body
+            .contains("Votre message lance un tour"));
         assert!(fr.salon_opt_turn_body.contains("plafond 4"));
         assert!(!en.canvas_opt_export_example.is_empty());
         assert!(!fr.salon_opt_turn_example.is_empty());

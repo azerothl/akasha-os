@@ -101,8 +101,15 @@ pub fn apply_session_load_intent(pending: &mut PendingSessionNav, loaded_id: &st
 }
 
 /// Whether a same-session reload may replace the in-memory transcript.
-pub fn should_replace_chat_on_same_session_reload(schedule_transcript_dirty: bool) -> bool {
-    !schedule_transcript_dirty
+///
+/// Schedule-card edits are preserved unless a salon turn is in flight: those
+/// replies live on disk until the blocking conductor RPC returns, so the UI
+/// must accept snapshots or the thread looks frozen after the first speaker.
+pub fn should_replace_chat_on_same_session_reload(
+    schedule_transcript_dirty: bool,
+    room_turn_in_flight: bool,
+) -> bool {
+    room_turn_in_flight || !schedule_transcript_dirty
 }
 
 /// Simulate handling a cross-session `SessionLoaded` (e.g. stale create after Pause).
@@ -188,8 +195,9 @@ mod tests {
 
     #[test]
     fn same_session_reload_skipped_when_schedule_dirty() {
-        assert!(!should_replace_chat_on_same_session_reload(true));
-        assert!(should_replace_chat_on_same_session_reload(false));
+        assert!(!should_replace_chat_on_same_session_reload(true, false));
+        assert!(should_replace_chat_on_same_session_reload(false, false));
+        assert!(should_replace_chat_on_same_session_reload(true, true));
     }
 
     #[test]
