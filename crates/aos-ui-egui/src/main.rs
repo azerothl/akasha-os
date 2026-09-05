@@ -416,7 +416,9 @@ const CHAT_MAIN_MARGIN: f32 = 16.0;
 fn estimate_label_chip_w(label: &str) -> f32 {
     const CHAR_W: f32 = 8.5;
     const PAD: f32 = 22.0;
-    label.len() as f32 * CHAR_W + PAD
+    // Caractères, pas octets UTF-8 : "Téléchargements" faisait exploser
+    // la réserve et les chips voisins se peignaient par-dessus.
+    label.chars().count() as f32 * CHAR_W + PAD
 }
 
 fn session_toggle_reserve_width(t: &i18n::UiStrings, canvas_open: bool) -> f32 {
@@ -434,9 +436,9 @@ fn session_toggle_reserve_width(t: &i18n::UiStrings, canvas_open: bool) -> f32 {
 }
 
 fn session_toggle_chip(ui: &mut egui::Ui, selected: bool, label: &str) -> egui::Response {
-    let w = estimate_label_chip_w(label);
-    ui.add_sized(
-        egui::vec2(w, ui.spacing().interact_size.y),
+    // Taille naturelle au contenu : l'ancienne largeur forcée par estimation
+    // (octets, pas glyphes) faisait déborder le texte sur les voisins.
+    ui.add(
         egui::SelectableLabel::new(selected, egui::RichText::new(label)),
     )
 }
@@ -476,6 +478,9 @@ struct UiApp {
     agent_ui: agent_ui_state::AgentUiState,
     security_ui: security_ui_state::SecurityUiState,
     status: String,
+    /// P1: file des derniers statuts (le String seul écrasait tout).
+    /// Cap 20, affiché en tooltip de la status bar.
+    status_history: std::collections::VecDeque<String>,
     onboarding: OnboardingState,
     show_onboarding: bool,
     scenario_ui: scenario_ui_state::ScenarioUiState,
@@ -640,6 +645,7 @@ impl UiApp {
             ),
             security_ui: security_ui_state::SecurityUiState::default(),
             status: String::new(),
+            status_history: std::collections::VecDeque::new(),
             onboarding,
             show_onboarding,
             scenario_ui: scenario_ui_state::ScenarioUiState::default(),
@@ -913,9 +919,16 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         } else {
             ui.label(t.onboard_allowance_memory_off);
         }
+        // Honnête : CapList peut ne pas être revenu au moment du recap.
+        // "…" = chargement, pas un mensonger "0".
+        let caps_label = if self.security_ui.caps.is_empty() {
+            "…".to_string()
+        } else {
+            self.security_ui.caps.len().to_string()
+        };
         ui.label(
             t.onboard_allowance_caps
-                .replace("{n}", &self.security_ui.caps.len().to_string()),
+                .replace("{n}", &caps_label),
         );
         ui.label(t.onboard_allowance_no_agent_tools);
         ui.add_space(8.0);
@@ -1602,11 +1615,38 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         egui::CollapsingHeader::new(t.nav_more)
             .default_open(more_open)
             .show(ui, |ui| {
+                // P1: 3 niveaux — Quotidien / Système / Admin. Le rail garde
+                // Chat/Agents/Create/Memory, More ne duplique jamais le rail.
+                let lang = self.prefs.language.clone();
+                ui.weak(nav::NavGroup::Daily.label(&lang));
                 for (tab, label, hint) in [
                     (Tab::Notes, t.tab_notes, t.tab_hint_notes),
                     (Tab::Library, t.tab_library, t.tab_hint_library),
                     (Tab::Tasks, t.tab_tasks, t.tab_hint_tasks),
                     (Tab::Models, t.tab_models, t.tab_hint_models),
+                ] {
+                    if ui
+                        .selectable_label(self.tab == tab, label)
+                        .on_hover_text(hint)
+                        .clicked()
+                    {
+                        self.on_tab_open(tab);
+                    }
+                }
+                // Documents reste un overlay (research_ui), pas un Tab :
+                // présenté comme action, pas comme destination, pour éviter
+                // la confusion relevée en audit.
+                if ui
+                    .selectable_label(self.research_ui.documents_list.open, t.nav_documents)
+                    .on_hover_text(t.documents_list_title)
+                    .clicked()
+                {
+                    self.research_ui.open_documents_list();
+                }
+                ui.separator();
+                ui.weak(nav::NavGroup::System.label(&lang));
+                for (tab, label, hint) in [
+                    (Tab::Providers, t.tab_providers, t.tab_hint_providers),
                     (Tab::Settings, t.tab_settings, t.tab_hint_settings),
                 ] {
                     if ui
@@ -1617,17 +1657,11 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                         self.on_tab_open(tab);
                     }
                 }
-                if ui
-                    .selectable_label(self.research_ui.documents_list.open, t.nav_documents)
-                    .on_hover_text(t.documents_list_title)
-                    .clicked()
-                {
-                    self.research_ui.open_documents_list();
-                }
+                ui.separator();
+                ui.weak(nav::NavGroup::Admin.label(&lang));
                 for (tab, label, hint) in [
                     (Tab::Caps, t.tab_caps, t.tab_hint_caps),
                     (Tab::Audit, t.tab_audit, t.tab_hint_audit),
-                    (Tab::Providers, t.tab_providers, t.tab_hint_providers),
                 ] {
                     if ui
                         .selectable_label(self.tab == tab, label)
@@ -1850,6 +1884,22 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 ui.weak(format!("v{}", self.version));
             });
         });
+    }
+
+    /// P1: set persistant status + log historique (cap 20). Les toasts
+    /// portent l'éphémère, l'historique porte le persistant écrasé avant.
+    pub(crate) fn push_status(&mut self, msg: String) {
+        if msg.is_empty() {
+            self.status.clear();
+            return;
+        }
+        self.status = msg.clone();
+        if self.status_history.back().is_none_or(|last| *last != msg) {
+            self.status_history.push_back(msg);
+            while self.status_history.len() > 20 {
+                self.status_history.pop_front();
+            }
+        }
     }
 
     fn handle_keyboard_shortcuts(&mut self, ctx: &egui::Context) {
@@ -2384,6 +2434,32 @@ impl eframe::App for UiApp {
                                     save_onboarding(&self.onboarding);
                                 }
                             });
+                            // Non-bloquant : si le modèle télécharge encore,
+                            // l'utilisateur avance après envoi sans attendre la réponse.
+                            let can_continue =
+                                onboarding::chat_step_can_continue(self.onboarding.chat_sent)
+                                    && !ready;
+                            ui.add_enabled_ui(can_continue, |ui| {
+                                // Libellé inline FR/EN sans nouvelle clé i18n :
+                                // le bouton principal garde `next`, celui-ci est
+                                // explicitement dégradé.
+                                let label = if self.onboarding.language == "fr" {
+                                    "Continuer sans la réponse"
+                                } else {
+                                    "Continue without reply"
+                                };
+                                if ui.button(label).clicked() {
+                                    self.onboarding.tutorial_step = 2;
+                                    save_onboarding(&self.onboarding);
+                                    // Même pré-chargement que sur réponse : le recap
+                                    // affiche "…" en attendant CapList, pas "0".
+                                    if let Some(id) = self.chat_state.active_session.as_deref() {
+                                        let holder = format!("session:{id}");
+                                        self.security_ui.select_holder(holder.clone());
+                                        let _ = self.cmd_tx.send(Cmd::CapList { holder });
+                                    }
+                                }
+                            });
                         } else if ui.button(onboard_t.finish_tutorial).clicked() {
                             self.complete_onboarding(onboard_t.tutorial_done_status.into());
                         }
@@ -2593,7 +2669,14 @@ impl eframe::App for UiApp {
                 self.ui_status_bar(ui, &t);
                 if !self.status.is_empty() {
                     ui.separator();
-                    ui.weak(&self.status);
+                    let history: Vec<String> =
+                        self.status_history.iter().cloned().collect();
+                    let tip = if history.is_empty() {
+                        String::new()
+                    } else {
+                        format!("History:\n- {}", history.join("\n- "))
+                    };
+                    ui.weak(&self.status).on_hover_text(tip);
                 }
             });
 

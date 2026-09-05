@@ -49,7 +49,7 @@ pub(crate) fn on_error(app: &mut UiApp, message: String) -> bool {
     }
     let t = crate::i18n::strings(&app.prefs.language);
     let visible = chat_error_copy::user_visible_chat_error(&t, &message);
-    app.status = visible.clone();
+    app.push_status(visible.clone());
     app.toasts.push_error(visible.clone());
     app.chat.push(ChatLine::plain("système", visible));
     false
@@ -76,6 +76,11 @@ pub(crate) fn on_chat_error(app: &mut UiApp, session_id: String, message: String
         }
         app.status = visible.clone();
         app.toasts.push_error(visible.clone());
+        // Log historique même quand le transcript porte déjà le message.
+        app.status_history.push_back(visible.clone());
+        while app.status_history.len() > 20 {
+            app.status_history.pop_front();
+        }
         if load_fail {
             // Chrome card carries the user-visible copy + Retry.
         } else {
@@ -99,6 +104,6 @@ pub(crate) fn on_status(app: &mut UiApp, message: String) {
     {
         // swallow kill-ok banner for document-prep stop
     } else {
-        app.status = message;
+        app.push_status(message);
     }
 }

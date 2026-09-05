@@ -36,6 +36,21 @@ impl TabKind {
         matches!(self, TabKind::Scenarios | TabKind::Feedback)
     }
 
+    /// P1 grouping: Daily (quotidien) vs System vs Admin. Rail tabs
+    /// (Chat/Agents/Create/Memory) are excluded — they never render in More.
+    pub fn nav_group(self) -> Option<NavGroup> {
+        match self {
+            TabKind::Notes | TabKind::Library | TabKind::Tasks | TabKind::Models => {
+                Some(NavGroup::Daily)
+            }
+            TabKind::Providers => Some(NavGroup::System),
+            TabKind::Caps | TabKind::Audit | TabKind::Settings | TabKind::Scenarios | TabKind::Feedback | TabKind::Module => {
+                Some(NavGroup::Admin)
+            }
+            TabKind::Chat | TabKind::Agents | TabKind::Create | TabKind::Memory => None,
+        }
+    }
+
     pub fn keyboard_shortcut(self) -> Option<&'static str> {
         PRIMARY_RAIL
             .iter()
@@ -47,6 +62,26 @@ impl TabKind {
                 3 => "Ctrl+4",
                 _ => unreachable!(),
             })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NavGroup {
+    Daily,
+    System,
+    Admin,
+}
+
+impl NavGroup {
+    pub fn label(self, lang: &str) -> &'static str {
+        match (self, lang == "fr") {
+            (NavGroup::Daily, true) => "Quotidien",
+            (NavGroup::Daily, false) => "Daily",
+            (NavGroup::System, true) => "Système",
+            (NavGroup::System, false) => "System",
+            (NavGroup::Admin, true) => "Admin & sûreté",
+            (NavGroup::Admin, false) => "Admin & safety",
+        }
     }
 }
 
@@ -129,5 +164,16 @@ mod tests {
         assert_eq!(tab_from_primary_index(3), Some(Tab::Memory));
         assert_eq!(tab_from_primary_index(4), None);
         assert_eq!(TabKind::Agents.keyboard_shortcut(), Some("Ctrl+2"));
+    }
+
+    #[test]
+    fn overflow_groups_are_stable() {
+        assert_eq!(TabKind::Notes.nav_group(), Some(NavGroup::Daily));
+        assert_eq!(TabKind::Models.nav_group(), Some(NavGroup::Daily));
+        assert_eq!(TabKind::Providers.nav_group(), Some(NavGroup::System));
+        assert_eq!(TabKind::Caps.nav_group(), Some(NavGroup::Admin));
+        assert_eq!(TabKind::Chat.nav_group(), None);
+        assert_eq!(NavGroup::Daily.label("fr"), "Quotidien");
+        assert_eq!(NavGroup::Admin.label("en"), "Admin & safety");
     }
 }

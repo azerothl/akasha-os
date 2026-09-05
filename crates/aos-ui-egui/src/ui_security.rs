@@ -9,11 +9,25 @@ impl UiApp {
 pub(crate) fn ui_audit(&mut self, ui: &mut egui::Ui) {
         let t = i18n::strings(&self.prefs.language);
         ui.heading(t.audit_heading);
+        if self.security_ui.audit.is_empty() {
+            ui.weak(if self.prefs.language == "fr" {
+                "Aucun événement d'audit pour le moment."
+            } else {
+                "No audit events yet."
+            });
+        }
         ui.horizontal(|ui| {
             if ui.button(t.decl_ui_refresh).clicked() {
                 let _ = self.cmd_tx.send(Cmd::Audit { last: 50 });
             }
-            if ui.button(t.audit_kill_p4).clicked() {
+            // Garde-fou destructeur (opensourceui `slide-to-confirm`
+            // adapté two-step) : KillAuditd à côté de Refresh.
+            if crate::ui_primitives::danger_confirm_button(
+                ui,
+                "audit-kill",
+                t.audit_kill_p4,
+                &format!("{} ?", t.audit_kill_p4),
+            ) {
                 let _ = self.cmd_tx.send(Cmd::KillAuditd);
             }
         });

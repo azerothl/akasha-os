@@ -65,6 +65,13 @@ pub fn chat_step_can_advance(chat_sent: bool, first_chat_done: bool) -> bool {
     chat_sent && first_chat_done
 }
 
+/// Non-bloquant : l'utilisateur peut continuer dès qu'il a envoyé un message,
+/// même si le modèle télécharge encore et que la réponse tarde. La réponse
+/// reste souhaitable (Next principal), mais ne bloque plus le parcours.
+pub fn chat_step_can_continue(chat_sent: bool) -> bool {
+    chat_sent
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -80,5 +87,11 @@ mod tests {
         assert!(!chat_step_can_advance(true, false));
         assert!(!chat_step_can_advance(false, false));
         assert!(chat_step_can_advance(true, true));
+    }
+
+    #[test]
+    fn chat_step_continue_needs_only_sent() {
+        assert!(chat_step_can_continue(true));
+        assert!(!chat_step_can_continue(false));
     }
 }

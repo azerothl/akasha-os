@@ -5,6 +5,9 @@ use aos_proto::{ModuleCatalogue, ModuleInfo};
 #[derive(Debug)]
 pub(crate) struct SettingsUiState {
     pub(crate) search: String,
+    /// P1 pagination lite : section sélectionnée quand la recherche est vide.
+    /// `all` = tout (comportement historique), sinon un id de section.
+    pub(crate) section: String,
     pub(crate) secret_brave: String,
     pub(crate) secret_github: String,
     pub(crate) secret_openai: String,
@@ -21,6 +24,7 @@ impl Default for SettingsUiState {
     fn default() -> Self {
         Self {
             search: String::new(),
+            section: "all".into(),
             secret_brave: String::new(),
             secret_github: String::new(),
             secret_openai: String::new(),

@@ -288,14 +288,15 @@ fn ui_capability_badge(ui: &mut egui::Ui, label: &str) {
 
 /// Polished vision chip for catalog cards (localized « sees images » / « voit les images »).
 pub fn ui_catalog_vision_chip(ui: &mut egui::Ui, label: &str) {
-    use crate::theme::SIGNAL;
+    // Surchargable : accent du thème courant, pas SIGNAL en dur.
+    let accent = crate::theme::button_colors(ui).accent;
     egui::Frame::new()
-        .fill(egui::Color32::from_rgba_unmultiplied(SIGNAL.r(), SIGNAL.g(), SIGNAL.b(), 36))
-        .stroke(egui::Stroke::new(1.0, SIGNAL))
+        .fill(egui::Color32::from_rgba_unmultiplied(accent.r(), accent.g(), accent.b(), 36))
+        .stroke(egui::Stroke::new(1.0, accent))
         .corner_radius(crate::theme::CARD_RADIUS)
         .inner_margin(egui::Margin::symmetric(6, 2))
         .show(ui, |ui| {
-            ui.label(egui::RichText::new(label).size(11.0).color(SIGNAL));
+            ui.label(egui::RichText::new(label).size(11.0).color(accent));
         });
 }
 

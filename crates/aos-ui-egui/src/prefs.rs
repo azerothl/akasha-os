@@ -60,6 +60,12 @@ pub struct CustomThemePreferences {
     pub accent: String,
     #[serde(default = "default_custom_danger")]
     pub danger: String,
+    /// Boutons/toasts succès (ex. model removed). Surchargable, défaut emerald.
+    #[serde(default = "default_custom_success")]
+    pub success: String,
+    /// Badges warning. Surchargable, défaut amber.
+    #[serde(default = "default_custom_warning")]
+    pub warning: String,
 }
 
 impl Default for CustomThemePreferences {
@@ -70,6 +76,8 @@ impl Default for CustomThemePreferences {
             text: default_custom_text(),
             accent: default_custom_accent(),
             danger: default_custom_danger(),
+            success: default_custom_success(),
+            warning: default_custom_warning(),
         }
     }
 }
@@ -79,6 +87,8 @@ fn default_custom_panel() -> String { "#101622".into() }
 fn default_custom_text() -> String { "#E8EEF6".into() }
 fn default_custom_accent() -> String { "#2EF0C8".into() }
 fn default_custom_danger() -> String { "#FF5A48".into() }
+fn default_custom_success() -> String { "#34D399".into() }
+fn default_custom_warning() -> String { "#FBBF24".into() }
 
 fn default_context_panel_width() -> f32 {
     320.0
@@ -438,6 +448,9 @@ mod tests {
         assert_eq!(prefs.ui_layout.context_panel_width, 320.0);
         assert!(!prefs.ui_layout.activity_panel_open);
         assert_eq!(prefs.custom_theme.accent, "#2EF0C8");
+        // Nouveaux champs boutons : défauts stables même sans migration.
+        assert_eq!(prefs.custom_theme.success, "#34D399");
+        assert_eq!(prefs.custom_theme.warning, "#FBBF24");
     }
 
     #[test]

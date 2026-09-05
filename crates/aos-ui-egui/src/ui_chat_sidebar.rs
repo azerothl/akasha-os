@@ -52,101 +52,125 @@ impl UiApp {
                     |ui| {
                         ui.set_width(side_w);
                         ui.set_min_width(side_w - 16.0);
-                        ui.heading(t.sidebar_web_files);
-                        ui.add(
-                            egui::TextEdit::singleline(&mut self.chat_state.sidebar.web_query)
-                                .desired_width(side_w - 20.0)
-                                .hint_text(t.sidebar_web_search_hint),
-                        );
-                        if ui.button(t.sidebar_search).clicked()
-                            && !self.chat_state.sidebar.web_query.is_empty()
-                        {
-                            let _ = self.cmd_tx.send(Cmd::WebSearch {
-                                query: self.chat_state.sidebar.web_query.clone(),
-                                engine: self.prefs.web_search_engine.clone(),
-                            });
-                        }
-                        for hit in &self.chat_state.sidebar.web_results {
-                            ui.small(format!("• {} — {}", hit.title, hit.url));
-                        }
-                        ui.add(
-                            egui::TextEdit::singleline(&mut self.chat_state.sidebar.fetch_url)
-                                .desired_width(side_w - 20.0)
-                                .hint_text(t.sidebar_url_hint),
-                        );
-                        ui.horizontal(|ui| {
-                            if ui.button(t.sidebar_fetch_url).clicked()
-                                && !self.chat_state.sidebar.fetch_url.is_empty()
-                            {
-                                let _ = self.cmd_tx.send(Cmd::NetFetch {
-                                    url: self.chat_state.sidebar.fetch_url.clone(),
-                                    max_bytes: self.prefs.web_fetch_max_bytes,
-                                });
-                            }
-                            let t = i18n::strings(&self.prefs.language);
-                            if ui.button(t.web_browse_btn).clicked()
-                                && !self.chat_state.sidebar.fetch_url.is_empty()
-                            {
-                                let _ = self.cmd_tx.send(Cmd::WebBrowse {
-                                    url: self.chat_state.sidebar.fetch_url.clone(),
-                                    max_chars: self.prefs.web_browse_max_chars,
-                                });
-                            }
-                        });
-                        if !self.chat_state.sidebar.browse_preview.is_empty() {
-                            ui.collapsing(t.sidebar_preview_page, |ui| {
-                                ui.small(&self.chat_state.sidebar.browse_preview);
-                            });
-                        }
-                        ui.horizontal(|ui| {
-                            egui::ComboBox::from_id_salt("gen_fmt")
-                                .selected_text(&self.chat_state.sidebar.generated_format)
-                                .show_ui(ui, |ui| {
-                                    for f in ["md", "txt", "json", "csv", "png", "pdf"] {
-                                        ui.selectable_value(
-                                            &mut self.chat_state.sidebar.generated_format,
-                                            f.into(),
-                                            f,
-                                        );
+                        // Outils Web/fichiers repliés par défaut : la liste des
+                        // sessions garde l'espace, les utilitaires restent à un clic.
+                        egui::CollapsingHeader::new(t.sidebar_web_files)
+                            .default_open(false)
+                            .show(ui, |ui| {
+                                ui.add(
+                                    egui::TextEdit::singleline(
+                                        &mut self.chat_state.sidebar.web_query,
+                                    )
+                                    .desired_width(side_w - 20.0)
+                                    .hint_text(t.sidebar_web_search_hint),
+                                );
+                                if ui.button(t.sidebar_search).clicked()
+                                    && !self.chat_state.sidebar.web_query.is_empty()
+                                {
+                                    let _ = self.cmd_tx.send(Cmd::WebSearch {
+                                        query: self.chat_state.sidebar.web_query.clone(),
+                                        engine: self.prefs.web_search_engine.clone(),
+                                    });
+                                }
+                                for hit in &self.chat_state.sidebar.web_results {
+                                    ui.small(format!("• {} — {}", hit.title, hit.url));
+                                }
+                                ui.add(
+                                    egui::TextEdit::singleline(
+                                        &mut self.chat_state.sidebar.fetch_url,
+                                    )
+                                    .desired_width(side_w - 20.0)
+                                    .hint_text(t.sidebar_url_hint),
+                                );
+                                ui.horizontal(|ui| {
+                                    if ui.button(t.sidebar_fetch_url).clicked()
+                                        && !self.chat_state.sidebar.fetch_url.is_empty()
+                                    {
+                                        let _ = self.cmd_tx.send(Cmd::NetFetch {
+                                            url: self.chat_state.sidebar.fetch_url.clone(),
+                                            max_bytes: self.prefs.web_fetch_max_bytes,
+                                        });
+                                    }
+                                    let t = i18n::strings(&self.prefs.language);
+                                    if ui.button(t.web_browse_btn).clicked()
+                                        && !self.chat_state.sidebar.fetch_url.is_empty()
+                                    {
+                                        let _ = self.cmd_tx.send(Cmd::WebBrowse {
+                                            url: self.chat_state.sidebar.fetch_url.clone(),
+                                            max_chars: self.prefs.web_browse_max_chars,
+                                        });
                                     }
                                 });
-                        });
-                        ui.add(
-                            egui::TextEdit::singleline(&mut self.chat_state.sidebar.generated_path)
-                                .desired_width(side_w - 20.0)
-                                .hint_text(t.sidebar_gen_path_hint),
-                        );
-                        ui.add(
-                            egui::TextEdit::multiline(&mut self.chat_state.sidebar.generated_content)
-                                .desired_width(side_w - 20.0)
-                                .desired_rows(3)
-                                .hint_text(t.sidebar_gen_content_hint),
-                        );
-                        if ui.button(t.sidebar_gen_file).clicked()
-                            && !self.chat_state.sidebar.generated_path.is_empty()
-                        {
-                            let _ = self.cmd_tx.send(Cmd::FilesGenerate {
-                                format: self.chat_state.sidebar.generated_format.clone(),
-                                path: self.chat_state.sidebar.generated_path.clone(),
-                                content: self.chat_state.sidebar.generated_content.clone(),
-                                title: Some("Akasha OS".into()),
+                                if !self.chat_state.sidebar.browse_preview.is_empty() {
+                                    ui.collapsing(t.sidebar_preview_page, |ui| {
+                                        ui.small(&self.chat_state.sidebar.browse_preview);
+                                    });
+                                }
+                                ui.horizontal(|ui| {
+                                    egui::ComboBox::from_id_salt("gen_fmt")
+                                        .selected_text(
+                                            &self.chat_state.sidebar.generated_format,
+                                        )
+                                        .show_ui(ui, |ui| {
+                                            for f in ["md", "txt", "json", "csv", "png", "pdf"] {
+                                                ui.selectable_value(
+                                                    &mut self.chat_state.sidebar.generated_format,
+                                                    f.into(),
+                                                    f,
+                                                );
+                                            }
+                                        });
+                                });
+                                ui.add(
+                                    egui::TextEdit::singleline(
+                                        &mut self.chat_state.sidebar.generated_path,
+                                    )
+                                    .desired_width(side_w - 20.0)
+                                    .hint_text(t.sidebar_gen_path_hint),
+                                );
+                                ui.add(
+                                    egui::TextEdit::multiline(
+                                        &mut self.chat_state.sidebar.generated_content,
+                                    )
+                                    .desired_width(side_w - 20.0)
+                                    .desired_rows(3)
+                                    .hint_text(t.sidebar_gen_content_hint),
+                                );
+                                if ui.button(t.sidebar_gen_file).clicked()
+                                    && !self.chat_state.sidebar.generated_path.is_empty()
+                                {
+                                    let _ = self.cmd_tx.send(Cmd::FilesGenerate {
+                                        format: self.chat_state.sidebar.generated_format.clone(),
+                                        path: self.chat_state.sidebar.generated_path.clone(),
+                                        content: self
+                                            .chat_state
+                                            .sidebar
+                                            .generated_content
+                                            .clone(),
+                                        title: Some("Akasha OS".into()),
+                                    });
+                                }
+                                if ui.button(t.sidebar_open_downloads).clicked() {
+                                    let dir = aos_home().join("var/storage/data/downloads");
+                                    open_os_folder(&dir);
+                                }
                             });
-                        }
-                        if ui.button(t.sidebar_open_downloads).clicked() {
-                            let dir = aos_home().join("var/storage/data/downloads");
-                            open_os_folder(&dir);
-                        }
                         ui.separator();
-                        if ui.button(t.sidebar_delete).clicked() {
-                            if let Some(id) = self.chat_state.active_session.clone() {
-                                self.chat_state.sidebar.delete_confirm = Some(id);
+                        // Actions session côte à côte (une ligne) au lieu de
+                        // deux blocs pleine largeur empilés : moins de hauteur
+                        // volée à la liste, pas de superposition perçue.
+                        ui.horizontal(|ui| {
+                            if ui.button(t.sidebar_delete).clicked() {
+                                if let Some(id) = self.chat_state.active_session.clone() {
+                                    self.chat_state.sidebar.delete_confirm = Some(id);
+                                }
                             }
-                        }
-                        if ui.button(t.session_export).clicked() {
-                            if let Some(id) = self.chat_state.active_session.clone() {
-                                let _ = self.cmd_tx.send(Cmd::SessionExport { id });
+                            if ui.button(t.session_export).clicked() {
+                                if let Some(id) = self.chat_state.active_session.clone() {
+                                    let _ = self.cmd_tx.send(Cmd::SessionExport { id });
+                                }
                             }
-                        }
+                        });
                         ui.horizontal(|ui| {
                             ui.add(
                                 egui::TextEdit::singleline(&mut self.chat_state.sidebar.rename)
@@ -176,6 +200,17 @@ impl UiApp {
                             .filter(|s| show_archived || !s.archived)
                             .cloned()
                             .collect();
+                            if sessions.is_empty() {
+                                ui.weak(if self.prefs.language == "fr" {
+                                    "Aucune session — créez-en une."
+                                } else {
+                                    "No sessions — create one."
+                                });
+                                if ui.button(t.session_new).clicked() {
+                                    let n = self.chat_state.sessions.len() + 1;
+                                    self.request_session_create(Some(format!("Session {n}")));
+                                }
+                            }
                             for group in crate::session_nav::GROUP_ORDER {
                                 let mut group_sessions: Vec<_> = sessions
                                     .iter()

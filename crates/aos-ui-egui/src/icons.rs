@@ -458,10 +458,13 @@ pub fn agent_activity_icon(ui: &mut Ui, icon: AgentActivityIcon) {
     match icon {
         AgentActivityIcon::Done => paint_done_check(ui, rect, ui.visuals().weak_text_color()),
         AgentActivityIcon::Failed => {
-            paint_failed_mark(ui, rect, crate::theme::HYDROGEN)
+            // Surchargable via thème (custom inclus).
+            paint_failed_mark(ui, rect, crate::theme::button_colors(ui).danger)
         }
         AgentActivityIcon::Blocked => paint_help(ui, rect, ui.visuals().weak_text_color()),
-        AgentActivityIcon::Running => paint_running_dots(ui, rect, crate::theme::SIGNAL),
+        AgentActivityIcon::Running => {
+            paint_running_dots(ui, rect, crate::theme::button_colors(ui).accent)
+        }
         AgentActivityIcon::Pending => {
             ui.painter().circle_filled(
                 rect.center(),

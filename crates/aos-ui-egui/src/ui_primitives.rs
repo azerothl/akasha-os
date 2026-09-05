@@ -37,7 +37,8 @@ pub fn danger_confirm_button(
     let text = if armed { armed_label } else { label };
     let mut btn = egui::Button::new(text).corner_radius(crate::theme::RADIUS_SM);
     if armed {
-        btn = btn.fill(crate::theme::HYDROGEN);
+        // Surchargable : danger du thème courant (custom inclus), pas HYDROGEN en dur.
+        btn = btn.fill(crate::theme::button_colors(ui).danger);
     }
     let resp = ui.add_enabled(true, btn);
     if resp.clicked() {
@@ -150,10 +151,12 @@ impl Toasts {
                 ui.vertical(|ui| {
                     let mut dismiss = Vec::new();
                     for (idx, toast) in self.items.iter().enumerate() {
+                        // Surchargables via thème (custom inclus) : jamais en dur.
+                        let theme_c = crate::theme::button_colors(ui);
                         let (accent, label) = match toast.kind {
-                            ToastKind::Info => (crate::theme::SIGNAL, "i"),
-                            ToastKind::Success => (crate::theme::SUCCESS, "OK"),
-                            ToastKind::Error => (crate::theme::HYDROGEN, "!"),
+                            ToastKind::Info => (theme_c.accent, "i"),
+                            ToastKind::Success => (theme_c.success, "OK"),
+                            ToastKind::Error => (theme_c.danger, "!"),
                         };
                         egui::Frame::group(ui.style())
                             .corner_radius(crate::theme::RADIUS_LG)

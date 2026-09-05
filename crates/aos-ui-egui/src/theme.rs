@@ -42,6 +42,9 @@ pub const STROKE_SUBTLE: f32 = 1.0;
 pub const SPACE_UNIT: f32 = 8.0;
 
 /// Semantic fills ported from opensourceui tactile/soft-ui buttons.
+/// Valeurs canoniques (dark). Ne pas les référencer directement dans les
+/// widgets : passer par `button_colors(ui)` pour que `light/soft/
+/// high_contrast/custom` puissent les surcharger.
 #[allow(dead_code)]
 pub const SUCCESS: egui::Color32 = egui::Color32::from_rgb(52, 211, 153);
 #[allow(dead_code)]
@@ -51,6 +54,72 @@ pub const WARNING: egui::Color32 = egui::Color32::from_rgb(251, 191, 36);
 #[allow(dead_code)]
 pub fn scrim() -> egui::Color32 {
     egui::Color32::from_rgba_unmultiplied(7, 11, 20, 180)
+}
+
+/// Couleurs sémantiques résolues pour le thème courant. Stockées en mémoire
+/// egui à chaque `apply_theme` pour que les boutons/toasts restent
+/// surchargables (custom inclus) sans couleur en dur dans les widgets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ThemeColors {
+    pub accent: egui::Color32,
+    pub danger: egui::Color32,
+    pub success: egui::Color32,
+    pub warning: egui::Color32,
+}
+
+fn theme_colors_id() -> egui::Id {
+    egui::Id::new("aos_theme_colors")
+}
+
+pub fn theme_colors(
+    theme: &str,
+    custom: &crate::prefs::CustomThemePreferences,
+) -> ThemeColors {
+    match theme {
+        "light" => ThemeColors {
+            accent: mix(VOID, SIGNAL, 0.85),
+            danger: mix(HYDROGEN, VOID, 0.25),
+            success: mix(SUCCESS, VOID, 0.35),
+            warning: mix(WARNING, VOID, 0.35),
+        },
+        "soft" => ThemeColors {
+            accent: mix(SIGNAL, VOID, 0.15),
+            danger: mix(HYDROGEN, VOID, 0.25),
+            success: mix(SUCCESS, VOID, 0.35),
+            warning: mix(WARNING, VOID, 0.35),
+        },
+        "high_contrast" => ThemeColors {
+            accent: SIGNAL,
+            danger: HYDROGEN,
+            success: SUCCESS,
+            warning: WARNING,
+        },
+        "custom" => ThemeColors {
+            accent: parse_hex(&custom.accent, SIGNAL),
+            danger: parse_hex(&custom.danger, HYDROGEN),
+            success: parse_hex(&custom.success, SUCCESS),
+            warning: parse_hex(&custom.warning, WARNING),
+        },
+        _ => ThemeColors {
+            accent: SIGNAL,
+            danger: HYDROGEN,
+            success: SUCCESS,
+            warning: WARNING,
+        },
+    }
+}
+
+/// Couleurs boutons/toasts pour le frame courant. Fallback dark si
+/// `apply_theme` n'a pas encore tourné (tests).
+pub fn button_colors(ui: &egui::Ui) -> ThemeColors {
+    ui.ctx()
+        .memory_mut(|m| m.data.get_persisted::<ThemeColors>(theme_colors_id()))
+        .unwrap_or(ThemeColors {
+            accent: SIGNAL,
+            danger: HYDROGEN,
+            success: SUCCESS,
+            warning: WARNING,
+        })
 }
 
 const FOCUS_STROKE_WIDTH: f32 = 2.0;
@@ -126,6 +195,8 @@ pub fn apply_theme(
         _ => chamber_dark(),
     };
     ctx.set_visuals(visuals);
+    let colors = theme_colors(theme, custom);
+    ctx.memory_mut(|m| m.data.insert_persisted(theme_colors_id(), colors));
 }
 
 /// Scale the whole Preview chrome (rail, status bar, panels) via egui zoom factor.
@@ -204,6 +275,9 @@ fn chamber_light() -> egui::Visuals {
     v.widgets.hovered.bg_fill = mix(PAPER, SIGNAL, 0.25);
     v.widgets.active.bg_fill = mix(PAPER, SIGNAL, 0.35);
     base_widgets(&mut v, VOID, mix(VOID, SIGNAL, 0.85));
+    // Danger assombri pour rester lisible sur fond clair (surchargable via custom).
+    v.warn_fg_color = mix(HYDROGEN, VOID, 0.25);
+    v.error_fg_color = mix(HYDROGEN, VOID, 0.25);
     v
 }
 
@@ -217,6 +291,8 @@ fn chamber_soft() -> egui::Visuals {
     v.widgets.inactive.bg_fill = mix(soft_paper, VOID, 0.05);
     v.widgets.hovered.bg_fill = mix(soft_paper, soft_signal, 0.20);
     base_widgets(&mut v, soft_fg, soft_signal);
+    v.warn_fg_color = mix(HYDROGEN, VOID, 0.25);
+    v.error_fg_color = mix(HYDROGEN, VOID, 0.25);
     v
 }
 
@@ -287,5 +363,35 @@ mod tests {
         assert!(ICON_HIT >= 24.0);
         assert!(TOOLBAR_HIT >= 24.0);
         assert!(CONTROL_MIN_H_COMFORTABLE >= 32.0);
+    }
+
+    #[test]
+    fn theme_colors_follow_each_theme() {
+        let custom = crate::prefs::CustomThemePreferences::default();
+        let dark = theme_colors("dark", &custom);
+        assert_eq!(dark.accent, SIGNAL);
+        assert_eq!(dark.danger, HYDROGEN);
+        // Light assombrit danger/success/warning pour contraste sur PAPER.
+        let light = theme_colors("light", &custom);
+        assert_ne!(light.danger, HYDROGEN);
+        assert_ne!(light.success, SUCCESS);
+        assert_ne!(light.warning, WARNING);
+        let hc = theme_colors("high_contrast", &custom);
+        assert_eq!(hc.accent, SIGNAL);
+    }
+
+    #[test]
+    fn custom_theme_overrides_buttons_and_falls_back_on_bad_hex() {
+        let mut custom = crate::prefs::CustomThemePreferences::default();
+        custom.accent = "#FF0000".into();
+        custom.danger = "#00FF00".into();
+        custom.success = "#0000FF".into();
+        custom.warning = "not-a-hex".into();
+        let c = theme_colors("custom", &custom);
+        assert_eq!(c.accent, egui::Color32::from_rgb(255, 0, 0));
+        assert_eq!(c.danger, egui::Color32::from_rgb(0, 255, 0));
+        assert_eq!(c.success, egui::Color32::from_rgb(0, 0, 255));
+        // Hex invalide -> fallback canonique, jamais de panique.
+        assert_eq!(c.warning, WARNING);
     }
 }

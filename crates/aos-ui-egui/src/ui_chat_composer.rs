@@ -131,8 +131,14 @@ impl UiApp {
                             }
                         }
                         let send_btn = ui
-                            .add_sized(egui::vec2(send_w, input_h), egui::Button::new(t.agent_send))
-                            .on_hover_text(t.tip_send);
+                            .add_sized(
+                                egui::vec2(send_w, input_h.max(44.0)),
+                                egui::Button::new(t.agent_send)
+                                    .corner_radius(crate::theme::RADIUS_MD)
+                                    // Surchargable : accent du thème courant, pas SIGNAL en dur.
+                                    .fill(crate::theme::button_colors(ui).accent),
+                            )
+                            .on_hover_text(format!("{} (Enter)", t.tip_send));
                         send_clicked |= send_btn.clicked();
 
                         ui.allocate_ui_with_layout(
@@ -188,21 +194,12 @@ impl UiApp {
                         r.request_focus();
                         self.chat_state.composer.refocus = false;
                     }
-                    // Enter sends; Shift+Enter remains a newline. Keep the
-                    // editor intentionally bounded so the transcript retains
-                    // visual priority even for pasted text.
+                    // Enter sends; Shift+Enter remains a newline. L'éditeur
+                    // garde tout le texte collé : la hauteur visuelle est
+                    // plafonnée (132px) mais le contenu défile au lieu
+                    // d'être tronqué silencieusement à 5 lignes.
                     let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
                     let shift_enter = ui.input(|i| i.modifiers.shift);
-                    if self.chat_state.composer.input.lines().count() > 5 {
-                        self.chat_state.composer.input = self
-                            .chat_state
-                            .composer
-                            .input
-                            .lines()
-                            .take(5)
-                            .collect::<Vec<_>>()
-                            .join("\n");
-                    }
                     let send = send_clicked
                         || matches!(
                             composer_enter_action(enter, shift_enter),

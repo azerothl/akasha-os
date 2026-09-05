@@ -34,12 +34,41 @@ impl UiApp {
         let t = i18n::strings(&self.prefs.language);
         ui.heading(t.settings_title);
         crate::ui_primitives::search_field(ui, &mut self.settings_ui.search, t.settings_search_hint);
+        // P1 pagination lite : 850 lignes en un scroll -> pills de sections.
+        // Recherche non vide = filtre global historique ; sinon une seule section.
+        let fr = self.prefs.language == "fr";
+        let sections: [(&str, &str); 10] = [
+            ("all", if fr { "Tout" } else { "All" }),
+            ("me", if fr { "Moi" } else { "Me" }),
+            ("models", "Models"),
+            ("image", "Image"),
+            ("trust", if fr { "Confiance" } else { "Trust" }),
+            ("agent", "Agent"),
+            ("web", "Web"),
+            ("secrets", "Secrets"),
+            ("catalogue", "Catalogue"),
+            ("schedule", if fr { "Planif" } else { "Schedule" }),
+        ];
+        ui.horizontal_wrapped(|ui| {
+            for (id, label) in sections {
+                if ui
+                    .selectable_label(self.settings_ui.section == id, label)
+                    .clicked()
+                {
+                    self.settings_ui.section = id.into();
+                }
+            }
+        });
         ui.separator();
 
         let label_w = 160.0_f32;
         let query = self.settings_ui.search.trim().to_lowercase();
-        let section_visible = |terms: &[&str]| {
-            query.is_empty() || terms.iter().any(|term| term.contains(query.as_str()))
+        let selected = self.settings_ui.section.clone();
+        let section_visible = |id: &str, terms: &[&str]| {
+            if !query.is_empty() {
+                return terms.iter().any(|term| term.contains(query.as_str()));
+            }
+            selected == "all" || selected == id
         };
         if !query.is_empty()
             && ![
@@ -59,7 +88,7 @@ impl UiApp {
             return;
         }
 
-        if section_visible(&["utilisateur", "user", "langue", "language", "thème", "theme", "densité", "density", "échelle", "scale"]) {
+        if section_visible("me", &["utilisateur", "user", "langue", "language", "thème", "theme", "densité", "density", "échelle", "scale"]) {
         ui.heading(t.settings_me);
         egui::Grid::new("settings_me")
             .num_columns(2)
@@ -131,6 +160,10 @@ impl UiApp {
                             ui.end_row();
                             changed |= edit_theme_color(ui, t.settings_color_danger, &mut self.prefs.custom_theme.danger);
                             ui.end_row();
+                            changed |= edit_theme_color(ui, t.settings_color_success, &mut self.prefs.custom_theme.success);
+                            ui.end_row();
+                            changed |= edit_theme_color(ui, t.settings_color_warning, &mut self.prefs.custom_theme.warning);
+                            ui.end_row();
                             if changed {
                                 save_preferences(&self.prefs);
                             }
@@ -193,7 +226,7 @@ impl UiApp {
         }
 
         ui.add_space(12.0);
-        if section_visible(&["modèle", "model", "inference", "routage", "routing", "image", "audio"]) {
+        if section_visible("models", &["modèle", "model", "inference", "routage", "routing", "image", "audio"]) {
         ui.heading(t.settings_models);
         egui::Grid::new("settings_models")
             .num_columns(2)
@@ -353,7 +386,7 @@ impl UiApp {
             });
         }
 
-        if section_visible(&["image", "expert", "steps", "taille", "size"]) {
+        if section_visible("image", &["image", "expert", "steps", "taille", "size"]) {
         egui::CollapsingHeader::new(t.settings_expert_image_defaults)
             .default_open(false)
             .show(ui, |ui| {
@@ -389,7 +422,7 @@ impl UiApp {
         }
 
         ui.add_space(12.0);
-        if section_visible(&["confidentialité", "privacy", "confiance", "trust", "réseau", "network", "mémoire", "remember"]) {
+        if section_visible("trust", &["confidentialité", "privacy", "confiance", "trust", "réseau", "network", "mémoire", "remember"]) {
         ui.heading(t.settings_trust);
         egui::Grid::new("settings_trust")
             .num_columns(2)
@@ -437,7 +470,7 @@ impl UiApp {
             });
         }
 
-        if section_visible(&["agent", "expert", "étapes", "steps", "timeout"]) {
+        if section_visible("agent", &["agent", "expert", "étapes", "steps", "timeout"]) {
         egui::CollapsingHeader::new(t.settings_expert_agent)
             .default_open(false)
             .show(ui, |ui| {
@@ -475,7 +508,7 @@ impl UiApp {
             });
         }
 
-        if section_visible(&["web", "recherche", "search", "navigation", "browse"]) {
+        if section_visible("web", &["web", "recherche", "search", "navigation", "browse"]) {
         egui::CollapsingHeader::new(t.settings_expert_web)
             .default_open(false)
             .show(ui, |ui| {
@@ -543,7 +576,7 @@ impl UiApp {
             });
         }
 
-        if section_visible(&["secret", "clé", "token", "api"]) {
+        if section_visible("secrets", &["secret", "clé", "token", "api"]) {
         egui::CollapsingHeader::new(t.settings_secrets)
             .default_open(false)
             .show(ui, |ui| {
@@ -626,7 +659,7 @@ impl UiApp {
             });
         }
 
-        if section_visible(&["catalogue", "catalog", "module", "community", "communauté"]) {
+        if section_visible("catalogue", &["catalogue", "catalog", "module", "community", "communauté"]) {
         egui::CollapsingHeader::new(t.settings_catalogue)
             .default_open(false)
             .show(ui, |ui| {
@@ -781,7 +814,7 @@ impl UiApp {
             });
         }
 
-        if section_visible(&["planification", "schedule", "tâche", "task"]) {
+        if section_visible("schedule", &["planification", "schedule", "tâche", "task"]) {
         egui::CollapsingHeader::new(t.schedule_heading)
             .default_open(false)
             .show(ui, |ui| {

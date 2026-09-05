@@ -44,8 +44,55 @@ pub(crate) fn chat_role_label(
     }
 }
 
-/// Returns fill, stroke, and role-label colors.
+/// Returns fill, stroke, and role-label colors. Tout est dérivé du thème
+/// courant (`button_colors` + `Visuals`) : aucune valeur en dur, `custom`
+/// inclus. En mode clair, l'accent est assombri vers le texte pour le label.
 pub(crate) fn chat_bubble_colors(
+    ui: &egui::Ui,
+    kind: ChatBubbleKind,
+) -> (egui::Color32, egui::Color32, egui::Color32) {
+    let v = ui.visuals();
+    let tc = crate::theme::button_colors(ui);
+    let text = v.strong_text_color();
+    let weak = v.weak_text_color();
+    // Mélange local (Visuals n'expose pas de mix public).
+    let mix = |a: egui::Color32, b: egui::Color32, t: f32| {
+        let t = t.clamp(0.0, 1.0);
+        let inv = 1.0 - t;
+        egui::Color32::from_rgb(
+            (f32::from(a.r()) * inv + f32::from(b.r()) * t) as u8,
+            (f32::from(a.g()) * inv + f32::from(b.g()) * t) as u8,
+            (f32::from(a.b()) * inv + f32::from(b.b()) * t) as u8,
+        )
+    };
+    match kind {
+        ChatBubbleKind::User => {
+            let fill = mix(v.panel_fill, tc.accent, 0.14);
+            let role = if v.dark_mode {
+                tc.accent
+            } else {
+                mix(tc.accent, text, 0.45)
+            };
+            (fill, tc.accent, role)
+        }
+        ChatBubbleKind::Assistant | ChatBubbleKind::RoomSpeaker => {
+            (v.faint_bg_color, weak, v.strong_text_color())
+        }
+        ChatBubbleKind::System => (v.extreme_bg_color, weak, weak),
+    }
+}
+
+/// Compat tests : mêmes teintes que le thème dark, sans contexte egui.
+#[cfg(test)]
+pub(crate) fn chat_bubble_colors_legacy(
+    kind: ChatBubbleKind,
+    dark: bool,
+) -> (egui::Color32, egui::Color32, egui::Color32) {
+    chat_bubble_colors_static(kind, dark)
+}
+
+/// Returns fill, stroke, and role-label colors (static dark/light reference).
+fn chat_bubble_colors_static(
     kind: ChatBubbleKind,
     dark: bool,
 ) -> (egui::Color32, egui::Color32, egui::Color32) {
@@ -102,15 +149,16 @@ pub(crate) fn chat_bubble_max_width(available_w: f32, kind: ChatBubbleKind) -> f
 }
 
 /// Role-colored frame. User messages sit right; all other roles sit left.
+/// Largeur contenu : `max_w` est un plafond, jamais une largeur forcée —
+/// un "ok" ne s'étire plus à 88% de la vue.
 pub(crate) fn chat_message_frame(
     ui: &mut egui::Ui,
     kind: ChatBubbleKind,
     color_override: Option<(egui::Color32, egui::Color32)>,
     add_contents: impl FnOnce(&mut egui::Ui),
 ) {
-    let dark = ui.visuals().dark_mode;
     let (fill, stroke) = color_override.unwrap_or_else(|| {
-        let (fill, stroke, _) = chat_bubble_colors(kind, dark);
+        let (fill, stroke, _) = chat_bubble_colors(ui, kind);
         (fill, stroke)
     });
     let max_w = chat_bubble_max_width(ui.available_width(), kind);
@@ -121,16 +169,27 @@ pub(crate) fn chat_message_frame(
 
     ui.with_layout(layout, |ui| {
         ui.set_max_width(max_w);
-        ui.set_width(max_w);
         egui::Frame::NONE
             .fill(fill)
             .stroke(egui::Stroke::new(1.0_f32, stroke))
-            .corner_radius(6.0)
+            .corner_radius(crate::theme::RADIUS_MD)
             .inner_margin(egui::Margin::symmetric(10, 8))
             .show(ui, |ui| {
-                ui.set_max_width(max_w - 8.0);
+                ui.set_max_width((max_w - 8.0).max(1.0));
                 ui.with_layout(egui::Layout::top_down(egui::Align::Min), add_contents);
             });
     });
     ui.add_space(6.0);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legacy_bubble_roles_stay_distinct() {
+        let (user_fill, _, _) = chat_bubble_colors_legacy(ChatBubbleKind::User, true);
+        let (asst_fill, _, _) = chat_bubble_colors_legacy(ChatBubbleKind::Assistant, true);
+        assert_ne!(user_fill, asst_fill);
+    }
 }

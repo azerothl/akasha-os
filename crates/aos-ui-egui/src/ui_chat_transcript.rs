@@ -167,12 +167,22 @@ impl UiApp {
                             let (r, g, b) =
                                 chat_room::speaker_color_rgb(sid, ui.visuals().dark_mode);
                             let c = egui::Color32::from_rgb(r, g, b);
-                            (c.gamma_multiply(0.25), c, c)
+                            // Surchargable et contrasté : teinte speaker mélangée
+                            // au fond au lieu de gamma_multiply(0.25) qui écrasait tout.
+                            let panel = ui.visuals().panel_fill;
+                            let t = 0.16_f32.clamp(0.0, 1.0);
+                            let inv = 1.0 - t;
+                            let fill = egui::Color32::from_rgb(
+                                (f32::from(panel.r()) * inv + f32::from(c.r()) * t) as u8,
+                                (f32::from(panel.g()) * inv + f32::from(c.g()) * t) as u8,
+                                (f32::from(panel.b()) * inv + f32::from(c.b()) * t) as u8,
+                            );
+                            (fill, c, c)
                         } else {
-                            chat_bubble_colors(kind, ui.visuals().dark_mode)
+                            chat_bubble_colors(ui, kind)
                         }
                     } else {
-                        chat_bubble_colors(kind, ui.visuals().dark_mode)
+                        chat_bubble_colors(ui, kind)
                     };
                     let frame_colors = if kind == ChatBubbleKind::RoomSpeaker {
                         Some((fill, stroke))
@@ -186,7 +196,9 @@ impl UiApp {
                                 egui::RichText::new(&shown_role).strong().small(),
                             );
                             if ts_ms > 0 {
-                                ui.weak(
+                                // Horodatage en texte normal (pas weak) : il
+                                // disparaissait visuellement sur fond sombre.
+                                ui.label(
                                     egui::RichText::new(format_chat_stamp(
                                         ts_ms, chat_now, tz_offset,
                                     ))
@@ -202,7 +214,7 @@ impl UiApp {
                             }
                             if ui.small_button(t.btn_copy).clicked() {
                                 ui.ctx().copy_text(text.clone());
-                                self.status = t.copied.into();
+                                self.push_status(t.copied.into());
                             }
                         });
                         if kind == ChatBubbleKind::RoomSpeaker {
@@ -217,7 +229,9 @@ impl UiApp {
                             }
                         }
                         if !text.is_empty() {
-                            if role == "assistant" {
+                            // Markdown des deux côtés : le user colle aussi du
+                            // code/blocs, le viewer gère le texte brut.
+                            if role == "assistant" || role == "user" || role == "vous" {
                                 ui.push_id(("chat_md", i), |ui| {
                                     chat_markdown_viewer(ui).show(
                                         ui,
@@ -523,7 +537,7 @@ impl UiApp {
                 }
                 if !self.chat_state.runtime.streaming.is_empty() {
                     let (_, _, role_color) =
-                        chat_bubble_colors(ChatBubbleKind::Assistant, ui.visuals().dark_mode);
+                        chat_bubble_colors(ui, ChatBubbleKind::Assistant);
                     chat_message_frame(ui, ChatBubbleKind::Assistant, None, |ui| {
                         ui.horizontal(|ui| {
                             ui.colored_label(
@@ -550,7 +564,7 @@ impl UiApp {
                     });
                 } else if self.chat_state.runtime.pending {
                     let (_, _, role_color) =
-                        chat_bubble_colors(ChatBubbleKind::Assistant, ui.visuals().dark_mode);
+                        chat_bubble_colors(ui, ChatBubbleKind::Assistant);
                     let thinking = if room_mode {
                         self.chat_state
                             .runtime
