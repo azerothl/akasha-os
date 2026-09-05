@@ -3,7 +3,7 @@
 use crate::chat_canvas;
 use crate::chat_room;
 use crate::cmd::{ChatLine, Cmd};
-use crate::{designer_shot_mode, session_nav, UiApp};
+use crate::{designer_shot_mode, session_chat, session_nav, UiApp};
 use aos_proto::ChatSessionMeta;
 
 pub(crate) fn on_sessions(app: &mut UiApp, sessions: Vec<ChatSessionMeta>) {
@@ -34,9 +34,11 @@ pub(crate) fn on_loaded(
         return;
     }
 
+    let room_turn_in_flight = app.chat_state.session_chat.is_pending(&id);
     if !session_changed
         && !session_nav::should_replace_chat_on_same_session_reload(
             app.schedule_ui.transcript_dirty,
+            room_turn_in_flight,
         )
     {
         app.chat_state.sidebar.rename = meta.title.clone();
@@ -47,6 +49,25 @@ pub(crate) fn on_loaded(
         app.pending_session_nav = session_nav::PendingSessionNav::None;
         return;
     }
+
+    if !session_changed
+        && room_turn_in_flight
+        && !session_chat::should_apply_room_snapshot(&app.chat, &messages)
+    {
+        app.chat_state.sidebar.rename = meta.title.clone();
+        if let Some(session) = app.chat_state.sessions.iter_mut().find(|s| s.id == meta.id) {
+            *session = meta;
+        }
+        app.sync_schedule_cards();
+        app.pending_session_nav = session_nav::PendingSessionNav::None;
+        return;
+    }
+
+    let room_turn_text = if room_turn_in_flight {
+        app.chat_state.runtime.room_turn_text.clone()
+    } else {
+        None
+    };
 
     app.pending_session_nav = session_nav::PendingSessionNav::None;
     app.chat_state.active_session = Some(id.clone());
@@ -64,17 +85,19 @@ pub(crate) fn on_loaded(
             ));
         }
         chat.extend(messages);
-        crate::session_chat::infer_reply_durations(&mut chat);
+        session_chat::infer_reply_durations(&mut chat);
         crate::deep_plan_ui::collapse_duplicate_deep_plans(&mut chat);
         app.chat = chat;
     } else {
         let mut chat = messages;
-        crate::session_chat::infer_reply_durations(&mut chat);
+        session_chat::infer_reply_durations(&mut chat);
         crate::deep_plan_ui::collapse_duplicate_deep_plans(&mut chat);
         app.chat = chat;
     }
     app.sync_schedule_cards();
-    let _ = app.cmd_tx.send(Cmd::SkillPassPending);
+    if !room_turn_in_flight {
+        let _ = app.cmd_tx.send(Cmd::SkillPassPending);
+    }
     app.chat_state.session_chat.clear_unread(&id);
     app.chat_state.session_chat.sync_active_view(
         app.chat_state.active_session.as_deref(),
@@ -82,13 +105,13 @@ pub(crate) fn on_loaded(
         &mut app.chat_state.runtime.pending,
         &mut app.chat_state.runtime.inference_id,
     );
-    app.chat_state.runtime.room_turn_text = None;
+    app.chat_state.runtime.room_turn_text = room_turn_text;
     if meta.canvas_open {
         let _ = app.cmd_tx.send(Cmd::CanvasPoll {
             session_id: id,
             after_seq: None,
         });
-    } else {
+    } else if session_changed {
         app.chat_state.view.canvas = chat_canvas::CanvasPanelState::default();
     }
 }
