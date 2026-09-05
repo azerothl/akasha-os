@@ -516,9 +516,15 @@ pub fn ui_installed_card(
                     {
                         on_redownload();
                     }
-                    if ui
-                        .add_enabled(!busy, egui::Button::new(t.models_remove))
-                        .clicked()
+                    // Anti-clic accidentel (opensourceui `slide-to-confirm`,
+                    // adapté two-step clavier en egui) : suppression Go.
+                    if !busy
+                        && crate::ui_primitives::danger_confirm_button(
+                            ui,
+                            ("model-remove", &m.id),
+                            t.models_remove,
+                            &format!("{} ?", t.models_remove),
+                        )
                     {
                         on_remove();
                     }

@@ -17,6 +17,7 @@ impl UiApp {
             "{}: {error}",
             t.models_download_failed.replace("{}", &model_id)
         );
+        self.toasts.push_error(self.status.clone());
     }
 
     pub(crate) fn on_providers(&mut self, list: Vec<ProviderRecord>) {
@@ -68,7 +69,9 @@ impl UiApp {
     pub(crate) fn on_model_removed(&mut self, model_id: String) {
         let t = i18n::strings(&self.prefs.language);
         self.models_ui
-            .mark_model_removed(model_id, t.models_removed.to_string());
+            .mark_model_removed(model_id.clone(), t.models_removed.to_string());
+        self.toasts
+            .push_success(format!("{} : {model_id}", t.models_removed));
     }
 
     pub(crate) fn send_provider_upsert(&mut self) {

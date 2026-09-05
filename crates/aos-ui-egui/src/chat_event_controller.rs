@@ -50,6 +50,7 @@ pub(crate) fn on_error(app: &mut UiApp, message: String) -> bool {
     let t = crate::i18n::strings(&app.prefs.language);
     let visible = chat_error_copy::user_visible_chat_error(&t, &message);
     app.status = visible.clone();
+    app.toasts.push_error(visible.clone());
     app.chat.push(ChatLine::plain("système", visible));
     false
 }
@@ -74,6 +75,7 @@ pub(crate) fn on_chat_error(app: &mut UiApp, session_id: String, message: String
             app.status.clear();
         }
         app.status = visible.clone();
+        app.toasts.push_error(visible.clone());
         if load_fail {
             // Chrome card carries the user-visible copy + Retry.
         } else {

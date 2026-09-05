@@ -33,11 +33,7 @@ impl UiApp {
     pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
         let t = i18n::strings(&self.prefs.language);
         ui.heading(t.settings_title);
-        ui.add_sized(
-            egui::vec2(ui.available_width().min(420.0), 36.0),
-            egui::TextEdit::singleline(&mut self.settings_ui.search)
-                .hint_text(t.settings_search_hint),
-        );
+        crate::ui_primitives::search_field(ui, &mut self.settings_ui.search, t.settings_search_hint);
         ui.separator();
 
         let label_w = 160.0_f32;

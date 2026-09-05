@@ -93,6 +93,7 @@ mod ui_providers;
 mod ui_scenarios;
 mod ui_security;
 mod ui_settings;
+mod ui_primitives;
 mod ui_workspace;
 mod workspace_controller;
 mod workspace_ui_state;
@@ -488,6 +489,8 @@ struct UiApp {
     image_studio: image_studio::ImageStudioState,
     image_generating: Option<image_studio::ImageGenUiState>,
     show_go_to_palette: bool,
+    spotlight_query: String,
+    toasts: ui_primitives::Toasts,
     guide: guide::GuideState,
     research_ui: research_ui_state::ResearchUiState,
 }
@@ -650,6 +653,8 @@ impl UiApp {
             image_studio: image_studio::ImageStudioState::default(),
             image_generating: None,
             show_go_to_palette: false,
+            spotlight_query: String::new(),
+            toasts: ui_primitives::Toasts::default(),
             guide: guide::GuideState::default(),
             research_ui: research_ui_state::ResearchUiState::default(),
         }
@@ -1852,6 +1857,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             if i.modifiers.command || i.modifiers.ctrl {
                 if i.key_pressed(egui::Key::K) {
                     self.show_go_to_palette = true;
+                    self.spotlight_query.clear();
                 }
                 for (idx, key) in [
                     egui::Key::Num1,
@@ -1879,10 +1885,16 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         egui::Window::new(t.go_to_title)
             .collapsible(false)
             .resizable(false)
-            .default_width(360.0)
+            .default_width(420.0)
             .anchor(egui::Align2::CENTER_TOP, [0.0, 48.0])
             .show(ctx, |ui| {
                 ui.weak(t.go_to_hint);
+                ui.add_space(4.0);
+                let search = ui_primitives::search_field(ui, &mut self.spotlight_query, "Filter…");
+                // Focus le champ à l'ouverture (opensourceui `spotlight-bar`).
+                if self.spotlight_query.is_empty() && !search.has_focus() {
+                    ui.memory_mut(|m| m.request_focus(search.id));
+                }
                 ui.separator();
                 let destinations: [(&str, Tab); 14] = [
                     (t.tab_chat, Tab::Chat),
@@ -1900,18 +1912,47 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                     (t.tab_scenarios, Tab::Scenarios),
                     (t.tab_feedback, Tab::Feedback),
                 ];
-                for (label, tab) in destinations {
-                    if ui.button(label).clicked() {
-                        self.on_tab_open(tab);
+                let labels: Vec<&str> = destinations.iter().map(|(l, _)| *l).collect();
+                let hits = ui_primitives::filter_labels(&self.spotlight_query, &labels);
+                if hits.is_empty() {
+                    ui.weak(t.settings_search_empty);
+                }
+                let mut open: Option<Tab> = None;
+                for idx in hits {
+                    let (label, tab) = &destinations[idx];
+                    if ui
+                        .add_sized(
+                            egui::vec2(ui.available_width(), 36.0),
+                            egui::Button::new(*label),
+                        )
+                        .clicked()
+                    {
+                        open = Some(tab.clone());
+                    }
+                }
+                if let Some(tab) = open {
+                    self.on_tab_open(tab);
+                    self.show_go_to_palette = false;
+                    self.spotlight_query.clear();
+                }
+                // Enter ouvre le 1er résultat, comme spotlight.
+                if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
+                    let labels: Vec<&str> = destinations.iter().map(|(l, _)| *l).collect();
+                    if let Some(first) = ui_primitives::filter_labels(&self.spotlight_query, &labels).first() {
+                        let (_, tab) = &destinations[*first];
+                        self.on_tab_open(tab.clone());
                         self.show_go_to_palette = false;
+                        self.spotlight_query.clear();
                     }
                 }
                 if ui.button(t.skip).clicked() {
                     self.show_go_to_palette = false;
+                    self.spotlight_query.clear();
                 }
             });
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             self.show_go_to_palette = false;
+            self.spotlight_query.clear();
         }
     }
 }
@@ -2557,6 +2598,9 @@ impl eframe::App for UiApp {
             });
 
         self.ui_go_to_palette(ctx, &t);
+        // Toasts transitoires (opensourceui `toast-notification`) : la status
+        // bar garde le persistant, les toasts portent l'éphémère + erreurs.
+        self.toasts.show(ctx);
 
         let mut restart_onboarding = false;
         guide::show_window(
