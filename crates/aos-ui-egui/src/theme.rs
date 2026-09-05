@@ -25,8 +25,9 @@ pub const PRIMARY_MIN_H: f32 = 44.0;
 /// Accessible hit target for icon-only controls. Glyph stays 18px centered.
 pub const ICON_HIT: f32 = 28.0;
 pub const ICON_GLYPH: f32 = 18.0;
-/// Toolbar hit target (canvas tools, session bar toggles).
-pub const TOOLBAR_HIT: f32 = 32.0;
+/// Toolbar hit target (canvas tools, session bar toggles). Même taille que
+/// les icônes (28px) pour des lignes de toolbar homogènes.
+pub const TOOLBAR_HIT: f32 = 28.0;
 #[allow(dead_code)]
 pub const COMPOSER_MIN_H: f32 = 44.0;
 #[allow(dead_code)]

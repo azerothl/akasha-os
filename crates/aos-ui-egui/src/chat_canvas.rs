@@ -682,11 +682,14 @@ fn ui_canvas_seeing_pill(ui: &mut Ui, label: &str) {
         });
 }
 
-const TOOLBAR_GAP: f32 = 3.0;
-const TOOLBAR_ROW_H: f32 = 22.0;
-const TOOLBAR_CTRL_H: f32 = 20.0;
+const TOOLBAR_GAP: f32 = 4.0;
+const TOOLBAR_ROW_H: f32 = 30.0;
+/// Hauteur unique de tous les contrôles de la rangée (icônes 28px, couleur,
+/// sliders, DragValue) : plus de dents de scie.
+const TOOLBAR_CTRL_H: f32 = 28.0;
 const TOOLBAR_MAX_H: f32 = 48.0;
-const TOOLBAR_SLIDER_W: f32 = 56.0;
+/// Assez large pour afficher la valeur à droite du rail.
+const TOOLBAR_SLIDER_W: f32 = 104.0;
 
 /// Per-row height for the canvas tool strip.
 pub fn toolbar_row_height() -> f32 {
@@ -754,7 +757,7 @@ fn toolbar_slider(
 ) -> eframe::egui::Response {
     ui.add_sized(
         Vec2::new(TOOLBAR_SLIDER_W, TOOLBAR_CTRL_H),
-        eframe::egui::Slider::new(value, range).show_value(false),
+        eframe::egui::Slider::new(value, range).show_value(true),
     )
 }
 
@@ -848,7 +851,7 @@ pub fn ui_canvas_toolbar(
             CanvasTool::Rect | CanvasTool::Ellipse | CanvasTool::Path
         ) {
             let fill_on = state.shape_fill;
-            if icons::toolbar_text_selectable(ui, fill_on, "F", t.canvas_fill_toggle) {
+            if icons::toolbar_action_selectable(ui, fill_on, icons::ToolbarActionIcon::Fill, t.canvas_fill_toggle) {
                 state.shape_fill = !fill_on;
             }
         }
@@ -884,7 +887,7 @@ pub fn ui_canvas_toolbar(
         ) && state.shape_fill
         {
             let grad_on = state.use_gradient;
-            if icons::toolbar_text_selectable(ui, grad_on, "G", t.canvas_gradient) {
+            if icons::toolbar_action_selectable(ui, grad_on, icons::ToolbarActionIcon::Gradient, t.canvas_gradient) {
                 state.use_gradient = !grad_on;
             }
             if state.use_gradient {
@@ -909,16 +912,16 @@ pub fn ui_canvas_toolbar(
         if icons::toolbar_action_button(ui, ToolbarActionIcon::Undo, t.canvas_undo) {
             action = Some(CanvasUiAction::Apply(CanvasOpBody::Undo));
         }
-        if icons::toolbar_text_button(ui, "P", t.canvas_export) {
+        if icons::toolbar_action_button(ui, icons::ToolbarActionIcon::ExportPng, t.canvas_export) {
             action = Some(CanvasUiAction::ExportPng);
         }
-        if icons::toolbar_text_button(ui, "S", t.canvas_export_svg) {
+        if icons::toolbar_action_button(ui, icons::ToolbarActionIcon::ExportSvg, t.canvas_export_svg) {
             action = Some(CanvasUiAction::ExportSvg);
         }
-        if icons::toolbar_text_button(ui, "J", t.canvas_export_json) {
+        if icons::toolbar_action_button(ui, icons::ToolbarActionIcon::ExportJson, t.canvas_export_json) {
             action = Some(CanvasUiAction::ExportJson);
         }
-        if icons::toolbar_text_button(ui, "I", t.canvas_import) {
+        if icons::toolbar_action_button(ui, icons::ToolbarActionIcon::ImportJson, t.canvas_import) {
             action = Some(CanvasUiAction::ImportJson);
         }
         if icons::toolbar_action_button(ui, ToolbarActionIcon::ResetView, t.canvas_reset_view) {
@@ -931,6 +934,11 @@ pub fn ui_canvas_toolbar(
         let snap_on = state.snap;
         if icons::toolbar_action_selectable(ui, snap_on, ToolbarActionIcon::Snap, t.canvas_snap) {
             state.snap = !snap_on;
+            // Retour visible : l'aimant seul ne change rien à l'écran, la
+            // grille rend la magnétisme (pas de 0,01) perceptible.
+            if state.snap {
+                state.show_grid = true;
+            }
         }
         if state.clear_confirm_open {
             if icons::toolbar_action_button(
@@ -962,15 +970,33 @@ pub fn ui_canvas_toolbar(
         if let Some(seq) = state.selected_seq {
             ui.horizontal(|ui| {
                 ui.set_min_width(ui.available_width());
-                for (label, edge) in [
-                    (t.canvas_align_left, "left"),
-                    (t.canvas_align_right, "right"),
-                    (t.canvas_align_top, "top"),
-                    (t.canvas_align_bottom, "bottom"),
-                    (t.canvas_align_cx, "center_x"),
-                    (t.canvas_align_cy, "center_y"),
+                for (icon, edge) in [
+                    (
+                        icons::ToolbarActionIcon::AlignLeft,
+                        "left",
+                    ),
+                    (
+                        icons::ToolbarActionIcon::AlignRight,
+                        "right",
+                    ),
+                    (
+                        icons::ToolbarActionIcon::AlignTop,
+                        "top",
+                    ),
+                    (
+                        icons::ToolbarActionIcon::AlignBottom,
+                        "bottom",
+                    ),
+                    (
+                        icons::ToolbarActionIcon::AlignCX,
+                        "center_x",
+                    ),
+                    (
+                        icons::ToolbarActionIcon::AlignCY,
+                        "center_y",
+                    ),
                 ] {
-                    if icons::toolbar_text_button(ui, label, t.canvas_align_to_margin) {
+                    if icons::toolbar_action_button(ui, icon, t.canvas_align_to_margin) {
                         action = Some(CanvasUiAction::Edit(CanvasEdit::Align {
                             seq,
                             to_seq: None,
@@ -1008,7 +1034,7 @@ pub fn ui_canvas_toolbar(
                     {
                         let mut rot = *rotation;
                         let rot_resp = ui.add_sized(
-                            Vec2::new(48.0, TOOLBAR_CTRL_H),
+                            Vec2::new(64.0, TOOLBAR_CTRL_H),
                             eframe::egui::DragValue::new(&mut rot)
                                 .suffix("°")
                                 .range(-180.0..=180.0)
@@ -1065,28 +1091,32 @@ pub fn ui_canvas_aspect_row(
     action
 }
 
-/// Compact layer stack: name, hide, lock, new layer.
+/// Compact layer stack: one row per layer (position, name, hide, lock,
+/// opacity, delete) so the z-order stays readable. The active row exposes
+/// rename + reorder inline.
 pub fn ui_canvas_layers(
     ui: &mut Ui,
     t: &UiStrings,
     state: &mut CanvasPanelState,
 ) -> Option<CanvasUiAction> {
     let mut action: Option<CanvasUiAction> = None;
-    ui.horizontal_wrapped(|ui| {
-        if ui
-            .button(eframe::egui::RichText::new(t.canvas_layer_add).weak())
-            .clicked()
-        {
-            action = Some(CanvasUiAction::Edit(CanvasEdit::LayerCreate {
-                name: None,
-                parent_id: None,
-            }));
-        }
-        let layers = state.layers.clone();
-        let layer_count = layers.len();
-        let active_id = state.active_layer_id.clone();
-        for (layer_idx, layer) in layers.iter().enumerate() {
-            let selected = active_id == layer.id;
+    if ui
+        .button(eframe::egui::RichText::new(t.canvas_layer_add).weak())
+        .clicked()
+    {
+        action = Some(CanvasUiAction::Edit(CanvasEdit::LayerCreate {
+            name: None,
+            parent_id: None,
+        }));
+    }
+    let layers = state.layers.clone();
+    let layer_count = layers.len();
+    let active_id = state.active_layer_id.clone();
+    for (layer_idx, layer) in layers.iter().enumerate() {
+        let selected = active_id == layer.id;
+        ui.horizontal(|ui| {
+            // Position dans la pile, une ligne par calque.
+            ui.weak(format!("#{}", layer_idx + 1));
             if ui.selectable_label(selected, &layer.name).clicked() {
                 action = Some(CanvasUiAction::Edit(CanvasEdit::LayerActivate {
                     id: layer.id.clone(),
@@ -1098,10 +1128,11 @@ pub fn ui_canvas_layers(
                     state.layer_rename_text = layer.name.clone();
                 }
                 if layer_idx > 0
-                    && ui
-                        .small_button("↑")
-                        .on_hover_text(t.canvas_z_forward)
-                        .clicked()
+                    && icons::toolbar_action_button(
+                        ui,
+                        icons::ToolbarActionIcon::ArrowUp,
+                        t.canvas_z_forward,
+                    )
                 {
                     action = Some(CanvasUiAction::Edit(CanvasEdit::LayerReorder {
                         id: layer.id.clone(),
@@ -1110,10 +1141,11 @@ pub fn ui_canvas_layers(
                     }));
                 }
                 if layer_idx + 1 < layer_count
-                    && ui
-                        .small_button("↓")
-                        .on_hover_text(t.canvas_z_back)
-                        .clicked()
+                    && icons::toolbar_action_button(
+                        ui,
+                        icons::ToolbarActionIcon::ArrowDown,
+                        t.canvas_z_back,
+                    )
                 {
                     action = Some(CanvasUiAction::Edit(CanvasEdit::LayerReorder {
                         id: layer.id.clone(),
@@ -1165,20 +1197,18 @@ pub fn ui_canvas_layers(
             }
             opacity_resp.on_hover_text(t.canvas_layer_opacity);
             if layer_count > 1
-                && ui
-                    .button(
-                        eframe::egui::RichText::new(t.canvas_layer_delete)
-                            .small()
-                            .weak(),
-                    )
-                    .clicked()
+                && icons::toolbar_action_button(
+                    ui,
+                    icons::ToolbarActionIcon::Clear,
+                    t.canvas_layer_delete,
+                )
             {
                 action = Some(CanvasUiAction::Edit(CanvasEdit::LayerDelete {
                     id: layer.id.clone(),
                 }));
             }
-        }
-        if let Some(rename_id) = state.layer_rename_id.clone() {
+        });
+        if state.layer_rename_id.as_deref() == Some(layer.id.as_str()) {
             ui.horizontal(|ui| {
                 ui.label(t.canvas_layer_rename);
                 let resp = ui.text_edit_singleline(&mut state.layer_rename_text);
@@ -1186,7 +1216,7 @@ pub fn ui_canvas_layers(
                     let name = state.layer_rename_text.trim().to_string();
                     if !name.is_empty() {
                         action = Some(CanvasUiAction::Edit(CanvasEdit::LayerRename {
-                            id: rename_id,
+                            id: layer.id.clone(),
                             name,
                         }));
                     }
@@ -1194,7 +1224,7 @@ pub fn ui_canvas_layers(
                 }
             });
         }
-    });
+    }
     action
 }
 
@@ -1899,6 +1929,15 @@ mod routing_tests {
     fn toolbar_min_width_covers_icon_row() {
         let w = toolbar_content_min_width(false, false);
         assert!(w > 400.0, "icon toolbar scroll extent, got {w}");
+    }
+
+    #[test]
+    fn toolbar_controls_share_one_height() {
+        // Icônes 28px, couleur, sliders et DragValue sur la même hauteur :
+        // la rangée ne doit plus avoir de dents de scie.
+        assert_eq!(TOOLBAR_CTRL_H, crate::icons::TOOLBAR_ICON_SZ);
+        assert!(TOOLBAR_ROW_H >= TOOLBAR_CTRL_H + 2.0);
+        assert!(TOOLBAR_SLIDER_W >= 96.0, "slider must fit its value");
     }
 
     #[test]
