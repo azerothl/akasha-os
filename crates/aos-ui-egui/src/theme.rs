@@ -11,14 +11,47 @@ pub const PAPER: egui::Color32 = egui::Color32::from_rgb(232, 238, 246);
 /// Shared UI tokens.  Keeping these here prevents individual panels from
 /// inventing their own hit targets and makes accessibility regressions easy to
 /// test.
+///
+/// Token sources: Tailwind-scale spacing + Lucide 24px glyph grid
+/// (see opensourceui.in mapping — MIT, bidyut10/opensourceui).
+/// Only tokens live here; widgets live in `icons.rs` / panels.
 pub const CONTROL_MIN_H_COMFORTABLE: f32 = 36.0;
 #[allow(dead_code)]
 pub const CONTROL_MIN_H_COMPACT: f32 = 32.0;
+/// Primary CTA height (Envoyer, Save, Get Preview). WCAG target §2.5.8
+/// recommends 24px minimum, 44px preferred for pointer inputs.
+#[allow(dead_code)]
+pub const PRIMARY_MIN_H: f32 = 44.0;
+/// Accessible hit target for icon-only controls. Glyph stays 18px centered.
+pub const ICON_HIT: f32 = 28.0;
+pub const ICON_GLYPH: f32 = 18.0;
+/// Toolbar hit target (canvas tools, session bar toggles).
+pub const TOOLBAR_HIT: f32 = 32.0;
 #[allow(dead_code)]
 pub const COMPOSER_MIN_H: f32 = 44.0;
 #[allow(dead_code)]
 pub const CARD_RADIUS: u8 = 8;
+#[allow(dead_code)]
+pub const RADIUS_SM: u8 = 6;
+#[allow(dead_code)]
+pub const RADIUS_MD: u8 = 8;
+#[allow(dead_code)]
+pub const RADIUS_LG: u8 = 12;
+#[allow(dead_code)]
+pub const STROKE_SUBTLE: f32 = 1.0;
 pub const SPACE_UNIT: f32 = 8.0;
+
+/// Semantic fills ported from opensourceui tactile/soft-ui buttons.
+#[allow(dead_code)]
+pub const SUCCESS: egui::Color32 = egui::Color32::from_rgb(52, 211, 153);
+#[allow(dead_code)]
+pub const WARNING: egui::Color32 = egui::Color32::from_rgb(251, 191, 36);
+/// Translucent scrim for spotlight/toast overlays (not const: `from_rgba_*`
+/// is not const in egui 0.31, use this helper).
+#[allow(dead_code)]
+pub fn scrim() -> egui::Color32 {
+    egui::Color32::from_rgba_unmultiplied(7, 11, 20, 180)
+}
 
 const FOCUS_STROKE_WIDTH: f32 = 2.0;
 
@@ -139,7 +172,7 @@ pub fn apply_ui_density(ctx: &egui::Context, density: crate::prefs::UiDensity) {
     let mut style = (*ctx.style()).clone();
     let h = density.control_height();
     style.spacing.interact_size.y = h;
-    style.spacing.button_padding.y = ((h - 20.0) / 2.0).max(6.0);
+    style.spacing.button_padding = egui::vec2(16.0, ((h - 20.0) / 2.0).max(6.0));
     style.spacing.item_spacing = egui::vec2(SPACE_UNIT, SPACE_UNIT);
     ctx.set_style(style);
 }
@@ -237,5 +270,22 @@ mod tests {
             ratio >= 3.0,
             "expected signal-on-void >= 3:1 for UI accents, got {ratio:.2}"
         );
+    }
+
+    #[test]
+    fn light_void_on_paper_meets_aa_body_text() {
+        let ratio = contrast_ratio(VOID, PAPER);
+        assert!(
+            ratio >= 12.0,
+            "expected void-on-paper >= 12:1, got {ratio:.2}"
+        );
+    }
+
+    #[test]
+    fn hit_targets_meet_wcag_minimum() {
+        assert!(PRIMARY_MIN_H >= 44.0);
+        assert!(ICON_HIT >= 24.0);
+        assert!(TOOLBAR_HIT >= 24.0);
+        assert!(CONTROL_MIN_H_COMFORTABLE >= 32.0);
     }
 }

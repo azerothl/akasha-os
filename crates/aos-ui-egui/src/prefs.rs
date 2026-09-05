@@ -151,7 +151,7 @@ pub struct Preferences {
     pub image_height: u32,
     #[serde(default = "default_image_steps")]
     pub image_steps: u32,
-    /// Interface scale as a percentage (90, 100, 110, 125). Applied via egui `zoom_factor`.
+    /// Interface scale as a percentage (90, 100, 110, 125, 150). Applied via egui `zoom_factor`.
     #[serde(default = "default_ui_scale_percent")]
     pub ui_scale_percent: u32,
     /// `ask` (default) | `autonomous` — inline Allow Once gate for chat agents.
@@ -169,7 +169,7 @@ pub struct Preferences {
 }
 
 /// Preset scale steps exposed in Settings → Me.
-pub const UI_SCALE_PRESETS: [u32; 4] = [90, 100, 110, 125];
+pub const UI_SCALE_PRESETS: [u32; 5] = [90, 100, 110, 125, 150];
 
 /// Preview UI language from OS locale when possible (`en` or `fr`).
 pub fn detect_os_language() -> String {
@@ -413,7 +413,8 @@ mod tests {
         assert_eq!(clamp_ui_scale_percent(95), 90);
         assert_eq!(clamp_ui_scale_percent(113), 110);
         assert_eq!(clamp_ui_scale_percent(118), 125);
-        assert_eq!(clamp_ui_scale_percent(200), 125);
+        assert_eq!(clamp_ui_scale_percent(140), 150);
+        assert_eq!(clamp_ui_scale_percent(200), 150);
         assert_eq!(clamp_ui_scale_percent(0), 90);
     }
 

@@ -41,9 +41,9 @@ impl UiApp {
         ui.separator();
 
         let label_w = 160.0_f32;
-        let query = self.settings_ui.search.trim().to_ascii_lowercase();
+        let query = self.settings_ui.search.trim().to_lowercase();
         let section_visible = |terms: &[&str]| {
-            query.is_empty() || terms.iter().any(|term| query.contains(term))
+            query.is_empty() || terms.iter().any(|term| term.contains(query.as_str()))
         };
         if !query.is_empty()
             && ![
@@ -57,7 +57,7 @@ impl UiApp {
                 ["planification", "schedule", "tâche", "task"].as_slice(),
             ]
             .iter()
-            .any(|terms| terms.iter().any(|term| query.contains(term)))
+            .any(|terms| terms.iter().any(|term| term.contains(query.as_str())))
         {
             ui.weak(t.settings_search_empty);
             return;

@@ -1,10 +1,16 @@
 //! Painted chrome icons — no emoji or special font glyphs.
+//! Glyph grid follows Lucide 24px strokes (MIT, lucide.dev + opensourceui.in
+//! mapping): 1.4px stroke, round caps. Hit target comes from
+//! `crate::theme::ICON_HIT` (28px) so WCAG §2.5.8 holds even when the
+//! visible glyph stays 18px.
 
 use eframe::egui::{
     self, Color32, Pos2, Rect, Response, Sense, Shape, Stroke, StrokeKind, Ui, Vec2, Widget,
 };
 
-const BTN: f32 = 18.0;
+/// Accessible hit slot for icon-only controls (close/help/attach/…).
+/// Use `glyph_rect()` to center the 18px drawing inside it.
+const BTN: f32 = crate::theme::ICON_HIT;
 
 /// Session-bar icon-only control size (activity toggle, etc.).
 pub const SESSION_ICON_SZ: f32 = BTN;
@@ -23,27 +29,36 @@ fn hover_color(ui: &Ui, response: &Response) -> Color32 {
     }
 }
 
-/// Small square close control (replaces `×`).
+/// Inner 18px glyph rect centered in the 28px hit slot, so the visible
+/// drawing stays Lucide-sized while the target meets WCAG §2.5.8.
+fn glyph_rect(rect: Rect) -> Rect {
+    let glyph = crate::theme::ICON_GLYPH;
+    Rect::from_center_size(rect.center(), Vec2::splat(glyph))
+}
+
+/// Small square close control (replaces `×`). 28px hit, 18px cross (Lucide `x`).
 pub fn close_button(ui: &mut Ui) -> Response {
     let size = Vec2::splat(BTN);
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
     if ui.is_rect_visible(rect) {
-        let c = rect.center();
-        let r = rect.width() * 0.22;
+        let inner = glyph_rect(rect);
+        let c = inner.center();
+        let r = inner.width() * 0.32;
         let stroke = Stroke::new(1.5_f32, hover_color(ui, &response));
         let painter = ui.painter();
         painter.line_segment([c + Vec2::new(-r, -r), c + Vec2::new(r, r)], stroke);
         painter.line_segment([c + Vec2::new(-r, r), c + Vec2::new(r, -r)], stroke);
     }
-    response
+    response.on_hover_text("Close")
 }
 
 /// Painted help control (circle + question mark) for tab/session headers.
+/// 28px hit, 18px glyph (Lucide `circle-help`).
 pub fn help_button(ui: &mut Ui) -> Response {
     let size = Vec2::splat(BTN);
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
     if ui.is_rect_visible(rect) {
-        paint_help(ui, rect, hover_color(ui, &response));
+        paint_help(ui, glyph_rect(rect), hover_color(ui, &response));
     }
     response
 }
@@ -99,7 +114,7 @@ impl Widget for AttachIcon {
         let size = Vec2::splat(BTN);
         let (rect, response) = ui.allocate_exact_size(size, Sense::click());
         if ui.is_rect_visible(rect) {
-            paint_paperclip(ui, rect, hover_color(ui, &response));
+            paint_paperclip(ui, glyph_rect(rect), hover_color(ui, &response));
         }
         response
     }
@@ -267,7 +282,7 @@ pub fn close_all_button(ui: &mut Ui, label: &str) -> Response {
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
     if ui.is_rect_visible(rect) {
         let icon_rect = Rect::from_min_size(rect.min, Vec2::splat(BTN));
-        paint_close_mark(ui, icon_rect, hover_color(ui, &response));
+        paint_close_mark(ui, glyph_rect(icon_rect), hover_color(ui, &response));
         ui.painter().text(
             Pos2::new(icon_rect.right() + 2.0, rect.center().y),
             egui::Align2::LEFT_CENTER,
@@ -289,7 +304,7 @@ pub fn archived_toggle_button(ui: &mut Ui, selected: bool) -> Response {
         } else {
             hover_color(ui, &response)
         };
-        paint_archived_filter(ui, rect, color, selected);
+        paint_archived_filter(ui, glyph_rect(rect), color, selected);
     }
     response
 }
@@ -317,7 +332,7 @@ pub fn activity_toggle_button(ui: &mut Ui, open: bool) -> Response {
         } else {
             hover_color(ui, &response)
         };
-        paint_activity_list(ui, rect, color);
+        paint_activity_list(ui, glyph_rect(rect), color);
     }
     response
 }
@@ -356,7 +371,8 @@ pub fn link_broken(ui: &mut Ui) {
 }
 
 /// Canvas toolbar hit target (matches `chat_canvas::TOOLBAR_CTRL_H`).
-pub const TOOLBAR_ICON_SZ: f32 = 20.0;
+/// 32px slot, glyph drawn proportionally inside — see `theme::TOOLBAR_HIT`.
+pub const TOOLBAR_ICON_SZ: f32 = crate::theme::TOOLBAR_HIT;
 
 /// Drawing-tool glyphs for the session canvas toolbar.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
