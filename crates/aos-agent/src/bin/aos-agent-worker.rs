@@ -1611,8 +1611,9 @@ async fn infer_turn(
     let infer_deadline = Duration::from_secs(180);
     let started_infer = Instant::now();
 
-    while let Some(ev) = rx.recv().await {
-        if started_infer.elapsed() > infer_deadline {
+    loop {
+        let remaining = infer_deadline.saturating_sub(started_infer.elapsed());
+        if remaining.is_zero() {
             if !token_buf.is_empty() {
                 report(
                     bus,
@@ -1628,6 +1629,26 @@ async fn infer_turn(
                 infer_deadline.as_secs()
             ));
         }
+        let ev = match tokio::time::timeout(remaining, rx.recv()).await {
+            Ok(Some(ev)) => ev,
+            Ok(None) => break,
+            Err(_) => {
+                if !token_buf.is_empty() {
+                    report(
+                        bus,
+                        &spec.agent_id,
+                        AgentOutputEvent::Token {
+                            text: std::mem::take(&mut token_buf),
+                        },
+                    )
+                    .await;
+                }
+                return InferOutcome::Fatal(format!(
+                    "timeout inférence ({} s) — le modèle ou le bus ne répond plus",
+                    infer_deadline.as_secs()
+                ));
+            }
+        };
         match ev {
             Ok(TokenEvent::Started { inference_id }) => {
                 *shared.current_inference.lock().await = Some(inference_id);

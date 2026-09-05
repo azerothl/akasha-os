@@ -4,6 +4,7 @@
 //! `--spec-path`. Skills, MCP catalogue, prompt optimize.
 
 use aos_agent::deep_thinking::{self, deep_thinking_caps, DeepThinkingEngine};
+use aos_agent::health::{self, HealthAction, HealthSample};
 use aos_agent::mcp::{list_mcp_servers, load_servers_config, resolve_secret_placeholder};
 use aos_agent::room_personas::{self, persona_agent_id, ROOM_PERSONAS};
 use aos_agent::persist::{self, registry_add};
@@ -30,6 +31,7 @@ use aos_proto::{
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::process::Command;
 use tokio::sync::{mpsc, Mutex};
 
@@ -37,6 +39,20 @@ struct AgentEntry {
     info: AgentInfo,
     subscribers: Vec<mpsc::Sender<AgentOutputEvent>>,
     trace: Vec<AgentStepRecord>,
+    last_activity: Instant,
+    health_recoveries: u32,
+}
+
+impl AgentEntry {
+    fn new(info: AgentInfo, trace: Vec<AgentStepRecord>) -> Self {
+        Self {
+            info,
+            subscribers: Vec::new(),
+            trace,
+            last_activity: Instant::now(),
+            health_recoveries: 0,
+        }
+    }
 }
 
 struct Runtime {
@@ -112,6 +128,205 @@ fn unexpected_child_exit_terminal(last_output: &str) -> (AgentState, String, boo
         last_output.to_string()
     };
     (AgentState::Failed, result, false)
+}
+
+fn note_agent_activity(entry: &mut AgentEntry, event: &AgentOutputEvent) {
+    entry.last_activity = Instant::now();
+    if health::event_proves_progress(event) {
+        entry.health_recoveries = 0;
+    }
+}
+
+struct HealthJob {
+    agent_id: String,
+    action: HealthAction,
+    idle_secs: u64,
+    parent_id: Option<String>,
+}
+
+async fn run_health_pass(shared: &Shared, bus: &Arc<BusClient>, bus_addr: &str) {
+    let jobs: Vec<HealthJob> = {
+        let rt = shared.lock().await;
+        rt.agents
+            .iter()
+            .filter_map(|(id, entry)| {
+                let action = health::evaluate(&HealthSample {
+                    state: entry.info.state.clone(),
+                    kind: entry.info.kind,
+                    pid: entry.info.pid,
+                    last_action: entry
+                        .trace
+                        .last()
+                        .map(|s| s.action.clone())
+                        .unwrap_or_default(),
+                    idle: entry.last_activity.elapsed(),
+                    recoveries: entry.health_recoveries,
+                });
+                if action == HealthAction::None {
+                    return None;
+                }
+                Some(HealthJob {
+                    agent_id: id.clone(),
+                    action,
+                    idle_secs: entry.last_activity.elapsed().as_secs(),
+                    parent_id: entry.info.parent_id.clone(),
+                })
+            })
+            .collect()
+    };
+    for job in jobs {
+        apply_health_action(shared, bus, bus_addr, job).await;
+    }
+}
+
+async fn apply_health_action(
+    shared: &Shared,
+    bus: &Arc<BusClient>,
+    bus_addr: &str,
+    job: HealthJob,
+) {
+    let HealthJob {
+        agent_id,
+        action,
+        idle_secs,
+        parent_id,
+    } = job;
+    eprintln!(
+        "[aos-agentd] health {agent_id} {:?} after {idle_secs}s idle",
+        action
+    );
+    match action {
+        HealthAction::None => {}
+        HealthAction::Nudge | HealthAction::Unblock => {
+            let line = if action == HealthAction::Unblock {
+                format!(
+                    "health : déblocage automatique (aucune activité depuis {idle_secs}s)"
+                )
+            } else {
+                format!(
+                    "health : reprise automatique (aucune activité depuis {idle_secs}s)"
+                )
+            };
+            let _ = send_control(
+                bus,
+                &agent_id,
+                &ControlCmd::Steer {
+                    directive: format!(
+                        "continue — le runtime n'a vu aucune activité depuis {idle_secs}s. \
+                         Poursuis la tâche ou goal.complete / goal.fail."
+                    ),
+                },
+            )
+            .await;
+            let _ = send_control(bus, &agent_id, &ControlCmd::Resume).await;
+            let mut rt = shared.lock().await;
+            if let Some(entry) = rt.agents.get_mut(&agent_id) {
+                entry.health_recoveries = entry.health_recoveries.saturating_add(1);
+                entry.last_activity = Instant::now();
+                if entry.info.state == AgentState::Blocked {
+                    entry.info.state = AgentState::Running;
+                    entry.info.fail_reason = None;
+                }
+                persist::update_info_sidecar(&entry.info);
+                broadcast(
+                    entry,
+                    &AgentOutputEvent::Log { line: line.clone() },
+                )
+                .await;
+                if action == HealthAction::Unblock {
+                    broadcast(
+                        entry,
+                        &AgentOutputEvent::StateChanged {
+                            state: AgentState::Running,
+                        },
+                    )
+                    .await;
+                }
+            }
+        }
+        HealthAction::Restart => {
+            let (recoveries, pid) = {
+                let mut rt = shared.lock().await;
+                let Some(entry) = rt.agents.get_mut(&agent_id) else {
+                    return;
+                };
+                entry.health_recoveries = entry.health_recoveries.saturating_add(1);
+                (entry.health_recoveries, entry.info.pid.take())
+            };
+            if let Some(pid) = pid {
+                kill_pid(pid);
+            }
+            let Some(spec) = persist::read_spec(&agent_id) else {
+                return;
+            };
+            match spawn_worker(shared, bus_addr, &agent_id, &spec, true, Some(bus.clone())).await
+            {
+                Ok(_) => eprintln!("[aos-agentd] health {agent_id} worker relancé"),
+                Err(e) => {
+                    eprintln!("[aos-agentd] health restart {agent_id}: {e}");
+                    return;
+                }
+            }
+            let mut rt = shared.lock().await;
+            if let Some(entry) = rt.agents.get_mut(&agent_id) {
+                entry.health_recoveries = recoveries;
+                entry.last_activity = Instant::now();
+                broadcast(
+                    entry,
+                    &AgentOutputEvent::Log {
+                        line: format!(
+                            "health : worker relancé (aucune activité depuis {idle_secs}s)"
+                        ),
+                    },
+                )
+                .await;
+            }
+        }
+        HealthAction::MarkFailed => {
+            let pid = {
+                let mut rt = shared.lock().await;
+                let pid = rt.agents.get_mut(&agent_id).and_then(|e| e.info.pid.take());
+                if let Some(entry) = rt.agents.get_mut(&agent_id) {
+                    entry.info.state = AgentState::Failed;
+                    entry.info.fail_reason =
+                        Some("bloqué sans activité (health check)".into());
+                    entry.last_activity = Instant::now();
+                    persist::update_info_sidecar(&entry.info);
+                    broadcast(
+                        entry,
+                        &AgentOutputEvent::Log {
+                            line: format!(
+                                "health : agent marqué Failed (aucune activité depuis {idle_secs}s)"
+                            ),
+                        },
+                    )
+                    .await;
+                    broadcast(
+                        entry,
+                        &AgentOutputEvent::StateChanged {
+                            state: AgentState::Failed,
+                        },
+                    )
+                    .await;
+                }
+                pid
+            };
+            if let Some(pid) = pid {
+                kill_pid(pid);
+            }
+            if let Some(parent_id) = parent_id {
+                notify_parent_child_terminal(
+                    shared,
+                    bus,
+                    &parent_id,
+                    &agent_id,
+                    "bloqué sans activité (health check)",
+                    false,
+                )
+                .await;
+            }
+        }
+    }
 }
 
 fn worker_exe_path() -> std::path::PathBuf {
@@ -277,11 +492,7 @@ async fn register_roster_agent(
         let mut rt = shared.lock().await;
         rt.agents.insert(
             agent_id.to_string(),
-            AgentEntry {
-                info,
-                subscribers: Vec::new(),
-                trace: Vec::new(),
-            },
+            AgentEntry::new(info, Vec::new()),
         );
         persist::update_info_sidecar(&rt.agents[agent_id].info);
     }
@@ -470,10 +681,7 @@ async fn spawn_worker(
             rt.caps
                 .mint(holder, uri.clone(), aos_caps::Rights::all(), None, None, 0);
         }
-        rt.agents.insert(
-            agent_id.to_string(),
-            AgentEntry {
-                info: AgentInfo {
+        let info = AgentInfo {
                     agent_id: agent_id.to_string(),
                     state: AgentState::Created,
                     directive: spec.goal.statement.clone(),
@@ -509,11 +717,12 @@ async fn spawn_worker(
                     origin: spec.origin.clone(),
                     deep_plan: None,
                     cognitive_mode: spec.cognitive_mode,
-                },
-                subscribers: Vec::new(),
-                trace: restored_trace,
-            },
-        );
+                };
+                let mut entry = AgentEntry::new(info, restored_trace);
+                if let Some(prev) = rt.agents.remove(agent_id) {
+                    entry.subscribers = prev.subscribers;
+                }
+                rt.agents.insert(agent_id.to_string(), entry);
         persist::update_info_sidecar(&rt.agents[agent_id].info);
     }
 
@@ -524,32 +733,58 @@ async fn spawn_worker(
     let bus_for_wait = bus.clone();
     let shared2 = shared.clone();
     let agent_id2 = agent_id.to_string();
+    let waited_pid = pid;
     let mut child = child;
     tokio::spawn(async move {
         let _ = child.wait().await;
         let mut unexpected_parent: Option<(String, String, bool)> = None;
+        let mut release_schedule = true;
         {
             let mut rt = shared2.lock().await;
             if let Some(entry) = rt.agents.get_mut(&agent_id2) {
-                entry.info.pid = None;
-                if !matches!(
-                    entry.info.state,
-                    AgentState::Killed | AgentState::Done | AgentState::Failed
-                ) {
-                    let parent_id = entry.info.parent_id.clone();
-                    let (state, result, ok) =
-                        unexpected_child_exit_terminal(&entry.info.last_output);
-                    entry.info.state = state.clone();
-                    if !ok {
-                        entry.info.fail_reason = Some(result.clone());
+                if entry.info.pid.is_some() && entry.info.pid != waited_pid {
+                    // A newer worker owns this id (health restart / start).
+                    release_schedule = false;
+                } else {
+                    let ours = entry.info.pid == waited_pid;
+                    if ours {
+                        entry.info.pid = None;
                     }
-                    let ev = AgentOutputEvent::StateChanged { state };
-                    broadcast(entry, &ev).await;
-                    if let Some(parent_id) = parent_id {
-                        unexpected_parent = Some((parent_id, result, ok));
+                    if ours
+                        && !matches!(
+                            entry.info.state,
+                            AgentState::Killed | AgentState::Done | AgentState::Failed
+                        )
+                    {
+                        let parent_id = entry.info.parent_id.clone();
+                        let (state, result, ok) =
+                            unexpected_child_exit_terminal(&entry.info.last_output);
+                        entry.info.state = state.clone();
+                        if !ok {
+                            entry.info.fail_reason = Some(result.clone());
+                        }
+                        let ev = AgentOutputEvent::StateChanged { state };
+                        broadcast(entry, &ev).await;
+                        if let Some(parent_id) = parent_id {
+                            unexpected_parent = Some((parent_id, result, ok));
+                        }
+                    }
+                    if ours {
+                        persist::update_info_sidecar(&entry.info);
+                    }
+                    if !ours
+                        && matches!(
+                            entry.info.state,
+                            AgentState::Created
+                                | AgentState::Running
+                                | AgentState::Paused
+                                | AgentState::Blocked
+                        )
+                    {
+                        // Health restart already took the pid; do not free the schedule.
+                        release_schedule = false;
                     }
                 }
-                persist::update_info_sidecar(&entry.info);
             }
         }
         if let (Some(bus), Some((parent_id, result, ok))) = (bus_for_wait, unexpected_parent) {
@@ -563,8 +798,10 @@ async fn spawn_worker(
             )
             .await;
         }
-        if let Err(e) = schedule::release_agent(&agent_id2) {
-            eprintln!("[aos-agentd] schedule release {agent_id2}: {e}");
+        if release_schedule {
+            if let Err(e) = schedule::release_agent(&agent_id2) {
+                eprintln!("[aos-agentd] schedule release {agent_id2}: {e}");
+            }
         }
     });
 
@@ -688,11 +925,7 @@ async fn main() {
                             let info = roster_info_from_spec(&spec);
                             rt.agents.insert(
                                 agent_id.clone(),
-                                AgentEntry {
-                                    info,
-                                    subscribers: Vec::new(),
-                                    trace: Vec::new(),
-                                },
+                                AgentEntry::new(info, Vec::new()),
                             );
                         }
                         let _ = ctx
@@ -810,11 +1043,7 @@ async fn main() {
                     } else {
                         rt.agents.insert(
                             req.agent_id.clone(),
-                            AgentEntry {
-                                info: info.clone(),
-                                subscribers: Vec::new(),
-                                trace: Vec::new(),
-                            },
+                            AgentEntry::new(info.clone(), Vec::new()),
                         );
                     }
                     persist::update_info_sidecar(&info);
@@ -1296,6 +1525,7 @@ async fn main() {
                                 }
                             }
                             if let Some(entry) = rt.agents.get_mut(&rep.agent_id) {
+                                note_agent_activity(entry, &rep.event);
                                 match &rep.event {
                                     AgentOutputEvent::Token { text } => {
                                         entry.info.last_output.push_str(text);
@@ -2043,6 +2273,20 @@ async fn main() {
         });
     }
 
+    // Health-check: stalled Running / Blocked-without-wait / dead workers.
+    {
+        let shared_h = shared.clone();
+        let bus_h = bus.clone();
+        let bus_addr_h = bus_addr.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(20));
+            loop {
+                interval.tick().await;
+                run_health_pass(&shared_h, &bus_h, &bus_addr_h).await;
+            }
+        });
+    }
+
     // --- Deep Thinking plan.* ---
     {
         let shared2 = shared.clone();
@@ -2392,14 +2636,7 @@ fn hydrate_persisted_agents(rt: &mut Runtime) {
         let trace = persist::read_state(&id)
             .map(|s| s.trace)
             .unwrap_or_default();
-        rt.agents.insert(
-            id,
-            AgentEntry {
-                info,
-                subscribers: Vec::new(),
-                trace,
-            },
-        );
+        rt.agents.insert(id, AgentEntry::new(info, trace));
     }
 }
 

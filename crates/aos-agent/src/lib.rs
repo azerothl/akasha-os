@@ -11,6 +11,7 @@ pub mod context_budget;
 pub mod deep_thinking;
 pub mod document_index;
 pub mod document_prep;
+pub mod health;
 pub mod mcp;
 pub mod persist;
 pub mod prompt;
