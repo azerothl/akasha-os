@@ -32,7 +32,10 @@ impl UiApp {
         });
         let actions = library_panel::render(ui, &t, &self.workspace_ui.library);
         if actions.add_clicked {
-            let filters = [(t.tab_library, aos_proto::chat_document::CHAT_DOCUMENT_EXTENSIONS)];
+            let filters = [(
+                t.tab_library,
+                aos_proto::chat_document::CHAT_DOCUMENT_EXTENSIONS,
+            )];
             if let Some(path) = os_open::pick_os_file(
                 t.tab_library,
                 &filters,

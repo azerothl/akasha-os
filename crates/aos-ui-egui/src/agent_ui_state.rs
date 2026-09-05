@@ -207,8 +207,7 @@ impl AgentUiState {
     }
 
     pub(crate) fn dismiss_notices(&mut self, agent_ids: &[String]) {
-        self.notices
-            .retain(|x| !agent_ids.contains(&x.agent_id));
+        self.notices.retain(|x| !agent_ids.contains(&x.agent_id));
     }
 
     pub(crate) fn set_ask_reply_target(&mut self, agent_id: String) {
@@ -452,7 +451,7 @@ mod tests {
             optimize_prompt: false,
             gate_mode: "ask".into(),
             origin: None,
-        cognitive_mode: aos_proto::CognitiveMode::Normal,
+            cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
         state.upsert_roster_draft_from_spec(&spec);
         let draft = state.roster_edit_drafts.get("roster-1").expect("draft");

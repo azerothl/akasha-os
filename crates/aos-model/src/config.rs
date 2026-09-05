@@ -1,7 +1,7 @@
 //! Configuration de `aos-modeld` (fichier YAML dev, chemins réels des poids).
 
+use aos_placement::{LanNode, QuantizationMetadata};
 use serde::Deserialize;
-use aos_placement::QuantizationMetadata;
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -52,6 +52,18 @@ pub struct ModeldConfig {
     /// `performance`, `balanced`, `quiet` or `always-on`.
     #[serde(default = "default_thermal_policy")]
     pub thermal_policy: String,
+    /// Explicitly configured, already paired LAN nodes. No discovery or
+    /// network listener is enabled by this configuration alone.
+    #[serde(default)]
+    pub lan_cluster: LanClusterConfig,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct LanClusterConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub nodes: Vec<LanNode>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -162,6 +174,16 @@ impl ModeldConfig {
             .unwrap_or(self.adaptive_planner)
     }
 
+    /// UI preferences can gate the configured LAN adapter without changing
+    /// the YAML node inventory. Missing preferences preserve YAML behavior.
+    pub fn lan_cluster_enabled_at(&self, home: &Path) -> bool {
+        std::fs::read_to_string(home.join("var/run/preferences.json"))
+            .ok()
+            .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+            .and_then(|v| v.get("lan_cluster").and_then(|v| v.as_bool()))
+            .unwrap_or(self.lan_cluster.enabled)
+    }
+
     pub fn load(path: impl AsRef<Path>) -> Result<Self, Box<dyn std::error::Error>> {
         Ok(serde_yaml::from_str(&std::fs::read_to_string(path)?)?)
     }
@@ -174,8 +196,12 @@ mod tests {
     #[test]
     fn adaptive_preference_is_reread_and_legacy_preserves_config() {
         let root = std::env::temp_dir().join(format!(
-            "aos-adaptive-pref-{}-{}", std::process::id(),
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+            "aos-adaptive-pref-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
         ));
         std::fs::create_dir_all(root.join("var/run")).unwrap();
         let path = root.join("var/run/preferences.json");

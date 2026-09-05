@@ -244,7 +244,7 @@ impl ModelSubsystem {
                 })
                 .collect()
         };
-        let hw = {
+        let mut hw = {
             let home = std::env::var("AOS_HOME")
                 .map(std::path::PathBuf::from)
                 .unwrap_or_else(|_| std::path::PathBuf::from("."));
@@ -259,6 +259,15 @@ impl ModelSubsystem {
                 gpus,
             )
         };
+        // Make the configured paired-node inventory visible to the planner
+        // without making LAN execution selectable: the adapter remains
+        // experimental/non-executable until authenticated transport exists.
+        hw.remote_nodes = config
+            .lan_cluster
+            .nodes
+            .iter()
+            .filter(|node| node.trust == aos_placement::NodeTrust::Paired)
+            .count() as u32;
         let sim = Arc::new(StdMutex::new(PlacementSim::new(hw, CostModel::default())));
         let mut models = HashMap::new();
         for entry in registry.entries() {

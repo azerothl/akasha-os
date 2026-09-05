@@ -14,7 +14,12 @@ pub(crate) fn on_load_intent(app: &mut UiApp, id: String) {
     session_nav::apply_session_load_intent(&mut app.pending_session_nav, &id);
 }
 
-pub(crate) fn on_loaded(app: &mut UiApp, id: String, messages: Vec<ChatLine>, meta: ChatSessionMeta) {
+pub(crate) fn on_loaded(
+    app: &mut UiApp,
+    id: String,
+    messages: Vec<ChatLine>,
+    meta: ChatSessionMeta,
+) {
     let session_changed = app.chat_state.active_session.as_deref() != Some(id.as_str());
     if session_changed
         && !session_nav::should_switch_session_view(

@@ -226,7 +226,7 @@ impl UiApp {
         }
 
         ui.add_space(12.0);
-        if section_visible("models", &["modèle", "model", "inference", "inférence", "adaptive", "adaptative", "routage", "routing", "image", "audio"]) {
+        if section_visible("models", &["modèle", "model", "inference", "inférence", "adaptive", "adaptative", "cluster", "lan", "routage", "routing", "image", "audio"]) {
         ui.heading(t.settings_models);
         egui::Grid::new("settings_models")
             .num_columns(2)
@@ -262,6 +262,16 @@ impl UiApp {
                         self.status = format!("{} — {}", t.settings_saved, t.adaptive_planner_hint);
                     }
                     ui.label(t.adaptive_planner_hint);
+                });
+                ui.end_row();
+
+                ui.label(t.lan_cluster);
+                ui.vertical(|ui| {
+                    if ui.checkbox(&mut self.prefs.lan_cluster, t.providers_enabled).changed() {
+                        save_preferences(&self.prefs);
+                        self.status = format!("{} — {}", t.settings_saved, t.lan_cluster_hint);
+                    }
+                    ui.label(t.lan_cluster_hint);
                 });
                 ui.end_row();
 
@@ -887,3 +897,4 @@ impl UiApp {
         }
     }
 }
+

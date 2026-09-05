@@ -97,6 +97,7 @@ impl UiApp {
                     for m in installed_rows {
                         let id = m.id.clone();
                         let mut load = false;
+                        let mut inspect_plan = false;
                         let mut set_default = false;
                         let mut redownload = false;
                         let mut remove = false;
@@ -110,6 +111,27 @@ impl UiApp {
                             &mut || redownload = true,
                             &mut || remove = true,
                         );
+                        let plan_busy = self.models_ui.plan_loading(&id);
+                        if ui
+                            .add_enabled(
+                                !plan_busy,
+                                egui::Button::new(if plan_busy {
+                                    t.models_plan_loading
+                                } else {
+                                    t.models_plan_button
+                                }),
+                            )
+                            .clicked()
+                        {
+                            inspect_plan = true;
+                        }
+                        if inspect_plan {
+                            self.models_ui.begin_plan(&id);
+                            let _ = self.cmd_tx.send(Cmd::ModelPlan {
+                                model_id: id.clone(),
+                                kv_tokens: 0,
+                            });
+                        }
                         if load {
                             self.models_ui.begin_transition(&id);
                             let _ = self.cmd_tx.send(Cmd::ModelLoad {
@@ -194,6 +216,15 @@ impl UiApp {
                                 );
                                 ui.weak(t.models_error_detail);
                             }
+                        }
+                        if let Some(plans) = self.models_ui.plan_diagnostics.get(&id).cloned() {
+                            ui_model_plan_diagnostic(ui, &plans, &t);
+                        }
+                        if let Some(error) = self.models_ui.plan_errors.get(&id) {
+                            ui.colored_label(
+                                crate::theme::button_colors(ui).warning,
+                                format!("{}: {error}", t.models_plan_error),
+                            );
                         }
                         ui.add_space(6.0);
                     }
@@ -372,6 +403,73 @@ impl UiApp {
                     }
                 });
         }
+    }
+}
+
+fn ui_model_plan_diagnostic(
+    ui: &mut egui::Ui,
+    plans: &[aos_proto::ModelPlanDiagnostic],
+    t: &i18n::UiStrings,
+) {
+    ui.add_space(crate::theme::SPACE_UNIT);
+    ui.separator();
+    ui.add_space(crate::theme::SPACE_UNIT * 0.5);
+    ui.strong(t.models_plan_title);
+    ui.weak(t.models_plan_hint);
+    if plans.is_empty() {
+        ui.weak(t.models_plan_empty);
+        return;
+    }
+    for plan in plans {
+        let feasible = plan.feasible.unwrap_or(false);
+        let colors = crate::theme::button_colors(ui);
+        egui::CollapsingHeader::new(format!(
+            "{} · {} · {}",
+            plan.requested_profile, plan.backend, plan.quantization
+        ))
+        .default_open(feasible)
+        .show(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.weak(format!("{}:", t.models_plan_title));
+                ui.monospace(&plan.placement);
+                ui.colored_label(
+                    if feasible {
+                        colors.success
+                    } else {
+                        colors.warning
+                    },
+                    if feasible {
+                        t.models_plan_feasible
+                    } else {
+                        t.models_plan_infeasible
+                    },
+                );
+                if plan.experimental {
+                    ui.colored_label(colors.warning, t.models_plan_experimental);
+                }
+            });
+            ui.horizontal_wrapped(|ui| {
+                metric_reading(ui, t.metrics_backend, Some(plan.backend.clone()));
+                metric_reading(ui, t.metrics_quantization, Some(plan.quantization.clone()));
+                metric_reading(ui, t.metrics_profile, Some(plan.requested_profile.clone()));
+                metric_reading(
+                    ui,
+                    t.metrics_kv,
+                    Some(format!("{} · {}", plan.kv_cache, plan.kv_tokens)),
+                );
+                metric_reading(ui, t.metrics_plan_reason, Some(plan.speculative.clone()));
+            });
+            ui.weak(format!(
+                "{}: {}",
+                t.metrics_plan_reason, plan.thermal_policy
+            ));
+            if let Some(summary) = &plan.placement_summary {
+                ui.label(summary);
+            }
+            if let Some(error) = &plan.error {
+                ui.colored_label(colors.warning, format!("{}: {error}", t.models_plan_error));
+            }
+        });
     }
 }
 

@@ -25,11 +25,7 @@ pub(crate) fn chat_bubble_kind(
     }
 }
 
-pub(crate) fn chat_role_label(
-    kind: ChatBubbleKind,
-    strings: &UiStrings,
-    raw_role: &str,
-) -> String {
+pub(crate) fn chat_role_label(kind: ChatBubbleKind, strings: &UiStrings, raw_role: &str) -> String {
     match kind {
         ChatBubbleKind::User => strings.chat_you.to_string(),
         ChatBubbleKind::Assistant => strings.chat_assistant.to_string(),

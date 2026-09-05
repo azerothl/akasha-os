@@ -56,8 +56,7 @@ impl UiApp {
                             .selectable_label(self.models_ui.provider_preset == name, name)
                             .clicked()
                         {
-                            self.models_ui
-                                .apply_provider_preset(name, endpoint, secret);
+                            self.models_ui.apply_provider_preset(name, endpoint, secret);
                         }
                     }
                 });

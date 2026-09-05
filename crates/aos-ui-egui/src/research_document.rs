@@ -61,8 +61,7 @@ pub fn show_document_overlay(
     let body = read_logical_markdown(&path).unwrap_or_else(|| t.document_open_failed.to_string());
     let mut close = false;
     let avail = ctx.available_rect();
-    let (default_size, max_size, min_size) =
-        overlay_window_sizes(avail.width(), avail.height());
+    let (default_size, max_size, min_size) = overlay_window_sizes(avail.width(), avail.height());
     const FOOTER_H: f32 = 34.0_f32;
 
     egui::Window::new(&title)
@@ -113,8 +112,7 @@ pub fn show_documents_list(
     let mut close = false;
     let mut open_path: Option<(String, String)> = None;
     let avail = ctx.available_rect();
-    let (default_size, max_size, min_size) =
-        overlay_window_sizes(avail.width(), avail.height());
+    let (default_size, max_size, min_size) = overlay_window_sizes(avail.width(), avail.height());
     const FOOTER_H: f32 = 34.0_f32;
 
     egui::Window::new(t.documents_list_title)
@@ -149,10 +147,8 @@ pub fn show_documents_list(
                                     egui::Layout::right_to_left(egui::Align::Center),
                                     |ui| {
                                         if ui.button(t.document_result_open).clicked() {
-                                            open_path = Some((
-                                                entry.question.clone(),
-                                                entry.path.clone(),
-                                            ));
+                                            open_path =
+                                                Some((entry.question.clone(), entry.path.clone()));
                                         }
                                     },
                                 );

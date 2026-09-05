@@ -9,8 +9,7 @@ pub(crate) fn ask_origin_closes(origin: &str) -> bool {
 
 /// File FIFO des `user.ask` encore ouverts pour des agents actuellement bloqués.
 pub(crate) fn pending_ask_ids(chat: &[ChatLine], blocked_ids: &[String]) -> Vec<String> {
-    let blocked: std::collections::HashSet<&str> =
-        blocked_ids.iter().map(String::as_str).collect();
+    let blocked: std::collections::HashSet<&str> = blocked_ids.iter().map(String::as_str).collect();
     let mut order: Vec<String> = Vec::new();
     for line in chat {
         for att in &line.attachments {

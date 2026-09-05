@@ -1,7 +1,9 @@
 //! Mutable state owned by the Tasks / Library / Notes workspace panels.
 
 use crate::library_panel::LibraryPanelState;
-use crate::notes_panel::{NoteDetail, NoteListItem, NoteRelatedHit, NoteSearchHit, NotesPanelState};
+use crate::notes_panel::{
+    NoteDetail, NoteListItem, NoteRelatedHit, NoteSearchHit, NotesPanelState,
+};
 use crate::tasks_panel::{TaskItem, TasksPanelState};
 use aos_proto::UserLibraryDoc;
 

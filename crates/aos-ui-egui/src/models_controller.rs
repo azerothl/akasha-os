@@ -20,6 +20,18 @@ impl UiApp {
         self.toasts.push_error(self.status.clone());
     }
 
+    pub(crate) fn on_model_plan(
+        &mut self,
+        model_id: String,
+        plans: Vec<aos_proto::ModelPlanDiagnostic>,
+    ) {
+        self.models_ui.set_plan(model_id, plans);
+    }
+
+    pub(crate) fn on_model_plan_failed(&mut self, model_id: String, error: String) {
+        self.models_ui.set_plan_error(model_id, error);
+    }
+
     pub(crate) fn on_providers(&mut self, list: Vec<ProviderRecord>) {
         self.models_ui.set_providers(list);
     }

@@ -82,13 +82,27 @@ impl Default for CustomThemePreferences {
     }
 }
 
-fn default_custom_background() -> String { "#070B14".into() }
-fn default_custom_panel() -> String { "#101622".into() }
-fn default_custom_text() -> String { "#E8EEF6".into() }
-fn default_custom_accent() -> String { "#2EF0C8".into() }
-fn default_custom_danger() -> String { "#FF5A48".into() }
-fn default_custom_success() -> String { "#34D399".into() }
-fn default_custom_warning() -> String { "#FBBF24".into() }
+fn default_custom_background() -> String {
+    "#070B14".into()
+}
+fn default_custom_panel() -> String {
+    "#101622".into()
+}
+fn default_custom_text() -> String {
+    "#E8EEF6".into()
+}
+fn default_custom_accent() -> String {
+    "#2EF0C8".into()
+}
+fn default_custom_danger() -> String {
+    "#FF5A48".into()
+}
+fn default_custom_success() -> String {
+    "#34D399".into()
+}
+fn default_custom_warning() -> String {
+    "#FBBF24".into()
+}
 
 fn default_context_panel_width() -> f32 {
     320.0
@@ -125,6 +139,10 @@ pub struct Preferences {
     /// Applied by modeld when a model is next loaded.
     #[serde(default = "default_adaptive_planner")]
     pub adaptive_planner: bool,
+    /// LAN cluster is an explicit experimental opt-in; it never discovers or
+    /// contacts a node by itself.
+    #[serde(default)]
+    pub lan_cluster: bool,
     /// `light` | `dark` | `soft` | `high_contrast`
     #[serde(default = "default_theme")]
     pub theme: String,
@@ -277,6 +295,7 @@ impl Default for Preferences {
             trust_default: default_trust(),
             inference_mode: default_inference(),
             adaptive_planner: default_adaptive_planner(),
+            lan_cluster: false,
             theme: default_theme(),
             network_online: false,
             auto_remember_chat: default_auto_remember_chat(),

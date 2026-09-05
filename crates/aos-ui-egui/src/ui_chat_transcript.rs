@@ -536,8 +536,7 @@ impl UiApp {
                     self.status = t.status_agent_reply_target.into();
                 }
                 if !self.chat_state.runtime.streaming.is_empty() {
-                    let (_, _, role_color) =
-                        chat_bubble_colors(ui, ChatBubbleKind::Assistant);
+                    let (_, _, role_color) = chat_bubble_colors(ui, ChatBubbleKind::Assistant);
                     chat_message_frame(ui, ChatBubbleKind::Assistant, None, |ui| {
                         ui.horizontal(|ui| {
                             ui.colored_label(
@@ -563,8 +562,7 @@ impl UiApp {
                         });
                     });
                 } else if self.chat_state.runtime.pending {
-                    let (_, _, role_color) =
-                        chat_bubble_colors(ui, ChatBubbleKind::Assistant);
+                    let (_, _, role_color) = chat_bubble_colors(ui, ChatBubbleKind::Assistant);
                     let thinking = if room_mode {
                         self.chat_state
                             .runtime
@@ -607,18 +605,32 @@ impl UiApp {
                 {
                     let recovery = crate::chat_load_fail::render_load_fail_recovery(ui, t);
                     match recovery {
-                        crate::chat_load_fail::RecoveryAction::Retry => self.retry_load_failed_turn(),
+                        crate::chat_load_fail::RecoveryAction::Retry => {
+                            self.retry_load_failed_turn()
+                        }
                         crate::chat_load_fail::RecoveryAction::Unload => {
-                            if let Some(model_id) = self.chat_state.sessions.iter()
-                                .find(|s| self.chat_state.active_session.as_deref() == Some(s.id.as_str()))
-                                .and_then(|s| s.model_id.clone()) {
+                            if let Some(model_id) = self
+                                .chat_state
+                                .sessions
+                                .iter()
+                                .find(|s| {
+                                    self.chat_state.active_session.as_deref() == Some(s.id.as_str())
+                                })
+                                .and_then(|s| s.model_id.clone())
+                            {
                                 let _ = self.cmd_tx.send(Cmd::ModelUnload { model_id });
                             }
                         }
                         crate::chat_load_fail::RecoveryAction::Reload => {
-                            if let Some(model_id) = self.chat_state.sessions.iter()
-                                .find(|s| self.chat_state.active_session.as_deref() == Some(s.id.as_str()))
-                                .and_then(|s| s.model_id.clone()) {
+                            if let Some(model_id) = self
+                                .chat_state
+                                .sessions
+                                .iter()
+                                .find(|s| {
+                                    self.chat_state.active_session.as_deref() == Some(s.id.as_str())
+                                })
+                                .and_then(|s| s.model_id.clone())
+                            {
                                 let _ = self.cmd_tx.send(Cmd::ModelReload { model_id });
                             }
                         }
@@ -675,24 +687,10 @@ mod tests {
     #[test]
     fn follow_bottom_stays_latched_while_streaming_grows() {
         assert!(transcript_should_follow_bottom(
-            true,
-            false,
-            10,
-            10,
-            120,
-            100,
-            true,
-            false,
+            true, false, 10, 10, 120, 100, true, false,
         ));
         assert!(!transcript_should_follow_bottom(
-            true,
-            false,
-            10,
-            10,
-            100,
-            100,
-            false,
-            false,
+            true, false, 10, 10, 100, 100, false, false,
         ));
     }
 }

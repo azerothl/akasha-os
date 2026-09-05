@@ -158,9 +158,7 @@ mod tests {
     fn choice_attachment_pending_state() {
         match choice_attachment("What is SOTA?", "rc-1") {
             ChatAttachment::ResearchChoice {
-                state,
-                question,
-                ..
+                state, question, ..
             } => {
                 assert_eq!(state, "pending");
                 assert_eq!(question, "What is SOTA?");

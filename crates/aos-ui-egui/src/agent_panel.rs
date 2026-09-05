@@ -1,13 +1,13 @@
 //! Panneau détail agent : timeline mise en forme, sources, sous-agents.
 
-use aos_proto::{AgentInfo, AgentSource, AgentState, AgentStepRecord, AgentTrace};
 #[cfg(test)]
 use aos_proto::AgentKind;
+use aos_proto::{AgentInfo, AgentSource, AgentState, AgentStepRecord, AgentTrace};
 use eframe::egui::{self, Color32, RichText, Ui};
 use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
 
-use crate::icons;
 use crate::i18n;
+use crate::icons;
 use crate::theme;
 
 #[derive(Default)]
@@ -21,7 +21,6 @@ pub struct PanelActions {
     pub steer: Option<String>,
     pub open_child: Option<String>,
 }
-
 
 pub fn agent_state_label(t: &i18n::UiStrings, state: &AgentState) -> &'static str {
     match state {
@@ -166,11 +165,7 @@ fn find_canvas_tool_leak(lower: &str) -> Option<usize> {
     while let Some(i) = lower[search_from..].find("canvas.") {
         let pos = search_from + i;
         let rest = &lower[pos + "canvas.".len()..];
-        if rest
-            .chars()
-            .next()
-            .is_some_and(|c| c.is_ascii_lowercase())
-        {
+        if rest.chars().next().is_some_and(|c| c.is_ascii_lowercase()) {
             return Some(pos);
         }
         search_from = pos + 1;
@@ -347,8 +342,7 @@ pub fn canvas_draw_step_cap_continue(
     if !agent_is_canvas_draw(a) {
         return false;
     }
-    if a
-        .fail_reason
+    if a.fail_reason
         .as_deref()
         .is_some_and(aos_agent::context_budget::is_overflow_fail_reason)
     {
@@ -430,8 +424,7 @@ pub fn notes_create_fail_chrome(
 
 /// True when the action is a mutating canvas tool (not get/export).
 pub fn is_canvas_draw_tool(action: &str) -> bool {
-    action.starts_with("canvas.")
-        && !matches!(action, "canvas.get" | "canvas.export")
+    action.starts_with("canvas.") && !matches!(action, "canvas.get" | "canvas.export")
 }
 
 /// True when a tool result looks like a runtime/parse failure.
@@ -452,7 +445,9 @@ pub fn human_canvas_journal_result(
     if canvas_tool_failed(tool_result) {
         return None;
     }
-    Some(crate::agent_act_phrase::format_agent_act_phrase(t, action, args))
+    Some(crate::agent_act_phrase::format_agent_act_phrase(
+        t, action, args,
+    ))
 }
 
 /// Truncate before the first forbidden meta substring (including mid-stream tokens).
@@ -528,7 +523,9 @@ pub fn sanitize_chat_visible_bubble(text: &str) -> String {
             kept_paras.push(kept_sentences.join(" "));
         }
     }
-    collapse_consecutive_duplicate_paragraphs(&kept_paras.join("\n\n")).trim().to_string()
+    collapse_consecutive_duplicate_paragraphs(&kept_paras.join("\n\n"))
+        .trim()
+        .to_string()
 }
 
 /// Extrait la prose hors blocs JSON / TOOL: / DSML tool_call.
@@ -556,14 +553,7 @@ pub fn prose_without_json(response: &str) -> String {
 
 /// Clés d'args dont la valeur string est du contenu utilisateur (souvent markdown).
 const CONTENT_ARG_KEYS: &[&str] = &[
-    "content",
-    "text",
-    "body",
-    "markdown",
-    "summary",
-    "message",
-    "result",
-    "answer",
+    "content", "text", "body", "markdown", "summary", "message", "result", "answer",
 ];
 
 fn looks_like_action_json(s: &str) -> bool {
@@ -607,7 +597,10 @@ pub fn format_assistant_display(raw: &str) -> String {
     cleaned.trim().to_string()
 }
 
-fn format_action_as_markdown(action: &aos_agent::actions::AgentAction, outer_prose: &str) -> String {
+fn format_action_as_markdown(
+    action: &aos_agent::actions::AgentAction,
+    outer_prose: &str,
+) -> String {
     let mut parts: Vec<String> = Vec::new();
     if !outer_prose.is_empty() {
         parts.push(outer_prose.to_string());
@@ -780,15 +773,7 @@ pub fn chat_agent_card(
             a.state == AgentState::Blocked,
         )
     } else {
-        (
-            "…".into(),
-            Color32::GRAY,
-            0,
-            0,
-            String::new(),
-            None,
-            false,
-        )
+        ("…".into(), Color32::GRAY, 0, 0, String::new(), None, false)
     };
     let ask_card = origin == "ask" && is_blocked;
     let stroke_color = if selected_for_reply && ask_card {
@@ -819,11 +804,7 @@ pub fn chat_agent_card(
                 if !state_label.is_empty() {
                     ui.colored_label(color, RichText::new(state_label).strong());
                 }
-                let shown = if title.is_empty() {
-                    agent_id
-                } else {
-                    title
-                };
+                let shown = if title.is_empty() { agent_id } else { title };
                 ui.strong(truncate(shown, 64));
                 ui.weak(agent_id);
                 if max_steps > 0 && !canvas_fail && !canvas_muted {
@@ -864,15 +845,22 @@ pub fn chat_agent_card(
                     theme::HYDROGEN,
                     RichText::new(t.canvas_draw_failed).strong(),
                 );
-                if ui.add(egui::Button::new(t.canvas_draw_retry).small()).clicked() {
+                if ui
+                    .add(egui::Button::new(t.canvas_draw_retry).small())
+                    .clicked()
+                {
                     action = ChatCardAction::Retry;
                 }
             } else if canvas_continue {
-                if ui.add(egui::Button::new(t.canvas_draw_continue).small()).clicked() {
+                if ui
+                    .add(egui::Button::new(t.canvas_draw_continue).small())
+                    .clicked()
+                {
                     action = ChatCardAction::Continue;
                 }
             } else if let Some(reason) = fail {
-                let visible = resolve_visible_fail_reason(t, info, reason.as_str(), session_ops, trace);
+                let visible =
+                    resolve_visible_fail_reason(t, info, reason.as_str(), session_ops, trace);
                 if !visible.is_empty() {
                     ui.colored_label(theme::HYDROGEN, truncate(&visible, 100));
                 }
@@ -915,9 +903,10 @@ pub fn aggregate_sources(trace: &AgentTrace) -> Vec<AgentSource> {
     let mut out = Vec::new();
     for step in &trace.steps {
         for s in &step.sources {
-            if !out.iter().any(|x: &AgentSource| {
-                x.locator == s.locator && x.kind == s.kind
-            }) {
+            if !out
+                .iter()
+                .any(|x: &AgentSource| x.locator == s.locator && x.kind == s.kind)
+            {
                 out.push(s.clone());
             }
         }
@@ -1119,10 +1108,13 @@ pub fn draw_agent_detail(
                 }
                 AgentState::Created | AgentState::Roster => {}
             }
-            if !matches!(a.state, AgentState::Killed | AgentState::Done | AgentState::Roster)
-                && ui.button(t.agent_kill).clicked() {
-                    actions.kill = true;
-                }
+            if !matches!(
+                a.state,
+                AgentState::Killed | AgentState::Done | AgentState::Roster
+            ) && ui.button(t.agent_kill).clicked()
+            {
+                actions.kill = true;
+            }
             if ui.button(t.agent_export).clicked() {
                 actions.export = true;
             }
@@ -1149,8 +1141,10 @@ pub fn draw_agent_detail(
                         icons::external_arrow(ui);
                         if ui
                             .add(
-                                egui::Button::new(RichText::new(&child_info_label)
-                                    .color(Color32::from_rgb(160, 200, 255)))
+                                egui::Button::new(
+                                    RichText::new(&child_info_label)
+                                        .color(Color32::from_rgb(160, 200, 255)),
+                                )
                                 .frame(true),
                             )
                             .clicked()
@@ -1219,11 +1213,8 @@ pub fn draw_agent_detail(
                                 });
                             } else {
                                 ui.label(
-                                    RichText::new(format!(
-                                        "{role}: {}",
-                                        truncate(content, 300)
-                                    ))
-                                    .small(),
+                                    RichText::new(format!("{role}: {}", truncate(content, 300)))
+                                        .small(),
                                 );
                             }
                         }
@@ -1366,14 +1357,11 @@ fn draw_step(
             }
 
             if rec.action == "agent.spawn" {
-                let child = rec
-                    .child_id
-                    .clone()
-                    .or_else(|| {
-                        rec.tool_result
-                            .strip_prefix("sous-agent créé: ")
-                            .map(|s| s.trim().to_string())
-                    });
+                let child = rec.child_id.clone().or_else(|| {
+                    rec.tool_result
+                        .strip_prefix("sous-agent créé: ")
+                        .map(|s| s.trim().to_string())
+                });
                 let brief = rec
                     .args
                     .get("brief")
@@ -1390,9 +1378,9 @@ fn draw_step(
                 };
                 card_frame(if spawn_ok {
                     Color32::from_rgb(30, 45, 60)
-                        } else {
-                            Color32::from_rgb(55, 32, 32)
-                        })
+                } else {
+                    Color32::from_rgb(55, 32, 32)
+                })
                 .show(ui, |ui| {
                     ui.label(
                         RichText::new(if spawn_ok {
@@ -1475,8 +1463,8 @@ fn draw_step(
                             obj.remove(*k);
                         }
                     }
-                    let args_s = serde_json::to_string_pretty(&args)
-                        .unwrap_or_else(|_| args.to_string());
+                    let args_s =
+                        serde_json::to_string_pretty(&args).unwrap_or_else(|_| args.to_string());
                     if args_s != "null" && args_s != "{}" && args_s != "[]" {
                         ui.collapsing("Arguments", |ui| {
                             ui.monospace(&args_s);
@@ -1676,7 +1664,10 @@ Je vais répondre de manière naturelle et concise, en expliquant le concept hum
 Je vais répondre de manière naturelle"#;
         let out = format_chat_streaming_preview(raw);
         assert!(out.contains("panneau vectoriel"), "{out}");
-        assert!(!out.to_ascii_lowercase().contains("je vais répondre"), "{out}");
+        assert!(
+            !out.to_ascii_lowercase().contains("je vais répondre"),
+            "{out}"
+        );
     }
 
     #[test]
@@ -1758,7 +1749,9 @@ Je vais répondre de manière naturelle"#;
                 width: 0.01,
                 fill: false,
                 rotation: 0.0,
-                    opacity: 1.0, dash: vec![], gradient: None
+                opacity: 1.0,
+                dash: vec![],
+                gradient: None,
             },
         }];
         assert!(canvas_draw_step_cap_continue(Some(&info), Some(&ops), None));
@@ -1857,7 +1850,9 @@ Je vais répondre de manière naturelle"#;
                 fill: false,
                 width: 0.0,
                 rotation: 0.0,
-                    opacity: 1.0, dash: vec![], gradient: None
+                opacity: 1.0,
+                dash: vec![],
+                gradient: None,
             },
         }];
         assert!(!canvas_draw_fail_chrome(Some(&info), Some(&ops), None));

@@ -62,9 +62,7 @@ impl UiApp {
                 .desired_rows(10),
         );
         ui.horizontal(|ui| {
-            if ui.button(t.feedback_add_file).clicked()
-                && self.feedback_ui.attachments.len() < 8
-            {
+            if ui.button(t.feedback_add_file).clicked() && self.feedback_ui.attachments.len() < 8 {
                 if let Some(path) = pick_os_file(t.feedback_add_file_dialog, &[], None) {
                     self.feedback_ui.attachments.push(path);
                 }

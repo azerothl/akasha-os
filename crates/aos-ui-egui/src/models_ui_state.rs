@@ -1,7 +1,7 @@
 //! Mutable state owned by the Models / Providers panels (catalog, downloads, HF import).
 
 use crate::models_page::ModelCatalogTab;
-use aos_proto::{ModelInfo, ProviderRecord};
+use aos_proto::{ModelInfo, ModelPlanDiagnostic, ProviderRecord};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone)]
@@ -35,6 +35,9 @@ pub(crate) struct ModelsUiState {
     /// refresh so recovery guidance is not lost between frames.
     pub(crate) last_errors: HashMap<String, String>,
     pub(crate) transitions: HashSet<String>,
+    pub(crate) plan_diagnostics: HashMap<String, Vec<ModelPlanDiagnostic>>,
+    pub(crate) plan_errors: HashMap<String, String>,
+    pub(crate) plan_loading: HashSet<String>,
 }
 
 impl Default for ModelsUiState {
@@ -59,6 +62,9 @@ impl Default for ModelsUiState {
             hf_download_status: String::new(),
             last_errors: HashMap::new(),
             transitions: HashSet::new(),
+            plan_diagnostics: HashMap::new(),
+            plan_errors: HashMap::new(),
+            plan_loading: HashSet::new(),
         }
     }
 }
@@ -93,6 +99,26 @@ impl ModelsUiState {
 
     pub(crate) fn is_transitioning(&self, model_id: &str) -> bool {
         self.transitions.contains(model_id)
+    }
+
+    pub(crate) fn begin_plan(&mut self, model_id: &str) {
+        self.plan_loading.insert(model_id.to_string());
+        self.plan_errors.remove(model_id);
+    }
+
+    pub(crate) fn set_plan(&mut self, model_id: String, plans: Vec<ModelPlanDiagnostic>) {
+        self.plan_loading.remove(&model_id);
+        self.plan_errors.remove(&model_id);
+        self.plan_diagnostics.insert(model_id, plans);
+    }
+
+    pub(crate) fn set_plan_error(&mut self, model_id: String, error: String) {
+        self.plan_loading.remove(&model_id);
+        self.plan_errors.insert(model_id, error);
+    }
+
+    pub(crate) fn plan_loading(&self, model_id: &str) -> bool {
+        self.plan_loading.contains(model_id)
     }
 
     pub(crate) fn set_providers(&mut self, list: Vec<ProviderRecord>) {
@@ -323,7 +349,10 @@ mod tests {
             has_vision: false,
         }]);
         assert!(!state.is_transitioning("m1"));
-        assert_eq!(state.last_errors.get("m1").map(String::as_str), Some("Mémoire insuffisante"));
+        assert_eq!(
+            state.last_errors.get("m1").map(String::as_str),
+            Some("Mémoire insuffisante")
+        );
 
         state.set_model_infos(vec![ModelInfo {
             id: "m1".into(),

@@ -37,14 +37,19 @@ mod delegate_tests {
         assert!(user_wants_deep_thinking(
             "Active le deep thinking pour cette tâche. Résume le dépôt."
         ));
-        assert!(user_wants_deep_thinking("Enable deep thinking for this task."));
+        assert!(user_wants_deep_thinking(
+            "Enable deep thinking for this task."
+        ));
         assert!(!user_wants_deep_thinking("juste un résumé du dépôt"));
     }
 
     #[test]
     fn deep_thinking_force_delegate_adds_skill() {
-        let (brief, skills, _tools, prose) =
-            crate::chat_delegate::deep_thinking_force_delegate("planifie le déploiement", false, &[]);
+        let (brief, skills, _tools, prose) = crate::chat_delegate::deep_thinking_force_delegate(
+            "planifie le déploiement",
+            false,
+            &[],
+        );
         assert_eq!(brief, "planifie le déploiement");
         assert!(skills.iter().any(|s| s == "deep-thinking"));
         assert!(prose.to_ascii_lowercase().contains("deep"));
@@ -80,7 +85,13 @@ mod delegate_tests {
     #[test]
     fn create_module_dump_delegates_instead_of_display() {
         let dumped = r#"{"kind":"column","children":[{"kind":"heading","text":"Ping"}]}"#;
-        let spec = chat_delegate_agent_spec("crée un module ping", dumped, false, ASPECT, &full_canvas_exported());
+        let spec = chat_delegate_agent_spec(
+            "crée un module ping",
+            dumped,
+            false,
+            ASPECT,
+            &full_canvas_exported(),
+        );
         let (brief, _skills, tools, prose) = spec.expect("doit déléguer");
         assert_eq!(brief, "crée un module ping");
         assert!(tools.iter().any(|x| x == "module.scaffold"));
@@ -102,7 +113,8 @@ mod delegate_tests {
     #[test]
     fn model_scaffold_action_delegates() {
         let out = r#"{"action":"module.scaffold","args":{"name":"ping"}}"#;
-        let spec = chat_delegate_agent_spec("fais un ping", out, false, ASPECT, &full_canvas_exported());
+        let spec =
+            chat_delegate_agent_spec("fais un ping", out, false, ASPECT, &full_canvas_exported());
         let (_brief, _skills, tools, _) = spec.expect("doit déléguer");
         assert!(tools.iter().any(|x| x == "module.scaffold"));
     }
@@ -110,14 +122,27 @@ mod delegate_tests {
     #[test]
     fn tts_ask_does_not_delegate_agent() {
         let out = r#"{"action":"agent.spawn","args":{"brief":"tts"}}"#;
-        assert!(chat_delegate_agent_spec("génère un audio qui dit bonjour", out, false, ASPECT, &full_canvas_exported()).is_none());
+        assert!(chat_delegate_agent_spec(
+            "génère un audio qui dit bonjour",
+            out,
+            false,
+            ASPECT,
+            &full_canvas_exported()
+        )
+        .is_none());
         let (_skills, tools) = chat_agent_kit("génère un audio de bonjour");
         assert!(tools.iter().any(|t| t == "media.audio.generate"));
     }
 
     #[test]
     fn draw_request_delegates_with_image_tools_when_canvas_closed() {
-        let spec = chat_delegate_agent_spec("dessine une maison", "Ok.", false, ASPECT, &full_canvas_exported());
+        let spec = chat_delegate_agent_spec(
+            "dessine une maison",
+            "Ok.",
+            false,
+            ASPECT,
+            &full_canvas_exported(),
+        );
         let (_brief, _skills, tools, _prose) = spec.expect("doit déléguer image");
         assert!(tools.iter().any(|x| x == "media.image.generate"));
         assert!(!tools.iter().any(|x| x == "canvas.stroke"));
@@ -125,8 +150,14 @@ mod delegate_tests {
 
     #[test]
     fn draw_request_delegates_with_canvas_tools_when_canvas_open() {
-        let spec = chat_delegate_agent_spec("dessine une maison", "Ok.", true, ASPECT, &full_canvas_exported())
-            .expect("canvas ouvert + dessine doit déléguer canvas");
+        let spec = chat_delegate_agent_spec(
+            "dessine une maison",
+            "Ok.",
+            true,
+            ASPECT,
+            &full_canvas_exported(),
+        )
+        .expect("canvas ouvert + dessine doit déléguer canvas");
         let (_brief, _skills, tools, _prose) = spec;
         assert!(tools.iter().any(|x| x == "canvas.stroke"));
         assert!(!tools.iter().any(|x| x == "media.image.generate"));
@@ -138,7 +169,13 @@ mod delegate_tests {
 
     #[test]
     fn explicit_canvas_delegates_with_canvas_tools() {
-        let spec = chat_delegate_agent_spec("dessine sur le canvas une maison", "Ok.", false, ASPECT, &full_canvas_exported());
+        let spec = chat_delegate_agent_spec(
+            "dessine sur le canvas une maison",
+            "Ok.",
+            false,
+            ASPECT,
+            &full_canvas_exported(),
+        );
         let (brief, skills, tools, prose) = spec.expect("doit déléguer canvas");
         assert_eq!(brief, "dessine sur le canvas une maison");
         assert!(!brief.contains("toit + murs"));
@@ -169,8 +206,14 @@ mod delegate_tests {
 
     #[test]
     fn dans_le_canvas_delegates_with_canvas_tools() {
-        let spec = chat_delegate_agent_spec("dessine dans le canvas", "Ok.", false, ASPECT, &full_canvas_exported())
-            .expect("dessine dans le canvas doit déléguer canvas");
+        let spec = chat_delegate_agent_spec(
+            "dessine dans le canvas",
+            "Ok.",
+            false,
+            ASPECT,
+            &full_canvas_exported(),
+        )
+        .expect("dessine dans le canvas doit déléguer canvas");
         let (_brief, _skills, tools, _prose) = spec;
         assert!(tools.iter().any(|x| x == "canvas.stroke"));
         assert!(!tools.iter().any(|x| x == "media.image.generate"));
@@ -179,8 +222,14 @@ mod delegate_tests {
 
     #[test]
     fn bare_dessine_delegates_with_image_tools() {
-        let spec = chat_delegate_agent_spec("dessine une maison", "Ok.", false, ASPECT, &full_canvas_exported())
-            .expect("dessine une maison doit déléguer image");
+        let spec = chat_delegate_agent_spec(
+            "dessine une maison",
+            "Ok.",
+            false,
+            ASPECT,
+            &full_canvas_exported(),
+        )
+        .expect("dessine une maison doit déléguer image");
         let (_brief, _skills, tools, _prose) = spec;
         assert!(tools.iter().any(|x| x == "media.image.generate"));
         assert!(!tools.iter().any(|x| x == "canvas.stroke"));
@@ -196,13 +245,22 @@ mod delegate_tests {
             &full_canvas_exported(),
         )
         .is_none());
-        assert!(chat_delegate_agent_spec("vas y", "Ok.", true, ASPECT, &full_canvas_exported()).is_none());
+        assert!(
+            chat_delegate_agent_spec("vas y", "Ok.", true, ASPECT, &full_canvas_exported())
+                .is_none()
+        );
     }
 
     #[test]
     fn canvas_truncated_spawn_explicit_canvas_delegates() {
         let out = r#"{"action":"agent.spawn","args":{"brief":"Génération d'une maison médiévale avec plus de détails en cours..."#;
-        let spec = chat_delegate_agent_spec("dessine sur le canvas", out, false, ASPECT, &full_canvas_exported());
+        let spec = chat_delegate_agent_spec(
+            "dessine sur le canvas",
+            out,
+            false,
+            ASPECT,
+            &full_canvas_exported(),
+        );
         let (_brief, _skills, tools, _) = spec.expect("JSON tronqué + explicit canvas");
         assert!(tools.iter().any(|x| x == "canvas.stroke"));
     }
@@ -210,7 +268,9 @@ mod delegate_tests {
     #[test]
     fn canvas_truncated_spawn_followup_does_not_delegate() {
         let out = r#"{"action":"agent.spawn","args":{"brief":"Génération..."#;
-        assert!(chat_delegate_agent_spec("vas y", out, true, ASPECT, &full_canvas_exported()).is_none());
+        assert!(
+            chat_delegate_agent_spec("vas y", out, true, ASPECT, &full_canvas_exported()).is_none()
+        );
     }
 
     #[test]
@@ -247,14 +307,26 @@ mod delegate_tests {
 
     #[test]
     fn explicit_canvas_after_image_delegate_gets_canvas_tools() {
-        let image = chat_delegate_agent_spec("dessine une maison", "Ok.", false, ASPECT, &full_canvas_exported())
-            .expect("image delegate");
+        let image = chat_delegate_agent_spec(
+            "dessine une maison",
+            "Ok.",
+            false,
+            ASPECT,
+            &full_canvas_exported(),
+        )
+        .expect("image delegate");
         let image_tools = image.2;
         assert!(image_tools.iter().any(|x| x == "media.image.generate"));
         assert!(!image_tools.iter().any(|x| x == "canvas.stroke"));
 
-        let canvas = chat_delegate_agent_spec("dessine sur le canvas", "Ok.", false, ASPECT, &full_canvas_exported())
-            .expect("canvas delegate after image");
+        let canvas = chat_delegate_agent_spec(
+            "dessine sur le canvas",
+            "Ok.",
+            false,
+            ASPECT,
+            &full_canvas_exported(),
+        )
+        .expect("canvas delegate after image");
         let canvas_tools = canvas.2;
         assert!(canvas_tools.iter().any(|x| x == "canvas.stroke"));
         assert!(!canvas_tools.iter().any(|x| x == "media.image.generate"));
@@ -467,8 +539,8 @@ mod layout_tests {
     use super::*;
     use crate::chat_bubble::ChatBubbleKind;
     use crate::composer_layout::{
-        bounded_chat_workspace_width, chat_canvas_layout, chat_composer_reserve_height, chat_sessions_split,
-        composer_field_width, ChatCanvasLayout,
+        bounded_chat_workspace_width, chat_canvas_layout, chat_composer_reserve_height,
+        chat_sessions_split, composer_field_width, ChatCanvasLayout,
     };
 
     #[test]
@@ -540,12 +612,9 @@ mod layout_tests {
         let fr = i18n::strings("fr");
         let send_w = estimate_composer_buttons_w(fr.agent_send, false, "");
         let stop_w = estimate_composer_buttons_w("Stop", false, "");
-        let field =
-            composer_field_width(580.0, send_w, icons::ATTACH_BTN_W, stop_w, 4.0, true);
+        let field = composer_field_width(580.0, send_w, icons::ATTACH_BTN_W, stop_w, 4.0, true);
         assert!(field > 200.0);
-        assert!(
-            field + send_w + stop_w + icons::ATTACH_BTN_W + 12.0 <= 580.0 + 0.01
-        );
+        assert!(field + send_w + stop_w + icons::ATTACH_BTN_W + 12.0 <= 580.0 + 0.01);
     }
 
     #[test]

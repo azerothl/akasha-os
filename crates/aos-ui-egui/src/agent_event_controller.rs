@@ -1,10 +1,8 @@
 //! Event handling for agent roster transitions and notices.
 
-use crate::cmd::{AgentNotice, ChatLine, Cmd};
 use crate::chat_ask::{agent_display_title, chat_has_open_ask};
-use crate::{
-    agent_canvas_session_ops, agent_completion_chat_text, agent_panel, i18n, UiApp,
-};
+use crate::cmd::{AgentNotice, ChatLine, Cmd};
+use crate::{agent_canvas_session_ops, agent_completion_chat_text, agent_panel, i18n, UiApp};
 use aos_proto::{AgentInfo, AgentState, ChatAttachment};
 
 pub(crate) fn on_spawned(
@@ -46,14 +44,20 @@ pub(crate) fn on_agents(app: &mut UiApp, agents: Vec<AgentInfo>) {
     let t = i18n::strings(&app.prefs.language);
     if app.scenario_ui.pending_note_agent
         && agents.iter().any(|ag| {
-            matches!(ag.state, AgentState::Done | AgentState::Failed | AgentState::Killed)
+            matches!(
+                ag.state,
+                AgentState::Done | AgentState::Failed | AgentState::Killed
+            )
         })
     {
         let _ = app.cmd_tx.send(Cmd::NotesList);
     }
     if app.scenario_ui.pending_module_agent
         && agents.iter().any(|ag| {
-            matches!(ag.state, AgentState::Done | AgentState::Failed | AgentState::Killed)
+            matches!(
+                ag.state,
+                AgentState::Done | AgentState::Failed | AgentState::Killed
+            )
         })
     {
         let _ = app.cmd_tx.send(Cmd::ModuleList);
@@ -78,21 +82,26 @@ pub(crate) fn on_agents(app: &mut UiApp, agents: Vec<AgentInfo>) {
                         )
                     })
                 });
-                let idx = crate::deep_plan_ui::sync_deep_plan_in_chat(
-                    &mut app.chat,
-                    &ag.agent_id,
-                    plan,
-                );
+                let idx =
+                    crate::deep_plan_ui::sync_deep_plan_in_chat(&mut app.chat, &ag.agent_id, plan);
                 if !had {
                     app.chat_state.view.deep_plan_open.insert(idx);
                 }
             }
         }
         let prev = app.agent_ui.prev_states.get(&ag.agent_id).cloned();
-        let terminal = matches!(ag.state, AgentState::Done | AgentState::Failed | AgentState::Killed);
+        let terminal = matches!(
+            ag.state,
+            AgentState::Done | AgentState::Failed | AgentState::Killed
+        );
         let was_active = prev
             .as_ref()
-            .map(|p| !matches!(p, AgentState::Done | AgentState::Failed | AgentState::Killed))
+            .map(|p| {
+                !matches!(
+                    p,
+                    AgentState::Done | AgentState::Failed | AgentState::Killed
+                )
+            })
             .unwrap_or(false);
         if terminal {
             if app.agent_ui.document_prep_agents.contains_key(&ag.agent_id)
@@ -194,11 +203,7 @@ pub(crate) fn on_agents(app: &mut UiApp, agents: Vec<AgentInfo>) {
                         app.workspace_ui.notes.notes.len(),
                     ) {
                         t.notes_create_failed.to_string()
-                    } else if agent_panel::canvas_draw_failure_muted(
-                        Some(ag),
-                        session_ops,
-                        trace,
-                    ) {
+                    } else if agent_panel::canvas_draw_failure_muted(Some(ag), session_ops, trace) {
                         String::new()
                     } else {
                         match ag.state {

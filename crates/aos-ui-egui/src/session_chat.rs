@@ -202,10 +202,7 @@ pub(crate) fn on_chat_cancelled(
 pub(crate) fn infer_reply_durations(chat: &mut [ChatLine]) {
     let mut prev_ts = 0u64;
     for line in chat.iter_mut() {
-        if line.duration_ms == 0
-            && line.ts_ms > prev_ts
-            && prev_ts > 0
-            && line.role == "assistant"
+        if line.duration_ms == 0 && line.ts_ms > prev_ts && prev_ts > 0 && line.role == "assistant"
         {
             line.duration_ms = line.ts_ms - prev_ts;
         }
@@ -292,8 +289,7 @@ mod tests {
         );
 
         assert!(
-            chat
-                .iter()
+            chat.iter()
                 .all(|l| l.role != "assistant" || l.text != "assistant reply for A"),
             "B's transcript must not receive A's assistant turn"
         );
@@ -420,8 +416,10 @@ mod tests {
 
         // Returning to A clears unread and restores inflight view (completed).
         state.clear_unread(session_a());
-        let chat_a = [ChatLine::plain("user", "question in A"),
-            ChatLine::plain("assistant", "reply text")];
+        let chat_a = [
+            ChatLine::plain("user", "question in A"),
+            ChatLine::plain("assistant", "reply text"),
+        ];
         state.sync_active_view(
             Some(session_a()),
             &mut streaming,

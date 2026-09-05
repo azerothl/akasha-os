@@ -187,9 +187,8 @@ impl UiApp {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_millis() as u64)
             .unwrap_or(0);
-        let _ = aos_agent::document_index::record_research_document(
-            &home, question, path, label, ms,
-        );
+        let _ =
+            aos_agent::document_index::record_research_document(&home, question, path, label, ms);
         self.research_ui.reload_documents();
     }
 

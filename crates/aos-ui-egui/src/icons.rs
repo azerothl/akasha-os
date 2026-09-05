@@ -197,7 +197,8 @@ pub fn caret(ui: &mut Ui, expanded: bool) -> Response {
                 c + Vec2::new(s * 0.85, 0.0),
             ]
         };
-        ui.painter().add(Shape::convex_polygon(tri, Color32::TRANSPARENT, stroke));
+        ui.painter()
+            .add(Shape::convex_polygon(tri, Color32::TRANSPARENT, stroke));
     }
     response
 }
@@ -224,7 +225,10 @@ pub fn child_branch(ui: &mut Ui) {
     let painter = ui.painter();
     let mid_y = rect.center().y;
     painter.line_segment(
-        [Pos2::new(rect.left(), mid_y), Pos2::new(rect.center().x, mid_y)],
+        [
+            Pos2::new(rect.left(), mid_y),
+            Pos2::new(rect.center().x, mid_y),
+        ],
         stroke,
     );
     painter.line_segment(
@@ -235,7 +239,10 @@ pub fn child_branch(ui: &mut Ui) {
         stroke,
     );
     painter.line_segment(
-        [Pos2::new(rect.center().x, mid_y), Pos2::new(rect.right(), mid_y)],
+        [
+            Pos2::new(rect.center().x, mid_y),
+            Pos2::new(rect.right(), mid_y),
+        ],
         stroke,
     );
 }
@@ -315,17 +322,11 @@ pub fn activity_toggle_button(ui: &mut Ui, open: bool) -> Response {
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
     if ui.is_rect_visible(rect) {
         if open {
-            ui.painter().rect_filled(
-                rect,
-                3.0,
-                ui.visuals().selection.bg_fill,
-            );
+            ui.painter()
+                .rect_filled(rect, 3.0, ui.visuals().selection.bg_fill);
         } else if response.hovered() {
-            ui.painter().rect_filled(
-                rect,
-                3.0,
-                ui.visuals().widgets.hovered.bg_fill,
-            );
+            ui.painter()
+                .rect_filled(rect, 3.0, ui.visuals().widgets.hovered.bg_fill);
         }
         let color = if open {
             ui.visuals().strong_text_color()
@@ -365,7 +366,10 @@ pub fn link_broken(ui: &mut Ui) {
         stroke,
     );
     painter.line_segment(
-        [Pos2::new(cx + gap_half, y), Pos2::new(rect.right() - 1.0, y)],
+        [
+            Pos2::new(cx + gap_half, y),
+            Pos2::new(rect.right() - 1.0, y),
+        ],
         stroke,
     );
 }
@@ -516,17 +520,11 @@ fn toolbar_color(ui: &Ui, response: &Response, selected: bool) -> Color32 {
 
 fn paint_toolbar_bg(ui: &mut Ui, response: &Response, selected: bool) {
     if selected {
-        ui.painter().rect_filled(
-            response.rect,
-            3.0,
-            ui.visuals().selection.bg_fill,
-        );
+        ui.painter()
+            .rect_filled(response.rect, 3.0, ui.visuals().selection.bg_fill);
     } else if response.hovered() {
-        ui.painter().rect_filled(
-            response.rect,
-            3.0,
-            ui.visuals().widgets.hovered.bg_fill,
-        );
+        ui.painter()
+            .rect_filled(response.rect, 3.0, ui.visuals().widgets.hovered.bg_fill);
     }
 }
 
@@ -562,11 +560,7 @@ fn paint_canvas_tool(ui: &mut Ui, rect: Rect, icon: CanvasToolIcon, color: Color
                 r.left_bottom(),
                 r.right_bottom(),
             ] {
-                painter.rect_filled(
-                    Rect::from_center_size(corner, Vec2::splat(h)),
-                    0.0,
-                    color,
-                );
+                painter.rect_filled(Rect::from_center_size(corner, Vec2::splat(h)), 0.0, color);
             }
         }
         CanvasToolIcon::Pan => {
@@ -605,15 +599,15 @@ fn paint_canvas_tool(ui: &mut Ui, rect: Rect, icon: CanvasToolIcon, color: Color
         CanvasToolIcon::Eraser => {
             painter.circle_stroke(c, s * 0.75, stroke);
             painter.line_segment(
-                [c + Vec2::angled(-0.25) * s * 0.9, c + Vec2::angled(2.9) * s * 0.9],
+                [
+                    c + Vec2::angled(-0.25) * s * 0.9,
+                    c + Vec2::angled(2.9) * s * 0.9,
+                ],
                 stroke,
             );
         }
         CanvasToolIcon::Line => {
-            painter.line_segment(
-                [c + Vec2::new(-s, s), c + Vec2::new(s, -s)],
-                stroke,
-            );
+            painter.line_segment([c + Vec2::new(-s, s), c + Vec2::new(s, -s)], stroke);
         }
         CanvasToolIcon::Spline => {
             let pts: Vec<Pos2> = (0..=8)
@@ -659,8 +653,12 @@ fn paint_toolbar_action(ui: &mut Ui, rect: Rect, icon: ToolbarActionIcon, color:
     let c = rect.center();
     let s = rect.width() * 0.28;
     match icon {
-        ToolbarActionIcon::ArrowDown => paint_chevron(painter, c, s, Vec2::new(0.0, 1.0), color, stroke),
-        ToolbarActionIcon::ArrowUp => paint_chevron(painter, c, s, Vec2::new(0.0, -1.0), color, stroke),
+        ToolbarActionIcon::ArrowDown => {
+            paint_chevron(painter, c, s, Vec2::new(0.0, 1.0), color, stroke)
+        }
+        ToolbarActionIcon::ArrowUp => {
+            paint_chevron(painter, c, s, Vec2::new(0.0, -1.0), color, stroke)
+        }
         ToolbarActionIcon::Undo => {
             let r = s * 1.1;
             painter.circle_stroke(c + Vec2::new(r * 0.15, 0.0), r, stroke);
@@ -736,7 +734,11 @@ fn paint_chevron(
     let perp = Vec2::new(-dir.y, dir.x);
     let tip = c + dir * s * 0.85;
     painter.add(Shape::convex_polygon(
-        vec![tip, c - dir * s * 0.25 + perp * s, c - dir * s * 0.25 - perp * s],
+        vec![
+            tip,
+            c - dir * s * 0.25 + perp * s,
+            c - dir * s * 0.25 - perp * s,
+        ],
         Color32::TRANSPARENT,
         stroke,
     ));
@@ -749,11 +751,17 @@ fn paint_done_check(ui: &mut Ui, rect: Rect, color: Color32) {
     let stroke = Stroke::new(1.6_f32, color);
     let painter = ui.painter();
     painter.line_segment(
-        [c + Vec2::new(-s * 0.95, s * 0.05), c + Vec2::new(-s * 0.15, s * 0.75)],
+        [
+            c + Vec2::new(-s * 0.95, s * 0.05),
+            c + Vec2::new(-s * 0.15, s * 0.75),
+        ],
         stroke,
     );
     painter.line_segment(
-        [c + Vec2::new(-s * 0.15, s * 0.75), c + Vec2::new(s * 0.95, -s * 0.70)],
+        [
+            c + Vec2::new(-s * 0.15, s * 0.75),
+            c + Vec2::new(s * 0.95, -s * 0.70),
+        ],
         stroke,
     );
 }
@@ -776,12 +784,25 @@ fn paint_archived_filter(ui: &mut Ui, rect: Rect, color: Color32, selected: bool
     let bot = c.y + rect.height() * 0.24;
     painter.line_segment([Pos2::new(c.x - w, top), Pos2::new(c.x + w, top)], stroke);
     painter.line_segment(
-        [Pos2::new(c.x - w * 0.72, (top + bot) * 0.5), Pos2::new(c.x + w * 0.72, (top + bot) * 0.5)],
+        [
+            Pos2::new(c.x - w * 0.72, (top + bot) * 0.5),
+            Pos2::new(c.x + w * 0.72, (top + bot) * 0.5),
+        ],
         stroke,
     );
-    painter.line_segment([Pos2::new(c.x - w * 0.44, bot), Pos2::new(c.x + w * 0.44, bot)], stroke);
+    painter.line_segment(
+        [
+            Pos2::new(c.x - w * 0.44, bot),
+            Pos2::new(c.x + w * 0.44, bot),
+        ],
+        stroke,
+    );
     if selected {
-        painter.circle_filled(c + Vec2::new(w * 0.82, -rect.height() * 0.18), rect.width() * 0.09, color);
+        painter.circle_filled(
+            c + Vec2::new(w * 0.82, -rect.height() * 0.18),
+            rect.width() * 0.09,
+            color,
+        );
     }
 }
 
@@ -793,11 +814,14 @@ fn paint_activity_list(ui: &mut Ui, rect: Rect, color: Color32) {
     let gap = rect.height() * 0.22;
     for dy in [-gap, 0.0, gap] {
         let y = c.y + dy;
-        let half = if dy < 0.0 { w * 0.85 } else if dy > 0.0 { w * 0.65 } else { w };
-        painter.line_segment(
-            [Pos2::new(c.x - half, y), Pos2::new(c.x + half, y)],
-            stroke,
-        );
+        let half = if dy < 0.0 {
+            w * 0.85
+        } else if dy > 0.0 {
+            w * 0.65
+        } else {
+            w
+        };
+        painter.line_segment([Pos2::new(c.x - half, y), Pos2::new(c.x + half, y)], stroke);
     }
 }
 
@@ -815,8 +839,7 @@ fn paint_running_dots(ui: &mut Ui, rect: Rect, color: Color32) {
     let r = rect.width() * 0.09;
     let gap = rect.width() * 0.22;
     for dx in [-gap, 0.0, gap] {
-        ui.painter()
-            .circle_filled(c + Vec2::new(dx, 0.0), r, color);
+        ui.painter().circle_filled(c + Vec2::new(dx, 0.0), r, color);
     }
 }
 

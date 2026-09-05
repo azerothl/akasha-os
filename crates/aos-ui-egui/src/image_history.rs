@@ -77,10 +77,7 @@ fn host_png_from_logical(logical: &str) -> PathBuf {
 
 pub fn meta_host_path_for_logical(logical: &str) -> PathBuf {
     let png = host_png_from_logical(logical);
-    let stem = png
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("image");
+    let stem = png.file_stem().and_then(|s| s.to_str()).unwrap_or("image");
     png.with_file_name(format!("{stem}.meta.json"))
 }
 
@@ -100,7 +97,11 @@ pub fn load_image_meta(logical: &str) -> Option<ImageGenMeta> {
 }
 
 /// Copy meta from an existing PNG to a new logical path (e.g. after upscale).
-pub fn clone_meta_for_new_path(source_logical: &str, new_logical: &str, engine: &str) -> Option<()> {
+pub fn clone_meta_for_new_path(
+    source_logical: &str,
+    new_logical: &str,
+    engine: &str,
+) -> Option<()> {
     let mut meta = load_image_meta(source_logical)?;
     meta.path = new_logical.to_string();
     if !engine.is_empty() {

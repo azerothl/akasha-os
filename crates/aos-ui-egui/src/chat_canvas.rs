@@ -12,8 +12,8 @@ use eframe::egui::{Align2, Color32, FontId, Pos2, Sense, Stroke, Ui, Vec2};
 use crate::canvas_paint::{
     self, body_dash, fill_color, layer_effective_opacity, paint_polyline, path_stroke, stroke_color,
 };
-use crate::icons::{self, CanvasToolIcon, ToolbarActionIcon};
 use crate::i18n::UiStrings;
+use crate::icons::{self, CanvasToolIcon, ToolbarActionIcon};
 use crate::theme::{PAPER, SIGNAL, VOID};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -747,7 +747,11 @@ fn toolbar_color_button(ui: &mut Ui, rgba: &mut [f32; 4]) -> eframe::egui::Respo
     .inner
 }
 
-fn toolbar_slider(ui: &mut Ui, value: &mut f32, range: std::ops::RangeInclusive<f32>) -> eframe::egui::Response {
+fn toolbar_slider(
+    ui: &mut Ui,
+    value: &mut f32,
+    range: std::ops::RangeInclusive<f32>,
+) -> eframe::egui::Response {
     ui.add_sized(
         Vec2::new(TOOLBAR_SLIDER_W, TOOLBAR_CTRL_H),
         eframe::egui::Slider::new(value, range).show_value(false),
@@ -776,15 +780,31 @@ pub fn ui_canvas_toolbar(
             ui.weak(t.canvas_thinking);
         }
         for (tool, icon, tip) in [
-            (CanvasTool::Select, CanvasToolIcon::Select, t.canvas_tool_select),
+            (
+                CanvasTool::Select,
+                CanvasToolIcon::Select,
+                t.canvas_tool_select,
+            ),
             (CanvasTool::Pan, CanvasToolIcon::Pan, t.canvas_tool_pan),
             (CanvasTool::Pen, CanvasToolIcon::Pen, t.canvas_tool_pen),
-            (CanvasTool::Eraser, CanvasToolIcon::Eraser, t.canvas_tool_eraser),
+            (
+                CanvasTool::Eraser,
+                CanvasToolIcon::Eraser,
+                t.canvas_tool_eraser,
+            ),
             (CanvasTool::Line, CanvasToolIcon::Line, t.canvas_tool_line),
-            (CanvasTool::Spline, CanvasToolIcon::Spline, t.canvas_tool_spline),
+            (
+                CanvasTool::Spline,
+                CanvasToolIcon::Spline,
+                t.canvas_tool_spline,
+            ),
             (CanvasTool::Path, CanvasToolIcon::Path, t.canvas_tool_path),
             (CanvasTool::Rect, CanvasToolIcon::Rect, t.canvas_tool_rect),
-            (CanvasTool::Ellipse, CanvasToolIcon::Ellipse, t.canvas_tool_ellipse),
+            (
+                CanvasTool::Ellipse,
+                CanvasToolIcon::Ellipse,
+                t.canvas_tool_ellipse,
+            ),
         ] {
             if icons::toolbar_selectable(ui, state.tool == tool, icon, tip) {
                 state.tool = tool;
@@ -844,7 +864,12 @@ pub fn ui_canvas_toolbar(
             });
         }
         let dashed_on = state.pen_dashed;
-        if icons::toolbar_action_selectable(ui, dashed_on, ToolbarActionIcon::Dashed, t.canvas_dashed) {
+        if icons::toolbar_action_selectable(
+            ui,
+            dashed_on,
+            ToolbarActionIcon::Dashed,
+            t.canvas_dashed,
+        ) {
             state.pen_dashed = !dashed_on;
             action = Some(CanvasUiAction::SetStyle {
                 color: None,
@@ -908,11 +933,19 @@ pub fn ui_canvas_toolbar(
             state.snap = !snap_on;
         }
         if state.clear_confirm_open {
-            if icons::toolbar_action_button(ui, ToolbarActionIcon::ConfirmYes, t.canvas_clear_confirm_yes) {
+            if icons::toolbar_action_button(
+                ui,
+                ToolbarActionIcon::ConfirmYes,
+                t.canvas_clear_confirm_yes,
+            ) {
                 state.clear_confirm_open = false;
                 action = Some(CanvasUiAction::Apply(CanvasOpBody::Clear));
             }
-            if icons::toolbar_action_button(ui, ToolbarActionIcon::ConfirmNo, t.canvas_clear_confirm_no) {
+            if icons::toolbar_action_button(
+                ui,
+                ToolbarActionIcon::ConfirmNo,
+                t.canvas_clear_confirm_no,
+            ) {
                 state.clear_confirm_open = false;
             }
         } else if icons::toolbar_action_button(ui, ToolbarActionIcon::Clear, t.canvas_clear) {
@@ -946,16 +979,22 @@ pub fn ui_canvas_toolbar(
                     }
                 }
                 if let Some(idx) = state.ops.iter().position(|o| o.seq == seq) {
-                    if icons::toolbar_action_button(ui, ToolbarActionIcon::ArrowDown, t.canvas_z_back)
-                        && idx > 0
+                    if icons::toolbar_action_button(
+                        ui,
+                        ToolbarActionIcon::ArrowDown,
+                        t.canvas_z_back,
+                    ) && idx > 0
                     {
                         action = Some(CanvasUiAction::Edit(CanvasEdit::Reorder {
                             seq,
                             z: (idx as i64) - 1,
                         }));
                     }
-                    if icons::toolbar_action_button(ui, ToolbarActionIcon::ArrowUp, t.canvas_z_forward)
-                        && idx + 1 < state.ops.len()
+                    if icons::toolbar_action_button(
+                        ui,
+                        ToolbarActionIcon::ArrowUp,
+                        t.canvas_z_forward,
+                    ) && idx + 1 < state.ops.len()
                     {
                         action = Some(CanvasUiAction::Edit(CanvasEdit::Reorder {
                             seq,

@@ -1,8 +1,8 @@
 //! First-run model selection (auto-best offer + optional remote providers).
 
+use crate::theme;
 use aos_model::RemoteOpenAiBackend;
 use aos_proto::ProviderRecord;
-use crate::theme;
 use eframe::egui;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -338,7 +338,8 @@ impl SetupApp {
                         Err(e) => self.provider_status = e,
                     }
                 }
-                let test = ui.add_enabled(!self.provider_testing, egui::Button::new(t.providers_test));
+                let test =
+                    ui.add_enabled(!self.provider_testing, egui::Button::new(t.providers_test));
                 if test.clicked() && self.save_provider().is_ok() {
                     self.test_saved_provider(t);
                 }
@@ -356,7 +357,11 @@ impl SetupApp {
                     let label = remote_model_label(&id);
                     ui.horizontal(|ui| {
                         ui.label(label);
-                        ui.radio_value(&mut self.default_chat, id.clone(), t.model_setup_default_chat);
+                        ui.radio_value(
+                            &mut self.default_chat,
+                            id.clone(),
+                            t.model_setup_default_chat,
+                        );
                         ui.radio_value(
                             &mut self.default_embed,
                             id.clone(),
@@ -409,11 +414,13 @@ impl SetupApp {
     }
 
     fn ensure_required_defaults_selected(&mut self) {
-        if !is_remote_model_id(&self.default_chat) && self.model_supports(&self.default_chat, "chat")
+        if !is_remote_model_id(&self.default_chat)
+            && self.model_supports(&self.default_chat, "chat")
         {
             self.selected.insert(self.default_chat.clone());
         }
-        if !is_remote_model_id(&self.default_embed) && self.model_supports(&self.default_embed, "embed")
+        if !is_remote_model_id(&self.default_embed)
+            && self.model_supports(&self.default_embed, "embed")
         {
             self.selected.insert(self.default_embed.clone());
         }
@@ -597,7 +604,10 @@ impl eframe::App for SetupApp {
 
                     ui.horizontal(|ui| {
                         if ui
-                            .add_enabled(can_continue, egui::Button::new(t.model_setup_download_continue))
+                            .add_enabled(
+                                can_continue,
+                                egui::Button::new(t.model_setup_download_continue),
+                            )
                             .clicked()
                         {
                             self.try_confirm();

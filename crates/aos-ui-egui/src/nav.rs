@@ -44,9 +44,12 @@ impl TabKind {
                 Some(NavGroup::Daily)
             }
             TabKind::Providers => Some(NavGroup::System),
-            TabKind::Caps | TabKind::Audit | TabKind::Settings | TabKind::Scenarios | TabKind::Feedback | TabKind::Module => {
-                Some(NavGroup::Admin)
-            }
+            TabKind::Caps
+            | TabKind::Audit
+            | TabKind::Settings
+            | TabKind::Scenarios
+            | TabKind::Feedback
+            | TabKind::Module => Some(NavGroup::Admin),
             TabKind::Chat | TabKind::Agents | TabKind::Create | TabKind::Memory => None,
         }
     }
@@ -107,10 +110,7 @@ pub fn tab_kind(tab: &Tab) -> TabKind {
 }
 
 pub fn is_primary_rail(tab: &Tab) -> bool {
-    matches!(
-        tab,
-        Tab::Chat | Tab::Agents | Tab::Image | Tab::Memory
-    )
+    matches!(tab, Tab::Chat | Tab::Agents | Tab::Image | Tab::Memory)
 }
 
 pub fn is_overflow_tab(tab: &Tab) -> bool {

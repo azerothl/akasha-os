@@ -286,6 +286,10 @@ pub(crate) enum Cmd {
     ModelLoad {
         model_id: String,
     },
+    ModelPlan {
+        model_id: String,
+        kv_tokens: u32,
+    },
     ModelUnload {
         model_id: String,
     },
@@ -639,6 +643,14 @@ pub(crate) enum Evt {
         error: String,
     },
     ModelOperationFailed {
+        model_id: String,
+        error: String,
+    },
+    ModelPlan {
+        model_id: String,
+        plans: Vec<aos_proto::ModelPlanDiagnostic>,
+    },
+    ModelPlanFailed {
         model_id: String,
         error: String,
     },

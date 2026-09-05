@@ -36,11 +36,7 @@ pub fn render_image(
     }
 }
 
-pub fn render_pending_image_chips(
-    ui: &mut egui::Ui,
-    ctx: &egui::Context,
-    paths: &mut Vec<String>,
-) {
+pub fn render_pending_image_chips(ui: &mut egui::Ui, ctx: &egui::Context, paths: &mut Vec<String>) {
     let mut remove_idx = None;
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing = egui::vec2(6.0, 4.0);
@@ -232,7 +228,11 @@ fn knobs(ui: &mut egui::Ui, o: &mut MediaAudioOptions) {
         let mut noise = o.noise_scale.unwrap_or(0.667);
         ui.label("noise");
         if ui
-            .add(egui::DragValue::new(&mut noise).range(0.0..=1.5).speed(0.01))
+            .add(
+                egui::DragValue::new(&mut noise)
+                    .range(0.0..=1.5)
+                    .speed(0.01),
+            )
             .changed()
         {
             o.noise_scale = Some(noise);
@@ -255,7 +255,10 @@ fn knobs(ui: &mut egui::Ui, o: &mut MediaAudioOptions) {
         }
         let mut spk = o.speaker.unwrap_or(0);
         ui.label("speaker");
-        if ui.add(egui::DragValue::new(&mut spk).range(0..=16)).changed() {
+        if ui
+            .add(egui::DragValue::new(&mut spk).range(0..=16))
+            .changed()
+        {
             o.speaker = Some(spk);
         }
     });

@@ -56,7 +56,9 @@ pub fn format_agent_act_phrase(t: &UiStrings, action: &str, args: &Value) -> Str
             }
         }
         "canvas.set_style" => t.agent_act_canvas_set_style.into(),
-        "canvas.stroke" | "canvas.line" | "canvas.spline" | "canvas.path" => t.agent_act_canvas_stroke.into(),
+        "canvas.stroke" | "canvas.line" | "canvas.spline" | "canvas.path" => {
+            t.agent_act_canvas_stroke.into()
+        }
         "canvas.rect" => t.agent_act_canvas_rect.into(),
         "canvas.ellipse" => t.agent_act_canvas_ellipse.into(),
         "canvas.erase" => t.agent_act_canvas_erase.into(),
@@ -142,10 +144,7 @@ pub fn thread_display_text(
 }
 
 /// Thread bubble text from a chat attachment, if this message carries an agent act.
-pub fn thread_display_from_attachment(
-    t: &UiStrings,
-    att: &ChatAttachment,
-) -> Option<String> {
+pub fn thread_display_from_attachment(t: &UiStrings, att: &ChatAttachment) -> Option<String> {
     match att {
         ChatAttachment::AgentAct {
             action,

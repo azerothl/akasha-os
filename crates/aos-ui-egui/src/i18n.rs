@@ -230,6 +230,17 @@ pub struct UiStrings {
     pub inference_mode: &'static str,
     pub adaptive_planner: &'static str,
     pub adaptive_planner_hint: &'static str,
+    pub lan_cluster: &'static str,
+    pub lan_cluster_hint: &'static str,
+    pub models_plan_button: &'static str,
+    pub models_plan_title: &'static str,
+    pub models_plan_hint: &'static str,
+    pub models_plan_loading: &'static str,
+    pub models_plan_empty: &'static str,
+    pub models_plan_feasible: &'static str,
+    pub models_plan_infeasible: &'static str,
+    pub models_plan_experimental: &'static str,
+    pub models_plan_error: &'static str,
     pub inference_gpu: &'static str,
     pub inference_cpu: &'static str,
     pub theme: &'static str,
@@ -1108,6 +1119,17 @@ const EN: UiStrings = UiStrings {
     inference_mode: "Inference",
     adaptive_planner: "Adaptive inference (experimental)",
     adaptive_planner_hint: "Choose model placement automatically. Applies when a model is next loaded; unload and reload an active model to apply now.",
+    lan_cluster: "LAN cluster (experimental)",
+    lan_cluster_hint: "Allow only explicitly paired local nodes. Requires configured nodes and encrypted transport; off by default.",
+    models_plan_button: "Compare plans",
+    models_plan_title: "Planner diagnostic",
+    models_plan_hint: "Read-only comparison of automatic placement profiles. No model weights or prompts are sent.",
+    models_plan_loading: "Comparing profiles…",
+    models_plan_empty: "No diagnostic available for this model.",
+    models_plan_feasible: "feasible",
+    models_plan_infeasible: "not feasible",
+    models_plan_experimental: "experimental",
+    models_plan_error: "diagnostic error",
     inference_gpu: "GPU (CUDA)",
     inference_cpu: "CPU only",
     theme: "Theme",
@@ -1984,6 +2006,17 @@ const FR: UiStrings = UiStrings {
     inference_mode: "Inférence",
     adaptive_planner: "Inférence adaptative (expérimental)",
     adaptive_planner_hint: "Choisit automatiquement le placement du modèle. S’applique au prochain chargement ; déchargez puis rechargez un modèle actif pour appliquer maintenant.",
+    lan_cluster: "Cluster LAN (expérimental)",
+    lan_cluster_hint: "Autorise uniquement les nœuds locaux explicitement appairés. Nécessite des nœuds configurés et un transport chiffré ; désactivé par défaut.",
+    models_plan_button: "Comparer les plans",
+    models_plan_title: "Diagnostic du planner",
+    models_plan_hint: "Comparaison en lecture seule des profils de placement. Aucun poids ni prompt n’est envoyé.",
+    models_plan_loading: "Comparaison des profils…",
+    models_plan_empty: "Aucun diagnostic disponible pour ce modèle.",
+    models_plan_feasible: "possible",
+    models_plan_infeasible: "impossible",
+    models_plan_experimental: "expérimental",
+    models_plan_error: "erreur de diagnostic",
     inference_gpu: "GPU (CUDA)",
     inference_cpu: "CPU seul",
     theme: "Thème",
@@ -2798,10 +2831,16 @@ mod tests {
         let t = strings("en");
         assert_eq!(roster_tool_label(&t, "notes.create"), "Create note");
         assert!(!roster_tool_label(&t, "notes.create").contains('.'));
-        assert_eq!(roster_tool_label(&t, "device.camera.capture"), "Webcam photo");
+        assert_eq!(
+            roster_tool_label(&t, "device.camera.capture"),
+            "Webcam photo"
+        );
         let t_fr = strings("fr");
         assert_eq!(roster_tool_label(&t_fr, "notes.create"), "Créer une note");
-        assert_eq!(roster_tool_label(&t_fr, "device.camera.capture"), "Photo webcam");
+        assert_eq!(
+            roster_tool_label(&t_fr, "device.camera.capture"),
+            "Photo webcam"
+        );
         assert_eq!(t_fr.agents_skills, "Compétences");
     }
 

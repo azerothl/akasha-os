@@ -67,10 +67,7 @@ pub(crate) fn parse_deep_plan_command(text: &str) -> Option<DeepPlanCommand> {
     None
 }
 
-pub(crate) fn apply_command_to_attachment(
-    att: &mut ChatAttachment,
-    cmd: &DeepPlanCommand,
-) -> bool {
+pub(crate) fn apply_command_to_attachment(att: &mut ChatAttachment, cmd: &DeepPlanCommand) -> bool {
     let ChatAttachment::DeepPlan {
         expand_step_ids,
         show_logs_step_id,
@@ -144,9 +141,10 @@ pub(crate) fn collapse_duplicate_deep_plans(chat: &mut Vec<ChatLine>) {
             }
         }
         if remove_atts {
-            let only_deep = line.attachments.iter().all(|a| {
-                matches!(a, ChatAttachment::DeepPlan { .. })
-            });
+            let only_deep = line
+                .attachments
+                .iter()
+                .all(|a| matches!(a, ChatAttachment::DeepPlan { .. }));
             if only_deep {
                 drop_idx.push(i);
             }
@@ -169,17 +167,22 @@ pub(crate) fn upsert_deep_plan_line(
         plan.title.as_str()
     };
     let content = format!("📋 Plan Deep Thinking (v{}) — {title}", plan.version);
-    let target = chat.iter().enumerate().rev().find(|(_, line)| {
-        line.attachments.iter().any(|a| {
-            matches!(
-                a,
-                ChatAttachment::DeepPlan { plan_id, .. } if plan_id == &plan.id
-            ) || matches!(
-                a,
-                ChatAttachment::DeepPlan { agent_id: aid, .. } if aid == agent_id
-            )
+    let target = chat
+        .iter()
+        .enumerate()
+        .rev()
+        .find(|(_, line)| {
+            line.attachments.iter().any(|a| {
+                matches!(
+                    a,
+                    ChatAttachment::DeepPlan { plan_id, .. } if plan_id == &plan.id
+                ) || matches!(
+                    a,
+                    ChatAttachment::DeepPlan { agent_id: aid, .. } if aid == agent_id
+                )
+            })
         })
-    }).map(|(i, _)| i);
+        .map(|(i, _)| i);
 
     if let Some(idx) = target {
         let line = &mut chat[idx];
@@ -273,10 +276,14 @@ fn draw_step(
     show_logs_step_id: Option<&str>,
     parent_expanded: bool,
 ) {
-    let force = expand_step_ids.iter().any(|id| id == &step.id || step.id.starts_with(&format!("{id}.")));
+    let force = expand_step_ids
+        .iter()
+        .any(|id| id == &step.id || step.id.starts_with(&format!("{id}.")));
     if !parent_expanded && !force && depth > 0 {
         // When only a subtree is requested, still show ancestors of forced ids
-        let ancestor = expand_step_ids.iter().any(|id| id.starts_with(&format!("{}.", step.id)) || id == &step.id);
+        let ancestor = expand_step_ids
+            .iter()
+            .any(|id| id.starts_with(&format!("{}.", step.id)) || id == &step.id);
         if !ancestor {
             return;
         }

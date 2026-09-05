@@ -336,6 +336,79 @@ pub struct ModelIdRequest {
     pub model_id: String,
 }
 
+/// Read-only request for comparing the adaptive planner profiles.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelPlanRequest {
+    pub model_id: String,
+    /// Zero lets modeld use its configured default context.
+    #[serde(default)]
+    pub kv_tokens: u32,
+}
+
+/// Transport-neutral diagnostic row returned by `model.plan`.
+///
+/// The model daemon maps its internal placement enums to strings here so UI
+/// clients do not need a dependency on the planner crate.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelPlanDiagnostic {
+    pub requested_profile: String,
+    pub backend: String,
+    pub quantization: String,
+    pub placement: String,
+    pub kv_cache: String,
+    pub kv_tokens: u32,
+    pub speculative: String,
+    pub thermal_policy: String,
+    pub experimental: bool,
+    #[serde(default)]
+    pub feasible: Option<bool>,
+    #[serde(default)]
+    pub placement_summary: Option<String>,
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
+/// Experimental LAN cluster controls are explicit and disabled by default.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanClusterPlanRequest {
+    pub work_id: String,
+    pub model_id: String,
+    pub shard_ids: Vec<u32>,
+    #[serde(default)]
+    pub kv_tokens: u32,
+    #[serde(default)]
+    pub allow_sensitive_data: bool,
+    pub encrypted_transport: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanClusterJobRequest {
+    pub work_id: String,
+    #[serde(default)]
+    pub node_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanClusterAssignment {
+    pub node_id: String,
+    pub shard_ids: Vec<u32>,
+    pub kv_tokens: u32,
+    pub encrypted_transport: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanClusterPlanResponse {
+    pub work_id: String,
+    pub state: String,
+    pub assignments: Vec<LanClusterAssignment>,
+    #[serde(default)]
+    pub unassigned_shards: Vec<u32>,
+    #[serde(default)]
+    pub reassigned_shards: Vec<u32>,
+    #[serde(default)]
+    pub cancelled_nodes: Vec<String>,
+}
+
 /// Métriques live d'un modèle (`model.metrics`, F-PLC-08, F-OBS-02).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelMetrics {

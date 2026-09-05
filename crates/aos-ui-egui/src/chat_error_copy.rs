@@ -33,9 +33,9 @@ pub(crate) fn leaks_filesystem_path(msg: &str) -> bool {
     }
     // Windows drive letter (e.g. `C:\Users\...`).
     let bytes = msg.as_bytes();
-    bytes.windows(2).any(|w| {
-        w[0].is_ascii_alphabetic() && w[1] == b':'
-    })
+    bytes
+        .windows(2)
+        .any(|w| w[0].is_ascii_alphabetic() && w[1] == b':')
 }
 
 /// Map a raw runtime error to localized chat chrome copy (no path leaks).
@@ -63,10 +63,7 @@ mod tests {
     #[test]
     fn sanitize_replaces_path_with_i18n_load_fail() {
         let t = crate::i18n::strings("fr");
-        let out = user_visible_chat_error(
-            &t,
-            "poids introuvables: C:\\share\\models\\foo.gguf",
-        );
+        let out = user_visible_chat_error(&t, "poids introuvables: C:\\share\\models\\foo.gguf");
         assert_eq!(out, t.chat_load_fail_message);
         assert!(!out.contains("gguf"));
         assert!(!out.contains('\\'));

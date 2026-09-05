@@ -42,7 +42,8 @@ impl UiApp {
 
     pub(crate) fn on_notes_saved(&mut self, path: String, slug: String, title: String) {
         let t = i18n::strings(&self.prefs.language);
-        self.workspace_ui.mark_note_saved(path, slug, title, t.notes_status_saved);
+        self.workspace_ui
+            .mark_note_saved(path, slug, title, t.notes_status_saved);
         if !self.workspace_ui.notes.notes.is_empty() {
             self.scenario_ui.note_human = true;
         }
@@ -64,7 +65,6 @@ impl UiApp {
 
     pub(crate) fn on_tasks_listed(&mut self, tasks: Vec<TaskItem>) {
         let t = i18n::strings(&self.prefs.language);
-        self.workspace_ui
-            .apply_tasks_listed(tasks, t.tasks_count);
+        self.workspace_ui.apply_tasks_listed(tasks, t.tasks_count);
     }
 }

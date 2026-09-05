@@ -25,7 +25,10 @@ impl SecurityUiState {
         self.caps_holder = holder;
     }
 
-    pub(crate) fn set_device_permissions(&mut self, permissions: Vec<aos_proto::DevicePermissionInfo>) {
+    pub(crate) fn set_device_permissions(
+        &mut self,
+        permissions: Vec<aos_proto::DevicePermissionInfo>,
+    ) {
         self.device_permissions = permissions;
     }
 

@@ -213,6 +213,24 @@ impl BackendRegistry {
             });
         }
         if allow_experimental {
+            if hw.remote_nodes > 0 {
+                backends.push(BackendDescriptor {
+                    kind: BackendKind::Lan,
+                    name: "lan/paired-cluster".into(),
+                    quantizations: vec![Quantization::F16, Quantization::Q4],
+                    gemm: true,
+                    gemv: true,
+                    batching: true,
+                    kv_cache: true,
+                    memory_cost_factor: 1.1,
+                    latency_factor: 1.35,
+                    maturity: 0,
+                    experimental: true,
+                    // The coordinator is available, but no network transport
+                    // is executable until the authenticated adapter is wired.
+                    executable: false,
+                });
+            }
             if hw.npu.is_some() {
                 backends.push(BackendDescriptor {
                     kind: BackendKind::Npu,

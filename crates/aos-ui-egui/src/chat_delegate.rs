@@ -13,7 +13,11 @@ use std::sync::Arc;
 fn chat_action_is_self_tool(action: &str) -> bool {
     matches!(
         action,
-        "module.scaffold" | "module.package" | "module.install" | "module.uninstall" | "skill.create"
+        "module.scaffold"
+            | "module.package"
+            | "module.install"
+            | "module.uninstall"
+            | "skill.create"
     )
 }
 
@@ -25,7 +29,8 @@ pub(crate) fn user_wants_deep_thinking(text: &str) -> bool {
     }
     if let Ok(v) = serde_json::from_str::<serde_json::Value>(t) {
         if let Some(mode) = v.get("mode").and_then(|m| m.as_str()) {
-            if mode.eq_ignore_ascii_case("deep_thinking") || mode.eq_ignore_ascii_case("deep-thinking")
+            if mode.eq_ignore_ascii_case("deep_thinking")
+                || mode.eq_ignore_ascii_case("deep-thinking")
             {
                 return true;
             }
@@ -37,13 +42,10 @@ pub(crate) fn user_wants_deep_thinking(text: &str) -> bool {
             if let Some(end) = t.rfind('}') {
                 if end > start {
                     if let Ok(v) = serde_json::from_str::<serde_json::Value>(&t[start..=end]) {
-                        if v.get("mode")
-                            .and_then(|m| m.as_str())
-                            .is_some_and(|m| {
-                                m.eq_ignore_ascii_case("deep_thinking")
-                                    || m.eq_ignore_ascii_case("deep-thinking")
-                            })
-                        {
+                        if v.get("mode").and_then(|m| m.as_str()).is_some_and(|m| {
+                            m.eq_ignore_ascii_case("deep_thinking")
+                                || m.eq_ignore_ascii_case("deep-thinking")
+                        }) {
                             return true;
                         }
                     }
@@ -130,9 +132,7 @@ fn merge_named_args(dst: &mut Vec<String>, args: &serde_json::Value, key: &str) 
 /// Retire les outils incompatibles avec le kit canvas (vectoriel) vs pixel (diffusion).
 fn strip_delegate_kit_tools(tools: &mut Vec<String>, skills: &mut Vec<String>, use_canvas: bool) {
     if use_canvas {
-        tools.retain(|t| {
-            t.starts_with("canvas.") || t == "plan.update"
-        });
+        tools.retain(|t| t.starts_with("canvas.") || t == "plan.update");
         // A canvas author needs a compact geometric context. Notes/tasks and
         // their long skill instructions caused the model to archive the
         // drawing mid-run instead of continuing the composition.
@@ -196,8 +196,10 @@ fn push_device_capture_tools(tools: &mut Vec<String>, intent: DeviceCaptureInten
             tools.push(t.into());
         }
     }
-    if matches!(intent, DeviceCaptureIntent::Camera | DeviceCaptureIntent::Both)
-        && !tools.iter().any(|x| x == "device.camera.capture")
+    if matches!(
+        intent,
+        DeviceCaptureIntent::Camera | DeviceCaptureIntent::Both
+    ) && !tools.iter().any(|x| x == "device.camera.capture")
     {
         tools.push("device.camera.capture".into());
     }
@@ -230,22 +232,24 @@ pub(crate) fn device_vision_model_id(
             .find(|m| &m.id == id && m.has_vision)
             .map(|m| m.id.clone())
     });
-    selected_vision.or_else(|| canvas_model_id(None, available)).or(selected)
+    selected_vision
+        .or_else(|| canvas_model_id(None, available))
+        .or(selected)
 }
 
 /// A canvas critic needs pixels, not merely a capable model installed on disk.
 /// Keep an explicitly selected chat model untouched; only fill an absent model
 /// with a vision-capable model that is already resident.
-pub(crate) fn canvas_model_id(
-    selected: Option<String>,
-    available: &[ModelInfo],
-) -> Option<String> {
+pub(crate) fn canvas_model_id(selected: Option<String>, available: &[ModelInfo]) -> Option<String> {
     selected.or_else(|| {
         available
             .iter()
             .find(|model| {
                 model.has_vision
-                    && matches!(model.state, ModelState::Loaded | ModelState::PartiallyOffloaded)
+                    && matches!(
+                        model.state,
+                        ModelState::Loaded | ModelState::PartiallyOffloaded
+                    )
             })
             .map(|model| model.id.clone())
     })
@@ -314,8 +318,8 @@ pub(crate) fn chat_delegate_agent_spec(
             } else {
                 strip_delegate_kit_tools(&mut tools, &mut skills, false);
             }
-            if let Some(intent) = chat_device_capture_intent(user_text)
-                .or_else(|| chat_device_capture_intent(&brief))
+            if let Some(intent) =
+                chat_device_capture_intent(user_text).or_else(|| chat_device_capture_intent(&brief))
             {
                 push_device_capture_tools(&mut tools, intent);
             }
@@ -473,7 +477,10 @@ pub(crate) async fn spawn_chat_delegate_agent(
             .await
             .map(|list| aos_agent::tools::canvas_tools_from_module_list(&list))
             .unwrap_or_default();
-        req.system_prompt = Some(chat_canvas::canvas_agent_system_prompt(canvas_aspect, &exported));
+        req.system_prompt = Some(chat_canvas::canvas_agent_system_prompt(
+            canvas_aspect,
+            &exported,
+        ));
     }
     req.goal = Some(AgentGoal {
         statement: goal_statement.clone(),
@@ -512,9 +519,8 @@ pub(crate) async fn spawn_chat_delegate_agent(
         req.caps.push("device.mic.capture".into());
     }
     req.gate_mode = crate::prefs::load_preferences().agent_gate_mode.clone();
-    let wants_deep = deep_thinking
-        || user_wants_deep_thinking(&user_text)
-        || user_wants_deep_thinking(&brief);
+    let wants_deep =
+        deep_thinking || user_wants_deep_thinking(&user_text) || user_wants_deep_thinking(&brief);
     if wants_deep {
         apply_deep_thinking_mode(&mut req, &goal_statement);
     }
@@ -604,8 +610,9 @@ pub(crate) async fn spawn_document_prep_agent(
     ));
     req.goal = Some(AgentGoal {
         statement: goal.clone(),
-        success_criteria: vec!["Structured markdown under /downloads/ with footnoted sources"
-            .into()],
+        success_criteria: vec![
+            "Structured markdown under /downloads/ with footnoted sources".into(),
+        ],
         max_steps,
         max_subagents: 0,
         timeout_secs: 3600,
@@ -685,9 +692,10 @@ fn chat_agent_kit_ex(
         }
     }
     if (lower.contains("task") || lower.contains("tâche") || lower.contains("todo"))
-        && !skills.iter().any(|s| s == "tasks") {
-            skills.push("tasks".into());
-        }
+        && !skills.iter().any(|s| s == "tasks")
+    {
+        skills.push("tasks".into());
+    }
     if lower.contains("recherch")
         || lower.contains("web")
         || lower.contains("search")
@@ -709,9 +717,10 @@ fn chat_agent_kit_ex(
         || lower.contains("speak")
         || lower.contains("wav")
         || lower.contains("vocal"))
-        && !tools.iter().any(|x| x == "media.audio.generate") {
-            tools.push("media.audio.generate".into());
-        }
+        && !tools.iter().any(|x| x == "media.audio.generate")
+    {
+        tools.push("media.audio.generate".into());
+    }
     if !chat_canvas::chat_user_wants_explicit_canvas(task)
         && !canvas_open
         && chat_device_capture_intent(task).is_none()
@@ -720,9 +729,10 @@ fn chat_agent_kit_ex(
             || lower.contains("illustration")
             || lower.contains("diffusion")
             || chat_canvas::chat_user_has_draw_wording(task))
-        && !tools.iter().any(|x| x == "media.image.generate") {
-            tools.push("media.image.generate".into());
-        }
+        && !tools.iter().any(|x| x == "media.image.generate")
+    {
+        tools.push("media.image.generate".into());
+    }
     if canvas_open || chat_canvas::chat_user_wants_explicit_canvas(task) {
         for t in aos_agent::tools::filter_canvas_tool_ids(canvas_exported) {
             if !tools.iter().any(|x| x == &t) {

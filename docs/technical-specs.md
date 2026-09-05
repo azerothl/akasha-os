@@ -425,6 +425,30 @@ request on either low acceptance (<25%) or an observed per-token verification
 cost more than 10% above sampled standard decoding. This is a local,
 reversible safeguard; no draft weights or prompts are sent elsewhere.
 
+#### 3.5.11 LAN cluster gate (experimental)
+
+The first LAN tranche is a fail-closed coordinator, not an implicit discovery
+service. `ModeldConfig.lan_cluster` contains an explicit node inventory; each
+node must already have `trust: paired`, a private/link-local address and a
+fingerprint. The UI toggle **Settings → Models → LAN cluster (experimental)**
+is persisted in `var/run/preferences.json` and gates the configured inventory.
+It is disabled by default.
+
+`aos-placement::LanCluster` partitions declared weight shards across paired
+nodes and retains a job state. The model daemon exposes the internal
+`model.cluster.plan`, `model.cluster.recover` and `model.cluster.cancel`
+services. Every plan requires encrypted transport; sensitive work additionally
+requires the node capability `sensitive-data`. A lost node moves the job to
+`degraded` and redistributes its shards to surviving paired nodes, or marks it
+`failed` when none remain. Cancellation returns every node that must receive a
+cancel signal.
+
+This tranche performs policy and state transitions only: it does not open a
+LAN listener, discover peers, copy weights, route tokens or transmit KV data.
+An authenticated LAN transport must be added before enabling execution, and
+must consume only the coordinator's assignments. There is no Internet
+fallback and no automatic sharing of prompts or model data.
+
 ### 3.6 Inference Scheduler
 
 Features :
@@ -903,6 +927,9 @@ If step 3 partially fails → degraded mode with clear messages; direct shell re
 | `model.list` | List of registry models |
 | `model.inspect` | Metadata + current placement |
 | `model.plan` | Read-only comparison of automatic and explicit placement profiles |
+| `model.cluster.plan` | Experimental paired-LAN shard plan; encrypted transport required |
+| `model.cluster.recover` | Reassign shards after an explicitly reported node loss |
+| `model.cluster.cancel` | Mark a LAN job cancelled and return cancellation targets |
 | `model.load` | Charge with investment profile |
 | `model.unload` | Frees resources |
 | `model.set_placement` | Plan manuel / profil |
