@@ -313,10 +313,24 @@ impl UiApp {
                             if let Some(draft) = mm.draft_accept {
                                 metric_reading(ui, t.metrics_draft, Some(format!("{draft:.1}")));
                             }
+                            if let Some(rate) = mm.draft_acceptance_rate {
+                                metric_reading(
+                                    ui,
+                                    t.metrics_draft_rate,
+                                    Some(format!("{:.0}%", rate * 100.0)),
+                                );
+                            }
                             if let Some(prefix) = mm.prefix_hit.filter(|tokens| *tokens > 0) {
                                 metric_reading(ui, t.metrics_prefix, Some(prefix.to_string()));
                             }
                         });
+                        if mm.draft_disabled {
+                            let reason = mm.draft_disable_reason.as_deref().unwrap_or("adaptive");
+                            ui.colored_label(
+                                colors.warning,
+                                format!("{}: {reason}", t.metrics_draft_disabled),
+                            );
+                        }
                     }
 
                     ui.horizontal_wrapped(|ui| {

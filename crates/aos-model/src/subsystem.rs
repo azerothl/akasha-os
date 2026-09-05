@@ -20,7 +20,54 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex as StdMutex};
 use tokio::sync::{mpsc, oneshot};
 
-const PREFIX_SPEC_PRIORITY: u8 = 2;
+const LONG_REASONING_MIN_TOKENS: u32 = 384;
+
+fn classify_workload(messages: &[(String, String)], priority: u8, max_tokens: u32) -> WorkloadKind {
+    if priority == 0 {
+        WorkloadKind::Batch
+    } else if messages
+        .iter()
+        .any(|(role, _)| matches!(role.as_str(), "tool" | "function"))
+    {
+        WorkloadKind::AgentTools
+    } else if max_tokens >= LONG_REASONING_MIN_TOKENS {
+        WorkloadKind::LongReasoning
+    } else {
+        WorkloadKind::Chat
+    }
+}
+
+fn should_use_lookup_speculation(
+    configured: &str,
+    prefix_enabled: bool,
+    workload: WorkloadKind,
+    priority: u8,
+    min_priority: u8,
+    has_vision: bool,
+) -> bool {
+    if !prefix_enabled || has_vision {
+        return false;
+    }
+    match configured {
+        "off" => false,
+        "on" => !matches!(workload, WorkloadKind::Batch),
+        _ => {
+            priority >= min_priority
+                && matches!(
+                    workload,
+                    WorkloadKind::LongReasoning | WorkloadKind::AgentTools
+                )
+        }
+    }
+}
+
+fn speculative_mode_name(workload: WorkloadKind) -> &'static str {
+    match workload {
+        WorkloadKind::LongReasoning => "speculative-long-reasoning",
+        WorkloadKind::AgentTools => "speculative-agent-tools",
+        _ => "speculative",
+    }
+}
 
 /// Snapshot KV chaud pour prefix cache / migrate E18 (E20).
 struct WarmPrefix {
@@ -67,7 +114,10 @@ pub struct ModelRuntime {
     pub est_tok_s: Option<f64>,
     /// E20 : moyenne tokens acceptés / pas speculative.
     pub last_draft_accept: Option<f64>,
+    pub last_draft_acceptance_rate: Option<f64>,
+    pub last_draft_tokens_per_step: Option<f64>,
     pub last_draft_disabled: bool,
+    pub last_draft_disable_reason: Option<String>,
     pub last_draft_verify_ms: Option<f64>,
     /// E20 : tokens de préfixe réutilisés au dernier C1.
     pub last_prefix_hit: Option<u32>,
@@ -103,7 +153,10 @@ impl ModelRuntime {
             last_tok_s: None,
             est_tok_s: None,
             last_draft_accept: None,
+            last_draft_acceptance_rate: None,
+            last_draft_tokens_per_step: None,
             last_draft_disabled: false,
+            last_draft_disable_reason: None,
             last_draft_verify_ms: None,
             last_prefix_hit: None,
             last_inference_mode: None,
@@ -960,19 +1013,21 @@ impl ModelSubsystem {
                 let abort_flag = job.abort.clone();
                 let pause_flag = job.pause.clone();
                 let optim_c1 = optim.clone();
+                let workload =
+                    classify_workload(&job.messages, job.priority, job.params.max_tokens);
                 let result = match ctx {
                     Some(ctx) => {
                         tokio::task::spawn_blocking(move || {
                             let mut guard = ctx.lock().unwrap();
                             let prefix_enabled = optim_c1.prefix_cache != "off";
-                            let use_prefix_spec = match optim_c1.speculation.as_str() {
-                                "off" => false,
-                                "on" => true,
-                                _ => {
-                                    job.priority
-                                        >= optim_c1.min_spec_priority.max(PREFIX_SPEC_PRIORITY)
-                                }
-                            } && prefix_enabled;
+                            let use_prefix_spec = should_use_lookup_speculation(
+                                &optim_c1.speculation,
+                                prefix_enabled,
+                                workload,
+                                job.priority,
+                                optim_c1.min_spec_priority,
+                                guard.has_vision() || !job.images.is_empty(),
+                            );
                             if use_prefix_spec && guard.seq0_tokens().is_empty() {
                                 if let Some(w) = warm {
                                     let _ = guard.state_set(&w.state, Some(w.tokens));
@@ -1032,7 +1087,7 @@ impl ModelSubsystem {
                             } else {
                                 None
                             };
-                            (res, job, warm_out, gen_text)
+                            (res, job, warm_out, gen_text, workload)
                         })
                         .await
                     }
@@ -1041,6 +1096,7 @@ impl ModelSubsystem {
                         job,
                         None,
                         String::new(),
+                        workload,
                     )),
                 };
                 {
@@ -1050,7 +1106,7 @@ impl ModelSubsystem {
                     }
                 }
                 match result {
-                    Ok((res, job, warm_out, gen_text)) => {
+                    Ok((res, job, warm_out, gen_text, workload)) => {
                         if let Some(w) = warm_out {
                             let mut g = inner_c1.lock().unwrap();
                             if let Some(m) = g.models.get_mut(&mid) {
@@ -1092,11 +1148,18 @@ impl ModelSubsystem {
                                         m.last_ttft_ms = Some(stats.ttft_ms);
                                         m.last_tok_s = Some(stats.tok_s);
                                         m.last_draft_accept = stats.draft_accept_avg();
+                                        m.last_draft_acceptance_rate =
+                                            stats.draft_acceptance_rate();
+                                        m.last_draft_tokens_per_step =
+                                            stats.draft_tokens_per_step();
                                         m.last_draft_disabled = stats.draft_disabled;
+                                        m.last_draft_disable_reason = stats
+                                            .draft_disable_reason
+                                            .map(|reason| reason.as_str().to_string());
                                         m.last_draft_verify_ms = Some(stats.draft_verify_ms);
                                         m.last_prefix_hit = Some(stats.prefix_hit_tokens);
                                         m.last_inference_mode = Some(if stats.draft_steps > 0 {
-                                            "speculative".into()
+                                            speculative_mode_name(workload).into()
                                         } else {
                                             "standard".into()
                                         });
@@ -1622,6 +1685,11 @@ impl ModelSubsystem {
                     m.inference_plan = None;
                     m.warm = None;
                     m.last_draft_accept = None;
+                    m.last_draft_acceptance_rate = None;
+                    m.last_draft_tokens_per_step = None;
+                    m.last_draft_disabled = false;
+                    m.last_draft_disable_reason = None;
+                    m.last_draft_verify_ms = None;
                     m.last_prefix_hit = None;
                     // Block a concurrent ensure_loaded from placing until sim is updated.
                     m.loading = true;
@@ -1770,6 +1838,8 @@ impl ModelSubsystem {
                 media_total_steps: m.media_total_steps,
                 last_step_s: m.last_step_s,
                 draft_accept: m.last_draft_accept,
+                draft_acceptance_rate: m.last_draft_acceptance_rate,
+                draft_tokens_per_step: m.last_draft_tokens_per_step,
                 prefix_hit: m.last_prefix_hit,
                 inference_mode: m.last_inference_mode.clone(),
                 adaptive_backend: m
@@ -1796,6 +1866,7 @@ impl ModelSubsystem {
                 kv_tokens: m.inference_plan.as_ref().map(|p| p.kv_tokens),
                 fallback_used: m.inference_plan.as_ref().is_some_and(|p| p.fallback_used),
                 draft_disabled: m.last_draft_disabled,
+                draft_disable_reason: m.last_draft_disable_reason.clone(),
                 draft_verify_ms: m.last_draft_verify_ms,
             })
             .collect();
@@ -1973,8 +2044,12 @@ fn resolve_mmproj_for_model(model_id: &str, weights_path: &std::path::Path) -> O
 
 #[cfg(test)]
 mod tests {
-    use super::{resolve_mmproj_for_model, resume_messages, should_use_vision_infer};
+    use super::{
+        classify_workload, resolve_mmproj_for_model, resume_messages,
+        should_use_lookup_speculation, should_use_vision_infer,
+    };
     use aos_llama::StopReason;
+    use aos_placement::WorkloadKind;
     use std::path::PathBuf;
 
     #[test]
@@ -2049,5 +2124,60 @@ mod tests {
         ];
         let same = resume_messages(&msgs, "");
         assert_eq!(same, msgs);
+    }
+
+    #[test]
+    fn auto_speculation_is_reserved_for_long_or_tool_workloads() {
+        let chat = vec![("user".into(), "bonjour".into())];
+        let tools = vec![
+            ("user".into(), "cherche".into()),
+            ("tool".into(), "résultat".into()),
+        ];
+        assert_eq!(classify_workload(&chat, 1, 64), WorkloadKind::Chat);
+        assert_eq!(
+            classify_workload(&chat, 2, 512),
+            WorkloadKind::LongReasoning
+        );
+        assert_eq!(classify_workload(&tools, 2, 64), WorkloadKind::AgentTools);
+        assert!(!should_use_lookup_speculation(
+            "auto",
+            true,
+            WorkloadKind::Chat,
+            4,
+            2,
+            false
+        ));
+        assert!(should_use_lookup_speculation(
+            "auto",
+            true,
+            WorkloadKind::LongReasoning,
+            2,
+            2,
+            false
+        ));
+        assert!(should_use_lookup_speculation(
+            "auto",
+            true,
+            WorkloadKind::AgentTools,
+            2,
+            2,
+            false
+        ));
+        assert!(!should_use_lookup_speculation(
+            "auto",
+            true,
+            WorkloadKind::AgentTools,
+            1,
+            2,
+            false
+        ));
+        assert!(!should_use_lookup_speculation(
+            "on",
+            true,
+            WorkloadKind::LongReasoning,
+            4,
+            2,
+            true
+        ));
     }
 }

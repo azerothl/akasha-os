@@ -409,6 +409,22 @@ decode tok/s estimate and RAM/VRAM/disk placement). It is not a substitute for
 a real-device benchmark: production calibration must separately collect real
 TTFT, p50/p95, sustained throughput, temperature and power on the target host.
 
+#### 3.5.10 Speculative decode policy
+
+The existing local prompt-lookup path is selected per request, without adding
+or changing a public intent. In `auto`, short chat stays on standard decoding;
+single long-reasoning and tool-loop requests may use lookup speculation when
+their priority meets `min_spec_priority`. Concurrent batches and vision remain
+on their existing paths. The prefix state is restored only for a compatible
+single request, so a tool result changes the rendered prefix before reuse.
+
+Each speculative request records proposed and accepted draft tokens, acceptance
+rate, accepted tokens per verification, verification time and its stop reason.
+After four verification steps, speculation is disabled for the rest of that
+request on either low acceptance (<25%) or an observed per-token verification
+cost more than 10% above sampled standard decoding. This is a local,
+reversible safeguard; no draft weights or prompts are sent elsewhere.
+
 ### 3.6 Inference Scheduler
 
 Features :

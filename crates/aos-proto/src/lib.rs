@@ -358,6 +358,12 @@ pub struct ModelMetrics {
     /// E20 : moyenne tokens acceptés / pas de verify speculative (C1).
     #[serde(default)]
     pub draft_accept: Option<f64>,
+    /// E20 : part des tokens draft acceptés par le modèle principal.
+    #[serde(default)]
+    pub draft_acceptance_rate: Option<f64>,
+    /// E20 : tokens draft acceptés par vérification.
+    #[serde(default)]
+    pub draft_tokens_per_step: Option<f64>,
     /// E20 : tokens de préfixe réutilisés au dernier C1.
     #[serde(default)]
     pub prefix_hit: Option<u32>,
@@ -384,6 +390,8 @@ pub struct ModelMetrics {
     pub fallback_used: bool,
     #[serde(default)]
     pub draft_disabled: bool,
+    #[serde(default)]
+    pub draft_disable_reason: Option<String>,
     #[serde(default)]
     pub draft_verify_ms: Option<f64>,
 }
