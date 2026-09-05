@@ -368,8 +368,10 @@ impl AdaptivePlanner {
         } else {
             requested_profile
         };
+        // Prompt-lookup is for single-stream jobs (chat, reasoning, tools).
+        // Batch N>1 stays on the continuous-batching path (E20 / P5.1).
         let speculative = if self.options.speculation
-            && !matches!(workload, WorkloadKind::Batch | WorkloadKind::Chat)
+            && !matches!(workload, WorkloadKind::Batch)
             && model.n_layers > 0
         {
             SpeculativeStrategy::PromptLookup
@@ -542,5 +544,52 @@ mod tests {
         assert_eq!(Quantization::parse("F16"), Some(Quantization::F16));
         assert_eq!(Quantization::parse("IQ4_XS"), Some(Quantization::Q4));
         assert_eq!(Quantization::parse("Qwen2.5 3B"), None);
+    }
+
+    #[test]
+    fn chat_enables_prompt_lookup_when_speculation_is_on() {
+        let planner =
+            AdaptivePlanner::new(HardwareProfile::reference_v1(), PlannerOptions::default());
+        let chat = planner.select(
+            &model_3b(),
+            PlacementProfile::Balanced,
+            WorkloadKind::Chat,
+            2048,
+            None,
+        );
+        assert_eq!(chat.speculative, SpeculativeStrategy::PromptLookup);
+        for workload in [WorkloadKind::LongReasoning, WorkloadKind::AgentTools] {
+            let plan = planner.select(
+                &model_3b(),
+                PlacementProfile::Balanced,
+                workload,
+                2048,
+                None,
+            );
+            assert_eq!(plan.speculative, SpeculativeStrategy::PromptLookup);
+        }
+        let batch = planner.select(
+            &model_3b(),
+            PlacementProfile::Balanced,
+            WorkloadKind::Batch,
+            2048,
+            None,
+        );
+        assert_eq!(batch.speculative, SpeculativeStrategy::Disabled);
+    }
+
+    #[test]
+    fn speculation_option_disables_prompt_lookup() {
+        let mut options = PlannerOptions::default();
+        options.speculation = false;
+        let planner = AdaptivePlanner::new(HardwareProfile::reference_v1(), options);
+        let plan = planner.select(
+            &model_3b(),
+            PlacementProfile::Balanced,
+            WorkloadKind::Chat,
+            2048,
+            None,
+        );
+        assert_eq!(plan.speculative, SpeculativeStrategy::Disabled);
     }
 }
