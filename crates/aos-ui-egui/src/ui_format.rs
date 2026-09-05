@@ -1,7 +1,7 @@
 //! Pure date, metric, byte-size, and memory-relation formatting helpers.
 
 use crate::i18n::UiStrings;
-use aos_proto::{MemHit, MemRelationKind, ModelMetrics};
+use aos_proto::{MemHit, MemRelationKind};
 use std::collections::HashMap;
 
 pub(crate) fn chrono_like_stamp() -> String {
@@ -68,12 +68,8 @@ pub(crate) fn parse_tz_offset_minutes(raw: &str) -> Option<i32> {
     if digits.len() < 3 {
         return None;
     }
-    let hours: i32 = digits[..digits.len().saturating_sub(2)]
-        .parse()
-        .ok()?;
-    let mins: i32 = digits[digits.len().saturating_sub(2)..]
-        .parse()
-        .ok()?;
+    let hours: i32 = digits[..digits.len().saturating_sub(2)].parse().ok()?;
+    let mins: i32 = digits[digits.len().saturating_sub(2)..].parse().ok()?;
     Some(sign * (hours * 60 + mins))
 }
 
@@ -84,7 +80,11 @@ pub(crate) fn local_day_index(ts_ms: u64, offset_minutes: i32) -> i64 {
 
 pub(crate) fn civil_from_day_index(days: i64) -> (i32, u32, u32) {
     let z = days + 719468;
-    let era = if z >= 0 { z / 146097 } else { (z - 146096) / 146097 };
+    let era = if z >= 0 {
+        z / 146097
+    } else {
+        (z - 146096) / 146097
+    };
     let doe = z - era * 146097;
     let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
     let y = (yoe + era * 400) as i32;
@@ -185,50 +185,6 @@ pub(crate) fn human_bytes(v: u64) -> String {
         format!("{:.1} MiB", v as f64 / MIB)
     } else {
         format!("{v} B")
-    }
-}
-
-pub(crate) fn format_model_infer_line(mm: &ModelMetrics, t: &UiStrings) -> String {
-    let vram = format!("{:.0} MiB", mm.vram_bytes as f64 / (1 << 20) as f64);
-    if mm.media_total_steps.is_some() || mm.media_step.is_some() {
-        let step = mm
-            .media_step
-            .map(|v| v.to_string())
-            .unwrap_or_else(|| "—".into());
-        let total = mm
-            .media_total_steps
-            .map(|v| v.to_string())
-            .unwrap_or_else(|| "—".into());
-        let step_s = mm
-            .last_step_s
-            .map(|v| format!("{v:.2}"))
-            .unwrap_or_else(|| "—".into());
-        format!(
-            "{} {}/{} · {} {} · {} {}",
-            t.metrics_step, step, total, t.metrics_step_s, step_s, t.metrics_vram, vram
-        )
-    } else {
-        let ttft = mm
-            .last_ttft_ms
-            .map(|v| format!("{v:.0} ms"))
-            .unwrap_or_else(|| "—".into());
-        let toks = mm
-            .last_tok_s
-            .map(|v| format!("{v:.1}"))
-            .unwrap_or_else(|| "—".into());
-        let mut line = format!(
-            "{} {} · {} {} · {} {}",
-            t.metrics_ttft, ttft, t.metrics_tok_s, toks, t.metrics_vram, vram
-        );
-        if let Some(d) = mm.draft_accept {
-            line.push_str(&format!(" · {} {d:.1}", t.metrics_draft));
-        }
-        if let Some(p) = mm.prefix_hit {
-            if p > 0 {
-                line.push_str(&format!(" · {} {p}", t.metrics_prefix));
-            }
-        }
-        line
     }
 }
 
