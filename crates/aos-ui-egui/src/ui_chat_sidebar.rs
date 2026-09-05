@@ -75,16 +75,16 @@ impl UiApp {
                     });
                 }
 
-                // Un seul scroll vertical en pur top_down : l'ordre visuel est
-                // l'ordre de déclaration (liste, séparateur, outils), hauteurs
-                // naturelles, aucun chevauchement possible. L'ancien montage
-                // bottom_up + hauteur calculée peignait le footer sur la liste,
-                // la raccourcissait au minimum et inversait l'ordre perçu.
-                let list_h = ui.available_height().max(80.0);
+                // Liste en scroll dédié + tiroir outils épinglé en bas : même
+                // avec 5000 sessions, le tiroir reste visible sans scroller
+                // toute la liste ; ouvert, son corps scrolle en interne sans
+                // manger la liste.
+                let footer_reserve = 64.0;
+                let sessions_h = (ui.available_height() - footer_reserve).max(120.0);
                 egui::ScrollArea::vertical()
-                    .id_salt("chat_sidebar_scroll")
+                    .id_salt("chat_sessions")
                     .auto_shrink([false, false])
-                    .max_height(list_h)
+                    .max_height(sessions_h)
                     .show(ui, |ui| {
                         ui.set_width(side_w);
                             let now = crate::ui_format::now_ms();
@@ -213,12 +213,25 @@ impl UiApp {
                                     });
                                 }
                             }
+                    });
+                // Tiroir épinglé en bas (un seul enfant dans le scope : aucun
+                // chevauchement possible, toujours visible).
+                ui.with_layout(
+                    egui::Layout::bottom_up(egui::Align::Min).with_cross_justify(true),
+                    |ui| {
                         ui.separator();
-                        // Outils Web/fichiers repliés par défaut, APRÈS la liste :
-                        // sessions garde l'espace, les utilitaires restent à un clic.
+                        // Outils Web/fichiers repliés par défaut, APRÈS la liste.
                         egui::CollapsingHeader::new(t.sidebar_web_files)
                             .default_open(false)
                             .show(ui, |ui| {
+                                // Corps borné en scroll interne : ouvert avec des
+                                // résultats, il ne repousse rien hors de vue.
+                                let body_h = (ui.available_height() - 8.0).max(80.0);
+                                egui::ScrollArea::vertical()
+                                    .id_salt("chat_sidebar_tools")
+                                    .auto_shrink([false, false])
+                                    .max_height(body_h)
+                                    .show(ui, |ui| {
                                 ui.add(
                                     egui::TextEdit::singleline(
                                         &mut self.chat_state.sidebar.web_query,
@@ -316,8 +329,10 @@ impl UiApp {
                                     let dir = aos_home().join("var/storage/data/downloads");
                                     open_os_folder(&dir);
                                 }
+                                    });
                             });
-                    });
+                    },
+                );
             },
         );
         // Popup de renommage : champ pleine largeur du popup, plus de
