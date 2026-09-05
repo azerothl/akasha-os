@@ -65,6 +65,16 @@ mod delegate_tests {
             canvas_model_id(Some("chosen-text".into()), &models).as_deref(),
             Some("chosen-text")
         );
+        assert_eq!(
+            crate::chat_delegate::device_vision_model_id(Some("text-loaded".into()), &models)
+                .as_deref(),
+            Some("vision-loaded")
+        );
+        assert_eq!(
+            crate::chat_delegate::device_vision_model_id(Some("vision-loaded".into()), &models)
+                .as_deref(),
+            Some("vision-loaded")
+        );
     }
 
     #[test]
@@ -201,6 +211,38 @@ mod delegate_tests {
     fn canvas_truncated_spawn_followup_does_not_delegate() {
         let out = r#"{"action":"agent.spawn","args":{"brief":"Génération..."#;
         assert!(chat_delegate_agent_spec("vas y", out, true, ASPECT, &full_canvas_exported()).is_none());
+    }
+
+    #[test]
+    fn webcam_request_delegates_with_device_tools_even_if_model_refuses() {
+        let refused = "La capacité de capture de webcam n'est pas disponible dans Preview.";
+        let spec = chat_delegate_agent_spec(
+            "regarde la webcam et dis-moi ce que tu vois",
+            refused,
+            false,
+            ASPECT,
+            &full_canvas_exported(),
+        )
+        .expect("webcam must force-delegate");
+        let (_brief, _skills, tools, prose) = spec;
+        assert!(tools.iter().any(|x| x == "device.camera.capture"));
+        assert!(tools.iter().any(|x| x == "device.enumerate"));
+        assert!(prose.to_lowercase().contains("webcam") || prose.contains("caméra"));
+        assert!(!tools.iter().any(|x| x == "media.image.generate"));
+    }
+
+    #[test]
+    fn microphone_request_delegates_with_mic_tool() {
+        let spec = chat_delegate_agent_spec(
+            "écoute-moi avec le microphone",
+            "Ok.",
+            false,
+            ASPECT,
+            &full_canvas_exported(),
+        )
+        .expect("mic must delegate");
+        let (_brief, _skills, tools, _) = spec;
+        assert!(tools.iter().any(|x| x == "device.mic.capture"));
     }
 
     #[test]

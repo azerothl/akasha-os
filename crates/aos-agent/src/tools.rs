@@ -144,6 +144,52 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
             backend: ToolBackend::Native,
             required_caps: vec!["media.generate".into(), "fs.write:/downloads/**".into()],
         },
+        ToolDesc {
+            name: "device.enumerate".into(),
+            description: "Lister les caméras et microphones disponibles (Windows). Préalable à device.camera.capture / device.mic.capture.".into(),
+            input_schema: serde_json::json!({"type":"object","properties":{}}),
+            backend: ToolBackend::Native,
+            required_caps: vec![],
+        },
+        ToolDesc {
+            name: "device.camera.capture".into(),
+            description: "Capturer une image PNG de la webcam. device_id optionnel (sinon première caméra). mode: once (défaut, une photo analysable) ou stream. Confirmation utilisateur requise. La PNG est jointe au tour vision suivant — décris ce que tu vois, n'invente pas que la webcam est indisponible.".into(),
+            input_schema: serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "device_id":{"type":"string","description":"id renvoyé par device.enumerate ; omis = première caméra"},
+                    "mode":{"type":"string","description":"once|stream"},
+                    "max_duration_ms":{"type":"integer"}
+                }
+            }),
+            backend: ToolBackend::Native,
+            required_caps: vec!["device.camera.capture".into()],
+        },
+        ToolDesc {
+            name: "device.mic.capture".into(),
+            description: "Capturer un extrait microphone (Windows). device_id optionnel. Confirmation requise. La transcription vocale (STT) n'est pas dans Preview — n'affirme pas entendre le contenu.".into(),
+            input_schema: serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "device_id":{"type":"string"},
+                    "mode":{"type":"string","description":"once|stream"},
+                    "max_duration_ms":{"type":"integer"}
+                }
+            }),
+            backend: ToolBackend::Native,
+            required_caps: vec!["device.mic.capture".into()],
+        },
+        ToolDesc {
+            name: "device.capture.stop".into(),
+            description: "Arrêter un flux device.camera.capture / device.mic.capture (mode stream). capture_id obligatoire.".into(),
+            input_schema: serde_json::json!({
+                "type":"object",
+                "properties":{"capture_id":{"type":"string"}},
+                "required":["capture_id"]
+            }),
+            backend: ToolBackend::Native,
+            required_caps: vec![],
+        },
         // Runtime
         ToolDesc {
             name: "plan.update".into(),
@@ -1091,10 +1137,13 @@ pub fn select_tools_mode(selected: &[String], extra: &[ToolDesc], deep: bool) ->
                 || t.name == "files.generate"
                 || t.name == "media.image.generate"
                 || t.name == "media.audio.generate"
+                || t.name.starts_with("device.")
         } else {
             // Mode restreint : always + ids / préfixes explicitement demandés
+            let device_selected = selected.iter().any(|s| s.starts_with("device."));
             always.contains(&t.name.as_str())
                 || selected.iter().any(|s| s == &t.name || t.name.starts_with(&format!("{s}.")))
+                || (device_selected && t.name.starts_with("device."))
         };
         if keep && !out.iter().any(|x| x.name == t.name) {
             out.push(t.clone());
@@ -1201,6 +1250,10 @@ pub fn canonicalize_tool_name(name: &str) -> String {
         "image.generate" | "img.generate" | "image.gen" | "sd.generate" => {
             "media.image.generate".into()
         }
+        "webcam" | "webcam.capture" | "camera.capture" | "camera.snap" | "camera.photo" => {
+            "device.camera.capture".into()
+        }
+        "mic.capture" | "microphone.capture" | "microphone" => "device.mic.capture".into(),
         other => other.to_string(),
     }
 }
@@ -1228,6 +1281,7 @@ pub fn reserved_tool_prefix(prefix: &str) -> bool {
             | "image"
             | "tts"
             | "mcp"
+            | "device"
     )
 }
 
@@ -1559,6 +1613,25 @@ mod tests {
         assert!(!is_module_fallback_candidate("tool.invoke:audio.generate"));
         assert!(is_module_fallback_candidate("notes.create"));
         let (kind, _, _) = classify_action("tool.invoke:audio.generate", &[], &[]);
+        assert_eq!(kind, "native");
+    }
+
+    #[test]
+    fn device_capture_tools_are_native_and_catalogued() {
+        assert_eq!(
+            canonicalize_tool_name("webcam.capture"),
+            "device.camera.capture"
+        );
+        assert_eq!(canonicalize_tool_name("camera.snap"), "device.camera.capture");
+        assert_eq!(canonicalize_tool_name("mic.capture"), "device.mic.capture");
+        assert!(!is_module_fallback_candidate("device.camera.capture"));
+        let tools = select_tools(&["device.camera.capture".into()], &[]);
+        assert!(tools.iter().any(|t| t.name == "device.camera.capture"));
+        assert!(tools.iter().any(|t| t.name == "device.enumerate"));
+        assert!(tools.iter().any(|t| t.name == "device.mic.capture"));
+        let permissive = select_tools(&[], &[]);
+        assert!(permissive.iter().any(|t| t.name == "device.camera.capture"));
+        let (kind, _, _) = classify_action("device.camera.capture", &[], &[]);
         assert_eq!(kind, "native");
     }
 

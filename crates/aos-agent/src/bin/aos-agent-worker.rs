@@ -16,6 +16,7 @@ use aos_agent::context_budget::{
     LoopVerdict, DEFAULT_N_CTX_HINT, MAX_INFER_STALL_RETRIES, MAX_OVERFLOW_INFER_RETRIES,
 };
 use aos_agent::persist;
+use aos_agent::device_tools::{capture_png_path_from_tool_result, invoke_device_tool};
 use aos_agent::canvas_scene::{
     agent_has_canvas_tools, begin_canvas_vision, canvas_action_near_duplicate_reason, canvas_critic_system_prompt,
     canvas_op_succeeded,
@@ -463,6 +464,7 @@ async fn main() {
     let mut terminal: Option<AgentState> = None;
     let mut loop_guard = LoopGuard::default();
     let mut last_canvas_scene_png: Option<String> = None;
+    let mut last_device_capture_png: Option<String> = None;
     let mut last_canvas_visual = None;
     let mut n_ctx_hint = DEFAULT_N_CTX_HINT;
 
@@ -710,6 +712,13 @@ async fn main() {
                 {
                     step_refs = merge_canvas_vision_refs(&step_refs, &png);
                 }
+            }
+        }
+        if let Some(ref png) = last_device_capture_png {
+            if session_model_has_vision(&bus, spec.model_id.as_deref()).await
+                && !step_refs.iter().any(|p| p == png)
+            {
+                step_refs.push(png.clone());
             }
         }
         let canvas_active = canvas_agent
@@ -987,6 +996,10 @@ async fn main() {
                             "net.connect:*".to_string()
                         } else if canonical.starts_with("media.") {
                             "media.generate".to_string()
+                        } else if canonical.starts_with("device.camera") {
+                            "device.camera.capture".to_string()
+                        } else if canonical.starts_with("device.mic") {
+                            "device.mic.capture".to_string()
                         } else if canonical.starts_with("fs.") {
                             "fs.write:**".to_string()
                         } else if canonical.contains('.') {
@@ -1029,6 +1042,11 @@ async fn main() {
                                 last_canvas_scene_png = Some(png);
                                 canvas_scene_changed = true;
                             }
+                        }
+                    }
+                    if canonicalize_tool_name(&action.action).starts_with("device.camera") {
+                        if let Some(path) = capture_png_path_from_tool_result(&outcome) {
+                            last_device_capture_png = Some(path);
                         }
                     }
                     let mut one_tool_result = outcome.clone();
@@ -1179,6 +1197,10 @@ async fn main() {
                         "net.connect:*".to_string()
                     } else if canonical.starts_with("media.") {
                         "media.generate".to_string()
+                    } else if canonical.starts_with("device.camera") {
+                        "device.camera.capture".to_string()
+                    } else if canonical.starts_with("device.mic") {
+                        "device.mic.capture".to_string()
                     } else if canonical.starts_with("fs.") {
                         "fs.write:**".to_string()
                     } else if canonical.contains('.') {
@@ -1221,6 +1243,11 @@ async fn main() {
                             last_canvas_scene_png = Some(png);
                             canvas_scene_changed = true;
                         }
+                    }
+                }
+                if canonicalize_tool_name(&action.action).starts_with("device.camera") {
+                    if let Some(path) = capture_png_path_from_tool_result(&outcome) {
+                        last_device_capture_png = Some(path);
                     }
                 }
                 tool_result = outcome.clone();
@@ -2206,7 +2233,15 @@ async fn execute_action(
                     ActResult::Continue(outcome)
                 }
                 Some(ToolBackend::Native) => {
-                    let outcome = invoke_native(bus, &agent_id, &caps, other, args).await;
+                    let outcome = invoke_native(
+                        bus,
+                        &agent_id,
+                        &caps,
+                        other,
+                        args,
+                        spec.session_id.as_deref(),
+                    )
+                    .await;
                     ActResult::Continue(outcome)
                 }
                 Some(ToolBackend::Mcp { server }) => {
@@ -3133,6 +3168,7 @@ async fn invoke_native(
     caps: &[String],
     tool: &str,
     args: &serde_json::Value,
+    session_id: Option<&str>,
 ) -> String {
     let actor = format!("agent:{agent_id}");
     match tool {
@@ -3746,6 +3782,9 @@ async fn invoke_native(
                 Ok(v) => v.to_string(),
                 Err(e) => format!("module.describe err: {e}"),
             }
+        }
+        "device.enumerate" | "device.camera.capture" | "device.mic.capture" | "device.capture.stop" => {
+            invoke_device_tool(bus, agent_id, tool, args, session_id).await
         }
         other => format!("natif non implémenté: {other}"),
     }

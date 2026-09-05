@@ -142,6 +142,97 @@ fn strip_delegate_kit_tools(tools: &mut Vec<String>, skills: &mut Vec<String>, u
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DeviceCaptureIntent {
+    Camera,
+    Microphone,
+    Both,
+}
+
+pub(crate) fn chat_device_capture_intent(text: &str) -> Option<DeviceCaptureIntent> {
+    let l = text.to_ascii_lowercase();
+    let camera = l.contains("webcam")
+        || l.contains("web cam")
+        || l.contains("la caméra")
+        || l.contains("ma caméra")
+        || l.contains("la camera")
+        || l.contains("ma camera")
+        || l.contains("my camera")
+        || l.contains("the camera")
+        || l.contains("use the camera")
+        || l.contains("utilise la cam")
+        || l.contains("utiliser la cam")
+        || l.contains("accéder à la cam")
+        || l.contains("acceder a la cam")
+        || l.contains("prends une photo")
+        || l.contains("prend une photo")
+        || l.contains("take a photo")
+        || l.contains("take a picture")
+        || l.contains("regarde-moi")
+        || l.contains("regarde moi")
+        || l.contains("look at me")
+        || l.contains("vois ce que je")
+        || l.contains("what do you see");
+    let mic = l.contains("microphone")
+        || l.contains("le micro")
+        || l.contains("au micro")
+        || l.contains("du micro")
+        || l.contains("écoute-moi")
+        || l.contains("ecoute-moi")
+        || l.contains("listen to me")
+        || l.contains("enregistre ma voix")
+        || l.contains("record my voice");
+    match (camera, mic) {
+        (true, true) => Some(DeviceCaptureIntent::Both),
+        (true, false) => Some(DeviceCaptureIntent::Camera),
+        (false, true) => Some(DeviceCaptureIntent::Microphone),
+        (false, false) => None,
+    }
+}
+
+fn push_device_capture_tools(tools: &mut Vec<String>, intent: DeviceCaptureIntent) {
+    for t in ["device.enumerate", "device.capture.stop"] {
+        if !tools.iter().any(|x| x == t) {
+            tools.push(t.into());
+        }
+    }
+    if matches!(intent, DeviceCaptureIntent::Camera | DeviceCaptureIntent::Both)
+        && !tools.iter().any(|x| x == "device.camera.capture")
+    {
+        tools.push("device.camera.capture".into());
+    }
+    if matches!(
+        intent,
+        DeviceCaptureIntent::Microphone | DeviceCaptureIntent::Both
+    ) && !tools.iter().any(|x| x == "device.mic.capture")
+    {
+        tools.push("device.mic.capture".into());
+    }
+}
+
+fn device_capture_ack(intent: DeviceCaptureIntent) -> String {
+    match intent {
+        DeviceCaptureIntent::Microphone => "Je lance un agent pour le microphone.".into(),
+        DeviceCaptureIntent::Camera | DeviceCaptureIntent::Both => {
+            "Je lance un agent pour la webcam.".into()
+        }
+    }
+}
+
+/// Prefer a loaded vision model when the chat model cannot see the captured PNG.
+pub(crate) fn device_vision_model_id(
+    selected: Option<String>,
+    available: &[ModelInfo],
+) -> Option<String> {
+    let selected_vision = selected.as_ref().and_then(|id| {
+        available
+            .iter()
+            .find(|m| &m.id == id && m.has_vision)
+            .map(|m| m.id.clone())
+    });
+    selected_vision.or_else(|| canvas_model_id(None, available)).or(selected)
+}
+
 /// A canvas critic needs pixels, not merely a capable model installed on disk.
 /// Keep an explicitly selected chat model untouched; only fill an absent model
 /// with a vision-capable model that is already resident.
@@ -223,6 +314,11 @@ pub(crate) fn chat_delegate_agent_spec(
             } else {
                 strip_delegate_kit_tools(&mut tools, &mut skills, false);
             }
+            if let Some(intent) = chat_device_capture_intent(user_text)
+                .or_else(|| chat_device_capture_intent(&brief))
+            {
+                push_device_capture_tools(&mut tools, intent);
+            }
             if self_tool {
                 for t in [
                     "module.scaffold",
@@ -245,6 +341,8 @@ pub(crate) fn chat_delegate_agent_spec(
                     "Je lance un agent pour créer le module.".into()
                 } else if use_canvas {
                     "Je lance un agent pour dessiner sur le canvas.".into()
+                } else if let Some(intent) = chat_device_capture_intent(user_text) {
+                    device_capture_ack(intent)
                 } else {
                     "Je lance un agent pour cette tâche.".into()
                 };
@@ -294,6 +392,16 @@ pub(crate) fn chat_delegate_agent_spec(
             "Je lance un agent pour générer l'image.".into(),
         ));
     }
+    if let Some(intent) = chat_device_capture_intent(user_text) {
+        let (skills, mut tools) = chat_delegate_kit(user_text, canvas_open, false, canvas_exported);
+        push_device_capture_tools(&mut tools, intent);
+        return Some((
+            user_text.to_string(),
+            skills,
+            tools,
+            device_capture_ack(intent),
+        ));
+    }
     None
 }
 
@@ -330,6 +438,7 @@ pub(crate) async fn spawn_chat_delegate_agent(
     deep_thinking: bool,
 ) {
     let canvas_delegate = tools.iter().any(|t| t.starts_with("canvas."));
+    let device_camera_delegate = tools.iter().any(|t| t == "device.camera.capture");
     let goal_statement = if canvas_delegate {
         user_text.trim().to_string()
     } else {
@@ -349,6 +458,12 @@ pub(crate) async fn spawn_chat_delegate_agent(
             .await
             .unwrap_or_default();
         canvas_model_id(model_id.clone(), &available)
+    } else if device_camera_delegate {
+        let available: Vec<ModelInfo> = bus
+            .call("model.list", &(), vec![])
+            .await
+            .unwrap_or_default();
+        device_vision_model_id(model_id.clone(), &available)
     } else {
         model_id.clone()
     };
@@ -389,6 +504,12 @@ pub(crate) async fn spawn_chat_delegate_agent(
     if req.tools.iter().any(|t| t.starts_with("canvas.")) {
         req.caps.push("tool.invoke:canvas".into());
         req.caps.push("fs.write:/downloads/**".into());
+    }
+    if req.tools.iter().any(|t| t == "device.camera.capture") {
+        req.caps.push("device.camera.capture".into());
+    }
+    if req.tools.iter().any(|t| t == "device.mic.capture") {
+        req.caps.push("device.mic.capture".into());
     }
     req.gate_mode = crate::prefs::load_preferences().agent_gate_mode.clone();
     let wants_deep = deep_thinking
@@ -593,6 +714,7 @@ fn chat_agent_kit_ex(
         }
     if !chat_canvas::chat_user_wants_explicit_canvas(task)
         && !canvas_open
+        && chat_device_capture_intent(task).is_none()
         && (lower.contains("image")
             || lower.contains("png")
             || lower.contains("illustration")
@@ -607,6 +729,9 @@ fn chat_agent_kit_ex(
                 tools.push(t);
             }
         }
+    }
+    if let Some(intent) = chat_device_capture_intent(task) {
+        push_device_capture_tools(&mut tools, intent);
     }
     (skills, tools)
 }

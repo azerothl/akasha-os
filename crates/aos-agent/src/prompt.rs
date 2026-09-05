@@ -57,6 +57,19 @@ pub fn compile_system_prompt(input: &PromptCompileInput<'_>) -> String {
                  **Interdit** `agent.spawn` / `agent.await` pour le même dessin."
             ));
         }
+        let has_device_tools = input.tools.iter().any(|t| t.name.starts_with("device."));
+        if has_device_tools {
+            parts.push(format!(
+                "## Capture caméra / micro\n\
+                 Session liée : `{sid}`. Omets `session_id` (le runtime le force).\n\
+                 Webcam : `device.enumerate` si besoin, puis `device.camera.capture` (mode once). \
+                 Une PNG est jointe au tour suivant — décris ce que tu vois. \
+                 **Interdit** de dire que la webcam ou l'analyse d'image est indisponible : \
+                 ces outils existent. Confirmation utilisateur (Allow once / Always / Deny).\n\
+                 Micro : `device.mic.capture` enregistre un extrait ; pas de STT dans Preview \
+                 — n'affirme pas transcrire la voix."
+            ));
+        }
     }
 
     // 3. Prompt utilisateur
@@ -332,5 +345,50 @@ mod tests {
         assert!(out.contains("Canvas de session"));
         assert!(out.contains("N'invente jamais"));
         assert!(!out.contains("Guide dessin canvas"));
+    }
+
+    #[test]
+    fn device_capture_binding_in_prompt() {
+        let spec = AgentSpec {
+            agent_id: "agent-1".into(),
+            goal: AgentGoal {
+                statement: "regarde la webcam".into(),
+                ..Default::default()
+            },
+            kind: Default::default(),
+            display_name: None,
+            persona_id: None,
+            system_prompt: None,
+            skills: vec![],
+            tools: vec!["device.camera.capture".into()],
+            mcp_servers: vec![],
+            documents: vec![],
+            caps: vec!["device.camera.capture".into()],
+            model_id: None,
+            parent_id: None,
+            session_id: Some("sess-cam".into()),
+            budget: AgentBudget::default(),
+            optimize_prompt: false,
+            gate_mode: "ask".into(),
+            origin: None,
+            cognitive_mode: aos_proto::CognitiveMode::Normal,
+        };
+        let tools = vec![ToolDesc {
+            name: "device.camera.capture".into(),
+            description: "photo webcam".into(),
+            input_schema: serde_json::json!({"type":"object"}),
+            backend: crate::tools::ToolBackend::Native,
+            required_caps: vec!["device.camera.capture".into()],
+        }];
+        let out = compile_system_prompt(&PromptCompileInput {
+            spec: &spec,
+            skills: &[],
+            tools: &tools,
+            doc_index: &[],
+        });
+        assert!(out.contains("sess-cam"));
+        assert!(out.contains("Capture caméra"));
+        assert!(out.contains("device.camera.capture"));
+        assert!(out.contains("indisponible"));
     }
 }

@@ -18,6 +18,7 @@ This is **not** the bootable OS. Target v1 requirements live in
 - **Focus and activity**: Canvas focus mode hides neighbouring panels; agent traces live in a resizable Activity panel; the bell opens the notification centre
 - **Session navigation**: background reloads no longer steal the active chat; `chat.session.set_pinned` / `set_archived` / `list_all` back the new chrome
 - **Settings search**: typing in Settings filters Me / Models / Trust and the expert folds
+- **Webcam / microphone**: chat can delegate a capture agent (`device.enumerate`, `device.camera.capture`, `device.mic.capture`); Windows writes a PNG the vision model can read after confirmation (Allow once / Always / Deny)
 
 ### What's new in 0.16.0
 
@@ -224,6 +225,8 @@ Slash commands:
 | `/canvas` | Toggle the shared vector drawing canvas for this session |
 
 **Chat canvas (vector strokes, live)** — session-scoped drawing surface (human + agents). Humans: Select (move / delete / align / rotate), Pan + scroll zoom, pen, line, spline, path (filled silhouette), rect, ellipse; per-op opacity, dashed strokes, linear gradient fills; named layers (hide / lock / opacity); grid and 0.01 snap; export PNG, SVG, or JSON; **import JSON sidecar** (round-trip). Agents: bundled WASM `canvas.*` (`stroke` / `path` / `rect` / `ellipse` / `move` / `delete` / `align` / `rotate` / `layer_*` / `get` / `export`). A CPU-only global vector validator checks geometry/topology every three mutations and before completion; vision remains optional. Flood-fill (`canvas.fill`) is raster-only on export — not a human toolbar tool. Document: `var/sessions/<id>/canvas.json`. Distinct from Image Studio and `/image`.
+
+**Webcam and microphone (issue #137)** — Windows Media Foundation capture through `device.enumerate` / `device.camera.capture` / `device.mic.capture`. A one-shot camera capture writes a PNG under `var/sessions/<session>/devices/` and the next agent turn attaches it for vision analysis. Confirmation is required (Allow once / Always / Deny); persistent grants are per agent + device + action. Linux/macOS return `UnsupportedPlatform` in this slice. Always-on STT is still out of scope.
 
 ---
 

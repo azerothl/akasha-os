@@ -129,12 +129,20 @@ impl DeviceCaptureBackend for WindowsMediaFoundationBackend {
         max_bytes: u64,
     ) -> Result<BackendCapture, DeviceCaptureError> {
         let started = std::time::Instant::now();
-        let sample = windows_sample(device, max_bytes)?;
+        let (sample, mime_type) = if device.kind == DeviceKind::Camera {
+            let png = windows_camera_png(device, max_bytes)?;
+            (png, "image/png".to_string())
+        } else {
+            (
+                windows_sample(device, max_bytes)?,
+                "application/octet-stream".to_string(),
+            )
+        };
         fs::write(output, &sample).map_err(|e| DeviceCaptureError::Backend(e.to_string()))?;
         Ok(BackendCapture {
             size_bytes: sample.len() as u64,
             duration_ms: started.elapsed().as_millis() as u64,
-            mime_type: "application/octet-stream".into(),
+            mime_type,
         })
     }
 
@@ -367,6 +375,175 @@ fn windows_sample(
     }
 }
 
+/// Convertit un tampon BGRA/BGRX (Media Foundation RGB32) en PNG.
+pub fn encode_bgra_png(
+    width: u32,
+    height: u32,
+    stride: usize,
+    bgra: &[u8],
+    flip_vertical: bool,
+) -> Result<Vec<u8>, DeviceCaptureError> {
+    if width == 0 || height == 0 {
+        return Err(DeviceCaptureError::Backend("frame webcam vide".into()));
+    }
+    let row = (width as usize).saturating_mul(4);
+    if stride < row {
+        return Err(DeviceCaptureError::Backend("stride RGB trop petit".into()));
+    }
+    let needed = stride.saturating_mul(height as usize);
+    if bgra.len() < needed {
+        return Err(DeviceCaptureError::Backend("buffer RGB trop petit".into()));
+    }
+    let mut img: image::RgbaImage = image::ImageBuffer::new(width, height);
+    for y in 0..height {
+        let src_y = if flip_vertical { height - 1 - y } else { y };
+        let start = src_y as usize * stride;
+        let row_bytes = &bgra[start..start + row];
+        for x in 0..width as usize {
+            let i = x * 4;
+            let b = row_bytes[i];
+            let g = row_bytes[i + 1];
+            let r = row_bytes[i + 2];
+            let a = row_bytes[i + 3];
+            img.put_pixel(
+                x as u32,
+                y,
+                image::Rgba([r, g, b, if a == 0 { 255 } else { a }]),
+            );
+        }
+    }
+    let mut out = Vec::new();
+    img.write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png)
+        .map_err(|e| DeviceCaptureError::Backend(e.to_string()))?;
+    Ok(out)
+}
+
+#[cfg(windows)]
+fn windows_camera_png(
+    device: &DeviceDescriptor,
+    max_bytes: u64,
+) -> Result<Vec<u8>, DeviceCaptureError> {
+    use std::ptr::null_mut;
+    use windows::Win32::Media::MediaFoundation::{
+        IMFActivate, IMFMediaType, MFCreateAttributes, MFCreateMediaType,
+        MFCreateSourceReaderFromMediaSource, MFEnumDeviceSources, MFShutdown, MFStartup,
+        MFSTARTUP_FULL, MFVideoFormat_RGB32, MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE,
+        MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID, MF_MT_DEFAULT_STRIDE, MF_MT_FRAME_SIZE,
+        MF_MT_MAJOR_TYPE, MF_MT_SUBTYPE, MF_SOURCE_READERF_ENDOFSTREAM,
+        MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, MF_SOURCE_READER_FIRST_VIDEO_STREAM, MF_VERSION,
+        MFMediaType_Video,
+    };
+    use windows::Win32::System::Com::{
+        CoInitializeEx, CoTaskMemFree, CoUninitialize, COINIT_MULTITHREADED,
+    };
+    unsafe {
+        CoInitializeEx(None, COINIT_MULTITHREADED)
+            .ok()
+            .map_err(mf_error)?;
+        MFStartup(MF_VERSION, MFSTARTUP_FULL).map_err(mf_error)?;
+        let result = (|| {
+            let mut attrs = None;
+            MFCreateAttributes(&mut attrs, 1).map_err(mf_error)?;
+            let attrs = attrs.ok_or_else(|| mf_error("attributs absents"))?;
+            attrs
+                .SetGUID(
+                    &MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE,
+                    &MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID,
+                )
+                .map_err(mf_error)?;
+            let mut raw: *mut Option<IMFActivate> = null_mut();
+            let mut count = 0u32;
+            MFEnumDeviceSources(&attrs, &mut raw, &mut count).map_err(mf_error)?;
+            let wanted_index = device
+                .id
+                .rsplit(':')
+                .next()
+                .and_then(|n| n.parse::<usize>().ok())
+                .unwrap_or(0);
+            let mut selected = None;
+            if !raw.is_null() {
+                let entries = std::slice::from_raw_parts_mut(raw, count as usize);
+                for (index, entry) in entries.iter_mut().enumerate() {
+                    if let Some(activate) = entry.take() {
+                        if index == wanted_index {
+                            selected = Some(activate);
+                            break;
+                        }
+                    }
+                }
+                CoTaskMemFree(Some(raw as *const _));
+            }
+            let activate =
+                selected.ok_or_else(|| DeviceCaptureError::DeviceAbsent(device.id.clone()))?;
+            let source: windows::Win32::Media::MediaFoundation::IMFMediaSource =
+                activate.ActivateObject().map_err(mf_error)?;
+            let mut reader_attrs = None;
+            MFCreateAttributes(&mut reader_attrs, 1).map_err(mf_error)?;
+            let reader_attrs = reader_attrs.ok_or_else(|| mf_error("attributs reader absents"))?;
+            reader_attrs
+                .SetUINT32(&MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, 1)
+                .map_err(mf_error)?;
+            let reader =
+                MFCreateSourceReaderFromMediaSource(&source, &reader_attrs).map_err(mf_error)?;
+            let stream = MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32;
+            reader.SetStreamSelection(stream, true).map_err(mf_error)?;
+            let media_type: IMFMediaType = MFCreateMediaType().map_err(mf_error)?;
+            media_type
+                .SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)
+                .map_err(mf_error)?;
+            media_type
+                .SetGUID(&MF_MT_SUBTYPE, &MFVideoFormat_RGB32)
+                .map_err(mf_error)?;
+            reader
+                .SetCurrentMediaType(stream, None, &media_type)
+                .map_err(mf_error)?;
+            let current = reader.GetCurrentMediaType(stream).map_err(mf_error)?;
+            let packed = current.GetUINT64(&MF_MT_FRAME_SIZE).map_err(mf_error)?;
+            let width = (packed >> 32) as u32;
+            let height = packed as u32;
+            let stride_attr = current.GetUINT32(&MF_MT_DEFAULT_STRIDE).unwrap_or(width * 4);
+            let stride_i = stride_attr as i32;
+            let flip = stride_i < 0;
+            let stride = stride_i.unsigned_abs() as usize;
+            let mut sample = None;
+            for _ in 0..45 {
+                let mut flags = 0u32;
+                sample = None;
+                reader
+                    .ReadSample(stream, 0, None, Some(&mut flags), None, Some(&mut sample))
+                    .map_err(mf_error)?;
+                if flags & MF_SOURCE_READERF_ENDOFSTREAM.0 as u32 != 0 {
+                    break;
+                }
+                if sample.is_some() {
+                    break;
+                }
+            }
+            let sample = sample.ok_or_else(|| {
+                DeviceCaptureError::Backend("sample webcam Media Foundation vide".into())
+            })?;
+            let buffer = sample.ConvertToContiguousBuffer().map_err(mf_error)?;
+            let mut ptr = null_mut();
+            let mut current_len = 0u32;
+            buffer
+                .Lock(&mut ptr, None, Some(&mut current_len))
+                .map_err(mf_error)?;
+            let raw = std::slice::from_raw_parts(ptr, current_len as usize);
+            let png = encode_bgra_png(width, height, stride.max(width as usize * 4), raw, flip);
+            buffer.Unlock().map_err(mf_error)?;
+            source.Shutdown().ok();
+            let png = png?;
+            if (png.len() as u64) > max_bytes {
+                return Err(DeviceCaptureError::QuotaExceeded("taille".into()));
+            }
+            Ok(png)
+        })();
+        MFShutdown().ok();
+        CoUninitialize();
+        result
+    }
+}
+
 pub fn default_backend() -> Arc<dyn DeviceCaptureBackend> {
     #[cfg(windows)]
     {
@@ -571,10 +748,11 @@ impl DeviceCaptureManager {
             now_ms(),
             self.next_id.fetch_add(1, Ordering::Relaxed)
         );
-        let ext = if req.kind == DeviceKind::Camera {
-            "bin"
-        } else {
-            "pcm"
+        let ext = match (req.kind, req.mode) {
+            (DeviceKind::Camera, CaptureMode::Once) => "png",
+            (DeviceKind::Microphone, CaptureMode::Once) => "pcm",
+            (DeviceKind::Camera, CaptureMode::Stream) => "bin",
+            (DeviceKind::Microphone, CaptureMode::Stream) => "pcm",
         };
         let output = session_dir.join(format!("{id}.{ext}"));
         // Réserve le fichier avant de lancer un flux asynchrone : la réponse
@@ -822,12 +1000,24 @@ impl DeviceCaptureBackend for FakeDeviceCaptureBackend {
 
     fn capture_once(
         &self,
-        _device: &DeviceDescriptor,
+        device: &DeviceDescriptor,
         output: &Path,
         max_bytes: u64,
     ) -> Result<BackendCapture, DeviceCaptureError> {
         if let Some(e) = &self.once_error {
             return Err(e.clone());
+        }
+        if device.kind == DeviceKind::Camera {
+            let px = [
+                0u8, 0, 255, 255, 0, 255, 0, 255, 255, 0, 0, 255, 255, 255, 255, 255,
+            ];
+            let png = encode_bgra_png(2, 2, 8, &px, false)?;
+            fs::write(output, &png).map_err(|e| DeviceCaptureError::Backend(e.to_string()))?;
+            return Ok(BackendCapture {
+                size_bytes: png.len() as u64,
+                duration_ms: 10,
+                mime_type: "image/png".into(),
+            });
         }
         let n = max_bytes.min(4096).max(1) as usize;
         let mut file =
@@ -929,8 +1119,20 @@ mod tests {
             )
             .unwrap();
         assert!(r.artifact.path.contains("devices"));
+        assert!(r.artifact.path.ends_with(".png"));
+        assert_eq!(r.artifact.mime_type, "image/png");
         assert_eq!(r.metadata.size_bytes, r.artifact.size_bytes);
         assert!(!serde_json::to_string(&r).unwrap().contains("A5"));
+        let bytes = fs::read(&r.artifact.path).unwrap();
+        assert_eq!(&bytes[..8], b"\x89PNG\r\n\x1a\n");
+    }
+
+    #[test]
+    fn encode_bgra_png_writes_valid_signature() {
+        let px = [0u8, 0, 255, 255, 255, 255, 255, 255];
+        let png = encode_bgra_png(2, 1, 8, &px, false).unwrap();
+        assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n");
+        assert!(png.len() > 8);
     }
 
     #[test]

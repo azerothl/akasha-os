@@ -5,6 +5,7 @@ use aos_proto::{
     FsListRequest, FsReadRequest, FsReadResponse, FsWriteRequest, ModuleInvokeRequest,
     ModuleInvokeResponse, WebBrowseRequest, WebBrowseResponse, WebSearchRequest, WebSearchResponse,
 };
+use crate::device_tools::invoke_device_tool;
 use crate::mcp::McpSession;
 use crate::tools::{
     canonicalize_tool_name, canvas_tool_denied_by_allowlist, is_module_fallback_candidate, normalize_tool_args, resolve_tool_backend,
@@ -92,6 +93,7 @@ pub async fn invoke_native_tool(
     caps: &[String],
     tool: &str,
     args: &serde_json::Value,
+    session_id: Option<&str>,
 ) -> String {
     let actor = format!("agent:{agent_id}");
     match tool {
@@ -196,6 +198,9 @@ pub async fn invoke_native_tool(
                 Err(e) => format!("web.browse err: {e}"),
             }
         }
+        "device.enumerate" | "device.camera.capture" | "device.mic.capture" | "device.capture.stop" => {
+            invoke_device_tool(bus, agent_id, tool, args, session_id).await
+        }
         other => format!("outil natif non supporté en salon: {other}"),
     }
 }
@@ -235,7 +240,9 @@ pub async fn execute_room_tool(
         None if is_module_fallback_candidate(name) => {
             invoke_module_tool(bus, agent_id, caps, name, args, trace_id, session_id).await
         }
-        Some(ToolBackend::Native) => invoke_native_tool(bus, agent_id, caps, name, args).await,
+        Some(ToolBackend::Native) => {
+            invoke_native_tool(bus, agent_id, caps, name, args, session_id).await
+        }
         Some(ToolBackend::Mcp { server }) => {
             if let Some(session) = mcp_sessions.get_mut(&server) {
                 match session.call_tool(name, args.clone()).await {

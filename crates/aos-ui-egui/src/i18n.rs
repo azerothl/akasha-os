@@ -561,6 +561,7 @@ pub struct UiStrings {
     pub agents_tool_family_web: &'static str,
     pub agents_tool_family_canvas: &'static str,
     pub agents_tool_family_agents: &'static str,
+    pub agents_tool_family_devices: &'static str,
     pub agents_tool_notes_create: &'static str,
     pub agents_tool_notes_list: &'static str,
     pub agents_tool_notes_read: &'static str,
@@ -590,6 +591,10 @@ pub struct UiStrings {
     pub agents_tool_agent_spawn: &'static str,
     pub agents_tool_agent_await: &'static str,
     pub agents_tool_plan_update: &'static str,
+    pub agents_tool_device_enumerate: &'static str,
+    pub agents_tool_device_camera_capture: &'static str,
+    pub agents_tool_device_mic_capture: &'static str,
+    pub agents_tool_device_capture_stop: &'static str,
     pub agents_mcp: &'static str,
     pub agents_mcp_empty: &'static str,
     pub agents_docs: &'static str,
@@ -1421,6 +1426,7 @@ const EN: UiStrings = UiStrings {
     agents_tool_family_web: "Web",
     agents_tool_family_canvas: "Canvas",
     agents_tool_family_agents: "Agents",
+    agents_tool_family_devices: "Camera / mic",
     agents_tool_notes_create: "Create note",
     agents_tool_notes_list: "List notes",
     agents_tool_notes_read: "Read note",
@@ -1450,6 +1456,10 @@ const EN: UiStrings = UiStrings {
     agents_tool_agent_spawn: "Spawn sub-agent",
     agents_tool_agent_await: "Await sub-agent",
     agents_tool_plan_update: "Update plan",
+    agents_tool_device_enumerate: "List devices",
+    agents_tool_device_camera_capture: "Webcam photo",
+    agents_tool_device_mic_capture: "Microphone clip",
+    agents_tool_device_capture_stop: "Stop capture",
     agents_mcp: "MCP servers",
     agents_mcp_empty: "Configure var/mcp/servers.yaml then Refresh",
     agents_docs: "Documents (comma-separated paths)",
@@ -2278,6 +2288,7 @@ const FR: UiStrings = UiStrings {
     agents_tool_family_web: "Web",
     agents_tool_family_canvas: "Canvas",
     agents_tool_family_agents: "Agents",
+    agents_tool_family_devices: "Caméra / micro",
     agents_tool_notes_create: "Créer une note",
     agents_tool_notes_list: "Lister les notes",
     agents_tool_notes_read: "Lire une note",
@@ -2307,6 +2318,10 @@ const FR: UiStrings = UiStrings {
     agents_tool_agent_spawn: "Déléguer à un sous-agent",
     agents_tool_agent_await: "Attendre un sous-agent",
     agents_tool_plan_update: "Mettre à jour le plan",
+    agents_tool_device_enumerate: "Lister les périphériques",
+    agents_tool_device_camera_capture: "Photo webcam",
+    agents_tool_device_mic_capture: "Extrait micro",
+    agents_tool_device_capture_stop: "Arrêter la capture",
     agents_mcp: "Serveurs MCP",
     agents_mcp_empty: "Configurer var/mcp/servers.yaml puis Rafraîchir",
     agents_docs: "Documents (chemins séparés par virgule)",
@@ -2649,6 +2664,10 @@ pub fn roster_tool_label<'a>(t: &'a UiStrings, tool_id: &str) -> &'a str {
         "agent.spawn" => t.agents_tool_agent_spawn,
         "agent.await" => t.agents_tool_agent_await,
         "plan.update" => t.agents_tool_plan_update,
+        "device.enumerate" => t.agents_tool_device_enumerate,
+        "device.camera.capture" => t.agents_tool_device_camera_capture,
+        "device.mic.capture" => t.agents_tool_device_mic_capture,
+        "device.capture.stop" => t.agents_tool_device_capture_stop,
         _ => "?",
     }
 }
@@ -2737,8 +2756,10 @@ mod tests {
         let t = strings("en");
         assert_eq!(roster_tool_label(&t, "notes.create"), "Create note");
         assert!(!roster_tool_label(&t, "notes.create").contains('.'));
+        assert_eq!(roster_tool_label(&t, "device.camera.capture"), "Webcam photo");
         let t_fr = strings("fr");
         assert_eq!(roster_tool_label(&t_fr, "notes.create"), "Créer une note");
+        assert_eq!(roster_tool_label(&t_fr, "device.camera.capture"), "Photo webcam");
         assert_eq!(t_fr.agents_skills, "Compétences");
     }
 

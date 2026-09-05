@@ -7,6 +7,11 @@ The first device slice exposes four IPC intents:
 - `device.mic.capture`
 - `device.capture.stop`
 
+Agents call the same intents as tools. A one-shot camera capture is encoded as
+PNG (`image/png`) so a vision chat model can describe the frame on the next
+turn. Microphone clips stay as PCM in this slice; always-on STT is out of
+scope.
+
 Capture permissions are separate capabilities: `device.camera.capture`,
 `device.camera.stream`, `device.mic.capture`, and `device.mic.stream`. A
 persistent grant is stored as an agent + exact device + exact action tuple.

@@ -18,6 +18,7 @@ Ce n'est **pas** l'OS bootable. Les exigences v1 sont dans
 - **Focus et activité** : mode focus Canvas masque les panneaux voisins ; traces agent dans un volet Activité redimensionnable ; la cloche ouvre le centre de notifications
 - **Navigation session** : un rechargement en arrière-plan n’enlève plus le chat actif ; `chat.session.set_pinned` / `set_archived` / `list_all` alimentent le nouveau chrome
 - **Recherche Paramètres** : la saisie filtre Moi / Modèles / Confiance et les replis expert
+- **Webcam / microphone** : le chat peut déléguer un agent de capture (`device.enumerate`, `device.camera.capture`, `device.mic.capture`) ; sous Windows, une PNG lisible par un modèle vision est écrite après confirmation (une fois / toujours / refuser)
 
 ### Nouveautés 0.16.0
 
@@ -224,6 +225,8 @@ Commandes slash :
 | `/canvas` | Basculer le canvas de dessin vectoriel partagé de la session |
 
 **Canvas chat (traits vectoriels, live)** — surface de dessin liée à la session (humain + agents). Humain : Sélect. (déplacer / supprimer / aligner / rotation), crayon, ligne, courbe, silhouette (`path`), rectangle, ellipse ; calques nommés (masquer / verrouiller / opacité) ; grille et aimant 0.01 ; export PNG, SVG ou JSON. Agents : module WASM `canvas.*` (`stroke` / `path` / `rect` / `ellipse` / `move` / `delete` / `align` / `rotate` / `layer_*` / `get` / `export`). Un validateur vectoriel global CPU-only contrôle la géométrie et la topologie toutes les trois mutations et avant la fin ; la vision reste facultative. Le seau (`canvas.fill`) n’est pas dans la barre humaine — flood-fill PNG seulement. Document : `var/sessions/<id>/canvas.json`. Distinct du studio Image et de `/image`.
+
+**Webcam et microphone (issue #137)** — capture Windows Media Foundation via `device.enumerate` / `device.camera.capture` / `device.mic.capture`. Une capture caméra ponctuelle écrit un PNG sous `var/sessions/<session>/devices/` et le tour d’agent suivant le joint pour l’analyse vision. Confirmation obligatoire (une fois / toujours / refuser) ; les autorisations persistantes sont par agent + périphérique + action. Linux/macOS renvoient `UnsupportedPlatform` dans cette tranche. Le STT en continu reste hors scope.
 
 ---
 

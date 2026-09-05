@@ -541,6 +541,15 @@ const ROSTER_TOOL_GROUPS: &[(&str, &[&str])] = &[
         ],
     ),
     ("agents", &["agent.spawn", "agent.await", "plan.update"]),
+    (
+        "devices",
+        &[
+            "device.enumerate",
+            "device.camera.capture",
+            "device.mic.capture",
+            "device.capture.stop",
+        ],
+    ),
 ];
 
 fn roster_tool_family_label(t: &i18n::UiStrings, family: &str) -> &'static str {
@@ -551,6 +560,7 @@ fn roster_tool_family_label(t: &i18n::UiStrings, family: &str) -> &'static str {
         "web" => t.agents_tool_family_web,
         "canvas" => t.agents_tool_family_canvas,
         "agents" => t.agents_tool_family_agents,
+        "devices" => t.agents_tool_family_devices,
         _ => "?",
     }
 }
