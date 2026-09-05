@@ -492,7 +492,7 @@ impl UiApp {
                         egui::ComboBox::from_id_salt("prefs_search_engine")
                             .selected_text(&self.prefs.web_search_engine)
                             .show_ui(ui, |ui| {
-                                for eng in ["auto", "brave", "duckduckgo", "bing"] {
+                                for eng in ["auto", "brave", "searxng", "duckduckgo", "bing"] {
                                     if ui
                                         .selectable_label(self.prefs.web_search_engine == eng, eng)
                                         .clicked()
@@ -502,6 +502,22 @@ impl UiApp {
                                     }
                                 }
                             });
+                        ui.end_row();
+
+                        ui.label(t.settings_searxng_url);
+                        if ui
+                            .add(
+                                egui::TextEdit::singleline(&mut self.prefs.searxng_url)
+                                    .desired_width(220.0)
+                                    .hint_text("https://searx.example"),
+                            )
+                            .changed()
+                        {
+                            save_preferences(&self.prefs);
+                        }
+                        ui.end_row();
+                        ui.label("");
+                        ui.weak(t.settings_searxng_hint);
                         ui.end_row();
 
                         ui.label(t.settings_browse_chars);

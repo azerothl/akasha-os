@@ -1,10 +1,15 @@
 //! Recherche web + téléchargement HTTP + browse HTML→texte (Preview PC.8–PC.9).
 //!
-//! Search : Brave API (clé) / DuckDuckGo HTML / Bing HTML, avec chaîne `auto`.
+//! Search : Brave API (clé) / SearXNG JSON / DuckDuckGo HTML / Bing HTML, chaîne `auto`.
 
 use aos_proto::{WebBrowseResponse, WebSearchHit, WebSearchResponse};
 use crate::net::EgressControl;
+use base64::Engine as _;
+use std::collections::HashSet;
 use std::io::Read;
+
+/// Desktop Chrome UA — the previous AgentOS UA triggered DDG's anomaly wall.
+const SEARCH_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
 
 #[derive(Debug)]
 pub enum NetSvcError {
@@ -56,7 +61,7 @@ fn ensure_egress(
 }
 
 /// Recherche web multi-moteurs.
-/// `engine` : `auto` | `brave` | `duckduckgo` | `bing`.
+/// `engine` : `auto` | `brave` | `searxng` | `duckduckgo` | `bing`.
 pub fn web_search(
     net: &mut EgressControl,
     actor: &str,
@@ -72,6 +77,7 @@ pub fn web_search(
     } else {
         engine.as_str()
     };
+    let searxng = searxng_url_from_prefs();
 
     match engine {
         "brave" => {
@@ -82,28 +88,64 @@ pub fn web_search(
             })?;
             brave_search(net, actor, caps, query, max_results, key)
         }
+        "searxng" | "searx" => {
+            let url = searxng.as_deref().ok_or_else(|| {
+                NetSvcError::Unsupported(
+                    "SearXNG: URL d'instance absente (Settings → outils web)".into(),
+                )
+            })?;
+            searxng_search(net, actor, caps, query, max_results, url)
+        }
         "duckduckgo" | "ddg" => ddg_search(net, actor, caps, query, max_results),
         "bing" => bing_search(net, actor, caps, query, max_results),
         _ => {
-            // auto : Brave → DDG → Bing
-            let mut last_err: Option<NetSvcError> = None;
+            // auto : Brave → SearXNG → DDG → Bing. Empty HTML scrapes are errors.
+            let mut errors: Vec<String> = Vec::new();
             if let Some(key) = brave_key.filter(|k| !k.is_empty()) {
                 match brave_search(net, actor, caps, query, max_results, key) {
                     Ok(r) if !r.results.is_empty() => return Ok(r),
-                    Ok(_) => {}
-                    Err(e) => last_err = Some(e),
+                    Ok(_) => errors.push("brave: 0 résultat".into()),
+                    Err(e) => errors.push(format!("brave: {e}")),
+                }
+            }
+            if let Some(url) = searxng.as_deref() {
+                match searxng_search(net, actor, caps, query, max_results, url) {
+                    Ok(r) if !r.results.is_empty() => return Ok(r),
+                    Ok(_) => errors.push("searxng: 0 résultat".into()),
+                    Err(e) => errors.push(format!("searxng: {e}")),
                 }
             }
             match ddg_search(net, actor, caps, query, max_results) {
                 Ok(r) if !r.results.is_empty() => return Ok(r),
-                Ok(_) => {}
-                Err(e) => last_err = Some(e),
+                Ok(_) => errors.push("duckduckgo: 0 résultat".into()),
+                Err(e) => errors.push(format!("duckduckgo: {e}")),
             }
             match bing_search(net, actor, caps, query, max_results) {
-                Ok(r) => Ok(r),
-                Err(e) => Err(last_err.unwrap_or(e)),
+                Ok(r) if !r.results.is_empty() => return Ok(r),
+                Ok(_) => errors.push("bing: 0 résultat".into()),
+                Err(e) => errors.push(format!("bing: {e}")),
             }
+            Err(NetSvcError::Http(if errors.is_empty() {
+                "aucun moteur disponible".into()
+            } else {
+                errors.join(" → ")
+            }))
         }
+    }
+}
+
+fn searxng_url_from_prefs() -> Option<String> {
+    let home = std::env::var("AOS_HOME").unwrap_or_else(|_| ".".into());
+    let raw = std::fs::read_to_string(
+        std::path::Path::new(&home).join("var/run/preferences.json"),
+    )
+    .ok()?;
+    let v: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    let s = v.get("searxng_url")?.as_str()?.trim();
+    if s.starts_with("http://") || s.starts_with("https://") {
+        Some(s.trim_end_matches('/').to_string())
+    } else {
+        None
     }
 }
 
@@ -161,6 +203,51 @@ fn brave_search(
     Ok(WebSearchResponse { results })
 }
 
+fn searxng_search(
+    net: &mut EgressControl,
+    actor: &str,
+    caps: &[String],
+    query: &str,
+    max_results: usize,
+    instance: &str,
+) -> Result<WebSearchResponse, NetSvcError> {
+    let base = instance.trim().trim_end_matches('/');
+    let (host, port) = parse_host_port(base)?;
+    net.grant(format!("net.connect:{host}:{port}"));
+    ensure_egress(net, actor, &host, port, caps)?;
+    let url = format!(
+        "{base}/search?q={}&format=json&categories=general",
+        urlencoding(query)
+    );
+    let body = http_get_text(net, actor, caps, &url, Some("application/json"))?;
+    parse_searxng_json(&body, max_results)
+}
+
+fn parse_searxng_json(body: &str, max_results: usize) -> Result<WebSearchResponse, NetSvcError> {
+    let v: serde_json::Value = serde_json::from_str(body).map_err(|_| {
+        NetSvcError::Http("searxng: réponse non-JSON (format=json souvent désactivé)".into())
+    })?;
+    let mut results = Vec::new();
+    if let Some(arr) = v.get("results").and_then(|x| x.as_array()) {
+        for item in arr.iter().take(max_results.max(1)) {
+            let url = item.get("url").and_then(|t| t.as_str()).unwrap_or("");
+            let title = item.get("title").and_then(|t| t.as_str()).unwrap_or("");
+            if url.starts_with("http") && !title.is_empty() {
+                results.push(WebSearchHit {
+                    title: title.into(),
+                    url: url.into(),
+                    snippet: item
+                        .get("content")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("")
+                        .into(),
+                });
+            }
+        }
+    }
+    Ok(WebSearchResponse { results })
+}
+
 fn ddg_search(
     net: &mut EgressControl,
     actor: &str,
@@ -173,10 +260,21 @@ fn ddg_search(
         "https://html.duckduckgo.com/html/?q={}",
         urlencoding(query)
     );
-    let html = http_get_text(net, actor, caps, &url)?;
-    Ok(WebSearchResponse {
-        results: parse_ddg_html(&html, max_results),
-    })
+    let html = http_get_text(net, actor, caps, &url, None)?;
+    if ddg_html_blocked(&html) {
+        return Err(NetSvcError::Http("duckduckgo: challenge anti-bot".into()));
+    }
+    let results = parse_ddg_html(&html, max_results);
+    if results.is_empty() {
+        return Err(NetSvcError::Http(
+            "duckduckgo: 0 résultat (HTML inattendu)".into(),
+        ));
+    }
+    Ok(WebSearchResponse { results })
+}
+
+fn ddg_html_blocked(html: &str) -> bool {
+    html.contains("anomaly-modal") || html.contains("anomaly.js")
 }
 
 fn bing_search(
@@ -188,10 +286,12 @@ fn bing_search(
 ) -> Result<WebSearchResponse, NetSvcError> {
     ensure_egress(net, actor, "www.bing.com", 443, caps)?;
     let url = format!("https://www.bing.com/search?q={}", urlencoding(query));
-    let html = http_get_text(net, actor, caps, &url)?;
-    Ok(WebSearchResponse {
-        results: parse_bing_html(&html, max_results),
-    })
+    let html = http_get_text(net, actor, caps, &url, None)?;
+    let results = parse_bing_html(&html, max_results);
+    if results.is_empty() {
+        return Err(NetSvcError::Http("bing: 0 résultat (HTML inattendu)".into()));
+    }
+    Ok(WebSearchResponse { results })
 }
 
 fn http_get_text(
@@ -199,19 +299,23 @@ fn http_get_text(
     actor: &str,
     caps: &[String],
     url: &str,
+    accept: Option<&str>,
 ) -> Result<String, NetSvcError> {
     let (host, port) = parse_host_port(url)?;
     ensure_egress(net, actor, &host, port, caps)?;
     let client = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(20))
-        .user_agent("AgentOS-Preview/0.1 (compatible; +https://github.com/azerothl/akasha-os)")
+        .user_agent(SEARCH_UA)
         .redirect(reqwest::redirect::Policy::limited(5))
         .build()
         .map_err(|e| NetSvcError::Http(e.to_string()))?;
-    let resp = client
+    let mut req = client
         .get(url)
-        .send()
-        .map_err(|e| NetSvcError::Http(e.to_string()))?;
+        .header("Accept-Language", "en-US,en;q=0.9,fr;q=0.8");
+    if let Some(a) = accept {
+        req = req.header("Accept", a);
+    }
+    let resp = req.send().map_err(|e| NetSvcError::Http(e.to_string()))?;
     if !resp.status().is_success() {
         return Err(NetSvcError::Http(format!("status {}", resp.status())));
     }
@@ -264,30 +368,32 @@ fn parse_ddg_html(html: &str, max_results: usize) -> Vec<WebSearchHit> {
 
 fn parse_bing_html(html: &str, max_results: usize) -> Vec<WebSearchHit> {
     let mut results = Vec::new();
+    let mut seen = HashSet::new();
     let mut rest = html;
     while results.len() < max_results {
         // Liens résultats : <h2><a href="https://...">title</a></h2> dans li.b_algo
         let Some(algo) = rest.find("b_algo") else {
             break;
         };
-        rest = &rest[algo..];
+        rest = &rest[algo + 6..];
         let Some(h2) = rest.find("<h2") else {
-            rest = rest.get(6..).unwrap_or("");
             continue;
         };
         let after_h2 = &rest[h2..];
         let Some(href_pos) = after_h2.find("href=\"") else {
-            rest = rest.get(6..).unwrap_or("");
             continue;
         };
         let after = &after_h2[href_pos + 6..];
         let Some(end) = after.find('"') else {
             break;
         };
-        let url = after[..end].to_string();
+        let url = decode_bing_href(&after[..end]);
         let title = extract_between(&after[end..], ">", "</a>")
             .map(|t| strip_tags(&t))
             .unwrap_or_default();
+        if title.is_empty() || is_search_noise_url(&url) || !seen.insert(url.clone()) {
+            continue;
+        }
         let snippet = rest
             .find("b_caption")
             .or_else(|| rest.find("b_lineclamp"))
@@ -298,50 +404,51 @@ fn parse_bing_html(html: &str, max_results: usize) -> Vec<WebSearchHit> {
             })
             .map(|s| strip_tags(&s))
             .unwrap_or_default();
-        if !title.is_empty()
-            && url.starts_with("http")
-            && !url.contains("bing.com/ck/")
-            && !url.contains("microsoft.com")
-        {
-            results.push(WebSearchHit {
-                title,
-                url,
-                snippet,
-            });
-        }
-        rest = rest.get(6..).unwrap_or("");
-    }
-    // Fallback plus large si parse b_algo vide
-    if results.is_empty() {
-        let mut rest = html;
-        while results.len() < max_results {
-            let Some(href_pos) = rest.find("href=\"http") else {
-                break;
-            };
-            let after = &rest[href_pos + 6..];
-            let Some(end) = after.find('"') else {
-                break;
-            };
-            let url = after[..end].to_string();
-            let title = extract_between(&after[end..], ">", "</a>")
-                .map(|t| strip_tags(&t))
-                .unwrap_or_default();
-            rest = &after[end..];
-            if title.len() > 8
-                && url.starts_with("http")
-                && !url.contains("bing.com")
-                && !url.contains("microsoft.com")
-                && !url.contains("msn.com")
-            {
-                results.push(WebSearchHit {
-                    title,
-                    url,
-                    snippet: String::new(),
-                });
-            }
-        }
+        results.push(WebSearchHit {
+            title,
+            url,
+            snippet,
+        });
     }
     results
+}
+
+fn decode_bing_href(raw: &str) -> String {
+    let url = html_unescape(raw);
+    if let Some(dest) = bing_ck_destination(&url) {
+        return dest;
+    }
+    url
+}
+
+/// Bing wraps results in `/ck/a?...&u=a1<base64-url>`.
+fn bing_ck_destination(url: &str) -> Option<String> {
+    let rest = url
+        .split("&u=")
+        .nth(1)
+        .or_else(|| url.split("?u=").nth(1))?;
+    let payload = rest.split('&').next()?.trim();
+    let b64 = payload.strip_prefix("a1").unwrap_or(payload);
+    base64_decode_to_string(b64).filter(|s| s.starts_with("http"))
+}
+
+fn base64_decode_to_string(s: &str) -> Option<String> {
+    let mut padded = s.replace('-', "+").replace('_', "/");
+    while padded.len() % 4 != 0 {
+        padded.push('=');
+    }
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(padded.as_bytes())
+        .ok()?;
+    String::from_utf8(bytes).ok()
+}
+
+fn is_search_noise_url(url: &str) -> bool {
+    let u = url.to_ascii_lowercase();
+    !(u.starts_with("http://") || u.starts_with("https://"))
+        || u.contains("bing.com")
+        || u.contains("microsoft.com")
+        || u.contains("msn.com")
 }
 
 /// Lit une page HTML et renvoie un texte utilisable par le LLM (sans JS).
@@ -588,4 +695,60 @@ pub fn safe_download_name(url: &str) -> String {
             }
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bing_ck_decodes_a1_base64() {
+        let href = "https://www.bing.com/ck/a?!&amp;&amp;p=abc&amp;u=a1aHR0cHM6Ly9lbi53aWtpcGVkaWEub3JnL3dpa2kvRGV2aW5fQUk&amp;ntb=1";
+        assert_eq!(decode_bing_href(href), "https://en.wikipedia.org/wiki/Devin_AI");
+    }
+
+    #[test]
+    fn parse_bing_html_unwraps_ck_tracking_links() {
+        let html = r#"<ol id="b_results"><li class="b_algo"><div class="b_tpcn"></div>
+<h2><a target="_blank" href="https://www.bing.com/ck/a?!&amp;&amp;p=x&amp;u=a1aHR0cHM6Ly9lbi53aWtpcGVkaWEub3JnL3dpa2kvRGV2aW5fQUk&amp;ntb=1">Devin AI - Wikipedia</a></h2>
+<div class="b_caption"><p class="b_lineclamp2">Devin is an autonomous AI software engineer.</p></div></li>
+<li class="b_algo"><h2><a href="https://www.bing.com/ck/a?!&amp;u=a1aHR0cHM6Ly93d3cuZGV2aW4uYWkv">Devin</a></h2>
+<div class="b_caption"><p>The official site.</p></div></li></ol>"#;
+        let hits = parse_bing_html(html, 5);
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[0].url, "https://en.wikipedia.org/wiki/Devin_AI");
+        assert_eq!(hits[0].title, "Devin AI - Wikipedia");
+        assert!(hits[0].snippet.contains("autonomous"));
+        assert_eq!(hits[1].url, "https://www.devin.ai/");
+    }
+
+    #[test]
+    fn parse_bing_html_drops_undecoded_tracking() {
+        let html = r#"<li class="b_algo"><h2><a href="https://www.bing.com/ck/a?!&amp;p=nope">No dest</a></h2></li>"#;
+        assert!(parse_bing_html(html, 5).is_empty());
+    }
+
+    #[test]
+    fn ddg_anomaly_page_is_blocked() {
+        assert!(ddg_html_blocked(
+            r#"<div class="anomaly-modal__mask"></div><script src="anomaly.js"></script>"#
+        ));
+        assert!(!ddg_html_blocked(
+            r#"<a class="result__a" href="https://example.com">Example</a>"#
+        ));
+    }
+
+    #[test]
+    fn parse_searxng_json_hits() {
+        let body = r#"{"results":[{"title":"Devin","url":"https://devin.ai","content":"AI engineer"},{"title":"","url":"https://skip.me"}]}"#;
+        let resp = parse_searxng_json(body, 5).unwrap();
+        assert_eq!(resp.results.len(), 1);
+        assert_eq!(resp.results[0].url, "https://devin.ai");
+        assert_eq!(resp.results[0].snippet, "AI engineer");
+    }
+
+    #[test]
+    fn parse_searxng_rejects_html() {
+        assert!(parse_searxng_json("<html>nope</html>", 5).is_err());
+    }
 }

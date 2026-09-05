@@ -3251,14 +3251,15 @@ async fn invoke_native(
                 Ok(r) if r.results.is_empty() => {
                     format!(
                         "web.search: 0 résultat pour « {query} ». \
-                         Réessaie avec args.engine=\"bing\" ou \"duckduckgo\", \
-                         ou utilise web.browse sur une URL connue."
+                         Réessaie avec une requête plus simple, \
+                         engine=\"searxng\" si une instance est configurée, \
+                         ou web.browse sur une URL connue."
                     )
                 }
                 Ok(r) => serde_json::to_string(&r.results).unwrap_or_default(),
                 Err(e) => format!(
                     "web.search err: {e}. Si le réseau est online, réessaie avec \
-                     engine=\"bing\" ou utilise web.browse sur une URL."
+                     une autre requête ou web.browse sur une URL."
                 ),
             }
         }

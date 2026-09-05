@@ -71,7 +71,7 @@ Un pack média tire aussi le moteur (`sd.cpp` / Piper) dans `bin/` s’il manque
 ## Réseau
 
 Coupé par défaut (`offline_strict`). **Autoriser le réseau**, puis rechercher
-(`auto` = Brave → DuckDuckGo → Bing) ou **Parcourir** une URL (HTML → texte).
+(`auto` = Brave → SearXNG → DuckDuckGo → Bing) ou **Parcourir** une URL (HTML → texte).
 Clé Brave optionnelle : `var/secrets/keys.yaml`.
 
 ## Dépannage

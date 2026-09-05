@@ -133,7 +133,8 @@ same way onto `%LOCALAPPDATA%\AgentOS-Preview` /
 
 Network is **off** by default (`offline_strict`). Enable **Allow network**
 for `web.search` / `web.browse` / `net.fetch`. Search engine (`auto` =
-Brave → DuckDuckGo → Bing) is set in **Settings**.
+Brave → SearXNG → DuckDuckGo → Bing) is set in **Settings**. Optional
+SearXNG instance URL also lives there.
 
 ```yaml
 # var/secrets/keys.yaml (optional)

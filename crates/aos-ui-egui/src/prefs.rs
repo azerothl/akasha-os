@@ -129,9 +129,12 @@ pub struct Preferences {
     pub default_max_steps: u32,
     #[serde(default = "default_timeout_secs")]
     pub default_timeout_secs: u64,
-    /// `auto` | `brave` | `duckduckgo` | `bing`
+    /// `auto` | `brave` | `searxng` | `duckduckgo` | `bing`
     #[serde(default = "default_search_engine")]
     pub web_search_engine: String,
+    /// Optional SearXNG instance base URL (`https://searx.example`). Empty = unused.
+    #[serde(default)]
+    pub searxng_url: String,
     #[serde(default = "default_fetch_max")]
     pub web_fetch_max_bytes: u64,
     #[serde(default = "default_browse_chars")]
@@ -264,6 +267,7 @@ impl Default for Preferences {
             default_max_steps: default_max_steps(),
             default_timeout_secs: default_timeout_secs(),
             web_search_engine: default_search_engine(),
+            searxng_url: String::new(),
             web_fetch_max_bytes: default_fetch_max(),
             web_browse_max_chars: default_browse_chars(),
             default_image_model: None,

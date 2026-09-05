@@ -798,7 +798,7 @@ Outils réseau Preview (F-NET-01/02), tous soumis au même contrôle d'egress :
 
 | Intent | Comportement |
 |--------|-----------|
-| `web.search` | `engine` : `auto` (API Brave si `brave_search_api_key` → DuckDuckGo HTML → Bing HTML) ou forcé `brave` / `duckduckgo` / `bing` |
+| `web.search` | `engine` : `auto` (API Brave si `brave_search_api_key` → SearXNG JSON si URL d'instance → DuckDuckGo HTML → Bing HTML) ou forcé `brave` / `searxng` / `duckduckgo` / `bing` |
 | `web.browse` | HTTP GET, HTML → texte (sans JS) ; `max_chars` (défaut 12_000) |
 | `net.fetch` | Téléchargement binaire dans le FS logique (défaut `/downloads/`, `max_bytes`) |
 

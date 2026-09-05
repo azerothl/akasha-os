@@ -4357,7 +4357,7 @@ pub struct WebSearchRequest {
     pub caps: Vec<String>,
     #[serde(default)]
     pub actor: String,
-    /// `auto` | `brave` | `duckduckgo` | `bing` (défaut `auto`).
+    /// `auto` | `brave` | `searxng` | `duckduckgo` | `bing` (défaut `auto`).
     #[serde(default = "default_search_engine")]
     pub engine: String,
 }

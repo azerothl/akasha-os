@@ -336,7 +336,7 @@ Mode par défaut : **`offline_strict`** (egress refusé). Activer
 
 | Intent | Rôle |
 |--------|------|
-| `web.search` | Multi-moteurs : `auto` (Brave → DuckDuckGo → Bing), ou forcer `brave` / `duckduckgo` / `bing` |
+| `web.search` | Multi-moteurs : `auto` (Brave → SearXNG → DuckDuckGo → Bing), ou forcer `brave` / `searxng` / `duckduckgo` / `bing` |
 | `web.browse` | HTML → texte (sans JavaScript) ; `max_chars` configurable |
 | `net.fetch` | Télécharger une URL dans le FS logique (défaut `/downloads/`) |
 | `files.generate` | Écrire `md` / `txt` / `json` / `csv` / `png` / `pdf` |

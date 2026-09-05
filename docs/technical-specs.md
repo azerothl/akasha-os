@@ -797,7 +797,7 @@ Preview network tools (F-NET-01/02), all gated by the same egress control:
 
 | Intent | Behaviour |
 |--------|-----------|
-| `web.search` | `engine`: `auto` (Brave API if `brave_search_api_key` → DuckDuckGo HTML → Bing HTML) or forced `brave` / `duckduckgo` / `bing` |
+| `web.search` | `engine`: `auto` (Brave API if `brave_search_api_key` → SearXNG JSON if instance URL → DuckDuckGo HTML → Bing HTML) or forced `brave` / `searxng` / `duckduckgo` / `bing` |
 | `web.browse` | HTTP GET, HTML → plain text (no JS); `max_chars` (default 12_000) |
 | `net.fetch` | Binary download into the logical FS (default `/downloads/`, `max_bytes`) |
 

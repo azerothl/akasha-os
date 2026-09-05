@@ -68,13 +68,13 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
         },
         ToolDesc {
             name: "web.search".into(),
-            description: "Recherche web (auto: Brave→DDG→Bing)".into(),
+            description: "Recherche web (auto: Brave→SearXNG→DDG→Bing)".into(),
             input_schema: serde_json::json!({
                 "type":"object",
                 "properties":{
                     "query":{"type":"string"},
                     "max_results":{"type":"integer"},
-                    "engine":{"type":"string","description":"auto|brave|duckduckgo|bing"}
+                    "engine":{"type":"string","description":"auto|brave|searxng|duckduckgo|bing"}
                 },
                 "required":["query"]
             }),

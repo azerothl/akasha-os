@@ -336,7 +336,7 @@ Default mode is **`offline_strict`** (deny-by-default egress). Enable
 
 | Intent | Role |
 |--------|------|
-| `web.search` | Multi-engine search: `auto` (Brave → DuckDuckGo → Bing), or force `brave` / `duckduckgo` / `bing` |
+| `web.search` | Multi-engine search: `auto` (Brave → SearXNG → DuckDuckGo → Bing), or force `brave` / `searxng` / `duckduckgo` / `bing` |
 | `web.browse` | Fetch HTML → plain text (no JavaScript); `max_chars` configurable |
 | `net.fetch` | Download a URL into the logical FS (default `/downloads/`) |
 | `files.generate` | Write `md` / `txt` / `json` / `csv` / `png` / `pdf` |

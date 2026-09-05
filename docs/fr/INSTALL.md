@@ -133,7 +133,8 @@ applique le même overlay vers `%LOCALAPPDATA%\AgentOS-Preview` /
 
 Par défaut le réseau est **coupé** (`offline_strict`). Case
 **Autoriser le réseau** pour `web.search` / `web.browse` / `net.fetch`.
-Le moteur (`auto` = Brave → DuckDuckGo → Bing) se règle dans **Settings**.
+Le moteur (`auto` = Brave → SearXNG → DuckDuckGo → Bing) se règle dans **Settings**.
+L’URL d’instance SearXNG (optionnelle) aussi.
 
 ```yaml
 # var/secrets/keys.yaml (optionnel)

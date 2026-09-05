@@ -77,7 +77,7 @@ CLI: `aos-session --download-models <id>…`
 ## Network
 
 Off by default (`offline_strict`). Enable **Allow network**, then search
-(engine `auto` = Brave → DuckDuckGo → Bing) or **Browse** a URL (HTML → text).
+(engine `auto` = Brave → SearXNG → DuckDuckGo → Bing) or **Browse** a URL (HTML → text).
 Optional Brave key: `var/secrets/keys.yaml` → `brave_search_api_key`.
 
 ## Quick troubleshooting
