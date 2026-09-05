@@ -2,7 +2,7 @@
 
 use crate::cmd::Cmd;
 use crate::os_open::{aos_home, open_os_folder};
-use crate::{i18n, icons, overflow_scroll_h, theme, UiApp};
+use crate::{agent_panel, i18n, icons, overflow_scroll_h, theme, UiApp};
 use eframe::egui;
 
 impl UiApp {
@@ -43,6 +43,36 @@ impl UiApp {
                 if ui.button(t.session_new).clicked() {
                     let n = self.chat_state.sessions.len() + 1;
                     self.request_session_create(Some(format!("Session {n}")));
+                }
+                // Barre d'actions de la session active, sous + New : une ligne
+                // enroulée de petits boutons — jamais de chevauchement avec la
+                // liste, toujours accessible même en sidebar étroite.
+                if self.chat_state.active_session.is_some() {
+                    ui.horizontal_wrapped(|ui| {
+                        if ui.small_button(t.sidebar_delete).clicked() {
+                            if let Some(id) = self.chat_state.active_session.clone() {
+                                self.chat_state.sidebar.delete_confirm = Some(id);
+                            }
+                        }
+                        if ui.small_button(t.session_export).clicked() {
+                            if let Some(id) = self.chat_state.active_session.clone() {
+                                let _ = self.cmd_tx.send(Cmd::SessionExport { id });
+                            }
+                        }
+                        if ui.small_button(t.sidebar_rename).clicked() {
+                            if let Some(id) = self.chat_state.active_session.clone() {
+                                let title = self
+                                    .chat_state
+                                    .sessions
+                                    .iter()
+                                    .find(|s| s.id == id)
+                                    .map(|s| s.title.clone())
+                                    .unwrap_or_default();
+                                self.chat_state.sidebar.rename = title;
+                                self.chat_state.sidebar.rename_open = true;
+                            }
+                        }
+                    });
                 }
 
                 // Footer is laid out bottom-up so session scroll height = remaining space
@@ -156,37 +186,9 @@ impl UiApp {
                                 }
                             });
                         ui.separator();
-                        // Actions session côte à côte (une ligne) au lieu de
-                        // deux blocs pleine largeur empilés : moins de hauteur
-                        // volée à la liste, pas de superposition perçue.
-                        ui.horizontal(|ui| {
-                            if ui.button(t.sidebar_delete).clicked() {
-                                if let Some(id) = self.chat_state.active_session.clone() {
-                                    self.chat_state.sidebar.delete_confirm = Some(id);
-                                }
-                            }
-                            if ui.button(t.session_export).clicked() {
-                                if let Some(id) = self.chat_state.active_session.clone() {
-                                    let _ = self.cmd_tx.send(Cmd::SessionExport { id });
-                                }
-                            }
-                        });
-                        ui.horizontal(|ui| {
-                            ui.add(
-                                egui::TextEdit::singleline(&mut self.chat_state.sidebar.rename)
-                                    .desired_width(120.0)
-                                    .hint_text(t.sidebar_rename_hint),
-                            );
-                            if ui.button(t.sidebar_rename).clicked() {
-                                if let Some(id) = self.chat_state.active_session.clone() {
-                                    let _ = self.cmd_tx.send(Cmd::SessionRename {
-                                        id,
-                                        title: self.chat_state.sidebar.rename.clone(),
-                                    });
-                                }
-                            }
-                        });
-
+                        // Les actions Delete/Export/Renommage vivent dans la
+                        // barre sous + New et dans le menu contextuel des
+                        // lignes : plus de blocs intercalés avec la liste.
                         let session_h = ui.available_height().max(80.0);
                         overflow_scroll_h(ui, "chat_sessions", session_h, |ui| {
                             ui.set_width(side_w);
@@ -243,11 +245,21 @@ impl UiApp {
                                         let pin = if s.pinned { "★ " } else { "" };
                                         if unread {
                                             let t = i18n::strings(&self.prefs.language);
-                                            icons::status_dot(ui, theme::SIGNAL)
-                                                .on_hover_text(t.session_unread_reply);
+                                            icons::status_dot(
+                                                ui,
+                                                crate::theme::button_colors(ui).accent,
+                                            )
+                                            .on_hover_text(t.session_unread_reply);
                                         }
+                                        // Titre tronqué + tooltip complet : les longs
+                                        // titres débordaient sur le compteur.
+                                        let short = agent_panel::truncate(
+                                            &format!("{pin}{}", s.title),
+                                            26,
+                                        );
                                         let title = ui
-                                            .selectable_label(selected, format!("{pin}{}", s.title));
+                                            .selectable_label(selected, short)
+                                            .on_hover_text(&s.title);
                                         ui.label(
                                             egui::RichText::new(format!("({})", s.message_count))
                                                 .weak(),
@@ -311,6 +323,44 @@ impl UiApp {
                 );
             },
         );
+        // Popup de renommage : champ pleine largeur du popup, plus de
+        // TextEdit 120px qui débordait de la sidebar.
+        if self.chat_state.sidebar.rename_open {
+            let mut close = false;
+            let mut apply = false;
+            egui::Window::new(t.sidebar_rename)
+                .collapsible(false)
+                .resizable(false)
+                .default_width(320.0)
+                .show(ui.ctx(), |ui| {
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.chat_state.sidebar.rename)
+                            .desired_width(f32::INFINITY)
+                            .hint_text(t.sidebar_rename_hint),
+                    );
+                    ui.horizontal(|ui| {
+                        if ui.button(t.memory_btn_cancel).clicked() {
+                            close = true;
+                        }
+                        if ui.button(t.sidebar_rename).clicked()
+                            && !self.chat_state.sidebar.rename.trim().is_empty()
+                        {
+                            apply = true;
+                        }
+                    });
+                });
+            if apply {
+                if let Some(id) = self.chat_state.active_session.clone() {
+                    let _ = self.cmd_tx.send(Cmd::SessionRename {
+                        id,
+                        title: self.chat_state.sidebar.rename.trim().to_string(),
+                    });
+                }
+                self.chat_state.sidebar.rename_open = false;
+            } else if close {
+                self.chat_state.sidebar.rename_open = false;
+            }
+        }
         if let Some(id) = self.chat_state.sidebar.delete_confirm.clone() {
             let title = self
                 .chat_state
