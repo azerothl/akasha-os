@@ -3936,6 +3936,14 @@ pub struct ChatSessionAppendRequest {
     pub thinking: Option<String>,
 }
 
+/// Upsert the single Deep Thinking plan card in a session transcript.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatSessionUpsertDeepPlanRequest {
+    pub session_id: String,
+    pub agent_id: String,
+    pub plan: DeepPlan,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatSessionSetModeRequest {
     pub session_id: String,

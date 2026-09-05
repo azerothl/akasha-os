@@ -1104,6 +1104,41 @@ async fn main() {
     }
     {
         let s = sub.clone();
+        svc.on("chat.session.upsert_deep_plan", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<aos_proto::ChatSessionUpsertDeepPlanRequest>() {
+                    Ok(req) => {
+                        let result = s.sessions.lock().unwrap().upsert_deep_plan(
+                            &req.session_id,
+                            &req.agent_id,
+                            req.plan,
+                        );
+                        match result {
+                            Ok(msg) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &msg).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::InternalError,
+                                        &e.to_string(),
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
         svc.on("chat.session.rename", move |ctx| {
             let s = s.clone();
             async move {

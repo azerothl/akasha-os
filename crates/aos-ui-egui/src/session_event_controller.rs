@@ -59,9 +59,12 @@ pub(crate) fn on_loaded(app: &mut UiApp, id: String, messages: Vec<ChatLine>, me
             ));
         }
         chat.extend(messages);
+        crate::deep_plan_ui::collapse_duplicate_deep_plans(&mut chat);
         app.chat = chat;
     } else {
-        app.chat = messages;
+        let mut chat = messages;
+        crate::deep_plan_ui::collapse_duplicate_deep_plans(&mut chat);
+        app.chat = chat;
     }
     app.sync_schedule_cards();
     let _ = app.cmd_tx.send(Cmd::SkillPassPending);

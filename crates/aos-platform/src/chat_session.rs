@@ -7,7 +7,7 @@ use aos_proto::{
     set_canvas_op_rotation, translate_canvas_op_body, usable_canvas_bbox, CanvasAspect, CanvasDoc,
     CanvasEdit, CanvasLayer, CanvasLinearGradient, CanvasOp, CanvasOpBody, CanvasPenStyle,
     ChatAttachment, ChatRoomConductorPolicy, ChatRoomMember, ChatSessionMessage, ChatSessionMeta,
-    ChatSessionMode,
+    ChatSessionMode, DeepPlan,
 };
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -661,6 +661,155 @@ impl ChatSessionStore {
         Ok(msg)
     }
 
+    /// Keep a single DeepPlan card per plan/agent in the transcript (update in place).
+    pub fn upsert_deep_plan(
+        &self,
+        id: &str,
+        agent_id: &str,
+        plan: DeepPlan,
+    ) -> Result<ChatSessionMessage, SessionError> {
+        if agent_id.trim().is_empty() || plan.id.trim().is_empty() {
+            return Err(SessionError::BadRequest("agent_id/plan.id requis".into()));
+        }
+        let mut meta = self.load_meta(id)?;
+        let (_, messages) = self.get(id)?;
+        let title = if plan.title.trim().is_empty() {
+            "plan".to_string()
+        } else {
+            plan.title.clone()
+        };
+        let content = format!("📋 Plan Deep Thinking (v{}) — {title}", plan.version);
+
+        let target_idx = messages
+            .iter()
+            .enumerate()
+            .rev()
+            .find(|(_, msg)| {
+                msg.attachments.iter().any(|a| {
+                    matches!(
+                        a,
+                        ChatAttachment::DeepPlan { plan_id, .. } if plan_id == &plan.id
+                    )
+                })
+            })
+            .map(|(i, _)| i)
+            .or_else(|| {
+                messages.iter().enumerate().rev().find(|(_, msg)| {
+                    msg.attachments.iter().any(|a| {
+                        matches!(
+                            a,
+                            ChatAttachment::DeepPlan { agent_id: aid, .. } if aid == agent_id
+                        )
+                    })
+                }).map(|(i, _)| i)
+            });
+
+        let mut keep = Vec::with_capacity(messages.len());
+        let mut out_msg: Option<ChatSessionMessage> = None;
+        for (i, mut msg) in messages.into_iter().enumerate() {
+            let has_this_plan = msg.attachments.iter().any(|a| {
+                matches!(
+                    a,
+                    ChatAttachment::DeepPlan { plan_id, .. } if plan_id == &plan.id
+                ) || matches!(
+                    a,
+                    ChatAttachment::DeepPlan { agent_id: aid, .. } if aid == agent_id
+                )
+            });
+            if Some(i) == target_idx {
+                let (expand, logs_step) = msg
+                    .attachments
+                    .iter()
+                    .find_map(|a| match a {
+                        ChatAttachment::DeepPlan {
+                            expand_step_ids,
+                            show_logs_step_id,
+                            ..
+                        } => Some((expand_step_ids.clone(), show_logs_step_id.clone())),
+                        _ => None,
+                    })
+                    .unwrap_or_default();
+                msg.role = "system".into();
+                msg.content = content.clone();
+                msg.ts_ms = Self::now_ms();
+                msg.attachments = vec![ChatAttachment::DeepPlan {
+                    agent_id: agent_id.to_string(),
+                    plan_id: plan.id.clone(),
+                    title: plan.title.clone(),
+                    version: plan.version,
+                    steps: plan.steps.clone(),
+                    expand_step_ids: expand,
+                    show_logs_step_id: logs_step,
+                }];
+                out_msg = Some(msg.clone());
+                keep.push(msg);
+            } else if has_this_plan {
+                msg.attachments.retain(|a| {
+                    !matches!(
+                        a,
+                        ChatAttachment::DeepPlan { plan_id, .. } if plan_id == &plan.id
+                    ) && !matches!(
+                        a,
+                        ChatAttachment::DeepPlan { agent_id: aid, .. } if aid == agent_id
+                    )
+                });
+                let only_trace = msg.attachments.is_empty()
+                    && (msg.content.starts_with('🧠')
+                        || msg.content.contains("Deep Thinking")
+                        || msg.content.contains("Plan Deep"));
+                if only_trace || (msg.content.trim().is_empty() && msg.attachments.is_empty()) {
+                    continue;
+                }
+                keep.push(msg);
+            } else {
+                keep.push(msg);
+            }
+        }
+
+        let out = if let Some(msg) = out_msg {
+            self.rewrite_messages(id, &keep)?;
+            msg
+        } else {
+            let msg = ChatSessionMessage {
+                role: "system".into(),
+                content,
+                ts_ms: Self::now_ms(),
+                attachments: vec![ChatAttachment::DeepPlan {
+                    agent_id: agent_id.to_string(),
+                    plan_id: plan.id.clone(),
+                    title: plan.title.clone(),
+                    version: plan.version,
+                    steps: plan.steps.clone(),
+                    expand_step_ids: vec![],
+                    show_logs_step_id: None,
+                }],
+                speaker_id: None,
+                speaker_name: None,
+                thinking: None,
+            };
+            keep.push(msg.clone());
+            self.rewrite_messages(id, &keep)?;
+            msg
+        };
+        meta.updated_ms = out.ts_ms;
+        self.save_meta(&meta)?;
+        Ok(out)
+    }
+
+    fn rewrite_messages(
+        &self,
+        id: &str,
+        messages: &[ChatSessionMessage],
+    ) -> Result<(), SessionError> {
+        let path = self.dir(id).join("messages.jsonl");
+        let mut body = String::new();
+        for msg in messages {
+            body.push_str(&serde_json::to_string(msg).unwrap());
+            body.push('\n');
+        }
+        fs::write(&path, body).map_err(|e| SessionError::Io(e.to_string()))
+    }
+
     pub fn set_model(
         &self,
         id: &str,
@@ -899,6 +1048,53 @@ fn restyle_op_body(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn upsert_deep_plan_updates_in_place() {
+        use aos_proto::{DeepPlan, DeepPlanStatus, PlanStep, PlanStepStatus};
+        let dir = std::env::temp_dir().join(format!("aos-sess-dplan-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let s = ChatSessionStore::open(&dir).unwrap();
+        let m = s.create(Some("Deep".into()), None).unwrap();
+        let mut plan = DeepPlan {
+            id: "plan-1".into(),
+            agent_id: "ag-1".into(),
+            title: "T".into(),
+            status: DeepPlanStatus::InProgress,
+            steps: vec![PlanStep {
+                id: "1".into(),
+                label: "A".into(),
+                description: None,
+                status: PlanStepStatus::Pending,
+                agent_id: None,
+                children: vec![],
+                logs: vec![],
+            }],
+            version: 1,
+            created_at_ms: 1,
+            updated_at_ms: 1,
+        };
+        s.upsert_deep_plan(&m.id, "ag-1", plan.clone()).unwrap();
+        plan.version = 2;
+        plan.steps[0].status = PlanStepStatus::Done;
+        s.upsert_deep_plan(&m.id, "ag-1", plan).unwrap();
+        let (_, msgs) = s.get(&m.id).unwrap();
+        let deep_count = msgs
+            .iter()
+            .filter(|m| {
+                m.attachments
+                    .iter()
+                    .any(|a| matches!(a, ChatAttachment::DeepPlan { .. }))
+            })
+            .count();
+        assert_eq!(deep_count, 1);
+        let ChatAttachment::DeepPlan { version, steps, .. } = &msgs[0].attachments[0] else {
+            panic!("deep plan");
+        };
+        assert_eq!(*version, 2);
+        assert!(matches!(steps[0].status, PlanStepStatus::Done));
+        let _ = fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn create_append_list() {

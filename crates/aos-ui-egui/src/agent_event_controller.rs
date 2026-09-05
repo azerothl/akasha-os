@@ -59,6 +59,34 @@ pub(crate) fn on_agents(app: &mut UiApp, agents: Vec<AgentInfo>) {
     }
     let seeding = app.agent_ui.prev_states_seeding();
     for ag in &agents {
+        if let Some(plan) = ag.deep_plan.as_ref() {
+            if ag
+                .session_id
+                .as_deref()
+                .is_some_and(|sid| app.chat_state.active_session.as_deref() == Some(sid))
+            {
+                let had = app.chat.iter().any(|l| {
+                    l.attachments.iter().any(|a| {
+                        matches!(
+                            a,
+                            ChatAttachment::DeepPlan { plan_id, .. } if plan_id == &plan.id
+                        ) || matches!(
+                            a,
+                            ChatAttachment::DeepPlan { agent_id: aid, .. }
+                                if aid == &ag.agent_id
+                        )
+                    })
+                });
+                let idx = crate::deep_plan_ui::sync_deep_plan_in_chat(
+                    &mut app.chat,
+                    &ag.agent_id,
+                    plan,
+                );
+                if !had {
+                    app.chat_state.view.deep_plan_open.insert(idx);
+                }
+            }
+        }
         let prev = app.agent_ui.prev_states.get(&ag.agent_id).cloned();
         let terminal = matches!(ag.state, AgentState::Done | AgentState::Failed | AgentState::Killed);
         let was_active = prev

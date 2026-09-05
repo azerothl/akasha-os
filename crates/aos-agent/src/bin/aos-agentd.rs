@@ -23,10 +23,10 @@ use aos_proto::{
     AgentSpecResponse, AgentStartRequest, AgentState, AgentSteerRequest, AgentStepRecord,
     AgentTrace, CapInfo, CapListRequest, CapMintRequest, CapMintResponse, ChatAttachment,
     ChatMessage, ChatSessionAppendRequest, ChatSessionGetResponse, ChatSessionIdRequest,
-    ChatSessionRoomTurnCancelRequest, CancelRequest, CognitiveMode, InferParams, InferRequest,
-    McpServerInfo, PlanAppendLogRequest, PlanCreateRequest, PlanDelegateStepRequest,
-    PlanGetRequest, PlanReplaceTreeRequest, PlanResponse, PlanUpdateStepRequest, SecretGetRequest,
-    SkillInfo, TokenEvent,
+    ChatSessionRoomTurnCancelRequest, ChatSessionUpsertDeepPlanRequest, CancelRequest, CognitiveMode,
+    InferParams, InferRequest, McpServerInfo, PlanAppendLogRequest, PlanCreateRequest,
+    PlanDelegateStepRequest, PlanGetRequest, PlanReplaceTreeRequest, PlanResponse,
+    PlanUpdateStepRequest, SecretGetRequest, SkillInfo, TokenEvent,
 };
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -1510,7 +1510,8 @@ async fn main() {
                     Ok(rep) => {
                         let mut chat_summary: Option<(String, String, String, String, String)> =
                             None;
-                        let mut deep_trace_chat: Option<(String, String)> = None;
+                        let mut deep_plan_upsert: Option<(String, String, aos_proto::DeepPlan)> =
+                            None;
                         let mut parent_notify: Option<(String, String, String, bool)> = None;
                         {
                             let mut rt = shared.lock().await;
@@ -1520,7 +1521,14 @@ async fn main() {
                                     .complete_delegated_child(&rep.agent_id, child_id, result)
                                 {
                                     if let Some(entry) = rt.agents.get_mut(&rep.agent_id) {
-                                        entry.info.deep_plan = Some(plan);
+                                        entry.info.deep_plan = Some(plan.clone());
+                                        if let Some(sid) = entry.info.session_id.clone() {
+                                            deep_plan_upsert = Some((
+                                                sid,
+                                                entry.info.agent_id.clone(),
+                                                plan,
+                                            ));
+                                        }
                                     }
                                 }
                             }
@@ -1705,14 +1713,20 @@ async fn main() {
                                         {
                                             entry.info.current_task = Some(cur);
                                         }
+                                        if let Some(sid) = entry.info.session_id.clone() {
+                                            deep_plan_upsert = Some((
+                                                sid,
+                                                entry.info.agent_id.clone(),
+                                                plan.clone(),
+                                            ));
+                                        }
                                     }
                                     AgentOutputEvent::DeepTrace { message } => {
                                         if entry.info.last_output.is_empty() {
                                             entry.info.last_output = message.clone();
                                         }
-                                        if let Some(sid) = entry.info.session_id.clone() {
-                                            deep_trace_chat = Some((sid, message.clone()));
-                                        }
+                                        // Light traces stay on AgentInfo / activity —
+                                        // the plan card is upserted via DeepPlanUpdated.
                                     }
                                     AgentOutputEvent::Step(rec) => {
                                         if rec.action == "goal.complete"
@@ -1791,35 +1805,14 @@ async fn main() {
                                 )
                                 .await;
                         }
-                        if let Some((session_id, message)) = deep_trace_chat {
-                            let mut attachments = Vec::new();
-                            {
-                                let rt = shared.lock().await;
-                                if let Some(entry) = rt.agents.get(&rep.agent_id) {
-                                    if let Some(plan) = entry.info.deep_plan.as_ref() {
-                                        attachments.push(ChatAttachment::DeepPlan {
-                                            agent_id: entry.info.agent_id.clone(),
-                                            plan_id: plan.id.clone(),
-                                            title: plan.title.clone(),
-                                            version: plan.version,
-                                            steps: plan.steps.clone(),
-                                            expand_step_ids: vec![],
-                                            show_logs_step_id: None,
-                                        });
-                                    }
-                                }
-                            }
+                        if let Some((session_id, agent_id, plan)) = deep_plan_upsert {
                             let _ = bus
-                                .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
-                                    "chat.session.append",
-                                    &ChatSessionAppendRequest {
+                                .call::<ChatSessionUpsertDeepPlanRequest, aos_proto::ChatSessionMessage>(
+                                    "chat.session.upsert_deep_plan",
+                                    &ChatSessionUpsertDeepPlanRequest {
                                         session_id,
-                                        role: "system".into(),
-                                        content: format!("🧠 {message}"),
-                                        attachments,
-                                        speaker_id: None,
-                                        speaker_name: None,
-                                        thinking: None,
+                                        agent_id,
+                                        plan,
                                     },
                                     vec![],
                                 )

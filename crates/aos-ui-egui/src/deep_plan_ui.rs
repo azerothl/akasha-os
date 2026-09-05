@@ -1,6 +1,7 @@
 //! Deep Thinking plan collapsible UI + chat command parsing.
 
-use aos_proto::{ChatAttachment, PlanStep, PlanStepStatus};
+use crate::cmd::ChatLine;
+use aos_proto::{ChatAttachment, DeepPlan, PlanStep, PlanStepStatus};
 use eframe::egui;
 
 /// Parse user requests about the deep plan. Returns a UI action if matched.
@@ -110,6 +111,123 @@ fn status_label(s: PlanStepStatus) -> &'static str {
     }
 }
 
+/// Collapse historical duplicates then upsert the live plan card for `agent_id`.
+pub(crate) fn sync_deep_plan_in_chat(
+    chat: &mut Vec<ChatLine>,
+    agent_id: &str,
+    plan: &DeepPlan,
+) -> usize {
+    collapse_duplicate_deep_plans(chat);
+    upsert_deep_plan_line(chat, agent_id, plan)
+}
+
+/// Keep the latest DeepPlan card per plan_id (drop older system-only duplicates).
+pub(crate) fn collapse_duplicate_deep_plans(chat: &mut Vec<ChatLine>) {
+    let mut seen_plan_ids = std::collections::HashSet::new();
+    let mut drop_idx = Vec::new();
+    for (i, line) in chat.iter().enumerate().rev() {
+        let plan_ids: Vec<String> = line
+            .attachments
+            .iter()
+            .filter_map(|a| match a {
+                ChatAttachment::DeepPlan { plan_id, .. } => Some(plan_id.clone()),
+                _ => None,
+            })
+            .collect();
+        if plan_ids.is_empty() {
+            continue;
+        }
+        let mut remove_atts = false;
+        for pid in &plan_ids {
+            if !seen_plan_ids.insert(pid.clone()) {
+                remove_atts = true;
+            }
+        }
+        if remove_atts {
+            let only_deep = line.attachments.iter().all(|a| {
+                matches!(a, ChatAttachment::DeepPlan { .. })
+            });
+            if only_deep {
+                drop_idx.push(i);
+            }
+        }
+    }
+    for i in drop_idx {
+        chat.remove(i);
+    }
+}
+
+/// Insert or update a single DeepPlan attachment line for this agent/plan.
+pub(crate) fn upsert_deep_plan_line(
+    chat: &mut Vec<ChatLine>,
+    agent_id: &str,
+    plan: &DeepPlan,
+) -> usize {
+    let title = if plan.title.trim().is_empty() {
+        "plan"
+    } else {
+        plan.title.as_str()
+    };
+    let content = format!("📋 Plan Deep Thinking (v{}) — {title}", plan.version);
+    let target = chat.iter().enumerate().rev().find(|(_, line)| {
+        line.attachments.iter().any(|a| {
+            matches!(
+                a,
+                ChatAttachment::DeepPlan { plan_id, .. } if plan_id == &plan.id
+            ) || matches!(
+                a,
+                ChatAttachment::DeepPlan { agent_id: aid, .. } if aid == agent_id
+            )
+        })
+    }).map(|(i, _)| i);
+
+    if let Some(idx) = target {
+        let line = &mut chat[idx];
+        let (expand, logs) = line
+            .attachments
+            .iter()
+            .find_map(|a| match a {
+                ChatAttachment::DeepPlan {
+                    expand_step_ids,
+                    show_logs_step_id,
+                    ..
+                } => Some((expand_step_ids.clone(), show_logs_step_id.clone())),
+                _ => None,
+            })
+            .unwrap_or_default();
+        line.role = "system".into();
+        line.text = content;
+        line.attachments = vec![ChatAttachment::DeepPlan {
+            agent_id: agent_id.to_string(),
+            plan_id: plan.id.clone(),
+            title: plan.title.clone(),
+            version: plan.version,
+            steps: plan.steps.clone(),
+            expand_step_ids: expand,
+            show_logs_step_id: logs,
+        }];
+        idx
+    } else {
+        chat.push(ChatLine {
+            role: "system".into(),
+            text: content,
+            attachments: vec![ChatAttachment::DeepPlan {
+                agent_id: agent_id.to_string(),
+                plan_id: plan.id.clone(),
+                title: plan.title.clone(),
+                version: plan.version,
+                steps: plan.steps.clone(),
+                expand_step_ids: vec![],
+                show_logs_step_id: None,
+            }],
+            speaker_id: None,
+            speaker_name: None,
+            thinking: None,
+        });
+        chat.len() - 1
+    }
+}
+
 /// Collapsible Deep Thinking plan tree (mirrors salon thinking toggle).
 pub(crate) fn deep_plan_toggle(
     ui: &mut egui::Ui,
@@ -201,6 +319,28 @@ fn draw_step(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use aos_proto::{DeepPlanStatus, PlanStep};
+
+    fn sample_plan(version: u32, status: PlanStepStatus) -> DeepPlan {
+        DeepPlan {
+            id: "p1".into(),
+            agent_id: "a1".into(),
+            title: "Mission".into(),
+            status: DeepPlanStatus::InProgress,
+            steps: vec![PlanStep {
+                id: "1".into(),
+                label: "Étape".into(),
+                description: None,
+                status,
+                agent_id: None,
+                children: vec![],
+                logs: vec![],
+            }],
+            version,
+            created_at_ms: 1,
+            updated_at_ms: 1,
+        }
+    }
 
     #[test]
     fn detects_show_and_expand() {
@@ -216,5 +356,61 @@ mod tests {
             parse_deep_plan_command("Affiche les logs internes de l'étape 3.1"),
             Some(DeepPlanCommand::ShowLogs { step_id }) if step_id == "3.1"
         ));
+    }
+
+    #[test]
+    fn upsert_updates_same_card_not_duplicates() {
+        let mut chat = Vec::new();
+        let p1 = sample_plan(1, PlanStepStatus::Pending);
+        upsert_deep_plan_line(&mut chat, "a1", &p1);
+        let p2 = sample_plan(2, PlanStepStatus::Done);
+        upsert_deep_plan_line(&mut chat, "a1", &p2);
+        assert_eq!(chat.len(), 1);
+        let ChatAttachment::DeepPlan { version, steps, .. } = &chat[0].attachments[0] else {
+            panic!("expected DeepPlan");
+        };
+        assert_eq!(*version, 2);
+        assert!(matches!(steps[0].status, PlanStepStatus::Done));
+    }
+
+    #[test]
+    fn collapse_keeps_latest_plan_card() {
+        let mut chat = vec![
+            ChatLine {
+                role: "system".into(),
+                text: "old".into(),
+                attachments: vec![ChatAttachment::DeepPlan {
+                    agent_id: "a1".into(),
+                    plan_id: "p1".into(),
+                    title: "t".into(),
+                    version: 1,
+                    steps: vec![],
+                    expand_step_ids: vec![],
+                    show_logs_step_id: None,
+                }],
+                speaker_id: None,
+                speaker_name: None,
+                thinking: None,
+            },
+            ChatLine {
+                role: "system".into(),
+                text: "new".into(),
+                attachments: vec![ChatAttachment::DeepPlan {
+                    agent_id: "a1".into(),
+                    plan_id: "p1".into(),
+                    title: "t".into(),
+                    version: 3,
+                    steps: vec![],
+                    expand_step_ids: vec![],
+                    show_logs_step_id: None,
+                }],
+                speaker_id: None,
+                speaker_name: None,
+                thinking: None,
+            },
+        ];
+        collapse_duplicate_deep_plans(&mut chat);
+        assert_eq!(chat.len(), 1);
+        assert_eq!(chat[0].text, "new");
     }
 }
