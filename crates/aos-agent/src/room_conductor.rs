@@ -81,11 +81,22 @@ fn mention_labels_longest_first(members: &[ChatRoomMember]) -> Vec<(String, Stri
     labels
 }
 
-fn mention_boundary_ok(tail: &str, label_len: usize) -> bool {
-    tail.chars()
-        .nth(label_len)
-        .map(|c| !c.is_ascii_alphanumeric() && c != '-' && c != '_')
-        .unwrap_or(true)
+/// True when the character immediately after a matched prefix is a mention
+/// boundary (end of string, whitespace, punctuation, …).
+fn mention_boundary_ok(tail: &str, matched_bytes: usize) -> bool {
+    match tail.get(matched_bytes..).and_then(|rest| rest.chars().next()) {
+        None => true,
+        Some(c) => !c.is_ascii_alphanumeric() && c != '-' && c != '_',
+    }
+}
+
+/// UTF-8–safe ASCII-case prefix match. `str::get` returns `None` when
+/// `needle.len()` is not a char boundary in `haystack` (e.g. longer ASCII
+/// label overlapping a multi-byte `—`).
+fn ascii_prefix_eq_ignore_case(haystack: &str, needle: &str) -> bool {
+    haystack
+        .get(..needle.len())
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case(needle))
 }
 
 /// Extrait les mentions `@Name` / `@agent_id` roster dans l'ordre d'apparition.
@@ -100,10 +111,7 @@ pub fn parse_mentions(content: &str, members: &[ChatRoomMember]) -> Vec<String> 
             let tail = &content[i + 1..];
             let mut matched = false;
             for (label, agent_id) in &labels {
-                if tail.len() < label.len() {
-                    continue;
-                }
-                if !tail[..label.len()].eq_ignore_ascii_case(label) {
+                if !ascii_prefix_eq_ignore_case(tail, label) {
                     continue;
                 }
                 if !mention_boundary_ok(tail, label.len()) {
@@ -130,16 +138,23 @@ pub fn parse_mentions(content: &str, members: &[ChatRoomMember]) -> Vec<String> 
                 }
             }
             if end > start {
-                let token = &content[start..end];
-                if let Some(id) = resolve_mention_token(token, members) {
-                    if !out.iter().any(|x| x == &id) {
-                        out.push(id);
+                if let Some(token) = content.get(start..end) {
+                    if let Some(id) = resolve_mention_token(token, members) {
+                        if !out.iter().any(|x| x == &id) {
+                            out.push(id);
+                        }
                     }
                 }
             }
             i = end;
         } else {
-            i += 1;
+            // Advance one Unicode scalar so `i` stays on a char boundary
+            // (needed before the next `@` / `content[i+1..]` slice).
+            i += content[i..]
+                .chars()
+                .next()
+                .map(|c| c.len_utf8())
+                .unwrap_or(1);
         }
     }
     out
@@ -382,6 +397,31 @@ mod tests {
         }
         assert_eq!(queue[0], "agent-gamma");
         assert_eq!(queue[1], "agent-alpha");
+    }
+
+    #[test]
+    fn parse_mentions_skips_utf8_unsafe_longer_label_prefix() {
+        // Longer ASCII label (8 bytes) must not slice into the multi-byte em dash
+        // after a shorter name — that used to panic in aos-agentd.
+        let m = vec![
+            ChatRoomMember {
+                agent_id: "persona-critique".into(),
+                display_name: "Critique".into(),
+                persona_id: None,
+                joined_ms: 1,
+            },
+            ChatRoomMember {
+                agent_id: "persona-critic".into(),
+                display_name: "Critic".into(),
+                persona_id: Some("critic".into()),
+                joined_ms: 2,
+            },
+        ];
+        let ids = parse_mentions(
+            "@Critic — je vais jouer le rôle…\n**@Critic** : « Vends la souve",
+            &m,
+        );
+        assert_eq!(ids, vec![String::from("persona-critic")]);
     }
 
     #[test]
