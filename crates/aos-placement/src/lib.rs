@@ -39,7 +39,8 @@ pub use benchmark::{
 pub use cost::{Bound, CostModel, Estimate};
 pub use distributed::{
     DistributedWork, LanCluster, LanJobState, LanNode, LanPairingRegistry, LanRecovery,
-    LanSecureChannel, LanSecureFrame, LanSessionKey, LanShardAssignment, LanWorkPlan, NodeTrust,
+    LanSecureChannel, LanSecureFrame, LanSessionKey, LanShardAssignment, LanTcpTransport,
+    LanWorkMessage, LanWorkPlan, NodeTrust,
 };
 pub use hardware::{
     CpuIsa, CpuTopology, GpuBackend, GpuDevice, HardwareProfile, NpuCapabilities, ThermalSnapshot,
