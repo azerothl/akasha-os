@@ -11,7 +11,7 @@ This is **not** the bootable OS. Target v1 requirements live in
 
 ### What's new in 0.16.2
 
-- **USB I/O**: Windows-first opt-in serial USB (`device.usb.enumerate` / `open` / `read` / `write` / `close`); capability `device.usb.io`; Allow once / Always / Deny; Linux/macOS return `UnsupportedPlatform`. See [device-usb.md](device-usb.md)
+- **USB I/O**: opt-in serial USB (`device.usb.enumerate` / `open` / `read` / `write` / `close`); capability `device.usb.io`; Allow once / Always / Deny; Windows, Linux, and macOS serial backends. See [device-usb.md](device-usb.md)
 
 ### What's new in 0.16.1
 
@@ -232,7 +232,7 @@ Slash commands:
 
 **Webcam and microphone (issue #137)** — Windows Media Foundation, Linux V4L2 + cpal, and macOS AVFoundation + cpal capture through `device.enumerate` / `device.camera.capture` / `device.mic.capture`. A one-shot camera capture writes a PNG under `var/sessions/<session>/devices/` and the next agent turn attaches it for vision analysis. Confirmation is required (Allow once / Always / Deny); persistent grants are per agent + device + action. OS permission denials surface as `OsPermissionDenied`. Always-on STT is still out of scope.
 
-**USB I/O (issue #137, slice 3)** — Windows-first opt-in USB via `device.usb.enumerate` / `device.usb.open` / `device.usb.read` / `device.usb.write` / `device.usb.close`. Capability `device.usb.io`; confirmation mirrors capture (Allow once / Always / Deny). Serial (COM) open/read/write on Windows; Linux/macOS return `UnsupportedPlatform`. See `docs/device-usb.md`.
+**USB I/O (issue #137, slice 3–4)** — opt-in USB via `device.usb.enumerate` / `device.usb.open` / `device.usb.read` / `device.usb.write` / `device.usb.close`. Capability `device.usb.io`; confirmation mirrors capture (Allow once / Always / Deny). Serial open/read/write on Windows (COM), Linux (`/dev/ttyUSB*`, `/dev/ttyACM*`), and macOS (`/dev/cu.*`). See `docs/device-usb.md`.
 
 ---
 
