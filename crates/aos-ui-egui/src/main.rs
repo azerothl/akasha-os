@@ -7,6 +7,8 @@ mod agent_act_phrase;
 mod agent_controller;
 mod agent_event_controller;
 mod agent_panel;
+mod backup;
+mod backup_state;
 mod agent_ui_state;
 mod canvas_event_controller;
 mod canvas_paint;
@@ -483,6 +485,7 @@ struct UiApp {
     /// P1: file des derniers statuts (le String seul écrasait tout).
     /// Cap 20, affiché en tooltip de la status bar.
     status_history: std::collections::VecDeque<String>,
+    backup_ui: backup_state::BackupUiState,
     onboarding: OnboardingState,
     show_onboarding: bool,
     scenario_ui: scenario_ui_state::ScenarioUiState,
@@ -662,6 +665,9 @@ impl UiApp {
             security_ui: security_ui_state::SecurityUiState::default(),
             status: String::new(),
             status_history: std::collections::VecDeque::new(),
+            backup_ui: backup_state::BackupUiState::with_defaults(
+                backup::default_backup_parent().to_string_lossy().into_owned(),
+            ),
             onboarding,
             show_onboarding,
             scenario_ui: scenario_ui_state::ScenarioUiState::default(),
