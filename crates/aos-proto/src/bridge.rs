@@ -51,7 +51,7 @@ fn canonicalize(value: &Value) -> Value {
         Value::Array(values) => Value::Array(values.iter().map(canonicalize).collect()),
         Value::Object(object) => {
             let mut entries: Vec<_> = object.iter().collect();
-            entries.sort_by(|(left, _), (right, _)| left.cmp(right));
+            entries.sort_by_key(|(left, _)| *left);
             let mut sorted = Map::new();
             for (key, value) in entries {
                 sorted.insert(key.clone(), canonicalize(value));
