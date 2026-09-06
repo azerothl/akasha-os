@@ -75,7 +75,11 @@ pub fn default_usb_backend() -> Arc<dyn UsbIoBackend> {
     {
         return Arc::new(WindowsUsbBackend);
     }
-    #[cfg(not(windows))]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    {
+        Arc::new(crate::device_usb_host::HostUsbBackend)
+    }
+    #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
     {
         Arc::new(UnsupportedPlatformUsbBackend)
     }

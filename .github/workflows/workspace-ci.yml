@@ -51,7 +51,7 @@ jobs:
       - name: Install Linux host capture deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev
+          sudo apt-get install -y libasound2-dev libudev-dev
       - name: Clippy core and primary UI (warnings are errors)
         run: cargo clippy -p aos-proto -p aos-agent -p aos-ui-egui --all-targets -- -D warnings
       # The release workflow owns CUDA builds. Keep the general CI job CPU-only
