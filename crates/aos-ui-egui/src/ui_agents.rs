@@ -326,6 +326,10 @@ impl UiApp {
                     }
                 ));
             }
+            // S6 phase 2 : modèle effectif (hérité à la création).
+            if let Some(model) = a.model_id.as_deref().filter(|m| !m.is_empty()) {
+                ui.weak(agent_panel::truncate(model, 28)).on_hover_text(model);
+            }
             if let Some(task) = &a.current_task {
                 ui.small(task);
             }
@@ -657,6 +661,231 @@ impl UiApp {
                             });
                             self.draw_caps_list(ui, &holder);
                         });
+                        ui.separator();
+
+                        // S6 : confiance par agent (intents `trust.*`, `trust.set`
+                        // audité côté serveur). Le score explique les paliers.
+                        {
+                            let fr = self.prefs.language == "fr";
+                            let profile = self.agent_ui.trust.get(&id).cloned();
+                            ui.horizontal_wrapped(|ui| {
+                                ui.strong(if fr { "Confiance" } else { "Trust" });
+                                match &profile {
+                                    Some(p) => {
+                                        ui.label(format!("{:.0} · {}", p.score, p.tier));
+                                        ui.weak(format!(
+                                            "ok:{} ko:{} override:{} refus:{}",
+                                            p.success_count,
+                                            p.failure_count,
+                                            p.override_count,
+                                            p.confirmation_denials,
+                                        ));
+                                    }
+                                    None => {
+                                        ui.weak(if fr {
+                                            "profil non chargé"
+                                        } else {
+                                            "profile not loaded"
+                                        });
+                                        if ui.small_button(t.caps_refresh).clicked() {
+                                            let _ = self.cmd_tx.send(Cmd::TrustGet {
+                                                agent_id: id.clone(),
+                                            });
+                                        }
+                                    }
+                                }
+                            });
+                            if let Some(p) = profile {
+                                let pending = self
+                                    .agent_ui
+                                    .trust_edit
+                                    .entry(id.clone())
+                                    .or_insert(p.score);
+                                let mut score = *pending;
+                                ui.horizontal(|ui| {
+                                    if ui
+                                        .add(
+                                            egui::Slider::new(&mut score, 0.0..=100.0)
+                                                .show_value(true),
+                                        )
+                                        .on_hover_text(if fr {
+                                            "Ajustement manuel (audité)"
+                                        } else {
+                                            "Manual adjustment (audited)"
+                                        })
+                                        .changed()
+                                    {
+                                        *pending = score;
+                                    }
+                                    if crate::ui_primitives::danger_confirm_button(
+                                        ui,
+                                        ("trust-set", &id),
+                                        if fr { "Appliquer" } else { "Apply" },
+                                        if fr { "Confirmer ?" } else { "Confirm?" },
+                                    ) {
+                                        let _ = self.cmd_tx.send(Cmd::TrustSet {
+                                            agent_id: id.clone(),
+                                            score: *pending,
+                                        });
+                                    }
+                                    if ui
+                                        .small_button(if fr { "Réinitialiser" } else { "Reset" })
+                                        .clicked()
+                                    {
+                                        let _ = self.cmd_tx.send(Cmd::TrustReset {
+                                            agent_id: id.clone(),
+                                        });
+                                    }
+                                });
+                            }
+                        }
+                        ui.separator();
+
+                        // S6 phase 2 : politique par agent (net/tools/fs.write,
+                        // enforcement worker fail-closed, audité via UI).
+                        {
+                            let fr = self.prefs.language == "fr";
+                            ui.horizontal_wrapped(|ui| {
+                                ui.strong(if fr { "Politiques" } else { "Policies" });
+                                if let Some(p) = self.agent_ui.policies.get(&id) {
+                                    let mut bits: Vec<String> = Vec::new();
+                                    bits.push(
+                                        if matches!(
+                                            p.net,
+                                            aos_proto::AgentNetPolicy::Deny
+                                        ) {
+                                            if fr {
+                                                "réseau: refusé"
+                                            } else {
+                                                "net: denied"
+                                            }
+                                        } else if fr {
+                                            "réseau: autorisé"
+                                        } else {
+                                            "net: allowed"
+                                        }
+                                        .to_string(),
+                                    );
+                                    bits.push(
+                                        if p.fs_write {
+                                            if fr { "fs.write: oui" } else { "fs.write: yes" }
+                                        } else if fr {
+                                            "fs.write: non"
+                                        } else {
+                                            "fs.write: no"
+                                        }
+                                        .to_string(),
+                                    );
+                                    if let Some(allow) = &p.tool_allowlist {
+                                        bits.push(
+                                            if fr {
+                                                format!("outils: {}/…", allow.len())
+                                            } else {
+                                                format!("tools: {}/…", allow.len())
+                                            },
+                                        );
+                                    }
+                                    ui.weak(bits.join(" · "));
+                                } else {
+                                    ui.weak(if fr {
+                                        "politique non chargée"
+                                    } else {
+                                        "policy not loaded"
+                                    });
+                                    if ui.small_button(t.caps_refresh).clicked() {
+                                        let _ = self.cmd_tx.send(Cmd::AgentPolicyGet {
+                                            agent_id: id.clone(),
+                                        });
+                                    }
+                                }
+                            });
+                            if self.agent_ui.policies.contains_key(&id) {
+                                let draft = self
+                                    .agent_ui
+                                    .policy_edit
+                                    .entry(id.clone())
+                                    .or_insert_with(|| {
+                                        crate::agent_ui_state::PolicyEditDraft::from_policy(
+                                            self.agent_ui
+                                                .policies
+                                                .get(&id)
+                                                .expect("checked"),
+                                        )
+                                    });
+                                // NOTE: `draft` emprunte agent_ui ; copier les
+                                // champs éditables en locaux pour la frame.
+                                let mut net_deny = draft.net_deny;
+                                let mut fs_write = draft.fs_write;
+                                let mut restrict = draft.restrict_tools;
+                                let mut tools = draft.tools.clone();
+                                ui.horizontal(|ui| {
+                                    ui.label(if fr { "Réseau" } else { "Network" });
+                                    ui.radio_value(&mut net_deny, false, if fr { "Autorisé" } else { "Allowed" });
+                                    ui.radio_value(&mut net_deny, true, if fr { "Refusé" } else { "Denied" });
+                                });
+                                ui.checkbox(
+                                    &mut fs_write,
+                                    if fr { "Autoriser fs.write" } else { "Allow fs.write" },
+                                );
+                                ui.checkbox(
+                                    &mut restrict,
+                                    if fr {
+                                        "Restreindre les outils (allowlist)"
+                                    } else {
+                                        "Restrict tools (allowlist)"
+                                    },
+                                );
+                                if restrict {
+                                    ui.indent("policy_tools", |ui| {
+                                        for (_family, names) in crate::ROSTER_TOOL_GROUPS {
+                                            for name in *names {
+                                                let mut on =
+                                                    tools.iter().any(|x| x == name);
+                                                if ui.checkbox(&mut on, *name).changed() {
+                                                    if on {
+                                                        tools.push((*name).into());
+                                                    } else {
+                                                        tools.retain(|x| x != name);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    });
+                                }
+                                ui.horizontal(|ui| {
+                                    if crate::ui_primitives::danger_confirm_button(
+                                        ui,
+                                        ("policy-set", &id),
+                                        if fr { "Appliquer" } else { "Apply" },
+                                        if fr { "Confirmer ?" } else { "Confirm?" },
+                                    ) {
+                                        let policy = crate::agent_ui_state::PolicyEditDraft {
+                                            net_deny,
+                                            fs_write,
+                                            restrict_tools: restrict,
+                                            tools: tools.clone(),
+                                        }
+                                        .to_policy();
+                                        let _ = self.cmd_tx.send(Cmd::AgentPolicySet {
+                                            agent_id: id.clone(),
+                                            policy,
+                                        });
+                                        self.toasts.push_success(if fr {
+                                            "Politique envoyée (live si l'agent tourne, sinon au redémarrage)".to_string()
+                                        } else {
+                                            "Policy sent (live if running, else on restart)".to_string()
+                                        });
+                                    }
+                                });
+                                // Réécrit le brouillon persistant.
+                                if let Some(d) = self.agent_ui.policy_edit.get_mut(&id) {
+                                    d.net_deny = net_deny;
+                                    d.fs_write = fs_write;
+                                    d.restrict_tools = restrict;
+                                    d.tools = tools;
+                                }
+                            }
+                        }
                         ui.separator();
 
                         let info = self.agents.iter().find(|a| a.agent_id == id).cloned();

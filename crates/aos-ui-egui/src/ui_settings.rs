@@ -41,7 +41,7 @@ impl UiApp {
         // P1 pagination lite : 850 lignes en un scroll -> pills de sections.
         // Recherche non vide = filtre global historique ; sinon une seule section.
         let fr = self.prefs.language == "fr";
-        let sections: [(&str, &str); 10] = [
+        let sections: [(&str, &str); 11] = [
             ("all", if fr { "Tout" } else { "All" }),
             ("me", if fr { "Moi" } else { "Me" }),
             ("models", "Models"),
@@ -52,6 +52,7 @@ impl UiApp {
             ("secrets", "Secrets"),
             ("catalogue", "Catalogue"),
             ("schedule", if fr { "Planif" } else { "Schedule" }),
+            ("backup", if fr { "Sauvegarde" } else { "Backup" }),
         ];
         ui.horizontal_wrapped(|ui| {
             for (id, label) in sections {
@@ -118,6 +119,7 @@ impl UiApp {
                 ["secret", "clé", "token", "api"].as_slice(),
                 ["catalogue", "catalog", "module", "community", "communauté"].as_slice(),
                 ["planification", "schedule", "tâche", "task"].as_slice(),
+                ["sauvegarde", "backup", "restauration", "restore", "export"].as_slice(),
             ]
             .iter()
             .any(|terms| terms.iter().any(|term| term.contains(query.as_str())))
@@ -1257,6 +1259,12 @@ impl UiApp {
                         }
                     }
                 });
+        }
+        if section_visible(
+            "backup",
+            &["sauvegarde", "backup", "restauration", "restore", "export"],
+        ) {
+            self.ui_backup(ui);
         }
     }
 }

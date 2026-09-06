@@ -20,6 +20,7 @@ pub enum TabKind {
     Notes,
     Library,
     Tasks,
+    Files,
     Models,
     Settings,
     Caps,
@@ -40,7 +41,7 @@ impl TabKind {
     /// (Chat/Agents/Create/Memory) are excluded — they never render in More.
     pub fn nav_group(self) -> Option<NavGroup> {
         match self {
-            TabKind::Notes | TabKind::Library | TabKind::Tasks | TabKind::Models => {
+            TabKind::Notes | TabKind::Library | TabKind::Tasks | TabKind::Files | TabKind::Models => {
                 Some(NavGroup::Daily)
             }
             TabKind::Providers => Some(NavGroup::System),
@@ -98,6 +99,7 @@ pub fn tab_kind(tab: &Tab) -> TabKind {
         Tab::Notes => TabKind::Notes,
         Tab::Library => TabKind::Library,
         Tab::Tasks => TabKind::Tasks,
+        Tab::Files => TabKind::Files,
         Tab::Models => TabKind::Models,
         Tab::Settings => TabKind::Settings,
         Tab::Caps => TabKind::Caps,
@@ -169,6 +171,7 @@ mod tests {
     #[test]
     fn overflow_groups_are_stable() {
         assert_eq!(TabKind::Notes.nav_group(), Some(NavGroup::Daily));
+        assert_eq!(TabKind::Files.nav_group(), Some(NavGroup::Daily));
         assert_eq!(TabKind::Models.nav_group(), Some(NavGroup::Daily));
         assert_eq!(TabKind::Providers.nav_group(), Some(NavGroup::System));
         assert_eq!(TabKind::Caps.nav_group(), Some(NavGroup::Admin));

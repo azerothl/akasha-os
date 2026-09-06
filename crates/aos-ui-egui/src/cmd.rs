@@ -7,10 +7,10 @@ use aos_proto::decl_ui::ModuleUiResponse;
 use aos_proto::McpServerInfo;
 use aos_proto::{
     AgentInfo, AgentTrace, AuditEvent, CanvasOp, CanvasOpBody, CanvasPenStyle, CapInfo,
-    ChatAttachment, ChatRoomMember, ChatSessionMeta, ChatSessionMode, DocumentRef,
-    FeedbackSubmitRequest, FeedbackSubmitResponse, MemHit, ModelInfo, ModuleCatalogue, ModuleInfo,
-    PendingConfirmation, ProviderRecord, SkillInfo, SkillPassPendingOffer, SystemMetrics,
-    WebSearchHit,
+    ChatAttachment, ChatRoomMember, ChatSessionMeta, ChatSessionMode, DataClass, DocumentRef,
+    FeedbackSubmitRequest, FeedbackSubmitResponse, FsEntry, MemHit, ModelInfo, ModuleCatalogue,
+    ModuleInfo, PendingConfirmation, ProviderRecord, SkillInfo, SkillPassPendingOffer,
+    SystemMetrics, WebSearchHit,
 };
 
 #[allow(clippy::large_enum_variant)] // Boxing command payloads would complicate every UI dispatch site.
@@ -273,6 +273,43 @@ pub(crate) enum Cmd {
     TasksComplete {
         id: String,
         done: bool,
+    },
+    /// S6 : confiance par agent (intents `trust.*`, audités côté serveur).
+    TrustGet {
+        agent_id: String,
+    },
+    TrustSet {
+        agent_id: String,
+        score: f32,
+    },
+    TrustReset {
+        agent_id: String,
+    },
+    /// S6 phase 2 : politique par agent (intents `agent.policy.*`).
+    AgentPolicyGet {
+        agent_id: String,
+    },
+    AgentPolicySet {
+        agent_id: String,
+        policy: aos_proto::AgentPolicy,
+    },
+    /// S5 : navigateur de fichiers (intents `fs.*`).
+    FilesList {
+        prefix: String,
+    },
+    FilesRead {
+        path: String,
+    },
+    FilesWrite {
+        path: String,
+        content: String,
+    },
+    FilesDelete {
+        path: String,
+    },
+    FilesSetClass {
+        path: String,
+        class: DataClass,
     },
     Feedback(FeedbackSubmitRequest),
     KillAuditd,
@@ -609,6 +646,27 @@ pub(crate) enum Evt {
         agent_id: String,
     },
     FileOk(String),
+    /// S5 : résultats du navigateur de fichiers (toujours racine ; la
+    /// navigation par dossier est une présentation locale).
+    FilesListed {
+        entries: Vec<FsEntry>,
+    },
+    FilesRead {
+        path: String,
+        content: String,
+        class: DataClass,
+        version: u64,
+    },
+    FilesOpOk(String),
+    /// S6 : profil de confiance d'un agent.
+    TrustProfile {
+        profile: aos_proto::TrustProfile,
+    },
+    /// S6 phase 2 : politique d'un agent.
+    AgentPolicy {
+        agent_id: String,
+        policy: aos_proto::AgentPolicy,
+    },
     MediaOk {
         kind: String,
         path: String,
@@ -793,9 +851,17 @@ fn now_epoch_ms() -> u64 {
         .unwrap_or(0)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum NoticeSeverity {
+    Info,
+    Warning,
+    Urgent,
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct AgentNotice {
     pub(crate) agent_id: String,
     pub(crate) session_id: String,
     pub(crate) summary: String,
+    pub(crate) severity: NoticeSeverity,
 }

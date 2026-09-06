@@ -28,7 +28,9 @@ use aos_proto::{
     ChatSessionRoomTurnResponse, ChatSessionSetArchivedRequest, ChatSessionSetModeRequest,
     ChatSessionSetModelRequest, ChatSessionSetPinnedRequest, ConfirmResponseRequest,
     DeviceCaptureStopRequest, DevicePermissionRevokeRequest, FeedbackSubmitRequest,
-    FeedbackSubmitResponse, FilesGenerateRequest, FilesGenerateResponse, InferParams, InferRequest,
+    FeedbackSubmitResponse, FilesGenerateRequest, FilesGenerateResponse, FsDeleteRequest,
+    FsEntry, FsListRequest, FsReadRequest, FsReadResponse, FsSetClassRequest, FsWriteRequest,
+    InferParams, InferRequest,
     LoadRequest, LoadResponse, McpServerInfo, MediaAudioGenerateRequest, MediaGenerateResponse,
     MediaImageGenerateRequest, MediaImageUpscaleRequest, MemContextRequest, MemContextResponse,
     MemEpisodicDeleteRequest, MemExtractRequest, MemExtractResponse, MemHit, MemListRequest,
@@ -38,8 +40,9 @@ use aos_proto::{
     NetFetchRequest, NetFetchResponse, NetModeRequest, PendingConfirmation, ProviderIdRequest,
     ProviderListResponse, ProviderRecord, ProviderTestResponse, ProviderUpsertRequest,
     SecretListRequest, SecretListResponse, SecretSetRequest, SetRoutingRequest, SkillInfo,
-    SkillPassPendingOffer, SkillPassRequest, SystemMetrics, TokenEvent, UnloadRequest,
-    UserLibraryAddRequest, UserLibraryAddResponse, UserLibraryListResponse,
+    SkillPassPendingOffer, SkillPassRequest, SystemMetrics, TokenEvent, TrustGetRequest,
+    TrustProfile, TrustSetRequest, UnloadRequest, AgentPolicyGetRequest, AgentPolicySetRequest,
+    AgentPolicy,    UserLibraryAddRequest, UserLibraryAddResponse, UserLibraryListResponse,
     UserLibraryRemoveRequest, UserLibraryRemoveResponse, WebBrowseRequest, WebBrowseResponse,
     WebSearchRequest, WebSearchResponse, CHAT_DELEGATION_PROMPT,
 };
@@ -1608,6 +1611,113 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 }
             }
         }
+        // S5 : navigateur de fichiers via les intents `fs.*` (audités côté serveur).
+        Cmd::FilesList { prefix } => {
+            match bus
+                .call::<FsListRequest, Vec<FsEntry>>(
+                    "fs.list",
+                    &FsListRequest { prefix, caps: vec![] },
+                    vec![],
+                )
+                .await
+            {
+                Ok(entries) => {
+                    let _ = evt_tx.send(Evt::FilesListed { entries });
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::FilesRead { path } => {
+            match bus
+                .call::<FsReadRequest, FsReadResponse>(
+                    "fs.read",
+                    &FsReadRequest { path: path.clone(), actor: String::new(), caps: vec![] },
+                    vec![],
+                )
+                .await
+            {
+                Ok(resp) => {
+                    let _ = evt_tx.send(Evt::FilesRead {
+                        path: resp.path,
+                        content: resp.content,
+                        class: resp.class,
+                        version: resp.version,
+                    });
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::FilesWrite { path, content } => {
+            match bus
+                .call::<FsWriteRequest, u64>(
+                    "fs.write",
+                    &FsWriteRequest {
+                        path: path.clone(),
+                        content,
+                        tx_id: None,
+                        actor: "human:ui".into(),
+                        caps: vec![],
+                        trace_id: String::new(),
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(version) => {
+                    let _ = evt_tx.send(Evt::FilesOpOk(format!("{path} (v{version})")));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::FilesDelete { path } => {
+            match bus
+                .call::<FsDeleteRequest, u64>(
+                    "fs.delete",
+                    &FsDeleteRequest {
+                        path: path.clone(),
+                        tx_id: None,
+                        actor: "human:ui".into(),
+                        caps: vec![],
+                        trace_id: String::new(),
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(_) => {
+                    let _ = evt_tx.send(Evt::FilesOpOk(format!("{path}")));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::FilesSetClass { path, class } => {
+            match bus
+                .call::<FsSetClassRequest, Result<(), String>>(
+                    "fs.set_class",
+                    &FsSetClassRequest { path: path.clone(), class, caps: vec![] },
+                    vec![],
+                )
+                .await
+            {
+                Ok(Ok(())) => {
+                    let _ = evt_tx.send(Evt::FilesOpOk(format!("{path}")));
+                }
+                Ok(Err(e)) => {
+                    let _ = evt_tx.send(Evt::Error(e));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
         Cmd::Confirm { id, approved } => {
             match bus
                 .call::<ConfirmResponseRequest, bool>(
@@ -2121,6 +2231,120 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(format!("cap.revoke: {e}")));
+                }
+            }
+        }
+        // S6 : confiance par agent (audité côté serveur pour trust.set).
+        Cmd::TrustGet { agent_id } => {
+            match bus
+                .call::<TrustGetRequest, TrustProfile>(
+                    "trust.get",
+                    &TrustGetRequest { agent_id: agent_id.clone() },
+                    vec![],
+                )
+                .await
+            {
+                Ok(profile) => {
+                    let _ = evt_tx.send(Evt::TrustProfile { profile });
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(format!("trust.get: {e}")));
+                }
+            }
+        }
+        Cmd::TrustSet { agent_id, score } => {
+            match bus
+                .call::<TrustSetRequest, bool>(
+                    "trust.set",
+                    &TrustSetRequest { agent_id: agent_id.clone(), score },
+                    vec![],
+                )
+                .await
+            {
+                Ok(_) => {
+                    if let Ok(profile) = bus
+                        .call::<TrustGetRequest, TrustProfile>(
+                            "trust.get",
+                            &TrustGetRequest { agent_id: agent_id.clone() },
+                            vec![],
+                        )
+                        .await
+                    {
+                        let _ = evt_tx.send(Evt::TrustProfile { profile });
+                    }
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(format!("trust.set: {e}")));
+                }
+            }
+        }
+        Cmd::TrustReset { agent_id } => {
+            match bus
+                .call::<TrustGetRequest, bool>(
+                    "trust.reset",
+                    &TrustGetRequest { agent_id: agent_id.clone() },
+                    vec![],
+                )
+                .await
+            {
+                Ok(_) => {
+                    if let Ok(profile) = bus
+                        .call::<TrustGetRequest, TrustProfile>(
+                            "trust.get",
+                            &TrustGetRequest { agent_id },
+                            vec![],
+                        )
+                        .await
+                    {
+                        let _ = evt_tx.send(Evt::TrustProfile { profile });
+                    }
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(format!("trust.reset: {e}")));
+                }
+            }
+        }
+        // S6 phase 2 : politique par agent (application live si le worker tourne).
+        Cmd::AgentPolicyGet { agent_id } => {
+            match bus
+                .call::<AgentPolicyGetRequest, AgentPolicy>(
+                    aos_agent::intents::POLICY_GET,
+                    &AgentPolicyGetRequest { agent_id: agent_id.clone() },
+                    vec![],
+                )
+                .await
+            {
+                Ok(policy) => {
+                    let _ = evt_tx.send(Evt::AgentPolicy { agent_id, policy });
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(format!("agent.policy.get: {e}")));
+                }
+            }
+        }
+        Cmd::AgentPolicySet { agent_id, policy } => {
+            match bus
+                .call::<AgentPolicySetRequest, bool>(
+                    aos_agent::intents::POLICY_SET,
+                    &AgentPolicySetRequest { agent_id: agent_id.clone(), policy },
+                    vec![],
+                )
+                .await
+            {
+                Ok(_) => {
+                    if let Ok(policy) = bus
+                        .call::<AgentPolicyGetRequest, AgentPolicy>(
+                            aos_agent::intents::POLICY_GET,
+                            &AgentPolicyGetRequest { agent_id: agent_id.clone() },
+                            vec![],
+                        )
+                        .await
+                    {
+                        let _ = evt_tx.send(Evt::AgentPolicy { agent_id, policy });
+                    }
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(format!("agent.policy.set: {e}")));
                 }
             }
         }

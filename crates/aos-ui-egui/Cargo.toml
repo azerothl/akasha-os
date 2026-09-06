@@ -22,3 +22,4 @@ egui_commonmark = { version = "0.20", default-features = false, features = ["pul
 egui_plot = "0.31"
 image = { version = "0.25", default-features = false, features = ["png"] }
 rfd = "0.15"
+sha2 = "0.10"
