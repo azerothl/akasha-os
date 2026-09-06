@@ -215,6 +215,12 @@ async fn inherit_device_vision_model(bus: &BusClient, spec: &mut AgentSpec) {
 /// True for ActorDenied / PermissionDenied — not JSON fields like `os_permission`.
 fn outcome_looks_like_missing_cap(outcome: &str) -> bool {
     let lower = outcome.to_ascii_lowercase();
+    if lower.contains("périphérique occupé")
+        || lower.contains("peripherique occupe")
+        || lower.contains("device busy")
+    {
+        return false;
+    }
     lower.contains("permissiondenied")
         || lower.contains("actordenied")
         || lower.contains("permission refus")
@@ -222,6 +228,46 @@ fn outcome_looks_like_missing_cap(outcome: &str) -> bool {
         || lower.contains("capacité manquante")
         || lower.contains("confiance trop faible")
         || lower.contains("confiance faible")
+}
+
+fn missing_cap_hint(canonical: &str) -> String {
+    if canonical.starts_with("module.install") {
+        "module.install".to_string()
+    } else if canonical.starts_with("module.compile") {
+        "module.compile".to_string()
+    } else if canonical.starts_with("web.") || canonical.starts_with("net.") {
+        "net.connect:*".to_string()
+    } else if canonical.starts_with("media.") {
+        "media.generate".to_string()
+    } else if canonical.starts_with("device.camera") {
+        "device.camera.capture".to_string()
+    } else if canonical.starts_with("device.mic") {
+        "device.mic.capture".to_string()
+    } else if canonical.starts_with("device.usb") {
+        "device.usb.io".to_string()
+    } else if canonical.starts_with("fs.") {
+        "fs.write:**".to_string()
+    } else if canonical.contains('.') {
+        let mod_name = canonical.split('.').next().unwrap_or("?");
+        format!("tool.invoke:{mod_name}")
+    } else {
+        "tool.invoke:*".to_string()
+    }
+}
+
+fn append_usb_busy_hint(outcome: &mut String, action: &str) {
+    if !canonicalize_tool_name(action).starts_with("device.usb") {
+        return;
+    }
+    let lower = outcome.to_ascii_lowercase();
+    if lower.contains("périphérique occupé")
+        || lower.contains("peripherique occupe")
+        || lower.contains("device busy")
+    {
+        outcome.push_str(
+            "\n[hint] périphérique occupé — fermez l'autre appli qui utilise le port, puis réessayez.",
+        );
+    }
 }
 
 fn agent_has_device_capture_tools(tools: &[String]) -> bool {
@@ -1077,32 +1123,13 @@ async fn main() {
                     let mut outcome = outcome;
                     if outcome_looks_like_missing_cap(&outcome) {
                         let canonical = canonicalize_tool_name(&action.action);
-                        let hint = if canonical.starts_with("module.install") {
-                            "module.install".to_string()
-                        } else if canonical.starts_with("module.compile") {
-                            "module.compile".to_string()
-                        } else if canonical.starts_with("web.") || canonical.starts_with("net.")
-                        {
-                            "net.connect:*".to_string()
-                        } else if canonical.starts_with("media.") {
-                            "media.generate".to_string()
-                        } else if canonical.starts_with("device.camera") {
-                            "device.camera.capture".to_string()
-                        } else if canonical.starts_with("device.mic") {
-                            "device.mic.capture".to_string()
-                        } else if canonical.starts_with("fs.") {
-                            "fs.write:**".to_string()
-                        } else if canonical.contains('.') {
-                            let mod_name = canonical.split('.').next().unwrap_or("?");
-                            format!("tool.invoke:{mod_name}")
-                        } else {
-                            "tool.invoke:*".to_string()
-                        };
+                        let hint = missing_cap_hint(&canonical);
                         outcome.push_str(&format!(
                             "\n[hint] Essayez : TOOL: cap.request {{\"cap\":\"{hint}\",\"reason\":\"besoin pour {}\"}}",
                             action.action
                         ));
                     }
+                    append_usb_busy_hint(&mut outcome, &action.action);
                     if canvas_tool_mutates_scene(&action.action) && canvas_op_succeeded(&outcome) {
                         if let Some(sid) = spec.session_id.as_deref().filter(|s| !s.is_empty()) {
                             let scene = refresh_canvas_scene_after_op(
@@ -1273,32 +1300,13 @@ async fn main() {
                 let mut outcome = outcome;
                 if outcome_looks_like_missing_cap(&outcome) {
                     let canonical = canonicalize_tool_name(&action.action);
-                    let hint = if canonical.starts_with("module.install") {
-                        "module.install".to_string()
-                    } else if canonical.starts_with("module.compile") {
-                        "module.compile".to_string()
-                    } else if canonical.starts_with("web.") || canonical.starts_with("net.")
-                    {
-                        "net.connect:*".to_string()
-                    } else if canonical.starts_with("media.") {
-                        "media.generate".to_string()
-                    } else if canonical.starts_with("device.camera") {
-                        "device.camera.capture".to_string()
-                    } else if canonical.starts_with("device.mic") {
-                        "device.mic.capture".to_string()
-                    } else if canonical.starts_with("fs.") {
-                        "fs.write:**".to_string()
-                    } else if canonical.contains('.') {
-                        let mod_name = canonical.split('.').next().unwrap_or("?");
-                        format!("tool.invoke:{mod_name}")
-                    } else {
-                        "tool.invoke:*".to_string()
-                    };
+                    let hint = missing_cap_hint(&canonical);
                     outcome.push_str(&format!(
                         "\n[hint] Essayez : TOOL: cap.request {{\"cap\":\"{hint}\",\"reason\":\"besoin pour {}\"}}",
                         action.action
                     ));
                 }
+                append_usb_busy_hint(&mut outcome, &action.action);
                 if canvas_tool_mutates_scene(&action.action) && canvas_op_succeeded(&outcome) {
                     if let Some(sid) = spec.session_id.as_deref().filter(|s| !s.is_empty()) {
                         let scene = refresh_canvas_scene_after_op(
@@ -5016,5 +5024,24 @@ mod tests {
         assert!(!super::outcome_looks_like_missing_cap(
             "PNG webcam capturé. path=foo.png"
         ));
+        assert!(!super::outcome_looks_like_missing_cap(
+            "PermissionDenied: périphérique occupé"
+        ));
+    }
+
+    #[test]
+    fn usb_busy_hint_uses_human_fr_copy() {
+        let mut outcome = "device.usb.open err: PermissionDenied: périphérique occupé".to_string();
+        super::append_usb_busy_hint(&mut outcome, "device.usb.open");
+        assert!(outcome.contains("fermez l'autre appli"));
+        assert!(!outcome.contains("tool.invoke:device"));
+    }
+
+    #[test]
+    fn missing_cap_hint_for_usb_uses_device_usb_io() {
+        assert_eq!(
+            super::missing_cap_hint("device.usb.open"),
+            "device.usb.io"
+        );
     }
 }
