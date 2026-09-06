@@ -564,7 +564,7 @@ mod windows_backend {
             let id = format!("win:Serial:{}", port);
             devices.push(UsbDeviceDescriptor {
                 id,
-                name: format!("USB Serial ({port})"),
+                name: "USB Serial".to_string(),
                 class: UsbDeviceClass::Serial,
                 vendor_id: None,
                 product_id: None,

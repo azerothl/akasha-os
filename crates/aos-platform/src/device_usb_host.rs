@@ -81,19 +81,16 @@ fn open_serial_port(path: &str) -> Result<Box<dyn UsbDeviceHandle>, UsbIoError> 
     Ok(Box::new(SerialHandle { port }))
 }
 
-fn serial_device_name(path: &str, info: &serialport::SerialPortInfo) -> String {
-    match &info.port_type {
-        serialport::SerialPortType::UsbPort(usb) => {
-            if let Some(product) = usb.product.as_deref().filter(|s| !s.is_empty()) {
-                format!("{} ({})", product, path)
-            } else if let Some(mfr) = usb.manufacturer.as_deref().filter(|s| !s.is_empty()) {
-                format!("{} ({})", mfr, path)
-            } else {
-                format!("USB Serial ({})", path)
-            }
+fn serial_device_name(info: &serialport::SerialPortInfo) -> String {
+    if let serialport::SerialPortType::UsbPort(usb) = &info.port_type {
+        if let Some(product) = usb.product.as_deref().filter(|s| !s.is_empty()) {
+            return product.to_string();
         }
-        _ => format!("USB Serial ({})", path),
+        if let Some(mfr) = usb.manufacturer.as_deref().filter(|s| !s.is_empty()) {
+            return mfr.to_string();
+        }
     }
+    "USB Serial".to_string()
 }
 
 impl UsbIoBackend for HostUsbBackend {
@@ -109,7 +106,7 @@ impl UsbIoBackend for HostUsbBackend {
             };
             devices.push(UsbDeviceDescriptor {
                 id,
-                name: serial_device_name(&path, &info),
+                name: serial_device_name(&info),
                 class: UsbDeviceClass::Serial,
                 vendor_id,
                 product_id,
@@ -154,6 +151,36 @@ mod tests {
         assert_eq!(err, UsbIoError::DeviceBusy);
         let err = map_host_error("Operation timed out");
         assert_eq!(err, UsbIoError::IoTimeout);
+    }
+
+    #[test]
+    fn serial_device_name_omits_host_path() {
+        let info = serialport::SerialPortInfo {
+            port_name: "/dev/ttyUSB0".into(),
+            port_type: serialport::SerialPortType::UsbPort(serialport::UsbPortInfo {
+                vid: 0x10c4,
+                pid: 0xea60,
+                serial_number: None,
+                manufacturer: Some("Silicon Labs".into()),
+                product: Some("CP2102 USB to UART Bridge Controller".into()),
+            }),
+        };
+        let name = serial_device_name(&info);
+        assert_eq!(name, "CP2102 USB to UART Bridge Controller");
+        assert!(!name.contains("/dev/"));
+        assert!(!name.contains("ttyUSB"));
+    }
+
+    #[test]
+    fn serial_device_name_falls_back_without_usb_metadata() {
+        let info = serialport::SerialPortInfo {
+            port_name: "/dev/cu.usbserial-1410".into(),
+            port_type: serialport::SerialPortType::Unknown,
+        };
+        let name = serial_device_name(&info);
+        assert_eq!(name, "USB Serial");
+        assert!(!name.contains("/dev/"));
+        assert!(!name.contains("cu."));
     }
 
     #[test]

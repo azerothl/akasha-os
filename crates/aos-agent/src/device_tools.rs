@@ -4,9 +4,26 @@ use aos_ipc::BusClient;
 use aos_proto::{
     CaptureMode, CapturePermission, DeviceCaptureRequest, DeviceCaptureResponse,
     DeviceCaptureStopRequest, DeviceEnumerateResponse, DeviceKind, UsbCloseRequest,
-    UsbEnumerateResponse, UsbOpenRequest, UsbPermission, UsbReadRequest, UsbWriteRequest,
+    UsbDeviceDescriptor, UsbEnumerateResponse, UsbOpenRequest, UsbPermission, UsbReadRequest,
+    UsbWriteRequest,
 };
 use std::path::PathBuf;
+
+fn usb_devices_for_agent(devices: &[UsbDeviceDescriptor]) -> String {
+    let slim: Vec<serde_json::Value> = devices
+        .iter()
+        .map(|d| {
+            serde_json::json!({
+                "id": d.id,
+                "name": d.name,
+                "class": d.class,
+                "vendor_id": d.vendor_id,
+                "product_id": d.product_id,
+            })
+        })
+        .collect();
+    serde_json::to_string(&slim).unwrap_or_else(|_| "[]".into())
+}
 
 fn first_json_value(s: &str) -> Option<serde_json::Value> {
     let start = s.find('{')?;
@@ -197,12 +214,10 @@ pub async fn invoke_device_tool(
             .await
         {
             Ok(resp) if resp.devices.is_empty() => {
-                "aucun périphérique USB détecté. Sous Windows, branche un adaptateur série USB.".into()
+                "aucun périphérique USB détecté. Branche un adaptateur série USB.".into()
             }
-            Ok(resp) => serde_json::to_string(&resp.devices).unwrap_or_default(),
-            Err(e) => format!(
-                "device.usb.enumerate err: {e}. L'accès USB natif n'est disponible que sous Windows dans Preview."
-            ),
+            Ok(resp) => usb_devices_for_agent(&resp.devices),
+            Err(e) => format!("device.usb.enumerate err: {e}."),
         },
         "device.usb.open" => {
             let Some(session_id) = session_id.filter(|s| !s.is_empty()) else {
@@ -324,6 +339,26 @@ pub async fn invoke_device_tool(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use aos_proto::device_usb::{UsbDeviceClass, UsbDeviceDescriptor};
+
+    #[test]
+    fn usb_devices_for_agent_omits_path_hint() {
+        let devices = vec![
+            UsbDeviceDescriptor {
+                id: "linux:Serial:/dev/ttyUSB0".into(),
+                name: "CP2102".into(),
+                class: UsbDeviceClass::Serial,
+                vendor_id: Some(0x10c4),
+                product_id: Some(0xea60),
+                path_hint: Some("/dev/ttyUSB0".into()),
+            },
+        ];
+        let json = usb_devices_for_agent(&devices);
+        assert!(!json.contains("path_hint"));
+        assert!(json.contains(r#""name":"CP2102"#));
+        assert!(json.contains("linux:Serial"));
+        assert!(!json.contains(r#""name":"CP2102 (/dev"#));
+    }
 
     #[test]
     fn extracts_png_path_from_capture_json() {

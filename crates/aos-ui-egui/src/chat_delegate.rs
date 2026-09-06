@@ -316,8 +316,10 @@ pub(crate) fn chat_device_usb_connect_intent(text: &str) -> bool {
 }
 
 const USB_OPEN_BRIEF_DIRECTIVE: &str = "[USB] Procédure obligatoire : \
-1) device.usb.enumerate pour obtenir les device_id (ex. win:Serial:COM3) \
+1) device.usb.enumerate pour obtenir les device_id \
 2) device.usb.open avec ce device_id exact. \
+Dans goal.complete : cite uniquement le champ name (ex. CP2102, USB Serial), \
+jamais /dev/*, path_hint ni device_id. \
 Interdit : device.usb.io (capacité, pas un outil), device.enumerate, shell.run.";
 
 fn enrich_usb_connect_brief(brief: String, user_text: &str) -> String {
