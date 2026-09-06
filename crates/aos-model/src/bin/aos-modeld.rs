@@ -6,8 +6,9 @@ use aos_ipc::{BusClient, BusService, StreamHandle};
 use aos_model::{media, providers, ModelSubsystem, ModeldConfig};
 use aos_placement::{
     BackendKind, DistributedWork, InferencePlanDiagnostic, LanCluster, LanDiscoveryAdvertisement,
-    LanDiscoverySocket, LanNode, LanPairingRegistry, LanSessionKey, LanTcpTransport,
-    LanWorkMessage, LanWorkPlan, NodeTrust, PlacementProfile, ThermalPolicy,
+    LanDiscoverySocket, LanNode, LanPairingRegistry, LanSessionKey, LanTcpListener,
+    LanTcpTransport, LanWorkMessage, LanWorkPlan, LanWorkerRegistry, NodeTrust, PlacementProfile,
+    ThermalPolicy,
 };
 use aos_proto::{
     CancelRequest, InferRequest, LanClusterAssignment, LanClusterDiscoverRequest,
@@ -207,8 +208,15 @@ async fn send_lan_cancel(
         let message = LanWorkMessage::Cancel {
             work_id: work.work_id.clone(),
         };
-        if let Err(error) = transport.send_message(&message, work).await {
-            errors.push(format!("{node_id}: {error}"));
+        match transport.send_message(&message, work).await {
+            Ok(()) => match transport.receive_message(work).await {
+                Ok(LanWorkMessage::Ack { operation, .. }) if operation == "cancel" => {}
+                Ok(other) => errors.push(format!("{node_id}: réponse LAN inattendue: {other:?}")),
+                Err(error) => {
+                    errors.push(format!("{node_id}: accusé annulation LAN absent: {error}"))
+                }
+            },
+            Err(error) => errors.push(format!("{node_id}: {error}")),
         }
     }
     errors
@@ -249,11 +257,152 @@ async fn send_lan_assignments(
             assignment: assignment.clone(),
         };
         match transport.send_message(&message, work).await {
-            Ok(()) => dispatched.push(assignment.node_id.clone()),
+            Ok(()) => match transport.receive_message(work).await {
+                Ok(LanWorkMessage::Ack { operation, .. }) if operation == "assign" => {
+                    dispatched.push(assignment.node_id.clone())
+                }
+                Ok(other) => errors.push(format!(
+                    "{}: réponse LAN inattendue après assignment: {other:?}",
+                    assignment.node_id
+                )),
+                Err(error) => errors.push(format!(
+                    "{}: accusé assignment LAN absent: {error}",
+                    assignment.node_id
+                )),
+            },
             Err(error) => errors.push(format!("{}: {error}", assignment.node_id)),
         }
     }
     (dispatched, errors)
+}
+
+fn lan_control_work(work_id: &str, shard_ids: Vec<u32>) -> DistributedWork {
+    DistributedWork {
+        work_id: work_id.to_string(),
+        model_id: String::new(),
+        shard_ids: if shard_ids.is_empty() {
+            vec![0]
+        } else {
+            shard_ids
+        },
+        allow_sensitive_data: false,
+        encrypted_transport: true,
+    }
+}
+
+async fn handle_lan_worker_connection(
+    mut transport: LanTcpTransport,
+    local_node_id: String,
+    worker_registry: Arc<Mutex<LanWorkerRegistry>>,
+) -> Result<(), String> {
+    let first = transport.receive_message_unchecked().await?;
+    match first {
+        LanWorkMessage::Assign {
+            work_id,
+            model_id,
+            assignment,
+        } => {
+            let work = DistributedWork {
+                work_id: work_id.clone(),
+                model_id: model_id.clone(),
+                shard_ids: assignment.shard_ids.clone(),
+                allow_sensitive_data: false,
+                encrypted_transport: true,
+            };
+            LanWorkMessage::Assign {
+                work_id: work_id.clone(),
+                model_id: model_id.clone(),
+                assignment: assignment.clone(),
+            }
+            .validate_for(&work, &local_node_id)?;
+            worker_registry
+                .lock()
+                .map_err(|_| "état worker LAN verrouillé".to_string())?
+                .assign(
+                    &local_node_id,
+                    transport.peer_node_id(),
+                    model_id,
+                    assignment,
+                    work_id.clone(),
+                )?;
+            transport
+                .send_message(
+                    &LanWorkMessage::Ack {
+                        work_id: work_id.clone(),
+                        operation: "assign".into(),
+                    },
+                    &work,
+                )
+                .await?;
+
+            loop {
+                let message = match transport.receive_message_unchecked().await {
+                    Ok(message) => message,
+                    Err(error) if error.contains("lecture de trame LAN") => return Ok(()),
+                    Err(error) => return Err(error),
+                };
+                match message {
+                    LanWorkMessage::Heartbeat { work_id: id } if id == work_id => {
+                        transport
+                            .send_message(
+                                &LanWorkMessage::Ack {
+                                    work_id: work_id.clone(),
+                                    operation: "heartbeat".into(),
+                                },
+                                &work,
+                            )
+                            .await?;
+                    }
+                    LanWorkMessage::Cancel { work_id: id } if id == work_id => {
+                        worker_registry
+                            .lock()
+                            .map_err(|_| "état worker LAN verrouillé".to_string())?
+                            .cancel(&work_id)?;
+                        transport
+                            .send_message(
+                                &LanWorkMessage::Ack {
+                                    work_id: work_id.clone(),
+                                    operation: "cancel".into(),
+                                },
+                                &work,
+                            )
+                            .await?;
+                        return Ok(());
+                    }
+                    _ => return Err("message LAN worker inattendu".into()),
+                }
+            }
+        }
+        LanWorkMessage::Cancel { work_id } => {
+            let work = lan_control_work(&work_id, Vec::new());
+            worker_registry
+                .lock()
+                .map_err(|_| "état worker LAN verrouillé".to_string())?
+                .cancel(&work_id)?;
+            transport
+                .send_message(
+                    &LanWorkMessage::Ack {
+                        work_id,
+                        operation: "cancel".into(),
+                    },
+                    &work,
+                )
+                .await
+        }
+        LanWorkMessage::Heartbeat { work_id } => {
+            let work = lan_control_work(&work_id, Vec::new());
+            transport
+                .send_message(
+                    &LanWorkMessage::Ack {
+                        work_id,
+                        operation: "heartbeat".into(),
+                    },
+                    &work,
+                )
+                .await
+        }
+        _ => Err("premier message LAN worker inattendu".into()),
+    }
 }
 
 #[tokio::main]
@@ -355,6 +504,74 @@ async fn main() {
     let bus = BusClient::connect(&config.bus, "modeld")
         .await
         .expect("connexion au bus — lancer aos-busd d'abord");
+
+    // The worker listener is opt-in and only starts when the LAN session key
+    // is available from the secret service. Discovery alone never opens this
+    // socket, and an unpaired/revoked peer is rejected before the handshake.
+    if config.lan_cluster_enabled_at(&preference_home) {
+        let local_node_id = config.lan_node_id_at(&preference_home);
+        let listen_address = config.lan_listen_address_at(&preference_home);
+        let secret_name = config.lan_session_key_secret_at(&preference_home);
+        match load_lan_session_key(&bus, &secret_name).await {
+            Ok(session_key) => {
+                let empty_registry = LanPairingRegistry::default();
+                match LanTcpListener::bind(&local_node_id, &listen_address, &empty_registry).await {
+                    Ok(listener) => {
+                        eprintln!(
+                            "[aos-modeld] worker LAN prêt sur {}",
+                            listener
+                                .local_addr()
+                                .map(|address| address.to_string())
+                                .unwrap_or_else(|_| listen_address.clone())
+                        );
+                        let cluster = lan_cluster.clone();
+                        let worker_registry = Arc::new(Mutex::new(LanWorkerRegistry::default()));
+                        let worker_registry_task = worker_registry.clone();
+                        tokio::spawn(async move {
+                            loop {
+                                let registry = cluster
+                                    .lock()
+                                    .map(|cluster| cluster.registry().clone())
+                                    .unwrap_or_default();
+                                match listener
+                                    .accept_authenticated_any_work_with_registry(
+                                        &registry,
+                                        session_key.clone(),
+                                    )
+                                    .await
+                                {
+                                    Ok(transport) => {
+                                        let local_node_id = local_node_id.clone();
+                                        let worker_registry = worker_registry_task.clone();
+                                        tokio::spawn(async move {
+                                            if let Err(error) = handle_lan_worker_connection(
+                                                transport,
+                                                local_node_id,
+                                                worker_registry,
+                                            )
+                                            .await
+                                            {
+                                                eprintln!(
+                                                    "[aos-modeld] session worker LAN interrompue: {error}"
+                                                );
+                                            }
+                                        });
+                                    }
+                                    Err(error) => {
+                                        eprintln!(
+                                            "[aos-modeld] connexion worker LAN refusée: {error}"
+                                        );
+                                    }
+                                }
+                            }
+                        });
+                    }
+                    Err(error) => eprintln!("[aos-modeld] worker LAN désactivé: {error}"),
+                }
+            }
+            Err(error) => eprintln!("[aos-modeld] worker LAN désactivé: {error}"),
+        }
+    }
 
     let mut svc = BusService::new("modeld");
 

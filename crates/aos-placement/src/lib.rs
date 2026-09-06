@@ -45,7 +45,8 @@ pub use discovery::{
 pub use distributed::{
     DistributedWork, LanCluster, LanJobState, LanNode, LanPairingRegistry, LanRecovery,
     LanSecureChannel, LanSecureFrame, LanSessionKey, LanShardAssignment, LanTcpListener,
-    LanTcpTransport, LanWorkMessage, LanWorkPlan, NodeTrust,
+    LanTcpTransport, LanWorkMessage, LanWorkPlan, LanWorkerJob, LanWorkerJobState,
+    LanWorkerRegistry, NodeTrust,
 };
 pub use hardware::{
     CpuIsa, CpuTopology, GpuBackend, GpuDevice, HardwareProfile, NpuCapabilities, ThermalSnapshot,
