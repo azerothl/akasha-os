@@ -2666,13 +2666,13 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 let _ = evt_tx.send(Evt::Models(models));
             }
         }
-        Cmd::ModelLoad { model_id } => {
+        Cmd::ModelLoad { model_id, profile } => {
             match bus
                 .call::<LoadRequest, LoadResponse>(
                     "model.load",
                     &LoadRequest {
                         model_id: model_id.clone(),
-                        profile: "balanced".into(),
+                        profile: crate::prefs::normalize_placement_profile(&profile),
                         kv_tokens: 8192,
                     },
                     vec![],
@@ -2831,7 +2831,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 }
             }
         }
-        Cmd::ModelReload { model_id } => {
+        Cmd::ModelReload { model_id, profile } => {
             let unload = bus
                 .call::<UnloadRequest, bool>(
                     "model.unload",
@@ -2852,7 +2852,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                         "model.load",
                         &LoadRequest {
                             model_id: model_id.clone(),
-                            profile: "balanced".into(),
+                            profile: crate::prefs::normalize_placement_profile(&profile),
                             kv_tokens: 8192,
                         },
                         vec![],

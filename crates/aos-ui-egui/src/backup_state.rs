@@ -8,6 +8,8 @@ pub(crate) struct BackupUiState {
     pub(crate) restore_dir: String,
     /// Un flag par entrée de `backup::BACKUP_SCOPES`.
     pub(crate) scopes: Vec<bool>,
+    /// Chiffrer sous la clé maître de ce PC/utilisateur (défaut oui).
+    pub(crate) encrypted: bool,
     /// Dernier résultat affiché sous les boutons.
     pub(crate) last_result: String,
 }
@@ -18,6 +20,7 @@ impl BackupUiState {
             dest_parent,
             restore_dir: String::new(),
             scopes: vec![true; crate::backup::BACKUP_SCOPES.len()],
+            encrypted: true,
             last_result: String::new(),
         }
     }

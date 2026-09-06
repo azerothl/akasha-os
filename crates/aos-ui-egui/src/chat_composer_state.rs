@@ -17,6 +17,12 @@ pub(crate) struct ChatComposerState {
     pub(crate) refocus: bool,
     /// Session-header chip: spawn agents in Deep Thinking (hierarchical plan) mode.
     pub(crate) deep_thinking: bool,
+    /// S7.5 : navigation clavier des popups slash/mentions.
+    /// Index sélectionné (↑↓), `$popup_input` = texte vu au dernier reset.
+    pub(crate) popup_sel: usize,
+    pub(crate) popup_input: String,
+    /// Fermé via Échap jusqu'à la prochaine frappe.
+    pub(crate) popup_dismissed: bool,
 }
 
 impl ChatComposerState {
@@ -80,6 +86,14 @@ mod tests {
             state.last_session_image.as_deref(),
             Some("/downloads/4.png")
         );
+    }
+
+    #[test]
+    fn popup_nav_state_defaults() {
+        let state = ChatComposerState::default();
+        assert_eq!(state.popup_sel, 0);
+        assert!(state.popup_input.is_empty());
+        assert!(!state.popup_dismissed);
     }
 
     #[test]

@@ -39,6 +39,16 @@ impl UiApp {
             Vec::new()
         };
         let mut chat_sent_this_frame = false;
+        let mut sel_changed = false;
+        // S7.5 : reset sélection à chaque frappe (les listes changent).
+        {
+            let composer = &mut self.chat_state.composer;
+            if composer.popup_input != composer.input {
+                composer.popup_input = composer.input.clone();
+                composer.popup_sel = 0;
+                composer.popup_dismissed = false;
+            }
+        }
         let input_row = ui.allocate_ui_with_layout(
             egui::vec2(ui.available_width(), composer_h),
             egui::Layout::bottom_up(egui::Align::Min),
@@ -200,11 +210,53 @@ impl UiApp {
                     // d'être tronqué silencieusement à 5 lignes.
                     let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
                     let shift_enter = ui.input(|i| i.modifiers.shift);
+                    // S7.5 : popup ouverte + focus = les flèches naviguent,
+                    // Entrée choisit, Échap ferme (pas d'envoi).
+                    let focused = r.has_focus();
+                    let popup_open = !self.chat_state.composer.popup_dismissed
+                        && (!mention_hits.is_empty() || !completions.is_empty());
+                    if focused && popup_open {
+                        let n = if !mention_hits.is_empty() {
+                            mention_hits.len()
+                        } else {
+                            completions.len()
+                        }
+                        .max(1);
+                        let sel = &mut self.chat_state.composer.popup_sel;
+                        if ui.input(|i| i.key_pressed(egui::Key::ArrowDown)) {
+                            *sel = (*sel + 1) % n;
+                            sel_changed = true;
+                        }
+                        if ui.input(|i| i.key_pressed(egui::Key::ArrowUp)) {
+                            *sel = (*sel + n - 1) % n;
+                            sel_changed = true;
+                        }
+                        if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                            self.chat_state.composer.popup_dismissed = true;
+                        }
+                    }
+                    let mut keyboard_picked: Option<String> = None;
+                    if focused && popup_open && enter && !shift_enter {
+                        let sel = self.chat_state.composer.popup_sel;
+                        if !mention_hits.is_empty() {
+                            keyboard_picked =
+                                mention_hits.get(sel).map(|(text, _)| text.clone());
+                        } else if !completions.is_empty() {
+                            keyboard_picked = completions
+                                .get(sel)
+                                .map(|(cmd, _)| slash_insert_text(cmd));
+                        }
+                    }
                     let send = send_clicked
-                        || matches!(
-                            composer_enter_action(enter, shift_enter),
-                            ComposerEnterAction::Send
-                        );
+                        || (keyboard_picked.is_none()
+                            && matches!(
+                                composer_enter_action(enter, shift_enter),
+                                ComposerEnterAction::Send
+                            ));
+                    if let Some(text) = keyboard_picked {
+                        self.chat_state.composer.input = text;
+                        self.chat_state.composer.refocus = true;
+                    }
                     if send && self.chat_state.composer.input.ends_with('\n') {
                         self.chat_state.composer.input.pop();
                     }
@@ -259,6 +311,7 @@ impl UiApp {
             let popup_w = input_rect.width().clamp(240.0, chat_w);
             let max_h = 180.0_f32;
             let mut picked: Option<String> = None;
+            let sel = self.chat_state.composer.popup_sel;
             egui::Area::new(egui::Id::new("mention_completions_popup"))
                 .order(egui::Order::Foreground)
                 .fixed_pos(egui::pos2(input_rect.left(), input_rect.top() - 6.0))
@@ -274,12 +327,18 @@ impl UiApp {
                             egui::ScrollArea::vertical()
                                 .max_height(max_h)
                                 .show(ui, |ui| {
-                                    for (text, name) in &mention_hits {
-                                        if ui.selectable_label(false, name.as_str()).clicked() {
+                                    for (idx, (text, name)) in mention_hits.iter().enumerate() {
+                                        let selected = idx == sel;
+                                        let resp = ui.selectable_label(selected, name.as_str());
+                                        if selected && sel_changed {
+                                            resp.scroll_to_me(None);
+                                        }
+                                        if resp.clicked() {
                                             picked = Some(text.clone());
                                         }
                                     }
                                 });
+                            ui.weak("↑↓ · Enter · Esc");
                         });
                 });
             if let Some(text) = picked {
@@ -293,6 +352,7 @@ impl UiApp {
             let popup_w = input_rect.width().clamp(240.0, chat_w);
             let max_h = 220.0_f32;
             let mut picked: Option<String> = None;
+            let sel = self.chat_state.composer.popup_sel;
             egui::Area::new(egui::Id::new("slash_completions_popup"))
                 .order(egui::Order::Foreground)
                 .fixed_pos(egui::pos2(input_rect.left(), input_rect.top() - 6.0))
@@ -308,15 +368,21 @@ impl UiApp {
                             egui::ScrollArea::vertical()
                                 .max_height(max_h)
                                 .show(ui, |ui| {
-                                    for (cmd, desc) in &completions {
-                                        if ui
-                                            .selectable_label(false, format!("{cmd} — {desc}"))
-                                            .clicked()
-                                        {
+                                    for (idx, (cmd, desc)) in completions.iter().enumerate() {
+                                        let selected = idx == sel;
+                                        let resp = ui.selectable_label(
+                                            selected,
+                                            format!("{cmd} — {desc}"),
+                                        );
+                                        if selected && sel_changed {
+                                            resp.scroll_to_me(None);
+                                        }
+                                        if resp.clicked() {
                                             picked = Some(slash_insert_text(cmd));
                                         }
                                     }
                                 });
+                            ui.weak("↑↓ · Enter · Esc");
                         });
                 });
             if let Some(text) = picked {

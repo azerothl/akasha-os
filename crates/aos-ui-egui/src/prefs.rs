@@ -168,10 +168,12 @@ pub struct Preferences {
     pub auto_download_updates: bool,
     #[serde(default)]
     pub default_agent_model: Option<String>,
-    /// S2 : plafond cloud mensuel en cents USD (0 = illimité).
+        /// S2 : plafond cloud mensuel en cents USD (0 = illimité).
     #[serde(default)]
     pub cloud_cap_cents: u32,
-    /// S2 : seuil d'alerte en % du plafond.
+    /// S7.4 : profil de placement (`latency`/`balanced`/`memory-saver`/`cpu-only`).
+    #[serde(default = "default_placement_profile")]
+    pub placement_profile: String,    /// S2 : seuil d'alerte en % du plafond.
     #[serde(default = "default_cloud_alert_pct")]
     pub cloud_alert_pct: u8,
     /// S2 : au plafond, basculer `local_only` (fail-closed).
@@ -310,6 +312,24 @@ fn default_cloud_alert_pct() -> u8 {
     80
 }
 
+/// Profils de placement F-PLC-10 (le backend replie intelligemment).
+pub const PLACEMENT_PROFILES: [&str; 4] =
+    ["latency", "balanced", "memory-saver", "cpu-only"];
+
+/// Normalise un profil persisté/saisi (inconnu → `balanced`).
+pub fn normalize_placement_profile(raw: &str) -> String {
+    let v = raw.trim().to_ascii_lowercase();
+    if PLACEMENT_PROFILES.contains(&v.as_str()) {
+        v
+    } else {
+        default_placement_profile()
+    }
+}
+
+fn default_placement_profile() -> String {
+    "balanced".into()
+}
+
 fn default_true() -> bool {
     true
 }
@@ -364,6 +384,7 @@ impl Default for Preferences {
             cloud_cap_cents: 0,
             cloud_alert_pct: default_cloud_alert_pct(),
             cloud_cut_at_cap: true,
+            placement_profile: default_placement_profile(),
             community_catalogue_enabled: false,
             ui_density: UiDensity::default(),
             ui_layout: UiLayoutPreferences::default(),
@@ -518,8 +539,18 @@ mod tests {
     }
 
     #[test]
-    fn new_layout_fields_migrate_from_legacy_json() {
+    fn placement_profile_normalizes_and_migrates() {
+        assert_eq!(normalize_placement_profile("latency"), "latency");
+        assert_eq!(normalize_placement_profile("  MEMORY-SAVER "), "memory-saver");
+        assert_eq!(normalize_placement_profile(""), "balanced");
+        assert_eq!(normalize_placement_profile("n'importe quoi"), "balanced");
         let raw = r#"{"language":"en","theme":"dark","ui_scale_percent":100}"#;
+        let prefs: Preferences = serde_json::from_str(raw).expect("legacy preferences");
+        assert_eq!(prefs.placement_profile, "balanced");
+    }
+
+    #[test]
+    fn new_layout_fields_migrate_from_legacy_json() {        let raw = r#"{"language":"en","theme":"dark","ui_scale_percent":100}"#;
         let prefs: Preferences = serde_json::from_str(raw).expect("legacy preferences");
         assert_eq!(prefs.ui_density, UiDensity::Comfortable);
         assert_eq!(prefs.ui_layout.context_panel_width, 320.0);

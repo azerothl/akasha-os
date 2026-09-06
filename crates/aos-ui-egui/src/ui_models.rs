@@ -91,6 +91,41 @@ impl UiApp {
             .auto_shrink([false, false])
             .show(ui, |ui| match self.models_ui.catalog_tab {
                 models_page::ModelCatalogTab::Installed => {
+                    // S7.4 : profil de placement F-PLC-10 (le backend replie
+                    // intelligemment ; le profil effectif reste visible en métriques).
+                    {
+                        let fr = self.prefs.language == "fr";
+                        let options = [
+                            ("latency", if fr { "Latence (max GPU)" } else { "Latency (max GPU)" }),
+                            ("balanced", if fr { "Équilibré" } else { "Balanced" }),
+                            ("memory-saver", if fr { "Économe (RAM/disque)" } else { "Memory saver (RAM/disk)" }),
+                            ("cpu-only", if fr { "CPU uniquement" } else { "CPU only" }),
+                        ];
+                        let current = crate::prefs::normalize_placement_profile(
+                            &self.prefs.placement_profile,
+                        );
+                        let current_label = options
+                            .iter()
+                            .find(|(id, _)| *id == current)
+                            .map(|(_, label)| *label)
+                            .unwrap_or("balanced");
+                        ui.horizontal(|ui| {
+                            ui.label(if fr { "Placement" } else { "Placement" });
+                            egui::ComboBox::from_id_salt("placement_profile")
+                                .selected_text(current_label)
+                                .show_ui(ui, |ui| {
+                                    for (id, label) in options {
+                                        if ui
+                                            .selectable_label(current == id, label)
+                                            .clicked()
+                                        {
+                                            self.prefs.placement_profile = id.into();
+                                            crate::prefs::save_preferences(&self.prefs);
+                                        }
+                                    }
+                                });
+                        });
+                    }
                     // S7.3 : hygiène disque — total, partiels à purger.
                     if self.models_ui.disk_scan.is_none() {
                         self.models_ui.disk_scan = Some(models_disk::DiskScan::refresh());
@@ -211,6 +246,7 @@ impl UiApp {
                             );
                             let _ = self.cmd_tx.send(Cmd::ModelLoad {
                                 model_id: id.clone(),
+                                profile: self.prefs.placement_profile.clone(),
                             });
                         }
                         if set_default {
@@ -271,6 +307,7 @@ impl UiApp {
                                             );
                                             let _ = self.cmd_tx.send(Cmd::ModelLoad {
                                                 model_id: id.clone(),
+                                                profile: self.prefs.placement_profile.clone(),
                                             });
                                         }
                                         if ui
@@ -288,6 +325,7 @@ impl UiApp {
                                             );
                                             let _ = self.cmd_tx.send(Cmd::ModelReload {
                                                 model_id: id.clone(),
+                                                profile: self.prefs.placement_profile.clone(),
                                             });
                                         }
                                     }

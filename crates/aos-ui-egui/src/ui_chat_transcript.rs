@@ -635,7 +635,10 @@ impl UiApp {
                                 })
                                 .and_then(|s| s.model_id.clone())
                             {
-                                let _ = self.cmd_tx.send(Cmd::ModelReload { model_id });
+                                let _ = self.cmd_tx.send(Cmd::ModelReload {
+                                    model_id,
+                                    profile: self.prefs.placement_profile.clone(),
+                                });
                             }
                         }
                         crate::chat_load_fail::RecoveryAction::None => {}

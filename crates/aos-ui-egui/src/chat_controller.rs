@@ -337,6 +337,7 @@ impl UiApp {
         }
         let _ = self.cmd_tx.send(Cmd::ModelLoad {
             model_id: model_id.clone(),
+            profile: self.prefs.placement_profile.clone(),
         });
         self.status = format!("vision: {model_id}");
     }

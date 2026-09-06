@@ -322,6 +322,8 @@ pub(crate) enum Cmd {
     ModelsRefresh,
     ModelLoad {
         model_id: String,
+        /// Profil F-PLC-10 (`latency`/`balanced`/`memory-saver`/`cpu-only`).
+        profile: String,
     },
     ModelPlan {
         model_id: String,
@@ -346,6 +348,8 @@ pub(crate) enum Cmd {
     },
     ModelReload {
         model_id: String,
+        /// Profil F-PLC-10 (comme `ModelLoad`).
+        profile: String,
     },
     ModelDownload {
         model_id: String,

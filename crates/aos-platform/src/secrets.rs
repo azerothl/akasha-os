@@ -197,6 +197,25 @@ impl SecretStore {
         Ok(serde_yaml::to_string(&File { keys: &self.keys })?)
     }
 
+    /// Chiffre un blob arbitraire sous la clé maître (enveloppe backup S1
+    /// phase 2). Même contrôle d'accès que la gestion des secrets : l'UI
+    /// (`ui-egui`) peut sceller, jamais lire la clé.
+    pub fn seal_bytes(&self, actor: &str, plaintext: &[u8]) -> Result<Vec<u8>, SecretError> {
+        if !may_manage_secrets(actor) {
+            return Err(SecretError::Forbidden(actor.into()));
+        }
+        Ok(seal_with_master(&self.master, plaintext))
+    }
+
+    /// Déchiffre un blob `seal_bytes`. Échoue proprement si autre machine /
+    /// autre utilisateur (clé maître différente) ou blob altéré.
+    pub fn unseal_bytes(&self, actor: &str, blob: &[u8]) -> Result<Vec<u8>, SecretError> {
+        if !may_manage_secrets(actor) {
+            return Err(SecretError::Forbidden(actor.into()));
+        }
+        unseal_with_master(&self.master, blob)
+    }
+
     /// True si le magasin n'est plus un YAML clair.
     pub fn is_encrypted(&self) -> bool {
         self.vault_path().exists()
@@ -595,20 +614,10 @@ fn encrypt_vault(
     master: &[u8; 32],
     keys: &HashMap<String, String>,
 ) -> Result<(), SecretError> {
-    let cipher = ChaCha20Poly1305::new(Key::from_slice(master));
-    let mut nonce_bytes = [0u8; 12];
-    rand::thread_rng().fill_bytes(&mut nonce_bytes);
-    let nonce = Nonce::from_slice(&nonce_bytes);
     let plaintext = serde_json::to_vec(&VaultFile {
         keys: keys.clone(),
     })?;
-    let ciphertext = cipher
-        .encrypt(nonce, plaintext.as_ref())
-        .map_err(|e| SecretError::Crypto(e.to_string()))?;
-    let mut out = Vec::with_capacity(12 + ciphertext.len());
-    out.extend_from_slice(&nonce_bytes);
-    out.extend_from_slice(&ciphertext);
-    std::fs::write(path, out)?;
+    std::fs::write(path, seal_with_master(master, &plaintext))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -619,17 +628,40 @@ fn encrypt_vault(
 
 fn decrypt_vault(path: &Path, master: &[u8; 32]) -> Result<HashMap<String, String>, SecretError> {
     let raw = std::fs::read(path)?;
-    if raw.len() < 13 {
-        return Err(SecretError::Crypto("vault.enc trop court".into()));
-    }
-    let (nonce_bytes, ciphertext) = raw.split_at(12);
-    let cipher = ChaCha20Poly1305::new(Key::from_slice(master));
-    let nonce = Nonce::from_slice(nonce_bytes);
-    let plaintext = cipher
-        .decrypt(nonce, ciphertext)
-        .map_err(|e| SecretError::Crypto(e.to_string()))?;
+    let plaintext = unseal_with_master(master, &raw)?;
     let file: VaultFile = serde_json::from_slice(&plaintext)?;
     Ok(file.keys)
+}
+
+/// Enveloppe générique ChaCha20-Poly1305 sous clé maître : nonce(12) + ciphertext.
+/// Utilisée par le vault ET les sauvegardes chiffrées (S1 phase 2).
+/// Le chiffrement avec nonce frais ne peut pas échouer en pratique.
+pub fn seal_with_master(master: &[u8; 32], plaintext: &[u8]) -> Vec<u8> {
+    let cipher = ChaCha20Poly1305::new(Key::from_slice(master));
+    let mut nonce_bytes = [0u8; 12];
+    rand::thread_rng().fill_bytes(&mut nonce_bytes);
+    let nonce = Nonce::from_slice(&nonce_bytes);
+    let ciphertext = cipher
+        .encrypt(nonce, plaintext)
+        .expect("chacha20-poly1305 seal");
+    let mut out = Vec::with_capacity(12 + ciphertext.len());
+    out.extend_from_slice(&nonce_bytes);
+    out.extend_from_slice(&ciphertext);
+    out
+}
+
+/// Inverse de `seal_with_master`. Échoue proprement si tronqué, mauvaise clé
+/// ou altéré (authentification AEAD).
+pub fn unseal_with_master(master: &[u8; 32], blob: &[u8]) -> Result<Vec<u8>, SecretError> {
+    if blob.len() < 13 {
+        return Err(SecretError::Crypto("blob trop court".into()));
+    }
+    let (nonce_bytes, ciphertext) = blob.split_at(12);
+    let cipher = ChaCha20Poly1305::new(Key::from_slice(master));
+    let nonce = Nonce::from_slice(nonce_bytes);
+    cipher
+        .decrypt(nonce, ciphertext)
+        .map_err(|e| SecretError::Crypto(e.to_string()))
 }
 
 #[cfg(all(windows, not(test)))]
@@ -877,5 +909,44 @@ mod tests {
         std::env::remove_var("AOS_SECRETS_TPM");
         std::env::remove_var("AOS_SECRETS_FILE_KEY");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn envelope_roundtrip_rejects_wrong_key_and_tamper() {
+        let dir = tmp_dir();
+        std::fs::create_dir_all(&dir).unwrap();
+        std::env::set_var("AOS_SECRETS_FILE_KEY", "1");
+        let store = SecretStore::open(dir.join("keys.yaml")).unwrap();
+        let blob = store.seal_bytes("ui-egui", b"backup payload").unwrap();
+        // Nonces frais : deux scellements diffèrent.
+        let blob2 = store.seal_bytes("ui-egui", b"backup payload").unwrap();
+        assert_ne!(blob, blob2);
+        assert_eq!(store.unseal_bytes("ui-egui", &blob).unwrap(), b"backup payload");
+        // Acteur non autorisé.
+        assert!(matches!(
+            store.seal_bytes("agent:1", b"x"),
+            Err(SecretError::Forbidden(_))
+        ));
+        // Mauvaise clé (autre magasin).
+        let dir2 = tmp_dir();
+        std::fs::create_dir_all(&dir2).unwrap();
+        let other = SecretStore::open(dir2.join("keys.yaml")).unwrap();
+        assert!(matches!(
+            other.unseal_bytes("ui-egui", &blob),
+            Err(SecretError::Crypto(_))
+        ));
+        // Altération.
+        let mut tampered = blob.clone();
+        let last = tampered.len() - 1;
+        tampered[last] ^= 0x01;
+        assert!(matches!(
+            store.unseal_bytes("ui-egui", &tampered),
+            Err(SecretError::Crypto(_))
+        ));
+        // Tronqué.
+        assert!(store.unseal_bytes("ui-egui", &blob[..5]).is_err());
+        std::env::remove_var("AOS_SECRETS_FILE_KEY");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&dir2);
     }
 }

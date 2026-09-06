@@ -1,11 +1,13 @@
-//! Sauvegarde / restauration locale (S1, phase 1).
+//! Sauvegarde / restauration locale (S1, phase 2 avec chiffrement).
 //!
-//! Copie + `manifest.json` (tailles + sha256). **NON chiffré v1** : `var/secrets`
-//! est exclu (listé dans `skipped`, clés à ressaisir après restore) et le
-//! dossier doit rester sur un support de confiance. Le chiffrement via le
-//! vault (phase 2) demandera une API d'enveloppe côté `aos-platform`.
-//! La restauration exige de **relancer Preview** (agents + stores en mémoire).
+//! Copie + `manifest.json` (tailles + sha256). Chiffré (par défaut) via
+//! l'enveloppe ChaCha20-Poly1305 du vault (`aous-platform::secrets`,
+//! clé maître de CE pc/utilisateur) : chaque fichier est scellé en
+//! `<rel>.enc`, le manifest reste lisible (noms/tailles visibles, contenus
+//! chiffrés — documenté dans l'UI). `var/secrets` reste exclu (clés à
+//! ressaisir après restore). Relance requise après restauration.
 
+use aos_platform::secrets::SecretStore;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -68,17 +70,30 @@ pub struct BackupManifest {
     pub scopes: Vec<String>,
     pub files: Vec<BackupFileEntry>,
     pub skipped: Vec<String>,
+    /// Chiffré (fichiers en `<rel>.enc`, sha256 = clair vérifié après déchiffrement).
+    #[serde(default)]
+    pub encrypted: bool,
+}
+
+pub fn sha256_bytes(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    format!("{:x}", hasher.finalize())
 }
 
 pub fn sha256_file(path: &Path) -> Result<String, String> {
-    use sha2::{Digest, Sha256};
     let bytes = std::fs::read(path).map_err(|e| format!("lecture {}: {e}", path.display()))?;
-    let mut hasher = Sha256::new();
-    hasher.update(&bytes);
-    Ok(format!("{:x}", hasher.finalize()))
+    Ok(sha256_bytes(&bytes))
 }
 
-fn copy_dir_recursive(src: &Path, dst: &Path, out: &mut Vec<BackupFileEntry>, rel_base: &Path) -> Result<(), String> {
+fn copy_dir_recursive(
+    src: &Path,
+    dst: &Path,
+    out: &mut Vec<BackupFileEntry>,
+    rel_base: &Path,
+    seal: Option<&SecretStore>,
+) -> Result<(), String> {
     std::fs::create_dir_all(dst).map_err(|e| format!("mkdir {}: {e}", dst.display()))?;
     let entries =
         std::fs::read_dir(src).map_err(|e| format!("list {}: {e}", src.display()))?;
@@ -94,20 +109,34 @@ fn copy_dir_recursive(src: &Path, dst: &Path, out: &mut Vec<BackupFileEntry>, re
         let src_path = entry.path();
         let name = entry.file_name();
         if file_type.is_dir() {
-            copy_dir_recursive(&src_path, &dst.join(&name), out, rel_base)?;
+            copy_dir_recursive(&src_path, &dst.join(&name), out, rel_base, seal)?;
         } else if file_type.is_file() {
-            let dst_path = dst.join(&name);
-            std::fs::copy(&src_path, &dst_path)
-                .map_err(|e| format!("copie {}: {e}", src_path.display()))?;
-            let rel = dst_path
+            let plain = std::fs::read(&src_path)
+                .map_err(|e| format!("lecture {}: {e}", src_path.display()))?;
+            let sha256 = sha256_bytes(&plain);
+            let rel_inner = dst
+                .join(&name)
                 .strip_prefix(rel_base)
                 .map_err(|_| "chemin hors backup".to_string())?
                 .to_string_lossy()
                 .replace('\\', "/");
-            let len = std::fs::metadata(&dst_path)
-                .map(|m| m.len())
-                .unwrap_or(0);
-            let sha256 = sha256_file(&dst_path)?;
+            let (payload, rel) = match seal {
+                Some(store) => {
+                    let sealed = store
+                        .seal_bytes("ui-egui", &plain)
+                        .map_err(|e| format!("scellement {}: {e}", src_path.display()))?;
+                    (sealed, format!("{rel_inner}.enc"))
+                }
+                None => (plain, rel_inner),
+            };
+            let len = payload.len() as u64;
+            let dst_path = rel_base.join(rel.replace('/', std::path::MAIN_SEPARATOR_STR));
+            if let Some(parent) = dst_path.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
+            }
+            std::fs::write(&dst_path, &payload)
+                .map_err(|e| format!("écriture {}: {e}", dst_path.display()))?;
             out.push(BackupFileEntry { rel, len, sha256 });
         }
     }
@@ -143,13 +172,19 @@ pub fn default_backup_parent() -> PathBuf {
 
 /// Crée `dest_parent/akasha-backup-<date>/` (+ manifest). `mask[i]` = scope i.
 /// `kind` = "backup" (tout coché) ou "export" (scopes imposés par l'appelant).
+/// `seal` = chiffrer chaque fichier sous la clé maître de CE pc/utilisateur
+/// (noms/tailles visibles, contenus chiffrés).
 pub fn do_backup(
     home: &Path,
     dest_parent: &Path,
     prefix: &str,
     kind: &str,
     mask: &[bool],
+    seal: bool,
 ) -> Result<(PathBuf, usize, u64), String> {
+    if mask.len() != BACKUP_SCOPES.len() {
+        return Err("masque de scopes invalide".into());
+    }
     if mask.len() != BACKUP_SCOPES.len() {
         return Err("masque de scopes invalide".into());
     }
@@ -160,6 +195,14 @@ pub fn do_backup(
         .map_err(|e| format!("dossier destination {}: {e}", dest_parent.display()))?;
     let dir = dest_parent.join(timestamp_dir_name(prefix));
     std::fs::create_dir_all(&dir).map_err(|e| format!("mkdir {}: {e}", dir.display()))?;
+    let store = if seal {
+        Some(
+            SecretStore::open(home.join("var/secrets"))
+                .map_err(|e| format!("coffre indisponible : {e}"))?,
+        )
+    } else {
+        None
+    };
     let var = home.join("var");
     let mut files = Vec::new();
     let mut scopes = Vec::new();
@@ -171,21 +214,34 @@ pub fn do_backup(
         if !src.is_dir() {
             continue;
         }
-        copy_dir_recursive(&src, &dir.join(scope.dir), &mut files, &dir)?;
+        copy_dir_recursive(&src, &dir.join(scope.dir), &mut files, &dir, store.as_ref())?;
         scopes.push(scope.id.to_string());
     }
     for rel in BACKUP_CONFIG_FILES {
         let src = home.join("var").join(rel);
         if src.is_file() {
-            let dst = dir.join(rel);
+            let plain = std::fs::read(&src).map_err(|e| format!("lecture {rel}: {e}"))?;
+            let sha256 = sha256_bytes(&plain);
+            let (payload, out_rel) = match &store {
+                Some(st) => (
+                    st.seal_bytes("ui-egui", &plain)
+                        .map_err(|e| format!("scellement {rel}: {e}"))?,
+                    format!("{rel}.enc"),
+                ),
+                None => (plain, rel.to_string()),
+            };
+            let len = payload.len() as u64;
+            let dst = dir.join(out_rel.replace('/', std::path::MAIN_SEPARATOR_STR));
             if let Some(parent) = dst.parent() {
                 std::fs::create_dir_all(parent)
                     .map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
             }
-            std::fs::copy(&src, &dst).map_err(|e| format!("copie {rel}: {e}"))?;
-            let len = std::fs::metadata(&dst).map(|m| m.len()).unwrap_or(0);
-            let sha256 = sha256_file(&dst)?;
-            files.push(BackupFileEntry { rel: rel.replace('\\', "/"), len, sha256 });
+            std::fs::write(&dst, &payload).map_err(|e| format!("écriture {rel}: {e}"))?;
+            files.push(BackupFileEntry {
+                rel: out_rel,
+                len,
+                sha256,
+            });
         }
     }
     if files.is_empty() {
@@ -202,6 +258,7 @@ pub fn do_backup(
         scopes,
         skipped: BACKUP_SKIPPED.iter().map(|(d, why)| format!("{d} — {why}")).collect(),
         files,
+        encrypted: store.is_some(),
     };
     let raw =
         serde_json::to_string_pretty(&manifest).map_err(|e| format!("manifest: {e}"))?;
@@ -212,7 +269,9 @@ pub fn do_backup(
     Ok((dir, n, total))
 }
 
-/// Vérifie manifest + version + présence/taille/sha256 de chaque fichier.
+/// Vérifie manifest + version + présence/taille (+ sha256 si en clair).
+/// Chiffré : le sha256 porte sur le clair, vérifié après déchiffrement au
+/// restore — ici on contrôle présence + taille du blob.
 pub fn verify_backup(dir: &Path) -> Result<BackupManifest, String> {
     let raw = std::fs::read_to_string(dir.join("manifest.json"))
         .map_err(|_| "manifest.json introuvable — pas un dossier de sauvegarde".to_string())?;
@@ -234,7 +293,7 @@ pub fn verify_backup(dir: &Path) -> Result<BackupManifest, String> {
         if meta.len() != f.len {
             return Err(format!("taille différente : {} ({} ≠ {})", f.rel, meta.len(), f.len));
         }
-        if sha256_file(&path)? != f.sha256 {
+        if !manifest.encrypted && sha256_file(&path)? != f.sha256 {
             return Err(format!("sha256 différent : {}", f.rel));
         }
     }
@@ -242,44 +301,103 @@ pub fn verify_backup(dir: &Path) -> Result<BackupManifest, String> {
 }
 
 /// Restaure (vérifie d'abord) : remplace les scopes + configs, exige relance.
+/// Chiffré : déchiffre sous la clé maître locale (autre PC/utilisateur =
+/// erreur propre), vérifie le sha256 du clair à l'écriture.
 pub fn do_restore(home: &Path, dir: &Path) -> Result<usize, String> {
     let manifest = verify_backup(dir)?;
+    let store = if manifest.encrypted {
+        Some(
+            SecretStore::open(home.join("var/secrets")).map_err(|e| {
+                format!("coffre indisponible (restauration chiffrée impossible ici) : {e}")
+            })?,
+        )
+    } else {
+        None
+    };
     let var = home.join("var");
-    // Garde-fou : seuls les scopes + run/* connus sont restaurés.
+    // Lit un fichier du backup (déchiffre si besoin) + vérifie son sha256 clair.
+    let read_entry = |rel: &str| -> Result<Vec<u8>, String> {
+        let path = dir.join(rel.replace('/', std::path::MAIN_SEPARATOR_STR));
+        let blob =
+            std::fs::read(&path).map_err(|e| format!("lecture {}: {e}", path.display()))?;
+        let plain = match &store {
+            Some(st) => st
+                .unseal_bytes("ui-egui", &blob)
+                .map_err(|_| format!("déchiffrement impossible : {rel} (mauvaise machine/utilisateur ou backup altéré)"))?,
+            None => blob,
+        };
+        Ok(plain)
+    };
+    // Garde-fou : seuls les scopes + run/* connus sont restaurés (rel dest).
     for f in &manifest.files {
-        let first = f.rel.split('/').next().unwrap_or_default();
+        let dest_rel = f.rel.strip_suffix(".enc").unwrap_or(&f.rel);
+        let first = dest_rel.split('/').next().unwrap_or_default();
         let allowed = BACKUP_SCOPES.iter().any(|s| s.dir == first)
-            || (first == "run" && BACKUP_CONFIG_FILES.contains(&f.rel.as_str()));
+            || (first == "run" && BACKUP_CONFIG_FILES.contains(&dest_rel));
         if !allowed {
             return Err(format!("entrée hors scopes autorisés : {}", f.rel));
         }
     }
     // Remplace chaque scope d'un bloc (évite le mélange ancien/nouveau).
     for scope in BACKUP_SCOPES.iter().map(|s| s.dir).chain(std::iter::once("run")) {
-        let src = dir.join(scope);
-        if src.is_dir() {
-            let dst = var.join(scope);
-            if scope == "run" {
-                // run/ : uniquement les 3 fichiers de config, jamais tout le dossier.
-                for rel in BACKUP_CONFIG_FILES {
-                    let s = dir.join(rel);
-                    if s.is_file() {
-                        let d = var.join(rel);
-                        if let Some(parent) = d.parent() {
-                            std::fs::create_dir_all(parent)
-                                .map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
-                        }
-                        std::fs::copy(&s, &d)
-                            .map_err(|e| format!("restore {rel}: {e}"))?;
-                    }
+        if scope == "run" {
+            // run/ : uniquement les 3 fichiers de config, jamais tout le dossier.
+            for rel in BACKUP_CONFIG_FILES {
+                let src_rel = if manifest.encrypted {
+                    format!("{rel}.enc")
+                } else {
+                    rel.to_string()
+                };
+                let found = manifest.files.iter().any(|f| f.rel == src_rel);
+                if !found {
+                    continue;
                 }
-            } else {
-                if dst.exists() {
-                    std::fs::remove_dir_all(&dst)
-                        .map_err(|e| format!("nettoyage {}: {e}", dst.display()))?;
+                let plain = read_entry(&src_rel)?;
+                let entry = manifest.files.iter().find(|f| f.rel == src_rel).expect("found");
+                if sha256_bytes(&plain) != entry.sha256 {
+                    return Err(format!("sha256 différent après déchiffrement : {src_rel}"));
                 }
-                copy_dir_recursive(&src, &dst, &mut Vec::new(), &dst)?;
+                let d = var.join(rel);
+                if let Some(parent) = d.parent() {
+                    std::fs::create_dir_all(parent)
+                        .map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
+                }
+                std::fs::write(&d, &plain).map_err(|e| format!("restore {rel}: {e}"))?;
             }
+            continue;
+        }
+        let has_scope = manifest.files.iter().any(|f| {
+            f.rel == scope
+                || f.rel.starts_with(&format!("{scope}/"))
+                || f.rel.starts_with(&format!("{scope}."))
+        });
+        if !has_scope {
+            continue;
+        }
+        let dst = var.join(scope);
+        if dst.exists() {
+            std::fs::remove_dir_all(&dst)
+                .map_err(|e| format!("nettoyage {}: {e}", dst.display()))?;
+        }
+        std::fs::create_dir_all(&dst)
+            .map_err(|e| format!("mkdir {}: {e}", dst.display()))?;
+        for f in manifest.files.iter().filter(|f| {
+            f.rel.starts_with(&format!("{scope}/")) || f.rel == scope
+        }) {
+            let plain = read_entry(&f.rel)?;
+            if sha256_bytes(&plain) != f.sha256 {
+                return Err(format!("sha256 différent après déchiffrement : {}", f.rel));
+            }
+            let dest_rel = f.rel.strip_suffix(".enc").unwrap_or(&f.rel);
+            let out = dst.join(dest_rel
+                .strip_prefix(&format!("{scope}/"))
+                .unwrap_or(dest_rel)
+                .replace('/', std::path::MAIN_SEPARATOR_STR));
+            if let Some(parent) = out.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
+            }
+            std::fs::write(&out, &plain).map_err(|e| format!("restore {}: {e}", f.rel))?;
         }
     }
     Ok(manifest.files.len())
@@ -302,9 +420,9 @@ impl UiApp {
         let fr = self.prefs.language == "fr";
         ui.heading(if fr { "Sauvegarde" } else { "Backup" });
         ui.weak(if fr {
-            "Copie + manifest (tailles + sha256) vers un dossier. NON chiffré v1 : gardez le support pour vous. Clés (var/secrets) exclues — à ressaisir après restauration. Relancez Preview après une restauration."
+            "Copie + manifest (tailles + sha256) vers un dossier. Chiffré par défaut sous la clé de CE pc/utilisateur (noms/tailles visibles, contenus chiffrés). Clés (var/secrets) exclues — à ressaisir après restauration. Relancez Preview après une restauration."
         } else {
-            "Copy + manifest (sizes + sha256) to a folder. NOT encrypted v1: keep the media to yourself. Keys (var/secrets) excluded — re-enter after restore. Relaunch Preview after restoring."
+            "Copy + manifest (sizes + sha256) to a folder. Encrypted by default under THIS machine/user key (names/sizes visible, contents encrypted). Keys (var/secrets) excluded — re-enter after restore. Relaunch Preview after restoring."
         });
         ui.separator();
         ui.horizontal(|ui| {
@@ -332,10 +450,21 @@ impl UiApp {
             }
         });
         ui.horizontal_wrapped(|ui| {
+            ui.checkbox(
+                &mut self.backup_ui.encrypted,
+                if fr {
+                    "Chiffrer (clé de ce PC — restaure ici uniquement)"
+                } else {
+                    "Encrypt (this PC key — restores here only)"
+                },
+            );
+        });
+        ui.horizontal_wrapped(|ui| {
             if ui.button(if fr { "Sauvegarder" } else { "Back up" }).clicked() {
                 let home = crate::os_open::aos_home();
                 let dest = PathBuf::from(self.backup_ui.dest_parent.clone());
-                match do_backup(&home, &dest, BACKUP_DIR_PREFIX, "backup", &self.backup_ui.scopes.clone()) {
+                let seal = self.backup_ui.encrypted;
+                match do_backup(&home, &dest, BACKUP_DIR_PREFIX, "backup", &self.backup_ui.scopes.clone(), seal) {
                     Ok((dir, n, total)) => {
                         let msg = if fr {
                             format!("Sauvegardé : {} ({} fichiers, {})", dir.display(), n, human_bytes(total))
@@ -362,7 +491,7 @@ impl UiApp {
                 }
                 let home = crate::os_open::aos_home();
                 let dest = PathBuf::from(self.backup_ui.dest_parent.clone());
-                match do_backup(&home, &dest, BACKUP_EXPORT_PREFIX, "export", &mask) {
+                match do_backup(&home, &dest, BACKUP_EXPORT_PREFIX, "export", &mask, false) {
                     Ok((dir, n, total)) => {
                         let msg = if fr {
                             format!("Exporté : {} ({} fichiers, {})", dir.display(), n, human_bytes(total))
@@ -453,7 +582,7 @@ mod tests {
         let home = tmp_home("roundtrip");
         let dest = home.join("out");
         let mask = vec![true; BACKUP_SCOPES.len()];
-        let (dir, n, total) = do_backup(&home, &dest, BACKUP_DIR_PREFIX, "backup", &mask)
+        let (dir, n, total) = do_backup(&home, &dest, BACKUP_DIR_PREFIX, "backup", &mask, false)
             .expect("backup");
         assert!(n >= 2 && total > 0);
         let manifest = verify_backup(&dir).expect("verify");
@@ -477,7 +606,7 @@ mod tests {
         let home = tmp_home("tamper");
         let dest = home.join("out");
         let mask = vec![true; BACKUP_SCOPES.len()];
-        let (dir, _, _) = do_backup(&home, &dest, BACKUP_DIR_PREFIX, "backup", &mask)
+        let (dir, _, _) = do_backup(&home, &dest, BACKUP_DIR_PREFIX, "backup", &mask, false)
             .expect("backup");
         std::fs::write(home.join("var/memory/facts.json"), "[tampered]").expect("write");
         // Le live est corrompu mais pas le backup : verify du backup OK.
@@ -503,5 +632,35 @@ mod tests {
             assert!(ids.contains(want), "scope {want} manquant");
         }
         assert_eq!(BACKUP_SCOPES.len(), 9);
+    }
+
+    #[test]
+    fn encrypted_roundtrip_needs_same_machine_key() {
+        std::env::set_var("AOS_SECRETS_FILE_KEY", "1");
+        let home = tmp_home("encloop");
+        let dest = home.join("out");
+        let mask = vec![true; BACKUP_SCOPES.len()];
+        let (dir, n, _) =
+            do_backup(&home, &dest, BACKUP_DIR_PREFIX, "backup", &mask, true).expect("backup");
+        assert!(n >= 2);
+        let manifest = verify_backup(&dir).expect("verify structure");
+        assert!(manifest.encrypted);
+        // Contenus illisibles au repos.
+        let blob = std::fs::read(dir.join("sessions/s1/chat.json.enc")).expect("read");
+        assert!(!String::from_utf8_lossy(&blob).contains("\"a\":1"));
+        // Restore OK avec la clé locale.
+        std::fs::write(home.join("var/sessions/s1/chat.json"), "GARBAGE").expect("write");
+        assert_eq!(do_restore(&home, &dir).expect("restore"), n);
+        assert_eq!(
+            std::fs::read_to_string(home.join("var/sessions/s1/chat.json")).expect("read"),
+            r#"{"a":1}"#
+        );
+        // Autre clé (autre machine/utilisateur) : échec propre.
+        std::fs::remove_file(home.join("var/secrets/master.key")).expect("rm key");
+        std::fs::write(home.join("var/secrets/master.key"), vec![7u8; 32]).expect("write");
+        let err = do_restore(&home, &dir).expect_err("mauvaise clé");
+        assert!(err.contains("déchiffrement"), "attendu déchiffrement, got: {err}");
+        std::env::remove_var("AOS_SECRETS_FILE_KEY");
+        let _ = std::fs::remove_dir_all(&home);
     }
 }
