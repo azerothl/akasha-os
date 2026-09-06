@@ -1303,6 +1303,12 @@ pub fn classify_action(
     }
 }
 
+pub const USB_IO_CAP_TOOL_ERROR: &str =
+    "device.usb.io est une capacité (grant USB), pas un outil. \
+     Liste : device.usb.enumerate. Ouvrir un port COM : device.usb.open {\"device_id\":\"<id de enumerate>\"}. \
+     Puis device.usb.read / device.usb.write / device.usb.close. \
+     Interdit : shell.run, device.enumerate (caméras).";
+
 /// `device.usb.io` est une capacité (grant), pas un outil — redirige ou rejette clairement.
 pub fn resolve_usb_io_cap_tool(name: &str, args: &serde_json::Value) -> Result<(String, serde_json::Value), String> {
     if name != "device.usb.io" {
@@ -1349,12 +1355,7 @@ pub fn resolve_usb_io_cap_tool(name: &str, args: &serde_json::Value) -> Result<(
             serde_json::json!({ "handle_id": handle_id }),
         ));
     }
-    Err(
-        "device.usb.io est une capacité (grant USB), pas un outil. \
-         Liste : device.usb.enumerate. Ouvrir un port COM : device.usb.open {\"device_id\":\"<id de enumerate>\"}. \
-         Puis device.usb.read / device.usb.write / device.usb.close."
-            .into(),
-    )
+    Err(USB_IO_CAP_TOOL_ERROR.into())
 }
 
 /// Noms d'outils hallucinés → catalogue natif (`media.audio.generate`, …).
@@ -1380,6 +1381,7 @@ pub fn canonicalize_tool_name(name: &str) -> String {
         "usb.read" => "device.usb.read".into(),
         "usb.write" => "device.usb.write".into(),
         "usb.close" => "device.usb.close".into(),
+        "usb.io" | "device.usb.io" => "device.usb.io".into(),
         other => other.to_string(),
     }
 }
@@ -1795,6 +1797,7 @@ mod tests {
         assert_eq!(canonicalize_tool_name("usb.read"), "device.usb.read");
         assert_eq!(canonicalize_tool_name("usb.write"), "device.usb.write");
         assert_eq!(canonicalize_tool_name("usb.close"), "device.usb.close");
+        assert_eq!(canonicalize_tool_name("device.usb.io"), "device.usb.io");
         assert!(!is_module_fallback_candidate("usb.list"));
         assert!(!is_module_fallback_candidate("shell.run"));
         assert!(reserved_tool_prefix("usb"));

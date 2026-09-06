@@ -5,7 +5,10 @@ use super::*;
 #[cfg(test)]
 mod delegate_tests {
     use super::*;
-    use crate::chat_delegate::{canvas_model_id, chat_device_usb_intent, user_wants_deep_thinking};
+    use crate::chat_delegate::{
+        canvas_model_id, chat_device_usb_connect_intent, chat_device_usb_intent,
+        user_wants_deep_thinking,
+    };
     use aos_proto::{CanvasAspect, ModelInfo, ModelState};
 
     const ASPECT: CanvasAspect = CanvasAspect::Square;
@@ -315,6 +318,11 @@ mod delegate_tests {
         assert!(chat_device_usb_intent("infos sur COM3"));
         assert!(chat_device_usb_intent("se connecter au port série"));
         assert!(chat_device_usb_intent("connect to COM3 serial port"));
+        assert!(chat_device_usb_connect_intent("se connecter au COM3"));
+        assert!(chat_device_usb_connect_intent("ouvrir le port COM4"));
+        assert!(chat_device_usb_connect_intent("connect to COM3 serial port"));
+        assert!(!chat_device_usb_connect_intent("liste les périphériques usb"));
+        assert!(!chat_device_usb_connect_intent("ports série connectés"));
         assert!(chat_device_usb_intent("usb"));
         assert!(!chat_device_usb_intent(
             "Le bus USB 2.0 dans cette documentation décrit la couche physique et \
@@ -371,9 +379,28 @@ mod delegate_tests {
             &full_canvas_exported(),
         )
         .expect("com connect must delegate");
-        let (_brief, _skills, tools, _) = spec;
+        let (brief, _skills, tools, _) = spec;
         assert!(tools.iter().any(|x| x == "device.usb.enumerate"));
         assert!(tools.iter().any(|x| x == "device.usb.open"));
+        assert!(brief.contains("device.usb.enumerate"));
+        assert!(brief.contains("device.usb.open"));
+        assert!(brief.contains("device.usb.io"));
+        assert!(brief.contains("shell.run"));
+    }
+
+    #[test]
+    fn usb_list_delegate_skips_open_directive() {
+        let spec = chat_delegate_agent_spec(
+            "liste les périphériques usb connectés",
+            "Ok.",
+            false,
+            ASPECT,
+            &full_canvas_exported(),
+        )
+        .expect("usb list must delegate");
+        let (brief, _skills, tools, _) = spec;
+        assert!(tools.iter().any(|x| x == "device.usb.enumerate"));
+        assert!(!brief.contains("Procédure obligatoire"));
     }
 
     #[test]

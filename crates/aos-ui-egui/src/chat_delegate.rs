@@ -268,6 +268,77 @@ fn text_has_com_port_ref(text: &str) -> bool {
         })
 }
 
+fn usb_has_connect_verb(text: &str) -> bool {
+    let l = text.to_ascii_lowercase();
+    l.contains("se connecter")
+        || l.contains("connecter")
+        || l.contains("connect to")
+        || l.contains(" connect ")
+        || l.ends_with(" connect")
+        || (l.contains("connect") && !l.contains("connected") && !l.contains("connectés"))
+}
+
+fn usb_has_open_verb(text: &str) -> bool {
+    let l = text.to_ascii_lowercase();
+    l.contains("ouvrir") || l.contains(" open ") || l.starts_with("open ")
+}
+
+/// Ouvrir / connecter un port (COM, série) — pas une simple liste USB.
+pub(crate) fn chat_device_usb_connect_intent(text: &str) -> bool {
+    if text.trim().is_empty() {
+        return false;
+    }
+    let l = text.to_ascii_lowercase();
+    if text_has_com_port_ref(text) {
+        return true;
+    }
+    let portish = l.contains("com")
+        || l.contains("série")
+        || l.contains("serie")
+        || l.contains("serial")
+        || l.contains("port");
+    let usb_serial = l.contains("usb serial")
+        || l.contains("serial usb")
+        || l.contains("série usb")
+        || l.contains("serie usb");
+    if l.contains("se connecter")
+        && (portish || usb_serial || l.contains("usb") || text_has_com_port_ref(text))
+    {
+        return true;
+    }
+    if usb_has_open_verb(text) && (portish || text_has_com_port_ref(text)) {
+        return true;
+    }
+    if usb_has_connect_verb(text) && (portish || usb_serial || l.contains("usb")) {
+        return true;
+    }
+    false
+}
+
+const USB_OPEN_BRIEF_DIRECTIVE: &str = "[USB] Procédure obligatoire : \
+1) device.usb.enumerate pour obtenir les device_id (ex. win:Serial:COM3) \
+2) device.usb.open avec ce device_id exact. \
+Interdit : device.usb.io (capacité, pas un outil), device.enumerate, shell.run.";
+
+fn enrich_usb_connect_brief(brief: String, user_text: &str) -> String {
+    if !chat_device_usb_connect_intent(user_text) && !chat_device_usb_connect_intent(&brief) {
+        return brief;
+    }
+    let trimmed = brief.trim();
+    if trimmed.is_empty() {
+        USB_OPEN_BRIEF_DIRECTIVE.into()
+    } else if trimmed.contains(USB_OPEN_BRIEF_DIRECTIVE) {
+        brief
+    } else {
+        format!("{trimmed}\n\n{USB_OPEN_BRIEF_DIRECTIVE}")
+    }
+}
+
+fn push_device_usb_tools_and_brief(brief: &mut String, user_text: &str, tools: &mut Vec<String>) {
+    push_device_usb_tools(tools);
+    *brief = enrich_usb_connect_brief(brief.clone(), user_text);
+}
+
 /// Détecte une demande de liste/accès USB (FR/EN). Les longs textes exigent un signal
 /// explicite pour éviter un « usb » isolé dans une doc technique.
 pub(crate) fn chat_device_usb_intent(text: &str) -> bool {
@@ -419,7 +490,7 @@ pub(crate) fn chat_delegate_agent_spec(
             };
             let use_canvas = chat_canvas::chat_wants_canvas_agent(user_text, canvas_open)
                 || chat_canvas::chat_wants_canvas_agent(&brief, canvas_open);
-            let brief = if use_canvas && !self_tool {
+            let mut brief = if use_canvas && !self_tool {
                 user_text.to_string()
             } else {
                 brief
@@ -446,7 +517,7 @@ pub(crate) fn chat_delegate_agent_spec(
                 push_device_capture_tools(&mut tools, intent);
             }
             if chat_device_usb_intent(user_text) || chat_device_usb_intent(&brief) {
-                push_device_usb_tools(&mut tools);
+                push_device_usb_tools_and_brief(&mut brief, user_text, &mut tools);
             }
             if self_tool {
                 for t in [
@@ -535,13 +606,9 @@ pub(crate) fn chat_delegate_agent_spec(
     }
     if chat_device_usb_intent(user_text) {
         let (skills, mut tools) = chat_delegate_kit(user_text, canvas_open, false, canvas_exported);
-        push_device_usb_tools(&mut tools);
-        return Some((
-            user_text.to_string(),
-            skills,
-            tools,
-            device_usb_ack(),
-        ));
+        let mut brief = user_text.to_string();
+        push_device_usb_tools_and_brief(&mut brief, user_text, &mut tools);
+        return Some((brief, skills, tools, device_usb_ack()));
     }
     None
 }

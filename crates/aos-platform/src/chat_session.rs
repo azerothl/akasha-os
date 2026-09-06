@@ -938,7 +938,13 @@ impl ChatSessionStore {
                         title,
                         origin,
                     } => {
-                        out.push_str(&format!("_agent: {agent_id} ({origin}) — {title}_\n\n"));
+                        if origin == "completion" && !m.content.trim().is_empty() {
+                            out.push_str(&format!(
+                                "_agent completion: {agent_id} — {title}_\n\n"
+                            ));
+                        } else {
+                            out.push_str(&format!("_agent: {agent_id} ({origin}) — {title}_\n\n"));
+                        }
                     }
                     ChatAttachment::Image { path, prompt } => {
                         out.push_str(&format!("_image: {path}_\n\n"));
@@ -1278,6 +1284,32 @@ archived: false
         let md = s.export_markdown(&m.id).unwrap();
         assert!(md.contains("### Thinking"));
         assert!(md.contains("raison interne"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn export_markdown_includes_agent_completion_body() {
+        let dir = std::env::temp_dir().join(format!("aos-sess-export-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let s = ChatSessionStore::open(&dir).unwrap();
+        let m = s.create(Some("USB".into()), None).unwrap();
+        s.append(
+            &m.id,
+            "assistant",
+            "**Résultat — USB**\n\nCOM3 (win:Serial:COM3) : Arduino Uno",
+            vec![ChatAttachment::AgentRef {
+                agent_id: "agent-181".into(),
+                title: "se connecter au COM3".into(),
+                origin: "completion".into(),
+            }],
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        let md = s.export_markdown(&m.id).unwrap();
+        assert!(md.contains("COM3 (win:Serial:COM3)"));
+        assert!(md.contains("_agent completion: agent-181"));
         let _ = fs::remove_dir_all(&dir);
     }
 
