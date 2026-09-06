@@ -458,7 +458,14 @@ fallback and no automatic sharing of prompts or model data.
 The transport contract includes `LanSecureFrame` and `LanSecureChannel` using
 ChaCha20-Poly1305 with node/job associated data and a monotonic sequence. It
 rejects a wrong nonce, altered ciphertext, cross-job frame or replay. The
-codec is ready for the adapter, but no listener consumes it yet.
+explicit `LanTcpTransport` adapter adds a bounded CBOR frame envelope and
+connects only to the address stored for an already paired node, when the caller
+provides a session key from the secret store. `aos-modeld` does not instantiate
+this adapter or bind a listener by default: remote model execution, key
+exchange, weight/shard loading and token/KV routing remain to be integrated.
+The typed `LanWorkMessage` contract currently covers hello, shard assignment,
+heartbeat, acknowledgement and cancellation; it rejects cross-job messages,
+unknown shards and unexpected peer identities before application handling.
 
 ### 3.6 Inference Scheduler
 

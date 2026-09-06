@@ -6,6 +6,9 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::io::Cursor;
+
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use chacha20poly1305::aead::{Aead, KeyInit, Payload};
 use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
@@ -39,6 +42,99 @@ pub struct DistributedWork {
     pub allow_sensitive_data: bool,
     /// Required by the transport adapter; false is rejected by the registry.
     pub encrypted_transport: bool,
+}
+
+/// Messages allowed on an authenticated LAN work channel.
+///
+/// The payload deliberately contains control-plane data only. Prompts,
+/// generated tokens and KV pages need an explicit future data-plane contract;
+/// they must not be smuggled through an untyped transport call.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "kebab-case")]
+pub enum LanWorkMessage {
+    Hello {
+        work_id: String,
+        node_id: String,
+        protocol_version: u16,
+    },
+    Assign {
+        work_id: String,
+        model_id: String,
+        assignment: LanShardAssignment,
+    },
+    Cancel {
+        work_id: String,
+    },
+    Heartbeat {
+        work_id: String,
+    },
+    Ack {
+        work_id: String,
+        operation: String,
+    },
+}
+
+impl LanWorkMessage {
+    pub fn work_id(&self) -> &str {
+        match self {
+            Self::Hello { work_id, .. }
+            | Self::Assign { work_id, .. }
+            | Self::Cancel { work_id }
+            | Self::Heartbeat { work_id }
+            | Self::Ack { work_id, .. } => work_id,
+        }
+    }
+
+    /// Check that a message can be applied to the declared work and peer.
+    pub fn validate_for(&self, work: &DistributedWork, peer_node_id: &str) -> Result<(), String> {
+        if self.work_id() != work.work_id {
+            return Err("message LAN liée à un autre travail".into());
+        }
+        match self {
+            Self::Hello {
+                node_id,
+                protocol_version,
+                ..
+            } => {
+                if node_id != peer_node_id {
+                    return Err("identité LAN annoncée inattendue".into());
+                }
+                if *protocol_version != 1 {
+                    return Err("version de protocole LAN non supportée".into());
+                }
+            }
+            Self::Assign {
+                model_id,
+                assignment,
+                ..
+            } => {
+                if model_id != &work.model_id {
+                    return Err("modèle LAN inattendu".into());
+                }
+                if assignment.node_id != peer_node_id {
+                    return Err("assignment LAN destinée à un autre nœud".into());
+                }
+                if !assignment.encrypted_transport || !work.encrypted_transport {
+                    return Err("assignment LAN non chiffrée refusée".into());
+                }
+                if assignment.shard_ids.is_empty()
+                    || assignment
+                        .shard_ids
+                        .iter()
+                        .any(|shard| !work.shard_ids.contains(shard))
+                {
+                    return Err("assignment LAN contient un shard non déclaré".into());
+                }
+            }
+            Self::Cancel { .. } | Self::Heartbeat { .. } => {}
+            Self::Ack { operation, .. } => {
+                if operation.trim().is_empty() {
+                    return Err("opération LAN vide".into());
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -261,17 +357,24 @@ impl LanSessionKey {
 /// replayed frames before handing plaintext to the caller.
 pub struct LanSecureChannel {
     key: LanSessionKey,
-    node_id: String,
+    local_node_id: String,
+    peer_node_id: String,
     work_id: String,
     next_send: u64,
     last_received: Option<u64>,
 }
 
 impl LanSecureChannel {
-    pub fn new(key: LanSessionKey, node_id: impl Into<String>, work_id: impl Into<String>) -> Self {
+    pub fn new(
+        key: LanSessionKey,
+        local_node_id: impl Into<String>,
+        peer_node_id: impl Into<String>,
+        work_id: impl Into<String>,
+    ) -> Self {
         Self {
             key,
-            node_id: node_id.into(),
+            local_node_id: local_node_id.into(),
+            peer_node_id: peer_node_id.into(),
             work_id: work_id.into(),
             next_send: 0,
             last_received: None,
@@ -285,11 +388,11 @@ impl LanSecureChannel {
             .checked_add(1)
             .ok_or("séquence LAN épuisée")?;
         self.key
-            .encrypt(&self.node_id, &self.work_id, sequence, plaintext)
+            .encrypt(&self.local_node_id, &self.work_id, sequence, plaintext)
     }
 
     pub fn receive(&mut self, frame: &LanSecureFrame) -> Result<Vec<u8>, String> {
-        if frame.node_id != self.node_id || frame.work_id != self.work_id {
+        if frame.node_id != self.peer_node_id || frame.work_id != self.work_id {
             return Err("frame LAN liée à une autre identité ou un autre travail".into());
         }
         if self
@@ -301,6 +404,142 @@ impl LanSecureChannel {
         let plaintext = self.key.decrypt(frame)?;
         self.last_received = Some(frame.sequence);
         Ok(plaintext)
+    }
+}
+
+/// Explicit length-delimited TCP adapter for the secure frame contract.
+///
+/// Construction is the only operation that connects. This adapter does not
+/// discover peers, bind a listener, retry outside the LAN, or choose a node.
+/// The caller supplies a session key obtained from its secret store.
+pub struct LanTcpTransport {
+    stream: tokio::net::TcpStream,
+    channel: LanSecureChannel,
+    max_frame_bytes: usize,
+}
+
+impl LanTcpTransport {
+    pub const DEFAULT_MAX_FRAME_BYTES: usize = 4 * 1024 * 1024;
+
+    pub async fn connect(
+        local_node_id: impl Into<String>,
+        node_id: &str,
+        address: &str,
+        registry: &LanPairingRegistry,
+        work: &DistributedWork,
+        key: LanSessionKey,
+    ) -> Result<Self, String> {
+        registry.authorize(node_id, work)?;
+        let registered_address = registry
+            .get(node_id)
+            .map(|node| node.address.as_str())
+            .ok_or("nœud non appairé")?;
+        if address != registered_address {
+            return Err("adresse LAN différente de celle appairée".into());
+        }
+        let stream = tokio::net::TcpStream::connect(address)
+            .await
+            .map_err(|e| format!("connexion LAN impossible: {e}"))?;
+        Ok(Self::from_stream(
+            stream,
+            local_node_id,
+            node_id,
+            work.work_id.clone(),
+            key,
+        ))
+    }
+
+    pub fn from_stream(
+        stream: tokio::net::TcpStream,
+        local_node_id: impl Into<String>,
+        peer_node_id: impl Into<String>,
+        work_id: impl Into<String>,
+        key: LanSessionKey,
+    ) -> Self {
+        Self {
+            stream,
+            channel: LanSecureChannel::new(key, local_node_id, peer_node_id, work_id),
+            max_frame_bytes: Self::DEFAULT_MAX_FRAME_BYTES,
+        }
+    }
+
+    pub fn with_max_frame_bytes(mut self, max_frame_bytes: usize) -> Result<Self, String> {
+        if max_frame_bytes == 0 || max_frame_bytes > Self::DEFAULT_MAX_FRAME_BYTES {
+            return Err("taille maximale de trame LAN invalide".into());
+        }
+        self.max_frame_bytes = max_frame_bytes;
+        Ok(self)
+    }
+
+    pub async fn send(&mut self, plaintext: &[u8]) -> Result<(), String> {
+        let frame = self.channel.send(plaintext)?;
+        let mut encoded = Vec::new();
+        ciborium::into_writer(&frame, &mut encoded)
+            .map_err(|e| format!("encodage de trame LAN: {e}"))?;
+        if encoded.len() > self.max_frame_bytes {
+            return Err("trame LAN trop volumineuse".into());
+        }
+        self.stream
+            .write_u32(encoded.len() as u32)
+            .await
+            .map_err(|e| format!("écriture de trame LAN: {e}"))?;
+        self.stream
+            .write_all(&encoded)
+            .await
+            .map_err(|e| format!("écriture de trame LAN: {e}"))
+    }
+
+    pub async fn send_message(
+        &mut self,
+        message: &LanWorkMessage,
+        work: &DistributedWork,
+    ) -> Result<(), String> {
+        if message.work_id() != work.work_id || message.work_id() != self.channel.work_id {
+            return Err("message LAN liée à un autre travail".into());
+        }
+        match message {
+            LanWorkMessage::Hello { node_id, .. } if node_id != &self.channel.local_node_id => {
+                return Err("identité LAN locale inattendue".into());
+            }
+            LanWorkMessage::Assign { .. } => {
+                message.validate_for(work, &self.channel.peer_node_id)?
+            }
+            _ => {}
+        }
+        let mut encoded = Vec::new();
+        ciborium::into_writer(message, &mut encoded)
+            .map_err(|e| format!("encodage de message LAN: {e}"))?;
+        self.send(&encoded).await
+    }
+
+    pub async fn receive(&mut self) -> Result<Vec<u8>, String> {
+        let length = self
+            .stream
+            .read_u32()
+            .await
+            .map_err(|e| format!("lecture de trame LAN: {e}"))? as usize;
+        if length == 0 || length > self.max_frame_bytes {
+            return Err("taille de trame LAN refusée".into());
+        }
+        let mut encoded = vec![0; length];
+        self.stream
+            .read_exact(&mut encoded)
+            .await
+            .map_err(|e| format!("lecture de trame LAN: {e}"))?;
+        let frame: LanSecureFrame = ciborium::from_reader(Cursor::new(encoded))
+            .map_err(|e| format!("décodage de trame LAN: {e}"))?;
+        self.channel.receive(&frame)
+    }
+
+    pub async fn receive_message(
+        &mut self,
+        work: &DistributedWork,
+    ) -> Result<LanWorkMessage, String> {
+        let plaintext = self.receive().await?;
+        let message: LanWorkMessage = ciborium::from_reader(Cursor::new(plaintext))
+            .map_err(|e| format!("décodage de message LAN: {e}"))?;
+        message.validate_for(work, &self.channel.peer_node_id)?;
+        Ok(message)
     }
 }
 
@@ -565,8 +804,8 @@ mod tests {
     #[test]
     fn canal_chiffre_verifie_le_job_et_rejette_le_rejeu() {
         let key = LanSessionKey::from_bytes(&[7; 32]).unwrap();
-        let mut sender = LanSecureChannel::new(key.clone(), "n1", "work");
-        let mut receiver = LanSecureChannel::new(key, "n1", "work");
+        let mut sender = LanSecureChannel::new(key.clone(), "coordinator", "n1", "work");
+        let mut receiver = LanSecureChannel::new(key, "n1", "coordinator", "work");
         let frame = sender.send(b"shard payload").unwrap();
         assert_eq!(receiver.receive(&frame).unwrap(), b"shard payload");
         assert!(receiver.receive(&frame).is_err());
@@ -575,5 +814,90 @@ mod tests {
         wrong_job.work_id = "other-work".into();
         assert!(receiver.receive(&wrong_job).is_err());
         assert!(LanSessionKey::from_bytes(&[0; 31]).is_err());
+    }
+
+    #[test]
+    fn protocole_lan_valide_le_noeud_les_shards_et_le_job() {
+        let work = DistributedWork {
+            work_id: "work-1".into(),
+            model_id: "model-1".into(),
+            shard_ids: vec![1, 2],
+            allow_sensitive_data: false,
+            encrypted_transport: true,
+        };
+        let hello = LanWorkMessage::Hello {
+            work_id: "work-1".into(),
+            node_id: "n1".into(),
+            protocol_version: 1,
+        };
+        hello.validate_for(&work, "n1").unwrap();
+
+        let assignment = LanWorkMessage::Assign {
+            work_id: "work-1".into(),
+            model_id: "model-1".into(),
+            assignment: LanShardAssignment {
+                node_id: "n1".into(),
+                shard_ids: vec![1],
+                kv_tokens: 128,
+                encrypted_transport: true,
+            },
+        };
+        let mut encoded = Vec::new();
+        ciborium::into_writer(&assignment, &mut encoded).unwrap();
+        let decoded: LanWorkMessage = ciborium::from_reader(Cursor::new(encoded)).unwrap();
+        decoded.validate_for(&work, "n1").unwrap();
+
+        let mut invalid = assignment.clone();
+        if let LanWorkMessage::Assign { assignment, .. } = &mut invalid {
+            assignment.shard_ids = vec![99];
+        }
+        assert!(invalid.validate_for(&work, "n1").is_err());
+    }
+
+    #[tokio::test]
+    async fn transport_tcp_echange_des_trames_chiffrees() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let key_bytes = [9; 32];
+        let server_key = LanSessionKey::from_bytes(&key_bytes).unwrap();
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut transport =
+                LanTcpTransport::from_stream(stream, "n1", "coordinator", "work-tcp", server_key);
+            assert_eq!(transport.receive().await.unwrap(), b"hello");
+            transport.send(b"ack").await.unwrap();
+        });
+
+        let mut registry = LanPairingRegistry::default();
+        registry.discover(LanNode {
+            node_id: "n1".into(),
+            display_name: "worker".into(),
+            address: address.to_string(),
+            public_key_fingerprint: "tcp-key".into(),
+            trust: NodeTrust::Unpaired,
+            capabilities: vec![],
+        });
+        registry.pair("n1", "tcp-key").unwrap();
+        let work = DistributedWork {
+            work_id: "work-tcp".into(),
+            model_id: "m".into(),
+            shard_ids: vec![1],
+            allow_sensitive_data: false,
+            encrypted_transport: true,
+        };
+        let key = LanSessionKey::from_bytes(&key_bytes).unwrap();
+        let mut client = LanTcpTransport::connect(
+            "coordinator",
+            "n1",
+            &address.to_string(),
+            &registry,
+            &work,
+            key,
+        )
+        .await
+        .unwrap();
+        client.send(b"hello").await.unwrap();
+        assert_eq!(client.receive().await.unwrap(), b"ack");
+        server.await.unwrap();
     }
 }
