@@ -194,7 +194,7 @@ Actions runtime (toujours `{"action":"…","args":{…}}` — ne mets pas brief/
 - memory.remember : {"text":"..."}
 - memory.recall : {"query":"..."}
 - docs.read : {"path":"..."}
-- goal.complete : {"summary":"..."}
+- goal.complete : {"summary":"..."} — summary obligatoire : le résultat lisible pour l'utilisateur (pas vide, pas seulement « terminé »)
 - goal.fail : {"reason":"..."}
 
 Extensions OS (si limitation) :
@@ -229,7 +229,7 @@ Exemples :
 - plan.create : {"action":"plan.create","args":{"task":"…","steps":[{"id":"1","label":"Analyse","children":[{"id":"1.1","label":"Contexte"}]}]}}
 - plan.update_step : {"action":"plan.update_step","args":{"step_id":"1","status":"done"}}
 - plan.delegate_step : {"action":"plan.delegate_step","args":{"step_id":"2.1","brief":"Extraire README et Cargo.toml","tools":["fs.read","fs.list"]}}
-- goal.complete : {"summary":"…"}
+- goal.complete : {"summary":"…"} — summary obligatoire (résultat lisible pour l'utilisateur)
 "#;
 
 /// Prompt court pour optimiser le system prompt.

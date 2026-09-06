@@ -37,7 +37,7 @@ use aos_agent::tool_exec::format_module_invoke_result;
 use aos_agent::tools::{
     canonicalize_tool_name, canvas_tool_denied_by_allowlist, canvas_tools_from_module_list, caps_for_tools, caps_subset,
     classify_action, canvas_draw_strategy_hint, is_module_fallback_candidate,
-    normalize_tool_args, resolve_tool_backend, restrict_canvas_tools, select_tools,
+    normalize_tool_args, resolve_tool_backend, resolve_usb_io_cap_tool, restrict_canvas_tools, select_tools,
     select_tools_mode, strip_canvas_blocked_runtime_tools, ToolBackend,
     ToolDesc,
 };
@@ -1942,8 +1942,12 @@ async fn execute_action(
     action: &AgentAction,
 ) -> ActResult {
     let canonical = canonicalize_tool_name(&action.action);
-    let name = canonical.as_str();
-    let args_owned = normalize_tool_args(name, &action.args);
+    let (resolved_name, resolved_args) = match resolve_usb_io_cap_tool(canonical.as_str(), &action.args) {
+        Ok(pair) => pair,
+        Err(msg) => return ActResult::Continue(msg),
+    };
+    let name = resolved_name.as_str();
+    let args_owned = normalize_tool_args(name, &resolved_args);
     let args = &args_owned;
     // Skill name used as tool (research, file.author, …) → correction claire
     if tools.iter().all(|t| t.name != name) {
@@ -2002,11 +2006,18 @@ async fn execute_action(
                 .into(),
         ),
         "goal.complete" => {
-            let summary = args
-                .get("summary")
-                .and_then(|v| v.as_str())
-                .unwrap_or("terminé")
-                .to_string();
+            let prior = {
+                let st = shared.state.lock().await;
+                st.trace
+                    .last()
+                    .map(|s| s.tool_result.clone())
+                    .unwrap_or_default()
+            };
+            let summary = aos_agent::actions::resolve_goal_complete_summary(
+                args,
+                &action.thought,
+                &prior,
+            );
             ActResult::Complete(summary)
         }
         "goal.fail" => {

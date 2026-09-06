@@ -411,8 +411,14 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
         },
         ToolDesc {
             name: "goal.complete".into(),
-            description: "Marquer le goal comme réussi".into(),
-            input_schema: serde_json::json!({"type":"object","properties":{"summary":{"type":"string"}}}),
+            description: "Marquer le goal comme réussi. summary OBLIGATOIRE : résultat lisible pour l'utilisateur (liste, confirmation, chemins) — ne pas laisser vide.".into(),
+            input_schema: serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "summary":{"type":"string","description":"Résultat final lisible pour l'utilisateur (obligatoire)"}
+                },
+                "required":["summary"]
+            }),
             backend: ToolBackend::Runtime,
             required_caps: vec![],
         },
@@ -1297,6 +1303,60 @@ pub fn classify_action(
     }
 }
 
+/// `device.usb.io` est une capacité (grant), pas un outil — redirige ou rejette clairement.
+pub fn resolve_usb_io_cap_tool(name: &str, args: &serde_json::Value) -> Result<(String, serde_json::Value), String> {
+    if name != "device.usb.io" {
+        return Ok((name.to_string(), args.clone()));
+    }
+    if let Some(device_id) = args
+        .get("device_id")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        return Ok((
+            "device.usb.open".into(),
+            serde_json::json!({ "device_id": device_id }),
+        ));
+    }
+    if let Some(handle_id) = args
+        .get("handle_id")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        if args.get("data_base64").is_some() {
+            return Ok((
+                "device.usb.write".into(),
+                serde_json::json!({
+                    "handle_id": handle_id,
+                    "data_base64": args.get("data_base64").cloned().unwrap_or(serde_json::Value::Null)
+                }),
+            ));
+        }
+        if args.get("max_bytes").is_some() || args.get("timeout_ms").is_some() {
+            let mut out = serde_json::json!({ "handle_id": handle_id });
+            if let Some(v) = args.get("max_bytes") {
+                out["max_bytes"] = v.clone();
+            }
+            if let Some(v) = args.get("timeout_ms") {
+                out["timeout_ms"] = v.clone();
+            }
+            return Ok(("device.usb.read".into(), out));
+        }
+        return Ok((
+            "device.usb.close".into(),
+            serde_json::json!({ "handle_id": handle_id }),
+        ));
+    }
+    Err(
+        "device.usb.io est une capacité (grant USB), pas un outil. \
+         Liste : device.usb.enumerate. Ouvrir un port COM : device.usb.open {\"device_id\":\"<id de enumerate>\"}. \
+         Puis device.usb.read / device.usb.write / device.usb.close."
+            .into(),
+    )
+}
+
 /// Noms d'outils hallucinés → catalogue natif (`media.audio.generate`, …).
 pub fn canonicalize_tool_name(name: &str) -> String {
     let trimmed = name.trim();
@@ -1701,6 +1761,25 @@ mod tests {
         assert!(permissive.iter().any(|t| t.name == "device.camera.capture"));
         let (kind, _, _) = classify_action("device.camera.capture", &[], &[]);
         assert_eq!(kind, "native");
+    }
+
+    #[test]
+    fn resolve_usb_io_cap_tool_rejects_bare_cap_name() {
+        let err = resolve_usb_io_cap_tool("device.usb.io", &serde_json::json!({}))
+            .expect_err("bare cap");
+        assert!(err.contains("device.usb.enumerate"));
+        assert!(err.contains("device.usb.open"));
+    }
+
+    #[test]
+    fn resolve_usb_io_cap_tool_canonicalizes_open() {
+        let (name, args) = resolve_usb_io_cap_tool(
+            "device.usb.io",
+            &serde_json::json!({"device_id": "win:Serial:COM3"}),
+        )
+        .expect("open redirect");
+        assert_eq!(name, "device.usb.open");
+        assert_eq!(args["device_id"], "win:Serial:COM3");
     }
 
     #[test]
