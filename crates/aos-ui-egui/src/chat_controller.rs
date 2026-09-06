@@ -156,6 +156,8 @@ impl UiApp {
             };
             self.chat_state.session_chat.begin_turn(&session_id);
             self.chat_state.runtime.begin_turn(Some(text.clone()));
+            // S2 : prompt facturable (si modèle provider non-loopback).
+            self.note_provider_prompt(&session_id, &text);
             let _ = self.cmd_tx.send(Cmd::RoomTurn {
                 session_id,
                 content: room_content,
@@ -275,6 +277,8 @@ impl UiApp {
             .collect();
         self.chat_state.session_chat.begin_turn(&session_id);
         self.chat_state.runtime.begin_turn(None);
+        // S2 : prompt facturable (si modèle provider non-loopback).
+        self.note_provider_prompt(&session_id, &text);
         self.chat_state.runtime.load_fail_retry = None;
         let retry_turn = ChatRetryTurn {
             session_id: session_id.clone(),

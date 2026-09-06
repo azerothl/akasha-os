@@ -517,6 +517,7 @@ mod canvas_completion_tests {
             mcp_servers: vec![],
             fail_reason: Some("max_steps (64) atteint".into()),
             session_id: Some("sess-1".into()),
+            model_id: None,
             title: String::new(),
             kind: AgentKind::Task,
             display_name: None,

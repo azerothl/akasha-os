@@ -1,7 +1,7 @@
 //! Event handling for agent roster transitions and notices.
 
 use crate::chat_ask::{agent_display_title, chat_has_open_ask};
-use crate::cmd::{AgentNotice, ChatLine, Cmd};
+use crate::cmd::{AgentNotice, ChatLine, Cmd, NoticeSeverity};
 use crate::{agent_canvas_session_ops, agent_completion_chat_text, agent_panel, i18n, UiApp};
 use aos_proto::{AgentInfo, AgentState, ChatAttachment};
 
@@ -249,6 +249,11 @@ pub(crate) fn on_agents(app: &mut UiApp, agents: Vec<AgentInfo>) {
                         agent_id: ag.agent_id.clone(),
                         session_id: sid.clone(),
                         summary,
+                        severity: match ag.state {
+                            AgentState::Failed => NoticeSeverity::Urgent,
+                            AgentState::Killed => NoticeSeverity::Warning,
+                            _ => NoticeSeverity::Info,
+                        },
                     });
                 }
             }
@@ -311,6 +316,8 @@ pub(crate) fn on_agents(app: &mut UiApp, agents: Vec<AgentInfo>) {
                         agent_id: ag.agent_id.clone(),
                         session_id: sid.clone(),
                         summary: format!("{} pose une question", agent_display_title(ag)),
+                        // Une question bloque l'agent : prioritaire.
+                        severity: NoticeSeverity::Urgent,
                     });
                 }
             }

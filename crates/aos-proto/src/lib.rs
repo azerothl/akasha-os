@@ -658,6 +658,9 @@ pub struct AgentSpec {
     pub caps: Vec<String>,
     #[serde(default)]
     pub model_id: Option<String>,
+    /// Politique par agent S6 phase 2 (`None` = défauts permissifs).
+    #[serde(default)]
+    pub policy: Option<AgentPolicy>,
     #[serde(default)]
     pub parent_id: Option<String>,
     /// Session chat d'origine (carte / résumé dans le fil).
@@ -716,6 +719,9 @@ pub struct AgentCreateRequest {
     /// Modèle préféré (`None` → défaut système).
     #[serde(default)]
     pub model_id: Option<String>,
+    /// Politique initiale S6 phase 2 (`None` = défauts permissifs).
+    #[serde(default)]
+    pub policy: Option<AgentPolicy>,
     /// Objectif structuré (si absent → dérivé de `directive`).
     #[serde(default)]
     pub goal: Option<AgentGoal>,
@@ -772,6 +778,7 @@ impl AgentCreateRequest {
             persona_id: None,
             caps: Vec::new(),
             model_id: None,
+            policy: None,
             goal: None,
             system_prompt: None,
             skills: Vec::new(),
@@ -1180,6 +1187,10 @@ pub struct AgentInfo {
     /// Session chat liée (pour carte / notification).
     #[serde(default)]
     pub session_id: Option<String>,
+    /// Modèle effectif (hérité spec/session à la création ; S6 phase 2).
+    /// Le resolve vision du worker peut le changer sans remonter ici.
+    #[serde(default)]
+    pub model_id: Option<String>,
     /// Libellé court dérivé de la directive (liste / historique).
     #[serde(default)]
     pub title: String,
@@ -2749,6 +2760,59 @@ pub struct TrustSetRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrustGetRequest {
     pub agent_id: String,
+}
+
+/// Politique réseau par agent (S6 phase 2, fail-closed : refus explicite).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentNetPolicy {
+    /// web.search / web.browse / net.fetch autorisés (défaut, inchangé).
+    #[default]
+    Allow,
+    /// Refusés avec message explicite (pas de contournement silencieux).
+    Deny,
+}
+
+/// Politique par agent (S6 phase 2). Tout est permissif par défaut pour ne
+/// rien casser ; chaque restriction est un refus explicite tracé.
+/// NOTE : `Default` manuel (et non dérivé) pour que `fs_write` vaille `true`
+/// aussi hors désérialisation — sinon `Default::default()` contredirait
+/// `serde(default = "default_true")`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentPolicy {
+    #[serde(default)]
+    pub net: AgentNetPolicy,
+    /// `fs.write` autorisé (défaut true). À false : refus explicite.
+    /// Le mode "demander avant" reste un `user.ask` manuel, pas une politique.
+    #[serde(default = "default_true")]
+    pub fs_write: bool,
+    /// Restriction supplémentaire aux outils (au-delà des caps).
+    /// `None` = tous les outils des caps.
+    #[serde(default)]
+    pub tool_allowlist: Option<Vec<String>>,
+}
+
+impl Default for AgentPolicy {
+    fn default() -> Self {
+        Self {
+            net: AgentNetPolicy::Allow,
+            fs_write: true,
+            tool_allowlist: None,
+        }
+    }
+}
+
+/// `agent.policy.get`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentPolicyGetRequest {
+    pub agent_id: String,
+}
+
+/// `agent.policy.set` (audité côté agentd).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentPolicySetRequest {
+    pub agent_id: String,
+    pub policy: AgentPolicy,
 }
 
 /// `cap.request` — demande de capacité par un agent (§4.7 paliers).
@@ -5314,6 +5378,7 @@ mod chat_session_room_tests {
             mcp_servers: vec![],
             fail_reason: None,
             session_id: None,
+            model_id: None,
             title: String::new(),
             kind: AgentKind::Roster,
             display_name: Some("Coder".into()),
@@ -5360,6 +5425,7 @@ mod chat_session_room_tests {
             mcp_servers: vec![],
             fail_reason: None,
             session_id: None,
+            model_id: None,
             title: String::new(),
             kind: AgentKind::Roster,
             display_name: Some("Skills Auditor".into()),

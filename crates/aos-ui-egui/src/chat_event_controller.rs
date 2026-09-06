@@ -36,6 +36,8 @@ pub(crate) fn on_done(
     if app.status.starts_with("assistant :") {
         app.status.clear();
     }
+    // S2 : clôture le turn facturable (prompt enregistré au begin_turn).
+    app.note_provider_completion(&session_id, &text);
     app.mark_onboarding_chat_done();
 }
 

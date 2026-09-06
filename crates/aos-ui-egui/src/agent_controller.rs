@@ -53,6 +53,10 @@ impl UiApp {
         crate::prefs::save_preferences(&self.prefs);
         self.agent_ui.open_tab(id);
         let _ = self.cmd_tx.send(Cmd::AgentTrace { id: id.to_string() });
+        // S6 : profil de confiance affiché dans le détail.
+        let _ = self.cmd_tx.send(Cmd::TrustGet { agent_id: id.to_string() });
+        // S6 phase 2 : politique affichée/éditée dans le détail.
+        let _ = self.cmd_tx.send(Cmd::AgentPolicyGet { agent_id: id.to_string() });
         let holder = agent_cap_holder(id);
         self.security_ui.select_holder(holder.clone());
         let _ = self.cmd_tx.send(Cmd::CapList { holder });

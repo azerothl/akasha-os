@@ -510,6 +510,7 @@ dependencies = [
  "rfd",
  "serde",
  "serde_json",
+ "sha2",
  "tokio",
  "winres",
 ]

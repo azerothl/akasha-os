@@ -15,6 +15,7 @@ pub mod document_prep;
 pub mod health;
 pub mod mcp;
 pub mod persist;
+pub mod policy;
 pub mod prompt;
 pub mod room_conductor;
 pub mod room_personas;
@@ -64,6 +65,10 @@ pub mod intents {
     pub const ROOM_CONDUCT_CANCEL: &str = "agent.room_conduct.cancel";
     pub const SPEC_GET: &str = "agent.spec.get";
     pub const ROSTER_UPDATE: &str = "agent.roster.update";
+    /// Politique par agent (S6 phase 2) : lecture/écriture via agentd,
+    /// application live via `ControlCmd::SetPolicy`.
+    pub const POLICY_GET: &str = "agent.policy.get";
+    pub const POLICY_SET: &str = "agent.policy.set";
     pub const PLAN_CREATE: &str = "plan.create";
     pub const PLAN_GET: &str = "plan.get";
     pub const PLAN_UPDATE_STEP: &str = "plan.update_step";
@@ -81,6 +86,8 @@ pub enum ControlCmd {
     Snapshot,
     /// Hot-grant d'une capacité (mise à jour caps du worker).
     GrantCap { cap: String },
+    /// Politique par agent S6 phase 2 (mise à jour live, persistée par agentd).
+    SetPolicy { policy: aos_proto::AgentPolicy },
     /// Réponse inline Allow Once / Refuser pour une action agent (slice 1).
     ActDecision { act_id: String, approved: bool },
     /// Un sous-agent a atteint un état terminal ; le parent doit intégrer le résultat.

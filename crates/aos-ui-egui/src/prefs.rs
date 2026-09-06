@@ -168,6 +168,15 @@ pub struct Preferences {
     pub auto_download_updates: bool,
     #[serde(default)]
     pub default_agent_model: Option<String>,
+    /// S2 : plafond cloud mensuel en cents USD (0 = illimité).
+    #[serde(default)]
+    pub cloud_cap_cents: u32,
+    /// S2 : seuil d'alerte en % du plafond.
+    #[serde(default = "default_cloud_alert_pct")]
+    pub cloud_alert_pct: u8,
+    /// S2 : au plafond, basculer `local_only` (fail-closed).
+    #[serde(default = "default_true")]
+    pub cloud_cut_at_cap: bool,
     #[serde(default = "default_max_steps")]
     pub default_max_steps: u32,
     #[serde(default = "default_timeout_secs")]
@@ -297,6 +306,14 @@ fn default_agent_gate_mode() -> String {
     "ask".into()
 }
 
+fn default_cloud_alert_pct() -> u8 {
+    80
+}
+
+fn default_true() -> bool {
+    true
+}
+
 /// Clamp persisted or deserialized scale to supported Preview presets.
 pub fn clamp_ui_scale_percent(percent: u32) -> u32 {
     UI_SCALE_PRESETS
@@ -344,6 +361,9 @@ impl Default for Preferences {
             image_steps: default_image_steps(),
             ui_scale_percent: default_ui_scale_percent(),
             agent_gate_mode: default_agent_gate_mode(),
+            cloud_cap_cents: 0,
+            cloud_alert_pct: default_cloud_alert_pct(),
+            cloud_cut_at_cap: true,
             community_catalogue_enabled: false,
             ui_density: UiDensity::default(),
             ui_layout: UiLayoutPreferences::default(),
