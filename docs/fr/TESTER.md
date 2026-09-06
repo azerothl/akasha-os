@@ -350,9 +350,13 @@ Guide testeur (sans cargo) : [write-a-module.md](write-a-module.md).
 - kind `webview`
 ### Capture caméra / micro (issue #137)
 
-- Sous Windows 10/11, vérifier que `device.enumerate` détecte une caméra et un
-  micro.
-- Confirmer dans Akasha avant d’accepter la permission Windows ; tester
+- Sous **Windows 10/11**, vérifier que `device.enumerate` détecte une caméra et
+  un micro.
+- Sous **Linux**, vérifier que les caméras V4L2 et les entrées cpal apparaissent
+  quand le matériel est présent.
+- Sous **macOS**, vérifier AVFoundation et CoreAudio après accord Camera/Micro
+  dans Réglages système.
+- Confirmer dans Akasha avant d’accepter la permission OS ; tester
   `Autoriser une fois`, `Toujours`, `Refuser` et la révocation du périphérique
   exact dans Caps.
 - Démarrer un flux, utiliser le contrôle visible **Arrêter**, puis vérifier
@@ -360,4 +364,5 @@ Guide testeur (sans cargo) : [write-a-module.md](write-a-module.md).
 - Vérifier que l’artefact reste sous
   `var/sessions/<session>/devices/` et que les erreurs absent/occupé/refus/quota
   sont lisibles.
-- Sous Linux/macOS CI, vérifier le backend factice et `UnsupportedPlatform`.
+- Sous Linux/macOS CI, vérifier le backend factice et que le backend hôte
+  énumère sans `UnsupportedPlatform` (la capture matérielle reste manuelle).

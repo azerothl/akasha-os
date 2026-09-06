@@ -38,6 +38,10 @@ windows = { version = "0.58", features = [
     "Win32_System_Com",
 ] }
 
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
+nokhwa = { version = "0.10", default-features = false, features = ["input-native"] }
+cpal = "0.15"
+
 [features]
 default = ["embeddings", "cuda"]
 # Pulls llama.cpp. Disable `cuda` for CPU-only packaging.
