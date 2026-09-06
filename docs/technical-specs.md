@@ -449,8 +449,10 @@ requires the node capability `sensitive-data`. A lost node moves the job to
 `failed` when none remain. Cancellation returns every node that must receive a
 cancel signal.
 
-The policy layer does not open a listener or discover peers by itself. The
-explicit authenticated TCP adapter and listener are now available to an
+The policy layer does not open a listener or discover peers by itself. An
+explicit opt-in UDP advertisement service can discover unpaired candidates;
+it validates LAN scope and source/address consistency but never pairs them.
+The authenticated TCP adapter and listener are now available to an
 integration that supplies a session key, but they are not started by
 `aos-modeld`. They still do not copy weights, route tokens or transmit KV data
 automatically; an execution layer must consume only the coordinator's

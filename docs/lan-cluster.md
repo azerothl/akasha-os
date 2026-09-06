@@ -10,13 +10,17 @@ peers.
 2. Set the local node identity, the advertised listener address, and the name
    of the session-key secret. The default secret name is
    `lan_cluster_session_key`.
-3. Open **Settings → Secrets vault**, enter a random 32-byte key as exactly 64
+3. Set the local public-key fingerprint, enable **Auto-discover LAN
+   candidates**, and keep the same UDP discovery port on the participating
+   hosts.
+4. Open **Settings → Secrets vault**, enter a random 32-byte key as exactly 64
    hexadecimal characters, and save it under that secret name. The value is
    write-only in the UI.
-4. In the LAN cluster section, enter the remote node ID, display name, LAN
+5. In the LAN cluster section, enter the remote node ID, display name, LAN
    address (`192.168.x.y:port`, loopback and link-local addresses are also
    accepted), and its public-key fingerprint.
-5. Select **Add node**, then select **Pair** after checking the fingerprint.
+6. Select **Add node**, or wait for a discovery candidate, then select
+   **Pair** after checking the fingerprint.
    **Revoke** immediately excludes a node from future work.
 
 The local identity, announced address and secret name are stored in the local
@@ -30,6 +34,9 @@ preferences file. The node inventory and trust state are persisted in
 - A changed fingerprint for an existing node is rejected.
 - A node is not eligible for work until it is paired.
 - Revocation is fail-closed and survives a restart.
+- Discovery advertisements are unauthenticated hints. The source IP must
+  match the advertised LAN address; a changed fingerprint is rejected and a
+  new candidate always remains `Unpaired`.
 
 ## Current execution boundary
 
@@ -44,6 +51,11 @@ the session-key secret name.
 remote shard execution, token routing and KV-cache transfer still require the
 worker-side execution integration. Until that integration is enabled, local
 CPU/GPU inference remains the default and no data leaves the machine.
+
+Auto-discovery takes effect when `aos-modeld` starts with both the LAN cluster
+and auto-discovery enabled. It uses bounded UDP CBOR advertisements on the
+configured local port and does not transmit prompts, model weights, tokens or
+session-key values.
 
 ## YAML inventory (optional)
 

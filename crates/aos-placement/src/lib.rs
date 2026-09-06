@@ -18,6 +18,7 @@ pub mod adaptive;
 pub mod bandwidth;
 pub mod benchmark;
 pub mod cost;
+pub mod discovery;
 pub mod distributed;
 pub mod hardware;
 pub mod manager;
@@ -37,6 +38,10 @@ pub use benchmark::{
     reference_scenarios, run_reference_matrix, run_scenario, BenchmarkResult, BenchmarkScenario,
 };
 pub use cost::{Bound, CostModel, Estimate};
+pub use discovery::{
+    LanDiscoveryAdvertisement, LanDiscoverySocket, LAN_DISCOVERY_MAGIC, LAN_DISCOVERY_PORT,
+    LAN_DISCOVERY_PROTOCOL_VERSION,
+};
 pub use distributed::{
     DistributedWork, LanCluster, LanJobState, LanNode, LanPairingRegistry, LanRecovery,
     LanSecureChannel, LanSecureFrame, LanSessionKey, LanShardAssignment, LanTcpListener,

@@ -69,6 +69,12 @@ pub struct LanClusterConfig {
     #[serde(default = "default_lan_session_secret")]
     pub session_key_secret: String,
     #[serde(default)]
+    pub auto_discovery: bool,
+    #[serde(default = "default_lan_discovery_port")]
+    pub discovery_port: u16,
+    #[serde(default)]
+    pub public_key_fingerprint: String,
+    #[serde(default)]
     pub nodes: Vec<LanNode>,
 }
 
@@ -177,6 +183,9 @@ fn default_lan_listen_address() -> String {
 fn default_lan_session_secret() -> String {
     "lan_cluster_session_key".into()
 }
+fn default_lan_discovery_port() -> u16 {
+    47_821
+}
 
 impl ModeldConfig {
     /// UI preferences take effect on the next load, without restarting modeld.
@@ -214,6 +223,19 @@ impl ModeldConfig {
             .unwrap_or_else(|| self.lan_cluster.session_key_secret.clone())
     }
 
+    pub fn lan_auto_discovery_at(&self, home: &Path) -> bool {
+        preference_bool(home, "lan_auto_discovery").unwrap_or(self.lan_cluster.auto_discovery)
+    }
+
+    pub fn lan_discovery_port_at(&self, home: &Path) -> u16 {
+        preference_u16(home, "lan_discovery_port").unwrap_or(self.lan_cluster.discovery_port)
+    }
+
+    pub fn lan_public_key_fingerprint_at(&self, home: &Path) -> String {
+        preference_string(home, "lan_public_key_fingerprint")
+            .unwrap_or_else(|| self.lan_cluster.public_key_fingerprint.clone())
+    }
+
     pub fn load(path: impl AsRef<Path>) -> Result<Self, Box<dyn std::error::Error>> {
         Ok(serde_yaml::from_str(&std::fs::read_to_string(path)?)?)
     }
@@ -230,6 +252,22 @@ fn preference_string(home: &Path, key: &str) -> Option<String> {
                 .map(str::to_owned)
         })
         .filter(|value| !value.trim().is_empty())
+}
+
+fn preference_bool(home: &Path, key: &str) -> Option<bool> {
+    std::fs::read_to_string(home.join("var/run/preferences.json"))
+        .ok()
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+        .and_then(|value| value.get(key).and_then(|value| value.as_bool()))
+}
+
+fn preference_u16(home: &Path, key: &str) -> Option<u16> {
+    std::fs::read_to_string(home.join("var/run/preferences.json"))
+        .ok()
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+        .and_then(|value| value.get(key).and_then(|value| value.as_u64()))
+        .and_then(|value| u16::try_from(value).ok())
+        .filter(|value| *value >= 1024)
 }
 
 #[cfg(test)]

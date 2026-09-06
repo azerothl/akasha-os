@@ -149,6 +149,12 @@ pub struct Preferences {
     pub lan_listen_address: String,
     #[serde(default = "default_lan_session_secret")]
     pub lan_session_key_secret: String,
+    #[serde(default)]
+    pub lan_auto_discovery: bool,
+    #[serde(default = "default_lan_discovery_port")]
+    pub lan_discovery_port: u16,
+    #[serde(default)]
+    pub lan_public_key_fingerprint: String,
     /// `light` | `dark` | `soft` | `high_contrast`
     #[serde(default = "default_theme")]
     pub theme: String,
@@ -253,6 +259,9 @@ fn default_lan_listen_address() -> String {
 fn default_lan_session_secret() -> String {
     "lan_cluster_session_key".into()
 }
+fn default_lan_discovery_port() -> u16 {
+    47_821
+}
 fn default_theme() -> String {
     "dark".into()
 }
@@ -314,6 +323,9 @@ impl Default for Preferences {
             lan_node_id: default_lan_node_id(),
             lan_listen_address: default_lan_listen_address(),
             lan_session_key_secret: default_lan_session_secret(),
+            lan_auto_discovery: false,
+            lan_discovery_port: default_lan_discovery_port(),
+            lan_public_key_fingerprint: String::new(),
             theme: default_theme(),
             network_online: false,
             auto_remember_chat: default_auto_remember_chat(),

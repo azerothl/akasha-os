@@ -5,9 +5,9 @@
 use aos_ipc::{BusClient, BusService, StreamHandle};
 use aos_model::{media, providers, ModelSubsystem, ModeldConfig};
 use aos_placement::{
-    BackendKind, DistributedWork, InferencePlanDiagnostic, LanCluster, LanNode, LanPairingRegistry,
-    LanSessionKey, LanTcpTransport, LanWorkMessage, LanWorkPlan, NodeTrust, PlacementProfile,
-    ThermalPolicy,
+    BackendKind, DistributedWork, InferencePlanDiagnostic, LanCluster, LanDiscoveryAdvertisement,
+    LanDiscoverySocket, LanNode, LanPairingRegistry, LanSessionKey, LanTcpTransport,
+    LanWorkMessage, LanWorkPlan, NodeTrust, PlacementProfile, ThermalPolicy,
 };
 use aos_proto::{
     CancelRequest, InferRequest, LanClusterAssignment, LanClusterDiscoverRequest,
@@ -284,6 +284,67 @@ async fn main() {
         let registry = load_lan_registry(&config, &preference_home);
         Arc::new(Mutex::new(LanCluster::new(registry)))
     };
+    if config.lan_cluster_enabled_at(&preference_home)
+        && config.lan_auto_discovery_at(&preference_home)
+    {
+        let port = config.lan_discovery_port_at(&preference_home);
+        let local_node = LanNode {
+            node_id: config.lan_node_id_at(&preference_home),
+            display_name: "Akasha OS".into(),
+            address: config.lan_listen_address_at(&preference_home),
+            public_key_fingerprint: config.lan_public_key_fingerprint_at(&preference_home),
+            trust: NodeTrust::Unpaired,
+            capabilities: Vec::new(),
+        };
+        let advertisement = if local_node.public_key_fingerprint.trim().is_empty() {
+            None
+        } else {
+            Some(LanDiscoveryAdvertisement::from_node(&local_node))
+        };
+        let cluster = lan_cluster.clone();
+        let discovery_home = preference_home.clone();
+        tokio::spawn(async move {
+            let bind_address = format!("0.0.0.0:{port}");
+            let broadcast_address = format!("255.255.255.255:{port}");
+            let socket = match LanDiscoverySocket::bind(&bind_address, &broadcast_address).await {
+                Ok(socket) => socket,
+                Err(error) => {
+                    eprintln!("[aos-modeld] découverte LAN désactivée: {error}");
+                    return;
+                }
+            };
+            let mut announce_tick = tokio::time::interval(std::time::Duration::from_secs(5));
+            loop {
+                tokio::select! {
+                    _ = announce_tick.tick() => {
+                        if let Some(advertisement) = advertisement.as_ref() {
+                            if let Err(error) = socket.announce(advertisement).await {
+                                eprintln!("[aos-modeld] annonce LAN: {error}");
+                            }
+                        }
+                    }
+                    received = socket.receive() => {
+                        match received {
+                            Ok(node) => {
+                                if node.node_id == local_node.node_id {
+                                    continue;
+                                }
+                                if let Ok(mut cluster) = cluster.lock() {
+                                    if cluster.registry_mut().try_discover(node).is_ok() {
+                                        let _ = persist_lan_registry(
+                                            cluster.registry(),
+                                            &discovery_home,
+                                        );
+                                    }
+                                }
+                            }
+                            Err(error) => eprintln!("[aos-modeld] réception découverte LAN: {error}"),
+                        }
+                    }
+                }
+            }
+        });
+    }
     eprintln!(
         "[aos-modeld] {} modèles au registry, bus {}",
         registry.len(),

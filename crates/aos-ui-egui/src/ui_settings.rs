@@ -406,6 +406,44 @@ impl UiApp {
                                 }
                                 ui.end_row();
 
+                                ui.label(t.lan_public_fingerprint);
+                                if ui
+                                    .add(
+                                        egui::TextEdit::singleline(
+                                            &mut self.prefs.lan_public_key_fingerprint,
+                                        )
+                                        .desired_width(220.0),
+                                    )
+                                    .changed()
+                                {
+                                    save_preferences(&self.prefs);
+                                }
+                                ui.end_row();
+
+                                ui.label(t.lan_auto_discovery);
+                                if ui
+                                    .checkbox(
+                                        &mut self.prefs.lan_auto_discovery,
+                                        t.providers_enabled,
+                                    )
+                                    .changed()
+                                {
+                                    save_preferences(&self.prefs);
+                                }
+                                ui.end_row();
+
+                                ui.label(t.lan_discovery_port);
+                                if ui
+                                    .add(
+                                        egui::DragValue::new(&mut self.prefs.lan_discovery_port)
+                                            .range(1024..=65535),
+                                    )
+                                    .changed()
+                                {
+                                    save_preferences(&self.prefs);
+                                }
+                                ui.end_row();
+
                                 ui.label(t.lan_session_secret);
                                 if ui
                                     .add(
@@ -421,6 +459,7 @@ impl UiApp {
                                 }
                                 ui.end_row();
                             });
+                        ui.weak(t.lan_discovery_hint);
                         ui.weak(t.lan_session_secret_hint);
 
                         egui::Grid::new("settings_lan_add_node")
