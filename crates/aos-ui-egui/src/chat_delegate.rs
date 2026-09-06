@@ -221,6 +221,105 @@ fn device_capture_ack(intent: DeviceCaptureIntent) -> String {
     }
 }
 
+fn text_has_usb_word(text: &str) -> bool {
+    text.to_ascii_lowercase()
+        .split(|c: char| !c.is_alphanumeric() && c != '.')
+        .any(|w| w == "usb" || w.starts_with("usb."))
+}
+
+/// Dans un long texte, exige « usb » proche d'un verbe/nom d'action (fenêtre ±4 mots).
+fn usb_with_action_context(text: &str) -> bool {
+    let words: Vec<String> = text
+        .to_ascii_lowercase()
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .map(str::to_string)
+        .collect();
+    const ACTION: &[&str] = &[
+        "list", "lister", "liste", "enumerate", "enumerer", "enumere", "port", "ports",
+        "device", "devices", "serial", "com", "connect", "connecter", "brancher", "branch",
+    ];
+    for (i, w) in words.iter().enumerate() {
+        if w != "usb" {
+            continue;
+        }
+        let start = i.saturating_sub(4);
+        let end = (i + 5).min(words.len());
+        for neighbor in &words[start..end] {
+            if ACTION.contains(&neighbor.as_str())
+                || neighbor.starts_with("peripher")
+                || neighbor.starts_with("périph")
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Détecte une demande de liste/accès USB (FR/EN). Les longs textes exigent un signal
+/// explicite pour éviter un « usb » isolé dans une doc technique.
+pub(crate) fn chat_device_usb_intent(text: &str) -> bool {
+    let l = text.to_ascii_lowercase();
+    if l.contains("device.usb")
+        || l.contains("périphérique usb")
+        || l.contains("périphériques usb")
+        || l.contains("peripherique usb")
+        || l.contains("peripheriques usb")
+        || l.contains("lister usb")
+        || l.contains("liste usb")
+        || l.contains("list usb")
+        || l.contains("list the usb")
+        || l.contains("ports série")
+        || l.contains("port série")
+        || l.contains("ports serie")
+        || l.contains("port serie")
+        || l.contains("serial port")
+        || l.contains("serial ports")
+        || l.contains("com port")
+        || l.contains("ports com")
+        || l.contains("port com")
+        || l.contains("usb device")
+        || l.contains("usb devices")
+        || l.contains("enumerate usb")
+        || l.contains("énumérer usb")
+        || l.contains("enumerer usb")
+        || l.contains("brancher un usb")
+        || l.contains("connecter un usb")
+        || l.contains("lister les périphériques usb")
+        || l.contains("list usb devices")
+    {
+        return true;
+    }
+    if !text_has_usb_word(text) {
+        return false;
+    }
+    if text.len() > 280 {
+        return usb_with_action_context(text);
+    }
+    true
+}
+
+const DEVICE_USB_TOOLS: [&str; 5] = [
+    "device.usb.enumerate",
+    "device.usb.open",
+    "device.usb.read",
+    "device.usb.write",
+    "device.usb.close",
+];
+
+fn push_device_usb_tools(tools: &mut Vec<String>) {
+    for t in DEVICE_USB_TOOLS {
+        if !tools.iter().any(|x| x == t) {
+            tools.push(t.into());
+        }
+    }
+}
+
+fn device_usb_ack() -> String {
+    "Je lance un agent pour les périphériques USB.".into()
+}
+
 /// Prefer a loaded vision model when the chat model cannot see the captured PNG.
 pub(crate) fn device_vision_model_id(
     selected: Option<String>,
@@ -323,6 +422,9 @@ pub(crate) fn chat_delegate_agent_spec(
             {
                 push_device_capture_tools(&mut tools, intent);
             }
+            if chat_device_usb_intent(user_text) || chat_device_usb_intent(&brief) {
+                push_device_usb_tools(&mut tools);
+            }
             if self_tool {
                 for t in [
                     "module.scaffold",
@@ -347,6 +449,8 @@ pub(crate) fn chat_delegate_agent_spec(
                     "Je lance un agent pour dessiner sur le canvas.".into()
                 } else if let Some(intent) = chat_device_capture_intent(user_text) {
                     device_capture_ack(intent)
+                } else if chat_device_usb_intent(user_text) || chat_device_usb_intent(&brief) {
+                    device_usb_ack()
                 } else {
                     "Je lance un agent pour cette tâche.".into()
                 };
@@ -404,6 +508,16 @@ pub(crate) fn chat_delegate_agent_spec(
             skills,
             tools,
             device_capture_ack(intent),
+        ));
+    }
+    if chat_device_usb_intent(user_text) {
+        let (skills, mut tools) = chat_delegate_kit(user_text, canvas_open, false, canvas_exported);
+        push_device_usb_tools(&mut tools);
+        return Some((
+            user_text.to_string(),
+            skills,
+            tools,
+            device_usb_ack(),
         ));
     }
     None
@@ -724,6 +838,7 @@ fn chat_agent_kit_ex(
     if !chat_canvas::chat_user_wants_explicit_canvas(task)
         && !canvas_open
         && chat_device_capture_intent(task).is_none()
+        && !chat_device_usb_intent(task)
         && (lower.contains("image")
             || lower.contains("png")
             || lower.contains("illustration")
@@ -742,6 +857,9 @@ fn chat_agent_kit_ex(
     }
     if let Some(intent) = chat_device_capture_intent(task) {
         push_device_capture_tools(&mut tools, intent);
+    }
+    if chat_device_usb_intent(task) {
+        push_device_usb_tools(&mut tools);
     }
     (skills, tools)
 }

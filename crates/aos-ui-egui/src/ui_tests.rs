@@ -5,7 +5,7 @@ use super::*;
 #[cfg(test)]
 mod delegate_tests {
     use super::*;
-    use crate::chat_delegate::{canvas_model_id, user_wants_deep_thinking};
+    use crate::chat_delegate::{canvas_model_id, chat_device_usb_intent, user_wants_deep_thinking};
     use aos_proto::{CanvasAspect, ModelInfo, ModelState};
 
     const ASPECT: CanvasAspect = CanvasAspect::Square;
@@ -303,6 +303,65 @@ mod delegate_tests {
         .expect("mic must delegate");
         let (_brief, _skills, tools, _) = spec;
         assert!(tools.iter().any(|x| x == "device.mic.capture"));
+    }
+
+    #[test]
+    fn usb_intent_detection_matches_fr_en_queries() {
+        assert!(chat_device_usb_intent("liste les périphériques usb"));
+        assert!(chat_device_usb_intent("list usb devices"));
+        assert!(chat_device_usb_intent("serial port"));
+        assert!(chat_device_usb_intent("ports série connectés"));
+        assert!(chat_device_usb_intent("device.usb.enumerate"));
+        assert!(chat_device_usb_intent("usb"));
+        assert!(!chat_device_usb_intent(
+            "Le bus USB 2.0 dans cette documentation décrit la couche physique et \
+             les descripteurs sans lien avec l'énumération locale des périphériques \
+             branchés sur cette machine. Les sections suivantes couvrent l'alimentation, \
+             la négociation de débit, les classes HID et MSC, et les bonnes pratiques \
+             de câblage pour les hubs alimentés."
+        ));
+    }
+
+    #[test]
+    fn usb_request_delegates_with_usb_tools() {
+        let spec = chat_delegate_agent_spec(
+            "liste les périphériques usb connectés",
+            "Ok.",
+            false,
+            ASPECT,
+            &full_canvas_exported(),
+        )
+        .expect("usb must delegate");
+        let (_brief, _skills, tools, prose) = spec;
+        assert!(tools.iter().any(|x| x == "device.usb.enumerate"));
+        assert!(tools.iter().any(|x| x == "device.usb.open"));
+        assert!(tools.iter().any(|x| x == "device.usb.read"));
+        assert!(tools.iter().any(|x| x == "device.usb.write"));
+        assert!(tools.iter().any(|x| x == "device.usb.close"));
+        assert!(prose.contains("USB"));
+        assert!(!tools.iter().any(|x| x == "media.image.generate"));
+    }
+
+    #[test]
+    fn usb_spawn_json_delegates_with_usb_tools() {
+        let out = r#"{"action":"agent.spawn","args":{"brief":"lister usb"}}"#;
+        let spec = chat_delegate_agent_spec(
+            "liste les ports usb",
+            out,
+            false,
+            ASPECT,
+            &full_canvas_exported(),
+        )
+        .expect("usb spawn must delegate");
+        let (_brief, _skills, tools, prose) = spec;
+        assert!(tools.iter().any(|x| x == "device.usb.enumerate"));
+        assert!(prose.contains("USB"));
+    }
+
+    #[test]
+    fn usb_kit_includes_tools_via_chat_agent_kit() {
+        let (_skills, tools) = chat_agent_kit("lister les ports série");
+        assert!(tools.iter().any(|x| x == "device.usb.enumerate"));
     }
 
     #[test]

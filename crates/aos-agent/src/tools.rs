@@ -1315,6 +1315,11 @@ pub fn canonicalize_tool_name(name: &str) -> String {
             "device.camera.capture".into()
         }
         "mic.capture" | "microphone.capture" | "microphone" => "device.mic.capture".into(),
+        "usb.list" | "usb.enumerate" | "list.usb" | "usb" => "device.usb.enumerate".into(),
+        "usb.open" => "device.usb.open".into(),
+        "usb.read" => "device.usb.read".into(),
+        "usb.write" => "device.usb.write".into(),
+        "usb.close" => "device.usb.close".into(),
         other => other.to_string(),
     }
 }
@@ -1343,6 +1348,8 @@ pub fn reserved_tool_prefix(prefix: &str) -> bool {
             | "tts"
             | "mcp"
             | "device"
+            | "usb"
+            | "shell"
     )
 }
 
@@ -1694,6 +1701,25 @@ mod tests {
         assert!(permissive.iter().any(|t| t.name == "device.camera.capture"));
         let (kind, _, _) = classify_action("device.camera.capture", &[], &[]);
         assert_eq!(kind, "native");
+    }
+
+    #[test]
+    fn canonicalize_usb_aliases() {
+        assert_eq!(
+            canonicalize_tool_name("tool.invoke:usb.list"),
+            "device.usb.enumerate"
+        );
+        assert_eq!(canonicalize_tool_name("usb.enumerate"), "device.usb.enumerate");
+        assert_eq!(canonicalize_tool_name("list.usb"), "device.usb.enumerate");
+        assert_eq!(canonicalize_tool_name("usb"), "device.usb.enumerate");
+        assert_eq!(canonicalize_tool_name("usb.open"), "device.usb.open");
+        assert_eq!(canonicalize_tool_name("usb.read"), "device.usb.read");
+        assert_eq!(canonicalize_tool_name("usb.write"), "device.usb.write");
+        assert_eq!(canonicalize_tool_name("usb.close"), "device.usb.close");
+        assert!(!is_module_fallback_candidate("usb.list"));
+        assert!(!is_module_fallback_candidate("shell.run"));
+        assert!(reserved_tool_prefix("usb"));
+        assert!(reserved_tool_prefix("shell"));
     }
 
     #[test]
