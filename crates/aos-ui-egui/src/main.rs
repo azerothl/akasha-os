@@ -9,6 +9,7 @@ mod agent_event_controller;
 mod agent_panel;
 mod backup;
 mod backup_state;
+mod billing;
 mod agent_ui_state;
 mod canvas_event_controller;
 mod canvas_paint;
@@ -486,6 +487,9 @@ struct UiApp {
     /// Cap 20, affiché en tooltip de la status bar.
     status_history: std::collections::VecDeque<String>,
     backup_ui: backup_state::BackupUiState,
+    /// S2 : livre de dépenses cloud mensuel + prompts en attente par session.
+    billing: billing::BillingLedger,
+    billing_pending: HashMap<String, u64>,
     onboarding: OnboardingState,
     show_onboarding: bool,
     scenario_ui: scenario_ui_state::ScenarioUiState,
@@ -668,6 +672,8 @@ impl UiApp {
             backup_ui: backup_state::BackupUiState::with_defaults(
                 backup::default_backup_parent().to_string_lossy().into_owned(),
             ),
+            billing: billing::load_ledger(),
+            billing_pending: HashMap::new(),
             onboarding,
             show_onboarding,
             scenario_ui: scenario_ui_state::ScenarioUiState::default(),
@@ -1891,6 +1897,9 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 };
                 ui.weak(short).on_hover_text(tip);
             }
+            ui.separator();
+            // S2 : badge budget cloud.
+            self.ui_billing_segment(ui);
             ui.separator();
             if let Some(pending_ver) = load_pending_update_version() {
                 ui.label(t.status_update_pending.replace("{version}", &pending_ver));

@@ -96,5 +96,71 @@ impl UiApp {
         if !self.models_ui.provider_test_msg.is_empty() {
             ui.label(&self.models_ui.provider_test_msg);
         }
+        // S2 : budget cloud mensuel (estimation chat, tarifs indicatifs).
+        ui.separator();
+        let fr = self.prefs.language == "fr";
+        ui.heading(if fr { "Budget cloud" } else { "Cloud budget" });
+        ui.weak(if fr {
+            "Estimation ≈ depuis les turns chat sur providers non-locaux (caractères/4). Loopback (Ollama/vLLM/LM Studio) = 0. Agents exclus en phase 1."
+        } else {
+            "≈ estimate from chat turns on non-local providers (chars/4). Loopback (Ollama/vLLM/LM Studio) = 0. Agents excluded in phase 1."
+        });
+        ui.horizontal(|ui| {
+            ui.label(if fr { "Plafond mensuel" } else { "Monthly cap" });
+            let mut euros = self.prefs.cloud_cap_cents as f32 / 100.0;
+            if ui
+                .add(
+                    egui::DragValue::new(&mut euros)
+                        .range(0.0..=100_000.0)
+                        .speed(5.0)
+                        .suffix(" €"),
+                )
+                .on_hover_text(if fr { "0 = illimité" } else { "0 = unlimited" })
+                .changed()
+            {
+                self.prefs.cloud_cap_cents = (euros.max(0.0) * 100.0).round() as u32;
+                crate::prefs::save_preferences(&self.prefs);
+            }
+        });
+        ui.horizontal(|ui| {
+            ui.label(if fr { "Alerte à" } else { "Alert at" });
+            let mut pct = self.prefs.cloud_alert_pct as u32;
+            if ui
+                .add(egui::DragValue::new(&mut pct).range(10..=100).suffix(" %"))
+                .changed()
+            {
+                self.prefs.cloud_alert_pct = pct.clamp(10, 100) as u8;
+                crate::prefs::save_preferences(&self.prefs);
+            }
+            let mut cut = self.prefs.cloud_cut_at_cap;
+            if ui
+                .checkbox(
+                    &mut cut,
+                    if fr { "Couper (local_only forcé)" } else { "Cut (force local_only)" },
+                )
+                .changed()
+            {
+                self.prefs.cloud_cut_at_cap = cut;
+                crate::prefs::save_preferences(&self.prefs);
+            }
+        });
+        ui.horizontal(|ui| {
+            ui.label(format!(
+                "{} · {} · {} turns",
+                self.billing.month,
+                crate::billing::format_cents(self.billing.cents, fr),
+                self.billing.turns,
+            ));
+            if ui
+                .small_button(if fr { "Réinitialiser le mois" } else { "Reset month" })
+                .clicked()
+            {
+                self.billing = crate::billing::BillingLedger {
+                    month: crate::billing::current_month_key(),
+                    ..Default::default()
+                };
+                crate::billing::save_ledger(&self.billing);
+            }
+        });
     }
 }
