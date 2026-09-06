@@ -1994,8 +1994,8 @@ impl Drop for LlamaContext {
 mod tests {
     use super::{
         accumulate_pooled_chunk, common_prefix_len, finish_mean_pool, l2_normalize,
-        prompt_lookup_draft, semantic_prefix_len, BatchItem, GenParams, KvType, LlamaError,
-        StopReason,
+        prompt_lookup_draft, semantic_prefix_len, speculation_disable_reason, BatchItem,
+        DraftDisableReason, GenParams, KvType, LlamaError, StopReason,
     };
     use std::sync::atomic::AtomicBool;
     use std::sync::Arc;

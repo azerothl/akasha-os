@@ -2032,15 +2032,17 @@ mod routing_tests {
         // Icônes 28px, couleur, sliders et DragValue sur la même hauteur :
         // la rangée ne doit plus avoir de dents de scie.
         assert_eq!(TOOLBAR_CTRL_H, crate::icons::TOOLBAR_ICON_SZ);
-        assert!(TOOLBAR_ROW_H >= TOOLBAR_CTRL_H + 2.0);
-        assert!(TOOLBAR_SLIDER_W >= 96.0, "slider must fit its value");
+        const { assert!(TOOLBAR_ROW_H >= TOOLBAR_CTRL_H + 2.0); };
+        const { assert!(TOOLBAR_SLIDER_W >= 96.0); };
     }
 
     #[test]
     fn spline_commit_needs_two_anchors() {
-        let mut state = CanvasPanelState::default();
-        state.tool = CanvasTool::Spline;
-        state.draft_points = vec![CanvasPoint { x: 0.1, y: 0.1 }];
+        let mut state = CanvasPanelState {
+            tool: CanvasTool::Spline,
+            draft_points: vec![CanvasPoint { x: 0.1, y: 0.1 }],
+            ..Default::default()
+        };
         assert!(commit_freehand_draft(&mut state).is_none());
         assert!(state.draft_points.is_empty());
         state.draft_points = vec![
@@ -2057,12 +2059,14 @@ mod routing_tests {
 
     #[test]
     fn path_commit_needs_three_anchors() {
-        let mut state = CanvasPanelState::default();
-        state.tool = CanvasTool::Path;
-        state.draft_points = vec![
-            CanvasPoint { x: 0.1, y: 0.1 },
-            CanvasPoint { x: 0.5, y: 0.5 },
-        ];
+        let mut state = CanvasPanelState {
+            tool: CanvasTool::Path,
+            draft_points: vec![
+                CanvasPoint { x: 0.1, y: 0.1 },
+                CanvasPoint { x: 0.5, y: 0.5 },
+            ],
+            ..Default::default()
+        };
         assert!(commit_freehand_draft(&mut state).is_none());
         assert!(state.draft_points.is_empty());
     }

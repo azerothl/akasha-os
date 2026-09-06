@@ -301,7 +301,7 @@ pub fn ui_catalog_vision_chip(ui: &mut egui::Ui, label: &str) {
             accent.b(),
             36,
         ))
-        .stroke(egui::Stroke::new(1.0, accent))
+        .stroke(egui::Stroke::new(1.0_f32, accent))
         .corner_radius(crate::theme::CARD_RADIUS)
         .inner_margin(egui::Margin::symmetric(6, 2))
         .show(ui, |ui| {
