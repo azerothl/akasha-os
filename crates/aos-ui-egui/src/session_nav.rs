@@ -49,7 +49,7 @@ pub fn filter_and_sort<'a>(
 }
 
 /// Newest-first within a group; pinned rows stay above unpinned peers.
-pub fn sort_within_group<'a>(sessions: &mut [&'a ChatSessionMeta]) {
+pub fn sort_within_group(sessions: &mut [&ChatSessionMeta]) {
     sessions.sort_by_key(|s| (!s.pinned, std::cmp::Reverse(s.updated_ms)));
 }
 

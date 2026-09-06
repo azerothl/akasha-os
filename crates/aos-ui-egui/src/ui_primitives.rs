@@ -160,7 +160,7 @@ impl Toasts {
                         };
                         egui::Frame::group(ui.style())
                             .corner_radius(crate::theme::RADIUS_LG)
-                            .stroke(egui::Stroke::new(1.0, accent))
+                            .stroke(egui::Stroke::new(1.0_f32, accent))
                             .inner_margin(egui::Margin::same(10))
                             .show(ui, |ui| {
                                 ui.set_max_width(340.0);

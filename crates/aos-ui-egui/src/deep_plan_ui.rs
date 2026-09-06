@@ -232,19 +232,24 @@ pub(crate) fn upsert_deep_plan_line(
     }
 }
 
+/// Inputs for the collapsible Deep Thinking plan tree (mirrors salon thinking toggle).
+pub(crate) struct DeepPlanToggle<'a> {
+    pub title: &'a str,
+    pub version: u32,
+    pub steps: &'a [PlanStep],
+    pub expand_step_ids: &'a [String],
+    pub show_logs_step_id: Option<&'a str>,
+}
+
 /// Collapsible Deep Thinking plan tree (mirrors salon thinking toggle).
 pub(crate) fn deep_plan_toggle(
     ui: &mut egui::Ui,
     line_index: usize,
-    title: &str,
-    version: u32,
-    steps: &[PlanStep],
-    expand_step_ids: &[String],
-    show_logs_step_id: Option<&str>,
+    plan: DeepPlanToggle<'_>,
     open: &mut std::collections::HashSet<usize>,
 ) {
     let expanded = open.contains(&line_index);
-    let header = format!("📋 Plan Deep Thinking (v{version}) — {title}");
+    let header = format!("📋 Plan Deep Thinking (v{version}) — {title}", version = plan.version, title = plan.title);
     let response = ui.add(
         egui::Label::new(
             egui::RichText::new(header)
@@ -260,10 +265,10 @@ pub(crate) fn deep_plan_toggle(
             open.insert(line_index);
         }
     }
-    if expanded || !expand_step_ids.is_empty() {
+    if expanded || !plan.expand_step_ids.is_empty() {
         ui.add_space(2.0);
-        for step in steps {
-            draw_step(ui, step, 0, expand_step_ids, show_logs_step_id, expanded);
+        for step in plan.steps {
+            draw_step(ui, step, 0, plan.expand_step_ids, plan.show_logs_step_id, expanded);
         }
     }
 }

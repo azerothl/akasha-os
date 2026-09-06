@@ -554,7 +554,12 @@ impl UiApp {
             let select_active = self.chat_state.view.canvas.tool == chat_canvas::CanvasTool::Select
                 && self.chat_state.view.canvas.selected_seq.is_some();
             let toolbar_rows = chat_canvas::toolbar_row_count(select_active);
-            let toolbar_h = toolbar_rows as f32 * chat_canvas::toolbar_row_height() + 4.0;
+            let toolbar_h = (toolbar_rows as f32 * chat_canvas::toolbar_row_height() + 4.0)
+                .min(chat_canvas::toolbar_max_height());
+            let toolbar_min_w = chat_canvas::toolbar_content_min_width(
+                self.chat_state.view.canvas.seeing,
+                self.chat_state.view.canvas.clear_confirm_open,
+            );
             let track_w = ui.available_width();
             ui.allocate_ui_with_layout(
                 egui::vec2(track_w, toolbar_h),
@@ -565,7 +570,7 @@ impl UiApp {
                         .id_salt("canvas_toolbar_scroll")
                         .auto_shrink([false, false])
                         .show(ui, |ui| {
-                            ui.set_min_width(track_w);
+                            ui.set_min_width(toolbar_min_w.max(track_w));
                             toolbar_action = chat_canvas::ui_canvas_toolbar(
                                 ui,
                                 t,
@@ -662,15 +667,18 @@ impl UiApp {
                     .iter()
                     .filter(|m| !m.id.starts_with("provider:"))
                 {
-                    let picker_label = if models_page::load_catalog_models()
+                    let picker_label = models_page::load_catalog_models()
                         .iter()
                         .find(|c| c.id == m.id)
-                        .is_some_and(models_page::catalog_has_vision)
-                    {
-                        format!("{} · {}", m.name, t.models_sees_images)
-                    } else {
-                        m.name.clone()
-                    };
+                        .map(|catalog| {
+                            let badges = models_page::picker_surface_badges(catalog, t);
+                            if badges.is_empty() {
+                                m.name.clone()
+                            } else {
+                                format!("{} · {}", m.name, badges[0])
+                            }
+                        })
+                        .unwrap_or_else(|| m.name.clone());
                     if ui
                         .selectable_value(&mut selected_model, m.id.clone(), picker_label)
                         .changed()
@@ -743,23 +751,22 @@ impl UiApp {
         room: bool,
         canvas_open: bool,
     ) {
-        if canvas_open {
-            if icons::activity_toggle_button(ui, self.prefs.ui_layout.activity_panel_open)
+        if canvas_open
+            && icons::activity_toggle_button(ui, self.prefs.ui_layout.activity_panel_open)
                 .on_hover_text(if self.prefs.ui_layout.activity_panel_open {
                     t.activity_close
                 } else {
                     t.activity_open
                 })
                 .clicked()
-            {
-                self.prefs.ui_layout.activity_panel_open =
-                    !self.prefs.ui_layout.activity_panel_open;
-                crate::prefs::save_preferences(&self.prefs);
-            }
+        {
+            self.prefs.ui_layout.activity_panel_open =
+                !self.prefs.ui_layout.activity_panel_open;
+            crate::prefs::save_preferences(&self.prefs);
         }
         if session_toggle_chip(ui, canvas_open, t.session_toggle_canvas).clicked() {
             let new_open = !canvas_open;
-            self.set_canvas_open_local(&sid, new_open);
+            self.set_canvas_open_local(sid, new_open);
             let _ = self.cmd_tx.send(Cmd::CanvasSetOpen {
                 session_id: sid.to_string(),
                 open: new_open,

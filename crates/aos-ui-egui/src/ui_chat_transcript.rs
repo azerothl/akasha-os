@@ -27,7 +27,7 @@ fn transcript_near_bottom(offset_y: f32, content_h: f32, viewport_h: f32) -> boo
 
 /// Keep following when already latched and live content is still growing (streaming rows,
 /// pending chrome). Prevents stick_to_bottom from toggling off due to row-height jitter.
-fn transcript_should_follow_bottom(
+struct TranscriptFollowInput {
     was_following: bool,
     near_bottom: bool,
     row_count: usize,
@@ -36,15 +36,17 @@ fn transcript_should_follow_bottom(
     prev_streaming_len: usize,
     streaming_active: bool,
     pending: bool,
-) -> bool {
-    if near_bottom {
+}
+
+fn transcript_should_follow_bottom(input: TranscriptFollowInput) -> bool {
+    if input.near_bottom {
         return true;
     }
-    was_following
-        && (row_count > prev_row_count
-            || streaming_len > prev_streaming_len
-            || streaming_active
-            || pending)
+    input.was_following
+        && (input.row_count > input.prev_row_count
+            || input.streaming_len > input.prev_streaming_len
+            || input.streaming_active
+            || input.pending)
 }
 
 /// Viewport height for the transcript scroll area from the pane's live budget.
@@ -465,11 +467,13 @@ impl UiApp {
                                     crate::deep_plan_ui::deep_plan_toggle(
                                         ui,
                                         i,
-                                        title,
-                                        *version,
-                                        steps,
-                                        expand_step_ids,
-                                        show_logs_step_id.as_deref(),
+                                        crate::deep_plan_ui::DeepPlanToggle {
+                                            title,
+                                            version: *version,
+                                            steps,
+                                            expand_step_ids,
+                                            show_logs_step_id: show_logs_step_id.as_deref(),
+                                        },
                                         &mut self.chat_state.view.deep_plan_open,
                                     );
                                 }
@@ -645,16 +649,16 @@ impl UiApp {
             scroll.content_size.y,
             scroll.inner_rect.height(),
         );
-        view.follow_bottom = transcript_should_follow_bottom(
-            follow_bottom,
+        view.follow_bottom = transcript_should_follow_bottom(TranscriptFollowInput {
+            was_following: follow_bottom,
             near_bottom,
-            n,
+            row_count: n,
             prev_row_count,
             streaming_len,
             prev_streaming_len,
             streaming_active,
             pending,
-        );
+        });
         view.transcript_row_count = n;
         view.transcript_streaming_len = streaming_len;
     }
@@ -664,7 +668,7 @@ impl UiApp {
 mod tests {
     use super::{
         transcript_near_bottom, transcript_should_follow_bottom, transcript_viewport_height,
-        TRANSCRIPT_BOTTOM_PADDING,
+        TranscriptFollowInput, TRANSCRIPT_BOTTOM_PADDING,
     };
 
     #[test]
@@ -675,7 +679,7 @@ mod tests {
 
     #[test]
     fn bottom_padding_is_comfortable_gap() {
-        assert!(TRANSCRIPT_BOTTOM_PADDING >= 8.0);
+        const { assert!(TRANSCRIPT_BOTTOM_PADDING >= 8.0); };
     }
 
     #[test]
@@ -686,11 +690,25 @@ mod tests {
 
     #[test]
     fn follow_bottom_stays_latched_while_streaming_grows() {
-        assert!(transcript_should_follow_bottom(
-            true, false, 10, 10, 120, 100, true, false,
-        ));
-        assert!(!transcript_should_follow_bottom(
-            true, false, 10, 10, 100, 100, false, false,
-        ));
+        assert!(transcript_should_follow_bottom(TranscriptFollowInput {
+            was_following: true,
+            near_bottom: false,
+            row_count: 10,
+            prev_row_count: 10,
+            streaming_len: 120,
+            prev_streaming_len: 100,
+            streaming_active: true,
+            pending: false,
+        }));
+        assert!(!transcript_should_follow_bottom(TranscriptFollowInput {
+            was_following: true,
+            near_bottom: false,
+            row_count: 10,
+            prev_row_count: 10,
+            streaming_len: 100,
+            prev_streaming_len: 100,
+            streaming_active: false,
+            pending: false,
+        }));
     }
 }

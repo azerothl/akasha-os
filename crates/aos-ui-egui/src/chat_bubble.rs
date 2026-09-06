@@ -88,6 +88,7 @@ pub(crate) fn chat_bubble_colors_legacy(
 }
 
 /// Returns fill, stroke, and role-label colors (static dark/light reference).
+#[cfg(test)]
 fn chat_bubble_colors_static(
     kind: ChatBubbleKind,
     dark: bool,
