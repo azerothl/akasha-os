@@ -47,7 +47,7 @@ Confirmation UI mirrors device capture with neutral keys:
 
 | Key (EN) | Key (FR) | Buttons |
 |----------|----------|---------|
-| USB device | Périphérique USB | Allow once · Always · Deny |
+| USB | USB | Allow once · Always · Deny |
 
 The control bar shows `device_usb` label when `action.kind` is `device.usb.io`.
 

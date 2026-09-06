@@ -373,7 +373,7 @@ Guide testeur (sans cargo) : [write-a-module.md](write-a-module.md).
 
 - Sous **Windows 10/11**, brancher un adaptateur USB-série et vérifier que
   `device.usb.enumerate` liste des entrées `win:Serial:*`.
-- Confirmer la bannière Akasha (périphérique USB · une fois / toujours /
+- Confirmer la bannière Akasha (USB · une fois / toujours /
   refuser) avant `device.usb.open`.
 - Ouvrir, lire, écrire, fermer ; vérifier l’Audit (requête/ouverture/lecture/
   écriture/fermeture) sans octets bruts.

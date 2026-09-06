@@ -404,7 +404,7 @@ Tester-facing write-up (no cargo): [write-a-module.md](write-a-module.md).
 
 - On **Windows 10/11**, plug a USB-serial adapter and verify
   `device.usb.enumerate` lists `win:Serial:*` entries.
-- Confirm Akasha grant chrome (USB device · Allow once / Always / Deny) before
+- Confirm Akasha grant chrome (USB · Allow once / Always / Deny) before
   `device.usb.open`.
 - Open, read, write, and close; verify Audit has request/open/read/write/close
   without raw payload bytes.
