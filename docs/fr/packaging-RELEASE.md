@@ -44,9 +44,9 @@ Les GGUF sont téléchargés au **premier run** via `share/models/manifest.json`
 ```
 Akasha OS Preview 0.16.2 — I/O USB série
 
-- Windows : `device.usb.enumerate` / `open` / `read` / `write` / `close` pour ports série USB (COM)
+- Windows, Linux, macOS : `device.usb.enumerate` / `open` / `read` / `write` / `close` série
 - Bannière : USB · une fois / toujours / refuser ; cap `device.usb.io`
-- Linux/macOS : enumerate renvoie UnsupportedPlatform dans cette tranche
+- CI utilise FakeUsbIoBackend ; les backends hôte énumèrent les ports série réels si présents
 - Mêmes bandes mill Win/Linux/Mac qu'en 0.16.x
 
 Pas un OS bootable. Voir FIRST-RUN.md / INSTALL.md / TESTER.md

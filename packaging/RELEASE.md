@@ -51,9 +51,9 @@ GGUFs are downloaded on **first run** via `share/models/manifest.json`.
 ```
 Akasha OS Preview 0.16.2 — USB serial I/O
 
-- Windows: `device.usb.enumerate` / `open` / `read` / `write` / `close` for USB serial (COM)
+- Windows, Linux, macOS: serial `device.usb.enumerate` / `open` / `read` / `write` / `close`
 - Grant chrome: USB · Allow once / Always / Deny; cap `device.usb.io`
-- Linux/macOS: enumerate returns UnsupportedPlatform in this slice
+- CI uses FakeUsbIoBackend; host backends enumerate real serial ports when present
 - Same Win/Linux/Mac mill bands as 0.16.x
 
 Not a bootable OS. See FIRST-RUN.md / INSTALL.md / TESTER.md

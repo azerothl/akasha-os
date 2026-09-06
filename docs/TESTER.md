@@ -342,7 +342,9 @@ Tester-facing write-up (no cargo): [write-a-module.md](write-a-module.md).
 - Confirm Akasha grant chrome (USB · Allow once / Always / Deny) before
   `device.usb.open`. Open, read, write, and close; Audit must not contain raw
   payload bytes. Revoke `device.usb.io` in Caps and confirm handles close.
-- On Linux/macOS, `device.usb.enumerate` returns `UnsupportedPlatform`.
+- On Linux/macOS, plug a USB-serial adapter and verify `device.usb.enumerate`
+  lists `linux:Serial:*` or `macos:Serial:*` entries (empty list is OK when no
+  ports are present; must not return `UnsupportedPlatform`).
 
 ### 29. Calm shell and session navigation (0.16.1)
 
@@ -418,5 +420,6 @@ Tester-facing write-up (no cargo): [write-a-module.md](write-a-module.md).
 - Open, read, write, and close; verify Audit has request/open/read/write/close
   without raw payload bytes.
 - Revoke `device.usb.io` in Caps and confirm open handles close.
-- On Linux/macOS, verify `device.usb.enumerate` returns `UnsupportedPlatform`
-  and fake-backend CI tests pass.
+- On Linux/macOS, verify `device.usb.enumerate` does not return
+  `UnsupportedPlatform` (lists serial ports when hardware is present; fake-backend
+  CI tests still pass).

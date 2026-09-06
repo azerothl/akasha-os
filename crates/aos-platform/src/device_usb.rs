@@ -75,7 +75,11 @@ pub fn default_usb_backend() -> Arc<dyn UsbIoBackend> {
     {
         return Arc::new(WindowsUsbBackend);
     }
-    #[cfg(not(windows))]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    {
+        Arc::new(crate::device_usb_host::HostUsbBackend)
+    }
+    #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
     {
         Arc::new(UnsupportedPlatformUsbBackend)
     }
@@ -560,7 +564,7 @@ mod windows_backend {
             let id = format!("win:Serial:{}", port);
             devices.push(UsbDeviceDescriptor {
                 id,
-                name: format!("USB Serial ({port})"),
+                name: "USB Serial".to_string(),
                 class: UsbDeviceClass::Serial,
                 vendor_id: None,
                 product_id: None,
