@@ -1,4 +1,4 @@
-# Fonctionnalités Preview — Akasha OS 0.16.1
+# Fonctionnalités Preview — Akasha OS 0.16.2
 
 **Langue :** [English](../FEATURES.md) | Français
 
@@ -7,7 +7,11 @@ Ce n'est **pas** l'OS bootable. Les exigences v1 sont dans
 [specs-fonctionnelles.md](specs-fonctionnelles.md) ; les gates dans
 [STATUS.md](STATUS.md).
 
-> Date : 03/09/2026 · Preview **0.16.1**
+> Date : 06/09/2026 · Preview **0.16.2**
+
+### Nouveautés 0.16.2
+
+- **USB I/O** : accès série USB opt-in Windows d’abord (`device.usb.enumerate` / `open` / `read` / `write` / `close`) ; capacité `device.usb.io` ; une fois / toujours / refuser ; Linux/macOS renvoient `UnsupportedPlatform`. Voir [device-usb.md](../device-usb.md)
 
 ### Nouveautés 0.16.1
 
@@ -228,6 +232,8 @@ Commandes slash :
 
 **Webcam et microphone (issue #137)** — capture Windows Media Foundation, Linux V4L2 + cpal et macOS AVFoundation + cpal via `device.enumerate` / `device.camera.capture` / `device.mic.capture`. Une capture caméra ponctuelle écrit un PNG sous `var/sessions/<session>/devices/` et le tour d’agent suivant le joint pour l’analyse vision. Confirmation obligatoire (une fois / toujours / refuser) ; les autorisations persistantes sont par agent + périphérique + action. Les refus de permission OS remontent en `OsPermissionDenied`. Le STT en continu reste hors scope.
 
+**USB I/O (issue #137, tranche 3)** — accès USB opt-in Windows d’abord via `device.usb.enumerate` / `device.usb.open` / `device.usb.read` / `device.usb.write` / `device.usb.close`. Capacité `device.usb.io` ; confirmation calquée sur la capture (une fois / toujours / refuser). Ouverture/lecture/écriture série (COM) sous Windows ; Linux/macOS renvoient `UnsupportedPlatform`. Voir `docs/device-usb.md`.
+
 ---
 
 ## 3. Mémoire (PC.7 + P04.1/P04.2 + P05 / E14)
@@ -410,7 +416,7 @@ Piste VM seL4 (PV.1–PV.3) séparée : [phases/phase-vm-sel4.md](phases/phase-v
 
 ---
 
-## 11. Hors Preview 0.16.1
+## 11. Hors Preview 0.16.2
 
 - Image bootable / fer nu
 - STT / voix permanente

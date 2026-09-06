@@ -13,6 +13,7 @@ mod canvas_style;
 pub mod chat_document;
 pub mod decl_ui;
 pub mod device_capture;
+pub mod device_usb;
 pub mod mem_extract;
 
 pub use device_capture::{
@@ -22,6 +23,13 @@ pub use device_capture::{
     DeviceCaptureResponse, DeviceCaptureStopRequest, DeviceCaptureStopResponse, DeviceDescriptor,
     DeviceEnumerateResponse, DeviceKind, DevicePermissionInfo, DevicePermissionRevokeRequest,
     OsPermissionState,
+};
+
+pub use device_usb::{
+    usb_io_capability, UsbActiveHandle, UsbCloseRequest, UsbCloseResponse, UsbDeviceClass,
+    UsbDeviceDescriptor, UsbEnumerateResponse, UsbOpenRequest, UsbOpenResponse, UsbPermission,
+    UsbPermissionInfo, UsbPermissionRevokeRequest, UsbReadRequest, UsbReadResponse,
+    UsbWriteRequest, UsbWriteResponse,
 };
 
 pub use canvas_layers::{
@@ -2325,7 +2333,7 @@ mod preview_prompt_tests {
 
     #[test]
     fn chat_supervisor_lock_bans_meta_in_visible_reply() {
-        let lock = format_chat_supervisor_lock("0.16.1");
+        let lock = format_chat_supervisor_lock("0.16.2");
         for term in [
             "RAG",
             "JSON",
@@ -2347,7 +2355,7 @@ mod preview_prompt_tests {
             );
         }
         assert!(
-            lock.contains("0.16.1"),
+            lock.contains("0.16.2"),
             "supervisor lock must name the running chrome version"
         );
         assert!(

@@ -1,4 +1,4 @@
-# Preview features — Akasha OS 0.16.1
+# Preview features — Akasha OS 0.16.2
 
 **Language:** English | [Français](fr/FEATURES.md)
 
@@ -7,7 +7,11 @@ This is **not** the bootable OS. Target v1 requirements live in
 [functional-specs.md](functional-specs.md); phase gates in
 [STATUS.md](STATUS.md).
 
-> Date: 03/09/2026 · Preview **0.16.1**
+> Date: 06/09/2026 · Preview **0.16.2**
+
+### What's new in 0.16.2
+
+- **USB I/O**: Windows-first opt-in serial USB (`device.usb.enumerate` / `open` / `read` / `write` / `close`); capability `device.usb.io`; Allow once / Always / Deny; Linux/macOS return `UnsupportedPlatform`. See [device-usb.md](device-usb.md)
 
 ### What's new in 0.16.1
 
@@ -228,6 +232,8 @@ Slash commands:
 
 **Webcam and microphone (issue #137)** — Windows Media Foundation, Linux V4L2 + cpal, and macOS AVFoundation + cpal capture through `device.enumerate` / `device.camera.capture` / `device.mic.capture`. A one-shot camera capture writes a PNG under `var/sessions/<session>/devices/` and the next agent turn attaches it for vision analysis. Confirmation is required (Allow once / Always / Deny); persistent grants are per agent + device + action. OS permission denials surface as `OsPermissionDenied`. Always-on STT is still out of scope.
 
+**USB I/O (issue #137, slice 3)** — Windows-first opt-in USB via `device.usb.enumerate` / `device.usb.open` / `device.usb.read` / `device.usb.write` / `device.usb.close`. Capability `device.usb.io`; confirmation mirrors capture (Allow once / Always / Deny). Serial (COM) open/read/write on Windows; Linux/macOS return `UnsupportedPlatform`. See `docs/device-usb.md`.
+
 ---
 
 ## 3. Memory (PC.7 + P04.1/P04.2 + P05 / E14)
@@ -410,7 +416,7 @@ seL4 VM track (PV.1–PV.3) is separate: see [phases/phase-vm-sel4.md](phases/ph
 
 ---
 
-## 11. Not in Preview 0.16.1
+## 11. Not in Preview 0.16.2
 
 - Bootable / bare-metal image
 - STT / always-on voice

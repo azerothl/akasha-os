@@ -24,6 +24,7 @@ pub struct ProviderRate {
     pub in_cents_per_1m: f64,
     pub out_cents_per_1m: f64,
     /// Faux si taux de repli (modèle inconnu) : sur-estimation volontaire.
+    #[allow(dead_code)]
     pub known: bool,
 }
 
@@ -79,11 +80,18 @@ pub fn split_provider_model(model_id: &str) -> Option<(&str, &str)> {
 pub fn endpoint_is_loopback(endpoint: &str) -> bool {
     let lower = endpoint.trim().to_ascii_lowercase();
     let after_scheme = lower.split("://").last().unwrap_or(&lower);
-    let host = after_scheme
-        .split([':', '/'])
-        .next()
-        .unwrap_or(after_scheme)
-        .trim_matches(['[', ']']);
+    let host = if after_scheme.starts_with('[') {
+        after_scheme
+            .split(']')
+            .next()
+            .unwrap_or(after_scheme)
+            .trim_start_matches('[')
+    } else {
+        after_scheme
+            .split([':', '/'])
+            .next()
+            .unwrap_or(after_scheme)
+    };
     matches!(host, "localhost" | "127.0.0.1" | "::1")
         || host.starts_with("127.")
         || host == "0.0.0.0"

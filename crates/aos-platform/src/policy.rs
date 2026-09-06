@@ -102,6 +102,15 @@ impl PolicyEngine {
                 effect: PolicyEffect::RequireConfirmation,
                 timeout_sec: Some(confirm_timeout_sec),
             },
+            PolicyRule {
+                name: "confirm_device_usb".into(),
+                matches: vec![(
+                    "action.kind".into(),
+                    serde_json::json!(["device.usb.io"]),
+                )],
+                effect: PolicyEffect::RequireConfirmation,
+                timeout_sec: Some(confirm_timeout_sec),
+            },
         ]
     }
 
@@ -205,5 +214,13 @@ mod tests {
         let (eff, rule) = e.evaluate(&ctx(&[("action.kind", "device.camera.stream")]));
         assert_eq!(eff, PolicyEffect::RequireConfirmation);
         assert_eq!(rule.unwrap().name, "confirm_device_capture");
+    }
+
+    #[test]
+    fn usb_io_exige_confirmation() {
+        let e = engine();
+        let (eff, rule) = e.evaluate(&ctx(&[("action.kind", "device.usb.io")]));
+        assert_eq!(eff, PolicyEffect::RequireConfirmation);
+        assert_eq!(rule.unwrap().name, "confirm_device_usb");
     }
 }

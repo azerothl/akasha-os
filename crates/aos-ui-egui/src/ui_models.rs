@@ -267,7 +267,7 @@ impl UiApp {
                                             models_disk::note_used(
                                                 &mut self.models_ui.model_usage,
                                                 &id,
-                                                crate::now_ms() as u64,
+                                                crate::now_ms(),
                                             );
                                             let _ = self.cmd_tx.send(Cmd::ModelLoad {
                                                 model_id: id.clone(),
@@ -284,7 +284,7 @@ impl UiApp {
                                             models_disk::note_used(
                                                 &mut self.models_ui.model_usage,
                                                 &id,
-                                                crate::now_ms() as u64,
+                                                crate::now_ms(),
                                             );
                                             let _ = self.cmd_tx.send(Cmd::ModelReload {
                                                 model_id: id.clone(),

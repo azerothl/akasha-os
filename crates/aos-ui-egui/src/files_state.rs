@@ -2,7 +2,7 @@
 
 use aos_proto::{DataClass, FsEntry};
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub(crate) struct FilesUiState {
     /// Préfixe courant ("" = racine logique, toujours avec '/' final sauf "").
     pub(crate) prefix: String,
@@ -25,27 +25,6 @@ pub(crate) struct FilesUiState {
     /// Suppression en attente de confirm.
     pub(crate) delete_confirm: Option<String>,
     pub(crate) filter: String,
-}
-
-impl Default for FilesUiState {
-    fn default() -> Self {
-        Self {
-            prefix: String::new(),
-            entries: Vec::new(),
-            open_path: None,
-            open_content: String::new(),
-            open_class: DataClass::default(),
-            open_version: 0,
-            open_dirty: false,
-            new_name: String::new(),
-            rename_open: false,
-            rename_target: String::new(),
-            rename_source: None,
-            pending_rename: None,
-            delete_confirm: None,
-            filter: String::new(),
-        }
-    }
 }
 
 impl FilesUiState {
@@ -110,14 +89,16 @@ mod tests {
 
     #[test]
     fn dirs_and_files_split_flat_prefix() {
-        let mut s = FilesUiState::default();
-        s.prefix = "docs/".into();
-        s.entries = vec![
-            entry("docs/a.md"),
-            entry("docs/sub/b.md"),
-            entry("docs/sub/c.md"),
-            entry("other/d.md"),
-        ];
+        let mut s = FilesUiState {
+            prefix: "docs/".into(),
+            entries: vec![
+                entry("docs/a.md"),
+                entry("docs/sub/b.md"),
+                entry("docs/sub/c.md"),
+                entry("other/d.md"),
+            ],
+            ..Default::default()
+        };
         assert_eq!(s.child_dirs(), vec!["sub".to_string()]);
         let files: Vec<&str> = s.child_files().iter().map(|e| e.path.as_str()).collect();
         assert_eq!(files, vec!["docs/a.md"]);
@@ -129,8 +110,10 @@ mod tests {
 
     #[test]
     fn crumbs_build_prefixes() {
-        let mut s = FilesUiState::default();
-        s.prefix = "a/b/".into();
+        let s = FilesUiState {
+            prefix: "a/b/".into(),
+            ..Default::default()
+        };
         let crumbs = s.crumbs();
         assert_eq!(crumbs.len(), 3);
         assert_eq!(crumbs[2].0, "a/b/");

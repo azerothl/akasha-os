@@ -63,6 +63,7 @@ pub struct UiStrings {
     pub confirm_wants_action: &'static str,
     pub device_camera: &'static str,
     pub device_microphone: &'static str,
+    pub device_usb: &'static str,
     pub device_allow_once: &'static str,
     pub device_always: &'static str,
     pub device_deny: &'static str,
@@ -659,6 +660,11 @@ pub struct UiStrings {
     pub agents_tool_device_camera_capture: &'static str,
     pub agents_tool_device_mic_capture: &'static str,
     pub agents_tool_device_capture_stop: &'static str,
+    pub agents_tool_device_usb_enumerate: &'static str,
+    pub agents_tool_device_usb_open: &'static str,
+    pub agents_tool_device_usb_read: &'static str,
+    pub agents_tool_device_usb_write: &'static str,
+    pub agents_tool_device_usb_close: &'static str,
     pub agents_mcp: &'static str,
     pub agents_mcp_empty: &'static str,
     pub agents_docs: &'static str,
@@ -991,6 +997,7 @@ const EN: UiStrings = UiStrings {
     confirm_wants_action: "The agent wants to perform: {action}",
     device_camera: "Camera",
     device_microphone: "Microphone",
+    device_usb: "USB",
     device_allow_once: "Allow once",
     device_always: "Always",
     device_deny: "Deny",
@@ -1554,7 +1561,7 @@ const EN: UiStrings = UiStrings {
     agents_tool_family_web: "Web",
     agents_tool_family_canvas: "Canvas",
     agents_tool_family_agents: "Agents",
-    agents_tool_family_devices: "Camera / mic",
+    agents_tool_family_devices: "Camera / mic / USB",
     agents_tool_notes_create: "Create note",
     agents_tool_notes_list: "List notes",
     agents_tool_notes_read: "Read note",
@@ -1588,6 +1595,11 @@ const EN: UiStrings = UiStrings {
     agents_tool_device_camera_capture: "Webcam photo",
     agents_tool_device_mic_capture: "Microphone clip",
     agents_tool_device_capture_stop: "Stop capture",
+    agents_tool_device_usb_enumerate: "List USB devices",
+    agents_tool_device_usb_open: "Open USB device",
+    agents_tool_device_usb_read: "USB read",
+    agents_tool_device_usb_write: "USB write",
+    agents_tool_device_usb_close: "Close USB handle",
     agents_mcp: "MCP servers",
     agents_mcp_empty: "Configure var/mcp/servers.yaml then Refresh",
     agents_docs: "Documents (comma-separated paths)",
@@ -1917,6 +1929,7 @@ const FR: UiStrings = UiStrings {
     confirm_wants_action: "L'agent veut effectuer : {action}",
     device_camera: "Caméra",
     device_microphone: "Micro",
+    device_usb: "USB",
     device_allow_once: "Autoriser une fois",
     device_always: "Toujours",
     device_deny: "Refuser",
@@ -2480,7 +2493,7 @@ const FR: UiStrings = UiStrings {
     agents_tool_family_web: "Web",
     agents_tool_family_canvas: "Canvas",
     agents_tool_family_agents: "Agents",
-    agents_tool_family_devices: "Caméra / micro",
+    agents_tool_family_devices: "Caméra / micro / USB",
     agents_tool_notes_create: "Créer une note",
     agents_tool_notes_list: "Lister les notes",
     agents_tool_notes_read: "Lire une note",
@@ -2514,6 +2527,11 @@ const FR: UiStrings = UiStrings {
     agents_tool_device_camera_capture: "Photo webcam",
     agents_tool_device_mic_capture: "Extrait micro",
     agents_tool_device_capture_stop: "Arrêter la capture",
+    agents_tool_device_usb_enumerate: "Lister USB",
+    agents_tool_device_usb_open: "Ouvrir USB",
+    agents_tool_device_usb_read: "Lecture USB",
+    agents_tool_device_usb_write: "Écriture USB",
+    agents_tool_device_usb_close: "Fermer USB",
     agents_mcp: "Serveurs MCP",
     agents_mcp_empty: "Configurer var/mcp/servers.yaml puis Rafraîchir",
     agents_docs: "Documents (chemins séparés par virgule)",
@@ -2860,7 +2878,26 @@ pub fn roster_tool_label<'a>(t: &'a UiStrings, tool_id: &str) -> &'a str {
         "device.camera.capture" => t.agents_tool_device_camera_capture,
         "device.mic.capture" => t.agents_tool_device_mic_capture,
         "device.capture.stop" => t.agents_tool_device_capture_stop,
+        "device.usb.enumerate" => t.agents_tool_device_usb_enumerate,
+        "device.usb.open" => t.agents_tool_device_usb_open,
+        "device.usb.read" => t.agents_tool_device_usb_read,
+        "device.usb.write" => t.agents_tool_device_usb_write,
+        "device.usb.close" => t.agents_tool_device_usb_close,
         _ => "?",
+    }
+}
+
+/// Human-readable label for pending confirmation banners (never raw cap ids).
+pub fn confirm_action_label(t: &UiStrings, action: &str) -> String {
+    let mapped = match action {
+        "device.usb.io" => "device.usb.open",
+        other => other,
+    };
+    let label = roster_tool_label(t, mapped);
+    if label == "?" {
+        action.to_string()
+    } else {
+        label.to_string()
     }
 }
 
@@ -3025,6 +3062,15 @@ mod tests {
         assert!(!resolved_fr.contains("atteint"));
         assert_eq!(resolved_en, en.agent_could_not_continue);
         assert_eq!(resolved_fr, fr.agent_could_not_continue);
+    }
+
+    #[test]
+    fn confirm_action_label_maps_usb_cap_to_open() {
+        let fr = strings("fr");
+        let en = strings("en");
+        assert_eq!(confirm_action_label(&fr, "device.usb.io"), "Ouvrir USB");
+        assert_eq!(confirm_action_label(&en, "device.usb.io"), "Open USB device");
+        assert_eq!(confirm_action_label(&fr, "device.usb.open"), "Ouvrir USB");
     }
 
     #[test]

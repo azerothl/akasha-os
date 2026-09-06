@@ -1792,10 +1792,16 @@ async fn main() {
                                         // the plan card is upserted via DeepPlanUpdated.
                                     }
                                     AgentOutputEvent::Step(rec) => {
-                                        if rec.action == "goal.complete"
-                                            && !rec.tool_result.trim().is_empty()
-                                        {
-                                            entry.info.last_output = rec.tool_result.clone();
+                                        if rec.action == "goal.complete" {
+                                            let prior = entry.info.last_output.clone();
+                                            entry.info.last_output =
+                                                aos_agent::actions::resolve_goal_complete_summary(
+                                                    &serde_json::json!({
+                                                        "summary": rec.tool_result
+                                                    }),
+                                                    &rec.thought,
+                                                    &prior,
+                                                );
                                         } else if rec.action == "goal.fail"
                                             && !rec.tool_result.trim().is_empty()
                                         {

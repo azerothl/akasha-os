@@ -198,7 +198,9 @@ pub async fn invoke_native_tool(
                 Err(e) => format!("web.browse err: {e}"),
             }
         }
-        "device.enumerate" | "device.camera.capture" | "device.mic.capture" | "device.capture.stop" => {
+        "device.enumerate" | "device.camera.capture" | "device.mic.capture" | "device.capture.stop"
+        | "device.usb.enumerate" | "device.usb.open" | "device.usb.read" | "device.usb.write"
+        | "device.usb.close" => {
             invoke_device_tool(bus, agent_id, tool, args, session_id).await
         }
         other => format!("outil natif non supporté en salon: {other}"),

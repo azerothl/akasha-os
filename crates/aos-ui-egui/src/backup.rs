@@ -278,7 +278,7 @@ pub fn do_restore(home: &Path, dir: &Path) -> Result<usize, String> {
                     std::fs::remove_dir_all(&dst)
                         .map_err(|e| format!("nettoyage {}: {e}", dst.display()))?;
                 }
-                copy_dir_recursive(&src, &dst, &mut Vec::new(), &src)?;
+                copy_dir_recursive(&src, &dst, &mut Vec::new(), &dst)?;
             }
         }
     }

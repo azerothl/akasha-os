@@ -1691,7 +1691,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 .await
             {
                 Ok(_) => {
-                    let _ = evt_tx.send(Evt::FilesOpOk(format!("{path}")));
+                    let _ = evt_tx.send(Evt::FilesOpOk(path.to_string()));
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));
@@ -1708,7 +1708,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 .await
             {
                 Ok(Ok(())) => {
-                    let _ = evt_tx.send(Evt::FilesOpOk(format!("{path}")));
+                    let _ = evt_tx.send(Evt::FilesOpOk(path.to_string()));
                 }
                 Ok(Err(e)) => {
                     let _ = evt_tx.send(Evt::Error(e));

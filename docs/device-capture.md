@@ -44,6 +44,8 @@ capture returns `OsPermissionDenied` with a human-readable message. Linux
 typically has no TCC-style preflight; macOS requires Camera/Microphone consent
 in System Settings. The injectable fake backend is used by portable CI tests.
 
+USB I/O is documented separately in `device-usb.md` (slice 3, Windows-first).
+
 Manual validation:
 
 - **Windows 10/11** — one camera and one microphone; confirm Akasha grant

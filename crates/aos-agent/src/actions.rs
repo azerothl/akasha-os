@@ -460,6 +460,51 @@ pub fn parse_tool_line(text: &str) -> Option<(String, serde_json::Value)> {
     None
 }
 
+/// Résumé affiché à l'utilisateur quand l'agent appelle `goal.complete`.
+/// Si `summary` est vide ou générique, on réutilise le raisonnement ou le dernier résultat d'outil.
+pub fn resolve_goal_complete_summary(
+    args: &serde_json::Value,
+    thought: &str,
+    prior_tool_result: &str,
+) -> String {
+    if let Some(s) = args
+        .get("summary")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty() && !is_placeholder_complete_summary(s))
+    {
+        return s.to_string();
+    }
+    let thought = thought.trim();
+    let prior = prior_tool_result.trim();
+    if !thought.is_empty() && !is_internal_complete_thought(thought) {
+        return thought.to_string();
+    }
+    if !prior.is_empty() {
+        return prior.to_string();
+    }
+    if !thought.is_empty() {
+        return thought.to_string();
+    }
+    "terminé".to_string()
+}
+
+fn is_internal_complete_thought(s: &str) -> bool {
+    let lower = s.trim().to_ascii_lowercase();
+    lower.contains("aucune action supplémentaire")
+        || lower.contains("aucune action supplementaire")
+        || lower.contains("no further action")
+        || lower.contains("nothing more to do")
+        || lower.contains("no additional action")
+}
+
+fn is_placeholder_complete_summary(s: &str) -> bool {
+    matches!(
+        s.trim().to_ascii_lowercase().as_str(),
+        "terminé" | "termine" | "done" | "ok" | "fini" | "complete" | "completed"
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -574,6 +619,59 @@ Thinking Process:
         assert!(!stripped.contains("tool_call"));
         assert!(!stripped.contains("DSML"));
         assert!(!stripped.contains("canvas.rect"));
+    }
+
+    #[test]
+    fn resolve_goal_complete_summary_prefers_explicit_summary() {
+        let args = serde_json::json!({"summary": "3 ports USB trouvés"});
+        assert_eq!(
+            resolve_goal_complete_summary(&args, "pensée", "outil"),
+            "3 ports USB trouvés"
+        );
+    }
+
+    #[test]
+    fn resolve_goal_complete_summary_falls_back_to_thought() {
+        let args = serde_json::json!({});
+        assert_eq!(
+            resolve_goal_complete_summary(
+                &args,
+                "COM3 : Arduino Uno",
+                "raw enumerate output"
+            ),
+            "COM3 : Arduino Uno"
+        );
+    }
+
+    #[test]
+    fn resolve_goal_complete_summary_falls_back_to_prior_tool_result() {
+        let args = serde_json::json!({"summary": ""});
+        assert_eq!(
+            resolve_goal_complete_summary(&args, "", "COM3 (win:Serial:...)"),
+            "COM3 (win:Serial:...)"
+        );
+    }
+
+    #[test]
+    fn resolve_goal_complete_summary_rejects_placeholder_only() {
+        let args = serde_json::json!({"summary": "terminé"});
+        assert_eq!(
+            resolve_goal_complete_summary(&args, "liste USB", ""),
+            "liste USB"
+        );
+    }
+
+    #[test]
+    fn resolve_goal_complete_summary_prefers_prior_over_internal_thought() {
+        let args = serde_json::json!({"summary": ""});
+        assert_eq!(
+            resolve_goal_complete_summary(
+                &args,
+                "Aucune action supplémentaire requise.",
+                "COM3 (win:Serial:COM3)",
+            ),
+            "COM3 (win:Serial:COM3)"
+        );
     }
 
     #[test]

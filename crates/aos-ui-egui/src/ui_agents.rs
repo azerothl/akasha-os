@@ -128,38 +128,7 @@ impl UiApp {
             });
 
             ui.collapsing(t.agents_tools, |ui| {
-                for name in [
-                    "notes.create",
-                    "notes.list",
-                    "notes.read",
-                    "notes.search",
-                    "notes.update",
-                    "notes.links",
-                    "notes.related",
-                    "tasks.create",
-                    "tasks.list",
-                    "tasks.update",
-                    "tasks.complete",
-                    "fs.read",
-                    "fs.write",
-                    "fs.list",
-                    "web.search",
-                    "web.browse",
-                    "net.fetch",
-                    "files.generate",
-                    "agent.spawn",
-                    "agent.await",
-                    "plan.update",
-                ] {
-                    let mut on = self.agent_ui.tool_selected.iter().any(|t| t == name);
-                    if ui.checkbox(&mut on, name).changed() {
-                        if on {
-                            self.agent_ui.tool_selected.push(name.into());
-                        } else {
-                            self.agent_ui.tool_selected.retain(|t| t != name);
-                        }
-                    }
-                }
+                ui_roster_tool_checkboxes(ui, &t, &mut self.agent_ui.tool_selected);
             });
 
             ui.collapsing(t.agents_mcp, |ui| {
