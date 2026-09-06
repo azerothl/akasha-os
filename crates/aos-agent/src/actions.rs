@@ -476,14 +476,26 @@ pub fn resolve_goal_complete_summary(
         return s.to_string();
     }
     let thought = thought.trim();
-    if !thought.is_empty() {
+    let prior = prior_tool_result.trim();
+    if !thought.is_empty() && !is_internal_complete_thought(thought) {
         return thought.to_string();
     }
-    let prior = prior_tool_result.trim();
     if !prior.is_empty() {
         return prior.to_string();
     }
+    if !thought.is_empty() {
+        return thought.to_string();
+    }
     "terminé".to_string()
+}
+
+fn is_internal_complete_thought(s: &str) -> bool {
+    let lower = s.trim().to_ascii_lowercase();
+    lower.contains("aucune action supplémentaire")
+        || lower.contains("aucune action supplementaire")
+        || lower.contains("no further action")
+        || lower.contains("nothing more to do")
+        || lower.contains("no additional action")
 }
 
 fn is_placeholder_complete_summary(s: &str) -> bool {
@@ -646,6 +658,19 @@ Thinking Process:
         assert_eq!(
             resolve_goal_complete_summary(&args, "liste USB", ""),
             "liste USB"
+        );
+    }
+
+    #[test]
+    fn resolve_goal_complete_summary_prefers_prior_over_internal_thought() {
+        let args = serde_json::json!({"summary": ""});
+        assert_eq!(
+            resolve_goal_complete_summary(
+                &args,
+                "Aucune action supplémentaire requise.",
+                "COM3 (win:Serial:COM3)",
+            ),
+            "COM3 (win:Serial:COM3)"
         );
     }
 
