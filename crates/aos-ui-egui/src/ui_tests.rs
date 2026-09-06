@@ -312,6 +312,9 @@ mod delegate_tests {
         assert!(chat_device_usb_intent("serial port"));
         assert!(chat_device_usb_intent("ports série connectés"));
         assert!(chat_device_usb_intent("device.usb.enumerate"));
+        assert!(chat_device_usb_intent("infos sur COM3"));
+        assert!(chat_device_usb_intent("se connecter au port série"));
+        assert!(chat_device_usb_intent("connect to COM3 serial port"));
         assert!(chat_device_usb_intent("usb"));
         assert!(!chat_device_usb_intent(
             "Le bus USB 2.0 dans cette documentation décrit la couche physique et \
@@ -356,6 +359,21 @@ mod delegate_tests {
         let (_brief, _skills, tools, prose) = spec;
         assert!(tools.iter().any(|x| x == "device.usb.enumerate"));
         assert!(prose.contains("USB"));
+    }
+
+    #[test]
+    fn com_port_connect_delegates_with_usb_tools() {
+        let spec = chat_delegate_agent_spec(
+            "se connecter au COM3",
+            "Ok.",
+            false,
+            ASPECT,
+            &full_canvas_exported(),
+        )
+        .expect("com connect must delegate");
+        let (_brief, _skills, tools, _) = spec;
+        assert!(tools.iter().any(|x| x == "device.usb.enumerate"));
+        assert!(tools.iter().any(|x| x == "device.usb.open"));
     }
 
     #[test]

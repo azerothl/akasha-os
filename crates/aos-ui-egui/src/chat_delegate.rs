@@ -257,6 +257,17 @@ fn usb_with_action_context(text: &str) -> bool {
     false
 }
 
+fn text_has_com_port_ref(text: &str) -> bool {
+    text.to_ascii_lowercase()
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .any(|w| {
+            w.len() >= 4
+                && w.starts_with("com")
+                && w[3..].chars().all(|c| c.is_ascii_digit())
+        })
+}
+
 /// Détecte une demande de liste/accès USB (FR/EN). Les longs textes exigent un signal
 /// explicite pour éviter un « usb » isolé dans une doc technique.
 pub(crate) fn chat_device_usb_intent(text: &str) -> bool {
@@ -276,6 +287,10 @@ pub(crate) fn chat_device_usb_intent(text: &str) -> bool {
         || l.contains("port serie")
         || l.contains("serial port")
         || l.contains("serial ports")
+        || l.contains("usb serial")
+        || l.contains("serial usb")
+        || l.contains("série usb")
+        || l.contains("serie usb")
         || l.contains("com port")
         || l.contains("ports com")
         || l.contains("port com")
@@ -286,8 +301,16 @@ pub(crate) fn chat_device_usb_intent(text: &str) -> bool {
         || l.contains("enumerer usb")
         || l.contains("brancher un usb")
         || l.contains("connecter un usb")
+        || (l.contains("se connecter")
+            && (l.contains("usb")
+                || l.contains("série")
+                || l.contains("serie")
+                || l.contains("serial")
+                || l.contains("com")
+                || text_has_com_port_ref(text)))
         || l.contains("lister les périphériques usb")
         || l.contains("list usb devices")
+        || text_has_com_port_ref(text)
     {
         return true;
     }
