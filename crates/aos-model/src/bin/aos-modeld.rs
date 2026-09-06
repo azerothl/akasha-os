@@ -149,7 +149,7 @@ fn parse_lan_session_key(raw: &str) -> Result<LanSessionKey, String> {
         return Err("la clé de session LAN doit contenir 64 caractères hexadécimaux".into());
     }
     let mut bytes = [0u8; 32];
-    for (index, chunk) in raw.as_bytes().chunks_exact(2).enumerate() {
+    for (index, chunk) in raw.as_bytes().as_chunks::<2>().0.iter().enumerate() {
         let high = (chunk[0] as char)
             .to_digit(16)
             .ok_or("clé de session LAN non hexadécimale")?;
