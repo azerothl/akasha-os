@@ -38,19 +38,22 @@ preferences file. The node inventory and trust state are persisted in
   match the advertised LAN address; a changed fingerprint is rejected and a
   new candidate always remains `Unpaired`.
 
-## Current execution boundary
+## Current execution state
 
 `model.cluster.plan` computes the shard plan. The explicit internal
 `model.cluster.dispatch` service can send typed, encrypted assignments to a
-paired worker when the worker listener and session key are available.
+paired worker when the worker listener and session key are available. The
+worker acknowledges assignments, heartbeats and cancellations.
 `model.cluster.recover` can resend the updated assignments after a reported
 node loss, and `model.cluster.cancel` propagates cancellation when supplied
 the session-key secret name.
 
-`aos-modeld` does not bind a LAN listener automatically. Weight loading,
-remote shard execution, token routing and KV-cache transfer still require the
-worker-side execution integration. Until that integration is enabled, local
-CPU/GPU inference remains the default and no data leaves the machine.
+`aos-modeld` binds the LAN listener only when the cluster is enabled and the
+session key is available from the secret vault. Actual weight loading, shard
+execution and token routing still require model-engine integration. `Prefill`,
+`Decode`, token and KV-page messages are defined, encrypted and bounded; they
+return an explicit `Nack` until that executor is installed. By default, no
+model or prompt data leaves the machine.
 
 Auto-discovery takes effect when `aos-modeld` starts with both the LAN cluster
 and auto-discovery enabled. It uses bounded UDP CBOR advertisements on the

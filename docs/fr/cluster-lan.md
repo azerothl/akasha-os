@@ -40,20 +40,23 @@ dans `var/run/lan-pairing.json`.
   correspondre à l’adresse LAN annoncée ; un nouvel hôte reste toujours
   `Unpaired` jusqu’à validation manuelle.
 
-## Limite d’exécution actuelle
+## État d’exécution actuel
 
 `model.cluster.plan` calcule le placement des shards. Le service interne
 explicite `model.cluster.dispatch` peut envoyer des assignments typées et
 chiffrées à un worker appairé lorsque son listener et la clé de session sont
-disponibles. `model.cluster.recover` peut renvoyer les assignments après une
-perte de nœud, et `model.cluster.cancel` propage l’annulation si le nom du
-secret de session est fourni.
+disponibles. Le worker accuse réception des assignments, des heartbeats et
+des annulations. `model.cluster.recover` peut renvoyer les assignments après
+une perte de nœud, et `model.cluster.cancel` propage l’annulation si le nom
+du secret de session est fourni.
 
-`aos-modeld` n’ouvre pas automatiquement de listener LAN. Le chargement réel
-des poids, l’exécution des shards, le routage des tokens et le transfert du
-cache KV nécessitent encore l’intégration du worker. Tant qu’elle n’est pas
-activée, l’inférence CPU/GPU locale reste le comportement par défaut et
-aucune donnée ne quitte la machine.
+`aos-modeld` ouvre le listener LAN uniquement lorsque le cluster est activé
+et que la clé de session est disponible dans le coffre. Le chargement réel
+des poids, l’exécution des shards et le routage des tokens nécessitent encore
+l’intégration du moteur de modèle. Les messages `Prefill`, `Decode`, tokens et
+pages KV sont définis, chiffrés et bornés ; ils renvoient explicitement
+`Nack` tant que cet exécuteur n’est pas installé. Par défaut, aucune donnée
+de modèle ou de prompt ne quitte la machine.
 
 La découverte automatique prend effet au démarrage de `aos-modeld` lorsque le
 cluster LAN et la découverte sont activés. Elle utilise des annonces UDP CBOR
