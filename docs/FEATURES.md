@@ -1,4 +1,4 @@
-# Preview features — Akasha OS 0.16.1
+# Preview features — Akasha OS 0.16.2
 
 **Language:** English | [Français](fr/FEATURES.md)
 
@@ -7,7 +7,11 @@ This is **not** the bootable OS. Target v1 requirements live in
 [functional-specs.md](functional-specs.md); phase gates in
 [STATUS.md](STATUS.md).
 
-> Date: 03/09/2026 · Preview **0.16.1**
+> Date: 06/09/2026 · Preview **0.16.2**
+
+### What's new in 0.16.2
+
+- **USB I/O**: Windows-first opt-in serial USB (`device.usb.enumerate` / `open` / `read` / `write` / `close`); capability `device.usb.io`; Allow once / Always / Deny; Linux/macOS return `UnsupportedPlatform`. See [device-usb.md](device-usb.md)
 
 ### What's new in 0.16.1
 
@@ -412,7 +416,7 @@ seL4 VM track (PV.1–PV.3) is separate: see [phases/phase-vm-sel4.md](phases/ph
 
 ---
 
-## 11. Not in Preview 0.16.1
+## 11. Not in Preview 0.16.2
 
 - Bootable / bare-metal image
 - STT / always-on voice

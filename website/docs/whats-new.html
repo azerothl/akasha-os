@@ -6,7 +6,7 @@
     <title>What's new — Akasha OS Preview</title>
     <meta
       name="description"
-      content="What each Akasha OS Preview version added, from 0.16.1 back to 0.1.0. Host app on Windows/Linux/Mac, not a bootable OS."
+      content="What each Akasha OS Preview version added, from 0.16.2 back to 0.1.0. Host app on Windows/Linux/Mac, not a bootable OS."
     />
     <link rel="stylesheet" href="../styles.css" />
     <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
@@ -51,12 +51,12 @@
           <span data-lang="en">
             What each Preview added, newest first. This is the version log,
             not the full feature catalogue. Preview
-            <span data-aos-version="0.16.1">0.16.1</span> is a host app, not a bootable OS.
+            <span data-aos-version="0.16.2">0.16.2</span> is a host app, not a bootable OS.
           </span>
           <span data-lang="fr">
             Ce que chaque Preview a ajouté, plus récent en premier. C’est le
             journal des versions, pas le catalogue complet. La Preview
-            <span data-aos-version="0.16.1">0.16.1</span> est une appli hôte, pas un OS
+            <span data-aos-version="0.16.2">0.16.2</span> est une appli hôte, pas un OS
             bootable.
           </span>
         </h1>
@@ -70,6 +70,7 @@
         </p>
 
         <nav class="log-toc" aria-label="Versions">
+          <a href="#v0-16-2">0.16.2</a>
           <a href="#v0-16-1">0.16.1</a>
           <a href="#v0-16-0">0.16.0</a>
           <a href="#v0-15-0">0.15.0</a>
@@ -92,6 +93,31 @@
           <a href="#v0-1-1">0.1.1</a>
           <a href="#v0-1-0">0.1.0</a>
         </nav>
+
+        <article class="grant" id="v0-16-2">
+          <h2>0.16.2</h2>
+          <p class="rev-when">06/09/2026</p>
+          <p class="hist" data-lang="en">
+            Agents can open USB serial ports on Windows after an explicit grant.
+            Enumeration, read and write stay quota-bounded; Linux and macOS
+            return UnsupportedPlatform in this slice. Still a host app, not a
+            bootable OS.
+          </p>
+          <p class="hist" data-lang="fr">
+            Les agents peuvent ouvrir des ports série USB sous Windows après
+            un accord explicite. L’énumération, la lecture et l’écriture restent
+            bornées par quota ; Linux et macOS renvoient UnsupportedPlatform
+            dans cette tranche. Toujours une appli hôte, pas un OS bootable.
+          </p>
+          <ul class="ticks">
+            <li data-lang="en"><strong>USB serial</strong>: <code>device.usb.enumerate</code> / <code>open</code> / <code>read</code> / <code>write</code> / <code>close</code> on Windows COM ports.</li>
+            <li data-lang="fr"><strong>USB série</strong> : <code>device.usb.enumerate</code> / <code>open</code> / <code>read</code> / <code>write</code> / <code>close</code> sur les ports COM Windows.</li>
+            <li data-lang="en"><strong>Grant</strong>: USB · Allow once / Always / Deny; cap <code>device.usb.io</code>; revoke closes handles.</li>
+            <li data-lang="fr"><strong>Accord</strong> : USB · une fois / toujours / refuser ; cap <code>device.usb.io</code> ; la révocation ferme les handles.</li>
+            <li data-lang="en"><strong>Other hosts</strong>: Linux/macOS enumerate returns UnsupportedPlatform until a later slice.</li>
+            <li data-lang="fr"><strong>Autres hôtes</strong> : Linux/macOS renvoient UnsupportedPlatform jusqu’à une tranche suivante.</li>
+          </ul>
+        </article>
 
         <article class="grant" id="v0-16-1">
           <h2>0.16.1</h2>

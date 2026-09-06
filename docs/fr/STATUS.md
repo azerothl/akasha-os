@@ -7,11 +7,11 @@ Résumé des phases livrées. Détail : [plan-developpement-phases.md](plan-deve
 
 **En-tête :** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview :** 0.16.1 — shell hôte calme, recherche/épingle/archive des
-sessions, compositeur multiligne, focus Canvas et volet Activité. Pas un OS bootable.
-Gate cohorte encore ouverte (**3 Windows + 1 Linux + 1 macOS Apple
-Silicon**, chemin de 15 minutes). **Suite :** fermeture cohorte PC ; Horizon C
-/ PV.4+ quand planifié ; E9 hard-green après un run 2 GPU documenté.
+**Preview :** 0.16.2 — I/O USB série opt-in sous Windows (`device.usb.*`),
+par-dessus le shell calme 0.16.1. Pas un OS bootable. Gate cohorte encore
+ouverte (**3 Windows + 1 Linux + 1 macOS Apple Silicon**, chemin de 15 minutes).
+**Suite :** fermeture cohorte PC ; Horizon C / PV.4+ quand planifié ; E9
+hard-green après un run 2 GPU documenté.
 
 ## P16 — Preview 0.16.0 (qualité Canvas + opérations modèles) — fait
 
@@ -24,6 +24,7 @@ Silicon**, chemin de 15 minutes). **Suite :** fermeture cohorte PC ; Horizon C
 | P16.5 | Export de traces agent, catalogue communautaire signé et synchro des capacités | fait |
 | P16.6 | Version, documentation, site et packaging release | fait |
 | P16.7 | Patch 0.16.1 — shell calme, recherche/épingle/archive des sessions | fait |
+| P16.8 | Patch 0.16.2 — USB I/O (série Windows, issue #137 tranche 3) | fait |
 
 ## P13 — Preview 0.13.0 (créer + documents chat) — fait
 

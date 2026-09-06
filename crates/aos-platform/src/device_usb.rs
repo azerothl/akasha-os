@@ -405,17 +405,18 @@ fn now_ms() -> u64 {
 #[cfg(windows)]
 mod windows_backend {
     use super::*;
-    use std::ptr::null_mut;
     use windows::core::PCWSTR;
+    use windows::Win32::Devices::Communication::{
+        GetCommState, SetCommState, SetCommTimeouts, COMMTIMEOUTS, DCB, NOPARITY, ONESTOPBIT,
+    };
     use windows::Win32::Devices::DeviceAndDriverInstallation::{
         SetupDiDestroyDeviceInfoList, SetupDiEnumDeviceInfo, SetupDiGetClassDevsW,
-        SetupDiGetDeviceRegistryPropertyW, SetupDiGetDeviceInstanceIdW, DIGCF_PRESENT,
-        SP_DEVINFO_DATA,
+        SetupDiGetDeviceInstanceIdW, SetupDiGetDeviceRegistryPropertyW, DIGCF_ALLCLASSES,
+        DIGCF_PRESENT, SP_DEVINFO_DATA, SPDRP_FRIENDLYNAME,
     };
-    use windows::Win32::Devices::SerialCommunication::{
-        GetCommState, SetCommState, SetCommTimeouts, COMMTIMEOUTS, DCB,
+    use windows::Win32::Foundation::{
+        CloseHandle, ERROR_SUCCESS, GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE,
     };
-    use windows::Win32::Foundation::{CloseHandle, GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE};
     use windows::Win32::Storage::FileSystem::{
         CreateFileW, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
         ReadFile, WriteFile,
@@ -434,13 +435,16 @@ mod windows_backend {
         handle: HANDLE,
     }
 
+    // Exclusive COM-port HANDLE owned by this wrapper.
+    unsafe impl Send for SerialHandle {}
+
     impl UsbDeviceHandle for SerialHandle {
         fn read(&mut self, max_bytes: usize, timeout: Duration) -> Result<Vec<u8>, UsbIoError> {
             set_comm_timeouts(self.handle, timeout)?;
             let mut buf = vec![0u8; max_bytes];
             let mut read = 0u32;
-            ReadFile(self.handle, Some(&mut buf), Some(&mut read), None)
-                .map_err(|e| win_error(e))?;
+            unsafe { ReadFile(self.handle, Some(&mut buf), Some(&mut read), None) }
+                .map_err(win_error)?;
             buf.truncate(read as usize);
             Ok(buf)
         }
@@ -448,14 +452,14 @@ mod windows_backend {
         fn write(&mut self, data: &[u8], timeout: Duration) -> Result<usize, UsbIoError> {
             set_comm_timeouts(self.handle, timeout)?;
             let mut written = 0u32;
-            WriteFile(self.handle, Some(data), Some(&mut written), None)
-                .map_err(|e| win_error(e))?;
+            unsafe { WriteFile(self.handle, Some(data), Some(&mut written), None) }
+                .map_err(win_error)?;
             Ok(written as usize)
         }
 
         fn close(&mut self) -> Result<(), UsbIoError> {
             if !self.handle.is_invalid() {
-                let _ = CloseHandle(self.handle);
+                let _ = unsafe { CloseHandle(self.handle) };
                 self.handle = INVALID_HANDLE_VALUE;
             }
             Ok(())
@@ -471,7 +475,7 @@ mod windows_backend {
             WriteTotalTimeoutMultiplier: 0,
             WriteTotalTimeoutConstant: ms,
         };
-        SetCommTimeouts(handle, &timeouts).map_err(|e| win_error(e))
+        unsafe { SetCommTimeouts(handle, &timeouts) }.map_err(win_error)
     }
 
     fn open_serial_port(port: &str) -> Result<Box<dyn UsbDeviceHandle>, UsbIoError> {
@@ -481,27 +485,29 @@ mod windows_backend {
             format!("\\\\.\\{}", port)
         };
         let wide: Vec<u16> = path.encode_utf16().chain([0]).collect();
-        let handle = CreateFileW(
-            PCWSTR(wide.as_ptr()),
-            (GENERIC_READ | GENERIC_WRITE).0,
-            FILE_SHARE_READ | FILE_SHARE_WRITE,
-            None,
-            OPEN_EXISTING,
-            FILE_ATTRIBUTE_NORMAL,
-            None,
-        )
+        let handle = unsafe {
+            CreateFileW(
+                PCWSTR(wide.as_ptr()),
+                (GENERIC_READ | GENERIC_WRITE).0,
+                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                None,
+                OPEN_EXISTING,
+                FILE_ATTRIBUTE_NORMAL,
+                None,
+            )
+        }
         .map_err(|_| UsbIoError::DeviceBusy)?;
         if handle == INVALID_HANDLE_VALUE {
             return Err(UsbIoError::OsPermissionDenied);
         }
         let mut dcb = DCB::default();
         dcb.DCBlength = std::mem::size_of::<DCB>() as u32;
-        GetCommState(handle, &mut dcb).map_err(|e| win_error(e))?;
+        unsafe { GetCommState(handle, &mut dcb) }.map_err(win_error)?;
         dcb.BaudRate = 115200;
         dcb.ByteSize = 8;
-        dcb.Parity = windows::Win32::Devices::SerialCommunication::NOPARITY;
-        dcb.StopBits = windows::Win32::Devices::SerialCommunication::ONESTOPBIT;
-        SetCommState(handle, &dcb).map_err(|e| win_error(e))?;
+        dcb.Parity = NOPARITY;
+        dcb.StopBits = ONESTOPBIT;
+        unsafe { SetCommState(handle, &dcb) }.map_err(win_error)?;
         Ok(Box::new(SerialHandle { handle }))
     }
 
@@ -510,14 +516,15 @@ mod windows_backend {
         let key_path = "HARDWARE\\DEVICEMAP\\SERIALCOMM";
         let wide: Vec<u16> = key_path.encode_utf16().chain([0]).collect();
         let mut hkey = HKEY::default();
-        if RegOpenKeyExW(
-            HKEY_LOCAL_MACHINE,
-            PCWSTR(wide.as_ptr()),
-            0,
-            KEY_READ,
-            &mut hkey,
-        )
-        .is_err()
+        if unsafe {
+            RegOpenKeyExW(
+                HKEY_LOCAL_MACHINE,
+                PCWSTR(wide.as_ptr()),
+                0,
+                KEY_READ,
+                &mut hkey,
+            )
+        } != ERROR_SUCCESS
         {
             return devices;
         }
@@ -528,17 +535,19 @@ mod windows_backend {
             let mut value = [0u16; 64];
             let mut value_len = (value.len() * 2) as u32;
             let mut kind = 0u32;
-            let err = windows::Win32::System::Registry::RegEnumValueW(
-                hkey,
-                index,
-                windows::core::PWSTR(name.as_mut_ptr()),
-                &mut name_len,
-                None,
-                Some(&mut kind),
-                Some(value.as_mut_ptr() as *mut u8),
-                Some(&mut value_len),
-            );
-            if err.is_err() {
+            let err = unsafe {
+                RegEnumValueW(
+                    hkey,
+                    index,
+                    windows::core::PWSTR(name.as_mut_ptr()),
+                    &mut name_len,
+                    None,
+                    Some(&mut kind),
+                    Some(value.as_mut_ptr() as *mut u8),
+                    Some(&mut value_len),
+                )
+            };
+            if err != ERROR_SUCCESS {
                 break;
             }
             index += 1;
@@ -558,14 +567,17 @@ mod windows_backend {
                 path_hint: Some(port),
             });
         }
-        let _ = RegCloseKey(hkey);
+        let _ = unsafe { RegCloseKey(hkey) };
         devices
     }
 
     fn enumerate_usb_devices() -> Vec<UsbDeviceDescriptor> {
         let mut devices = Vec::new();
-        let flags = DIGCF_PRESENT;
-        let info = SetupDiGetClassDevsW(None, PCWSTR::null(), None, flags);
+        let Ok(info) = (unsafe {
+            SetupDiGetClassDevsW(None, PCWSTR::null(), None, DIGCF_PRESENT | DIGCF_ALLCLASSES)
+        }) else {
+            return devices;
+        };
         if info.is_invalid() {
             return devices;
         }
@@ -573,12 +585,14 @@ mod windows_backend {
         loop {
             let mut data = SP_DEVINFO_DATA::default();
             data.cbSize = std::mem::size_of::<SP_DEVINFO_DATA>() as u32;
-            if SetupDiEnumDeviceInfo(info, index, &mut data).is_err() {
+            if unsafe { SetupDiEnumDeviceInfo(info, index, &mut data) }.is_err() {
                 break;
             }
             index += 1;
             let mut instance_id = [0u16; 512];
-            if SetupDiGetDeviceInstanceIdW(info, &data, &mut instance_id, None).is_err() {
+            if unsafe { SetupDiGetDeviceInstanceIdW(info, &data, Some(&mut instance_id), None) }
+                .is_err()
+            {
                 continue;
             }
             let instance = String::from_utf16_lossy(
@@ -589,17 +603,26 @@ mod windows_backend {
             }
             let mut desc_buf = [0u16; 256];
             let mut required = 0u32;
-            let name = if SetupDiGetDeviceRegistryPropertyW(
-                info,
-                &data,
-                windows::Win32::Devices::DeviceAndDriverInstallation::SPDRP_FRIENDLYNAME,
-                None,
-                Some(desc_buf.as_mut_ptr() as *mut u8),
-                Some((desc_buf.len() * 2) as u32),
-                Some(&mut required),
-            )
-            .is_ok()
-            {
+            let named = {
+                let prop_bytes = unsafe {
+                    std::slice::from_raw_parts_mut(
+                        desc_buf.as_mut_ptr() as *mut u8,
+                        desc_buf.len() * 2,
+                    )
+                };
+                unsafe {
+                    SetupDiGetDeviceRegistryPropertyW(
+                        info,
+                        &data,
+                        SPDRP_FRIENDLYNAME,
+                        None,
+                        Some(prop_bytes),
+                        Some(&mut required),
+                    )
+                }
+                .is_ok()
+            };
+            let name = if named {
                 String::from_utf16_lossy(
                     &desc_buf[..desc_buf.iter().position(|&c| c == 0).unwrap_or(0)],
                 )
@@ -613,7 +636,6 @@ mod windows_backend {
                 pid.unwrap_or(0),
                 index
             );
-            // Avoid duplicate serial entries already listed as COM ports.
             if devices.iter().any(|d| d.id == id) {
                 continue;
             }
@@ -626,7 +648,7 @@ mod windows_backend {
                 path_hint: Some(truncate_hint(&instance)),
             });
         }
-        let _ = SetupDiDestroyDeviceInfoList(info);
+        let _ = unsafe { SetupDiDestroyDeviceInfoList(info) };
         devices
     }
 

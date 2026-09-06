@@ -1,8 +1,8 @@
-# Protocole testeur — Akasha OS Preview 0.16.1
+# Protocole testeur — Akasha OS Preview 0.16.2
 
 **Langue :** [English](../TESTER.md) | Français
 
-> Date : 03/09/2026 · Preview **0.16.1**
+> Date : 06/09/2026 · Preview **0.16.2**
 
 Merci de tester la Preview. Objectif : installer **sans** `cargo` ni clone du
 repo, exercer les parcours principaux, et envoyer un retour **depuis l'UI**.
@@ -307,6 +307,16 @@ Guide testeur (sans cargo) : [write-a-module.md](write-a-module.md).
 - Des métriques **draft** / **préfixe** optionnelles peuvent apparaître quand le prompt-lookup se déclenche.
 - Les tokens streamés restent exacts (même sampler). Batch / multi-agents N>1 stream encore.
 
+### 30. USB I/O (0.16.2 / issue #137)
+
+- Sous **Windows 10/11**, brancher un adaptateur USB-série et vérifier que
+  `device.usb.enumerate` liste des entrées `win:Serial:*`.
+- Confirmer la bannière Akasha (USB · une fois / toujours / refuser) avant
+  `device.usb.open`. Ouvrir, lire, écrire, fermer ; l’Audit ne doit pas contenir
+  d’octets bruts. Révoquer `device.usb.io` dans Caps et vérifier la fermeture
+  des handles.
+- Sous Linux/macOS, `device.usb.enumerate` renvoie `UnsupportedPlatform`.
+
 ### 29. Shell calme et navigation des sessions (0.16.1)
 
 - Dans Paramètres → Moi, basculer Confortable / Compact : les contrôles restent
@@ -342,7 +352,7 @@ Guide testeur (sans cargo) : [write-a-module.md](write-a-module.md).
 - Gates PC.6–PC.9 et PC.11–PC.13 cochés sur au moins une machine (protocole
   long ; pas exigé de chaque testeur)
 
-## Hors scope Preview 0.16.1
+## Hors scope Preview 0.16.2
 
 - Boot seL4 / fer nu (tag interne `sel4-pv-*` seulement)
 - Intel Mac
