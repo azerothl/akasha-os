@@ -26,9 +26,10 @@ pub fn canvas_op_body_opacity(body: &CanvasOpBody) -> f32 {
         | CanvasOpBody::Rect { opacity, .. }
         | CanvasOpBody::Ellipse { opacity, .. }
         | CanvasOpBody::Line { opacity, .. }
-        | CanvasOpBody::Spline { opacity, .. }
+        |         CanvasOpBody::Spline { opacity, .. }
         | CanvasOpBody::Path { opacity, .. }
-        | CanvasOpBody::Fill { opacity, .. } => opacity.clamp(0.0, 1.0),
+        | CanvasOpBody::Fill { opacity, .. }
+        | CanvasOpBody::Text { opacity, .. } => opacity.clamp(0.0, 1.0),
         CanvasOpBody::Erase { .. } | CanvasOpBody::Clear | CanvasOpBody::Undo => 1.0,
     }
 }
@@ -43,6 +44,7 @@ pub fn canvas_op_body_dash(body: &CanvasOpBody) -> &[f32] {
         | CanvasOpBody::Ellipse { dash, .. } => dash.as_slice(),
         CanvasOpBody::Erase { .. }
         | CanvasOpBody::Fill { .. }
+        | CanvasOpBody::Text { .. }
         | CanvasOpBody::Clear
         | CanvasOpBody::Undo => &[],
     }
@@ -64,9 +66,10 @@ pub fn set_canvas_op_body_opacity(body: &mut CanvasOpBody, opacity: f32) {
         | CanvasOpBody::Rect { opacity, .. }
         | CanvasOpBody::Ellipse { opacity, .. }
         | CanvasOpBody::Line { opacity, .. }
-        | CanvasOpBody::Spline { opacity, .. }
+        |         CanvasOpBody::Spline { opacity, .. }
         | CanvasOpBody::Path { opacity, .. }
-        | CanvasOpBody::Fill { opacity, .. } => *opacity = o,
+        | CanvasOpBody::Fill { opacity, .. }
+        | CanvasOpBody::Text { opacity, .. } => *opacity = o,
         CanvasOpBody::Erase { .. } | CanvasOpBody::Clear | CanvasOpBody::Undo => {}
     }
 }
@@ -109,13 +112,13 @@ pub fn resolve_canvas_op_style_ex(body: &mut CanvasOpBody, pen: &CanvasPenStyle)
             }
         }
         CanvasOpBody::Fill { .. }
+        | CanvasOpBody::Text { .. }
         | CanvasOpBody::Erase { .. }
         | CanvasOpBody::Clear
         | CanvasOpBody::Undo => {}
     }
 }
 
-/// Sample gradient at normalized board coords (0..1).
 pub fn sample_linear_gradient(g: &CanvasLinearGradient, x: f32, y: f32) -> Option<[u8; 3]> {
     let c0 = parse_rgb(&g.color0)?;
     let c1 = parse_rgb(&g.color1)?;

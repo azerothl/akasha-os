@@ -1011,7 +1011,8 @@ fn restyle_op_body(
             | CanvasOpBody::Line { color, .. }
             | CanvasOpBody::Spline { color, .. }
             | CanvasOpBody::Path { color, .. }
-            | CanvasOpBody::Fill { color, .. } => *color = normalized,
+            | CanvasOpBody::Fill { color, .. }
+            | CanvasOpBody::Text { color, .. } => *color = normalized,
             CanvasOpBody::Erase { .. } | CanvasOpBody::Clear | CanvasOpBody::Undo => {}
         }
     }
@@ -1025,7 +1026,11 @@ fn restyle_op_body(
             | CanvasOpBody::Spline { width, .. }
             | CanvasOpBody::Path { width, .. }
             | CanvasOpBody::Erase { width, .. } => *width = w,
-            CanvasOpBody::Fill { .. } | CanvasOpBody::Clear | CanvasOpBody::Undo => {}
+            // Texte : la taille passe par `size`, pas `width`.
+            CanvasOpBody::Text { .. }
+            | CanvasOpBody::Fill { .. }
+            | CanvasOpBody::Clear
+            | CanvasOpBody::Undo => {}
         }
     }
     if let Some(fill) = fill {

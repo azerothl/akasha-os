@@ -390,6 +390,8 @@ pub enum CanvasToolIcon {
     Path,
     Rect,
     Ellipse,
+    /// Étiquette texte S4 (chasse « T » + soulignement, façon Lucide Type).
+    Text,
 }
 
 /// Non-tool toolbar actions (export, view, z-order, …).
@@ -666,6 +668,21 @@ fn paint_canvas_tool(ui: &mut Ui, rect: Rect, icon: CanvasToolIcon, color: Color
                 Vec2::new(s * 0.85, s * 0.6),
                 stroke,
             ));
+        }
+        CanvasToolIcon::Text => {
+            // Chasse « T » : barre haute + fût + ligne de base.
+            painter.line_segment(
+                [c + Vec2::new(-s * 0.75, -s * 0.85), c + Vec2::new(s * 0.75, -s * 0.85)],
+                stroke,
+            );
+            painter.line_segment(
+                [c + Vec2::new(0.0, -s * 0.85), c + Vec2::new(0.0, s * 0.45)],
+                stroke,
+            );
+            painter.line_segment(
+                [c + Vec2::new(-s * 0.65, s * 0.85), c + Vec2::new(s * 0.65, s * 0.85)],
+                stroke,
+            );
         }
     }
 }

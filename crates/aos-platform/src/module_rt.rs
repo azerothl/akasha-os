@@ -822,6 +822,12 @@ pub fn probe_args_for_tool(tool: &str) -> serde_json::Value {
             "x": 0.5,
             "y": 0.5
         }),
+        "canvas.text" => serde_json::json!({
+            "session_id": "__probe__",
+            "x": 0.1,
+            "y": 0.1,
+            "text": "probe"
+        }),
         "canvas.erase" => serde_json::json!({
             "session_id": "__probe__",
             "points": [{"x": 0.1, "y": 0.1}, {"x": 0.2, "y": 0.2}]

@@ -380,6 +380,7 @@ dependencies = [
 name = "aos-platform"
 version = "0.16.2"
 dependencies = [
+ "ab_glyph",
  "aos-agent",
  "aos-caps",
  "aos-ipc",
@@ -389,6 +390,7 @@ dependencies = [
  "chacha20poly1305",
  "cpal",
  "ed25519-dalek",
+ "epaint_default_fonts",
  "futures",
  "hmac",
  "image",

@@ -246,6 +246,10 @@ pub fn translate_canvas_op_body(body: &mut CanvasOpBody, dx: f32, dy: f32) {
             *x = (*x + dx).clamp(0.0, 1.0);
             *y = (*y + dy).clamp(0.0, 1.0);
         }
+        CanvasOpBody::Text { x, y, .. } => {
+            *x = (*x + dx).clamp(0.0, 1.0);
+            *y = (*y + dy).clamp(0.0, 1.0);
+        }
         CanvasOpBody::Clear | CanvasOpBody::Undo => {}
     }
 }
@@ -271,11 +275,13 @@ pub fn canvas_rect_corners(x: f32, y: f32, w: f32, h: f32, rotation: f32) -> [(f
 pub fn set_canvas_op_rotation(body: &mut CanvasOpBody, rotation: f32) -> Result<(), String> {
     match body {
         CanvasOpBody::Rect { rotation: slot, .. }
-        | CanvasOpBody::Ellipse { rotation: slot, .. } => {
+        | CanvasOpBody::Ellipse { rotation: slot, .. }
+        // Texte : pivot au point d'ancrage.
+        | CanvasOpBody::Text { rotation: slot, .. } => {
             *slot = rotation;
             Ok(())
         }
-        _ => Err("rotation seulement rect/ellipse".into()),
+        _ => Err("rotation seulement rect/ellipse/texte".into()),
     }
 }
 

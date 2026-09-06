@@ -552,6 +552,7 @@ const ROSTER_TOOL_GROUPS: &[(&str, &[&str])] = &[
             "canvas.stroke",
             "canvas.rect",
             "canvas.ellipse",
+            "canvas.text",
             "canvas.erase",
             "canvas.clear",
             "canvas.undo",

@@ -16,6 +16,7 @@ fn handle(tool: &str, args: &Value) -> Result<Value, String> {
         "canvas.path" => path(args),
         "canvas.rect" => rect(args),
         "canvas.ellipse" => ellipse(args),
+        "canvas.text" => text(args),
         "canvas.fill" => fill(args),
         "canvas.erase" => erase(args),
         "canvas.clear" => clear(args),
@@ -300,6 +301,67 @@ fn fill(args: &Value) -> Result<Value, String> {
         a.author_id.as_deref().unwrap_or("agent"),
         op,
     )
+}
+
+#[derive(Deserialize)]
+struct TextArgs {
+    session_id: String,
+    #[serde(default)]
+    author_id: Option<String>,
+    x: f32,
+    y: f32,
+    text: String,
+    #[serde(default)]
+    size: Option<f32>,
+    #[serde(default, alias = "fill_color")]
+    color: Option<String>,
+    #[serde(default)]
+    rotation: Option<f32>,
+    #[serde(default)]
+    opacity: Option<f32>,
+}
+
+fn text(args: &Value) -> Result<Value, String> {
+    let a: TextArgs = aos_module_sdk::parse_args(args)?;
+    if a.text.trim().is_empty() {
+        return Err("text: étiquette vide".into());
+    }
+    if a.text.chars().count() > 500 {
+        return Err("text: 500 caractères max".into());
+    }
+    let mut op = json!({
+        "kind": "text",
+        "x": a.x,
+        "y": a.y,
+        "text": a.text,
+    });
+    if let Some(s) = a.size {
+        op["size"] = json!(s);
+    }
+    if let Some(c) = a.color {
+        op["color"] = json!(c);
+    }
+    if let Some(r) = a.rotation {
+        op["rotation"] = json!(r);
+    }
+    if let Some(o) = a.opacity {
+        op["opacity"] = json!(o);
+    }
+    let resp = apply(
+        &a.session_id,
+        a.author_id.as_deref().unwrap_or("agent"),
+        op,
+    )?;
+    let seq = resp
+        .get("next_seq")
+        .and_then(|v| v.as_u64())
+        .or_else(|| resp.pointer("/applied/seq").and_then(|v| v.as_u64()))
+        .unwrap_or(0);
+    Ok(json!({
+        "ok": true,
+        "seq": seq,
+        "message": format!("ok seq={seq} text bbox=({:.3},{:.3})", a.x, a.y),
+    }))
 }
 
 struct ShapeArgs {
@@ -883,8 +945,15 @@ mod tests {
     }
 
     #[test]
-    fn shape_op_emits_bbox_fields() {
-        let a = ShapeArgs {
+    fn text_rejects_empty_and_overlong() {
+        let empty = json!({"session_id": "s1", "x": 0.1, "y": 0.2, "text": "   "});
+        assert!(text(&empty).is_err());
+        let big = json!({"session_id": "s1", "x": 0.1, "y": 0.2, "text": "x".repeat(501)});
+        assert!(text(&big).is_err());
+    }
+
+    #[test]
+    fn shape_op_emits_bbox_fields() {        let a = ShapeArgs {
             session_id: "s1".into(),
             author_id: None,
             x: 0.35,

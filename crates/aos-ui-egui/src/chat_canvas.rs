@@ -27,6 +27,8 @@ pub enum CanvasTool {
     Path,
     Rect,
     Ellipse,
+    /// Étiquette texte (S4) : clic = saisie inline, Entrée = valider.
+    Text,
 }
 
 #[derive(Debug, Clone)]
@@ -89,6 +91,24 @@ pub struct CanvasPanelState {
     /// Inline rename for active layer.
     pub layer_rename_id: Option<String>,
     pub layer_rename_text: String,
+    /// S4 : saisie de texte en cours (position ancrée + contenu).
+    pub text_edit: Option<CanvasTextEdit>,
+}
+
+/// S4 : état de la saisie inline d'une étiquette.
+#[derive(Debug, Clone)]
+pub struct CanvasTextEdit {
+    pub pos: CanvasPoint,
+    pub content: String,
+}
+
+impl Default for CanvasTextEdit {
+    fn default() -> Self {
+        Self {
+            pos: CanvasPoint { x: 0.0, y: 0.0 },
+            content: String::new(),
+        }
+    }
 }
 
 impl Default for CanvasPanelState {
@@ -121,6 +141,7 @@ impl Default for CanvasPanelState {
             view_zoom: 1.0,
             layer_rename_id: None,
             layer_rename_text: String::new(),
+            text_edit: None,
         }
     }
 }
@@ -291,6 +312,10 @@ fn snap_body(body: &mut CanvasOpBody) {
             *x = snap_unit(*x);
             *y = snap_unit(*y);
         }
+        CanvasOpBody::Text { x, y, .. } => {
+            *x = snap_unit(*x);
+            *y = snap_unit(*y);
+        }
         CanvasOpBody::Clear | CanvasOpBody::Undo => {}
     }
 }
@@ -458,11 +483,50 @@ fn anim_progress(state: &CanvasPanelState, seq: u64, now: f64) -> f32 {
     }
 }
 
+/// Rendu d'une étiquette (op validée ET aperçu de saisie) : une `TextShape`
+/// par ligne, pivot à l'ancre, angle horaire comme le raster/SVG.
+pub(crate) fn paint_canvas_text(
+    painter: &eframe::egui::Painter,
+    rect: eframe::egui::Rect,
+    x: f32,
+    y: f32,
+    text: &str,
+    size: f32,
+    color: eframe::egui::Color32,
+    rotation_deg: f32,
+) {
+    if text.trim().is_empty() {
+        return;
+    }
+    let anchor = to_screen(rect, CanvasPoint { x, y });
+    let px = (size * rect.width().min(rect.height())).clamp(8.0, 256.0);
+    let angle = rotation_deg.to_radians();
+    let (sin, cos) = angle.sin_cos();
+    for (i, line) in text.lines().enumerate() {
+        let galley = painter.layout_no_wrap(
+            line.to_string(),
+            eframe::egui::FontId::proportional(px),
+            color,
+        );
+        let off = eframe::egui::Vec2::new(0.0, i as f32 * px * 1.2);
+        let pos = anchor
+            + eframe::egui::Vec2::new(off.x * cos - off.y * sin, off.x * sin + off.y * cos);
+        painter.add(Shape::Text(eframe::egui::epaint::TextShape {
+            pos,
+            galley,
+            underline: Stroke::NONE,
+            fallback_color: color,
+            override_text_color: None,
+            opacity_factor: 1.0,
+            angle,
+        }));
+    }
+}
+
 fn paint_op(
     painter: &eframe::egui::Painter,
     rect: eframe::egui::Rect,
-    op: &CanvasOp,
-    layers: &[CanvasLayer],
+    op: &CanvasOp,    layers: &[CanvasLayer],
     dark: bool,
     progress: f32,
 ) {
@@ -655,6 +719,18 @@ fn paint_op(
             let center = to_screen(rect, CanvasPoint { x: *x, y: *y });
             let arm = (rect.width().min(rect.height()) * 0.008 * progress).max(2.0);
             painter.circle_stroke(center, arm, Stroke::new(1.2_f32, c));
+        }
+        CanvasOpBody::Text {
+            x,
+            y,
+            text,
+            size,
+            color,
+            rotation,
+            ..
+        } => {
+            let c = stroke_color(&op.body, &op.author_id, color, dark, layer_opacity);
+            paint_canvas_text(painter, rect, *x, *y, text, *size, c, *rotation);
         }
         CanvasOpBody::Clear | CanvasOpBody::Undo => {}
     }
@@ -888,6 +964,11 @@ pub fn ui_canvas_toolbar(
                 CanvasToolIcon::Ellipse,
                 t.canvas_tool_ellipse,
             ),
+            (
+                CanvasTool::Text,
+                CanvasToolIcon::Text,
+                t.canvas_tool_text,
+            ),
         ] {
             if icons::toolbar_selectable(ui, state.tool == tool, icon, tip) {
                 // Valide les ancres en attente avec l'ANCIEN outil plutôt que
@@ -1117,7 +1198,8 @@ pub fn ui_canvas_toolbar(
                 }
                 if let Some(op) = state.ops.iter_mut().find(|o| o.seq == seq) {
                     if let CanvasOpBody::Rect { rotation, .. }
-                    | CanvasOpBody::Ellipse { rotation, .. } = &mut op.body
+                    | CanvasOpBody::Ellipse { rotation, .. }
+                    | CanvasOpBody::Text { rotation, .. } = &mut op.body
                     {
                         let mut rot = *rotation;
                         let rot_resp = ui.add_sized(
@@ -1446,6 +1528,21 @@ pub fn ui_canvas_surface(
             }
         }
     }
+    // S4 : aperçu live du texte en cours de saisie.
+    if let Some(edit) = &state.text_edit {
+        if !edit.content.is_empty() {
+            paint_canvas_text(
+                &painter,
+                rect,
+                edit.pos.x,
+                edit.pos.y,
+                &edit.content,
+                state.width.max(0.005),
+                state.color,
+                0.0,
+            );
+        }
+    }
     if let (Some(a), Some(b)) = (state.drag_origin, state.drag_current) {
         let r = eframe::egui::Rect::from_two_pos(to_screen(rect, a), to_screen(rect, b));
         match state.tool {
@@ -1488,7 +1585,8 @@ pub fn ui_canvas_surface(
             | CanvasTool::Spline
             | CanvasTool::Path
             | CanvasTool::Select
-            | CanvasTool::Pan => {}
+            | CanvasTool::Pan
+            | CanvasTool::Text => {}
         }
     }
 
@@ -1528,6 +1626,8 @@ pub fn ui_canvas_surface(
                     }
                     state.drag_current = Some(p);
                 }
+                // Texte : saisie au clic, pas de tracé glissé.
+                CanvasTool::Text => {}
                 CanvasTool::Select => {
                     if state.drag_origin.is_none() {
                         state.drag_origin = Some(p);
@@ -1552,6 +1652,22 @@ pub fn ui_canvas_surface(
                     })
                     .collect();
                 state.selected_seq = canvas_hit_test(visible, p.x, p.y);
+            }
+        }
+    }
+
+    // S4 : outil Texte — clic = ancre + saisie inline (overlay ci-dessous),
+    // Entrée = valider, Échap = annuler.
+    if state.tool == CanvasTool::Text && response.clicked() {
+        if let Some(pos) = response.interact_pointer_pos() {
+            if rect.contains(pos) {
+                let p = maybe_snap_point(to_norm(rect, pos), state.snap);
+                state.text_edit = Some(CanvasTextEdit {
+                    pos: p,
+                    content: String::new(),
+                });
+                state.selected_seq = None;
+                ui.ctx().request_repaint();
             }
         }
     }
@@ -1609,6 +1725,69 @@ pub fn ui_canvas_surface(
                     }
                 }
             }
+        }
+    }
+
+    // S4 : éditeur inline de l'étiquette (overlay au point d'ancrage).
+    if state.text_edit.is_some() {
+        let (anchor, initial) = state
+            .text_edit
+            .as_ref()
+            .map(|e| (to_screen(rect, e.pos), e.content.clone()))
+            .expect("checked");
+        let mut content = initial;
+        let mut commit = false;
+        let mut cancel = false;
+        eframe::egui::Area::new(eframe::egui::Id::new("canvas_text_edit"))
+            .order(eframe::egui::Order::Foreground)
+            .fixed_pos(anchor)
+            .show(ui.ctx(), |ui| {
+                eframe::egui::Frame::popup(ui.style())
+                    .inner_margin(eframe::egui::Margin::same(8))
+                    .show(ui, |ui| {
+                        let resp = ui.add_sized(
+                            eframe::egui::Vec2::new(240.0, 28.0),
+                            eframe::egui::TextEdit::singleline(&mut content),
+                        );
+                        if content.is_empty() && !resp.has_focus() {
+                            resp.request_focus();
+                        }
+                        if resp.has_focus() {
+                            if ui.input(|i| i.key_pressed(eframe::egui::Key::Enter)) {
+                                commit = true;
+                            }
+                            if ui.input(|i| i.key_pressed(eframe::egui::Key::Escape)) {
+                                cancel = true;
+                            }
+                        }
+                    });
+            });
+        if commit {
+            let text: String = content
+                .chars()
+                .take(aos_proto::CANVAS_TEXT_MAX_CHARS)
+                .collect();
+            if !text.trim().is_empty() {
+                let (opacity, _, _) = pen_style_fields(state);
+                if let Some(edit) = state.text_edit.take() {
+                    let p = maybe_snap_point(edit.pos, state.snap);
+                    action = Some(CanvasUiAction::Apply(CanvasOpBody::Text {
+                        x: p.x,
+                        y: p.y,
+                        text,
+                        size: state.width.max(0.005),
+                        color: color_to_hex(state.color),
+                        rotation: 0.0,
+                        opacity,
+                    }));
+                }
+            } else {
+                state.text_edit = None;
+            }
+        } else if cancel {
+            state.text_edit = None;
+        } else if let Some(edit) = state.text_edit.as_mut() {
+            edit.content = content;
         }
     }
 
@@ -1730,6 +1909,8 @@ pub fn ui_canvas_surface(
                         }
                     }
                 }
+                // Texte : saisie au clic, pas de commit au relâché.
+                CanvasTool::Text => {}
             }
         }
     }

@@ -317,6 +317,36 @@ fn append_svg_op(out: &mut String, body: &CanvasOpBody, w: u32, h: u32) {
             }
         }
         CanvasOpBody::Fill { .. } | CanvasOpBody::Clear | CanvasOpBody::Undo => {}
+        CanvasOpBody::Text {
+            x,
+            y,
+            text,
+            size,
+            color,
+            rotation,
+            ..
+        } => {
+            if text.trim().is_empty() {
+                return;
+            }
+            let px = svg_px(*x, w);
+            let py = svg_px(*y, h);
+            let font_px = (*size * w.min(h) as f32).max(6.0);
+            let rot = if rotation.abs() > 0.001 {
+                format!(" transform=\"rotate({rotation:.2} {px:.2} {py:.2})\"")
+            } else {
+                String::new()
+            };
+            // Une balise <text> par ligne (dy = 1.2em).
+            for (i, line) in text.lines().enumerate() {
+                out.push_str(&format!(
+                    "<text x=\"{px:.2}\" y=\"{:.2}\" font-size=\"{font_px:.2}\" fill=\"{}\"{op_attr}{rot}>{}</text>",
+                    py + i as f32 * font_px * 1.2,
+                    svg_color(color),
+                    xml_escape(line),
+                ));
+            }
+        }
     }
 }
 
@@ -555,6 +585,21 @@ fn paint_op(img: &mut RgbImage, body: &CanvasOpBody, opacity: f32) {
             let (px, py) = to_px(img, *x, *y);
             flood_fill(img, px, py, c);
         }
+        CanvasOpBody::Text {
+            x,
+            y,
+            text,
+            size,
+            color,
+            rotation,
+            ..
+        } => {
+            if text.trim().is_empty() {
+                return;
+            }
+            let c = parse_color(color).unwrap_or(DEFAULT_FG);
+            draw_text_op(img, *x, *y, text, *size, c, *rotation);
+        }
         CanvasOpBody::Clear | CanvasOpBody::Undo => {}
     }
 }
@@ -594,6 +639,98 @@ fn put(img: &mut RgbImage, x: i32, y: i32, c: Rgb<u8>) {
         dst[0] = (c[0] as f32 * a + dst[0] as f32 * (1.0 - a)).round() as u8;
         dst[1] = (c[1] as f32 * a + dst[1] as f32 * (1.0 - a)).round() as u8;
         dst[2] = (c[2] as f32 * a + dst[2] as f32 * (1.0 - a)).round() as u8;
+    }
+}
+
+/// Variante avec couverture (anti-crénelage des glyphes).
+fn put_alpha(img: &mut RgbImage, x: i32, y: i32, c: Rgb<u8>, coverage: f32) {
+    if coverage <= 0.0 {
+        return;
+    }
+    if x < 0 || y < 0 || (x as u32) >= img.width() || (y as u32) >= img.height() {
+        return;
+    }
+    let opacity = PAINT_OPACITY.with(|slot| slot.get());
+    let a = (coverage * opacity).clamp(0.0, 1.0);
+    if a >= 0.999 {
+        img.put_pixel(x as u32, y as u32, c);
+        return;
+    }
+    if a <= 0.0 {
+        return;
+    }
+    let dst = img.get_pixel_mut(x as u32, y as u32);
+    for i in 0..3 {
+        dst[i] = (c[i] as f32 * a + dst[i] as f32 * (1.0 - a)).round() as u8;
+    }
+}
+
+/// Fonte embarquée (Hack, même famille que l'UI) : pas de dépendance système,
+/// rendu déterministe sur toutes les plateformes.
+fn board_font() -> &'static ab_glyph::FontRef<'static> {
+    static FONT: std::sync::OnceLock<ab_glyph::FontRef<'static>> = std::sync::OnceLock::new();
+    FONT.get_or_init(|| {
+        ab_glyph::FontRef::try_from_slice(epaint_default_fonts::HACK_REGULAR)
+            .expect("bundled Hack font")
+    })
+}
+
+/// Étiquette raster (export PNG / vision agent) : mise en page manuelle
+/// (avances + crénage), rotation autour de l'ancre, alpha combinée.
+fn draw_text_op(
+    img: &mut RgbImage,
+    x: f32,
+    y: f32,
+    text: &str,
+    size: f32,
+    color: Rgb<u8>,
+    rotation_deg: f32,
+) {
+    use ab_glyph::{Font, PxScale, ScaleFont};
+    let side = img.width().min(img.height()) as f32;
+    let px = (size.max(0.005) * side).max(8.0);
+    let font = board_font();
+    let scaled = font.as_scaled(PxScale::from(px));
+    let (ax, ay) = to_px(img, x, y);
+    let line_h = (scaled.ascent() - scaled.descent() + scaled.line_gap()).max(1.0);
+    let rad = rotation_deg.to_radians();
+    let (sin, cos) = rad.sin_cos();
+    for (line_idx, line) in text.lines().enumerate() {
+        let mut caret_x = 0.0f32;
+        let baseline = line_idx as f32 * line_h + scaled.ascent();
+        let mut prev: Option<ab_glyph::GlyphId> = None;
+        for ch in line.chars() {
+            if ch == '\r' {
+                continue;
+            }
+            let id = font.glyph_id(ch);
+            if let Some(p) = prev {
+                caret_x += scaled.kern(p, id);
+            }
+            prev = Some(id);
+            let glyph = ab_glyph::Glyph {
+                id,
+                scale: PxScale::from(px),
+                position: ab_glyph::point(caret_x, baseline),
+            };
+            if let Some(outlined) = scaled.outline_glyph(glyph) {
+                let bounds = outlined.px_bounds();
+                outlined.draw(|gx, gy, v| {
+                    let lx = bounds.min.x + gx as f32;
+                    let ly = bounds.min.y + gy as f32;
+                    let rx = lx * cos - ly * sin;
+                    let ry = lx * sin + ly * cos;
+                    put_alpha(
+                        img,
+                        ax + rx.round() as i32,
+                        ay + ry.round() as i32,
+                        color,
+                        v,
+                    );
+                });
+            }
+            caret_x += scaled.h_advance(id);
+        }
     }
 }
 
@@ -951,6 +1088,62 @@ mod tests {
         assert!(svg.contains("<svg"));
         assert!(svg.contains("lyr-1"));
         assert!(svg.contains("<rect"));
+    }
+
+    #[test]
+    fn export_text_svg_and_png() {
+        let body = CanvasOpBody::Text {
+            x: 0.1,
+            y: 0.2,
+            text: "Hi <you> & moi".into(),
+            size: 0.08,
+            color: "#ffffff".into(),
+            rotation: 0.0,
+            opacity: 1.0,
+        };
+        let doc = CanvasDoc {
+            session_id: "s".into(),
+            next_seq: 2,
+            pen: CanvasPenStyle::default(),
+            ops: vec![CanvasOp {
+                seq: 1,
+                author_id: "human".into(),
+                ts_ms: 1,
+                layer_id: String::new(),
+                body,
+            }],
+            ..Default::default()
+        };
+        // SVG : une balise <text> par ligne, contenu échappé.
+        let svg = String::from_utf8(export_svg(&doc, 200, 200).unwrap()).unwrap();
+        assert!(svg.contains("<text"));
+        assert!(svg.contains("Hi &lt;you&gt; &amp; moi"));
+        assert!(svg.contains("font-size="));
+        // PNG : des pixels non-fond existent dans la zone du texte.
+        let png = export_png(&doc, 200, 200).unwrap();
+        let img = image::load_from_memory(&png).unwrap().to_rgb8();
+        let fg = [255u8, 255u8, 255u8];
+        let marked = img.pixels().filter(|p| {
+            let d = (p[0] as i32 - fg[0] as i32).abs()
+                + (p[1] as i32 - fg[1] as i32).abs()
+                + (p[2] as i32 - fg[2] as i32).abs();
+            d < 120
+        }).count();
+        assert!(marked > 20, "le texte devrait marquer des pixels, got {marked}");
+        // Rotation + vide : pas de crash, pas de pixels.
+        let mut doc2 = doc.clone();
+        if let CanvasOpBody::Text { rotation, text, .. } = &mut doc2.ops[0].body {
+            *rotation = 45.0;
+            *text = "   ".into();
+        }
+        let png2 = export_png(&doc2, 200, 200).unwrap();
+        let img2 = image::load_from_memory(&png2).unwrap().to_rgb8();
+        assert!(img2.pixels().filter(|p| {
+            let d = (p[0] as i32 - fg[0] as i32).abs()
+                + (p[1] as i32 - fg[1] as i32).abs()
+                + (p[2] as i32 - fg[2] as i32).abs();
+            d < 120
+        }).count() == 0);
     }
 
     #[test]

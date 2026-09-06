@@ -195,7 +195,8 @@ impl UiApp {
                                         | CanvasOpBody::Line { color, .. }
                                         | CanvasOpBody::Spline { color, .. }
                                         | CanvasOpBody::Path { color, .. }
-                                        | CanvasOpBody::Fill { color, .. } => {
+                                        | CanvasOpBody::Fill { color, .. }
+                                        | CanvasOpBody::Text { color, .. } => {
                                             *color = normalized;
                                         }
                                         CanvasOpBody::Erase { .. }
@@ -214,7 +215,9 @@ impl UiApp {
                                     | CanvasOpBody::Spline { width, .. }
                                     | CanvasOpBody::Path { width, .. }
                                     | CanvasOpBody::Erase { width, .. } => *width = w,
-                                    CanvasOpBody::Fill { .. }
+                                    // Texte : la taille passe par `size`, pas `width`.
+                                    CanvasOpBody::Text { .. }
+                                    | CanvasOpBody::Fill { .. }
                                     | CanvasOpBody::Clear
                                     | CanvasOpBody::Undo => {}
                                 }

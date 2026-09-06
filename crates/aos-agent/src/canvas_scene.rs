@@ -139,6 +139,24 @@ pub fn validate_canvas_global(
                     "La forme ne contient pas assez de points.",
                 ));
             }
+            CanvasOpBody::Text { text, .. } if text.trim().is_empty() => {
+                issues.push(validation_issue(
+                    "empty_text",
+                    vec![op.seq],
+                    "error",
+                    "L'étiquette est vide.",
+                ));
+            }
+            CanvasOpBody::Text { text, .. }
+                if text.chars().count() > aos_proto::CANVAS_TEXT_MAX_CHARS =>
+            {
+                issues.push(validation_issue(
+                    "overlong_text",
+                    vec![op.seq],
+                    "warning",
+                    "L'étiquette dépasse la limite et peut déborder.",
+                ));
+            }
             _ => {}
         }
     }
@@ -637,6 +655,7 @@ pub fn canvas_draw_tool_applies_trait(tool: &str) -> bool {
             | "canvas.path"
             | "canvas.rect"
             | "canvas.ellipse"
+            | "canvas.text"
             | "canvas.fill"
             | "canvas.erase"
     )
@@ -652,6 +671,7 @@ pub fn canvas_op_body_applies_trait(body: &CanvasOpBody) -> bool {
             | CanvasOpBody::Path { .. }
             | CanvasOpBody::Rect { .. }
             | CanvasOpBody::Ellipse { .. }
+            | CanvasOpBody::Text { .. }
             | CanvasOpBody::Fill { .. }
             | CanvasOpBody::Erase { .. }
     )
@@ -692,6 +712,7 @@ pub fn canvas_tool_mutates_scene(tool: &str) -> bool {
             | "canvas.path"
             | "canvas.rect"
             | "canvas.ellipse"
+            | "canvas.text"
             | "canvas.fill"
             | "canvas.erase"
             | "canvas.clear"
@@ -722,6 +743,7 @@ pub fn canvas_tool_completes_plan_node(tool: &str) -> bool {
             | "canvas.path"
             | "canvas.rect"
             | "canvas.ellipse"
+            | "canvas.text"
             | "canvas.fill"
     )
 }
@@ -1145,8 +1167,55 @@ mod tests {
     }
 
     #[test]
-    fn complete_cube_passes_global_validation() {
+    fn text_empty_is_error_and_overlong_is_warning() {
+        fn text_op(seq: u64, text: &str) -> CanvasOp {
+            CanvasOp {
+                seq,
+                author_id: "agent".into(),
+                ts_ms: 0,
+                layer_id: "default".into(),
+                body: CanvasOpBody::Text {
+                    x: 0.2,
+                    y: 0.3,
+                    text: text.into(),
+                    size: 0.05,
+                    color: "#ffffff".into(),
+                    rotation: 0.0,
+                    opacity: 1.0,
+                },
+            }
+        }
         let doc = CanvasDoc {
+            ops: vec![text_op(1, "   ")],
+            ..CanvasDoc::default()
+        };
+        let report = validate_canvas_global(&doc, "annote le schéma", true);
+        assert!(report
+            .issues
+            .iter()
+            .any(|issue| issue.kind == "empty_text" && issue.severity == "error"));
+        let doc = CanvasDoc {
+            ops: vec![text_op(2, &"x".repeat(501))],
+            ..CanvasDoc::default()
+        };
+        let report = validate_canvas_global(&doc, "annote le schéma", false);
+        assert!(report
+            .issues
+            .iter()
+            .any(|issue| issue.kind == "overlong_text" && issue.severity == "warning"));
+        let doc = CanvasDoc {
+            ops: vec![text_op(3, "OK")],
+            ..CanvasDoc::default()
+        };
+        let report = validate_canvas_global(&doc, "annote le schéma", false);
+        assert!(report
+            .issues
+            .iter()
+            .all(|issue| issue.kind != "empty_text" && issue.kind != "overlong_text"));
+    }
+
+    #[test]
+    fn complete_cube_passes_global_validation() {        let doc = CanvasDoc {
             ops: vec![
                 rect_op(1, 0.20, 0.30, 0.30, 0.30),
                 rect_op(2, 0.35, 0.20, 0.30, 0.30),

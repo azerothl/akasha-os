@@ -3288,9 +3288,35 @@ pub enum CanvasOpBody {
         #[serde(default = "default_canvas_opacity")]
         opacity: f32,
     },
+    /// Étiquette texte ancrée en (x, y), coin haut-gauche (coords 0..1).
+    /// `size` = hauteur de ligne relative au petit côté (défaut 0.05).
+    /// Max 500 caractères (validateur). Pas de dash/gradient : texte uni.
+    Text {
+        x: f32,
+        y: f32,
+        #[serde(default)]
+        text: String,
+        #[serde(default = "default_canvas_text_size")]
+        size: f32,
+        #[serde(default)]
+        color: String,
+        /// Degrees, pivot au point d'ancrage.
+        #[serde(default)]
+        rotation: f32,
+        #[serde(default = "default_canvas_opacity")]
+        opacity: f32,
+    },
     Clear,
     Undo,
 }
+
+/// Taille de texte par défaut (5% du petit côté).
+fn default_canvas_text_size() -> f32 {
+    0.05
+}
+
+/// Longueur max d'une étiquette (validateur + garde-fou UI).
+pub const CANVAS_TEXT_MAX_CHARS: usize = 500;
 
 fn default_canvas_color() -> String {
     "#3ee0c4".into()
@@ -3375,6 +3401,9 @@ fn canvas_op_collect_coords(body: &CanvasOpBody) -> Vec<f32> {
             values.extend([*x, *y, *x + *w, *y + *h]);
         }
         CanvasOpBody::Fill { x, y, .. } => {
+            values.extend([*x, *y]);
+        }
+        CanvasOpBody::Text { x, y, .. } => {
             values.extend([*x, *y]);
         }
         CanvasOpBody::Clear | CanvasOpBody::Undo => {}
@@ -3467,6 +3496,15 @@ pub fn normalize_canvas_op_coords(body: &mut CanvasOpBody) -> bool {
                 *y = clamp_canvas_unit(*y);
             }
         }
+        CanvasOpBody::Text { x, y, .. } => {
+            if rescaled {
+                *x = clamp_canvas_unit(*x / scale);
+                *y = clamp_canvas_unit(*y / scale);
+            } else {
+                *x = clamp_canvas_unit(*x);
+                *y = clamp_canvas_unit(*y);
+            }
+        }
         CanvasOpBody::Clear | CanvasOpBody::Undo => {}
     }
     rescaled
@@ -3505,6 +3543,14 @@ pub fn resolve_canvas_op_style(body: &mut CanvasOpBody, pen: &CanvasPenStyle) {
         CanvasOpBody::Fill { color, .. } => {
             if color.is_empty() {
                 *color = pen.color.clone();
+            }
+        }
+        CanvasOpBody::Text { color, size, .. } => {
+            if color.is_empty() {
+                *color = pen.color.clone();
+            }
+            if *size <= 0.0 {
+                *size = default_canvas_text_size();
             }
         }
         CanvasOpBody::Erase { width, .. } => {
@@ -3609,6 +3655,26 @@ pub fn canvas_op_bbox(body: &CanvasOpBody) -> Option<CanvasBBox> {
             // Tiny bbox so digest shows a non-degenerate region.
             b.expand_point((x + 0.01).min(1.0), (y + 0.01).min(1.0));
         }
+        CanvasOpBody::Text { x, y, text, size, .. } => {
+            // Approximation sans métriques de fonte : largeur ≈ 0.55×size par
+            // caractère sur la plus longue ligne, hauteur ≈ 1.2×size par ligne.
+            // Suffit pour sélection, digest et détection de doublons.
+            let mut lines = 0usize;
+            let mut longest = 0usize;
+            for line in text.lines() {
+                lines += 1;
+                longest = longest.max(line.chars().count());
+            }
+            if lines == 0 {
+                return None;
+            }
+            let s = size.max(0.005);
+            b.expand_point(*x, *y);
+            b.expand_point(
+                (x + s * 0.55 * longest as f32).min(1.0),
+                (y + s * 1.2 * lines as f32).min(1.0),
+            );
+        }
         CanvasOpBody::Clear | CanvasOpBody::Undo => return None,
     }
     if b.is_valid() {
@@ -3628,6 +3694,7 @@ fn canvas_op_kind_label(body: &CanvasOpBody) -> &'static str {
         CanvasOpBody::Spline { .. } => "spline",
         CanvasOpBody::Path { .. } => "path",
         CanvasOpBody::Fill { .. } => "fill",
+        CanvasOpBody::Text { .. } => "text",
         CanvasOpBody::Clear => "clear",
         CanvasOpBody::Undo => "undo",
     }
@@ -5139,6 +5206,71 @@ mod chat_session_room_tests {
             serde_json::from_str::<CanvasOpBody>(&fill_json).unwrap(),
             fill
         );
+    }
+
+    #[test]
+    fn canvas_op_text_roundtrip_bbox_and_style() {
+        use super::{
+            canvas_op_bbox, resolve_canvas_op_style, CanvasOpBody, CanvasPenStyle,
+            CANVAS_TEXT_MAX_CHARS,
+        };
+        let text = CanvasOpBody::Text {
+            x: 0.2,
+            y: 0.3,
+            text: "Hello\nworld!".into(),
+            size: 0.05,
+            color: String::new(),
+            rotation: 0.0,
+            opacity: 1.0,
+        };
+        let json = serde_json::to_string(&text).unwrap();
+        assert!(json.contains("\"kind\":\"text\""));
+        assert_eq!(
+            serde_json::from_str::<CanvasOpBody>(&json).unwrap(),
+            text
+        );
+        // Bbox approximative : 6 caractères max, 2 lignes.
+        let b = canvas_op_bbox(&text).expect("bbox");
+        assert!((b.x0 - 0.2).abs() < 1e-6);
+        assert!((b.y0 - 0.3).abs() < 1e-6);
+        assert!((b.x1 - (0.2 + 0.05 * 0.55 * 6.0)).abs() < 1e-4);
+        assert!((b.y1 - (0.3 + 0.05 * 1.2 * 2.0)).abs() < 1e-4);
+        // Vide = pas de bbox (validateur : erreur, pas de crash).
+        let empty = CanvasOpBody::Text {
+            x: 0.0,
+            y: 0.0,
+            text: String::new(),
+            size: 0.05,
+            color: String::new(),
+            rotation: 0.0,
+            opacity: 1.0,
+        };
+        assert!(canvas_op_bbox(&empty).is_none());
+        assert!("x".repeat(CANVAS_TEXT_MAX_CHARS + 1).len() > CANVAS_TEXT_MAX_CHARS);
+        // Style : couleur du crayon, taille par défaut si ≤0.
+        let pen = CanvasPenStyle {
+            color: "#aabbcc".into(),
+            width: 0.022,
+            opacity: 1.0,
+            dash: vec![],
+        };
+        let mut sized = CanvasOpBody::Text {
+            x: 0.0,
+            y: 0.0,
+            text: "t".into(),
+            size: 0.0,
+            color: String::new(),
+            rotation: 0.0,
+            opacity: 1.0,
+        };
+        resolve_canvas_op_style(&mut sized, &pen);
+        match sized {
+            CanvasOpBody::Text { color, size, .. } => {
+                assert_eq!(color, "#aabbcc");
+                assert!(size > 0.0);
+            }
+            _ => panic!("expected text"),
+        }
     }
 
     #[test]

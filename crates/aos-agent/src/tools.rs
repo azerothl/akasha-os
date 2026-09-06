@@ -780,6 +780,24 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
             }),
         ),
         (
+            "canvas.text",
+            "Étiquette texte ancrée en (x,y), coin haut-gauche (coords 0..1, max 1.0). size = hauteur de ligne relative (défaut 0.05). 500 caractères max. rotation en degrés (pivot à l'ancre).",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "x":{"type":"number"},"y":{"type":"number"},
+                    "text":{"type":"string"},
+                    "size":{"type":"number","description":"hauteur de ligne relative 0..1 (défaut 0.05)"},
+                    "color":{"type":"string","description":"#RRGGBB (alias fill_color)"},
+                    "fill_color":{"type":"string","description":"alias de color"},
+                    "rotation":{"type":"number","description":"degrés, pivot à l'ancre"},
+                    "opacity":{"type":"number"}
+                },
+                "required":["x","y","text"]
+            }),
+        ),
+        (
             "canvas.erase",
             "Effacer le long d'une polyline (peint le fond)",
             serde_json::json!({
@@ -1014,6 +1032,7 @@ pub const CANVAS_TOOL_IDS: &[&str] = &[
     "canvas.path",
     "canvas.rect",
     "canvas.ellipse",
+    "canvas.text",
     "canvas.erase",
     "canvas.clear",
     "canvas.undo",
