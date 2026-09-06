@@ -382,13 +382,18 @@ Tester-facing write-up (no cargo): [write-a-module.md](write-a-module.md).
 - `webview` widget kind
 ### Device capture (issue #137)
 
-- On Windows 10/11, verify `device.enumerate` shows a camera and a microphone.
-- Confirm in Akasha before accepting the Windows permission prompt; test
+- On **Windows 10/11**, verify `device.enumerate` shows a camera and a microphone.
+- On **Linux**, verify V4L2 cameras and cpal input devices appear in
+  `device.enumerate` when hardware is present.
+- On **macOS**, verify AVFoundation cameras and CoreAudio inputs appear after
+  granting Camera/Microphone in System Settings.
+- Confirm in Akasha before accepting the OS permission prompt; test
   `Allow once`, `Always`, `Refuse`, and exact-device revocation in Caps.
 - Start a stream, use the visible **Stop** control, then verify the stream is
   gone and Audit contains request/open/stop/error/revocation events without
   media bytes.
 - Verify the artifact is under `var/sessions/<session>/devices/` and that
   absent, busy, denied, and quota errors are human-readable.
-- On Linux/macOS CI, verify the fake backend tests pass and the production
-  backend returns `UnsupportedPlatform`.
+- On Linux/macOS CI, verify the fake backend tests pass and that the host
+  backend enumerates without `UnsupportedPlatform` (hardware capture is
+  manual-only).

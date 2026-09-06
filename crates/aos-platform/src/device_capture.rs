@@ -559,7 +559,11 @@ pub fn default_backend() -> Arc<dyn DeviceCaptureBackend> {
     {
         return Arc::new(WindowsMediaFoundationBackend);
     }
-    #[cfg(not(windows))]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    {
+        Arc::new(crate::device_capture_host::HostDeviceCaptureBackend)
+    }
+    #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
     {
         Arc::new(UnsupportedPlatformBackend)
     }
