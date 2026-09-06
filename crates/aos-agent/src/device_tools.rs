@@ -3,7 +3,8 @@
 use aos_ipc::BusClient;
 use aos_proto::{
     CaptureMode, CapturePermission, DeviceCaptureRequest, DeviceCaptureResponse,
-    DeviceCaptureStopRequest, DeviceEnumerateResponse, DeviceKind,
+    DeviceCaptureStopRequest, DeviceEnumerateResponse, DeviceKind, UsbCloseRequest,
+    UsbEnumerateResponse, UsbOpenRequest, UsbPermission, UsbReadRequest, UsbWriteRequest,
 };
 use std::path::PathBuf;
 
@@ -185,6 +186,135 @@ pub async fn invoke_device_tool(
             {
                 Ok(resp) => serde_json::to_string(&resp).unwrap_or_default(),
                 Err(e) => format!("device.capture.stop err: {e}"),
+            }
+        }
+        "device.usb.enumerate" => match bus
+            .call::<(), UsbEnumerateResponse>(
+                aos_proto::device_usb::intents::ENUMERATE,
+                &(),
+                vec![],
+            )
+            .await
+        {
+            Ok(resp) if resp.devices.is_empty() => {
+                "aucun périphérique USB détecté. Sous Windows, branche un adaptateur série USB.".into()
+            }
+            Ok(resp) => serde_json::to_string(&resp.devices).unwrap_or_default(),
+            Err(e) => format!(
+                "device.usb.enumerate err: {e}. L'accès USB natif n'est disponible que sous Windows dans Preview."
+            ),
+        },
+        "device.usb.open" => {
+            let Some(session_id) = session_id.filter(|s| !s.is_empty()) else {
+                return "device.usb.open err: session_id manquant — relance depuis le chat lié".into();
+            };
+            let device_id = match args
+                .get("device_id")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+            {
+                Some(id) => id.to_string(),
+                None => return "device.usb.open err: device_id requis".into(),
+            };
+            let req = UsbOpenRequest {
+                agent_id: format!("agent:{agent_id}"),
+                device_id,
+                session_id: session_id.to_string(),
+                permission: UsbPermission::Ask,
+            };
+            match bus
+                .call::<UsbOpenRequest, aos_proto::UsbOpenResponse>(
+                    aos_proto::device_usb::intents::OPEN,
+                    &req,
+                    vec![],
+                )
+                .await
+            {
+                Ok(resp) => serde_json::to_string(&resp).unwrap_or_default(),
+                Err(e) => format!("device.usb.open err: {e}"),
+            }
+        }
+        "device.usb.read" => {
+            let handle_id = args
+                .get("handle_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            if handle_id.is_empty() {
+                return "device.usb.read err: handle_id requis".into();
+            }
+            let req = UsbReadRequest {
+                agent_id: format!("agent:{agent_id}"),
+                handle_id,
+                max_bytes: args.get("max_bytes").and_then(|v| v.as_u64()),
+                timeout_ms: args.get("timeout_ms").and_then(|v| v.as_u64()),
+            };
+            match bus
+                .call::<UsbReadRequest, aos_proto::UsbReadResponse>(
+                    aos_proto::device_usb::intents::READ,
+                    &req,
+                    vec![],
+                )
+                .await
+            {
+                Ok(resp) => serde_json::to_string(&resp).unwrap_or_default(),
+                Err(e) => format!("device.usb.read err: {e}"),
+            }
+        }
+        "device.usb.write" => {
+            let handle_id = args
+                .get("handle_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let data_base64 = args
+                .get("data_base64")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            if handle_id.is_empty() || data_base64.is_empty() {
+                return "device.usb.write err: handle_id et data_base64 requis".into();
+            }
+            let req = UsbWriteRequest {
+                agent_id: format!("agent:{agent_id}"),
+                handle_id,
+                data_base64,
+                timeout_ms: args.get("timeout_ms").and_then(|v| v.as_u64()),
+            };
+            match bus
+                .call::<UsbWriteRequest, aos_proto::UsbWriteResponse>(
+                    aos_proto::device_usb::intents::WRITE,
+                    &req,
+                    vec![],
+                )
+                .await
+            {
+                Ok(resp) => serde_json::to_string(&resp).unwrap_or_default(),
+                Err(e) => format!("device.usb.write err: {e}"),
+            }
+        }
+        "device.usb.close" => {
+            let handle_id = args
+                .get("handle_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            if handle_id.is_empty() {
+                return "device.usb.close err: handle_id requis".into();
+            }
+            match bus
+                .call::<UsbCloseRequest, aos_proto::UsbCloseResponse>(
+                    aos_proto::device_usb::intents::CLOSE,
+                    &UsbCloseRequest {
+                        agent_id: format!("agent:{agent_id}"),
+                        handle_id,
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(resp) => serde_json::to_string(&resp).unwrap_or_default(),
+                Err(e) => format!("device.usb.close err: {e}"),
             }
         }
         other => format!("outil device inconnu: {other}"),

@@ -228,6 +228,8 @@ Commandes slash :
 
 **Webcam et microphone (issue #137)** — capture Windows Media Foundation, Linux V4L2 + cpal et macOS AVFoundation + cpal via `device.enumerate` / `device.camera.capture` / `device.mic.capture`. Une capture caméra ponctuelle écrit un PNG sous `var/sessions/<session>/devices/` et le tour d’agent suivant le joint pour l’analyse vision. Confirmation obligatoire (une fois / toujours / refuser) ; les autorisations persistantes sont par agent + périphérique + action. Les refus de permission OS remontent en `OsPermissionDenied`. Le STT en continu reste hors scope.
 
+**USB I/O (issue #137, tranche 3)** — accès USB opt-in Windows d’abord via `device.usb.enumerate` / `device.usb.open` / `device.usb.read` / `device.usb.write` / `device.usb.close`. Capacité `device.usb.io` ; confirmation calquée sur la capture (une fois / toujours / refuser). Ouverture/lecture/écriture série (COM) sous Windows ; Linux/macOS renvoient `UnsupportedPlatform`. Voir `docs/device-usb.md`.
+
 ---
 
 ## 3. Mémoire (PC.7 + P04.1/P04.2 + P05 / E14)

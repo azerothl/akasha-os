@@ -134,6 +134,8 @@ pub struct PlatformSubsystem {
     pub trust: Mutex<TrustManager>,
     /// Capture caméra/microphone et permissions liées à agent+périphérique.
     pub devices: Mutex<crate::device_capture::DeviceCaptureManager>,
+    /// Accès USB opt-in (énumération + I/O série).
+    pub usb: Mutex<crate::device_usb::UsbIoManager>,
     pub net: Mutex<EgressControl>,
     pub secrets: Mutex<SecretStore>,
     /// Caps accordées par `cap.request` (registre logique par agent).
@@ -209,6 +211,8 @@ impl PlatformSubsystem {
         let secrets = SecretStore::open(&config.secrets_file).map_err(|e| e.to_string())?;
         let devices = crate::device_capture::DeviceCaptureManager::open(&config.sessions_dir)
             .map_err(|e| e.to_string())?;
+        let usb = crate::device_usb::UsbIoManager::open(&config.sessions_dir)
+            .map_err(|e| e.to_string())?;
         let secrets_backend = secrets.master_backend().as_str().to_string();
         let mut net = EgressControl::new();
         if config.net_mode == "offline_strict" {
@@ -232,6 +236,7 @@ impl PlatformSubsystem {
             confirm: ConfirmManager::new(config.confirm_timeout_sec),
             trust: Mutex::new(TrustManager::new()),
             devices: Mutex::new(devices),
+            usb: Mutex::new(usb),
             net: Mutex::new(net),
             secrets: Mutex::new(secrets),
             granted_caps: Mutex::new(std::collections::HashMap::new()),
@@ -467,6 +472,7 @@ impl PlatformSubsystem {
             "media.generate",
             "device.camera",
             "device.mic",
+            "device.usb",
         ];
         let tier = self.trust.lock().unwrap().tier(agent_id);
         let critical = CRITICAL.iter().any(|c| cap.starts_with(c));

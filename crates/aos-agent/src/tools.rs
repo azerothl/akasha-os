@@ -190,6 +190,67 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
             backend: ToolBackend::Native,
             required_caps: vec![],
         },
+        ToolDesc {
+            name: "device.usb.enumerate".into(),
+            description: "Lister les périphériques USB (ports série et génériques). Préalable à device.usb.open.".into(),
+            input_schema: serde_json::json!({"type":"object","properties":{}}),
+            backend: ToolBackend::Native,
+            required_caps: vec![],
+        },
+        ToolDesc {
+            name: "device.usb.open".into(),
+            description: "Ouvrir un périphérique USB pour I/O (ports série USB sous Windows). Confirmation requise.".into(),
+            input_schema: serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "device_id":{"type":"string","description":"id renvoyé par device.usb.enumerate"}
+                },
+                "required":["device_id"]
+            }),
+            backend: ToolBackend::Native,
+            required_caps: vec!["device.usb.io".into()],
+        },
+        ToolDesc {
+            name: "device.usb.read".into(),
+            description: "Lire des octets depuis un handle USB ouvert (base64 dans la réponse).".into(),
+            input_schema: serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "handle_id":{"type":"string"},
+                    "max_bytes":{"type":"integer"},
+                    "timeout_ms":{"type":"integer"}
+                },
+                "required":["handle_id"]
+            }),
+            backend: ToolBackend::Native,
+            required_caps: vec!["device.usb.io".into()],
+        },
+        ToolDesc {
+            name: "device.usb.write".into(),
+            description: "Écrire des octets (base64) vers un handle USB ouvert.".into(),
+            input_schema: serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "handle_id":{"type":"string"},
+                    "data_base64":{"type":"string"},
+                    "timeout_ms":{"type":"integer"}
+                },
+                "required":["handle_id","data_base64"]
+            }),
+            backend: ToolBackend::Native,
+            required_caps: vec!["device.usb.io".into()],
+        },
+        ToolDesc {
+            name: "device.usb.close".into(),
+            description: "Fermer un handle USB ouvert.".into(),
+            input_schema: serde_json::json!({
+                "type":"object",
+                "properties":{"handle_id":{"type":"string"}},
+                "required":["handle_id"]
+            }),
+            backend: ToolBackend::Native,
+            required_caps: vec!["device.usb.io".into()],
+        },
         // Runtime
         ToolDesc {
             name: "plan.update".into(),

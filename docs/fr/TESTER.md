@@ -368,3 +368,15 @@ Guide testeur (sans cargo) : [write-a-module.md](write-a-module.md).
   sont lisibles.
 - Sous Linux/macOS CI, vérifier le backend factice et que le backend hôte
   énumère sans `UnsupportedPlatform` (la capture matérielle reste manuelle).
+
+### USB I/O (issue #137, tranche 3)
+
+- Sous **Windows 10/11**, brancher un adaptateur USB-série et vérifier que
+  `device.usb.enumerate` liste des entrées `win:Serial:*`.
+- Confirmer la bannière Akasha (périphérique USB · une fois / toujours /
+  refuser) avant `device.usb.open`.
+- Ouvrir, lire, écrire, fermer ; vérifier l’Audit (requête/ouverture/lecture/
+  écriture/fermeture) sans octets bruts.
+- Révoquer `device.usb.io` dans Caps et vérifier la fermeture des handles.
+- Sous Linux/macOS, vérifier que `device.usb.enumerate` renvoie
+  `UnsupportedPlatform` et que les tests CI du backend factice passent.

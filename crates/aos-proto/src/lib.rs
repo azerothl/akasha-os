@@ -13,6 +13,7 @@ mod canvas_style;
 pub mod chat_document;
 pub mod decl_ui;
 pub mod device_capture;
+pub mod device_usb;
 pub mod mem_extract;
 
 pub use device_capture::{
@@ -22,6 +23,13 @@ pub use device_capture::{
     DeviceCaptureResponse, DeviceCaptureStopRequest, DeviceCaptureStopResponse, DeviceDescriptor,
     DeviceEnumerateResponse, DeviceKind, DevicePermissionInfo, DevicePermissionRevokeRequest,
     OsPermissionState,
+};
+
+pub use device_usb::{
+    usb_io_capability, UsbActiveHandle, UsbCloseRequest, UsbCloseResponse, UsbDeviceClass,
+    UsbDeviceDescriptor, UsbEnumerateResponse, UsbOpenRequest, UsbOpenResponse, UsbPermission,
+    UsbPermissionInfo, UsbPermissionRevokeRequest, UsbReadRequest, UsbReadResponse,
+    UsbWriteRequest, UsbWriteResponse,
 };
 
 pub use canvas_layers::{

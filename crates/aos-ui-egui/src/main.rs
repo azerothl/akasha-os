@@ -554,6 +554,11 @@ const ROSTER_TOOL_GROUPS: &[(&str, &[&str])] = &[
             "device.camera.capture",
             "device.mic.capture",
             "device.capture.stop",
+            "device.usb.enumerate",
+            "device.usb.open",
+            "device.usb.read",
+            "device.usb.write",
+            "device.usb.close",
         ],
     ),
 ];
@@ -2789,7 +2794,9 @@ impl eframe::App for UiApp {
                         ui.group(|ui| {
                             let device_capture = c.action.starts_with("device.camera.")
                                 || c.action.starts_with("device.mic.");
-                            let rich = device_capture
+                            let device_usb = c.action.starts_with("device.usb.");
+                            let device_grant = device_capture || device_usb;
+                            let rich = device_grant
                                 || matches!(
                                     c.action.as_str(),
                                     "module.install"
@@ -2808,6 +2815,11 @@ impl eframe::App for UiApp {
                                     egui::Color32::from_rgb(220, 180, 80),
                                     format!("{} · {}", t.device_camera, t.device_microphone),
                                 );
+                            } else if device_usb {
+                                ui.colored_label(
+                                    egui::Color32::from_rgb(220, 180, 80),
+                                    t.device_usb,
+                                );
                             } else if rich {
                                 ui.colored_label(
                                     egui::Color32::from_rgb(220, 180, 80),
@@ -2815,8 +2827,8 @@ impl eframe::App for UiApp {
                                 );
                             }
                             ui.horizontal(|ui| {
-                                if (!device_capture && ui.button(t.confirm_grant).clicked())
-                                    || (device_capture && ui.button(t.device_allow_once).clicked())
+                                if (!device_grant && ui.button(t.confirm_grant).clicked())
+                                    || (device_grant && ui.button(t.device_allow_once).clicked())
                                 {
                                     let _ = self.cmd_tx.send(Cmd::Confirm {
                                         id: c.id.clone(),
@@ -2824,7 +2836,7 @@ impl eframe::App for UiApp {
                                     });
                                     self.scenario_ui.confirm = true;
                                 }
-                                if device_capture && ui.button(t.device_always).clicked() {
+                                if device_grant && ui.button(t.device_always).clicked() {
                                     // La durée de permission est portée par la
                                     // requête device ; ce clic ne demande jamais
                                     // directement la permission Windows.
@@ -2835,7 +2847,7 @@ impl eframe::App for UiApp {
                                     self.scenario_ui.confirm = true;
                                 }
                                 if ui
-                                    .button(if device_capture {
+                                    .button(if device_grant {
                                         t.device_deny
                                     } else {
                                         t.confirm_deny

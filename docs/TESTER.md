@@ -399,3 +399,15 @@ Tester-facing write-up (no cargo): [write-a-module.md](write-a-module.md).
 - On Linux/macOS CI, verify the fake backend tests pass and that the host
   backend enumerates without `UnsupportedPlatform` (hardware capture is
   manual-only).
+
+### USB I/O (issue #137, slice 3)
+
+- On **Windows 10/11**, plug a USB-serial adapter and verify
+  `device.usb.enumerate` lists `win:Serial:*` entries.
+- Confirm Akasha grant chrome (USB device · Allow once / Always / Deny) before
+  `device.usb.open`.
+- Open, read, write, and close; verify Audit has request/open/read/write/close
+  without raw payload bytes.
+- Revoke `device.usb.io` in Caps and confirm open handles close.
+- On Linux/macOS, verify `device.usb.enumerate` returns `UnsupportedPlatform`
+  and fake-backend CI tests pass.

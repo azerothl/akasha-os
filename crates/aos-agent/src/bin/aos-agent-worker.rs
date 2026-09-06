@@ -3863,7 +3863,9 @@ async fn invoke_native(
                 Err(e) => format!("module.describe err: {e}"),
             }
         }
-        "device.enumerate" | "device.camera.capture" | "device.mic.capture" | "device.capture.stop" => {
+        "device.enumerate" | "device.camera.capture" | "device.mic.capture" | "device.capture.stop"
+        | "device.usb.enumerate" | "device.usb.open" | "device.usb.read" | "device.usb.write"
+        | "device.usb.close" => {
             invoke_device_tool(bus, agent_id, tool, args, session_id).await
         }
         other => format!("natif non implémenté: {other}"),

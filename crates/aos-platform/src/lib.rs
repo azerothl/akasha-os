@@ -15,6 +15,7 @@ pub mod confirm;
 pub mod device_capture;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod device_capture_host;
+pub mod device_usb;
 pub mod extract;
 pub mod mem_sweep;
 pub mod skill_pass;
