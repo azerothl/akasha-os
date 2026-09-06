@@ -24,6 +24,7 @@ pub struct ProviderRate {
     pub in_cents_per_1m: f64,
     pub out_cents_per_1m: f64,
     /// Faux si taux de repli (modèle inconnu) : sur-estimation volontaire.
+    #[allow(dead_code)]
     pub known: bool,
 }
 
