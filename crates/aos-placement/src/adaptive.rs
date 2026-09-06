@@ -514,8 +514,10 @@ mod tests {
             .registry
             .get(BackendKind::Npu)
             .is_none());
-        let mut options = PlannerOptions::default();
-        options.allow_experimental = true;
+        let options = PlannerOptions {
+            allow_experimental: true,
+            ..Default::default()
+        };
         assert!(AdaptivePlanner::new(hw, options)
             .registry
             .get(BackendKind::Npu)
@@ -598,8 +600,10 @@ mod tests {
 
     #[test]
     fn speculation_option_disables_prompt_lookup() {
-        let mut options = PlannerOptions::default();
-        options.speculation = false;
+        let options = PlannerOptions {
+            speculation: false,
+            ..Default::default()
+        };
         let planner = AdaptivePlanner::new(HardwareProfile::reference_v1(), options);
         let plan = planner.select(
             &model_3b(),
