@@ -10,6 +10,7 @@ mod agent_panel;
 mod backup;
 mod backup_state;
 mod billing;
+mod models_disk;
 mod agent_ui_state;
 mod canvas_event_controller;
 mod canvas_paint;
@@ -36,6 +37,8 @@ mod decl_ui;
 mod deep_plan_ui;
 mod feedback_event_controller;
 mod feedback_ui_state;
+mod files_event_controller;
+mod files_state;
 mod guide;
 mod i18n;
 mod icons;
@@ -90,6 +93,7 @@ mod ui_chat_transcript;
 mod ui_chat_workspace;
 mod ui_decl_module;
 mod ui_feedback;
+mod ui_files;
 mod ui_format;
 mod ui_memory;
 mod ui_models;
@@ -118,7 +122,7 @@ use chat_delegate::{
     chat_agent_kit, chat_delegate_agent_spec, session_has_running_canvas_agent,
     spawn_chat_delegate_agent, spawn_document_prep_agent,
 };
-use cmd::{ChatLine, Cmd, Evt};
+use cmd::{ChatLine, Cmd, Evt, NoticeSeverity};
 #[cfg(test)]
 use composer_layout::{chat_composer_wraps, COMPOSER_INPUT_ROW_H};
 use composer_layout::{estimate_composer_buttons_w, COMPOSER_MIN_INPUT_W};
@@ -183,6 +187,7 @@ enum Tab {
     Scenarios,
     Feedback,
     Settings,
+    Files,
     Module(String),
 }
 
@@ -494,6 +499,7 @@ struct UiApp {
     show_onboarding: bool,
     scenario_ui: scenario_ui_state::ScenarioUiState,
     feedback_ui: feedback_ui_state::FeedbackUiState,
+    files_ui: files_state::FilesUiState,
     chat_md_cache: CommonMarkCache,
     update_download_child: Option<std::process::Child>,
     update_status: String,
@@ -638,6 +644,10 @@ impl UiApp {
         let agent_max_steps = prefs.default_max_steps;
         let agent_timeout_secs = prefs.default_timeout_secs;
         let network_online = prefs.network_online;
+        let mut models_ui =
+            models_ui_state::ModelsUiState::with_updates_msg(model_updates_msg);
+        // S7.3 : dernière activité modèles (persistée).
+        models_ui.model_usage = models_disk::load_usage();
         let intro = format!(
             "{}\n\
              Sessions / Memory / Network opt-in.\n\
@@ -678,10 +688,11 @@ impl UiApp {
             show_onboarding,
             scenario_ui: scenario_ui_state::ScenarioUiState::default(),
             feedback_ui: feedback_ui_state::FeedbackUiState::default(),
+            files_ui: files_state::FilesUiState::default(),
             chat_md_cache: CommonMarkCache::default(),
             update_download_child: None,
             update_status: String::new(),
-            models_ui: models_ui_state::ModelsUiState::with_updates_msg(model_updates_msg),
+            models_ui,
             decl_panels: HashMap::new(),
             decl_md_cache: CommonMarkCache::default(),
             image_studio: image_studio::ImageStudioState::default(),
@@ -1588,6 +1599,9 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             Tab::Tasks => {
                 let _ = self.cmd_tx.send(Cmd::TasksList);
             }
+            Tab::Files => {
+                let _ = self.cmd_tx.send(Cmd::FilesList { prefix: String::new() });
+            }
             Tab::Library => {
                 let _ = self.cmd_tx.send(Cmd::UserLibraryList);
             }
@@ -1656,6 +1670,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                     (Tab::Notes, t.tab_notes, t.tab_hint_notes),
                     (Tab::Library, t.tab_library, t.tab_hint_library),
                     (Tab::Tasks, t.tab_tasks, t.tab_hint_tasks),
+                    (Tab::Files, t.tab_files, t.tab_hint_files),
                     (Tab::Models, t.tab_models, t.tab_hint_models),
                 ] {
                     if ui
@@ -2059,7 +2074,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 }
                 ui.separator();
                 let query = self.spotlight_query.trim().to_lowercase();
-                let destinations: [(&str, Tab); 14] = [
+                let destinations: [(&str, Tab); 15] = [
                     (t.tab_chat, Tab::Chat),
                     (t.tab_agents, Tab::Agents),
                     (t.tab_create, Tab::Image),
@@ -2067,6 +2082,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                     (t.tab_notes, Tab::Notes),
                     (t.tab_library, Tab::Library),
                     (t.tab_tasks, Tab::Tasks),
+                    (t.tab_files, Tab::Files),
                     (t.tab_models, Tab::Models),
                     (t.tab_settings, Tab::Settings),
                     (t.tab_caps, Tab::Caps),
@@ -2469,6 +2485,15 @@ impl eframe::App for UiApp {
                     self.status = msg.clone();
                     self.chat.push(ChatLine::plain("système", msg));
                 }
+                Evt::FilesListed { entries } => {
+                    files_event_controller::on_listed(self, entries);
+                }
+                Evt::FilesRead { path, content, class, version } => {
+                    files_event_controller::on_read(self, path, content, class, version);
+                }
+                Evt::FilesOpOk(msg) => {
+                    files_event_controller::on_op_ok(self, msg);
+                }
                 Evt::MediaImageEnriched { enriched } => {
                     media_event_controller::on_image_enriched(self, enriched);
                 }
@@ -2551,6 +2576,11 @@ impl eframe::App for UiApp {
                     self.status = t.agents_edit_saved.into();
                 }
                 Evt::AgentTrace(t) => self.on_agent_trace(t),
+                // S6 : profil de confiance (intents `trust.*`).
+                Evt::TrustProfile { profile } => {
+                    self.agent_ui.trust_edit.remove(&profile.agent_id);
+                    self.agent_ui.trust.insert(profile.agent_id.clone(), profile);
+                }
                 Evt::InferStarted {
                     session_id,
                     inference_id,
@@ -2759,11 +2789,45 @@ impl eframe::App for UiApp {
                 });
             });
             if self.prefs.ui_layout.notifications_open && !self.agent_ui.notices.is_empty() {
-                let notices = self.agent_ui.notices.clone();
+                let mut notices = self.agent_ui.notices.clone();
+                // S6 : urgents d'abord (questions bloquantes, échecs).
+                notices.sort_by_key(|n| match n.severity {
+                    NoticeSeverity::Urgent => 0,
+                    NoticeSeverity::Warning => 1,
+                    NoticeSeverity::Info => 2,
+                });
+                let fr = self.prefs.language == "fr";
+                ui.horizontal(|ui| {
+                    ui.weak(format!(
+                        "{} · {}",
+                        t.preview_tagline,
+                        if fr {
+                            format!("{} non lues", notices.len())
+                        } else {
+                            format!("{} unread", notices.len())
+                        }
+                    ));
+                    if ui
+                        .small_button(if fr { "Tout marquer lu" } else { "Mark all read" })
+                        .clicked()
+                    {
+                        let ids: Vec<String> =
+                            notices.iter().map(|n| n.agent_id.clone()).collect();
+                        self.agent_ui.dismiss_notices(&ids);
+                        notices.clear();
+                    }
+                });
                 let mut dismiss: Vec<String> = Vec::new();
                 let mut open_sess: Option<String> = None;
                 for n in &notices {
                     ui.horizontal(|ui| {
+                        // Pastille de sévérité (thème, pas de couleur en dur).
+                        let dot = match n.severity {
+                            NoticeSeverity::Urgent => crate::theme::button_colors(ui).danger,
+                            NoticeSeverity::Warning => crate::theme::button_colors(ui).warning,
+                            NoticeSeverity::Info => crate::theme::button_colors(ui).accent,
+                        };
+                        icons::status_dot(ui, dot);
                         ui.colored_label(egui::Color32::from_rgb(120, 180, 230), &n.summary);
                         let sess_title = self
                             .chat_state
@@ -3030,6 +3094,7 @@ impl eframe::App for UiApp {
             Tab::Scenarios => overflow_scroll(ui, "scenarios", |ui| self.ui_scenarios(ui)),
             Tab::Feedback => overflow_scroll(ui, "feedback", |ui| self.ui_feedback(ui)),
             Tab::Settings => overflow_scroll(ui, "settings", |ui| self.ui_settings(ui)),
+            Tab::Files => overflow_scroll(ui, "files", |ui| self.ui_files(ui)),
             Tab::Module(name) => overflow_scroll(ui, ("decl-mod", name.as_str()), |ui| {
                 self.ui_decl_module(ui, &name)
             }),

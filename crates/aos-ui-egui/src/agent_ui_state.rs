@@ -1,7 +1,7 @@
 //! Mutable state owned by the Agents workspace.
 
 use crate::cmd::AgentNotice;
-use aos_proto::{AgentSpec, AgentState, AgentTrace, McpServerInfo, SkillInfo};
+use aos_proto::{AgentSpec, AgentState, AgentTrace, McpServerInfo, SkillInfo, TrustProfile};
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
@@ -66,6 +66,10 @@ pub(crate) struct AgentUiState {
     pub(crate) prev_states: HashMap<String, AgentState>,
     pub(crate) notices: Vec<AgentNotice>,
     pub(crate) notified: HashSet<String>,
+    /// S6 : profils de confiance par agent (`trust.get`).
+    pub(crate) trust: HashMap<String, TrustProfile>,
+    /// S6 : score en cours d'édition par agent (slider avant Apply).
+    pub(crate) trust_edit: HashMap<String, f32>,
     /// Agent targeted for the next `user.ask` reply (multiple may be blocked).
     pub(crate) ask_reply_target: Option<String>,
     pub(crate) roster_edit_drafts: HashMap<String, RosterEditDraft>,
@@ -101,6 +105,8 @@ impl Default for AgentUiState {
             prev_states: HashMap::new(),
             notices: Vec::new(),
             notified: HashSet::new(),
+            trust: HashMap::new(),
+            trust_edit: HashMap::new(),
             ask_reply_target: None,
             roster_edit_drafts: HashMap::new(),
             document_prep_agents: HashMap::new(),
@@ -382,11 +388,13 @@ mod tests {
             agent_id: "a1".into(),
             session_id: "s1".into(),
             summary: "done".into(),
+            severity: crate::cmd::NoticeSeverity::Info,
         }));
         assert!(!state.push_notice_once(AgentNotice {
             agent_id: "a1".into(),
             session_id: "s1".into(),
             summary: "again".into(),
+            severity: crate::cmd::NoticeSeverity::Urgent,
         }));
         assert_eq!(state.notices.len(), 1);
         assert!(state.notified.contains("a1"));

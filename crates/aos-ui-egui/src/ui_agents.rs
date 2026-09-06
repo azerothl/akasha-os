@@ -659,6 +659,84 @@ impl UiApp {
                         });
                         ui.separator();
 
+                        // S6 : confiance par agent (intents `trust.*`, `trust.set`
+                        // audité côté serveur). Le score explique les paliers.
+                        {
+                            let fr = self.prefs.language == "fr";
+                            let profile = self.agent_ui.trust.get(&id).cloned();
+                            ui.horizontal_wrapped(|ui| {
+                                ui.strong(if fr { "Confiance" } else { "Trust" });
+                                match &profile {
+                                    Some(p) => {
+                                        ui.label(format!("{:.0} · {}", p.score, p.tier));
+                                        ui.weak(format!(
+                                            "ok:{} ko:{} override:{} refus:{}",
+                                            p.success_count,
+                                            p.failure_count,
+                                            p.override_count,
+                                            p.confirmation_denials,
+                                        ));
+                                    }
+                                    None => {
+                                        ui.weak(if fr {
+                                            "profil non chargé"
+                                        } else {
+                                            "profile not loaded"
+                                        });
+                                        if ui.small_button(t.caps_refresh).clicked() {
+                                            let _ = self.cmd_tx.send(Cmd::TrustGet {
+                                                agent_id: id.clone(),
+                                            });
+                                        }
+                                    }
+                                }
+                            });
+                            if let Some(p) = profile {
+                                let pending = self
+                                    .agent_ui
+                                    .trust_edit
+                                    .entry(id.clone())
+                                    .or_insert(p.score);
+                                let mut score = *pending;
+                                ui.horizontal(|ui| {
+                                    if ui
+                                        .add(
+                                            egui::Slider::new(&mut score, 0.0..=100.0)
+                                                .show_value(true),
+                                        )
+                                        .on_hover_text(if fr {
+                                            "Ajustement manuel (audité)"
+                                        } else {
+                                            "Manual adjustment (audited)"
+                                        })
+                                        .changed()
+                                    {
+                                        *pending = score;
+                                    }
+                                    if crate::ui_primitives::danger_confirm_button(
+                                        ui,
+                                        ("trust-set", &id),
+                                        if fr { "Appliquer" } else { "Apply" },
+                                        if fr { "Confirmer ?" } else { "Confirm?" },
+                                    ) {
+                                        let _ = self.cmd_tx.send(Cmd::TrustSet {
+                                            agent_id: id.clone(),
+                                            score: *pending,
+                                        });
+                                    }
+                                    if ui
+                                        .small_button(if fr { "Réinitialiser" } else { "Reset" })
+                                        .clicked()
+                                    {
+                                        let _ = self.cmd_tx.send(Cmd::TrustReset {
+                                            agent_id: id.clone(),
+                                        });
+                                    }
+                                });
+                            }
+                        }
+                        ui.separator();
+
                         let info = self.agents.iter().find(|a| a.agent_id == id).cloned();
                         let trace = self.agent_ui.traces.get(&id).cloned();
                         if info.as_ref().is_some_and(|a| a.is_roster()) {

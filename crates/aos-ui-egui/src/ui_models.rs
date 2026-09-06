@@ -3,7 +3,7 @@
 use crate::cmd::Cmd;
 use crate::os_open::{open_url, request_preview_restart};
 use crate::ui_format::human_bytes;
-use crate::{i18n, icons, models_page, UiApp};
+use crate::{i18n, icons, models_disk, models_page, UiApp};
 use eframe::egui;
 
 impl UiApp {
@@ -91,6 +91,76 @@ impl UiApp {
             .auto_shrink([false, false])
             .show(ui, |ui| match self.models_ui.catalog_tab {
                 models_page::ModelCatalogTab::Installed => {
+                    // S7.3 : hygiène disque — total, partiels à purger.
+                    if self.models_ui.disk_scan.is_none() {
+                        self.models_ui.disk_scan = Some(models_disk::DiskScan::refresh());
+                    }
+                    if let Some(scan) = self.models_ui.disk_scan.clone() {
+                        let fr = self.prefs.language == "fr";
+                        ui.group(|ui| {
+                            ui.horizontal_wrapped(|ui| {
+                                ui.strong("share/models");
+                                ui.weak(format!(
+                                    "{} · {}",
+                                    if fr {
+                                        format!("{} fichiers", scan.files)
+                                    } else {
+                                        format!("{} files", scan.files)
+                                    },
+                                    human_bytes(scan.bytes),
+                                ));
+                                if ui
+                                    .small_button(if fr { "Actualiser" } else { "Refresh" })
+                                    .clicked()
+                                {
+                                    self.models_ui.disk_scan =
+                                        Some(models_disk::DiskScan::refresh());
+                                }
+                            });
+                            if !scan.partials.is_empty() {
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.weak(format!(
+                                        "{} · {}",
+                                        if fr {
+                                            format!("{} partiels", scan.partials.len())
+                                        } else {
+                                            format!("{} partials", scan.partials.len())
+                                        },
+                                        human_bytes(scan.partial_bytes()),
+                                    ));
+                                    if crate::ui_primitives::danger_confirm_button(
+                                        ui,
+                                        "models-purge-partials",
+                                        if fr { "Purger" } else { "Purge" },
+                                        if fr { "Supprimer ?" } else { "Delete?" },
+                                    ) {
+                                        let paths: Vec<_> = scan
+                                            .partials
+                                            .iter()
+                                            .map(|(p, _)| p.clone())
+                                            .collect();
+                                        let (n, freed) = models_disk::purge_partials(&paths);
+                                        let msg = if fr {
+                                            format!(
+                                                "Partiels purgés : {n} ({} libérés)",
+                                                human_bytes(freed)
+                                            )
+                                        } else {
+                                            format!(
+                                                "Purged partials: {n} ({} freed)",
+                                                human_bytes(freed)
+                                            )
+                                        };
+                                        self.push_status(msg.clone());
+                                        self.toasts.push_success(msg);
+                                        self.models_ui.disk_scan =
+                                            Some(models_disk::DiskScan::refresh());
+                                    }
+                                });
+                            }
+                        });
+                        ui.add_space(6.0);
+                    }
                     if installed_rows.is_empty() {
                         ui.weak(t.models_catalog_empty);
                     }
@@ -134,6 +204,11 @@ impl UiApp {
                         }
                         if load {
                             self.models_ui.begin_transition(&id);
+                            models_disk::note_used(
+                                &mut self.models_ui.model_usage,
+                                &id,
+                                crate::now_ms(),
+                            );
                             let _ = self.cmd_tx.send(Cmd::ModelLoad {
                                 model_id: id.clone(),
                             });
@@ -189,6 +264,11 @@ impl UiApp {
                                             .clicked()
                                         {
                                             self.models_ui.begin_transition(&id);
+                                            models_disk::note_used(
+                                                &mut self.models_ui.model_usage,
+                                                &id,
+                                                crate::now_ms() as u64,
+                                            );
                                             let _ = self.cmd_tx.send(Cmd::ModelLoad {
                                                 model_id: id.clone(),
                                             });
@@ -201,6 +281,11 @@ impl UiApp {
                                             .clicked()
                                         {
                                             self.models_ui.begin_transition(&id);
+                                            models_disk::note_used(
+                                                &mut self.models_ui.model_usage,
+                                                &id,
+                                                crate::now_ms() as u64,
+                                            );
                                             let _ = self.cmd_tx.send(Cmd::ModelReload {
                                                 model_id: id.clone(),
                                             });
@@ -215,6 +300,29 @@ impl UiApp {
                                     format!("{} : {error}", t.models_state_prefix),
                                 );
                                 ui.weak(t.models_error_detail);
+                            }
+                        }
+                        // S7.3 : dernière activité honnête (chargement/retry/reload/download).
+                        {
+                            let fr = self.prefs.language == "fr";
+                            match self.models_ui.model_usage.get(&id) {
+                                Some(ms) => {
+                                    let date = crate::ui_format::format_local_date_short(
+                                        *ms,
+                                        crate::ui_format::local_tz_offset_minutes(),
+                                    );
+                                    ui.weak(format!(
+                                        "{} : {date}",
+                                        if fr { "Dernière activité" } else { "Last active" }
+                                    ));
+                                }
+                                None => {
+                                    ui.weak(if fr {
+                                        "Jamais chargé"
+                                    } else {
+                                        "Never loaded"
+                                    });
+                                }
                             }
                         }
                         if let Some(plans) = self.models_ui.plan_diagnostics.get(&id).cloned() {

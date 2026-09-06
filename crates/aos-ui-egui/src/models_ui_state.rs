@@ -39,6 +39,9 @@ pub(crate) struct ModelsUiState {
     pub(crate) plan_errors: HashMap<String, String>,
     pub(crate) plan_loading: HashSet<String>,
     pub(crate) lan_cluster: Option<LanClusterNodesResponse>,
+    /// S7.3 : dernière activité par modèle (epoch ms) + dernier scan disque.
+    pub(crate) model_usage: HashMap<String, u64>,
+    pub(crate) disk_scan: Option<crate::models_disk::DiskScan>,
 }
 
 impl Default for ModelsUiState {
@@ -67,6 +70,8 @@ impl Default for ModelsUiState {
             plan_errors: HashMap::new(),
             plan_loading: HashSet::new(),
             lan_cluster: None,
+            model_usage: HashMap::new(),
+            disk_scan: None,
         }
     }
 }
