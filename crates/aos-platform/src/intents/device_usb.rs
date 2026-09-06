@@ -196,8 +196,14 @@ fn register_open(svc: &mut BusService, sub: Arc<PlatformSubsystem>) {
                 context.insert("action.kind".into(), cap.clone());
                 context.insert("device.id".into(), req.device_id.clone());
                 context.insert("device.kind".into(), "usb".into());
-                s.policy_gate(context, &actor, &cap, &req.device_id, "device-usb")
-                    .await
+                s.policy_gate(
+                    context,
+                    &actor,
+                    device_usb::intents::OPEN,
+                    &req.device_id,
+                    "device-usb",
+                )
+                .await
             };
             if !allowed {
                 let _ = ctx

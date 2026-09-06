@@ -2892,7 +2892,12 @@ impl eframe::App for UiApp {
                                         | "media.image.generate"
                                         | "media.audio.generate"
                                 );
-                            ui.label(t.confirm_wants_action.replace("{action}", &c.action));
+                            ui.label(
+                                t.confirm_wants_action.replace(
+                                    "{action}",
+                                    &i18n::confirm_action_label(&t, &c.action),
+                                ),
+                            );
                             ui.monospace(format!("{} → {}", c.target, c.reason));
                             if device_capture {
                                 ui.colored_label(

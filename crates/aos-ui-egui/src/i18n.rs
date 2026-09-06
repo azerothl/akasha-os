@@ -2887,6 +2887,20 @@ pub fn roster_tool_label<'a>(t: &'a UiStrings, tool_id: &str) -> &'a str {
     }
 }
 
+/// Human-readable label for pending confirmation banners (never raw cap ids).
+pub fn confirm_action_label(t: &UiStrings, action: &str) -> String {
+    let mapped = match action {
+        "device.usb.io" => "device.usb.open",
+        other => other,
+    };
+    let label = roster_tool_label(t, mapped);
+    if label == "?" {
+        action.to_string()
+    } else {
+        label.to_string()
+    }
+}
+
 /// Human-readable routing label for Settings and onboarding (technical id in tooltip).
 pub fn persona_label(t: &UiStrings, persona_id: &str) -> &'static str {
     match persona_id {
@@ -3048,6 +3062,15 @@ mod tests {
         assert!(!resolved_fr.contains("atteint"));
         assert_eq!(resolved_en, en.agent_could_not_continue);
         assert_eq!(resolved_fr, fr.agent_could_not_continue);
+    }
+
+    #[test]
+    fn confirm_action_label_maps_usb_cap_to_open() {
+        let fr = strings("fr");
+        let en = strings("en");
+        assert_eq!(confirm_action_label(&fr, "device.usb.io"), "Ouvrir USB");
+        assert_eq!(confirm_action_label(&en, "device.usb.io"), "Open USB device");
+        assert_eq!(confirm_action_label(&fr, "device.usb.open"), "Ouvrir USB");
     }
 
     #[test]
