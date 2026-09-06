@@ -499,12 +499,25 @@ mod delegate_tests {
 mod research_document_tests {
     use aos_agent::document_prep::{compose_document, BrowsePage};
     use aos_proto::WebSearchHit;
+    use crate::chat_delegate::chat_agent_kit;
 
     #[test]
     fn user_requested_document_skips_choice_card() {
         assert!(aos_agent::research_detect::user_requested_document(
             "Please prepare a document about agentic apps"
         ));
+        assert!(aos_agent::research_detect::user_requested_document(
+            "fais moi un document de présentation de ce dont on a parlé"
+        ));
+    }
+
+    #[test]
+    fn document_ask_kit_includes_files_generate() {
+        let (skills, tools) = chat_agent_kit(
+            "fais moi un document de présentation de ce dont on a parlé",
+        );
+        assert!(skills.iter().any(|s| s == "file-author"));
+        assert!(tools.iter().any(|t| t == "files.generate"));
     }
 
     #[test]

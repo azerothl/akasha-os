@@ -107,7 +107,10 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
             description: "Générer un fichier (md/txt/json/csv/png/pdf)".into(),
             input_schema: serde_json::json!({"type":"object","properties":{"path":{"type":"string"},"format":{"type":"string"},"content":{"type":"string"}},"required":["path","format"]}),
             backend: ToolBackend::Native,
-            required_caps: vec!["fs.write:/documents/**".into()],
+            required_caps: vec![
+                "fs.write:/downloads/**".into(),
+                "fs.write:/documents/**".into(),
+            ],
         },
         ToolDesc {
             name: "media.image.generate".into(),

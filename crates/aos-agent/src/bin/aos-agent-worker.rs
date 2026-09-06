@@ -631,6 +631,16 @@ async fn main() {
                     &assess,
                 )
                 .await;
+                maybe_enable_document_delivery(
+                    &bus,
+                    &shared,
+                    &mut spec,
+                    &mut skill_docs,
+                    &mut tools,
+                    &module_tools,
+                    &d,
+                )
+                .await;
                 if assess.is_complex() {
                     let needs_new_plan = shared.state.lock().await.task_graph.is_empty();
                     if needs_new_plan {
@@ -657,6 +667,16 @@ async fn main() {
             match cmd {
                 WorkerCmd::Steer(d) => {
                     shared.state.lock().await.push_user(&format!("[steer] {d}"));
+                    maybe_enable_document_delivery(
+                        &bus,
+                        &shared,
+                        &mut spec,
+                        &mut skill_docs,
+                        &mut tools,
+                        &module_tools,
+                        &d,
+                    )
+                    .await;
                 }
                 WorkerCmd::ChildFinished {
                     child_id,
@@ -4006,6 +4026,52 @@ async fn index_documents(
             )
             .await;
     }
+}
+
+async fn maybe_enable_document_delivery(
+    bus: &BusClient,
+    shared: &Shared,
+    spec: &mut AgentSpec,
+    skill_docs: &mut Vec<SkillDoc>,
+    tools: &mut Vec<ToolDesc>,
+    module_tools: &[ToolDesc],
+    text: &str,
+) {
+    if !aos_agent::research_detect::user_requested_document(text) {
+        return;
+    }
+    shared.state.lock().await.push_user(
+        "[hint] L'utilisateur demande un document fichier : utilise files.generate sous /downloads/ (md), pas notes.create.",
+    );
+    let already = tools.iter().any(|t| t.name == "files.generate");
+    aos_agent::research_detect::ensure_document_file_tools(&mut spec.skills, &mut spec.tools);
+    if already {
+        return;
+    }
+    *skill_docs = load_skills(&spec.skills);
+    let tool_ids = merge_skill_tools(&spec.tools, skill_docs);
+    *tools = select_tools_mode(
+        &tool_ids,
+        module_tools,
+        spec.cognitive_mode.is_deep_thinking(),
+    );
+    strip_canvas_blocked_runtime_tools(tools, &spec.tools);
+    let derived = caps_for_tools(tools, &spec.mcp_servers);
+    for c in derived {
+        if !spec.caps.contains(&c) {
+            spec.caps.push(c);
+        }
+    }
+    install_system_prompt(bus, shared, spec, skill_docs, tools).await;
+    let _ = persist::write_spec(spec);
+    report(
+        bus,
+        &spec.agent_id,
+        AgentOutputEvent::Log {
+            line: "outil files.generate activé (demande de document)".into(),
+        },
+    )
+    .await;
 }
 
 async fn install_system_prompt(

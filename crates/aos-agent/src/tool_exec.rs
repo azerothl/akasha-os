@@ -2,8 +2,9 @@
 
 use aos_ipc::BusClient;
 use aos_proto::{
-    FsListRequest, FsReadRequest, FsReadResponse, FsWriteRequest, ModuleInvokeRequest,
-    ModuleInvokeResponse, WebBrowseRequest, WebBrowseResponse, WebSearchRequest, WebSearchResponse,
+    FilesGenerateRequest, FsListRequest, FsReadRequest, FsReadResponse, FsWriteRequest,
+    ModuleInvokeRequest, ModuleInvokeResponse, WebBrowseRequest, WebBrowseResponse, WebSearchRequest,
+    WebSearchResponse,
 };
 use crate::device_tools::invoke_device_tool;
 use crate::mcp::McpSession;
@@ -196,6 +197,41 @@ pub async fn invoke_native_tool(
             {
                 Ok(r) => serde_json::to_string(&r).unwrap_or_default(),
                 Err(e) => format!("web.browse err: {e}"),
+            }
+        }
+        "files.generate" => {
+            let path = args
+                .get("path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let format = args
+                .get("format")
+                .and_then(|v| v.as_str())
+                .unwrap_or("md")
+                .to_string();
+            let content = args
+                .get("content")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            match bus
+                .call::<FilesGenerateRequest, serde_json::Value>(
+                    "files.generate",
+                    &FilesGenerateRequest {
+                        format,
+                        path,
+                        content,
+                        title: None,
+                        caps: caps.to_vec(),
+                        actor,
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(v) => v.to_string(),
+                Err(e) => format!("files.generate err: {e}"),
             }
         }
         "device.enumerate" | "device.camera.capture" | "device.mic.capture" | "device.capture.stop"

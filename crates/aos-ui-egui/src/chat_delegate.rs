@@ -951,5 +951,8 @@ fn chat_agent_kit_ex(
     if chat_device_usb_intent(task) {
         push_device_usb_tools(&mut tools);
     }
+    if aos_agent::research_detect::user_requested_document(task) {
+        aos_agent::research_detect::ensure_document_file_tools(&mut skills, &mut tools);
+    }
     (skills, tools)
 }

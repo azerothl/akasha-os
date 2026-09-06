@@ -54,6 +54,8 @@ Quand tu dois utiliser un outil, réponds par un objet JSON unique :
 - `action` = nom exact du catalogue (`canvas.stroke`, `canvas.get`, …).
 - Pour le canvas : coords 0..1, commence par `canvas.get`, omets `session_id` (le runtime le force).
 - Couleur : `canvas.set_style` avec `color` #RRGGBB ou `color` sur chaque op — le teal par défaut n'est pas la seule teinte.
+- Document / présentation / rapport demandé par l'utilisateur : `files.generate` sous `/downloads/` (md), **pas** `notes.create`.
+- Notes du carnet interne uniquement si l'utilisateur demande une *note* — sinon livrable fichier.
 - Quand tu as fini (y compris après des outils), réponds en texte libre SANS JSON — c'est ta réplique visible dans le salon.
 - Pas de `agent.spawn`, `user.ask`, ni collègues inventés."#;
 
@@ -163,13 +165,22 @@ fn member_display_name<'a>(
 }
 
 /// Assemble tool ids + caps for a roster member turn.
+///
+/// When `document_ask` is true (user asked for a presentation/report file), inject
+/// `file-author` + `files.generate` even if the roster spec only listed notes tools.
 pub fn room_member_kit(
     spec: &AgentSpec,
     canvas_open: bool,
     canvas_exported: &[String],
+    document_ask: bool,
 ) -> (Vec<String>, Vec<String>) {
-    let skill_docs = load_skills(&spec.skills);
-    let mut tool_ids = merge_skill_tools(&spec.tools, &skill_docs);
+    let mut skills = spec.skills.clone();
+    let mut base_tools = spec.tools.clone();
+    if document_ask {
+        crate::research_detect::ensure_document_file_tools(&mut skills, &mut base_tools);
+    }
+    let skill_docs = load_skills(&skills);
+    let mut tool_ids = merge_skill_tools(&base_tools, &skill_docs);
     merge_canvas_tools(&mut tool_ids, canvas_open, canvas_exported);
     let tools = select_tools(&tool_ids, &[]);
     let mut caps = spec.caps.clone();
@@ -179,6 +190,16 @@ pub fn room_member_kit(
         }
     }
     (tool_ids, caps)
+}
+
+fn last_user_message_text(session: &ChatSessionGetResponse) -> &str {
+    session
+        .messages
+        .iter()
+        .rev()
+        .find(|m| m.role == "user")
+        .map(|m| m.content.as_str())
+        .unwrap_or("")
 }
 
 pub async fn fetch_canvas_exported_tools(bus: &BusClient) -> Vec<String> {
@@ -638,7 +659,10 @@ pub async fn execute_room_turn(
     } else {
         Vec::new()
     };
-    let (tool_ids, caps) = room_member_kit(&spec, session.meta.canvas_open, &canvas_exported);
+    let document_ask =
+        crate::research_detect::user_requested_document(last_user_message_text(&session));
+    let (tool_ids, caps) =
+        room_member_kit(&spec, session.meta.canvas_open, &canvas_exported, document_ask);
     let tool_descs = if tool_ids.is_empty() {
         Vec::new()
     } else {
@@ -1104,7 +1128,7 @@ mod tests {
         };
         use crate::tools::CANVAS_TOOL_IDS;
         let exported: Vec<String> = CANVAS_TOOL_IDS.iter().map(|s| (*s).to_string()).collect();
-        let (ids, caps) = room_member_kit(&spec, true, &exported);
+        let (ids, caps) = room_member_kit(&spec, true, &exported, false);
         assert!(ids.iter().any(|x| x == "canvas.set_style"));
         assert!(ids.iter().any(|x| x == "canvas.stroke"));
         assert!(ids.iter().any(|x| x == "canvas.line"));
@@ -1139,9 +1163,40 @@ mod tests {
             origin: None,
         cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
-        let (ids, caps) = room_member_kit(&spec, false, &[]);
+        let (ids, caps) = room_member_kit(&spec, false, &[], false);
         assert!(!ids.iter().any(|x| x.starts_with("canvas.")));
         assert!(!caps.iter().any(|c| c == "tool.invoke:canvas"));
+    }
+
+    #[test]
+    fn room_member_kit_injects_files_generate_on_document_ask() {
+        let spec = AgentSpec {
+            agent_id: "agent-x".into(),
+            goal: AgentGoal::default(),
+            kind: Default::default(),
+            display_name: None,
+            persona_id: None,
+            system_prompt: None,
+            skills: vec!["notes-writer".into()],
+            tools: vec!["notes.create".into()],
+            mcp_servers: vec![],
+            documents: vec![],
+            caps: vec![],
+            model_id: None,
+            policy: None,
+            parent_id: None,
+            session_id: None,
+            budget: Default::default(),
+            optimize_prompt: false,
+            gate_mode: "ask".into(),
+            origin: None,
+            cognitive_mode: aos_proto::CognitiveMode::Normal,
+        };
+        let (ids, caps) = room_member_kit(&spec, false, &[], true);
+        assert!(ids.iter().any(|x| x == "files.generate"));
+        assert!(caps.iter().any(|c| c == "fs.write:/downloads/**"));
+        let (ids_off, _) = room_member_kit(&spec, false, &[], false);
+        assert!(!ids_off.iter().any(|x| x == "files.generate"));
     }
 
     #[test]

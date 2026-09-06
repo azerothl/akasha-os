@@ -190,26 +190,26 @@ impl UiApp {
             .find(|s| s.id == session_id)
             .map(|s| s.canvas_aspect)
             .unwrap_or_default();
-        if pending_images.is_empty()
-            && pending_documents.is_empty()
-            && aos_agent::research_detect::is_research_shaped_ask(&text)
-        {
-            let history: Vec<(String, String)> = self
-                .chat
-                .iter()
-                .filter(|l| l.role == "user" || l.role == "vous" || l.role == "assistant")
-                .map(|l| {
-                    (
-                        if l.role == "vous" || l.role == "user" {
-                            "user".into()
-                        } else {
-                            "assistant".into()
-                        },
-                        l.text.clone(),
-                    )
-                })
-                .collect();
-            if aos_agent::research_detect::user_requested_document(&text) {
+        if pending_images.is_empty() && pending_documents.is_empty() {
+            let wants_document = aos_agent::research_detect::user_requested_document(&text);
+            let research_shaped =
+                aos_agent::research_detect::is_research_shaped_ask(&text);
+            if wants_document || research_shaped {
+                let history: Vec<(String, String)> = self
+                    .chat
+                    .iter()
+                    .filter(|l| l.role == "user" || l.role == "vous" || l.role == "assistant")
+                    .map(|l| {
+                        (
+                            if l.role == "vous" || l.role == "user" {
+                                "user".into()
+                            } else {
+                                "assistant".into()
+                            },
+                            l.text.clone(),
+                        )
+                    })
+                    .collect();
                 let choice_id = format!("research-choice-{}", chrono_like_stamp());
                 let pending = ResearchPendingChat {
                     session_id: session_id.clone(),
@@ -227,38 +227,25 @@ impl UiApp {
                     deep_thinking: self.chat_state.composer.deep_thinking,
                     choice_id,
                 };
-                let _ = self.cmd_tx.send(Cmd::SessionAppend {
-                    session_id: session_id.clone(),
-                    role: "user".into(),
-                    content: text.clone(),
-                    attachments: self
-                        .chat
-                        .last()
-                        .map(|l| l.attachments.clone())
-                        .unwrap_or_default(),
-                });
-                self.start_document_prep(session_id.as_str(), pending);
+                // Explicit document ask → prep agent (fichier /downloads/), même hors
+                // question « research-shaped ».
+                if wants_document {
+                    let _ = self.cmd_tx.send(Cmd::SessionAppend {
+                        session_id: session_id.clone(),
+                        role: "user".into(),
+                        content: text.clone(),
+                        attachments: self
+                            .chat
+                            .last()
+                            .map(|l| l.attachments.clone())
+                            .unwrap_or_default(),
+                    });
+                    self.start_document_prep(session_id.as_str(), pending);
+                    return;
+                }
+                self.offer_research_choice(&session_id, &text, pending);
                 return;
             }
-            let choice_id = format!("research-choice-{}", chrono_like_stamp());
-            let pending = ResearchPendingChat {
-                session_id: session_id.clone(),
-                history,
-                user_text: text.clone(),
-                model_id: model_id.clone(),
-                images: pending_images,
-                documents: pending_documents,
-                auto_remember: self.prefs.auto_remember_chat,
-                max_steps: chat_agent_max_steps(self.prefs.default_max_steps),
-                routing: self.prefs.routing.clone(),
-                language: self.prefs.language.clone(),
-                canvas_open,
-                canvas_aspect,
-                deep_thinking: self.chat_state.composer.deep_thinking,
-                choice_id,
-            };
-            self.offer_research_choice(&session_id, &text, pending);
-            return;
         }
         let history: Vec<(String, String)> = self
             .chat

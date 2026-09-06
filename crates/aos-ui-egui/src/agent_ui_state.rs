@@ -16,6 +16,7 @@ fn default_tool_selected() -> Vec<String> {
         "notes.update".into(),
         "notes.links".into(),
         "notes.related".into(),
+        "files.generate".into(),
         "tasks.create".into(),
         "tasks.list".into(),
         "tasks.update".into(),

@@ -177,7 +177,8 @@ IMPORTANT :
 - Si complex : appelle `plan.update` AVANT tout effet de bord (recherche, écriture, spawn).
 - Si le plan a des nœuds **indépendants**, préfère `agent.spawn` en parallèle puis `agent.await` plutôt que tout faire en série toi-même.
 - `agent.spawn` : brief **court** (≤ 3 phrases, auto-suffisant), tools/docs **minimaux** — ne dump pas le contexte parent ni les résultats d'outils.
-- Notes / documents longs : `notes.create` avec titre + **outline court**, puis `notes.update` **section par section** (≤ ~1200 caractères de `content` par appel). Ne mets jamais un guide entier dans un seul JSON.
+- Notes (carnet interne Notes) : `notes.create` avec titre + **outline court**, puis `notes.update` **section par section** (≤ ~1200 caractères de `content` par appel). Ne mets jamais un guide entier dans un seul JSON.
+- Document fichier demandé par l'utilisateur (présentation, rapport, livrable, « fais-moi un document ») : `files.generate` sous `/downloads/` (md de préférence) — **pas** `notes.create`. Si `files.generate` n'est pas au catalogue, dis-le clairement.
 - `memory.recall` sert à accélérer le nœud / brief courant — pas à relire tout le goal.
 - Après `agent.spawn`, le runtime injecte `[child-done]` quand le sous-agent termine. Tu peux `agent.await` ou poursuivre dès que tu vois ce résultat — ne reste pas bloqué à attendre.
 - Après une découverte utile : `memory.remember`.

@@ -1,26 +1,84 @@
 //! Heuristics for research-shaped chat questions (document choice card).
 
-/// User already asked for a prepared document — skip the choice card.
+/// User already asked for a prepared document — skip the choice card /
+/// prefer `files.generate` over notes.
 pub fn user_requested_document(text: &str) -> bool {
     let lower = text.to_lowercase();
     const MARKERS: &[&str] = &[
+        // EN
         "prepare a document",
         "prepare document",
         "write a document",
         "write me a document",
+        "make a document",
+        "make me a document",
+        "generate a document",
+        "create a document",
         "document about",
         "research document",
+        "write a report",
+        "prepare a report",
+        "write a presentation",
+        "presentation document",
+        "document presentation",
+        // FR — infinitives / conjugations / spacing variants
         "préparer un document",
         "prépare un document",
+        "prépare-moi un document",
+        "prépare moi un document",
         "preparer un document",
+        "prepare un document",
         "rédiger un document",
         "rediger un document",
-        "document sur",
+        "rédige un document",
+        "redige un document",
+        "rédige-moi un document",
+        "rédige moi un document",
+        "redige-moi un document",
+        "redige moi un document",
+        "écrire un document",
+        "ecrire un document",
+        "écris un document",
+        "ecris un document",
+        "écris-moi un document",
+        "écris moi un document",
+        "génère un document",
+        "genere un document",
+        "génère-moi un document",
+        "genere moi un document",
+        "crée un document",
+        "cree un document",
+        "créer un document",
+        "creer un document",
         "fais un document",
         "fais-moi un document",
-        "make a document",
+        "fais moi un document",
+        "fait moi un document",
+        "faites-moi un document",
+        "faites moi un document",
+        "faire un document",
+        "document sur",
+        "document de présentation",
+        "document de presentation",
+        "prépare un rapport",
+        "prepare un rapport",
+        "rédige un rapport",
+        "redige un rapport",
+        "fais un rapport",
+        "fais-moi un rapport",
+        "fais moi un rapport",
     ];
     MARKERS.iter().any(|m| lower.contains(m))
+}
+
+/// Ensure `file-author` + `files.generate` so a document ask can land under `/downloads/`.
+pub fn ensure_document_file_tools(skills: &mut Vec<String>, tool_ids: &mut Vec<String>) {
+    if !skills.iter().any(|s| s == "file-author") {
+        skills.push("file-author".into());
+    }
+    if !tool_ids.iter().any(|t| t == "files.generate") {
+        tool_ids.push("files.generate".into());
+    }
 }
 
 /// True when the user message looks like an open research question worth offering
@@ -197,6 +255,27 @@ mod tests {
         assert!(user_requested_document(
             "Peux-tu préparer un document sur l'état de l'art ?"
         ));
+        assert!(user_requested_document(
+            "fais moi un document de présentation de ce dont on a parlé"
+        ));
+        assert!(user_requested_document("rédige moi un document là-dessus"));
         assert!(!user_requested_document("what is the state of the art?"));
+        assert!(!user_requested_document("écris une note rapide"));
+    }
+
+    #[test]
+    fn ensure_document_file_tools_idempotent() {
+        let mut skills = vec!["planner".into()];
+        let mut tools = vec!["notes.create".into()];
+        ensure_document_file_tools(&mut skills, &mut tools);
+        ensure_document_file_tools(&mut skills, &mut tools);
+        assert_eq!(
+            skills.iter().filter(|s| *s == "file-author").count(),
+            1
+        );
+        assert_eq!(
+            tools.iter().filter(|t| *t == "files.generate").count(),
+            1
+        );
     }
 }
