@@ -46,9 +46,10 @@ pub struct DistributedWork {
 
 /// Messages allowed on an authenticated LAN work channel.
 ///
-/// The payload deliberately contains control-plane data only. Prompts,
-/// generated tokens and KV pages need an explicit future data-plane contract;
-/// they must not be smuggled through an untyped transport call.
+/// Control-plane and explicitly typed data-plane messages share the same
+/// authenticated channel. Data payloads remain bounded and require the work's
+/// explicit sensitive-data policy; they must not be smuggled through an
+/// untyped transport call.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum LanWorkMessage {
@@ -61,6 +62,8 @@ pub enum LanWorkMessage {
         work_id: String,
         model_id: String,
         assignment: LanShardAssignment,
+        #[serde(default)]
+        allow_sensitive_data: bool,
     },
     Cancel {
         work_id: String,
@@ -72,6 +75,35 @@ pub enum LanWorkMessage {
         work_id: String,
         operation: String,
     },
+    Prefill {
+        work_id: String,
+        request_id: String,
+        input_tokens: Vec<u32>,
+        kv_tokens: u32,
+    },
+    Decode {
+        work_id: String,
+        request_id: String,
+        max_tokens: u32,
+    },
+    TokenBatch {
+        work_id: String,
+        request_id: String,
+        tokens: Vec<u32>,
+        finished: bool,
+    },
+    KvPage {
+        work_id: String,
+        request_id: String,
+        page_index: u32,
+        data: Vec<u8>,
+        final_page: bool,
+    },
+    Nack {
+        work_id: String,
+        operation: String,
+        reason: String,
+    },
 }
 
 impl LanWorkMessage {
@@ -81,7 +113,12 @@ impl LanWorkMessage {
             | Self::Assign { work_id, .. }
             | Self::Cancel { work_id }
             | Self::Heartbeat { work_id }
-            | Self::Ack { work_id, .. } => work_id,
+            | Self::Ack { work_id, .. }
+            | Self::Prefill { work_id, .. }
+            | Self::Decode { work_id, .. }
+            | Self::TokenBatch { work_id, .. }
+            | Self::KvPage { work_id, .. }
+            | Self::Nack { work_id, .. } => work_id,
         }
     }
 
@@ -106,6 +143,7 @@ impl LanWorkMessage {
             Self::Assign {
                 model_id,
                 assignment,
+                allow_sensitive_data,
                 ..
             } => {
                 if model_id != &work.model_id {
@@ -116,6 +154,9 @@ impl LanWorkMessage {
                 }
                 if !assignment.encrypted_transport || !work.encrypted_transport {
                     return Err("assignment LAN non chiffrée refusée".into());
+                }
+                if *allow_sensitive_data != work.allow_sensitive_data {
+                    return Err("politique de données sensibles LAN incohérente".into());
                 }
                 if assignment.shard_ids.is_empty()
                     || assignment
@@ -130,6 +171,65 @@ impl LanWorkMessage {
             Self::Ack { operation, .. } => {
                 if operation.trim().is_empty() {
                     return Err("opération LAN vide".into());
+                }
+            }
+            Self::Prefill {
+                request_id,
+                input_tokens,
+                kv_tokens,
+                ..
+            } => {
+                validate_request_id(request_id)?;
+                if !work.allow_sensitive_data {
+                    return Err("prefill LAN refusé sans politique sensible explicite".into());
+                }
+                if input_tokens.is_empty() || input_tokens.len() > 8192 {
+                    return Err("taille de prefill LAN invalide".into());
+                }
+                if *kv_tokens > 1_048_576 {
+                    return Err("budget KV LAN excessif".into());
+                }
+            }
+            Self::Decode {
+                request_id,
+                max_tokens,
+                ..
+            } => {
+                validate_request_id(request_id)?;
+                if *max_tokens == 0 || *max_tokens > 8192 {
+                    return Err("budget de décodage LAN invalide".into());
+                }
+            }
+            Self::TokenBatch {
+                request_id,
+                tokens,
+                finished,
+                ..
+            } => {
+                validate_request_id(request_id)?;
+                if tokens.len() > 8192 || (tokens.is_empty() && !finished) {
+                    return Err("batch de tokens LAN invalide".into());
+                }
+                if !work.allow_sensitive_data {
+                    return Err("tokens LAN refusés sans politique sensible explicite".into());
+                }
+            }
+            Self::KvPage {
+                request_id, data, ..
+            } => {
+                validate_request_id(request_id)?;
+                if data.is_empty() || data.len() > 1_048_576 {
+                    return Err("page KV LAN invalide".into());
+                }
+                if !work.allow_sensitive_data {
+                    return Err("KV LAN refusé sans politique sensible explicite".into());
+                }
+            }
+            Self::Nack {
+                operation, reason, ..
+            } => {
+                if operation.trim().is_empty() || reason.trim().is_empty() {
+                    return Err("refus LAN incomplet".into());
                 }
             }
         }
@@ -165,6 +265,13 @@ impl LanWorkMessage {
     }
 }
 
+fn validate_request_id(request_id: &str) -> Result<(), String> {
+    if request_id.trim().is_empty() || request_id.len() > 128 {
+        return Err("identifiant de requête LAN invalide".into());
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum LanJobState {
@@ -198,12 +305,13 @@ pub struct LanWorkerJob {
     pub model_id: String,
     pub shard_ids: Vec<u32>,
     pub kv_tokens: u32,
+    pub allow_sensitive_data: bool,
     pub state: LanWorkerJobState,
 }
 
-/// Runtime state owned by a model worker. This is deliberately limited to
-/// the authenticated control plane: actual weight loading and token/KV
-/// transfer remain a separate data-plane feature.
+/// Runtime state owned by a model worker. Assignment/cancellation state is
+/// available now; model weight loading and token/KV execution are separate
+/// runtime capabilities layered on top of the typed data-plane contract.
 #[derive(Debug, Clone, Default)]
 pub struct LanWorkerRegistry {
     jobs: HashMap<String, LanWorkerJob>,
@@ -217,6 +325,7 @@ impl LanWorkerRegistry {
         model_id: String,
         assignment: LanShardAssignment,
         work_id: String,
+        allow_sensitive_data: bool,
     ) -> Result<(), String> {
         if assignment.node_id != local_node_id {
             return Err("assignment LAN destinée à un autre worker".into());
@@ -237,6 +346,7 @@ impl LanWorkerRegistry {
                 model_id,
                 shard_ids: assignment.shard_ids,
                 kv_tokens: assignment.kv_tokens,
+                allow_sensitive_data,
                 state: LanWorkerJobState::Assigned,
             },
         );
@@ -822,10 +932,8 @@ impl LanTcpTransport {
             LanWorkMessage::Hello { node_id, .. } if node_id != &self.channel.local_node_id => {
                 return Err("identité LAN locale inattendue".into());
             }
-            LanWorkMessage::Assign { .. } => {
-                message.validate_for(work, &self.channel.peer_node_id)?
-            }
-            _ => {}
+            LanWorkMessage::Hello { .. } => {}
+            _ => message.validate_for(work, &self.channel.peer_node_id)?,
         }
         let mut encoded = Vec::new();
         ciborium::into_writer(message, &mut encoded)
@@ -1180,6 +1288,7 @@ mod tests {
                 kv_tokens: 128,
                 encrypted_transport: true,
             },
+            allow_sensitive_data: false,
         };
         let mut encoded = Vec::new();
         ciborium::into_writer(&assignment, &mut encoded).unwrap();
@@ -1208,6 +1317,7 @@ mod tests {
                     encrypted_transport: true,
                 },
                 "work-1".into(),
+                false,
             )
             .unwrap();
         assert_eq!(worker.get("work-1").unwrap().shard_ids, vec![3, 4]);
@@ -1229,8 +1339,57 @@ mod tests {
                     encrypted_transport: true,
                 },
                 "work-2".into(),
+                false,
             )
             .is_err());
+    }
+
+    #[test]
+    fn data_plane_exige_une_politique_et_borne_les_payloads() {
+        let private_work = DistributedWork {
+            work_id: "data-work".into(),
+            model_id: "model-1".into(),
+            shard_ids: vec![1],
+            allow_sensitive_data: false,
+            encrypted_transport: true,
+        };
+        let prefill = LanWorkMessage::Prefill {
+            work_id: "data-work".into(),
+            request_id: "req-1".into(),
+            input_tokens: vec![1, 2, 3],
+            kv_tokens: 128,
+        };
+        assert!(prefill.validate_for(&private_work, "n1").is_err());
+
+        let sensitive_work = DistributedWork {
+            allow_sensitive_data: true,
+            ..private_work
+        };
+        assert!(prefill.validate_for(&sensitive_work, "n1").is_ok());
+        assert!(LanWorkMessage::Prefill {
+            work_id: "data-work".into(),
+            request_id: "req-1".into(),
+            input_tokens: Vec::new(),
+            kv_tokens: 128,
+        }
+        .validate_for(&sensitive_work, "n1")
+        .is_err());
+        assert!(LanWorkMessage::KvPage {
+            work_id: "data-work".into(),
+            request_id: "req-1".into(),
+            page_index: 0,
+            data: vec![0; 1_048_577],
+            final_page: true,
+        }
+        .validate_for(&sensitive_work, "n1")
+        .is_err());
+        assert!(LanWorkMessage::Nack {
+            work_id: "data-work".into(),
+            operation: String::new(),
+            reason: "refus".into(),
+        }
+        .validate_for(&sensitive_work, "n1")
+        .is_err());
     }
 
     #[tokio::test]
@@ -1351,6 +1510,7 @@ mod tests {
                         kv_tokens: 0,
                         encrypted_transport: true,
                     },
+                    allow_sensitive_data: false,
                 },
                 &work,
             )
@@ -1443,6 +1603,7 @@ mod tests {
                         kv_tokens: 64,
                         encrypted_transport: true,
                     },
+                    allow_sensitive_data: false,
                 },
                 &work,
             )

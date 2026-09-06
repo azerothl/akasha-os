@@ -255,6 +255,7 @@ async fn send_lan_assignments(
             work_id: work.work_id.clone(),
             model_id: work.model_id.clone(),
             assignment: assignment.clone(),
+            allow_sensitive_data: work.allow_sensitive_data,
         };
         match transport.send_message(&message, work).await {
             Ok(()) => match transport.receive_message(work).await {
@@ -301,18 +302,20 @@ async fn handle_lan_worker_connection(
             work_id,
             model_id,
             assignment,
+            allow_sensitive_data,
         } => {
             let work = DistributedWork {
                 work_id: work_id.clone(),
                 model_id: model_id.clone(),
                 shard_ids: assignment.shard_ids.clone(),
-                allow_sensitive_data: false,
+                allow_sensitive_data,
                 encrypted_transport: true,
             };
             LanWorkMessage::Assign {
                 work_id: work_id.clone(),
                 model_id: model_id.clone(),
                 assignment: assignment.clone(),
+                allow_sensitive_data,
             }
             .validate_for(&work, &local_node_id)?;
             worker_registry
@@ -324,6 +327,7 @@ async fn handle_lan_worker_connection(
                     model_id,
                     assignment,
                     work_id.clone(),
+                    allow_sensitive_data,
                 )?;
             transport
                 .send_message(
@@ -368,6 +372,48 @@ async fn handle_lan_worker_connection(
                             )
                             .await?;
                         return Ok(());
+                    }
+                    message @ LanWorkMessage::Prefill { .. } => {
+                        message.validate_for(&work, transport.peer_node_id())?;
+                        transport
+                            .send_message(
+                                &LanWorkMessage::Nack {
+                                    work_id: work_id.clone(),
+                                    operation: "prefill".into(),
+                                    reason: "exécuteur data-plane LAN non configuré".into(),
+                                },
+                                &work,
+                            )
+                            .await?;
+                    }
+                    message @ LanWorkMessage::Decode { .. } => {
+                        message.validate_for(&work, transport.peer_node_id())?;
+                        transport
+                            .send_message(
+                                &LanWorkMessage::Nack {
+                                    work_id: work_id.clone(),
+                                    operation: "decode".into(),
+                                    reason: "exécuteur data-plane LAN non configuré".into(),
+                                },
+                                &work,
+                            )
+                            .await?;
+                    }
+                    message @ LanWorkMessage::KvPage { .. } => {
+                        message.validate_for(&work, transport.peer_node_id())?;
+                        transport
+                            .send_message(
+                                &LanWorkMessage::Nack {
+                                    work_id: work_id.clone(),
+                                    operation: "kv-page".into(),
+                                    reason: "transfert KV LAN non configuré".into(),
+                                },
+                                &work,
+                            )
+                            .await?;
+                    }
+                    LanWorkMessage::TokenBatch { .. } => {
+                        return Err("batch de tokens LAN reçu dans le mauvais sens".into());
                     }
                     _ => return Err("message LAN worker inattendu".into()),
                 }
@@ -885,9 +931,22 @@ async fn main() {
                         work_id: work.work_id.clone(),
                         model_id: work.model_id.clone(),
                         assignment: assignment.clone(),
+                        allow_sensitive_data: work.allow_sensitive_data,
                     };
                     match transport.send_message(&message, &work).await {
-                        Ok(()) => dispatched_nodes.push(assignment.node_id.clone()),
+                        Ok(()) => match transport.receive_message(&work).await {
+                            Ok(LanWorkMessage::Ack { operation, .. }) if operation == "assign" => {
+                                dispatched_nodes.push(assignment.node_id.clone())
+                            }
+                            Ok(other) => errors.push(format!(
+                                "{}: réponse LAN inattendue après assignment: {other:?}",
+                                assignment.node_id
+                            )),
+                            Err(error) => errors.push(format!(
+                                "{}: accusé assignment LAN absent: {error}",
+                                assignment.node_id
+                            )),
+                        },
                         Err(error) => errors.push(format!("{}: {error}", assignment.node_id)),
                     }
                 }
