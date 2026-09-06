@@ -472,6 +472,16 @@ pub struct LanClusterPairRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanClusterDiscoverRequest {
+    pub node_id: String,
+    pub display_name: String,
+    pub address: String,
+    pub public_key_fingerprint: String,
+    #[serde(default)]
+    pub capabilities: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LanClusterNodeRequest {
     pub node_id: String,
 }

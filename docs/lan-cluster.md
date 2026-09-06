@@ -1,0 +1,68 @@
+# LAN cluster configuration
+
+The LAN cluster is experimental and disabled by default. It only uses nodes
+that you add and explicitly pair; it never discovers or contacts Internet
+peers.
+
+## Configure it in the UI
+
+1. Open **Settings → Models** and enable **LAN cluster**.
+2. Set the local node identity, the advertised listener address, and the name
+   of the session-key secret. The default secret name is
+   `lan_cluster_session_key`.
+3. Open **Settings → Secrets vault**, enter a random 32-byte key as exactly 64
+   hexadecimal characters, and save it under that secret name. The value is
+   write-only in the UI.
+4. In the LAN cluster section, enter the remote node ID, display name, LAN
+   address (`192.168.x.y:port`, loopback and link-local addresses are also
+   accepted), and its public-key fingerprint.
+5. Select **Add node**, then select **Pair** after checking the fingerprint.
+   **Revoke** immediately excludes a node from future work.
+
+The local identity, announced address and secret name are stored in the local
+preferences file. The node inventory and trust state are persisted in
+`var/run/lan-pairing.json`.
+
+## Key and pairing rules
+
+- Use a different random session key for each trusted LAN group.
+- Never paste a prompt, model, or private key into the node fingerprint field.
+- A changed fingerprint for an existing node is rejected.
+- A node is not eligible for work until it is paired.
+- Revocation is fail-closed and survives a restart.
+
+## Current execution boundary
+
+`model.cluster.plan` computes the shard plan. The explicit internal
+`model.cluster.dispatch` service can send typed, encrypted assignments to a
+paired worker when the worker listener and session key are available.
+`model.cluster.recover` can resend the updated assignments after a reported
+node loss, and `model.cluster.cancel` propagates cancellation when supplied
+the session-key secret name.
+
+`aos-modeld` does not bind a LAN listener automatically. Weight loading,
+remote shard execution, token routing and KV-cache transfer still require the
+worker-side execution integration. Until that integration is enabled, local
+CPU/GPU inference remains the default and no data leaves the machine.
+
+## YAML inventory (optional)
+
+The same nodes may be seeded in the model daemon configuration:
+
+```yaml
+lan_cluster:
+  enabled: false
+  local_node_id: local
+  listen_address: 127.0.0.1:9001
+  session_key_secret: lan_cluster_session_key
+  nodes:
+    - node_id: worker-1
+      display_name: Office worker
+      address: 192.168.1.20:9001
+      public_key_fingerprint: sha256:replace-with-verified-fingerprint
+      trust: unpaired
+      capabilities: []
+```
+
+Keep `enabled: false` until the pairing and worker-side validation have been
+tested on the intended LAN.

@@ -91,6 +91,7 @@ cargo run -p aos-session --release
 | [docs/FIRST-RUN.md](docs/FIRST-RUN.md) | First-run guide |
 | [docs/functional-specs.md](docs/functional-specs.md) | Functional requirements |
 | [docs/technical-specs.md](docs/technical-specs.md) | Architecture & APIs |
+| [docs/lan-cluster.md](docs/lan-cluster.md) | Configure and validate the experimental LAN cluster |
 | [docs/development-plan.md](docs/development-plan.md) | Phase plan |
 | [docs/vision.md](docs/vision.md) | Product vision |
 | [docs/competitive-landscape.md](docs/competitive-landscape.md) | Agentic OS landscape vs Akasha OS |

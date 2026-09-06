@@ -952,6 +952,7 @@ If step 3 partially fails → degraded mode with clear messages; direct shell re
 | `model.cluster.recover` | Reassign shards after a reported node loss and optionally propagate new assignments with a session-key secret |
 | `model.cluster.cancel` | Cancel a LAN job and propagate cancellation through the encrypted transport; requires a session-key secret |
 | `model.cluster.nodes` | List configured nodes and their trust state |
+| `model.cluster.discover` | Add or update a LAN node advertisement without pairing it |
 | `model.cluster.pair` | Persist an explicit fingerprint-confirmed pairing |
 | `model.cluster.revoke` | Persist immediate node revocation |
 | `model.load` | Charge with investment profile |

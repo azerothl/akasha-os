@@ -6,15 +6,16 @@ use aos_ipc::{BusClient, BusService, StreamHandle};
 use aos_model::{media, providers, ModelSubsystem, ModeldConfig};
 use aos_placement::{
     BackendKind, DistributedWork, InferencePlanDiagnostic, LanCluster, LanNode, LanPairingRegistry,
-    LanSessionKey, LanTcpTransport, LanWorkMessage, LanWorkPlan, PlacementProfile, ThermalPolicy,
+    LanSessionKey, LanTcpTransport, LanWorkMessage, LanWorkPlan, NodeTrust, PlacementProfile,
+    ThermalPolicy,
 };
 use aos_proto::{
-    CancelRequest, InferRequest, LanClusterAssignment, LanClusterDispatchRequest,
-    LanClusterDispatchResponse, LanClusterJobRequest, LanClusterNode, LanClusterNodeRequest,
-    LanClusterNodesResponse, LanClusterPairRequest, LanClusterPlanRequest, LanClusterPlanResponse,
-    LoadRequest, MediaAudioGenerateRequest, MediaImageGenerateRequest, MediaImageUpscaleRequest,
-    MigrateRequest, ModelIdRequest, ModelPlanDiagnostic, ModelPlanRequest, TokenEvent,
-    UnloadRequest,
+    CancelRequest, InferRequest, LanClusterAssignment, LanClusterDiscoverRequest,
+    LanClusterDispatchRequest, LanClusterDispatchResponse, LanClusterJobRequest, LanClusterNode,
+    LanClusterNodeRequest, LanClusterNodesResponse, LanClusterPairRequest, LanClusterPlanRequest,
+    LanClusterPlanResponse, LoadRequest, MediaAudioGenerateRequest, MediaImageGenerateRequest,
+    MediaImageUpscaleRequest, MigrateRequest, ModelIdRequest, ModelPlanDiagnostic,
+    ModelPlanRequest, TokenEvent, UnloadRequest,
 };
 use aos_registry::ModelRegistry;
 use std::sync::{Arc, Mutex};
@@ -428,6 +429,78 @@ async fn main() {
                     Err(error) => {
                         let _ = ctx
                             .respond_error(aos_ipc::msg::Status::InternalError, &error)
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let cluster = lan_cluster.clone();
+        let preference_home = preference_home.clone();
+        svc.on("model.cluster.discover", move |ctx| {
+            let cluster = cluster.clone();
+            let preference_home = preference_home.clone();
+            async move {
+                match ctx.payload::<LanClusterDiscoverRequest>() {
+                    Ok(req) => {
+                        let address_valid = req
+                            .address
+                            .parse::<std::net::SocketAddr>()
+                            .map(|address| {
+                                address.ip().is_loopback()
+                                    || match address.ip() {
+                                        std::net::IpAddr::V4(ip) => {
+                                            ip.is_private() || ip.is_link_local()
+                                        }
+                                        std::net::IpAddr::V6(ip) => {
+                                            (ip.segments()[0] & 0xfe00) == 0xfc00
+                                                || (ip.segments()[0] & 0xffc0) == 0xfe80
+                                        }
+                                    }
+                            })
+                            .unwrap_or(false);
+                        if req.node_id.trim().is_empty()
+                            || req.display_name.trim().is_empty()
+                            || req.public_key_fingerprint.trim().is_empty()
+                            || !address_valid
+                        {
+                            let _ = ctx
+                                .respond_error(
+                                    aos_ipc::msg::Status::BadRequest,
+                                    "identité, empreinte ou adresse LAN invalide",
+                                )
+                                .await;
+                            return;
+                        }
+                        let result = cluster
+                            .lock()
+                            .map_err(|_| "verrou cluster indisponible".to_string())
+                            .and_then(|mut cluster| {
+                                cluster.registry_mut().try_discover(LanNode {
+                                    node_id: req.node_id,
+                                    display_name: req.display_name,
+                                    address: req.address,
+                                    public_key_fingerprint: req.public_key_fingerprint,
+                                    trust: NodeTrust::Unpaired,
+                                    capabilities: req.capabilities,
+                                })?;
+                                persist_lan_registry(cluster.registry(), &preference_home)
+                            });
+                        match result {
+                            Ok(()) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &true).await;
+                            }
+                            Err(error) => {
+                                let _ = ctx
+                                    .respond_error(aos_ipc::msg::Status::BadRequest, &error)
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
                             .await;
                     }
                 }

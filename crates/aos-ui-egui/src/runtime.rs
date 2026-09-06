@@ -2508,6 +2508,35 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 }
             }
         }
+        Cmd::ModelClusterDiscover {
+            node_id,
+            display_name,
+            address,
+            public_key_fingerprint,
+        } => {
+            match bus
+                .call::<aos_proto::LanClusterDiscoverRequest, bool>(
+                    "model.cluster.discover",
+                    &aos_proto::LanClusterDiscoverRequest {
+                        node_id,
+                        display_name,
+                        address,
+                        public_key_fingerprint,
+                        capabilities: Vec::new(),
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(_) => {
+                    let _ = evt_tx.send(Evt::Status("LAN node added; pair it to trust it".into()));
+                    let _ = evt_tx.send(Evt::ModelClusterRefresh);
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::ModelClusterOperationFailed(e.to_string()));
+                }
+            }
+        }
         Cmd::ModelClusterPair {
             node_id,
             public_key_fingerprint,

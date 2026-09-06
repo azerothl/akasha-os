@@ -375,6 +375,120 @@ impl UiApp {
                             self.status = format!("{} — {}", t.settings_saved, t.lan_cluster_hint);
                         }
                         ui.label(t.lan_cluster_hint);
+                        egui::Grid::new("settings_lan_local")
+                            .num_columns(2)
+                            .spacing([12.0, 6.0])
+                            .show(ui, |ui| {
+                                ui.label(t.lan_local_identity);
+                                if ui
+                                    .add(
+                                        egui::TextEdit::singleline(&mut self.prefs.lan_node_id)
+                                            .desired_width(220.0),
+                                    )
+                                    .changed()
+                                {
+                                    save_preferences(&self.prefs);
+                                }
+                                ui.end_row();
+
+                                ui.label(t.lan_listen_address);
+                                if ui
+                                    .add(
+                                        egui::TextEdit::singleline(
+                                            &mut self.prefs.lan_listen_address,
+                                        )
+                                        .desired_width(220.0)
+                                        .hint_text("127.0.0.1:9001"),
+                                    )
+                                    .changed()
+                                {
+                                    save_preferences(&self.prefs);
+                                }
+                                ui.end_row();
+
+                                ui.label(t.lan_session_secret);
+                                if ui
+                                    .add(
+                                        egui::TextEdit::singleline(
+                                            &mut self.prefs.lan_session_key_secret,
+                                        )
+                                        .desired_width(220.0)
+                                        .hint_text("lan_cluster_session_key"),
+                                    )
+                                    .changed()
+                                {
+                                    save_preferences(&self.prefs);
+                                }
+                                ui.end_row();
+                            });
+                        ui.weak(t.lan_session_secret_hint);
+
+                        egui::Grid::new("settings_lan_add_node")
+                            .num_columns(2)
+                            .spacing([12.0, 6.0])
+                            .show(ui, |ui| {
+                                ui.label(t.lan_node_id);
+                                ui.add(
+                                    egui::TextEdit::singleline(
+                                        &mut self.settings_ui.lan_node_id,
+                                    )
+                                    .desired_width(220.0),
+                                );
+                                ui.end_row();
+
+                                ui.label(t.lan_node_name);
+                                ui.add(
+                                    egui::TextEdit::singleline(
+                                        &mut self.settings_ui.lan_node_name,
+                                    )
+                                    .desired_width(220.0),
+                                );
+                                ui.end_row();
+
+                                ui.label(t.lan_node_address);
+                                ui.add(
+                                    egui::TextEdit::singleline(
+                                        &mut self.settings_ui.lan_node_address,
+                                    )
+                                    .desired_width(220.0)
+                                    .hint_text("192.168.1.20:9001"),
+                                );
+                                ui.end_row();
+
+                                ui.label(t.lan_node_fingerprint);
+                                ui.add(
+                                    egui::TextEdit::singleline(
+                                        &mut self.settings_ui.lan_node_fingerprint,
+                                    )
+                                    .desired_width(220.0),
+                                );
+                                ui.end_row();
+                            });
+                        if ui.button(t.lan_add_node).clicked() {
+                            let node_id = self.settings_ui.lan_node_id.trim().to_string();
+                            let display_name = self.settings_ui.lan_node_name.trim().to_string();
+                            let address = self.settings_ui.lan_node_address.trim().to_string();
+                            let public_key_fingerprint =
+                                self.settings_ui.lan_node_fingerprint.trim().to_string();
+                            if node_id.is_empty()
+                                || display_name.is_empty()
+                                || address.is_empty()
+                                || public_key_fingerprint.is_empty()
+                            {
+                                self.status = t.lan_node_fields_required.to_string();
+                            } else {
+                                let _ = self.cmd_tx.send(Cmd::ModelClusterDiscover {
+                                    node_id,
+                                    display_name,
+                                    address,
+                                    public_key_fingerprint,
+                                });
+                                self.settings_ui.lan_node_id.clear();
+                                self.settings_ui.lan_node_name.clear();
+                                self.settings_ui.lan_node_address.clear();
+                                self.settings_ui.lan_node_fingerprint.clear();
+                            }
+                        }
                         if ui.button(t.lan_refresh).clicked() {
                             let _ = self.cmd_tx.send(Cmd::ModelClusterNodes);
                         }
@@ -589,6 +703,7 @@ impl UiApp {
                                 }
                             });
                             ui.end_row();
+
                         });
                 });
         }
@@ -826,6 +941,27 @@ impl UiApp {
                                         value: self.settings_ui.secret_openai.clone(),
                                     });
                                     self.settings_ui.secret_openai.clear();
+                                }
+                            });
+                            ui.end_row();
+
+                            ui.label(t.lan_session_value);
+                            ui.horizontal(|ui| {
+                                ui.add(
+                                    egui::TextEdit::singleline(
+                                        &mut self.settings_ui.secret_lan_session,
+                                    )
+                                    .password(true)
+                                    .desired_width(220.0)
+                                    .hint_text("64 hex characters"),
+                                );
+                                if ui.button(t.settings_secret_save).clicked() {
+                                    let name = self.prefs.lan_session_key_secret.clone();
+                                    let _ = self.cmd_tx.send(Cmd::SecretSet {
+                                        name,
+                                        value: self.settings_ui.secret_lan_session.clone(),
+                                    });
+                                    self.settings_ui.secret_lan_session.clear();
                                 }
                             });
                             ui.end_row();

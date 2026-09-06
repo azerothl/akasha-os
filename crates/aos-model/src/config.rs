@@ -62,6 +62,12 @@ pub struct ModeldConfig {
 pub struct LanClusterConfig {
     #[serde(default)]
     pub enabled: bool,
+    #[serde(default = "default_lan_node_id")]
+    pub local_node_id: String,
+    #[serde(default = "default_lan_listen_address")]
+    pub listen_address: String,
+    #[serde(default = "default_lan_session_secret")]
+    pub session_key_secret: String,
     #[serde(default)]
     pub nodes: Vec<LanNode>,
 }
@@ -162,6 +168,15 @@ fn default_min_quality() -> f32 {
 fn default_thermal_policy() -> String {
     "balanced".into()
 }
+fn default_lan_node_id() -> String {
+    "local".into()
+}
+fn default_lan_listen_address() -> String {
+    "127.0.0.1:9001".into()
+}
+fn default_lan_session_secret() -> String {
+    "lan_cluster_session_key".into()
+}
 
 impl ModeldConfig {
     /// UI preferences take effect on the next load, without restarting modeld.
@@ -184,9 +199,37 @@ impl ModeldConfig {
             .unwrap_or(self.lan_cluster.enabled)
     }
 
+    pub fn lan_node_id_at(&self, home: &Path) -> String {
+        preference_string(home, "lan_node_id")
+            .unwrap_or_else(|| self.lan_cluster.local_node_id.clone())
+    }
+
+    pub fn lan_listen_address_at(&self, home: &Path) -> String {
+        preference_string(home, "lan_listen_address")
+            .unwrap_or_else(|| self.lan_cluster.listen_address.clone())
+    }
+
+    pub fn lan_session_key_secret_at(&self, home: &Path) -> String {
+        preference_string(home, "lan_session_key_secret")
+            .unwrap_or_else(|| self.lan_cluster.session_key_secret.clone())
+    }
+
     pub fn load(path: impl AsRef<Path>) -> Result<Self, Box<dyn std::error::Error>> {
         Ok(serde_yaml::from_str(&std::fs::read_to_string(path)?)?)
     }
+}
+
+fn preference_string(home: &Path, key: &str) -> Option<String> {
+    std::fs::read_to_string(home.join("var/run/preferences.json"))
+        .ok()
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+        .and_then(|value| {
+            value
+                .get(key)
+                .and_then(|value| value.as_str())
+                .map(str::to_owned)
+        })
+        .filter(|value| !value.trim().is_empty())
 }
 
 #[cfg(test)]

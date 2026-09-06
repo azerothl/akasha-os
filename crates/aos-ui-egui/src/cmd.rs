@@ -291,6 +291,12 @@ pub(crate) enum Cmd {
         kv_tokens: u32,
     },
     ModelClusterNodes,
+    ModelClusterDiscover {
+        node_id: String,
+        display_name: String,
+        address: String,
+        public_key_fingerprint: String,
+    },
     ModelClusterPair {
         node_id: String,
         public_key_fingerprint: String,
