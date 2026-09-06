@@ -6,14 +6,15 @@ use aos_ipc::{BusClient, BusService, StreamHandle};
 use aos_model::{media, providers, ModelSubsystem, ModeldConfig};
 use aos_placement::{
     BackendKind, DistributedWork, InferencePlanDiagnostic, LanCluster, LanNode, LanPairingRegistry,
-    LanWorkPlan, PlacementProfile, ThermalPolicy,
+    LanSessionKey, LanTcpTransport, LanWorkMessage, LanWorkPlan, PlacementProfile, ThermalPolicy,
 };
 use aos_proto::{
-    CancelRequest, InferRequest, LanClusterAssignment, LanClusterJobRequest, LanClusterNode,
-    LanClusterNodeRequest, LanClusterNodesResponse, LanClusterPairRequest, LanClusterPlanRequest,
-    LanClusterPlanResponse, LoadRequest, MediaAudioGenerateRequest, MediaImageGenerateRequest,
-    MediaImageUpscaleRequest, MigrateRequest, ModelIdRequest, ModelPlanDiagnostic,
-    ModelPlanRequest, TokenEvent, UnloadRequest,
+    CancelRequest, InferRequest, LanClusterAssignment, LanClusterDispatchRequest,
+    LanClusterDispatchResponse, LanClusterJobRequest, LanClusterNode, LanClusterNodeRequest,
+    LanClusterNodesResponse, LanClusterPairRequest, LanClusterPlanRequest, LanClusterPlanResponse,
+    LoadRequest, MediaAudioGenerateRequest, MediaImageGenerateRequest, MediaImageUpscaleRequest,
+    MigrateRequest, ModelIdRequest, ModelPlanDiagnostic, ModelPlanRequest, TokenEvent,
+    UnloadRequest,
 };
 use aos_registry::ModelRegistry;
 use std::sync::{Arc, Mutex};
@@ -98,6 +99,7 @@ fn lan_plan_response(
         unassigned_shards: plan.unassigned_shards.clone(),
         reassigned_shards,
         cancelled_nodes,
+        errors: Vec::new(),
     }
 }
 
@@ -138,6 +140,119 @@ fn lan_node_info(node: &LanNode) -> LanClusterNode {
         trust: format!("{:?}", node.trust).to_ascii_lowercase(),
         capabilities: node.capabilities.clone(),
     }
+}
+
+fn parse_lan_session_key(raw: &str) -> Result<LanSessionKey, String> {
+    let raw = raw.trim();
+    if raw.len() != 64 {
+        return Err("la clé de session LAN doit contenir 64 caractères hexadécimaux".into());
+    }
+    let mut bytes = [0u8; 32];
+    for (index, chunk) in raw.as_bytes().chunks_exact(2).enumerate() {
+        let high = (chunk[0] as char)
+            .to_digit(16)
+            .ok_or("clé de session LAN non hexadécimale")?;
+        let low = (chunk[1] as char)
+            .to_digit(16)
+            .ok_or("clé de session LAN non hexadécimale")?;
+        bytes[index] = ((high << 4) | low) as u8;
+    }
+    LanSessionKey::from_bytes(&bytes)
+}
+
+async fn load_lan_session_key(bus: &BusClient, secret_name: &str) -> Result<LanSessionKey, String> {
+    let secret = bus
+        .call::<aos_proto::SecretGetRequest, String>(
+            "secrets.get",
+            &aos_proto::SecretGetRequest {
+                name: secret_name.to_string(),
+                actor: "service:modeld".into(),
+            },
+            vec![],
+        )
+        .await
+        .map_err(|error| format!("clé LAN indisponible: {error}"))?;
+    parse_lan_session_key(&secret)
+}
+
+async fn send_lan_cancel(
+    registry: &LanPairingRegistry,
+    work: &DistributedWork,
+    node_ids: &[String],
+    key: LanSessionKey,
+) -> Vec<String> {
+    let mut errors = Vec::new();
+    for node_id in node_ids {
+        let Some(node) = registry.get(node_id) else {
+            errors.push(format!("{node_id}: nœud inconnu"));
+            continue;
+        };
+        let mut transport = match LanTcpTransport::connect_authenticated(
+            "coordinator",
+            node_id,
+            &node.address,
+            registry,
+            work,
+            key.clone(),
+        )
+        .await
+        {
+            Ok(transport) => transport,
+            Err(error) => {
+                errors.push(format!("{node_id}: {error}"));
+                continue;
+            }
+        };
+        let message = LanWorkMessage::Cancel {
+            work_id: work.work_id.clone(),
+        };
+        if let Err(error) = transport.send_message(&message, work).await {
+            errors.push(format!("{node_id}: {error}"));
+        }
+    }
+    errors
+}
+
+async fn send_lan_assignments(
+    registry: &LanPairingRegistry,
+    work: &DistributedWork,
+    assignments: &[aos_placement::LanShardAssignment],
+    key: LanSessionKey,
+) -> (Vec<String>, Vec<String>) {
+    let mut dispatched = Vec::new();
+    let mut errors = Vec::new();
+    for assignment in assignments {
+        let Some(node) = registry.get(&assignment.node_id) else {
+            errors.push(format!("{}: nœud inconnu", assignment.node_id));
+            continue;
+        };
+        let mut transport = match LanTcpTransport::connect_authenticated(
+            "coordinator",
+            &assignment.node_id,
+            &node.address,
+            registry,
+            work,
+            key.clone(),
+        )
+        .await
+        {
+            Ok(transport) => transport,
+            Err(error) => {
+                errors.push(format!("{}: {error}", assignment.node_id));
+                continue;
+            }
+        };
+        let message = LanWorkMessage::Assign {
+            work_id: work.work_id.clone(),
+            model_id: work.model_id.clone(),
+            assignment: assignment.clone(),
+        };
+        match transport.send_message(&message, work).await {
+            Ok(()) => dispatched.push(assignment.node_id.clone()),
+            Err(error) => errors.push(format!("{}: {error}", assignment.node_id)),
+        }
+    }
+    (dispatched, errors)
 }
 
 #[tokio::main]
@@ -321,6 +436,143 @@ async fn main() {
     }
     {
         let cluster = lan_cluster.clone();
+        let model_config = config.clone();
+        let preference_home = preference_home.clone();
+        let bus = bus.clone();
+        svc.on("model.cluster.dispatch", move |ctx| {
+            let cluster = cluster.clone();
+            let model_config = model_config.clone();
+            let preference_home = preference_home.clone();
+            let bus = bus.clone();
+            async move {
+                if !model_config.lan_cluster_enabled_at(&preference_home) {
+                    let _ = ctx
+                        .respond_error(
+                            aos_ipc::msg::Status::PermissionDenied,
+                            "cluster LAN désactivé",
+                        )
+                        .await;
+                    return;
+                }
+                let req = match ctx.payload::<LanClusterDispatchRequest>() {
+                    Ok(req) => req,
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                        return;
+                    }
+                };
+                let key = match load_lan_session_key(&bus, &req.session_key_secret).await {
+                    Ok(key) => key,
+                    Err(error) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::PermissionDenied, &error)
+                            .await;
+                        return;
+                    }
+                };
+                let work = DistributedWork {
+                    work_id: req.work_id,
+                    model_id: req.model_id,
+                    shard_ids: req.shard_ids,
+                    allow_sensitive_data: req.allow_sensitive_data,
+                    encrypted_transport: req.encrypted_transport,
+                };
+                let planned = cluster
+                    .lock()
+                    .map(|cluster| {
+                        cluster
+                            .job(&work.work_id)
+                            .cloned()
+                            .map(|plan| (plan, cluster.registry().clone()))
+                    })
+                    .map_err(|_| "verrou cluster indisponible".to_string());
+                let (plan, registry) = match planned {
+                    Ok(Some(planned)) => planned,
+                    Ok(None) => {
+                        let _ = ctx
+                            .respond_error(
+                                aos_ipc::msg::Status::NotFound,
+                                "travail LAN non planifié",
+                            )
+                            .await;
+                        return;
+                    }
+                    Err(error) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::InternalError, &error)
+                            .await;
+                        return;
+                    }
+                };
+
+                let mut dispatched_nodes = Vec::new();
+                let mut errors = Vec::new();
+                for assignment in &plan.assignments {
+                    let Some(node) = registry.get(&assignment.node_id) else {
+                        errors.push(format!("{}: nœud inconnu", assignment.node_id));
+                        continue;
+                    };
+                    let mut transport = match LanTcpTransport::connect_authenticated(
+                        "coordinator",
+                        &assignment.node_id,
+                        &node.address,
+                        &registry,
+                        &work,
+                        key.clone(),
+                    )
+                    .await
+                    {
+                        Ok(transport) => transport,
+                        Err(error) => {
+                            errors.push(format!("{}: {error}", assignment.node_id));
+                            continue;
+                        }
+                    };
+                    let message = LanWorkMessage::Assign {
+                        work_id: work.work_id.clone(),
+                        model_id: work.model_id.clone(),
+                        assignment: assignment.clone(),
+                    };
+                    match transport.send_message(&message, &work).await {
+                        Ok(()) => dispatched_nodes.push(assignment.node_id.clone()),
+                        Err(error) => errors.push(format!("{}: {error}", assignment.node_id)),
+                    }
+                }
+
+                let mut state = lan_state_name(plan.state);
+                if errors.is_empty() {
+                    match cluster.lock() {
+                        Ok(mut cluster) => match cluster.set_running(&work.work_id) {
+                            Ok(()) => state = "running".into(),
+                            Err(error) => errors.push(error),
+                        },
+                        Err(_) => errors.push("verrou cluster indisponible".into()),
+                    }
+                }
+                let response = LanClusterDispatchResponse {
+                    work_id: work.work_id,
+                    state,
+                    dispatched_nodes,
+                    errors,
+                    assignments: plan
+                        .assignments
+                        .iter()
+                        .map(|assignment| LanClusterAssignment {
+                            node_id: assignment.node_id.clone(),
+                            shard_ids: assignment.shard_ids.clone(),
+                            kv_tokens: assignment.kv_tokens,
+                            encrypted_transport: assignment.encrypted_transport,
+                        })
+                        .collect(),
+                };
+                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &response).await;
+            }
+        });
+    }
+    {
+        let cluster = lan_cluster.clone();
         let preference_home = preference_home.clone();
         svc.on("model.cluster.pair", move |ctx| {
             let cluster = cluster.clone();
@@ -451,10 +703,12 @@ async fn main() {
         let cluster = lan_cluster.clone();
         let model_config = config.clone();
         let preference_home = preference_home.clone();
+        let bus = bus.clone();
         svc.on("model.cluster.recover", move |ctx| {
             let cluster = cluster.clone();
             let model_config = model_config.clone();
             let preference_home = preference_home.clone();
+            let bus = bus.clone();
             async move {
                 if !model_config.lan_cluster_enabled_at(&preference_home) {
                     let _ = ctx
@@ -473,6 +727,45 @@ async fn main() {
                                 .await;
                             return;
                         };
+                        let dispatch_key = match (&req.session_key_secret, &req.model_id) {
+                            (Some(secret_name), Some(_))
+                                if !secret_name.trim().is_empty() =>
+                            {
+                                match load_lan_session_key(&bus, secret_name).await {
+                                    Ok(key) => Some(key),
+                                    Err(error) => {
+                                        let _ = ctx
+                                            .respond_error(
+                                                aos_ipc::msg::Status::PermissionDenied,
+                                                &error,
+                                            )
+                                            .await;
+                                        return;
+                                    }
+                                }
+                            }
+                            (None, None) => None,
+                            _ => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::BadRequest,
+                                        "model_id et session_key_secret doivent être fournis ensemble",
+                                    )
+                                    .await;
+                                return;
+                            }
+                        };
+                        if dispatch_key.is_some()
+                            && (req.shard_ids.is_empty() || !req.encrypted_transport)
+                        {
+                            let _ = ctx
+                                .respond_error(
+                                    aos_ipc::msg::Status::BadRequest,
+                                    "shard_ids et encrypted_transport sont requis pour propager la reprise",
+                                )
+                                .await;
+                            return;
+                        }
                         let result = cluster
                             .lock()
                             .map_err(|_| "verrou cluster indisponible".to_string())
@@ -482,11 +775,39 @@ async fn main() {
                                     .job(&req.work_id)
                                     .ok_or("travail LAN introuvable")?
                                     .clone();
-                                Ok((plan, recovery.reassigned_shards))
+                                Ok((
+                                    plan,
+                                    recovery.reassigned_shards,
+                                    cluster.registry().clone(),
+                                ))
                             });
                         match result {
-                            Ok((plan, reassigned)) => {
-                                let response = lan_plan_response(&plan, reassigned, Vec::new());
+                            Ok((plan, reassigned, registry)) => {
+                                let errors = if let (Some(key), Some(model_id)) =
+                                    (dispatch_key, req.model_id.as_ref())
+                                {
+                                    let work = DistributedWork {
+                                        work_id: req.work_id.clone(),
+                                        model_id: model_id.clone(),
+                                        shard_ids: req.shard_ids.clone(),
+                                        allow_sensitive_data: req.allow_sensitive_data,
+                                        encrypted_transport: req.encrypted_transport,
+                                    };
+                                    let (_, errors) =
+                                        send_lan_assignments(
+                                            &registry,
+                                            &work,
+                                            &plan.assignments,
+                                            key,
+                                        )
+                                        .await;
+                                    errors
+                                } else {
+                                    Vec::new()
+                                };
+                                let mut response =
+                                    lan_plan_response(&plan, reassigned, Vec::new());
+                                response.errors = errors;
                                 let _ = ctx.respond(aos_ipc::msg::Status::Ok, &response).await;
                             }
                             Err(error) => {
@@ -509,10 +830,12 @@ async fn main() {
         let cluster = lan_cluster.clone();
         let model_config = config.clone();
         let preference_home = preference_home.clone();
+        let bus = bus.clone();
         svc.on("model.cluster.cancel", move |ctx| {
             let cluster = cluster.clone();
             let model_config = model_config.clone();
             let preference_home = preference_home.clone();
+            let bus = bus.clone();
             async move {
                 if !model_config.lan_cluster_enabled_at(&preference_home) {
                     let _ = ctx
@@ -525,6 +848,28 @@ async fn main() {
                 }
                 match ctx.payload::<LanClusterJobRequest>() {
                     Ok(req) => {
+                        let Some(secret_name) = req
+                            .session_key_secret
+                            .as_deref()
+                            .filter(|name| !name.trim().is_empty())
+                        else {
+                            let _ = ctx
+                                .respond_error(
+                                    aos_ipc::msg::Status::BadRequest,
+                                    "session_key_secret requis pour propager l'annulation LAN",
+                                )
+                                .await;
+                            return;
+                        };
+                        let key = match load_lan_session_key(&bus, secret_name).await {
+                            Ok(key) => key,
+                            Err(error) => {
+                                let _ = ctx
+                                    .respond_error(aos_ipc::msg::Status::PermissionDenied, &error)
+                                    .await;
+                                return;
+                            }
+                        };
                         let result = cluster
                             .lock()
                             .map_err(|_| "verrou cluster indisponible".to_string())
@@ -534,12 +879,30 @@ async fn main() {
                                     .job(&req.work_id)
                                     .ok_or("travail LAN introuvable")?
                                     .clone();
-                                Ok((plan, cancellation.cancelled_nodes))
+                                Ok((
+                                    plan,
+                                    cancellation.cancelled_nodes,
+                                    cluster.registry().clone(),
+                                ))
                             });
                         match result {
-                            Ok((plan, cancelled_nodes)) => {
-                                let response =
+                            Ok((plan, cancelled_nodes, registry)) => {
+                                let work = DistributedWork {
+                                    work_id: req.work_id.clone(),
+                                    model_id: String::new(),
+                                    shard_ids: plan
+                                        .assignments
+                                        .iter()
+                                        .flat_map(|assignment| assignment.shard_ids.iter().copied())
+                                        .collect(),
+                                    allow_sensitive_data: false,
+                                    encrypted_transport: true,
+                                };
+                                let errors =
+                                    send_lan_cancel(&registry, &work, &cancelled_nodes, key).await;
+                                let mut response =
                                     lan_plan_response(&plan, Vec::new(), cancelled_nodes);
+                                response.errors = errors;
                                 let _ = ctx.respond(aos_ipc::msg::Status::Ok, &response).await;
                             }
                             Err(error) => {
@@ -1275,4 +1638,16 @@ async fn main() {
 
     eprintln!("[aos-modeld] prêt");
     let _ = svc.serve(&config.bus).await;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_lan_session_key;
+
+    #[test]
+    fn cle_lan_hex_est_strictement_validee() {
+        assert!(parse_lan_session_key(&"ab".repeat(32)).is_ok());
+        assert!(parse_lan_session_key(&"zz".repeat(32)).is_err());
+        assert!(parse_lan_session_key(&"ab".repeat(31)).is_err());
+    }
 }

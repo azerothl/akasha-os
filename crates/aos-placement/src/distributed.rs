@@ -135,6 +135,34 @@ impl LanWorkMessage {
         }
         Ok(())
     }
+
+    fn validate_received_for(
+        &self,
+        work: &DistributedWork,
+        local_node_id: &str,
+        peer_node_id: &str,
+    ) -> Result<(), String> {
+        match self {
+            Self::Hello {
+                node_id,
+                protocol_version,
+                ..
+            } => {
+                if self.work_id() != work.work_id {
+                    return Err("message LAN liée à un autre travail".into());
+                }
+                if node_id != peer_node_id {
+                    return Err("identité LAN annoncée inattendue".into());
+                }
+                if *protocol_version != 1 {
+                    return Err("version de protocole LAN non supportée".into());
+                }
+                Ok(())
+            }
+            Self::Assign { .. } => self.validate_for(work, local_node_id),
+            _ => self.validate_for(work, peer_node_id),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -418,6 +446,89 @@ pub struct LanTcpTransport {
     max_frame_bytes: usize,
 }
 
+/// Explicit listener for a paired LAN worker.
+///
+/// Binding is opt-in. The first message must be a typed `Hello` from the
+/// expected peer, and the listener answers with its own `Hello` before it
+/// hands the transport to the caller.
+pub struct LanTcpListener {
+    listener: tokio::net::TcpListener,
+    local_node_id: String,
+    registry: LanPairingRegistry,
+}
+
+impl LanTcpListener {
+    pub async fn bind(
+        local_node_id: impl Into<String>,
+        address: &str,
+        registry: &LanPairingRegistry,
+    ) -> Result<Self, String> {
+        let listener = tokio::net::TcpListener::bind(address)
+            .await
+            .map_err(|e| format!("listener LAN impossible: {e}"))?;
+        Ok(Self {
+            listener,
+            local_node_id: local_node_id.into(),
+            registry: registry.clone(),
+        })
+    }
+
+    pub fn local_addr(&self) -> Result<std::net::SocketAddr, String> {
+        self.listener
+            .local_addr()
+            .map_err(|e| format!("adresse du listener LAN indisponible: {e}"))
+    }
+
+    pub async fn accept_authenticated(
+        &self,
+        peer_node_id: &str,
+        work: &DistributedWork,
+        key: LanSessionKey,
+    ) -> Result<LanTcpTransport, String> {
+        self.registry.authorize(peer_node_id, work)?;
+        let registered_address = self
+            .registry
+            .get(peer_node_id)
+            .map(|node| node.address.as_str())
+            .ok_or("nœud LAN non appairé")?;
+        let registered_ip = registered_address
+            .parse::<std::net::SocketAddr>()
+            .map_err(|_| "adresse LAN appairée invalide".to_string())?
+            .ip();
+        let (stream, remote_address) = self
+            .listener
+            .accept()
+            .await
+            .map_err(|e| format!("accept LAN impossible: {e}"))?;
+        if remote_address.ip() != registered_ip {
+            return Err("adresse source LAN différente du nœud appairé".into());
+        }
+
+        let mut transport = LanTcpTransport::from_stream(
+            stream,
+            self.local_node_id.clone(),
+            peer_node_id,
+            work.work_id.clone(),
+            key,
+        );
+        let hello = transport.receive_message(work).await?;
+        if !matches!(hello, LanWorkMessage::Hello { .. }) {
+            return Err("handshake LAN sans message hello".into());
+        }
+        transport
+            .send_message(
+                &LanWorkMessage::Hello {
+                    work_id: work.work_id.clone(),
+                    node_id: self.local_node_id.clone(),
+                    protocol_version: 1,
+                },
+                work,
+            )
+            .await?;
+        Ok(transport)
+    }
+}
+
 impl LanTcpTransport {
     pub const DEFAULT_MAX_FRAME_BYTES: usize = 4 * 1024 * 1024;
 
@@ -447,6 +558,34 @@ impl LanTcpTransport {
             work.work_id.clone(),
             key,
         ))
+    }
+
+    pub async fn connect_authenticated(
+        local_node_id: impl Into<String>,
+        node_id: &str,
+        address: &str,
+        registry: &LanPairingRegistry,
+        work: &DistributedWork,
+        key: LanSessionKey,
+    ) -> Result<Self, String> {
+        let local_node_id = local_node_id.into();
+        let mut transport =
+            Self::connect(local_node_id.clone(), node_id, address, registry, work, key).await?;
+        transport
+            .send_message(
+                &LanWorkMessage::Hello {
+                    work_id: work.work_id.clone(),
+                    node_id: local_node_id,
+                    protocol_version: 1,
+                },
+                work,
+            )
+            .await?;
+        let hello = transport.receive_message(work).await?;
+        if !matches!(hello, LanWorkMessage::Hello { .. }) {
+            return Err("handshake LAN sans réponse hello".into());
+        }
+        Ok(transport)
     }
 
     pub fn from_stream(
@@ -538,7 +677,11 @@ impl LanTcpTransport {
         let plaintext = self.receive().await?;
         let message: LanWorkMessage = ciborium::from_reader(Cursor::new(plaintext))
             .map_err(|e| format!("décodage de message LAN: {e}"))?;
-        message.validate_for(work, &self.channel.peer_node_id)?;
+        message.validate_received_for(
+            work,
+            &self.channel.local_node_id,
+            &self.channel.peer_node_id,
+        )?;
         Ok(message)
     }
 }
@@ -898,6 +1041,85 @@ mod tests {
         .unwrap();
         client.send(b"hello").await.unwrap();
         assert_eq!(client.receive().await.unwrap(), b"ack");
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn listener_tcp_exige_un_handshake_et_un_noeud_appaire() {
+        let work = DistributedWork {
+            work_id: "work-handshake".into(),
+            model_id: "m".into(),
+            shard_ids: vec![1],
+            allow_sensitive_data: false,
+            encrypted_transport: true,
+        };
+        let key_bytes = [5; 32];
+        let server_key = LanSessionKey::from_bytes(&key_bytes).unwrap();
+        let client_key = LanSessionKey::from_bytes(&key_bytes).unwrap();
+
+        let mut server_registry = LanPairingRegistry::default();
+        server_registry.discover(LanNode {
+            node_id: "coordinator".into(),
+            display_name: "coordinator".into(),
+            address: "127.0.0.1:1".into(),
+            public_key_fingerprint: "coordinator-key".into(),
+            trust: NodeTrust::Unpaired,
+            capabilities: vec![],
+        });
+        server_registry
+            .pair("coordinator", "coordinator-key")
+            .unwrap();
+        let listener = LanTcpListener::bind("n1", "127.0.0.1:0", &server_registry)
+            .await
+            .unwrap();
+        let address = listener.local_addr().unwrap().to_string();
+
+        let server_work = work.clone();
+        let server = tokio::spawn(async move {
+            let mut transport = listener
+                .accept_authenticated("coordinator", &server_work, server_key)
+                .await
+                .unwrap();
+            let message = transport.receive_message(&server_work).await.unwrap();
+            assert!(matches!(message, LanWorkMessage::Assign { .. }));
+        });
+
+        let mut client_registry = LanPairingRegistry::default();
+        client_registry.discover(LanNode {
+            node_id: "n1".into(),
+            display_name: "worker".into(),
+            address: address.clone(),
+            public_key_fingerprint: "worker-key".into(),
+            trust: NodeTrust::Unpaired,
+            capabilities: vec![],
+        });
+        client_registry.pair("n1", "worker-key").unwrap();
+        let mut client = LanTcpTransport::connect_authenticated(
+            "coordinator",
+            "n1",
+            &address,
+            &client_registry,
+            &work,
+            client_key,
+        )
+        .await
+        .unwrap();
+        client
+            .send_message(
+                &LanWorkMessage::Assign {
+                    work_id: work.work_id.clone(),
+                    model_id: work.model_id.clone(),
+                    assignment: LanShardAssignment {
+                        node_id: "n1".into(),
+                        shard_ids: vec![1],
+                        kv_tokens: 0,
+                        encrypted_transport: true,
+                    },
+                },
+                &work,
+            )
+            .await
+            .unwrap();
         server.await.unwrap();
     }
 }

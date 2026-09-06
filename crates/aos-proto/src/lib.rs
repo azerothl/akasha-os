@@ -386,6 +386,18 @@ pub struct LanClusterJobRequest {
     pub work_id: String,
     #[serde(default)]
     pub node_id: Option<String>,
+    #[serde(default)]
+    pub session_key_secret: Option<String>,
+    #[serde(default)]
+    pub model_id: Option<String>,
+    #[serde(default)]
+    pub shard_ids: Vec<u32>,
+    #[serde(default)]
+    pub kv_tokens: u32,
+    #[serde(default)]
+    pub allow_sensitive_data: bool,
+    #[serde(default)]
+    pub encrypted_transport: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -407,6 +419,33 @@ pub struct LanClusterPlanResponse {
     pub reassigned_shards: Vec<u32>,
     #[serde(default)]
     pub cancelled_nodes: Vec<String>,
+    #[serde(default)]
+    pub errors: Vec<String>,
+}
+
+/// Dispatch is explicit and remains disabled unless the LAN cluster flag is on.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanClusterDispatchRequest {
+    pub work_id: String,
+    pub model_id: String,
+    pub shard_ids: Vec<u32>,
+    #[serde(default)]
+    pub kv_tokens: u32,
+    #[serde(default)]
+    pub allow_sensitive_data: bool,
+    pub encrypted_transport: bool,
+    /// Name of a secret containing exactly 64 hexadecimal characters.
+    pub session_key_secret: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanClusterDispatchResponse {
+    pub work_id: String,
+    pub state: String,
+    pub dispatched_nodes: Vec<String>,
+    #[serde(default)]
+    pub errors: Vec<String>,
+    pub assignments: Vec<LanClusterAssignment>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
