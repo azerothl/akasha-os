@@ -2581,6 +2581,11 @@ impl eframe::App for UiApp {
                     self.agent_ui.trust_edit.remove(&profile.agent_id);
                     self.agent_ui.trust.insert(profile.agent_id.clone(), profile);
                 }
+                // S6 phase 2 : politique par agent.
+                Evt::AgentPolicy { agent_id, policy } => {
+                    self.agent_ui.policy_edit.remove(&agent_id);
+                    self.agent_ui.policies.insert(agent_id, policy);
+                }
                 Evt::InferStarted {
                     session_id,
                     inference_id,

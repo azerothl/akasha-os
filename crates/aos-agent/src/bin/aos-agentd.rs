@@ -18,12 +18,13 @@ use aos_caps::{CapStore, HolderId};
 use aos_ipc::{BusClient, BusService};
 use aos_proto::{
     AgentCreateRequest, AgentCreateResponse, AgentIdRequest, AgentInfo, AgentKind,
-    AgentOutputEvent, AgentPromptOptimizeRequest, AgentPromptOptimizeResponse,
-    AgentRoomConductRequest, AgentRoomTurnRequest, AgentRosterUpdateRequest, AgentSpec,
-    AgentSpecResponse, AgentStartRequest, AgentState, AgentSteerRequest, AgentStepRecord,
-    AgentTrace, CapInfo, CapListRequest, CapMintRequest, CapMintResponse, ChatAttachment,
-    ChatMessage, ChatSessionAppendRequest, ChatSessionGetResponse, ChatSessionIdRequest,
-    ChatSessionRoomTurnCancelRequest, ChatSessionUpsertDeepPlanRequest, CancelRequest, CognitiveMode,
+    AgentOutputEvent, AgentPolicyGetRequest, AgentPolicySetRequest, AgentPromptOptimizeRequest,
+    AgentPromptOptimizeResponse, AgentRoomConductRequest, AgentRoomTurnRequest,
+    AgentRosterUpdateRequest, AgentSpec, AgentSpecResponse, AgentStartRequest, AgentState,
+    AgentSteerRequest, AgentStepRecord, AgentTrace, CapInfo, CapListRequest, CapMintRequest,
+    CapMintResponse, ChatAttachment, ChatMessage, ChatSessionAppendRequest, ChatSessionGetResponse,
+    ChatSessionIdRequest, ChatSessionRoomTurnCancelRequest, ChatSessionUpsertDeepPlanRequest,
+    CancelRequest, CognitiveMode,
     InferParams, InferRequest, McpServerInfo, PlanAppendLogRequest, PlanCreateRequest,
     PlanDelegateStepRequest, PlanGetRequest, PlanReplaceTreeRequest, PlanResponse,
     PlanUpdateStepRequest, SecretGetRequest, SkillInfo, TokenEvent,
@@ -471,6 +472,7 @@ fn roster_info_from_spec(spec: &AgentSpec) -> AgentInfo {
         mcp_servers: spec.mcp_servers.clone(),
         fail_reason: None,
         session_id: spec.session_id.clone(),
+        model_id: spec.model_id.clone(),
         title,
         kind: AgentKind::Roster,
         display_name: spec.display_name.clone(),
@@ -703,6 +705,7 @@ async fn spawn_worker(
                     mcp_servers: spec.mcp_servers.clone(),
                     fail_reason: None,
                     session_id: spec.session_id.clone(),
+                    model_id: spec.model_id.clone(),
                     title: persist::read_info(agent_id)
                         .map(|i| i.title)
                         .filter(|t| !t.is_empty())
@@ -996,6 +999,65 @@ async fn main() {
             let _ = ctx
                 .respond(aos_ipc::msg::Status::Ok, &AgentSpecResponse { spec })
                 .await;
+        });
+    }
+
+    // --- agent.policy.get / agent.policy.set (S6 phase 2) ---
+    {
+        svc.on(intents::POLICY_GET, move |ctx| async move {
+            let req: AgentPolicyGetRequest = match ctx.payload() {
+                Ok(r) => r,
+                Err(_) => {
+                    let _ = ctx
+                        .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                        .await;
+                    return;
+                }
+            };
+            let policy = persist::read_spec(&req.agent_id)
+                .and_then(|s| s.policy)
+                .unwrap_or_default();
+            let _ = ctx.respond(aos_ipc::msg::Status::Ok, &policy).await;
+        });
+    }
+    {
+        let bus2 = bus.clone();
+        svc.on(intents::POLICY_SET, move |ctx| {
+            let bus = bus2.clone();
+            async move {
+                let req: AgentPolicySetRequest = match ctx.payload() {
+                    Ok(r) => r,
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                        return;
+                    }
+                };
+                let Some(mut spec) = persist::read_spec(&req.agent_id) else {
+                    let _ = ctx
+                        .respond_error(aos_ipc::msg::Status::NotFound, "spec introuvable")
+                        .await;
+                    return;
+                };
+                spec.policy = Some(req.policy.clone());
+                if let Err(e) = persist::write_spec(&spec) {
+                    let _ = ctx
+                        .respond_error(aos_ipc::msg::Status::InternalError, &e.to_string())
+                        .await;
+                    return;
+                }
+                // Live si le worker tourne, sinon appliqué au (re)démarrage.
+                // Pas d'audit bus ici (aucun intent audit.append côté agentd) :
+                // le changement reste visible via UI (toast + statut).
+                let _ = send_control(
+                    &bus,
+                    &req.agent_id,
+                    &ControlCmd::SetPolicy { policy: req.policy },
+                )
+                .await;
+                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &true).await;
+            }
         });
     }
 

@@ -87,6 +87,7 @@ pub fn roster_spec_from_request(agent_id: &str, req: &AgentCreateRequest) -> Age
         documents: req.documents.clone(),
         caps: req.caps.clone(),
         model_id: req.model_id.clone(),
+        policy: req.policy.clone(),
         parent_id: req.parent_id.clone(),
         session_id: req.session_id.clone(),
         budget: req.budget.clone(),

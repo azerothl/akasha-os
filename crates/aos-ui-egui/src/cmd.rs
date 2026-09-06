@@ -285,6 +285,14 @@ pub(crate) enum Cmd {
     TrustReset {
         agent_id: String,
     },
+    /// S6 phase 2 : politique par agent (intents `agent.policy.*`).
+    AgentPolicyGet {
+        agent_id: String,
+    },
+    AgentPolicySet {
+        agent_id: String,
+        policy: aos_proto::AgentPolicy,
+    },
     /// S5 : navigateur de fichiers (intents `fs.*`).
     FilesList {
         prefix: String,
@@ -653,6 +661,11 @@ pub(crate) enum Evt {
     /// S6 : profil de confiance d'un agent.
     TrustProfile {
         profile: aos_proto::TrustProfile,
+    },
+    /// S6 phase 2 : politique d'un agent.
+    AgentPolicy {
+        agent_id: String,
+        policy: aos_proto::AgentPolicy,
     },
     MediaOk {
         kind: String,

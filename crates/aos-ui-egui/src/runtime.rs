@@ -41,8 +41,8 @@ use aos_proto::{
     ProviderListResponse, ProviderRecord, ProviderTestResponse, ProviderUpsertRequest,
     SecretListRequest, SecretListResponse, SecretSetRequest, SetRoutingRequest, SkillInfo,
     SkillPassPendingOffer, SkillPassRequest, SystemMetrics, TokenEvent, TrustGetRequest,
-    TrustProfile, TrustSetRequest, UnloadRequest,
-    UserLibraryAddRequest, UserLibraryAddResponse, UserLibraryListResponse,
+    TrustProfile, TrustSetRequest, UnloadRequest, AgentPolicyGetRequest, AgentPolicySetRequest,
+    AgentPolicy,    UserLibraryAddRequest, UserLibraryAddResponse, UserLibraryListResponse,
     UserLibraryRemoveRequest, UserLibraryRemoveResponse, WebBrowseRequest, WebBrowseResponse,
     WebSearchRequest, WebSearchResponse, CHAT_DELEGATION_PROMPT,
 };
@@ -2301,6 +2301,50 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(format!("trust.reset: {e}")));
+                }
+            }
+        }
+        // S6 phase 2 : politique par agent (application live si le worker tourne).
+        Cmd::AgentPolicyGet { agent_id } => {
+            match bus
+                .call::<AgentPolicyGetRequest, AgentPolicy>(
+                    aos_agent::intents::POLICY_GET,
+                    &AgentPolicyGetRequest { agent_id: agent_id.clone() },
+                    vec![],
+                )
+                .await
+            {
+                Ok(policy) => {
+                    let _ = evt_tx.send(Evt::AgentPolicy { agent_id, policy });
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(format!("agent.policy.get: {e}")));
+                }
+            }
+        }
+        Cmd::AgentPolicySet { agent_id, policy } => {
+            match bus
+                .call::<AgentPolicySetRequest, bool>(
+                    aos_agent::intents::POLICY_SET,
+                    &AgentPolicySetRequest { agent_id: agent_id.clone(), policy },
+                    vec![],
+                )
+                .await
+            {
+                Ok(_) => {
+                    if let Ok(policy) = bus
+                        .call::<AgentPolicyGetRequest, AgentPolicy>(
+                            aos_agent::intents::POLICY_GET,
+                            &AgentPolicyGetRequest { agent_id: agent_id.clone() },
+                            vec![],
+                        )
+                        .await
+                    {
+                        let _ = evt_tx.send(Evt::AgentPolicy { agent_id, policy });
+                    }
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(format!("agent.policy.set: {e}")));
                 }
             }
         }

@@ -1,7 +1,9 @@
 //! Mutable state owned by the Agents workspace.
 
 use crate::cmd::AgentNotice;
-use aos_proto::{AgentSpec, AgentState, AgentTrace, McpServerInfo, SkillInfo, TrustProfile};
+use aos_proto::{
+    AgentPolicy, AgentSpec, AgentState, AgentTrace, McpServerInfo, SkillInfo, TrustProfile,
+};
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
@@ -34,6 +36,45 @@ pub(crate) struct RosterEditDraft {
     pub(crate) tools: Vec<String>,
     pub(crate) mcp_servers: Vec<String>,
     pub(crate) model_id: String,
+}
+
+/// Brouillon d'édition de politique S6 phase 2 (avant Apply).
+#[derive(Clone, Debug, Default)]
+pub(crate) struct PolicyEditDraft {
+    pub(crate) net_deny: bool,
+    pub(crate) fs_write: bool,
+    pub(crate) restrict_tools: bool,
+    pub(crate) tools: Vec<String>,
+}
+
+impl PolicyEditDraft {
+    pub(crate) fn from_policy(policy: &AgentPolicy) -> Self {
+        Self {
+            net_deny: !matches!(
+                policy.net,
+                aos_proto::AgentNetPolicy::Allow
+            ),
+            fs_write: policy.fs_write,
+            restrict_tools: policy.tool_allowlist.is_some(),
+            tools: policy.tool_allowlist.clone().unwrap_or_default(),
+        }
+    }
+
+    pub(crate) fn to_policy(&self) -> AgentPolicy {
+        AgentPolicy {
+            net: if self.net_deny {
+                aos_proto::AgentNetPolicy::Deny
+            } else {
+                aos_proto::AgentNetPolicy::Allow
+            },
+            fs_write: self.fs_write,
+            tool_allowlist: if self.restrict_tools {
+                Some(self.tools.clone())
+            } else {
+                None
+            },
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -70,6 +111,10 @@ pub(crate) struct AgentUiState {
     pub(crate) trust: HashMap<String, TrustProfile>,
     /// S6 : score en cours d'édition par agent (slider avant Apply).
     pub(crate) trust_edit: HashMap<String, f32>,
+    /// S6 phase 2 : politiques effectives par agent (`agent.policy.get`).
+    pub(crate) policies: HashMap<String, AgentPolicy>,
+    /// S6 phase 2 : brouillons d'édition par agent.
+    pub(crate) policy_edit: HashMap<String, PolicyEditDraft>,
     /// Agent targeted for the next `user.ask` reply (multiple may be blocked).
     pub(crate) ask_reply_target: Option<String>,
     pub(crate) roster_edit_drafts: HashMap<String, RosterEditDraft>,
@@ -107,6 +152,8 @@ impl Default for AgentUiState {
             notified: HashSet::new(),
             trust: HashMap::new(),
             trust_edit: HashMap::new(),
+            policies: HashMap::new(),
+            policy_edit: HashMap::new(),
             ask_reply_target: None,
             roster_edit_drafts: HashMap::new(),
             document_prep_agents: HashMap::new(),
@@ -453,6 +500,7 @@ mod tests {
             documents: Vec::new(),
             caps: Vec::new(),
             model_id: Some("m1".into()),
+            policy: None,
             parent_id: None,
             session_id: None,
             budget: Default::default(),

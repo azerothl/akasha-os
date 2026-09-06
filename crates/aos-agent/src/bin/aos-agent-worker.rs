@@ -95,6 +95,8 @@ struct Shared {
     child_results: Mutex<HashMap<String, (String, bool)>>,
     /// Sous-agents déjà intégrés (évite un double inject après `agent.await`).
     consumed_child_results: Mutex<HashSet<String>>,
+    /// Politique S6 phase 2 (live via `ControlCmd::SetPolicy`, défaut = spec).
+    policy: Mutex<aos_proto::AgentPolicy>,
 }
 
 fn parse_args() -> (String, String, PathBuf, bool) {
@@ -275,6 +277,7 @@ async fn main() {
         cmd_tx: cmd_tx.clone(),
         child_results: Mutex::new(HashMap::new()),
         consumed_child_results: Mutex::new(HashSet::new()),
+        policy: Mutex::new(spec.policy.clone().unwrap_or_default()),
     });
 
     // Skills + tools + MCP + modules installés (catalogue dynamique)
@@ -375,6 +378,10 @@ async fn main() {
                         if !st.cap_set_snapshot.contains(&cap) {
                             st.cap_set_snapshot.push(cap.clone());
                         }
+                        ControlResp::Ack
+                    }
+                    ControlCmd::SetPolicy { policy } => {
+                        *shared.policy.lock().await = policy;
                         ControlResp::Ack
                     }
                     ControlCmd::ActDecision { act_id, approved } => {
@@ -2278,6 +2285,13 @@ async fn execute_action(
             ))
         }
         other => {
+            // S6 phase 2 : politique par agent (fail-closed, refus explicite).
+            {
+                let policy = shared.policy.lock().await;
+                if let Some(denial) = aos_agent::policy::policy_deny(&policy, other) {
+                    return ActResult::Continue(denial);
+                }
+            }
             let backend = resolve_tool_backend(other, tools);
             match backend {
                 Some(ToolBackend::Module) => {
@@ -2681,6 +2695,8 @@ async fn spawn_child(
         persona_id: None,
         caps: caps.to_vec(),
         model_id: parent.model_id.clone(),
+        // Héritée : la politique ne s'échappe pas via les sous-agents.
+        policy: parent.policy.clone(),
         goal: Some(AgentGoal {
             statement: child_goal_statement,
             success_criteria: vec![
@@ -4860,6 +4876,7 @@ mod tests {
             documents: vec![],
             caps: vec![],
             model_id: None,
+            policy: None,
             parent_id: None,
             session_id: None,
             budget: Default::default(),
@@ -4928,6 +4945,7 @@ mod tests {
             documents: vec![],
             caps: vec![],
             model_id: None,
+            policy: None,
             parent_id: None,
             session_id: None,
             budget: Default::default(),
@@ -4961,6 +4979,7 @@ mod tests {
             documents: vec![],
             caps: vec![],
             model_id: None,
+            policy: None,
             parent_id: None,
             session_id: None,
             budget: Default::default(),
