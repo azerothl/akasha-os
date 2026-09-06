@@ -300,17 +300,25 @@ pub fn verify_backup(dir: &Path) -> Result<BackupManifest, String> {
     Ok(manifest)
 }
 
+fn open_secrets_for_restore(home: &Path) -> Result<SecretStore, String> {
+    SecretStore::open(home.join("var/secrets")).map_err(|e| {
+        let msg = e.to_string().to_lowercase();
+        if msg.contains("crypto") || msg.contains("aead") {
+            "déchiffrement impossible (mauvaise machine/utilisateur ou clé maître différente)"
+                .to_string()
+        } else {
+            format!("coffre indisponible (restauration chiffrée impossible ici) : {e}")
+        }
+    })
+}
+
 /// Restaure (vérifie d'abord) : remplace les scopes + configs, exige relance.
 /// Chiffré : déchiffre sous la clé maître locale (autre PC/utilisateur =
 /// erreur propre), vérifie le sha256 du clair à l'écriture.
 pub fn do_restore(home: &Path, dir: &Path) -> Result<usize, String> {
     let manifest = verify_backup(dir)?;
     let store = if manifest.encrypted {
-        Some(
-            SecretStore::open(home.join("var/secrets")).map_err(|e| {
-                format!("coffre indisponible (restauration chiffrée impossible ici) : {e}")
-            })?,
-        )
+        Some(open_secrets_for_restore(home)?)
     } else {
         None
     };
