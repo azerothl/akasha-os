@@ -434,7 +434,7 @@ fn bing_ck_destination(url: &str) -> Option<String> {
 
 fn base64_decode_to_string(s: &str) -> Option<String> {
     let mut padded = s.replace('-', "+").replace('_', "/");
-    while padded.len() % 4 != 0 {
+    while !padded.len().is_multiple_of(4) {
         padded.push('=');
     }
     let bytes = base64::engine::general_purpose::STANDARD

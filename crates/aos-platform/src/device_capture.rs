@@ -1041,7 +1041,7 @@ impl DeviceCaptureBackend for FakeDeviceCaptureBackend {
                 mime_type: "image/png".into(),
             });
         }
-        let n = max_bytes.min(4096).max(1) as usize;
+        let n = max_bytes.clamp(1, 4096) as usize;
         let mut file =
             File::create(output).map_err(|e| DeviceCaptureError::Backend(e.to_string()))?;
         file.write_all(&vec![0xA5; n])

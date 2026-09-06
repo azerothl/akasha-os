@@ -1809,26 +1809,23 @@ async fn infer_turn(
                         },
                     )
                     .await;
-                    loop {
-                        match cmd_rx.recv().await {
-                            Some(WorkerCmd::Resume) => return InferOutcome::Aborted,
-                            Some(WorkerCmd::Steer(d)) => return InferOutcome::Steer(d),
-                            Some(WorkerCmd::ActDecision { .. }) => {
-                                return InferOutcome::Aborted
-                            }
-                            Some(WorkerCmd::ChildFinished {
-                                child_id,
-                                result,
-                                ok,
-                            }) => {
-                                record_child_finished(shared, child_id, result, ok).await;
-                                // Return to the token stream. Remaining ChildFinished
-                                // stay queued; the next paused token or the step
-                                // drain will pick them up. Do not wait here forever.
-                                break;
-                            }
-                            None => return InferOutcome::Fatal("control fermé".into()),
+                    match cmd_rx.recv().await {
+                        Some(WorkerCmd::Resume) => return InferOutcome::Aborted,
+                        Some(WorkerCmd::Steer(d)) => return InferOutcome::Steer(d),
+                        Some(WorkerCmd::ActDecision { .. }) => {
+                            return InferOutcome::Aborted
                         }
+                        Some(WorkerCmd::ChildFinished {
+                            child_id,
+                            result,
+                            ok,
+                        }) => {
+                            record_child_finished(shared, child_id, result, ok).await;
+                            // Return to the token stream. Remaining ChildFinished
+                            // stay queued; the next paused token or the step
+                            // drain will pick them up. Do not wait here forever.
+                        }
+                        None => return InferOutcome::Fatal("control fermé".into()),
                     }
                 }
                 full_text.push_str(&text);

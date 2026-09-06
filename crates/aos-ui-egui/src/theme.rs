@@ -361,10 +361,10 @@ mod tests {
 
     #[test]
     fn hit_targets_meet_wcag_minimum() {
-        assert!(PRIMARY_MIN_H >= 44.0);
-        assert!(ICON_HIT >= 24.0);
-        assert!(TOOLBAR_HIT >= 24.0);
-        assert!(CONTROL_MIN_H_COMFORTABLE >= 32.0);
+        const { assert!(PRIMARY_MIN_H >= 44.0); };
+        const { assert!(ICON_HIT >= 24.0); };
+        const { assert!(TOOLBAR_HIT >= 24.0); };
+        const { assert!(CONTROL_MIN_H_COMFORTABLE >= 32.0); };
     }
 
     #[test]
@@ -384,11 +384,13 @@ mod tests {
 
     #[test]
     fn custom_theme_overrides_buttons_and_falls_back_on_bad_hex() {
-        let mut custom = crate::prefs::CustomThemePreferences::default();
-        custom.accent = "#FF0000".into();
-        custom.danger = "#00FF00".into();
-        custom.success = "#0000FF".into();
-        custom.warning = "not-a-hex".into();
+        let custom = crate::prefs::CustomThemePreferences {
+            accent: "#FF0000".into(),
+            danger: "#00FF00".into(),
+            success: "#0000FF".into(),
+            warning: "not-a-hex".into(),
+            ..Default::default()
+        };
         let c = theme_colors("custom", &custom);
         assert_eq!(c.accent, egui::Color32::from_rgb(255, 0, 0));
         assert_eq!(c.danger, egui::Color32::from_rgb(0, 255, 0));
