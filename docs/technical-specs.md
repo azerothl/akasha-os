@@ -908,6 +908,8 @@ Preview network tools (F-NET-01/02), all gated by the same egress control:
 
 User defaults live in `var/run/preferences.json` (`web_search_engine`, `web_browse_max_chars`, `web_fetch_max_bytes`, `network_online`).
 
+JavaScript-rendered pages (SPA, hydration, bot walls) are out of scope for these intents. A user-installed headless-browser MCP (`var/mcp/servers.yaml`) can reach them; that guest does not inherit `net.connect`.
+
 ---
 
 ## 10. Boot sequence (technical)

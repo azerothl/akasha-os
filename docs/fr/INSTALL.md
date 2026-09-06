@@ -134,7 +134,9 @@ applique le même overlay vers `%LOCALAPPDATA%\AgentOS-Preview` /
 Par défaut le réseau est **coupé** (`offline_strict`). Case
 **Autoriser le réseau** pour `web.search` / `web.browse` / `net.fetch`.
 Le moteur (`auto` = Brave → SearXNG → DuckDuckGo → Bing) se règle dans **Settings**.
-L’URL d’instance SearXNG (optionnelle) aussi.
+L’URL d’instance SearXNG (optionnelle) aussi. `web.browse` n’exécute pas le
+JavaScript de la page ; SPA et pages anti-bot demandent un MCP navigateur
+headless optionnel dans `var/mcp/servers.yaml` (voir [FEATURES.md](FEATURES.md) §7).
 
 ```yaml
 # var/secrets/keys.yaml (optionnel)

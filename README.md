@@ -42,7 +42,7 @@ Full catalogue: [docs/FEATURES.md](docs/FEATURES.md).
 | Models | Hardware-aware packs (incl. CPU); retryable failed loads; prefix-cache/speculation controls; optional image/TTS packs; live TTFT / tok/s / VRAM metrics |
 | Canvas | Layered vector drawing, grid and snapping, PNG/SVG/JSON export, agent scene checks and global geometry validation |
 | Providers | OpenAI-compat cloud + loopback (Ollama / vLLM / LM Studio); keys in the vault |
-| Network | Opt-in search (Brave / DDG / Bing) + `web.browse` + fetch |
+| Network | Opt-in search + `web.browse` (no JS) + fetch; JS/SPA pages via optional browser MCP |
 | Settings | Language, theme, density, trust, routing, gpu/cpu/auto, agent defaults, search engine |
 | Feedback | Local report + GitHub issue on this repo |
 | Troubleshoot | In-app diagnostics; GitHub report when findings exist |

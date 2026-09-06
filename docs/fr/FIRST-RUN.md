@@ -50,7 +50,7 @@ Catalogue : `share/models/catalog-offerings.json`.
 | Models | Liste / load / download ; packs image/TTS optionnels (pas dans le zip ; Download installe aussi `bin/sd` / `bin/piper`) |
 | Providers | Cloud OpenAI-compat + loopback (Ollama / vLLM / LM Studio) ; clés dans le vault |
 | Audit | Événements signés ; tuer auditd (le superviseur le relance) |
-| Réseau (barre latérale) | Opt-in `web.search` / `web.browse` / `net.fetch` |
+| Réseau (barre latérale) | Opt-in `web.search` / `web.browse` / `net.fetch` (HTML seulement ; pages JS → MCP navigateur optionnel, [FEATURES.md](FEATURES.md) §7) |
 | Settings | Langue, trust, routage, défauts agent, moteur de recherche, mémorisation auto, gpu/cpu/auto |
 | Retour | Issue GitHub sur azerothl/akasha-os |
 | Scénarios | Protocole cohorte ([TESTER.md](TESTER.md)) |

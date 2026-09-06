@@ -274,7 +274,7 @@ Boucle Observe / Think / Act avec caps, confirmation et audit.
 | `task.assess` | Classe le goal en **simple** ou **complex** ; complex active la skill planner |
 | Skills | Recettes déclaratives (`share/skills/`, surchargeables sous `var/skills/`) |
 | Outils | Natif, module WASM, MCP, ou runtime (plan / spawn / mémoire) |
-| MCP | Serveurs stdio optionnels (`share/mcp/servers.yaml.example`) |
+| MCP | Serveurs stdio optionnels (`share/mcp/servers.yaml.example`) ; un MCP navigateur headless installé par l’utilisateur peut lire les pages JS (voir §7) |
 | Sous-agents | `agent.spawn` / `agent.await` avec un brief étroit |
 | `user.ask` | Pause et question à l'utilisateur dans le chat lié ; réponse via steer |
 | Hot-grant | `cap.request` sous trust + confirmation |
@@ -353,6 +353,15 @@ keys:
 ```
 
 Sans clé Brave, `auto` bascule sur DuckDuckGo puis Bing HTML.
+
+`web.browse` n’exécute **pas** le JavaScript de la page. SPA, apps hydratées
+côté client, chargement paresseux et pages anti-bot restent opaques (squelette
+vide ou erreur HTTP). La Preview n’embarque pas de moteur de navigateur. Pour
+ce type de sites, installez vous-même un **MCP navigateur headless** et
+ajoutez-le dans `var/mcp/servers.yaml` (exemple commenté dans
+`share/mcp/servers.yaml.example`). Ce guest ouvre ses propres sockets :
+`net.connect` / offline-strict d’Akasha **ne l’encadrent pas**. Préférez les
+intents natifs `web.*` pour le HTML ordinaire.
 
 ---
 

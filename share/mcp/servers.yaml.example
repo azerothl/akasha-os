@@ -4,6 +4,11 @@
 # Secrets: use ${secret:name} so API keys stay in the encrypted vault
 # (Settings → Secrets), never plaintext in this file.
 #
+# Native web.browse is HTML→text with no JavaScript. For SPAs / hydrated
+# pages, add a headless-browser MCP you installed yourself. That process
+# does its own network egress — Akasha net.connect / offline_strict do not
+# wrap it. Prefer native web.search / web.browse / net.fetch for ordinary HTML.
+#
 # servers:
 #   filesystem:
 #     command: npx
@@ -14,5 +19,9 @@
 #     args: ["-y", "@modelcontextprotocol/server-github"]
 #     env:
 #       GITHUB_PERSONAL_ACCESS_TOKEN: "${secret:github_token}"
+#   browser:
+#     command: obscura
+#     args: ["mcp"]
+#   # or: npx -y @playwright/mcp
 
 servers: {}

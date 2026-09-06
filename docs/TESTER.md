@@ -190,8 +190,10 @@ Optional extra source (E10 Git index, off by default):
 ### 8b. Browse a page (PC.13)
 
 - With network ON: paste a URL → **Browse** (`web.browse`).
-- Expect title + extracted text (no JavaScript). Compare with **Download URL**
-  (`net.fetch`), which saves the raw file under `/downloads`.
+- Expect title + extracted text (no JavaScript). SPAs / hydrated apps / bot
+  walls stay empty — optional headless-browser MCP in `var/mcp/servers.yaml`
+  ([FEATURES.md](FEATURES.md) §7). Compare with **Download URL** (`net.fetch`),
+  which saves the raw file under `/downloads`.
 
 ### 9. Download + file generation (PC.9)
 

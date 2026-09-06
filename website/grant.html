@@ -218,7 +218,9 @@
             module-backed, MCP stdio servers, or runtime helpers for plan and
             spawn. Detail shows the step timeline; you can pause, resume, steer,
             or kill. Optional MCP servers are configured from
-            <code>share/mcp/servers.yaml.example</code>.
+            <code>share/mcp/servers.yaml.example</code> (including a
+            headless-browser MCP if you need JavaScript-rendered pages; that
+            guest is not wrapped by <code>net.connect</code>).
           </p>
           <p class="hist" data-lang="fr">
             L’onglet Agents démarre une boucle de goal avec une tâche et un
@@ -228,7 +230,10 @@
             stdio, ou des aides runtime pour plan et spawn. Détail montre la
             timeline des étapes ; vous pouvez pauser, reprendre, steerer ou
             tuer. Les serveurs MCP optionnels se configurent depuis
-            <code>share/mcp/servers.yaml.example</code>.
+            <code>share/mcp/servers.yaml.example</code> (y compris un MCP
+            navigateur headless si vous avez besoin de pages rendues en
+            JavaScript ; ce guest n’est pas encadré par
+            <code>net.connect</code>).
           </p>
         </article>
 

@@ -804,6 +804,8 @@ Outils réseau Preview (F-NET-01/02), tous soumis au même contrôle d'egress :
 
 Défauts utilisateur dans `var/run/preferences.json` (`web_search_engine`, `web_browse_max_chars`, `web_fetch_max_bytes`, `network_online`).
 
+Les pages rendues en JavaScript (SPA, hydratation, murs anti-bot) sont hors périmètre de ces intents. Un MCP navigateur headless installé par l’utilisateur (`var/mcp/servers.yaml`) peut les atteindre ; ce guest n’hérite pas de `net.connect`.
+
 ---
 
 ## 10. Boot sequence (technique)

@@ -557,6 +557,8 @@
             <code>files.generate</code> (md / txt / json / csv / png / pdf).
             Without a Brave key, <code>auto</code> falls through to DuckDuckGo
             then Bing HTML. Optional keys live under Settings → Secrets.
+            JavaScript-rendered pages need an optional headless-browser MCP
+            (<a href="network.html">Network</a>).
           </p>
           <p class="hist" data-lang="fr">
             Mode défaut : <code>offline_strict</code> (egress deny-by-default).
@@ -568,7 +570,9 @@
             logique, défaut <code>/downloads/</code>), et
             <code>files.generate</code> (md / txt / json / csv / png / pdf).
             Sans clé Brave, <code>auto</code> bascule sur DuckDuckGo puis Bing
-            HTML. Clés optionnelles sous Settings → Secrets.
+            HTML. Clés optionnelles sous Settings → Secrets. Les pages rendues
+            en JavaScript demandent un MCP navigateur headless optionnel
+            (<a href="network.html">Network</a>).
           </p>
           <aside class="callout">
             <p data-lang="en">
@@ -764,13 +768,20 @@
             Copy <code>share/mcp/servers.yaml.example</code>, add stdio servers,
             and reference vault secrets with <code>${secret:name}</code>. MCP
             tools appear in the agent Detail panel alongside native and module
-            tools.
+            tools. Native <code>web.browse</code> does not run page JavaScript;
+            a headless-browser MCP you install is the Preview path for SPA /
+            hydrated pages, and it does its own network egress (not wrapped by
+            <code>net.connect</code>).
           </p>
           <p class="hist" data-lang="fr">
             Copiez <code>share/mcp/servers.yaml.example</code>, ajoutez des
             serveurs stdio, et référencez les secrets du vault avec
             <code>${secret:name}</code>. Les outils MCP apparaissent dans le
             panneau Détail de l’agent à côté des outils natifs et modules.
+            <code>web.browse</code> natif n’exécute pas le JavaScript de la
+            page ; un MCP navigateur headless que vous installez est le chemin
+            Preview pour les SPA / pages hydratées, et il sort sur le réseau
+            tout seul (pas encadré par <code>net.connect</code>).
           </p>
 
           <h3 data-lang="en">Providers as extension</h3>

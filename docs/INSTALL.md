@@ -134,7 +134,9 @@ same way onto `%LOCALAPPDATA%\AgentOS-Preview` /
 Network is **off** by default (`offline_strict`). Enable **Allow network**
 for `web.search` / `web.browse` / `net.fetch`. Search engine (`auto` =
 Brave → SearXNG → DuckDuckGo → Bing) is set in **Settings**. Optional
-SearXNG instance URL also lives there.
+SearXNG instance URL also lives there. `web.browse` does not run page
+JavaScript; SPAs and bot-challenge pages need an optional headless-browser
+MCP you add in `var/mcp/servers.yaml` (see [FEATURES.md](FEATURES.md) §7).
 
 ```yaml
 # var/secrets/keys.yaml (optional)

@@ -41,7 +41,7 @@ Catalogue : [FEATURES.md](FEATURES.md).
 | Modèles | Packs selon le matériel (dont CPU) ; nouvelle tentative après erreur de chargement ; contrôles cache de préfixe/spéculation ; packs image/TTS optionnels ; métriques live TTFT / tok/s / VRAM |
 | Canvas | Dessin vectoriel avec calques, grille, édition, exports PNG/SVG/JSON et validation géométrique globale des agents |
 | Providers | Cloud OpenAI-compat + loopback (Ollama / vLLM / LM Studio) ; clés dans le vault |
-| Réseau | Recherche opt-in (Brave / DDG / Bing) + `web.browse` + fetch |
+| Réseau | Recherche opt-in + `web.browse` (sans JS) + fetch ; pages JS/SPA via MCP navigateur optionnel |
 | Settings | Langue, thème, densité, trust, routage, gpu/cpu/auto, défauts agent, moteur |
 | Retour | Rapport local + issue GitHub |
 | Dépannage | Diagnostic in-app ; rapport GitHub s'il y a des anomalies |

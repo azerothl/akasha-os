@@ -49,7 +49,7 @@ Catalogue: `share/models/catalog-offerings.json`. Installed registry:
 | Models | List / load / download offerings; optional image/TTS packs (not in the zip; Download also installs `bin/sd` / `bin/piper`) |
 | Providers | OpenAI-compat cloud + loopback (Ollama / vLLM / LM Studio); keys in the vault |
 | Audit | Signed events; kill auditd (supervisor restarts it) |
-| Network (sidebar) | Opt-in `web.search` / `web.browse` / `net.fetch` |
+| Network (sidebar) | Opt-in `web.search` / `web.browse` / `net.fetch` (HTML only; JS pages → optional browser MCP, [FEATURES.md](FEATURES.md) §7) |
 | Settings | Language, trust, routing, agent defaults, search engine, auto-remember, gpu/cpu/auto |
 | Feedback | GitHub issue on azerothl/akasha-os |
 | Scenarios | Cohort protocol (see [TESTER.md](TESTER.md)) |

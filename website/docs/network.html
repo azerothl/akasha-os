@@ -156,7 +156,11 @@
             <code>var/storage/data/downloads/</code>). You can also generate a
             file (for example <code>pdf</code> or <code>png</code> at
             <code>/downloads/test.pdf</code>) and open the downloads folder from
-            the UI.
+            the UI. JavaScript-rendered pages (SPA, hydration, bot walls) stay
+            opaque: Preview does not ship a browser. You can attach an optional
+            headless-browser MCP in <code>var/mcp/servers.yaml</code> (see
+            <code>share/mcp/servers.yaml.example</code>). That guest opens its
+            own sockets; Akasha <code>net.connect</code> does not wrap it.
           </p>
           <p class="hist" data-lang="fr">
             Réseau activé : collez une URL et utilisez <strong>Browse</strong>
@@ -167,7 +171,14 @@
             <code>var/storage/data/downloads/</code>). Vous pouvez aussi
             générer un fichier (par exemple <code>pdf</code> ou
             <code>png</code> en <code>/downloads/test.pdf</code>) et ouvrir le
-            dossier downloads depuis l’UI.
+            dossier downloads depuis l’UI. Les pages rendues en JavaScript
+            (SPA, hydratation, murs anti-bot) restent opaques : la Preview
+            n’embarque pas de navigateur. Vous pouvez brancher un MCP
+            navigateur headless optionnel dans
+            <code>var/mcp/servers.yaml</code> (voir
+            <code>share/mcp/servers.yaml.example</code>). Ce guest ouvre ses
+            propres sockets ; <code>net.connect</code> d’Akasha ne l’encadre
+            pas.
           </p>
         </article>
 

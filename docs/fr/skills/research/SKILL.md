@@ -22,3 +22,5 @@ tools:
 6. Cite les sources dans le résumé final.
 
 Si la recherche échoue, réessaie avec une requête plus simple ou `web.browse` une URL connue. Ne suppose pas que Bing/DuckDuckGo HTML réussira.
+
+`web.browse` n’exécute pas le JavaScript de la page. Un squelette SPA vide est attendu. Si un outil MCP navigateur est déjà dans ton catalogue, utilise-le pour les pages hydratées ; sinon cite l’URL et n’invente pas le corps manquant.

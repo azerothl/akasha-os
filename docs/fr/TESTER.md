@@ -192,7 +192,9 @@ Source extra optionnelle (index Git E10, désactivée par défaut) :
 ### 8b. Parcourir une page (PC.13)
 
 - Réseau ON : coller une URL → **Parcourir** (`web.browse`).
-- Attendre titre + texte extrait (sans JavaScript). Comparer avec
+- Attendre titre + texte extrait (sans JavaScript). SPA / apps hydratées /
+  murs anti-bot restent vides — MCP navigateur headless optionnel dans
+  `var/mcp/servers.yaml` ([FEATURES.md](FEATURES.md) §7). Comparer avec
   **Télécharger URL** (`net.fetch`), qui enregistre le fichier brut sous
   `/downloads`.
 

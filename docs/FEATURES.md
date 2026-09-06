@@ -274,7 +274,7 @@ Observe / Think / Act loop with capability checks, confirmation, and audit.
 | `task.assess` | Classifies the goal as **simple** or **complex**; complex activates the planner skill |
 | Skills | Declarative recipes (`share/skills/`, overridable under `var/skills/`) |
 | Tools | Native, WASM module, MCP, or runtime (plan / spawn / memory) |
-| MCP | Optional stdio servers (`share/mcp/servers.yaml.example`) |
+| MCP | Optional stdio servers (`share/mcp/servers.yaml.example`); a user-installed headless-browser MCP can read JS-rendered pages (see §7) |
 | Sub-agents | `agent.spawn` / `agent.await` with a narrow brief |
 | `user.ask` | Pause and ask the user in the linked chat; reply routes via steer |
 | Hot-grant | `cap.request` under trust + confirmation |
@@ -353,6 +353,15 @@ keys:
 ```
 
 Without a Brave key, `auto` falls through to DuckDuckGo then Bing HTML.
+
+`web.browse` does **not** run page JavaScript. SPAs, client-hydrated apps,
+lazy-loaded bodies, and bot-challenge pages stay opaque (empty shell or HTTP
+error). Preview does not ship a browser engine. To reach that class of sites,
+install a **headless-browser MCP** yourself and add it under
+`var/mcp/servers.yaml` (commented example in
+`share/mcp/servers.yaml.example`). That guest opens its own sockets: Akasha
+`net.connect` / offline-strict do **not** wrap it. Prefer native `web.*` for
+ordinary HTML.
 
 ---
 

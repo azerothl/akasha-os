@@ -22,3 +22,5 @@ tools:
 6. Cite sources in the final summary.
 
 If search fails, try a simpler query or `web.browse` a known URL. Do not assume Bing/DuckDuckGo HTML will succeed.
+
+`web.browse` does not run page JavaScript. Empty SPA shells are expected. If a browser MCP tool is already in your catalogue, use it for hydrated pages; otherwise cite the URL and do not invent the missing body.
