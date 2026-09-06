@@ -27,6 +27,7 @@ mod chat_state;
 mod chat_view_state;
 mod cmd;
 mod composer_layout;
+mod composer_drafts;
 mod confirmation_ui_state;
 mod decl_ui;
 mod deep_plan_ui;
@@ -497,6 +498,10 @@ struct UiApp {
     show_go_to_palette: bool,
     spotlight_query: String,
     toasts: ui_primitives::Toasts,
+    /// S7.1 : brouillons du composer par session + flush debouncé (3 s).
+    drafts: HashMap<String, String>,
+    drafts_dirty: bool,
+    drafts_last_flush: std::time::Instant,
     guide: guide::GuideState,
     research_ui: research_ui_state::ResearchUiState,
 }
@@ -672,6 +677,9 @@ impl UiApp {
             show_go_to_palette: false,
             spotlight_query: String::new(),
             toasts: ui_primitives::Toasts::default(),
+            drafts: composer_drafts::load_drafts(),
+            drafts_dirty: false,
+            drafts_last_flush: std::time::Instant::now(),
             guide: guide::GuideState::default(),
             research_ui: research_ui_state::ResearchUiState::default(),
         }
@@ -1437,12 +1445,14 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
     }
 
     fn request_session_select(&mut self, id: String) {
+        self.stash_composer_draft();
         self.pending_session_nav = session_nav::PendingSessionNav::Explicit(id.clone());
         self.schedule_ui.clear_transcript_dirty();
         let _ = self.cmd_tx.send(Cmd::SessionSelect { id });
     }
 
     fn request_session_create(&mut self, title: Option<String>) {
+        self.stash_composer_draft();
         self.pending_session_nav = session_nav::PendingSessionNav::AwaitingCreate;
         self.schedule_ui.clear_transcript_dirty();
         let _ = self.cmd_tx.send(Cmd::SessionCreate { title });
@@ -1855,6 +1865,27 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 }
             });
             ui.separator();
+            // S3 : compteur tokens session (estimation ≈ + agents exacts).
+            {
+                let (transcript_tok, agent_tok, agent_n) = self.session_token_estimate();
+                let total = transcript_tok + agent_tok;
+                let short = if total >= 10_000 {
+                    format!("≈{:.1}k tok", total as f64 / 1000.0)
+                } else {
+                    format!("≈{total} tok")
+                };
+                let tip = if self.prefs.language == "fr" {
+                    format!(
+                        "Estimation ≈ (transcript {transcript_tok} + agents {agent_tok} sur {agent_n}) — pas de limite connue côté backend"
+                    )
+                } else {
+                    format!(
+                        "Rough estimate ≈ (transcript {transcript_tok} + agents {agent_tok} over {agent_n}) — no known backend limit"
+                    )
+                };
+                ui.weak(short).on_hover_text(tip);
+            }
+            ui.separator();
             if let Some(pending_ver) = load_pending_update_version() {
                 ui.label(t.status_update_pending.replace("{version}", &pending_ver));
                 if let Some(offer) = load_update_offer() {
@@ -1913,6 +1944,61 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         }
     }
 
+    /// S7.1 : stash le texte en cours sous la session active (avant switch).
+    pub(crate) fn stash_composer_draft(&mut self) {
+        if let Some(sid) = self.chat_state.active_session.clone() {
+            composer_drafts::stash_draft(
+                &mut self.drafts,
+                &sid,
+                &self.chat_state.composer.input,
+            );
+            self.drafts_dirty = true;
+        }
+    }
+
+    /// S7.1 : suit la frappe + flush disque debouncé (3 s). Appelé par update().
+    pub(crate) fn autosave_composer_draft(&mut self) {
+        if let Some(sid) = self.chat_state.active_session.clone() {
+            let cur = self.chat_state.composer.input.clone();
+            let changed = self
+                .drafts
+                .get(&sid)
+                .map(|saved| saved != &cur)
+                .unwrap_or(!cur.is_empty());
+            if changed {
+                composer_drafts::stash_draft(&mut self.drafts, &sid, &cur);
+                self.drafts_dirty = true;
+            }
+        }
+        if self.drafts_dirty && self.drafts_last_flush.elapsed() > std::time::Duration::from_secs(3)
+        {
+            composer_drafts::save_drafts(&self.drafts);
+            self.drafts_dirty = false;
+            self.drafts_last_flush = std::time::Instant::now();
+        }
+    }
+
+    /// S3 : estimation honnête des tokens de la session active.
+    /// Transcript local (caractères/4, marqué ≈) + tokens exacts des agents
+    /// liés. Pas de jauge : le backend ne reporte pas le n_ctx réel à l'UI.
+    pub(crate) fn session_token_estimate(&self) -> (u64, u64, usize) {
+        let mut chars = 0usize;
+        for line in &self.chat {
+            chars += line.role.len() + line.text.len();
+        }
+        let mut agent_tok = 0u64;
+        let mut agent_n = 0usize;
+        if let Some(sid) = self.chat_state.active_session.as_deref() {
+            for a in &self.agents {
+                if a.session_id.as_deref() == Some(sid) {
+                    agent_tok += a.tokens_used;
+                    agent_n += 1;
+                }
+            }
+        }
+        ((chars as u64) / 4, agent_tok, agent_n)
+    }
+
     fn handle_keyboard_shortcuts(&mut self, ctx: &egui::Context) {
         ctx.input(|i| {
             if i.modifiers.command || i.modifiers.ctrl {
@@ -1957,6 +2043,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                     ui.memory_mut(|m| m.request_focus(search.id));
                 }
                 ui.separator();
+                let query = self.spotlight_query.trim().to_lowercase();
                 let destinations: [(&str, Tab); 14] = [
                     (t.tab_chat, Tab::Chat),
                     (t.tab_agents, Tab::Agents),
@@ -1974,12 +2061,60 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                     (t.tab_feedback, Tab::Feedback),
                 ];
                 let labels: Vec<&str> = destinations.iter().map(|(l, _)| *l).collect();
-                let hits = ui_primitives::filter_labels(&self.spotlight_query, &labels);
-                if hits.is_empty() {
+                let tab_hits = ui_primitives::filter_labels(&self.spotlight_query, &labels);
+                // S7.2 : recherche globale — sessions, notes, mémoire en plus
+                // des onglets. Sessions même à requête vide (accès rapide).
+                let session_hits: Vec<(String, String)> = self
+                    .chat_state
+                    .sessions
+                    .iter()
+                    .filter(|s| {
+                        query.is_empty() || s.title.to_lowercase().contains(query.as_str())
+                    })
+                    .take(8)
+                    .map(|s| (s.id.clone(), s.title.clone()))
+                    .collect();
+                let note_hits: Vec<(String, String)> = if query.is_empty() {
+                    Vec::new()
+                } else {
+                    self.workspace_ui
+                        .notes
+                        .notes
+                        .iter()
+                        .filter(|n| {
+                            n.title.to_lowercase().contains(query.as_str())
+                                || n.path.to_lowercase().contains(query.as_str())
+                        })
+                        .take(8)
+                        .map(|n| (n.path.clone(), n.title.clone()))
+                        .collect()
+                };
+                let mem_hits: Vec<String> = if query.is_empty() {
+                    Vec::new()
+                } else {
+                    self.memory_ui
+                        .hits
+                        .iter()
+                        .filter(|h| h.text.to_lowercase().contains(query.as_str()))
+                        .take(5)
+                        .map(|h| h.text.clone())
+                        .collect()
+                };
+                enum Pick {
+                    Tab(Tab),
+                    Session(String),
+                    Note(String),
+                    Memory(String),
+                }
+                let mut pick: Option<Pick> = None;
+                if tab_hits.is_empty()
+                    && session_hits.is_empty()
+                    && note_hits.is_empty()
+                    && mem_hits.is_empty()
+                {
                     ui.weak(t.settings_search_empty);
                 }
-                let mut open: Option<Tab> = None;
-                for idx in hits {
+                for idx in tab_hits {
                     let (label, tab) = &destinations[idx];
                     if ui
                         .add_sized(
@@ -1988,24 +2123,112 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                         )
                         .clicked()
                     {
-                        open = Some(tab.clone());
+                        pick = Some(Pick::Tab(tab.clone()));
                     }
                 }
-                if let Some(tab) = open {
-                    self.on_tab_open(tab);
-                    self.show_go_to_palette = false;
-                    self.spotlight_query.clear();
+                if !session_hits.is_empty() {
+                    ui.separator();
+                    ui.weak("Sessions");
+                    for (id, title) in &session_hits {
+                        if ui
+                            .add_sized(
+                                egui::vec2(ui.available_width(), 36.0),
+                                egui::Button::new(title),
+                            )
+                            .clicked()
+                        {
+                            pick = Some(Pick::Session(id.clone()));
+                        }
+                    }
                 }
-                // Enter ouvre le 1er résultat, comme spotlight.
-                if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
-                    let labels: Vec<&str> = destinations.iter().map(|(l, _)| *l).collect();
-                    if let Some(first) =
-                        ui_primitives::filter_labels(&self.spotlight_query, &labels).first()
-                    {
-                        let (_, tab) = &destinations[*first];
-                        self.on_tab_open(tab.clone());
+                if !note_hits.is_empty() {
+                    ui.separator();
+                    ui.weak(t.tab_notes);
+                    for (path, title) in &note_hits {
+                        if ui
+                            .add_sized(
+                                egui::vec2(ui.available_width(), 36.0),
+                                egui::Button::new(title),
+                            )
+                            .clicked()
+                        {
+                            pick = Some(Pick::Note(path.clone()));
+                        }
+                    }
+                }
+                if !mem_hits.is_empty() {
+                    ui.separator();
+                    ui.weak(t.tab_memory);
+                    for text in &mem_hits {
+                        let short: String = text.chars().take(80).collect();
+                        if ui
+                            .add_sized(
+                                egui::vec2(ui.available_width(), 36.0),
+                                egui::Button::new(&short),
+                            )
+                            .clicked()
+                        {
+                            pick = Some(Pick::Memory(text.clone()));
+                        }
+                    }
+                }
+                match pick {
+                    Some(Pick::Tab(tab)) => {
+                        self.on_tab_open(tab);
                         self.show_go_to_palette = false;
                         self.spotlight_query.clear();
+                    }
+                    Some(Pick::Session(id)) => {
+                        self.request_session_select(id);
+                        self.show_go_to_palette = false;
+                        self.spotlight_query.clear();
+                    }
+                    Some(Pick::Note(path)) => {
+                        let title = note_hits
+                            .iter()
+                            .find(|(p, _)| p == &path)
+                            .map(|(_, ti)| ti.clone())
+                            .unwrap_or_default();
+                        self.workspace_ui.notes.filter = title;
+                        self.on_tab_open(Tab::Notes);
+                        self.show_go_to_palette = false;
+                        self.spotlight_query.clear();
+                    }
+                    Some(Pick::Memory(text)) => {
+                        self.memory_ui.query = text.chars().take(80).collect();
+                        self.on_tab_open(Tab::Memory);
+                        self.show_go_to_palette = false;
+                        self.spotlight_query.clear();
+                    }
+                    None => {}
+                }
+                // Enter ouvre le 1er résultat : session, note, mémoire, onglet.
+                if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
+                    if let Some((id, _)) = session_hits.first() {
+                        self.request_session_select(id.clone());
+                        self.show_go_to_palette = false;
+                        self.spotlight_query.clear();
+                    } else if let Some((_, title)) = note_hits.first() {
+                        self.workspace_ui.notes.filter = title.clone();
+                        self.on_tab_open(Tab::Notes);
+                        self.show_go_to_palette = false;
+                        self.spotlight_query.clear();
+                    } else if let Some(text) = mem_hits.first() {
+                        self.memory_ui.query = text.chars().take(80).collect();
+                        self.on_tab_open(Tab::Memory);
+                        self.show_go_to_palette = false;
+                        self.spotlight_query.clear();
+                    } else {
+                        let labels: Vec<&str> =
+                            destinations.iter().map(|(l, _)| *l).collect();
+                        if let Some(first) =
+                            ui_primitives::filter_labels(&self.spotlight_query, &labels).first()
+                        {
+                            let (_, tab) = &destinations[*first];
+                            self.on_tab_open(tab.clone());
+                            self.show_go_to_palette = false;
+                            self.spotlight_query.clear();
+                        }
                     }
                 }
                 if ui.button(t.skip).clicked() {
@@ -2027,6 +2250,7 @@ impl eframe::App for UiApp {
         theme::apply_ui_density(ctx, self.prefs.ui_density);
         self.handle_keyboard_shortcuts(ctx);
         self.poll_update_download();
+        self.autosave_composer_draft();
         while let Ok(ev) = self.evt_rx.try_recv() {
             match ev {
                 Evt::Delta { session_id, text } => {

@@ -71,6 +71,11 @@ pub(crate) fn on_loaded(
 
     app.pending_session_nav = session_nav::PendingSessionNav::None;
     app.chat_state.active_session = Some(id.clone());
+    // S7.1 : restaure le brouillon de la session cible ; sans brouillon,
+    // garde le texte actuel (ex. tapé avant la création de la session).
+    if let Some(saved) = app.drafts.get(&id).cloned() {
+        app.chat_state.composer.input = saved;
+    }
     app.chat_state.sidebar.rename = meta.title.clone();
     if let Some(session) = app.chat_state.sessions.iter_mut().find(|s| s.id == meta.id) {
         *session = meta.clone();

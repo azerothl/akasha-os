@@ -25,6 +25,12 @@ impl UiApp {
         };
         self.chat_state.composer.input.clear();
         self.chat_state.composer.refocus = true;
+        // S7.1 : envoyé = plus de brouillon pour cette session.
+        if let Some(sid) = self.chat_state.active_session.clone() {
+            if self.drafts.remove(&sid).is_some() {
+                self.drafts_dirty = true;
+            }
+        }
         if text.starts_with('/') && pending_images.is_empty() && pending_documents.is_empty() {
             self.handle_slash(&text);
             return;
