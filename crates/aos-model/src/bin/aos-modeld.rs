@@ -7,8 +7,8 @@ use aos_model::{media, providers, ModelSubsystem, ModeldConfig};
 use aos_placement::{
     BackendKind, DistributedWork, InferencePlanDiagnostic, LanChatMessage, LanCluster,
     LanDiscoveryAdvertisement, LanDiscoverySocket, LanNode, LanPairingRegistry, LanSessionKey,
-    LanTcpListener, LanTcpTransport, LanWorkMessage, LanWorkPlan, LanWorkerRegistry, NodeTrust,
-    PlacementProfile, ThermalPolicy,
+    LanShardManifest, LanTcpListener, LanTcpTransport, LanWeightRange, LanWorkMessage, LanWorkPlan,
+    LanWorkerRegistry, NodeTrust, PlacementProfile, ThermalPolicy,
 };
 use aos_proto::{
     CancelRequest, InferRequest, LanClusterAssignment, LanClusterDiscoverRequest,
@@ -510,6 +510,23 @@ fn stage_lan_weight_shard(
         .join(lan_artifact_component(work_id));
     std::fs::create_dir_all(&directory)
         .map_err(|error| format!("création du staging poids LAN impossible: {error}"))?;
+    let coverage_path = directory.join("manifest.json");
+    let mut coverage = if coverage_path.exists() {
+        let raw = std::fs::read(&coverage_path)
+            .map_err(|error| format!("lecture du manifeste poids LAN impossible: {error}"))?;
+        serde_json::from_slice::<LanShardManifest>(&raw)
+            .map_err(|error| format!("manifeste poids LAN invalide: {error}"))?
+    } else {
+        LanShardManifest::new(model_id, total_model_bytes)?
+    };
+    if coverage.model_id != model_id || coverage.total_model_bytes != total_model_bytes {
+        return Err("manifeste poids LAN incompatible avec le modèle".into());
+    }
+    coverage.record_range(LanWeightRange {
+        shard_id,
+        offset,
+        length: data.len() as u64,
+    })?;
     let stem = format!("shard-{shard_id:05}-offset-{offset}");
     let partial = directory.join(format!("{stem}.part"));
     let final_path = directory.join(format!("{stem}.bin"));
@@ -517,6 +534,13 @@ fn stage_lan_weight_shard(
         .map_err(|error| format!("écriture du staging poids LAN impossible: {error}"))?;
     std::fs::rename(&partial, &final_path)
         .map_err(|error| format!("validation du staging poids LAN impossible: {error}"))?;
+    let coverage_partial = directory.join("manifest.json.part");
+    let coverage_data = serde_json::to_vec_pretty(&coverage)
+        .map_err(|error| format!("sérialisation du manifeste poids LAN impossible: {error}"))?;
+    std::fs::write(&coverage_partial, coverage_data)
+        .map_err(|error| format!("écriture du manifeste poids LAN impossible: {error}"))?;
+    std::fs::rename(&coverage_partial, &coverage_path)
+        .map_err(|error| format!("publication du manifeste poids LAN impossible: {error}"))?;
     let manifest = serde_json::json!({
         "model_id": model_id,
         "work_id": work_id,

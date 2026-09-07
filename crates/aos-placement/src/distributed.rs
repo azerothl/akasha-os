@@ -344,6 +344,9 @@ impl LanWorkMessage {
                 if !work.allow_sensitive_data {
                     return Err("poids LAN refusés sans politique sensible explicite".into());
                 }
+                if !work.shard_ids.contains(shard_id) {
+                    return Err("shard de poids LAN non déclaré".into());
+                }
                 if *shard_id > 65_535
                     || *length == 0
                     || *length > 64 * 1024 * 1024
@@ -421,6 +424,9 @@ impl LanWorkMessage {
                 }
                 if !work.allow_sensitive_data {
                     return Err("poids LAN refusés sans politique sensible explicite".into());
+                }
+                if !work.shard_ids.contains(shard_id) {
+                    return Err("shard de poids LAN non déclaré".into());
                 }
             }
             Self::Nack {
@@ -505,6 +511,95 @@ pub struct LanWorkerJob {
     pub kv_tokens: u32,
     pub allow_sensitive_data: bool,
     pub state: LanWorkerJobState,
+}
+
+/// Bounded range of a model file staged for a declared logical shard.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LanWeightRange {
+    pub shard_id: u32,
+    pub offset: u64,
+    pub length: u64,
+}
+
+/// Coverage manifest for staged model ranges.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LanShardManifest {
+    pub model_id: String,
+    pub total_model_bytes: u64,
+    #[serde(default)]
+    pub ranges: Vec<LanWeightRange>,
+}
+
+impl LanShardManifest {
+    pub fn new(model_id: impl Into<String>, total_model_bytes: u64) -> Result<Self, String> {
+        let model_id = model_id.into();
+        if model_id.trim().is_empty() || total_model_bytes == 0 {
+            return Err("manifeste de poids LAN invalide".into());
+        }
+        Ok(Self {
+            model_id,
+            total_model_bytes,
+            ranges: Vec::new(),
+        })
+    }
+
+    pub fn record_range(&mut self, range: LanWeightRange) -> Result<(), String> {
+        if range.shard_id > 65_535
+            || range.length == 0
+            || range.length > 64 * 1024 * 1024
+            || range.offset.saturating_add(range.length) > self.total_model_bytes
+        {
+            return Err("plage de poids LAN invalide".into());
+        }
+        if self.ranges.iter().any(|existing| {
+            existing.shard_id == range.shard_id
+                && existing.offset == range.offset
+                && existing.length == range.length
+        }) {
+            return Ok(());
+        }
+        let range_end = range.offset + range.length;
+        if self.ranges.iter().any(|existing| {
+            let existing_end = existing.offset + existing.length;
+            range.offset < existing_end && existing.offset < range_end
+        }) {
+            return Err("plages de poids LAN recouvrantes".into());
+        }
+        self.ranges.push(range);
+        self.ranges
+            .sort_by_key(|range| (range.offset, range.shard_id));
+        Ok(())
+    }
+
+    pub fn is_complete(&self) -> bool {
+        let mut ranges = self.ranges.clone();
+        ranges.sort_by_key(|range| (range.offset, range.shard_id));
+        let mut cursor = 0u64;
+        for range in &ranges {
+            if range.offset != cursor {
+                return false;
+            }
+            cursor = cursor.saturating_add(range.length);
+        }
+        cursor == self.total_model_bytes
+    }
+
+    pub fn missing_ranges(&self) -> Vec<(u64, u64)> {
+        let mut ranges = self.ranges.clone();
+        ranges.sort_by_key(|range| (range.offset, range.shard_id));
+        let mut missing = Vec::new();
+        let mut cursor = 0u64;
+        for range in &ranges {
+            if range.offset > cursor {
+                missing.push((cursor, range.offset - cursor));
+            }
+            cursor = cursor.max(range.offset.saturating_add(range.length));
+        }
+        if cursor < self.total_model_bytes {
+            missing.push((cursor, self.total_model_bytes - cursor));
+        }
+        missing
+    }
 }
 
 /// Runtime state owned by a model worker. Assignment/cancellation state is
@@ -1469,6 +1564,43 @@ mod tests {
     }
 
     #[test]
+    fn manifeste_poids_refuse_recouvrement_et_signale_les_trous() {
+        let mut manifest = LanShardManifest::new("model-1", 100).unwrap();
+        manifest
+            .record_range(LanWeightRange {
+                shard_id: 1,
+                offset: 40,
+                length: 20,
+            })
+            .unwrap();
+        assert_eq!(manifest.missing_ranges(), vec![(0, 40), (60, 40)]);
+        assert!(!manifest.is_complete());
+        assert!(manifest
+            .record_range(LanWeightRange {
+                shard_id: 2,
+                offset: 50,
+                length: 10,
+            })
+            .is_err());
+        manifest
+            .record_range(LanWeightRange {
+                shard_id: 0,
+                offset: 0,
+                length: 40,
+            })
+            .unwrap();
+        manifest
+            .record_range(LanWeightRange {
+                shard_id: 2,
+                offset: 60,
+                length: 40,
+            })
+            .unwrap();
+        assert!(manifest.is_complete());
+        assert!(manifest.missing_ranges().is_empty());
+    }
+
+    #[test]
     fn identite_changee_est_refusee_et_etat_paire_est_conserve() {
         let mut registry = LanPairingRegistry::default();
         registry.discover(node());
@@ -1677,6 +1809,27 @@ mod tests {
         }
         .validate_for(&sensitive_work, "n1")
         .is_ok());
+        assert!(LanWorkMessage::WeightRequest {
+            work_id: "data-work".into(),
+            request_id: "weight-unknown".into(),
+            shard_id: 2,
+            offset: 0,
+            length: 4096,
+            total_model_bytes: 8192,
+        }
+        .validate_for(&sensitive_work, "n1")
+        .is_err());
+        assert!(LanWorkMessage::WeightPage {
+            work_id: "data-work".into(),
+            request_id: "weight-unknown".into(),
+            shard_id: 2,
+            page_index: 0,
+            offset: 0,
+            data: vec![7; 4096],
+            final_page: true,
+        }
+        .validate_for(&sensitive_work, "n1")
+        .is_err());
         assert!(LanWorkMessage::WeightRequest {
             work_id: "data-work".into(),
             request_id: "weight-1".into(),
