@@ -1585,7 +1585,7 @@ async fn handle_lan_worker_connection(
                     LanWorkMessage::TextBatch { .. } => {
                         return Err("batch texte LAN reçu dans le mauvais sens".into());
                     }
-                    LanWorkMessage::LayerActivationPage { .. } => {
+                    LanWorkMessage::LayerActivationPage { work_id, .. } => {
                         let reason = match aos_llama::LlamaBackend::distributed_layer_capability() {
                             aos_llama::DistributedLayerCapability::Unavailable => {
                                 "pipeline de couches LAN indisponible : llama.cpp sans backend RPC"
@@ -1594,7 +1594,16 @@ async fn handle_lan_worker_connection(
                                 "pipeline de couches LAN non câblé : adaptateur RPC Akasha manquant"
                             }
                         };
-                        return Err(reason.into());
+                        transport
+                            .send_message(
+                                &LanWorkMessage::Nack {
+                                    work_id,
+                                    operation: "layer-activation".into(),
+                                    reason: reason.into(),
+                                },
+                                &work,
+                            )
+                            .await?;
                     }
                     _ => return Err("message LAN worker inattendu".into()),
                 }

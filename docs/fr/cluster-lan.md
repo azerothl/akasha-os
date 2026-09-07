@@ -78,9 +78,10 @@ chiffrées, bornées à 512 KiB, validées dans l’ordre puis publiées
 atomiquement avec un manifeste. Ce staging n’est pas encore consommé par
 llama.cpp pour exécuter des couches distantes.
 Le protocole contient aussi des pages d’activation typées et bornées pour le
-futur passage d’un segment au suivant ; le worker répond explicitement que ce
-pipeline est indisponible tant que l’adaptateur natif llama.cpp n’est pas
-activé.
+futur passage d’un segment au suivant ; le worker répond par un `Nack` explicite
+que le scheduler peut traiter pour revenir au placement local tant que
+l’adaptateur natif llama.cpp n’est pas activé. Le canal chiffré reste ouvert
+pour les opérations suivantes.
 Le daemon sonde `llama_supports_rpc()` et distingue un build llama.cpp sans
 RPC d’un build avec RPC mais sans adaptateur Akasha. Dans les deux cas, une
 page d’activation est refusée proprement tant que le chemin chiffré complet
