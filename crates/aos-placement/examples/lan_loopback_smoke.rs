@@ -5,17 +5,17 @@
 //! machine or a model file.
 
 use aos_placement::{
-    DistributedWork, LanNode, LanPairingRegistry, LanSessionKey, LanTcpListener,
-    LanTcpTransport, LanWorkMessage, NodeTrust,
+    DistributedWork, LanNode, LanPairingRegistry, LanSessionKey, LanTcpListener, LanTcpTransport,
+    LanWorkMessage, NodeTrust,
 };
 
 #[tokio::main]
 async fn main() -> Result<(), String> {
-    let server = LanTcpListener::bind("worker", "127.0.0.1:0", &LanPairingRegistry::default())
-        .await?;
+    let server =
+        LanTcpListener::bind("worker", "127.0.0.1:0", &LanPairingRegistry::default()).await?;
     let address = server.local_addr()?.to_string();
-    let mut registry = LanPairingRegistry::default();
-    registry.discover(LanNode {
+    let mut client_registry = LanPairingRegistry::default();
+    client_registry.discover(LanNode {
         node_id: "worker".into(),
         display_name: "loopback worker".into(),
         address: address.clone(),
@@ -23,7 +23,17 @@ async fn main() -> Result<(), String> {
         trust: NodeTrust::Unpaired,
         capabilities: vec!["sensitive-data".into()],
     });
-    registry.pair("worker", "sha256:loopback-worker")?;
+    client_registry.pair("worker", "sha256:loopback-worker")?;
+    let mut server_registry = LanPairingRegistry::default();
+    server_registry.discover(LanNode {
+        node_id: "coordinator".into(),
+        display_name: "loopback coordinator".into(),
+        address: "127.0.0.1:1".into(),
+        public_key_fingerprint: "sha256:loopback-coordinator".into(),
+        trust: NodeTrust::Unpaired,
+        capabilities: Vec::new(),
+    });
+    server_registry.pair("coordinator", "sha256:loopback-coordinator")?;
 
     let work = DistributedWork {
         work_id: "loopback-smoke".into(),
@@ -33,12 +43,11 @@ async fn main() -> Result<(), String> {
         encrypted_transport: true,
     };
     let key = LanSessionKey::from_bytes(&[7; 32])?;
-    let server_registry = registry.clone();
     let server_work = work.clone();
     let server_key = key.clone();
     let server_task = tokio::spawn(async move {
         let mut transport = server
-            .accept_authenticated("worker", &server_work, server_key)
+            .accept_authenticated_any_work_with_registry(&server_registry, server_key)
             .await?;
         match transport.receive_message(&server_work).await? {
             LanWorkMessage::Heartbeat { work_id } if work_id == server_work.work_id => {
@@ -61,7 +70,7 @@ async fn main() -> Result<(), String> {
         "coordinator",
         "worker",
         &address,
-        &server_registry,
+        &client_registry,
         &work,
         key,
     )
