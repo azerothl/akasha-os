@@ -457,8 +457,11 @@ session key are present, `aos-modeld` starts the authenticated TCP worker
 listener. A worker loads its local model before acknowledging an assignment.
 The internal `model.cluster.infer_tokens` operation can then send a typed
 prefill and decode request over one encrypted session and return token batches.
-There is no Internet fallback and no automatic prompt/model sharing: token
-transfer requires an explicit sensitive-data policy.
+The explicit `model.cluster.infer_chat` operation applies the same policy to
+text prompts and returns bounded generated text plus metrics. There is no
+Internet fallback and no automatic prompt/model sharing: data transfer
+requires an explicit sensitive-data policy. The public `model.infer` path
+remains local by default.
 
 The transport contract includes `LanSecureFrame` and `LanSecureChannel` using
 ChaCha20-Poly1305 with node/job associated data and a monotonic sequence. It
@@ -954,6 +957,7 @@ If step 3 partially fails → degraded mode with clear messages; direct shell re
 | `model.plan` | Read-only comparison of automatic and explicit placement profiles |
 | `model.cluster.plan` | Experimental paired-LAN shard plan; encrypted transport required |
 | `model.cluster.dispatch` | Explicitly dispatch a planned assignment through the paired encrypted LAN transport |
+| `model.cluster.infer_chat` | Explicit, encrypted text inference on one assigned paired worker; sensitive-data opt-in required |
 | `model.cluster.recover` | Reassign shards after a reported node loss and optionally propagate new assignments with a session-key secret |
 | `model.cluster.cancel` | Cancel a LAN job and propagate cancellation through the encrypted transport; requires a session-key secret |
 | `model.cluster.nodes` | List configured nodes and their trust state |

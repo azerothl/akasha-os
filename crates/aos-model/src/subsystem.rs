@@ -944,6 +944,57 @@ impl ModelSubsystem {
         .map_err(|error| format!("worker prefill interrompu: {error}"))?
     }
 
+    /// Exécute une inférence texte complète pour le worker LAN.
+    ///
+    /// Cette API est volontairement distincte de `infer`: elle ne passe pas
+    /// par le dispatcher local et n'est appelée qu'après l'autorisation
+    /// explicite du travail LAN. Le verrou du contexte couvre toute la
+    /// génération, afin d'éviter qu'un second travail ne mélange son KV avec
+    /// celui-ci.
+    pub async fn worker_infer_text(
+        &self,
+        model_id: &str,
+        messages: Vec<(String, String)>,
+        params: GenParams,
+        abort: Arc<AtomicBool>,
+    ) -> Result<(String, aos_llama::GenStats), String> {
+        let ctx = {
+            let inner = self.inner.lock().unwrap();
+            let model = inner
+                .models
+                .get(model_id)
+                .ok_or_else(|| format!("modèle inconnu: {model_id}"))?;
+            if !matches!(
+                model.state,
+                ModelState::Loaded | ModelState::PartiallyOffloaded
+            ) {
+                return Err(format!("modèle {model_id} non chargé"));
+            }
+            model
+                .ctx
+                .clone()
+                .ok_or_else(|| format!("contexte du modèle {model_id} indisponible"))?
+        };
+        tokio::task::spawn_blocking(move || {
+            let mut guard = ctx
+                .lock()
+                .map_err(|_| "contexte llama verrouillé".to_string())?;
+            let mut text = String::new();
+            let stats = guard
+                .generate(&messages, &params, |piece| {
+                    if abort.load(Ordering::SeqCst) {
+                        return false;
+                    }
+                    text.push_str(piece);
+                    true
+                })
+                .map_err(|error| error.to_string())?;
+            Ok((text, stats))
+        })
+        .await
+        .map_err(|error| format!("worker inférence interrompue: {error}"))?
+    }
+
     /// Décode des tokens dans le contexte préparé par le dernier prefill LAN.
     pub async fn worker_decode_tokens(
         &self,

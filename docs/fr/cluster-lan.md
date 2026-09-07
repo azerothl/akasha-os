@@ -54,10 +54,13 @@ du secret de session est fourni.
 et que la clé de session est disponible dans le coffre. Le worker charge le
 modèle local avant l’ACK de l’assignment et sait exécuter le prefill/decode
 token-level dans son contexte courant. Les messages `Prefill`, `Decode`,
-tokens et pages KV sont définis, chiffrés et bornés. Le routage d’une requête
-utilisateur par le coordinateur, la partition réelle des poids/shards et le
-transfert KV inter-processus restent à intégrer. Par défaut, aucune donnée de
-modèle ou de prompt ne quitte la machine.
+tokens, inférence texte explicite et pages KV sont définis, chiffrés et bornés.
+`model.cluster.infer_chat` permet à un appelant autorisé de transmettre un
+prompt au nœud choisi et retourne le texte avec ses métriques ; il exige
+`allow_sensitive_data=true`, un secret de session valide et un nœud appairé.
+Le routage implicite de `model.infer` reste local. La partition réelle des
+poids/shards et le transfert KV inter-processus restent à intégrer. Par défaut,
+aucune donnée de modèle ou de prompt ne quitte la machine.
 
 La découverte automatique prend effet au démarrage de `aos-modeld` lorsque le
 cluster LAN et la découverte sont activés. Elle utilise des annonces UDP CBOR

@@ -484,6 +484,36 @@ pub struct LanClusterInferTokensResponse {
     pub finished: bool,
 }
 
+/// Inférence texte LAN explicite. Le prompt ne peut sortir du poste que si
+/// l'appelant active lui-même `allow_sensitive_data` et le transport chiffré.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanClusterInferChatRequest {
+    pub work_id: String,
+    pub request_id: String,
+    pub node_id: String,
+    pub model_id: String,
+    pub messages: Vec<ChatMessage>,
+    #[serde(default)]
+    pub params: InferParams,
+    pub allow_sensitive_data: bool,
+    pub encrypted_transport: bool,
+    /// Nom d'un secret contenant exactement 64 caractères hexadécimaux.
+    pub session_key_secret: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanClusterInferChatResponse {
+    pub work_id: String,
+    pub request_id: String,
+    pub node_id: String,
+    pub text: String,
+    pub finished: bool,
+    pub prompt_tokens: u32,
+    pub generated_tokens: u32,
+    pub ttft_ms: f64,
+    pub tok_s: f64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LanClusterNode {
     pub node_id: String,

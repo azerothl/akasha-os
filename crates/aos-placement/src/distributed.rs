@@ -44,6 +44,16 @@ pub struct DistributedWork {
     pub encrypted_transport: bool,
 }
 
+/// Message textuelle explicitement autorisée sur un travail LAN chiffré.
+///
+/// Elle est distincte du protocole IPC `model.infer` afin qu'un appelant ne
+/// puisse pas faire sortir un prompt du poste par simple sélection de modèle.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LanChatMessage {
+    pub role: String,
+    pub content: String,
+}
+
 /// Messages allowed on an authenticated LAN work channel.
 ///
 /// Control-plane and explicitly typed data-plane messages share the same
@@ -86,11 +96,32 @@ pub enum LanWorkMessage {
         request_id: String,
         max_tokens: u32,
     },
+    ChatInfer {
+        work_id: String,
+        request_id: String,
+        messages: Vec<LanChatMessage>,
+        max_tokens: u32,
+        /// Température et top-p en millièmes pour garder le contrat CBOR
+        /// déterministe et sans flottants côté transport.
+        temperature_milli: u32,
+        top_p_milli: u32,
+        seed: u64,
+    },
     TokenBatch {
         work_id: String,
         request_id: String,
         tokens: Vec<u32>,
         finished: bool,
+    },
+    TextBatch {
+        work_id: String,
+        request_id: String,
+        text: String,
+        finished: bool,
+        prompt_tokens: u32,
+        generated_tokens: u32,
+        ttft_ms_milli: u64,
+        tok_s_milli: u64,
     },
     KvPage {
         work_id: String,
@@ -116,7 +147,9 @@ impl LanWorkMessage {
             | Self::Ack { work_id, .. }
             | Self::Prefill { work_id, .. }
             | Self::Decode { work_id, .. }
+            | Self::ChatInfer { work_id, .. }
             | Self::TokenBatch { work_id, .. }
+            | Self::TextBatch { work_id, .. }
             | Self::KvPage { work_id, .. }
             | Self::Nack { work_id, .. } => work_id,
         }
@@ -203,6 +236,43 @@ impl LanWorkMessage {
                     return Err("budget de décodage LAN invalide".into());
                 }
             }
+            Self::ChatInfer {
+                request_id,
+                messages,
+                max_tokens,
+                temperature_milli,
+                top_p_milli,
+                ..
+            } => {
+                validate_request_id(request_id)?;
+                if !work.allow_sensitive_data {
+                    return Err(
+                        "inférence texte LAN refusée sans politique sensible explicite".into(),
+                    );
+                }
+                if messages.is_empty() || messages.len() > 64 {
+                    return Err("nombre de messages LAN invalide".into());
+                }
+                let total_bytes: usize = messages
+                    .iter()
+                    .map(|message| message.role.len().saturating_add(message.content.len()))
+                    .sum();
+                if total_bytes == 0 || total_bytes > 1_048_576 {
+                    return Err("taille de prompt LAN invalide".into());
+                }
+                if messages
+                    .iter()
+                    .any(|message| message.role.trim().is_empty() || message.role.len() > 32)
+                {
+                    return Err("rôle de message LAN invalide".into());
+                }
+                if *max_tokens == 0 || *max_tokens > 8192 {
+                    return Err("budget de décodage LAN invalide".into());
+                }
+                if *temperature_milli > 5000 || *top_p_milli == 0 || *top_p_milli > 1000 {
+                    return Err("paramètres d'échantillonnage LAN invalides".into());
+                }
+            }
             Self::TokenBatch {
                 request_id,
                 tokens,
@@ -215,6 +285,20 @@ impl LanWorkMessage {
                 }
                 if !work.allow_sensitive_data {
                     return Err("tokens LAN refusés sans politique sensible explicite".into());
+                }
+            }
+            Self::TextBatch {
+                request_id,
+                text,
+                finished,
+                ..
+            } => {
+                validate_request_id(request_id)?;
+                if text.len() > 1_048_576 || (text.is_empty() && !finished) {
+                    return Err("batch texte LAN invalide".into());
+                }
+                if !work.allow_sensitive_data {
+                    return Err("texte LAN refusé sans politique sensible explicite".into());
                 }
             }
             Self::KvPage {
@@ -1366,7 +1450,7 @@ mod tests {
 
         let sensitive_work = DistributedWork {
             allow_sensitive_data: true,
-            ..private_work
+            ..private_work.clone()
         };
         assert!(prefill.validate_for(&sensitive_work, "n1").is_ok());
         assert!(LanWorkMessage::Prefill {
@@ -1374,6 +1458,34 @@ mod tests {
             request_id: "req-1".into(),
             input_tokens: Vec::new(),
             kv_tokens: 128,
+        }
+        .validate_for(&sensitive_work, "n1")
+        .is_err());
+        let chat = LanWorkMessage::ChatInfer {
+            work_id: "data-work".into(),
+            request_id: "req-2".into(),
+            messages: vec![LanChatMessage {
+                role: "user".into(),
+                content: "bonjour".into(),
+            }],
+            max_tokens: 32,
+            temperature_milli: 700,
+            top_p_milli: 950,
+            seed: 42,
+        };
+        assert!(chat.validate_for(&sensitive_work, "n1").is_ok());
+        assert!(chat.validate_for(&private_work, "n1").is_err());
+        assert!(LanWorkMessage::ChatInfer {
+            work_id: "data-work".into(),
+            request_id: "req-2".into(),
+            messages: vec![LanChatMessage {
+                role: "user".into(),
+                content: "bonjour".into(),
+            }],
+            max_tokens: 32,
+            temperature_milli: 700,
+            top_p_milli: 0,
+            seed: 42,
         }
         .validate_for(&sensitive_work, "n1")
         .is_err());
