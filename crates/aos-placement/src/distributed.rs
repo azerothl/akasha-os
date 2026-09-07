@@ -1372,6 +1372,7 @@ mod tests {
             encrypted_transport: true,
         };
         let plan = cluster.plan(&work, 4096).unwrap();
+        assert_eq!(plan.model_id, "m");
         assert_eq!(plan.assignments.len(), 2);
         assert_eq!(
             plan.assignments

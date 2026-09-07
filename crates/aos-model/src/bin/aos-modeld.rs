@@ -1488,6 +1488,16 @@ async fn main() {
                     .lock()
                     .map(|cluster| {
                         let plan = cluster.job(&req.work_id).cloned()?;
+                        if plan.model_id != req.model_id
+                            || req.shard_ids.iter().any(|shard_id| {
+                                !plan
+                                    .assignments
+                                    .iter()
+                                    .any(|assignment| assignment.shard_ids.contains(shard_id))
+                            })
+                        {
+                            return None;
+                        }
                         let assignment = plan
                             .assignments
                             .iter()
@@ -1509,7 +1519,11 @@ async fn main() {
                 let work = DistributedWork {
                     work_id: req.work_id.clone(),
                     model_id: req.model_id.clone(),
-                    shard_ids: req.shard_ids.clone(),
+                    shard_ids: if req.shard_ids.is_empty() {
+                        assignment.shard_ids.clone()
+                    } else {
+                        req.shard_ids.clone()
+                    },
                     allow_sensitive_data: true,
                     encrypted_transport: true,
                 };
@@ -1634,6 +1648,9 @@ async fn main() {
                     .lock()
                     .map(|cluster| {
                         let plan = cluster.job(&req.work_id).cloned()?;
+                        if plan.model_id != req.model_id {
+                            return None;
+                        }
                         let assignment = plan
                             .assignments
                             .iter()
@@ -2256,6 +2273,14 @@ async fn main() {
                             .lock()
                             .map_err(|_| "verrou cluster indisponible".to_string())
                             .and_then(|mut cluster| {
+                                if let Some(model_id) = req.model_id.as_ref() {
+                                    let plan = cluster
+                                        .job(&req.work_id)
+                                        .ok_or("travail LAN introuvable")?;
+                                    if plan.model_id != *model_id {
+                                        return Err("modèle de reprise LAN différent du plan".into());
+                                    }
+                                }
                                 let recovery = cluster.recover_node_loss(&req.work_id, &node_id)?;
                                 let plan = cluster
                                     .job(&req.work_id)
