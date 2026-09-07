@@ -1396,6 +1396,13 @@ impl LanCluster {
 
     /// Partition a model's declared shards across paired LAN nodes.
     pub fn plan(&mut self, work: &DistributedWork, kv_tokens: u32) -> Result<LanWorkPlan, String> {
+        if self
+            .jobs
+            .get(&work.work_id)
+            .is_some_and(|plan| matches!(plan.state, LanJobState::Cancelled | LanJobState::Failed))
+        {
+            return Err("travail LAN terminé : utiliser un nouvel identifiant".into());
+        }
         if work.work_id.trim().is_empty() {
             return Err("identifiant de travail LAN vide".into());
         }
@@ -1457,12 +1464,27 @@ impl LanCluster {
         lost_node_id: &str,
     ) -> Result<LanRecovery, String> {
         let plan = self.jobs.get_mut(work_id).ok_or("travail LAN inconnu")?;
+        if matches!(plan.state, LanJobState::Cancelled | LanJobState::Failed) {
+            return Err("travail LAN terminé".into());
+        }
         let lost = plan
             .assignments
             .iter()
             .position(|assignment| assignment.node_id == lost_node_id)
             .ok_or("nœud absent du travail LAN")?;
-        let shards = plan.assignments.remove(lost).shard_ids;
+        let mut shards = plan.assignments.remove(lost).shard_ids;
+        // Revoked assignments are no longer usable either. Preserve their
+        // shards in recovery rather than leaving them attached to stale peers.
+        plan.assignments.retain(|assignment| {
+            let paired = self
+                .registry
+                .get(&assignment.node_id)
+                .is_some_and(|node| node.trust == NodeTrust::Paired);
+            if !paired {
+                shards.extend_from_slice(&assignment.shard_ids);
+            }
+            paired
+        });
         let survivors: Vec<String> = plan
             .assignments
             .iter()
@@ -1598,6 +1620,25 @@ mod tests {
         let cancelled = cluster.cancel("w1").unwrap();
         assert_eq!(cancelled.state, LanJobState::Cancelled);
         assert_eq!(cancelled.cancelled_nodes, vec!["n2"]);
+        assert!(cluster.recover_node_loss("w1", "n2").is_err());
+        assert!(cluster.plan(&work, 4096).is_err());
+        assert_eq!(cluster.job("w1").unwrap().state, LanJobState::Cancelled);
+        assert_eq!(cluster.job("w1").unwrap().assignments.len(), 1);
+
+        let second = DistributedWork {
+            work_id: "w2".into(),
+            ..work
+        };
+        cluster.plan(&second, 4096).unwrap();
+        cluster.registry_mut().revoke("n2");
+        cluster.recover_node_loss("w2", "n1").unwrap();
+        let failed = cluster.job("w2").unwrap();
+        assert_eq!(failed.state, LanJobState::Failed);
+        assert!(failed.assignments.is_empty());
+        let mut missing = failed.unassigned_shards.clone();
+        missing.sort_unstable();
+        assert_eq!(missing, vec![1, 2, 3, 4]);
+        assert!(cluster.plan(&second, 4096).is_err());
     }
 
     #[test]

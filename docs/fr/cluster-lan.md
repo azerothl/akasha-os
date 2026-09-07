@@ -49,6 +49,11 @@ disponibles. Le worker accuse réception des assignments, des heartbeats et
 des annulations. `model.cluster.recover` peut renvoyer les assignments après
 une perte de nœud, et `model.cluster.cancel` propage l’annulation si le nom
 du secret de session est fourni.
+Le coordinateur refuse la récupération et la replanification d’un travail
+annulé ou échoué : une nouvelle tentative doit utiliser un nouvel identifiant.
+Lors d’une récupération, les assignments des nœuds révoqués sont retirées et
+leurs shards sont réaffectés ; sans survivant appairé, tous les shards concernés
+sont conservés dans la liste des shards non assignés.
 
 `aos-modeld` ouvre le listener LAN uniquement lorsque le cluster est activé
 et que la clé de session est disponible dans le coffre. Le worker charge le
