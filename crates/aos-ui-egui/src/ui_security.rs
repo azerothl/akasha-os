@@ -6,47 +6,6 @@ use aos_proto::CapInfo;
 use eframe::egui;
 
 impl UiApp {
-    pub(crate) fn ui_audit(&mut self, ui: &mut egui::Ui) {
-        let t = i18n::strings(&self.prefs.language);
-        ui.heading(t.audit_heading);
-        if self.security_ui.audit.is_empty() {
-            ui.weak(if self.prefs.language == "fr" {
-                "Aucun événement d'audit pour le moment."
-            } else {
-                "No audit events yet."
-            });
-        }
-        ui.horizontal(|ui| {
-            if ui.button(t.decl_ui_refresh).clicked() {
-                let _ = self.cmd_tx.send(Cmd::Audit {
-                    last: self.security_ui.audit_last_or_default(),
-                    actor: None,
-                    action: None,
-                    trace_id: None,
-                });
-            }
-            // Garde-fou destructeur (opensourceui `slide-to-confirm`
-            // adapté two-step) : KillAuditd à côté de Refresh.
-            if crate::ui_primitives::danger_confirm_button(
-                ui,
-                "audit-kill",
-                t.audit_kill_p4,
-                &format!("{} ?", t.audit_kill_p4),
-            ) {
-                let _ = self.cmd_tx.send(Cmd::KillAuditd);
-            }
-        });
-        let list_h = ui.available_height().max(120.0);
-        overflow_scroll_h(ui, "audit_list", list_h, |ui| {
-            for e in &self.security_ui.audit {
-                ui.monospace(format!(
-                    "#{} {} {} {} → {}",
-                    e.seq, e.actor, e.action, e.target, e.hash
-                ));
-            }
-        });
-    }
-
     pub(crate) fn ui_caps(&mut self, ui: &mut egui::Ui) {
         let t = i18n::strings(&self.prefs.language);
         ui.heading(t.caps_heading);

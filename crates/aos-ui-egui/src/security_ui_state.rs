@@ -1,6 +1,7 @@
 //! Mutable state owned by the audit and capabilities panels.
 
 use aos_proto::{AuditEvent, CapInfo};
+use crate::ui_audit::DaemonRestart;
 
 #[derive(Default)]
 pub(crate) struct SecurityUiState {
@@ -22,6 +23,10 @@ pub(crate) struct SecurityUiState {
     pub(crate) audit_trace: Option<String>,
     /// Résultat `audit.verify` (None = non vérifié cette session).
     pub(crate) audit_verified: Option<bool>,
+    /// Redémarrages watchdog (daemon_restarts.log).
+    pub(crate) audit_restarts: Vec<DaemonRestart>,
+    /// Queues stderr des daemons (daemon.stderr.log).
+    pub(crate) audit_logs: Vec<(String, Vec<String>)>,
 }
 
 impl SecurityUiState {

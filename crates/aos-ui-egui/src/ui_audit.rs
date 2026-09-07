@@ -474,10 +474,6 @@ impl UiApp {
     }
 }
 
-fn agent_panel_short(target: &str, n: usize) -> String {
-    crate::agent_panel::truncate(target, n)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -67,9 +67,12 @@ paired worker. The state is capped at 64 MiB and pages must arrive in order.
 range for a declared shard to the target worker's local staging area. Pages are
 encrypted, ordered and atomically published with a manifest. The staged bytes
 are not yet consumed by llama.cpp for remote-layer execution.
-The protocol also defines bounded typed activation pages for the future hop
-between contiguous layer segments; workers return an explicit unsupported error
-until the native llama.cpp adapter is enabled.
+The protocol also defines bounded typed activation pages and result pages for
+the hop between contiguous layer segments. The independent Akasha adapter
+reassembles an activation, invokes an injected worker executor, and pages the
+result back without depending on llama.cpp RPC symbols. The production worker
+executor is still gated until a backend exposes safe intermediate tensors;
+unsupported requests return an explicit Nack and can fall back locally.
 The daemon probes `llama_supports_rpc()` and distinguishes a llama.cpp build
 without RPC from one with RPC but without the Akasha adapter. In both cases an
 activation page is rejected cleanly until the complete encrypted path exists.

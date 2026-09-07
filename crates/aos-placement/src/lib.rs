@@ -23,8 +23,10 @@ pub mod distributed;
 pub mod hardware;
 pub mod manager;
 pub mod model;
+pub mod layer_rpc;
 pub mod plan;
 pub mod sim;
+pub mod tensor_wire;
 
 pub use adaptive::{
     AdaptivePlanner, BackendDescriptor, BackendKind, BackendRegistry, InferencePlan,
@@ -53,9 +55,14 @@ pub use hardware::{
     WebGpuCapabilities,
 };
 pub use manager::{Budgets, PlacementError, PlacementManager};
+pub use layer_rpc::{
+    LayerRpcExecutor, LayerRpcReceiver, LayerRpcRequest, LayerRpcResult,
+    LAYER_RPC_PAGE_BYTES, LAYER_RPC_PROTOCOL_VERSION,
+};
 pub use model::{KvCacheType, ModelDesc, PrivacyClass, QuantizationMetadata};
 pub use plan::{PlacementPlan, PlacementProfile, Priority, Shard, ShardKind, Tier};
 pub use sim::{PlacedModel, PlacementSim, PressureReport, ReprofileReport, RunState, SimEvent};
+pub use tensor_wire::{CpuLayerExecutor, F32Tensor, TensorDType};
 
 /// Modèles de test partagés entre modules.
 #[cfg(test)]

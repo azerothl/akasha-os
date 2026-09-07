@@ -144,6 +144,18 @@ pub enum LanWorkMessage {
         data: Vec<u8>,
         final_page: bool,
     },
+    /// Result page returned by the independent Akasha layer adapter.
+    LayerActivationResult {
+        work_id: String,
+        request_id: String,
+        shard_id: u32,
+        layer_index: u32,
+        sequence: u32,
+        page_index: u32,
+        total_bytes: u64,
+        data: Vec<u8>,
+        final_page: bool,
+    },
     ChatInfer {
         work_id: String,
         request_id: String,
@@ -202,6 +214,7 @@ impl LanWorkMessage {
             | Self::WeightBegin { work_id, .. }
             | Self::WeightPage { work_id, .. }
             | Self::LayerActivationPage { work_id, .. }
+            | Self::LayerActivationResult { work_id, .. }
             | Self::ChatInfer { work_id, .. }
             | Self::TokenBatch { work_id, .. }
             | Self::TextBatch { work_id, .. }
@@ -470,6 +483,34 @@ impl LanWorkMessage {
                     || data.len() as u64 > *total_bytes
                 {
                     return Err("page d'activation LAN invalide".into());
+                }
+            }
+            Self::LayerActivationResult {
+                request_id,
+                shard_id,
+                layer_index,
+                sequence,
+                page_index,
+                total_bytes,
+                data,
+                ..
+            } => {
+                validate_request_id(request_id)?;
+                if !work.allow_sensitive_data {
+                    return Err("résultat d'activation LAN refusé sans politique sensible explicite".into());
+                }
+                if !work.shard_ids.contains(shard_id)
+                    || *shard_id > 65_535
+                    || *layer_index > 65_535
+                    || *sequence > 1_048_576
+                    || *page_index > 65_535
+                    || *total_bytes == 0
+                    || *total_bytes > 64 * 1024 * 1024
+                    || data.is_empty()
+                    || data.len() > 1_048_576
+                    || data.len() as u64 > *total_bytes
+                {
+                    return Err("page de résultat d'activation LAN invalide".into());
                 }
             }
             Self::Nack {

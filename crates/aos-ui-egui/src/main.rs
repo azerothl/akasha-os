@@ -102,6 +102,7 @@ mod ui_providers;
 mod ui_scenarios;
 mod ui_security;
 mod ui_settings;
+mod ui_audit;
 mod ui_workspace;
 mod workspace_controller;
 mod workspace_ui_state;
@@ -2389,6 +2390,9 @@ impl eframe::App for UiApp {
                 Evt::Audit(a) => {
                     self.security_ui.set_audit(a);
                     self.scenario_ui.audit = true;
+                }
+                Evt::AuditVerified(ok) => {
+                    self.security_ui.audit_verified = Some(ok);
                 }
                 Evt::Caps { holder, caps } => {
                     self.security_ui.set_caps(holder, caps);
