@@ -499,9 +499,17 @@ fn stage_lan_weight_shard(
     total_model_bytes: u64,
     data: &[u8],
 ) -> Result<(), String> {
+    // Worker connections run on separate blocking tasks. Serialize publication
+    // so their read/modify/write cycles cannot lose manifest entries.
+    static STAGING_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _staging_guard = STAGING_LOCK
+        .lock()
+        .map_err(|_| "verrou staging poids LAN indisponible".to_string())?;
     if data.is_empty()
         || data.len() > LAN_KV_MAX_BYTES
-        || offset.saturating_add(data.len() as u64) > total_model_bytes
+        || offset
+            .checked_add(data.len() as u64)
+            .is_none_or(|end| end > total_model_bytes)
     {
         return Err("plage de poids LAN invalide".into());
     }
@@ -530,10 +538,23 @@ fn stage_lan_weight_shard(
     let stem = format!("shard-{shard_id:05}-offset-{offset}");
     let partial = directory.join(format!("{stem}.part"));
     let final_path = directory.join(format!("{stem}.bin"));
-    std::fs::write(&partial, data)
-        .map_err(|error| format!("écriture du staging poids LAN impossible: {error}"))?;
-    std::fs::rename(&partial, &final_path)
-        .map_err(|error| format!("validation du staging poids LAN impossible: {error}"))?;
+    if final_path.exists() {
+        let metadata = std::fs::metadata(&final_path)
+            .map_err(|error| format!("lecture du shard existant impossible: {error}"))?;
+        if metadata.len() != data.len() as u64 {
+            return Err("conflit avec un shard de poids LAN existant".into());
+        }
+        let existing = std::fs::read(&final_path)
+            .map_err(|error| format!("lecture du shard existant impossible: {error}"))?;
+        if existing != data {
+            return Err("conflit avec un shard de poids LAN existant".into());
+        }
+    } else {
+        std::fs::write(&partial, data)
+            .map_err(|error| format!("écriture du staging poids LAN impossible: {error}"))?;
+        std::fs::rename(&partial, &final_path)
+            .map_err(|error| format!("validation du staging poids LAN impossible: {error}"))?;
+    }
     let coverage_partial = directory.join("manifest.json.part");
     let coverage_data = serde_json::to_vec_pretty(&coverage)
         .map_err(|error| format!("sérialisation du manifeste poids LAN impossible: {error}"))?;
@@ -3813,6 +3834,31 @@ mod tests {
         assert_eq!(manifest["model_id"], "model:test");
         assert_eq!(manifest["length"], 3);
         assert!(!directory.join("shard-00007-offset-4.part").exists());
+        // Retrying identical bytes succeeds; different bytes preserve the shard.
+        stage_lan_weight_shard(&root, "work/with spaces", "model:test", 7, 4, 10, b"abc").unwrap();
+        assert!(
+            stage_lan_weight_shard(&root, "work/with spaces", "model:test", 7, 4, 10, b"xyz")
+                .is_err()
+        );
+        assert_eq!(
+            std::fs::read(directory.join("shard-00007-offset-4.bin")).unwrap(),
+            b"abc"
+        );
+        std::thread::scope(|scope| {
+            scope.spawn(|| {
+                stage_lan_weight_shard(&root, "work/with spaces", "model:test", 0, 0, 10, b"0123")
+                    .unwrap()
+            });
+            scope.spawn(|| {
+                stage_lan_weight_shard(&root, "work/with spaces", "model:test", 8, 7, 10, b"789")
+                    .unwrap()
+            });
+        });
+        let coverage: aos_placement::LanShardManifest =
+            serde_json::from_slice(&std::fs::read(directory.join("manifest.json")).unwrap())
+                .unwrap();
+        assert!(coverage.is_complete());
+        assert_eq!(coverage.ranges.len(), 3);
         std::fs::remove_dir_all(root).unwrap();
     }
 }

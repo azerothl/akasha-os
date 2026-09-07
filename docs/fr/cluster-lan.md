@@ -70,6 +70,10 @@ poids d’un shard vers le staging local d’un worker cible. Les pages sont
 chiffrées, bornées à 512 KiB, validées dans l’ordre puis publiées
 atomiquement avec un manifeste. Ce staging n’est pas encore consommé par
 llama.cpp pour exécuter des couches distantes.
+Une retransmission du même shard est acceptée si les octets sont identiques ;
+un contenu différent est refusé sans écraser le fichier existant. Les publications
+des connexions d’un même daemon sont sérialisées pour préserver le manifeste de
+couverture. Cette garantie suppose un seul daemon par répertoire de staging.
 Le routage implicite de `model.infer` reste local. La partition réelle des
 poids/shards reste à intégrer ; le transfert KV explicite est disponible via
 `model.cluster.kv_transfer`. Par défaut,
