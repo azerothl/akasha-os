@@ -315,7 +315,10 @@ Guide testeur (sans cargo) : [write-a-module.md](write-a-module.md).
   `device.usb.open`. Ouvrir, lire, écrire, fermer ; l’Audit ne doit pas contenir
   d’octets bruts. Révoquer `device.usb.io` dans Caps et vérifier la fermeture
   des handles.
-- Sous Linux/macOS, `device.usb.enumerate` renvoie `UnsupportedPlatform`.
+- Sous Linux/macOS, brancher un adaptateur USB-série et vérifier que
+  `device.usb.enumerate` liste des entrées `linux:Serial:*` ou `macos:Serial:*`
+  (liste vide acceptable sans matériel ; ne doit pas renvoyer
+  `UnsupportedPlatform`).
 
 ### 29. Shell calme et navigation des sessions (0.16.1)
 
@@ -388,5 +391,6 @@ Guide testeur (sans cargo) : [write-a-module.md](write-a-module.md).
 - Ouvrir, lire, écrire, fermer ; vérifier l’Audit (requête/ouverture/lecture/
   écriture/fermeture) sans octets bruts.
 - Révoquer `device.usb.io` dans Caps et vérifier la fermeture des handles.
-- Sous Linux/macOS, vérifier que `device.usb.enumerate` renvoie
-  `UnsupportedPlatform` et que les tests CI du backend factice passent.
+- Sous Linux/macOS, vérifier que `device.usb.enumerate` ne renvoie pas
+  `UnsupportedPlatform` (liste les ports série si matériel présent ; les tests CI
+  du backend factice passent toujours).

@@ -14,7 +14,7 @@ sudo apt-get install -y -qq \
   clang libclang-dev libssl-dev \
   libx11-dev libxcursor-dev libxrandr-dev libxi-dev libxkbcommon-dev \
   libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
-  libwayland-dev libasound2-dev xz-utils zstd findutils lld
+  libwayland-dev libasound2-dev libudev-dev xz-utils zstd findutils lld
 
 # The base image points cc/c++ at clang, whose driver cannot locate libstdc++
 # when building llama.cpp (llama-cpp-sys-2) via CMake ("cannot find -lstdc++").

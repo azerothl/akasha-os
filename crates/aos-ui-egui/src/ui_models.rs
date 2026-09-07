@@ -110,7 +110,7 @@ impl UiApp {
                             .map(|(_, label)| *label)
                             .unwrap_or("balanced");
                         ui.horizontal(|ui| {
-                            ui.label(if fr { "Placement" } else { "Placement" });
+                            ui.label("Placement");
                             egui::ComboBox::from_id_salt("placement_profile")
                                 .selected_text(current_label)
                                 .show_ui(ui, |ui| {
