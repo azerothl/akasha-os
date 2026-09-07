@@ -540,6 +540,37 @@ pub struct LanClusterKvTransferResponse {
     pub total_bytes: u64,
 }
 
+/// Explicit transfer of one bounded model-weight range to a paired worker.
+/// The target stages the range atomically; it is not consumed by inference
+/// until a backend with native shard loading is available.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanClusterWeightTransferRequest {
+    pub work_id: String,
+    pub request_id: String,
+    pub source_node_id: String,
+    pub target_node_id: String,
+    pub model_id: String,
+    pub shard_id: u32,
+    pub offset: u64,
+    pub length: u64,
+    pub total_model_bytes: u64,
+    pub allow_sensitive_data: bool,
+    pub encrypted_transport: bool,
+    #[serde(default)]
+    pub session_key_secret: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanClusterWeightTransferResponse {
+    pub work_id: String,
+    pub request_id: String,
+    pub source_node_id: String,
+    pub target_node_id: String,
+    pub shard_id: u32,
+    pub page_count: u32,
+    pub total_bytes: u64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LanClusterNode {
     pub node_id: String,

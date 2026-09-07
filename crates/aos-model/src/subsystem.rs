@@ -15,6 +15,7 @@ use aos_proto::{
 };
 use aos_registry::ModelRegistry;
 use std::collections::HashMap;
+use std::io::{Read, Seek, SeekFrom};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex as StdMutex};
@@ -978,6 +979,60 @@ impl ModelSubsystem {
         })
         .await
         .map_err(|error| format!("export KV interrompu: {error}"))?
+    }
+
+    /// Lit une plage bornée du fichier de poids local pour un staging LAN.
+    ///
+    /// Le backend llama reste propriétaire du chargement : cette primitive ne
+    /// expose que des octets explicitement demandés par un travail chiffré.
+    pub async fn worker_read_weight_range(
+        &self,
+        model_id: &str,
+        offset: u64,
+        length: u64,
+    ) -> Result<(u64, Vec<u8>), String> {
+        if length == 0 || length > 64 * 1024 * 1024 {
+            return Err("plage de poids LAN invalide".into());
+        }
+        let path = {
+            let inner = self.inner.lock().unwrap();
+            let model = inner
+                .models
+                .get(model_id)
+                .ok_or_else(|| format!("modèle inconnu: {model_id}"))?;
+            if !matches!(
+                model.state,
+                ModelState::Loaded | ModelState::PartiallyOffloaded
+            ) {
+                return Err(format!("modèle {model_id} non chargé"));
+            }
+            model
+                .path
+                .clone()
+                .ok_or_else(|| format!("poids du modèle {model_id} indisponibles"))?
+        };
+        tokio::task::spawn_blocking(move || {
+            let mut file = std::fs::File::open(&path)
+                .map_err(|error| format!("ouverture des poids LAN impossible: {error}"))?;
+            let total = file
+                .metadata()
+                .map_err(|error| format!("métadonnées des poids LAN indisponibles: {error}"))?
+                .len();
+            let end = offset
+                .checked_add(length)
+                .ok_or("plage de poids LAN hors limites")?;
+            if offset >= total || end > total {
+                return Err("plage de poids LAN hors fichier".into());
+            }
+            file.seek(SeekFrom::Start(offset))
+                .map_err(|error| format!("positionnement des poids LAN impossible: {error}"))?;
+            let mut data = vec![0u8; length as usize];
+            file.read_exact(&mut data)
+                .map_err(|error| format!("lecture des poids LAN impossible: {error}"))?;
+            Ok((total, data))
+        })
+        .await
+        .map_err(|error| format!("lecture des poids interrompue: {error}"))?
     }
 
     /// Importe l'état KV d'une séquence reçue via le transport LAN.

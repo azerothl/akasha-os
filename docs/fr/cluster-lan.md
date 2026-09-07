@@ -65,6 +65,11 @@ token.
 worker, le transporter par pages CBOR chiffrées de 512 KiB maximum, puis le
 restaurer sur un autre worker appairé. L’état est limité à 64 MiB et les pages
 doivent arriver dans l’ordre.
+`model.cluster.weight_transfer` peut transférer explicitement une plage de
+poids d’un shard vers le staging local d’un worker cible. Les pages sont
+chiffrées, bornées à 512 KiB, validées dans l’ordre puis publiées
+atomiquement avec un manifeste. Ce staging n’est pas encore consommé par
+llama.cpp pour exécuter des couches distantes.
 Le routage implicite de `model.infer` reste local. La partition réelle des
 poids/shards reste à intégrer ; le transfert KV explicite est disponible via
 `model.cluster.kv_transfer`. Par défaut,

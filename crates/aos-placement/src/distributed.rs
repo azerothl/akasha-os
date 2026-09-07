@@ -105,6 +105,31 @@ pub enum LanWorkMessage {
         request_id: String,
         seq_id: u32,
     },
+    WeightRequest {
+        work_id: String,
+        request_id: String,
+        shard_id: u32,
+        offset: u64,
+        length: u64,
+        total_model_bytes: u64,
+    },
+    WeightBegin {
+        work_id: String,
+        request_id: String,
+        shard_id: u32,
+        offset: u64,
+        length: u64,
+        total_model_bytes: u64,
+    },
+    WeightPage {
+        work_id: String,
+        request_id: String,
+        shard_id: u32,
+        page_index: u32,
+        offset: u64,
+        data: Vec<u8>,
+        final_page: bool,
+    },
     ChatInfer {
         work_id: String,
         request_id: String,
@@ -159,6 +184,9 @@ impl LanWorkMessage {
             | Self::Prefill { work_id, .. }
             | Self::Decode { work_id, .. }
             | Self::KvRequest { work_id, .. }
+            | Self::WeightRequest { work_id, .. }
+            | Self::WeightBegin { work_id, .. }
+            | Self::WeightPage { work_id, .. }
             | Self::ChatInfer { work_id, .. }
             | Self::TokenBatch { work_id, .. }
             | Self::TextBatch { work_id, .. }
@@ -296,6 +324,35 @@ impl LanWorkMessage {
                     return Err("séquence KV LAN invalide".into());
                 }
             }
+            Self::WeightRequest {
+                request_id,
+                shard_id,
+                offset,
+                length,
+                total_model_bytes,
+                ..
+            }
+            | Self::WeightBegin {
+                request_id,
+                shard_id,
+                offset,
+                length,
+                total_model_bytes,
+                ..
+            } => {
+                validate_request_id(request_id)?;
+                if !work.allow_sensitive_data {
+                    return Err("poids LAN refusés sans politique sensible explicite".into());
+                }
+                if *shard_id > 65_535
+                    || *length == 0
+                    || *length > 64 * 1024 * 1024
+                    || *total_model_bytes == 0
+                    || offset.saturating_add(*length) > *total_model_bytes
+                {
+                    return Err("plage de poids LAN invalide".into());
+                }
+            }
             Self::TokenBatch {
                 request_id,
                 tokens,
@@ -343,6 +400,27 @@ impl LanWorkMessage {
                 }
                 if !work.allow_sensitive_data {
                     return Err("KV LAN refusé sans politique sensible explicite".into());
+                }
+            }
+            Self::WeightPage {
+                request_id,
+                shard_id,
+                page_index,
+                offset,
+                data,
+                ..
+            } => {
+                validate_request_id(request_id)?;
+                if *shard_id > 65_535
+                    || *page_index > 65_535
+                    || data.is_empty()
+                    || data.len() > 1_048_576
+                    || *offset > u64::MAX - data.len() as u64
+                {
+                    return Err("page de poids LAN invalide".into());
+                }
+                if !work.allow_sensitive_data {
+                    return Err("poids LAN refusés sans politique sensible explicite".into());
                 }
             }
             Self::Nack {
@@ -1599,6 +1677,37 @@ mod tests {
         }
         .validate_for(&sensitive_work, "n1")
         .is_ok());
+        assert!(LanWorkMessage::WeightRequest {
+            work_id: "data-work".into(),
+            request_id: "weight-1".into(),
+            shard_id: 1,
+            offset: 0,
+            length: 4096,
+            total_model_bytes: 8192,
+        }
+        .validate_for(&sensitive_work, "n1")
+        .is_ok());
+        assert!(LanWorkMessage::WeightPage {
+            work_id: "data-work".into(),
+            request_id: "weight-1".into(),
+            shard_id: 1,
+            page_index: 0,
+            offset: 0,
+            data: vec![7; 4096],
+            final_page: true,
+        }
+        .validate_for(&sensitive_work, "n1")
+        .is_ok());
+        assert!(LanWorkMessage::WeightRequest {
+            work_id: "data-work".into(),
+            request_id: "weight-1".into(),
+            shard_id: 1,
+            offset: 8192,
+            length: 1,
+            total_model_bytes: 8192,
+        }
+        .validate_for(&sensitive_work, "n1")
+        .is_err());
         assert!(LanWorkMessage::KvPage {
             work_id: "data-work".into(),
             request_id: "req-kv".into(),

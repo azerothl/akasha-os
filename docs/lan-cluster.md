@@ -61,6 +61,10 @@ to the generation context and stops the work at a token boundary.
 `model.cluster.kv_transfer` can export sequence-0 KV state from one worker,
 carry it as encrypted CBOR pages of at most 512 KiB, and restore it on another
 paired worker. The state is capped at 64 MiB and pages must arrive in order.
+`model.cluster.weight_transfer` can explicitly transfer one bounded weight
+range for a declared shard to the target worker's local staging area. Pages are
+encrypted, ordered and atomically published with a manifest. The staged bytes
+are not yet consumed by llama.cpp for remote-layer execution.
 Implicit `model.infer` routing remains local. Actual weight/shard partitioning
 still needs to be integrated; explicit KV transfer is available through
 `model.cluster.kv_transfer`. By default, no model or prompt data leaves the

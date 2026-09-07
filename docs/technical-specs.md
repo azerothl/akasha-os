@@ -475,6 +475,10 @@ and multi-worker token aggregation remain to be integrated. The explicit
 `model.cluster.kv_transfer` operation relays sequence-0 KV state between two
 assigned paired workers using ordered encrypted pages (512 KiB per page,
 64 MiB total) and restores the token mirror before acknowledging completion.
+The explicit `model.cluster.weight_transfer` operation stages one bounded
+declared weight range on a target worker, with ordered encrypted pages and
+atomic publication of a manifest. The llama.cpp path does not consume staged
+ranges yet; native remote-layer execution remains a later backend gate.
 The typed `LanWorkMessage` contract covers hello, shard assignment, heartbeat,
 acknowledgement, cancellation, prefill, decode, token batches and KV pages; it
 rejects cross-job messages, unknown shards and unexpected peer identities
@@ -964,6 +968,7 @@ If step 3 partially fails → degraded mode with clear messages; direct shell re
 | `model.cluster.dispatch` | Explicitly dispatch a planned assignment through the paired encrypted LAN transport |
 | `model.cluster.infer_chat` | Explicit, encrypted text inference on one assigned paired worker; sensitive-data opt-in required |
 | `model.cluster.kv_transfer` | Explicit encrypted KV state transfer between two assigned paired workers |
+| `model.cluster.weight_transfer` | Explicit encrypted staging of one bounded weight range for a declared shard |
 | `model.cluster.recover` | Reassign shards after a reported node loss and optionally propagate new assignments with a session-key secret |
 | `model.cluster.cancel` | Cancel a LAN job and propagate cancellation through the encrypted transport; requires a session-key secret |
 | `model.cluster.nodes` | List configured nodes and their trust state |

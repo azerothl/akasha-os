@@ -16,11 +16,13 @@ use aos_proto::{
     LanClusterInferChatResponse, LanClusterInferTokensRequest, LanClusterInferTokensResponse,
     LanClusterJobRequest, LanClusterKvTransferRequest, LanClusterKvTransferResponse,
     LanClusterNode, LanClusterNodeRequest, LanClusterNodesResponse, LanClusterPairRequest,
-    LanClusterPlanRequest, LanClusterPlanResponse, LoadRequest, MediaAudioGenerateRequest,
+    LanClusterPlanRequest, LanClusterPlanResponse, LanClusterWeightTransferRequest,
+    LanClusterWeightTransferResponse, LoadRequest, MediaAudioGenerateRequest,
     MediaImageGenerateRequest, MediaImageUpscaleRequest, MigrateRequest, ModelIdRequest,
     ModelPlanDiagnostic, ModelPlanRequest, TokenEvent, UnloadRequest,
 };
 use aos_registry::ModelRegistry;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 fn parse_profile(s: &str) -> PlacementProfile {
@@ -463,6 +465,78 @@ struct KvPageAssembly {
     seq0_tokens: Vec<i32>,
 }
 
+struct WeightPageAssembly {
+    request_id: String,
+    shard_id: u32,
+    offset: u64,
+    length: u64,
+    total_model_bytes: u64,
+    next_page: u32,
+    data: Vec<u8>,
+}
+
+fn lan_artifact_component(value: &str) -> String {
+    let mut output = String::with_capacity(value.len().min(96));
+    for byte in value.bytes().take(96) {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_') {
+            output.push(byte as char);
+        } else {
+            output.push('_');
+        }
+    }
+    if output.is_empty() {
+        output.push_str("unnamed");
+    }
+    output
+}
+
+fn stage_lan_weight_shard(
+    staging_root: &Path,
+    work_id: &str,
+    model_id: &str,
+    shard_id: u32,
+    offset: u64,
+    total_model_bytes: u64,
+    data: &[u8],
+) -> Result<(), String> {
+    if data.is_empty()
+        || data.len() > LAN_KV_MAX_BYTES
+        || offset.saturating_add(data.len() as u64) > total_model_bytes
+    {
+        return Err("plage de poids LAN invalide".into());
+    }
+    let directory = staging_root
+        .join("lan-shards")
+        .join(lan_artifact_component(work_id));
+    std::fs::create_dir_all(&directory)
+        .map_err(|error| format!("création du staging poids LAN impossible: {error}"))?;
+    let stem = format!("shard-{shard_id:05}-offset-{offset}");
+    let partial = directory.join(format!("{stem}.part"));
+    let final_path = directory.join(format!("{stem}.bin"));
+    std::fs::write(&partial, data)
+        .map_err(|error| format!("écriture du staging poids LAN impossible: {error}"))?;
+    std::fs::rename(&partial, &final_path)
+        .map_err(|error| format!("validation du staging poids LAN impossible: {error}"))?;
+    let manifest = serde_json::json!({
+        "model_id": model_id,
+        "work_id": work_id,
+        "shard_id": shard_id,
+        "offset": offset,
+        "length": data.len(),
+        "total_model_bytes": total_model_bytes,
+        "path": final_path.file_name().and_then(|name| name.to_str()).unwrap_or_default(),
+    });
+    let manifest_partial = directory.join(format!("{stem}.manifest.part"));
+    let manifest_path = directory.join(format!("{stem}.manifest.json"));
+    let manifest_data = serde_json::to_vec_pretty(&manifest)
+        .map_err(|error| format!("métadonnées poids LAN invalides: {error}"))?;
+    std::fs::write(&manifest_partial, manifest_data)
+        .map_err(|error| format!("écriture métadonnées poids LAN impossible: {error}"))?;
+    std::fs::rename(&manifest_partial, &manifest_path)
+        .map_err(|error| format!("validation métadonnées poids LAN impossible: {error}"))?;
+    Ok(())
+}
+
 async fn send_lan_kv_transfer(
     local_node_id: &str,
     registry: &LanPairingRegistry,
@@ -590,6 +664,162 @@ async fn send_lan_kv_transfer(
     Ok((pages.len() as u32, total_bytes as u64))
 }
 
+async fn send_lan_weight_shard(
+    local_node_id: &str,
+    registry: &LanPairingRegistry,
+    work: &DistributedWork,
+    source_node_id: &str,
+    source_shards: Vec<u32>,
+    target_node_id: &str,
+    target_shards: Vec<u32>,
+    request_id: String,
+    shard_id: u32,
+    offset: u64,
+    length: u64,
+    total_model_bytes: u64,
+    key: LanSessionKey,
+) -> Result<(u32, u64), String> {
+    if source_node_id == target_node_id {
+        return Err("source et cible poids LAN doivent être distinctes".into());
+    }
+    let source = registry
+        .get(source_node_id)
+        .ok_or("nœud source poids LAN inconnu")?;
+    let source_assignment = aos_placement::LanShardAssignment {
+        node_id: source_node_id.to_string(),
+        shard_ids: source_shards,
+        kv_tokens: 0,
+        encrypted_transport: work.encrypted_transport,
+    };
+    let mut source_transport = LanTcpTransport::connect_authenticated(
+        local_node_id,
+        source_node_id,
+        &source.address,
+        registry,
+        work,
+        key.clone(),
+    )
+    .await?;
+    source_transport
+        .send_message(
+            &LanWorkMessage::Assign {
+                work_id: work.work_id.clone(),
+                model_id: work.model_id.clone(),
+                assignment: source_assignment,
+                allow_sensitive_data: work.allow_sensitive_data,
+            },
+            work,
+        )
+        .await?;
+    expect_lan_ack(&mut source_transport, work, "assign").await?;
+    source_transport
+        .send_message(
+            &LanWorkMessage::WeightRequest {
+                work_id: work.work_id.clone(),
+                request_id: request_id.clone(),
+                shard_id,
+                offset,
+                length,
+                total_model_bytes,
+            },
+            work,
+        )
+        .await?;
+
+    let mut pages = Vec::new();
+    let mut received_bytes = 0u64;
+    loop {
+        match source_transport.receive_message(work).await? {
+            LanWorkMessage::WeightPage {
+                request_id: received,
+                shard_id: received_shard,
+                page_index,
+                offset: page_offset,
+                data,
+                final_page,
+                ..
+            } if received == request_id && received_shard == shard_id => {
+                if page_index != pages.len() as u32
+                    || page_offset != offset.saturating_add(received_bytes)
+                {
+                    return Err("pages de poids LAN reçues hors ordre".into());
+                }
+                received_bytes = received_bytes.saturating_add(data.len() as u64);
+                if received_bytes > length {
+                    return Err("volume de poids LAN reçu supérieur à la demande".into());
+                }
+                if final_page && received_bytes != length {
+                    return Err("page finale de poids LAN prématurée".into());
+                }
+                pages.push(LanWorkMessage::WeightPage {
+                    work_id: work.work_id.clone(),
+                    request_id: request_id.clone(),
+                    shard_id,
+                    page_index,
+                    offset: page_offset,
+                    data,
+                    final_page,
+                });
+                if final_page {
+                    break;
+                }
+            }
+            LanWorkMessage::Nack { reason, .. } => return Err(reason),
+            other => return Err(format!("réponse poids LAN inattendue: {other:?}")),
+        }
+    }
+
+    let target = registry
+        .get(target_node_id)
+        .ok_or("nœud cible poids LAN inconnu")?;
+    let target_assignment = aos_placement::LanShardAssignment {
+        node_id: target_node_id.to_string(),
+        shard_ids: target_shards,
+        kv_tokens: 0,
+        encrypted_transport: work.encrypted_transport,
+    };
+    let mut target_transport = LanTcpTransport::connect_authenticated(
+        local_node_id,
+        target_node_id,
+        &target.address,
+        registry,
+        work,
+        key,
+    )
+    .await?;
+    target_transport
+        .send_message(
+            &LanWorkMessage::Assign {
+                work_id: work.work_id.clone(),
+                model_id: work.model_id.clone(),
+                assignment: target_assignment,
+                allow_sensitive_data: work.allow_sensitive_data,
+            },
+            work,
+        )
+        .await?;
+    expect_lan_ack(&mut target_transport, work, "assign").await?;
+    target_transport
+        .send_message(
+            &LanWorkMessage::WeightBegin {
+                work_id: work.work_id.clone(),
+                request_id: request_id.clone(),
+                shard_id,
+                offset,
+                length,
+                total_model_bytes,
+            },
+            work,
+        )
+        .await?;
+    expect_lan_ack(&mut target_transport, work, "weight-begin").await?;
+    for page in &pages {
+        target_transport.send_message(page, work).await?;
+    }
+    expect_lan_ack(&mut target_transport, work, "weight-shard").await?;
+    Ok((pages.len() as u32, received_bytes))
+}
+
 fn lan_control_work(work_id: &str, shard_ids: Vec<u32>) -> DistributedWork {
     DistributedWork {
         work_id: work_id.to_string(),
@@ -609,6 +839,7 @@ async fn handle_lan_worker_connection(
     local_node_id: String,
     subsystem: Arc<ModelSubsystem>,
     worker_registry: Arc<Mutex<LanWorkerRegistry>>,
+    staging_root: PathBuf,
 ) -> Result<(), String> {
     let first = transport.receive_message_unchecked().await?;
     match first {
@@ -676,6 +907,7 @@ async fn handle_lan_worker_connection(
                 .map_err(|_| "état worker LAN verrouillé".to_string())?
                 .register_abort(&work_id, abort.clone())?;
             let mut kv_assembly: Option<KvPageAssembly> = None;
+            let mut weight_assembly: Option<WeightPageAssembly> = None;
             loop {
                 let message = match transport.receive_message_unchecked().await {
                     Ok(message) => message,
@@ -830,6 +1062,85 @@ async fn handle_lan_worker_connection(
                                         &LanWorkMessage::Nack {
                                             work_id: work_id.clone(),
                                             operation: "kv-request".into(),
+                                            reason: error,
+                                        },
+                                        &work,
+                                    )
+                                    .await?;
+                            }
+                        }
+                    }
+                    LanWorkMessage::WeightRequest {
+                        work_id: id,
+                        request_id,
+                        shard_id,
+                        offset,
+                        length,
+                        total_model_bytes,
+                    } if id == work_id => {
+                        let message = LanWorkMessage::WeightRequest {
+                            work_id: work_id.clone(),
+                            request_id: request_id.clone(),
+                            shard_id,
+                            offset,
+                            length,
+                            total_model_bytes,
+                        };
+                        message.validate_for(&work, transport.peer_node_id())?;
+                        worker_registry
+                            .lock()
+                            .map_err(|_| "état worker LAN verrouillé".to_string())?
+                            .reset_abort(&work_id)?;
+                        match subsystem
+                            .worker_read_weight_range(&model_id, offset, length)
+                            .await
+                        {
+                            Ok((actual_total, data)) if actual_total == total_model_bytes => {
+                                let page_count = data.len().div_ceil(LAN_KV_PAGE_BYTES);
+                                for (page_index, page_data) in
+                                    data.chunks(LAN_KV_PAGE_BYTES).enumerate()
+                                {
+                                    if abort.load(std::sync::atomic::Ordering::SeqCst) {
+                                        return Ok(());
+                                    }
+                                    transport
+                                        .send_message(
+                                            &LanWorkMessage::WeightPage {
+                                                work_id: work_id.clone(),
+                                                request_id: request_id.clone(),
+                                                shard_id,
+                                                page_index: page_index as u32,
+                                                offset: offset.saturating_add(
+                                                    (page_index * LAN_KV_PAGE_BYTES) as u64,
+                                                ),
+                                                data: page_data.to_vec(),
+                                                final_page: page_index + 1 == page_count,
+                                            },
+                                            &work,
+                                        )
+                                        .await?;
+                                }
+                            }
+                            Ok((actual_total, _)) => {
+                                transport
+                                    .send_message(
+                                        &LanWorkMessage::Nack {
+                                            work_id: work_id.clone(),
+                                            operation: "weight-request".into(),
+                                            reason: format!(
+                                                "taille du modèle source inattendue: {actual_total}"
+                                            ),
+                                        },
+                                        &work,
+                                    )
+                                    .await?;
+                            }
+                            Err(error) => {
+                                transport
+                                    .send_message(
+                                        &LanWorkMessage::Nack {
+                                            work_id: work_id.clone(),
+                                            operation: "weight-request".into(),
                                             reason: error,
                                         },
                                         &work,
@@ -1084,6 +1395,145 @@ async fn handle_lan_worker_connection(
                             }
                         }
                     }
+                    LanWorkMessage::WeightBegin {
+                        work_id: id,
+                        request_id,
+                        shard_id,
+                        offset,
+                        length,
+                        total_model_bytes,
+                    } if id == work_id => {
+                        let message = LanWorkMessage::WeightBegin {
+                            work_id: work_id.clone(),
+                            request_id: request_id.clone(),
+                            shard_id,
+                            offset,
+                            length,
+                            total_model_bytes,
+                        };
+                        message.validate_for(&work, transport.peer_node_id())?;
+                        worker_registry
+                            .lock()
+                            .map_err(|_| "état worker LAN verrouillé".to_string())?
+                            .reset_abort(&work_id)?;
+                        if weight_assembly.is_some() {
+                            return Err("staging de poids LAN simultané interdit".into());
+                        }
+                        weight_assembly = Some(WeightPageAssembly {
+                            request_id,
+                            shard_id,
+                            offset,
+                            length,
+                            total_model_bytes,
+                            next_page: 0,
+                            data: Vec::with_capacity(length as usize),
+                        });
+                        transport
+                            .send_message(
+                                &LanWorkMessage::Ack {
+                                    work_id: work_id.clone(),
+                                    operation: "weight-begin".into(),
+                                },
+                                &work,
+                            )
+                            .await?;
+                    }
+                    LanWorkMessage::WeightPage {
+                        work_id: id,
+                        request_id,
+                        shard_id,
+                        page_index,
+                        offset,
+                        data,
+                        final_page,
+                    } if id == work_id => {
+                        let message = LanWorkMessage::WeightPage {
+                            work_id: work_id.clone(),
+                            request_id: request_id.clone(),
+                            shard_id,
+                            page_index,
+                            offset,
+                            data,
+                            final_page,
+                        };
+                        message.validate_for(&work, transport.peer_node_id())?;
+                        if abort.load(std::sync::atomic::Ordering::SeqCst) {
+                            return Ok(());
+                        }
+                        let LanWorkMessage::WeightPage {
+                            request_id,
+                            shard_id,
+                            page_index,
+                            offset,
+                            data,
+                            final_page,
+                            ..
+                        } = message
+                        else {
+                            unreachable!()
+                        };
+                        let assembly = weight_assembly
+                            .as_mut()
+                            .ok_or("page de poids LAN sans début de staging")?;
+                        if assembly.request_id != request_id
+                            || assembly.shard_id != shard_id
+                            || page_index != assembly.next_page
+                            || offset != assembly.offset.saturating_add(assembly.data.len() as u64)
+                            || assembly.data.len().saturating_add(data.len())
+                                > assembly.length as usize
+                        {
+                            return Err("page de poids LAN incohérente ou hors ordre".into());
+                        }
+                        assembly.data.extend_from_slice(&data);
+                        assembly.next_page = assembly.next_page.saturating_add(1);
+                        if final_page {
+                            if assembly.data.len() != assembly.length as usize {
+                                return Err("staging de poids LAN incomplet".into());
+                            }
+                            let assembly = weight_assembly.take().unwrap();
+                            let staging_root = staging_root.clone();
+                            let staging_work_id = work_id.clone();
+                            let staging_model_id = model_id.clone();
+                            let result = tokio::task::spawn_blocking(move || {
+                                stage_lan_weight_shard(
+                                    &staging_root,
+                                    &staging_work_id,
+                                    &staging_model_id,
+                                    assembly.shard_id,
+                                    assembly.offset,
+                                    assembly.total_model_bytes,
+                                    &assembly.data,
+                                )
+                            })
+                            .await
+                            .map_err(|error| format!("staging poids interrompu: {error}"))?;
+                            match result {
+                                Ok(()) => {
+                                    transport
+                                        .send_message(
+                                            &LanWorkMessage::Ack {
+                                                work_id: work_id.clone(),
+                                                operation: "weight-shard".into(),
+                                            },
+                                            &work,
+                                        )
+                                        .await?;
+                                }
+                                Err(error) => {
+                                    transport
+                                        .send_message(
+                                            &LanWorkMessage::Nack {
+                                                work_id: work_id.clone(),
+                                                operation: "weight-shard".into(),
+                                                reason: error,
+                                            },
+                                            &work,
+                                        )
+                                        .await?;
+                                }
+                            }
+                        }
+                    }
                     LanWorkMessage::TokenBatch { .. } => {
                         return Err("batch de tokens LAN reçu dans le mauvais sens".into());
                     }
@@ -1249,6 +1699,7 @@ async fn main() {
                         let subsystem_task = subsystem.clone();
                         let worker_registry = Arc::new(Mutex::new(LanWorkerRegistry::default()));
                         let worker_registry_task = worker_registry.clone();
+                        let staging_root = preference_home.clone();
                         tokio::spawn(async move {
                             loop {
                                 let registry = cluster
@@ -1266,12 +1717,14 @@ async fn main() {
                                         let local_node_id = local_node_id.clone();
                                         let subsystem = subsystem_task.clone();
                                         let worker_registry = worker_registry_task.clone();
+                                        let staging_root = staging_root.clone();
                                         tokio::spawn(async move {
                                             if let Err(error) = handle_lan_worker_connection(
                                                 transport,
                                                 local_node_id,
                                                 subsystem,
                                                 worker_registry,
+                                                staging_root,
                                             )
                                             .await
                                             {
@@ -1431,6 +1884,157 @@ async fn main() {
                     Err(error) => {
                         let _ = ctx
                             .respond_error(aos_ipc::msg::Status::InternalError, &error)
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let cluster = lan_cluster.clone();
+        let model_config = config.clone();
+        let preference_home = preference_home.clone();
+        let bus = bus.clone();
+        svc.on("model.cluster.weight_transfer", move |ctx| {
+            let cluster = cluster.clone();
+            let model_config = model_config.clone();
+            let preference_home = preference_home.clone();
+            let bus = bus.clone();
+            async move {
+                if !model_config.lan_cluster_enabled_at(&preference_home) {
+                    let _ = ctx
+                        .respond_error(
+                            aos_ipc::msg::Status::PermissionDenied,
+                            "cluster LAN désactivé",
+                        )
+                        .await;
+                    return;
+                }
+                let req = match ctx.payload::<LanClusterWeightTransferRequest>() {
+                    Ok(req) => req,
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                        return;
+                    }
+                };
+                if !req.allow_sensitive_data || !req.encrypted_transport {
+                    let _ = ctx
+                        .respond_error(
+                            aos_ipc::msg::Status::PermissionDenied,
+                            "le transfert de poids LAN exige une autorisation sensible explicite et un transport chiffré",
+                        )
+                        .await;
+                    return;
+                }
+                if req.source_node_id == req.target_node_id
+                    || req.length == 0
+                    || req.length > LAN_KV_MAX_BYTES as u64
+                    || req.total_model_bytes == 0
+                    || req.offset.saturating_add(req.length) > req.total_model_bytes
+                {
+                    let _ = ctx
+                        .respond_error(
+                            aos_ipc::msg::Status::BadRequest,
+                            "plage de poids LAN invalide",
+                        )
+                        .await;
+                    return;
+                }
+                let planned = cluster
+                    .lock()
+                    .map(|cluster| {
+                        let plan = cluster.job(&req.work_id).cloned()?;
+                        if plan.model_id != req.model_id {
+                            return None;
+                        }
+                        let source = plan
+                            .assignments
+                            .iter()
+                            .find(|assignment| {
+                                assignment.node_id == req.source_node_id
+                                    && assignment.shard_ids.contains(&req.shard_id)
+                            })?
+                            .clone();
+                        let target = plan
+                            .assignments
+                            .iter()
+                            .find(|assignment| assignment.node_id == req.target_node_id)?
+                            .clone();
+                        Some((source, target, cluster.registry().clone()))
+                    })
+                    .map_err(|_| "verrou cluster indisponible".to_string())
+                    .and_then(|planned| {
+                        planned.ok_or("travail poids LAN non planifié pour ce shard".into())
+                    });
+                let (source, target, registry) = match planned {
+                    Ok(planned) => planned,
+                    Err(error) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, &error)
+                            .await;
+                        return;
+                    }
+                };
+                let mut shard_ids = source.shard_ids.clone();
+                for shard_id in &target.shard_ids {
+                    if !shard_ids.contains(shard_id) {
+                        shard_ids.push(*shard_id);
+                    }
+                }
+                if !shard_ids.contains(&req.shard_id) {
+                    shard_ids.push(req.shard_id);
+                }
+                let work = DistributedWork {
+                    work_id: req.work_id.clone(),
+                    model_id: req.model_id.clone(),
+                    shard_ids,
+                    allow_sensitive_data: true,
+                    encrypted_transport: true,
+                };
+                let key = match load_lan_session_key(&bus, &req.session_key_secret).await {
+                    Ok(key) => key,
+                    Err(error) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::PermissionDenied, &error)
+                            .await;
+                        return;
+                    }
+                };
+                let local_node_id = model_config.lan_node_id_at(&preference_home);
+                match send_lan_weight_shard(
+                    &local_node_id,
+                    &registry,
+                    &work,
+                    &req.source_node_id,
+                    source.shard_ids,
+                    &req.target_node_id,
+                    target.shard_ids,
+                    req.request_id.clone(),
+                    req.shard_id,
+                    req.offset,
+                    req.length,
+                    req.total_model_bytes,
+                    key,
+                )
+                .await
+                {
+                    Ok((page_count, total_bytes)) => {
+                        let response = LanClusterWeightTransferResponse {
+                            work_id: req.work_id,
+                            request_id: req.request_id,
+                            source_node_id: req.source_node_id,
+                            target_node_id: req.target_node_id,
+                            shard_id: req.shard_id,
+                            page_count,
+                            total_bytes,
+                        };
+                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &response).await;
+                    }
+                    Err(error) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, &error)
                             .await;
                     }
                 }
@@ -3153,12 +3757,38 @@ async fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_lan_session_key;
+    use super::{lan_artifact_component, parse_lan_session_key, stage_lan_weight_shard};
+    use std::path::PathBuf;
 
     #[test]
     fn cle_lan_hex_est_strictement_validee() {
         assert!(parse_lan_session_key(&"ab".repeat(32)).is_ok());
         assert!(parse_lan_session_key(&"zz".repeat(32)).is_err());
         assert!(parse_lan_session_key(&"ab".repeat(31)).is_err());
+    }
+
+    #[test]
+    fn staging_poids_lan_est_atomique_et_sanitise() {
+        let root = PathBuf::from(std::env::temp_dir())
+            .join(format!("akasha-weight-stage-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        assert_eq!(
+            lan_artifact_component("work/with spaces"),
+            "work_with_spaces"
+        );
+        stage_lan_weight_shard(&root, "work/with spaces", "model:test", 7, 4, 10, b"abc").unwrap();
+        let directory = root.join("lan-shards").join("work_with_spaces");
+        assert_eq!(
+            std::fs::read(directory.join("shard-00007-offset-4.bin")).unwrap(),
+            b"abc"
+        );
+        let manifest: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(directory.join("shard-00007-offset-4.manifest.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(manifest["model_id"], "model:test");
+        assert_eq!(manifest["length"], 3);
+        assert!(!directory.join("shard-00007-offset-4.part").exists());
+        std::fs::remove_dir_all(root).unwrap();
     }
 }
