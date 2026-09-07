@@ -470,8 +470,11 @@ ChaCha20-Poly1305 with node/job associated data and a monotonic sequence. It
 rejects a wrong nonce, altered ciphertext, cross-job frame or replay. The
 explicit `LanTcpTransport` adapter adds a bounded CBOR frame envelope and
 connects only to the address stored for an already paired node, when the caller
-provides a session key from the secret store. Remote weight/shard partitioning,
-KV-page transfer and multi-worker token aggregation remain to be integrated.
+provides a session key from the secret store. Remote weight/shard partitioning
+and multi-worker token aggregation remain to be integrated. The explicit
+`model.cluster.kv_transfer` operation relays sequence-0 KV state between two
+assigned paired workers using ordered encrypted pages (512 KiB per page,
+64 MiB total) and restores the token mirror before acknowledging completion.
 The typed `LanWorkMessage` contract covers hello, shard assignment, heartbeat,
 acknowledgement, cancellation, prefill, decode, token batches and KV pages; it
 rejects cross-job messages, unknown shards and unexpected peer identities
@@ -960,6 +963,7 @@ If step 3 partially fails → degraded mode with clear messages; direct shell re
 | `model.cluster.plan` | Experimental paired-LAN shard plan; encrypted transport required |
 | `model.cluster.dispatch` | Explicitly dispatch a planned assignment through the paired encrypted LAN transport |
 | `model.cluster.infer_chat` | Explicit, encrypted text inference on one assigned paired worker; sensitive-data opt-in required |
+| `model.cluster.kv_transfer` | Explicit encrypted KV state transfer between two assigned paired workers |
 | `model.cluster.recover` | Reassign shards after a reported node loss and optionally propagate new assignments with a session-key secret |
 | `model.cluster.cancel` | Cancel a LAN job and propagate cancellation through the encrypted transport; requires a session-key secret |
 | `model.cluster.nodes` | List configured nodes and their trust state |

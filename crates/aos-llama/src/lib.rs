@@ -1169,6 +1169,27 @@ impl LlamaContext {
         Ok(())
     }
 
+    /// Restore une séquence KV et ses tokens de référence.
+    ///
+    /// `llama_state_seq_set_data` restaure la mémoire native mais ne connaît
+    /// pas le miroir `seq0_tokens` utilisé par les chemins de cache et de
+    /// décodage. Cette variante maintient les deux états synchronisés.
+    pub fn state_seq_set_with_tokens(
+        &mut self,
+        data: &[u8],
+        seq_id: sys::llama_seq_id,
+        seq0_tokens: Option<Vec<sys::llama_token>>,
+    ) -> Result<(), LlamaError> {
+        self.state_seq_set(data, seq_id)?;
+        if seq_id == 0 {
+            if let Some(tokens) = seq0_tokens {
+                self.seq0_tokens = tokens;
+                self.refresh_seq0_anchors();
+            }
+        }
+        Ok(())
+    }
+
     /// Prépare le KV seq 0 pour `prompt_tokens` : réutilise le préfixe commun,
     /// avec ancrage sémantique aux frontières tour/outil/pensée (E21).
     /// Retourne le nombre de tokens déjà en cache (hit).

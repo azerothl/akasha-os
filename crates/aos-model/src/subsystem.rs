@@ -944,6 +944,84 @@ impl ModelSubsystem {
         .map_err(|error| format!("worker prefill interrompu: {error}"))?
     }
 
+    /// Exporte l'état KV de la séquence worker 0 pour un transfert LAN.
+    pub async fn worker_export_kv_state(
+        &self,
+        model_id: &str,
+    ) -> Result<(Vec<u8>, Vec<i32>), String> {
+        let ctx = {
+            let inner = self.inner.lock().unwrap();
+            let model = inner
+                .models
+                .get(model_id)
+                .ok_or_else(|| format!("modèle inconnu: {model_id}"))?;
+            if !matches!(
+                model.state,
+                ModelState::Loaded | ModelState::PartiallyOffloaded
+            ) {
+                return Err(format!("modèle {model_id} non chargé"));
+            }
+            model
+                .ctx
+                .clone()
+                .ok_or_else(|| format!("contexte du modèle {model_id} indisponible"))?
+        };
+        tokio::task::spawn_blocking(move || {
+            let guard = ctx
+                .lock()
+                .map_err(|_| "contexte llama verrouillé".to_string())?;
+            let data = guard.state_seq_get(0).map_err(|error| error.to_string())?;
+            if data.len() > 64 * 1024 * 1024 {
+                return Err("état KV LAN supérieur à 64 MiB".into());
+            }
+            Ok((data, guard.seq0_tokens().to_vec()))
+        })
+        .await
+        .map_err(|error| format!("export KV interrompu: {error}"))?
+    }
+
+    /// Importe l'état KV d'une séquence reçue via le transport LAN.
+    pub async fn worker_import_kv_state(
+        &self,
+        model_id: &str,
+        data: Vec<u8>,
+        seq0_tokens: Vec<i32>,
+    ) -> Result<(), String> {
+        if data.is_empty() || data.len() > 64 * 1024 * 1024 {
+            return Err("état KV LAN invalide".into());
+        }
+        if seq0_tokens.len() > 8192 {
+            return Err("miroir de tokens KV LAN trop grand".into());
+        }
+        let ctx = {
+            let inner = self.inner.lock().unwrap();
+            let model = inner
+                .models
+                .get(model_id)
+                .ok_or_else(|| format!("modèle inconnu: {model_id}"))?;
+            if !matches!(
+                model.state,
+                ModelState::Loaded | ModelState::PartiallyOffloaded
+            ) {
+                return Err(format!("modèle {model_id} non chargé"));
+            }
+            model
+                .ctx
+                .clone()
+                .ok_or_else(|| format!("contexte du modèle {model_id} indisponible"))?
+        };
+        tokio::task::spawn_blocking(move || {
+            let mut guard = ctx
+                .lock()
+                .map_err(|_| "contexte llama verrouillé".to_string())?;
+            guard
+                .state_seq_set_with_tokens(data.as_slice(), 0, Some(seq0_tokens))
+                .map_err(|error| error.to_string())
+        })
+        .await
+        .map_err(|error| format!("import KV interrompu: {error}"))?
+    }
+
     /// Exécute une inférence texte complète pour le worker LAN.
     ///
     /// Cette API est volontairement distincte de `infer`: elle ne passe pas

@@ -14,10 +14,11 @@ use aos_proto::{
     CancelRequest, InferRequest, LanClusterAssignment, LanClusterDiscoverRequest,
     LanClusterDispatchRequest, LanClusterDispatchResponse, LanClusterInferChatRequest,
     LanClusterInferChatResponse, LanClusterInferTokensRequest, LanClusterInferTokensResponse,
-    LanClusterJobRequest, LanClusterNode, LanClusterNodeRequest, LanClusterNodesResponse,
-    LanClusterPairRequest, LanClusterPlanRequest, LanClusterPlanResponse, LoadRequest,
-    MediaAudioGenerateRequest, MediaImageGenerateRequest, MediaImageUpscaleRequest, MigrateRequest,
-    ModelIdRequest, ModelPlanDiagnostic, ModelPlanRequest, TokenEvent, UnloadRequest,
+    LanClusterJobRequest, LanClusterKvTransferRequest, LanClusterKvTransferResponse,
+    LanClusterNode, LanClusterNodeRequest, LanClusterNodesResponse, LanClusterPairRequest,
+    LanClusterPlanRequest, LanClusterPlanResponse, LoadRequest, MediaAudioGenerateRequest,
+    MediaImageGenerateRequest, MediaImageUpscaleRequest, MigrateRequest, ModelIdRequest,
+    ModelPlanDiagnostic, ModelPlanRequest, TokenEvent, UnloadRequest,
 };
 use aos_registry::ModelRegistry;
 use std::sync::{Arc, Mutex};
@@ -452,6 +453,143 @@ async fn send_lan_chat_inference(
     }
 }
 
+const LAN_KV_PAGE_BYTES: usize = 512 * 1024;
+const LAN_KV_MAX_BYTES: usize = 64 * 1024 * 1024;
+
+struct KvPageAssembly {
+    request_id: String,
+    next_page: u32,
+    data: Vec<u8>,
+    seq0_tokens: Vec<i32>,
+}
+
+async fn send_lan_kv_transfer(
+    local_node_id: &str,
+    registry: &LanPairingRegistry,
+    work: &DistributedWork,
+    source_node_id: &str,
+    source_shards: Vec<u32>,
+    target_node_id: &str,
+    target_shards: Vec<u32>,
+    request_id: String,
+    key: LanSessionKey,
+) -> Result<(u32, u64), String> {
+    if source_node_id == target_node_id {
+        return Err("source et cible KV LAN doivent être distinctes".into());
+    }
+    let source = registry
+        .get(source_node_id)
+        .ok_or("nœud source KV LAN inconnu")?;
+    let source_assignment = aos_placement::LanShardAssignment {
+        node_id: source_node_id.to_string(),
+        shard_ids: source_shards,
+        kv_tokens: 0,
+        encrypted_transport: work.encrypted_transport,
+    };
+    let mut source_transport = LanTcpTransport::connect_authenticated(
+        local_node_id,
+        source_node_id,
+        &source.address,
+        registry,
+        work,
+        key.clone(),
+    )
+    .await?;
+    source_transport
+        .send_message(
+            &LanWorkMessage::Assign {
+                work_id: work.work_id.clone(),
+                model_id: work.model_id.clone(),
+                assignment: source_assignment,
+                allow_sensitive_data: work.allow_sensitive_data,
+            },
+            work,
+        )
+        .await?;
+    expect_lan_ack(&mut source_transport, work, "assign").await?;
+    source_transport
+        .send_message(
+            &LanWorkMessage::KvRequest {
+                work_id: work.work_id.clone(),
+                request_id: request_id.clone(),
+                seq_id: 0,
+            },
+            work,
+        )
+        .await?;
+    let mut pages = Vec::new();
+    let mut total_bytes = 0usize;
+    loop {
+        match source_transport.receive_message(work).await? {
+            LanWorkMessage::KvPage {
+                request_id: received,
+                page_index,
+                data,
+                seq0_tokens,
+                final_page,
+                ..
+            } if received == request_id => {
+                if page_index != pages.len() as u32 {
+                    return Err("pages KV LAN reçues hors ordre".into());
+                }
+                total_bytes = total_bytes.saturating_add(data.len());
+                if total_bytes > LAN_KV_MAX_BYTES {
+                    return Err("état KV LAN supérieur à 64 MiB".into());
+                }
+                pages.push(LanWorkMessage::KvPage {
+                    work_id: work.work_id.clone(),
+                    request_id: request_id.clone(),
+                    page_index,
+                    data,
+                    seq0_tokens,
+                    final_page,
+                });
+                if final_page {
+                    break;
+                }
+            }
+            LanWorkMessage::Nack { reason, .. } => return Err(reason),
+            other => return Err(format!("réponse KV LAN inattendue: {other:?}")),
+        }
+    }
+
+    let target = registry
+        .get(target_node_id)
+        .ok_or("nœud cible KV LAN inconnu")?;
+    let target_assignment = aos_placement::LanShardAssignment {
+        node_id: target_node_id.to_string(),
+        shard_ids: target_shards,
+        kv_tokens: 0,
+        encrypted_transport: work.encrypted_transport,
+    };
+    let mut target_transport = LanTcpTransport::connect_authenticated(
+        local_node_id,
+        target_node_id,
+        &target.address,
+        registry,
+        work,
+        key,
+    )
+    .await?;
+    target_transport
+        .send_message(
+            &LanWorkMessage::Assign {
+                work_id: work.work_id.clone(),
+                model_id: work.model_id.clone(),
+                assignment: target_assignment,
+                allow_sensitive_data: work.allow_sensitive_data,
+            },
+            work,
+        )
+        .await?;
+    expect_lan_ack(&mut target_transport, work, "assign").await?;
+    for page in &pages {
+        target_transport.send_message(page, work).await?;
+    }
+    expect_lan_ack(&mut target_transport, work, "kv-page").await?;
+    Ok((pages.len() as u32, total_bytes as u64))
+}
+
 fn lan_control_work(work_id: &str, shard_ids: Vec<u32>) -> DistributedWork {
     DistributedWork {
         work_id: work_id.to_string(),
@@ -537,6 +675,7 @@ async fn handle_lan_worker_connection(
                 .lock()
                 .map_err(|_| "état worker LAN verrouillé".to_string())?
                 .register_abort(&work_id, abort.clone())?;
+            let mut kv_assembly: Option<KvPageAssembly> = None;
             loop {
                 let message = match transport.receive_message_unchecked().await {
                     Ok(message) => message,
@@ -632,6 +771,71 @@ async fn handle_lan_worker_connection(
                         }
                         if abort.load(std::sync::atomic::Ordering::SeqCst) {
                             return Ok(());
+                        }
+                    }
+                    LanWorkMessage::KvRequest {
+                        work_id: id,
+                        request_id,
+                        seq_id,
+                    } if id == work_id => {
+                        let message = LanWorkMessage::KvRequest {
+                            work_id: work_id.clone(),
+                            request_id: request_id.clone(),
+                            seq_id,
+                        };
+                        message.validate_for(&work, transport.peer_node_id())?;
+                        worker_registry
+                            .lock()
+                            .map_err(|_| "état worker LAN verrouillé".to_string())?
+                            .reset_abort(&work_id)?;
+                        match subsystem.worker_export_kv_state(&model_id).await {
+                            Ok((data, seq0_tokens)) => {
+                                let seq0_tokens: Vec<u32> = seq0_tokens
+                                    .into_iter()
+                                    .map(|token| {
+                                        u32::try_from(token).map_err(|_| {
+                                            "identifiant de token KV LAN hors plage".to_string()
+                                        })
+                                    })
+                                    .collect::<Result<_, _>>()?;
+                                let page_count = data.len().div_ceil(LAN_KV_PAGE_BYTES).max(1);
+                                for (page_index, page_data) in
+                                    data.chunks(LAN_KV_PAGE_BYTES).enumerate()
+                                {
+                                    if abort.load(std::sync::atomic::Ordering::SeqCst) {
+                                        return Ok(());
+                                    }
+                                    transport
+                                        .send_message(
+                                            &LanWorkMessage::KvPage {
+                                                work_id: work_id.clone(),
+                                                request_id: request_id.clone(),
+                                                page_index: page_index as u32,
+                                                data: page_data.to_vec(),
+                                                seq0_tokens: if page_index == 0 {
+                                                    seq0_tokens.clone()
+                                                } else {
+                                                    Vec::new()
+                                                },
+                                                final_page: page_index + 1 == page_count,
+                                            },
+                                            &work,
+                                        )
+                                        .await?;
+                                }
+                            }
+                            Err(error) => {
+                                transport
+                                    .send_message(
+                                        &LanWorkMessage::Nack {
+                                            work_id: work_id.clone(),
+                                            operation: "kv-request".into(),
+                                            reason: error,
+                                        },
+                                        &work,
+                                    )
+                                    .await?;
+                            }
                         }
                     }
                     LanWorkMessage::ChatInfer {
@@ -781,18 +985,104 @@ async fn handle_lan_worker_connection(
                             }
                         }
                     }
-                    message @ LanWorkMessage::KvPage { .. } => {
+                    LanWorkMessage::KvPage {
+                        work_id: id,
+                        request_id,
+                        page_index,
+                        data,
+                        seq0_tokens,
+                        final_page,
+                    } if id == work_id => {
+                        let message = LanWorkMessage::KvPage {
+                            work_id: work_id.clone(),
+                            request_id: request_id.clone(),
+                            page_index,
+                            data,
+                            seq0_tokens,
+                            final_page,
+                        };
                         message.validate_for(&work, transport.peer_node_id())?;
-                        transport
-                            .send_message(
-                                &LanWorkMessage::Nack {
-                                    work_id: work_id.clone(),
-                                    operation: "kv-page".into(),
-                                    reason: "transfert KV LAN non configuré côté moteur".into(),
-                                },
-                                &work,
-                            )
-                            .await?;
+                        if abort.load(std::sync::atomic::Ordering::SeqCst) {
+                            return Ok(());
+                        }
+                        let LanWorkMessage::KvPage {
+                            request_id,
+                            page_index,
+                            data,
+                            seq0_tokens,
+                            final_page,
+                            ..
+                        } = message
+                        else {
+                            unreachable!()
+                        };
+                        let expected_page = kv_assembly
+                            .as_ref()
+                            .map_or(0, |assembly| assembly.next_page);
+                        if page_index != expected_page {
+                            return Err("pages KV LAN reçues hors ordre".into());
+                        }
+                        if let Some(assembly) = &kv_assembly {
+                            if assembly.request_id != request_id {
+                                return Err("transferts KV LAN simultanés interdits".into());
+                            }
+                        } else {
+                            let seq0_tokens: Vec<i32> = seq0_tokens
+                                .into_iter()
+                                .map(|token| {
+                                    i32::try_from(token).map_err(|_| {
+                                        "identifiant de token KV LAN hors plage".to_string()
+                                    })
+                                })
+                                .collect::<Result<_, _>>()?;
+                            kv_assembly = Some(KvPageAssembly {
+                                request_id: request_id.clone(),
+                                next_page: 0,
+                                data: Vec::new(),
+                                seq0_tokens,
+                            });
+                        }
+                        let assembly = kv_assembly.as_mut().unwrap();
+                        if assembly.data.len().saturating_add(data.len()) > LAN_KV_MAX_BYTES {
+                            return Err("état KV LAN supérieur à 64 MiB".into());
+                        }
+                        assembly.data.extend_from_slice(&data);
+                        assembly.next_page = assembly.next_page.saturating_add(1);
+                        if final_page {
+                            let assembly = kv_assembly.take().unwrap();
+                            match subsystem
+                                .worker_import_kv_state(
+                                    &model_id,
+                                    assembly.data,
+                                    assembly.seq0_tokens,
+                                )
+                                .await
+                            {
+                                Ok(()) => {
+                                    transport
+                                        .send_message(
+                                            &LanWorkMessage::Ack {
+                                                work_id: work_id.clone(),
+                                                operation: "kv-page".into(),
+                                            },
+                                            &work,
+                                        )
+                                        .await?;
+                                }
+                                Err(error) => {
+                                    transport
+                                        .send_message(
+                                            &LanWorkMessage::Nack {
+                                                work_id: work_id.clone(),
+                                                operation: "kv-page".into(),
+                                                reason: error,
+                                            },
+                                            &work,
+                                        )
+                                        .await?;
+                                }
+                            }
+                        }
                     }
                     LanWorkMessage::TokenBatch { .. } => {
                         return Err("batch de tokens LAN reçu dans le mauvais sens".into());
@@ -1405,6 +1695,134 @@ async fn main() {
                             generated_tokens,
                             ttft_ms,
                             tok_s,
+                        };
+                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &response).await;
+                    }
+                    Err(error) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, &error)
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let cluster = lan_cluster.clone();
+        let model_config = config.clone();
+        let preference_home = preference_home.clone();
+        let bus = bus.clone();
+        svc.on("model.cluster.kv_transfer", move |ctx| {
+            let cluster = cluster.clone();
+            let model_config = model_config.clone();
+            let preference_home = preference_home.clone();
+            let bus = bus.clone();
+            async move {
+                if !model_config.lan_cluster_enabled_at(&preference_home) {
+                    let _ = ctx
+                        .respond_error(
+                            aos_ipc::msg::Status::PermissionDenied,
+                            "cluster LAN désactivé",
+                        )
+                        .await;
+                    return;
+                }
+                let req = match ctx.payload::<LanClusterKvTransferRequest>() {
+                    Ok(req) => req,
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                        return;
+                    }
+                };
+                if !req.allow_sensitive_data || !req.encrypted_transport {
+                    let _ = ctx
+                        .respond_error(
+                            aos_ipc::msg::Status::PermissionDenied,
+                            "le transfert KV LAN exige une autorisation sensible explicite et un transport chiffré",
+                        )
+                        .await;
+                    return;
+                }
+                let key = match load_lan_session_key(&bus, &req.session_key_secret).await {
+                    Ok(key) => key,
+                    Err(error) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::PermissionDenied, &error)
+                            .await;
+                        return;
+                    }
+                };
+                let planned = cluster
+                    .lock()
+                    .map(|cluster| {
+                        let plan = cluster.job(&req.work_id).cloned()?;
+                        if plan.model_id != req.model_id {
+                            return None;
+                        }
+                        let source = plan
+                            .assignments
+                            .iter()
+                            .find(|assignment| assignment.node_id == req.source_node_id)?
+                            .clone();
+                        let target = plan
+                            .assignments
+                            .iter()
+                            .find(|assignment| assignment.node_id == req.target_node_id)?
+                            .clone();
+                        Some((source, target, cluster.registry().clone()))
+                    })
+                    .map_err(|_| "verrou cluster indisponible".to_string())
+                    .and_then(|planned| planned.ok_or("travail KV LAN non planifié pour ces nœuds".into()));
+                let (source, target, registry) = match planned {
+                    Ok(planned) => planned,
+                    Err(error) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, &error)
+                            .await;
+                        return;
+                    }
+                };
+                let mut shard_ids = if req.shard_ids.is_empty() {
+                    source.shard_ids.clone()
+                } else {
+                    req.shard_ids.clone()
+                };
+                for shard_id in &target.shard_ids {
+                    if !shard_ids.contains(shard_id) {
+                        shard_ids.push(*shard_id);
+                    }
+                }
+                let work = DistributedWork {
+                    work_id: req.work_id.clone(),
+                    model_id: req.model_id,
+                    shard_ids,
+                    allow_sensitive_data: true,
+                    encrypted_transport: true,
+                };
+                let local_node_id = model_config.lan_node_id_at(&preference_home);
+                match send_lan_kv_transfer(
+                    &local_node_id,
+                    &registry,
+                    &work,
+                    &req.source_node_id,
+                    source.shard_ids,
+                    &req.target_node_id,
+                    target.shard_ids,
+                    req.request_id.clone(),
+                    key,
+                )
+                .await
+                {
+                    Ok((page_count, total_bytes)) => {
+                        let response = LanClusterKvTransferResponse {
+                            work_id: req.work_id,
+                            request_id: req.request_id,
+                            source_node_id: req.source_node_id,
+                            target_node_id: req.target_node_id,
+                            page_count,
+                            total_bytes,
                         };
                         let _ = ctx.respond(aos_ipc::msg::Status::Ok, &response).await;
                     }

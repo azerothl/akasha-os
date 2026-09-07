@@ -514,6 +514,32 @@ pub struct LanClusterInferChatResponse {
     pub tok_s: f64,
 }
 
+/// Transfert explicite de l'état KV d'un worker appairé vers un autre.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanClusterKvTransferRequest {
+    pub work_id: String,
+    pub request_id: String,
+    pub source_node_id: String,
+    pub target_node_id: String,
+    pub model_id: String,
+    #[serde(default)]
+    pub shard_ids: Vec<u32>,
+    pub allow_sensitive_data: bool,
+    pub encrypted_transport: bool,
+    #[serde(default)]
+    pub session_key_secret: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanClusterKvTransferResponse {
+    pub work_id: String,
+    pub request_id: String,
+    pub source_node_id: String,
+    pub target_node_id: String,
+    pub page_count: u32,
+    pub total_bytes: u64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LanClusterNode {
     pub node_id: String,

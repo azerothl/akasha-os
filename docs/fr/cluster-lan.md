@@ -61,8 +61,13 @@ prompt au nœud choisi et retourne le texte avec ses métriques ; il exige
 Une annulation authentifiée reçue sur une connexion séparée est propagée au
 drapeau du contexte de génération et termine le travail à la frontière de
 token.
+`model.cluster.kv_transfer` peut exporter l’état KV de la séquence 0 d’un
+worker, le transporter par pages CBOR chiffrées de 512 KiB maximum, puis le
+restaurer sur un autre worker appairé. L’état est limité à 64 MiB et les pages
+doivent arriver dans l’ordre.
 Le routage implicite de `model.infer` reste local. La partition réelle des
-poids/shards et le transfert KV inter-processus restent à intégrer. Par défaut,
+poids/shards reste à intégrer ; le transfert KV explicite est disponible via
+`model.cluster.kv_transfer`. Par défaut,
 aucune donnée de modèle ou de prompt ne quitte la machine.
 
 La découverte automatique prend effet au démarrage de `aos-modeld` lorsque le

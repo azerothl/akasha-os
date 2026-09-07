@@ -58,9 +58,13 @@ selected node and receive generated text plus metrics; it requires
 `allow_sensitive_data=true`, a valid session secret and a paired node.
 An authenticated cancellation received on a separate connection is propagated
 to the generation context and stops the work at a token boundary.
+`model.cluster.kv_transfer` can export sequence-0 KV state from one worker,
+carry it as encrypted CBOR pages of at most 512 KiB, and restore it on another
+paired worker. The state is capped at 64 MiB and pages must arrive in order.
 Implicit `model.infer` routing remains local. Actual weight/shard partitioning
-and inter-process KV transfer still need to be integrated. By default, no
-model or prompt data leaves the machine.
+still needs to be integrated; explicit KV transfer is available through
+`model.cluster.kv_transfer`. By default, no model or prompt data leaves the
+machine.
 
 Auto-discovery takes effect when `aos-modeld` starts with both the LAN cluster
 and auto-discovery enabled. It uses bounded UDP CBOR advertisements on the

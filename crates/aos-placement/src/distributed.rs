@@ -100,6 +100,11 @@ pub enum LanWorkMessage {
         request_id: String,
         max_tokens: u32,
     },
+    KvRequest {
+        work_id: String,
+        request_id: String,
+        seq_id: u32,
+    },
     ChatInfer {
         work_id: String,
         request_id: String,
@@ -132,6 +137,8 @@ pub enum LanWorkMessage {
         request_id: String,
         page_index: u32,
         data: Vec<u8>,
+        #[serde(default)]
+        seq0_tokens: Vec<u32>,
         final_page: bool,
     },
     Nack {
@@ -151,6 +158,7 @@ impl LanWorkMessage {
             | Self::Ack { work_id, .. }
             | Self::Prefill { work_id, .. }
             | Self::Decode { work_id, .. }
+            | Self::KvRequest { work_id, .. }
             | Self::ChatInfer { work_id, .. }
             | Self::TokenBatch { work_id, .. }
             | Self::TextBatch { work_id, .. }
@@ -277,6 +285,17 @@ impl LanWorkMessage {
                     return Err("paramètres d'échantillonnage LAN invalides".into());
                 }
             }
+            Self::KvRequest {
+                request_id, seq_id, ..
+            } => {
+                validate_request_id(request_id)?;
+                if !work.allow_sensitive_data {
+                    return Err("export KV LAN refusé sans politique sensible explicite".into());
+                }
+                if *seq_id > 1024 {
+                    return Err("séquence KV LAN invalide".into());
+                }
+            }
             Self::TokenBatch {
                 request_id,
                 tokens,
@@ -306,11 +325,21 @@ impl LanWorkMessage {
                 }
             }
             Self::KvPage {
-                request_id, data, ..
+                request_id,
+                page_index,
+                data,
+                seq0_tokens,
+                ..
             } => {
                 validate_request_id(request_id)?;
                 if data.is_empty() || data.len() > 1_048_576 {
                     return Err("page KV LAN invalide".into());
+                }
+                if *page_index > 65_535 {
+                    return Err("index de page KV LAN invalide".into());
+                }
+                if seq0_tokens.len() > 8192 || (*page_index != 0 && !seq0_tokens.is_empty()) {
+                    return Err("métadonnées de tokens KV LAN invalides".into());
                 }
                 if !work.allow_sensitive_data {
                     return Err("KV LAN refusé sans politique sensible explicite".into());
@@ -496,6 +525,8 @@ impl LanWorkerRegistry {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LanWorkPlan {
     pub work_id: String,
+    #[serde(default)]
+    pub model_id: String,
     pub state: LanJobState,
     pub assignments: Vec<LanShardAssignment>,
     #[serde(default)]
@@ -1191,6 +1222,7 @@ impl LanCluster {
         assignments.retain(|assignment| !assignment.shard_ids.is_empty());
         let plan = LanWorkPlan {
             work_id: work.work_id.clone(),
+            model_id: work.model_id.clone(),
             state: LanJobState::Planned,
             assignments,
             unassigned_shards: Vec::new(),
@@ -1552,11 +1584,36 @@ mod tests {
         }
         .validate_for(&sensitive_work, "n1")
         .is_err());
+        assert!(LanWorkMessage::KvRequest {
+            work_id: "data-work".into(),
+            request_id: "req-kv".into(),
+            seq_id: 0,
+        }
+        .validate_for(&private_work, "n1")
+        .is_err());
+        assert!(LanWorkMessage::KvRequest {
+            work_id: "data-work".into(),
+            request_id: "req-kv".into(),
+            seq_id: 0,
+        }
+        .validate_for(&sensitive_work, "n1")
+        .is_ok());
+        assert!(LanWorkMessage::KvPage {
+            work_id: "data-work".into(),
+            request_id: "req-kv".into(),
+            page_index: 1,
+            data: vec![1],
+            seq0_tokens: vec![42],
+            final_page: true,
+        }
+        .validate_for(&sensitive_work, "n1")
+        .is_err());
         assert!(LanWorkMessage::KvPage {
             work_id: "data-work".into(),
             request_id: "req-1".into(),
             page_index: 0,
             data: vec![0; 1_048_577],
+            seq0_tokens: Vec::new(),
             final_page: true,
         }
         .validate_for(&sensitive_work, "n1")
