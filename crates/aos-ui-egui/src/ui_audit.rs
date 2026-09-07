@@ -293,7 +293,7 @@ impl UiApp {
                             self.chat_state
                                 .sessions
                                 .iter()
-                                .find(|s| &s.id == id)
+                                .find(|s| s.id == id)
                                 .map(|s| s.title.clone())
                         })
                         .unwrap_or_else(|| {
@@ -493,7 +493,7 @@ mod tests {
         assert!(is_problem_action("policy.deny"));
         assert!(is_problem_action("cap.deny"));
         assert!(is_problem_action("device.capture.error"));
-        assert!(is_problem_action("model.migrate.fallback") == false);
+        assert!(!is_problem_action("model.migrate.fallback"));
         assert!(!is_problem_action("fs.write"));
         assert!(!is_problem_action("mem.extract"));
     }

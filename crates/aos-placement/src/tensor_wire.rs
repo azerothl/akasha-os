@@ -75,9 +75,14 @@ impl F32Tensor {
         if payload > MAX_BYTES || input.len() != cursor + payload {
             return Err("payload de tenseur Akasha invalide".into());
         }
-        let values = input[cursor..]
-            .chunks_exact(4)
-            .map(|b| f32::from_le_bytes(b.try_into().unwrap()))
+        let bytes = &input[cursor..];
+        let (chunks, remainder) = bytes.as_chunks();
+        if !remainder.is_empty() {
+            return Err("payload de tenseur Akasha invalide".into());
+        }
+        let values = chunks
+            .iter()
+            .map(|b| f32::from_le_bytes(*b))
             .collect();
         Self::new(shape, values)
     }

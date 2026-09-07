@@ -777,6 +777,7 @@ fn materialize_staged_lan_model(
     Ok(Some(output))
 }
 
+
 #[allow(clippy::too_many_arguments)]
 async fn send_lan_kv_transfer(
     local_node_id: &str,
@@ -5343,7 +5344,6 @@ mod tests {
         greedy_token, lan_artifact_component, last_token_activation, parse_lan_session_key,
         materialize_staged_lan_model, sample_token, stage_lan_weight_shard,
     };
-    use std::path::PathBuf;
 
     #[test]
     fn cle_lan_hex_est_strictement_validee() {
@@ -5375,7 +5375,7 @@ mod tests {
 
     #[test]
     fn staging_poids_lan_est_atomique_et_sanitise() {
-        let root = PathBuf::from(std::env::temp_dir())
+        let root = std::env::temp_dir()
             .join(format!("akasha-weight-stage-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         assert_eq!(
@@ -5429,7 +5429,7 @@ mod tests {
 
     #[test]
     fn staging_sparse_materialise_apres_couverture_requise() {
-        let root = PathBuf::from(std::env::temp_dir())
+        let root = std::env::temp_dir()
             .join(format!("akasha-sparse-stage-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let required = vec![
