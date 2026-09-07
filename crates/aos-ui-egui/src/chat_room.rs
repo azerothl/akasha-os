@@ -2,6 +2,7 @@
 
 use crate::i18n::{self, UiStrings};
 use aos_agent::room_conductor::{build_initial_queue, effective_max_turns};
+use aos_agent::room_conductor::resolve_mention_token;
 use aos_proto::{
     AgentInfo, AgentKind, AgentState, ChatRoomMember, ChatSessionMeta, ChatSessionMode,
 };
@@ -235,8 +236,8 @@ pub fn room_turn_done_status(_agent_turns: u32, _cancelled: bool) -> Option<Stri
     None
 }
 
-/// Strip roster `agent_id` echoes (`@agent-2`, `(@agent-3)`) from text painted in bubbles.
-pub fn strip_roster_agent_id_mentions(
+/// Paint `@` destinations with human roster labels only — never technical `agent_id` tokens.
+pub fn format_room_mention_destinations(
     t: &UiStrings,
     text: &str,
     members: &[ChatRoomMember],
@@ -244,43 +245,67 @@ pub fn strip_roster_agent_id_mentions(
     let mut out = text.to_string();
     for m in members {
         let id = &m.agent_id;
-        let replace_name = member_display_label(t, m);
+        let human = format!("@{}", member_display_label(t, m));
         for pattern in [format!("(@{id})"), format!("@{id}")] {
-            out = out.replace(&pattern, &replace_name);
+            out = out.replace(&pattern, &human);
         }
     }
-    strip_bare_agent_id_tokens(&out)
+    replace_remaining_technical_mentions(t, &out, members)
 }
 
-fn strip_bare_agent_id_tokens(text: &str) -> String {
+/// Back-compat alias — prefer [`format_room_mention_destinations`].
+pub fn strip_roster_agent_id_mentions(
+    t: &UiStrings,
+    text: &str,
+    members: &[ChatRoomMember],
+) -> String {
+    format_room_mention_destinations(t, text, members)
+}
+
+fn replace_remaining_technical_mentions(
+    t: &UiStrings,
+    text: &str,
+    members: &[ChatRoomMember],
+) -> String {
     let mut out = String::with_capacity(text.len());
-    let mut rest = text;
-    while !rest.is_empty() {
-        if let Some(at) = rest.find('@') {
-            out.push_str(&rest[..at]);
-            let after_at = &rest[at + 1..];
-            if let Some(agent_suffix) = after_at.strip_prefix("agent-") {
-                let mut byte_end = 6;
-                for (i, c) in agent_suffix.char_indices() {
-                    if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
-                        byte_end = 6 + i + c.len_utf8();
-                    } else {
-                        break;
-                    }
-                }
-                if byte_end > 6 {
-                    rest = &after_at[byte_end..];
-                    continue;
+    let bytes = text.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'@' {
+            let start = i + 1;
+            let mut end = start;
+            while end < bytes.len() {
+                let c = bytes[end];
+                if c.is_ascii_alphanumeric() || c == b'-' || c == b'_' {
+                    end += 1;
+                } else {
+                    break;
                 }
             }
-            out.push('@');
-            rest = &rest[at + 1..];
-        } else {
-            out.push_str(rest);
-            break;
+            if end > start {
+                if let Some(token) = text.get(start..end) {
+                    if looks_like_technical_agent_token(token) {
+                        if let Some(id) = resolve_mention_token(token, members) {
+                            if let Some(m) = members.iter().find(|m| m.agent_id == id) {
+                                out.push('@');
+                                out.push_str(&member_display_label(t, m));
+                            }
+                        }
+                        i = end;
+                        continue;
+                    }
+                }
+            }
         }
+        let ch = text[i..].chars().next().unwrap();
+        out.push(ch);
+        i += ch.len_utf8();
     }
     out
+}
+
+fn looks_like_technical_agent_token(token: &str) -> bool {
+    token.starts_with("agent-") || token.starts_with("persona-") || token.starts_with("agent_id")
 }
 
 fn mention_token_end(input: &str, at: usize) -> usize {
@@ -467,10 +492,36 @@ mod tests {
         let t = i18n::strings("fr");
         let members = vec![member("agent-2", "Maya"), member("agent-3", "Leo")];
         let raw = "Bonjour! Leo (@agent-3) et moi, Maya (@agent-2), sommes là.";
-        let painted = strip_roster_agent_id_mentions(&t, raw, &members);
+        let painted = format_room_mention_destinations(&t, raw, &members);
         assert!(!painted.contains("@agent-"));
-        assert!(painted.contains("Maya"));
-        assert!(painted.contains("Leo"));
+        assert!(painted.contains("@Maya"));
+        assert!(painted.contains("@Leo"));
+    }
+
+    #[test]
+    fn format_room_mention_destinations_uses_localized_persona_label() {
+        let t = i18n::strings("fr");
+        let mut m1 = member("persona-critic", "Critic");
+        m1.persona_id = Some("critic".into());
+        let members = vec![m1];
+        let painted = format_room_mention_destinations(&t, "@persona-critic confirme ?", &members);
+        assert!(painted.contains("@Critique"));
+        assert!(!painted.contains("persona-critic"));
+    }
+
+    #[test]
+    fn room_action_unavailable_copy_locked() {
+        let en = i18n::strings("en");
+        let fr = i18n::strings("fr");
+        assert_eq!(
+            en.room_action_unavailable,
+            "That action isn't available in the room."
+        );
+        assert_eq!(fr.room_action_unavailable, "Action indisponible dans le salon.");
+        assert_eq!(en.room_policy_one_agent, "One agent");
+        assert_eq!(fr.room_policy_one_agent, "Un agent");
+        assert_eq!(en.room_policy_open_floor, "Open floor");
+        assert_eq!(fr.room_policy_open_floor, "Tout le salon");
     }
 
     #[test]

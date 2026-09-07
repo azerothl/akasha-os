@@ -145,9 +145,15 @@ impl UiApp {
                         text = i18n::agent_could_not_continue_message(t);
                     }
                     let kind = chat_bubble_kind(&role, speaker_id.as_deref(), room_mode);
-                    let text = if kind == ChatBubbleKind::RoomSpeaker {
-                        let visible = chat_room::format_room_visible_bubble(&text);
-                        chat_room::strip_roster_agent_id_mentions(t, &visible, room_members)
+                    let text = if room_mode
+                        && (kind == ChatBubbleKind::RoomSpeaker || kind == ChatBubbleKind::User)
+                    {
+                        let base = if kind == ChatBubbleKind::RoomSpeaker {
+                            chat_room::format_room_visible_bubble(&text)
+                        } else {
+                            text
+                        };
+                        chat_room::format_room_mention_destinations(t, &base, room_members)
                     } else if role == "assistant" && !is_completion && speaker_id.is_none() {
                         agent_panel::format_chat_assistant_display(&text)
                     } else {

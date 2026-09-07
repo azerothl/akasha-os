@@ -46,6 +46,9 @@ const ROOM_INFER_MAX_TOKENS: u32 = 768;
 /// get replayed verbatim across rebound speakers in the same round.
 const ROOM_INFER_PRIORITY: u8 = 1;
 
+/// Sentinel returned to the UI when a salon turn cannot invoke the tools an ask requires.
+pub const ROOM_ACTION_UNAVAILABLE: &str = "room_action_unavailable";
+
 const ROOM_ACTION_PROTOCOL: &str = r#"## Protocole d'actions (salon)
 
 Quand tu dois utiliser un outil, réponds par un objet JSON unique :
@@ -162,6 +165,16 @@ fn member_display_name<'a>(
         .find(|m| m.agent_id == agent_id)
         .map(|m| m.display_name.as_str())
         .ok_or_else(|| format!("membre {agent_id} absent du salon"))
+}
+
+fn room_kit_lacks_required_tools(tool_ids: &[String], user_message: &str) -> bool {
+    if crate::research_detect::user_requested_document(user_message) {
+        return !tool_ids.iter().any(|t| t == "files.generate");
+    }
+    if crate::research_detect::user_requested_note(user_message) {
+        return !tool_ids.iter().any(|t| t == "notes.create");
+    }
+    false
 }
 
 /// Assemble tool ids + caps for a roster member salon turn.
@@ -718,6 +731,10 @@ pub async fn execute_room_turn(
 
     let model_id = spec.model_id.clone().or(session.meta.model_id.clone());
     let images = room_images_from_session(&session);
+    if room_kit_lacks_required_tools(&tool_ids, user_message) {
+        return Err(ROOM_ACTION_UNAVAILABLE.into());
+    }
+
     let (content, thinking) = if tool_descs.is_empty() {
         let mut refs = images.clone();
         let canvas_png = if session.meta.canvas_open {
@@ -1317,6 +1334,51 @@ mod tests {
         assert!(caps.iter().any(|c| c == "fs.write:/downloads/**"));
         let (ids_off, _) = room_member_kit(&spec, false, &[], false);
         assert!(!ids_off.iter().any(|x| x == "files.generate"));
+    }
+
+    #[test]
+    fn room_kit_lacks_required_tools_detects_missing_note_tool() {
+        assert!(room_kit_lacks_required_tools(&["canvas.stroke".into()], "écris une note"));
+        assert!(!room_kit_lacks_required_tools(&["notes.create".into()], "écris une note"));
+        assert!(room_kit_lacks_required_tools(
+            &["notes.create".into()],
+            "prepare a document about rust"
+        ));
+        assert!(!room_kit_lacks_required_tools(
+            &["files.generate".into()],
+            "prepare a document about rust"
+        ));
+    }
+
+    #[test]
+    fn execute_room_turn_rejects_missing_note_tool_kit() {
+        let session = room_session_with_user("écris une note rapide");
+        let spec = AgentSpec {
+            agent_id: "agent-a".into(),
+            goal: AgentGoal::default(),
+            kind: Default::default(),
+            display_name: Some("Alpha".into()),
+            persona_id: None,
+            system_prompt: None,
+            skills: vec![],
+            tools: vec!["canvas.stroke".into()],
+            mcp_servers: vec![],
+            documents: vec![],
+            caps: vec![],
+            model_id: None,
+            policy: None,
+            parent_id: None,
+            session_id: None,
+            budget: Default::default(),
+            optimize_prompt: false,
+            gate_mode: "ask".into(),
+            origin: None,
+            cognitive_mode: aos_proto::CognitiveMode::Normal,
+        };
+        let user_message = last_user_message_text(&session);
+        let (tool_ids, _) = assemble_room_member_tools(&spec, false, &[], user_message);
+        assert!(room_kit_lacks_required_tools(&tool_ids, user_message));
+        assert_eq!(ROOM_ACTION_UNAVAILABLE, "room_action_unavailable");
     }
 
     #[test]

@@ -1,6 +1,7 @@
 //! User-visible chat error copy — never leak filesystem paths into bubbles.
 
 use crate::i18n::UiStrings;
+use aos_agent::room_runtime::ROOM_ACTION_UNAVAILABLE;
 
 /// True when the runtime error is a model weight load failure (often embeds a `.gguf` path).
 pub(crate) fn is_model_load_fail_error(msg: &str) -> bool {
@@ -40,6 +41,16 @@ pub(crate) fn leaks_filesystem_path(msg: &str) -> bool {
 
 /// Map a raw runtime error to localized chat chrome copy (no path leaks).
 pub(crate) fn user_visible_chat_error(t: &UiStrings, raw: &str) -> String {
+    if raw == ROOM_ACTION_UNAVAILABLE || raw.contains(ROOM_ACTION_UNAVAILABLE) {
+        return t.room_action_unavailable.to_string();
+    }
+    let lower = raw.to_ascii_lowercase();
+    if lower.contains("indisponible en tour de salon")
+        || lower.contains("indisponible en salon")
+        || lower.contains("isn't available in the room")
+    {
+        return t.room_action_unavailable.to_string();
+    }
     if is_model_load_fail_error(raw) {
         return t.chat_load_fail_message.to_string();
     }
@@ -52,6 +63,24 @@ pub(crate) fn user_visible_chat_error(t: &UiStrings, raw: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn room_action_unavailable_maps_to_locked_copy() {
+        let en = crate::i18n::strings("en");
+        let fr = crate::i18n::strings("fr");
+        assert_eq!(
+            user_visible_chat_error(&en, ROOM_ACTION_UNAVAILABLE),
+            en.room_action_unavailable
+        );
+        assert_eq!(
+            user_visible_chat_error(&fr, ROOM_ACTION_UNAVAILABLE),
+            fr.room_action_unavailable
+        );
+        assert_eq!(
+            user_visible_chat_error(&en, "action notes.create indisponible en tour de salon"),
+            en.room_action_unavailable
+        );
+    }
 
     #[test]
     fn model_load_fail_detects_gguf_path() {
