@@ -645,7 +645,7 @@ impl LanShardManifest {
 #[derive(Debug, Clone, Default)]
 pub struct LanWorkerRegistry {
     jobs: HashMap<String, LanWorkerJob>,
-    abort_flags: HashMap<String, Arc<AtomicBool>>,
+    abort_flags: HashMap<String, Vec<std::sync::Weak<AtomicBool>>>,
 }
 
 impl LanWorkerRegistry {
@@ -669,6 +669,14 @@ impl LanWorkerRegistry {
         }
         if !assignment.encrypted_transport {
             return Err("assignment LAN non chiffrée refusée".into());
+        }
+        if let Some(job) = self.jobs.get(&work_id) {
+            if job.state == LanWorkerJobState::Cancelled {
+                return Err("travail LAN déjà annulé".into());
+            }
+            if job.model_id != model_id || job.allow_sensitive_data != allow_sensitive_data {
+                return Err("réaffectation LAN incompatible avec le travail existant".into());
+            }
         }
         self.jobs.insert(
             work_id.clone(),
@@ -694,8 +702,9 @@ impl LanWorkerRegistry {
         if job.state == LanWorkerJobState::Cancelled {
             return Err("travail LAN déjà annulé".into());
         }
-        abort.store(false, Ordering::SeqCst);
-        self.abort_flags.insert(work_id.to_string(), abort);
+        let flags = self.abort_flags.entry(work_id.to_string()).or_default();
+        flags.retain(|flag| flag.strong_count() > 0);
+        flags.push(Arc::downgrade(&abort));
         Ok(())
     }
 
@@ -705,11 +714,14 @@ impl LanWorkerRegistry {
         if job.state == LanWorkerJobState::Cancelled {
             return Err("travail LAN annulé".into());
         }
-        if let Some(abort) = self.abort_flags.get(work_id) {
-            if abort.load(Ordering::SeqCst) {
+        if let Some(flags) = self.abort_flags.get(work_id) {
+            if flags
+                .iter()
+                .filter_map(std::sync::Weak::upgrade)
+                .any(|abort| abort.load(Ordering::SeqCst))
+            {
                 return Err("travail LAN annulé".into());
             }
-            abort.store(false, Ordering::SeqCst);
         }
         Ok(())
     }
@@ -717,8 +729,10 @@ impl LanWorkerRegistry {
     pub fn cancel(&mut self, work_id: &str) -> Result<(), String> {
         let job = self.jobs.get_mut(work_id).ok_or("travail LAN inconnu")?;
         job.state = LanWorkerJobState::Cancelled;
-        if let Some(abort) = self.abort_flags.get(work_id) {
-            abort.store(true, Ordering::SeqCst);
+        if let Some(flags) = self.abort_flags.get(work_id) {
+            for abort in flags.iter().filter_map(std::sync::Weak::upgrade) {
+                abort.store(true, Ordering::SeqCst);
+            }
         }
         Ok(())
     }
@@ -1838,9 +1852,33 @@ mod tests {
             .unwrap();
         let abort = Arc::new(AtomicBool::new(false));
         worker.register_abort("work-cancel", abort.clone()).unwrap();
+        let second = Arc::new(AtomicBool::new(false));
+        worker
+            .register_abort("work-cancel", second.clone())
+            .unwrap();
         worker.cancel("work-cancel").unwrap();
         assert!(abort.load(Ordering::SeqCst));
+        assert!(second.load(Ordering::SeqCst));
         assert!(worker.reset_abort("work-cancel").is_err());
+        assert!(worker
+            .assign(
+                "n1",
+                "coordinator",
+                "model-1".into(),
+                LanShardAssignment {
+                    node_id: "n1".into(),
+                    shard_ids: vec![1],
+                    kv_tokens: 128,
+                    encrypted_transport: true
+                },
+                "work-cancel".into(),
+                true
+            )
+            .is_err());
+        assert_eq!(
+            worker.get("work-cancel").unwrap().state,
+            LanWorkerJobState::Cancelled
+        );
     }
 
     #[test]
