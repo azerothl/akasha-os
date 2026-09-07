@@ -847,7 +847,7 @@ mod vision_catalog_tests {
     fn catalog_parses_mmproj_role_and_vision_profile() {
         let raw = include_str!("../../../share/models/catalog-offerings.json");
         let file: OfferingsFile = serde_json::from_str(raw).expect("catalog json");
-        assert_eq!(file.version, "0.3.4");
+        assert_eq!(file.version, "0.3.5");
         let gemma = file
             .models
             .iter()

@@ -1,5 +1,5 @@
 {
-  "version": "0.3.4",
+  "version": "0.3.5",
   "models": [
     {
       "id": "local:qwen3-embedding-0.6b",
@@ -303,6 +303,34 @@
         "dense"
       ],
       "description": "IBM Granite 4.1 3B — Apache-2.0, CPU / petit GPU. Alternative licence ouverte au LFM 2,6B."
+    },
+    {
+      "id": "local:minicpm5-2b",
+      "name": "MiniCPM5 2B Q4",
+      "profiles": [
+        "chat",
+        "code"
+      ],
+      "filename": "MiniCPM5-2B-Q4_K_M.gguf",
+      "url": "https://huggingface.co/openbmb/MiniCPM5-2B-GGUF/resolve/main/MiniCPM5-2B-Q4_K_M.gguf",
+      "bytes": 1561318368,
+      "sha256": "",
+      "min_vram_mib": 0,
+      "min_disk_bytes": 1800000000,
+      "quality_score": 72,
+      "speed_score": 96,
+      "n_layers": 42,
+      "n_params": 2000000000.0,
+      "weights_bytes": 1561318368,
+      "embed_bytes": 120000000,
+      "kv_bytes_per_token": 20000,
+      "replaces": [],
+      "optional": true,
+      "tags": [
+        "cpu",
+        "dense"
+      ],
+      "description": "OpenBMB MiniCPM5 2B — dense on-device, tool-calling / agent; Apache-2.0. Alt CPU / petit GPU."
     },
     {
       "id": "local:gemma-4-e4b",
@@ -1376,6 +1404,7 @@
       "alternatives": [
         "local:lfm2.5-2.6b",
         "local:granite-4.1-3b",
+        "local:minicpm5-2b",
         "local:qwen3-vl-4b",
         "local:qwen3.5-4b-instruct",
         "local:qwen3-4b-instruct-2507"
@@ -1390,6 +1419,7 @@
         "local:llava-1.6",
         "local:granite-4.1-8b",
         "local:lfm2.5-2.6b",
+        "local:minicpm5-2b",
         "local:qwen3.5-4b-instruct",
         "local:qwen3-4b-instruct-2507"
       ]
