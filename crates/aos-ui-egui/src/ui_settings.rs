@@ -763,50 +763,55 @@ impl UiApp {
                 "remember",
             ],
         ) {
-            ui.heading(t.settings_trust);
-            egui::Grid::new("settings_trust")
-                .num_columns(2)
-                .spacing([12.0, 8.0])
-                .min_col_width(label_w)
+            egui::CollapsingHeader::new(t.settings_trust)
+                .default_open(false)
                 .show(ui, |ui| {
-                    ui.label(t.trust_default);
-                    ui.horizontal(|ui| {
-                        for (code, label) in [("low", t.trust_low), ("medium", t.trust_medium)] {
-                            if ui
-                                .selectable_label(self.prefs.trust_default == code, label)
-                                .clicked()
-                            {
-                                self.prefs.trust_default = code.into();
-                                self.onboarding.trust_default = code.into();
+                    egui::Grid::new("settings_trust")
+                        .num_columns(2)
+                        .spacing([12.0, 8.0])
+                        .min_col_width(label_w)
+                        .show(ui, |ui| {
+                            ui.label(t.trust_default);
+                            ui.horizontal(|ui| {
+                                for (code, label) in
+                                    [("low", t.trust_low), ("medium", t.trust_medium)]
+                                {
+                                    if ui
+                                        .selectable_label(self.prefs.trust_default == code, label)
+                                        .clicked()
+                                    {
+                                        self.prefs.trust_default = code.into();
+                                        self.onboarding.trust_default = code.into();
+                                        save_preferences(&self.prefs);
+                                        save_onboarding(&self.onboarding);
+                                    }
+                                }
+                            });
+                            ui.end_row();
+
+                            ui.label(t.network_heading);
+                            let mut online = self.prefs.network_online;
+                            if ui.checkbox(&mut online, t.allow_network).changed() {
+                                self.prefs.network_online = online;
+                                self.network_online = online;
                                 save_preferences(&self.prefs);
-                                save_onboarding(&self.onboarding);
+                                let _ = self.cmd_tx.send(Cmd::NetSetMode { online });
                             }
-                        }
-                    });
-                    ui.end_row();
+                            ui.end_row();
 
-                    ui.label(t.network_heading);
-                    let mut online = self.prefs.network_online;
-                    if ui.checkbox(&mut online, t.allow_network).changed() {
-                        self.prefs.network_online = online;
-                        self.network_online = online;
-                        save_preferences(&self.prefs);
-                        let _ = self.cmd_tx.send(Cmd::NetSetMode { online });
-                    }
-                    ui.end_row();
-
-                    ui.label(t.settings_auto_remember);
-                    let mut auto = self.prefs.auto_remember_chat;
-                    if ui
-                        .checkbox(&mut auto, t.settings_auto_remember)
-                        .on_hover_text(t.settings_auto_remember_hint)
-                        .changed()
-                    {
-                        self.prefs.auto_remember_chat = auto;
-                        save_preferences(&self.prefs);
-                        self.status = t.settings_saved.into();
-                    }
-                    ui.end_row();
+                            ui.label(t.settings_auto_remember);
+                            let mut auto = self.prefs.auto_remember_chat;
+                            if ui
+                                .checkbox(&mut auto, t.settings_auto_remember)
+                                .on_hover_text(t.settings_auto_remember_hint)
+                                .changed()
+                            {
+                                self.prefs.auto_remember_chat = auto;
+                                save_preferences(&self.prefs);
+                                self.status = t.settings_saved.into();
+                            }
+                            ui.end_row();
+                        });
                 });
         }
 

@@ -620,6 +620,7 @@ pub struct UiStrings {
     pub agents_optimize_now: &'static str,
     pub agents_catalog_empty: &'static str,
     pub agents_tools: &'static str,
+    pub agents_policies: &'static str,
     pub agents_skills: &'static str,
     pub agents_tool_family_notes: &'static str,
     pub agents_tool_family_tasks: &'static str,
@@ -1556,6 +1557,7 @@ const EN: UiStrings = UiStrings {
     agents_optimize_now: "Optimize now",
     agents_catalog_empty: "No catalogue — click Refresh (skills/ shipped at startup)",
     agents_tools: "Tools",
+    agents_policies: "Policies",
     agents_skills: "Skills",
     agents_tool_family_notes: "Notes",
     agents_tool_family_tasks: "Tasks",
@@ -2489,6 +2491,7 @@ const FR: UiStrings = UiStrings {
     agents_optimize_now: "Optimiser maintenant",
     agents_catalog_empty: "Aucun catalogue — cliquez Rafraîchir (skills/ livrés au démarrage)",
     agents_tools: "Outils",
+    agents_policies: "Politiques",
     agents_skills: "Compétences",
     agents_tool_family_notes: "Notes",
     agents_tool_family_tasks: "Tâches",
@@ -2945,6 +2948,8 @@ mod tests {
             assert!(!t.settings_me.is_empty());
             assert!(!t.settings_models.is_empty());
             assert!(!t.settings_trust.is_empty());
+            assert_eq!(t.settings_trust, if lang == "fr" { "Confiance" } else { "Trust" });
+            assert_eq!(t.agents_policies, if lang == "fr" { "Politiques" } else { "Policies" });
         }
     }
 
