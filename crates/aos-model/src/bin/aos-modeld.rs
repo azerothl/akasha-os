@@ -1272,10 +1272,21 @@ async fn main() {
                 if !req.params.temperature.is_finite()
                     || !req.params.top_p.is_finite()
                     || req.params.temperature < 0.0
-                    || req.params.temperature > 5.0
                     || req.params.top_p <= 0.0
-                    || req.params.top_p > 1.0
                 {
+                    let _ = ctx
+                        .respond_error(
+                            aos_ipc::msg::Status::BadRequest,
+                            "paramètres d'échantillonnage invalides",
+                        )
+                        .await;
+                    return;
+                }
+                // Same bounds as LanWorkMessage::InferChat worker validation after
+                // milli conversion — reject values that round to top_p_milli == 0.
+                let temperature_milli = (req.params.temperature * 1000.0).round() as u32;
+                let top_p_milli = (req.params.top_p * 1000.0).round() as u32;
+                if temperature_milli > 5000 || top_p_milli == 0 || top_p_milli > 1000 {
                     let _ = ctx
                         .respond_error(
                             aos_ipc::msg::Status::BadRequest,
@@ -1330,8 +1341,6 @@ async fn main() {
                         content: message.content,
                     })
                     .collect();
-                let temperature_milli = (req.params.temperature * 1000.0).round() as u32;
-                let top_p_milli = (req.params.top_p * 1000.0).round() as u32;
                 let local_node_id = model_config.lan_node_id_at(&preference_home);
                 match send_lan_chat_inference(
                     &local_node_id,
