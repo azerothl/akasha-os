@@ -456,6 +456,34 @@ pub struct LanClusterDispatchResponse {
     pub assignments: Vec<LanClusterAssignment>,
 }
 
+/// Explicit token-level LAN inference. Prompts are intentionally not accepted
+/// here; callers must tokenize locally and opt in to sensitive-data transfer.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanClusterInferTokensRequest {
+    pub work_id: String,
+    pub request_id: String,
+    pub node_id: String,
+    pub model_id: String,
+    pub shard_ids: Vec<u32>,
+    pub input_tokens: Vec<u32>,
+    pub max_tokens: u32,
+    #[serde(default)]
+    pub kv_tokens: u32,
+    pub allow_sensitive_data: bool,
+    pub encrypted_transport: bool,
+    /// Name of a secret containing exactly 64 hexadecimal characters.
+    pub session_key_secret: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanClusterInferTokensResponse {
+    pub work_id: String,
+    pub request_id: String,
+    pub node_id: String,
+    pub tokens: Vec<u32>,
+    pub finished: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LanClusterNode {
     pub node_id: String,
@@ -3655,7 +3683,9 @@ pub fn canvas_op_bbox(body: &CanvasOpBody) -> Option<CanvasBBox> {
             // Tiny bbox so digest shows a non-degenerate region.
             b.expand_point((x + 0.01).min(1.0), (y + 0.01).min(1.0));
         }
-        CanvasOpBody::Text { x, y, text, size, .. } => {
+        CanvasOpBody::Text {
+            x, y, text, size, ..
+        } => {
             // Approximation sans métriques de fonte : largeur ≈ 0.55×size par
             // caractère sur la plus longue ligne, hauteur ≈ 1.2×size par ligne.
             // Suffit pour sélection, digest et détection de doublons.
@@ -5225,10 +5255,7 @@ mod chat_session_room_tests {
         };
         let json = serde_json::to_string(&text).unwrap();
         assert!(json.contains("\"kind\":\"text\""));
-        assert_eq!(
-            serde_json::from_str::<CanvasOpBody>(&json).unwrap(),
-            text
-        );
+        assert_eq!(serde_json::from_str::<CanvasOpBody>(&json).unwrap(), text);
         // Bbox approximative : 6 caractères max, 2 lignes.
         let b = canvas_op_bbox(&text).expect("bbox");
         assert!((b.x0 - 0.2).abs() < 1e-6);

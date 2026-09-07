@@ -442,34 +442,35 @@ existing identity.
 
 `aos-placement::LanCluster` partitions declared weight shards across paired
 nodes and retains a job state. The model daemon exposes the internal
-`model.cluster.plan`, `model.cluster.dispatch`, `model.cluster.recover` and `model.cluster.cancel`
-services. Every plan requires encrypted transport; sensitive work additionally
+`model.cluster.plan`, `model.cluster.dispatch`, `model.cluster.infer_tokens`,
+`model.cluster.recover` and `model.cluster.cancel` services. Every plan
+requires encrypted transport; sensitive work additionally
 requires the node capability `sensitive-data`. A lost node moves the job to
 `degraded` and redistributes its shards to surviving paired nodes, or marks it
 `failed` when none remain. Cancellation returns every node that must receive a
 cancel signal.
 
-The policy layer does not open a listener or discover peers by itself. An
-explicit opt-in UDP advertisement service can discover unpaired candidates;
-it validates LAN scope and source/address consistency but never pairs them.
-The authenticated TCP adapter and listener are now available to an
-integration that supplies a session key, but they are not started by
-`aos-modeld`. They still do not copy weights, route tokens or transmit KV data
-automatically; an execution layer must consume only the coordinator's
-assignments. There is no Internet fallback and no automatic sharing of prompts
-or model data.
+The policy layer does not discover peers by itself. An explicit opt-in UDP
+advertisement service can discover unpaired candidates; it validates LAN scope
+and source/address consistency but never pairs them. When the LAN flag and a
+session key are present, `aos-modeld` starts the authenticated TCP worker
+listener. A worker loads its local model before acknowledging an assignment.
+The internal `model.cluster.infer_tokens` operation can then send a typed
+prefill and decode request over one encrypted session and return token batches.
+There is no Internet fallback and no automatic prompt/model sharing: token
+transfer requires an explicit sensitive-data policy.
 
 The transport contract includes `LanSecureFrame` and `LanSecureChannel` using
 ChaCha20-Poly1305 with node/job associated data and a monotonic sequence. It
 rejects a wrong nonce, altered ciphertext, cross-job frame or replay. The
 explicit `LanTcpTransport` adapter adds a bounded CBOR frame envelope and
 connects only to the address stored for an already paired node, when the caller
-provides a session key from the secret store. `aos-modeld` does not instantiate
-this adapter or bind a listener by default: remote model execution, key
-exchange, weight/shard loading and token/KV routing remain to be integrated.
-The typed `LanWorkMessage` contract currently covers hello, shard assignment,
-heartbeat, acknowledgement and cancellation; it rejects cross-job messages,
-unknown shards and unexpected peer identities before application handling.
+provides a session key from the secret store. Remote weight/shard partitioning,
+KV-page transfer and multi-worker token aggregation remain to be integrated.
+The typed `LanWorkMessage` contract covers hello, shard assignment, heartbeat,
+acknowledgement, cancellation, prefill, decode, token batches and KV pages; it
+rejects cross-job messages, unknown shards and unexpected peer identities
+before application handling.
 
 ### 3.6 Inference Scheduler
 

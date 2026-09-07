@@ -156,10 +156,9 @@ mod tests {
 
     #[test]
     fn wire_shape_defaults_permission_to_ask() {
-        let req: UsbOpenRequest = serde_json::from_str(
-            r#"{"agent_id":"a","device_id":"usb-1","session_id":"s"}"#,
-        )
-        .unwrap();
+        let req: UsbOpenRequest =
+            serde_json::from_str(r#"{"agent_id":"a","device_id":"usb-1","session_id":"s"}"#)
+                .unwrap();
         assert_eq!(req.permission, UsbPermission::Ask);
         assert_eq!(usb_io_capability(), "device.usb.io");
     }

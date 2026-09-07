@@ -26,7 +26,7 @@ pub fn canvas_op_body_opacity(body: &CanvasOpBody) -> f32 {
         | CanvasOpBody::Rect { opacity, .. }
         | CanvasOpBody::Ellipse { opacity, .. }
         | CanvasOpBody::Line { opacity, .. }
-        |         CanvasOpBody::Spline { opacity, .. }
+        | CanvasOpBody::Spline { opacity, .. }
         | CanvasOpBody::Path { opacity, .. }
         | CanvasOpBody::Fill { opacity, .. }
         | CanvasOpBody::Text { opacity, .. } => opacity.clamp(0.0, 1.0),
@@ -66,7 +66,7 @@ pub fn set_canvas_op_body_opacity(body: &mut CanvasOpBody, opacity: f32) {
         | CanvasOpBody::Rect { opacity, .. }
         | CanvasOpBody::Ellipse { opacity, .. }
         | CanvasOpBody::Line { opacity, .. }
-        |         CanvasOpBody::Spline { opacity, .. }
+        | CanvasOpBody::Spline { opacity, .. }
         | CanvasOpBody::Path { opacity, .. }
         | CanvasOpBody::Fill { opacity, .. }
         | CanvasOpBody::Text { opacity, .. } => *opacity = o,
