@@ -18,7 +18,12 @@ impl UiApp {
         }
         ui.horizontal(|ui| {
             if ui.button(t.decl_ui_refresh).clicked() {
-                let _ = self.cmd_tx.send(Cmd::Audit { last: 50 });
+                let _ = self.cmd_tx.send(Cmd::Audit {
+                    last: self.security_ui.audit_last_or_default(),
+                    actor: None,
+                    action: None,
+                    trace_id: None,
+                });
             }
             // Garde-fou destructeur (opensourceui `slide-to-confirm`
             // adapté two-step) : KillAuditd à côté de Refresh.

@@ -1494,8 +1494,7 @@ fn auditd_watchdog(session: Arc<Session>) {
 
 /// Redémarre platformd s'il meurt (ex. assert llama embed) pour que
 /// `mem.*` / notes / modules restent joignables.
-fn platformd_watchdog(session: Arc<Session>) {
-    daemon_watchdog(session, "aos-platformd", &|home| {
+fn platformd_watchdog(session: Arc<Session>) {    daemon_watchdog(session, "aos-platformd", &|home| {
         let mut cmd = Command::new(bin_path(home, "aos-platformd"));
         cmd.arg("etc/platformd.yaml");
         cmd
@@ -1542,13 +1541,36 @@ fn daemon_watchdog(session: Arc<Session>, name: &'static str, make_cmd: &dyn Fn(
                         );
                         daemons[pos] = Daemon { name, child };
                         eprintln!("[aos-session] {name} up (pid {pid})");
+                        log_daemon_restart(&home, name, true);
                     }
-                    Err(e) => eprintln!("[aos-session] restart {name} échoué : {e}"),
+                    Err(e) => {
+                        eprintln!("[aos-session] restart {name} échoué : {e}");
+                        log_daemon_restart(&home, name, false);
+                    }
                 }
             }
             Ok(None) => {}
             Err(_) => {}
         }
+    }
+}
+
+/// Trace les redémarrages watchdog dans `var/run/daemon_restarts.log`
+/// (`<ms> <daemon> restarted|restart-failed`), lus par l'onglet Audit.
+/// Écriture synchrone : le watchdog tourne déjà sur thread dédié.
+fn log_daemon_restart(home: &Path, name: &str, ok: bool) {
+    let ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let line = format!(
+        "{ms} {name} {}\n",
+        if ok { "restarted" } else { "restart-failed" }
+    );
+    let path = home.join("var/run/daemon_restarts.log");
+    if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(&path) {
+        use std::io::Write;
+        let _ = f.write_all(line.as_bytes());
     }
 }
 

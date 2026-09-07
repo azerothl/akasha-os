@@ -9,11 +9,33 @@ pub(crate) struct SecurityUiState {
     pub(crate) caps_holder: String,
     pub(crate) device_permissions: Vec<aos_proto::DevicePermissionInfo>,
     pub(crate) device_active: Vec<aos_proto::DeviceActiveCapture>,
+    /// S7.6 : filtres d'audit.
+    pub(crate) audit_search: String,
+    pub(crate) audit_problems_only: bool,
+    /// Session chat ciblée (None = toutes).
+    pub(crate) audit_session: Option<String>,
+    /// Nombre d'événements demandés (0 = défaut 200).
+    pub(crate) audit_last: usize,
+    /// Ligne sélectionnée (seq) pour le détail.
+    pub(crate) audit_selected: Option<u64>,
+    /// Trace ciblée via "chaîne" (None = toutes).
+    pub(crate) audit_trace: Option<String>,
+    /// Résultat `audit.verify` (None = non vérifié cette session).
+    pub(crate) audit_verified: Option<bool>,
 }
 
 impl SecurityUiState {
     pub(crate) fn set_audit(&mut self, audit: Vec<AuditEvent>) {
         self.audit = audit;
+    }
+
+    /// Nombre d'événements demandés au journal (défaut 200).
+    pub(crate) fn audit_last_or_default(&self) -> usize {
+        if self.audit_last == 0 {
+            200
+        } else {
+            self.audit_last
+        }
     }
 
     pub(crate) fn set_caps(&mut self, holder: String, caps: Vec<CapInfo>) {

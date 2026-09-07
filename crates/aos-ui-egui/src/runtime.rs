@@ -2117,14 +2117,14 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 }
             }
         }
-        Cmd::Audit { last } => {
+        Cmd::Audit { last, actor, action, trace_id } => {
             match bus
                 .call::<AuditQueryRequest, Vec<AuditEvent>>(
                     "audit.query",
                     &AuditQueryRequest {
-                        trace_id: None,
-                        actor: None,
-                        action: None,
+                        trace_id,
+                        actor,
+                        action,
                         last,
                     },
                     vec![],
@@ -2133,6 +2133,17 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             {
                 Ok(ev) => {
                     let _ = evt_tx.send(Evt::Audit(ev));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        // S7.6 : intégrité de la chaîne (détection d'altération).
+        Cmd::AuditVerify => {
+            match bus.call::<(), bool>("audit.verify", &(), vec![]).await {
+                Ok(ok) => {
+                    let _ = evt_tx.send(Evt::AuditVerified(ok));
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));

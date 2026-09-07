@@ -229,7 +229,12 @@ pub(crate) enum Cmd {
     Troubleshoot,
     Audit {
         last: usize,
+        actor: Option<String>,
+        action: Option<String>,
+        trace_id: Option<String>,
     },
+    /// S7.6 : vérification d'intégrité de la chaîne (`audit.verify`).
+    AuditVerify,
     CapList {
         holder: String,
     },
@@ -662,6 +667,8 @@ pub(crate) enum Evt {
         version: u64,
     },
     FilesOpOk(String),
+    /// S7.6 : intégrité de la chaîne d'audit.
+    AuditVerified(bool),
     /// S6 : profil de confiance d'un agent.
     TrustProfile {
         profile: aos_proto::TrustProfile,

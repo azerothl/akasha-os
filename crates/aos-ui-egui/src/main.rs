@@ -1079,7 +1079,12 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             }
             "/audit" => {
                 let n = rest.parse().unwrap_or(20);
-                let _ = self.cmd_tx.send(Cmd::Audit { last: n });
+                let _ = self.cmd_tx.send(Cmd::Audit {
+                    last: n,
+                    actor: None,
+                    action: None,
+                    trace_id: None,
+                });
                 self.tab = Tab::Audit;
             }
             "/kill" => {
@@ -1585,7 +1590,12 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 let _ = self.cmd_tx.send(Cmd::ProviderList);
             }
             Tab::Audit => {
-                let _ = self.cmd_tx.send(Cmd::Audit { last: 40 });
+                let _ = self.cmd_tx.send(Cmd::Audit {
+                    last: self.security_ui.audit_last_or_default(),
+                    actor: None,
+                    action: None,
+                    trace_id: None,
+                });
             }
             Tab::Caps => {
                 if !self.security_ui.caps_holder.is_empty() {
