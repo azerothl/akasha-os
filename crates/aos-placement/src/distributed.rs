@@ -544,10 +544,14 @@ impl LanShardManifest {
     }
 
     pub fn record_range(&mut self, range: LanWeightRange) -> Result<(), String> {
+        self.validate()?;
         if range.shard_id > 65_535
             || range.length == 0
             || range.length > 64 * 1024 * 1024
-            || range.offset.saturating_add(range.length) > self.total_model_bytes
+            || range
+                .offset
+                .checked_add(range.length)
+                .is_none_or(|end| end > self.total_model_bytes)
         {
             return Err("plage de poids LAN invalide".into());
         }
@@ -572,6 +576,9 @@ impl LanShardManifest {
     }
 
     pub fn is_complete(&self) -> bool {
+        if self.validate().is_err() {
+            return false;
+        }
         let mut ranges = self.ranges.clone();
         ranges.sort_by_key(|range| (range.offset, range.shard_id));
         let mut cursor = 0u64;
@@ -585,6 +592,10 @@ impl LanShardManifest {
     }
 
     pub fn missing_ranges(&self) -> Vec<(u64, u64)> {
+        // Invalid persisted coverage must never make bytes appear available.
+        if self.validate().is_err() {
+            return vec![(0, self.total_model_bytes)];
+        }
         let mut ranges = self.ranges.clone();
         ranges.sort_by_key(|range| (range.offset, range.shard_id));
         let mut missing = Vec::new();
@@ -599,6 +610,32 @@ impl LanShardManifest {
             missing.push((cursor, self.total_model_bytes - cursor));
         }
         missing
+    }
+
+    /// Validate persisted manifests as well as values built through record_range.
+    pub fn validate(&self) -> Result<(), String> {
+        if self.model_id.trim().is_empty() || self.total_model_bytes == 0 {
+            return Err("manifeste de poids LAN invalide".into());
+        }
+        let mut ranges = self.ranges.iter().collect::<Vec<_>>();
+        ranges.sort_by_key(|range| range.offset);
+        let mut cursor = 0;
+        for range in ranges {
+            let end = range
+                .offset
+                .checked_add(range.length)
+                .ok_or("débordement de plage de poids LAN")?;
+            if range.shard_id > 65_535
+                || range.length == 0
+                || range.length > 64 * 1024 * 1024
+                || range.offset < cursor
+                || end > self.total_model_bytes
+            {
+                return Err("couverture de poids LAN invalide".into());
+            }
+            cursor = end;
+        }
+        Ok(())
     }
 }
 
@@ -1598,6 +1635,34 @@ mod tests {
             .unwrap();
         assert!(manifest.is_complete());
         assert!(manifest.missing_ranges().is_empty());
+    }
+
+    #[test]
+    fn manifeste_persistant_invalide_est_refuse_sans_panique() {
+        let mut manifest = LanShardManifest::new("model", u64::MAX).unwrap();
+        assert!(manifest
+            .record_range(LanWeightRange {
+                shard_id: 1,
+                offset: u64::MAX,
+                length: 1,
+            })
+            .is_err());
+        // Public fields and deserialization bypass record_range.
+        manifest.ranges.push(LanWeightRange {
+            shard_id: 1,
+            offset: 0,
+            length: u64::MAX,
+        });
+        assert!(manifest.validate().is_err());
+        assert!(!manifest.is_complete());
+        assert_eq!(manifest.missing_ranges(), vec![(0, u64::MAX)]);
+        assert!(manifest
+            .record_range(LanWeightRange {
+                shard_id: 2,
+                offset: 0,
+                length: 1,
+            })
+            .is_err());
     }
 
     #[test]
