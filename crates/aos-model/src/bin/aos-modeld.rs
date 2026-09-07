@@ -732,6 +732,10 @@ async fn handle_lan_worker_connection(
                             max_tokens,
                         };
                         message.validate_for(&work, transport.peer_node_id())?;
+                        worker_registry
+                            .lock()
+                            .map_err(|_| "état worker LAN verrouillé".to_string())?
+                            .reset_abort(&work_id)?;
                         match subsystem
                             .worker_decode_tokens(&model_id, max_tokens, abort.clone())
                             .await
@@ -771,6 +775,9 @@ async fn handle_lan_worker_connection(
                                         &work,
                                     )
                                     .await?;
+                                if abort.load(std::sync::atomic::Ordering::SeqCst) {
+                                    return Ok(());
+                                }
                             }
                         }
                     }
