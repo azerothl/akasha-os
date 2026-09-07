@@ -306,7 +306,7 @@
     },
     {
       "id": "local:minicpm5-2b",
-      "name": "MiniCPM5 2B Q4",
+      "name": "MiniCPM 5 2B",
       "profiles": [
         "chat",
         "code"
