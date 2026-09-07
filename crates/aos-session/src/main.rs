@@ -12,6 +12,7 @@ mod update;
 use aos_ipc::BusClient;
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -1494,7 +1495,8 @@ fn auditd_watchdog(session: Arc<Session>) {
 
 /// Redémarre platformd s'il meurt (ex. assert llama embed) pour que
 /// `mem.*` / notes / modules restent joignables.
-fn platformd_watchdog(session: Arc<Session>) {    daemon_watchdog(session, "aos-platformd", &|home| {
+fn platformd_watchdog(session: Arc<Session>) {
+    daemon_watchdog(session, "aos-platformd", &|home| {
         let mut cmd = Command::new(bin_path(home, "aos-platformd"));
         cmd.arg("etc/platformd.yaml");
         cmd
@@ -1569,7 +1571,6 @@ fn log_daemon_restart(home: &Path, name: &str, ok: bool) {
     );
     let path = home.join("var/run/daemon_restarts.log");
     if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(&path) {
-        use std::io::Write;
         let _ = f.write_all(line.as_bytes());
     }
 }
