@@ -1586,10 +1586,15 @@ async fn handle_lan_worker_connection(
                         return Err("batch texte LAN reçu dans le mauvais sens".into());
                     }
                     LanWorkMessage::LayerActivationPage { .. } => {
-                        return Err(
-                            "pipeline de couches LAN indisponible : backend llama.cpp non activé"
-                                .into(),
-                        );
+                        let reason = match aos_llama::LlamaBackend::distributed_layer_capability() {
+                            aos_llama::DistributedLayerCapability::Unavailable => {
+                                "pipeline de couches LAN indisponible : llama.cpp sans backend RPC"
+                            }
+                            aos_llama::DistributedLayerCapability::NativeRpc => {
+                                "pipeline de couches LAN non câblé : adaptateur RPC Akasha manquant"
+                            }
+                        };
+                        return Err(reason.into());
                     }
                     _ => return Err("message LAN worker inattendu".into()),
                 }

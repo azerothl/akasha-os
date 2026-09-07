@@ -81,6 +81,10 @@ Le protocole contient aussi des pages d’activation typées et bornées pour le
 futur passage d’un segment au suivant ; le worker répond explicitement que ce
 pipeline est indisponible tant que l’adaptateur natif llama.cpp n’est pas
 activé.
+Le daemon sonde `llama_supports_rpc()` et distingue un build llama.cpp sans
+RPC d’un build avec RPC mais sans adaptateur Akasha. Dans les deux cas, une
+page d’activation est refusée proprement tant que le chemin chiffré complet
+n’est pas disponible.
 Une retransmission du même shard est acceptée si les octets sont identiques ;
 un contenu différent est refusé sans écraser le fichier existant. Les publications
 des connexions d’un même daemon sont sérialisées pour préserver le manifeste de

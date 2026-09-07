@@ -70,6 +70,9 @@ are not yet consumed by llama.cpp for remote-layer execution.
 The protocol also defines bounded typed activation pages for the future hop
 between contiguous layer segments; workers return an explicit unsupported error
 until the native llama.cpp adapter is enabled.
+The daemon probes `llama_supports_rpc()` and distinguishes a llama.cpp build
+without RPC from one with RPC but without the Akasha adapter. In both cases an
+activation page is rejected cleanly until the complete encrypted path exists.
 Retrying a shard accepts identical bytes and rejects different content without
 overwriting the existing file. Publication is serialized across connections in
 one daemon to preserve coverage entries. Use one daemon per staging directory.

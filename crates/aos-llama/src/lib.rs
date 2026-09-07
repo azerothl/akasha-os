@@ -187,6 +187,13 @@ pub struct LlamaBackend {
     _private: (),
 }
 
+/// Native support required before a remote layer pipeline can be executed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DistributedLayerCapability {
+    Unavailable,
+    NativeRpc,
+}
+
 impl LlamaBackend {
     pub fn init() -> Self {
         ensure_llama_backend();
@@ -196,6 +203,18 @@ impl LlamaBackend {
     /// GPU avec offload supporté par ce build ?
     pub fn supports_gpu_offload() -> bool {
         unsafe { sys::llama_supports_gpu_offload() }
+    }
+
+    /// Reports whether the native llama.cpp build includes its RPC backend.
+    /// This is a capability probe only; Akasha still requires an authenticated
+    /// LAN adapter before exposing a distributed execution path.
+    pub fn distributed_layer_capability() -> DistributedLayerCapability {
+        ensure_llama_backend();
+        if unsafe { sys::llama_supports_rpc() } {
+            DistributedLayerCapability::NativeRpc
+        } else {
+            DistributedLayerCapability::Unavailable
+        }
     }
 
     /// Max devices compilé dans llama.cpp (pas le nombre physique).
