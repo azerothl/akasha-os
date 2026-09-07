@@ -2829,7 +2829,13 @@ async fn main() {
                         let result = cluster
                             .lock()
                             .map_err(|_| "verrou cluster indisponible".to_string())
-                            .and_then(|mut cluster| cluster.plan(&work, req.kv_tokens));
+                            .and_then(|mut cluster| {
+                                if req.layer_pipeline {
+                                    cluster.plan_layer_pipeline(&work, req.kv_tokens)
+                                } else {
+                                    cluster.plan(&work, req.kv_tokens)
+                                }
+                            });
                         match result {
                             Ok(plan) => {
                                 let response = lan_plan_response(&plan, Vec::new(), Vec::new());

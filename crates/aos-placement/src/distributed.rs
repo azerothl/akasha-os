@@ -1462,6 +1462,31 @@ impl LanCluster {
         Ok(plan)
     }
 
+    /// Build the assignment shape required by a layer pipeline: each worker
+    /// receives one contiguous segment, preserving activation order.
+    pub fn plan_layer_pipeline(
+        &mut self,
+        work: &DistributedWork,
+        kv_tokens: u32,
+    ) -> Result<LanWorkPlan, String> {
+        let mut plan = self.plan(work, kv_tokens)?;
+        let workers = plan.assignments.len();
+        if workers == 0 {
+            return Err("aucun worker pour le pipeline de couches LAN".into());
+        }
+        for assignment in &mut plan.assignments {
+            assignment.shard_ids.clear();
+        }
+        for (index, shard_id) in work.shard_ids.iter().copied().enumerate() {
+            let worker = index * workers / work.shard_ids.len();
+            plan.assignments[worker].shard_ids.push(shard_id);
+        }
+        plan.assignments
+            .retain(|assignment| !assignment.shard_ids.is_empty());
+        self.jobs.insert(work.work_id.clone(), plan.clone());
+        Ok(plan)
+    }
+
     pub fn set_running(&mut self, work_id: &str) -> Result<(), String> {
         let plan = self.jobs.get_mut(work_id).ok_or("travail LAN inconnu")?;
         if plan.state == LanJobState::Cancelled || plan.state == LanJobState::Failed {
@@ -1627,6 +1652,13 @@ mod tests {
                 .sum::<usize>(),
             4
         );
+        let pipeline_work = DistributedWork {
+            work_id: "pipeline".into(),
+            ..work.clone()
+        };
+        let pipeline = cluster.plan_layer_pipeline(&pipeline_work, 4096).unwrap();
+        assert_eq!(pipeline.assignments[0].shard_ids, vec![1, 2]);
+        assert_eq!(pipeline.assignments[1].shard_ids, vec![3, 4]);
         cluster.set_running("w1").unwrap();
         let recovery = cluster.recover_node_loss("w1", "n1").unwrap();
         assert_eq!(recovery.reassigned_shards.len(), 2);

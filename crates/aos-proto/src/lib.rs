@@ -387,6 +387,9 @@ pub struct LanClusterPlanRequest {
     #[serde(default)]
     pub allow_sensitive_data: bool,
     pub encrypted_transport: bool,
+    /// Preserve contiguous layer order for the experimental activation pipeline.
+    #[serde(default)]
+    pub layer_pipeline: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

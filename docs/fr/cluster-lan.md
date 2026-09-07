@@ -42,7 +42,9 @@ dans `var/run/lan-pairing.json`.
 
 ## État d’exécution actuel
 
-`model.cluster.plan` calcule le placement des shards. Le service interne
+`model.cluster.plan` calcule le placement des shards. Le champ optionnel
+`layer_pipeline=true` demande des segments de couches contigus par worker,
+nécessaires pour préserver l’ordre des activations. Le service interne
 explicite `model.cluster.dispatch` peut envoyer des assignments typées et
 chiffrées à un worker appairé lorsque son listener et la clé de session sont
 disponibles. Le worker accuse réception des assignments, des heartbeats et

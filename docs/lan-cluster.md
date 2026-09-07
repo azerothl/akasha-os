@@ -40,7 +40,9 @@ preferences file. The node inventory and trust state are persisted in
 
 ## Current execution state
 
-`model.cluster.plan` computes the shard plan. The explicit internal
+`model.cluster.plan` computes the shard plan. The optional
+`layer_pipeline=true` requests contiguous layer segments per worker so
+activation order can be preserved. The explicit internal
 `model.cluster.dispatch` service can send typed, encrypted assignments to a
 paired worker when the worker listener and session key are available. The
 worker acknowledges assignments, heartbeats and cancellations.
