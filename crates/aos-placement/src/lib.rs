@@ -43,10 +43,10 @@ pub use discovery::{
     LAN_DISCOVERY_PROTOCOL_VERSION,
 };
 pub use distributed::{
-    DistributedWork, LanChatMessage, LanCluster, LanJobState, LanNode, LanPairingRegistry,
-    LanRecovery, LanSecureChannel, LanSecureFrame, LanSessionKey, LanShardAssignment,
-    LanShardManifest, LanTcpListener, LanTcpTransport, LanWeightRange, LanWorkMessage, LanWorkPlan,
-    LanWorkerJob, LanWorkerJobState, LanWorkerRegistry, NodeTrust,
+    DistributedWork, LanActivationAssembly, LanChatMessage, LanCluster, LanJobState, LanNode,
+    LanPairingRegistry, LanRecovery, LanSecureChannel, LanSecureFrame, LanSessionKey,
+    LanShardAssignment, LanShardManifest, LanTcpListener, LanTcpTransport, LanWeightRange,
+    LanWorkMessage, LanWorkPlan, LanWorkerJob, LanWorkerJobState, LanWorkerRegistry, NodeTrust,
 };
 pub use hardware::{
     CpuIsa, CpuTopology, GpuBackend, GpuDevice, HardwareProfile, NpuCapabilities, ThermalSnapshot,

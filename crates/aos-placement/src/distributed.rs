@@ -573,6 +573,74 @@ pub struct LanShardManifest {
     pub ranges: Vec<LanWeightRange>,
 }
 
+/// Ordered reassembly state for one activation crossing a layer boundary.
+/// This is transport-only; a backend owns the resulting tensor bytes.
+#[derive(Debug, Clone)]
+pub struct LanActivationAssembly {
+    pub request_id: String,
+    pub shard_id: u32,
+    pub layer_index: u32,
+    pub sequence: u32,
+    total_bytes: u64,
+    next_page: u32,
+    data: Vec<u8>,
+}
+
+impl LanActivationAssembly {
+    pub fn new(
+        request_id: impl Into<String>,
+        shard_id: u32,
+        layer_index: u32,
+        sequence: u32,
+        total_bytes: u64,
+    ) -> Result<Self, String> {
+        let request_id = request_id.into();
+        if request_id.trim().is_empty()
+            || shard_id > 65_535
+            || layer_index > 65_535
+            || sequence > 1_048_576
+            || total_bytes == 0
+            || total_bytes > 64 * 1024 * 1024
+        {
+            return Err("assemblage d’activation LAN invalide".into());
+        }
+        Ok(Self {
+            request_id,
+            shard_id,
+            layer_index,
+            sequence,
+            total_bytes,
+            next_page: 0,
+            data: Vec::with_capacity(total_bytes as usize),
+        })
+    }
+
+    /// Add one page. Returns the complete activation only on its final page.
+    pub fn push_page(
+        &mut self,
+        page_index: u32,
+        data: &[u8],
+        final_page: bool,
+    ) -> Result<Option<Vec<u8>>, String> {
+        if page_index != self.next_page || data.is_empty() || data.len() > 1_048_576 {
+            return Err("page d’activation LAN hors ordre ou invalide".into());
+        }
+        let new_len = self.data.len().saturating_add(data.len());
+        if new_len as u64 > self.total_bytes {
+            return Err("activation LAN supérieure à la taille déclarée".into());
+        }
+        if final_page && new_len as u64 != self.total_bytes {
+            return Err("activation LAN finale incomplète".into());
+        }
+        if !final_page && new_len as u64 == self.total_bytes {
+            return Err("activation LAN complète sans page finale".into());
+        }
+        self.data.extend_from_slice(data);
+        self.next_page = self.next_page.saturating_add(1);
+        Ok(final_page.then(|| std::mem::take(&mut self.data)))
+    }
+}
+
 impl LanShardManifest {
     pub fn new(model_id: impl Into<String>, total_model_bytes: u64) -> Result<Self, String> {
         let model_id = model_id.into();
@@ -1793,6 +1861,20 @@ mod tests {
                 length: 1,
             })
             .is_err());
+    }
+
+    #[test]
+    fn assemblage_activation_exige_pages_ordonnees_et_completes() {
+        let mut assembly = LanActivationAssembly::new("activation", 1, 4, 0, 6).unwrap();
+        assert!(assembly.push_page(1, b"ab", false).is_err());
+        assert!(assembly.push_page(0, b"ab", false).unwrap().is_none());
+        assert!(assembly.push_page(2, b"cd", false).is_err());
+        assert!(assembly.push_page(1, b"cd", false).unwrap().is_none());
+        assert_eq!(
+            assembly.push_page(2, b"ef", true).unwrap(),
+            Some(b"abcdef".to_vec())
+        );
+        assert!(assembly.push_page(3, b"x", true).is_err());
     }
 
     #[test]
