@@ -485,6 +485,7 @@ fn anim_progress(state: &CanvasPanelState, seq: u64, now: f64) -> f32 {
 
 /// Rendu d'une étiquette (op validée ET aperçu de saisie) : une `TextShape`
 /// par ligne, pivot à l'ancre, angle horaire comme le raster/SVG.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn paint_canvas_text(
     painter: &eframe::egui::Painter,
     rect: eframe::egui::Rect,
