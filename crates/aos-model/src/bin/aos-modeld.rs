@@ -1272,7 +1272,9 @@ async fn main() {
                 if !req.params.temperature.is_finite()
                     || !req.params.top_p.is_finite()
                     || req.params.temperature < 0.0
+                    || req.params.temperature > 5.0
                     || req.params.top_p <= 0.0
+                    || req.params.top_p > 1.0
                 {
                     let _ = ctx
                         .respond_error(
@@ -1282,8 +1284,9 @@ async fn main() {
                         .await;
                     return;
                 }
-                // Same bounds as LanWorkMessage::InferChat worker validation after
-                // milli conversion — reject values that round to top_p_milli == 0.
+                // Float upper bounds above reject values that would round down into
+                // range (e.g. top_p=1.00001 → 1000). Milli check catches top_p that
+                // rounds to 0 (e.g. 0.0004) which still passes top_p > 0.0.
                 let temperature_milli = (req.params.temperature * 1000.0).round() as u32;
                 let top_p_milli = (req.params.top_p * 1000.0).round() as u32;
                 if temperature_milli > 5000 || top_p_milli == 0 || top_p_milli > 1000 {
