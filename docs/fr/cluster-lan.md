@@ -58,6 +58,9 @@ tokens, inférence texte explicite et pages KV sont définis, chiffrés et born�
 `model.cluster.infer_chat` permet à un appelant autorisé de transmettre un
 prompt au nœud choisi et retourne le texte avec ses métriques ; il exige
 `allow_sensitive_data=true`, un secret de session valide et un nœud appairé.
+Une annulation authentifiée reçue sur une connexion séparée est propagée au
+drapeau du contexte de génération et termine le travail à la frontière de
+token.
 Le routage implicite de `model.infer` reste local. La partition réelle des
 poids/shards et le transfert KV inter-processus restent à intégrer. Par défaut,
 aucune donnée de modèle ou de prompt ne quitte la machine.

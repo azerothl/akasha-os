@@ -56,6 +56,8 @@ inference and KV-page messages are defined, encrypted and bounded.
 `model.cluster.infer_chat` lets an authorized caller send a prompt to the
 selected node and receive generated text plus metrics; it requires
 `allow_sensitive_data=true`, a valid session secret and a paired node.
+An authenticated cancellation received on a separate connection is propagated
+to the generation context and stops the work at a token boundary.
 Implicit `model.infer` routing remains local. Actual weight/shard partitioning
 and inter-process KV transfer still need to be integrated. By default, no
 model or prompt data leaves the machine.

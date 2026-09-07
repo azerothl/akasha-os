@@ -7,6 +7,10 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::Cursor;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -402,6 +406,7 @@ pub struct LanWorkerJob {
 #[derive(Debug, Clone, Default)]
 pub struct LanWorkerRegistry {
     jobs: HashMap<String, LanWorkerJob>,
+    abort_flags: HashMap<String, Arc<AtomicBool>>,
 }
 
 impl LanWorkerRegistry {
@@ -440,9 +445,42 @@ impl LanWorkerRegistry {
         Ok(())
     }
 
+    /// Associe le drapeau d'annulation du contexte actif à son travail.
+    ///
+    /// Le drapeau reste dans le registre plutôt que dans la connexion TCP :
+    /// une annulation peut ainsi arriver sur une nouvelle connexion
+    /// authentifiée pendant qu'une génération bloque la connexion de travail.
+    pub fn register_abort(&mut self, work_id: &str, abort: Arc<AtomicBool>) -> Result<(), String> {
+        let job = self.jobs.get(work_id).ok_or("travail LAN inconnu")?;
+        if job.state == LanWorkerJobState::Cancelled {
+            return Err("travail LAN déjà annulé".into());
+        }
+        abort.store(false, Ordering::SeqCst);
+        self.abort_flags.insert(work_id.to_string(), abort);
+        Ok(())
+    }
+
+    /// Réarme un travail affecté avant une nouvelle requête sur sa session.
+    pub fn reset_abort(&mut self, work_id: &str) -> Result<(), String> {
+        let job = self.jobs.get(work_id).ok_or("travail LAN inconnu")?;
+        if job.state == LanWorkerJobState::Cancelled {
+            return Err("travail LAN annulé".into());
+        }
+        if let Some(abort) = self.abort_flags.get(work_id) {
+            if abort.load(Ordering::SeqCst) {
+                return Err("travail LAN annulé".into());
+            }
+            abort.store(false, Ordering::SeqCst);
+        }
+        Ok(())
+    }
+
     pub fn cancel(&mut self, work_id: &str) -> Result<(), String> {
         let job = self.jobs.get_mut(work_id).ok_or("travail LAN inconnu")?;
         job.state = LanWorkerJobState::Cancelled;
+        if let Some(abort) = self.abort_flags.get(work_id) {
+            abort.store(true, Ordering::SeqCst);
+        }
         Ok(())
     }
 
@@ -1429,6 +1467,31 @@ mod tests {
                 false,
             )
             .is_err());
+    }
+
+    #[test]
+    fn annulation_worker_propage_le_drapeau_actif() {
+        let mut worker = LanWorkerRegistry::default();
+        worker
+            .assign(
+                "n1",
+                "coordinator",
+                "model-1".into(),
+                LanShardAssignment {
+                    node_id: "n1".into(),
+                    shard_ids: vec![1],
+                    kv_tokens: 128,
+                    encrypted_transport: true,
+                },
+                "work-cancel".into(),
+                true,
+            )
+            .unwrap();
+        let abort = Arc::new(AtomicBool::new(false));
+        worker.register_abort("work-cancel", abort.clone()).unwrap();
+        worker.cancel("work-cancel").unwrap();
+        assert!(abort.load(Ordering::SeqCst));
+        assert!(worker.reset_abort("work-cancel").is_err());
     }
 
     #[test]

@@ -461,7 +461,9 @@ The explicit `model.cluster.infer_chat` operation applies the same policy to
 text prompts and returns bounded generated text plus metrics. There is no
 Internet fallback and no automatic prompt/model sharing: data transfer
 requires an explicit sensitive-data policy. The public `model.infer` path
-remains local by default.
+remains local by default. Worker cancellation is bound to the active context,
+including cancellation arriving through a separate authenticated control
+connection.
 
 The transport contract includes `LanSecureFrame` and `LanSecureChannel` using
 ChaCha20-Poly1305 with node/job associated data and a monotonic sequence. It

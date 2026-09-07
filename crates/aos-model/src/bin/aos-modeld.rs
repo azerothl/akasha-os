@@ -533,6 +533,10 @@ async fn handle_lan_worker_connection(
                 .await?;
 
             let abort = Arc::new(std::sync::atomic::AtomicBool::new(false));
+            worker_registry
+                .lock()
+                .map_err(|_| "état worker LAN verrouillé".to_string())?
+                .register_abort(&work_id, abort.clone())?;
             loop {
                 let message = match transport.receive_message_unchecked().await {
                     Ok(message) => message,
@@ -591,7 +595,10 @@ async fn handle_lan_worker_connection(
                                     .map_err(|_| "identifiant de token LAN hors plage".to_string())
                             })
                             .collect::<Result<_, _>>()?;
-                        abort.store(false, std::sync::atomic::Ordering::SeqCst);
+                        worker_registry
+                            .lock()
+                            .map_err(|_| "état worker LAN verrouillé".to_string())?
+                            .reset_abort(&work_id)?;
                         match subsystem
                             .worker_prefill_tokens(&model_id, input_tokens)
                             .await
@@ -606,6 +613,9 @@ async fn handle_lan_worker_connection(
                                         &work,
                                     )
                                     .await?;
+                                if abort.load(std::sync::atomic::Ordering::SeqCst) {
+                                    return Ok(());
+                                }
                             }
                             Err(error) => {
                                 transport
@@ -619,6 +629,9 @@ async fn handle_lan_worker_connection(
                                     )
                                     .await?;
                             }
+                        }
+                        if abort.load(std::sync::atomic::Ordering::SeqCst) {
+                            return Ok(());
                         }
                     }
                     LanWorkMessage::ChatInfer {
@@ -640,7 +653,10 @@ async fn handle_lan_worker_connection(
                             seed,
                         };
                         message.validate_for(&work, transport.peer_node_id())?;
-                        abort.store(false, std::sync::atomic::Ordering::SeqCst);
+                        worker_registry
+                            .lock()
+                            .map_err(|_| "état worker LAN verrouillé".to_string())?
+                            .reset_abort(&work_id)?;
                         let messages = messages
                             .into_iter()
                             .map(|message| (message.role, message.content))
@@ -662,7 +678,8 @@ async fn handle_lan_worker_connection(
                                             work_id: work_id.clone(),
                                             request_id,
                                             text,
-                                            finished: true,
+                                            finished: !abort
+                                                .load(std::sync::atomic::Ordering::SeqCst),
                                             prompt_tokens: stats.prompt_tokens,
                                             generated_tokens: stats.generated_tokens,
                                             ttft_ms_milli: if stats.ttft_ms.is_finite()
@@ -683,6 +700,9 @@ async fn handle_lan_worker_connection(
                                         &work,
                                     )
                                     .await?;
+                                if abort.load(std::sync::atomic::Ordering::SeqCst) {
+                                    return Ok(());
+                                }
                             }
                             Err(error) => {
                                 transport
@@ -695,6 +715,9 @@ async fn handle_lan_worker_connection(
                                         &work,
                                     )
                                     .await?;
+                                if abort.load(std::sync::atomic::Ordering::SeqCst) {
+                                    return Ok(());
+                                }
                             }
                         }
                     }
@@ -733,6 +756,9 @@ async fn handle_lan_worker_connection(
                                         &work,
                                     )
                                     .await?;
+                                if abort.load(std::sync::atomic::Ordering::SeqCst) {
+                                    return Ok(());
+                                }
                             }
                             Err(error) => {
                                 transport
