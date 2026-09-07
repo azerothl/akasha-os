@@ -17,7 +17,7 @@ pub struct F32Tensor {
 
 impl F32Tensor {
     pub fn new(shape: Vec<u32>, values: Vec<f32>) -> Result<Self, String> {
-        if shape.is_empty() || shape.len() > MAX_RANK || shape.iter().any(|&d| d == 0) {
+        if shape.is_empty() || shape.len() > MAX_RANK || shape.contains(&0) {
             return Err("forme de tenseur Akasha invalide".into());
         }
         let expected = shape.iter().try_fold(1usize, |acc, &d| acc.checked_mul(d as usize));
@@ -73,9 +73,14 @@ impl F32Tensor {
         if payload > MAX_BYTES || input.len() != cursor + payload {
             return Err("payload de tenseur Akasha invalide".into());
         }
-        let values = input[cursor..]
-            .chunks_exact(4)
-            .map(|b| f32::from_le_bytes(b.try_into().unwrap()))
+        let bytes = &input[cursor..];
+        let (chunks, remainder) = bytes.as_chunks();
+        if !remainder.is_empty() {
+            return Err("payload de tenseur Akasha invalide".into());
+        }
+        let values = chunks
+            .iter()
+            .map(|b| f32::from_le_bytes(*b))
             .collect();
         Self::new(shape, values)
     }
