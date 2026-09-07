@@ -196,6 +196,9 @@ impl LanWorkMessage {
                 ..
             } => {
                 validate_request_id(request_id)?;
+                if !work.allow_sensitive_data {
+                    return Err("decode LAN refusé sans politique sensible explicite".into());
+                }
                 if *max_tokens == 0 || *max_tokens > 8192 {
                     return Err("budget de décodage LAN invalide".into());
                 }

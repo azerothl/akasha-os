@@ -907,6 +907,80 @@ impl ModelSubsystem {
         Ok((job_id, delta_rx, done_rx))
     }
 
+    /// Prépare le contexte seq 0 pour un worker LAN à partir de tokens déjà
+    /// tokenisés. Ce chemin est séparé du chat afin de ne pas contourner le
+    /// dispatcher/continuous batching local.
+    pub async fn worker_prefill_tokens(
+        &self,
+        model_id: &str,
+        input_tokens: Vec<i32>,
+    ) -> Result<(), String> {
+        let ctx = {
+            let inner = self.inner.lock().unwrap();
+            let model = inner
+                .models
+                .get(model_id)
+                .ok_or_else(|| format!("modèle inconnu: {model_id}"))?;
+            if !matches!(
+                model.state,
+                ModelState::Loaded | ModelState::PartiallyOffloaded
+            ) {
+                return Err(format!("modèle {model_id} non chargé"));
+            }
+            model
+                .ctx
+                .clone()
+                .ok_or_else(|| format!("contexte du modèle {model_id} indisponible"))?
+        };
+        tokio::task::spawn_blocking(move || {
+            let mut guard = ctx
+                .lock()
+                .map_err(|_| "contexte llama verrouillé".to_string())?;
+            guard
+                .prefill_token_ids(&input_tokens)
+                .map_err(|error| error.to_string())
+        })
+        .await
+        .map_err(|error| format!("worker prefill interrompu: {error}"))?
+    }
+
+    /// Décode des tokens dans le contexte préparé par le dernier prefill LAN.
+    pub async fn worker_decode_tokens(
+        &self,
+        model_id: &str,
+        max_tokens: u32,
+        abort: Arc<AtomicBool>,
+    ) -> Result<(Vec<i32>, bool), String> {
+        let ctx = {
+            let inner = self.inner.lock().unwrap();
+            let model = inner
+                .models
+                .get(model_id)
+                .ok_or_else(|| format!("modèle inconnu: {model_id}"))?;
+            if !matches!(
+                model.state,
+                ModelState::Loaded | ModelState::PartiallyOffloaded
+            ) {
+                return Err(format!("modèle {model_id} non chargé"));
+            }
+            model
+                .ctx
+                .clone()
+                .ok_or_else(|| format!("contexte du modèle {model_id} indisponible"))?
+        };
+        tokio::task::spawn_blocking(move || {
+            let mut guard = ctx
+                .lock()
+                .map_err(|_| "contexte llama verrouillé".to_string())?;
+            guard
+                .decode_token_ids(max_tokens, &abort)
+                .map(|result| (result.tokens, result.finished))
+                .map_err(|error| error.to_string())
+        })
+        .await
+        .map_err(|error| format!("worker decode interrompu: {error}"))?
+    }
+
     async fn dispatch_loop(
         inner: Arc<StdMutex<Inner>>,
         model_id: String,

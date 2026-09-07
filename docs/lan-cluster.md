@@ -49,11 +49,12 @@ node loss, and `model.cluster.cancel` propagates cancellation when supplied
 the session-key secret name.
 
 `aos-modeld` binds the LAN listener only when the cluster is enabled and the
-session key is available from the secret vault. Actual weight loading, shard
-execution and token routing still require model-engine integration. `Prefill`,
-`Decode`, token and KV-page messages are defined, encrypted and bounded; they
-return an explicit `Nack` until that executor is installed. By default, no
-model or prompt data leaves the machine.
+session key is available from the secret vault. The worker loads its local
+model before acknowledging an assignment and can execute token-level prefill
+and decode in its current context. `Prefill`, `Decode`, token and KV-page
+messages are defined, encrypted and bounded. Coordinator request routing,
+actual weight/shard partitioning and inter-process KV transfer still need to
+be integrated. By default, no model or prompt data leaves the machine.
 
 Auto-discovery takes effect when `aos-modeld` starts with both the LAN cluster
 and auto-discovery enabled. It uses bounded UDP CBOR advertisements on the

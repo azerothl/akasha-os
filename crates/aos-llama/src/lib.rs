@@ -401,6 +401,13 @@ pub struct GenStats {
     pub draft_verify_ms: f64,
 }
 
+/// Resultat d'un décodage token-level utilisé par le worker LAN.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TokenDecodeResult {
+    pub tokens: Vec<i32>,
+    pub finished: bool,
+}
+
 impl GenStats {
     /// Tokens acceptés / pas de verify (0 si pas de speculative).
     pub fn draft_accept_avg(&self) -> Option<f64> {
@@ -890,6 +897,86 @@ impl LlamaContext {
         }
         unsafe { sys::llama_batch_free(batch) };
         Ok(())
+    }
+
+    /// Prépare seq 0 à partir d'identifiants de tokens déjà calculés.
+    ///
+    /// Ce chemin est réservé aux transports internes qui ont leur propre
+    /// tokeniseur. Il repart d'un KV propre afin qu'un assignment worker ne
+    /// puisse pas réutiliser implicitement le contexte d'un autre travail.
+    pub fn prefill_token_ids(&mut self, input_tokens: &[i32]) -> Result<(), LlamaError> {
+        if input_tokens.is_empty() || input_tokens.len() + 8 > self.n_ctx_seq() as usize {
+            return Err(LlamaError::prompt_too_long(
+                input_tokens.len(),
+                self.n_ctx_seq(),
+                0,
+            ));
+        }
+        unsafe {
+            let mem = sys::llama_get_memory(self.ptr);
+            sys::llama_memory_clear(mem, true);
+        }
+        self.seq0_tokens.clear();
+        let tokens: Vec<sys::llama_token> = input_tokens.to_vec();
+        self.prefill_text_tokens(&tokens)?;
+        self.seq0_tokens = tokens;
+        self.refresh_seq0_anchors();
+        Ok(())
+    }
+
+    /// Decode une séquence token-level après [`Self::prefill_token_ids`].
+    pub fn decode_token_ids(
+        &mut self,
+        max_tokens: u32,
+        abort: &AtomicBool,
+    ) -> Result<TokenDecodeResult, LlamaError> {
+        if max_tokens == 0 {
+            return Ok(TokenDecodeResult {
+                tokens: Vec::new(),
+                finished: true,
+            });
+        }
+        self.abort.store(false, Ordering::SeqCst);
+        let smpl = Self::make_sampler(&GenParams {
+            max_tokens,
+            temperature: 0.7,
+            top_p: 0.95,
+            seed: 42,
+        });
+        let vocab = unsafe { sys::llama_model_get_vocab(self.model.ptr) };
+        let mut generated = Vec::new();
+        let mut current = unsafe { sys::llama_sampler_sample(smpl, self.ptr, -1) };
+        let mut finished = false;
+
+        for _ in 0..max_tokens {
+            if abort.load(Ordering::SeqCst) {
+                self.abort();
+                break;
+            }
+            if unsafe { sys::llama_vocab_is_eog(vocab, current) } {
+                finished = true;
+                break;
+            }
+            generated.push(current);
+            self.seq0_tokens.push(current);
+            let mut token = current;
+            let batch = unsafe { sys::llama_batch_get_one(&mut token, 1) };
+            let rc = unsafe { sys::llama_decode(self.ptr, batch) };
+            if rc != 0 {
+                unsafe { sys::llama_sampler_free(smpl) };
+                return Err(LlamaError::Decode(rc));
+            }
+            current = unsafe { sys::llama_sampler_sample(smpl, self.ptr, -1) };
+        }
+        if generated.len() as u32 >= max_tokens {
+            finished = true;
+        }
+        unsafe { sys::llama_sampler_free(smpl) };
+        self.refresh_seq0_anchors();
+        Ok(TokenDecodeResult {
+            tokens: generated,
+            finished,
+        })
     }
 
     /// Prefill multimodal via libmtmd. Retourne le nombre de positions consommées.

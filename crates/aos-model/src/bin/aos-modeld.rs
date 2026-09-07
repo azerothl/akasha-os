@@ -294,6 +294,7 @@ fn lan_control_work(work_id: &str, shard_ids: Vec<u32>) -> DistributedWork {
 async fn handle_lan_worker_connection(
     mut transport: LanTcpTransport,
     local_node_id: String,
+    subsystem: Arc<ModelSubsystem>,
     worker_registry: Arc<Mutex<LanWorkerRegistry>>,
 ) -> Result<(), String> {
     let first = transport.receive_message_unchecked().await?;
@@ -304,6 +305,7 @@ async fn handle_lan_worker_connection(
             assignment,
             allow_sensitive_data,
         } => {
+            let assigned_kv_tokens = assignment.kv_tokens;
             let work = DistributedWork {
                 work_id: work_id.clone(),
                 model_id: model_id.clone(),
@@ -318,13 +320,29 @@ async fn handle_lan_worker_connection(
                 allow_sensitive_data,
             }
             .validate_for(&work, &local_node_id)?;
+            if let Err(error) = subsystem
+                .ensure_loaded(&model_id, PlacementProfile::Balanced, assigned_kv_tokens)
+                .await
+            {
+                let _ = transport
+                    .send_message(
+                        &LanWorkMessage::Nack {
+                            work_id: work_id.clone(),
+                            operation: "assign".into(),
+                            reason: format!("chargement worker impossible: {error}"),
+                        },
+                        &work,
+                    )
+                    .await;
+                return Err(error);
+            }
             worker_registry
                 .lock()
                 .map_err(|_| "état worker LAN verrouillé".to_string())?
                 .assign(
                     &local_node_id,
                     transport.peer_node_id(),
-                    model_id,
+                    model_id.clone(),
                     assignment,
                     work_id.clone(),
                     allow_sensitive_data,
@@ -339,6 +357,7 @@ async fn handle_lan_worker_connection(
                 )
                 .await?;
 
+            let abort = Arc::new(std::sync::atomic::AtomicBool::new(false));
             loop {
                 let message = match transport.receive_message_unchecked().await {
                     Ok(message) => message,
@@ -358,6 +377,7 @@ async fn handle_lan_worker_connection(
                             .await?;
                     }
                     LanWorkMessage::Cancel { work_id: id } if id == work_id => {
+                        abort.store(true, std::sync::atomic::Ordering::SeqCst);
                         worker_registry
                             .lock()
                             .map_err(|_| "état worker LAN verrouillé".to_string())?
@@ -373,31 +393,108 @@ async fn handle_lan_worker_connection(
                             .await?;
                         return Ok(());
                     }
-                    message @ LanWorkMessage::Prefill { .. } => {
+                    LanWorkMessage::Prefill {
+                        work_id: id,
+                        request_id,
+                        input_tokens,
+                        kv_tokens,
+                    } if id == work_id => {
+                        let message = LanWorkMessage::Prefill {
+                            work_id: work_id.clone(),
+                            request_id,
+                            input_tokens: input_tokens.clone(),
+                            kv_tokens,
+                        };
                         message.validate_for(&work, transport.peer_node_id())?;
-                        transport
-                            .send_message(
-                                &LanWorkMessage::Nack {
-                                    work_id: work_id.clone(),
-                                    operation: "prefill".into(),
-                                    reason: "exécuteur data-plane LAN non configuré".into(),
-                                },
-                                &work,
-                            )
-                            .await?;
+                        if kv_tokens > assigned_kv_tokens {
+                            return Err("budget KV prefill supérieur à l'assignment".into());
+                        }
+                        let input_tokens: Vec<i32> = input_tokens
+                            .into_iter()
+                            .map(|token| {
+                                i32::try_from(token)
+                                    .map_err(|_| "identifiant de token LAN hors plage".to_string())
+                            })
+                            .collect::<Result<_, _>>()?;
+                        abort.store(false, std::sync::atomic::Ordering::SeqCst);
+                        match subsystem
+                            .worker_prefill_tokens(&model_id, input_tokens)
+                            .await
+                        {
+                            Ok(()) => {
+                                transport
+                                    .send_message(
+                                        &LanWorkMessage::Ack {
+                                            work_id: work_id.clone(),
+                                            operation: "prefill".into(),
+                                        },
+                                        &work,
+                                    )
+                                    .await?;
+                            }
+                            Err(error) => {
+                                transport
+                                    .send_message(
+                                        &LanWorkMessage::Nack {
+                                            work_id: work_id.clone(),
+                                            operation: "prefill".into(),
+                                            reason: error,
+                                        },
+                                        &work,
+                                    )
+                                    .await?;
+                            }
+                        }
                     }
-                    message @ LanWorkMessage::Decode { .. } => {
+                    LanWorkMessage::Decode {
+                        work_id: id,
+                        request_id,
+                        max_tokens,
+                    } if id == work_id => {
+                        let message = LanWorkMessage::Decode {
+                            work_id: work_id.clone(),
+                            request_id: request_id.clone(),
+                            max_tokens,
+                        };
                         message.validate_for(&work, transport.peer_node_id())?;
-                        transport
-                            .send_message(
-                                &LanWorkMessage::Nack {
-                                    work_id: work_id.clone(),
-                                    operation: "decode".into(),
-                                    reason: "exécuteur data-plane LAN non configuré".into(),
-                                },
-                                &work,
-                            )
-                            .await?;
+                        match subsystem
+                            .worker_decode_tokens(&model_id, max_tokens, abort.clone())
+                            .await
+                        {
+                            Ok((tokens, finished)) => {
+                                let tokens: Vec<u32> = tokens
+                                    .into_iter()
+                                    .map(|token| {
+                                        u32::try_from(token).map_err(|_| {
+                                            "identifiant de token généré hors plage".to_string()
+                                        })
+                                    })
+                                    .collect::<Result<_, _>>()?;
+                                transport
+                                    .send_message(
+                                        &LanWorkMessage::TokenBatch {
+                                            work_id: work_id.clone(),
+                                            request_id,
+                                            tokens,
+                                            finished,
+                                        },
+                                        &work,
+                                    )
+                                    .await?;
+                            }
+                            Err(error) => {
+                                transport
+                                    .send_message(
+                                        &LanWorkMessage::Nack {
+                                            work_id: work_id.clone(),
+                                            operation: "decode".into(),
+                                            reason: error,
+                                        },
+                                        &work,
+                                    )
+                                    .await?;
+                            }
+                        }
                     }
                     message @ LanWorkMessage::KvPage { .. } => {
                         message.validate_for(&work, transport.peer_node_id())?;
@@ -406,7 +503,7 @@ async fn handle_lan_worker_connection(
                                 &LanWorkMessage::Nack {
                                     work_id: work_id.clone(),
                                     operation: "kv-page".into(),
-                                    reason: "transfert KV LAN non configuré".into(),
+                                    reason: "transfert KV LAN non configuré côté moteur".into(),
                                 },
                                 &work,
                             )
@@ -571,6 +668,7 @@ async fn main() {
                                 .unwrap_or_else(|_| listen_address.clone())
                         );
                         let cluster = lan_cluster.clone();
+                        let subsystem_task = subsystem.clone();
                         let worker_registry = Arc::new(Mutex::new(LanWorkerRegistry::default()));
                         let worker_registry_task = worker_registry.clone();
                         tokio::spawn(async move {
@@ -588,11 +686,13 @@ async fn main() {
                                 {
                                     Ok(transport) => {
                                         let local_node_id = local_node_id.clone();
+                                        let subsystem = subsystem_task.clone();
                                         let worker_registry = worker_registry_task.clone();
                                         tokio::spawn(async move {
                                             if let Err(error) = handle_lan_worker_connection(
                                                 transport,
                                                 local_node_id,
+                                                subsystem,
                                                 worker_registry,
                                             )
                                             .await

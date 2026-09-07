@@ -51,12 +51,13 @@ une perte de nœud, et `model.cluster.cancel` propage l’annulation si le nom
 du secret de session est fourni.
 
 `aos-modeld` ouvre le listener LAN uniquement lorsque le cluster est activé
-et que la clé de session est disponible dans le coffre. Le chargement réel
-des poids, l’exécution des shards et le routage des tokens nécessitent encore
-l’intégration du moteur de modèle. Les messages `Prefill`, `Decode`, tokens et
-pages KV sont définis, chiffrés et bornés ; ils renvoient explicitement
-`Nack` tant que cet exécuteur n’est pas installé. Par défaut, aucune donnée
-de modèle ou de prompt ne quitte la machine.
+et que la clé de session est disponible dans le coffre. Le worker charge le
+modèle local avant l’ACK de l’assignment et sait exécuter le prefill/decode
+token-level dans son contexte courant. Les messages `Prefill`, `Decode`,
+tokens et pages KV sont définis, chiffrés et bornés. Le routage d’une requête
+utilisateur par le coordinateur, la partition réelle des poids/shards et le
+transfert KV inter-processus restent à intégrer. Par défaut, aucune donnée de
+modèle ou de prompt ne quitte la machine.
 
 La découverte automatique prend effet au démarrage de `aos-modeld` lorsque le
 cluster LAN et la découverte sont activés. Elle utilise des annonces UDP CBOR
