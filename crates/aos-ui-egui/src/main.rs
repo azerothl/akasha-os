@@ -2579,6 +2579,7 @@ impl eframe::App for UiApp {
                 Evt::ModelPlanFailed { model_id, error } => {
                     self.on_model_plan_failed(model_id, error)
                 }
+                Evt::ModelAdapterStatus(response) => self.on_model_adapter_status(response),
                 Evt::ModelClusterNodes(response) => self.on_model_cluster_nodes(response),
                 Evt::ModelClusterLayerPipelineStatus(response) => {
                     self.on_model_cluster_layer_pipeline_status(response)

@@ -73,7 +73,7 @@ impl UsbIoBackend for UnsupportedPlatformUsbBackend {
 pub fn default_usb_backend() -> Arc<dyn UsbIoBackend> {
     #[cfg(windows)]
     {
-        return Arc::new(WindowsUsbBackend);
+        Arc::new(WindowsUsbBackend)
     }
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     {
@@ -504,8 +504,10 @@ mod windows_backend {
         if handle == INVALID_HANDLE_VALUE {
             return Err(UsbIoError::OsPermissionDenied);
         }
-        let mut dcb = DCB::default();
-        dcb.DCBlength = std::mem::size_of::<DCB>() as u32;
+        let mut dcb = DCB {
+            DCBlength: std::mem::size_of::<DCB>() as u32,
+            ..Default::default()
+        };
         unsafe { GetCommState(handle, &mut dcb) }.map_err(win_error)?;
         dcb.BaudRate = 115200;
         dcb.ByteSize = 8;
@@ -587,8 +589,10 @@ mod windows_backend {
         }
         let mut index = 0u32;
         loop {
-            let mut data = SP_DEVINFO_DATA::default();
-            data.cbSize = std::mem::size_of::<SP_DEVINFO_DATA>() as u32;
+            let mut data = SP_DEVINFO_DATA {
+                cbSize: std::mem::size_of::<SP_DEVINFO_DATA>() as u32,
+                ..Default::default()
+            };
             if unsafe { SetupDiEnumDeviceInfo(info, index, &mut data) }.is_err() {
                 break;
             }

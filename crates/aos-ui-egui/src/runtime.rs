@@ -30,7 +30,10 @@ use aos_proto::{
     DeviceCaptureStopRequest, DevicePermissionRevokeRequest, FeedbackSubmitRequest,
     FeedbackSubmitResponse, FilesGenerateRequest, FilesGenerateResponse, FsDeleteRequest,
     FsEntry, FsListRequest, FsReadRequest, FsReadResponse, FsSetClassRequest, FsWriteRequest,
-    InferParams, InferRequest,
+    InferParams, InferRequest, LanClusterDispatchRequest, LanClusterDispatchResponse,
+    LanClusterLayerPipelineRequest, LanClusterLayerPipelineResponse, LanClusterLayerStage,
+    LanClusterNodesResponse, LanClusterPlanRequest, LanClusterPlanResponse,
+    LanClusterStageLocalModelRequest, LanClusterStageLocalModelResponse,
     LoadRequest, LoadResponse, McpServerInfo, MediaAudioGenerateRequest, MediaGenerateResponse,
     MediaImageGenerateRequest, MediaImageUpscaleRequest, MemContextRequest, MemContextResponse,
     MemEpisodicDeleteRequest, MemExtractRequest, MemExtractResponse, MemHit, MemListRequest,
@@ -2755,6 +2758,217 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::ModelClusterOperationFailed(e.to_string()));
+                }
+            }
+        }
+        Cmd::ModelAdapterStatus { backend } => {
+            match bus
+                .call::<aos_proto::ModelAdapterStatusRequest, aos_proto::ModelAdapterStatusResponse>(
+                    "model.adapter.status",
+                    &aos_proto::ModelAdapterStatusRequest { backend },
+                    vec![],
+                )
+                .await
+            {
+                Ok(status) => {
+                    let _ = evt_tx.send(Evt::ModelAdapterStatus(status));
+                }
+                Err(error) => {
+                    let _ = evt_tx.send(Evt::ModelClusterOperationFailed(error.to_string()));
+                }
+            }
+        }
+        Cmd::ModelClusterPipelineTest {
+            model_id,
+            total_layers,
+            session_key_secret,
+            allow_sensitive_data,
+        } => {
+            let result: Result<String, String> = async {
+                if total_layers == 0 {
+                    return Err("le modèle ne déclare aucune couche Transformer".into());
+                }
+                let nodes = bus
+                    .call::<(), LanClusterNodesResponse>("model.cluster.nodes", &(), vec![])
+                    .await
+                    .map_err(|error| error.to_string())?;
+                let paired_nodes: Vec<_> = nodes
+                    .nodes
+                    .into_iter()
+                    .filter(|node| node.trust == "paired")
+                    .collect();
+                if paired_nodes.is_empty() {
+                    return Err("aucun nœud LAN appairé".into());
+                }
+                let worker_count = paired_nodes.len().min(total_layers as usize);
+                let work_id = format!(
+                    "ui-layer-test-{}",
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis()
+                );
+                let plan = bus
+                    .call::<LanClusterPlanRequest, LanClusterPlanResponse>(
+                        "model.cluster.plan",
+                        &LanClusterPlanRequest {
+                            work_id: work_id.clone(),
+                            model_id: model_id.clone(),
+                            // One synthetic shard per worker allows the
+                            // explicit layer pipeline to partition a single
+                            // local GGUF into contiguous layer ranges.
+                            shard_ids: (0..worker_count as u32).collect(),
+                            kv_tokens: 1024,
+                            allow_sensitive_data,
+                            encrypted_transport: true,
+                            layer_pipeline: true,
+                        },
+                        vec![],
+                    )
+                    .await
+                    .map_err(|error| error.to_string())?;
+                if plan.assignments.is_empty() {
+                    return Err("le plan LAN ne contient aucune assignment".into());
+                }
+                let plan_nodes: Vec<String> = plan
+                    .assignments
+                    .iter()
+                    .map(|assignment| assignment.node_id.clone())
+                    .collect();
+                let planned_layer_ranges = aos_placement::partition_layer_stages(
+                    total_layers,
+                    &plan_nodes,
+                )
+                .map_err(|error| format!("partition des couches LAN invalide: {error}"))?;
+                let mut staged_bytes = 0u64;
+                let mut staged_pages = 0u32;
+                for (index, assignment) in plan.assignments.iter().enumerate() {
+                    let shard_id = *assignment
+                        .shard_ids
+                        .first()
+                        .ok_or("l'assignment LAN ne contient aucun shard")?;
+                    let staged = bus
+                        .call::<LanClusterStageLocalModelRequest, LanClusterStageLocalModelResponse>(
+                            "model.cluster.stage_local_model",
+                            &LanClusterStageLocalModelRequest {
+                                work_id: work_id.clone(),
+                                request_id: format!("ui-stage-{}-{index}", std::process::id()),
+                                target_node_id: assignment.node_id.clone(),
+                                model_id: model_id.clone(),
+                                shard_id,
+                                allow_sensitive_data,
+                                encrypted_transport: true,
+                                session_key_secret: session_key_secret.clone(),
+                                required_ranges: Vec::new(),
+                                first_layer: Some(planned_layer_ranges[index].first_layer),
+                                last_layer: Some(planned_layer_ranges[index].last_layer),
+                            },
+                            vec![],
+                        )
+                        .await
+                        .map_err(|error| format!("staging GGUF LAN échoué: {error}"))?;
+                    staged_bytes = staged_bytes.saturating_add(staged.total_bytes);
+                    staged_pages = staged_pages.saturating_add(staged.page_count);
+                }
+                let shard_ids: Vec<u32> = plan
+                    .assignments
+                    .iter()
+                    .flat_map(|assignment| assignment.shard_ids.iter().copied())
+                    .collect();
+                let dispatched = bus
+                    .call::<LanClusterDispatchRequest, LanClusterDispatchResponse>(
+                        "model.cluster.dispatch",
+                        &LanClusterDispatchRequest {
+                            work_id: work_id.clone(),
+                            model_id: model_id.clone(),
+                            shard_ids,
+                            kv_tokens: 1024,
+                            allow_sensitive_data,
+                            encrypted_transport: true,
+                            session_key_secret: session_key_secret.clone(),
+                        },
+                        vec![],
+                    )
+                    .await
+                    .map_err(|error| error.to_string())?;
+                if dispatched.assignments.is_empty() {
+                    return Err("le dispatch LAN n'a retourné aucun worker".into());
+                }
+                let worker_nodes: Vec<String> = dispatched
+                    .assignments
+                    .iter()
+                    .map(|assignment| assignment.node_id.clone())
+                    .collect();
+                let layer_ranges = aos_placement::partition_layer_stages(
+                    total_layers,
+                    &worker_nodes,
+                )
+                .map_err(|error| format!("partition des couches LAN invalide: {error}"))?;
+                let mut stages = Vec::with_capacity(total_layers as usize);
+                for (range, assignment) in layer_ranges
+                    .iter()
+                    .zip(dispatched.assignments.iter())
+                {
+                    let shard_id = *assignment
+                        .shard_ids
+                        .first()
+                        .ok_or("le worker LAN n'a aucun shard")?;
+                    for layer_index in range.first_layer..=range.last_layer {
+                        stages.push(LanClusterLayerStage {
+                            node_id: assignment.node_id.clone(),
+                            shard_id,
+                            layer_index,
+                        });
+                    }
+                }
+                let response = bus
+                    .call::<LanClusterLayerPipelineRequest, LanClusterLayerPipelineResponse>(
+                        "model.cluster.layer_pipeline_infer",
+                        &LanClusterLayerPipelineRequest {
+                            work_id,
+                            request_id: format!("ui-request-{}", std::process::id()),
+                            model_id,
+                            total_layers,
+                            stages,
+                            activation: Vec::new(),
+                            input_tokens: vec![1],
+                            sequence: 0,
+                            position_start: 0,
+                            allow_sensitive_data,
+                            encrypted_transport: true,
+                            session_key_secret,
+                            return_logits: false,
+                            max_tokens: 1,
+                            eos_token_id: None,
+                            params: InferParams {
+                                max_tokens: 1,
+                                temperature: 0.0,
+                                top_p: 1.0,
+                                seed: Some(0),
+                            },
+                        },
+                        vec![],
+                    )
+                    .await
+                    .map_err(|error| error.to_string())?;
+                Ok(format!(
+                    "pipeline LAN OK — {} worker(s), GGUF transféré ({:.1} MiB, {} pages), {} couche(s), token généré {:?}, {:.1} tok/s",
+                    dispatched.assignments.len(),
+                    staged_bytes as f64 / 1_048_576.0,
+                    staged_pages,
+                    response.layers_executed,
+                    response.generated_tokens,
+                    response.tok_s
+                ))
+            }
+            .await;
+            match result {
+                Ok(message) => {
+                    let _ = evt_tx.send(Evt::Status(message));
+                    let _ = evt_tx.send(Evt::ModelClusterRefresh);
+                }
+                Err(error) => {
+                    let _ = evt_tx.send(Evt::ModelClusterOperationFailed(error));
                 }
             }
         }

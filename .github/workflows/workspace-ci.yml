@@ -15,8 +15,13 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_INCREMENTAL: "0"
+  CARGO_INCREMENTAL: "1"
   GGML_NATIVE: "OFF"
+  # sccache config
+  SCCACHE_DIR: ${{ runner.temp }}/sccache
+  SCCACHE_GHA_ENABLED: "true"
+  # mold linker
+  RUSTFLAGS: "-Clinker=clang -Clink-arg=-fuse-ld=mold"
 
 jobs:
   hygiene:
@@ -39,19 +44,28 @@ jobs:
   rust:
     name: Clippy and tests
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      - uses: Swatinem/rust-cache@v2
+      # sccache + cargo cache (replaces Swatinem/rust-cache)
+      - uses: mozilla-actions/sccache-action@v0.0.5
         with:
-          shared-key: workspace-ci-linux
+          cache-name: sccache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          cache-version: v1
+      - name: Install mold linker
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mold clang
       - name: Install Linux host capture deps
         run: |
           sudo apt-get update
           sudo apt-get install -y libasound2-dev libudev-dev
+      # Warm sccache with dependencies only (no code change = instant)
+      - name: Warm cargo fetch
+        run: cargo fetch --locked
       - name: Clippy core and primary UI (warnings are errors)
         run: cargo clippy -p aos-proto -p aos-agent -p aos-ui-egui --all-targets -- -D warnings
       # The release workflow owns CUDA builds. Keep the general CI job CPU-only
@@ -70,3 +84,38 @@ jobs:
           cargo test -p aos-llama --no-default-features
           cargo test -p aos-model --no-default-features
           cargo test -p aos-platform --no-default-features
+      # Upload sccache stats for visibility
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats
+
+  # Separate CUDA build job (manual / scheduled) to avoid PR timeout
+  cuda-build:
+    name: CUDA build (manual)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: mozilla-actions/sccache-action@v0.0.5
+        with:
+          cache-name: sccache-${{ runner.os }}-cuda-${{ hashFiles('**/Cargo.lock') }}
+          cache-version: v1
+      - name: Install CUDA toolkit
+        run: |
+          wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
+          sudo dpkg -i cuda-keyring_1.1-1_all.deb
+          sudo apt-get update
+          sudo apt-get install -y cuda-toolkit-12-4 mold clang
+      - name: Install Linux host capture deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libudev-dev
+      - name: Build with CUDA
+        env:
+          CUDA_PATH: /usr/local/cuda-12.4
+        run: cargo build --workspace --features cuda --release
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats

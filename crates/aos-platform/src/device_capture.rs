@@ -557,7 +557,7 @@ fn windows_camera_png(
 pub fn default_backend() -> Arc<dyn DeviceCaptureBackend> {
     #[cfg(windows)]
     {
-        return Arc::new(WindowsMediaFoundationBackend);
+        Arc::new(WindowsMediaFoundationBackend)
     }
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     {

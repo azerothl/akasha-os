@@ -1,7 +1,9 @@
 //! `cargo run -p aos-placement --example adaptive_benchmark --release`
 //! emits a deterministic CSV baseline for CPU/CUDA-like/Metal-like planning.
 
-use aos_placement::{run_reference_matrix, ModelDesc, PrivacyClass, QuantizationMetadata};
+use aos_placement::{
+    run_extended_matrix, run_reference_matrix, ModelDesc, PrivacyClass, QuantizationMetadata,
+};
 
 fn main() {
     const GIB: u64 = 1 << 30;
@@ -23,14 +25,22 @@ fn main() {
         backends_compatible: vec![],
     };
     println!(
-        "scenario,profile,feasible,ttft_ms,decode_tok_s,vram_bytes,ram_bytes,disk_bytes,error"
+        "scenario,profile,workload,concurrency,feasible,backend,speculative,thermal,ttft_ms,decode_tok_s,vram_bytes,ram_bytes,disk_bytes,error"
     );
-    for result in run_reference_matrix(&model) {
+    let results = run_reference_matrix(&model)
+        .into_iter()
+        .chain(run_extended_matrix(&model));
+    for result in results {
         println!(
-            "{},{:?},{},{},{},{},{},{},{}",
+            "{},{:?},{:?},{},{},{:?},{:?},{:?},{},{},{},{},{},{}",
             result.scenario,
             result.profile,
+            result.workload,
+            result.concurrency,
             result.feasible,
+            result.backend,
+            result.speculative,
+            result.thermal_policy,
             result
                 .ttft_ms
                 .map(|v| format!("{v:.3}"))

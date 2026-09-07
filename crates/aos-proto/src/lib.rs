@@ -299,6 +299,8 @@ pub enum ModelState {
 pub struct ModelInfo {
     pub id: String,
     pub name: String,
+    #[serde(default)]
+    pub n_layers: u32,
     pub privacy_class: String,
     pub state: ModelState,
     /// Résumé du placement effectif (ex. « VRAM 6,5 GiB | RAM 20 GiB »).
@@ -351,6 +353,52 @@ pub struct ModelPlanRequest {
     /// Zero lets modeld use its configured default context.
     #[serde(default)]
     pub kv_tokens: u32,
+}
+
+/// Execute an operation on an explicitly attached experimental adapter.
+/// The endpoint is never supplied by the caller; modeld resolves it from the
+/// host capability profile and therefore keeps the operation opt-in.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelAdapterExecuteRequest {
+    pub backend: String,
+    pub operation: String,
+    pub quantization: String,
+    pub tensor: Vec<u8>,
+    /// `prefill` or `decode`; old callers omit this and use `decode`.
+    #[serde(default = "default_adapter_phase")]
+    pub phase: String,
+}
+
+fn default_adapter_phase() -> String {
+    "decode".into()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelAdapterExecuteResponse {
+    pub backend: String,
+    pub operation: String,
+    pub tensor: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelAdapterStatusRequest {
+    pub backend: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelAdapterStatusResponse {
+    pub backend: String,
+    pub configured: bool,
+    pub reachable: bool,
+    #[serde(default)]
+    pub device: Option<String>,
+    #[serde(default)]
+    pub memory_bytes: Option<u64>,
+    #[serde(default)]
+    pub supported_operations: Vec<String>,
+    #[serde(default)]
+    pub supported_quantizations: Vec<String>,
+    pub reason: String,
 }
 
 /// Transport-neutral diagnostic row returned by `model.plan`.
@@ -459,6 +507,94 @@ pub struct LanClusterDispatchResponse {
     pub assignments: Vec<LanClusterAssignment>,
 }
 
+/// Exécute une activation sur une couche distante via l'adaptateur Akasha.
+/// Le payload est une activation F32 encodée par `aos-placement` et ne peut
+/// sortir du poste qu'avec une autorisation explicite.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanClusterLayerInferRequest {
+    pub work_id: String,
+    pub request_id: String,
+    pub node_id: String,
+    pub model_id: String,
+    pub shard_id: u32,
+    pub layer_index: u32,
+    pub sequence: u32,
+    #[serde(default)]
+    pub position_start: u32,
+    pub activation: Vec<u8>,
+    pub allow_sensitive_data: bool,
+    pub encrypted_transport: bool,
+    pub session_key_secret: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanClusterLayerInferResponse {
+    pub work_id: String,
+    pub request_id: String,
+    pub node_id: String,
+    pub shard_id: u32,
+    pub layer_index: u32,
+    pub sequence: u32,
+    pub activation: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanClusterLayerStage {
+    pub node_id: String,
+    pub shard_id: u32,
+    pub layer_index: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanClusterLayerPipelineRequest {
+    pub work_id: String,
+    pub request_id: String,
+    pub model_id: String,
+    pub total_layers: u32,
+    pub stages: Vec<LanClusterLayerStage>,
+    pub activation: Vec<u8>,
+    /// Optional local token input; when present, the coordinator builds the
+    /// embedding activation before dispatching the first layer.
+    #[serde(default)]
+    pub input_tokens: Vec<u32>,
+    pub sequence: u32,
+    #[serde(default)]
+    pub position_start: u32,
+    pub allow_sensitive_data: bool,
+    pub encrypted_transport: bool,
+    pub session_key_secret: String,
+    /// Return logits for the final token of the resulting activation.
+    #[serde(default)]
+    pub return_logits: bool,
+    /// Generate up to this many tokens after the input prompt. Zero keeps the
+    /// single forward-pass behavior.
+    #[serde(default)]
+    pub max_tokens: u32,
+    #[serde(default)]
+    pub eos_token_id: Option<u32>,
+    #[serde(default)]
+    pub params: InferParams,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanClusterLayerPipelineResponse {
+    pub work_id: String,
+    pub request_id: String,
+    pub activation: Vec<u8>,
+    pub layers_executed: u32,
+    pub transfers: u32,
+    #[serde(default)]
+    pub logits: Option<Vec<f32>>,
+    #[serde(default)]
+    pub generated_tokens: Vec<u32>,
+    #[serde(default)]
+    pub prompt_tokens: u32,
+    #[serde(default)]
+    pub generation_ms: f64,
+    #[serde(default)]
+    pub tok_s: f64,
+}
+
 /// Explicit token-level LAN inference. Prompts are intentionally not accepted
 /// here; callers must tokenize locally and opt in to sensitive-data transfer.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -543,9 +679,9 @@ pub struct LanClusterKvTransferResponse {
     pub total_bytes: u64,
 }
 
-/// Explicit transfer of one bounded model-weight range to a paired worker.
-/// The target stages the range atomically; it is not consumed by inference
-/// until a backend with native shard loading is available.
+/// Explicit transfer of one bounded model-weight range between paired workers.
+/// A complete manifest can subsequently be consumed by the Akasha layer
+/// adapter; the native llama.cpp path remains separate.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LanClusterWeightTransferRequest {
     pub work_id: String,
@@ -569,6 +705,47 @@ pub struct LanClusterWeightTransferResponse {
     pub request_id: String,
     pub source_node_id: String,
     pub target_node_id: String,
+    pub shard_id: u32,
+    pub page_count: u32,
+    pub total_bytes: u64,
+}
+
+/// Stages the local GGUF, completely or as a sparse layer shard, on one paired
+/// worker before a layer pipeline starts. The operation remains explicit and
+/// requires encrypted sensitive-data transfer.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanClusterWeightSegment {
+    pub shard_id: u32,
+    pub offset: u64,
+    pub length: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanClusterStageLocalModelRequest {
+    pub work_id: String,
+    pub request_id: String,
+    pub target_node_id: String,
+    pub model_id: String,
+    pub shard_id: u32,
+    pub allow_sensitive_data: bool,
+    pub encrypted_transport: bool,
+    pub session_key_secret: String,
+    /// Optional sparse GGUF contract. Empty means transfer the complete file.
+    #[serde(default)]
+    pub required_ranges: Vec<LanClusterWeightSegment>,
+    /// Optional layer bounds used by the daemon to derive GGUF ranges locally.
+    #[serde(default)]
+    pub first_layer: Option<u32>,
+    #[serde(default)]
+    pub last_layer: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanClusterStageLocalModelResponse {
+    pub work_id: String,
+    pub request_id: String,
+    pub target_node_id: String,
+    pub model_id: String,
     pub shard_id: u32,
     pub page_count: u32,
     pub total_bytes: u64,

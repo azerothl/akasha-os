@@ -123,7 +123,57 @@ impl UiApp {
                                             crate::prefs::save_preferences(&self.prefs);
                                         }
                                     }
+                            });
+                        });
+                        ui.add_space(4.0);
+                        ui.group(|ui| {
+                            let fr = self.prefs.language == "fr";
+                            ui.horizontal_wrapped(|ui| {
+                                ui.strong(if fr {
+                                    "Adaptateurs expérimentaux"
+                                } else {
+                                    "Experimental adapters"
                                 });
+                                if ui
+                                    .small_button(if fr { "Tester" } else { "Test" })
+                                    .clicked()
+                                {
+                                    let _ = self.cmd_tx.send(Cmd::ModelAdapterStatus {
+                                        backend: "npu".into(),
+                                    });
+                                    let _ = self.cmd_tx.send(Cmd::ModelAdapterStatus {
+                                        backend: "webgpu".into(),
+                                    });
+                                }
+                            });
+                            ui.weak(if fr {
+                                "Le test vérifie uniquement le runtime local configuré ; aucune donnée de conversation n'est envoyée."
+                            } else {
+                                "The test checks only the configured local runtime; no conversation data is sent."
+                            });
+                            for backend in ["npu", "webgpu"] {
+                                if let Some(status) =
+                                    self.models_ui.adapter_statuses.get(backend)
+                                {
+                                    let state = if status.reachable {
+                                        if fr { "joignable" } else { "reachable" }
+                                    } else if status.configured {
+                                        if fr { "indisponible" } else { "unavailable" }
+                                    } else if fr {
+                                        "non configuré"
+                                    } else {
+                                        "not configured"
+                                    };
+                                    ui.horizontal_wrapped(|ui| {
+                                        ui.monospace(backend);
+                                        ui.label(state);
+                                        if let Some(device) = &status.device {
+                                            ui.weak(device);
+                                        }
+                                        ui.weak(&status.reason);
+                                    });
+                                }
+                            }
                         });
                     }
                     // S7.3 : hygiène disque — total, partiels à purger.

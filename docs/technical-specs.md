@@ -379,15 +379,51 @@ metadata and workload. It records the selected backend (CPU/CUDA/Metal), the
 declared quantization, memory placement profile, KV type, speculative strategy,
 thermal policy, reason and ordered fallbacks. CPU, CUDA and Metal reuse the
 existing llama.cpp path; NPU, WebGPU and LAN adapters are experimental and are
-registered only when explicitly enabled, then remain non-executable until their
-adapter gate is implemented. An unavailable adapter falls back to CPU without
-sending prompts or model data elsewhere.
+registered only when explicitly enabled. The authenticated Akasha LAN layer
+adapter can be selected when paired nodes are available; NPU and WebGPU remain
+explicitly unavailable until their native runtimes are attached. An unavailable
+adapter falls back to CPU without sending prompts or model data elsewhere.
 
 The read-only `model.plan` service compares the four placement profiles. The
 `model.metrics` response exposes backend, quantization, thermal policy and the
 non-sensitive planning reason. `INT2`/`MXFP4` metadata can be represented, but
 the default quality gate and backend registry prevent them from being selected
-without a compatible, measured kernel.
+ without a compatible, measured kernel. The experimental
+ `LowBitKernelRegistry` additionally requires a local gain of at least 5% over
+ INT4 and matches the registered ISA plus the prefill GEMM or decode GEMV phase
+ before such a kernel can be enabled.
+
+The optional `hardware.json` fields `npu` and `webgpu` carry the detected
+device memory, supported operations and accepted quantization formats. A
+device with only a name/memory probe is displayed as detected but remains
+non-executable; the planner requires a complete runtime description and an
+attached implementation before it can ever leave the CPU/GPU fallback path.
+
+An attached experimental runtime may implement `aos-placement::adapter_rpc`.
+The client connects only to an explicitly configured `tcp://` or `akasha://`
+endpoint, exchanges a versioned CBOR length-framed handshake, and validates
+the advertised backend, memory, operations and quantizations before sending
+bounded tensor requests. Every execution response carries the request ID;
+invalid, oversized, uncorrelated or failed responses are rejected. This
+contract is suitable for a vendor NPU process or a browser/WebGPU bridge,
+while the default planner still keeps these adapters disabled until the
+runtime is explicitly attached and measured.
+
+For development and CI, the crate includes a bounded echo runtime that
+exercises the same handshake and request framing without pretending to be an
+accelerator:
+
+```powershell
+cargo run -p aos-placement --example adapter_echo_runtime -- npu 127.0.0.1:38471
+# or: webgpu 127.0.0.1:38472
+```
+
+Point the corresponding experimental adapter endpoint at that loopback
+address, then query `model.adapter.status` to verify the handshake and use the
+explicit `model.adapter.execute` diagnostic service.
+The runtime echoes tensors, so it validates connectivity, capability checks,
+phase selection and bounded transport only; it is not an inference benchmark
+and does not enable NPU/WebGPU text generation.
 
 For an installed model, the plan reports the GGUF file type returned by
 llama.cpp after the file is opened; it never infers a quantization from the
@@ -404,9 +440,10 @@ The deterministic planning baseline can be run in CI or locally with:
 cargo run -p aos-placement --example adaptive_benchmark --release
 ```
 
-It emits CSV for fixed CPU, CUDA-like and Metal-like profiles (TTFT estimate,
-decode tok/s estimate and RAM/VRAM/disk placement). It is not a substitute for
-a real-device benchmark: production calibration must separately collect real
+It emits CSV for fixed CPU, CUDA-like and Metal-like profiles plus long
+reasoning, tool-loop, concurrent-batch and thermal-pressure scenarios (TTFT
+estimate, decode tok/s estimate, adaptive path and RAM/VRAM/disk placement).
+It is not a substitute for a real-device benchmark: production calibration must separately collect real
 TTFT, p50/p95, sustained throughput, temperature and power on the target host.
 
 #### 3.5.10 Speculative decode policy
@@ -451,12 +488,23 @@ requires the node capability `sensitive-data`. A lost node moves the job to
 `failed` when none remain. Cancellation returns every node that must receive a
 cancel signal.
 
+The explicit `model.cluster.layer_pipeline_infer` service can also accept
+`input_tokens` instead of a prebuilt activation. The coordinator reads only
+the GGUF embedding/output tensors locally, dispatches ordered layer
+activations to paired workers, and optionally returns final-token logits with
+`return_logits=true`. This remains opt-in; `model.infer` keeps the local
+default and no prompt is uploaded implicitly. With `max_tokens`, generation
+reuses the per-request KV cache; `params.temperature`, `params.top_p` and
+`params.seed` select deterministic greedy or seeded nucleus sampling, and the
+response exposes generated tokens plus `generation_ms` and `tok_s`.
+
 The policy layer does not discover peers by itself. An explicit opt-in UDP
 advertisement service can discover unpaired candidates; it validates LAN scope
 and source/address consistency but never pairs them. When the LAN flag and a
 session key are present, `aos-modeld` starts the authenticated TCP worker
-listener. A worker loads its local model before acknowledging an assignment.
-The internal `model.cluster.infer_tokens` operation can then send a typed
+listener. A worker acknowledges an assignment before loading; weight staging
+can therefore prepare a model first, while inference loads llama.cpp on
+demand. The internal `model.cluster.infer_tokens` operation can then send a typed
 prefill and decode request over one encrypted session and return token batches.
 The explicit `model.cluster.infer_chat` operation applies the same policy to
 text prompts and returns bounded generated text plus metrics. There is no
@@ -472,14 +520,22 @@ rejects a wrong nonce, altered ciphertext, cross-job frame or replay. The
 explicit `LanTcpTransport` adapter adds a bounded CBOR frame envelope and
 connects only to the address stored for an already paired node, when the caller
 provides a session key from the secret store. Remote weight/shard partitioning
-and multi-worker token aggregation remain to be integrated. The explicit
+and multi-worker token aggregation remain to be integrated into the native
+llama.cpp path. The explicit
 `model.cluster.kv_transfer` operation relays sequence-0 KV state between two
 assigned paired workers using ordered encrypted pages (512 KiB per page,
 64 MiB total) and restores the token mirror before acknowledging completion.
 The explicit `model.cluster.weight_transfer` operation stages one bounded
 declared weight range on a target worker, with ordered encrypted pages and
-atomic publication of a manifest. The llama.cpp path does not consume staged
-ranges yet; native remote-layer execution remains a later backend gate.
+atomic publication of a manifest. When the manifest is complete, the worker
+reassembles the GGUF atomically and the independent Akasha layer adapter
+consumes the assigned layers without creating a full llama.cpp context;
+incomplete coverage remains non-executable.
+The explicit `model.cluster.stage_local_model` operation repeats this transfer
+for the coordinator-local GGUF in bounded chunks before a pipeline. For a
+layer segment it sends only the header/index and the required `blk.N` tensor
+ranges; an empty range contract retains complete-file staging. A target need
+not load the full model before receiving its assignment.
 The typed `LanWorkMessage` contract covers hello, shard assignment, heartbeat,
 acknowledgement, cancellation, prefill, decode, token batches and KV pages; it
 rejects cross-job messages, unknown shards and unexpected peer identities
@@ -970,6 +1026,8 @@ If step 3 partially fails → degraded mode with clear messages; direct shell re
 | `model.cluster.infer_chat` | Explicit, encrypted text inference on one assigned paired worker; sensitive-data opt-in required |
 | `model.cluster.kv_transfer` | Explicit encrypted KV state transfer between two assigned paired workers |
 | `model.cluster.weight_transfer` | Explicit encrypted staging of one bounded weight range for a declared shard |
+| `model.cluster.layer_infer` | Explicit encrypted Akasha activation exchange and CPU GGUF layer execution on one assigned worker |
+| `model.cluster.layer_pipeline_infer` | Explicit ordered multi-layer activation pipeline across planned paired workers |
 | `model.cluster.recover` | Reassign shards after a reported node loss and optionally propagate new assignments with a session-key secret |
 | `model.cluster.cancel` | Cancel a LAN job and propagate cancellation through the encrypted transport; requires a session-key secret |
 | `model.cluster.nodes` | List configured nodes and their trust state |

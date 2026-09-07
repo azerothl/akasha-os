@@ -6,6 +6,7 @@
 //! exécuteur local injectable côté worker.
 
 use crate::distributed::{LanActivationAssembly, LanWorkMessage};
+use crate::tensor_wire::{CpuLayerExecutor, CpuTransformerBlock, F32Tensor};
 
 pub const LAYER_RPC_PROTOCOL_VERSION: u16 = 1;
 pub const LAYER_RPC_PAGE_BYTES: usize = 1_048_576;
@@ -32,6 +33,56 @@ pub struct LayerRpcResult {
 
 pub trait LayerRpcExecutor {
     fn execute(&mut self, request: LayerRpcRequest) -> Result<LayerRpcResult, String>;
+}
+
+/// Exécuteur de référence pour une couche linéaire `W × X`.
+///
+/// Il sert de backend indépendant testable ; les poids sont déjà décodés en
+/// F32 et peuvent ensuite être remplacés par un kernel CPU/GPU spécialisé.
+#[derive(Debug, Clone)]
+pub struct LinearLayerExecutor {
+    pub weights: F32Tensor,
+}
+
+/// Exécuteur indépendant pour une couche Transformer CPU F32.
+/// Il permet de valider le protocole de transfert avec un vrai bloc sans
+/// dépendre de l'API interne de llama.cpp.
+#[derive(Debug, Clone)]
+pub struct TransformerBlockExecutor {
+    pub block: CpuTransformerBlock,
+}
+
+impl LayerRpcExecutor for TransformerBlockExecutor {
+    fn execute(&mut self, request: LayerRpcRequest) -> Result<LayerRpcResult, String> {
+        let input = F32Tensor::decode(&request.bytes)?;
+        let output = self.block.forward(&input)?;
+        Ok(LayerRpcResult {
+            request_id: request.request_id,
+            work_id: request.work_id,
+            shard_id: request.shard_id,
+            layer_index: request.layer_index,
+            sequence: request.sequence,
+            bytes: output.encode(),
+        })
+    }
+}
+
+impl LayerRpcExecutor for LinearLayerExecutor {
+    fn execute(&mut self, request: LayerRpcRequest) -> Result<LayerRpcResult, String> {
+        let input = F32Tensor::decode(&request.bytes)?;
+        let output = CpuLayerExecutor {
+            weights: self.weights.clone(),
+        }
+        .matmul(&input)?;
+        Ok(LayerRpcResult {
+            request_id: request.request_id,
+            work_id: request.work_id,
+            shard_id: request.shard_id,
+            layer_index: request.layer_index,
+            sequence: request.sequence,
+            bytes: output.encode(),
+        })
+    }
 }
 
 /// Accumule une activation entrante puis l'exécute exactement une fois.
@@ -106,6 +157,7 @@ fn page_result(result: LayerRpcResult) -> Vec<LanWorkMessage> {
             shard_id: result.shard_id,
             layer_index: result.layer_index,
             sequence: result.sequence,
+            position_start: 0,
             page_index: page_index as u32,
             total_bytes: result.bytes.len() as u64,
             data: data.to_vec(),
@@ -156,5 +208,23 @@ mod tests {
                 ..
             } if data == b"dcba"
         ));
+    }
+
+    #[test]
+    fn receiver_execute_une_couche_lineaire_wiree() {
+        let input = F32Tensor::new(vec![2, 1], vec![2.0, 3.0]).unwrap();
+        let mut receiver =
+            LayerRpcReceiver::new("work", "req", 2, 7, 1, input.encode().len() as u64).unwrap();
+        let mut executor = LinearLayerExecutor {
+            weights: F32Tensor::new(vec![1, 2], vec![4.0, 5.0]).unwrap(),
+        };
+        let messages = receiver
+            .push_page(0, &input.encode(), true, &mut executor)
+            .unwrap()
+            .unwrap();
+        let LanWorkMessage::LayerActivationResult { data, .. } = &messages[0] else {
+            panic!("résultat RPC inattendu");
+        };
+        assert_eq!(F32Tensor::decode(data).unwrap().values, vec![23.0]);
     }
 }

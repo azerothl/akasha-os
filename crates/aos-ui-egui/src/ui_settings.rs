@@ -380,9 +380,7 @@ impl UiApp {
                         if let Some(status) = &self.models_ui.lan_layer_pipeline {
                             ui.horizontal_wrapped(|ui| {
                                 ui.label(t.lan_layer_pipeline_status);
-                                let ready = status.enabled
-                                    && status.native_rpc
-                                    && status.adapter_ready;
+                                let ready = status.enabled && status.adapter_ready;
                                 ui.colored_label(
                                     if ready {
                                         egui::Color32::from_rgb(80, 190, 110)
@@ -549,6 +547,65 @@ impl UiApp {
                         }
                         if ui.button(t.lan_refresh).clicked() {
                             let _ = self.cmd_tx.send(Cmd::ModelClusterNodes);
+                        }
+                        ui.separator();
+                        ui.label("Test du pipeline par couches");
+                        if ui
+                            .checkbox(
+                                &mut self.prefs.lan_allow_sensitive_data,
+                                "Autoriser le transfert du modèle vers le LAN",
+                            )
+                            .on_hover_text(
+                                "Consentement explicite requis pour copier le GGUF vers un worker appairé.",
+                            )
+                            .changed()
+                        {
+                            save_preferences(&self.prefs);
+                        }
+                        egui::ComboBox::from_id_salt("lan_pipeline_model")
+                            .selected_text(if self.settings_ui.lan_pipeline_model.is_empty() {
+                                "Choisir un modèle"
+                            } else {
+                                self.settings_ui.lan_pipeline_model.as_str()
+                            })
+                            .show_ui(ui, |ui| {
+                                for model in self.models_ui.model_infos.iter().filter(|model| {
+                                    model.n_layers > 0
+                                        && !matches!(model.state, aos_proto::ModelState::Remote)
+                                }) {
+                                    ui.selectable_value(
+                                        &mut self.settings_ui.lan_pipeline_model,
+                                        model.id.clone(),
+                                        format!("{} ({} couches)", model.name, model.n_layers),
+                                    );
+                                }
+                            });
+                        if ui
+                            .add_enabled(
+                                self.prefs.lan_allow_sensitive_data,
+                                egui::Button::new("Lancer un test LAN (1 token)"),
+                            )
+                            .on_hover_text(
+                                "Envoie explicitement le token de test au worker appairé via le pipeline chiffré.",
+                            )
+                            .clicked()
+                        {
+                            if let Some(model) = self
+                                .models_ui
+                                .model_infos
+                                .iter()
+                                .find(|model| model.id == self.settings_ui.lan_pipeline_model)
+                            {
+                                let _ = self.cmd_tx.send(Cmd::ModelClusterPipelineTest {
+                                    model_id: model.id.clone(),
+                                    total_layers: model.n_layers,
+                                    session_key_secret: self.prefs.lan_session_key_secret.clone(),
+                                    allow_sensitive_data: self.prefs.lan_allow_sensitive_data,
+                                });
+                                self.status = "Test du pipeline LAN en cours…".into();
+                            } else {
+                                self.status = "Sélectionnez un modèle local avec des couches".into();
+                            }
                         }
                         let lan_nodes = self.models_ui.lan_cluster.clone();
                         match lan_nodes {

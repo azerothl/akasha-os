@@ -48,6 +48,13 @@ impl UiApp {
         self.toasts.push_error(error);
     }
 
+    pub(crate) fn on_model_adapter_status(
+        &mut self,
+        response: aos_proto::ModelAdapterStatusResponse,
+    ) {
+        self.models_ui.set_adapter_status(response);
+    }
+
     pub(crate) fn on_providers(&mut self, list: Vec<ProviderRecord>) {
         self.models_ui.set_providers(list);
     }

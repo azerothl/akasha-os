@@ -185,6 +185,10 @@ pub enum InferOutcome {
 
 struct Inner {
     models: HashMap<String, ModelRuntime>,
+    /// Blocs chargés pour l'adaptateur Akasha LAN, indexés par modèle/couche.
+    layer_blocks: HashMap<(String, u32), Arc<LayerBlockRuntime>>,
+    /// Entrées/sorties GGUF mises en cache pour l'amorçage et les logits.
+    model_io: HashMap<String, Arc<aos_placement::CpuGgufModelIo>>,
     /// inference_id → flag d'annulation (jobs en file).
     job_aborts: HashMap<u64, Arc<AtomicBool>>,
     /// inference_id → pause (E18 migrate, distinct from abort).
@@ -198,6 +202,14 @@ struct Inner {
     inference_pin: String,
     /// Jobs paused mid-stream waiting for a new context (prefix replay).
     paused_jobs: Vec<DispatchJob>,
+}
+
+struct LayerBlockRuntime {
+    block: aos_placement::CpuTransformerBlock,
+    rope_theta: Option<f32>,
+    /// Cache isolé par requête : deux séquences concurrentes ne doivent
+    /// jamais partager leurs clés/valeurs d'attention.
+    kv_cache: StdMutex<HashMap<String, aos_placement::CpuKvCache>>,
 }
 
 enum LoadAction {
@@ -260,9 +272,8 @@ impl ModelSubsystem {
                 gpus,
             )
         };
-        // Make the configured paired-node inventory visible to the planner
-        // without making LAN execution selectable: the adapter remains
-        // experimental/non-executable until authenticated transport exists.
+        // Make the configured paired-node inventory visible to the planner;
+        // LAN remains experimental and is selectable only behind its gate.
         hw.remote_nodes = config
             .lan_cluster
             .nodes
@@ -320,6 +331,8 @@ impl ModelSubsystem {
         Self {
             inner: Arc::new(StdMutex::new(Inner {
                 models,
+                layer_blocks: HashMap::new(),
+                model_io: HashMap::new(),
                 job_aborts: HashMap::new(),
                 job_pauses: HashMap::new(),
                 next_inference: 1,
@@ -343,6 +356,7 @@ impl ModelSubsystem {
         ModelInfo {
             id: rt.desc.id.clone(),
             name: rt.desc.name.clone(),
+            n_layers: rt.desc.n_layers,
             privacy_class: format!("{:?}", rt.desc.privacy_class).to_lowercase(),
             state: rt.state.clone(),
             placement: rt.plan.as_ref().map(|p| p.summary()),
@@ -908,6 +922,39 @@ impl ModelSubsystem {
         Ok((job_id, delta_rx, done_rx))
     }
 
+    /// Return the configured runtime contract without exposing the endpoint
+    /// through model metrics or a public model description.
+    pub fn adapter_runtime(
+        &self,
+        backend: aos_placement::BackendKind,
+    ) -> Option<(
+        String,
+        u64,
+        Vec<String>,
+        Vec<aos_placement::Quantization>,
+    )> {
+        let sim = self.sim.lock().unwrap();
+        match backend {
+            aos_placement::BackendKind::Npu => sim.hw.npu.as_ref().and_then(|caps| {
+                Some((
+                    caps.runtime_endpoint.clone()?,
+                    caps.memory_bytes,
+                    caps.supported_operations.clone(),
+                    caps.supported_quantizations.clone(),
+                ))
+            }),
+            aos_placement::BackendKind::WebGpu => sim.hw.webgpu.as_ref().and_then(|caps| {
+                Some((
+                    caps.runtime_endpoint.clone()?,
+                    caps.memory_bytes,
+                    caps.supported_operations.clone(),
+                    caps.supported_quantizations.clone(),
+                ))
+            }),
+            _ => None,
+        }
+    }
+
     /// Prépare le contexte seq 0 pour un worker LAN à partir de tokens déjà
     /// tokenisés. Ce chemin est séparé du chat afin de ne pas contourner le
     /// dispatcher/continuous batching local.
@@ -924,7 +971,7 @@ impl ModelSubsystem {
                 .ok_or_else(|| format!("modèle inconnu: {model_id}"))?;
             if !matches!(
                 model.state,
-                ModelState::Loaded | ModelState::PartiallyOffloaded
+                ModelState::Loaded | ModelState::PartiallyOffloaded | ModelState::OnDisk
             ) {
                 return Err(format!("modèle {model_id} non chargé"));
             }
@@ -943,6 +990,276 @@ impl ModelSubsystem {
         })
         .await
         .map_err(|error| format!("worker prefill interrompu: {error}"))?
+    }
+
+    /// Exécute une couche Transformer par l'adaptateur Akasha indépendant.
+    ///
+    /// Ce chemin est volontairement séparé du contexte llama : il est utilisé
+    /// pour le pipeline LAN lorsque le fichier GGUF local expose les poids et
+    /// les métadonnées nécessaires. Il ne tente jamais de lire des pointeurs
+    /// internes à llama.cpp.
+    pub async fn worker_layer_activation(
+        &self,
+        model_id: &str,
+        layer_index: u32,
+        request_id: String,
+        position_start: u32,
+        input: Vec<u8>,
+    ) -> Result<Vec<u8>, String> {
+        let cached = {
+            let inner = self.inner.lock().unwrap();
+            inner
+                .layer_blocks
+                .get(&(model_id.to_string(), layer_index))
+                .cloned()
+        };
+        let block = if let Some(block) = cached {
+            block
+        } else {
+            let path = {
+                let inner = self.inner.lock().unwrap();
+                let model = inner
+                    .models
+                    .get(model_id)
+                    .ok_or_else(|| format!("modèle inconnu: {model_id}"))?;
+                if !matches!(
+                    model.state,
+                    ModelState::Loaded | ModelState::PartiallyOffloaded | ModelState::OnDisk
+                ) {
+                    return Err(format!("modèle {model_id} non chargé"));
+                }
+                model
+                    .path
+                    .clone()
+                    .ok_or_else(|| format!("poids GGUF du modèle {model_id} indisponibles"))?
+            };
+            let block = tokio::task::spawn_blocking(move || {
+                let model = aos_placement::GgufModel::open(&path)?;
+                let rope_theta = model.metadata_f32("llama.rope.freq_base");
+                let block =
+                    aos_placement::CpuTransformerBlock::from_gguf_auto(&model, layer_index as usize)?;
+                Ok::<_, String>(LayerBlockRuntime {
+                    block,
+                    rope_theta,
+                    kv_cache: StdMutex::new(HashMap::new()),
+                })
+            })
+            .await
+            .map_err(|error| format!("chargement couche LAN interrompu: {error}"))??;
+            let block = Arc::new(block);
+            self.inner
+                .lock()
+                .unwrap()
+                .layer_blocks
+                .insert((model_id.to_string(), layer_index), block.clone());
+            block
+        };
+        tokio::task::spawn_blocking(move || {
+            let tensor = aos_placement::F32Tensor::decode(&input)?;
+            let tokens = tensor.shape.get(1).copied().ok_or("activation non matricielle")?;
+            if tokens == 0 {
+                return Err("activation sans token".into());
+            }
+            let hidden = tensor.shape[0] as usize;
+            let head_dim = hidden
+                .checked_div(block.block.n_heads)
+                .ok_or("configuration Transformer invalide")?;
+            let mut caches = block
+                .kv_cache
+                .lock()
+                .map_err(|_| "cache KV LAN verrouillé".to_string())?;
+            if position_start == 0 {
+                if caches.len() >= 8 && !caches.contains_key(&request_id) {
+                    if let Some(evicted) = caches.keys().next().cloned() {
+                        caches.remove(&evicted);
+                    }
+                }
+                caches.insert(
+                    request_id.clone(),
+                    aos_placement::CpuKvCache::new(
+                        block.block.n_kv_heads,
+                        head_dim,
+                        1_048_576,
+                    )?,
+                );
+            } else if !caches.contains_key(&request_id) {
+                return Err("cache KV absente pour une position de continuation".into());
+            }
+            let cache = caches.get_mut(&request_id).unwrap();
+            if tokens == 1 {
+                block
+                    .block
+                    .decode_with_cache(
+                        &tensor,
+                        position_start,
+                        cache,
+                        block.rope_theta,
+                    )
+                    .map(|output| output.encode())
+            } else {
+                block
+                    .block
+                    .prefill_with_cache(
+                        &tensor,
+                        position_start,
+                        cache,
+                        block.rope_theta,
+                    )
+                    .map(|output| output.encode())
+            }
+        })
+        .await
+        .map_err(|error| format!("exécution couche LAN interrompue: {error}"))?
+    }
+
+    /// Publie un GGUF reconstitué par le data-plane LAN comme source locale
+    /// de l'adaptateur Akasha. Ce chemin ne crée pas de contexte llama.cpp :
+    /// il permet au worker de n'exécuter que les couches qui lui sont assignées.
+    pub fn worker_register_staged_model(
+        &self,
+        model_id: &str,
+        path: PathBuf,
+    ) -> Result<(), String> {
+        if model_id.trim().is_empty() || !path.is_file() {
+            return Err("modèle GGUF staging LAN introuvable".into());
+        }
+        let mut inner = self.inner.lock().unwrap();
+        let runtime = inner.models.entry(model_id.to_string()).or_insert_with(|| {
+            ModelRuntime::new(
+                ModelDesc {
+                    id: model_id.to_string(),
+                    name: model_id.to_string(),
+                    n_layers: 0,
+                    n_params: 0.0,
+                    weights_bytes: 0,
+                    embed_bytes: 0,
+                    kv_bytes_per_token: 0,
+                    context_length: 0,
+                    supports_layer_offload: true,
+                    privacy_class: aos_placement::PrivacyClass::Local,
+                    quantization: Default::default(),
+                    backends_compatible: vec!["akasha-rpc".into()],
+                },
+                Some(path.clone()),
+            )
+        });
+        if runtime.loading || runtime.active > 0 || runtime.pending > 0 {
+            return Err("modèle staging LAN actuellement utilisé".into());
+        }
+        runtime.path = Some(path);
+        runtime.state = ModelState::OnDisk;
+        runtime.ctx = None;
+        runtime.model = None;
+        runtime.plan = None;
+        runtime.inference_plan = None;
+        inner
+            .layer_blocks
+            .retain(|(cached_id, _), _| cached_id != model_id);
+        inner.model_io.remove(model_id);
+        Ok(())
+    }
+
+    async fn worker_model_io(
+        &self,
+        model_id: &str,
+    ) -> Result<Arc<aos_placement::CpuGgufModelIo>, String> {
+        if let Some(cached) = self.inner.lock().unwrap().model_io.get(model_id).cloned() {
+            return Ok(cached);
+        }
+        let path = {
+            let inner = self.inner.lock().unwrap();
+            let model = inner
+                .models
+                .get(model_id)
+                .ok_or_else(|| format!("modèle inconnu: {model_id}"))?;
+            if model.state == ModelState::Remote {
+                return Err(format!("modèle distant {model_id} sans poids GGUF locaux"));
+            }
+            model
+                .path
+                .clone()
+                .ok_or_else(|| format!("poids GGUF du modèle {model_id} indisponibles"))?
+        };
+        let io = tokio::task::spawn_blocking(move || {
+            let model = aos_placement::GgufModel::open(&path)?;
+            aos_placement::CpuGgufModelIo::from_gguf(model).map(Arc::new)
+        })
+        .await
+        .map_err(|error| format!("chargement entrée/sortie GGUF interrompu: {error}"))??;
+        let mut inner = self.inner.lock().unwrap();
+        Ok(inner
+            .model_io
+            .entry(model_id.to_string())
+            .or_insert_with(|| io.clone())
+            .clone())
+    }
+
+    /// Construit l'activation d'embedding [hidden, tokens] pour l'entrée du
+    /// pipeline réparti. La tokenisation reste locale au coordinateur.
+    pub async fn worker_embed_tokens(
+        &self,
+        model_id: &str,
+        input_tokens: Vec<u32>,
+    ) -> Result<Vec<u8>, String> {
+        if input_tokens.is_empty() || input_tokens.len() > 8192 {
+            return Err("préfixe de tokens LAN vide ou trop long".into());
+        }
+        let io = self.worker_model_io(model_id).await?;
+        tokio::task::spawn_blocking(move || {
+            let mut token_values = Vec::with_capacity(io.hidden_size() * input_tokens.len());
+            for token in input_tokens {
+                token_values.extend(io.embedding(token)?.values);
+            }
+            let hidden = io.hidden_size();
+            let tokens = token_values.len() / hidden;
+            let mut columns = vec![0.0; token_values.len()];
+            for token in 0..tokens {
+                for row in 0..hidden {
+                    columns[row * tokens + token] = token_values[token * hidden + row];
+                }
+            }
+            aos_placement::F32Tensor::new(vec![hidden as u32, tokens as u32], columns)
+                .map(|tensor| tensor.encode())
+        })
+        .await
+        .map_err(|error| format!("embedding LAN interrompu: {error}"))?
+    }
+
+    /// Calcule les logits finaux d'une activation [hidden, 1] après le
+    /// pipeline réparti.
+    pub async fn worker_logits(
+        &self,
+        model_id: &str,
+        input: Vec<u8>,
+    ) -> Result<Vec<f32>, String> {
+        let io = self.worker_model_io(model_id).await?;
+        tokio::task::spawn_blocking(move || {
+            let tensor = aos_placement::F32Tensor::decode(&input)?;
+            io.logits(&tensor)
+        })
+        .await
+        .map_err(|error| format!("logits LAN interrompus: {error}"))?
+    }
+
+    /// Invalide les caches de couches après une annulation LAN.
+    ///
+    /// Le protocole d'annulation historique ne transporte que `work_id` ; on
+    /// purge donc toutes les séquences de ce modèle afin qu'aucun préfixe
+    /// partiel ne puisse être réutilisé lors d'une reprise.
+    pub fn clear_worker_layer_caches(&self) {
+        let blocks = {
+            let inner = self.inner.lock().unwrap();
+            inner
+                .layer_blocks
+                .values()
+                .cloned()
+                .collect::<Vec<_>>()
+        };
+        for block in blocks {
+            if let Ok(mut caches) = block.kv_cache.lock() {
+                caches.clear();
+            }
+        }
     }
 
     /// Exporte l'état KV de la séquence worker 0 pour un transfert LAN.
@@ -1002,7 +1319,7 @@ impl ModelSubsystem {
                 .ok_or_else(|| format!("modèle inconnu: {model_id}"))?;
             if !matches!(
                 model.state,
-                ModelState::Loaded | ModelState::PartiallyOffloaded
+                ModelState::Loaded | ModelState::PartiallyOffloaded | ModelState::OnDisk
             ) {
                 return Err(format!("modèle {model_id} non chargé"));
             }
@@ -1033,6 +1350,42 @@ impl ModelSubsystem {
         })
         .await
         .map_err(|error| format!("lecture des poids interrompue: {error}"))?
+    }
+
+    /// Returns the size of the local GGUF without loading its execution
+    /// context. Used by the explicit LAN staging operation.
+    pub fn worker_weight_file_size(&self, model_id: &str) -> Result<u64, String> {
+        let path = {
+            let inner = self.inner.lock().unwrap();
+            let model = inner
+                .models
+                .get(model_id)
+                .ok_or_else(|| format!("modèle inconnu: {model_id}"))?;
+            model
+                .path
+                .clone()
+                .ok_or_else(|| format!("poids du modèle {model_id} indisponibles"))?
+        };
+        let size = std::fs::metadata(&path)
+            .map_err(|error| format!("métadonnées GGUF indisponibles: {error}"))?
+            .len();
+        if size == 0 {
+            return Err("fichier GGUF vide".into());
+        }
+        Ok(size)
+    }
+
+    /// Returns the GGUF byte ranges needed by one contiguous layer segment.
+    /// The model IO cache owns the parsed index, avoiding a second full-file
+    /// read solely to calculate a LAN shard.
+    pub async fn worker_layer_weight_ranges(
+        &self,
+        model_id: &str,
+        first_layer: u32,
+        last_layer: u32,
+    ) -> Result<(u64, Vec<(u64, u64)>), String> {
+        let io = self.worker_model_io(model_id).await?;
+        Ok((io.file_len(), io.layer_data_ranges(first_layer, last_layer)?))
     }
 
     /// Importe l'état KV d'une séquence reçue via le transport LAN.
@@ -1966,6 +2319,8 @@ impl ModelSubsystem {
         }
         self.sim.lock().unwrap().unload(model_id);
         let mut g = self.inner.lock().unwrap();
+        g.layer_blocks.retain(|(id, _), _| id != model_id);
+        g.model_io.remove(model_id);
         if let Some(m) = g.models.get_mut(model_id) {
             if m.loading && m.state == ModelState::OnDisk && m.active == 0 && m.pending == 0 {
                 m.loading = false;
@@ -2045,6 +2400,8 @@ impl ModelSubsystem {
         for id in ids {
             g.remote_backends.remove(&id);
             g.models.remove(&id);
+            g.layer_blocks.retain(|(cached_id, _), _| cached_id != &id);
+            g.model_io.remove(&id);
         }
     }
 

@@ -1,6 +1,8 @@
 //! Détection matérielle Preview (NVIDIA + RAM + disque + bande passante E21).
 
-use aos_placement::{probe_host_bandwidth, BandwidthSignals};
+use aos_placement::{
+    probe_host_bandwidth, BandwidthSignals, NpuCapabilities, ThermalSnapshot, WebGpuCapabilities,
+};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
@@ -38,6 +40,15 @@ pub struct HardwareInfo {
     /// Bandwidth signals for Placement Manager (measured RAM + estimated GPU/PCIe).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bandwidth: Option<BandwidthSignals>,
+    /// Optional independently managed Akasha adapter capabilities. These are
+    /// preserved across session probes because the generic host probe cannot
+    /// discover vendor runtimes by itself.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub npu: Option<NpuCapabilities>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub webgpu: Option<WebGpuCapabilities>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thermal: Option<ThermalSnapshot>,
 }
 
 impl HardwareInfo {
@@ -59,6 +70,7 @@ impl HardwareInfo {
 }
 
 pub fn probe(home: &Path) -> HardwareInfo {
+    let previous = HardwareInfo::load(home);
     let force_cpu = std::env::var_os("AOS_CPU_ONLY").is_some()
         || std::env::var("AOS_INFERENCE")
             .map(|v| v.eq_ignore_ascii_case("cpu"))
@@ -84,6 +96,7 @@ pub fn probe(home: &Path) -> HardwareInfo {
     };
     let cpu_only = tier == HardwareTier::Cpu;
     let bandwidth = Some(probe_host_bandwidth(cpu_only));
+    let thermal = if force_cpu { None } else { probe_thermal() };
     HardwareInfo {
         gpu_name,
         vram_mib,
@@ -92,6 +105,9 @@ pub fn probe(home: &Path) -> HardwareInfo {
         driver_version,
         tier,
         bandwidth,
+        npu: previous.as_ref().and_then(|info| info.npu.clone()),
+        webgpu: previous.as_ref().and_then(|info| info.webgpu.clone()),
+        thermal,
     }
 }
 
@@ -130,6 +146,43 @@ fn probe_nvidia() -> (String, u64, String) {
     } else {
         ("unknown".into(), 0, String::new())
     }
+}
+
+fn probe_thermal() -> Option<ThermalSnapshot> {
+    #[cfg(not(target_os = "macos"))]
+    {
+        let output = Command::new("nvidia-smi")
+            .args([
+                "--query-gpu=temperature.gpu,power.draw,clocks.sm,clocks_throttle_reasons.active",
+                "--format=csv,noheader,nounits",
+            ])
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let text = String::from_utf8_lossy(&output.stdout);
+        parse_thermal_line(text.lines().next()?)
+    }
+    #[cfg(target_os = "macos")]
+    {
+        None
+    }
+}
+
+fn parse_thermal_line(line: &str) -> Option<ThermalSnapshot> {
+    let fields: Vec<_> = line.split(',').map(str::trim).collect();
+    let temperature_c = fields.first()?.parse::<f32>().ok()?;
+    let power_w = fields.get(1).and_then(|value| value.parse::<f32>().ok());
+    let throttling = fields
+        .get(3)
+        .is_some_and(|value| !value.is_empty() && *value != "0x0000000000000000");
+    Some(ThermalSnapshot {
+        temperature_c: Some(temperature_c),
+        sustained_temperature_c: None,
+        throttling,
+        power_w,
+    })
 }
 
 /// Apple Silicon unified memory — no discrete VRAM; report chip GPU name + RAM budget heuristic.
@@ -193,9 +246,7 @@ fn probe_ram_mib() -> u64 {
     }
     #[cfg(target_os = "macos")]
     {
-        let out = Command::new("sysctl")
-            .args(["-n", "hw.memsize"])
-            .output();
+        let out = Command::new("sysctl").args(["-n", "hw.memsize"]).output();
         if let Ok(out) = out {
             if out.status.success() {
                 let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
@@ -268,4 +319,52 @@ fn probe_disk_free(home: &Path) -> Result<u64, String> {
     }
     #[allow(unreachable_code)]
     Ok(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn probe_preserves_explicit_adapter_capabilities() {
+        let home =
+            std::env::temp_dir().join(format!("aos-session-hardware-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&home);
+        let original = HardwareInfo {
+            gpu_name: "test".into(),
+            vram_mib: 0,
+            ram_mib: 1024,
+            disk_free_bytes: 1 << 30,
+            driver_version: String::new(),
+            tier: HardwareTier::Cpu,
+            bandwidth: None,
+            npu: Some(NpuCapabilities {
+                name: "akasha-test-npu".into(),
+                memory_bytes: 1 << 30,
+                int8: true,
+                experimental: true,
+                supported_operations: vec!["gemm".into()],
+                supported_quantizations: vec![aos_placement::Quantization::Q8],
+                runtime_endpoint: Some("tcp://127.0.0.1:38471".into()),
+            }),
+            webgpu: None,
+            thermal: None,
+        };
+        original.save(&home).unwrap();
+        let probed = probe(&home);
+        assert_eq!(probed.npu, original.npu);
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn parses_nvidia_thermal_line_and_throttle_reason() {
+        let cool = parse_thermal_line("52, 118.4, 210, 0x0000000000000000").unwrap();
+        assert_eq!(cool.temperature_c, Some(52.0));
+        assert_eq!(cool.power_w, Some(118.4));
+        assert!(!cool.throttling);
+
+        let hot = parse_thermal_line("87, 220.0, 300, 0x0000000000000001").unwrap();
+        assert!(hot.throttling);
+        assert!(parse_thermal_line("not-a-number, 1, 2, 0").is_none());
+    }
 }

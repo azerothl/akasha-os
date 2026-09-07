@@ -226,16 +226,21 @@ impl BackendRegistry {
                     latency_factor: 1.35,
                     maturity: 0,
                     experimental: true,
-                    // The coordinator is available, but no network transport
-                    // is executable until the authenticated adapter is wired.
-                    executable: false,
+                    // The Akasha RPC layer is executable; native weight
+                    // staging remains an explicit capability of the worker.
+                    executable: crate::adapters::probe(BackendKind::Lan, hw, true).executable(),
                 });
             }
             if hw.npu.is_some() {
+                let quantizations = hw
+                    .npu
+                    .as_ref()
+                    .and_then(|caps| (!caps.supported_quantizations.is_empty()).then(|| caps.supported_quantizations.clone()))
+                    .unwrap_or_else(|| vec![Quantization::Q8, Quantization::Q4]);
                 backends.push(BackendDescriptor {
                     kind: BackendKind::Npu,
                     name: "npu/adapter".into(),
-                    quantizations: vec![Quantization::Q8, Quantization::Q4],
+                    quantizations,
                     gemm: true,
                     gemv: true,
                     batching: false,
@@ -248,10 +253,15 @@ impl BackendRegistry {
                 });
             }
             if hw.webgpu.is_some() {
+                let quantizations = hw
+                    .webgpu
+                    .as_ref()
+                    .and_then(|caps| (!caps.supported_quantizations.is_empty()).then(|| caps.supported_quantizations.clone()))
+                    .unwrap_or_else(|| vec![Quantization::F16, Quantization::Q4]);
                 backends.push(BackendDescriptor {
                     kind: BackendKind::WebGpu,
                     name: "webgpu/adapter".into(),
-                    quantizations: vec![Quantization::F16, Quantization::Q4],
+                    quantizations,
                     gemm: true,
                     gemv: true,
                     batching: true,
@@ -509,6 +519,9 @@ mod tests {
             memory_bytes: 1,
             int8: true,
             experimental: true,
+            supported_operations: vec!["gemm".into(), "gemv".into()],
+            supported_quantizations: vec![Quantization::Q8, Quantization::Q4],
+            runtime_endpoint: None,
         });
         assert!(AdaptivePlanner::new(hw.clone(), PlannerOptions::default())
             .registry
@@ -522,6 +535,68 @@ mod tests {
             .registry
             .get(BackendKind::Npu)
             .is_some());
+    }
+
+    #[test]
+    fn accelerator_registry_preserves_declared_formats() {
+        let mut hw = HardwareProfile::cpu_only_laptop();
+        hw.webgpu = Some(crate::WebGpuCapabilities {
+            adapter: "test-webgpu".into(),
+            memory_bytes: 1024,
+            shader_f16: true,
+            experimental: true,
+            supported_operations: vec!["gemm".into()],
+            supported_quantizations: vec![Quantization::F16],
+            runtime_endpoint: None,
+        });
+        let planner = AdaptivePlanner::new(
+            hw,
+            PlannerOptions {
+                allow_experimental: true,
+                ..PlannerOptions::default()
+            },
+        );
+        assert_eq!(
+            planner
+                .registry
+                .get(BackendKind::WebGpu)
+                .unwrap()
+                .quantizations,
+            vec![Quantization::F16]
+        );
+    }
+
+    #[test]
+    fn paired_lan_adapter_can_be_selected_only_with_the_experimental_gate() {
+        let mut hw = HardwareProfile::cpu_only_laptop();
+        hw.remote_nodes = 1;
+        let model = model_3b();
+        let disabled = AdaptivePlanner::new(hw.clone(), PlannerOptions::default()).select(
+            &model,
+            PlacementProfile::Balanced,
+            WorkloadKind::Chat,
+            128,
+            Some(BackendKind::Lan),
+        );
+        assert_eq!(disabled.backend, BackendKind::Cpu);
+
+        let enabled = AdaptivePlanner::new(
+            hw,
+            PlannerOptions {
+                allow_experimental: true,
+                ..Default::default()
+            },
+        )
+        .select(
+            &model,
+            PlacementProfile::Balanced,
+            WorkloadKind::Chat,
+            128,
+            Some(BackendKind::Lan),
+        );
+        assert_eq!(enabled.backend, BackendKind::Lan);
+        assert!(enabled.experimental);
+        assert!(enabled.fallback.contains(&BackendKind::Cpu));
     }
 
     #[test]

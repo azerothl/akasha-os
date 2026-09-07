@@ -15,15 +15,21 @@
 //! `adr/0002-model-placement.md`.
 
 pub mod adaptive;
+pub mod adapter_rpc;
+pub mod adapters;
 pub mod bandwidth;
 pub mod benchmark;
 pub mod cost;
 pub mod discovery;
 pub mod distributed;
 pub mod hardware;
+pub mod gguf;
 pub mod manager;
 pub mod model;
 pub mod layer_rpc;
+pub mod layer_pipeline;
+pub mod low_bit;
+pub mod model_io;
 pub mod plan;
 pub mod sim;
 pub mod tensor_wire;
@@ -33,11 +39,21 @@ pub use adaptive::{
     InferencePlanDiagnostic, PlannerOptions, Quantization, SpeculativeStrategy, ThermalAction,
     ThermalController, ThermalPolicy, WorkloadKind,
 };
+pub use adapters::{
+    probe as probe_adapter, validate_handshake, AdapterHandshake, AdapterState, AdapterStatus,
+    ADAPTER_PROTOCOL_VERSION,
+};
+pub use adapter_rpc::{
+    AdapterExecutionPhase, AdapterRpcClient, AdapterRpcMessage, ADAPTER_RPC_MAX_FRAME_BYTES,
+    ADAPTER_RPC_MAX_TENSOR_BYTES,
+};
 pub use bandwidth::{
     probe_host_bandwidth, probe_ram_read_bw, BandwidthSignal, BandwidthSignals, BandwidthSource,
 };
 pub use benchmark::{
-    reference_scenarios, run_reference_matrix, run_scenario, BenchmarkResult, BenchmarkScenario,
+    extended_scenarios, reference_scenarios, run_extended_matrix, run_layer_pipeline_benchmark,
+    run_reference_matrix, run_scenario, BenchmarkResult, BenchmarkScenario,
+    LayerPipelineBenchmarkResult,
 };
 pub use cost::{Bound, CostModel, Estimate};
 pub use discovery::{
@@ -54,15 +70,22 @@ pub use hardware::{
     CpuIsa, CpuTopology, GpuBackend, GpuDevice, HardwareProfile, NpuCapabilities, ThermalSnapshot,
     WebGpuCapabilities,
 };
+pub use gguf::{GgufMetadataValue, GgufModel, GgufTensorInfo, GgufTensorType};
 pub use manager::{Budgets, PlacementError, PlacementManager};
 pub use layer_rpc::{
-    LayerRpcExecutor, LayerRpcReceiver, LayerRpcRequest, LayerRpcResult,
-    LAYER_RPC_PAGE_BYTES, LAYER_RPC_PROTOCOL_VERSION,
+    LayerRpcExecutor, LayerRpcReceiver, LayerRpcRequest, LayerRpcResult, LinearLayerExecutor,
+    TransformerBlockExecutor, LAYER_RPC_PAGE_BYTES, LAYER_RPC_PROTOCOL_VERSION,
 };
+pub use layer_pipeline::{
+    partition_layer_stages, LayerPipelineExecutor, LayerPipelineMetrics, LayerPipelinePlan,
+    LayerStage,
+};
+pub use low_bit::{KernelPhase, LowBitKernel, LowBitKernelRegistry, LowBitLayout};
+pub use model_io::CpuGgufModelIo;
 pub use model::{KvCacheType, ModelDesc, PrivacyClass, QuantizationMetadata};
 pub use plan::{PlacementPlan, PlacementProfile, Priority, Shard, ShardKind, Tier};
 pub use sim::{PlacedModel, PlacementSim, PressureReport, ReprofileReport, RunState, SimEvent};
-pub use tensor_wire::{CpuLayerExecutor, F32Tensor, TensorDType};
+pub use tensor_wire::{CpuKvCache, CpuLayerExecutor, CpuTransformerBlock, F32Tensor, TensorDType};
 
 /// Modèles de test partagés entre modules.
 #[cfg(test)]

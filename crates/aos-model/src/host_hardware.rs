@@ -1,6 +1,8 @@
 //! Load `var/run/hardware.json` written by aos-session first-run probe.
 
-use aos_placement::{BandwidthSignals, HardwareProfile};
+use aos_placement::{
+    BandwidthSignals, HardwareProfile, NpuCapabilities, ThermalSnapshot, WebGpuCapabilities,
+};
 use serde::Deserialize;
 use std::path::Path;
 
@@ -16,6 +18,14 @@ struct HardwareJson {
     disk_free_bytes: u64,
     #[serde(default)]
     bandwidth: Option<BandwidthSignals>,
+    /// Optional capability probes written by newer session implementations.
+    /// Keeping these fields optional preserves compatibility with old files.
+    #[serde(default)]
+    npu: Option<NpuCapabilities>,
+    #[serde(default)]
+    webgpu: Option<WebGpuCapabilities>,
+    #[serde(default)]
+    thermal: Option<ThermalSnapshot>,
 }
 
 /// Build a [`HardwareProfile`] from session probe output when present.
@@ -45,27 +55,27 @@ pub fn hardware_profile_from_json(
         .map(|h| format!("host-{}", h.gpu_name))
         .unwrap_or_else(|| "host-p1".into());
 
-    if let Some(bw) = parsed.as_ref().and_then(|h| h.bandwidth.clone()) {
-        return HardwareProfile::from_host_caps(
-            name,
+    let mut hw = if let Some(bw) = parsed.as_ref().and_then(|h| h.bandwidth.clone()) {
+        HardwareProfile::from_host_caps(
+            name.clone(),
             has_gpu,
             vram_total_bytes,
             ram_total_bytes,
             disk_total,
             os_reserve_vram,
             os_reserve_ram,
-            gpus,
+            gpus.clone(),
             &bw,
-        );
-    }
-
-    // Legacy hardware.json without bandwidth block: reference defaults + RAM from probe file if any.
-    let mut hw = if has_gpu && n_gpus > 1 {
-        HardwareProfile::dual_gpu_8g()
-    } else if has_gpu {
-        HardwareProfile::reference_v1()
+        )
     } else {
-        HardwareProfile::cpu_only_laptop()
+        // Legacy hardware.json without bandwidth block: reference defaults + RAM from probe file if any.
+        if has_gpu && n_gpus > 1 {
+            HardwareProfile::dual_gpu_8g()
+        } else if has_gpu {
+            HardwareProfile::reference_v1()
+        } else {
+            HardwareProfile::cpu_only_laptop()
+        }
     };
     hw.name = name;
     hw.vram_total = vram_total_bytes;
@@ -75,6 +85,13 @@ pub fn hardware_profile_from_json(
     hw.os_reserve_ram = os_reserve_ram;
     hw.has_gpu = has_gpu;
     hw.gpus = gpus;
+    if let Some(probe) = parsed.as_ref() {
+        hw.npu = probe.npu.clone();
+        hw.webgpu = probe.webgpu.clone();
+        if let Some(thermal) = probe.thermal {
+            hw.thermal = thermal;
+        }
+    }
     hw
 }
 
@@ -130,6 +147,41 @@ mod tests {
         assert!((hw.gpu_mem_bw - 736e9).abs() < 1e9);
         assert!((hw.host_to_device_bw - 25e9).abs() < 1e9);
         assert_eq!(hw.name, "host-NVIDIA GeForce RTX 4080 SUPER");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn loads_optional_accelerator_capabilities_without_breaking_legacy_profiles() {
+        let base = std::env::temp_dir().join("aos-host-accelerators-test");
+        let run = base.join("var/run");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&run).unwrap();
+        let json = r#"{
+  "gpu_name": "CPU-only",
+  "disk_free_bytes": 1000000000,
+  "npu": {"name":"test-npu","memory_bytes":268435456,"int8":true,"experimental":true,"supported_operations":["gemm"],"supported_quantizations":["q8"],"runtime_endpoint":"akasha://npu-test"},
+  "webgpu": {"adapter":"test-webgpu","memory_bytes":536870912,"shader_f16":true,"experimental":true,"supported_operations":["gemm"],"supported_quantizations":["f16"],"runtime_endpoint":"akasha://webgpu-test"},
+  "thermal": {"temperature_c":52.0,"sustained_temperature_c":50.0,"throttling":false,"power_w":120.0}
+}"#;
+        fs::write(run.join("hardware.json"), json).unwrap();
+        let hw = hardware_profile_from_json(
+            &base,
+            false,
+            0,
+            8 << 30,
+            0,
+            1 << 30,
+            1,
+            vec![],
+        );
+        assert_eq!(hw.npu.as_ref().map(|v| v.name.as_str()), Some("test-npu"));
+        assert_eq!(hw.webgpu.as_ref().map(|v| v.adapter.as_str()), Some("test-webgpu"));
+        assert_eq!(
+            hw.npu.as_ref().and_then(|v| v.runtime_endpoint.as_deref()),
+            Some("akasha://npu-test")
+        );
+        assert!(!hw.has_gpu);
+        assert_eq!(hw.thermal.temperature_c, Some(52.0));
         let _ = fs::remove_dir_all(&base);
     }
 }

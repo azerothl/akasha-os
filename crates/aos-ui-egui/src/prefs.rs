@@ -143,6 +143,10 @@ pub struct Preferences {
     /// contacts a node by itself.
     #[serde(default)]
     pub lan_cluster: bool,
+    /// Explicit consent before a model file can leave this machine for LAN
+    /// staging. This is intentionally independent from enabling the cluster.
+    #[serde(default)]
+    pub lan_allow_sensitive_data: bool,
     #[serde(default = "default_lan_node_id")]
     pub lan_node_id: String,
     #[serde(default = "default_lan_listen_address")]
@@ -357,6 +361,7 @@ impl Default for Preferences {
             inference_mode: default_inference(),
             adaptive_planner: default_adaptive_planner(),
             lan_cluster: false,
+            lan_allow_sensitive_data: false,
             lan_node_id: default_lan_node_id(),
             lan_listen_address: default_lan_listen_address(),
             lan_session_key_secret: default_lan_session_secret(),
@@ -552,6 +557,7 @@ mod tests {
     #[test]
     fn new_layout_fields_migrate_from_legacy_json() {        let raw = r#"{"language":"en","theme":"dark","ui_scale_percent":100}"#;
         let prefs: Preferences = serde_json::from_str(raw).expect("legacy preferences");
+        assert!(!prefs.lan_allow_sensitive_data);
         assert_eq!(prefs.ui_density, UiDensity::Comfortable);
         assert_eq!(prefs.ui_layout.context_panel_width, 320.0);
         assert!(!prefs.ui_layout.activity_panel_open);

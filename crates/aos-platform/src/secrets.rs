@@ -666,6 +666,11 @@ pub fn unseal_with_master(master: &[u8; 32], blob: &[u8]) -> Result<Vec<u8>, Sec
 
 #[cfg(all(windows, not(test)))]
 fn protect_master(plain: &[u8]) -> Result<Vec<u8>, SecretError> {
+    // Explicit file-backend override is used by headless tests and portable
+    // deployments where the user has opted out of DPAPI/keyring storage.
+    if force_file_backend() {
+        return Ok(plain.to_vec());
+    }
     use std::ptr;
     use windows::core::PCWSTR;
     use windows::Win32::Foundation::{LocalFree, HLOCAL};

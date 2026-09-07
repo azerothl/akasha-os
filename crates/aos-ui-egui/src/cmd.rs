@@ -334,7 +334,17 @@ pub(crate) enum Cmd {
         model_id: String,
         kv_tokens: u32,
     },
+    ModelAdapterStatus {
+        backend: String,
+    },
     ModelClusterNodes,
+    /// Lance un smoke test explicite du pipeline GGUF par couches.
+    ModelClusterPipelineTest {
+        model_id: String,
+        total_layers: u32,
+        session_key_secret: String,
+        allow_sensitive_data: bool,
+    },
     ModelClusterDiscover {
         node_id: String,
         display_name: String,
@@ -737,6 +747,7 @@ pub(crate) enum Evt {
         model_id: String,
         error: String,
     },
+    ModelAdapterStatus(aos_proto::ModelAdapterStatusResponse),
     ModelClusterNodes(aos_proto::LanClusterNodesResponse),
     ModelClusterLayerPipelineStatus(aos_proto::LanClusterLayerPipelineStatusResponse),
     ModelClusterRefresh,

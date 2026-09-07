@@ -5,23 +5,31 @@
 use aos_ipc::{BusClient, BusService, StreamHandle};
 use aos_model::{media, providers, ModelSubsystem, ModeldConfig};
 use aos_placement::{
-    BackendKind, DistributedWork, InferencePlanDiagnostic, LanChatMessage, LanCluster,
+    AdapterExecutionPhase, BackendKind, DistributedWork, InferencePlanDiagnostic,
+    LanActivationAssembly, LanChatMessage,
+    LanCluster,
     LanDiscoveryAdvertisement, LanDiscoverySocket, LanNode, LanPairingRegistry, LanSessionKey,
     LanShardManifest, LanTcpListener, LanTcpTransport, LanWeightRange, LanWorkMessage, LanWorkPlan,
-    LanWorkerRegistry, NodeTrust, PlacementProfile, ThermalPolicy,
+    LanWorkerRegistry, LayerPipelinePlan, LayerStage, NodeTrust, PlacementProfile, ThermalPolicy,
 };
 use aos_proto::{
     CancelRequest, InferRequest, LanClusterAssignment, LanClusterDiscoverRequest,
     LanClusterDispatchRequest, LanClusterDispatchResponse, LanClusterInferChatRequest,
     LanClusterInferChatResponse, LanClusterInferTokensRequest, LanClusterInferTokensResponse,
     LanClusterJobRequest, LanClusterKvTransferRequest, LanClusterKvTransferResponse,
+    LanClusterLayerInferRequest, LanClusterLayerInferResponse, LanClusterLayerStage,
+    LanClusterLayerPipelineRequest, LanClusterLayerPipelineResponse,
     LanClusterLayerPipelineStatusResponse, LanClusterNode, LanClusterNodeRequest,
     LanClusterNodesResponse, LanClusterPairRequest, LanClusterPlanRequest, LanClusterPlanResponse,
+    LanClusterStageLocalModelRequest, LanClusterStageLocalModelResponse,
     LanClusterWeightTransferRequest, LanClusterWeightTransferResponse, LoadRequest,
     MediaAudioGenerateRequest, MediaImageGenerateRequest, MediaImageUpscaleRequest, MigrateRequest,
-    ModelIdRequest, ModelPlanDiagnostic, ModelPlanRequest, TokenEvent, UnloadRequest,
+    ModelAdapterExecuteRequest, ModelAdapterExecuteResponse, ModelAdapterStatusRequest,
+    ModelAdapterStatusResponse, ModelIdRequest, ModelPlanDiagnostic, ModelPlanRequest, TokenEvent,
+    UnloadRequest,
 };
 use aos_registry::ModelRegistry;
+use std::io::{Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -54,6 +62,16 @@ fn backend_name(backend: BackendKind) -> &'static str {
     }
 }
 
+fn endpoint_is_loopback(endpoint: &str) -> bool {
+    let address = endpoint
+        .strip_prefix("tcp://")
+        .or_else(|| endpoint.strip_prefix("akasha://"))
+        .unwrap_or_default();
+    address.starts_with("127.0.0.1:")
+        || address.starts_with("localhost:")
+        || address.starts_with("[::1]:")
+}
+
 fn thermal_name(policy: ThermalPolicy) -> &'static str {
     match policy {
         ThermalPolicy::Performance => "performance",
@@ -61,6 +79,102 @@ fn thermal_name(policy: ThermalPolicy) -> &'static str {
         ThermalPolicy::Quiet => "quiet",
         ThermalPolicy::AlwaysOn => "always-on",
     }
+}
+
+fn last_token_activation(input: &[u8]) -> Result<Vec<u8>, String> {
+    let tensor = aos_placement::F32Tensor::decode(input)?;
+    let hidden = tensor
+        .shape
+        .first()
+        .copied()
+        .ok_or("activation finale vide")? as usize;
+    let tokens = tensor
+        .shape
+        .get(1)
+        .copied()
+        .ok_or("activation finale non matricielle")? as usize;
+    if tokens == 0 {
+        return Err("activation finale sans token".into());
+    }
+    let values = (0..hidden)
+        .map(|row| tensor.values[row * tokens + tokens - 1])
+        .collect();
+    aos_placement::F32Tensor::new(vec![hidden as u32, 1], values).map(|last| last.encode())
+}
+
+fn greedy_token(logits: &[f32]) -> Result<u32, String> {
+    let (index, _) = logits
+        .iter()
+        .enumerate()
+        .filter(|(_, value)| value.is_finite())
+        .max_by(|(_, left), (_, right)| left.total_cmp(right))
+        .ok_or("logits invalides ou vides")?;
+    u32::try_from(index).map_err(|_| "index de token trop grand".into())
+}
+
+fn sample_token(
+    logits: &[f32],
+    temperature: f32,
+    top_p: f32,
+    state: &mut u64,
+) -> Result<u32, String> {
+    if !temperature.is_finite()
+        || !top_p.is_finite()
+        || !(0.0..=5.0).contains(&temperature)
+        || top_p <= 0.0
+        || top_p > 1.0
+    {
+        return Err("paramètres de sampling invalides".into());
+    }
+    if temperature == 0.0 {
+        return greedy_token(logits);
+    }
+    let max = logits
+        .iter()
+        .copied()
+        .filter(|value| value.is_finite())
+        .max_by(f32::total_cmp)
+        .ok_or("logits invalides ou vides")?;
+    let mut probabilities: Vec<(usize, f32)> = logits
+        .iter()
+        .enumerate()
+        .filter_map(|(index, value)| {
+            value
+                .is_finite()
+                .then_some((index, ((*value - max) / temperature).exp()))
+        })
+        .collect();
+    let total: f32 = probabilities.iter().map(|(_, value)| *value).sum();
+    if !total.is_finite() || total <= 0.0 {
+        return greedy_token(logits);
+    }
+    for (_, probability) in &mut probabilities {
+        *probability /= total;
+    }
+    probabilities.sort_by(|left, right| right.1.total_cmp(&left.1));
+    let mut cumulative = 0.0;
+    let mut cutoff = probabilities.len();
+    for (index, (_, probability)) in probabilities.iter().enumerate() {
+        cumulative += probability;
+        if cumulative >= top_p {
+            cutoff = index + 1;
+            break;
+        }
+    }
+    let draw = {
+        *state = state
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1);
+        ((*state >> 11) as f64 / (1u64 << 53) as f64) as f32
+    };
+    let mut remaining = draw;
+    for (index, probability) in probabilities.into_iter().take(cutoff) {
+        if remaining <= probability {
+            return u32::try_from(index).map_err(|_| "index de token trop grand".into());
+        }
+        remaining -= probability;
+    }
+    greedy_token(logits)
 }
 
 fn plan_diagnostic_row(row: InferencePlanDiagnostic) -> ModelPlanDiagnostic {
@@ -298,6 +412,7 @@ async fn expect_lan_ack(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn send_lan_token_inference(
     local_node_id: &str,
     registry: &LanPairingRegistry,
@@ -374,6 +489,7 @@ async fn send_lan_token_inference(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn send_lan_chat_inference(
     local_node_id: &str,
     registry: &LanPairingRegistry,
@@ -473,6 +589,7 @@ struct WeightPageAssembly {
     total_model_bytes: u64,
     next_page: u32,
     data: Vec<u8>,
+    required_ranges: Vec<LanWeightRange>,
 }
 
 fn lan_artifact_component(value: &str) -> String {
@@ -490,6 +607,7 @@ fn lan_artifact_component(value: &str) -> String {
     output
 }
 
+#[allow(clippy::too_many_arguments)]
 fn stage_lan_weight_shard(
     staging_root: &Path,
     work_id: &str,
@@ -497,6 +615,7 @@ fn stage_lan_weight_shard(
     shard_id: u32,
     offset: u64,
     total_model_bytes: u64,
+    required_ranges: Vec<LanWeightRange>,
     data: &[u8],
 ) -> Result<(), String> {
     // Worker connections run on separate blocking tasks. Serialize publication
@@ -529,6 +648,13 @@ fn stage_lan_weight_shard(
     };
     if coverage.model_id != model_id || coverage.total_model_bytes != total_model_bytes {
         return Err("manifeste poids LAN incompatible avec le modèle".into());
+    }
+    if !required_ranges.is_empty() {
+        if coverage.required_ranges.is_empty() {
+            coverage.set_required_ranges(required_ranges)?;
+        } else if coverage.required_ranges != required_ranges {
+            return Err("exigences de shard LAN incompatibles".into());
+        }
     }
     coverage.record_range(LanWeightRange {
         shard_id,
@@ -582,6 +708,76 @@ fn stage_lan_weight_shard(
     Ok(())
 }
 
+/// Reassemble un GGUF only after the persisted coverage manifest is complete.
+/// Every fragment is addressed by its manifest range; no directory listing or
+/// user-controlled path is used to select bytes.
+fn materialize_staged_lan_model(
+    staging_root: &Path,
+    work_id: &str,
+    model_id: &str,
+) -> Result<Option<PathBuf>, String> {
+    let directory = staging_root
+        .join("lan-shards")
+        .join(lan_artifact_component(work_id));
+    let manifest_path = directory.join("manifest.json");
+    if !manifest_path.is_file() {
+        return Ok(None);
+    }
+    let manifest: LanShardManifest = serde_json::from_slice(
+        &std::fs::read(&manifest_path)
+            .map_err(|error| format!("lecture du manifeste staging impossible: {error}"))?,
+    )
+    .map_err(|error| format!("manifeste staging LAN invalide: {error}"))?;
+    if manifest.model_id != model_id {
+        return Err("manifeste staging LAN associé à un autre modèle".into());
+    }
+    if !manifest.is_complete() {
+        return Ok(None);
+    }
+    let output = directory.join("model.gguf");
+    if output.is_file()
+        && std::fs::metadata(&output)
+            .map_err(|error| format!("lecture du GGUF staging impossible: {error}"))?
+            .len()
+            == manifest.total_model_bytes
+    {
+        return Ok(Some(output));
+    }
+    let temporary = directory.join("model.gguf.part");
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .read(true)
+        .write(true)
+        .open(&temporary)
+        .map_err(|error| format!("création du GGUF staging impossible: {error}"))?;
+    file.set_len(manifest.total_model_bytes)
+        .map_err(|error| format!("réservation du GGUF staging impossible: {error}"))?;
+    let mut ranges = manifest.ranges.clone();
+    ranges.sort_by_key(|range| range.offset);
+    for range in ranges {
+        let fragment = directory.join(format!(
+            "shard-{:05}-offset-{}.bin",
+            range.shard_id, range.offset
+        ));
+        let data = std::fs::read(&fragment)
+            .map_err(|error| format!("fragment GGUF staging absent: {error}"))?;
+        if data.len() as u64 != range.length {
+            return Err("fragment GGUF staging de taille inattendue".into());
+        }
+        file.seek(SeekFrom::Start(range.offset))
+            .map_err(|error| format!("positionnement GGUF staging impossible: {error}"))?;
+        file.write_all(&data)
+            .map_err(|error| format!("écriture GGUF staging impossible: {error}"))?;
+    }
+    file.sync_all()
+        .map_err(|error| format!("synchronisation GGUF staging impossible: {error}"))?;
+    std::fs::rename(&temporary, &output)
+        .map_err(|error| format!("publication GGUF staging impossible: {error}"))?;
+    Ok(Some(output))
+}
+
+#[allow(clippy::too_many_arguments)]
 async fn send_lan_kv_transfer(
     local_node_id: &str,
     registry: &LanPairingRegistry,
@@ -709,6 +905,7 @@ async fn send_lan_kv_transfer(
     Ok((pages.len() as u32, total_bytes as u64))
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn send_lan_weight_shard(
     local_node_id: &str,
     registry: &LanPairingRegistry,
@@ -853,6 +1050,7 @@ async fn send_lan_weight_shard(
                 offset,
                 length,
                 total_model_bytes,
+                required_ranges: Vec::new(),
             },
             work,
         )
@@ -863,6 +1061,337 @@ async fn send_lan_weight_shard(
     }
     expect_lan_ack(&mut target_transport, work, "weight-shard").await?;
     Ok((pages.len() as u32, received_bytes))
+}
+
+/// Transfer the coordinator-local GGUF, either completely or as the bounded
+/// sparse ranges required by one layer segment, to a paired worker. The
+/// worker's lazy Assign path lets this happen before any llama.cpp context is
+/// created.
+async fn resolve_stage_weight_ranges(
+    subsystem: &ModelSubsystem,
+    model_id: &str,
+    shard_id: u32,
+    explicit: &[aos_proto::LanClusterWeightSegment],
+    first_layer: Option<u32>,
+    last_layer: Option<u32>,
+) -> Result<Vec<LanWeightRange>, String> {
+    if !explicit.is_empty() {
+        return Ok(explicit
+            .iter()
+            .map(|range| LanWeightRange {
+                shard_id: range.shard_id,
+                offset: range.offset,
+                length: range.length,
+            })
+            .collect());
+    }
+    let (total, ranges) = match (first_layer, last_layer) {
+        (Some(first), Some(last)) => {
+            subsystem.worker_layer_weight_ranges(model_id, first, last).await?
+        }
+        (None, None) => return Ok(Vec::new()),
+        _ => return Err("bornes de couches GGUF incomplètes".into()),
+    };
+    if total == 0 || ranges.is_empty() {
+        return Err("aucune plage GGUF pour le segment demandé".into());
+    }
+    let mut bounded = Vec::new();
+    for (offset, length) in ranges {
+        let mut cursor = offset;
+        let end = offset
+            .checked_add(length)
+            .ok_or("plage GGUF débordante")?;
+        while cursor < end {
+            let chunk = (end - cursor).min(LAN_KV_MAX_BYTES as u64);
+            bounded.push(LanWeightRange {
+                shard_id,
+                offset: cursor,
+                length: chunk,
+            });
+            cursor += chunk;
+        }
+    }
+    Ok(bounded)
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn send_lan_local_weight_model(
+    local_node_id: &str,
+    registry: &LanPairingRegistry,
+    work: &DistributedWork,
+    model: &ModelSubsystem,
+    target_node_id: &str,
+    shard_id: u32,
+    request_id: &str,
+    required_ranges: Vec<LanWeightRange>,
+    key: LanSessionKey,
+) -> Result<(u32, u64), String> {
+    let total = model.worker_weight_file_size(&work.model_id)?;
+    let target = registry
+        .get(target_node_id)
+        .ok_or("nœud cible poids local LAN inconnu")?;
+    let assignment = aos_placement::LanShardAssignment {
+        node_id: target_node_id.to_string(),
+        shard_ids: vec![shard_id],
+        kv_tokens: 0,
+        encrypted_transport: work.encrypted_transport,
+    };
+    let mut transport = LanTcpTransport::connect_authenticated(
+        local_node_id,
+        target_node_id,
+        &target.address,
+        registry,
+        work,
+        key,
+    )
+    .await?;
+    transport
+        .send_message(
+            &LanWorkMessage::Assign {
+                work_id: work.work_id.clone(),
+                model_id: work.model_id.clone(),
+                assignment,
+                allow_sensitive_data: work.allow_sensitive_data,
+            },
+            work,
+        )
+        .await?;
+    expect_lan_ack(&mut transport, work, "assign").await?;
+
+    let sparse_transfer = !required_ranges.is_empty();
+    let transfer_ranges = if !sparse_transfer {
+        vec![LanWeightRange {
+            shard_id,
+            offset: 0,
+            length: total,
+        }]
+    } else {
+        let mut ranges = required_ranges;
+        ranges.sort_by_key(|range| range.offset);
+        if ranges.iter().any(|range| {
+            range.shard_id != shard_id
+                || range.length == 0
+                || range.offset.saturating_add(range.length) > total
+        }) {
+            return Err("plages GGUF requises incompatibles avec le shard LAN".into());
+        }
+        ranges
+    };
+    let mut page_count = 0u32;
+    let mut transferred_bytes = 0u64;
+    for range in &transfer_ranges {
+        let mut offset = range.offset;
+        let range_end = range.offset + range.length;
+        while offset < range_end {
+            let length = (range_end - offset).min(LAN_KV_MAX_BYTES as u64);
+            let (reported_total, data) = model
+                .worker_read_weight_range(&work.model_id, offset, length)
+                .await?;
+            if reported_total != total || data.len() as u64 != length {
+                return Err("taille GGUF locale incohérente pendant le staging".into());
+            }
+            let chunk_request = format!("{request_id}-{offset}");
+            transport
+                .send_message(
+                    &LanWorkMessage::WeightBegin {
+                        work_id: work.work_id.clone(),
+                        request_id: chunk_request.clone(),
+                        shard_id,
+                        offset,
+                        length,
+                        total_model_bytes: total,
+                        required_ranges: if !sparse_transfer {
+                            Vec::new()
+                        } else {
+                            // The worker records this once and checks every
+                            // subsequent fragment against the same contract.
+                            transfer_ranges.clone()
+                        },
+                    },
+                    work,
+                )
+                .await?;
+            expect_lan_ack(&mut transport, work, "weight-begin").await?;
+            for (index, page) in data.chunks(aos_placement::LAYER_RPC_PAGE_BYTES).enumerate() {
+                let page_offset = offset + (index * aos_placement::LAYER_RPC_PAGE_BYTES) as u64;
+                transport
+                    .send_message(
+                        &LanWorkMessage::WeightPage {
+                            work_id: work.work_id.clone(),
+                            request_id: chunk_request.clone(),
+                            shard_id,
+                            page_index: index as u32,
+                            offset: page_offset,
+                            data: page.to_vec(),
+                            final_page: page_offset + page.len() as u64 == offset + length,
+                        },
+                        work,
+                    )
+                    .await?;
+                page_count = page_count.saturating_add(1);
+            }
+            expect_lan_ack(&mut transport, work, "weight-shard").await?;
+            transferred_bytes = transferred_bytes.saturating_add(length);
+            offset += length;
+        }
+    }
+    Ok((page_count, transferred_bytes))
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn send_lan_layer_activation(
+    local_node_id: &str,
+    registry: &LanPairingRegistry,
+    work: &DistributedWork,
+    assignment: &aos_placement::LanShardAssignment,
+    request_id: String,
+    shard_id: u32,
+    layer_index: u32,
+    sequence: u32,
+    position_start: u32,
+    activation: Vec<u8>,
+    key: LanSessionKey,
+) -> Result<Vec<u8>, String> {
+    if activation.is_empty() || activation.len() > 64 * 1024 * 1024 {
+        return Err("activation couche LAN hors limite".into());
+    }
+    if !assignment.shard_ids.contains(&shard_id) {
+        return Err("shard absent de l'assignment LAN".into());
+    }
+    let node = registry
+        .get(&assignment.node_id)
+        .ok_or("nœud cible couche LAN inconnu")?;
+    let mut transport = LanTcpTransport::connect_authenticated(
+        local_node_id,
+        &assignment.node_id,
+        &node.address,
+        registry,
+        work,
+        key,
+    )
+    .await?;
+    transport
+        .send_message(
+            &LanWorkMessage::Assign {
+                work_id: work.work_id.clone(),
+                model_id: work.model_id.clone(),
+                assignment: assignment.clone(),
+                allow_sensitive_data: work.allow_sensitive_data,
+            },
+            work,
+        )
+        .await?;
+    expect_lan_ack(&mut transport, work, "assign").await?;
+    let total_bytes = activation.len() as u64;
+    for (page_index, page) in activation
+        .chunks(aos_placement::LAYER_RPC_PAGE_BYTES)
+        .enumerate()
+    {
+        transport
+            .send_message(
+                &LanWorkMessage::LayerActivationPage {
+                    work_id: work.work_id.clone(),
+                    request_id: request_id.clone(),
+                    shard_id,
+                    layer_index,
+                    sequence,
+                    position_start,
+                    page_index: page_index as u32,
+                    total_bytes,
+                    data: page.to_vec(),
+                    final_page: (page_index + 1) * aos_placement::LAYER_RPC_PAGE_BYTES
+                        >= activation.len(),
+                },
+                work,
+            )
+            .await?;
+    }
+    let mut output: Option<LanActivationAssembly> = None;
+    loop {
+        match transport.receive_message(work).await? {
+            LanWorkMessage::LayerActivationResult {
+                request_id: received_request,
+                shard_id: received_shard,
+                layer_index: received_layer,
+                sequence: received_sequence,
+                page_index,
+                total_bytes,
+                data,
+                final_page,
+                ..
+            } if received_request == request_id
+                && received_shard == shard_id
+                && received_layer == layer_index
+                && received_sequence == sequence =>
+            {
+                let assembly = if let Some(assembly) = output.as_mut() {
+                    assembly
+                } else {
+                    output = Some(LanActivationAssembly::new(
+                        request_id.clone(),
+                        shard_id,
+                        layer_index,
+                        sequence,
+                        total_bytes,
+                    )?);
+                    output.as_mut().unwrap()
+                };
+                if let Some(bytes) = assembly.push_page(page_index, &data, final_page)? {
+                    return Ok(bytes);
+                }
+            }
+            LanWorkMessage::Nack { reason, .. } => return Err(reason),
+            other => return Err(format!("réponse couche LAN inattendue: {other:?}")),
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn send_lan_layer_pipeline(
+    local_node_id: &str,
+    registry: &LanPairingRegistry,
+    work: &DistributedWork,
+    assignments: &[(LanClusterLayerStage, aos_placement::LanShardAssignment)],
+    request_id: String,
+    sequence: u32,
+    position_start: u32,
+    mut activation: Vec<u8>,
+    key: LanSessionKey,
+) -> Result<(Vec<u8>, u32, u32), String> {
+    if assignments.is_empty() || assignments.len() > 2048 {
+        return Err("pipeline de couches LAN vide ou trop long".into());
+    }
+    let mut previous_layer: Option<u32> = None;
+    let mut previous_node = None;
+    let mut transfers = 0u32;
+    for (index, (stage, assignment)) in assignments.iter().enumerate() {
+        let expected_layer = previous_layer.map_or(0, |layer| layer.saturating_add(1));
+        if stage.layer_index != expected_layer {
+            return Err("pipeline LAN incomplet ou couches hors ordre".into());
+        }
+        if let Some(node) = previous_node {
+            if node != stage.node_id {
+                transfers = transfers.saturating_add(1);
+            }
+        }
+        activation = send_lan_layer_activation(
+            local_node_id,
+            registry,
+            work,
+            assignment,
+            request_id.clone(),
+            stage.shard_id,
+            stage.layer_index,
+            sequence.saturating_add(index as u32),
+            position_start,
+            activation,
+            key.clone(),
+        )
+        .await?;
+        previous_layer = Some(stage.layer_index);
+        previous_node = Some(stage.node_id.as_str());
+    }
+    Ok((activation, assignments.len() as u32, transfers))
 }
 
 fn lan_control_work(work_id: &str, shard_ids: Vec<u32>) -> DistributedWork {
@@ -909,22 +1438,41 @@ async fn handle_lan_worker_connection(
                 allow_sensitive_data,
             }
             .validate_for(&work, &local_node_id)?;
-            if let Err(error) = subsystem
-                .ensure_loaded(&model_id, PlacementProfile::Balanced, assigned_kv_tokens)
-                .await
-            {
-                let _ = transport
-                    .send_message(
-                        &LanWorkMessage::Nack {
-                            work_id: work_id.clone(),
-                            operation: "assign".into(),
-                            reason: format!("chargement worker impossible: {error}"),
-                        },
-                        &work,
-                    )
-                    .await;
-                return Err(error);
+            let staged_model = match materialize_staged_lan_model(&staging_root, &work_id, &model_id) {
+                Ok(staged_model) => staged_model,
+                Err(error) => {
+                    let _ = transport
+                        .send_message(
+                            &LanWorkMessage::Nack {
+                                work_id: work_id.clone(),
+                                operation: "assign".into(),
+                                reason: format!("reconstruction GGUF staging impossible: {error}"),
+                            },
+                            &work,
+                        )
+                        .await;
+                    return Err(error);
+                }
+            };
+            if let Some(path) = &staged_model {
+                if let Err(error) = subsystem.worker_register_staged_model(&model_id, path.clone()) {
+                    let _ = transport
+                        .send_message(
+                            &LanWorkMessage::Nack {
+                                work_id: work_id.clone(),
+                                operation: "assign".into(),
+                                reason: error.clone(),
+                            },
+                            &work,
+                        )
+                        .await;
+                    return Err(error);
+                }
             }
+            // Loading is deferred until an operation needs llama.cpp. This is
+            // essential for weight staging: the target may not have a local
+            // GGUF yet, while the independent Akasha layer path can run from
+            // the reconstructed file without a full llama context.
             worker_registry
                 .lock()
                 .map_err(|_| "état worker LAN verrouillé".to_string())?
@@ -953,6 +1501,7 @@ async fn handle_lan_worker_connection(
                 .register_abort(&work_id, abort.clone())?;
             let mut kv_assembly: Option<KvPageAssembly> = None;
             let mut weight_assembly: Option<WeightPageAssembly> = None;
+            let mut activation_assembly: Option<LanActivationAssembly> = None;
             loop {
                 let message = match transport.receive_message_unchecked().await {
                     Ok(message) => message,
@@ -1015,6 +1564,22 @@ async fn handle_lan_worker_connection(
                             .lock()
                             .map_err(|_| "état worker LAN verrouillé".to_string())?
                             .reset_abort(&work_id)?;
+                        if let Err(error) = subsystem
+                            .ensure_loaded(&model_id, PlacementProfile::Balanced, kv_tokens)
+                            .await
+                        {
+                            transport
+                                .send_message(
+                                    &LanWorkMessage::Nack {
+                                        work_id: work_id.clone(),
+                                        operation: "prefill".into(),
+                                        reason: error,
+                                    },
+                                    &work,
+                                )
+                                .await?;
+                            continue;
+                        }
                         match subsystem
                             .worker_prefill_tokens(&model_id, input_tokens)
                             .await
@@ -1065,6 +1630,22 @@ async fn handle_lan_worker_connection(
                             .lock()
                             .map_err(|_| "état worker LAN verrouillé".to_string())?
                             .reset_abort(&work_id)?;
+                        if let Err(error) = subsystem
+                            .ensure_loaded(&model_id, PlacementProfile::Balanced, assigned_kv_tokens)
+                            .await
+                        {
+                            transport
+                                .send_message(
+                                    &LanWorkMessage::Nack {
+                                        work_id: work_id.clone(),
+                                        operation: "kv-request".into(),
+                                        reason: error,
+                                    },
+                                    &work,
+                                )
+                                .await?;
+                            continue;
+                        }
                         match subsystem.worker_export_kv_state(&model_id).await {
                             Ok((data, seq0_tokens)) => {
                                 let seq0_tokens: Vec<u32> = seq0_tokens
@@ -1217,6 +1798,22 @@ async fn handle_lan_worker_connection(
                             .lock()
                             .map_err(|_| "état worker LAN verrouillé".to_string())?
                             .reset_abort(&work_id)?;
+                        if let Err(error) = subsystem
+                            .ensure_loaded(&model_id, PlacementProfile::Balanced, assigned_kv_tokens)
+                            .await
+                        {
+                            transport
+                                .send_message(
+                                    &LanWorkMessage::Nack {
+                                        work_id: work_id.clone(),
+                                        operation: "chat-infer".into(),
+                                        reason: error,
+                                    },
+                                    &work,
+                                )
+                                .await?;
+                            continue;
+                        }
                         let messages = messages
                             .into_iter()
                             .map(|message| (message.role, message.content))
@@ -1296,6 +1893,22 @@ async fn handle_lan_worker_connection(
                             .lock()
                             .map_err(|_| "état worker LAN verrouillé".to_string())?
                             .reset_abort(&work_id)?;
+                        if let Err(error) = subsystem
+                            .ensure_loaded(&model_id, PlacementProfile::Balanced, assigned_kv_tokens)
+                            .await
+                        {
+                            transport
+                                .send_message(
+                                    &LanWorkMessage::Nack {
+                                        work_id: work_id.clone(),
+                                        operation: "decode".into(),
+                                        reason: error,
+                                    },
+                                    &work,
+                                )
+                                .await?;
+                            continue;
+                        }
                         match subsystem
                             .worker_decode_tokens(&model_id, max_tokens, abort.clone())
                             .await
@@ -1406,6 +2019,26 @@ async fn handle_lan_worker_connection(
                         assembly.next_page = assembly.next_page.saturating_add(1);
                         if final_page {
                             let assembly = kv_assembly.take().unwrap();
+                            if let Err(error) = subsystem
+                                .ensure_loaded(
+                                    &model_id,
+                                    PlacementProfile::Balanced,
+                                    assigned_kv_tokens,
+                                )
+                                .await
+                            {
+                                transport
+                                    .send_message(
+                                        &LanWorkMessage::Nack {
+                                            work_id: work_id.clone(),
+                                            operation: "kv-page".into(),
+                                            reason: error,
+                                        },
+                                        &work,
+                                    )
+                                    .await?;
+                                continue;
+                            }
                             match subsystem
                                 .worker_import_kv_state(
                                     &model_id,
@@ -1447,6 +2080,7 @@ async fn handle_lan_worker_connection(
                         offset,
                         length,
                         total_model_bytes,
+                        required_ranges,
                     } if id == work_id => {
                         let message = LanWorkMessage::WeightBegin {
                             work_id: work_id.clone(),
@@ -1455,6 +2089,7 @@ async fn handle_lan_worker_connection(
                             offset,
                             length,
                             total_model_bytes,
+                            required_ranges: required_ranges.clone(),
                         };
                         message.validate_for(&work, transport.peer_node_id())?;
                         worker_registry
@@ -1472,6 +2107,7 @@ async fn handle_lan_worker_connection(
                             total_model_bytes,
                             next_page: 0,
                             data: Vec::with_capacity(length as usize),
+                            required_ranges,
                         });
                         transport
                             .send_message(
@@ -1547,6 +2183,7 @@ async fn handle_lan_worker_connection(
                                     assembly.shard_id,
                                     assembly.offset,
                                     assembly.total_model_bytes,
+                                    assembly.required_ranges,
                                     &assembly.data,
                                 )
                             })
@@ -1585,25 +2222,107 @@ async fn handle_lan_worker_connection(
                     LanWorkMessage::TextBatch { .. } => {
                         return Err("batch texte LAN reçu dans le mauvais sens".into());
                     }
-                    LanWorkMessage::LayerActivationPage { work_id, .. } => {
-                        let reason = match aos_llama::LlamaBackend::distributed_layer_capability() {
-                            aos_llama::DistributedLayerCapability::Unavailable => {
-                                "pipeline de couches LAN indisponible : llama.cpp sans backend RPC"
-                            }
-                            aos_llama::DistributedLayerCapability::NativeRpc => {
-                                "pipeline de couches LAN non câblé : adaptateur RPC Akasha manquant"
-                            }
+                    LanWorkMessage::LayerActivationPage {
+                        work_id: id,
+                        request_id,
+                        shard_id,
+                        layer_index,
+                        sequence,
+                        position_start,
+                        page_index,
+                        total_bytes,
+                        data,
+                        final_page,
+                    } if id == work_id => {
+                        let message = LanWorkMessage::LayerActivationPage {
+                            work_id: work_id.clone(),
+                            request_id: request_id.clone(),
+                            shard_id,
+                            layer_index,
+                            sequence,
+                            position_start,
+                            page_index,
+                            total_bytes,
+                            data,
+                            final_page,
                         };
-                        transport
-                            .send_message(
-                                &LanWorkMessage::Nack {
-                                    work_id,
-                                    operation: "layer-activation".into(),
-                                    reason: reason.into(),
-                                },
-                                &work,
-                            )
-                            .await?;
+                        message.validate_for(&work, transport.peer_node_id())?;
+                        if abort.load(std::sync::atomic::Ordering::SeqCst) {
+                            return Ok(());
+                        }
+                        let LanWorkMessage::LayerActivationPage { data, .. } = message else {
+                            unreachable!()
+                        };
+                        if let Some(assembly) = &activation_assembly {
+                            if assembly.request_id != request_id
+                                || assembly.shard_id != shard_id
+                                || assembly.layer_index != layer_index
+                                || assembly.sequence != sequence
+                            {
+                                return Err("activations LAN simultanées incompatibles".into());
+                            }
+                        } else {
+                            activation_assembly = Some(LanActivationAssembly::new(
+                                request_id.clone(),
+                                shard_id,
+                                layer_index,
+                                sequence,
+                                total_bytes,
+                            )?);
+                        }
+                        let assembly = activation_assembly.as_mut().unwrap();
+                        if let Some(input) = assembly.push_page(page_index, &data, final_page)? {
+                            match subsystem
+                                .worker_layer_activation(
+                                    &model_id,
+                                    layer_index,
+                                    request_id.clone(),
+                                    position_start,
+                                    input,
+                                )
+                                .await
+                            {
+                                Ok(output) => {
+                                    for (page_index, page) in output
+                                        .chunks(aos_placement::LAYER_RPC_PAGE_BYTES)
+                                        .enumerate()
+                                    {
+                                        transport
+                                            .send_message(
+                                                &LanWorkMessage::LayerActivationResult {
+                                                    work_id: work_id.clone(),
+                                                    request_id: request_id.clone(),
+                                                    shard_id,
+                                                    layer_index,
+                                                    sequence,
+                                                    position_start,
+                                                    page_index: page_index as u32,
+                                                    total_bytes: output.len() as u64,
+                                                    data: page.to_vec(),
+                                                    final_page: (page_index + 1)
+                                                        * aos_placement::LAYER_RPC_PAGE_BYTES
+                                                        >= output.len(),
+                                                },
+                                                &work,
+                                            )
+                                            .await?;
+                                    }
+                                }
+                                Err(reason) => {
+                                    transport
+                                        .send_message(
+                                            &LanWorkMessage::Nack {
+                                                work_id: work_id.clone(),
+                                                operation: "layer-activation".into(),
+                                                reason,
+                                            },
+                                            &work,
+                                        )
+                                        .await?;
+                                }
+                            }
+                            activation_assembly = None;
+                        }
                     }
                     _ => return Err("message LAN worker inattendu".into()),
                 }
@@ -1615,6 +2334,7 @@ async fn handle_lan_worker_connection(
                 .lock()
                 .map_err(|_| "état worker LAN verrouillé".to_string())?
                 .cancel(&work_id)?;
+            subsystem.clear_worker_layer_caches();
             transport
                 .send_message(
                     &LanWorkMessage::Ack {
@@ -1890,6 +2610,211 @@ async fn main() {
         });
     }
 
+    // --- model.adapter.execute (explicit experimental runtime call) ---
+    {
+        let sub = subsystem.clone();
+        let execute_sub = sub.clone();
+        svc.on("model.adapter.status", move |ctx| {
+            let sub = sub.clone();
+            async move {
+                let req = match ctx.payload::<ModelAdapterStatusRequest>() {
+                    Ok(req) => req,
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                        return;
+                    }
+                };
+                let backend = match req.backend.trim().to_ascii_lowercase().as_str() {
+                    "npu" => BackendKind::Npu,
+                    "webgpu" => BackendKind::WebGpu,
+                    _ => {
+                        let _ = ctx
+                            .respond_error(
+                                aos_ipc::msg::Status::BadRequest,
+                                "backend expérimental invalide",
+                            )
+                            .await;
+                        return;
+                    }
+                };
+                let Some((endpoint, memory, operations, quantizations)) =
+                    sub.adapter_runtime(backend)
+                else {
+                    let response = ModelAdapterStatusResponse {
+                        backend: backend_name(backend).into(),
+                        configured: false,
+                        reachable: false,
+                        device: None,
+                        memory_bytes: None,
+                        supported_operations: Vec::new(),
+                        supported_quantizations: Vec::new(),
+                        reason: "aucun runtime adaptateur configuré".into(),
+                    };
+                    let _ = ctx.respond(aos_ipc::msg::Status::Ok, &response).await;
+                    return;
+                };
+                if !endpoint_is_loopback(&endpoint) {
+                    let response = ModelAdapterStatusResponse {
+                        backend: backend_name(backend).into(),
+                        configured: true,
+                        reachable: false,
+                        device: None,
+                        memory_bytes: None,
+                        supported_operations: Vec::new(),
+                        supported_quantizations: Vec::new(),
+                        reason: "endpoint refusé : runtime adaptateur limité au loopback".into(),
+                    };
+                    let _ = ctx.respond(aos_ipc::msg::Status::Ok, &response).await;
+                    return;
+                }
+                match aos_placement::AdapterRpcClient::connect(
+                    &endpoint,
+                    backend,
+                    memory,
+                    &operations,
+                    &quantizations,
+                )
+                .await
+                {
+                    Ok(client) => {
+                        let handshake = client.handshake().clone();
+                        let response = ModelAdapterStatusResponse {
+                            backend: backend_name(backend).into(),
+                            configured: true,
+                            reachable: true,
+                            device: Some(handshake.device),
+                            memory_bytes: Some(handshake.memory_bytes),
+                            supported_operations: handshake.supported_operations,
+                            supported_quantizations: handshake
+                                .supported_quantizations
+                                .into_iter()
+                                .map(|quantization| quantization.as_str().into())
+                                .collect(),
+                            reason: "handshake adaptateur accepté".into(),
+                        };
+                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &response).await;
+                    }
+                    Err(error) => {
+                        let response = ModelAdapterStatusResponse {
+                            backend: backend_name(backend).into(),
+                            configured: true,
+                            reachable: false,
+                            device: None,
+                            memory_bytes: None,
+                            supported_operations: Vec::new(),
+                            supported_quantizations: Vec::new(),
+                            reason: error,
+                        };
+                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &response).await;
+                    }
+                }
+            }
+        });
+        svc.on("model.adapter.execute", move |ctx| {
+            let sub = execute_sub.clone();
+            async move {
+                let req = match ctx.payload::<ModelAdapterExecuteRequest>() {
+                    Ok(req) => req,
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                        return;
+                    }
+                };
+                let backend = match req.backend.trim().to_ascii_lowercase().as_str() {
+                    "npu" => BackendKind::Npu,
+                    "webgpu" => BackendKind::WebGpu,
+                    _ => {
+                        let _ = ctx
+                            .respond_error(
+                                aos_ipc::msg::Status::BadRequest,
+                                "backend expérimental invalide",
+                            )
+                            .await;
+                        return;
+                    }
+                };
+                let quantization = match aos_placement::Quantization::parse(&req.quantization) {
+                    Some(quantization) => quantization,
+                    None => {
+                        let _ = ctx
+                            .respond_error(
+                                aos_ipc::msg::Status::BadRequest,
+                                "quantification adaptateur invalide",
+                            )
+                            .await;
+                        return;
+                    }
+                };
+                let phase = match req.phase.trim().to_ascii_lowercase().as_str() {
+                    "prefill" => AdapterExecutionPhase::Prefill,
+                    "decode" | "" => AdapterExecutionPhase::Decode,
+                    _ => {
+                        let _ = ctx
+                            .respond_error(
+                                aos_ipc::msg::Status::BadRequest,
+                                "phase adaptateur invalide (prefill|decode)",
+                            )
+                            .await;
+                        return;
+                    }
+                };
+                let Some((endpoint, memory, operations, quantizations)) =
+                    sub.adapter_runtime(backend)
+                else {
+                    let _ = ctx
+                        .respond_error(
+                            aos_ipc::msg::Status::NotFound,
+                            "aucun runtime adaptateur explicitement configuré",
+                        )
+                        .await;
+                    return;
+                };
+                if !endpoint_is_loopback(&endpoint) {
+                    let _ = ctx
+                        .respond_error(
+                            aos_ipc::msg::Status::PermissionDenied,
+                            "un runtime NPU/WebGPU doit être local au daemon",
+                        )
+                        .await;
+                    return;
+                }
+                let result = match aos_placement::AdapterRpcClient::connect(
+                    &endpoint,
+                    backend,
+                    memory,
+                    &operations,
+                    &quantizations,
+                )
+                .await
+                {
+                    Ok(mut client) => client
+                        .execute_phase(phase, &req.operation, quantization, req.tensor)
+                        .await,
+                    Err(error) => Err(error),
+                };
+                match result {
+                    Ok(tensor) => {
+                        let response = ModelAdapterExecuteResponse {
+                            backend: backend_name(backend).into(),
+                            operation: req.operation,
+                            tensor,
+                        };
+                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &response).await;
+                    }
+                    Err(error) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::InternalError, &error)
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+
     // --- model.plan (diagnostic, read-only) ---
     {
         let sub = subsystem.clone();
@@ -1956,27 +2881,36 @@ async fn main() {
         });
     }
     {
+        let cluster = lan_cluster.clone();
         let model_config = config.clone();
         let preference_home = preference_home.clone();
         svc.on("model.cluster.layer_pipeline_status", move |ctx| {
+            let cluster = cluster.clone();
             let model_config = model_config.clone();
             let preference_home = preference_home.clone();
             async move {
                 let enabled = model_config.lan_cluster_enabled_at(&preference_home);
+                let paired_nodes = cluster
+                    .lock()
+                    .map(|cluster| cluster.registry().paired_nodes().count())
+                    .unwrap_or(0);
                 let native_rpc = matches!(
                     aos_llama::LlamaBackend::distributed_layer_capability(),
                     aos_llama::DistributedLayerCapability::NativeRpc
                 );
+                let adapter_ready = enabled && paired_nodes > 0;
                 let response = LanClusterLayerPipelineStatusResponse {
                     enabled,
                     native_rpc,
-                    adapter_ready: false,
+                    adapter_ready,
                     reason: if !enabled {
                         "cluster LAN désactivé".into()
+                    } else if paired_nodes == 0 {
+                        "aucun nœud LAN appairé".into()
                     } else if !native_rpc {
-                        "build llama.cpp sans backend RPC".into()
+                        "adaptateur RPC Akasha CPU actif (GGUF requis)".into()
                     } else {
-                        "backend RPC détecté, adaptateur Akasha non câblé".into()
+                        "backend RPC natif et adaptateur Akasha disponibles".into()
                     },
                 };
                 let _ = ctx.respond(aos_ipc::msg::Status::Ok, &response).await;
@@ -2119,6 +3053,146 @@ async fn main() {
                             request_id: req.request_id,
                             source_node_id: req.source_node_id,
                             target_node_id: req.target_node_id,
+                            shard_id: req.shard_id,
+                            page_count,
+                            total_bytes,
+                        };
+                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &response).await;
+                    }
+                    Err(error) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, &error)
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let cluster = lan_cluster.clone();
+        let sub = subsystem.clone();
+        let model_config = config.clone();
+        let preference_home = preference_home.clone();
+        let bus = bus.clone();
+        svc.on("model.cluster.stage_local_model", move |ctx| {
+            let cluster = cluster.clone();
+            let sub = sub.clone();
+            let model_config = model_config.clone();
+            let preference_home = preference_home.clone();
+            let bus = bus.clone();
+            async move {
+                if !model_config.lan_cluster_enabled_at(&preference_home) {
+                    let _ = ctx
+                        .respond_error(
+                            aos_ipc::msg::Status::PermissionDenied,
+                            "cluster LAN désactivé",
+                        )
+                        .await;
+                    return;
+                }
+                let req = match ctx.payload::<LanClusterStageLocalModelRequest>() {
+                    Ok(req) => req,
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                        return;
+                    }
+                };
+                if !req.allow_sensitive_data || !req.encrypted_transport {
+                    let _ = ctx
+                        .respond_error(
+                            aos_ipc::msg::Status::PermissionDenied,
+                            "le staging local LAN exige une autorisation sensible et un transport chiffré",
+                        )
+                        .await;
+                    return;
+                }
+                let planned = cluster
+                    .lock()
+                    .map(|cluster| {
+                        let plan = cluster.job(&req.work_id).cloned()?;
+                        if plan.model_id != req.model_id {
+                            return None;
+                        }
+                        let target = plan.assignments.iter().find(|assignment| {
+                            assignment.node_id == req.target_node_id
+                                && assignment.shard_ids.contains(&req.shard_id)
+                        })?;
+                        let mut shard_ids = plan
+                            .assignments
+                            .iter()
+                            .flat_map(|assignment| assignment.shard_ids.iter().copied())
+                            .collect::<Vec<_>>();
+                        shard_ids.sort_unstable();
+                        shard_ids.dedup();
+                        Some((target.clone(), shard_ids, cluster.registry().clone()))
+                    })
+                    .map_err(|_| "verrou cluster indisponible".to_string())
+                    .and_then(|planned| planned.ok_or("travail LAN non planifié".into()));
+                let (target, shard_ids, registry) = match planned {
+                    Ok(planned) => planned,
+                    Err(error) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, &error)
+                            .await;
+                        return;
+                    }
+                };
+                let work = DistributedWork {
+                    work_id: req.work_id.clone(),
+                    model_id: req.model_id.clone(),
+                    shard_ids,
+                    allow_sensitive_data: true,
+                    encrypted_transport: true,
+                };
+                let key = match load_lan_session_key(&bus, &req.session_key_secret).await {
+                    Ok(key) => key,
+                    Err(error) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::PermissionDenied, &error)
+                            .await;
+                        return;
+                    }
+                };
+                let local_node_id = model_config.lan_node_id_at(&preference_home);
+                let required_ranges = match resolve_stage_weight_ranges(
+                    &sub,
+                    &req.model_id,
+                    req.shard_id,
+                    &req.required_ranges,
+                    req.first_layer,
+                    req.last_layer,
+                )
+                .await
+                {
+                    Ok(ranges) => ranges,
+                    Err(error) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, &error)
+                            .await;
+                        return;
+                    }
+                };
+                match send_lan_local_weight_model(
+                    &local_node_id,
+                    &registry,
+                    &work,
+                    &sub,
+                    &target.node_id,
+                    req.shard_id,
+                    &req.request_id,
+                    required_ranges,
+                    key,
+                )
+                .await
+                {
+                    Ok((page_count, total_bytes)) => {
+                        let response = LanClusterStageLocalModelResponse {
+                            work_id: req.work_id,
+                            request_id: req.request_id,
+                            target_node_id: target.node_id,
+                            model_id: work.model_id,
                             shard_id: req.shard_id,
                             page_count,
                             total_bytes,
@@ -2623,9 +3697,418 @@ async fn main() {
     }
     {
         let cluster = lan_cluster.clone();
+        let sub = subsystem.clone();
         let model_config = config.clone();
         let preference_home = preference_home.clone();
         let bus = bus.clone();
+        svc.on("model.cluster.layer_infer", {
+            let cluster = cluster.clone();
+            let model_config = model_config.clone();
+            let preference_home = preference_home.clone();
+            let bus = bus.clone();
+            move |ctx| {
+                let cluster = cluster.clone();
+                let model_config = model_config.clone();
+                let preference_home = preference_home.clone();
+                let bus = bus.clone();
+                async move {
+                    if !model_config.lan_cluster_enabled_at(&preference_home) {
+                        let _ = ctx
+                            .respond_error(
+                                aos_ipc::msg::Status::PermissionDenied,
+                                "cluster LAN désactivé",
+                            )
+                            .await;
+                        return;
+                    }
+                    let req = match ctx.payload::<LanClusterLayerInferRequest>() {
+                        Ok(req) => req,
+                        Err(_) => {
+                            let _ = ctx
+                                .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                                .await;
+                            return;
+                        }
+                    };
+                    if !req.allow_sensitive_data || !req.encrypted_transport {
+                        let _ = ctx
+                            .respond_error(
+                                aos_ipc::msg::Status::PermissionDenied,
+                                "le pipeline de couches LAN exige une autorisation sensible explicite et un transport chiffré",
+                            )
+                            .await;
+                        return;
+                    }
+                    let key = match load_lan_session_key(&bus, &req.session_key_secret).await {
+                        Ok(key) => key,
+                        Err(error) => {
+                            let _ = ctx
+                                .respond_error(aos_ipc::msg::Status::PermissionDenied, &error)
+                                .await;
+                            return;
+                        }
+                    };
+                    let mut work = DistributedWork {
+                        work_id: req.work_id.clone(),
+                        model_id: req.model_id.clone(),
+                        shard_ids: vec![req.shard_id],
+                        allow_sensitive_data: req.allow_sensitive_data,
+                        encrypted_transport: req.encrypted_transport,
+                    };
+                    let planned = cluster
+                        .lock()
+                        .map(|cluster| {
+                            let plan = cluster.job(&req.work_id).cloned()?;
+                            if plan.model_id != req.model_id {
+                                return None;
+                            }
+                            let assignment = plan
+                                .assignments
+                                .iter()
+                                .find(|assignment| {
+                                    assignment.node_id == req.node_id
+                                        && assignment.shard_ids.contains(&req.shard_id)
+                                })?
+                                .clone();
+                            Some((assignment, cluster.registry().clone()))
+                        })
+                        .map_err(|_| "verrou cluster indisponible".to_string())
+                        .and_then(|planned| {
+                            planned.ok_or("assignment couche LAN introuvable".into())
+                        });
+                    let (assignment, registry) = match planned {
+                        Ok(planned) => planned,
+                        Err(error) => {
+                            let _ = ctx
+                                .respond_error(aos_ipc::msg::Status::BadRequest, &error)
+                                .await;
+                            return;
+                    }
+                };
+                // Le canal est limité à l'assignment sélectionné ; il peut
+                // contenir plusieurs shards même si cette requête ne traite
+                // qu'une seule activation.
+                work.shard_ids = assignment.shard_ids.clone();
+                match send_lan_layer_activation(
+                        "coordinator",
+                        &registry,
+                        &work,
+                        &assignment,
+                        req.request_id.clone(),
+                        req.shard_id,
+                        req.layer_index,
+                        req.sequence,
+                        req.position_start,
+                        req.activation,
+                        key,
+                    )
+                    .await
+                    {
+                        Ok(activation) => {
+                            let response = LanClusterLayerInferResponse {
+                                work_id: req.work_id,
+                                request_id: req.request_id,
+                                node_id: req.node_id,
+                                shard_id: req.shard_id,
+                                layer_index: req.layer_index,
+                                sequence: req.sequence,
+                                activation,
+                            };
+                            let _ = ctx.respond(aos_ipc::msg::Status::Ok, &response).await;
+                        }
+                        Err(error) => {
+                            let _ = ctx
+                                .respond_error(aos_ipc::msg::Status::BadRequest, &error)
+                                .await;
+                        }
+                    }
+                }
+            }
+        });
+        svc.on("model.cluster.layer_pipeline_infer", {
+            let cluster = cluster.clone();
+            let sub = sub.clone();
+            let model_config = model_config.clone();
+            let preference_home = preference_home.clone();
+            let bus = bus.clone();
+            move |ctx| {
+                let cluster = cluster.clone();
+                let sub = sub.clone();
+                let model_config = model_config.clone();
+                let preference_home = preference_home.clone();
+                let bus = bus.clone();
+                async move {
+                    if !model_config.lan_cluster_enabled_at(&preference_home) {
+                        let _ = ctx
+                            .respond_error(
+                                aos_ipc::msg::Status::PermissionDenied,
+                                "cluster LAN désactivé",
+                            )
+                            .await;
+                        return;
+                    }
+                    let req = match ctx.payload::<LanClusterLayerPipelineRequest>() {
+                        Ok(req) => req,
+                        Err(_) => {
+                            let _ = ctx
+                                .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                                .await;
+                            return;
+                        }
+                    };
+                    if !req.allow_sensitive_data
+                        || !req.encrypted_transport
+                        || req.stages.is_empty()
+                        || req.stages.len() > 2048
+                        || (req.activation.is_empty() && req.input_tokens.is_empty())
+                        || (!req.activation.is_empty() && !req.input_tokens.is_empty())
+                        || req.input_tokens.len() > 8192
+                        || req.max_tokens > 4096
+                        || (req.max_tokens > 0 && req.input_tokens.is_empty())
+                    {
+                        let _ = ctx
+                            .respond_error(
+                                aos_ipc::msg::Status::PermissionDenied,
+                                "pipeline LAN invalide ou non autorisé",
+                            )
+                            .await;
+                        return;
+                    }
+                    if !req.params.temperature.is_finite()
+                        || req.params.temperature < 0.0
+                        || req.params.temperature > 5.0
+                        || !req.params.top_p.is_finite()
+                        || req.params.top_p <= 0.0
+                        || req.params.top_p > 1.0
+                    {
+                        let _ = ctx
+                            .respond_error(
+                                aos_ipc::msg::Status::BadRequest,
+                                "paramètres de sampling invalides",
+                            )
+                            .await;
+                        return;
+                    }
+                    let pipeline_plan = match LayerPipelinePlan::new(
+                        req.total_layers,
+                        req.stages
+                            .iter()
+                            .map(|stage| LayerStage {
+                                node_id: stage.node_id.clone(),
+                                first_layer: stage.layer_index,
+                                last_layer: stage.layer_index,
+                            })
+                            .collect(),
+                    ) {
+                        Ok(plan) => plan,
+                        Err(error) => {
+                            let _ = ctx
+                                .respond_error(aos_ipc::msg::Status::BadRequest, &error)
+                                .await;
+                            return;
+                        }
+                    };
+                    let key = match load_lan_session_key(&bus, &req.session_key_secret).await {
+                        Ok(key) => key,
+                        Err(error) => {
+                            let _ = ctx
+                                .respond_error(aos_ipc::msg::Status::PermissionDenied, &error)
+                                .await;
+                            return;
+                        }
+                    };
+                    let planned = cluster
+                        .lock()
+                        .map(|cluster| {
+                            let plan = cluster.job(&req.work_id).cloned()?;
+                            if plan.model_id != req.model_id {
+                                return None;
+                            }
+                            let mut stages = Vec::with_capacity(req.stages.len());
+                            for stage in &req.stages {
+                                let assignment = plan
+                                    .assignments
+                                    .iter()
+                                    .find(|assignment| {
+                                        assignment.node_id == stage.node_id
+                                            && assignment.shard_ids.contains(&stage.shard_id)
+                                    })?
+                                    .clone();
+                                stages.push((stage.clone(), assignment));
+                            }
+                            Some((stages, cluster.registry().clone()))
+                        })
+                        .map_err(|_| "verrou cluster indisponible".to_string())
+                        .and_then(|planned| {
+                            planned.ok_or("pipeline LAN non planifié pour ces nœuds".into())
+                        });
+                    let (stages, registry) = match planned {
+                        Ok(planned) => planned,
+                        Err(error) => {
+                            let _ = ctx
+                                .respond_error(aos_ipc::msg::Status::BadRequest, &error)
+                                .await;
+                            return;
+                        }
+                    };
+                    let activation = if req.activation.is_empty() {
+                        match sub
+                            .worker_embed_tokens(&req.model_id, req.input_tokens.clone())
+                            .await
+                        {
+                            Ok(activation) => activation,
+                            Err(error) => {
+                                let _ = ctx
+                                    .respond_error(aos_ipc::msg::Status::BadRequest, &error)
+                                    .await;
+                                return;
+                            }
+                        }
+                    } else {
+                        req.activation.clone()
+                    };
+                    if pipeline_plan.total_layers != stages.len() as u32 {
+                        let _ = ctx
+                            .respond_error(
+                                aos_ipc::msg::Status::BadRequest,
+                                "pipeline LAN incomplet",
+                            )
+                            .await;
+                        return;
+                    }
+                    let mut shard_ids = Vec::new();
+                    for (stage, _) in &stages {
+                        if !shard_ids.contains(&stage.shard_id) {
+                            shard_ids.push(stage.shard_id);
+                        }
+                    }
+                    let model_id = req.model_id.clone();
+                    let work = DistributedWork {
+                        work_id: req.work_id.clone(),
+                        model_id: model_id.clone(),
+                        shard_ids,
+                        allow_sensitive_data: req.allow_sensitive_data,
+                        encrypted_transport: req.encrypted_transport,
+                    };
+                    let generation_steps = if req.max_tokens == 0 { 1 } else { req.max_tokens };
+                    let prompt_tokens = req.input_tokens.len() as u32;
+                    let generation_started = std::time::Instant::now();
+                    let mut sampling_state = u64::from(req.params.seed.unwrap_or(42));
+                    let mut current_activation = activation;
+                    let mut final_logits = None;
+                    let mut generated_tokens = Vec::new();
+                    let mut layers_executed = 0u32;
+                    let mut transfers = 0u32;
+                    let mut pipeline_error = None;
+                    for step in 0..generation_steps {
+                        let position_start = if step == 0 {
+                            req.position_start
+                        } else {
+                            req.position_start
+                                .saturating_add(prompt_tokens)
+                                .saturating_add(generated_tokens.len().saturating_sub(1) as u32)
+                        };
+                        match send_lan_layer_pipeline(
+                            "coordinator",
+                            &registry,
+                            &work,
+                            &stages,
+                            req.request_id.clone(),
+                            req.sequence.saturating_add(step),
+                            position_start,
+                            std::mem::take(&mut current_activation),
+                            key.clone(),
+                        )
+                        .await
+                        {
+                            Ok((next_activation, executed, moved)) => {
+                                current_activation = next_activation;
+                                layers_executed = layers_executed.saturating_add(executed);
+                                transfers = transfers.saturating_add(moved);
+                            }
+                            Err(error) => {
+                                pipeline_error = Some(error);
+                                break;
+                            }
+                        }
+                        if req.return_logits || req.max_tokens > 0 {
+                            let last = match last_token_activation(&current_activation) {
+                                Ok(last) => last,
+                                Err(error) => {
+                                    pipeline_error = Some(error);
+                                    break;
+                                }
+                            };
+                            let logits = match sub.worker_logits(&model_id, last).await {
+                                Ok(logits) => logits,
+                                Err(error) => {
+                                    pipeline_error = Some(error);
+                                    break;
+                                }
+                            };
+                            if req.return_logits {
+                                final_logits = Some(logits.clone());
+                            }
+                            if req.max_tokens > 0 {
+                                let token = match sample_token(
+                                    &logits,
+                                    req.params.temperature,
+                                    req.params.top_p,
+                                    &mut sampling_state,
+                                ) {
+                                    Ok(token) => token,
+                                    Err(error) => {
+                                        pipeline_error = Some(error);
+                                        break;
+                                    }
+                                };
+                                generated_tokens.push(token);
+                                if req.eos_token_id == Some(token)
+                                    || generated_tokens.len() >= req.max_tokens as usize
+                                {
+                                    break;
+                                }
+                                current_activation = match sub
+                                    .worker_embed_tokens(&model_id, vec![token])
+                                    .await
+                                {
+                                    Ok(activation) => activation,
+                                    Err(error) => {
+                                        pipeline_error = Some(error);
+                                        break;
+                                    }
+                                };
+                            }
+                        }
+                    }
+                    if let Some(error) = pipeline_error {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, &error)
+                            .await;
+                    } else {
+                        let generation_ms = generation_started.elapsed().as_secs_f64() * 1000.0;
+                        let tok_s = if generation_ms > 0.0 {
+                            generated_tokens.len() as f64 / (generation_ms / 1000.0)
+                        } else {
+                            0.0
+                        };
+                        let response = LanClusterLayerPipelineResponse {
+                            work_id: req.work_id,
+                            request_id: req.request_id,
+                            activation: current_activation,
+                            layers_executed,
+                            transfers,
+                            logits: final_logits,
+                            generated_tokens,
+                            prompt_tokens,
+                            generation_ms,
+                            tok_s,
+                        };
+                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &response).await;
+                    }
+                }
+            }
+        });
         svc.on("model.cluster.dispatch", move |ctx| {
             let cluster = cluster.clone();
             let model_config = model_config.clone();
@@ -3856,7 +5339,10 @@ async fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{lan_artifact_component, parse_lan_session_key, stage_lan_weight_shard};
+    use super::{
+        greedy_token, lan_artifact_component, last_token_activation, parse_lan_session_key,
+        materialize_staged_lan_model, sample_token, stage_lan_weight_shard,
+    };
     use std::path::PathBuf;
 
     #[test]
@@ -3864,6 +5350,27 @@ mod tests {
         assert!(parse_lan_session_key(&"ab".repeat(32)).is_ok());
         assert!(parse_lan_session_key(&"zz".repeat(32)).is_err());
         assert!(parse_lan_session_key(&"ab".repeat(31)).is_err());
+    }
+
+    #[test]
+    fn generation_reutilise_le_dernier_token_et_choisit_le_maximum() {
+        let tensor = aos_placement::F32Tensor::new(
+            vec![2, 2],
+            vec![1.0, 2.0, 3.0, 4.0],
+        )
+        .unwrap();
+        let last = aos_placement::F32Tensor::decode(&last_token_activation(&tensor.encode()).unwrap())
+            .unwrap();
+        assert_eq!(last.shape, vec![2, 1]);
+        assert_eq!(last.values, vec![2.0, 4.0]);
+        assert_eq!(greedy_token(&[f32::NEG_INFINITY, 1.0, 3.0, 2.0]).unwrap(), 2);
+        assert!(greedy_token(&[f32::NAN, f32::INFINITY]).is_err());
+        let mut seed_a = 7;
+        let mut seed_b = 7;
+        assert_eq!(
+            sample_token(&[0.0, 1.0, 2.0], 0.8, 0.95, &mut seed_a).unwrap(),
+            sample_token(&[0.0, 1.0, 2.0], 0.8, 0.95, &mut seed_b).unwrap()
+        );
     }
 
     #[test]
@@ -3875,7 +5382,7 @@ mod tests {
             lan_artifact_component("work/with spaces"),
             "work_with_spaces"
         );
-        stage_lan_weight_shard(&root, "work/with spaces", "model:test", 7, 4, 10, b"abc").unwrap();
+        stage_lan_weight_shard(&root, "work/with spaces", "model:test", 7, 4, 10, Vec::new(), b"abc").unwrap();
         let directory = root.join("lan-shards").join("work_with_spaces");
         assert_eq!(
             std::fs::read(directory.join("shard-00007-offset-4.bin")).unwrap(),
@@ -3889,9 +5396,9 @@ mod tests {
         assert_eq!(manifest["length"], 3);
         assert!(!directory.join("shard-00007-offset-4.part").exists());
         // Retrying identical bytes succeeds; different bytes preserve the shard.
-        stage_lan_weight_shard(&root, "work/with spaces", "model:test", 7, 4, 10, b"abc").unwrap();
+        stage_lan_weight_shard(&root, "work/with spaces", "model:test", 7, 4, 10, Vec::new(), b"abc").unwrap();
         assert!(
-            stage_lan_weight_shard(&root, "work/with spaces", "model:test", 7, 4, 10, b"xyz")
+            stage_lan_weight_shard(&root, "work/with spaces", "model:test", 7, 4, 10, Vec::new(), b"xyz")
                 .is_err()
         );
         assert_eq!(
@@ -3900,11 +5407,11 @@ mod tests {
         );
         std::thread::scope(|scope| {
             scope.spawn(|| {
-                stage_lan_weight_shard(&root, "work/with spaces", "model:test", 0, 0, 10, b"0123")
+            stage_lan_weight_shard(&root, "work/with spaces", "model:test", 0, 0, 10, Vec::new(), b"0123")
                     .unwrap()
             });
             scope.spawn(|| {
-                stage_lan_weight_shard(&root, "work/with spaces", "model:test", 8, 7, 10, b"789")
+            stage_lan_weight_shard(&root, "work/with spaces", "model:test", 8, 7, 10, Vec::new(), b"789")
                     .unwrap()
             });
         });
@@ -3913,6 +5420,51 @@ mod tests {
                 .unwrap();
         assert!(coverage.is_complete());
         assert_eq!(coverage.ranges.len(), 3);
+        let staged = materialize_staged_lan_model(&root, "work/with spaces", "model:test")
+            .unwrap()
+            .unwrap();
+        assert_eq!(std::fs::read(staged).unwrap(), b"0123abc789");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn staging_sparse_materialise_apres_couverture_requise() {
+        let root = PathBuf::from(std::env::temp_dir())
+            .join(format!("akasha-sparse-stage-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let required = vec![
+            aos_placement::LanWeightRange { shard_id: 3, offset: 0, length: 3 },
+            aos_placement::LanWeightRange { shard_id: 3, offset: 7, length: 3 },
+        ];
+        stage_lan_weight_shard(
+            &root,
+            "sparse-work",
+            "model:sparse",
+            3,
+            0,
+            10,
+            required.clone(),
+            b"abc",
+        )
+        .unwrap();
+        assert!(materialize_staged_lan_model(&root, "sparse-work", "model:sparse")
+            .unwrap()
+            .is_none());
+        stage_lan_weight_shard(
+            &root,
+            "sparse-work",
+            "model:sparse",
+            3,
+            7,
+            10,
+            required,
+            b"hij",
+        )
+        .unwrap();
+        let staged = materialize_staged_lan_model(&root, "sparse-work", "model:sparse")
+            .unwrap()
+            .unwrap();
+        assert_eq!(std::fs::read(staged).unwrap(), b"abc\0\0\0\0hij");
         std::fs::remove_dir_all(root).unwrap();
     }
 }

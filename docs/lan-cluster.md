@@ -13,13 +13,16 @@ peers.
 3. Set the local public-key fingerprint, enable **Auto-discover LAN
    candidates**, and keep the same UDP discovery port on the participating
    hosts.
-4. Open **Settings → Secrets vault**, enter a random 32-byte key as exactly 64
+4. Enable **Allow model transfer to LAN** only after accepting that a GGUF
+   file may be copied to a paired worker. This consent is independent from
+   enabling the cluster and is disabled by default.
+5. Open **Settings → Secrets vault**, enter a random 32-byte key as exactly 64
    hexadecimal characters, and save it under that secret name. The value is
    write-only in the UI.
-5. In the LAN cluster section, enter the remote node ID, display name, LAN
+6. In the LAN cluster section, enter the remote node ID, display name, LAN
    address (`192.168.x.y:port`, loopback and link-local addresses are also
    accepted), and its public-key fingerprint.
-6. Select **Add node**, or wait for a discovery candidate, then select
+7. Select **Add node**, or wait for a discovery candidate, then select
    **Pair** after checking the fingerprint.
    **Revoke** immediately excludes a node from future work.
 
@@ -51,9 +54,9 @@ node loss, and `model.cluster.cancel` propagates cancellation when supplied
 the session-key secret name.
 
 `aos-modeld` binds the LAN listener only when the cluster is enabled and the
-session key is available from the secret vault. The worker loads its local
-model before acknowledging an assignment and can execute token-level prefill
-and decode in its current context. `Prefill`, `Decode`, token, explicit text
+session key is available from the secret vault. Assignment loading is lazy:
+weight staging can be acknowledged before a model context exists, while
+token-level prefill and decode load llama.cpp on demand. `Prefill`, `Decode`, token, explicit text
 inference and KV-page messages are defined, encrypted and bounded.
 `model.cluster.infer_chat` lets an authorized caller send a prompt to the
 selected node and receive generated text plus metrics; it requires
@@ -65,14 +68,17 @@ carry it as encrypted CBOR pages of at most 512 KiB, and restore it on another
 paired worker. The state is capped at 64 MiB and pages must arrive in order.
 `model.cluster.weight_transfer` can explicitly transfer one bounded weight
 range for a declared shard to the target worker's local staging area. Pages are
-encrypted, ordered and atomically published with a manifest. The staged bytes
-are not yet consumed by llama.cpp for remote-layer execution.
-The protocol also defines bounded typed activation pages and result pages for
-the hop between contiguous layer segments. The independent Akasha adapter
-reassembles an activation, invokes an injected worker executor, and pages the
-result back without depending on llama.cpp RPC symbols. The production worker
-executor is still gated until a backend exposes safe intermediate tensors;
-unsupported requests return an explicit Nack and can fall back locally.
+encrypted, ordered and atomically published with a manifest. A complete
+manifest is reassembled as a GGUF and consumed by the independent Akasha
+layer adapter; incomplete coverage remains non-executable.
+`model.cluster.stage_local_model` automates the same operation for the local
+GGUF before a pipeline. Layer segments transfer only the header/index and the
+required `blk.N` tensor ranges; an empty range list keeps full-file staging.
+The protocol also defines bounded
+typed activation pages and result pages for the hop between contiguous layer
+segments. The worker adapter executes those layers without depending on
+llama.cpp RPC symbols; unsupported requests return an explicit Nack and can
+fall back locally.
 The daemon probes `llama_supports_rpc()` and distinguishes a llama.cpp build
 without RPC from one with RPC but without the Akasha adapter. In both cases an
 activation page is rejected cleanly until the complete encrypted path exists.
@@ -80,8 +86,9 @@ Retrying a shard accepts identical bytes and rejects different content without
 overwriting the existing file. Publication is serialized across connections in
 one daemon to preserve coverage entries. Use one daemon per staging directory.
 
-Implicit `model.infer` routing remains local. Actual weight/shard partitioning
-still needs to be integrated; explicit KV transfer is available through
+Implicit `model.infer` routing remains local. Layer partitioning is available
+through the explicit Akasha pipeline; native llama.cpp shard loading remains a
+separate backend capability. Explicit KV transfer is available through
 `model.cluster.kv_transfer`. By default, no model or prompt data leaves the
 machine.
 
@@ -89,6 +96,11 @@ Auto-discovery takes effect when `aos-modeld` starts with both the LAN cluster
 and auto-discovery enabled. It uses bounded UDP CBOR advertisements on the
 configured local port and does not transmit prompts, model weights, tokens or
 session-key values.
+
+The **Run LAN test (1 token)** button in **Settings → Models** partitions the
+declared layers contiguously across the paired workers, stages the local GGUF
+to each worker, and runs the complete explicit pipeline. It uses one synthetic
+token and never sends conversation content.
 
 ## YAML inventory (optional)
 

@@ -120,6 +120,10 @@ pub enum LanWorkMessage {
         offset: u64,
         length: u64,
         total_model_bytes: u64,
+        /// Required logical ranges for a sparse layer shard. Empty preserves
+        /// the legacy full-file staging semantics.
+        #[serde(default)]
+        required_ranges: Vec<LanWeightRange>,
     },
     WeightPage {
         work_id: String,
@@ -131,14 +135,16 @@ pub enum LanWorkMessage {
         final_page: bool,
     },
     /// One bounded page of activations between two contiguous layer stages.
-    /// The current worker returns an explicit unsupported error until the
-    /// native llama.cpp layer backend is enabled.
+    /// The worker may handle it through the independent Akasha GGUF adapter;
+    /// native llama.cpp layer execution remains a separate capability.
     LayerActivationPage {
         work_id: String,
         request_id: String,
         shard_id: u32,
         layer_index: u32,
         sequence: u32,
+        #[serde(default)]
+        position_start: u32,
         page_index: u32,
         total_bytes: u64,
         data: Vec<u8>,
@@ -151,6 +157,8 @@ pub enum LanWorkMessage {
         shard_id: u32,
         layer_index: u32,
         sequence: u32,
+        #[serde(default)]
+        position_start: u32,
         page_index: u32,
         total_bytes: u64,
         data: Vec<u8>,
@@ -462,6 +470,7 @@ impl LanWorkMessage {
                 shard_id,
                 layer_index,
                 sequence,
+                position_start,
                 page_index,
                 total_bytes,
                 data,
@@ -475,6 +484,7 @@ impl LanWorkMessage {
                     || *shard_id > 65_535
                     || *layer_index > 65_535
                     || *sequence > 1_048_576
+                    || *position_start > 1_048_576
                     || *page_index > 65_535
                     || *total_bytes == 0
                     || *total_bytes > 64 * 1024 * 1024
@@ -490,6 +500,7 @@ impl LanWorkMessage {
                 shard_id,
                 layer_index,
                 sequence,
+                position_start,
                 page_index,
                 total_bytes,
                 data,
@@ -503,6 +514,7 @@ impl LanWorkMessage {
                     || *shard_id > 65_535
                     || *layer_index > 65_535
                     || *sequence > 1_048_576
+                    || *position_start > 1_048_576
                     || *page_index > 65_535
                     || *total_bytes == 0
                     || *total_bytes > 64 * 1024 * 1024
@@ -612,6 +624,10 @@ pub struct LanShardManifest {
     pub total_model_bytes: u64,
     #[serde(default)]
     pub ranges: Vec<LanWeightRange>,
+    /// Logical ranges that must be covered for a sparse shard to be usable.
+    /// Empty means every byte of the source file is required.
+    #[serde(default)]
+    pub required_ranges: Vec<LanWeightRange>,
 }
 
 /// Ordered reassembly state for one activation crossing a layer boundary.
@@ -703,7 +719,71 @@ impl LanShardManifest {
             model_id,
             total_model_bytes,
             ranges: Vec::new(),
+            required_ranges: Vec::new(),
         })
+    }
+
+    pub fn set_required_ranges(&mut self, ranges: Vec<LanWeightRange>) -> Result<(), String> {
+        for range in &ranges {
+            if range.shard_id > 65_535
+                || range.length == 0
+                || range.length > 64 * 1024 * 1024
+                || range
+                    .offset
+                    .checked_add(range.length)
+                    .is_none_or(|end| end > self.total_model_bytes)
+            {
+                return Err("plage requise de poids LAN invalide".into());
+            }
+        }
+        let mut sorted = ranges.clone();
+        sorted.sort_by_key(|range| range.offset);
+        if sorted.windows(2).any(|pair| {
+            pair[0].offset.saturating_add(pair[0].length) > pair[1].offset
+        }) {
+            return Err("plages requises de poids LAN recouvrantes".into());
+        }
+        self.required_ranges = sorted;
+        Ok(())
+    }
+
+    fn required_ranges_satisfied(&self) -> bool {
+        if self.required_ranges.is_empty() {
+            return self.full_coverage();
+        }
+        self.required_ranges.iter().all(|required| {
+            let required_end = required.offset.saturating_add(required.length);
+            let mut cursor = required.offset;
+            let mut actual = self
+                .ranges
+                .iter()
+                .filter(|range| range.shard_id == required.shard_id)
+                .collect::<Vec<_>>();
+            actual.sort_by_key(|range| range.offset);
+            for range in actual {
+                if range.offset > cursor {
+                    break;
+                }
+                cursor = cursor.max(range.offset.saturating_add(range.length));
+                if cursor >= required_end {
+                    return true;
+                }
+            }
+            false
+        })
+    }
+
+    fn full_coverage(&self) -> bool {
+        let mut ranges = self.ranges.clone();
+        ranges.sort_by_key(|range| (range.offset, range.shard_id));
+        let mut cursor = 0u64;
+        for range in &ranges {
+            if range.offset != cursor {
+                return false;
+            }
+            cursor = cursor.saturating_add(range.length);
+        }
+        cursor == self.total_model_bytes
     }
 
     pub fn record_range(&mut self, range: LanWeightRange) -> Result<(), String> {
@@ -739,19 +819,7 @@ impl LanShardManifest {
     }
 
     pub fn is_complete(&self) -> bool {
-        if self.validate().is_err() {
-            return false;
-        }
-        let mut ranges = self.ranges.clone();
-        ranges.sort_by_key(|range| (range.offset, range.shard_id));
-        let mut cursor = 0u64;
-        for range in &ranges {
-            if range.offset != cursor {
-                return false;
-            }
-            cursor = cursor.saturating_add(range.length);
-        }
-        cursor == self.total_model_bytes
+        self.validate().is_ok() && self.required_ranges_satisfied()
     }
 
     pub fn missing_ranges(&self) -> Vec<(u64, u64)> {
@@ -779,6 +847,25 @@ impl LanShardManifest {
     pub fn validate(&self) -> Result<(), String> {
         if self.model_id.trim().is_empty() || self.total_model_bytes == 0 {
             return Err("manifeste de poids LAN invalide".into());
+        }
+        let mut required = self.required_ranges.clone();
+        required.sort_by_key(|range| range.offset);
+        for range in &required {
+            if range.shard_id > 65_535
+                || range.length == 0
+                || range.length > 64 * 1024 * 1024
+                || range
+                    .offset
+                    .checked_add(range.length)
+                    .is_none_or(|end| end > self.total_model_bytes)
+            {
+                return Err("plage requise de poids LAN invalide".into());
+            }
+        }
+        if required.windows(2).any(|pair| {
+            pair[0].offset.saturating_add(pair[0].length) > pair[1].offset
+        }) {
+            return Err("plages requises de poids LAN recouvrantes".into());
         }
         let mut ranges = self.ranges.iter().collect::<Vec<_>>();
         ranges.sort_by_key(|range| range.offset);
@@ -1888,6 +1975,28 @@ mod tests {
     }
 
     #[test]
+    fn manifeste_sparse_exige_exactement_les_plages_du_shard() {
+        let mut manifest = LanShardManifest::new("model-1", 1_000).unwrap();
+        manifest
+            .set_required_ranges(vec![
+                LanWeightRange { shard_id: 3, offset: 0, length: 100 },
+                LanWeightRange { shard_id: 3, offset: 700, length: 100 },
+            ])
+            .unwrap();
+        manifest
+            .record_range(LanWeightRange { shard_id: 3, offset: 0, length: 100 })
+            .unwrap();
+        assert!(!manifest.is_complete());
+        manifest
+            .record_range(LanWeightRange { shard_id: 3, offset: 700, length: 100 })
+            .unwrap();
+        assert!(manifest.is_complete());
+        assert!(manifest
+            .record_range(LanWeightRange { shard_id: 4, offset: 100, length: 100 })
+            .is_ok());
+    }
+
+    #[test]
     fn manifeste_persistant_invalide_est_refuse_sans_panique() {
         let mut manifest = LanShardManifest::new("model", u64::MAX).unwrap();
         assert!(manifest
@@ -2190,6 +2299,7 @@ mod tests {
             shard_id: 1,
             layer_index: 3,
             sequence: 0,
+            position_start: 0,
             page_index: 0,
             total_bytes: 4096,
             data: vec![0; 4096],
@@ -2203,6 +2313,7 @@ mod tests {
             shard_id: 99,
             layer_index: 3,
             sequence: 0,
+            position_start: 0,
             page_index: 0,
             total_bytes: 4096,
             data: vec![0; 4096],

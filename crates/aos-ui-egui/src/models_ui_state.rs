@@ -43,6 +43,7 @@ pub(crate) struct ModelsUiState {
     pub(crate) plan_loading: HashSet<String>,
     pub(crate) lan_cluster: Option<LanClusterNodesResponse>,
     pub(crate) lan_layer_pipeline: Option<LanClusterLayerPipelineStatusResponse>,
+    pub(crate) adapter_statuses: HashMap<String, aos_proto::ModelAdapterStatusResponse>,
     /// S7.3 : dernière activité par modèle (epoch ms) + dernier scan disque.
     pub(crate) model_usage: HashMap<String, u64>,
     pub(crate) disk_scan: Option<crate::models_disk::DiskScan>,
@@ -75,6 +76,7 @@ impl Default for ModelsUiState {
             plan_loading: HashSet::new(),
             lan_cluster: None,
             lan_layer_pipeline: None,
+            adapter_statuses: HashMap::new(),
             model_usage: HashMap::new(),
             disk_scan: None,
         }
@@ -142,6 +144,13 @@ impl ModelsUiState {
         response: LanClusterLayerPipelineStatusResponse,
     ) {
         self.lan_layer_pipeline = Some(response);
+    }
+
+    pub(crate) fn set_adapter_status(
+        &mut self,
+        response: aos_proto::ModelAdapterStatusResponse,
+    ) {
+        self.adapter_statuses.insert(response.backend.clone(), response);
     }
 
     pub(crate) fn set_providers(&mut self, list: Vec<ProviderRecord>) {
@@ -353,6 +362,7 @@ mod tests {
         state.set_model_infos(vec![ModelInfo {
             id: "m1".into(),
             name: "Model 1".into(),
+            n_layers: 0,
             privacy_class: "local".into(),
             state: aos_proto::ModelState::Loading,
             placement: None,
@@ -365,6 +375,7 @@ mod tests {
         state.set_model_infos(vec![ModelInfo {
             id: "m1".into(),
             name: "Model 1".into(),
+            n_layers: 0,
             privacy_class: "local".into(),
             state: aos_proto::ModelState::Error,
             placement: None,
@@ -380,6 +391,7 @@ mod tests {
         state.set_model_infos(vec![ModelInfo {
             id: "m1".into(),
             name: "Model 1".into(),
+            n_layers: 0,
             privacy_class: "local".into(),
             state: aos_proto::ModelState::Loaded,
             placement: None,
@@ -388,5 +400,33 @@ mod tests {
         }]);
         assert!(!state.is_transitioning("m1"));
         assert!(!state.last_errors.contains_key("m1"));
+    }
+
+    #[test]
+    fn adapter_status_is_replaced_by_backend() {
+        let mut state = ModelsUiState::default();
+        state.set_adapter_status(aos_proto::ModelAdapterStatusResponse {
+            backend: "npu".into(),
+            configured: true,
+            reachable: false,
+            device: None,
+            memory_bytes: None,
+            supported_operations: Vec::new(),
+            supported_quantizations: Vec::new(),
+            reason: "hors ligne".into(),
+        });
+        assert!(!state.adapter_statuses["npu"].reachable);
+        state.set_adapter_status(aos_proto::ModelAdapterStatusResponse {
+            backend: "npu".into(),
+            configured: true,
+            reachable: true,
+            device: Some("fake-npu".into()),
+            memory_bytes: Some(1 << 30),
+            supported_operations: vec!["gemm".into()],
+            supported_quantizations: vec!["q8".into()],
+            reason: "ok".into(),
+        });
+        assert_eq!(state.adapter_statuses["npu"].device.as_deref(), Some("fake-npu"));
+        assert!(state.adapter_statuses["npu"].reachable);
     }
 }

@@ -24,6 +24,7 @@ mod delegate_tests {
         ModelInfo {
             id: id.into(),
             name: id.into(),
+            n_layers: 0,
             privacy_class: "local".into(),
             state,
             placement: None,

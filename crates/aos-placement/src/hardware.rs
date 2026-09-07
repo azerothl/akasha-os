@@ -85,6 +85,17 @@ pub struct NpuCapabilities {
     pub int8: bool,
     #[serde(default)]
     pub experimental: bool,
+    /// Operations exposed by the runtime probe (for example `gemm`, `gemv`,
+    /// `rmsnorm` or `attention`). An empty list means that only presence was
+    /// detected and execution support is unknown.
+    #[serde(default)]
+    pub supported_operations: Vec<String>,
+    /// Quantized formats accepted by the attached runtime.
+    #[serde(default)]
+    pub supported_quantizations: Vec<crate::adaptive::Quantization>,
+    /// Optional endpoint of an independently managed Akasha adapter.
+    #[serde(default)]
+    pub runtime_endpoint: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -95,6 +106,12 @@ pub struct WebGpuCapabilities {
     pub shader_f16: bool,
     #[serde(default)]
     pub experimental: bool,
+    #[serde(default)]
+    pub supported_operations: Vec<String>,
+    #[serde(default)]
+    pub supported_quantizations: Vec<crate::adaptive::Quantization>,
+    #[serde(default)]
+    pub runtime_endpoint: Option<String>,
 }
 
 /// Un GPU physique (E9 / P5.2 — partition pipeline inter-GPU).
