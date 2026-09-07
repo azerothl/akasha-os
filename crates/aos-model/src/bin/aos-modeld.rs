@@ -298,6 +298,7 @@ async fn expect_lan_ack(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn send_lan_token_inference(
     local_node_id: &str,
     registry: &LanPairingRegistry,
@@ -374,6 +375,7 @@ async fn send_lan_token_inference(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn send_lan_chat_inference(
     local_node_id: &str,
     registry: &LanPairingRegistry,
@@ -582,6 +584,7 @@ fn stage_lan_weight_shard(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn send_lan_kv_transfer(
     local_node_id: &str,
     registry: &LanPairingRegistry,
@@ -709,6 +712,7 @@ async fn send_lan_kv_transfer(
     Ok((pages.len() as u32, total_bytes as u64))
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn send_lan_weight_shard(
     local_node_id: &str,
     registry: &LanPairingRegistry,
@@ -3857,7 +3861,6 @@ async fn main() {
 #[cfg(test)]
 mod tests {
     use super::{lan_artifact_component, parse_lan_session_key, stage_lan_weight_shard};
-    use std::path::PathBuf;
 
     #[test]
     fn cle_lan_hex_est_strictement_validee() {
@@ -3868,7 +3871,7 @@ mod tests {
 
     #[test]
     fn staging_poids_lan_est_atomique_et_sanitise() {
-        let root = PathBuf::from(std::env::temp_dir())
+        let root = std::env::temp_dir()
             .join(format!("akasha-weight-stage-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         assert_eq!(
