@@ -46,6 +46,17 @@ pub fn persona_by_id(id: &str) -> Option<&'static RoomPersona> {
     ROOM_PERSONAS.iter().find(|p| p.id == id)
 }
 
+/// Mention tokens that resolve to a built-in persona (EN display name, FR UI label, id).
+pub fn persona_mention_labels(persona_id: &str) -> &'static [&'static str] {
+    match persona_id {
+        "researcher" => &["Researcher", "Chercheur", "researcher"],
+        "critic" => &["Critic", "Critique", "critic"],
+        "coder" => &["Coder", "Codeur", "coder"],
+        "planner" => &["Planner", "Planificateur", "planner"],
+        _ => &[],
+    }
+}
+
 /// Stable roster id shared across salon sessions (`persona-coder`, …).
 pub fn persona_agent_id(persona_id: &str) -> String {
     format!("persona-{persona_id}")

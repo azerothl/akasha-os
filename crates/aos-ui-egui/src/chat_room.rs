@@ -299,12 +299,15 @@ fn mention_token_end(input: &str, at: usize) -> usize {
 
 /// Replace the partial `@token` at `at` with `@display_name ` (drops the unfinished token tail).
 pub fn insert_mention(input: &str, at: usize, display_name: &str) -> String {
-    let _end = mention_token_end(input, at);
+    let end = mention_token_end(input, at);
     let mut out = String::new();
     out.push_str(&input[..at]);
     out.push('@');
     out.push_str(display_name);
     out.push(' ');
+    if end < input.len() {
+        out.push_str(input[end..].trim_start());
+    }
     out
 }
 
@@ -358,6 +361,7 @@ pub fn mention_completions(
     let mut out = Vec::new();
     for m in members {
         let label = member_display_label(t, m);
+        let mention_token = m.display_name.trim();
         let name_match = !needle.is_empty() && label.to_ascii_lowercase().starts_with(&needle);
         let stored_name_match =
             !needle.is_empty() && m.display_name.to_ascii_lowercase().starts_with(&needle);
@@ -367,7 +371,7 @@ pub fn mention_completions(
             .as_deref()
             .is_some_and(|p| !needle.is_empty() && p.to_ascii_lowercase().starts_with(&needle));
         if needle.is_empty() || name_match || stored_name_match || id_match || persona_match {
-            out.push((insert_mention(input, at, &label), label));
+            out.push((insert_mention(input, at, mention_token), label));
         }
     }
     out
@@ -472,8 +476,8 @@ mod tests {
     #[test]
     fn insert_mention_drops_partial_token_tail() {
         let out = insert_mention("bonjour @agent-2?", 8, "Maya");
-        assert_eq!(out, "bonjour @Maya ");
-        assert!(!out.contains('?'));
+        assert_eq!(out, "bonjour @Maya ?");
+        assert!(!out.contains("agent-2"));
     }
 
     #[test]
@@ -492,6 +496,32 @@ mod tests {
         let c = speaker_color_rgb("agent-beta", true);
         assert_eq!(a, b);
         assert_ne!(a, c);
+    }
+
+    #[test]
+    fn mention_completions_insert_roster_display_name_not_localized_label() {
+        let mut m1 = member("persona-researcher", "Researcher");
+        m1.persona_id = Some("researcher".into());
+        let members = vec![m1];
+        let t_fr = i18n::strings("fr");
+        let hits = mention_completions("hello @Cher", &members, &t_fr);
+        assert_eq!(hits.len(), 1);
+        assert!(hits[0].0.contains("@Researcher"));
+        assert!(!hits[0].0.contains("@Chercheur"));
+        assert_eq!(hits[0].1, t_fr.persona_researcher);
+    }
+
+    #[test]
+    fn turn_queue_directed_mention_only_target() {
+        let t = i18n::strings("en");
+        let mut m1 = member("a1", "Researcher");
+        m1.persona_id = Some("researcher".into());
+        let mut m2 = member("a2", "Coder");
+        m2.persona_id = Some("coder".into());
+        let members = vec![m1, m2];
+        let q = format_turn_speaker_queue(&t, "@Coder review this", &members, None).expect("queue");
+        assert!(q.contains(t.persona_coder));
+        assert!(!q.contains(t.persona_researcher));
     }
 
     #[test]

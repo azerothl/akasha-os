@@ -1,5 +1,6 @@
 //! Conducteur déterministe pour les salons multi-agent (`ChatSessionMode::Room`).
 
+use crate::room_personas::persona_mention_labels;
 use aos_proto::{ChatRoomConductorPolicy, ChatRoomMember};
 
 /// Plafond dur des tours agent par message utilisateur (indépendamment de la politique).
@@ -73,6 +74,9 @@ fn mention_labels_longest_first(members: &[ChatRoomMember]) -> Vec<(String, Stri
         }
         if let Some(p) = m.persona_id.as_deref().filter(|p| !p.is_empty()) {
             labels.push((p.to_string(), m.agent_id.clone()));
+            for alias in persona_mention_labels(p) {
+                labels.push((alias.to_string(), m.agent_id.clone()));
+            }
         }
         labels.push((m.agent_id.clone(), m.agent_id.clone()));
     }
@@ -334,6 +338,26 @@ mod tests {
     }
 
     #[test]
+    fn peer_followup_when_reply_mentions_localized_persona_label() {
+        let m = vec![
+            ChatRoomMember {
+                agent_id: "persona-researcher".into(),
+                display_name: "Researcher".into(),
+                persona_id: Some("researcher".into()),
+                joined_ms: 1,
+            },
+            ChatRoomMember {
+                agent_id: "persona-critic".into(),
+                display_name: "Critic".into(),
+                persona_id: Some("critic".into()),
+                joined_ms: 2,
+            },
+        ];
+        let peer = detect_peer_address("@Critique peux-tu confirmer ?", &m, "persona-researcher");
+        assert_eq!(peer, Some("persona-critic".into()));
+    }
+
+    #[test]
     fn peer_followup_when_reply_mentions_member() {
         let m = members();
         let peer = detect_peer_address("@Beta can you confirm?", &m, "agent-alpha");
@@ -554,6 +578,25 @@ mod tests {
             turns,
             vec![String::from("agent-alpha"), String::from("agent-beta")]
         );
+    }
+
+    #[test]
+    fn parse_mentions_localized_persona_label() {
+        let m = vec![ChatRoomMember {
+            agent_id: "persona-researcher".into(),
+            display_name: "Researcher".into(),
+            persona_id: Some("researcher".into()),
+            joined_ms: 1,
+        }];
+        let ids = parse_mentions("@Chercheur peux-tu résumer ?", &m);
+        assert_eq!(ids, vec![String::from("persona-researcher")]);
+    }
+
+    #[test]
+    fn directed_mention_queues_only_target_member() {
+        let m = members();
+        let queue = build_initial_queue("@Beta what do you think?", &m);
+        assert_eq!(queue, vec![String::from("agent-beta")]);
     }
 
     #[test]

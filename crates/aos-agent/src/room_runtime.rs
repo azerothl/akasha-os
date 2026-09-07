@@ -23,8 +23,8 @@ use crate::room_reply::split_room_reply;
 use crate::skills::{load_skills, merge_skill_tools};
 use crate::tool_exec::execute_room_tool;
 use crate::tools::{
-    canvas_tools_from_module_list, caps_for_tools, canonicalize_tool_name, merge_canvas_tools,
-    select_tools, ToolDesc,
+    canvas_tools_from_module_list, caps_for_tools, canonicalize_tool_name, default_agent_tools,
+    merge_canvas_tools, select_tools, ToolDesc,
 };
 use aos_ipc::BusClient;
 use aos_proto::{
@@ -164,19 +164,30 @@ fn member_display_name<'a>(
         .ok_or_else(|| format!("membre {agent_id} absent du salon"))
 }
 
-/// Assemble tool ids + caps for a roster member turn.
+/// Assemble tool ids + caps for a roster member salon turn.
 ///
-/// When `document_ask` is true (user asked for a presentation/report file), inject
+/// Built-in personas often ship with empty `tools`/`skills`; merge the same baseline
+/// notes/tasks/fs/web kit as solo chat. When `document_ask` is true, inject
 /// `file-author` + `files.generate` even if the roster spec only listed notes tools.
-pub fn room_member_kit(
+pub fn assemble_room_member_tools(
     spec: &AgentSpec,
     canvas_open: bool,
     canvas_exported: &[String],
-    document_ask: bool,
+    user_message: &str,
 ) -> (Vec<String>, Vec<String>) {
     let mut skills = spec.skills.clone();
     let mut base_tools = spec.tools.clone();
-    if document_ask {
+    if base_tools.is_empty() {
+        for t in default_agent_tools() {
+            if !base_tools.iter().any(|x| x == &t) {
+                base_tools.push(t);
+            }
+        }
+        if !skills.iter().any(|s| s == "notes-writer") {
+            skills.push("notes-writer".into());
+        }
+    }
+    if crate::research_detect::user_requested_document(user_message) {
         crate::research_detect::ensure_document_file_tools(&mut skills, &mut base_tools);
     }
     let skill_docs = load_skills(&skills);
@@ -190,6 +201,21 @@ pub fn room_member_kit(
         }
     }
     (tool_ids, caps)
+}
+
+/// Back-compat alias for [`assemble_room_member_tools`].
+pub fn room_member_kit(
+    spec: &AgentSpec,
+    canvas_open: bool,
+    canvas_exported: &[String],
+    document_ask: bool,
+) -> (Vec<String>, Vec<String>) {
+    let user_message = if document_ask {
+        "prepare a document"
+    } else {
+        ""
+    };
+    assemble_room_member_tools(spec, canvas_open, canvas_exported, user_message)
 }
 
 fn last_user_message_text(session: &ChatSessionGetResponse) -> &str {
@@ -659,10 +685,13 @@ pub async fn execute_room_turn(
     } else {
         Vec::new()
     };
-    let document_ask =
-        crate::research_detect::user_requested_document(last_user_message_text(&session));
-    let (tool_ids, caps) =
-        room_member_kit(&spec, session.meta.canvas_open, &canvas_exported, document_ask);
+    let user_message = last_user_message_text(&session);
+    let (tool_ids, caps) = assemble_room_member_tools(
+        &spec,
+        session.meta.canvas_open,
+        &canvas_exported,
+        user_message,
+    );
     let tool_descs = if tool_ids.is_empty() {
         Vec::new()
     } else {
@@ -839,6 +868,8 @@ pub async fn execute_room_conduct(
             break;
         }
 
+        // Slice C: optional supervisor-directed speaker selection could replace or
+        // augment this peer rebound queue without changing mention parsing.
         if session.meta.conductor_policy.allow_peer_debate {
             for peer_id in
                 detect_peer_addresses(&reply.content, &session.meta.members, &member.agent_id)
@@ -1103,6 +1134,35 @@ mod tests {
     }
 
     #[test]
+    fn room_member_kit_adds_baseline_tools_when_spec_empty() {
+        let spec = AgentSpec {
+            agent_id: "persona-coder".into(),
+            goal: AgentGoal::default(),
+            kind: Default::default(),
+            display_name: Some("Coder".into()),
+            persona_id: Some("coder".into()),
+            system_prompt: None,
+            skills: vec![],
+            tools: vec![],
+            mcp_servers: vec![],
+            documents: vec![],
+            caps: vec![],
+            model_id: None,
+            policy: None,
+            parent_id: None,
+            session_id: None,
+            budget: Default::default(),
+            optimize_prompt: false,
+            gate_mode: "ask".into(),
+            origin: None,
+            cognitive_mode: aos_proto::CognitiveMode::Normal,
+        };
+        let (ids, caps) = room_member_kit(&spec, false, &[], false);
+        assert!(ids.iter().any(|x| x == "notes.create"));
+        assert!(caps.iter().any(|c| c == "tool.invoke:notes"));
+    }
+
+    #[test]
     fn room_member_kit_adds_canvas_when_open() {
         let spec = AgentSpec {
             agent_id: "persona-coder".into(),
@@ -1166,6 +1226,66 @@ mod tests {
         let (ids, caps) = room_member_kit(&spec, false, &[], false);
         assert!(!ids.iter().any(|x| x.starts_with("canvas.")));
         assert!(!caps.iter().any(|c| c == "tool.invoke:canvas"));
+    }
+
+    #[test]
+    fn assemble_room_member_tools_injects_baseline_when_spec_empty() {
+        let spec = AgentSpec {
+            agent_id: "persona-researcher".into(),
+            goal: AgentGoal::default(),
+            kind: Default::default(),
+            display_name: Some("Researcher".into()),
+            persona_id: Some("researcher".into()),
+            system_prompt: None,
+            skills: vec![],
+            tools: vec![],
+            mcp_servers: vec![],
+            documents: vec![],
+            caps: vec![],
+            model_id: None,
+            policy: None,
+            parent_id: None,
+            session_id: None,
+            budget: Default::default(),
+            optimize_prompt: false,
+            gate_mode: "ask".into(),
+            origin: None,
+            cognitive_mode: aos_proto::CognitiveMode::Normal,
+        };
+        let (ids, caps) = assemble_room_member_tools(&spec, false, &[], "écris une note rapide");
+        assert!(ids.iter().any(|x| x == "notes.create"));
+        assert!(caps.iter().any(|c| c == "tool.invoke:notes"));
+        assert!(!ids.iter().any(|x| x == "files.generate"));
+    }
+
+    #[test]
+    fn assemble_room_member_tools_injects_files_generate_on_document_ask() {
+        let spec = AgentSpec {
+            agent_id: "agent-x".into(),
+            goal: AgentGoal::default(),
+            kind: Default::default(),
+            display_name: None,
+            persona_id: None,
+            system_prompt: None,
+            skills: vec![],
+            tools: vec![],
+            mcp_servers: vec![],
+            documents: vec![],
+            caps: vec![],
+            model_id: None,
+            policy: None,
+            parent_id: None,
+            session_id: None,
+            budget: Default::default(),
+            optimize_prompt: false,
+            gate_mode: "ask".into(),
+            origin: None,
+            cognitive_mode: aos_proto::CognitiveMode::Normal,
+        };
+        let (ids, caps) =
+            assemble_room_member_tools(&spec, false, &[], "prepare a document about rust");
+        assert!(ids.iter().any(|x| x == "files.generate"));
+        assert!(caps.iter().any(|c| c == "fs.write:/downloads/**"));
     }
 
     #[test]
