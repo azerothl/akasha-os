@@ -435,6 +435,7 @@ is persisted in `var/run/preferences.json` and gates the configured inventory.
 It is disabled by default.
 
 The model daemon exposes `model.cluster.nodes` for the current inventory,
+`model.cluster.layer_pipeline_status` for the native RPC and adapter gate,
 `model.cluster.pair` for a user-confirmed fingerprint match and
 `model.cluster.revoke` for immediate exclusion. The trust inventory is saved
 in `var/run/lan-pairing.json`; a changed fingerprint is never merged into an
@@ -972,6 +973,7 @@ If step 3 partially fails → degraded mode with clear messages; direct shell re
 | `model.cluster.recover` | Reassign shards after a reported node loss and optionally propagate new assignments with a session-key secret |
 | `model.cluster.cancel` | Cancel a LAN job and propagate cancellation through the encrypted transport; requires a session-key secret |
 | `model.cluster.nodes` | List configured nodes and their trust state |
+| `model.cluster.layer_pipeline_status` | Report native RPC detection and layer-pipeline adapter readiness |
 | `model.cluster.discover` | Add or update a LAN node advertisement without pairing it |
 | `model.cluster.pair` | Persist an explicit fingerprint-confirmed pairing |
 | `model.cluster.revoke` | Persist immediate node revocation |

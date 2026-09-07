@@ -15,11 +15,11 @@ use aos_proto::{
     LanClusterDispatchRequest, LanClusterDispatchResponse, LanClusterInferChatRequest,
     LanClusterInferChatResponse, LanClusterInferTokensRequest, LanClusterInferTokensResponse,
     LanClusterJobRequest, LanClusterKvTransferRequest, LanClusterKvTransferResponse,
-    LanClusterNode, LanClusterNodeRequest, LanClusterNodesResponse, LanClusterPairRequest,
-    LanClusterPlanRequest, LanClusterPlanResponse, LanClusterWeightTransferRequest,
-    LanClusterWeightTransferResponse, LoadRequest, MediaAudioGenerateRequest,
-    MediaImageGenerateRequest, MediaImageUpscaleRequest, MigrateRequest, ModelIdRequest,
-    ModelPlanDiagnostic, ModelPlanRequest, TokenEvent, UnloadRequest,
+    LanClusterLayerPipelineStatusResponse, LanClusterNode, LanClusterNodeRequest,
+    LanClusterNodesResponse, LanClusterPairRequest, LanClusterPlanRequest, LanClusterPlanResponse,
+    LanClusterWeightTransferRequest, LanClusterWeightTransferResponse, LoadRequest,
+    MediaAudioGenerateRequest, MediaImageGenerateRequest, MediaImageUpscaleRequest, MigrateRequest,
+    ModelIdRequest, ModelPlanDiagnostic, ModelPlanRequest, TokenEvent, UnloadRequest,
 };
 use aos_registry::ModelRegistry;
 use std::path::{Path, PathBuf};
@@ -1943,6 +1943,34 @@ async fn main() {
                             .await;
                     }
                 }
+            }
+        });
+    }
+    {
+        let model_config = config.clone();
+        let preference_home = preference_home.clone();
+        svc.on("model.cluster.layer_pipeline_status", move |ctx| {
+            let model_config = model_config.clone();
+            let preference_home = preference_home.clone();
+            async move {
+                let enabled = model_config.lan_cluster_enabled_at(&preference_home);
+                let native_rpc = matches!(
+                    aos_llama::LlamaBackend::distributed_layer_capability(),
+                    aos_llama::DistributedLayerCapability::NativeRpc
+                );
+                let response = LanClusterLayerPipelineStatusResponse {
+                    enabled,
+                    native_rpc,
+                    adapter_ready: false,
+                    reason: if !enabled {
+                        "cluster LAN désactivé".into()
+                    } else if !native_rpc {
+                        "build llama.cpp sans backend RPC".into()
+                    } else {
+                        "backend RPC détecté, adaptateur Akasha non câblé".into()
+                    },
+                };
+                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &response).await;
             }
         });
     }

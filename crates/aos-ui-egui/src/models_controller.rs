@@ -36,6 +36,13 @@ impl UiApp {
         self.models_ui.set_lan_cluster(response);
     }
 
+    pub(crate) fn on_model_cluster_layer_pipeline_status(
+        &mut self,
+        response: aos_proto::LanClusterLayerPipelineStatusResponse,
+    ) {
+        self.models_ui.set_lan_layer_pipeline(response);
+    }
+
     pub(crate) fn on_model_cluster_error(&mut self, error: String) {
         self.status = error.clone();
         self.toasts.push_error(error);

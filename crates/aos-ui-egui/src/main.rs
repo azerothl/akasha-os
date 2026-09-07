@@ -2566,6 +2566,9 @@ impl eframe::App for UiApp {
                     self.on_model_plan_failed(model_id, error)
                 }
                 Evt::ModelClusterNodes(response) => self.on_model_cluster_nodes(response),
+                Evt::ModelClusterLayerPipelineStatus(response) => {
+                    self.on_model_cluster_layer_pipeline_status(response)
+                }
                 Evt::ModelClusterRefresh => {
                     let _ = self.cmd_tx.send(Cmd::ModelClusterNodes);
                 }

@@ -1,7 +1,10 @@
 //! Mutable state owned by the Models / Providers panels (catalog, downloads, HF import).
 
 use crate::models_page::ModelCatalogTab;
-use aos_proto::{LanClusterNodesResponse, ModelInfo, ModelPlanDiagnostic, ProviderRecord};
+use aos_proto::{
+    LanClusterLayerPipelineStatusResponse, LanClusterNodesResponse, ModelInfo,
+    ModelPlanDiagnostic, ProviderRecord,
+};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone)]
@@ -39,6 +42,7 @@ pub(crate) struct ModelsUiState {
     pub(crate) plan_errors: HashMap<String, String>,
     pub(crate) plan_loading: HashSet<String>,
     pub(crate) lan_cluster: Option<LanClusterNodesResponse>,
+    pub(crate) lan_layer_pipeline: Option<LanClusterLayerPipelineStatusResponse>,
     /// S7.3 : dernière activité par modèle (epoch ms) + dernier scan disque.
     pub(crate) model_usage: HashMap<String, u64>,
     pub(crate) disk_scan: Option<crate::models_disk::DiskScan>,
@@ -70,6 +74,7 @@ impl Default for ModelsUiState {
             plan_errors: HashMap::new(),
             plan_loading: HashSet::new(),
             lan_cluster: None,
+            lan_layer_pipeline: None,
             model_usage: HashMap::new(),
             disk_scan: None,
         }
@@ -130,6 +135,13 @@ impl ModelsUiState {
 
     pub(crate) fn set_lan_cluster(&mut self, response: LanClusterNodesResponse) {
         self.lan_cluster = Some(response);
+    }
+
+    pub(crate) fn set_lan_layer_pipeline(
+        &mut self,
+        response: LanClusterLayerPipelineStatusResponse,
+    ) {
+        self.lan_layer_pipeline = Some(response);
     }
 
     pub(crate) fn set_providers(&mut self, list: Vec<ProviderRecord>) {

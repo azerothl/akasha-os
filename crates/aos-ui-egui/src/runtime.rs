@@ -2726,6 +2726,21 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             {
                 Ok(nodes) => {
                     let _ = evt_tx.send(Evt::ModelClusterNodes(nodes));
+                    match bus
+                        .call::<(), aos_proto::LanClusterLayerPipelineStatusResponse>(
+                            "model.cluster.layer_pipeline_status",
+                            &(),
+                            vec![],
+                        )
+                        .await
+                    {
+                        Ok(status) => {
+                            let _ = evt_tx.send(Evt::ModelClusterLayerPipelineStatus(status));
+                        }
+                        Err(e) => {
+                            let _ = evt_tx.send(Evt::ModelClusterOperationFailed(e.to_string()));
+                        }
+                    }
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::ModelClusterOperationFailed(e.to_string()));

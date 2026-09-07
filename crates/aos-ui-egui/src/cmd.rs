@@ -731,6 +731,7 @@ pub(crate) enum Evt {
         error: String,
     },
     ModelClusterNodes(aos_proto::LanClusterNodesResponse),
+    ModelClusterLayerPipelineStatus(aos_proto::LanClusterLayerPipelineStatusResponse),
     ModelClusterRefresh,
     ModelClusterOperationFailed(String),
     Providers(Vec<ProviderRecord>),

@@ -583,6 +583,7 @@ pub struct LanActivationAssembly {
     pub sequence: u32,
     total_bytes: u64,
     next_page: u32,
+    finished: bool,
     data: Vec<u8>,
 }
 
@@ -611,6 +612,7 @@ impl LanActivationAssembly {
             sequence,
             total_bytes,
             next_page: 0,
+            finished: false,
             data: Vec::with_capacity(total_bytes as usize),
         })
     }
@@ -622,7 +624,11 @@ impl LanActivationAssembly {
         data: &[u8],
         final_page: bool,
     ) -> Result<Option<Vec<u8>>, String> {
-        if page_index != self.next_page || data.is_empty() || data.len() > 1_048_576 {
+        if self.finished
+            || page_index != self.next_page
+            || data.is_empty()
+            || data.len() > 1_048_576
+        {
             return Err("page d’activation LAN hors ordre ou invalide".into());
         }
         let new_len = self.data.len().saturating_add(data.len());
@@ -637,7 +643,12 @@ impl LanActivationAssembly {
         }
         self.data.extend_from_slice(data);
         self.next_page = self.next_page.saturating_add(1);
-        Ok(final_page.then(|| std::mem::take(&mut self.data)))
+        if final_page {
+            self.finished = true;
+            Ok(Some(std::mem::take(&mut self.data)))
+        } else {
+            Ok(None)
+        }
     }
 }
 
@@ -1875,6 +1886,7 @@ mod tests {
             Some(b"abcdef".to_vec())
         );
         assert!(assembly.push_page(3, b"x", true).is_err());
+        assert!(assembly.push_page(2, b"ef", true).is_err());
     }
 
     #[test]

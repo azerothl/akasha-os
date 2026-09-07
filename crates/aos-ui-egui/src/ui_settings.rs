@@ -377,6 +377,23 @@ impl UiApp {
                             self.status = format!("{} — {}", t.settings_saved, t.lan_cluster_hint);
                         }
                         ui.label(t.lan_cluster_hint);
+                        if let Some(status) = &self.models_ui.lan_layer_pipeline {
+                            ui.horizontal_wrapped(|ui| {
+                                ui.label(t.lan_layer_pipeline_status);
+                                let ready = status.enabled
+                                    && status.native_rpc
+                                    && status.adapter_ready;
+                                ui.colored_label(
+                                    if ready {
+                                        egui::Color32::from_rgb(80, 190, 110)
+                                    } else {
+                                        egui::Color32::from_rgb(220, 160, 70)
+                                    },
+                                    if ready { "ready" } else { "unavailable" },
+                                );
+                                ui.weak(&status.reason);
+                            });
+                        }
                         egui::Grid::new("settings_lan_local")
                             .num_columns(2)
                             .spacing([12.0, 6.0])

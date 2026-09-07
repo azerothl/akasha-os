@@ -592,6 +592,14 @@ pub struct LanClusterNodesResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanClusterLayerPipelineStatusResponse {
+    pub enabled: bool,
+    pub native_rpc: bool,
+    pub adapter_ready: bool,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LanClusterPairRequest {
     pub node_id: String,
     pub public_key_fingerprint: String,
