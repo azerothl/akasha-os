@@ -130,6 +130,20 @@ pub enum LanWorkMessage {
         data: Vec<u8>,
         final_page: bool,
     },
+    /// One bounded page of activations between two contiguous layer stages.
+    /// The current worker returns an explicit unsupported error until the
+    /// native llama.cpp layer backend is enabled.
+    LayerActivationPage {
+        work_id: String,
+        request_id: String,
+        shard_id: u32,
+        layer_index: u32,
+        sequence: u32,
+        page_index: u32,
+        total_bytes: u64,
+        data: Vec<u8>,
+        final_page: bool,
+    },
     ChatInfer {
         work_id: String,
         request_id: String,
@@ -187,6 +201,7 @@ impl LanWorkMessage {
             | Self::WeightRequest { work_id, .. }
             | Self::WeightBegin { work_id, .. }
             | Self::WeightPage { work_id, .. }
+            | Self::LayerActivationPage { work_id, .. }
             | Self::ChatInfer { work_id, .. }
             | Self::TokenBatch { work_id, .. }
             | Self::TextBatch { work_id, .. }
@@ -427,6 +442,34 @@ impl LanWorkMessage {
                 }
                 if !work.shard_ids.contains(shard_id) {
                     return Err("shard de poids LAN non déclaré".into());
+                }
+            }
+            Self::LayerActivationPage {
+                request_id,
+                shard_id,
+                layer_index,
+                sequence,
+                page_index,
+                total_bytes,
+                data,
+                ..
+            } => {
+                validate_request_id(request_id)?;
+                if !work.allow_sensitive_data {
+                    return Err("activations LAN refusées sans politique sensible explicite".into());
+                }
+                if !work.shard_ids.contains(shard_id)
+                    || *shard_id > 65_535
+                    || *layer_index > 65_535
+                    || *sequence > 1_048_576
+                    || *page_index > 65_535
+                    || *total_bytes == 0
+                    || *total_bytes > 64 * 1024 * 1024
+                    || data.is_empty()
+                    || data.len() > 1_048_576
+                    || data.len() as u64 > *total_bytes
+                {
+                    return Err("page d'activation LAN invalide".into());
                 }
             }
             Self::Nack {
@@ -2002,6 +2045,32 @@ mod tests {
             page_index: 0,
             offset: 0,
             data: vec![7; 4096],
+            final_page: true,
+        }
+        .validate_for(&sensitive_work, "n1")
+        .is_err());
+        assert!(LanWorkMessage::LayerActivationPage {
+            work_id: "data-work".into(),
+            request_id: "activation-1".into(),
+            shard_id: 1,
+            layer_index: 3,
+            sequence: 0,
+            page_index: 0,
+            total_bytes: 4096,
+            data: vec![0; 4096],
+            final_page: true,
+        }
+        .validate_for(&sensitive_work, "n1")
+        .is_ok());
+        assert!(LanWorkMessage::LayerActivationPage {
+            work_id: "data-work".into(),
+            request_id: "activation-1".into(),
+            shard_id: 99,
+            layer_index: 3,
+            sequence: 0,
+            page_index: 0,
+            total_bytes: 4096,
+            data: vec![0; 4096],
             final_page: true,
         }
         .validate_for(&sensitive_work, "n1")

@@ -77,6 +77,10 @@ poids d’un shard vers le staging local d’un worker cible. Les pages sont
 chiffrées, bornées à 512 KiB, validées dans l’ordre puis publiées
 atomiquement avec un manifeste. Ce staging n’est pas encore consommé par
 llama.cpp pour exécuter des couches distantes.
+Le protocole contient aussi des pages d’activation typées et bornées pour le
+futur passage d’un segment au suivant ; le worker répond explicitement que ce
+pipeline est indisponible tant que l’adaptateur natif llama.cpp n’est pas
+activé.
 Une retransmission du même shard est acceptée si les octets sont identiques ;
 un contenu différent est refusé sans écraser le fichier existant. Les publications
 des connexions d’un même daemon sont sérialisées pour préserver le manifeste de

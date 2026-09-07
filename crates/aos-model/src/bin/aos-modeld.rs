@@ -1585,6 +1585,12 @@ async fn handle_lan_worker_connection(
                     LanWorkMessage::TextBatch { .. } => {
                         return Err("batch texte LAN reçu dans le mauvais sens".into());
                     }
+                    LanWorkMessage::LayerActivationPage { .. } => {
+                        return Err(
+                            "pipeline de couches LAN indisponible : backend llama.cpp non activé"
+                                .into(),
+                        );
+                    }
                     _ => return Err("message LAN worker inattendu".into()),
                 }
             }

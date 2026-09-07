@@ -67,6 +67,9 @@ paired worker. The state is capped at 64 MiB and pages must arrive in order.
 range for a declared shard to the target worker's local staging area. Pages are
 encrypted, ordered and atomically published with a manifest. The staged bytes
 are not yet consumed by llama.cpp for remote-layer execution.
+The protocol also defines bounded typed activation pages for the future hop
+between contiguous layer segments; workers return an explicit unsupported error
+until the native llama.cpp adapter is enabled.
 Retrying a shard accepts identical bytes and rejects different content without
 overwriting the existing file. Publication is serialized across connections in
 one daemon to preserve coverage entries. Use one daemon per staging directory.
