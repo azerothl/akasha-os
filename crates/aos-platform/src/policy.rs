@@ -111,6 +111,15 @@ impl PolicyEngine {
                 effect: PolicyEffect::RequireConfirmation,
                 timeout_sec: Some(confirm_timeout_sec),
             },
+            PolicyRule {
+                name: "confirm_host_folder_access".into(),
+                matches: vec![(
+                    "action.kind".into(),
+                    serde_json::json!(["fs.host.access"]),
+                )],
+                effect: PolicyEffect::RequireConfirmation,
+                timeout_sec: Some(confirm_timeout_sec),
+            },
         ]
     }
 
@@ -222,5 +231,13 @@ mod tests {
         let (eff, rule) = e.evaluate(&ctx(&[("action.kind", "device.usb.io")]));
         assert_eq!(eff, PolicyEffect::RequireConfirmation);
         assert_eq!(rule.unwrap().name, "confirm_device_usb");
+    }
+
+    #[test]
+    fn host_folder_access_exige_confirmation() {
+        let e = engine();
+        let (eff, rule) = e.evaluate(&ctx(&[("action.kind", "fs.host.access")]));
+        assert_eq!(eff, PolicyEffect::RequireConfirmation);
+        assert_eq!(rule.unwrap().name, "confirm_host_folder_access");
     }
 }

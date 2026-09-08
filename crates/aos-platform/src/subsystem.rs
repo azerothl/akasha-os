@@ -6,7 +6,7 @@
 
 use crate::audit::AuditJournal;
 use crate::chat_session::ChatSessionStore;
-use crate::confirm::ConfirmManager;
+use crate::confirm::{ConfirmManager, ConfirmationResult};
 use crate::memory::MemoryStore;
 use crate::module_rt::{read_module_asset_from_dir, HostCallCtx, HostServices, ModuleRuntime};
 use crate::net::EgressControl;
@@ -136,6 +136,8 @@ pub struct PlatformSubsystem {
     pub devices: Mutex<crate::device_capture::DeviceCaptureManager>,
     /// Accès USB opt-in (énumération + I/O série).
     pub usb: Mutex<crate::device_usb::UsbIoManager>,
+    /// Grants dossiers hôtes hors sandbox (issue #157).
+    pub host_folders: Mutex<crate::host_folder::HostFolderGrantManager>,
     pub net: Mutex<EgressControl>,
     pub secrets: Mutex<SecretStore>,
     /// Caps accordées par `cap.request` (registre logique par agent).
@@ -213,6 +215,8 @@ impl PlatformSubsystem {
             .map_err(|e| e.to_string())?;
         let usb = crate::device_usb::UsbIoManager::open(&config.sessions_dir)
             .map_err(|e| e.to_string())?;
+        let host_folders = crate::host_folder::HostFolderGrantManager::open(&config.sessions_dir)
+            .map_err(|e| e.to_string())?;
         let secrets_backend = secrets.master_backend().as_str().to_string();
         let mut net = EgressControl::new();
         if config.net_mode == "offline_strict" {
@@ -237,6 +241,7 @@ impl PlatformSubsystem {
             trust: Mutex::new(TrustManager::new()),
             devices: Mutex::new(devices),
             usb: Mutex::new(usb),
+            host_folders: Mutex::new(host_folders),
             net: Mutex::new(net),
             secrets: Mutex::new(secrets),
             granted_caps: Mutex::new(std::collections::HashMap::new()),
@@ -404,7 +409,7 @@ impl PlatformSubsystem {
 
     /// Évalue la politique pour une action ; gère `require_confirmation`
     /// (bloquant, fail-closed : timeout → refus audité, §9.4).
-    /// Retourne `true` si l'action peut procéder.
+    /// Retourne le résultat de confirmation (fail-closed).
     pub async fn policy_gate(
         &self,
         mut context: std::collections::HashMap<String, String>,
@@ -412,7 +417,7 @@ impl PlatformSubsystem {
         action: &str,
         target: &str,
         trace_id: &str,
-    ) -> bool {
+    ) -> ConfirmationResult {
         context
             .entry("action.kind".into())
             .or_insert_with(|| action.into());
@@ -422,7 +427,10 @@ impl PlatformSubsystem {
             (e, r.map(|r| r.name.clone()), r.and_then(|r| r.timeout_sec))
         };
         match effect {
-            aos_proto::PolicyEffect::Allow => true,
+            aos_proto::PolicyEffect::Allow => ConfirmationResult {
+                approved: true,
+                persistent: false,
+            },
             aos_proto::PolicyEffect::Deny => {
                 self.audit(AuditAppendRequest {
                     trace_id: trace_id.into(),
@@ -431,7 +439,10 @@ impl PlatformSubsystem {
                     target: target.into(),
                     detail: serde_json::json!({"rule": rule_name, "action": action}),
                 });
-                false
+                ConfirmationResult {
+                    approved: false,
+                    persistent: false,
+                }
             }
             aos_proto::PolicyEffect::RequireConfirmation => {
                 let (id, rx) = self
@@ -444,18 +455,25 @@ impl PlatformSubsystem {
                         timeout,
                     )
                     .await;
-                let approved = rx.await.unwrap_or(false);
+                let result = rx.await.unwrap_or(ConfirmationResult {
+                    approved: false,
+                    persistent: false,
+                });
                 self.audit(AuditAppendRequest {
                     trace_id: trace_id.into(),
                     actor: actor.into(),
                     action: "confirmation.resolved".into(),
                     target: target.into(),
-                    detail: serde_json::json!({"confirmation_id": id, "approved": approved}),
+                    detail: serde_json::json!({
+                        "confirmation_id": id,
+                        "approved": result.approved,
+                        "persistent": result.persistent,
+                    }),
                 });
-                if !approved {
+                if !result.approved {
                     self.trust.lock().unwrap().record_confirmation_denial(actor);
                 }
-                approved
+                result
             }
         }
     }

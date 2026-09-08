@@ -204,6 +204,7 @@ fn register_open(svc: &mut BusService, sub: Arc<PlatformSubsystem>) {
                     "device-usb",
                 )
                 .await
+                .approved
             };
             if !allowed {
                 let _ = ctx

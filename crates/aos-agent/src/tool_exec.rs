@@ -7,6 +7,7 @@ use aos_proto::{
     WebSearchResponse,
 };
 use crate::device_tools::invoke_device_tool;
+use crate::host_folder::try_host_folder_tool;
 use crate::mcp::McpSession;
 use crate::storage_path::{is_disallowed_storage_path, ROOM_HOST_PATH_DISALLOWED};
 use crate::tools::{
@@ -102,6 +103,11 @@ pub async fn invoke_native_tool(
         "fs.read" => {
             let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
             if is_disallowed_storage_path(path) {
+                if let Some(out) =
+                    try_host_folder_tool(bus, agent_id, tool, args, session_id).await
+                {
+                    return out;
+                }
                 return ROOM_HOST_PATH_DISALLOWED.to_string();
             }
             read_fs(bus, path, agent_id, caps).await
@@ -109,6 +115,11 @@ pub async fn invoke_native_tool(
         "fs.write" => {
             let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("").to_string();
             if is_disallowed_storage_path(&path) {
+                if let Some(out) =
+                    try_host_folder_tool(bus, agent_id, tool, args, session_id).await
+                {
+                    return out;
+                }
                 return ROOM_HOST_PATH_DISALLOWED.to_string();
             }
             let content = args
@@ -142,6 +153,11 @@ pub async fn invoke_native_tool(
                 .unwrap_or("")
                 .to_string();
             if !prefix.is_empty() && is_disallowed_storage_path(&prefix) {
+                if let Some(out) =
+                    try_host_folder_tool(bus, agent_id, tool, args, session_id).await
+                {
+                    return out;
+                }
                 return ROOM_HOST_PATH_DISALLOWED.to_string();
             }
             match bus
@@ -216,6 +232,11 @@ pub async fn invoke_native_tool(
                 .unwrap_or("")
                 .to_string();
             if is_disallowed_storage_path(&path) {
+                if let Some(out) =
+                    try_host_folder_tool(bus, agent_id, tool, args, session_id).await
+                {
+                    return out;
+                }
                 return ROOM_HOST_PATH_DISALLOWED.to_string();
             }
             let format = args
@@ -276,6 +297,11 @@ pub async fn execute_room_tool(
 
     if let Some(path) = storage_path_arg(name, args) {
         if is_disallowed_storage_path(path) {
+            if let Some(out) =
+                try_host_folder_tool(bus, agent_id, name, args, session_id).await
+            {
+                return out;
+            }
             return ROOM_HOST_PATH_DISALLOWED.to_string();
         }
     }
@@ -342,6 +368,8 @@ fn storage_path_arg<'a>(tool: &str, args: &'a serde_json::Value) -> Option<&'a s
 #[cfg(test)]
 mod tests {
     use super::format_module_invoke_result;
+    use super::*;
+    use aos_proto::HOST_FOLDER_ACCESS_ACTION;
 
     #[test]
     fn format_module_invoke_result_unwraps_json_string() {
@@ -350,5 +378,11 @@ mod tests {
             format_module_invoke_result(&v),
             "ok seq=12 ellipse bbox=(0.350,0.150)-(0.650,0.270)"
         );
+    }
+
+    #[test]
+    fn external_path_uses_host_folder_action_not_immediate_allow() {
+        assert!(is_disallowed_storage_path("e:/test/test"));
+        assert_eq!(HOST_FOLDER_ACCESS_ACTION, "fs.host.access");
     }
 }

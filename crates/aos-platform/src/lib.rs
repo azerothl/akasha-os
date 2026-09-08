@@ -23,6 +23,7 @@ pub mod mem_sweep;
 pub mod skill_pass;
 pub mod feedback;
 pub mod files_gen;
+pub mod host_folder;
 pub mod intents;
 pub mod memory;
 pub mod module_compile;
