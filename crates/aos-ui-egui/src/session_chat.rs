@@ -505,7 +505,7 @@ mod tests {
     #[test]
     fn room_snapshot_waits_for_optimistic_user_then_accepts_new_speakers() {
         let local = vec![
-            ChatLine::plain("système", "Session s — historique rechargé."),
+            ChatLine::plain("système", "Historique rechargé."),
             ChatLine::plain("user", "hello everyone"),
         ];
         let disk_user_only = vec![ChatLine::plain("user", "hello everyone")];

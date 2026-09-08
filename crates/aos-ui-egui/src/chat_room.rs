@@ -522,6 +522,7 @@ fn mention_labels_longest_first(t: &UiStrings, members: &[ChatRoomMember]) -> Ve
     let mut labels: Vec<String> = members
         .iter()
         .map(|m| member_display_label(t, m))
+        .filter(|label| !label.trim().is_empty())
         .collect();
     labels.sort_by_key(|l| std::cmp::Reverse(l.len()));
     labels.dedup();
@@ -540,6 +541,9 @@ fn split_mention_segments(text: &str, labels: &[String]) -> Vec<BubbleSegment> {
         let tail = &text[i + 1..];
         let mut matched_label = None::<String>;
         for label in labels {
+            if label.trim().is_empty() {
+                continue;
+            }
             // `label.len()` is bytes; `get` refuses mid-codepoint slices (e.g. `—`).
             let Some(prefix) = tail.get(..label.len()) else {
                 continue;
@@ -554,14 +558,30 @@ fn split_mention_segments(text: &str, labels: &[String]) -> Vec<BubbleSegment> {
             matched_label = Some(label.clone());
             break;
         }
-        if let Some(label) = matched_label {
+        if let Some(label) = matched_label.filter(|l| !l.trim().is_empty()) {
             push_text_segment(&mut out, &text[plain_start..i]);
             let label_len = label.len();
             out.push(BubbleSegment::Mention(label));
             i += 1 + label_len;
             plain_start = i;
         } else {
-            i += 1;
+            push_text_segment(&mut out, &text[plain_start..i]);
+            let end = mention_token_end(text, i);
+            let token = text.get(i + 1..end).map(str::trim).unwrap_or("");
+            if token.is_empty() {
+                i += 1;
+                if text
+                    .get(i..)
+                    .and_then(|s| s.chars().next())
+                    .is_some_and(|c| c.is_whitespace())
+                {
+                    i += text[i..].chars().next().unwrap().len_utf8();
+                }
+            } else {
+                push_text_segment(&mut out, token);
+                i = end;
+            }
+            plain_start = i;
         }
     }
     push_text_segment(&mut out, &text[plain_start..]);
@@ -637,6 +657,9 @@ fn normalize_mention_chip_segments(segments: Vec<BubbleSegment>) -> Vec<BubbleSe
     for seg in trim_prose_after_leading_mention_run(segments) {
         match seg {
             BubbleSegment::Mention(label) => {
+                if label.trim().is_empty() {
+                    continue;
+                }
                 if let Some(BubbleSegment::Text(prev)) = out.last_mut() {
                     *prev = trim_trailing_mention_separator(prev);
                     if prev.trim().is_empty() {
@@ -670,6 +693,10 @@ fn trim_prose_after_leading_mention_run(segments: Vec<BubbleSegment>) -> Vec<Bub
     while i < segments.len() {
         match &segments[i] {
             BubbleSegment::Mention(label) => {
+                if label.trim().is_empty() {
+                    i += 1;
+                    continue;
+                }
                 out.push(BubbleSegment::Mention(label.clone()));
                 i += 1;
             }
@@ -685,6 +712,7 @@ fn trim_prose_after_leading_mention_run(segments: Vec<BubbleSegment>) -> Vec<Bub
     let mut first_text = true;
     while i < segments.len() {
         match segments[i].clone() {
+            BubbleSegment::Mention(label) if label.trim().is_empty() => {}
             BubbleSegment::Mention(label) => out.push(BubbleSegment::Mention(label)),
             BubbleSegment::Text(s) => {
                 let body = if first_text {
@@ -746,7 +774,7 @@ fn paint_line_with_mention_chips(
                             .wrap_mode(egui::TextWrapMode::Wrap),
                         );
                     }
-                    BubbleSegment::Mention(label) => {
+                    BubbleSegment::Mention(label) if !label.trim().is_empty() => {
                         egui::Frame::NONE
                             .fill(chip_fill)
                             .stroke(chip_stroke)
@@ -760,6 +788,7 @@ fn paint_line_with_mention_chips(
                                 );
                             });
                     }
+                    BubbleSegment::Mention(_) => {}
                     BubbleSegment::Text(_) => {}
                 }
             }
@@ -817,6 +846,12 @@ pub fn format_room_mention_destinations(
     for m in members {
         let id = &m.agent_id;
         let human = member_display_label(t, m);
+        if human.trim().is_empty() {
+            for pattern in [format!("(@{id})"), format!("@{id}")] {
+                out = out.replace(&pattern, "");
+            }
+            continue;
+        }
         let mention = format!("@{human}");
         for pattern in [format!("(@{id})"), format!("@{id}")] {
             out = out.replace(&pattern, &mention);
@@ -1630,6 +1665,43 @@ mod tests {
         assert!(painted.contains("Chercheur"));
         assert!(!painted.contains("Planner"));
         assert!(!painted.contains("Researcher"));
+    }
+
+    #[test]
+    fn split_mention_segments_skips_lone_at_without_chip() {
+        let labels = vec!["Critique".to_string()];
+        let segs = normalize_mention_chip_segments(split_mention_segments(
+            "Merci @ pour cette mise en garde.",
+            &labels,
+        ));
+        assert!(!segs.iter().any(|seg| matches!(seg, BubbleSegment::Mention(_))));
+        assert_eq!(
+            segs,
+            vec![BubbleSegment::Text(
+                "Merci pour cette mise en garde.".to_string()
+            )]
+        );
+    }
+
+    #[test]
+    fn split_mention_segments_drops_unresolvable_at_token() {
+        let labels = vec!["Chercheur".to_string()];
+        let segs = split_mention_segments("Merci @Inconnu pour l'alerte.", &labels);
+        assert!(!segs.iter().any(|seg| matches!(seg, BubbleSegment::Mention(_))));
+        assert_eq!(
+            segs,
+            vec![BubbleSegment::Text("Merci Inconnu pour l'alerte.".to_string())]
+        );
+    }
+
+    #[test]
+    fn chat_history_reloaded_banner_copy_locked() {
+        let en = i18n::strings("en");
+        let fr = i18n::strings("fr");
+        assert_eq!(en.chat_history_reloaded, "History reloaded.");
+        assert_eq!(fr.chat_history_reloaded, "Historique rechargé.");
+        assert!(!en.chat_history_reloaded.contains("sess-"));
+        assert!(!fr.chat_history_reloaded.contains("sess-"));
     }
 
     #[test]
