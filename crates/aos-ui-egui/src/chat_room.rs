@@ -545,12 +545,28 @@ pub fn format_room_mention_destinations(
                 if alias.eq_ignore_ascii_case(&human) || alias.eq_ignore_ascii_case(stored) {
                     continue;
                 }
+                if mention_alias_claimed_by_other_member(t, members, alias, &m.agent_id) {
+                    continue;
+                }
                 out = out.replace(&format!("@{alias}"), &mention);
                 out = out.replace(&format!("(@{alias})"), &mention);
             }
         }
     }
     replace_remaining_technical_mentions(t, &out, members)
+}
+
+/// Persona aliases must not steal `@tokens` that match another member's header label.
+fn mention_alias_claimed_by_other_member(
+    t: &UiStrings,
+    members: &[ChatRoomMember],
+    alias: &str,
+    self_agent_id: &str,
+) -> bool {
+    members.iter().any(|other| {
+        other.agent_id != self_agent_id
+            && member_display_label(t, other).eq_ignore_ascii_case(alias)
+    })
 }
 
 /// Back-compat alias — prefer [`format_room_mention_destinations`].
@@ -1167,14 +1183,35 @@ mod tests {
     }
 
     #[test]
-    fn format_room_mention_destinations_maps_supervisor_to_critic_label() {
+    fn supervisor_display_name_preserved_in_mentions_and_chips() {
         let t = i18n::strings("fr");
-        let mut m1 = member("persona-critic", "Critic");
+        let mut m1 = member("persona-critic", "supervisor");
         m1.persona_id = Some("critic".into());
         let members = vec![m1];
-        let painted = format_room_mention_destinations(&t, "@supervisor, confirme ?", &members);
-        assert!(painted.contains("@Critique"));
-        assert!(!painted.contains("@supervisor"));
+        let painted =
+            format_room_mention_destinations(&t, "@supervisor, peux-tu valider ?", &members);
+        assert!(painted.contains("@supervisor"));
+        assert!(!painted.contains("@Critique"));
+        let labels = mention_labels_longest_first(&t, &members);
+        assert!(labels.iter().any(|l| l == "supervisor"));
+        let segs = split_mention_segments("@supervisor confirme", &labels);
+        assert_eq!(
+            segs.first(),
+            Some(&BubbleSegment::Mention("supervisor".to_string()))
+        );
+    }
+
+    #[test]
+    fn persona_alias_does_not_steal_another_members_header_label() {
+        let t = i18n::strings("fr");
+        let mut critic = member("persona-critic", "Critic");
+        critic.persona_id = Some("critic".into());
+        let mut supervisor = member("persona-planner", "supervisor");
+        supervisor.persona_id = Some("planner".into());
+        let members = vec![critic, supervisor];
+        let painted = format_room_mention_destinations(&t, "@supervisor organise", &members);
+        assert!(painted.contains("@supervisor"));
+        assert!(!painted.contains("@Planificateur"));
     }
 
     #[test]
