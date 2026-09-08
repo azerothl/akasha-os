@@ -23,6 +23,7 @@ impl UiApp {
             egui::Layout::top_down(egui::Align::Min).with_cross_justify(true),
             |ui| {
                 ui.set_min_width(chat_w);
+                ui.set_max_width(chat_w);
                 ui.set_min_height(full_y);
                 let room_mode = chat_room::session_is_room(chat_room::active_session_meta(
                     &self.chat_state.sessions,

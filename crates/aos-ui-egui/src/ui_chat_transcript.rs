@@ -80,7 +80,9 @@ impl UiApp {
             // Variable-height bubbles (attachments, agent cards) need natural layout;
             // show_rows' fixed row estimate clipped the tail when the canvas was open.
             .show(ui, |ui| {
-                ui.set_min_width(ui.available_width());
+                let pane_w = ui.available_width().max(1.0);
+                ui.set_min_width(pane_w);
+                ui.set_max_width(pane_w);
                 let mut open_agent: Option<String> = None;
                 let mut target_reply: Option<String> = None;
                 let mut open_studio: Option<(String, String)> = None;

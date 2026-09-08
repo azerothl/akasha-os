@@ -455,7 +455,52 @@ pub fn strip_salon_markdown_markers(text: &str) -> String {
             break;
         }
     }
+    work = strip_inline_single_asterisk_emphasis(&work);
     collapse_paint_spaces(&work)
+}
+
+fn strip_inline_single_asterisk_emphasis(text: &str) -> String {
+    let mut work = text.to_string();
+    let mut i = 0usize;
+    while i < work.len() {
+        if work.as_bytes().get(i) != Some(&b'*') {
+            i += work[i..].chars().next().unwrap().len_utf8();
+            continue;
+        }
+        if work[i..].starts_with("**") {
+            i += 2;
+            continue;
+        }
+        if is_line_start_asterisk_list_marker(&work, i) {
+            i += 1;
+            continue;
+        }
+        let rest = &work[i + 1..];
+        let Some(close_rel) = rest.find('*') else {
+            i += 1;
+            continue;
+        };
+        if rest[close_rel..].starts_with("**") {
+            i += 1;
+            continue;
+        }
+        let inner = rest[..close_rel].to_string();
+        if inner.is_empty() || inner.contains('*') {
+            i += 1;
+            continue;
+        }
+        let end = i + 1 + close_rel + 1;
+        work = format!("{}{}{}", &work[..i], inner, &work[end..]);
+        i += inner.len();
+    }
+    work
+}
+
+fn is_line_start_asterisk_list_marker(text: &str, at: usize) -> bool {
+    if at > 0 && !text[..at].ends_with('\n') {
+        return false;
+    }
+    text.get(at..).is_some_and(|tail| tail.starts_with("* "))
 }
 
 fn mention_chip_style(ui: &egui::Ui) -> (egui::Color32, egui::Color32, egui::Stroke) {
@@ -545,6 +590,8 @@ pub fn paint_room_bubble_body(
     if text.trim().is_empty() {
         return;
     }
+    let body_w = ui.available_width().max(1.0);
+    ui.set_max_width(body_w);
     let labels = mention_labels_longest_first(t, members);
     let (chip_fill, chip_text, chip_stroke) = mention_chip_style(ui);
     for para in text.split("\n\n") {
@@ -554,19 +601,67 @@ pub fn paint_room_bubble_body(
         }
         if let Some(body) = para.strip_prefix("- ") {
             ui.horizontal_top(|ui| {
+                ui.set_max_width(body_w);
                 ui.label("•");
-                paint_line_with_mention_chips(ui, body, &labels, chip_fill, chip_text, chip_stroke);
+                paint_line_with_mention_chips(
+                    ui,
+                    body,
+                    &labels,
+                    chip_fill,
+                    chip_text,
+                    chip_stroke,
+                );
             });
         } else if let Some(body) = para.strip_prefix("* ") {
             ui.horizontal_top(|ui| {
+                ui.set_max_width(body_w);
                 ui.label("•");
-                paint_line_with_mention_chips(ui, body, &labels, chip_fill, chip_text, chip_stroke);
+                paint_line_with_mention_chips(
+                    ui,
+                    body,
+                    &labels,
+                    chip_fill,
+                    chip_text,
+                    chip_stroke,
+                );
             });
         } else {
             paint_line_with_mention_chips(ui, para, &labels, chip_fill, chip_text, chip_stroke);
         }
         ui.add_space(4.0);
     }
+}
+
+fn normalize_mention_chip_segments(segments: Vec<BubbleSegment>) -> Vec<BubbleSegment> {
+    let mut out = Vec::new();
+    for seg in trim_prose_after_leading_mention_run(segments) {
+        match seg {
+            BubbleSegment::Mention(label) => {
+                if let Some(BubbleSegment::Text(prev)) = out.last_mut() {
+                    *prev = trim_trailing_mention_separator(prev);
+                    if prev.trim().is_empty() {
+                        out.pop();
+                    }
+                }
+                out.push(BubbleSegment::Mention(label));
+            }
+            BubbleSegment::Text(s) => {
+                let body = if matches!(out.last(), Some(BubbleSegment::Mention(_))) {
+                    trim_leading_mention_prose_separator(&s)
+                } else if let Some(BubbleSegment::Text(prev)) = out.last_mut() {
+                    prev.push_str(&s);
+                    continue;
+                } else {
+                    s
+                };
+                if body.trim().is_empty() {
+                    continue;
+                }
+                out.push(BubbleSegment::Text(body));
+            }
+        }
+    }
+    out
 }
 
 fn trim_prose_after_leading_mention_run(segments: Vec<BubbleSegment>) -> Vec<BubbleSegment> {
@@ -618,6 +713,12 @@ fn trim_leading_mention_prose_separator(s: &str) -> String {
         .to_string()
 }
 
+fn trim_trailing_mention_separator(s: &str) -> String {
+    s.trim_end()
+        .trim_end_matches(|c: char| c == ',' || c.is_whitespace())
+        .to_string()
+}
+
 fn paint_line_with_mention_chips(
     ui: &mut egui::Ui,
     line: &str,
@@ -626,35 +727,44 @@ fn paint_line_with_mention_chips(
     chip_text: egui::Color32,
     chip_stroke: egui::Stroke,
 ) {
-    let segments = trim_prose_after_leading_mention_run(split_mention_segments(line, labels));
-    ui.horizontal_wrapped(|ui| {
-        ui.spacing_mut().item_spacing = egui::vec2(2.0, 1.0);
-        for seg in segments {
-            match seg {
-                BubbleSegment::Text(s) if !s.trim().is_empty() => {
-                    ui.add(
-                        egui::Label::new(egui::RichText::new(s.trim()).color(ui.visuals().text_color()))
-                            .wrap_mode(egui::TextWrapMode::Extend),
-                    );
+    let line_w = ui.available_width().max(1.0);
+    let segments =
+        normalize_mention_chip_segments(split_mention_segments(line, labels));
+    ui.allocate_ui_with_layout(
+        egui::vec2(line_w, 0.0),
+        egui::Layout::left_to_right(egui::Align::TOP).with_main_wrap(true),
+        |ui| {
+            ui.set_max_width(line_w);
+            ui.spacing_mut().item_spacing = egui::vec2(2.0, 1.0);
+            for seg in segments {
+                match seg {
+                    BubbleSegment::Text(s) if !s.trim().is_empty() => {
+                        ui.add(
+                            egui::Label::new(
+                                egui::RichText::new(s.trim()).color(ui.visuals().text_color()),
+                            )
+                            .wrap_mode(egui::TextWrapMode::Wrap),
+                        );
+                    }
+                    BubbleSegment::Mention(label) => {
+                        egui::Frame::NONE
+                            .fill(chip_fill)
+                            .stroke(chip_stroke)
+                            .corner_radius(3.0)
+                            .inner_margin(egui::Margin::symmetric(3, 1))
+                            .show(ui, |ui| {
+                                ui.label(
+                                    egui::RichText::new(format!("@{label}"))
+                                        .small()
+                                        .color(chip_text),
+                                );
+                            });
+                    }
+                    BubbleSegment::Text(_) => {}
                 }
-                BubbleSegment::Mention(label) => {
-                    egui::Frame::NONE
-                        .fill(chip_fill)
-                        .stroke(chip_stroke)
-                        .corner_radius(3.0)
-                        .inner_margin(egui::Margin::symmetric(3, 1))
-                        .show(ui, |ui| {
-                            ui.label(
-                                egui::RichText::new(format!("@{label}"))
-                                    .small()
-                                    .color(chip_text),
-                            );
-                        });
-                }
-                BubbleSegment::Text(_) => {}
             }
-        }
-    });
+        },
+    );
 }
 
 /// Collapsible thinking block inside a salon speaker bubble.
@@ -1360,6 +1470,35 @@ mod tests {
     }
 
     #[test]
+    fn strip_salon_markdown_markers_removes_single_asterisk_emphasis() {
+        let raw = "La *sécurité par isolation* reste centrale.";
+        let stripped = strip_salon_markdown_markers(raw);
+        assert!(!stripped.contains('*'));
+        assert!(stripped.contains("sécurité par isolation"));
+    }
+
+    #[test]
+    fn normalize_mention_chip_segments_drops_inline_comma() {
+        let t = i18n::strings("fr");
+        let mut researcher = member("persona-researcher", "Researcher");
+        researcher.persona_id = Some("researcher".into());
+        let members = vec![researcher];
+        let labels = mention_labels_longest_first(&t, &members);
+        let segs = normalize_mention_chip_segments(split_mention_segments(
+            "C'est pertinent de la part de @Chercheur , mais je tempère.",
+            &labels,
+        ));
+        assert_eq!(
+            segs,
+            vec![
+                BubbleSegment::Text("C'est pertinent de la part de".to_string()),
+                BubbleSegment::Mention("Chercheur".to_string()),
+                BubbleSegment::Text("mais je tempère.".to_string()),
+            ]
+        );
+    }
+
+    #[test]
     fn supervisor_display_name_preserved_in_mentions_and_chips() {
         let t = i18n::strings("fr");
         let mut m1 = member("persona-critic", "supervisor");
@@ -1452,7 +1591,7 @@ mod tests {
         let members = vec![supervisor, researcher, planner];
         let labels = mention_labels_longest_first(&t, &members);
         let raw = "@supervisor @Chercheur @Planificateur, Je valide l'arrêt.";
-        let segs = trim_prose_after_leading_mention_run(split_mention_segments(raw, &labels));
+        let segs = normalize_mention_chip_segments(split_mention_segments(raw, &labels));
         let prose = segs
             .iter()
             .find_map(|seg| match seg {
