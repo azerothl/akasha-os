@@ -2,6 +2,7 @@
 
 use crate::actions::parse_embedded_action_question;
 use crate::room_runtime::RoomRoundState;
+use crate::storage_path::{text_contains_disallowed_storage_path, ROOM_HOST_PATH_DISALLOWED};
 use aos_ipc::BusClient;
 use aos_proto::{ChatAttachment, ChatSessionAppendRequest, ChatSessionMessage};
 use std::time::Duration;
@@ -51,8 +52,8 @@ pub async fn post_room_ask(
                 title: display_name.to_string(),
                 origin: "ask".into(),
             }],
-            speaker_id: Some(agent_id.to_string()),
-            speaker_name: Some(display_name.to_string()),
+            speaker_id: None,
+            speaker_name: None,
             thinking: None,
         },
         vec![],
@@ -84,8 +85,8 @@ pub async fn post_room_ask_timeout(
                 title: display_name.to_string(),
                 origin: "ask-timeout".into(),
             }],
-            speaker_id: Some(agent_id.to_string()),
-            speaker_name: Some(display_name.to_string()),
+            speaker_id: None,
+            speaker_name: None,
             thinking: None,
         },
         vec![],
@@ -165,6 +166,9 @@ pub async fn handle_room_user_ask(
     if question.is_empty() {
         return Ok("user.ask : question vide".into());
     }
+    if text_contains_disallowed_storage_path(&question) {
+        return Ok(ROOM_HOST_PATH_DISALLOWED.into());
+    }
     let choices: Vec<String> = args
         .get("choices")
         .and_then(|v| v.as_array())
@@ -205,6 +209,12 @@ mod tests {
         assert!(q.contains("Quelle option ?"));
         assert!(q.contains("Choix possibles"));
         assert!(q.contains("- A"));
+    }
+
+    #[test]
+    fn user_ask_rejects_host_path_in_question() {
+        let question = "peux-tu ouvrir e:/test/test ?";
+        assert!(text_contains_disallowed_storage_path(question));
     }
 
     #[tokio::test]

@@ -4,6 +4,7 @@ use crate::chat_bubble::{
     chat_bubble_colors, chat_bubble_kind, chat_markdown_viewer, chat_message_frame,
     chat_role_label, ChatBubbleKind,
 };
+use crate::chat_error_copy;
 use crate::cmd::Cmd;
 use crate::ui_format::{format_chat_stamp, format_local_date_short, local_day_index};
 use crate::{
@@ -118,6 +119,12 @@ impl UiApp {
                 for i in 0..n {
                     let role = self.chat[i].role.clone();
                     let mut text = self.chat[i].text.clone();
+                    if chat_error_copy::is_room_host_path_sentinel(&text) {
+                        if let Some(msg) = chat_error_copy::room_host_path_disallowed_toast(t) {
+                            self.toasts.push_error(msg);
+                        }
+                        continue;
+                    }
                     let attachments = self.chat[i].attachments.clone();
                     let speaker_id = self.chat[i].speaker_id.clone();
                     let speaker_name = self.chat[i].speaker_name.clone();

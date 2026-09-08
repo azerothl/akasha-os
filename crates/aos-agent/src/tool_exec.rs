@@ -8,6 +8,7 @@ use aos_proto::{
 };
 use crate::device_tools::invoke_device_tool;
 use crate::mcp::McpSession;
+use crate::storage_path::{is_disallowed_storage_path, ROOM_HOST_PATH_DISALLOWED};
 use crate::tools::{
     canonicalize_tool_name, canvas_tool_denied_by_allowlist, is_module_fallback_candidate, normalize_tool_args, resolve_tool_backend,
     ToolBackend, ToolDesc,
@@ -100,10 +101,16 @@ pub async fn invoke_native_tool(
     match tool {
         "fs.read" => {
             let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
+            if is_disallowed_storage_path(path) {
+                return ROOM_HOST_PATH_DISALLOWED.to_string();
+            }
             read_fs(bus, path, agent_id, caps).await
         }
         "fs.write" => {
             let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            if is_disallowed_storage_path(&path) {
+                return ROOM_HOST_PATH_DISALLOWED.to_string();
+            }
             let content = args
                 .get("content")
                 .and_then(|v| v.as_str())
@@ -134,6 +141,9 @@ pub async fn invoke_native_tool(
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
+            if !prefix.is_empty() && is_disallowed_storage_path(&prefix) {
+                return ROOM_HOST_PATH_DISALLOWED.to_string();
+            }
             match bus
                 .call::<FsListRequest, Vec<aos_proto::FsEntry>>(
                     "fs.list",
@@ -205,6 +215,9 @@ pub async fn invoke_native_tool(
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
+            if is_disallowed_storage_path(&path) {
+                return ROOM_HOST_PATH_DISALLOWED.to_string();
+            }
             let format = args
                 .get("format")
                 .and_then(|v| v.as_str())
@@ -261,6 +274,12 @@ pub async fn execute_room_tool(
     let args_owned = normalize_tool_args(name, args);
     let args = &args_owned;
 
+    if let Some(path) = storage_path_arg(name, args) {
+        if is_disallowed_storage_path(path) {
+            return ROOM_HOST_PATH_DISALLOWED.to_string();
+        }
+    }
+
     if matches!(name, "agent.spawn" | "agent.await" | "user.ask" | "goal.complete" | "goal.fail")
     {
         return format!("action {name} indisponible en tour de salon — réponds en texte");
@@ -309,6 +328,15 @@ pub async fn execute_room_tool(
         }
         None => format!("outil inconnu en salon: {name}"),
     }
+}
+
+fn storage_path_arg<'a>(tool: &str, args: &'a serde_json::Value) -> Option<&'a str> {
+    let key = match tool {
+        "fs.read" | "fs.write" | "files.generate" => "path",
+        "fs.list" => "prefix",
+        _ => return None,
+    };
+    args.get(key).and_then(|v| v.as_str()).filter(|s| !s.is_empty())
 }
 
 #[cfg(test)]

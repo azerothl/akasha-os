@@ -2,6 +2,7 @@
 
 use crate::i18n::UiStrings;
 use aos_agent::room_runtime::ROOM_ACTION_UNAVAILABLE;
+use aos_agent::storage_path::ROOM_HOST_PATH_DISALLOWED;
 
 /// True when the runtime error is a model weight load failure (often embeds a `.gguf` path).
 pub(crate) fn is_model_load_fail_error(msg: &str) -> bool {
@@ -39,8 +40,27 @@ pub(crate) fn leaks_filesystem_path(msg: &str) -> bool {
         .any(|w| w[0].is_ascii_alphabetic() && w[1] == b':')
 }
 
+/// True when the runtime posted the host-path sentinel (toast hook only).
+pub(crate) fn is_room_host_path_sentinel(msg: &str) -> bool {
+    msg.trim() == ROOM_HOST_PATH_DISALLOWED
+}
+
+/// CM-locked toast copy for disallowed host paths — `None` until strings are set.
+pub(crate) fn room_host_path_disallowed_toast(t: &UiStrings) -> Option<&'static str> {
+    if t.room_host_path_disallowed.is_empty() {
+        None
+    } else {
+        Some(t.room_host_path_disallowed)
+    }
+}
+
 /// Map a raw runtime error to localized chat chrome copy (no path leaks).
 pub(crate) fn user_visible_chat_error(t: &UiStrings, raw: &str) -> String {
+    if is_room_host_path_sentinel(raw) {
+        return room_host_path_disallowed_toast(t)
+            .map(str::to_string)
+            .unwrap_or_else(|| ROOM_HOST_PATH_DISALLOWED.to_string());
+    }
     if raw == ROOM_ACTION_UNAVAILABLE || raw.contains(ROOM_ACTION_UNAVAILABLE) {
         return t.room_action_unavailable.to_string();
     }

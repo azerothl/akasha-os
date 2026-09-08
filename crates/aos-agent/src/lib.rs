@@ -27,6 +27,7 @@ pub mod schedule;
 pub mod schedule_parse;
 pub mod skills;
 pub mod state;
+pub mod storage_path;
 pub mod tool_exec;
 pub mod tools;
 

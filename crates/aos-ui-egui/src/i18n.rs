@@ -385,6 +385,8 @@ pub struct UiStrings {
     pub room_queue_joiner: &'static str,
     pub room_thinking_label: &'static str,
     pub room_action_unavailable: &'static str,
+    /// CM-locked toast for host paths outside `/documents`, `/downloads`, notes — empty until copy lands.
+    pub room_host_path_disallowed: &'static str,
     /// Slice C (frozen copy — chooser not wired yet).
     pub room_policy_one_agent: &'static str,
     /// Slice C (frozen copy — chooser not wired yet).
@@ -1327,6 +1329,7 @@ const EN: UiStrings = UiStrings {
     room_queue_joiner: " then ",
     room_thinking_label: "Reflection",
     room_action_unavailable: "That action isn't available in the room.",
+    room_host_path_disallowed: "",
     room_policy_one_agent: "One agent",
     room_policy_open_floor: "Open floor",
     persona_researcher: "Researcher",
@@ -2265,6 +2268,7 @@ const FR: UiStrings = UiStrings {
     room_queue_joiner: " puis ",
     room_thinking_label: "Réflexion",
     room_action_unavailable: "Action indisponible dans le salon.",
+    room_host_path_disallowed: "",
     room_policy_one_agent: "Un agent",
     room_policy_open_floor: "Tout le salon",
     persona_researcher: "Chercheur",

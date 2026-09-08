@@ -16,6 +16,7 @@ use crate::device_tools::capture_png_path_from_tool_result;
 use crate::mcp::open_mcp_tools_with_secrets;
 use crate::persist;
 use crate::room_ask::handle_room_user_ask;
+use crate::storage_path::{post_room_host_path_notice, ROOM_HOST_PATH_DISALLOWED};
 use crate::room_conductor::{
     apply_peer_followups, build_initial_queue, effective_max_turns,
     effective_peer_followup_budget, format_roster_for_prompt, initial_schedule,
@@ -185,17 +186,18 @@ fn room_kit_lacks_required_tools(tool_ids: &[String], user_message: &str) -> boo
 /// Assemble tool ids + caps for a roster member salon turn.
 ///
 /// Built-in personas often ship with empty `tools`/`skills`; merge the same baseline
-/// notes/tasks/fs/web kit as solo chat. When `document_ask` is true, inject
-/// `file-author` + `files.generate` even if the roster spec only listed notes tools.
+/// notes/tasks/fs/web kit as solo chat. Custom agents keep the tools and caps granted
+/// at creation — baseline and derived caps apply only when the spec ships empty.
 pub fn assemble_room_member_tools(
     spec: &AgentSpec,
     canvas_open: bool,
     canvas_exported: &[String],
     user_message: &str,
 ) -> (Vec<String>, Vec<String>) {
+    let spec_tools_empty = spec.tools.is_empty();
     let mut skills = spec.skills.clone();
     let mut base_tools = spec.tools.clone();
-    if base_tools.is_empty() {
+    if spec_tools_empty {
         for t in default_agent_tools() {
             if !base_tools.iter().any(|x| x == &t) {
                 base_tools.push(t);
@@ -205,17 +207,32 @@ pub fn assemble_room_member_tools(
             skills.push("notes-writer".into());
         }
     }
+    let had_files_generate = base_tools.iter().any(|t| t == "files.generate");
     if crate::research_detect::user_requested_document(user_message) {
         crate::research_detect::ensure_document_file_tools(&mut skills, &mut base_tools);
     }
+    let injected_document_tools =
+        !had_files_generate && base_tools.iter().any(|t| t == "files.generate");
     let skill_docs = load_skills(&skills);
     let mut tool_ids = merge_skill_tools(&base_tools, &skill_docs);
-    merge_canvas_tools(&mut tool_ids, canvas_open, canvas_exported);
+    let canvas_granted = base_tools.iter().any(|t| t.starts_with("canvas."));
+    if canvas_open && (canvas_granted || spec_tools_empty) {
+        merge_canvas_tools(&mut tool_ids, true, canvas_exported);
+    }
     let tools = select_tools(&tool_ids, &[]);
     let mut caps = spec.caps.clone();
-    for c in caps_for_tools(&tools, &spec.mcp_servers) {
-        if !caps.contains(&c) {
-            caps.push(c);
+    if spec_tools_empty {
+        for c in caps_for_tools(&tools, &spec.mcp_servers) {
+            if !caps.contains(&c) {
+                caps.push(c);
+            }
+        }
+    } else if injected_document_tools {
+        let fg_tools = select_tools(&["files.generate".into()], &[]);
+        for c in caps_for_tools(&fg_tools, &spec.mcp_servers) {
+            if !caps.contains(&c) {
+                caps.push(c);
+            }
         }
     }
     (tool_ids, caps)
@@ -686,6 +703,9 @@ async fn run_room_tool_loop(
                 }
                 outcome
             };
+            if outcome == ROOM_HOST_PATH_DISALLOWED {
+                let _ = post_room_host_path_notice(bus, session_id).await;
+            }
 
             messages.push(ChatMessage {
                 role: "user".into(),
@@ -1436,5 +1456,38 @@ mod tests {
         assert!(ROOM_ACTION_PROTOCOL.contains("user.ask"));
         assert!(!ROOM_ACTION_PROTOCOL.contains("agent.spawn :"));
         assert!(ROOM_ACTION_PROTOCOL.contains("Pas de `agent.spawn`"));
+    }
+
+    #[test]
+    fn custom_agent_keeps_granted_tools_and_caps_without_canvas_floor() {
+        use crate::tools::CANVAS_TOOL_IDS;
+        let spec = AgentSpec {
+            agent_id: "agent-custom".into(),
+            goal: AgentGoal::default(),
+            kind: Default::default(),
+            display_name: Some("Custom".into()),
+            persona_id: None,
+            system_prompt: None,
+            skills: vec![],
+            tools: vec!["web.search".into()],
+            mcp_servers: vec![],
+            documents: vec![],
+            caps: vec!["net.connect:*:*".into()],
+            model_id: None,
+            policy: None,
+            parent_id: None,
+            session_id: None,
+            budget: Default::default(),
+            optimize_prompt: false,
+            gate_mode: "ask".into(),
+            origin: None,
+            cognitive_mode: aos_proto::CognitiveMode::Normal,
+        };
+        let exported: Vec<String> = CANVAS_TOOL_IDS.iter().map(|s| (*s).to_string()).collect();
+        let (ids, caps) = assemble_room_member_tools(&spec, true, &exported, "");
+        assert!(ids.iter().any(|x| x == "web.search"));
+        assert!(!ids.iter().any(|x| x.starts_with("canvas.")));
+        assert!(!ids.iter().any(|x| x == "notes.create"));
+        assert_eq!(caps, vec!["net.connect:*:*".to_string()]);
     }
 }

@@ -1,6 +1,7 @@
 //! Chat submission controller and composer-to-runtime transitions.
 
 use crate::cmd::{ChatLine, ChatRetryTurn, Cmd};
+use crate::chat_error_copy;
 use crate::research_ui_state::ResearchPendingChat;
 use crate::{
     chat_agent_max_steps, chat_ask, chat_canvas, chat_room, chrono_like_stamp, i18n,
@@ -75,6 +76,11 @@ impl UiApp {
                     self.send_room_ask_reply(session_id, agent_id, title, text);
                     return;
                 }
+            }
+        }
+        if aos_agent::storage_path::text_contains_disallowed_storage_path(&text) {
+            if let Some(msg) = chat_error_copy::room_host_path_disallowed_toast(&t) {
+                self.toasts.push_error(msg);
             }
         }
         if self
