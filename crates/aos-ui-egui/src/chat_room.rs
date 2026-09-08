@@ -629,18 +629,78 @@ enum BubbleSegment {
     Mention(String),
 }
 
-fn mention_labels_longest_first(t: &UiStrings, members: &[ChatRoomMember]) -> Vec<String> {
-    let mut labels: Vec<String> = members
-        .iter()
-        .map(|m| member_display_label(t, m))
-        .filter(|label| !label.trim().is_empty())
-        .collect();
-    labels.sort_by_key(|l| std::cmp::Reverse(l.len()));
-    labels.dedup();
+fn mention_match_labels_longest_first(
+    t: &UiStrings,
+    members: &[ChatRoomMember],
+) -> Vec<(String, String)> {
+    let mut labels: Vec<(String, String)> = Vec::new();
+    for member in members {
+        let human = member_display_label(t, member);
+        if human.trim().is_empty() {
+            continue;
+        }
+        labels.push((human.clone(), human.clone()));
+        if let Some(pid) = member.persona_id.as_deref() {
+            for alias in aos_agent::room_personas::persona_mention_labels(pid) {
+                if alias.eq_ignore_ascii_case(&human) {
+                    continue;
+                }
+                if mention_alias_claimed_by_other_member(t, members, alias, &member.agent_id) {
+                    continue;
+                }
+                labels.push((alias.to_string(), human.clone()));
+            }
+        }
+    }
+    labels.sort_by_key(|(match_label, _)| std::cmp::Reverse(match_label.len()));
+    labels.dedup_by(|a, b| a.0.eq_ignore_ascii_case(&b.0));
     labels
 }
 
-fn split_mention_segments(text: &str, labels: &[String]) -> Vec<BubbleSegment> {
+fn is_json_block_paragraph(para: &str) -> bool {
+    para.contains('\n')
+        && (para.trim_start().starts_with('{') || para.contains("\": "))
+}
+
+fn split_prose_prefix_from_json_block(para: &str) -> (&str, &str) {
+    let trimmed = para.trim_start();
+    if trimmed.starts_with('{') {
+        return ("", trimmed);
+    }
+    if let Some(rel) = para.find("\n{") {
+        return (para[..rel].trim_end(), para[rel + 1..].trim_start());
+    }
+    if para.contains("\": ") {
+        if let Some(rel) = para.find('{') {
+            return (para[..rel].trim_end(), para[rel..].trim_start());
+        }
+    }
+    (para, "")
+}
+
+fn paint_bubble_paragraph(
+    ui: &mut egui::Ui,
+    para: &str,
+    body_w: f32,
+    labels: &[(String, String)],
+    chip_fill: egui::Color32,
+    chip_text: egui::Color32,
+    chip_stroke: egui::Stroke,
+) {
+    if is_json_block_paragraph(para) {
+        let (prose, json) = split_prose_prefix_from_json_block(para);
+        if !prose.is_empty() {
+            paint_line_with_mention_chips(ui, prose, labels, chip_fill, chip_text, chip_stroke);
+        }
+        if !json.is_empty() {
+            paint_wrapped_prose_block(ui, json, body_w);
+        }
+        return;
+    }
+    paint_line_with_mention_chips(ui, para, labels, chip_fill, chip_text, chip_stroke);
+}
+
+fn split_mention_segments(text: &str, labels: &[(String, String)]) -> Vec<BubbleSegment> {
     let mut out = Vec::new();
     let mut plain_start = 0usize;
     let mut i = 0usize;
@@ -650,28 +710,27 @@ fn split_mention_segments(text: &str, labels: &[String]) -> Vec<BubbleSegment> {
             continue;
         }
         let tail = &text[i + 1..];
-        let mut matched_label = None::<String>;
-        for label in labels {
-            if label.trim().is_empty() {
+        let mut matched = None::<(usize, String)>;
+        for (match_label, chip_label) in labels {
+            if match_label.trim().is_empty() {
                 continue;
             }
-            // `label.len()` is bytes; `get` refuses mid-codepoint slices (e.g. `—`).
-            let Some(prefix) = tail.get(..label.len()) else {
+            // `match_label.len()` is bytes; `get` refuses mid-codepoint slices (e.g. `—`).
+            let Some(prefix) = tail.get(..match_label.len()) else {
                 continue;
             };
-            if !prefix.eq_ignore_ascii_case(label) {
+            if !prefix.eq_ignore_ascii_case(match_label) {
                 continue;
             }
-            let boundary = tail.get(label.len()..).and_then(|s| s.chars().next());
+            let boundary = tail.get(match_label.len()..).and_then(|s| s.chars().next());
             if boundary.is_some_and(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
                 continue;
             }
-            matched_label = Some(label.clone());
+            matched = Some((match_label.len(), chip_label.clone()));
             break;
         }
-        if let Some(label) = matched_label.filter(|l| !l.trim().is_empty()) {
+        if let Some((label_len, label)) = matched.filter(|(_, l)| !l.trim().is_empty()) {
             push_text_segment(&mut out, &text[plain_start..i]);
-            let label_len = label.len();
             out.push(BubbleSegment::Mention(label));
             i += 1 + label_len;
             plain_start = i;
@@ -802,7 +861,7 @@ pub fn paint_room_bubble_body(
     }
     let body_w = ui.available_width().max(1.0);
     ui.set_max_width(body_w);
-    let labels = mention_labels_longest_first(t, members);
+    let labels = mention_match_labels_longest_first(t, members);
     let (chip_fill, chip_text, chip_stroke) = mention_chip_style(ui);
     for para in bubble_paragraphs(text) {
         let para = para.trim();
@@ -835,12 +894,16 @@ pub fn paint_room_bubble_body(
                     chip_stroke,
                 );
             });
-        } else if para.contains('\n')
-            && (para.trim_start().starts_with('{') || para.contains("\": "))
-        {
-            paint_wrapped_prose_block(ui, para, body_w);
         } else {
-            paint_line_with_mention_chips(ui, para, &labels, chip_fill, chip_text, chip_stroke);
+            paint_bubble_paragraph(
+                ui,
+                para,
+                body_w,
+                &labels,
+                chip_fill,
+                chip_text,
+                chip_stroke,
+            );
         }
         ui.add_space(4.0);
     }
@@ -944,7 +1007,7 @@ fn trim_trailing_mention_separator(s: &str) -> String {
 fn paint_line_with_mention_chips(
     ui: &mut egui::Ui,
     line: &str,
-    labels: &[String],
+    labels: &[(String, String)],
     chip_fill: egui::Color32,
     chip_text: egui::Color32,
     chip_stroke: egui::Stroke,
@@ -1711,13 +1774,20 @@ mod tests {
         assert!(stripped.contains("sécurité par isolation"));
     }
 
+    fn match_labels(labels: &[&str]) -> Vec<(String, String)> {
+        labels
+            .iter()
+            .map(|label| (label.to_string(), label.to_string()))
+            .collect()
+    }
+
     #[test]
     fn normalize_mention_chip_segments_drops_inline_comma() {
         let t = i18n::strings("fr");
         let mut researcher = member("persona-researcher", "Researcher");
         researcher.persona_id = Some("researcher".into());
         let members = vec![researcher];
-        let labels = mention_labels_longest_first(&t, &members);
+        let labels = mention_match_labels_longest_first(&t, &members);
         let segs = normalize_mention_chip_segments(split_mention_segments(
             "C'est pertinent de la part de @Chercheur , mais je tempère.",
             &labels,
@@ -1742,8 +1812,8 @@ mod tests {
             format_room_mention_destinations(&t, "@supervisor, peux-tu valider ?", &members);
         assert!(painted.contains("@supervisor"));
         assert!(!painted.contains("@Critique"));
-        let labels = mention_labels_longest_first(&t, &members);
-        assert!(labels.iter().any(|l| l == "supervisor"));
+        let labels = mention_match_labels_longest_first(&t, &members);
+        assert!(labels.iter().any(|(_, chip)| chip == "supervisor"));
         let segs = split_mention_segments("@supervisor confirme", &labels);
         assert_eq!(
             segs.first(),
@@ -1786,7 +1856,7 @@ mod tests {
         let mut m1 = member("persona-researcher", "Researcher");
         m1.persona_id = Some("researcher".into());
         let members = vec![m1];
-        let labels = mention_labels_longest_first(&t, &members);
+        let labels = mention_match_labels_longest_first(&t, &members);
         let segs = split_mention_segments("@Chercheur, peux-tu détailler ?", &labels);
         assert_eq!(
             segs,
@@ -1801,7 +1871,7 @@ mod tests {
     fn split_mention_segments_skips_utf8_mid_char_prefix() {
         // Longer ASCII label ("supervisor", 10 bytes) must not panic when the
         // text after `@` has an em dash at byte 9 (`Critique — …`).
-        let labels = vec!["supervisor".into(), "Critique".into()];
+        let labels = match_labels(&["supervisor", "Critique"]);
         let segs = split_mention_segments(
             "@Critique — le graphe doit refléter des relations *décidées*",
             &labels,
@@ -1823,7 +1893,7 @@ mod tests {
         let mut planner = member("persona-planner", "Planner");
         planner.persona_id = Some("planner".into());
         let members = vec![supervisor, researcher, planner];
-        let labels = mention_labels_longest_first(&t, &members);
+        let labels = mention_match_labels_longest_first(&t, &members);
         let raw = "@supervisor @Chercheur @Planificateur, Je valide l'arrêt.";
         let segs = normalize_mention_chip_segments(split_mention_segments(raw, &labels));
         let prose = segs
@@ -1868,7 +1938,7 @@ mod tests {
 
     #[test]
     fn split_mention_segments_skips_lone_at_without_chip() {
-        let labels = vec!["Critique".to_string()];
+        let labels = match_labels(&["Critique"]);
         let segs = normalize_mention_chip_segments(split_mention_segments(
             "Merci @ pour cette mise en garde.",
             &labels,
@@ -1884,13 +1954,45 @@ mod tests {
 
     #[test]
     fn split_mention_segments_drops_unresolvable_at_token() {
-        let labels = vec!["Chercheur".to_string()];
+        let labels = match_labels(&["Chercheur"]);
         let segs = split_mention_segments("Merci @Inconnu pour l'alerte.", &labels);
         assert!(!segs.iter().any(|seg| matches!(seg, BubbleSegment::Mention(_))));
         assert_eq!(
             segs,
             vec![BubbleSegment::Text("Merci Inconnu pour l'alerte.".to_string())]
         );
+    }
+
+    #[test]
+    fn split_mention_segments_maps_planner_alias_to_header_chip() {
+        let t = i18n::strings("fr");
+        let mut planner = member("persona-planner", "Planner");
+        planner.persona_id = Some("planner".into());
+        let members = vec![planner];
+        let labels = mention_match_labels_longest_first(&t, &members);
+        let segs = split_mention_segments("@Planner, peux-tu valider ?", &labels);
+        assert_eq!(
+            segs.first(),
+            Some(&BubbleSegment::Mention("Planificateur".to_string()))
+        );
+    }
+
+    #[test]
+    fn split_prose_prefix_from_json_block_splits_leading_mention() {
+        let raw = "@Planificateur\n{\n  \"thought\": \"Plan\"\n}";
+        let (prose, json) = split_prose_prefix_from_json_block(raw);
+        assert_eq!(prose, "@Planificateur");
+        assert!(json.starts_with('{'));
+        assert!(json.contains("\"thought\""));
+    }
+
+    #[test]
+    fn bubble_paragraphs_keeps_mention_before_json_together_when_sealed() {
+        let raw = "@Planificateur\n{\n  \"thought\": \"Plan\"\n}";
+        let paras = bubble_paragraphs(raw);
+        assert_eq!(paras.len(), 1);
+        assert!(paras[0].starts_with("@Planificateur"));
+        assert!(paras[0].contains("\"thought\""));
     }
 
     #[test]
