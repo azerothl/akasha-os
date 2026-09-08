@@ -45,7 +45,7 @@ pub(crate) fn is_room_host_path_sentinel(msg: &str) -> bool {
     msg.trim() == ROOM_HOST_PATH_DISALLOWED
 }
 
-/// CM-locked toast copy for disallowed host paths — `None` until strings are set.
+/// CM-locked toast copy for disallowed host paths (no raw path in the message).
 pub(crate) fn room_host_path_disallowed_toast(t: &UiStrings) -> Option<&'static str> {
     if t.room_host_path_disallowed.is_empty() {
         None
@@ -123,5 +123,27 @@ mod tests {
         let t = crate::i18n::strings("en");
         let out = user_visible_chat_error(&t, "open failed: /var/run/aos-modeld.stderr.log");
         assert_eq!(out, t.chat_error_generic);
+    }
+
+    #[test]
+    fn room_host_path_disallowed_maps_to_locked_copy() {
+        let en = crate::i18n::strings("en");
+        let fr = crate::i18n::strings("fr");
+        assert_eq!(
+            user_visible_chat_error(&en, ROOM_HOST_PATH_DISALLOWED),
+            en.room_host_path_disallowed
+        );
+        assert_eq!(
+            user_visible_chat_error(&fr, ROOM_HOST_PATH_DISALLOWED),
+            fr.room_host_path_disallowed
+        );
+        assert_eq!(
+            room_host_path_disallowed_toast(&en),
+            Some(en.room_host_path_disallowed)
+        );
+        assert!(!en.room_host_path_disallowed.contains('/'));
+        assert!(!en.room_host_path_disallowed.contains(':'));
+        assert!(!fr.room_host_path_disallowed.contains('/'));
+        assert!(!fr.room_host_path_disallowed.contains(':'));
     }
 }
