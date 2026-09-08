@@ -16,9 +16,9 @@ use crate::device_tools::capture_png_path_from_tool_result;
 use crate::mcp::open_mcp_tools_with_secrets;
 use crate::persist;
 use crate::room_conductor::{
-    apply_peer_followups, build_initial_queue, detect_peer_addresses, effective_max_turns,
+    apply_peer_followups, build_initial_queue, effective_max_turns,
     effective_peer_followup_budget, format_roster_for_prompt, initial_schedule,
-    pop_next_scheduled_turn, sanitize_member_queue,
+    peers_requesting_response, pop_next_scheduled_turn, sanitize_member_queue,
 };
 use crate::room_reply::split_room_reply;
 use crate::skills::{load_skills, merge_skill_tools};
@@ -885,7 +885,7 @@ pub async fn execute_room_conduct(
         // Slice C: optional supervisor-directed speaker selection could replace or
         // augment this peer rebound queue without changing mention parsing.
         if session.meta.conductor_policy.allow_peer_debate {
-            let peers = detect_peer_addresses(
+            let peers = peers_requesting_response(
                 &reply.content,
                 &session.meta.members,
                 &member.agent_id,

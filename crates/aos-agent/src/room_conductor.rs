@@ -287,6 +287,66 @@ pub fn detect_peer_addresses(
         .collect()
 }
 
+/// Pairs `@` mentionnés quand la réplique pose une question ou formule une demande.
+pub fn peers_requesting_response(
+    reply: &str,
+    members: &[ChatRoomMember],
+    exclude_agent_id: &str,
+) -> Vec<String> {
+    if !reply_invites_peer_response(reply) {
+        return Vec::new();
+    }
+    detect_peer_addresses(reply, members, exclude_agent_id)
+}
+
+/// True when an agent reply expects a peer to answer (question or explicit request).
+pub fn reply_invites_peer_response(reply: &str) -> bool {
+    if !reply.contains('@') {
+        return false;
+    }
+    if reply.contains('?') || reply.contains('？') {
+        return true;
+    }
+    let lower = reply.to_ascii_lowercase();
+    if lower.contains("merci")
+        || lower.contains("thanks")
+        || lower.contains("thank you")
+        || lower.contains("got it")
+        || lower.contains("bien noté")
+    {
+        return false;
+    }
+    const REQUEST_MARKERS: &[&str] = &[
+        "peux-tu",
+        "peux tu",
+        "pourrais-tu",
+        "pourriez-vous",
+        "pouvez-vous",
+        "can you",
+        "could you",
+        "would you",
+        "please",
+        "s'il te plaît",
+        "s'il vous plaît",
+        "confirmes",
+        "confirme",
+        "confirm",
+        "acceptes",
+        "acceptez",
+        "accept",
+        "valide",
+        "dis-moi",
+        "tell me",
+        "your thoughts",
+        "ton avis",
+        "your view",
+        "weigh in",
+        "est-ce que",
+        "peux-tu confirmer",
+    ];
+    REQUEST_MARKERS.iter().any(|m| lower.contains(m))
+}
+
 /// Premier membre mentionné (compat tests / appels simples).
 pub fn detect_peer_address(
     reply: &str,
@@ -750,7 +810,7 @@ mod tests {
             if step < replies.len() {
                 let (speaker, reply) = replies[step];
                 assert_eq!(speaker, turn.agent_id);
-                let peers = detect_peer_addresses(reply, &m, speaker);
+                let peers = peers_requesting_response(reply, &m, speaker);
                 apply_peer_followups(
                     &mut queue,
                     &peers,
@@ -783,7 +843,7 @@ mod tests {
         let turn = pop_next_scheduled_turn(&mut queue, &initial_done).unwrap();
         let speaker = turn.agent_id.clone();
         initial_done.insert(turn.agent_id);
-        let peers = detect_peer_addresses("I agree, no need to tag anyone.", &m, &speaker);
+        let peers = peers_requesting_response("I agree, no need to tag anyone.", &m, &speaker);
         assert!(peers.is_empty());
         apply_peer_followups(
             &mut queue,
@@ -794,6 +854,35 @@ mod tests {
         );
         assert_eq!(queue.len(), 2);
         assert!(queue.iter().all(|t| !t.peer_followup));
+    }
+
+    #[test]
+    fn thanks_only_mention_does_not_request_peer_response() {
+        let m = members();
+        let reply = "Merci @Beta pour la synthèse.";
+        assert_eq!(
+            detect_peer_addresses(reply, &m, "agent-alpha"),
+            vec!["agent-beta".to_string()]
+        );
+        assert!(peers_requesting_response(reply, &m, "agent-alpha").is_empty());
+    }
+
+    #[test]
+    fn question_mention_requests_peer_response() {
+        let m = members();
+        let reply = "@Beta, peux-tu détailler les sources ?";
+        assert_eq!(
+            peers_requesting_response(reply, &m, "agent-alpha"),
+            vec!["agent-beta".to_string()]
+        );
+    }
+
+    #[test]
+    fn reply_invites_peer_response_for_questions_and_requests() {
+        assert!(reply_invites_peer_response("@Beta, peux-tu détailler ?"));
+        assert!(reply_invites_peer_response("@Beta, please share sources."));
+        assert!(!reply_invites_peer_response("Merci @Beta pour la synthèse."));
+        assert!(!reply_invites_peer_response("I agree with the direction."));
     }
 
     #[test]

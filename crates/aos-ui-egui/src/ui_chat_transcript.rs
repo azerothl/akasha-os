@@ -148,12 +148,12 @@ impl UiApp {
                     let text = if room_mode
                         && (kind == ChatBubbleKind::RoomSpeaker || kind == ChatBubbleKind::User)
                     {
-                        let base = if kind == ChatBubbleKind::RoomSpeaker {
-                            chat_room::format_room_visible_bubble(&text)
-                        } else {
-                            text
-                        };
-                        chat_room::format_room_mention_destinations(t, &base, room_members)
+                        chat_room::prepare_room_bubble_text(
+                            t,
+                            &text,
+                            room_members,
+                            kind == ChatBubbleKind::RoomSpeaker,
+                        )
                     } else if role == "assistant" && !is_completion && speaker_id.is_none() {
                         agent_panel::format_chat_assistant_display(&text)
                     } else {
@@ -237,9 +237,20 @@ impl UiApp {
                             }
                         }
                         if !text.is_empty() {
-                            // Markdown des deux côtés : le user colle aussi du
-                            // code/blocs, le viewer gère le texte brut.
-                            if role == "assistant" || role == "user" || role == "vous" {
+                            if room_mode
+                                && (kind == ChatBubbleKind::RoomSpeaker
+                                    || kind == ChatBubbleKind::User)
+                            {
+                                ui.push_id(("room_bubble", i), |ui| {
+                                    chat_room::paint_room_bubble_body(
+                                        ui,
+                                        &text,
+                                        role_color,
+                                        t,
+                                        room_members,
+                                    );
+                                });
+                            } else if role == "assistant" || role == "user" || role == "vous" {
                                 ui.push_id(("chat_md", i), |ui| {
                                     chat_markdown_viewer(ui).show(
                                         ui,

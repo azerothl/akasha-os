@@ -196,6 +196,239 @@ pub fn format_room_visible_bubble(text: &str) -> String {
     }
 }
 
+/// Full salon bubble paint pipeline: visible prose, no transcript prefix, no tool ids, human `@`.
+pub fn prepare_room_bubble_text(
+    t: &UiStrings,
+    text: &str,
+    members: &[ChatRoomMember],
+    from_speaker_bubble: bool,
+) -> String {
+    let base = if from_speaker_bubble {
+        format_room_visible_bubble(text)
+    } else {
+        text.trim().to_string()
+    };
+    let base = aos_agent::room_reply::strip_salon_transcript_prefix(&base);
+    let base = strip_tool_id_tokens(&base);
+    let base = aos_agent::room_reply::sanitize_visible_chars(&base);
+    format_room_mention_destinations(t, &base, members)
+}
+
+/// Never paint `tool.id` tokens (inline code or bare) in salon bubbles.
+pub fn strip_tool_id_tokens(text: &str) -> String {
+    let mut work = text.to_string();
+    while let Some(start) = work.find('`') {
+        if let Some(end_rel) = work[start + 1..].find('`') {
+            let inner = work[start + 1..start + 1 + end_rel].trim();
+            if looks_like_tool_id(inner) {
+                let before = work[..start].trim_end();
+                let after = work[start + 1 + end_rel + 1..].trim_start();
+                work = match (before.is_empty(), after.is_empty()) {
+                    (true, true) => String::new(),
+                    (true, false) => after.to_string(),
+                    (false, true) => before.to_string(),
+                    (false, false) => format!("{before} {after}"),
+                };
+                continue;
+            }
+        }
+        break;
+    }
+    collapse_paint_spaces(&strip_bare_tool_id_tokens(&work))
+}
+
+fn looks_like_tool_id(token: &str) -> bool {
+    let token = token.trim();
+    if token.is_empty() || !token.contains('.') {
+        return false;
+    }
+    let parts: Vec<&str> = token.split('.').collect();
+    if parts.len() < 2 || parts.len() > 4 {
+        return false;
+    }
+    parts.iter().all(|part| {
+        !part.is_empty()
+            && part
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    })
+}
+
+fn strip_bare_tool_id_tokens(text: &str) -> String {
+    let mut out = String::new();
+    let mut token = String::new();
+    for ch in text.chars() {
+        if ch.is_ascii_alphanumeric() || ch == '.' || ch == '_' || ch == '-' {
+            token.push(ch);
+        } else {
+            if !token.is_empty() {
+                if !looks_like_tool_id(&token) {
+                    out.push_str(&token);
+                }
+                token.clear();
+            }
+            out.push(ch);
+        }
+    }
+    if !token.is_empty() && !looks_like_tool_id(&token) {
+        out.push_str(&token);
+    }
+    out
+}
+
+fn collapse_paint_spaces(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut prev_space = false;
+    for ch in text.chars() {
+        if ch.is_whitespace() {
+            if !prev_space {
+                out.push(' ');
+                prev_space = true;
+            }
+        } else {
+            out.push(ch);
+            prev_space = false;
+        }
+    }
+    out.trim().to_string()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum BubbleSegment {
+    Text(String),
+    Mention(String),
+}
+
+fn mention_labels_longest_first(t: &UiStrings, members: &[ChatRoomMember]) -> Vec<String> {
+    let mut labels: Vec<String> = members
+        .iter()
+        .map(|m| member_display_label(t, m))
+        .collect();
+    labels.sort_by_key(|l| std::cmp::Reverse(l.len()));
+    labels.dedup();
+    labels
+}
+
+fn split_mention_segments(text: &str, labels: &[String]) -> Vec<BubbleSegment> {
+    let mut out = Vec::new();
+    let mut plain_start = 0usize;
+    let mut i = 0usize;
+    while i < text.len() {
+        if text.as_bytes().get(i) != Some(&b'@') {
+            i += text[i..].chars().next().unwrap().len_utf8();
+            continue;
+        }
+        let tail = &text[i + 1..];
+        let mut matched_label = None::<String>;
+        for label in labels {
+            if tail.len() < label.len() || !tail[..label.len()].eq_ignore_ascii_case(label) {
+                continue;
+            }
+            let boundary = tail.get(label.len()..).and_then(|s| s.chars().next());
+            if boundary.is_some_and(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+                continue;
+            }
+            matched_label = Some(label.clone());
+            break;
+        }
+        if let Some(label) = matched_label {
+            push_text_segment(&mut out, &text[plain_start..i]);
+            let label_len = label.len();
+            out.push(BubbleSegment::Mention(label));
+            i += 1 + label_len;
+            plain_start = i;
+        } else {
+            i += 1;
+        }
+    }
+    push_text_segment(&mut out, &text[plain_start..]);
+    out
+}
+
+fn push_text_segment(out: &mut Vec<BubbleSegment>, text: &str) {
+    if text.is_empty() {
+        return;
+    }
+    if let Some(BubbleSegment::Text(prev)) = out.last_mut() {
+        prev.push_str(text);
+    } else {
+        out.push(BubbleSegment::Text(text.to_string()));
+    }
+}
+
+/// Render salon bubble body with `@` mention chips (human labels only).
+pub fn paint_room_bubble_body(
+    ui: &mut egui::Ui,
+    text: &str,
+    accent: egui::Color32,
+    t: &UiStrings,
+    members: &[ChatRoomMember],
+) {
+    if text.trim().is_empty() {
+        return;
+    }
+    let labels = mention_labels_longest_first(t, members);
+    let chip_fill = egui::Color32::from_rgba_premultiplied(
+        accent.r(),
+        accent.g(),
+        accent.b(),
+        if ui.visuals().dark_mode { 56 } else { 40 },
+    );
+    for para in text.split("\n\n") {
+        let para = para.trim();
+        if para.is_empty() {
+            continue;
+        }
+        if let Some(body) = para.strip_prefix("- ") {
+            ui.horizontal_top(|ui| {
+                ui.label("•");
+                paint_line_with_mention_chips(ui, body, &labels, accent, chip_fill);
+            });
+        } else if let Some(body) = para.strip_prefix("* ") {
+            ui.horizontal_top(|ui| {
+                ui.label("•");
+                paint_line_with_mention_chips(ui, body, &labels, accent, chip_fill);
+            });
+        } else {
+            paint_line_with_mention_chips(ui, para, &labels, accent, chip_fill);
+        }
+        ui.add_space(4.0);
+    }
+}
+
+fn paint_line_with_mention_chips(
+    ui: &mut egui::Ui,
+    line: &str,
+    labels: &[String],
+    accent: egui::Color32,
+    chip_fill: egui::Color32,
+) {
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing.x = 2.0;
+        for seg in split_mention_segments(line, labels) {
+            match seg {
+                BubbleSegment::Text(s) if !s.trim().is_empty() => {
+                    ui.add(
+                        egui::Label::new(egui::RichText::new(s.trim()).color(ui.visuals().text_color()))
+                            .wrap_mode(egui::TextWrapMode::Extend),
+                    );
+                }
+                BubbleSegment::Mention(label) => {
+                    egui::Frame::NONE
+                        .fill(chip_fill)
+                        .stroke(egui::Stroke::new(1.0_f32, accent.gamma_multiply(0.65)))
+                        .corner_radius(4.0)
+                        .inner_margin(egui::Margin::symmetric(5, 2))
+                        .show(ui, |ui| {
+                            ui.label(egui::RichText::new(format!("@{label}")).strong().color(accent));
+                        });
+                }
+                BubbleSegment::Text(_) => {}
+            }
+        }
+    });
+}
+
 /// Collapsible thinking block inside a salon speaker bubble.
 pub fn room_thinking_toggle(
     ui: &mut egui::Ui,
@@ -245,9 +478,25 @@ pub fn format_room_mention_destinations(
     let mut out = text.to_string();
     for m in members {
         let id = &m.agent_id;
-        let human = format!("@{}", member_display_label(t, m));
+        let human = member_display_label(t, m);
+        let mention = format!("@{human}");
         for pattern in [format!("(@{id})"), format!("@{id}")] {
-            out = out.replace(&pattern, &human);
+            out = out.replace(&pattern, &mention);
+        }
+        let stored = m.display_name.trim();
+        if !stored.is_empty() && !stored.eq_ignore_ascii_case(&human) {
+            for pattern in [format!("(@{stored})"), format!("@{stored}")] {
+                out = out.replace(&pattern, &mention);
+            }
+        }
+        if let Some(pid) = m.persona_id.as_deref() {
+            for alias in aos_agent::room_personas::persona_mention_labels(pid) {
+                if alias.eq_ignore_ascii_case(&human) || alias.eq_ignore_ascii_case(stored) {
+                    continue;
+                }
+                out = out.replace(&format!("@{alias}"), &mention);
+                out = out.replace(&format!("(@{alias})"), &mention);
+            }
         }
     }
     replace_remaining_technical_mentions(t, &out, members)
@@ -845,6 +1094,48 @@ mod tests {
         assert!(is_salon_picker_candidate(&agent));
         let candidates = library_add_candidates(&[agent], &[], &t);
         assert!(candidates.iter().any(|a| a.agent_id == "agent-11"));
+    }
+
+    #[test]
+    fn strip_tool_id_tokens_removes_inline_and_bare_ids() {
+        let raw = "J'ai consulté `notes.read` et notes.list pour la synthèse.";
+        let stripped = strip_tool_id_tokens(raw);
+        assert!(!stripped.contains("notes.read"));
+        assert!(!stripped.contains("notes.list"));
+        assert!(stripped.contains("synthèse"));
+    }
+
+    #[test]
+    fn prepare_room_bubble_text_strips_prefix_and_tool_ids() {
+        let t = i18n::strings("fr");
+        let mut m1 = member("persona-critic", "Critic");
+        m1.persona_id = Some("critic".into());
+        let mut m2 = member("persona-researcher", "Researcher");
+        m2.persona_id = Some("researcher".into());
+        let members = vec![m1, m2];
+        let raw = "[Salon — Critique]\n@Chercheur, j'ai utilisé `web.search` — peux-tu confirmer ?";
+        let painted = prepare_room_bubble_text(&t, raw, &members, true);
+        assert!(!painted.contains("[Salon —"));
+        assert!(!painted.contains("web.search"));
+        assert!(painted.contains("@Chercheur"));
+        assert!(!painted.contains("@Researcher"));
+    }
+
+    #[test]
+    fn split_mention_segments_finds_localized_labels() {
+        let t = i18n::strings("fr");
+        let mut m1 = member("persona-researcher", "Researcher");
+        m1.persona_id = Some("researcher".into());
+        let members = vec![m1];
+        let labels = mention_labels_longest_first(&t, &members);
+        let segs = split_mention_segments("@Chercheur, peux-tu détailler ?", &labels);
+        assert_eq!(
+            segs,
+            vec![
+                BubbleSegment::Mention("Chercheur".to_string()),
+                BubbleSegment::Text(", peux-tu détailler ?".to_string()),
+            ]
+        );
     }
 
     #[test]
