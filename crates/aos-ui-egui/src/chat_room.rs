@@ -756,7 +756,9 @@ pub fn paint_room_bubble_body(
                     chip_stroke,
                 );
             });
-        } else if para.contains('\n') && para.trim_start().starts_with('{') {
+        } else if para.contains('\n')
+            && (para.trim_start().starts_with('{') || para.contains("\": "))
+        {
             paint_wrapped_prose_block(ui, para, body_w);
         } else {
             paint_line_with_mention_chips(ui, para, &labels, chip_fill, chip_text, chip_stroke);
