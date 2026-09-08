@@ -372,7 +372,11 @@ fn split_mention_segments(text: &str, labels: &[String]) -> Vec<BubbleSegment> {
         let tail = &text[i + 1..];
         let mut matched_label = None::<String>;
         for label in labels {
-            if tail.len() < label.len() || !tail[..label.len()].eq_ignore_ascii_case(label) {
+            // `label.len()` is bytes; `get` refuses mid-codepoint slices (e.g. `—`).
+            let Some(prefix) = tail.get(..label.len()) else {
+                continue;
+            };
+            if !prefix.eq_ignore_ascii_case(label) {
                 continue;
             }
             let boundary = tail.get(label.len()..).and_then(|s| s.chars().next());
@@ -1245,6 +1249,22 @@ mod tests {
                 BubbleSegment::Text(", peux-tu détailler ?".to_string()),
             ]
         );
+    }
+
+    #[test]
+    fn split_mention_segments_skips_utf8_mid_char_prefix() {
+        // Longer ASCII label ("supervisor", 10 bytes) must not panic when the
+        // text after `@` has an em dash at byte 9 (`Critique — …`).
+        let labels = vec!["supervisor".into(), "Critique".into()];
+        let segs = split_mention_segments(
+            "@Critique — le graphe doit refléter des relations *décidées*",
+            &labels,
+        );
+        assert_eq!(
+            segs.first(),
+            Some(&BubbleSegment::Mention("Critique".to_string()))
+        );
+        assert!(matches!(segs.get(1), Some(BubbleSegment::Text(t)) if t.starts_with(" —")));
     }
 
     #[test]
