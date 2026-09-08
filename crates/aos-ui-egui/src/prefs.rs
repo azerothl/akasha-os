@@ -14,6 +14,21 @@ pub enum UiDensity {
     Compact,
 }
 
+/// Global application chrome presentation.
+///
+/// `classic` remains the default so existing preference files and users keep
+/// the current layout. The other modes only change navigation chrome; section
+/// contents and state are shared.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum UiPresentationMode {
+    #[default]
+    Classic,
+    Focus,
+    Zen,
+    Rail,
+}
+
 impl UiDensity {
     pub fn control_height(self) -> f32 {
         match self {
@@ -221,6 +236,8 @@ pub struct Preferences {
     #[serde(default)]
     pub ui_density: UiDensity,
     #[serde(default)]
+    pub ui_presentation: UiPresentationMode,
+    #[serde(default)]
     pub ui_layout: UiLayoutPreferences,
     #[serde(default)]
     pub custom_theme: CustomThemePreferences,
@@ -392,6 +409,7 @@ impl Default for Preferences {
             placement_profile: default_placement_profile(),
             community_catalogue_enabled: false,
             ui_density: UiDensity::default(),
+            ui_presentation: UiPresentationMode::default(),
             ui_layout: UiLayoutPreferences::default(),
             custom_theme: CustomThemePreferences::default(),
         }
