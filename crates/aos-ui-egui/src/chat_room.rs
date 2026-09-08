@@ -570,6 +570,74 @@ pub fn strip_salon_markdown_markers(text: &str) -> String {
     collapse_paint_spaces(&work)
 }
 
+fn prose_list_marker_len(text: &str, at: usize) -> Option<usize> {
+    if text.get(at..).is_some_and(|tail| tail.starts_with("* ")) {
+        Some(2)
+    } else if text.get(at..).is_some_and(|tail| tail.starts_with("- ")) {
+        Some(2)
+    } else {
+        None
+    }
+}
+
+fn normalize_prose_paint_input(text: &str) -> String {
+    text.replace('\u{200b}', "")
+}
+
+fn trim_prose_boundary_tail(s: &str) -> &str {
+    s.trim_end_matches(|c: char| c.is_whitespace() || c == '\u{200b}')
+}
+
+fn is_prose_list_boundary_before(text: &str, at: usize) -> bool {
+    if at == 0 {
+        return true;
+    }
+    let before = &text[..at];
+    if before.ends_with(". ") {
+        return true;
+    }
+    if before.ends_with(": ") || before.ends_with(":\n") {
+        return true;
+    }
+    if let Some(line_start) = before.rfind('\n') {
+        if before[line_start + 1..]
+            .chars()
+            .all(|c| c.is_whitespace())
+        {
+            return true;
+        }
+    } else if before.chars().all(|c| c.is_whitespace()) {
+        return true;
+    }
+    trim_prose_boundary_tail(before).ends_with(':')
+}
+
+fn is_prose_list_marker(text: &str, at: usize) -> bool {
+    prose_list_marker_len(text, at).is_some() && is_prose_list_boundary_before(text, at)
+}
+
+fn is_prose_bullet_label_start(text: &str, at: usize) -> bool {
+    if !is_prose_list_boundary_before(text, at) {
+        return false;
+    }
+    let Some(rest) = text.get(at..) else {
+        return false;
+    };
+    let Some(colon) = rest
+        .find(" :")
+        .or_else(|| rest.find(':'))
+    else {
+        return false;
+    };
+    let label = rest[..colon].trim();
+    let word_count = label.split_whitespace().count();
+    word_count <= 2
+        && !label.is_empty()
+        && label
+            .chars()
+            .all(|c| c.is_alphabetic() || c == ' ' || c == '-' || c == '\'')
+}
+
 fn strip_inline_single_asterisk_emphasis(text: &str) -> String {
     let mut work = text.to_string();
     let mut i = 0usize;
@@ -582,7 +650,7 @@ fn strip_inline_single_asterisk_emphasis(text: &str) -> String {
             i += 2;
             continue;
         }
-        if is_line_start_asterisk_list_marker(&work, i) {
+        if is_prose_list_marker(&work, i) {
             i += 1;
             continue;
         }
@@ -605,13 +673,6 @@ fn strip_inline_single_asterisk_emphasis(text: &str) -> String {
         i += inner.len();
     }
     work
-}
-
-fn is_line_start_asterisk_list_marker(text: &str, at: usize) -> bool {
-    if at > 0 && !text[..at].ends_with('\n') {
-        return false;
-    }
-    text.get(at..).is_some_and(|tail| tail.starts_with("* "))
 }
 
 fn mention_chip_style(ui: &egui::Ui) -> (egui::Color32, egui::Color32, egui::Stroke) {
@@ -678,11 +739,72 @@ fn split_prose_prefix_from_json_block(para: &str) -> (&str, &str) {
     (para, "")
 }
 
-fn prose_line_bullet_body(line: &str) -> Option<&str> {
-    let trimmed = line.trim_start();
-    trimmed
-        .strip_prefix("- ")
-        .or_else(|| trimmed.strip_prefix("* "))
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ProsePaintUnit {
+    Text(String),
+    Bullet(String),
+}
+
+fn push_prose_text_unit(units: &mut Vec<ProsePaintUnit>, text: &str) {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return;
+    }
+    if let Some(ProsePaintUnit::Text(prev)) = units.last_mut() {
+        if !prev.is_empty() {
+            prev.push('\n');
+        }
+        prev.push_str(trimmed);
+    } else {
+        units.push(ProsePaintUnit::Text(trimmed.to_string()));
+    }
+}
+
+/// Split salon prose into text runs and bullet bodies, including inline `* ` / `- `
+/// markers after `:` or between sentences on one line.
+fn split_prose_paint_units(text: &str) -> Vec<ProsePaintUnit> {
+    let normalized = normalize_prose_paint_input(text);
+    let text = normalized.as_str();
+    let mut units = Vec::new();
+    let mut segment_start = 0usize;
+    let mut i = 0usize;
+    while i < text.len() {
+        let marker_len = prose_list_marker_len(text, i);
+        let bullet = if marker_len.is_some() && is_prose_list_marker(text, i) {
+            Some((i, i + marker_len.unwrap()))
+        } else if is_prose_bullet_label_start(text, i) {
+            Some((i, i))
+        } else {
+            None
+        };
+        if let Some((marker_at, body_start)) = bullet {
+            push_prose_text_unit(&mut units, &text[segment_start..marker_at]);
+            let body_end = find_inline_bullet_body_end(text, body_start);
+            let body = text[body_start..body_end].trim();
+            if !body.is_empty() {
+                units.push(ProsePaintUnit::Bullet(body.to_string()));
+            }
+            i = body_end;
+            segment_start = i;
+            continue;
+        }
+        i += text[i..].chars().next().unwrap().len_utf8();
+    }
+    push_prose_text_unit(&mut units, &text[segment_start..]);
+    units
+}
+
+fn find_inline_bullet_body_end(text: &str, body_start: usize) -> usize {
+    let mut i = body_start;
+    while i < text.len() {
+        if i > body_start
+            && (is_prose_list_marker(text, i) || is_prose_bullet_label_start(text, i))
+        {
+            return i;
+        }
+        i += text[i..].chars().next().unwrap().len_utf8();
+    }
+    text.len()
 }
 
 fn paint_prose_lines(
@@ -694,34 +816,40 @@ fn paint_prose_lines(
     chip_text: egui::Color32,
     chip_stroke: egui::Stroke,
 ) {
-    for line in text.split('\n') {
-        if line.trim().is_empty() {
-            continue;
+    for unit in split_prose_paint_units(text) {
+        match unit {
+            ProsePaintUnit::Text(s) => {
+                for line in s.split('\n') {
+                    if line.trim().is_empty() {
+                        continue;
+                    }
+                    paint_line_with_mention_chips(
+                        ui,
+                        line.trim_start(),
+                        labels,
+                        chip_fill,
+                        chip_text,
+                        chip_stroke,
+                    );
+                    ui.add_space(2.0);
+                }
+            }
+            ProsePaintUnit::Bullet(body) => {
+                ui.horizontal_top(|ui| {
+                    ui.set_max_width(body_w);
+                    ui.label("•");
+                    paint_line_with_mention_chips(
+                        ui,
+                        &body,
+                        labels,
+                        chip_fill,
+                        chip_text,
+                        chip_stroke,
+                    );
+                });
+                ui.add_space(2.0);
+            }
         }
-        if let Some(body) = prose_line_bullet_body(line) {
-            ui.horizontal_top(|ui| {
-                ui.set_max_width(body_w);
-                ui.label("•");
-                paint_line_with_mention_chips(
-                    ui,
-                    body,
-                    labels,
-                    chip_fill,
-                    chip_text,
-                    chip_stroke,
-                );
-            });
-        } else {
-            paint_line_with_mention_chips(
-                ui,
-                line.trim_start(),
-                labels,
-                chip_fill,
-                chip_text,
-                chip_stroke,
-            );
-        }
-        ui.add_space(2.0);
     }
 }
 
@@ -1351,6 +1479,69 @@ pub fn mention_completions(
 mod tests {
     use super::*;
     use aos_proto::ChatSessionMode;
+
+    fn salon_still_bullet_excerpt_newlines() -> &'static str {
+        "Voici mon analyse des manques critiques et des ajustements :\n\
+* Manque : L'OS ne connaît pas les schémas MERN, T3 ou Django-DRF par cœur.\n\
+* Solution : Créer une bibliothèque de Skills déclaratives.\n\
+* Manque : de \"Contextual Reasoning\" pour la génération.\n\
+* Solution : Intégrer un prompt engineering interne."
+    }
+
+    fn salon_still_bullet_excerpt_inline() -> &'static str {
+        "Voici mon analyse des manques critiques et des ajustements : \
+* Manque : L'OS ne connaît pas les schémas MERN, T3 ou Django-DRF par cœur. \
+* Solution : Créer une bibliothèque de Skills déclaratives. \
+* Manque : de \"Contextual Reasoning\" pour la génération. \
+* Solution : Intégrer un prompt engineering interne."
+    }
+
+    fn bubble_paint_units_from_prepared(prepared: &str) -> Vec<ProsePaintUnit> {
+        let mut units = Vec::new();
+        for para in bubble_paragraphs(prepared) {
+            let para = para.trim();
+            if para.is_empty() {
+                continue;
+            }
+            if is_json_block_paragraph(para) {
+                let (prose, _json) = split_prose_prefix_from_json_block(para);
+                units.extend(split_prose_paint_units(prose));
+            } else {
+                units.extend(split_prose_paint_units(para));
+            }
+        }
+        units
+    }
+
+    fn assert_salon_bullet_excerpt_paints_without_raw_asterisks(units: &[ProsePaintUnit]) {
+        for unit in units {
+            match unit {
+                ProsePaintUnit::Text(s) => {
+                    assert!(
+                        !s.contains("* Manque"),
+                        "raw '* Manque' remained in painted text: {s}"
+                    );
+                    assert!(
+                        !s.contains("* Solution"),
+                        "raw '* Solution' remained in painted text: {s}"
+                    );
+                }
+                ProsePaintUnit::Bullet(b) => {
+                    assert!(!b.contains('*'), "raw '*' remained in bullet body: {b}");
+                }
+            }
+        }
+        let manque = units
+            .iter()
+            .filter(|unit| matches!(unit, ProsePaintUnit::Bullet(b) if b.starts_with("Manque")))
+            .count();
+        let solution = units
+            .iter()
+            .filter(|unit| matches!(unit, ProsePaintUnit::Bullet(b) if b.starts_with("Solution")))
+            .count();
+        assert_eq!(manque, 2, "expected two Manque bullets, got {units:?}");
+        assert_eq!(solution, 2, "expected two Solution bullets, got {units:?}");
+    }
 
     fn member(id: &str, name: &str) -> ChatRoomMember {
         ChatRoomMember {
@@ -2009,16 +2200,76 @@ mod tests {
     }
 
     #[test]
-    fn prose_line_bullet_body_strips_asterisk_list_marker() {
-        assert_eq!(
-            prose_line_bullet_body("* Manque : L'OS ne connaît pas"),
-            Some("Manque : L'OS ne connaît pas")
+    fn split_prose_paint_units_splits_inline_asterisk_after_colon() {
+        let units = split_prose_paint_units(salon_still_bullet_excerpt_inline());
+        assert_salon_bullet_excerpt_paints_without_raw_asterisks(&units);
+    }
+
+    #[test]
+    fn split_prose_paint_units_splits_manque_after_colon_zwsp_without_asterisk() {
+        let prepared =
+            "Voici mon analyse des manques critiques et des ajustements :\u{200b} Manque :\u{200b} L'OS ne connaît pas les schémas MERN,\u{200b} T3 ou Django-DRF par cœur. * Solution :\u{200b} Créer une bibliothèque.";
+        let manque_at = prepared.find("Manque").expect("Manque");
+        assert!(
+            is_prose_bullet_label_start(prepared, manque_at),
+            "expected Manque label start"
         );
-        assert_eq!(
-            prose_line_bullet_body("* Solution : Créer une bibliothèque"),
-            Some("Solution : Créer une bibliothèque")
+        let units = split_prose_paint_units(prepared);
+        assert!(
+            units
+                .iter()
+                .any(|unit| matches!(unit, ProsePaintUnit::Bullet(b) if b.starts_with("Manque"))),
+            "expected Manque bullet, got {units:?}"
         );
-        assert_eq!(prose_line_bullet_body("1. Absence de patterns"), None);
+        assert!(
+            !units.iter().any(|unit| match unit {
+                ProsePaintUnit::Text(s) => s.contains("* Manque"),
+                _ => false,
+            }),
+            "raw '* Manque' remained: {units:?}"
+        );
+    }
+
+    #[test]
+    fn split_prose_paint_units_splits_newline_asterisk_bullets() {
+        let units = split_prose_paint_units(salon_still_bullet_excerpt_newlines());
+        assert_salon_bullet_excerpt_paints_without_raw_asterisks(&units);
+    }
+
+    #[test]
+    fn prepare_room_bubble_text_still_excerpt_newlines_paint_without_raw_asterisks() {
+        let t = i18n::strings("fr");
+        let mut planner = member("persona-planner", "Planner");
+        planner.persona_id = Some("planner".into());
+        let mut researcher = member("persona-researcher", "Researcher");
+        researcher.persona_id = Some("researcher".into());
+        let members = vec![planner, researcher];
+        let prepared = prepare_room_bubble_text(
+            &t,
+            salon_still_bullet_excerpt_newlines(),
+            &members,
+            true,
+        );
+        let units = bubble_paint_units_from_prepared(&prepared);
+        assert_salon_bullet_excerpt_paints_without_raw_asterisks(&units);
+    }
+
+    #[test]
+    fn prepare_room_bubble_text_still_excerpt_inline_paint_without_raw_asterisks() {
+        let t = i18n::strings("fr");
+        let mut planner = member("persona-planner", "Planner");
+        planner.persona_id = Some("planner".into());
+        let mut researcher = member("persona-researcher", "Researcher");
+        researcher.persona_id = Some("researcher".into());
+        let members = vec![planner, researcher];
+        let prepared = prepare_room_bubble_text(
+            &t,
+            salon_still_bullet_excerpt_inline(),
+            &members,
+            true,
+        );
+        let units = bubble_paint_units_from_prepared(&prepared);
+        assert_salon_bullet_excerpt_paints_without_raw_asterisks(&units);
     }
 
     #[test]
