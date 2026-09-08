@@ -12,6 +12,9 @@ use crate::context_budget::{
     compact_after_prompt_overflow, enforce_prompt_budget, is_prompt_too_long_error, prompt_budget,
     DEFAULT_N_CTX_HINT, MAX_OVERFLOW_INFER_RETRIES,
 };
+use crate::artifact_card::{
+    attachments_from_artifacts, detect_from_tool, strip_paths_from_prose, ProducedArtifact,
+};
 use crate::device_tools::capture_png_path_from_tool_result;
 use crate::mcp::open_mcp_tools_with_secrets;
 use crate::persist;
@@ -359,18 +362,22 @@ async fn append_room_reply(
     speaker_name: &str,
     content: &str,
     thinking: Option<&str>,
+    artifacts: &[ProducedArtifact],
 ) -> Result<(), String> {
+    let visible = strip_paths_from_prose(content, artifacts);
+    let mut attachments = vec![ChatAttachment::AgentRef {
+        agent_id: speaker_id.to_string(),
+        title: speaker_name.to_string(),
+        origin: "room".into(),
+    }];
+    attachments.extend(attachments_from_artifacts(artifacts));
     bus.call::<ChatSessionAppendRequest, ChatSessionMessage>(
         "chat.session.append",
         &ChatSessionAppendRequest {
             session_id: session_id.to_string(),
             role: "assistant".into(),
-            content: content.to_string(),
-            attachments: vec![ChatAttachment::AgentRef {
-                agent_id: speaker_id.to_string(),
-                title: speaker_name.to_string(),
-                origin: "room".into(),
-            }],
+            content: visible,
+            attachments,
             speaker_id: Some(speaker_id.to_string()),
             speaker_name: Some(speaker_name.to_string()),
             thinking: thinking.map(str::to_string),
@@ -573,7 +580,7 @@ async fn run_room_tool_loop(
     caps: &[String],
     mcp_servers: &[String],
     images: &[String],
-) -> Result<String, String> {
+) -> Result<(String, Vec<ProducedArtifact>), String> {
     let (mut mcp_sessions, _) = open_mcp_tools_with_secrets(mcp_servers, &HashMap::new()).await;
     let trace_base = format!(
         "room-{agent_id}-{}",
@@ -585,6 +592,7 @@ async fn run_room_tool_loop(
     let mut pending_canvas_png: Option<String> = None;
     let mut pending_device_png: Option<String> = None;
     let mut infer_model = model_id.clone();
+    let mut produced_artifacts: Vec<ProducedArtifact> = Vec::new();
 
     for step in 0..MAX_ROOM_TOOL_STEPS {
         let has_canvas = tool_descs.iter().any(|t| t.name.starts_with("canvas."));
@@ -633,7 +641,7 @@ async fn run_room_tool_loop(
 
         let parsed_actions = parse_actions(&raw);
         if let Some((reply, _thinking)) = room_reply_from_model(&raw, parsed_actions.first()) {
-            return Ok(reply);
+            return Ok((reply, produced_artifacts));
         }
 
         if parsed_actions.is_empty() {
@@ -703,6 +711,13 @@ async fn run_room_tool_loop(
                 }
                 outcome
             };
+            if let Some(art) = detect_from_tool(&action.action, &action.args, &outcome) {
+                if let Some(idx) = produced_artifacts.iter().position(|a| a.path == art.path) {
+                    produced_artifacts[idx] = art;
+                } else {
+                    produced_artifacts.push(art);
+                }
+            }
             if outcome == ROOM_HOST_PATH_DISALLOWED {
                 let _ = post_room_host_path_notice(bus, session_id).await;
             }
@@ -774,7 +789,7 @@ pub async fn execute_room_turn(
         return Err(ROOM_ACTION_UNAVAILABLE.into());
     }
 
-    let (content, thinking) = if tool_descs.is_empty() {
+    let (content, thinking, artifacts) = if tool_descs.is_empty() {
         let mut refs = images.clone();
         let canvas_png = if session.meta.canvas_open {
             begin_canvas_vision(
@@ -803,9 +818,10 @@ pub async fn execute_room_turn(
             end_canvas_vision(bus, &req.session_id).await;
         }
         let raw = raw?;
-        split_room_reply(&raw)
+        let (content, thinking) = split_room_reply(&raw);
+        (content, thinking, Vec::new())
     } else {
-        let reply = run_room_tool_loop(
+        let (reply, artifacts) = run_room_tool_loop(
             bus,
             round,
             &req.agent_id,
@@ -819,7 +835,7 @@ pub async fn execute_room_turn(
             &images,
         )
         .await?;
-        (reply, None)
+        (reply, None, artifacts)
     };
     if content.is_empty() {
         return Err("réponse vide".into());
@@ -832,6 +848,7 @@ pub async fn execute_room_turn(
         display_name,
         &content,
         thinking.as_deref(),
+        &artifacts,
     )
     .await?;
 

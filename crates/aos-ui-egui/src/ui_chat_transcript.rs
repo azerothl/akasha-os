@@ -8,9 +8,9 @@ use crate::chat_error_copy;
 use crate::cmd::Cmd;
 use crate::ui_format::{format_chat_stamp, format_local_date_short, local_day_index};
 use crate::{
-    agent_act_phrase, agent_canvas_session_ops, agent_panel, chat_ask, chat_media, chat_room,
-    i18n, local_tz_offset_minutes, now_ms, research_choice, research_document, schedule_card,
-    skill_offer, Tab, UiApp,
+    agent_act_phrase, agent_canvas_session_ops, agent_panel, artifact_card, chat_ask, chat_media,
+    chat_room, i18n, local_tz_offset_minutes, now_ms, research_choice, research_document,
+    schedule_card, skill_offer, Tab, UiApp,
 };
 use aos_proto::{ChatAttachment, ChatRoomMember};
 use eframe::egui;
@@ -95,6 +95,7 @@ impl UiApp {
                     research_choice::DocumentProgressAction,
                 )> = None;
                 let mut document_result_open: Option<(String, String)> = None;
+                let mut artifact_open: Option<artifact_card::ArtifactTarget> = None;
                 let mut schedule_act: Option<(String, usize, bool)> = None;
                 let tz_offset = local_tz_offset_minutes();
                 let chat_now = now_ms();
@@ -445,6 +446,31 @@ impl UiApp {
                                             Some((question.clone(), path.clone()));
                                     }
                                 }
+                                ChatAttachment::ArtifactCard {
+                                    title,
+                                    artifact_type,
+                                    path,
+                                    slug,
+                                } => {
+                                    if let Some(target) = artifact_card::parse_attachment(
+                                        title,
+                                        artifact_type,
+                                        path,
+                                        slug,
+                                    ) {
+                                        let action = ui
+                                            .push_id(
+                                                ("chat_artifact_card", i, j, path.as_str()),
+                                                |ui| artifact_card::render_artifact_card(ui, t, &target),
+                                            )
+                                            .inner;
+                                        if let artifact_card::ArtifactCardAction::Open(open) =
+                                            action
+                                        {
+                                            artifact_open = Some(open);
+                                        }
+                                    }
+                                }
                                 ChatAttachment::ScheduleAct { act_id, state, .. } => {
                                     if state == "pending" {
                                         ui.horizontal(|ui| {
@@ -558,6 +584,20 @@ impl UiApp {
                         &question,
                         &path,
                     );
+                }
+                if let Some(target) = artifact_open {
+                    if artifact_card::open_artifact_target(self, &target) {
+                        if target.kind == artifact_card::ArtifactKind::Document {
+                            research_document::open_document(
+                                &mut self.research_ui.overlay,
+                                &target.title,
+                                &target.path,
+                            );
+                        }
+                    } else {
+                        artifact_card::open_folder_for_path(&target.path);
+                        self.push_status(t.artifact_open_folder.into());
+                    }
                 }
                 if let Some((act_id, msg_idx, approved)) = schedule_act {
                     if approved {

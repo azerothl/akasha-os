@@ -1572,8 +1572,14 @@ async fn main() {
             async move {
                 match ctx.payload::<ReportPayload>() {
                     Ok(rep) => {
-                        let mut chat_summary: Option<(String, String, String, String, String)> =
-                            None;
+                        let mut chat_summary: Option<(
+                            String,
+                            String,
+                            String,
+                            String,
+                            String,
+                            Vec<ChatAttachment>,
+                        )> = None;
                         let mut deep_plan_upsert: Option<(String, String, aos_proto::DeepPlan)> =
                             None;
                         let mut parent_notify: Option<(String, String, String, bool)> = None;
@@ -1686,12 +1692,30 @@ async fn main() {
                                                     ),
                                                     _ => String::new(),
                                                 };
+                                                let artifacts =
+                                                    aos_agent::artifact_card::artifacts_from_trace(
+                                                        &entry.trace,
+                                                    );
+                                                let artifact_atts = if matches!(state, AgentState::Done)
+                                                    && !artifacts.is_empty()
+                                                {
+                                                    aos_agent::artifact_card::attachments_from_artifacts(
+                                                        &artifacts,
+                                                    )
+                                                } else {
+                                                    Vec::new()
+                                                };
+                                                let summary = aos_agent::artifact_card::strip_paths_from_prose(
+                                                    &summary,
+                                                    &artifacts,
+                                                );
                                                 chat_summary = Some((
                                                     sid,
                                                     entry.info.agent_id.clone(),
                                                     entry.info.directive.clone(),
                                                     summary,
                                                     format!("{state:?}").to_lowercase(),
+                                                    artifact_atts,
                                                 ));
                                             }
                                         }
@@ -1854,7 +1878,15 @@ async fn main() {
                             )
                             .await;
                         }
-                        if let Some((session_id, agent_id, title, content, _state)) = chat_summary {
+                        if let Some((session_id, agent_id, title, content, _state, artifact_atts)) =
+                            chat_summary
+                        {
+                            let mut attachments = vec![ChatAttachment::AgentRef {
+                                agent_id,
+                                title,
+                                origin: "completion".into(),
+                            }];
+                            attachments.extend(artifact_atts);
                             let _ = bus
                                 .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
                                     "chat.session.append",
@@ -1862,11 +1894,7 @@ async fn main() {
                                         session_id,
                                         role: "assistant".into(),
                                         content,
-                                        attachments: vec![ChatAttachment::AgentRef {
-                                            agent_id,
-                                            title,
-                                            origin: "completion".into(),
-                                        }],
+                                        attachments,
                                         speaker_id: None,
                                         speaker_name: None,
                                         thinking: None,
