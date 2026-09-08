@@ -53,6 +53,9 @@ fn take_thought_json_object(text: &str) -> Option<(String, String)> {
     let obj = extract_first_json_object(&text[start..])?;
     let value: serde_json::Value = serde_json::from_str(&obj).ok()?;
     let obj_map = value.as_object()?;
+    if has_substantive_plan_args(obj_map.get("args")) {
+        return None;
+    }
     let thought = obj_map
         .get("thought")
         .or_else(|| obj_map.get("thinking"))
@@ -79,20 +82,74 @@ fn take_thought_json_object(text: &str) -> Option<(String, String)> {
 fn visible_prose(text: &str) -> String {
     let mut out = strip_tool_markup_tags(text);
     while let Some(obj) = extract_first_json_object(&out) {
-        if serde_json::from_str::<serde_json::Value>(&obj)
+        let keep = serde_json::from_str::<serde_json::Value>(&obj)
             .ok()
-            .and_then(|v| v.as_object().cloned())
-            .is_some_and(|o| o.contains_key("thought") || o.contains_key("action"))
-        {
-            if let Some(start) = out.find(&obj) {
-                out = format!("{}{}", &out[..start], &out[start + obj.len()..]);
-                out = out.trim().to_string();
-                continue;
-            }
+            .is_some_and(|value| !is_internal_agent_envelope(&value));
+        if keep {
+            break;
+        }
+        if let Some(start) = out.find(&obj) {
+            out = format!("{}{}", &out[..start], &out[start + obj.len()..]);
+            out = out.trim().to_string();
+            continue;
         }
         break;
     }
     collapse_blank_lines(&sanitize_visible_chars(&strip_salon_transcript_prefix(&out)))
+}
+
+fn has_substantive_plan_args(args: Option<&serde_json::Value>) -> bool {
+    match args {
+        Some(serde_json::Value::Object(map)) => !map.is_empty(),
+        Some(serde_json::Value::Array(arr)) => !arr.is_empty(),
+        _ => false,
+    }
+}
+
+fn is_internal_agent_envelope(value: &serde_json::Value) -> bool {
+    let obj = match value.as_object() {
+        Some(obj) => obj,
+        None => return false,
+    };
+    let has_thought = obj.contains_key("thought")
+        || obj.contains_key("thinking")
+        || obj.contains_key("reasoning");
+    if !has_thought {
+        return false;
+    }
+    !has_substantive_plan_args(obj.get("args"))
+}
+
+/// Extract the first balanced `{…}` JSON object substring from `text`.
+pub fn extract_first_json_object(text: &str) -> Option<String> {
+    let start = text.find('{')?;
+    let mut depth = 0i32;
+    let mut in_str = false;
+    let mut escape = false;
+    for (i, ch) in text[start..].char_indices() {
+        if in_str {
+            if escape {
+                escape = false;
+            } else if ch == '\\' {
+                escape = true;
+            } else if ch == '"' {
+                in_str = false;
+            }
+            continue;
+        }
+        match ch {
+            '"' => in_str = true,
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(text[start..start + i + 1].to_string());
+                }
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 /// Remove echoed transcript attribution — the bubble header already names the speaker.
@@ -137,37 +194,6 @@ fn is_private_use_char(ch: char) -> bool {
         ch,
         '\u{E000}'..='\u{F8FF}' | '\u{F0000}'..='\u{FFFFD}' | '\u{100000}'..='\u{10FFFD}'
     )
-}
-
-fn extract_first_json_object(text: &str) -> Option<String> {
-    let start = text.find('{')?;
-    let mut depth = 0i32;
-    let mut in_str = false;
-    let mut escape = false;
-    for (i, ch) in text[start..].char_indices() {
-        if in_str {
-            if escape {
-                escape = false;
-            } else if ch == '\\' {
-                escape = true;
-            } else if ch == '"' {
-                in_str = false;
-            }
-            continue;
-        }
-        match ch {
-            '"' => in_str = true,
-            '{' => depth += 1,
-            '}' => {
-                depth -= 1;
-                if depth == 0 {
-                    return Some(text[start..start + i + 1].to_string());
-                }
-            }
-            _ => {}
-        }
-    }
-    None
 }
 
 fn collapse_blank_lines(text: &str) -> String {
@@ -242,6 +268,17 @@ Voici ce qu'il faut retenir sur Akasha OS."#;
         let raw = "(Note: important) garde ce détail.";
         let (visible, _) = split_room_reply(raw);
         assert_eq!(visible, raw);
+    }
+
+    #[test]
+    fn plan_json_with_args_stays_in_visible_reply() {
+        let raw = r#"Voici le plan :
+json {"thought":"Planification des phases","action":"","args":{"nodes":[{"id":"phase-1","status":"pending"}]}}
+Suite."#;
+        let (visible, thinking) = split_room_reply(raw);
+        assert!(visible.contains("\"nodes\""));
+        assert!(visible.contains("\"thought\""));
+        assert!(thinking.is_none());
     }
 
     #[test]

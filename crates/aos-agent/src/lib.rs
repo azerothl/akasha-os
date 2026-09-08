@@ -5,6 +5,7 @@
 
 pub mod actions;
 pub mod agent_act;
+pub mod artifact_card;
 pub mod assess;
 pub mod canvas_scene;
 pub mod context_budget;

@@ -4438,6 +4438,17 @@ pub enum ChatAttachment {
         #[serde(default)]
         show_logs_step_id: Option<String>,
     },
+    /// Agent-produced note, document, or image — clickable card in the bubble.
+    ArtifactCard {
+        /// Human title (never a path).
+        title: String,
+        /// `note` | `document` | `image`
+        artifact_type: String,
+        /// Logical path for navigation (not shown in the card).
+        path: String,
+        #[serde(default)]
+        slug: String,
+    },
 }
 
 fn default_skill_offer_state() -> String {
@@ -4479,7 +4490,8 @@ impl ChatAttachment {
             | Self::DocumentProgress { .. }
             | Self::ScheduleAct { .. }
             | Self::ScheduleCard { .. }
-            | Self::DeepPlan { .. } => None,
+            | Self::DeepPlan { .. }
+            | Self::ArtifactCard { .. } => None,
         }
     }
 
@@ -4491,7 +4503,19 @@ impl ChatAttachment {
                 state,
                 ..
             } => Some((agent_id.as_str(), act_id.as_str(), state.as_str())),
-            _ => None,
+            Self::ArtifactCard { .. } => None,
+            Self::AgentRef { .. }
+            | Self::Image { .. }
+            | Self::Audio { .. }
+            | Self::TtsDraft { .. }
+            | Self::Document { .. }
+            | Self::SkillOffer { .. }
+            | Self::ResearchChoice { .. }
+            | Self::DocumentResult { .. }
+            | Self::DocumentProgress { .. }
+            | Self::ScheduleAct { .. }
+            | Self::ScheduleCard { .. }
+            | Self::DeepPlan { .. } => None,
         }
     }
 }

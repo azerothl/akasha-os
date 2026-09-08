@@ -84,10 +84,8 @@ pub(crate) fn on_loaded(
         app.chat_state.view.room_members_open = false;
         let mut chat = Vec::new();
         if !designer_shot_mode() {
-            chat.push(ChatLine::plain(
-                "système",
-                format!("Session {id} — historique rechargé."),
-            ));
+            let t = crate::i18n::strings(&app.prefs.language);
+            chat.push(ChatLine::plain("système", t.chat_history_reloaded));
         }
         chat.extend(messages);
         session_chat::infer_reply_durations(&mut chat);

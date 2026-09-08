@@ -7,6 +7,7 @@ mod agent_act_phrase;
 mod agent_controller;
 mod agent_event_controller;
 mod agent_panel;
+mod artifact_card;
 mod backup;
 mod backup_state;
 mod billing;
